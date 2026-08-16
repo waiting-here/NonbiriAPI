@@ -1,10 +1,79 @@
-# Secrets
+# ===== Operating systems =====
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# WSL / NTFS interop
+*Zone.Identifier
+*Zone.Identifier:$DATA
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+
+# ===== Editors & IDEs =====
+
+# VS Code
+.vscode/
+*.code-workspace
+.history/
+.vscode-test/
+*.vsix
+
+# JetBrains (IntelliJ/GoLand/WebStorm etc.)
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Codex CLI (OpenAI)
+.codex/
+
+# Pi Coding Agent
+.pi/
+
+# Generic editor backups
+*.swp
+*.swo
+*.bak
+*.tmp
+
+# ===== Local agent workflow & planning docs (NOT part of open-source repo) =====
+
+.agents/
+AGENTS.md
+AGENT_BROWSER_NOTES.md
+requirements/
+decisions/
+tasks/
+
+# ===== Secrets & credentials =====
+
 .env
+.env.*
+!.env.example
 admin.env
 *.backup
+*.secret
+*.pem
+*.crt
+*.key
 i18n.json
 
-# User-supplied site assets (not part of the open-source repo)
+# ===== User-supplied site assets (not part of the open-source repo) =====
+
 *.ico
 *.png
 *.jpg
@@ -13,43 +82,92 @@ i18n.json
 *.webp
 *.svg
 
-# Debug artifacts
+# ===== Go =====
+
+# Compiled binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+nonbiriapi
+nonbiriapi.exe
+
+# Test / coverage artifacts
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Go workspace files (project may or may not use them; ignore by default)
+go.work
+go.work.sum
+
+# Vendor is committed on demand; ignore generated local vendor by default
+# (uncomment if you do NOT want to track vendor/)
+# vendor/
+
+# ===== Node / Vite / React =====
+
+node_modules/
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+
+# Vite build output & caches
+dist/
+.vite/
+*.tsbuildinfo
+
+# TypeScript / tsc caches
+*.tsbuildinfo
+
+# ESLint / Prettier / Stylelint caches
+.eslintcache
+.stylelintcache
+
+# npm / yarn / pnpm caches & debug logs
+.npm
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# ===== Debug artifacts =====
+
 debug.json
 debug_dumps/
 debug/
 
-# Local tooling & personal deployment configs
-.pi/
-.agents/
-nginx/*.local.conf
-nonbiriapi.service
+# ===== Local test configs =====
 
-# Local test configs (admin.env.local, etc.)
 *.local
+nginx/*.local.conf
 
-# Local planning docs
-requirements/
-decisions/
-AGENTS.md
-AGENT_BROWSER_NOTES.md
+# ===== Runtime files =====
 
-# Local task documents (multi-agent workflow, see AGENTS.md §8)
-tasks/
-
-# Binaries
-nonbiriapi
-nonbiriapi.exe
-
-# Exported files
-*.zip
-
-# Runtime files
 *.db
 *.db-shm
 *.db-wal
-*.key
 
-# Migration scripts (manual, version-specific, not for git)
+# ===== Exported files =====
+
+*.zip
+
+# ===== Migration scripts (manual, version-specific, not for git) =====
+
 *.sql
 
+# ===== Local deployment configs =====
+
+nonbiriapi.service
+
+# ===== Misc temp =====
+
 tmp/
+.cache/
