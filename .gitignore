@@ -1,0 +1,54 @@
+# Secrets
+.env
+admin.env
+*.backup
+i18n.json
+
+# User-supplied site assets (not part of the open-source repo)
+*.ico
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.svg
+
+# Debug artifacts
+debug.json
+debug_dumps/
+debug/
+
+# Local tooling & personal deployment configs
+.pi/
+nginx/*.local.conf
+nonbiriapi.service
+
+# Local test configs (admin.env.local, etc.)
+*.local
+
+# Local planning docs
+requirements/
+decisions/
+AGENTS.md
+AGENT_BROWSER_NOTES.md
+
+# Local task documents (multi-agent workflow, see AGENTS.md §8)
+tasks/
+
+# Binaries
+nonbiriapi
+nonbiriapi.exe
+
+# Exported files
+*.zip
+
+# Runtime files
+*.db
+*.db-shm
+*.db-wal
+*.key
+
+# Migration scripts (manual, version-specific, not for git)
+*.sql
+
+tmp/
