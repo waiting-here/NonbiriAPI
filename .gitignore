@@ -20,6 +20,7 @@ debug/
 
 # Local tooling & personal deployment configs
 .pi/
+.agents/
 nginx/*.local.conf
 nonbiriapi.service
 
