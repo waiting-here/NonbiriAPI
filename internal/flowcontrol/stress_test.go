@@ -50,12 +50,10 @@ func TestStressConcurrentAdmitCommitRelease(t *testing.T) {
 		wait     sync.WaitGroup
 	)
 	limits := controller.Limits()
-	random := rand.New(rand.NewSource(20260817))
 
-	check := func() {
+	check := func(userID int64) {
 		// Sampling the limiter from the same mutex keeps every observation
 		// consistent; the invariant must hold at every instant.
-		userID := random.Int63n(users) + 1
 		decision, err := controller.limiter.Check(fmt.Sprintf("%d", userID))
 		if err != nil {
 			t.Errorf("check: %v", err)
@@ -106,7 +104,7 @@ func TestStressConcurrentAdmitCommitRelease(t *testing.T) {
 					t.Error("second terminal action must be a no-op")
 				}
 				if local.Intn(97) == 0 {
-					check()
+					check(local.Int63n(users) + 1)
 				}
 			}
 		}(int64(g) + 1)
