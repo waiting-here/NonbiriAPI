@@ -1,0 +1,50 @@
+{
+  "user": {
+    "shell": {
+      "navLabel": "Main navigation",
+      "title": "User Console"
+    },
+    "home": {
+      "nav": "Home",
+      "title": "Home",
+      "description": "Welcome to NonbiriAPI."
+    },
+    "endpoints": {
+      "nav": "Endpoints",
+      "title": "Endpoint management",
+      "description": "Manage your upstream API endpoints and keys."
+    },
+    "models": {
+      "nav": "Models",
+      "title": "Model management",
+      "description": "Create and manage platform models and their bindings."
+    },
+    "keys": {
+      "nav": "Caller key",
+      "title": "Caller key",
+      "description": "Manage your platform caller key."
+    },
+    "issues": {
+      "nav": "Issues",
+      "title": "Issue center",
+      "description": "Review fetch and call issues."
+    },
+    "account": {
+      "nav": "Account",
+      "title": "Account & data",
+      "description": "Account information, data export and account deletion."
+    },
+    "legal": {
+      "privacy": {
+        "nav": "Privacy policy",
+        "title": "Privacy policy",
+        "body": "(Placeholder) The full privacy policy will be provided before release."
+      },
+      "terms": {
+        "nav": "Terms of service",
+        "title": "Terms of service",
+        "body": "(Placeholder) The full terms of service will be provided before release."
+      }
+    }
+  }
+}

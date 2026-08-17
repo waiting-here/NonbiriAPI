@@ -1,0 +1,25 @@
+{
+  "app": {
+    "name": "NonbiriAPI"
+  },
+  "shell": {
+    "skipToContent": "Skip to main content",
+    "langLabel": "Language",
+    "themeLabel": "Toggle theme",
+    "themeLight": "Switch to light theme",
+    "themeDark": "Switch to dark theme"
+  },
+  "common": {
+    "loading": "Loading…",
+    "error": "Something went wrong",
+    "retry": "Retry",
+    "comingSoon": "This page will be delivered in a later milestone.",
+    "notFoundTitle": "Page not found",
+    "notFoundBody": "The page you requested does not exist or has been removed.",
+    "backHome": "Back to home",
+    "routeErrorTitle": "Page failed to load",
+    "routeErrorBody": "An error occurred while rendering this page. Please refresh and try again.",
+    "reload": "Reload page",
+    "copyright": "© {{year}} NonbiriAPI. All rights reserved."
+  }
+}

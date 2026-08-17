@@ -1,0 +1,44 @@
+{
+  "admin": {
+    "shell": {
+      "title": "管理后台",
+      "navLabel": "管理导航",
+      "brandSuffix": "管理后台"
+    },
+    "dashboard": {
+      "nav": "仪表盘",
+      "title": "仪表盘",
+      "description": "站点运行概况与关键指标。"
+    },
+    "users": {
+      "nav": "用户",
+      "title": "用户管理",
+      "description": "用户列表、封禁与删除。"
+    },
+    "logs": {
+      "nav": "日志与用量",
+      "title": "请求日志与用量",
+      "description": "全局请求日志与用量统计。"
+    },
+    "endpoints": {
+      "nav": "端点",
+      "title": "端点概览",
+      "description": "全局端点概览，不含明文密钥。"
+    },
+    "models": {
+      "nav": "模型",
+      "title": "模型概览",
+      "description": "全局平台模型与绑定概览。"
+    },
+    "alerts": {
+      "nav": "告警",
+      "title": "告警中心",
+      "description": "平台告警与运营事件。"
+    },
+    "settings": {
+      "nav": "站点参数",
+      "title": "站点参数",
+      "description": "站点参数与各类上限配置。"
+    }
+  }
+}
