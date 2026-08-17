@@ -1,0 +1,50 @@
+{
+  "user": {
+    "shell": {
+      "navLabel": "主导航",
+      "title": "用户中心"
+    },
+    "home": {
+      "nav": "首页",
+      "title": "首页",
+      "description": "欢迎使用 NonbiriAPI。"
+    },
+    "endpoints": {
+      "nav": "端点",
+      "title": "端点管理",
+      "description": "管理你的上游 API 端点与密钥。"
+    },
+    "models": {
+      "nav": "模型",
+      "title": "模型管理",
+      "description": "创建与管理平台模型及其绑定。"
+    },
+    "keys": {
+      "nav": "调用密钥",
+      "title": "调用密钥",
+      "description": "管理你的平台调用密钥。"
+    },
+    "issues": {
+      "nav": "问题中心",
+      "title": "问题中心",
+      "description": "查看拉取与调用问题。"
+    },
+    "account": {
+      "nav": "账号",
+      "title": "账号与数据",
+      "description": "账号信息、数据导出与账号删除。"
+    },
+    "legal": {
+      "privacy": {
+        "nav": "隐私政策",
+        "title": "隐私政策",
+        "body": "（占位内容）隐私政策全文将在正式发布前提供。"
+      },
+      "terms": {
+        "nav": "服务条款",
+        "title": "服务条款",
+        "body": "（占位内容）服务条款全文将在正式发布前提供。"
+      }
+    }
+  }
+}

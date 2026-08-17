@@ -1,0 +1,44 @@
+{
+  "admin": {
+    "shell": {
+      "title": "Admin Console",
+      "navLabel": "Administration navigation",
+      "brandSuffix": "Admin"
+    },
+    "dashboard": {
+      "nav": "Dashboard",
+      "title": "Dashboard",
+      "description": "Site overview and key metrics."
+    },
+    "users": {
+      "nav": "Users",
+      "title": "User management",
+      "description": "User list, ban and deletion."
+    },
+    "logs": {
+      "nav": "Logs & usage",
+      "title": "Request logs and usage",
+      "description": "Global request logs and usage statistics."
+    },
+    "endpoints": {
+      "nav": "Endpoints",
+      "title": "Endpoint overview",
+      "description": "Global endpoint overview, without plaintext secrets."
+    },
+    "models": {
+      "nav": "Models",
+      "title": "Model overview",
+      "description": "Global platform models and bindings."
+    },
+    "alerts": {
+      "nav": "Alerts",
+      "title": "Alert center",
+      "description": "Platform alerts and operational events."
+    },
+    "settings": {
+      "nav": "Site settings",
+      "title": "Site settings",
+      "description": "Site parameters and limit configuration."
+    }
+  }
+}

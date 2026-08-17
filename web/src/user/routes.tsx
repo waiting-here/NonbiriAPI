@@ -1,0 +1,31 @@
+import { createBrowserRouter } from 'react-router';
+import { NotFoundPage } from '@shared/components/NotFoundPage';
+import { RouteErrorPage } from '@shared/components/RouteErrorPage';
+import { UserLayout } from './layouts/UserLayout';
+import { HomePage } from './pages/HomePage';
+import { EndpointsPage } from './pages/EndpointsPage';
+import { ModelsPage } from './pages/ModelsPage';
+import { KeysPage } from './pages/KeysPage';
+import { IssuesPage } from './pages/IssuesPage';
+import { AccountPage } from './pages/AccountPage';
+import { PrivacyPage } from './pages/PrivacyPage';
+import { TermsPage } from './pages/TermsPage';
+
+export const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <UserLayout />,
+    errorElement: <RouteErrorPage />,
+    children: [
+      { index: true, element: <HomePage /> },
+      { path: 'endpoints', element: <EndpointsPage /> },
+      { path: 'models', element: <ModelsPage /> },
+      { path: 'keys', element: <KeysPage /> },
+      { path: 'issues', element: <IssuesPage /> },
+      { path: 'account', element: <AccountPage /> },
+      { path: 'privacy', element: <PrivacyPage /> },
+      { path: 'terms', element: <TermsPage /> },
+      { path: '*', element: <NotFoundPage /> },
+    ],
+  },
+]);

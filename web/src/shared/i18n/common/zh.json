@@ -1,0 +1,25 @@
+{
+  "app": {
+    "name": "NonbiriAPI"
+  },
+  "shell": {
+    "skipToContent": "跳到主要内容",
+    "langLabel": "语言",
+    "themeLabel": "切换主题",
+    "themeLight": "切换到浅色主题",
+    "themeDark": "切换到深色主题"
+  },
+  "common": {
+    "loading": "加载中…",
+    "error": "出错了",
+    "retry": "重试",
+    "comingSoon": "此页面将在后续里程碑提供。",
+    "notFoundTitle": "页面未找到",
+    "notFoundBody": "你访问的页面不存在或已被移除。",
+    "backHome": "返回首页",
+    "routeErrorTitle": "页面加载失败",
+    "routeErrorBody": "页面渲染时发生错误，请刷新重试。",
+    "reload": "刷新页面",
+    "copyright": "© {{year}} NonbiriAPI。保留所有权利。"
+  }
+}

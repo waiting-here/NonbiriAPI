@@ -1,0 +1,54 @@
+{
+  "name": "nonbiriapi-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "NonbiriAPI web frontend: admin and user stations",
+  "license": "AGPL-3.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "packageManager": "npm@12.0.1",
+  "scripts": {
+    "dev": "npm run dev:admin",
+    "dev:admin": "vite --mode admin",
+    "dev:user": "vite --mode user",
+    "build": "npm run clean && vite build --mode admin && vite build --mode user && npm run notices && npm run hashes",
+    "build:admin": "vite build --mode admin",
+    "build:user": "vite build --mode user",
+    "preview": "npm run preview:admin",
+    "preview:admin": "vite preview --mode admin",
+    "preview:user": "vite preview --mode user",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "clean": "node scripts/clean.mjs",
+    "notices": "node scripts/gen-notices.mjs",
+    "hashes": "node scripts/gen-manifest.mjs"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "5.101.4",
+    "i18next": "26.3.6",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-i18next": "17.0.11",
+    "react-router": "7.18.2"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react-swc": "4.3.3",
+    "eslint": "9.39.5",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.4",
+    "globals": "17.11.0",
+    "prettier": "3.9.6",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.67.0",
+    "vite": "7.3.6"
+  }
+}

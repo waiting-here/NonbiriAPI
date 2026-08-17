@@ -1,0 +1,42 @@
+/* Design tokens. Light values on :root, dark values on [data-theme='dark'].
+   The data-theme attribute is set before first paint by an inline script in
+   each station's index.html and kept in sync by ThemeProvider. */
+
+:root {
+  color-scheme: light;
+
+  --nb-color-bg: #f4f6f8;
+  --nb-color-surface: #ffffff;
+  --nb-color-surface-alt: #e9edf2;
+  --nb-color-text: #1b1f24;
+  --nb-color-text-muted: #5b6470;
+  --nb-color-border: #d5dae0;
+  --nb-color-accent: #2563eb;
+  --nb-color-accent-contrast: #ffffff;
+  --nb-color-danger: #b3261e;
+  --nb-color-success: #1e7a46;
+
+  --nb-shadow-1: 0 1px 2px rgb(0 0 0 / 0.06);
+  --nb-radius-sm: 6px;
+  --nb-radius-md: 10px;
+  --nb-focus-ring: 0 0 0 3px rgb(37 99 235 / 0.35);
+  --nb-transition: 150ms ease;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --nb-color-bg: #121417;
+  --nb-color-surface: #1b1e23;
+  --nb-color-surface-alt: #262b31;
+  --nb-color-text: #e6e8eb;
+  --nb-color-text-muted: #9aa3ad;
+  --nb-color-border: #343b44;
+  --nb-color-accent: #6ea0ff;
+  --nb-color-accent-contrast: #10131a;
+  --nb-color-danger: #ef6d65;
+  --nb-color-success: #57b98a;
+
+  --nb-shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --nb-focus-ring: 0 0 0 3px rgb(110 160 255 / 0.4);
+}
