@@ -241,6 +241,14 @@ A request without / with an expired / with an already-consumed token is `403 for
 Self-tunable `rpm_limit` is bounded by the global cap; it cannot exceed it. A null
 user-level limit means the global default applies.
 
+`PATCH /api/me` accepts **only** `lang` (`"zh"` or `"en"`) and `rpm_limit`
+(non-negative integer, or `null` to restore the global default); any other field
+(`endpoint_limit`, `is_banned`, usage, id, …) is rejected with `invalid_request`
+by the strict decoder (unknown fields, trailing tokens, and oversized bodies are
+also rejected). The response is the same `{user:{…}}` envelope as `GET /api/me`,
+with `rpm_limit` already clamped to the global cap. This route is session-only:
+neither an admin session nor a caller key can reach it.
+
 ### 3.4 Caller key
 
 | Method | Path | Auth | Body | Response | Stable codes |
@@ -396,10 +404,31 @@ Auth: a valid admin session cookie. The administrator is env-configured (single 
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
 | `GET` | `/admin/api/users` | admin session | query: pagination + filters | `200` array of `{id, username, avatar, discord_id, is_banned, banned_reason, endpoint_limit, rpm_limit, usage totals, created_at}` (no caller-key secret) | `unauthorized`, `forbidden` |
+
+The users list returns the `{data:[…], has_more}` envelope. Pagination: `page`
+(1-based, default 1) and `page_size` (clamped to `[1,100]`, default 20); the
+`is_banned=true|false` filter narrows to banned/active users. Unknown, repeated,
+or malformed query parameters are `invalid_request`. The administrator row is
+never a candidate, and the projection never includes caller-key or session
+material.
 | `GET` | `/admin/api/users/{id}` | admin session | — | `200` the user object with full usage metadata | `unauthorized`, `forbidden`, `not_found` |
 | `PATCH` | `/admin/api/users/{id}` | admin session | `{endpoint_limit?, rpm_limit?, lang?}` | `200` updated user; `endpoint_limit`/`rpm_limit` nullable, NULL restores the global default; `rpm_limit` bounded by the global cap | `invalid_request`, `unauthorized`, `forbidden`, `not_found` |
+
+`PATCH /admin/api/users/{id}` accepts only `endpoint_limit` (integer `≥0`),
+`rpm_limit` (integer `≥1`, rejected above the current global per-user cap — the
+administrator raises that cap via `default_rpm_per_user` first), and `lang`
+(`"zh"`/`"en"`). An explicit `null` clears a limit back to the global default;
+an absent field is unchanged. Unknown fields, trailing tokens, an empty body,
+and oversized bodies are `invalid_request`; the administrator row is
+`forbidden`; a missing user is `not_found`.
 | `POST` | `/admin/api/users/{id}/ban` | admin session | `{reason?}` | `204`; sets `is_banned` + `banned_reason`; the user's caller key and sessions are invalidated immediately | `unauthorized`, `forbidden`, `not_found` |
 | `POST` | `/admin/api/users/{id}/unban` | admin session | — | `204`; clears `is_banned`/`banned_reason` | `unauthorized`, `forbidden`, `not_found` |
+
+Ban performs the flag update, the session deletion, and the caller-key deletion
+in one transaction, so request-time session auth and platform-exit caller-key
+auth are invalidated atomically (`reason` is optional, bounded to 1024 bytes,
+control-character-free). Unban does not recreate a caller key: the user must
+generate a new one.
 | `DELETE` | `/admin/api/users/{id}` | admin session + elevated | — | `204`; same cleanup guarantees as §3.8 self-service delete, plus the duplicated-by-orphan-alerts atomic suppression hook | `forbidden`, `unauthorized`, `not_found`, `internal` |
 
 ### 4.3 Global logs, usage, overview
@@ -431,7 +460,22 @@ Known `site_config` keys (the authoritative key set is enforced by the handler):
 - `discord_guild_id`, `discord_role_id` — registration gate (both must match to allow new registration; either blank pauses registration)
 - `alert_prefs_*` — administrator alert-center preferences
 
-Runtime config changes do not require a restart.
+Values are typed: integer keys (`default_endpoint_limit` `[0,10000]`; RPM keys
+`[1,4096]`, matching the shared limiter's event-store ceiling; concurrency keys
+`[1,100000]`) accept only JSON integers, text keys only JSON strings (bounded,
+no control characters), and `default_locale` only `"zh"`/`"en"`. `null` is
+rejected (clearing a per-user limit is expressed through the user-level NULL
+semantics; blanking a text gate value uses `""`). `GET` returns the effective
+typed value for every known key (documented defaults when unset) and never
+projects an unknown stored row; `PATCH` of an unknown key is `not_found`.
+`PATCH` responds `200 {key, value}` with the applied typed value.
+
+Runtime config changes do not require a restart: `default_rpm_per_user` /
+`global_rpm` are applied to the shared flow-control controller and
+`default_per_endpoint_concurrency` / `egress_global_concurrency` to the shared
+egress gate through the runtime apply hook. A failed runtime apply fails closed
+(DB untouched); a persistence failure after a successful apply reverts the
+runtime singleton to its previous value, so DB and runtime cannot drift.
 
 ### 4.5 Admin alerts
 

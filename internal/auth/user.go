@@ -2,9 +2,11 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"nonbiriapi/internal/host"
 	"nonbiriapi/internal/httperr"
 	"nonbiriapi/internal/httpmw"
+	"nonbiriapi/internal/ratelimit"
 )
 
 // DefaultElevatedCapabilityTTL mirrors the shared elevation manager default
@@ -38,6 +41,11 @@ type UserAuthConfig struct {
 	// Nil creates an owned manager for a standalone auth service; production
 	// should inject one instance shared with lifecycle.
 	Elevation *elevation.Manager
+	// UserRPMLimitCap optionally resolves the current site-wide per-user RPM
+	// ceiling used to clamp self-service rpm_limit updates (PATCH /api/me).
+	// Nil falls back to the persisted default_rpm_per_user site_config value,
+	// then the ratelimit package default.
+	UserRPMLimitCap func(ctx context.Context) (int, error)
 }
 
 // UserAuth exposes handlers, a mountable auth route tree, and middleware for
@@ -54,6 +62,7 @@ type UserAuth struct {
 	redirectURI      string
 	userRedirectPath string
 	registrationGate RegistrationGateFunc
+	userRPMLimitCap  func(ctx context.Context) (int, error)
 }
 
 // NewUserAuth validates fixed station configuration and returns a mountable
@@ -121,6 +130,7 @@ func NewUserAuth(config UserAuthConfig) (*UserAuth, error) {
 		store: config.Store, provider: config.Provider, clientID: config.ClientID, state: config.State,
 		ownsState: ownsState, siteBaseURL: base, redirectURI: redirectURI, userRedirectPath: path,
 		registrationGate: gate, elevation: manager, ownsElevation: ownsElevation,
+		userRPMLimitCap: config.UserRPMLimitCap,
 	}, nil
 }
 
@@ -411,6 +421,106 @@ func (a *UserAuth) Session(w http.ResponseWriter, r *http.Request) {
 // Me is the contract-compatible alias for the user profile probe.
 func (a *UserAuth) Me(w http.ResponseWriter, r *http.Request) { a.Session(w, r) }
 
+// PatchMe handles PATCH /api/me: a session-only self-service profile update
+// limited to lang and the user's own rpm_limit. endpoint_limit, admin/ban
+// state, usage, and the body user id are never accepted (unknown fields are
+// rejected by the strict decoder). rpm_limit is clamped to the current global
+// per-user cap; an explicit null restores the global default. The response is
+// the same no-store user envelope as GET /api/me.
+func (a *UserAuth) PatchMe(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodPatch) || !requireStation(w, r, host.StationUser) {
+		return
+	}
+	if a == nil || a.store == nil {
+		writeStableError(w, httperr.CodeServiceUnavailable, "authentication service unavailable")
+		return
+	}
+	user, ok := a.authenticateUserRequest(r)
+	if !ok {
+		writeStableError(w, httperr.CodeUnauthorized, "authentication required")
+		return
+	}
+	var body struct {
+		Lang     *string         `json:"lang"`
+		RPMLimit json.RawMessage `json:"rpm_limit"`
+	}
+	if !decodeJSONBody(w, r, &body) {
+		return
+	}
+	if body.Lang == nil && body.RPMLimit == nil {
+		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+		return
+	}
+	patch := db.UserLimitPatch{}
+	if body.Lang != nil {
+		if *body.Lang != "zh" && *body.Lang != "en" {
+			writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+			return
+		}
+		patch.LangSet = true
+		patch.Lang = *body.Lang
+	}
+	if body.RPMLimit != nil {
+		if string(body.RPMLimit) == "null" {
+			// An explicit null restores the global default.
+			patch.RPMLimitSet = true
+		} else {
+			var limit int
+			if err := json.Unmarshal(body.RPMLimit, &limit); err != nil || limit < 1 {
+				writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+				return
+			}
+			cap, err := a.currentUserRPMLimitCap(r.Context())
+			if err != nil {
+				writeStableError(w, httperr.CodeInternal, "profile update unavailable")
+				return
+			}
+			if limit > cap {
+				limit = cap
+			}
+			patch.RPMLimitSet = true
+			patch.RPMLimit = &limit
+		}
+	}
+	updated, err := a.store.UpdateUserLimits(user.ID, patch)
+	if err != nil {
+		switch {
+		case errors.Is(err, db.ErrNotFound), errors.Is(err, db.ErrAdminProtected):
+			// The session raced an account deletion; never distinguish it.
+			writeStableError(w, httperr.CodeUnauthorized, "authentication required")
+		case errors.Is(err, db.ErrConflict):
+			writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+		default:
+			writeStableError(w, httperr.CodeInternal, "profile update unavailable")
+		}
+		return
+	}
+	httperr.WriteJSON(w, http.StatusOK, userEnvelope{User: publicUser(updated)})
+}
+
+// currentUserRPMLimitCap resolves the ceiling used to clamp self-service
+// rpm_limit updates: the injected resolver when present, otherwise the
+// persisted default_rpm_per_user site_config value, otherwise the ratelimit
+// package default. The flow-control controller clamps the stored value again
+// at admission, so an over-large stored value can never raise a user's
+// budget.
+func (a *UserAuth) currentUserRPMLimitCap(ctx context.Context) (int, error) {
+	if a.userRPMLimitCap != nil {
+		return a.userRPMLimitCap(ctx)
+	}
+	if a.store != nil {
+		if raw, err := a.store.GetSiteConfigValue("default_rpm_per_user"); err == nil {
+			raw = strings.TrimSpace(raw)
+			if raw != "" {
+				if n, perr := strconv.Atoi(raw); perr == nil && n >= 1 {
+					return n, nil
+				}
+			}
+		}
+	}
+	return ratelimit.DefaultRPMPerUserLimit, nil
+}
+
 // Logout handles POST /api/auth/logout and atomically removes the presented
 // user session. Invalid/missing cookies are not echoed.
 func (a *UserAuth) Logout(w http.ResponseWriter, r *http.Request) {
@@ -692,6 +802,7 @@ func (a *UserAuth) Handler() http.Handler {
 	mux.HandleFunc("POST /api/auth/elevate", a.Elevate)
 	mux.HandleFunc("GET /api/session", a.Session)
 	mux.HandleFunc("GET /api/me", a.Me)
+	mux.HandleFunc("PATCH /api/me", a.PatchMe)
 	mux.HandleFunc("POST /api/auth/logout", a.Logout)
 	mux.HandleFunc("GET /api/caller-key", a.UserCallerKeyMetadata)
 	mux.HandleFunc("POST /api/caller-key/regenerate", a.RegenerateCallerKey)

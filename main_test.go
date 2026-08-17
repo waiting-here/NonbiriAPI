@@ -1,14 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"nonbiriapi/internal/config"
+	"nonbiriapi/internal/db"
+	"nonbiriapi/internal/secret"
 )
 
 func testHTTPConfig() *config.Config {
@@ -91,6 +95,61 @@ func TestHTTPHandlerStationAndPathMatrix(t *testing.T) {
 	}
 	if err := json.Unmarshal(unknown.Body.Bytes(), &envelope); err != nil || envelope.Error.Code != "invalid_request" {
 		t.Fatalf("unknown response=%s err=%v", unknown.Body.String(), err)
+	}
+}
+
+func TestApplicationWiringProtectsAllEntryPoints(t *testing.T) {
+	key := bytes.Repeat([]byte{0x6a}, secret.MasterKeyBytes)
+	vault, err := secret.New(key)
+	clear(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := db.Open(filepath.Join(t.TempDir(), "integration.db"), vault)
+	if err != nil {
+		_ = vault.Close()
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = store.Close()
+		_ = vault.Close()
+	}()
+	cfg := &config.Config{
+		ListenAddr: "127.0.0.1:18080", UserHost: "127.0.0.1", AdminHost: "127.0.0.2",
+		SiteBaseURL: "https://127.0.0.1", TrustedProxyCIDRs: []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")},
+		AdminUsername: "root", AdminPassword: "password", DiscordClientID: "client-id", DiscordClientSecret: "client-secret",
+	}
+	app, err := buildApplication(cfg, store, vault)
+	if err != nil {
+		t.Fatalf("buildApplication: %v", err)
+	}
+	defer app.Close()
+
+	for _, tc := range []struct {
+		name, host, path, want string
+	}{
+		{"user health", "127.0.0.1", "/healthz", `"status":"ok"`},
+		{"user management requires session", "127.0.0.1", "/api/endpoints", `"code":"unauthorized"`},
+		{"caller exit requires bearer", "127.0.0.1", "/v1/models", `"code":"unauthorized"`},
+		{"admin session requires cookie", "127.0.0.2", "/admin/api/session", `"code":"unauthorized"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := testHTTPResponse(t, app.handler, http.MethodGet, tc.host, tc.path)
+			if !strings.Contains(rec.Body.String(), tc.want) {
+				t.Fatalf("status=%d body=%q want=%q", rec.Code, rec.Body.String(), tc.want)
+			}
+			if rec.Header().Get("Cache-Control") != "no-store" {
+				t.Fatalf("cache-control=%q", rec.Header().Get("Cache-Control"))
+			}
+		})
+	}
+	spa := testHTTPResponse(t, app.handler, http.MethodGet, "127.0.0.1", "/")
+	if spa.Code != http.StatusOK || !strings.HasPrefix(spa.Header().Get("Content-Type"), "text/html") {
+		t.Fatalf("user SPA status=%d content-type=%q", spa.Code, spa.Header().Get("Content-Type"))
+	}
+	unknown := testHTTPResponse(t, app.handler, http.MethodGet, "198.51.100.10", "/")
+	if unknown.Code != http.StatusBadRequest || strings.Contains(unknown.Body.String(), "user placeholder") {
+		t.Fatalf("unknown host response status=%d body=%q", unknown.Code, unknown.Body.String())
 	}
 }
 

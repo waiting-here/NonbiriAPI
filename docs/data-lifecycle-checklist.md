@@ -49,6 +49,7 @@ be closed before the task is accepted.
 | `request_logs` | `user_id` FK CASCADE; `endpoint_key_id` FK SET NULL | yes (bounded metadata summary; **no content**) | cascade on user delete; late `RecordRequest` uses `INSERT ... SELECT ... WHERE EXISTS users` (atomic no-op) | **30-day retention cleanup**; at-most-once by `attempt_id` partial unique index | metadata + bounded `error_diag` only; content never persisted |
 | `user_issues` | `user_id` FK CASCADE | yes (kind, message, ref, created_at, resolved) | cascade on user delete; late `RecordUserIssue`/`FailFetch` use `INSERT ... SELECT ... WHERE EXISTS users` (atomic no-op) | hard cap `MaxUserIssuesPerUser` + resolve state | bounded/sanitized message/ref via `diagnostic.BoundTo` |
 | `admin_alerts` | `subject_user_id` **NO FK** (by design) | no (admin-facing, not the user's export) | explicit `DELETE FROM admin_alerts WHERE subject_user_id=?` inside `DeleteUserAccount`; late `RecordAdminAlert`/`RecordAdminAlertBounded` use `INSERT ... SELECT ... WHERE EXISTS users` (atomic no-op) | hard total cap `MaxAdminAlertsTotal` + per-kind pending cap + resolve state | bounded/sanitized message/ref; no secret |
+| `site_config` | **no user link** (admin-only runtime config) | n/a (never part of an account export) | n/a (not removed on account deletion; survives as operator configuration) | bounded known-key set (`adminapi` registry) with typed/range/control validation | no secret/upstream material by construction; values are bounded text/ints |
 
 ## Adding a new user-associated table/column — required steps
 

@@ -11,7 +11,7 @@ import {
 } from '@shared/components/States';
 import { apiFetch } from '@shared/query/http';
 import { asRecord, hasControlCharacters } from '@shared/query/normalize';
-import { useUserMe, useUserSession, useUserUsage, userKeys } from '../data';
+import { useUserMe, useUserSession, useUserUsage, useUpdateUserProfile, userKeys } from '../data';
 import { UserPageGate } from '../components/UserPageGate';
 
 function number(value: number): string {
@@ -76,6 +76,100 @@ function downloadExport(payload: unknown): void {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+function PreferencesForm({ initialLang, initialRpm }: { initialLang: 'zh' | 'en'; initialRpm?: number }) {
+  const { t } = useTranslation();
+  const updateProfile = useUpdateUserProfile();
+  const [lang, setLang] = useState<'zh' | 'en'>(initialLang);
+  const [rpm, setRpm] = useState(initialRpm === undefined ? '' : String(initialRpm));
+  const [validationError, setValidationError] = useState('');
+
+  const save = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setValidationError('');
+    let rpmLimit: number | null = null;
+    if (rpm.trim()) {
+      if (!/^\d+$/.test(rpm.trim())) {
+        setValidationError(t('user.account.preferencesRpmInvalid'));
+        return;
+      }
+      const parsed = Number(rpm.trim());
+      if (!Number.isSafeInteger(parsed) || parsed < 1) {
+        setValidationError(t('user.account.preferencesRpmInvalid'));
+        return;
+      }
+      rpmLimit = parsed;
+    }
+    updateProfile.mutate({ lang, rpm_limit: rpmLimit });
+  };
+
+  return (
+    <form className="limit-form" onSubmit={save} noValidate>
+      <div className="limit-fields">
+        <label>
+          <span>{t('user.account.preferencesLang')}</span>
+          <select value={lang} onChange={(event) => setLang(event.target.value === 'en' ? 'en' : 'zh')} aria-label={t('user.account.preferencesLang')}>
+            <option value="zh">中文</option>
+            <option value="en">EN</option>
+          </select>
+        </label>
+        <label>
+          <span>{t('user.account.preferencesRpm')}</span>
+          <input
+            type="number"
+            min="1"
+            step="1"
+            value={rpm}
+            onChange={(event) => setRpm(event.target.value)}
+            placeholder={t('user.account.preferencesRpmPlaceholder')}
+            aria-label={t('user.account.preferencesRpm')}
+          />
+        </label>
+      </div>
+      <small className="muted">{t('user.account.preferencesRpmHint')}</small>
+      {validationError ? <p className="field-error" role="alert">{validationError}</p> : null}
+      {updateProfile.error ? <ErrorState error={updateProfile.error} /> : null}
+      {updateProfile.isSuccess ? <p className="inline-success" role="status">{t('user.account.preferencesSaved')}</p> : null}
+      <div className="table-actions">
+        <button type="submit" className="btn btn-quiet" disabled={updateProfile.isPending}>
+          {updateProfile.isPending ? t('common.working') : t('user.account.preferencesSave')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-link"
+          onClick={() => setRpm('')}
+        >
+          {t('user.account.preferencesRestore')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function PreferencesCard() {
+  const { t } = useTranslation();
+  const me = useUserMe(true);
+  return (
+    <Card>
+      <h2>{t('user.account.preferencesTitle')}</h2>
+      <p className="muted">{t('user.account.preferencesBody')}</p>
+      {me.isPending ? (
+        <LoadingState />
+      ) : me.error ? (
+        <ErrorState error={me.error} onRetry={() => void me.refetch()} />
+      ) : (
+        // Remount with fresh server values after every save (the profile
+        // query is invalidated by the mutation), so the form always shows
+        // the server-authoritative, clamped state.
+        <PreferencesForm
+          key={`${me.data.id}-${me.data.lang}-${me.data.rpm_limit ?? 'default'}`}
+          initialLang={me.data.lang}
+          initialRpm={me.data.rpm_limit}
+        />
+      )}
+    </Card>
+  );
 }
 
 function AccountContent() {
@@ -225,6 +319,8 @@ function AccountContent() {
           )}
         </Card>
       </div>
+
+      <PreferencesCard />
 
       <Card className="danger-zone">
         <h2>{t('user.account.securityTitle')}</h2>
