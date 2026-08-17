@@ -1,0 +1,394 @@
+# NonbiriAPI HTTP API Contract (v1.0.0-alpha.1)
+
+- Status: **draft** (contract freeze point for Phase 0 → Phase 1)
+- Scope: v1.0.0-alpha.1 surface only. `/v1/chat/completions` and `/v1/models` are the only
+  OpenAI-compatible exit endpoints in alpha.1; embeddings / images / audio / files /
+  moderation / batch are deferred past the alpha.
+- Authority: this document aligns to the frozen v1.0.0-alpha.1 requirements, the accepted
+  credential / egress / data-lifecycle decisions, and the emitted stable-code set of
+  `internal/httperr`. Endpoint path names and JSON field names are contract drafts and may
+  be tuned during implementation; the entity relationships, invariants, auth model,
+  stable codes, cache policy, and diagnostic shape are the frozen contract.
+
+## 1. Conventions
+
+### 1.1 Stations and hosts
+
+Two physically host-isolated stations share one binary:
+
+| Station | Host | Serves |
+|---|---|---|
+| User station | `<userHost>` (derived from the configured site origin) | the OpenAI-compatible exit (`/v1/*`), normal-user self-service API (`/api/*`), the user SPA |
+| Admin station | `<adminHost>` (`admin.` prefix of, or env override on, `<userHost>`) | administrator API (`/admin/api/*`), the admin SPA |
+
+Host selection is a security control (trusted-proxy forwarding, distinct-host enforcement,
+client-IP/CIDR validation); it is implemented in a later rail. The contracts below assume a
+request already arrived at the correct station host. A request reaching the wrong host is not
+authorized to reach another station's API.
+
+`GET /healthz` is an unauthenticated liveness probe on both hosts; it never touches the
+database and returns `{"status":"ok"}`.
+
+### 1.2 Authentication schemes
+
+| Scheme | Where used | Carrier |
+|---|---|---|
+| CallerKey Bearer | platform exit `/v1/*` | `Authorization: Bearer nbk_<secret>` (the user's single per-user call key) |
+| User session | user station `/api/*` | opaque session cookie (Secure, HttpOnly, SameSite), idle + absolute TTL |
+| Admin session | admin station `/admin/api/*` | opaque admin session cookie (same attributes) |
+| Elevated (two-step) | self-service export / delete; destructive admin actions | short-lived elevated-action capability bound to an active session, obtained via a two-step endpoint |
+
+A normal user holds exactly one caller key (`nbk_` prefix, no scope binding). Regeneration
+invalidates the previous key the instant the new row is written; the plaintext is shown once
+at generation time and never persisted in a recoverable form (only an irretrievable SHA-256
+hash and head/tail display fragments are stored).
+
+A banned user's caller key is treated as invalid at request time, so a banned key fails
+platform-exit auth with `unauthorized`. Banning also keeps the user's sessions out of further
+use.
+
+### 1.3 Cache policy
+
+`Cache-Control: no-store` is the default for the whole API: every JSON success written through
+the shared response helper and every error envelope carries it. It is mandatory (and not
+overridable) for all key / secret / configuration endpoints so a secret or a stale config can
+never be cached. Hashed static SPA assets keep the file server's default caching; the SPA
+`index.html` and SPA route fallbacks are served `no-store` so a previous binary's bundle can
+never shadow a redeploy.
+
+### 1.4 Stable error envelope
+
+Every error response is a single JSON object:
+
+```json
+{ "error": { "code": "<stable>", "message": "<human, bounded>",
+             "diag": "<optional, bounded upstream context>", "request_id": "<optional>" } }
+```
+
+- `code` is a stable machine identifier. Codes may be added; an existing one is never
+  redefined for a new meaning. Unknown codes map to HTTP 500 internally.
+- `message` is bounded to 1000 runes and stripped of all C0 control characters and DEL; it
+  carries a short human-safe summary and **never** raw upstream identifiers or text.
+- `diag` is bounded to 4096 runes (the untrusted-upstream diagnostic limit). Carriage returns
+  become spaces; TAB and LF are kept; other C0 control characters and DEL are stripped. It is
+  omitted when empty. It is the only place raw upstream identifiers/error text may appear, and
+  only after this layer's bounding and sanitization. Frontends render `diag` as text, never as
+  HTML or formula-interpreted content.
+
+### 1.5 Layered diagnostic recording
+
+Diagnostics are recorded at two layers:
+
+- **Edge response** (`error.diag`, see above): bounded/sanitized upstream context surfaced to
+  the caller (operator or user where appropriate).
+- **Persistence** (`request_logs.error_code`, `request_logs.error_diag`): every forwarded
+  request logs the stable `error_code` and a bounded `error_diag` (≤4096) in the same
+  transaction as its usage accumulators. `request_logs` holds metadata only — no request or
+  response content is ever persisted (privacy policy).
+
+Logging additionally redacts by field name at the structured logger: keys and token fields are
+matched by a `_key` / token-name pattern and never emitted in plaintext.
+
+### 1.6 Stable code set
+
+Codes below are the emitted set; HTTP status is derived from the code.
+
+| code | HTTP | Used for |
+|---|---|---|
+| `internal` | 500 | unexpected server error |
+| `invalid_request` | 400 | malformed request body, invalid argument, validation failure |
+| `unauthorized` | 401 | missing / invalid / banned caller key or session |
+| `forbidden` | 403 | valid identity, not allowed for this resource |
+| `not_found` | 404 | unknown model, endpoint, key, model, binding, or resource |
+| `conflict` | 409 | uniqueness violation or illegal state transition |
+| `method_not_allowed` | 405 | path matched but method did not |
+| `rate_limited` | 429 | per-user RPM, global RPM, or concurrency gate exhausted |
+| `payload_too_large` | 413 | request exceeds the configured size bound |
+| `unbound_model` | 503 | resolved a platform model that has no usable binding (zero-binding draft / all bindings filtered out); a user issue is recorded |
+| `upstream` | 502 | upstream error after the commit boundary, a single attempt's upstream error with silent retry off, or all bindings exhausted under silent retry |
+| `service_unavailable` | 503 | internal service unavailability |
+
+## 2. Platform exit — `/v1/*` (CallerKey Bearer)
+
+Auth: `Authorization: Bearer nbk_<secret>`. The secret is the caller's per-user call key
+(never an upstream key). All responses are `no-store`.
+
+### 2.1 `POST /v1/chat/completions`
+
+OpenAI-compatible chat completions, streaming and non-streaming.
+
+Request body (OpenAI Chat Completions shape; call parameters are passed through verbatim —
+parameters the caller did not send are **not** injected, so the upstream applies its own
+defaults):
+
+| Field | Required | Notes |
+|---|---|---|
+| `model` | yes | a platform model full name `provider/model`; resolved against the caller's models only |
+| `stream` | no | `true` selects SSE; omitted/`false` selects the single JSON response |
+| other fields | no | forwarded as-is (incl. `stream_options.include_usage` when the caller sets it) |
+
+Server-side behavior (frozen contract; implementation in a later rail):
+
+1. Resolve `model` to one of the caller's platform models → its binding set. Cross-user
+   resources never enter the candidate set.
+2. Select a binding by the model's `route_strategy`:
+   - `ordered` — try bindings by `ord` ascending; advance only after a failure.
+   - `random` — pure random pick per call (stateless).
+3. Retry boundary = **committing no response-body bytes to the client yet**:
+   - Failure before the boundary (connection / DNS / upstream error status with nothing
+     streamed): by default return the error immediately; if the model's silent-retry option is
+     on, record a user issue and try the next binding until success or exhaustion.
+   - Failure after the boundary (streaming already started, first byte already sent): **no
+     retry**; end the current stream with an error.
+   Non-stream requests can retry up to the boundary, same option/default.
+4. Inject the OpenAI `safety_identifier` field = a stable, irreversible hash of the calling
+   user's id, for upstream per-user risk attribution.
+
+Response — non-stream (`stream` false/omitted): standard OpenAI Chat Completions response,
+including `usage` (`prompt_tokens`, `completion_tokens`, `total_tokens`) when the upstream
+returned it. HTTP 200 alone is not success; success requires a complete, protocol-valid body.
+
+Response — stream (`stream: true`): `Content-Type: text/event-stream`. A sequence of
+`data: <json chunk>\n\n` frames shaped as OpenAI Chat Completions chunks, terminated by
+`data: [DONE]\n\n`. When the caller asked for usage and the upstream supports it, an accurate
+`usage` is taken from the terminal chunk. HTTP 200 is not success: an explicit `[DONE]` frame
+(or a clean protocol termination) is required; an incomplete stream is never synthesized as a
+success. If the client disconnects, the cancellation is propagated upstream and concurrent
+slots / reservations are released; any unreadable `usage` is recorded with the
+`usage_unknown` flag rather than fabricated token values.
+
+Stable error codes at this endpoint:
+
+| code | HTTP | When |
+|---|---|---|
+| `unauthorized` | 401 | missing / invalid / banned caller key |
+| `forbidden` | 403 | caller identity valid but not permitted (e.g., not the key owner) |
+| `not_found` | 404 | `model` did not resolve to one of the caller's platform models |
+| `rate_limited` | 429 | per-user RPM, global RPM, or concurrency exhausted |
+| `payload_too_large` | 413 | request body exceeds the configured size bound |
+| `unbound_model` | 503 | the resolved model has no usable binding (zero-binding draft / all bindings filtered out) — a user issue is recorded |
+| `upstream` | 502 | upstream error after the commit boundary, single-attempt upstream error with silent retry off, or all bindings exhausted under silent retry |
+| `internal` | 500 | unexpected failure |
+
+(within an already-started stream, an error is emitted as an SSE error frame rather than a
+fresh HTTP error envelope, because the response status and headers have already been written.)
+
+### 2.2 `GET /v1/models`
+
+Lists the caller's own platform models (not upstream models), in the OpenAI `list` shape.
+
+Response (`200`, `no-store`):
+
+```json
+{ "object": "list",
+  "data": [ { "id": "provider/model", "object": "model",
+              "created": 1700000000, "owned_by": "provider" } ] }
+```
+
+- `id` is the platform model full name `provider/model` (the exact routing key).
+- `owned_by` is the model's `provider`.
+- Only the caller's models appear; cross-user resources are never candidates.
+
+Stable error codes: `unauthorized` (401); `rate_limited` (429); `internal` (500).
+
+## 3. User station — `/api/*` (user session cookie)
+
+Auth: a valid user session cookie. Banned users are denied. All responses are `no-store`.
+
+### 3.1 Auth & session
+
+| Method | Path | Auth | Body | Response | Stable codes |
+|---|---|---|---|---|---|
+| `GET` | `/api/auth/discord/start` | none | — | `302` to Discord's authorize URL; sets the OAuth `state` cookie (HMAC, short TTL, HttpOnly, SameSite) | `service_unavailable` (503) if Discord end is misconfigured / registration paused |
+| `GET` | `/api/auth/discord/callback` | OAuth `state` cookie | query: `code`, `state` | on success: sets the user session cookie and `302` to the user SPA; on mismatch/failure: `400 invalid_request` / `401 unauthorized` | `invalid_request`, `unauthorized`, `conflict`, `service_unavailable` |
+| `GET` | `/api/session` | user session | — | `200 {user:{id,username,avatar,lang,is_banned,endpoint_limit,rpm_limit,created_at}}` | `unauthorized` |
+| `POST` | `/api/auth/logout` | user session | — | `204`; clears the session cookie | `unauthorized` |
+
+Registration gate (Discord): registration is allowed only when both the configured
+`discord_guild_id` and `discord_role_id` match the Discord identity. If either is blank,
+registration is paused (already-registered users can still log in). The exact scope/guild/
+nickname policy is finalized when Discord is wired.
+
+### 3.2 Two-step elevation (for self-service export / delete)
+
+| Method | Path | Auth | Body | Response | Stable codes |
+|---|---|---|---|---|---|
+| `POST` | `/api/auth/elevate` | user session | — | initiates a fresh Discord re-authorization for an elevated-action capability (HMAC state, short TTL); on completion the session carries an elevated capability until it expires / is consumed | `unauthorized`, `service_unavailable` |
+
+Self-service destructive endpoints (`3.8`) require an **active elevated capability**. The
+carrier is the header `X-Elevated-Token: <token>` (a short-lived, single-use bound capability).
+A request without / with an expired / with an already-consumed token is `403 forbidden`
+(`elevated_required`).
+
+### 3.3 Profile & usage
+
+| Method | Path | Auth | Body | Response | Stable codes |
+|---|---|---|---|---|---|
+| `GET` | `/api/me` | user session | — | `200` user object (id, username, avatar, lang, is_banned, blocked_reason if any, endpoint_limit, rpm_limit, created_at) | `unauthorized` |
+| `PATCH` | `/api/me` | user session | `{lang?, rpm_limit?}` | `200` updated user object (`rpm_limit` is clamped to the global cap; clearing sends null to restore global default semantics within the user self-tunability band) | `invalid_request`, `unauthorized` |
+| `GET` | `/api/me/usage` | user session | — | `200 {total_requests, total_prompt_tokens, total_completion_tokens, total_unknown_usage_requests}` | `unauthorized` |
+
+Self-tunable `rpm_limit` is bounded by the global cap; it cannot exceed it. A null
+user-level limit means the global default applies.
+
+### 3.4 Caller key
+
+| Method | Path | Auth | Body | Response | Stable codes |
+|---|---|---|---|---|---|
+| `GET` | `/api/caller-key` | user session | — | `200 {display:"nbk_<head4>…<tail4>", created_at, updated_at}` — head/tail fragments only; the secret is never returned | `unauthorized` |
+| `POST` | `/api/caller-key/regenerate` | user session | — | `200 {secret:"nbk_…"}` — the full plaintext is returned **once**; the previous key is invalidated instantly and the new hash/display fragments are persisted in place | `unauthorized`, `rate_limited` |
+
+### 3.5 Endpoints
+
+| Method | Path | Auth | Body | Response | Stable codes |
+|---|---|---|---|---|---|
+| `GET` | `/api/endpoints` | user session | — | `200` array of `{id, connector_type, base_url, note, enabled, created_at, updated_at}` (key secrets never appear) | `unauthorized` |
+| `POST` | `/api/endpoints` | user session | `{base_url, note?, enabled?}` | `201` created endpoint; `base_url` is canonicalized (scheme/host lowercased, trailing dot removed, default ports made explicit, userinfo/query/fragment removed, redundant slashes collapsed) before persistence | `invalid_request`, `unauthorized`, `conflict`, `forbidden` (endpoint cap reached: `min(global_default, user_limit)`) |
+| `GET` | `/api/endpoints/{id}` | user session | — | `200` the endpoint object | `unauthorized`, `not_found` |
+| `PATCH` | `/api/endpoints/{id}` | user session | `{base_url?, note?, enabled?}` | `200` updated endpoint; saving / editing triggers an automatic re-fetch of every enabled key's upstream models | `invalid_request`, `unauthorized`, `not_found`, `forbidden` |
+| `DELETE` | `/api/endpoints/{id}` | user session | — | `204`; cascades to its keys, their fetched-model cache, and their bindings (immediate invalidation) | `unauthorized`, `not_found` |
+
+Multiple endpoints may share the same canonical `base_url` (no uniqueness on
+`base_url`); each keeps independent note/enabled state. The endpoint-count cap is
+`min(global_default, user_endpoint_limit)`; when the current count reaches the cap, new
+endpoints are rejected (`forbidden`) while existing ones are retained. The admin can set a
+per-user endpoint limit and clear it (NULL restores the global default).
+
+### 3.6 Endpoint keys & fetched models
+
+| Method | Path | Auth | Body | Response | Stable codes |
+|---|---|---|---|---|---|
+| `GET` | `/api/endpoints/{id}/keys` | user session | — | `200` array of `{id, note, enabled, created_at, updated_at}`; only head/tail display fragments, never the secret | `unauthorized`, `not_found` |
+| `POST` | `/api/endpoints/{id}/keys` | user session | `{secret, note?, enabled?}` | `201` created key metadata (`secret` is encrypted before persistence and never returned); triggers a model fetch for this key | `invalid_request`, `unauthorized`, `not_found`, `payload_too_large` |
+| `PATCH` | `/api/endpoints/{id}/keys/{keyId}` | user session | `{note?, enabled?}` | `200` updated key | `invalid_request`, `unauthorized`, `not_found` |
+| `DELETE` | `/api/endpoints/{id}/keys/{keyId}` | user session | — | `204`; cascades to its fetched-model cache and bindings | `unauthorized`, `not_found` |
+| `GET` | `/api/endpoints/{id}/keys/{keyId}/models` | user session | — | `200` array of `{upstream_model_id, provider, fetched_at, status}` for that (Endpoint, Key) combo | `unauthorized`, `not_found` |
+| `POST` | `/api/endpoints/{id}/keys/{keyId}/models/refresh` | user session | — | `202`; triggers a manual upstream `/v1/models` fetch; on success the cache for that combo is replaced; on failure the cache is cleared, the endpoint is flagged, and a user issue is recorded | `unauthorized`, `not_found`, `rate_limited` |
+
+The fetched-model cache is keyed per **(Endpoint, Key)** combo: different keys on the same
+endpoint may legitimately return different upstream lists. The server fetches automatically
+once after an endpoint save/edit or key add, and only manually thereafter (no background
+refresh). Fetched upstream model identifiers are treated as untrusted: bounded in size and
+count, validated to prevent over-long names polluting logs/DOM/DB. When a key is regenerated
+is not applicable (caller key is separate); when an endpoint key is deleted/disabled, its
+cache rows and bindings no longer participate in routing (immediate invalidation by cascade).
+
+### 3.7 Models & bindings
+
+| Method | Path | Auth | Body | Response | Stable codes |
+|---|---|---|---|---|---|
+| `GET` | `/api/models` | user session | — | `200` array of `{id, provider, model, full_name, route_strategy, binding_count, created_at, updated_at}` | `unauthorized` |
+| `POST` | `/api/models` | user session | `{provider, model, route_strategy?}` | `201` created model; `provider`/`model` are free strings that allow `/` (each ≤64, no control chars, no leading/trailing whitespace); the external name is `provider/model` and uniqueness is enforced on that full name | `invalid_request`, `unauthorized`, `conflict` (full-name collision) |
+| `GET` | `/api/models/{id}` | user session | — | `200` the model object | `unauthorized`, `not_found` |
+| `PATCH` | `/api/models/{id}` | user session | `{provider?, model?, route_strategy?}` | `200` updated model (changing `provider/model` recomputes `full_name` and may collide) | `invalid_request`, `unauthorized`, `not_found`, `conflict` |
+| `DELETE` | `/api/models/{id}` | user session | — | `204`; cascades to its bindings | `unauthorized`, `not_found` |
+| `GET` | `/api/models/{id}/bindings` | user session | — | `200` array ordered by `ord`: `{id, endpoint_key_id, upstream_model_id, ord}` | `unauthorized`, `not_found` |
+| `POST` | `/api/models/{id}/bindings` | user session | `{endpoint_key_id, upstream_model_id, ord?}` | `201` created binding; `endpoint_key_id` must belong to one of the user's endpoints; `upstream_model_id` is chosen from that key's fetched cache | `invalid_request`, `unauthorized`, `not_found`, `conflict` (duplicate `(model_id, endpoint_key_id, upstream_model_id)`) |
+| `PATCH` | `/api/models/{id}/bindings/{bId}` | user session | `{ord?, upstream_model_id?}` | `200` updated binding | `invalid_request`, `unauthorized`, `not_found` |
+| `DELETE` | `/api/models/{id}/bindings/{bId}` | user session | — | `204` | `unauthorized`, `not_found` |
+
+A model may be saved with zero bindings (a draft). Calling a draft model over `/v1/chat/completions`
+yields **503** (see §2.1). `provider`/`model` are stored and matched only as opaque strings
+(never split into path segments for routing; never interpolated into SQL), so `/` has no
+injection surface.
+
+### 3.8 Account self-service (two-step required)
+
+Both endpoints require `X-Elevated-Token` from §3.2.
+
+| Method | Path | Auth | Body | Response | Stable codes |
+|---|---|---|---|---|---|
+| `POST` | `/api/account/export` | user session + elevated | — | `200` JSON export package (user info, endpoint metadata, models, caller-key metadata, usage totals, log summary) **without any plaintext upstream secret**; download bound to a short token | `forbidden`, `unauthorized`, `rate_limited`, `internal` |
+| `POST` | `/api/account/delete` | user session + elevated | `{confirm:"DELETE"}` | `204`; deletes the account and all linked data (endpoints, keys, models, bindings, request logs, caller key, orphan alerts/callbacks); late callbacks against a deleted account are atomically suppressed server-side so the insert no-ops; the current session is invalidated | `forbidden`, `unauthorized`, `conflict`, `internal` |
+
+The export package excludes upstream secret material by policy; it carries enough metadata to
+be usable as a portable account snapshot. The exact field list is finalized with the export
+rail but the scope (no plaintext secret) is frozen here.
+
+## 4. Admin station — `/admin/api/*` (admin session cookie)
+
+Auth: a valid admin session cookie. The administrator is env-configured (single row,
+`discord_id` null) and cannot self-register. All responses are `no-store`.
+
+### 4.1 Admin auth & elevation
+
+| Method | Path | Auth | Body | Response | Stable codes |
+|---|---|---|---|---|---|
+| `POST` | `/admin/api/login` | none | `{username, password}` | `200 {admin:{username}}` sets admin session cookie; throttled against brute force (configurable backoff window) | `unauthorized`, `rate_limited` |
+| `POST` | `/admin/api/logout` | admin session | — | `204` clears the cookie | `unauthorized` |
+| `GET` | `/admin/api/session` | admin session | — | `200 {admin:{username}}` | `unauthorized` |
+| `POST` | `/admin/api/auth/elevate` | admin session | `{password}` | grants an elevated-action capability (admin re-inputs password as the second factor), used by §4.2 destructive actions; capability consumed at use | `unauthorized`, `forbidden` |
+
+### 4.2 User management
+
+| Method | Path | Auth | Body | Response | Stable codes |
+|---|---|---|---|---|---|
+| `GET` | `/admin/api/users` | admin session | query: pagination + filters | `200` array of `{id, username, avatar, discord_id, is_banned, banned_reason, endpoint_limit, rpm_limit, usage totals, created_at}` (no caller-key secret) | `unauthorized`, `forbidden` |
+| `GET` | `/admin/api/users/{id}` | admin session | — | `200` the user object with full usage metadata | `unauthorized`, `forbidden`, `not_found` |
+| `PATCH` | `/admin/api/users/{id}` | admin session | `{endpoint_limit?, rpm_limit?, lang?}` | `200` updated user; `endpoint_limit`/`rpm_limit` nullable, NULL restores the global default; `rpm_limit` bounded by the global cap | `invalid_request`, `unauthorized`, `forbidden`, `not_found` |
+| `POST` | `/admin/api/users/{id}/ban` | admin session | `{reason?}` | `204`; sets `is_banned` + `banned_reason`; the user's caller key and sessions are invalidated immediately | `unauthorized`, `forbidden`, `not_found` |
+| `POST` | `/admin/api/users/{id}/unban` | admin session | — | `204`; clears `is_banned`/`banned_reason` | `unauthorized`, `forbidden`, `not_found` |
+| `DELETE` | `/admin/api/users/{id}` | admin session + elevated | — | `204`; same cleanup guarantees as §3.8 self-service delete, plus the duplicated-by-orphan-alerts atomic suppression hook | `forbidden`, `unauthorized`, `not_found`, `internal` |
+
+### 4.3 Global logs, usage, overview
+
+| Method | Path | Auth | Body | Response | Stable codes |
+|---|---|---|---|---|---|
+| `GET` | `/admin/api/logs` | admin session | query: user, time range, model, status, pagination | `200` array of request-log rows (metadata only — never content): `{id, user_id, model, endpoint_key_id, upstream_model_id, status_code, duration_ms, started_at, completed_at, prompt_tokens, completion_tokens, total_tokens, usage_unknown, error_code, error_diag}` | `unauthorized`, `forbidden` |
+| `GET` | `/admin/api/usage` | admin session | query: aggregation (site-wide, by user) | `200` aggregate usage totals | `unauthorized`, `forbidden` |
+| `GET` | `/admin/api/overview/endpoints` | admin session | — | `200` array of `{id, user_id, connector_type, base_url, note, enabled, key_count, created_at, updated_at}` — **metadata only, no plaintext key** | `unauthorized`, `forbidden` |
+| `GET` | `/admin/api/overview/models` | admin session | — | `200` array of `{id, user_id, provider, model, full_name, route_strategy, binding_count, created_at}` across all users | `unauthorized`, `forbidden` |
+
+Plaintext upstream secrets never appear in any admin overview, log, or usage response.
+
+### 4.4 Site configuration
+
+| Method | Path | Auth | Body | Response | Stable codes |
+|---|---|---|---|---|---|
+| `GET` | `/admin/api/site-config` | admin session | — | `200` object of known keys → values (see below) | `unauthorized`, `forbidden` |
+| `PATCH` | `/admin/api/site-config/{key}` | admin session | `{value}` | `200` updated value | `invalid_request`, `unauthorized`, `forbidden`, `not_found` |
+
+Known `site_config` keys (the authoritative key set is enforced by the handler):
+
+- `site_name`, `default_locale`
+- `default_endpoint_limit` — global endpoint-count cap default
+- `default_rpm_per_user` — global per-user RPM default
+- `global_rpm` — site-wide RPM cap
+- `default_per_endpoint_concurrency` — global per-endpoint concurrency cap (keyed by normalized `base_url`)
+- `egress_global_concurrency` — egress global concurrency gate
+- `discord_guild_id`, `discord_role_id` — registration gate (both must match to allow new registration; either blank pauses registration)
+- `alert_prefs_*` — administrator alert-center preferences
+
+Runtime config changes do not require a restart.
+
+### 4.5 Admin alerts
+
+| Method | Path | Auth | Body | Response | Stable codes |
+|---|---|---|---|---|---|
+| `GET` | `/admin/api/alerts` | admin session | query: `resolved` filter, pagination | `200` array of `{id, kind, message, ref, subject_user_id, created_at, resolved, resolved_at}` | `unauthorized`, `forbidden` |
+
+`subject_user_id` has no foreign key on purpose: late callbacks against a deleted user are
+suppressed atomically (`INSERT … SELECT … WHERE EXISTS`), so the alert row is written only
+when the subject still exists. Alerts carry bounded, sanitized `message`/`ref`.
+
+## 5. Cross-cutting requirements
+
+- **No plaintext upstream secret** is ever returned, listed, logged, exported, or surfaced in
+  an error envelope. Only head/tail display fragments appear in a key view.
+- **`Cache-Control: no-store`** is mandatory and default on every JSON response and every
+  error envelope, and is the only cache policy permitted for key/secret/config endpoints.
+- **Stable codes** are the sole machine-facing error identifier; HTTP status is derived from
+  them.
+- **Layered, bounded, sanitized diagnostics**: upstream identifiers/text live only in `diag`
+  (≤4096) and in `request_logs.error_diag` (≤4096), bounded and control-character-normalized
+  by the shared error layer; `message` (≤1000) is human-safe and free of raw upstream text.
+  Frontends render all such fields as text.
+- **Request/response content is never persisted**: `request_logs` and any log entry hold
+  metadata and bounded diagnostics only (privacy policy).
+- **30-day retention**: request logs are periodically cleaned past 30 days.
+- **Ownership isolation**: every read/write path checks `user_id`; cross-user resources never
+  enter the candidate set for routing or listing.
+- **Deterministic routing**: when a full name cannot be resolved to exactly this user's model,
+  the request is rejected (`not_found` / `unauthorized` as applicable), never guessed.
+- **Atomic late-callback handling**: account deletion and late callbacks are linearized by an
+  atomic conditional write, never by a read-then-write.
