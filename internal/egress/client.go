@@ -11,9 +11,9 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"nonbiriapi/internal/config"
+	"nonbiriapi/internal/diagnostic"
 )
 
 const (
@@ -454,7 +454,7 @@ func newBoundedError(prefix string, cause error) error {
 	if cause == nil {
 		return errors.New(prefix)
 	}
-	text := safeDiagnostic(cause.Error(), 4096)
+	text := diagnostic.Bound(cause.Error())
 	if text == "" {
 		text = "unknown error"
 	}
@@ -463,30 +463,3 @@ func newBoundedError(prefix string, cause error) error {
 
 func (e *boundedError) Error() string { return e.message }
 func (e *boundedError) Unwrap() error { return e.cause }
-
-func safeDiagnostic(value string, maxRunes int) string {
-	value = strings.ToValidUTF8(value, "\uFFFD")
-	var b strings.Builder
-	count := 0
-	for _, r := range value {
-		if count == maxRunes {
-			break
-		}
-		switch {
-		case r == '\t', r == '\n':
-			b.WriteRune(r)
-		case r == '\r':
-			b.WriteByte(' ')
-		case r < 0x20 || r == 0x7f:
-			continue
-		default:
-			b.WriteRune(r)
-		}
-		count++
-	}
-	result := b.String()
-	if !utf8.ValidString(result) {
-		return strings.ToValidUTF8(result, "\uFFFD")
-	}
-	return result
-}

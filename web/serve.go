@@ -5,14 +5,18 @@ import (
 	"net/http"
 	"path"
 	"strings"
+
+	"nonbiriapi/internal/host"
+	"nonbiriapi/internal/httperr"
 )
 
 // Site identifies one of the two embedded SPAs.
 type Site string
 
 const (
-	SiteAdmin Site = "admin"
-	SiteUser  Site = "user"
+	SiteUnknown Site = ""
+	SiteAdmin   Site = "admin"
+	SiteUser    Site = "user"
 )
 
 // The embedded filesystems for each site are resolved once at init. Which
@@ -24,28 +28,35 @@ var (
 )
 
 func siteFS(site Site) fs.FS {
-	if site == SiteAdmin {
+	switch site {
+	case SiteAdmin:
 		return adminFS
+	case SiteUser:
+		return userFS
+	default:
+		return nil
 	}
-	return userFS
 }
 
-// PickSite is a PLACEHOLDER host-to-site router. It selects which embedded SPA
-// to serve based on the request Host header. It is NOT a security control:
-// trusted-proxy forwarding, distinct-host enforcement, and client-IP/CIDR
-// validation are implemented by Phase 1 track E. Until then this naive prefix
-// mapping exists only so the binary serves the right placeholder bundle, and
-// callers must not treat it as protective routing.
-func PickSite(host string) Site {
-	h := host
-	if i := strings.IndexByte(h, ':'); i >= 0 {
-		h = h[:i] // strip a trailing :port
+// PickSite maps a host only when the configured user and admin hosts are
+// supplied. An unknown, malformed, or unconfigured host always returns
+// SiteUnknown; there is no implicit user-site fallback.
+func PickSite(raw string, configured ...string) Site {
+	if len(configured) != 2 {
+		return SiteUnknown
 	}
-	h = strings.ToLower(strings.TrimSuffix(h, "."))
-	if strings.HasPrefix(h, "admin.") {
+	matcher, err := host.NewMatcher(configured[0], configured[1])
+	if err != nil {
+		return SiteUnknown
+	}
+	switch matcher.Match(raw) {
+	case host.StationAdmin:
 		return SiteAdmin
+	case host.StationUser:
+		return SiteUser
+	default:
+		return SiteUnknown
 	}
-	return SiteUser
 }
 
 // SPAHandler serves a single site's embedded SPA. Unknown paths fall back to
@@ -55,6 +66,11 @@ func PickSite(host string) Site {
 // asset files keep the file server's default caching.
 func SPAHandler(site Site) http.Handler {
 	fsys := siteFS(site)
+	if fsys == nil {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			httperr.WriteError(w, httperr.New(httperr.CodeInternal, "site is not configured"))
+		})
+	}
 	fileServer := http.FileServer(http.FS(fsys))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		clean := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
@@ -86,16 +102,41 @@ func serveIndexNoStore(w http.ResponseWriter, fsys fs.FS) {
 	_, _ = w.Write(b)
 }
 
-// NewMultiHandler routes each request to the SPA for its Host's site. It
-// precomputes the per-site handlers so per-request work is a dispatch only.
-func NewMultiHandler() http.Handler {
+// NewMultiHandler routes only the configured station hosts to their own
+// embedded SPA. When used behind httpmw, the validated station in the request
+// context is authoritative; the host matcher is retained for direct tests and
+// other safe compositions.
+func NewMultiHandler(configured ...string) http.Handler {
 	admin := SPAHandler(SiteAdmin)
 	user := SPAHandler(SiteUser)
+
+	var matcher host.Matcher
+	matcherReady := len(configured) == 2
+	if matcherReady {
+		var err error
+		matcher, err = host.NewMatcher(configured[0], configured[1])
+		matcherReady = err == nil
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if PickSite(r.Host) == SiteAdmin {
-			admin.ServeHTTP(w, r)
-			return
+		station, inContext := host.StationFromContext(r.Context())
+		if !inContext && matcherReady {
+			switch matcher.Match(r.Host) {
+			case host.StationAdmin:
+				station = host.StationAdmin
+			case host.StationUser:
+				station = host.StationUser
+			default:
+				station = host.StationUnknown
+			}
 		}
-		user.ServeHTTP(w, r)
+		switch station {
+		case host.StationAdmin:
+			admin.ServeHTTP(w, r)
+		case host.StationUser:
+			user.ServeHTTP(w, r)
+		default:
+			httperr.WriteError(w, httperr.New(httperr.CodeInvalidRequest, "misdirected request"))
+		}
 	})
 }

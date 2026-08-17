@@ -888,4 +888,14 @@ func TestSSEParserEventFramingAndLineLimit(t *testing.T) {
 	if !errors.As(err, &lineTooLarge) {
 		t.Fatalf("line limit error = %T %v", err, err)
 	}
+
+	err = ParseSSE(context.Background(), strings.NewReader("data: "+strings.Repeat("x", 40)+"\ndata: "+strings.Repeat("y", 40)+"\n"), make(chan SSEEvent, 1), SSEOptions{
+		MaxBytes:      1024,
+		MaxLineBytes:  128,
+		MaxEventBytes: 64,
+	})
+	var eventTooLarge *SSEEventTooLargeError
+	if !errors.As(err, &eventTooLarge) {
+		t.Fatalf("event limit error = %T %v", err, err)
+	}
 }

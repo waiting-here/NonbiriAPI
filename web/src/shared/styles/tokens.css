@@ -1,42 +1,56 @@
-/* Design tokens. Light values on :root, dark values on [data-theme='dark'].
-   The data-theme attribute is set before first paint by an inline script in
-   each station's index.html and kept in sync by ThemeProvider. */
+/* A small, dependency-free design system shared by both stations. */
 
 :root {
   color-scheme: light;
 
-  --nb-color-bg: #f4f6f8;
+  --nb-color-bg: #f5f7fb;
   --nb-color-surface: #ffffff;
-  --nb-color-surface-alt: #e9edf2;
-  --nb-color-text: #1b1f24;
-  --nb-color-text-muted: #5b6470;
-  --nb-color-border: #d5dae0;
-  --nb-color-accent: #2563eb;
+  --nb-color-surface-alt: #eef2f7;
+  --nb-color-surface-raised: #ffffff;
+  --nb-color-text: #172033;
+  --nb-color-text-muted: #627087;
+  --nb-color-border: #d8e0eb;
+  --nb-color-border-strong: #b9c6d7;
+  --nb-color-accent: #315bea;
+  --nb-color-accent-soft: #e8edff;
   --nb-color-accent-contrast: #ffffff;
-  --nb-color-danger: #b3261e;
-  --nb-color-success: #1e7a46;
-
-  --nb-shadow-1: 0 1px 2px rgb(0 0 0 / 0.06);
-  --nb-radius-sm: 6px;
-  --nb-radius-md: 10px;
-  --nb-focus-ring: 0 0 0 3px rgb(37 99 235 / 0.35);
+  --nb-color-danger: #bd3d51;
+  --nb-color-danger-soft: #fff0f2;
+  --nb-color-success: #147a58;
+  --nb-color-success-soft: #e8f7f0;
+  --nb-color-warning: #946114;
+  --nb-color-warning-soft: #fff7df;
+  --nb-shadow-1: 0 1px 2px rgb(27 44 74 / 0.05), 0 8px 24px rgb(27 44 74 / 0.04);
+  --nb-shadow-2: 0 18px 45px rgb(27 44 74 / 0.14);
+  --nb-radius-sm: 7px;
+  --nb-radius-md: 13px;
+  --nb-radius-lg: 22px;
+  --nb-focus-ring: 0 0 0 3px rgb(49 91 234 / 0.25);
   --nb-transition: 150ms ease;
+  --nb-content-width: 80rem;
 }
 
 [data-theme='dark'] {
   color-scheme: dark;
 
-  --nb-color-bg: #121417;
-  --nb-color-surface: #1b1e23;
-  --nb-color-surface-alt: #262b31;
-  --nb-color-text: #e6e8eb;
-  --nb-color-text-muted: #9aa3ad;
-  --nb-color-border: #343b44;
-  --nb-color-accent: #6ea0ff;
-  --nb-color-accent-contrast: #10131a;
-  --nb-color-danger: #ef6d65;
-  --nb-color-success: #57b98a;
-
-  --nb-shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
-  --nb-focus-ring: 0 0 0 3px rgb(110 160 255 / 0.4);
+  --nb-color-bg: #101521;
+  --nb-color-surface: #171e2d;
+  --nb-color-surface-alt: #202a3b;
+  --nb-color-surface-raised: #1c2638;
+  --nb-color-text: #edf2fb;
+  --nb-color-text-muted: #9aa9c1;
+  --nb-color-border: #2f3c51;
+  --nb-color-border-strong: #45546e;
+  --nb-color-accent: #88a5ff;
+  --nb-color-accent-soft: #242f58;
+  --nb-color-accent-contrast: #0d1630;
+  --nb-color-danger: #ff8797;
+  --nb-color-danger-soft: #3c222e;
+  --nb-color-success: #6bd1aa;
+  --nb-color-success-soft: #173a34;
+  --nb-color-warning: #eec373;
+  --nb-color-warning-soft: #3a3020;
+  --nb-shadow-1: 0 1px 2px rgb(0 0 0 / 0.22), 0 10px 28px rgb(0 0 0 / 0.12);
+  --nb-shadow-2: 0 20px 50px rgb(0 0 0 / 0.4);
+  --nb-focus-ring: 0 0 0 3px rgb(136 165 255 / 0.35);
 }

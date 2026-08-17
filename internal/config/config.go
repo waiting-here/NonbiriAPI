@@ -10,40 +10,53 @@
 package config
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io"
 	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"unicode/utf8"
+
+	"nonbiriapi/internal/host"
+	"nonbiriapi/internal/secret"
 )
 
 // Defaults are centralized here.
 const (
-	defaultListenAddr = "127.0.0.1:8080"
-	defaultDBPath     = "nonbiriapi.db"
-	defaultLogLevel   = "info"
-	defaultProxies    = "127.0.0.0/8,::1/128"
+	defaultListenAddr     = "127.0.0.1:8080"
+	defaultDBPath         = "nonbiriapi.db"
+	defaultLogLevel       = "info"
+	defaultProxies        = "127.0.0.0/8,::1/128"
+	maxMasterKeyFileBytes = 128
 )
 
-// Config holds all resolved startup configuration. The MasterKey is validated
-// here (exactly 32 bytes) but secret encryption is wired by a later rail; this
-// skeleton does not perform any crypto with it.
+// Config holds all resolved startup configuration. The encryption root is
+// kept in an opaque Vault and can be transferred exactly once with
+// TakeSecretVault; it is never exposed as a printable byte slice.
 type Config struct {
-	ListenAddr   string
-	DBPath       string
-	LogLevel     string
+	ListenAddr    string
+	DBPath        string
+	LogLevel      string
 	AdminUsername string
 	AdminPassword string
-	// MasterKey is the 32-byte encryption root (env- or file-provided). It is
-	// never logged; only its source/length is reported at startup.
-	MasterKey     []byte
-	MasterSource  string
+	// MasterSource is non-sensitive provenance for startup diagnostics. The
+	// corresponding key bytes remain inside masterVault.
+	MasterSource        string
+	masterVault         *secret.Vault
 	DiscordClientID     string
 	DiscordClientSecret string
+	// DiscordOAuthScopes is an optional provider policy value. It is kept in
+	// startup configuration rather than persisted in user data because the
+	// exact scope policy remains configurable.
+	DiscordOAuthScopes string
 	// SiteBaseURL is the canonical public origin of the user station (no
 	// trailing slash, no path/query/fragment/userinfo).
 	SiteBaseURL string
@@ -51,7 +64,7 @@ type Config struct {
 	UserHost string
 	// AdminHost is the admin station hostname (env override or derived as
 	// "admin." + UserHost). It must differ from UserHost.
-	AdminHost string
+	AdminHost         string
 	TrustedProxyCIDRs []netip.Prefix
 	SMTP              SMTPConfig
 }
@@ -60,45 +73,50 @@ type Config struct {
 // validated only when Host is set so a future rail can wire it without
 // touching the loader surface.
 type SMTPConfig struct {
-	Host     string
-	Port     int
-	User     string
-	Pass     string
-	From     string
-	TLS      string // "" auto, "starttls", "implicit"
-	Enabled  bool
+	Host    string
+	Port    int
+	User    string
+	Pass    string
+	From    string
+	TLS     string // "" auto, "starttls", "implicit"
+	Enabled bool
 }
 
 // Load reads environment variables and returns a fully validated Config, or a
 // descriptive error listing every problem found in the startup set.
 func Load() (*Config, error) {
 	c := &Config{
-		ListenAddr:   getenv("NONBIRI_LISTEN_ADDR", defaultListenAddr),
-		DBPath:       getenv("NONBIRI_DB_PATH", defaultDBPath),
-		LogLevel:     getenv("NONBIRI_LOG_LEVEL", defaultLogLevel),
-		AdminUsername: os.Getenv("NONBIRI_ADMIN_USERNAME"),
-		AdminPassword: os.Getenv("NONBIRI_ADMIN_PASSWORD"),
+		ListenAddr:          getenv("NONBIRI_LISTEN_ADDR", defaultListenAddr),
+		DBPath:              getenv("NONBIRI_DB_PATH", defaultDBPath),
+		LogLevel:            getenv("NONBIRI_LOG_LEVEL", defaultLogLevel),
+		AdminUsername:       os.Getenv("NONBIRI_ADMIN_USERNAME"),
+		AdminPassword:       os.Getenv("NONBIRI_ADMIN_PASSWORD"),
 		DiscordClientID:     os.Getenv("NONBIRI_DISCORD_CLIENT_ID"),
 		DiscordClientSecret: os.Getenv("NONBIRI_DISCORD_CLIENT_SECRET"),
+		DiscordOAuthScopes:  os.Getenv("NONBIRI_DISCORD_OAUTH_SCOPES"),
 	}
 
 	var errs []string
 
-	// Master key: env value first, then a key file. Exactly 32 bytes required.
+	// Master key: exactly one non-empty source is required. Parsing produces a
+	// short-lived byte slice that setMasterKey clears after constructing the
+	// opaque process vault.
 	keyRaw, keyOK := os.LookupEnv("NONBIRI_MASTER_KEY")
 	keyFile, fileOK := os.LookupEnv("NONBIRI_MASTER_KEY_FILE")
-	if keyRaw != "" && keyFile != "" {
+	keySet := keyOK && strings.TrimSpace(keyRaw) != ""
+	fileSet := fileOK && strings.TrimSpace(keyFile) != ""
+	if keySet && fileSet {
 		errs = append(errs, "set either NONBIRI_MASTER_KEY or NONBIRI_MASTER_KEY_FILE, not both")
 	} else {
 		switch {
-		case keyOK && strings.TrimSpace(keyRaw) != "":
+		case keySet:
 			mk, err := decodeMasterKey(keyRaw)
 			if err != nil {
 				errs = append(errs, "NONBIRI_MASTER_KEY: "+err.Error())
 			} else if err := c.setMasterKey(mk, "env"); err != nil {
 				errs = append(errs, "NONBIRI_MASTER_KEY: "+err.Error())
 			}
-		case fileOK && strings.TrimSpace(keyFile) != "":
+		case fileSet:
 			mk, src, err := loadMasterKeyFile(keyFile)
 			if err != nil {
 				errs = append(errs, "NONBIRI_MASTER_KEY_FILE: "+err.Error())
@@ -110,17 +128,20 @@ func Load() (*Config, error) {
 		}
 	}
 
-	if strings.TrimSpace(c.AdminUsername) == "" {
-		errs = append(errs, "NONBIRI_ADMIN_USERNAME: required")
+	if err := validateStartupAuthValue("NONBIRI_ADMIN_USERNAME", c.AdminUsername, 128, false); err != nil {
+		errs = append(errs, "NONBIRI_ADMIN_USERNAME: "+err.Error())
 	}
-	if strings.TrimSpace(c.AdminPassword) == "" {
-		errs = append(errs, "NONBIRI_ADMIN_PASSWORD: required")
+	if err := validateStartupAuthValue("NONBIRI_ADMIN_PASSWORD", c.AdminPassword, 4096, false); err != nil {
+		errs = append(errs, "NONBIRI_ADMIN_PASSWORD: "+err.Error())
 	}
-	if strings.TrimSpace(c.DiscordClientID) == "" {
-		errs = append(errs, "NONBIRI_DISCORD_CLIENT_ID: required")
+	if err := validateStartupAuthValue("NONBIRI_DISCORD_CLIENT_ID", c.DiscordClientID, 512, false); err != nil {
+		errs = append(errs, "NONBIRI_DISCORD_CLIENT_ID: "+err.Error())
 	}
-	if strings.TrimSpace(c.DiscordClientSecret) == "" {
-		errs = append(errs, "NONBIRI_DISCORD_CLIENT_SECRET: required")
+	if err := validateStartupAuthValue("NONBIRI_DISCORD_CLIENT_SECRET", c.DiscordClientSecret, 4096, false); err != nil {
+		errs = append(errs, "NONBIRI_DISCORD_CLIENT_SECRET: "+err.Error())
+	}
+	if err := validateStartupAuthValue("NONBIRI_DISCORD_OAUTH_SCOPES", c.DiscordOAuthScopes, 256, true); err != nil {
+		errs = append(errs, "NONBIRI_DISCORD_OAUTH_SCOPES: "+err.Error())
 	}
 
 	siteRaw := strings.TrimRight(strings.TrimSpace(os.Getenv("NONBIRI_SITE_BASE_URL")), "/")
@@ -148,18 +169,44 @@ func Load() (*Config, error) {
 	}
 
 	if len(errs) > 0 {
+		c.discardSecretVault()
 		return nil, fmt.Errorf("invalid startup configuration:\n  - %s", strings.Join(errs, "\n  - "))
 	}
 	return c, nil
 }
 
-func (c *Config) setMasterKey(mk []byte, src string) error {
-	if len(mk) != 32 {
-		return fmt.Errorf("must decode to exactly 32 bytes, got %d", len(mk))
+// TakeSecretVault transfers ownership of the configured process vault. It
+// returns nil after the first call. The caller must Close the returned Vault
+// during shutdown; Config retains no recoverable master-key copy.
+func (c *Config) TakeSecretVault() *secret.Vault {
+	if c == nil {
+		return nil
 	}
-	c.MasterKey = mk
+	v := c.masterVault
+	c.masterVault = nil
+	return v
+}
+
+func (c *Config) setMasterKey(mk []byte, src string) error {
+	defer clear(mk)
+	if len(mk) != secret.MasterKeyBytes {
+		return fmt.Errorf("must decode to exactly %d bytes, got %d", secret.MasterKeyBytes, len(mk))
+	}
+	v, err := secret.New(mk)
+	if err != nil {
+		return fmt.Errorf("initialize encryption root: %w", err)
+	}
+	c.discardSecretVault()
+	c.masterVault = v
 	c.MasterSource = src
 	return nil
+}
+
+func (c *Config) discardSecretVault() {
+	if c.masterVault != nil {
+		_ = c.masterVault.Close()
+		c.masterVault = nil
+	}
 }
 
 func (c *Config) setSiteBaseURL(raw string) error {
@@ -170,7 +217,7 @@ func (c *Config) setSiteBaseURL(raw string) error {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("scheme must be http or https, got %q", u.Scheme)
 	}
-	if u.Host == "" || u.Hostname() == "" {
+	if u.Host == "" {
 		return fmt.Errorf("missing hostname")
 	}
 	if u.User != nil {
@@ -185,8 +232,12 @@ func (c *Config) setSiteBaseURL(raw string) error {
 	if u.Fragment != "" {
 		return fmt.Errorf("fragment is not allowed")
 	}
-	c.SiteBaseURL = u.Scheme + "://" + u.Host
-	c.UserHost = strings.ToLower(u.Hostname())
+	parsed, err := host.ParseConfigured(u.Host)
+	if err != nil {
+		return fmt.Errorf("invalid hostname: %w", err)
+	}
+	c.SiteBaseURL = u.Scheme + "://" + parsed.Authority
+	c.UserHost = parsed.Host
 	return nil
 }
 
@@ -196,24 +247,19 @@ func (c *Config) setAdminHost(override string) error {
 		if c.UserHost == "" {
 			return fmt.Errorf("cannot derive admin host without a valid site base URL")
 		}
+		if strings.Contains(c.UserHost, ":") {
+			return fmt.Errorf("an IPv6 site requires an explicit admin host")
+		}
 		h = "admin." + c.UserHost
 	}
-	// Accept "hostname[:port]" but reject a full URL with scheme/path.
-	if strings.Contains(h, "://") || strings.ContainsAny(h, "/?#") {
-		return fmt.Errorf("must be a hostname (optionally with :port), not a URL")
+	parsed, err := host.ParseConfigured(h)
+	if err != nil {
+		return fmt.Errorf("must be a hostname (optionally with :port): %w", err)
 	}
-	hostOnly := h
-	if i := strings.LastIndex(h, ":"); i > 0 && !strings.Contains(h[i+1:], ":") {
-		hostOnly = h[:i] // strip a single port (not an IPv6 bracket form)
-	}
-	hostOnly = strings.ToLower(hostOnly)
-	if hostOnly == "" {
-		return fmt.Errorf("hostname is empty")
-	}
-	if hostOnly == c.UserHost {
+	if parsed.Host == c.UserHost {
 		return fmt.Errorf("must differ from the user station host %q", c.UserHost)
 	}
-	c.AdminHost = h
+	c.AdminHost = parsed.Authority
 	return nil
 }
 
@@ -284,44 +330,161 @@ func parseProxies(raw, def string) ([]netip.Prefix, error) {
 	return out, nil
 }
 
-// decodeMasterKey decodes an env master key as hex (64 chars) or base64
-// (std/rawurl/url) into exactly 32 bytes.
+// decodeMasterKey decodes a canonical environment value as hex, padded or
+// unpadded standard base64, or padded or unpadded URL-safe base64. It accepts
+// exactly 32 decoded bytes and never includes input material in its error.
 func decodeMasterKey(raw string) ([]byte, error) {
-	s := strings.TrimSpace(raw)
-	if b, err := hex.DecodeString(s); err == nil && len(b) == 32 {
-		return b, nil
-	}
-	for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.RawURLEncoding, base64.URLEncoding} {
-		if b, err := enc.DecodeString(s); err == nil && len(b) == 32 {
-			return b, nil
-		}
-	}
-	return nil, fmt.Errorf("must be hex (64 chars) or base64 of exactly 32 bytes")
+	encoded := []byte(strings.TrimSpace(raw))
+	defer clear(encoded)
+	return decodeMasterKeyBytes(encoded)
 }
 
-// loadMasterKeyFile reads a key file and decodes its content (base64 or hex),
-// falling back to the raw 32 bytes for a binary key file. Returns the bytes
-// and a source description for startup logging.
+func decodeMasterKeyBytes(encoded []byte) ([]byte, error) {
+	if len(encoded) == hex.EncodedLen(secret.MasterKeyBytes) {
+		decoded := make([]byte, secret.MasterKeyBytes)
+		if n, err := hex.Decode(decoded, encoded); err == nil && n == secret.MasterKeyBytes {
+			return decoded, nil
+		}
+		clear(decoded)
+	}
+	if !bytes.ContainsAny(encoded, " \t\r\n") {
+		for _, enc := range []*base64.Encoding{
+			base64.StdEncoding,
+			base64.RawStdEncoding,
+			base64.URLEncoding,
+			base64.RawURLEncoding,
+		} {
+			decoded := make([]byte, enc.DecodedLen(len(encoded)))
+			n, err := enc.Decode(decoded, encoded)
+			decoded = decoded[:n]
+			canonical := enc.AppendEncode(nil, decoded)
+			valid := err == nil && len(decoded) == secret.MasterKeyBytes && bytes.Equal(canonical, encoded)
+			clear(canonical)
+			if valid {
+				return decoded, nil
+			}
+			clear(decoded)
+		}
+	}
+	return nil, fmt.Errorf("must be hex (%d chars) or canonical base64 of exactly %d bytes", hex.EncodedLen(secret.MasterKeyBytes), secret.MasterKeyBytes)
+}
+
+// loadMasterKeyFile reads an existing owner-readable, owner-only regular file,
+// bounds the read, and decodes canonical text or exactly 32 raw bytes. On Unix,
+// the open itself uses O_NOFOLLOW; the Lstat identity is then matched against
+// the opened descriptor. It never creates, rewrites, or generates a key.
 func loadMasterKeyFile(path string) ([]byte, string, error) {
-	data, err := os.ReadFile(path)
+	path = filepath.Clean(path)
+	before, err := os.Lstat(path)
 	if err != nil {
-		return nil, "", fmt.Errorf("read %s: %v", filepath.Base(path), err)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, "", fmt.Errorf("master key file does not exist")
+		}
+		return nil, "", fmt.Errorf("inspect master key file: %w", err)
 	}
-	src := "file:" + filepath.Base(path)
-	trimmed := strings.TrimSpace(string(data))
-	if b, err := base64.StdEncoding.DecodeString(trimmed); err == nil && len(b) == 32 {
-		return b, src, nil
+	if !before.Mode().IsRegular() {
+		return nil, "", fmt.Errorf("master key file must be a regular file")
 	}
-	if b, err := base64.RawURLEncoding.DecodeString(trimmed); err == nil && len(b) == 32 {
-		return b, src, nil
+
+	file, opened, err := openValidatedMasterKeyFile(path, before)
+	if err != nil {
+		return nil, "", err
 	}
-	if b, err := hex.DecodeString(trimmed); err == nil && len(b) == 32 {
-		return b, src, nil
+	closed := false
+	defer func() {
+		if !closed {
+			_ = file.Close()
+		}
+	}()
+
+	data, err := io.ReadAll(io.LimitReader(file, maxMasterKeyFileBytes+1))
+	if err != nil {
+		return nil, "", fmt.Errorf("read master key file: %w", err)
 	}
-	if len(data) == 32 { // raw binary key file
-		return data, src, nil
+	defer clear(data)
+	if len(data) > maxMasterKeyFileBytes {
+		return nil, "", fmt.Errorf("master key file content is too long")
 	}
-	return nil, "", fmt.Errorf("content must decode to exactly 32 bytes, got %d bytes", len(data))
+
+	after, err := file.Stat()
+	if err != nil {
+		return nil, "", fmt.Errorf("reinspect master key file: %w", err)
+	}
+	if !os.SameFile(opened, after) || opened.Size() != after.Size() ||
+		!opened.ModTime().Equal(after.ModTime()) || opened.Mode() != after.Mode() ||
+		!secureMasterKeyFileMode(after.Mode(), runtime.GOOS) {
+		return nil, "", fmt.Errorf("master key file changed while being read")
+	}
+	if err := file.Close(); err != nil {
+		return nil, "", fmt.Errorf("close master key file: %w", err)
+	}
+	closed = true
+
+	src := "file"
+	trimmed := bytes.TrimSpace(data)
+	if key, err := decodeMasterKeyBytes(trimmed); err == nil {
+		return key, src, nil
+	}
+	if len(data) == secret.MasterKeyBytes {
+		key := make([]byte, secret.MasterKeyBytes)
+		copy(key, data)
+		return key, src, nil
+	}
+	return nil, "", fmt.Errorf("master key file must contain exactly %d raw bytes or a canonical encoding", secret.MasterKeyBytes)
+}
+
+// openValidatedMasterKeyFile binds the pathname identity observed by Lstat to
+// the descriptor used for all subsequent checks and reads. The platform opener
+// is O_NOFOLLOW on Unix, so replacing the path with a symlink to the very same
+// inode cannot bypass os.SameFile.
+func openValidatedMasterKeyFile(path string, before os.FileInfo) (*os.File, os.FileInfo, error) {
+	file, err := openMasterKeyFilePlatform(path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("open master key file: %w", err)
+	}
+	opened, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
+		return nil, nil, fmt.Errorf("inspect opened master key file: %w", err)
+	}
+	if !before.Mode().IsRegular() || !opened.Mode().IsRegular() || !os.SameFile(before, opened) {
+		_ = file.Close()
+		return nil, nil, fmt.Errorf("master key file changed during validation")
+	}
+	if !secureMasterKeyFileMode(opened.Mode(), runtime.GOOS) {
+		_ = file.Close()
+		return nil, nil, fmt.Errorf("master key file permissions must be owner-readable and owner-only")
+	}
+	return file, opened, nil
+}
+
+func secureMasterKeyFileMode(mode os.FileMode, goos string) bool {
+	// Windows FileMode permission bits are synthesized from ACLs and cannot
+	// express the deployment guarantee. Unix key files must grant owner-read,
+	// may grant owner-write, and must grant no execute or group/other access.
+	if goos == "windows" {
+		return true
+	}
+	if mode&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 {
+		return false
+	}
+	perm := mode.Perm()
+	return perm == 0o400 || perm == 0o600
+}
+
+func validateStartupAuthValue(_ string, value string, maxBytes int, allowEmpty bool) error {
+	if !allowEmpty && strings.TrimSpace(value) == "" {
+		return fmt.Errorf("required")
+	}
+	if len(value) > maxBytes || !utf8.ValidString(value) {
+		return fmt.Errorf("too long or invalid text")
+	}
+	for _, r := range value {
+		if r < 0x20 || r == 0x7f {
+			return fmt.Errorf("contains a control character")
+		}
+	}
+	return nil
 }
 
 func getenv(key, def string) string {
