@@ -64,6 +64,7 @@ tasks/
 .env
 .env.*
 !.env.example
+# Real deployment environment; keep admin.env.example tracked.
 admin.env
 *.backup
 *.secret

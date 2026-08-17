@@ -21,8 +21,8 @@
 
 set -euo pipefail
 
-# Pinned local toolchain; overridable via the GO env var.
-GO="${GO:-G:/code/NonbiriAPI/.pi/go/bin/go}"
+# Use the Go toolchain on PATH by default; callers may pin one with GO.
+GO="${GO:-go}"
 
 # Always run against the repository root regardless of the caller's CWD.
 cd "$(dirname "$0")/.."
