@@ -25,8 +25,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"nonbiriapi/internal/host"
-	"nonbiriapi/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 // Defaults are centralized here.

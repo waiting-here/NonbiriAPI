@@ -20,8 +20,8 @@ import (
 	"testing"
 	"time"
 
-	"nonbiriapi/internal/config"
-	"nonbiriapi/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/config"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
 )
 
 // fakeResolver answers every hostname with a fixed address list so a test can

@@ -3,6 +3,8 @@
 NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 网关。用户可以管理自己持有的上游端点和凭据，拉取上游模型，创建平台模型别名，并通过一个 `CallerKey` 调用这些模型。
 
 > **发布状态：** `v1.0.0-alpha.1`。本版本适合受控的自托管试运行。正式开放给用户前，请先阅读部署、备份、隐私和安全文档。
+>
+> 源码仓库：[github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
 ## 主要功能
 
@@ -57,7 +59,7 @@ set +a
 
 ## 配置
 
-完整的启动环境变量见 [`admin.env.example`](admin.env.example)。必须配置的值包括：
+完整的启动环境变量见 [`admin.env.example`](admin.env.example)。[配置参考](docs/configuration.md) 说明启动变量、管理员运行时设置和私有 Discord 试运行的注册门禁。必须配置的值包括：
 
 - `NONBIRI_MASTER_KEY_FILE` 或 `NONBIRI_MASTER_KEY`（二选一，解码后必须是 32 字节）。
 - `NONBIRI_ADMIN_USERNAME` 与 `NONBIRI_ADMIN_PASSWORD`。
@@ -75,6 +77,12 @@ set +a
 - [systemd 单元示例](deploy/nonbiriapi.service.example)
 
 更新流程采用保守策略：停止服务、备份数据库及 sidecar 文件、构建并验证新二进制、原子安装、重启，然后验证两个站点。alpha.1 尚无版本化数据库迁移框架，每次更新前都必须保留可用备份。
+
+alpha.1 采用源码优先方式发布：发布不要求提供预编译二进制。运营方可以在目标平台自行编译源码，或使用自己的构建流水线。以后若提供二进制，它只是便利产物，不构成兼容性边界。
+
+## GitHub 自动化
+
+仓库包含只读 CI 流程。GitHub Actions 会在推送到 `master` 和 Pull Request 时运行 Go 与前端门禁，不会部署应用。发布产物自动化会等支持平台和签名策略确定后再单独添加。
 
 ## API
 

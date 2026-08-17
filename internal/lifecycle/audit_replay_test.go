@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/elevation"
-	"nonbiriapi/internal/lifecycle"
-	"nonbiriapi/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/elevation"
+	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 type fixedVerifier struct{ ok bool }

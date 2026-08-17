@@ -6,8 +6,8 @@ import (
 	"path"
 	"strings"
 
-	"nonbiriapi/internal/host"
-	"nonbiriapi/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
 
 // Site identifies one of the two embedded SPAs.

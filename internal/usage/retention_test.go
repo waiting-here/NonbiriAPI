@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/secret"
-	"nonbiriapi/internal/usage"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/usage"
 )
 
 // quietLogger keeps the retention sweeps' summary lines out of the test log.

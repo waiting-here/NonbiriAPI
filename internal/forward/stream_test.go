@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"nonbiriapi/internal/egress"
-	"nonbiriapi/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
 
 func forwardChunk(content string) string {

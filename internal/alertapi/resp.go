@@ -6,7 +6,7 @@ package alertapi
 // (site-wide alert / unresolved alert). No shape carries a secret,
 // ciphertext, request/response content, or unbounded diagnostic field.
 
-import "nonbiriapi/internal/db"
+import "github.com/waiting-here/NonbiriAPI/internal/db"
 
 // alertResp is one alert row for the admin screen.
 type alertResp struct {

@@ -1,4 +1,4 @@
-module nonbiriapi
+module github.com/waiting-here/NonbiriAPI
 
 go 1.26.0
 

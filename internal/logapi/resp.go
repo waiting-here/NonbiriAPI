@@ -5,7 +5,7 @@ package logapi
 // other admin projections. No shape carries a secret, ciphertext, or
 // request/response content field.
 
-import "nonbiriapi/internal/db"
+import "github.com/waiting-here/NonbiriAPI/internal/db"
 
 // usageTotalsResp is the stable usage-totals shape shared by /api/me/usage
 // and the site-wide admin aggregation.

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"nonbiriapi/internal/config"
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/config"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 func testHTTPConfig() *config.Config {

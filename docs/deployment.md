@@ -1,6 +1,6 @@
 # VPS deployment with systemd
 
-This guide describes the first supported operating model for `v1.0.0-alpha.1`: one compiled binary, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS.
+This guide describes the first supported operating model for `v1.0.0-alpha.1`: one compiled binary, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS. See [configuration.md](configuration.md) for the full environment and runtime-settings reference.
 
 The commands are examples. Replace paths, hostnames, users, and package-manager commands for the target VPS. Do not copy real secrets into a Git checkout.
 

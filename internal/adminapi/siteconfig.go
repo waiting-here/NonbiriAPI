@@ -17,10 +17,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/egress"
-	"nonbiriapi/internal/httperr"
-	"nonbiriapi/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
 
 // Known site_config keys (the authoritative set enforced by the handler).

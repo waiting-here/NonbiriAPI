@@ -14,11 +14,11 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"nonbiriapi/internal/auth"
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/host"
-	"nonbiriapi/internal/httperr"
-	"nonbiriapi/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 // stubProvider satisfies auth.DiscordProvider for building a real UserAuth

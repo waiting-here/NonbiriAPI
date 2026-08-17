@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"nonbiriapi/internal/httperr"
-	"nonbiriapi/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
 
 func newTestMiddleware(t *testing.T, config ratelimit.RPMConfig, resolver UserLimitResolver, clock *fakeClock) (*Middleware, *Controller) {

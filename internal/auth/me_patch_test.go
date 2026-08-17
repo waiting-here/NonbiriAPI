@@ -14,8 +14,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/host"
 )
 
 func patchMeDirect(t *testing.T, service *UserAuth, st *db.Store, userID int64, body any) *httptest.ResponseRecorder {

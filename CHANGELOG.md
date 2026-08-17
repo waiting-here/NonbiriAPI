@@ -29,3 +29,6 @@ The project is currently in alpha. The public compatibility promise is limited t
 - Only `/v1/models` and `/v1/chat/completions` are exposed as OpenAI-compatible exit routes.
 - The database schema is initialized idempotently but has no versioned migration framework in this alpha. Back up the database before every update.
 - Discord OAuth, upstream success paths, and deployment-specific reverse-proxy behavior must be verified in the operator's staging environment.
+
+[Unreleased]: https://github.com/waiting-here/NonbiriAPI/compare/v1.0.0-alpha.1...HEAD
+[1.0.0-alpha.1]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.1

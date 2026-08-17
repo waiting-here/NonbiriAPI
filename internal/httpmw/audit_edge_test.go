@@ -8,8 +8,8 @@ import (
 	"net/netip"
 	"testing"
 
-	"nonbiriapi/internal/host"
-	"nonbiriapi/internal/httpmw"
+	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 )
 
 func spoofConfig() httpmw.Config {

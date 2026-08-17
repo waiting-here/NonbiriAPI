@@ -32,12 +32,12 @@ import (
 	"strconv"
 	"strings"
 
-	"nonbiriapi/internal/auth"
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/host"
-	"nonbiriapi/internal/httperr"
-	"nonbiriapi/internal/httpmw"
-	"nonbiriapi/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
+	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
 
 const maxAdminBodyBytes = 16 * 1024

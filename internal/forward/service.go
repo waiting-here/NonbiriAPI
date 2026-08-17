@@ -20,9 +20,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"nonbiriapi/internal/connector/openai"
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
 const (

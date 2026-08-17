@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"nonbiriapi/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/host"
 )
 
 func testConfig(forceHTTPS bool) Config {

@@ -13,9 +13,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/egress"
-	"nonbiriapi/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 // testService bundles a Service with its real collaborators so tests assert

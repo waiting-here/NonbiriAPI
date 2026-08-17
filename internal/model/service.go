@@ -8,7 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"nonbiriapi/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
 // Service-level sentinel errors. The handler maps these (and the db

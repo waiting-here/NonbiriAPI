@@ -20,16 +20,16 @@ import (
 	"testing"
 	"time"
 
-	"nonbiriapi/internal/auth"
-	"nonbiriapi/internal/config"
-	"nonbiriapi/internal/connector/openai"
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/egress"
-	"nonbiriapi/internal/endpoint"
-	"nonbiriapi/internal/forward"
-	"nonbiriapi/internal/host"
-	"nonbiriapi/internal/httperr"
-	"nonbiriapi/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/config"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
+	"github.com/waiting-here/NonbiriAPI/internal/forward"
+	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 type auditFixture struct {

@@ -4,8 +4,8 @@ This is an operator-facing preparation checklist for the first public GitHub rel
 
 ## Repository and versioning
 
-- [ ] Confirm the canonical GitHub HTTPS URL and SSH remote.
-- [ ] Set the Go module path to the canonical repository path, if the project is intended to be imported as a Go module.
+- [x] Confirm the canonical GitHub URL: `https://github.com/waiting-here/NonbiriAPI` and SSH remote `git@waiting-here:waiting-here/NonbiriAPI.git`.
+- [x] Set the Go module path to `github.com/waiting-here/NonbiriAPI`.
 - [ ] Decide the copyright holder and final SPDX/license wording.
 - [ ] Align application/frontend version metadata with `v1.0.0-alpha.1`.
 - [ ] Review the final diff on `master`; keep the release tag annotated and immutable.
@@ -36,16 +36,20 @@ This is an operator-facing preparation checklist for the first public GitHub rel
 
 ## GitHub settings
 
-- [ ] Add CI and release workflows with least-privilege permissions.
+- [x] Add a CI workflow with read-only contents permissions.
+- [ ] Add a release-artifact workflow with least-privilege permissions.
 - [ ] Enable branch protection for `master`.
 - [ ] Enable private vulnerability reporting, secret scanning, and dependency update tooling where available.
-- [ ] Add issue forms, pull-request template, and code ownership.
+- [x] Add issue forms and pull-request template.
+- [x] Add code ownership for `@waiting-here`.
 - [ ] Configure repository description, topics, license metadata, default branch, and release as a pre-release.
+- [ ] Enable Dependabot, private vulnerability reporting, secret scanning, and branch protection in GitHub settings.
 
 ## Deployment decisions still needed
 
 - Supported VPS distribution and CPU architectures.
-- Whether Docker/container artifacts are required in alpha.1 or systemd is sufficient.
+- [x] Alpha.1 deployment artifact: source-first systemd deployment; Docker is deferred.
+- [ ] Decide whether to publish optional prebuilt binaries for operator convenience.
 - Public user/admin hostnames and reverse-proxy implementation.
 - Database backup location, retention, and restore owner.
-- Whether pre-alpha databases need any migration guarantee.
+- [x] No pre-alpha database migration guarantee is needed; alpha.1 is the first release.

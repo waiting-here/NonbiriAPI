@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"nonbiriapi/internal/auth"
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
 
 // MaxBodyBytes bounds request bodies for the model routes. A body larger than

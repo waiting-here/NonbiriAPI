@@ -10,8 +10,8 @@ import (
 	"context"
 	"errors"
 
-	"nonbiriapi/internal/egress"
-	"nonbiriapi/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
 
 // RuntimeApplier applies one validated site_config change to the matching

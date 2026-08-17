@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"nonbiriapi/internal/config"
+	"github.com/waiting-here/NonbiriAPI/internal/config"
 )
 
 type staticResolver struct {

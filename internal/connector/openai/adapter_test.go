@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"nonbiriapi/internal/config"
-	"nonbiriapi/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/config"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
 )
 
 type adapterResolver struct{}

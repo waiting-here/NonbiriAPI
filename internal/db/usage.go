@@ -33,7 +33,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"nonbiriapi/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
 // Usage accounting bounds. All persisted numbers are non-negative and

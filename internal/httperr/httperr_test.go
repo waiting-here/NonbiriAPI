@@ -8,7 +8,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"nonbiriapi/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
 func decodeEnvelope(t *testing.T, body string) Envelope {

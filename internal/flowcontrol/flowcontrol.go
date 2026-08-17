@@ -25,8 +25,8 @@ import (
 	"strconv"
 	"time"
 
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
 
 var (

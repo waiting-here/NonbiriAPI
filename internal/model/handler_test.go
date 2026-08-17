@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"nonbiriapi/internal/auth"
-	"nonbiriapi/internal/host"
-	"nonbiriapi/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
 
 // newTestHandler builds a handler over a real service backed by a seeded user,

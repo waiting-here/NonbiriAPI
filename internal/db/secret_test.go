@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"nonbiriapi/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 func TestOpenRequiresSecretCodec(t *testing.T) {

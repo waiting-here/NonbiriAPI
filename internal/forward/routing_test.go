@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"nonbiriapi/internal/connector/openai"
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/endpoint"
-	"nonbiriapi/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
 
 // addRouteCfg is addRoute with an explicit route strategy and silent_retry

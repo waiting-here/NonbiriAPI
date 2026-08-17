@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"nonbiriapi/internal/config"
-	"nonbiriapi/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/config"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
 const (

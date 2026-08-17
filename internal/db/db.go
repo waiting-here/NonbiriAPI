@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 
-	"nonbiriapi/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 
 	_ "modernc.org/sqlite"
 )

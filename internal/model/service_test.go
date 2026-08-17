@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 // testService bundles a Service with a real Store so tests assert end-to-end

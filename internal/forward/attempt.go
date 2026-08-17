@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"reflect"
 
-	"nonbiriapi/internal/connector/openai"
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/endpoint"
-	"nonbiriapi/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 // TargetRepository is the final ownership/invalidation check performed after

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/egress"
-	"nonbiriapi/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
 
 // handlerFixture wraps a fetchFixture with the mounted HTTP handler. The

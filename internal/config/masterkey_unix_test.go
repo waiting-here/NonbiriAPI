@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"nonbiriapi/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 func TestMasterKeyFileUnixOwnerReadPolicy(t *testing.T) {

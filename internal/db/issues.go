@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"nonbiriapi/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
 // MaxIssuePageLimit bounds one user-issue page. Page sizes are clamped into

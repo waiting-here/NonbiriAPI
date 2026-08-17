@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"nonbiriapi/internal/auth"
-	"nonbiriapi/internal/connector/openai"
-	"nonbiriapi/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
 
 // IdentityResolver extracts only a CallerKey-established user id. Production

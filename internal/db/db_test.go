@@ -6,7 +6,7 @@ import (
 	"sort"
 	"testing"
 
-	"nonbiriapi/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 func openTestStore(t *testing.T, path string) *Store {

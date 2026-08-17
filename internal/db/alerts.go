@@ -54,7 +54,7 @@ import (
 	"strings"
 	"time"
 
-	"nonbiriapi/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
 const (
