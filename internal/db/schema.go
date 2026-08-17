@@ -90,12 +90,12 @@ CREATE INDEX IF NOT EXISTS idx_endpoints_user ON endpoints(user_id);
 
 -- ===== endpoint_keys ========================================================
 -- One endpoint may hold multiple keys, each independently noted/enabled. The
--- upstream secret is persisted only as an AES-256-GCM ciphertext; the crypto
--- is wired by Phase 1 track F and is intentionally NOT implemented here.
+-- upstream secret is persisted only as a versioned AES-256-GCM envelope;
+-- plaintext is never a SQL value.
 CREATE TABLE IF NOT EXISTS endpoint_keys (
 	id               INTEGER PRIMARY KEY AUTOINCREMENT,
 	endpoint_id       INTEGER NOT NULL REFERENCES endpoints(id) ON DELETE CASCADE,
-	encrypted_secret TEXT NOT NULL,                                -- AES-256-GCM ciphertext (base64); column only in this rail
+	encrypted_secret TEXT NOT NULL,                                -- nbsec:v1:aes-256-gcm:<nonce>:<ciphertext-and-tag> (raw base64url parts)
 	note             TEXT NOT NULL DEFAULT '',
 	enabled          INTEGER NOT NULL DEFAULT 1,
 	created_at       INTEGER NOT NULL,

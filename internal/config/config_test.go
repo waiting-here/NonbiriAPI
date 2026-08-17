@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -14,14 +13,14 @@ import (
 func allEnvs(t *testing.T) {
 	t.Helper()
 	set := map[string]string{
-		"NONBIRI_LISTEN_ADDR":         "127.0.0.1:9090",
-		"NONBIRI_DB_PATH":             "test.db",
-		"NONBIRI_ADMIN_USERNAME":      "admin",
-		"NONBIRI_ADMIN_PASSWORD":      "pw",
-		"NONBIRI_DISCORD_CLIENT_ID":    "dcid",
+		"NONBIRI_LISTEN_ADDR":           "127.0.0.1:9090",
+		"NONBIRI_DB_PATH":               "test.db",
+		"NONBIRI_ADMIN_USERNAME":        "admin",
+		"NONBIRI_ADMIN_PASSWORD":        "pw",
+		"NONBIRI_DISCORD_CLIENT_ID":     "dcid",
 		"NONBIRI_DISCORD_CLIENT_SECRET": "dcsecret",
-		"NONBIRI_SITE_BASE_URL":       "https://example.com",
-		"NONBIRI_MASTER_KEY":          hex.EncodeToString(make([]byte, 32)),
+		"NONBIRI_SITE_BASE_URL":         "https://example.com",
+		"NONBIRI_MASTER_KEY":            hex.EncodeToString(make([]byte, 32)),
 	}
 	for k, v := range set {
 		t.Setenv(k, v)
@@ -30,12 +29,26 @@ func allEnvs(t *testing.T) {
 	t.Setenv("NONBIRI_MASTER_KEY_FILE", "")
 }
 
+func closeLoadedVault(t *testing.T, c *Config) {
+	t.Helper()
+	vault := c.TakeSecretVault()
+	if vault == nil {
+		t.Fatal("configuration did not retain a secret vault")
+	}
+	t.Cleanup(func() { _ = vault.Close() })
+}
+
 func TestLoadValid(t *testing.T) {
 	allEnvs(t)
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
+	vault := c.TakeSecretVault()
+	if vault == nil {
+		t.Fatal("Load did not retain the configured secret vault")
+	}
+	t.Cleanup(func() { _ = vault.Close() })
 	if c.AdminHost != "admin.example.com" {
 		t.Fatalf("AdminHost = %q, want admin.example.com", c.AdminHost)
 	}
@@ -45,8 +58,8 @@ func TestLoadValid(t *testing.T) {
 	if c.SiteBaseURL != "https://example.com" {
 		t.Fatalf("SiteBaseURL = %q", c.SiteBaseURL)
 	}
-	if len(c.MasterKey) != 32 {
-		t.Fatalf("MasterKey len = %d, want 32", len(c.MasterKey))
+	if c.TakeSecretVault() != nil {
+		t.Fatal("TakeSecretVault transferred the vault more than once")
 	}
 	if c.MasterSource != "env" {
 		t.Fatalf("MasterSource = %q, want env", c.MasterSource)
@@ -58,11 +71,11 @@ func TestLoadValid(t *testing.T) {
 
 func TestMissingRequiredFailsFast(t *testing.T) {
 	cases := map[string]func(t *testing.T){
-		"admin_username": func(t *testing.T) { t.Setenv("NONBIRI_ADMIN_USERNAME", "") },
-		"admin_password": func(t *testing.T) { t.Setenv("NONBIRI_ADMIN_PASSWORD", "") },
-		"discord_client_id": func(t *testing.T) { t.Setenv("NONBIRI_DISCORD_CLIENT_ID", "") },
+		"admin_username":        func(t *testing.T) { t.Setenv("NONBIRI_ADMIN_USERNAME", "") },
+		"admin_password":        func(t *testing.T) { t.Setenv("NONBIRI_ADMIN_PASSWORD", "") },
+		"discord_client_id":     func(t *testing.T) { t.Setenv("NONBIRI_DISCORD_CLIENT_ID", "") },
 		"discord_client_secret": func(t *testing.T) { t.Setenv("NONBIRI_DISCORD_CLIENT_SECRET", "") },
-		"site_base_url": func(t *testing.T) { t.Setenv("NONBIRI_SITE_BASE_URL", "") },
+		"site_base_url":         func(t *testing.T) { t.Setenv("NONBIRI_SITE_BASE_URL", "") },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -103,11 +116,13 @@ func TestMasterKeyValidation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		if len(c.MasterKey) != 32 {
-			t.Fatalf("MasterKey len = %d", len(c.MasterKey))
+		vault := c.TakeSecretVault()
+		if vault == nil {
+			t.Fatal("Load did not retain the file-provided secret vault")
 		}
-		if !strings.HasPrefix(c.MasterSource, "file:") {
-			t.Fatalf("MasterSource = %q, want file:*", c.MasterSource)
+		t.Cleanup(func() { _ = vault.Close() })
+		if c.MasterSource != "file" {
+			t.Fatalf("MasterSource = %q, want file", c.MasterSource)
 		}
 	})
 }
@@ -159,6 +174,7 @@ func TestTrustedProxyCIDRValidation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
+		closeLoadedVault(t, c)
 		if len(c.TrustedProxyCIDRs) != 0 {
 			t.Fatalf("expected no trusted proxies, got %d", len(c.TrustedProxyCIDRs))
 		}
@@ -170,6 +186,7 @@ func TestTrustedProxyCIDRValidation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
+		closeLoadedVault(t, c)
 		if len(c.TrustedProxyCIDRs) != 1 {
 			t.Fatalf("expected one proxy, got %d", len(c.TrustedProxyCIDRs))
 		}
@@ -183,6 +200,7 @@ func TestSMTPValidation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
+		closeLoadedVault(t, c)
 		if c.SMTP.Enabled {
 			t.Fatalf("SMTP should be disabled when no host is set")
 		}

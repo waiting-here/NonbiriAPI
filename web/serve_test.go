@@ -26,19 +26,26 @@ func TestStubFSContainsIndex(t *testing.T) {
 	}
 }
 
-func TestPickSitePlaceholder(t *testing.T) {
+func TestPickSiteConfiguredBoundary(t *testing.T) {
 	cases := map[string]Site{
-		"admin.example.com":       SiteAdmin,
-		"admin.example.com:8080":  SiteAdmin,
-		"ADMIN.Example.com":       SiteAdmin,
-		"example.com":             SiteUser,
-		"example.com:8080":       SiteUser,
-		"localhost":              SiteUser,
+		"admin.example.com":        SiteAdmin,
+		"admin.example.com:8080":   SiteAdmin,
+		"ADMIN.Example.com.":       SiteAdmin,
+		"example.com":              SiteUser,
+		"example.com:8080":         SiteUser,
+		"EXAMPLE.COM.":             SiteUser,
+		"localhost":                SiteUnknown,
+		"unknown.example.com":      SiteUnknown,
+		"admin.example.com:broken": SiteUnknown,
+		"":                         SiteUnknown,
 	}
-	for host, want := range cases {
-		if got := PickSite(host); got != want {
-			t.Errorf("PickSite(%q) = %q, want %q", host, got, want)
+	for raw, want := range cases {
+		if got := PickSite(raw, "example.com", "admin.example.com"); got != want {
+			t.Errorf("PickSite(%q) = %q, want %q", raw, got, want)
 		}
+	}
+	if got := PickSite("example.com"); got != SiteUnknown {
+		t.Fatalf("PickSite without configured hosts = %q, want unknown", got)
 	}
 }
 

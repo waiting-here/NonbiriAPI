@@ -69,11 +69,13 @@ Every error response is a single JSON object:
   redefined for a new meaning. Unknown codes map to HTTP 500 internally.
 - `message` is bounded to 1000 runes and stripped of all C0 control characters and DEL; it
   carries a short human-safe summary and **never** raw upstream identifiers or text.
-- `diag` is bounded to 4096 runes (the untrusted-upstream diagnostic limit). Carriage returns
-  become spaces; TAB and LF are kept; other C0 control characters and DEL are stripped. It is
-  omitted when empty. It is the only place raw upstream identifiers/error text may appear, and
-  only after this layer's bounding and sanitization. Frontends render `diag` as text, never as
-  HTML or formula-interpreted content.
+- `diag` is bounded to 4096 bytes (the untrusted-upstream diagnostic resource limit) by
+  the shared `internal/diagnostic` boundary. Invalid UTF-8 is repaired (runs of invalid bytes
+  collapse to one U+FFFD); CR, LF, and TAB become spaces so untrusted text cannot forge log
+  lines; other C0 control characters and DEL are stripped; truncation ends on a rune boundary
+  and is marked. It is omitted when empty. It is the only place raw upstream identifiers/error
+  text may appear, and only after that shared bounding and sanitization. Frontends render
+  `diag` as text, never as HTML or formula-interpreted content.
 
 ### 1.5 Layered diagnostic recording
 
@@ -82,7 +84,7 @@ Diagnostics are recorded at two layers:
 - **Edge response** (`error.diag`, see above): bounded/sanitized upstream context surfaced to
   the caller (operator or user where appropriate).
 - **Persistence** (`request_logs.error_code`, `request_logs.error_diag`): every forwarded
-  request logs the stable `error_code` and a bounded `error_diag` (≤4096) in the same
+  request logs the stable `error_code` and a bounded `error_diag` (≤4096 bytes) in the same
   transaction as its usage accumulators. `request_logs` holds metadata only — no request or
   response content is ever persisted (privacy policy).
 
@@ -380,9 +382,10 @@ when the subject still exists. Alerts carry bounded, sanitized `message`/`ref`.
 - **Stable codes** are the sole machine-facing error identifier; HTTP status is derived from
   them.
 - **Layered, bounded, sanitized diagnostics**: upstream identifiers/text live only in `diag`
-  (≤4096) and in `request_logs.error_diag` (≤4096), bounded and control-character-normalized
-  by the shared error layer; `message` (≤1000) is human-safe and free of raw upstream text.
-  Frontends render all such fields as text.
+  (≤4096 bytes) and in `request_logs.error_diag` (≤4096 bytes), bounded, UTF-8-repaired, and
+  control-character-normalized (no CR/LF/TAB, so no line forgery) by the shared
+  `internal/diagnostic` boundary; `message` (≤1000 runes) is human-safe and free of raw
+  upstream text. Frontends render all such fields as text.
 - **Request/response content is never persisted**: `request_logs` and any log entry hold
   metadata and bounded diagnostics only (privacy policy).
 - **30-day retention**: request logs are periodically cleaned past 30 days.

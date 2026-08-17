@@ -5,23 +5,29 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+
+	"nonbiriapi/internal/secret"
 
 	_ "modernc.org/sqlite"
 )
 
-// Store wraps the SQLite handle. Alpha keeps a single writer connection to
-// avoid "database is locked" contention; the privacy policy (no request
-// content persisted) keeps write pressure low. Access is via the package-level
-// helpers and later rails' typed repositories.
+// Store wraps the SQLite handle and the recoverable-secret boundary. The
+// caller owns the Codec lifecycle; typed repositories use it internally so
+// plaintext never has to become a database argument or a Store field.
 type Store struct {
-	db *sql.DB
+	db      *sql.DB
+	secrets secret.Codec
 }
 
 // Open opens (creating if necessary) the SQLite database at path, applies
-// pragmas, and bootstraps the schema idempotently. The encryption master key
-// is intentionally NOT taken here: secret encryption is wired by a later rail
-// and is out of scope for the skeleton.
-func Open(path string) (*Store, error) {
+// pragmas, and bootstraps the schema idempotently. A non-nil secret Codec is
+// mandatory so no production Store can persist endpoint credentials without
+// an authenticated-encryption boundary.
+func Open(path string, secrets secret.Codec) (*Store, error) {
+	if nilSecretCodec(secrets) {
+		return nil, fmt.Errorf("open database: secret codec is required")
+	}
 	if dir := filepath.Dir(path); dir != "." && dir != "" && dir != string(filepath.Separator) {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nil, fmt.Errorf("create db directory: %w", err)
@@ -51,11 +57,25 @@ func Open(path string) (*Store, error) {
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
 
-	return &Store{db: d}, nil
+	return &Store{db: d, secrets: secrets}, nil
+}
+
+func nilSecretCodec(codec secret.Codec) bool {
+	if codec == nil {
+		return true
+	}
+	value := reflect.ValueOf(codec)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
 // DB returns the underlying handle for use by later rails' typed repositories.
 func (s *Store) DB() *sql.DB { return s.db }
 
-// Close closes the database handle.
+// Close closes the database handle. The caller remains responsible for
+// closing the injected secret Vault after database users have stopped.
 func (s *Store) Close() error { return s.db.Close() }

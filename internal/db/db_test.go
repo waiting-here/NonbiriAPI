@@ -1,10 +1,29 @@
 package db
 
 import (
+	"bytes"
 	"path/filepath"
 	"sort"
 	"testing"
+
+	"nonbiriapi/internal/secret"
 )
+
+func openTestStore(t *testing.T, path string) *Store {
+	t.Helper()
+	key := bytes.Repeat([]byte{0x29}, secret.MasterKeyBytes)
+	vault, err := secret.New(key)
+	clear(key)
+	if err != nil {
+		t.Fatalf("create test secret vault: %v", err)
+	}
+	t.Cleanup(func() { _ = vault.Close() })
+	st, err := Open(path, vault)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	return st
+}
 
 // expectedTables lists every entity table the contract requires. A name here
 // must resolve to a row in sqlite_master after bootstrap; a missing or extra
@@ -48,10 +67,7 @@ func tableNames(t *testing.T, st *Store) []string {
 // TestSchemaBootstrapsAllEntities opens a fresh database and asserts every
 // contracted entity table was created.
 func TestSchemaBootstrapsAllEntities(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "bootstrap.db"))
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	st := openTestStore(t, filepath.Join(t.TempDir(), "bootstrap.db"))
 	defer st.Close()
 
 	got := tableNames(t, st)
@@ -73,17 +89,11 @@ func TestSchemaBootstrapsAllEntities(t *testing.T) {
 func TestSchemaBootstrapIsIdempotent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "idem.db")
 
-	st, err := Open(path)
-	if err != nil {
-		t.Fatalf("first Open: %v", err)
-	}
+	st := openTestStore(t, path)
 	first := tableNames(t, st)
 	st.Close()
 
-	st2, err := Open(path)
-	if err != nil {
-		t.Fatalf("second Open: %v", err)
-	}
+	st2 := openTestStore(t, path)
 	second := tableNames(t, st2)
 	st2.Close()
 
@@ -104,10 +114,7 @@ func TestSchemaBootstrapIsIdempotent(t *testing.T) {
 //   - foreign_keys=ON makes endpoint -> endpoint_keys cascade-delete;
 //   - the models full_name CHECK rejects a mismatched full_name.
 func TestSchemaCascadeAndCheckInvariants(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "inv.db"))
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	st := openTestStore(t, filepath.Join(t.TempDir(), "inv.db"))
 	defer st.Close()
 	d := st.DB()
 
@@ -119,7 +126,15 @@ func TestSchemaCascadeAndCheckInvariants(t *testing.T) {
 	if _, err := d.Exec(`INSERT INTO endpoints (user_id, connector_type, base_url, created_at, updated_at) VALUES (1, 'openai-compatible', 'https://example.com', ?, ?)`, now, now); err != nil {
 		t.Fatalf("seed endpoint: %v", err)
 	}
-	if _, err := d.Exec(`INSERT INTO endpoint_keys (endpoint_id, encrypted_secret, created_at, updated_at) VALUES (1, 'enc1', ?, ?), (1, 'enc2', ?, ?)`, now, now, now, now); err != nil {
+	firstCiphertext, err := st.secrets.Seal([]byte{0x01})
+	if err != nil {
+		t.Fatalf("encrypt first endpoint key fixture: %v", err)
+	}
+	secondCiphertext, err := st.secrets.Seal([]byte{0x02})
+	if err != nil {
+		t.Fatalf("encrypt second endpoint key fixture: %v", err)
+	}
+	if _, err := d.Exec(`INSERT INTO endpoint_keys (endpoint_id, encrypted_secret, created_at, updated_at) VALUES (1, ?, ?, ?), (1, ?, ?, ?)`, firstCiphertext, now, now, secondCiphertext, now, now); err != nil {
 		t.Fatalf("seed endpoint_keys: %v", err)
 	}
 
