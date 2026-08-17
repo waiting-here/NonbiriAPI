@@ -428,7 +428,9 @@ func buildAdminAndRootAPI(cfg *config.Config, userAuth *auth.UserAuth, adminAuth
 			adminElevate.ServeHTTP(w, r)
 		case r.URL.Path == "/admin/api/users" || strings.HasPrefix(r.URL.Path, "/admin/api/users/"):
 			if r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/admin/api/users/") {
-				adminDelete.ServeHTTP(w, r)
+				request := r.Clone(r.Context())
+				request.SetPathValue("id", strings.TrimPrefix(r.URL.Path, "/admin/api/users/"))
+				adminDelete.ServeHTTP(w, request)
 			} else {
 				adminControlsHandler.ServeHTTP(w, r)
 			}

@@ -204,7 +204,7 @@ export function AdminLayout() {
             </ul>
           </nav>
         </aside>
-        <main id="main" className="admin-content">
+        <main id="main" className="admin-content" tabIndex={-1}>
           {logoutError ? <ErrorState error={logoutError} /> : null}
           <Outlet />
         </main>

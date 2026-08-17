@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link, NavLink, Outlet } from 'react-router';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '@shared/components/LanguageSwitcher';
 import { ErrorState } from '@shared/components/States';
@@ -26,6 +26,7 @@ const NAV_ITEMS: NavItem[] = [
 export function UserLayout() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const session = useUserSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const logout = useMutation({
@@ -34,6 +35,7 @@ export function UserLayout() {
       // Remove every account-owned query immediately after session logout.
       queryClient.removeQueries({ queryKey: userKeys.all });
       setMenuOpen(false);
+      navigate('/');
     },
   });
 
@@ -103,7 +105,7 @@ export function UserLayout() {
         </div>
       </header>
       {logout.error ? <div className="shell-error"><ErrorState error={logout.error} /></div> : null}
-      <main id="main" className="user-main">
+      <main id="main" className="user-main" tabIndex={-1}>
         <Outlet />
       </main>
       <footer className="site-footer">

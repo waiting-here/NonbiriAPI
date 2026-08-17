@@ -347,7 +347,10 @@ export function useUserSession() {
 export function useUserMe(enabled = true) {
   return useQuery({
     queryKey: userKeys.me,
-    queryFn: async () => normalizeUser(await apiFetch<unknown>('/api/me')),
+    queryFn: async () => {
+      const payload = asRecord(await apiFetch<unknown>('/api/me'));
+      return normalizeUser(payload?.user ?? payload);
+    },
     enabled,
   });
 }
