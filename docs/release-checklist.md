@@ -6,7 +6,7 @@ This is an operator-facing preparation checklist for the first public GitHub rel
 
 - [x] Confirm the canonical GitHub URL: `https://github.com/waiting-here/NonbiriAPI` and SSH remote `git@waiting-here:waiting-here/NonbiriAPI.git`.
 - [x] Set the Go module path to `github.com/waiting-here/NonbiriAPI`.
-- [ ] Decide the copyright holder and final SPDX/license wording.
+- [x] Set the copyright holder to `waiting-here`; document AGPL-3.0 in `NOTICE` and the README.
 - [ ] Align application/frontend version metadata with `v1.0.0-alpha.1`.
 - [ ] Review the final diff on `master`; keep the release tag annotated and immutable.
 
@@ -43,7 +43,7 @@ This is an operator-facing preparation checklist for the first public GitHub rel
 - [x] Add issue forms and pull-request template.
 - [x] Add code ownership for `@waiting-here`.
 - [ ] Configure repository description, topics, license metadata, default branch, and release as a pre-release.
-- [ ] Enable Dependabot, private vulnerability reporting, secret scanning, and branch protection in GitHub settings.
+- [ ] Enable Dependabot, private vulnerability reporting, secret scanning, and branch protection in GitHub settings; see `docs/github-settings.md`.
 
 ## Deployment decisions still needed
 

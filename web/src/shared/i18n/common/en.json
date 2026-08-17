@@ -64,7 +64,7 @@
     "routeErrorTitle": "Page failed to load",
     "routeErrorBody": "An error occurred while rendering this page. Please refresh and try again.",
     "reload": "Reload page",
-    "copyright": "© {{year}} NonbiriAPI. All rights reserved.",
+    "copyright": "© {{year}} waiting-here · AGPL-3.0",
     "comingSoon": "This area is not available in this release.",
     "networkError": "The network request failed. Check your connection and try again.",
     "rateLimited": "Too many requests. Please wait and try again.",

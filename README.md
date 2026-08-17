@@ -126,8 +126,8 @@ See [docs/data-lifecycle-checklist.md](docs/data-lifecycle-checklist.md) for the
 
 ## Security
 
-Please read [SECURITY.md](SECURITY.md). Do not report an undisclosed vulnerability in a public issue. NonbiriAPI is licensed under the [GNU Affero General Public License v3.0](LICENSE).
+Please read [SECURITY.md](SECURITY.md). Do not report an undisclosed vulnerability in a public issue. Repository security settings are documented in [docs/github-settings.md](docs/github-settings.md). NonbiriAPI is licensed under the [GNU Affero General Public License v3.0](LICENSE).
 
 ## License
 
-Copyright and licensing details must be finalized by the repository owner before the public release. The project code is distributed under the GNU AGPL v3.0; see [LICENSE](LICENSE) and [web/THIRD_PARTY_NOTICES.md](web/THIRD_PARTY_NOTICES.md).
+Copyright © 2026 `waiting-here`. The project code is distributed under the GNU Affero General Public License v3.0; see [LICENSE](LICENSE), [NOTICE](NOTICE), and [web/THIRD_PARTY_NOTICES.md](web/THIRD_PARTY_NOTICES.md).

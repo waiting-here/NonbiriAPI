@@ -64,7 +64,7 @@
     "routeErrorTitle": "页面加载失败",
     "routeErrorBody": "页面渲染时发生错误，请刷新重试。",
     "reload": "刷新页面",
-    "copyright": "© {{year}} NonbiriAPI。保留所有权利。",
+    "copyright": "© {{year}} waiting-here · AGPL-3.0",
     "comingSoon": "此区域在当前版本暂不可用。",
     "networkError": "网络请求失败，请检查连接后重试。",
     "rateLimited": "请求过于频繁，请稍后重试。",

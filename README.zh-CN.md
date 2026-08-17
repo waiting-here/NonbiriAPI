@@ -126,8 +126,8 @@ npm --prefix web run build
 
 ## 安全
 
-请阅读 [`SECURITY.md`](SECURITY.md)。不要在公开 Issue 中披露尚未修复的安全漏洞。NonbiriAPI 使用 [GNU Affero General Public License v3.0](LICENSE) 发布。
+请阅读 [`SECURITY.md`](SECURITY.md)，不要在公开 Issue 中披露尚未修复的安全漏洞。仓库安全设置见 [`docs/github-settings.md`](docs/github-settings.md)。NonbiriAPI 使用 [GNU Affero General Public License v3.0](LICENSE) 发布。
 
 ## 许可证
 
-公开发布前，仓库所有者还需要最终确认版权声明和许可证标识。项目代码使用 GNU AGPL v3.0；请参阅 [LICENSE](LICENSE) 和 [web/THIRD_PARTY_NOTICES.md](web/THIRD_PARTY_NOTICES.md)。
+版权所有 © 2026 `waiting-here`。项目代码采用 GNU Affero General Public License v3.0；请参阅 [`LICENSE`](LICENSE)、[`NOTICE`](NOTICE) 和 [`web/THIRD_PARTY_NOTICES.md`](web/THIRD_PARTY_NOTICES.md)。
