@@ -54,6 +54,10 @@ func auditChunk(content string) string {
 const auditUsageChunk = `{"id":"c","object":"chat.completion.chunk","created":1,"model":"up/model","choices":[],"usage":{"prompt_tokens":3,"completion_tokens":7,"total_tokens":10}}`
 
 func newAuditFixture(t *testing.T, upstreamURLs []string, hooks forward.Hooks) *auditFixture {
+	return newAuditFixtureWithTimeout(t, upstreamURLs, hooks, 10*time.Second)
+}
+
+func newAuditFixtureWithTimeout(t *testing.T, upstreamURLs []string, hooks forward.Hooks, requestTimeout time.Duration) *auditFixture {
 	t.Helper()
 	master := bytes.Repeat([]byte{0x3c}, secret.MasterKeyBytes)
 	vault, err := secret.New(master)
@@ -68,7 +72,7 @@ func newAuditFixture(t *testing.T, upstreamURLs []string, hooks forward.Hooks) *
 	}
 	stack, err := egress.NewStack(egress.StackOptions{
 		AllowedOrigins: upstreamURLs,
-		RequestTimeout: 10 * time.Second,
+		RequestTimeout: requestTimeout,
 		Concurrency:    egress.ConcurrencyLimits{Global: 8, PerEndpoint: 4},
 	})
 	if err != nil {
@@ -455,7 +459,10 @@ func TestAuditForwardBackpressureSlowClient(t *testing.T) {
 		flusher.Flush()
 	}))
 	defer upstream.Close()
-	fixture := newAuditFixture(t, []string{upstream.URL}, forward.Hooks{})
+	// The one-byte sink is intentionally slower under the race detector than
+	// normal execution. Give this backpressure-only fixture enough request
+	// budget to drain the complete stream instead of testing timeout behavior.
+	fixture := newAuditFixtureWithTimeout(t, []string{upstream.URL}, forward.Hooks{}, 60*time.Second)
 	user := fixture.addUser(t)
 	fixture.addRoute(t, user.id, upstream.URL, "up/model", "sk-secret-audit", 0, false)
 
