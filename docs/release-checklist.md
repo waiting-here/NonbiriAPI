@@ -7,8 +7,8 @@ This is an operator-facing preparation checklist for the first public GitHub rel
 - [x] Confirm the canonical GitHub URL: `https://github.com/waiting-here/NonbiriAPI` and SSH remote `git@waiting-here:waiting-here/NonbiriAPI.git`.
 - [x] Set the Go module path to `github.com/waiting-here/NonbiriAPI`.
 - [x] Set the copyright holder to `waiting-here`; document AGPL-3.0 in `NOTICE` and the README.
-- [x] Align the frontend package, API contract, changelog, and release tag with `v1.0.0-alpha.1`; the Go binary version is identified by the tag and VCS metadata.
-- [ ] Review the final diff on `master`; keep the release tag annotated and immutable.
+- [ ] Align the frontend package, API contract, changelog, and the replacement `v1.0.0-alpha.1` tag after the final dependency and test fixes; the Go binary version is identified by the tag and VCS metadata.
+- [ ] Review the final diff on `master`; create the annotated release tag only after the required CI checks pass, then keep it immutable.
 
 ## Documentation and legal
 
@@ -38,12 +38,13 @@ This is an operator-facing preparation checklist for the first public GitHub rel
 
 - [x] Add a CI workflow with read-only contents permissions.
 - [x] No release-artifact workflow is required for the alpha.1 source-only release; prebuilt artifacts are deferred.
-- [ ] Enable branch protection for `master`.
+- [x] Enable branch protection for `master` with the required `Go checks` and `Web checks` statuses and no force pushes/deletion.
 - [x] Private vulnerability reporting is enabled by the repository owner; remaining GitHub security features can be enabled incrementally.
 - [x] Add issue forms and pull-request template.
 - [x] Add code ownership for `@waiting-here`.
 - [ ] Configure repository description, topics, license metadata, default branch, and release as a pre-release.
-- [ ] Finish Dependabot, secret scanning, and branch protection settings as described in `docs/github-settings.md`.
+- [x] Enable Dependabot version updates and complete the branch-protection settings described in `docs/github-settings.md`.
+- [ ] Enable and verify secret scanning and push protection if supported by the repository plan.
 
 ## Deployment decisions still needed
 
