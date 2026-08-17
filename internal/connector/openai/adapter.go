@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"nonbiriapi/internal/egress"
-	"nonbiriapi/internal/endpoint"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
 )
 
 const (

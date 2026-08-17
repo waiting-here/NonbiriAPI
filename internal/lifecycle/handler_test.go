@@ -15,12 +15,12 @@ import (
 	"testing"
 	"time"
 
-	"nonbiriapi/internal/auth"
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/elevation"
-	"nonbiriapi/internal/host"
-	"nonbiriapi/internal/httpmw"
-	"nonbiriapi/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/elevation"
+	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 // stubDiscordProvider satisfies auth.DiscordProvider for lifecycle tests; the

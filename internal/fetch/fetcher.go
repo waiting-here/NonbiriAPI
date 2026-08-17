@@ -13,12 +13,12 @@ import (
 	"strings"
 	"time"
 
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/diagnostic"
-	"nonbiriapi/internal/egress"
-	"nonbiriapi/internal/endpoint"
-	"nonbiriapi/internal/ratelimit"
-	"nonbiriapi/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
+	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 // Defaults for the bounded refresh machinery. The pool (workers + queue)

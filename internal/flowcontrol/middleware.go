@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"nonbiriapi/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
 
 // IdentityResolver extracts a CallerKey-established user id from a request.

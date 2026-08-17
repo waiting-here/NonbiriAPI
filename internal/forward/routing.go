@@ -8,8 +8,8 @@ import (
 
 	mrand "math/rand/v2"
 
-	"nonbiriapi/internal/connector/openai"
-	"nonbiriapi/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
 // Routing bounds. MaxRouteAttempts caps the dispatch loop at the projected

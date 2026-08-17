@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/host"
 )
 
 // --- StateManager session binding -------------------------------------------

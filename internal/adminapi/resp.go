@@ -5,7 +5,7 @@ package adminapi
 // plaintext, session material, upstream secret, ciphertext, or request
 // content: the projection is built from the repository's safe user row only.
 
-import "nonbiriapi/internal/db"
+import "github.com/waiting-here/NonbiriAPI/internal/db"
 
 // userResp is one bounded admin user row: identity, ban metadata, per-user
 // limits, and the server-authoritative usage totals. endpoint_limit /

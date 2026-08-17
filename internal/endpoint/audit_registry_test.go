@@ -6,7 +6,7 @@ package endpoint_test
 import (
 	"testing"
 
-	"nonbiriapi/internal/endpoint"
+	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
 )
 
 func TestAuditConnectorRegistryStrictness(t *testing.T) {

@@ -49,7 +49,7 @@ import (
 	"fmt"
 	"time"
 
-	"nonbiriapi/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
 // Late-callback text bounds. Every persisted alert/issue field is bounded and

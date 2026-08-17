@@ -3,6 +3,8 @@
 NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible gateway. It lets each user manage their own upstream endpoints and credentials, discover upstream models, define platform model aliases, and call those aliases through a single `CallerKey`.
 
 > **Release status:** `v1.0.0-alpha.1`. This release is suitable for controlled self-hosted trials. Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
+>
+> Source repository: [github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
 ## Highlights
 
@@ -57,7 +59,7 @@ The untagged Go build embeds a development placeholder UI. A usable release bina
 
 ## Configuration
 
-`admin.env.example` documents the complete startup environment. The required values include:
+`admin.env.example` documents the complete startup environment. The [configuration reference](docs/configuration.md) explains startup variables, administrator runtime settings, and private Discord trial gates. The required values include:
 
 - `NONBIRI_MASTER_KEY_FILE` or `NONBIRI_MASTER_KEY` (exactly one; a 32-byte key).
 - `NONBIRI_ADMIN_USERNAME` and `NONBIRI_ADMIN_PASSWORD`.
@@ -75,6 +77,12 @@ The intended first deployment model is a manually updated systemd service. See:
 - [Example systemd unit](deploy/nonbiriapi.service.example)
 
 The update procedure is deliberately conservative: stop the service, back up the database and sidecars, build and verify a release binary, install it atomically, restart, and verify both configured hosts. The alpha has no versioned migration framework; keep a tested backup before every update.
+
+Alpha.1 is source-first: a prebuilt binary is not required for the release. Operators may compile the source on the target platform or use their own build pipeline. A published binary, if added later, is a convenience artifact rather than the compatibility boundary.
+
+## GitHub automation
+
+The repository includes a read-only CI workflow. GitHub Actions runs the Go and frontend checks on pushes to `master` and pull requests; it does not deploy the application. Release artifact automation is intentionally separate and will be added only after the supported targets and signing policy are decided.
 
 ## API
 

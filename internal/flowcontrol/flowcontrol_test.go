@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"nonbiriapi/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
 
 type fakeClock struct {

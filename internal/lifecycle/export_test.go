@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"nonbiriapi/internal/auth"
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/host"
-	"nonbiriapi/internal/httperr"
-	"nonbiriapi/internal/ratelimit"
-	"nonbiriapi/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 // fakeElevation simulates the auth rail's consumed-capability boundary.

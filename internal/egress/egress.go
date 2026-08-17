@@ -20,7 +20,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"nonbiriapi/internal/config"
+	"github.com/waiting-here/NonbiriAPI/internal/config"
 )
 
 const (

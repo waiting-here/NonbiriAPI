@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"time"
 
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/httperr"
-	"nonbiriapi/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
 
 const (

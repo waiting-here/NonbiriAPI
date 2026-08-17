@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"nonbiriapi/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
 // FetchedModel is one row of the upstream model cache for an (Endpoint, Key)

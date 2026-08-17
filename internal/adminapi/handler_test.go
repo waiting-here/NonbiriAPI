@@ -13,13 +13,13 @@ import (
 	"strings"
 	"testing"
 
-	"nonbiriapi/internal/auth"
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/egress"
-	"nonbiriapi/internal/flowcontrol"
-	"nonbiriapi/internal/host"
-	"nonbiriapi/internal/ratelimit"
-	"nonbiriapi/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
+	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 // stubProvider satisfies auth.DiscordProvider for building a real UserAuth

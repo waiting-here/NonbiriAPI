@@ -22,8 +22,8 @@ import (
 	"sync"
 	"time"
 
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/forward"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/forward"
 )
 
 const (

@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"nonbiriapi/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
 )
 
 func writeSSE(writer http.ResponseWriter, frames ...string) {

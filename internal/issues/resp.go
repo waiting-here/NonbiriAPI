@@ -5,7 +5,7 @@ package issues
 // request/response content, or full endpoint URL; kind/message/ref are bounded
 // and sanitized at the repository before they reach this layer.
 
-import "nonbiriapi/internal/db"
+import "github.com/waiting-here/NonbiriAPI/internal/db"
 
 // issueResp is one bounded issue row for the user screen.
 type issueResp struct {

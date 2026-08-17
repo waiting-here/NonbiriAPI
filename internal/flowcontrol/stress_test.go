@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"nonbiriapi/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
 
 // stressConfig models a small site: 64 users, per-user cap 8, global cap 64,

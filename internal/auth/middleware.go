@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strings"
 
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/host"
-	"nonbiriapi/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
 
 const maxAuthorizationBytes = 512

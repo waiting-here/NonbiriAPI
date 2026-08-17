@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"nonbiriapi/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 func assertLoadedMasterKey(t *testing.T, c *Config, expected []byte) {

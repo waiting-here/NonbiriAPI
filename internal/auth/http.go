@@ -11,10 +11,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/host"
-	"nonbiriapi/internal/httperr"
-	"nonbiriapi/internal/httpmw"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 )
 
 const (

@@ -18,7 +18,7 @@ import (
 	"net/http"
 	"strings"
 
-	"nonbiriapi/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
 // Stable error codes. Add new codes; never redefine an existing one.

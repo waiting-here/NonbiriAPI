@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"nonbiriapi/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 func auditVault(t *testing.T) (*secret.Vault, string, string) {

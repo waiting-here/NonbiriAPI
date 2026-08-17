@@ -24,11 +24,11 @@ import (
 	"strconv"
 	"time"
 
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/host"
-	"nonbiriapi/internal/httperr"
-	"nonbiriapi/internal/httpmw"
-	"nonbiriapi/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
+	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
 
 // ErrExportTooLarge reports that the assembled package exceeded the finite

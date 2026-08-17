@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"nonbiriapi/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
 
 // newTestHandler builds a handler over a real service backed by a seeded

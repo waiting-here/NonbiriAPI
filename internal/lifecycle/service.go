@@ -16,10 +16,10 @@ import (
 	"errors"
 	"time"
 
-	"nonbiriapi/internal/auth"
-	"nonbiriapi/internal/db"
-	"nonbiriapi/internal/elevation"
-	"nonbiriapi/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/elevation"
+	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
 
 // Sentinel errors mapped by the HTTP layer to stable codes. None carries
