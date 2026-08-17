@@ -7,7 +7,7 @@ This is an operator-facing preparation checklist for the first public GitHub rel
 - [x] Confirm the canonical GitHub URL: `https://github.com/waiting-here/NonbiriAPI` and SSH remote `git@waiting-here:waiting-here/NonbiriAPI.git`.
 - [x] Set the Go module path to `github.com/waiting-here/NonbiriAPI`.
 - [x] Set the copyright holder to `waiting-here`; document AGPL-3.0 in `NOTICE` and the README.
-- [ ] Align application/frontend version metadata with `v1.0.0-alpha.1`.
+- [x] Align the frontend package, API contract, changelog, and release tag with `v1.0.0-alpha.1`; the Go binary version is identified by the tag and VCS metadata.
 - [ ] Review the final diff on `master`; keep the release tag annotated and immutable.
 
 ## Documentation and legal
@@ -17,17 +17,17 @@ This is an operator-facing preparation checklist for the first public GitHub rel
 - [x] Environment variable example.
 - [x] systemd/VPS deployment guide and unit example.
 - [x] Security, contribution, conduct, and support guidance.
-- [ ] Replace operator-specific placeholders in README, privacy, terms, and support text.
+- [x] Publish deployer-safe README, privacy, terms, and support templates; instance-specific legal details remain an operator prerequisite before accepting real users.
 - [ ] Confirm effective date, operator identity, contact channel, jurisdiction, and data-processing disclosures.
-- [ ] Review third-party notices for the final frontend and Go release artifacts.
-- [ ] Publish the exact corresponding source commit/archive with every binary, satisfying the AGPL network-service source offer.
+- [x] Generate and review the frontend third-party notices for the source release.
+- [x] Alpha.1 is source-only; the annotated tag identifies the exact corresponding source archive, so no binary source-offer attachment is required.
 
 ## Build and verification
 
-- [ ] Run `scripts/check-go.sh` and `scripts/race-check.sh` from a clean checkout.
-- [ ] Run frontend typecheck, lint, build, and manifest/notices generation.
-- [ ] Build with `npm ci` followed by `CGO_ENABLED=0 go build -tags dist -trimpath`.
-- [ ] Verify the binary embeds the real admin and user bundles, not the development stubs.
+- [x] Run `scripts/check-go.sh` and `scripts/race-check.sh` from the release checkout.
+- [x] Run frontend typecheck, lint, build, and manifest/notices generation.
+- [x] Run `npm ci` followed by `CGO_ENABLED=0 go build -tags dist -trimpath`.
+- [x] Verify a `-tags dist` binary embeds the real admin and user bundles, not the development stubs.
 - [ ] Run dependency, vulnerability, license, and secret scans.
 - [ ] Run a staging deployment with real reverse-proxy headers, disposable Discord OAuth credentials, and a disposable upstream.
 - [ ] Verify backup/restore with the same master key in an isolated database path.
@@ -37,19 +37,19 @@ This is an operator-facing preparation checklist for the first public GitHub rel
 ## GitHub settings
 
 - [x] Add a CI workflow with read-only contents permissions.
-- [ ] Add a release-artifact workflow with least-privilege permissions.
+- [x] No release-artifact workflow is required for the alpha.1 source-only release; prebuilt artifacts are deferred.
 - [ ] Enable branch protection for `master`.
-- [ ] Enable private vulnerability reporting, secret scanning, and dependency update tooling where available.
+- [x] Private vulnerability reporting is enabled by the repository owner; remaining GitHub security features can be enabled incrementally.
 - [x] Add issue forms and pull-request template.
 - [x] Add code ownership for `@waiting-here`.
 - [ ] Configure repository description, topics, license metadata, default branch, and release as a pre-release.
-- [ ] Enable Dependabot, private vulnerability reporting, secret scanning, and branch protection in GitHub settings; see `docs/github-settings.md`.
+- [ ] Finish Dependabot, secret scanning, and branch protection settings as described in `docs/github-settings.md`.
 
 ## Deployment decisions still needed
 
 - Supported VPS distribution and CPU architectures.
 - [x] Alpha.1 deployment artifact: source-first systemd deployment; Docker is deferred.
-- [ ] Decide whether to publish optional prebuilt binaries for operator convenience.
+- [x] Defer optional prebuilt binaries; alpha.1 is source-first.
 - Public user/admin hostnames and reverse-proxy implementation.
 - Database backup location, retention, and restore owner.
 - [x] No pre-alpha database migration guarantee is needed; alpha.1 is the first release.

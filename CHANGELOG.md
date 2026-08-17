@@ -8,7 +8,7 @@ The project is currently in alpha. The public compatibility promise is limited t
 
 - No unreleased changes yet.
 
-## [1.0.0-alpha.1] - Unreleased
+## [1.0.0-alpha.1] - 2026-08-17
 
 ### Added
 
