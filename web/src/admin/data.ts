@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiFetch } from '@shared/query/http';
 import {
   asRecord,
@@ -11,7 +11,6 @@ import {
   optionalText,
   text,
   type UnknownRecord,
-  type ListResult,
 } from '@shared/query/normalize';
 
 export const ADMIN_PAGE_SIZE = 20;
@@ -19,6 +18,7 @@ export const ADMIN_PAGE_SIZE = 20;
 export interface AdminPage<T> {
   items: T[];
   hasNext: boolean;
+  nextCursor?: string;
 }
 
 export interface AdminSessionResponse {
@@ -109,12 +109,12 @@ export const adminKeys = {
   session: ['admin', 'session'] as const,
   users: (page: number) => ['admin', 'users', page] as const,
   usersRoot: ['admin', 'users'] as const,
-  logs: (page: number) => ['admin', 'logs', page] as const,
+  logs: (page: number, beforeId?: string) => ['admin', 'logs', page, beforeId ?? ''] as const,
   logsRoot: ['admin', 'logs'] as const,
   usage: ['admin', 'usage'] as const,
   endpoints: ['admin', 'endpoints'] as const,
   models: ['admin', 'models'] as const,
-  alerts: (page: number) => ['admin', 'alerts', page] as const,
+  alerts: (page: number, beforeId?: string) => ['admin', 'alerts', page, beforeId ?? ''] as const,
   alertsRoot: ['admin', 'alerts'] as const,
   siteConfig: ['admin', 'site-config'] as const,
 };
@@ -123,11 +123,33 @@ function recordValue(record: UnknownRecord, key: string): unknown {
   return record[key];
 }
 
-function pagePayload(payload: unknown): ListResult {
+interface PagePayload {
+  items: unknown[];
+  hasNext: boolean;
+  nextCursor?: string;
+}
+
+function pagePayload(payload: unknown, pageSize = ADMIN_PAGE_SIZE): PagePayload {
   if (!isListPayload(payload)) {
     throw new ApiError('invalid_response', 'The server returned an invalid list.', 200);
   }
-  return listResult(payload, ADMIN_PAGE_SIZE);
+  const record = asRecord(payload);
+  const result = listResult(payload, pageSize + 1);
+  const explicitHasNext = record?.has_more ?? record?.hasMore ?? record?.next_page;
+  const hasNext =
+    typeof explicitHasNext === 'boolean'
+      ? explicitHasNext
+      : typeof explicitHasNext === 'number'
+        ? explicitHasNext > 0
+        : result.items.length > pageSize;
+  const items = result.items.slice(0, pageSize);
+  const lastRecord = asRecord(items[items.length - 1]);
+  const cursor = lastRecord ? idValue(recordValue(lastRecord, 'id')) : undefined;
+  return {
+    items,
+    hasNext,
+    ...(hasNext && cursor && cursor !== '—' ? { nextCursor: cursor } : {}),
+  };
 }
 
 function listPayload(payload: unknown): unknown[] {
@@ -297,20 +319,28 @@ export function useAdminUsers(page: number, enabled = true) {
       const result = pagePayload(
         await apiFetch<unknown>(`/admin/api/users?page=${page}&page_size=${ADMIN_PAGE_SIZE}`),
       );
-      return { items: result.items.map(normalizeUser), hasNext: result.hasNext } satisfies AdminPage<AdminUser>;
+      return {
+        items: result.items.map(normalizeUser),
+        hasNext: result.hasNext,
+        ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
+      } satisfies AdminPage<AdminUser>;
     },
     enabled,
   });
 }
 
-export function useAdminLogs(page: number, enabled = true) {
+export function useAdminLogs(page: number, beforeId?: string, enabled = true) {
+  const params = new URLSearchParams({ limit: String(ADMIN_PAGE_SIZE + 1) });
+  if (beforeId) params.set('before_id', beforeId);
   return useQuery({
-    queryKey: adminKeys.logs(page),
+    queryKey: adminKeys.logs(page, beforeId),
     queryFn: async () => {
-      const result = pagePayload(
-        await apiFetch<unknown>(`/admin/api/logs?page=${page}&page_size=${ADMIN_PAGE_SIZE}`),
-      );
-      return { items: result.items.map(normalizeLog), hasNext: result.hasNext } satisfies AdminPage<AdminLog>;
+      const result = pagePayload(await apiFetch<unknown>(`/admin/api/logs?${params}`));
+      return {
+        items: result.items.map(normalizeLog),
+        hasNext: result.hasNext,
+        ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
+      } satisfies AdminPage<AdminLog>;
     },
     enabled,
   });
@@ -342,14 +372,18 @@ export function useAdminModels(enabled = true) {
   });
 }
 
-export function useAdminAlerts(page: number, enabled = true) {
+export function useAdminAlerts(page: number, beforeId?: string, enabled = true) {
+  const params = new URLSearchParams({ limit: String(ADMIN_PAGE_SIZE + 1) });
+  if (beforeId) params.set('before_id', beforeId);
   return useQuery({
-    queryKey: adminKeys.alerts(page),
+    queryKey: adminKeys.alerts(page, beforeId),
     queryFn: async () => {
-      const result = pagePayload(
-        await apiFetch<unknown>(`/admin/api/alerts?page=${page}&page_size=${ADMIN_PAGE_SIZE}`),
-      );
-      return { items: result.items.map(normalizeAlert), hasNext: result.hasNext } satisfies AdminPage<AdminAlert>;
+      const result = pagePayload(await apiFetch<unknown>(`/admin/api/alerts?${params}`));
+      return {
+        items: result.items.map(normalizeAlert),
+        hasNext: result.hasNext,
+        ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
+      } satisfies AdminPage<AdminAlert>;
     },
     enabled,
   });
@@ -361,5 +395,19 @@ export function useSiteConfig(enabled = true) {
     queryFn: async () => normalizeSiteConfig(await apiFetch<unknown>('/admin/api/site-config')),
     enabled,
     staleTime: 0,
+  });
+}
+
+export function useResolveAdminAlert() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ alertId, resolved }: { alertId: string; resolved: boolean }) =>
+      apiFetch<unknown>(`/admin/api/alerts/${encodeURIComponent(alertId)}/resolve`, {
+        method: 'POST',
+        json: { resolved },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: adminKeys.alertsRoot });
+    },
   });
 }

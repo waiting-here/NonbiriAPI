@@ -3,8 +3,17 @@ import { THEME_STORAGE_KEY, ThemeContext, type Theme } from './context';
 
 function getInitialTheme(): Theme {
   const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  if (stored === 'light' || stored === 'dark') return stored;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  const theme =
+    stored === 'light' || stored === 'dark'
+      ? stored
+      : window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light';
+  // The embedded station shell uses a strict script CSP. Apply the initial
+  // theme from module code before the first React paint instead of relying on
+  // an inline HTML bootstrap script.
+  document.documentElement.dataset.theme = theme;
+  return theme;
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

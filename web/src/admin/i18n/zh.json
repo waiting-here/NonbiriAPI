@@ -138,6 +138,8 @@
       "resolved": "状态",
       "open": "未解决",
       "resolvedValue": "已解决",
+      "resolve": "解决",
+      "reopen": "重新打开",
       "empty": "没有返回告警",
       "emptyBody": "管理员 API 没有返回告警记录。"
     },

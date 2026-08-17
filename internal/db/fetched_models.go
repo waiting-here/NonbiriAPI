@@ -252,8 +252,9 @@ WHERE id=? AND user_id=?`, now, now, endpointID, userID)
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO user_issues (user_id, kind, message, ref, created_at)
 SELECT ?, ?, ?, ?, ?
-WHERE EXISTS (SELECT 1 FROM users WHERE id=?)`,
-		userID, kind, message, ref, now, userID); err != nil {
+WHERE EXISTS (SELECT 1 FROM users WHERE id=?)
+  AND (SELECT COUNT(*) FROM user_issues WHERE user_id=?) < ?`,
+		userID, kind, message, ref, now, userID, userID, MaxUserIssuesPerUser); err != nil {
 		return fmt.Errorf("insert fetch issue: %w", err)
 	}
 	if err := tx.Commit(); err != nil {

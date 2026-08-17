@@ -138,6 +138,8 @@
       "resolved": "Resolved",
       "open": "Open",
       "resolvedValue": "Resolved",
+      "resolve": "Resolve",
+      "reopen": "Reopen",
       "empty": "No alerts returned",
       "emptyBody": "The administrator API returned no alert records."
     },

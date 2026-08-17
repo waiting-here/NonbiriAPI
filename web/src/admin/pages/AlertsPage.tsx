@@ -10,12 +10,24 @@ import {
   ReadOnlyValue,
   StatusBadge,
 } from '@shared/components/States';
-import { useAdminAlerts } from '../data';
+import { useAdminAlerts, useResolveAdminAlert } from '../data';
 
 export function AlertsPage() {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
-  const alerts = useAdminAlerts(page);
+  const [cursors, setCursors] = useState<Record<number, string>>({});
+  const beforeId = page > 1 ? cursors[page - 1] : undefined;
+  const alerts = useAdminAlerts(page, beforeId);
+  const resolve = useResolveAdminAlert();
+
+  const changePage = (nextPage: number) => {
+    if (nextPage > page) {
+      const nextCursor = alerts.data?.nextCursor;
+      if (!nextCursor) return;
+      setCursors((current) => ({ ...current, [page]: nextCursor }));
+    }
+    setPage(nextPage);
+  };
 
   return (
     <div className="page">
@@ -29,6 +41,7 @@ export function AlertsPage() {
           <h2>{t('admin.alerts.listTitle')}</h2>
           <span className="muted">{t('common.page', { page })}</span>
         </div>
+        {resolve.error ? <ErrorState error={resolve.error} /> : null}
         {alerts.isPending ? <LoadingState /> : alerts.error ? <ErrorState error={alerts.error} onRetry={() => void alerts.refetch()} /> : alerts.data.items.length === 0 ? (
           <EmptyState title={t('admin.alerts.empty')} body={t('admin.alerts.emptyBody')} />
         ) : (
@@ -60,13 +73,21 @@ export function AlertsPage() {
                           label={alert.resolved ? t('admin.alerts.resolvedValue') : t('admin.alerts.open')}
                         />
                         {alert.resolved_at !== '—' ? <span className="table-note">{alert.resolved_at}</span> : null}
+                        <button
+                          type="button"
+                          className="btn btn-quiet"
+                          disabled={resolve.isPending}
+                          onClick={() => resolve.mutate({ alertId: alert.id, resolved: !alert.resolved })}
+                        >
+                          {alert.resolved ? t('admin.alerts.reopen') : t('admin.alerts.resolve')}
+                        </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <Pagination page={page} hasNext={alerts.data.hasNext} onChange={setPage} />
+            <Pagination page={page} hasNext={alerts.data.hasNext} onChange={changePage} />
           </>
         )}
       </Card>

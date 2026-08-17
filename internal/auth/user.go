@@ -6,12 +6,18 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"nonbiriapi/internal/db"
+	"nonbiriapi/internal/elevation"
 	"nonbiriapi/internal/host"
 	"nonbiriapi/internal/httperr"
 	"nonbiriapi/internal/httpmw"
 )
+
+// DefaultElevatedCapabilityTTL mirrors the shared elevation manager default
+// while keeping the auth configuration API stable.
+const DefaultElevatedCapabilityTTL = elevation.DefaultTTL
 
 // UserAuthConfig wires the user station identity boundary. RedirectURI and
 // UserRedirectPath are fixed configuration; neither is derived from request
@@ -25,6 +31,13 @@ type UserAuthConfig struct {
 	RedirectURI      string
 	UserRedirectPath string
 	RegistrationGate RegistrationGateFunc
+	// ElevatedCapabilityTTL bounds a completed elevation (the second factor
+	// for account self-service). Zero selects DefaultElevatedCapabilityTTL.
+	ElevatedCapabilityTTL time.Duration
+	// Elevation optionally supplies the shared user/admin capability manager.
+	// Nil creates an owned manager for a standalone auth service; production
+	// should inject one instance shared with lifecycle.
+	Elevation *elevation.Manager
 }
 
 // UserAuth exposes handlers, a mountable auth route tree, and middleware for
@@ -34,6 +47,8 @@ type UserAuth struct {
 	provider         DiscordProvider
 	clientID         string
 	state            *StateManager
+	elevation        *elevation.Manager
+	ownsElevation    bool
 	ownsState        bool
 	siteBaseURL      string
 	redirectURI      string
@@ -86,10 +101,26 @@ func NewUserAuth(config UserAuthConfig) (*UserAuth, error) {
 			return RegistrationGate{GuildID: guildID, RoleID: roleID}, err
 		}
 	}
+	capabilityTTL := config.ElevatedCapabilityTTL
+	if capabilityTTL <= 0 {
+		capabilityTTL = DefaultElevatedCapabilityTTL
+	}
+	manager := config.Elevation
+	ownsElevation := false
+	if manager == nil {
+		manager, err = elevation.NewManagerWithTTL(capabilityTTL)
+		if err != nil {
+			if ownsState {
+				_ = config.State.Close()
+			}
+			return nil, ErrProviderUnavailable
+		}
+		ownsElevation = true
+	}
 	return &UserAuth{
 		store: config.Store, provider: config.Provider, clientID: config.ClientID, state: config.State,
 		ownsState: ownsState, siteBaseURL: base, redirectURI: redirectURI, userRedirectPath: path,
-		registrationGate: gate,
+		registrationGate: gate, elevation: manager, ownsElevation: ownsElevation,
 	}, nil
 }
 
@@ -218,7 +249,12 @@ func (a *UserAuth) Callback(w http.ResponseWriter, r *http.Request) {
 		writeStableError(w, httperr.CodeInvalidRequest, "invalid authentication callback")
 		return
 	}
-	if err := a.state.Consume(state, cookieState, StationUser, OAuthIntentLogin); err != nil {
+	// ConsumeAny verifies the signature, cookie equality, station, expiry and
+	// one-use nonce in one atomic step and reveals the signed intent, so the
+	// callback can branch without ever trusting an intent supplied by the
+	// client or mixing login and elevation states.
+	intent, binding, err := a.state.ConsumeAny(state, cookieState, StationUser)
+	if err != nil {
 		if errors.Is(err, ErrStateExpired) || errors.Is(err, ErrStateReplay) {
 			writeStableError(w, httperr.CodeUnauthorized, "authentication failed")
 		} else {
@@ -226,6 +262,24 @@ func (a *UserAuth) Callback(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	switch intent {
+	case OAuthIntentLogin:
+		if binding != "" {
+			// A login callback must never complete an elevation-bound state.
+			writeStableError(w, httperr.CodeInvalidRequest, "invalid authentication callback")
+			return
+		}
+		a.finishLoginCallback(w, r, code)
+	case OAuthIntentElevate:
+		a.finishElevationCallback(w, r, code, binding)
+	default:
+		writeStableError(w, httperr.CodeInvalidRequest, "invalid authentication callback")
+	}
+}
+
+// finishLoginCallback completes a normal Discord login: exchange, gate,
+// registration/profile refresh, and session minting.
+func (a *UserAuth) finishLoginCallback(w http.ResponseWriter, r *http.Request, code string) {
 	login, err := a.provider.Exchange(r.Context(), code, a.redirectURI)
 	if err != nil {
 		writeAuthFailure(w, err)
@@ -385,6 +439,133 @@ func (a *UserAuth) Logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// Elevate handles POST /api/auth/elevate: the first step of the two-step
+// elevation. It requires an active user session, issues a short-lived,
+// single-use OAuth state bound to that exact session, and returns the Discord
+// authorization URL. The browser carries the state cookie; the callback mints
+// the elevated capability only after the same identity re-authorizes. No
+// capability exists until the callback completes, so a leaked state can only
+// start (not finish) the flow.
+func (a *UserAuth) Elevate(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodPost) || !requireStation(w, r, host.StationUser) {
+		return
+	}
+	if a == nil || a.store == nil || a.provider == nil || a.state == nil || a.elevation == nil {
+		writeStableError(w, httperr.CodeServiceUnavailable, "authentication service unavailable")
+		return
+	}
+	if _, ok := a.authenticateUserRequest(r); !ok {
+		writeStableError(w, httperr.CodeUnauthorized, "authentication required")
+		return
+	}
+	sessionToken := UserSessionToken(r)
+	if sessionToken == "" {
+		writeStableError(w, httperr.CodeUnauthorized, "authentication required")
+		return
+	}
+	binding := db.SessionHash(sessionToken)
+	state, err := a.state.IssueBound(StationUser, OAuthIntentElevate, binding)
+	if err != nil {
+		writeStableError(w, httperr.CodeServiceUnavailable, "authentication service unavailable")
+		return
+	}
+	location, err := a.provider.AuthorizationURL(r.Context(), DiscordAuthorizeRequest{
+		ClientID: a.clientID, RedirectURI: a.redirectURI, State: state, Intent: OAuthIntentElevate,
+	})
+	if err != nil || !validAuthorizationLocation(location, state) {
+		writeStableError(w, httperr.CodeServiceUnavailable, "authentication service unavailable")
+		return
+	}
+	SetOAuthStateCookie(w, state, secureCookieForRequest(r, a.siteBaseURL), a.state.ttl)
+	httperr.WriteJSON(w, http.StatusOK, map[string]string{"authorization_url": location})
+}
+
+// finishElevationCallback completes the second factor: the OAuth state was
+// already consumed and the provider code exchanged. The re-authorized Discord
+// identity must be the same account that holds the presented session; only
+// then is a short-lived, single-use elevated capability minted and handed to
+// the browser via the elevated cookie. The Discord access token stays inside
+// the provider stack and never reaches a response, log, error, or URL.
+func (a *UserAuth) finishElevationCallback(w http.ResponseWriter, r *http.Request, code, binding string) {
+	sessionToken := UserSessionToken(r)
+	if sessionToken == "" || binding != db.SessionHash(sessionToken) {
+		writeStableError(w, httperr.CodeUnauthorized, "authentication failed")
+		return
+	}
+	user, err := a.store.AuthenticateUserSession(sessionToken)
+	if err != nil || user == nil {
+		writeStableError(w, httperr.CodeUnauthorized, "authentication failed")
+		return
+	}
+	login, err := a.provider.Exchange(r.Context(), code, a.redirectURI)
+	if err != nil {
+		writeAuthFailure(w, err)
+		return
+	}
+	identity := login.Identity
+	if !validateBoundedText(identity.ID, 128, false) {
+		writeStableError(w, httperr.CodeServiceUnavailable, "authentication service unavailable")
+		return
+	}
+	// The second factor is only meaningful when the re-authorized identity is
+	// the same account that owns the session. A different Discord account is a
+	// stable forbidden failure, never a session change.
+	if user.DiscordID != identity.ID {
+		writeStableError(w, httperr.CodeForbidden, "identity does not match the session")
+		return
+	}
+	token, _, err := a.elevation.IssueBound(user.ID, elevation.KindUser, binding)
+	if err != nil {
+		writeStableError(w, httperr.CodeServiceUnavailable, "authentication service unavailable")
+		return
+	}
+	SetElevatedCookie(w, token, secureCookieForRequest(r, a.siteBaseURL), a.elevation.TTL())
+	noStoreRedirect(w, r, a.userRedirectPath)
+}
+
+// ConsumeElevated atomically validates and consumes the X-Elevated-Token
+// capability bound to the session presented in the request. Any failure
+// (missing header, malformed/expired/replayed token, session or user binding
+// mismatch) collapses to ErrElevationRequired so the wire never distinguishes
+// which check failed. The raw token never enters an error value or log.
+func (a *UserAuth) ConsumeElevated(w http.ResponseWriter, r *http.Request, user *db.User) error {
+	if a == nil || a.elevation == nil || r == nil || user == nil || user.ID <= 0 {
+		return ErrElevationRequired
+	}
+	token := r.Header.Get("X-Elevated-Token")
+	if token == "" {
+		return ErrElevationRequired
+	}
+	sessionToken := UserSessionToken(r)
+	if sessionToken == "" {
+		return ErrElevationRequired
+	}
+	if err := a.elevation.ConsumeBound(token, user.ID, elevation.KindUser, db.SessionHash(sessionToken)); err != nil {
+		return ErrElevationRequired
+	}
+	a.ClearElevatedCookie(w, r)
+	return nil
+}
+
+// ElevationManager returns the shared capability manager so lifecycle export
+// and deletion can use the exact same one-use/session-bound token domain.
+func (a *UserAuth) ElevationManager() *elevation.Manager {
+	if a == nil {
+		return nil
+	}
+	return a.elevation
+}
+
+// ClearElevatedCookie removes the browser-side elevated capability cookie.
+// It is exposed so account self-service handlers can drop the single-use
+// token after a consume attempt.
+func (a *UserAuth) ClearElevatedCookie(w http.ResponseWriter, r *http.Request) {
+	if w == nil || r == nil {
+		return
+	}
+	ClearElevatedCookie(w, secureCookieForRequest(r, a.siteBaseURL))
+}
+
 // Middleware authenticates a user session and places a server-authoritative
 // principal in context. It rejects admin sessions and banned users.
 func (a *UserAuth) Middleware(next http.Handler) http.Handler {
@@ -484,10 +665,17 @@ func CallerKeyDisplay(key *db.CallerKey) string {
 
 const CallerKeyPrefixForDisplay = db.CallerKeyPrefix
 
-// Close releases an internally-created ephemeral OAuth state signer. A
-// caller-supplied StateManager remains owned by that caller.
+// Close releases an internally-created ephemeral OAuth state signer and the
+// elevated-capability store. A caller-supplied StateManager remains owned by
+// that caller.
 func (a *UserAuth) Close() error {
-	if a == nil || !a.ownsState || a.state == nil {
+	if a == nil {
+		return nil
+	}
+	if a.ownsElevation && a.elevation != nil {
+		_ = a.elevation.Close()
+	}
+	if !a.ownsState || a.state == nil {
 		return nil
 	}
 	return a.state.Close()
@@ -501,6 +689,7 @@ func (a *UserAuth) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/auth/discord/start", a.Start)
 	mux.HandleFunc("GET /api/auth/discord/callback", a.Callback)
+	mux.HandleFunc("POST /api/auth/elevate", a.Elevate)
 	mux.HandleFunc("GET /api/session", a.Session)
 	mux.HandleFunc("GET /api/me", a.Me)
 	mux.HandleFunc("POST /api/auth/logout", a.Logout)

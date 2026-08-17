@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
@@ -10,12 +10,33 @@ import {
   PageHeader,
 } from '@shared/components/States';
 import { apiFetch } from '@shared/query/http';
-import { asRecord } from '@shared/query/normalize';
+import { asRecord, hasControlCharacters } from '@shared/query/normalize';
 import { useUserMe, useUserSession, useUserUsage, userKeys } from '../data';
 import { UserPageGate } from '../components/UserPageGate';
 
 function number(value: number): string {
   return value.toLocaleString();
+}
+
+function elevatedTokenFromCookie(): string | undefined {
+  const cookie = document.cookie
+    .split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith('nb_elevated='));
+  if (!cookie) return undefined;
+  const raw = cookie.slice('nb_elevated='.length);
+  let token: string;
+  try {
+    token = decodeURIComponent(raw);
+  } catch {
+    return undefined;
+  }
+  return /^[A-Za-z0-9._-]{8,512}$/.test(token) ? token : undefined;
+}
+
+function elevatedHeaders(): Record<string, string> | undefined {
+  const token = elevatedTokenFromCookie();
+  return token ? { 'X-Elevated-Token': token } : undefined;
 }
 
 function removeSensitiveFields(value: unknown): unknown {
@@ -65,6 +86,9 @@ function AccountContent() {
   const me = useUserMe(true);
   const usage = useUserUsage(true);
   const [elevationStarted, setElevationStarted] = useState(false);
+  const [elevationBusy, setElevationBusy] = useState(false);
+  const [elevationError, setElevationError] = useState<unknown>(null);
+  const [exportOpen, setExportOpen] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
   const [exportError, setExportError] = useState<unknown>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -72,13 +96,50 @@ function AccountContent() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<unknown>(null);
 
+  const startElevation = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setElevationError(null);
+    setElevationBusy(true);
+    try {
+      const payload = await apiFetch<unknown>('/api/auth/elevate', { method: 'POST' });
+      const record = asRecord(payload);
+      const location = record?.authorization_url;
+      if (
+        typeof location !== 'string' ||
+        location.length > 2048 ||
+        hasControlCharacters(location)
+      ) {
+        throw new Error(t('user.account.elevationUnavailable'));
+      }
+      const authorizationUrl = new URL(location);
+      if (authorizationUrl.protocol !== 'https:') {
+        throw new Error(t('user.account.elevationUnavailable'));
+      }
+      setElevationStarted(true);
+      window.location.assign(authorizationUrl.toString());
+    } catch (error) {
+      setElevationError(error);
+    } finally {
+      setElevationBusy(false);
+    }
+  };
+
   const exportAccount = async () => {
     setExportError(null);
+    const headers = elevatedHeaders();
+    if (!headers) {
+      setExportError(new Error(t('user.account.elevationRequired')));
+      return;
+    }
     setExportBusy(true);
     try {
-      const payload = await apiFetch<unknown>('/api/account/export', { method: 'POST' });
+      const payload = await apiFetch<unknown>('/api/account/export', {
+        method: 'POST',
+        headers,
+      });
       if (payload === undefined) throw new Error(t('common.invalidResponse'));
       downloadExport(payload);
+      setExportOpen(false);
     } catch (error) {
       setExportError(error);
     } finally {
@@ -92,10 +153,16 @@ function AccountContent() {
       setDeleteError(new Error(t('user.account.deleteWordError')));
       return;
     }
+    const headers = elevatedHeaders();
+    if (!headers) {
+      setDeleteError(new Error(t('user.account.elevationRequired')));
+      return;
+    }
     setDeleteBusy(true);
     try {
       await apiFetch<void>('/api/account/delete', {
         method: 'POST',
+        headers,
         json: { confirm: 'DELETE' },
       });
       queryClient.removeQueries({ queryKey: userKeys.all });
@@ -162,22 +229,27 @@ function AccountContent() {
       <Card className="danger-zone">
         <h2>{t('user.account.securityTitle')}</h2>
         <p>{t('user.account.elevateBody')}</p>
-        <form
-          method="post"
-          action="/api/auth/elevate"
-          onSubmit={() => setElevationStarted(true)}
-        >
-          <button type="submit" className="btn btn-secondary">
-            {t('user.account.startElevation')}
+        <form onSubmit={(event) => void startElevation(event)} noValidate>
+          <button type="submit" className="btn btn-secondary" disabled={elevationBusy}>
+            {elevationBusy ? t('common.working') : t('user.account.startElevation')}
           </button>
         </form>
+        {elevationError ? <ErrorState error={elevationError} /> : null}
         {elevationStarted ? <p className="inline-success" role="status">{t('user.account.elevationStarted')}</p> : null}
         <div className="security-actions">
           <div>
             <h3>{t('user.account.export')}</h3>
             <p className="muted">{t('user.account.exportBody')}</p>
             {exportError ? <ErrorState error={exportError} /> : null}
-            <button type="button" className="btn btn-primary" onClick={() => void exportAccount()} disabled={exportBusy}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                setExportError(null);
+                setExportOpen(true);
+              }}
+              disabled={exportBusy}
+            >
               {exportBusy ? t('common.working') : t('user.account.export')}
             </button>
           </div>
@@ -198,6 +270,23 @@ function AccountContent() {
           </div>
         </div>
       </Card>
+
+      <ConfirmDialog
+        open={exportOpen}
+        title={t('user.account.exportTitle')}
+        description={t('user.account.exportBody')}
+        confirmLabel={t('user.account.exportConfirm')}
+        busy={exportBusy}
+        onCancel={() => {
+          if (!exportBusy) {
+            setExportOpen(false);
+            setExportError(null);
+          }
+        }}
+        onConfirm={() => void exportAccount()}
+      >
+        {exportError ? <ErrorState error={exportError} /> : null}
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={deleteOpen}

@@ -32,6 +32,7 @@ const (
 	CodeMethodNotAllowed   = "method_not_allowed"
 	CodeRateLimited        = "rate_limited"
 	CodePayloadTooLarge    = "payload_too_large"
+	CodeElevationRequired  = "elevated_required"
 	CodeUnboundModel       = "unbound_model"
 	CodeUpstream           = "upstream"
 	CodeServiceUnavailable = "service_unavailable"
@@ -94,6 +95,8 @@ func statusOf(code string) int {
 		return http.StatusTooManyRequests
 	case CodePayloadTooLarge:
 		return http.StatusRequestEntityTooLarge
+	case CodeElevationRequired:
+		return http.StatusForbidden
 	case CodeUpstream:
 		return http.StatusBadGateway
 	case CodeUnboundModel, CodeServiceUnavailable:

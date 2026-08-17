@@ -350,6 +350,33 @@ The export package excludes upstream secret material by policy; it carries enoug
 be usable as a portable account snapshot. The exact field list is finalized with the export
 rail but the scope (no plaintext secret) is frozen here.
 
+### 3.9 User issues
+
+| Method | Path | Auth | Body | Response | Stable codes |
+|---|---|---|---|---|---|
+| `GET` | `/api/issues` | user session | query: `resolved`, `before_id`, `limit` | `200 {data:[…], has_more}` — one page of `{id, kind, message, ref, created_at, resolved, resolved_at}` (newest first; `resolved_at` absent while unresolved) | `unauthorized` |
+| `POST` | `/api/issues/{id}/resolve` | user session | — | `204`; one-way idempotent ack (repeating it keeps the original `resolved_at` and still succeeds) | `unauthorized`, `not_found` |
+
+- **Ownership**: the issue center is session-only by construction. Every query carries the
+  session principal's `user_id` as a mandatory SQL predicate; cross-user issues never enter the
+  candidate set, and a resolve of a missing or cross-user issue is an indistinguishable
+  `not_found`. Caller keys, admin sessions, and header-carried identities never authorize these
+  routes, and there is no write path through which a user can fabricate an issue.
+- **Bounded projection**: `kind` ≤ 128 runes, `message` ≤ 1024 runes (human-safe, free of raw
+  upstream text), `ref` ≤ 256 runes. All three pass the shared diagnostic boundary as the final
+  sink on read as well as write: no secret, ciphertext, request/response content, raw body,
+  or full endpoint URL is ever projected, and no control characters or line forgery can reach
+  the wire. Frontends render these fields as plain text.
+- **Pagination**: keyset pagination by `id` (rows strictly older than `before_id`), `limit`
+  clamped into `[1, 100]` (default 100), `resolved` accepts exactly `true`/`false` (omitted =
+  both states). `has_more` is explicit; unknown, repeated, or malformed parameters are
+  `invalid_request`.
+- **Lifecycle**: issues cascade with account deletion; a late issue write against a deleted
+  user is an atomic no-op (see §3.8 / §5 atomic late-callback handling), and a resolve racing
+  a delete linearizes through the single writer — it can neither resurrect a deleted issue
+  nor strand an unresolved one. The administrator alert center (`admin_alerts`) is a
+  separate surface and is never reached through these routes.
+
 ## 4. Admin station — `/admin/api/*` (admin session cookie)
 
 Auth: a valid admin session cookie. The administrator is env-configured (single row,
@@ -410,11 +437,18 @@ Runtime config changes do not require a restart.
 
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
-| `GET` | `/admin/api/alerts` | admin session | query: `resolved` filter, pagination | `200` array of `{id, kind, message, ref, subject_user_id, created_at, resolved, resolved_at}` | `unauthorized`, `forbidden` |
+| `GET` | `/admin/api/alerts` | admin session | query: `resolved` filter (`true`/`false`), `before_id` keyset cursor, `limit` | `200` array of `{id, kind, message, ref, subject_user_id, created_at, resolved, resolved_at}` | `unauthorized`, `forbidden`, `invalid_request` |
+| `POST` | `/admin/api/alerts/{id}/resolve` | admin session | optional `{"resolved": bool}`; absent body or empty body means `true` (ack) | `200` updated `{id, kind, message, ref, subject_user_id, created_at, resolved, resolved_at}` | `unauthorized`, `forbidden`, `invalid_request`, `not_found`, `payload_too_large` |
 
 `subject_user_id` has no foreign key on purpose: late callbacks against a deleted user are
 suppressed atomically (`INSERT … SELECT … WHERE EXISTS`), so the alert row is written only
-when the subject still exists. Alerts carry bounded, sanitized `message`/`ref`.
+when the subject still exists. Alerts carry bounded, sanitized `message`/`ref`; pending
+(unresolved) alerts are deduplicated per `(kind, ref, subject)` and capped per kind
+(`MaxAdminAlertsPerKind`), so a repeating event source cannot flood the center. Listing is
+keyset-paginated newest-first (`id` descending, `before_id` exclusive) with a clamped page
+size; `resolved_at`/`subject_user_id` are `null` when absent. `resolve` is idempotent: a
+repeated call for the same target state succeeds and keeps the original `resolved_at`;
+resolving an alert with `false` reopens it and clears `resolved_at`.
 
 ## 5. Cross-cutting requirements
 

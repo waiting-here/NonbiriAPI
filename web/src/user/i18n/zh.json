@@ -158,10 +158,15 @@
       "nav": "问题",
       "title": "问题中心",
       "description": "查看服务端记录的拉取与路由问题，不暴露上游凭据。",
-      "unavailableTitle": "当前 API 契约尚未提供用户问题接口",
-      "unavailableBody": "服务端会在端点刷新和转发过程中记录问题。用户问题接口可用后，本页面将显示服务端数据；当前不会自行编造问题记录。",
-      "safeTitle": "浏览器中没有本地问题历史",
-      "safeBody": "本浏览器不会保存问题日志。需要时请检查端点状态并重试服务端操作。"
+      "listTitle": "服务端记录的问题",
+      "kind": "类型",
+      "reference": "引用",
+      "open": "未解决",
+      "resolved": "已解决",
+      "resolvedValue": "已确认",
+      "resolve": "确认问题",
+      "empty": "没有返回问题",
+      "emptyBody": "服务端没有返回属于此账号的问题记录。"
     },
     "account": {
       "nav": "账号",
@@ -180,6 +185,8 @@
       "elevateBody": "导出和删号需要重新完成 Discord 授权。请先启动服务端流程，再尝试操作。",
       "startElevation": "开始重新授权",
       "elevationStarted": "服务端授权流程已开始，完成后请返回此页面。",
+      "elevationUnavailable": "无法安全启动授权流程，请稍后重试。",
+      "elevationRequired": "请先完成新的授权，再使用此操作。",
       "elevatedToken": "提升令牌（如服务端提供，仅保存在内存）",
       "elevatedTokenHint": "此值不会进入 URL、浏览器存储或查询缓存。",
       "export": "导出账号数据",

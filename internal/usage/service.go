@@ -35,13 +35,19 @@ const (
 	DefaultPendingTTL = 10 * time.Minute
 )
 
-// Config wires the usage service. Logger defaults to slog.Default().
+// Config wires the usage service. Logger defaults to slog.Default(); the
+// Cleanup* fields bound the 30-day retention cleanup and default to the
+// package constants when zero.
 type Config struct {
 	Store              *db.Store
 	Logger             *slog.Logger
 	Now                func() time.Time
 	MaxPendingAttempts int
 	PendingTTL         time.Duration
+	CleanupRetention   time.Duration // 0 = DefaultRetention (30 days)
+	CleanupBatchSize   int           // 0 = DefaultCleanupBatchSize
+	CleanupMaxBatches  int           // 0 = DefaultCleanupMaxBatches
+	CleanupMaxDuration time.Duration // 0 = DefaultCleanupMaxDuration
 }
 
 // Service correlates each committed UsageRecord with its AttemptRecord via
@@ -57,6 +63,11 @@ type Service struct {
 	mu      sync.Mutex
 	pending map[string]attemptEntry
 	order   []string
+
+	cleanupRetention   time.Duration
+	cleanupBatchSize   int
+	cleanupMaxBatches  int
+	cleanupMaxDuration time.Duration
 }
 
 type attemptEntry struct {
@@ -76,6 +87,11 @@ func NewService(cfg Config) (*Service, error) {
 		max:     cfg.MaxPendingAttempts,
 		ttl:     cfg.PendingTTL,
 		pending: make(map[string]attemptEntry),
+
+		cleanupRetention:   cfg.CleanupRetention,
+		cleanupBatchSize:   cfg.CleanupBatchSize,
+		cleanupMaxBatches:  cfg.CleanupMaxBatches,
+		cleanupMaxDuration: cfg.CleanupMaxDuration,
 	}
 	if service.logger == nil {
 		service.logger = slog.Default()
@@ -88,6 +104,21 @@ func NewService(cfg Config) (*Service, error) {
 	}
 	if service.ttl <= 0 {
 		service.ttl = DefaultPendingTTL
+	}
+	if service.cleanupRetention <= 0 {
+		service.cleanupRetention = DefaultRetention
+	}
+	if service.cleanupBatchSize < 1 {
+		service.cleanupBatchSize = DefaultCleanupBatchSize
+	}
+	if service.cleanupBatchSize > db.MaxCleanupBatch {
+		service.cleanupBatchSize = db.MaxCleanupBatch
+	}
+	if service.cleanupMaxBatches < 1 {
+		service.cleanupMaxBatches = DefaultCleanupMaxBatches
+	}
+	if service.cleanupMaxDuration <= 0 {
+		service.cleanupMaxDuration = DefaultCleanupMaxDuration
 	}
 	return service, nil
 }

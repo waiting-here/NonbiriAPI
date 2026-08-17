@@ -9,12 +9,14 @@ const (
 	UserSessionCookieName  = "nb_user_session"
 	AdminSessionCookieName = "nb_admin_session"
 	OAuthStateCookieName   = "nb_oauth_state"
+	ElevatedCookieName     = "nb_elevated"
 )
 
 const (
 	userSessionCookiePath  = "/api"
 	adminSessionCookiePath = "/admin"
 	oauthStateCookiePath   = "/api/auth/discord"
+	elevatedCookiePath     = "/"
 )
 
 func sessionCookie(name, value, path string, secure bool, maxAge int, expires time.Time) *http.Cookie {
@@ -72,6 +74,37 @@ func SetOAuthStateCookie(w http.ResponseWriter, state string, secure bool, ttl t
 func ClearOAuthStateCookie(w http.ResponseWriter, secure bool) {
 	w.Header().Set("Cache-Control", "no-store")
 	http.SetCookie(w, sessionCookie(OAuthStateCookieName, "", oauthStateCookiePath, secure, -1, time.Unix(1, 0)))
+}
+
+// SetElevatedCookie hands the single-use elevated capability to the SPA. It is
+// deliberately not HttpOnly: the SPA must move the value into the
+// X-Elevated-Token header for the account self-service endpoints. The cookie
+// is short-lived (the capability TTL), SameSite Lax, and never written to any
+// server-side persistence or log.
+func SetElevatedCookie(w http.ResponseWriter, token string, secure bool, ttl time.Duration) {
+	w.Header().Set("Cache-Control", "no-store")
+	seconds := int(ttl / time.Second)
+	if seconds < 1 {
+		seconds = 1
+	}
+	cookie := &http.Cookie{
+		Name:     ElevatedCookieName,
+		Value:    token,
+		Path:     elevatedCookiePath,
+		HttpOnly: false,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   seconds,
+		Expires:  time.Now().Add(ttl).UTC(),
+	}
+	http.SetCookie(w, cookie)
+}
+
+// ClearElevatedCookie removes the browser-side elevated capability. It is
+// called after any consume attempt so a single-use token never lingers.
+func ClearElevatedCookie(w http.ResponseWriter, secure bool) {
+	w.Header().Set("Cache-Control", "no-store")
+	http.SetCookie(w, sessionCookie(ElevatedCookieName, "", elevatedCookiePath, secure, -1, time.Unix(1, 0)))
 }
 
 func UserSessionToken(r *http.Request) string {

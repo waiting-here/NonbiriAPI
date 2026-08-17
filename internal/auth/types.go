@@ -18,6 +18,10 @@ const (
 	StationUser      = "user"
 	StationAdmin     = "admin"
 	OAuthIntentLogin = "login"
+	// OAuthIntentElevate is the distinct OAuth intent for a fresh identity
+	// re-authorization. Elevation states are session-bound and can never be
+	// exchanged for login states (and vice versa).
+	OAuthIntentElevate = "elevate"
 )
 
 var (
@@ -31,6 +35,10 @@ var (
 	ErrGuildRoleMismatch    = errors.New("identity does not satisfy registration gate")
 	ErrInvalidIdentity      = errors.New("identity provider returned invalid identity")
 	ErrStationMismatch      = errors.New("request station is not authorized")
+	// ErrElevationRequired is the stable boundary failure reported when an
+	// account self-service request lacks a valid, unexpired, unconsumed
+	// elevated capability. It never carries the capability token.
+	ErrElevationRequired = errors.New("elevated capability required")
 )
 
 // DiscordAuthorizeRequest contains only fixed server configuration and the

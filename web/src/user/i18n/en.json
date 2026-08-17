@@ -158,10 +158,15 @@
       "nav": "Issues",
       "title": "Issue center",
       "description": "Review server-recorded fetch and routing issues without exposing upstream credentials.",
-      "unavailableTitle": "Issue records are not exposed by the current API contract",
-      "unavailableBody": "The service records issues as part of endpoint and forwarding operations. This page will show server data when a user issue endpoint is available; it does not invent local issue records.",
-      "safeTitle": "No local issue history",
-      "safeBody": "Nothing is stored in this browser as an issue log. Check endpoint status and retry a server operation when needed."
+      "listTitle": "Server-recorded issues",
+      "kind": "Kind",
+      "reference": "Reference",
+      "open": "Open",
+      "resolved": "Resolved",
+      "resolvedValue": "Acknowledged",
+      "resolve": "Acknowledge",
+      "empty": "No issues returned",
+      "emptyBody": "The service has not returned any issue records for this account."
     },
     "account": {
       "nav": "Account",
@@ -180,6 +185,8 @@
       "elevateBody": "Export and deletion require a fresh Discord re-authorization. Start the server flow before attempting either action.",
       "startElevation": "Start re-authorization",
       "elevationStarted": "The server authorization flow has started. Return here after completing it.",
+      "elevationUnavailable": "The authorization flow could not be started safely. Try again later.",
+      "elevationRequired": "Complete a fresh authorization before using this action.",
       "elevatedToken": "Elevated token (memory only, if provided by the service)",
       "elevatedTokenHint": "This value is never placed in a URL, browser storage or query cache.",
       "export": "Export account data",

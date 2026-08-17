@@ -22,8 +22,19 @@ function usageText(value: number | undefined): string {
 export function LogsPage() {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
+  const [cursors, setCursors] = useState<Record<number, string>>({});
   const usage = useAdminUsage();
-  const logs = useAdminLogs(page);
+  const beforeId = page > 1 ? cursors[page - 1] : undefined;
+  const logs = useAdminLogs(page, beforeId);
+
+  const changePage = (nextPage: number) => {
+    if (nextPage > page) {
+      const nextCursor = logs.data?.nextCursor;
+      if (!nextCursor) return;
+      setCursors((current) => ({ ...current, [page]: nextCursor }));
+    }
+    setPage(nextPage);
+  };
 
   return (
     <div className="page">
@@ -125,7 +136,7 @@ export function LogsPage() {
                 </tbody>
               </table>
             </div>
-            <Pagination page={page} hasNext={logs.data.hasNext} onChange={setPage} />
+            <Pagination page={page} hasNext={logs.data.hasNext} onChange={changePage} />
           </>
         )}
       </Card>

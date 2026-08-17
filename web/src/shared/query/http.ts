@@ -125,6 +125,24 @@ function fallbackMessage(status: number): string {
   return status > 0 ? `Request failed (HTTP ${status}).` : 'Request failed.';
 }
 
+function elevatedTokenForPath(path: string): string | undefined {
+  if (typeof document === 'undefined' || (path !== '/api/account/export' && path !== '/api/account/delete')) {
+    return undefined;
+  }
+  const matches = document.cookie
+    .split(';')
+    .map((part) => part.trim())
+    .filter((part) => part.startsWith('nb_elevated='));
+  if (matches.length !== 1) return undefined;
+  const token = matches[0].slice('nb_elevated='.length);
+  if (token.length === 0 || token.length > 256) return undefined;
+  for (const character of token) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if (codePoint < 32 || codePoint === 127) return undefined;
+  }
+  return token;
+}
+
 export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
 }
@@ -147,6 +165,10 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
   requestHeaders.set('Accept', 'application/json');
   requestHeaders.set('Cache-Control', 'no-store');
   if (json !== undefined) requestHeaders.set('Content-Type', 'application/json');
+  const elevatedToken = elevatedTokenForPath(path);
+  if (elevatedToken && !requestHeaders.has('X-Elevated-Token')) {
+    requestHeaders.set('X-Elevated-Token', elevatedToken);
+  }
 
   let response: Response;
   try {

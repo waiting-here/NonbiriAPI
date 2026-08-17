@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiFetch } from '@shared/query/http';
 import {
   asRecord,
@@ -95,6 +95,22 @@ export interface CallerKeySecret {
   secret: string;
 }
 
+export interface UserIssue {
+  id: string;
+  kind: string;
+  message: string;
+  ref: string;
+  created_at: string;
+  resolved: boolean;
+  resolved_at?: string;
+}
+
+export interface IssuePage {
+  items: UserIssue[];
+  hasMore: boolean;
+  nextCursor?: string;
+}
+
 export const userKeys = {
   all: ['user'] as const,
   session: ['user', 'session'] as const,
@@ -110,6 +126,8 @@ export const userKeys = {
   bindingsRoot: ['user', 'bindings'] as const,
   bindings: (modelId: string) => ['user', 'bindings', modelId] as const,
   callerKey: ['user', 'caller-key'] as const,
+  issues: ['user', 'issues'] as const,
+  issueResolve: (issueId: string) => ['user', 'issues', 'resolve', issueId] as const,
 };
 
 function recordValue(record: UnknownRecord, key: string): unknown {
@@ -263,6 +281,43 @@ function normalizeCallerKey(value: unknown): CallerKeyMetadata {
   };
 }
 
+function normalizeUserIssue(value: unknown): UserIssue {
+  const record = asRecord(value) ?? {};
+  return {
+    id: idValue(recordValue(record, 'id')),
+    kind: text(recordValue(record, 'kind'), 128, '—'),
+    message: text(recordValue(record, 'message'), 1024),
+    ref: text(recordValue(record, 'ref'), 256),
+    created_at: dateValue(recordValue(record, 'created_at')),
+    resolved: booleanValue(recordValue(record, 'resolved')),
+    ...(optionalText(recordValue(record, 'resolved_at'), 64)
+      ? { resolved_at: dateValue(recordValue(record, 'resolved_at')) }
+      : {}),
+  };
+}
+
+/**
+ * Normalize one paginated issue page `{data, has_more}`. The browser never
+ * invents issues: an invalid envelope throws so a broken server cannot fake
+ * a local issue list.
+ */
+function normalizeIssuePage(value: unknown, pageSize = 20): IssuePage {
+  if (!isListPayload(value)) {
+    throw new ApiError('invalid_response', 'The server returned an invalid issue list.', 200);
+  }
+  const record = asRecord(value);
+  const result = listResult(value, pageSize);
+  const hasMore =
+    typeof record?.has_more === 'boolean' ? record.has_more : result.hasNext;
+  const items = result.items.map(normalizeUserIssue);
+  const last = items[items.length - 1];
+  return {
+    items,
+    hasMore,
+    ...(hasMore && last && last.id !== '—' ? { nextCursor: last.id } : {}),
+  };
+}
+
 /** Validate the one-time response without ever normalizing it into a query. */
 export function normalizeSecret(value: unknown): CallerKeySecret {
   const record = asRecord(value);
@@ -375,5 +430,35 @@ export function useCallerKey(enabled = true) {
     queryFn: async () => normalizeCallerKey(await apiFetch<unknown>('/api/caller-key')),
     enabled,
     staleTime: 5_000,
+  });
+}
+
+/**
+ * The user issue center page. resolved is a tri-state: undefined shows every
+ * issue, true only acknowledged ones, false only open ones. Pagination uses
+ * the server's bounded keyset cursor; the cursor is never placed in a
+ * persistent browser store.
+ */
+export function useUserIssues(resolved?: boolean, beforeId?: string, enabled = true) {
+  const query = new URLSearchParams({ limit: '20' });
+  if (resolved !== undefined) query.set('resolved', resolved ? 'true' : 'false');
+  if (beforeId) query.set('before_id', beforeId);
+  const filterKey = resolved === undefined ? 'all' : String(resolved);
+  return useQuery({
+    queryKey: [...userKeys.issues, filterKey, beforeId ?? ''],
+    queryFn: async () => normalizeIssuePage(await apiFetch<unknown>(`/api/issues?${query}`), 20),
+    enabled,
+  });
+}
+
+/** Acknowledge one issue; the server treats repeats as a success. */
+export function useResolveUserIssue() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (issueId: string) =>
+      apiFetch<void>(`/api/issues/${encodeURIComponent(issueId)}/resolve`, { method: 'POST' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: userKeys.issues });
+    },
   });
 }

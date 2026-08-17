@@ -55,6 +55,8 @@ const (
 	maxLogStatus = 599
 	// MaxLogPageLimit bounds one request-log page.
 	MaxLogPageLimit = 200
+	// MaxCleanupBatch bounds one retention-cleanup delete batch.
+	MaxCleanupBatch = 1000
 	// MaxUsageByUserLimit bounds the per-user usage aggregation page.
 	MaxUsageByUserLimit = 1000
 	// maxLogErrorCodeLen bounds the stable error code.
@@ -291,6 +293,75 @@ func boolToInt(value bool) int {
 		return 1
 	}
 	return 0
+}
+
+// ===== retention cleanup ====================================================
+// The 30-day request-log retention policy (DEC-006, api-contract): log rows
+// whose started_at is strictly older than a server-side cutoff are deleted in
+// bounded single-transaction batches. The users accumulator columns are the
+// server-authoritative totals and are never recomputed or decremented here
+// (AggregateUsage never sums request_logs), so cleanup can never change the
+// per-user or site-wide usage numbers. Only request_logs is touched:
+// user_issues, admin_alerts, sessions, keys, endpoints and models are
+// outside this policy.
+
+// CountRequestLogsBefore returns the number of metadata-only log rows whose
+// started_at is strictly before beforeUnix. It backs the dry-run/count seam
+// for operators and the retention scheduler.
+func (s *Store) CountRequestLogsBefore(ctx context.Context, beforeUnix int64) (int64, error) {
+	if beforeUnix <= 0 {
+		return 0, fmt.Errorf("count request logs before: cutoff is invalid")
+	}
+	var n int64
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM request_logs WHERE started_at < ?`, beforeUnix).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count request logs before: %w", err)
+	}
+	return n, nil
+}
+
+// DeleteRequestLogsBefore deletes at most limit metadata-only log rows with
+// started_at strictly before beforeUnix, in a single transaction (one bounded
+// batch so a large table is never swept in one write lock). It is idempotent
+// — every surviving row still satisfies the predicate, so reruns converge to
+// the same state — and it fails closed: any error rolls the transaction back
+// and no partial deletion is ever committed. limit is clamped to 1..
+// MaxCleanupBatch.
+func (s *Store) DeleteRequestLogsBefore(ctx context.Context, beforeUnix int64, limit int) (int64, error) {
+	if beforeUnix <= 0 {
+		return 0, fmt.Errorf("delete request logs before: cutoff is invalid")
+	}
+	if limit < 1 {
+		return 0, fmt.Errorf("delete request logs before: batch limit is invalid")
+	}
+	if limit > MaxCleanupBatch {
+		limit = MaxCleanupBatch
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("delete request logs before: begin: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	res, err := tx.ExecContext(ctx,
+		`DELETE FROM request_logs WHERE id IN (SELECT id FROM request_logs WHERE started_at < ? ORDER BY id LIMIT ?)`,
+		beforeUnix, limit)
+	if err != nil {
+		return 0, fmt.Errorf("delete request logs before: %w", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("delete request logs before: rows affected: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("delete request logs before: commit: %w", err)
+	}
+	committed = true
+	return affected, nil
 }
 
 // RequestLog is the stable metadata-only log projection backing the admin

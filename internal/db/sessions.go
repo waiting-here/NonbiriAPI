@@ -47,6 +47,13 @@ func hashOpaqueToken(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// SessionHash returns the irreversible lookup hash of an opaque session token.
+// It is the single session-binding value other rails may hold in memory (for
+// example to bind an elevated capability to the session that requested it).
+// The raw token is never derivable from the hash, and the hash itself is never
+// a session identifier.
+func SessionHash(token string) string { return hashOpaqueToken(token) }
+
 func validateSessionToken(token string) bool {
 	if token == "" || len(token) > maxSessionTokenBytes || !utf8.ValidString(token) {
 		return false
