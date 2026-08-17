@@ -30,15 +30,19 @@ type SSEEvent struct {
 
 // SSEOptions bound parser memory and cumulative stream input. MaxBytes is
 // independent of line size and counts comments and ignored fields too.
+// MaxEventBytes bounds the assembled data payload before dispatch; this keeps
+// repeated data lines from accumulating an oversized event in memory even
+// when the total stream remains within MaxBytes.
 type SSEOptions struct {
-	MaxBytes     int64
-	MaxLineBytes int
-	ReadBuffer   int
-	EventBuffer  int
+	MaxBytes      int64
+	MaxLineBytes  int
+	MaxEventBytes int
+	ReadBuffer    int
+	EventBuffer   int
 }
 
 func normalizeSSEOptions(options SSEOptions) (SSEOptions, error) {
-	if options.MaxBytes < 0 || options.MaxLineBytes < 0 || options.ReadBuffer < 0 || options.EventBuffer < 0 {
+	if options.MaxBytes < 0 || options.MaxLineBytes < 0 || options.MaxEventBytes < 0 || options.ReadBuffer < 0 || options.EventBuffer < 0 {
 		return SSEOptions{}, errors.New("SSE limits must not be negative")
 	}
 	if options.MaxBytes == 0 {
@@ -52,6 +56,15 @@ func normalizeSSEOptions(options SSEOptions) (SSEOptions, error) {
 	}
 	if options.MaxLineBytes < 1 {
 		return SSEOptions{}, errors.New("SSE line limit must be positive")
+	}
+	if options.MaxEventBytes == 0 {
+		options.MaxEventBytes = int(options.MaxBytes)
+	}
+	if int64(options.MaxEventBytes) > options.MaxBytes {
+		options.MaxEventBytes = int(options.MaxBytes)
+	}
+	if options.MaxEventBytes < 1 {
+		return SSEOptions{}, errors.New("SSE event limit must be positive")
 	}
 	if options.ReadBuffer == 0 {
 		options.ReadBuffer = defaultSSEReadBuffer
@@ -73,6 +86,16 @@ type SSELineTooLargeError struct {
 
 func (e *SSELineTooLargeError) Error() string {
 	return "SSE line exceeds the " + strconv.Itoa(e.Limit) + "-byte limit"
+}
+
+// SSEEventTooLargeError reports repeated data fields crossing the assembled
+// event payload bound.
+type SSEEventTooLargeError struct {
+	Limit int
+}
+
+func (e *SSEEventTooLargeError) Error() string {
+	return "SSE event exceeds the " + strconv.Itoa(e.Limit) + "-byte limit"
 }
 
 // StreamSSE parses a response body asynchronously. Cancellation closes the
@@ -177,8 +200,8 @@ func ParseSSE(ctx context.Context, source io.Reader, out chan<- SSEEvent, option
 				if err := builder.dispatch(ctx, out); err != nil {
 					return err
 				}
-			} else {
-				builder.consume(string(line))
+			} else if err := builder.consume(string(line), normalized.MaxEventBytes); err != nil {
+				return err
 			}
 		}
 		if eof {
@@ -188,15 +211,16 @@ func ParseSSE(ctx context.Context, source io.Reader, out chan<- SSEEvent, option
 }
 
 type sseEventBuilder struct {
-	event string
-	data  []string
-	id    string
-	retry int64
+	event     string
+	data      []string
+	dataBytes int
+	id        string
+	retry     int64
 }
 
-func (b *sseEventBuilder) consume(line string) {
+func (b *sseEventBuilder) consume(line string, maxEventBytes int) error {
 	if strings.HasPrefix(line, ":") {
-		return
+		return nil
 	}
 	field, value, found := strings.Cut(line, ":")
 	if !found {
@@ -208,7 +232,15 @@ func (b *sseEventBuilder) consume(line string) {
 	case "event":
 		b.event = value
 	case "data":
+		additional := len(value)
+		if len(b.data) > 0 {
+			additional++ // strings.Join inserts a newline between data fields.
+		}
+		if additional > maxEventBytes-b.dataBytes {
+			return &SSEEventTooLargeError{Limit: maxEventBytes}
+		}
 		b.data = append(b.data, value)
+		b.dataBytes += additional
 	case "id":
 		if !strings.ContainsRune(value, '\x00') {
 			b.id = value
@@ -220,11 +252,13 @@ func (b *sseEventBuilder) consume(line string) {
 			}
 		}
 	}
+	return nil
 }
 
 func (b *sseEventBuilder) dispatch(ctx context.Context, out chan<- SSEEvent) error {
 	if len(b.data) == 0 {
 		b.event = ""
+		b.dataBytes = 0
 		b.retry = 0
 		return nil
 	}
@@ -240,6 +274,7 @@ func (b *sseEventBuilder) dispatch(ctx context.Context, out chan<- SSEEvent) err
 	}
 	b.event = ""
 	b.data = nil
+	b.dataBytes = 0
 	b.retry = 0
 	select {
 	case out <- event:
