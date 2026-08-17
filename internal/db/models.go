@@ -23,6 +23,7 @@ type Model struct {
 	Model         string
 	FullName      string
 	RouteStrategy string
+	SilentRetry   bool
 	BindingCount  int
 	CreatedAt     int64
 	UpdatedAt     int64
@@ -32,7 +33,7 @@ type Model struct {
 // keeps zero-binding drafts visible with count 0; GROUP BY m.id is safe
 // because id is the primary key (SQLite's bare-column rule).
 const modelListSQL = `
-SELECT m.id, m.user_id, m.provider, m.model, m.full_name, m.route_strategy, m.created_at, m.updated_at, COUNT(b.id)
+SELECT m.id, m.user_id, m.provider, m.model, m.full_name, m.route_strategy, m.silent_retry, m.created_at, m.updated_at, COUNT(b.id)
 FROM models m
 LEFT JOIN model_bindings b ON b.model_id = m.id
 WHERE m.user_id = ?
@@ -40,7 +41,7 @@ GROUP BY m.id
 ORDER BY m.id`
 
 const modelGetSQL = `
-SELECT m.id, m.user_id, m.provider, m.model, m.full_name, m.route_strategy, m.created_at, m.updated_at, COUNT(b.id)
+SELECT m.id, m.user_id, m.provider, m.model, m.full_name, m.route_strategy, m.silent_retry, m.created_at, m.updated_at, COUNT(b.id)
 FROM models m
 LEFT JOIN model_bindings b ON b.model_id = m.id
 WHERE m.id = ? AND m.user_id = ?
@@ -49,10 +50,11 @@ GROUP BY m.id`
 // CreateModel inserts a platform model for userID. provider/model must already
 // be validated by the service; the repository builds the routing key as the
 // opaque concatenation provider || '/' || model (construction, never
-// interpretation). A second model with the same (user_id, full_name) —
+// interpretation). silentRetry persists the explicit retry switch (false =
+// fail fast, the default). A second model with the same (user_id, full_name) —
 // including a different provider/model split that yields the same external
 // name — returns ErrConflict and writes nothing. now is caller-supplied.
-func (s *Store) CreateModel(ctx context.Context, userID int64, provider, model, routeStrategy string, now int64) (Model, error) {
+func (s *Store) CreateModel(ctx context.Context, userID int64, provider, model, routeStrategy string, silentRetry bool, now int64) (Model, error) {
 	fullName := provider + "/" + model
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -65,9 +67,13 @@ func (s *Store) CreateModel(ctx context.Context, userID int64, provider, model, 
 		}
 	}()
 
+	retryInt := 0
+	if silentRetry {
+		retryInt = 1
+	}
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO models (user_id, provider, model, full_name, route_strategy, created_at, updated_at) VALUES (?,?,?,?,?,?,?)`,
-		userID, provider, model, fullName, routeStrategy, now, now)
+		`INSERT INTO models (user_id, provider, model, full_name, route_strategy, silent_retry, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)`,
+		userID, provider, model, fullName, routeStrategy, retryInt, now, now)
 	if err != nil {
 		if isConstraintError(err) {
 			if derr := classifyConflict(ctx, tx,
@@ -87,7 +93,7 @@ func (s *Store) CreateModel(ctx context.Context, userID int64, provider, model, 
 	committed = true
 	return Model{
 		ID: id, UserID: userID, Provider: provider, Model: model,
-		FullName: fullName, RouteStrategy: routeStrategy,
+		FullName: fullName, RouteStrategy: routeStrategy, SilentRetry: silentRetry,
 		BindingCount: 0, CreatedAt: now, UpdatedAt: now,
 	}, nil
 }
@@ -121,9 +127,10 @@ func (s *Store) GetModel(ctx context.Context, userID, id int64) (Model, error) {
 // UpdateModel atomically updates the model with id owned by userID. A nil
 // argument leaves that field unchanged. When provider and/or model change, the
 // full name is recomputed inside the same transaction from the merged values;
-// a collision with another of the user's models returns ErrConflict. A missing
-// or cross-user id yields ErrNotFound. now updates updated_at.
-func (s *Store) UpdateModel(ctx context.Context, userID, id int64, provider, model, routeStrategy *string, now int64) (Model, error) {
+// a collision with another of the user's models returns ErrConflict. A nil
+// silentRetry leaves the retry switch unchanged. A missing or cross-user id
+// yields ErrNotFound. now updates updated_at.
+func (s *Store) UpdateModel(ctx context.Context, userID, id int64, provider, model, routeStrategy *string, silentRetry *bool, now int64) (Model, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Model{}, fmt.Errorf("begin update model: %w", err)
@@ -158,8 +165,12 @@ func (s *Store) UpdateModel(ctx context.Context, userID, id int64, provider, mod
 	if routeStrategy != nil {
 		newStrategy = *routeStrategy
 	}
+	newRetry := current.SilentRetry
+	if silentRetry != nil {
+		newRetry = *silentRetry
+	}
 	newFullName := newProvider + "/" + newModel
-	if newProvider == current.Provider && newModel == current.Model && newStrategy == current.RouteStrategy {
+	if newProvider == current.Provider && newModel == current.Model && newStrategy == current.RouteStrategy && newRetry == current.SilentRetry {
 		// No-op update: the ownership check already passed, echo the row.
 		if err := tx.Commit(); err != nil {
 			return Model{}, fmt.Errorf("commit noop model update: %w", err)
@@ -168,9 +179,13 @@ func (s *Store) UpdateModel(ctx context.Context, userID, id int64, provider, mod
 		return current, nil
 	}
 
+	retryInt := 0
+	if newRetry {
+		retryInt = 1
+	}
 	res, err := tx.ExecContext(ctx,
-		`UPDATE models SET provider=?, model=?, full_name=?, route_strategy=?, updated_at=? WHERE id=? AND user_id=?`,
-		newProvider, newModel, newFullName, newStrategy, now, id, userID)
+		`UPDATE models SET provider=?, model=?, full_name=?, route_strategy=?, silent_retry=?, updated_at=? WHERE id=? AND user_id=?`,
+		newProvider, newModel, newFullName, newStrategy, retryInt, now, id, userID)
 	if err != nil {
 		if isConstraintError(err) {
 			if derr := classifyConflict(ctx, tx,
@@ -245,11 +260,13 @@ func classifyConflict(ctx context.Context, q queryRowContexter, diagSQL string, 
 func scanModelRow(row *sql.Row) (Model, error) {
 	var m Model
 	var count int
+	var silentRetry int
 	err := row.Scan(&m.ID, &m.UserID, &m.Provider, &m.Model, &m.FullName, &m.RouteStrategy,
-		&m.CreatedAt, &m.UpdatedAt, &count)
+		&silentRetry, &m.CreatedAt, &m.UpdatedAt, &count)
 	if err != nil {
 		return Model{}, err
 	}
+	m.SilentRetry = silentRetry != 0
 	m.BindingCount = count
 	return m, nil
 }
@@ -259,10 +276,12 @@ func scanModels(rows *sql.Rows) ([]Model, error) {
 	for rows.Next() {
 		var m Model
 		var count int
+		var silentRetry int
 		if err := rows.Scan(&m.ID, &m.UserID, &m.Provider, &m.Model, &m.FullName, &m.RouteStrategy,
-			&m.CreatedAt, &m.UpdatedAt, &count); err != nil {
+			&silentRetry, &m.CreatedAt, &m.UpdatedAt, &count); err != nil {
 			return nil, fmt.Errorf("scan model: %w", err)
 		}
+		m.SilentRetry = silentRetry != 0
 		m.BindingCount = count
 		out = append(out, m)
 	}

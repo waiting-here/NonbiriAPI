@@ -35,6 +35,7 @@ function ModelForm({ onSaved }: { onSaved: () => void }) {
   const [provider, setProvider] = useState('');
   const [model, setModel] = useState('');
   const [strategy, setStrategy] = useState<'ordered' | 'random'>('ordered');
+  const [silentRetry, setSilentRetry] = useState(false);
   const [validationError, setValidationError] = useState('');
   const [requestError, setRequestError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
@@ -51,10 +52,11 @@ function ModelForm({ onSaved }: { onSaved: () => void }) {
     try {
       await apiFetch<unknown>('/api/models', {
         method: 'POST',
-        json: { provider, model, route_strategy: strategy },
+        json: { provider, model, route_strategy: strategy, silent_retry: silentRetry },
       });
       setProvider('');
       setModel('');
+      setSilentRetry(false);
       onSaved();
     } catch (error) {
       setRequestError(error);
@@ -98,6 +100,14 @@ function ModelForm({ onSaved }: { onSaved: () => void }) {
               <option value="ordered">{t('user.models.ordered')}</option>
               <option value="random">{t('user.models.random')}</option>
             </select>
+          </label>
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={silentRetry}
+              onChange={(event) => setSilentRetry(event.target.checked)}
+            />
+            <span>{t('user.models.silentRetry')}</span>
           </label>
         </div>
         {validationError ? <p className="field-error" role="alert">{validationError}</p> : null}
@@ -348,6 +358,7 @@ function ModelCard({ model, onChanged }: { model: PlatformModel; onChanged: () =
           </p>
         </div>
         <div className="badge-list">
+          {model.silent_retry ? <span className="tag">{t('user.models.silentRetry')}</span> : null}
           {model.binding_count === 0 ? <span className="tag">{t('user.models.draft')}</span> : null}
           <StatusBadge active={model.binding_count > 0} label={t('user.models.bindingCount', { count: model.binding_count })} />
           <button type="button" className="btn btn-secondary" onClick={() => setOpen((value) => !value)}>

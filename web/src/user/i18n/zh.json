@@ -98,6 +98,7 @@
       "strategy": "路由策略",
       "ordered": "按顺序故障转移",
       "random": "随机选择",
+      "silentRetry": "上游失败时静默重试",
       "create": "创建模型",
       "listTitle": "你的平台模型",
       "noModels": "还没有平台模型",

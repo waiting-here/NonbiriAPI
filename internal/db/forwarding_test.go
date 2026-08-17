@@ -93,6 +93,9 @@ VALUES (?, 'bad-status-model', '', 1, 'failed')`, badStatusKey); err != nil {
 	if route.ModelID != modelID || route.UserID != alice || route.FullName != "provider/with/slash/model" {
 		t.Fatalf("route = %+v", route)
 	}
+	if route.SilentRetry {
+		t.Fatalf("seeded draft route projected SilentRetry=true: %+v", route)
+	}
 	if len(route.Candidates) != 2 {
 		t.Fatalf("usable candidates = %+v, want exactly two", route.Candidates)
 	}
@@ -210,5 +213,31 @@ func TestCallerModelsProjectionAndLimits(t *testing.T) {
 	route, err := store.ResolveForwardRoute(ctx, alice, "p/one", 1)
 	if err != nil || len(route.Candidates) != 0 {
 		t.Fatalf("draft route=%+v err=%v", route, err)
+	}
+}
+
+// TestForwardRouteProjectsSilentRetry verifies the retry switch is carried on
+// the route projection so the forwarding service can honor it per call.
+func TestForwardRouteProjectsSilentRetry(t *testing.T) {
+	store := newModelsTestStore(t)
+	ctx := context.Background()
+	alice := seedUserRaw(t, store, "route-retry-alice")
+
+	onID, err := store.CreateModel(ctx, alice, "p", "on", "ordered", true, 1)
+	if err != nil {
+		t.Fatalf("create on: %v", err)
+	}
+	offID, err := store.CreateModel(ctx, alice, "p", "off", "random", false, 1)
+	if err != nil {
+		t.Fatalf("create off: %v", err)
+	}
+
+	onRoute, err := store.ResolveForwardRoute(ctx, alice, "p/on", 8)
+	if err != nil || onRoute.ModelID != onID.ID || !onRoute.SilentRetry || onRoute.RouteStrategy != "ordered" {
+		t.Fatalf("on route = %+v err=%v", onRoute, err)
+	}
+	offRoute, err := store.ResolveForwardRoute(ctx, alice, "p/off", 8)
+	if err != nil || offRoute.ModelID != offID.ID || offRoute.SilentRetry || offRoute.RouteStrategy != "random" {
+		t.Fatalf("off route = %+v err=%v", offRoute, err)
 	}
 }

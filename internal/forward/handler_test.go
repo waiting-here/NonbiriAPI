@@ -73,6 +73,18 @@ type fixtureRoute struct {
 
 func newForwardFixture(t *testing.T, allowed []string, hooks Hooks, selector Selector, stackMutate func(*egress.StackOptions)) *forwardFixture {
 	t.Helper()
+	return newForwardFixtureCfg(t, allowed, hooks, selector, stackMutate, BackoffConfig{Base: time.Millisecond, Max: 5 * time.Millisecond})
+}
+
+// newForwardFixtureBackoff builds a fixture with a caller-supplied backoff so
+// retry/cancel tests can use a wait large enough to observe or interrupt.
+func newForwardFixtureBackoff(t *testing.T, allowed []string, hooks Hooks, selector Selector, backoff BackoffConfig) *forwardFixture {
+	t.Helper()
+	return newForwardFixtureCfg(t, allowed, hooks, selector, nil, backoff)
+}
+
+func newForwardFixtureCfg(t *testing.T, allowed []string, hooks Hooks, selector Selector, stackMutate func(*egress.StackOptions), backoff BackoffConfig) *forwardFixture {
+	t.Helper()
 	master := bytes.Repeat([]byte{0x6a}, secret.MasterKeyBytes)
 	vault, err := secret.New(master)
 	clear(master)
@@ -129,6 +141,7 @@ func newForwardFixture(t *testing.T, allowed []string, hooks Hooks, selector Sel
 		Selector:   selector,
 		Runner:     runner,
 		Hooks:      hooks,
+		Backoff:    backoff,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -180,7 +193,7 @@ func (f *forwardFixture) addRoute(t *testing.T, userID int64, baseURL, provider,
 	}}, time.Now().Unix()); err != nil {
 		t.Fatal(err)
 	}
-	modelRow, err := f.store.CreateModel(context.Background(), userID, provider, model, "ordered", time.Now().Unix())
+	modelRow, err := f.store.CreateModel(context.Background(), userID, provider, model, "ordered", false, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -598,12 +611,12 @@ func TestTargetInvalidationBetweenSelectionAndDispatchNeverDials(t *testing.T) {
 	}))
 	defer upstream.Close()
 	var fixture *forwardFixture
-	selector := selectorFunc(func(_ context.Context, selection Selection) (int64, error) {
+	selector := selectorFunc(func(_ context.Context, selection Selection) ([]int64, error) {
 		candidate := selection.Candidates[0]
 		if _, err := fixture.store.DB().Exec(`UPDATE endpoint_keys SET enabled=0 WHERE id=?`, candidate.EndpointKeyID); err != nil {
-			return 0, err
+			return nil, err
 		}
-		return candidate.BindingID, nil
+		return []int64{candidate.BindingID}, nil
 	})
 	fixture = newForwardFixture(t, []string{upstream.URL}, Hooks{}, selector, nil)
 	user := fixture.addUser(t, "invalidation")
@@ -620,7 +633,7 @@ func TestSelectorCannotInjectUnprojectedBinding(t *testing.T) {
 		t.Error("selector injection reached upstream")
 	}))
 	defer upstream.Close()
-	selector := selectorFunc(func(context.Context, Selection) (int64, error) { return 999999, nil })
+	selector := selectorFunc(func(context.Context, Selection) ([]int64, error) { return []int64{999999}, nil })
 	fixture := newForwardFixture(t, []string{upstream.URL}, Hooks{}, selector, nil)
 	user := fixture.addUser(t, "selector")
 	_ = fixture.addRoute(t, user.id, upstream.URL, "p", "m", "upstream/model", "sk-selector", 0)
@@ -630,9 +643,9 @@ func TestSelectorCannotInjectUnprojectedBinding(t *testing.T) {
 	}
 }
 
-type selectorFunc func(context.Context, Selection) (int64, error)
+type selectorFunc func(context.Context, Selection) ([]int64, error)
 
-func (f selectorFunc) Select(ctx context.Context, selection Selection) (int64, error) {
+func (f selectorFunc) Select(ctx context.Context, selection Selection) ([]int64, error) {
 	return f(ctx, selection)
 }
 

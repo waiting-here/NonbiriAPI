@@ -31,6 +31,7 @@ type ForwardRoute struct {
 	UserID        int64
 	FullName      string
 	RouteStrategy string
+	SilentRetry   bool
 	Candidates    []ForwardCandidate
 }
 
@@ -150,17 +151,19 @@ func (s *Store) ResolveForwardRoute(ctx context.Context, userID int64, fullName 
 	}()
 
 	var route ForwardRoute
+	var silentRetry int
 	err = tx.QueryRowContext(ctx, `
-SELECT id, user_id, full_name, route_strategy
+SELECT id, user_id, full_name, route_strategy, silent_retry
 FROM models
 WHERE user_id=? AND full_name=?`, userID, fullName).
-		Scan(&route.ModelID, &route.UserID, &route.FullName, &route.RouteStrategy)
+		Scan(&route.ModelID, &route.UserID, &route.FullName, &route.RouteStrategy, &silentRetry)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ForwardRoute{}, ErrNotFound
 		}
 		return ForwardRoute{}, fmt.Errorf("resolve caller model: %w", err)
 	}
+	route.SilentRetry = silentRetry != 0
 
 	rows, err := tx.QueryContext(ctx, `
 SELECT b.id, b.model_id, e.id, ek.id, b.upstream_model_id, b.ord

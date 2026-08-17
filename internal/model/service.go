@@ -35,10 +35,10 @@ const (
 // Repository is the persistence boundary the service uses. *db.Store
 // satisfies it. Every method takes a user id and enforces ownership in SQL.
 type Repository interface {
-	CreateModel(ctx context.Context, userID int64, provider, model, routeStrategy string, now int64) (db.Model, error)
+	CreateModel(ctx context.Context, userID int64, provider, model, routeStrategy string, silentRetry bool, now int64) (db.Model, error)
 	ListModels(ctx context.Context, userID int64) ([]db.Model, error)
 	GetModel(ctx context.Context, userID, id int64) (db.Model, error)
-	UpdateModel(ctx context.Context, userID, id int64, provider, model, routeStrategy *string, now int64) (db.Model, error)
+	UpdateModel(ctx context.Context, userID, id int64, provider, model, routeStrategy *string, silentRetry *bool, now int64) (db.Model, error)
 	DeleteModel(ctx context.Context, userID, id int64) error
 
 	ListBindings(ctx context.Context, userID, modelID int64) ([]db.ModelBinding, error)
@@ -62,9 +62,11 @@ func NewService(repo Repository) *Service {
 // CreateModel creates a platform model for userID. provider/model are
 // validated (non-empty, UTF-8, no control characters, no leading/trailing
 // whitespace, at most MaxNamePartRunes runes); routeStrategy defaults to
-// ordered when nil and must otherwise be exactly ordered or random. The full
-// name provider/model must be unique among the user's models.
-func (s *Service) CreateModel(ctx context.Context, userID int64, provider, model string, routeStrategy *string) (db.Model, error) {
+// ordered when nil and must otherwise be exactly ordered or random. silentRetry
+// is the explicit retry switch (nil or false = fail fast, the default; the
+// service never silently flips it on). The full name provider/model must be
+// unique among the user's models.
+func (s *Service) CreateModel(ctx context.Context, userID int64, provider, model string, routeStrategy *string, silentRetry *bool) (db.Model, error) {
 	if s == nil || s.repo == nil {
 		return db.Model{}, ErrInvalidRequest
 	}
@@ -81,7 +83,11 @@ func (s *Service) CreateModel(ctx context.Context, userID int64, provider, model
 	if err != nil {
 		return db.Model{}, err
 	}
-	m, err := s.repo.CreateModel(ctx, userID, provider, model, strategy, s.now())
+	retry, err := resolveSilentRetry(silentRetry)
+	if err != nil {
+		return db.Model{}, err
+	}
+	m, err := s.repo.CreateModel(ctx, userID, provider, model, strategy, retry, s.now())
 	if err != nil {
 		return db.Model{}, mapRepoError(err)
 	}
@@ -115,8 +121,9 @@ func (s *Service) GetModel(ctx context.Context, userID, id int64) (db.Model, err
 // UpdateModel updates a platform model owned by userID. Each provided field is
 // validated exactly like create; changing provider and/or model recomputes the
 // full name, which may collide (conflict). routeStrategy must be exactly
-// ordered or random when provided.
-func (s *Service) UpdateModel(ctx context.Context, userID, id int64, provider, model, routeStrategy *string) (db.Model, error) {
+// ordered or random when provided. silentRetry must be a bool when provided; a
+// nil leaves it unchanged.
+func (s *Service) UpdateModel(ctx context.Context, userID, id int64, provider, model, routeStrategy *string, silentRetry *bool) (db.Model, error) {
 	if s == nil || s.repo == nil || userID <= 0 || id <= 0 {
 		return db.Model{}, db.ErrNotFound
 	}
@@ -138,7 +145,15 @@ func (s *Service) UpdateModel(ctx context.Context, userID, id int64, provider, m
 		}
 		strategy = &resolved
 	}
-	m, err := s.repo.UpdateModel(ctx, userID, id, provider, model, strategy, s.now())
+	var retry *bool
+	if silentRetry != nil {
+		resolved, err := resolveSilentRetry(silentRetry)
+		if err != nil {
+			return db.Model{}, err
+		}
+		retry = &resolved
+	}
+	m, err := s.repo.UpdateModel(ctx, userID, id, provider, model, strategy, retry, s.now())
 	if err != nil {
 		return db.Model{}, mapRepoError(err)
 	}
@@ -303,6 +318,18 @@ func resolveRouteStrategy(strategy *string) (string, error) {
 	default:
 		return "", fmt.Errorf("%w: route_strategy must be ordered or random", ErrInvalidRequest)
 	}
+}
+
+// resolveSilentRetry maps a nil switch to the fail-fast default (false) and
+// accepts only an actual bool. The caller's *bool is JSON-decoded, so a
+// non-bool value (e.g. the string "true") is rejected earlier at decode time;
+// this helper keeps the service boundary explicit and never silently flips the
+// default on.
+func resolveSilentRetry(silentRetry *bool) (bool, error) {
+	if silentRetry == nil {
+		return false, nil
+	}
+	return *silentRetry, nil
 }
 
 // resolveOrd maps a nil ord to 0 and bounds it to [0, MaxOrd].

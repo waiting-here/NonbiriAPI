@@ -88,10 +88,11 @@ Diagnostics are recorded at two layers:
 
 - **Edge response** (`error.diag`, see above): bounded/sanitized upstream context surfaced to
   the caller (operator or user where appropriate).
-- **Persistence** (`request_logs.error_code`, `request_logs.error_diag`): every forwarded
-  request logs the stable `error_code` and a bounded `error_diag` (≤4096 bytes) in the same
-  transaction as its usage accumulators. `request_logs` holds metadata only — no request or
-  response content is ever persisted (privacy policy).
+- **Persistence** (`request_logs.error_code`, `request_logs.error_diag`): every forwarded request
+  that crosses the response-byte accounting boundary logs its stable `error_code` and bounded
+  `error_diag` (≤4096 bytes) in the same transaction as its usage accumulators; failures before
+  any response byte are not accounted or persisted. `request_logs` holds metadata only — no
+  request or response content is ever persisted (privacy policy).
 
 Logging additionally redacts by field name at the structured logger: keys and token fields are
 matched by a `_key` / token-name pattern and never emitted in plaintext.
@@ -311,10 +312,10 @@ full response, or the endpoint URL. HTTP 200 alone never counts as success.
 
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
-| `GET` | `/api/models` | user session | — | `200` array of `{id, provider, model, full_name, route_strategy, binding_count, created_at, updated_at}` | `unauthorized` |
-| `POST` | `/api/models` | user session | `{provider, model, route_strategy?}` | `201` created model; `provider`/`model` are free strings that allow `/` (each ≤64 runes, no control chars, no leading/trailing whitespace); the external name is `provider/model` and uniqueness is enforced on that full name; `route_strategy` defaults to `ordered` and only `ordered`/`random` are accepted | `invalid_request`, `unauthorized`, `conflict` (full-name collision) |
+| `GET` | `/api/models` | user session | — | `200` array of `{id, provider, model, full_name, route_strategy, silent_retry, binding_count, created_at, updated_at}` | `unauthorized` |
+| `POST` | `/api/models` | user session | `{provider, model, route_strategy?, silent_retry?}` | `201` created model; `provider`/`model` are free strings that allow `/` (each ≤64 runes, no control chars, no leading/trailing whitespace); the external name is `provider/model` and uniqueness is enforced on that full name; `route_strategy` defaults to `ordered` and only `ordered`/`random` are accepted; `silent_retry` is an optional boolean that defaults to `false` (fail fast) and, when `true`, silently tries the next binding after a pre-commit upstream failure until success or exhaustion (it never retries after any response byte is committed) | `invalid_request`, `unauthorized`, `conflict` (full-name collision) |
 | `GET` | `/api/models/{id}` | user session | — | `200` the model object | `unauthorized`, `not_found` |
-| `PATCH` | `/api/models/{id}` | user session | `{provider?, model?, route_strategy?}` | `200` updated model (changing `provider/model` recomputes `full_name` and may collide) | `invalid_request`, `unauthorized`, `not_found`, `conflict` |
+| `PATCH` | `/api/models/{id}` | user session | `{provider?, model?, route_strategy?, silent_retry?}` | `200` updated model (changing `provider/model` recomputes `full_name` and may collide) | `invalid_request`, `unauthorized`, `not_found`, `conflict` |
 | `DELETE` | `/api/models/{id}` | user session | — | `204`; cascades to its bindings | `unauthorized`, `not_found` |
 | `GET` | `/api/models/{id}/bindings` | user session | — | `200` array ordered by `ord`: `{id, endpoint_key_id, upstream_model_id, ord}` | `unauthorized`, `not_found` |
 | `POST` | `/api/models/{id}/bindings` | user session | `{endpoint_key_id, upstream_model_id, ord?}` | `201` created binding; `endpoint_key_id` must belong to one of the user's enabled endpoints and the key itself must be enabled; `upstream_model_id` must exist in that key's fetched cache; `ord` defaults to `0` and must be within `[0, 1000000]` | `invalid_request`, `unauthorized`, `not_found`, `conflict` (duplicate `(model_id, endpoint_key_id, upstream_model_id)`) |
@@ -330,8 +331,10 @@ Bounded fields: `provider`/`model` are each ≤64 runes, must be valid UTF-8, mu
 control characters, and must not start or end with whitespace (Unicode-aware); interior
 whitespace and `/` are allowed. `upstream_model_id` is an opaque string bounded to ≤512 runes
 with the same character rules; it must match a row of the key's fetched cache exactly, so a
-client can never bind an arbitrary string. `ord` is an integer in `[0, 1000000]`. These bounds
-are enforced server-side on every create and patch; the unique `(user_id, full_name)` and
+client can never bind an arbitrary string. `ord` is an integer in `[0, 1000000]`. `silent_retry`
+is a boolean; a non-boolean value (e.g. the string `"true"`) is rejected with `invalid_request`,
+and an unknown field is rejected by `DisallowUnknownFields`. These bounds are enforced
+server-side on every create and patch; the unique `(user_id, full_name)` and
 `(model_id, endpoint_key_id, upstream_model_id)` constraints are the backstop.
 
 ### 3.8 Account self-service (two-step required)
@@ -379,7 +382,7 @@ Auth: a valid admin session cookie. The administrator is env-configured (single 
 | `GET` | `/admin/api/logs` | admin session | query: user, time range, model, status, pagination | `200` array of request-log rows (metadata only — never content): `{id, user_id, model, endpoint_key_id, upstream_model_id, status_code, duration_ms, started_at, completed_at, prompt_tokens, completion_tokens, total_tokens, usage_unknown, error_code, error_diag}` | `unauthorized`, `forbidden` |
 | `GET` | `/admin/api/usage` | admin session | query: aggregation (site-wide, by user) | `200` aggregate usage totals | `unauthorized`, `forbidden` |
 | `GET` | `/admin/api/overview/endpoints` | admin session | — | `200` array of `{id, user_id, connector_type, base_url, note, enabled, key_count, created_at, updated_at}` — **metadata only, no plaintext key** | `unauthorized`, `forbidden` |
-| `GET` | `/admin/api/overview/models` | admin session | — | `200` array of `{id, user_id, provider, model, full_name, route_strategy, binding_count, created_at}` across all users | `unauthorized`, `forbidden` |
+| `GET` | `/admin/api/overview/models` | admin session | — | `200` array of `{id, user_id, provider, model, full_name, route_strategy, silent_retry, binding_count, created_at}` across all users | `unauthorized`, `forbidden` |
 
 Plaintext upstream secrets never appear in any admin overview, log, or usage response.
 

@@ -107,7 +107,7 @@ func TestModelCRUDRoundTrip(t *testing.T) {
 	uid := seedUserRaw(t, st, "u1")
 	ctx := context.Background()
 
-	m, err := st.CreateModel(ctx, uid, "openai", "gpt-4o", "ordered", testNow)
+	m, err := st.CreateModel(ctx, uid, "openai", "gpt-4o", "ordered", false, testNow)
 	if err != nil {
 		t.Fatalf("create model: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestModelCRUDRoundTrip(t *testing.T) {
 
 	// Patch provider only: full_name must be recomputed as a/b.
 	provider := "anthropic"
-	upd, err := st.UpdateModel(ctx, uid, m.ID, &provider, nil, nil, testNow+1)
+	upd, err := st.UpdateModel(ctx, uid, m.ID, &provider, nil, nil, nil, testNow+1)
 	if err != nil {
 		t.Fatalf("update model: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestModelCRUDRoundTrip(t *testing.T) {
 
 	// Patch model only: full_name recomputed again; strategy untouched.
 	model := "claude-3-5-sonnet"
-	upd, err = st.UpdateModel(ctx, uid, m.ID, nil, &model, nil, testNow+2)
+	upd, err = st.UpdateModel(ctx, uid, m.ID, nil, &model, nil, nil, testNow+2)
 	if err != nil {
 		t.Fatalf("update model 2: %v", err)
 	}
@@ -149,14 +149,14 @@ func TestModelCRUDRoundTrip(t *testing.T) {
 	}
 
 	// No-op update echoes the row.
-	upd, err = st.UpdateModel(ctx, uid, m.ID, nil, nil, nil, testNow+3)
+	upd, err = st.UpdateModel(ctx, uid, m.ID, nil, nil, nil, nil, testNow+3)
 	if err != nil || upd.FullName != "anthropic/claude-3-5-sonnet" {
 		t.Fatalf("noop update = %+v err=%v", upd, err)
 	}
 
 	// Strategy patch.
 	strategy := "random"
-	upd, err = st.UpdateModel(ctx, uid, m.ID, nil, nil, &strategy, testNow+4)
+	upd, err = st.UpdateModel(ctx, uid, m.ID, nil, nil, &strategy, nil, testNow+4)
 	if err != nil || upd.RouteStrategy != "random" {
 		t.Fatalf("strategy update = %+v err=%v", upd, err)
 	}
@@ -167,7 +167,7 @@ func TestModelCRUDRoundTrip(t *testing.T) {
 	if _, err := st.GetModel(ctx, uid, m.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("get deleted model err = %v, want ErrNotFound", err)
 	}
-	if _, err := st.UpdateModel(ctx, uid, m.ID, nil, nil, nil, testNow); !errors.Is(err, ErrNotFound) {
+	if _, err := st.UpdateModel(ctx, uid, m.ID, nil, nil, nil, nil, testNow); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("update deleted model err = %v, want ErrNotFound", err)
 	}
 	if err := st.DeleteModel(ctx, uid, m.ID); !errors.Is(err, ErrNotFound) {
@@ -190,7 +190,7 @@ func TestModelOwnershipIsolation(t *testing.T) {
 		t.Fatalf("bob get alice model err = %v, want ErrNotFound", err)
 	}
 	provider := "evil"
-	if _, err := st.UpdateModel(ctx, bob, m, &provider, nil, nil, testNow); !errors.Is(err, ErrNotFound) {
+	if _, err := st.UpdateModel(ctx, bob, m, &provider, nil, nil, nil, testNow); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("bob update alice model err = %v, want ErrNotFound", err)
 	}
 	if err := st.DeleteModel(ctx, bob, m); !errors.Is(err, ErrNotFound) {
@@ -215,26 +215,26 @@ func TestModelFullNameUniquePerUser(t *testing.T) {
 	bob := seedUserRaw(t, st, "bob")
 	ctx := context.Background()
 
-	if _, err := st.CreateModel(ctx, alice, "openai", "gpt-4o", "ordered", testNow); err != nil {
+	if _, err := st.CreateModel(ctx, alice, "openai", "gpt-4o", "ordered", false, testNow); err != nil {
 		t.Fatalf("create first: %v", err)
 	}
 	// Same full name, same user: conflict.
-	if _, err := st.CreateModel(ctx, alice, "openai", "gpt-4o", "random", testNow); !errors.Is(err, ErrConflict) {
+	if _, err := st.CreateModel(ctx, alice, "openai", "gpt-4o", "random", false, testNow); !errors.Is(err, ErrConflict) {
 		t.Fatalf("duplicate full name err = %v, want ErrConflict", err)
 	}
 	// Same full name, another user: allowed.
-	if _, err := st.CreateModel(ctx, bob, "openai", "gpt-4o", "ordered", testNow); err != nil {
+	if _, err := st.CreateModel(ctx, bob, "openai", "gpt-4o", "ordered", false, testNow); err != nil {
 		t.Fatalf("same full name other user: %v", err)
 	}
 	// Field-split collision: "a/b" + "c" vs "a" + "b/c" both form "a/b/c".
-	if _, err := st.CreateModel(ctx, bob, "a/b", "c", "ordered", testNow); err != nil {
+	if _, err := st.CreateModel(ctx, bob, "a/b", "c", "ordered", false, testNow); err != nil {
 		t.Fatalf("create a/b + c: %v", err)
 	}
-	if _, err := st.CreateModel(ctx, bob, "a", "b/c", "random", testNow); !errors.Is(err, ErrConflict) {
+	if _, err := st.CreateModel(ctx, bob, "a", "b/c", "random", false, testNow); !errors.Is(err, ErrConflict) {
 		t.Fatalf("field-split collision err = %v, want ErrConflict", err)
 	}
 	// A non-colliding slash-y name is fine.
-	if _, err := st.CreateModel(ctx, bob, "a/b", "c/d", "ordered", testNow); err != nil {
+	if _, err := st.CreateModel(ctx, bob, "a/b", "c/d", "ordered", false, testNow); err != nil {
 		t.Fatalf("create a/b + c/d: %v", err)
 	}
 }
@@ -254,14 +254,14 @@ func TestModelUpdateCollision(t *testing.T) {
 	// A single-field patch that does not collide succeeds and recomputes the
 	// full name.
 	provider := "a"
-	upd, err := st.UpdateModel(ctx, uid, m2, &provider, nil, nil, testNow)
+	upd, err := st.UpdateModel(ctx, uid, m2, &provider, nil, nil, nil, testNow)
 	if err != nil || upd.FullName != "a/d" {
 		t.Fatalf("non-colliding patch = %+v err=%v, want a/d", upd, err)
 	}
 
 	// Patching the model to "b" now collides with m1 ("a/b").
 	model := "b"
-	if _, err := st.UpdateModel(ctx, uid, m2, nil, &model, nil, testNow); !errors.Is(err, ErrConflict) {
+	if _, err := st.UpdateModel(ctx, uid, m2, nil, &model, nil, nil, testNow); !errors.Is(err, ErrConflict) {
 		t.Fatalf("update into collision err = %v, want ErrConflict", err)
 	}
 
@@ -271,12 +271,12 @@ func TestModelUpdateCollision(t *testing.T) {
 		t.Fatalf("m3 should exist: %v", err)
 	}
 	model2 := "b/c"
-	if _, err := st.UpdateModel(ctx, uid, m2, &provider, &model2, nil, testNow); !errors.Is(err, ErrConflict) {
+	if _, err := st.UpdateModel(ctx, uid, m2, &provider, &model2, nil, nil, testNow); !errors.Is(err, ErrConflict) {
 		t.Fatalf("update into split collision err = %v, want ErrConflict", err)
 	}
 
 	// Updating m1 to its own values is a no-op success.
-	if _, err := st.UpdateModel(ctx, uid, m1, nil, nil, nil, testNow); err != nil {
+	if _, err := st.UpdateModel(ctx, uid, m1, nil, nil, nil, nil, testNow); err != nil {
 		t.Fatalf("noop update: %v", err)
 	}
 }
@@ -349,7 +349,7 @@ func TestModelSlashNamesStoredOpaquely(t *testing.T) {
 	uid := seedUserRaw(t, st, "u1")
 	ctx := context.Background()
 
-	m, err := st.CreateModel(ctx, uid, "accounts/org-a", "models/gpt/x", "ordered", testNow)
+	m, err := st.CreateModel(ctx, uid, "accounts/org-a", "models/gpt/x", "ordered", false, testNow)
 	if err != nil {
 		t.Fatalf("create slash model: %v", err)
 	}
@@ -373,12 +373,12 @@ func TestModelUpdateStrategyOnly(t *testing.T) {
 	uid := seedUserRaw(t, st, "u1")
 	ctx := context.Background()
 
-	m, err := st.CreateModel(ctx, uid, "p", "m", "ordered", testNow)
+	m, err := st.CreateModel(ctx, uid, "p", "m", "ordered", false, testNow)
 	if err != nil {
 		t.Fatalf("create model: %v", err)
 	}
 	strategy := "random"
-	upd, err := st.UpdateModel(ctx, uid, m.ID, nil, nil, &strategy, testNow)
+	upd, err := st.UpdateModel(ctx, uid, m.ID, nil, nil, &strategy, nil, testNow)
 	if err != nil || upd.FullName != "p/m" || upd.RouteStrategy != "random" {
 		t.Fatalf("strategy-only update = %+v err=%v", upd, err)
 	}
@@ -386,5 +386,72 @@ func TestModelUpdateStrategyOnly(t *testing.T) {
 		`INSERT INTO models (user_id, provider, model, full_name, route_strategy, created_at, updated_at) VALUES (?, 'x', 'y', 'x/y', 'weighted', 1, 1)`,
 		uid); err == nil {
 		t.Fatal("DB accepted an unknown route strategy")
+	}
+}
+
+// TestModelSilentRetryPersistence verifies the retry switch defaults to false,
+// persists true/false on create, projects on get/list, and updates atomically.
+func TestModelSilentRetryPersistence(t *testing.T) {
+	st := newModelsTestStore(t)
+	uid := seedUserRaw(t, st, "retry-u1")
+	ctx := context.Background()
+
+	off, err := st.CreateModel(ctx, uid, "p", "off", "ordered", false, testNow)
+	if err != nil {
+		t.Fatalf("create off: %v", err)
+	}
+	if off.SilentRetry {
+		t.Fatalf("create off returned SilentRetry=true")
+	}
+	on, err := st.CreateModel(ctx, uid, "p", "on", "ordered", true, testNow)
+	if err != nil {
+		t.Fatalf("create on: %v", err)
+	}
+	if !on.SilentRetry {
+		t.Fatalf("create on returned SilentRetry=false")
+	}
+
+	gotOff, err := st.GetModel(ctx, uid, off.ID)
+	if err != nil || gotOff.SilentRetry {
+		t.Fatalf("get off = %+v err=%v", gotOff, err)
+	}
+	gotOn, err := st.GetModel(ctx, uid, on.ID)
+	if err != nil || !gotOn.SilentRetry {
+		t.Fatalf("get on = %+v err=%v", gotOn, err)
+	}
+
+	list, err := st.ListModels(ctx, uid)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	byName := make(map[string]bool, len(list))
+	for _, m := range list {
+		byName[m.FullName] = m.SilentRetry
+	}
+	if byName["p/off"] || !byName["p/on"] {
+		t.Fatalf("list projection = %v", byName)
+	}
+
+	flip := true
+	upd, err := st.UpdateModel(ctx, uid, off.ID, nil, nil, nil, &flip, testNow+1)
+	if err != nil || !upd.SilentRetry {
+		t.Fatalf("flip on = %+v err=%v", upd, err)
+	}
+	clear := false
+	upd, err = st.UpdateModel(ctx, uid, off.ID, nil, nil, nil, &clear, testNow+2)
+	if err != nil || upd.SilentRetry {
+		t.Fatalf("flip off = %+v err=%v", upd, err)
+	}
+	// nil silentRetry leaves it unchanged (still false here).
+	upd, err = st.UpdateModel(ctx, uid, off.ID, nil, nil, nil, nil, testNow+3)
+	if err != nil || upd.SilentRetry {
+		t.Fatalf("noop silentRetry = %+v err=%v", upd, err)
+	}
+
+	// The DB CHECK rejects an out-of-range silent_retry value directly.
+	if _, err := st.DB().Exec(
+		`INSERT INTO models (user_id, provider, model, full_name, route_strategy, silent_retry, created_at, updated_at) VALUES (?, 'x', 'z', 'x/z', 'ordered', 2, 1, 1)`,
+		uid); err == nil {
+		t.Fatal("DB accepted an out-of-range silent_retry")
 	}
 }

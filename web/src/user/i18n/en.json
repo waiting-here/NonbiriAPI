@@ -98,6 +98,7 @@
       "strategy": "Routing strategy",
       "ordered": "Ordered failover",
       "random": "Random selection",
+      "silentRetry": "Silent retry on upstream failure",
       "create": "Create model",
       "listTitle": "Your platform models",
       "noModels": "No platform models yet",

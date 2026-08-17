@@ -1,11 +1,15 @@
 // Package forward provides the mountable CallerKey-only OpenAI-compatible
-// platform exit. It resolves caller-owned routes, delegates exactly one
-// upstream attempt, and exposes narrow selector/attempt/usage hooks for later
-// routing, accounting, and rate-control layers.
+// platform exit. It resolves caller-owned routes, orchestrates the candidate
+// dispatch loop (ordered / random) with the silent-retry boundary and bounded
+// backoff, and exposes narrow selector/attempt/usage/failover hooks for later
+// accounting, logging, and rate-control layers. Each attempt re-validates
+// ownership through the single-attempt runner; no retry crosses the commit
+// boundary or touches another connector's algorithm.
 package forward
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base32"
 	"errors"
@@ -42,32 +46,25 @@ type RouteRepository interface {
 }
 
 // Selection is the complete, finite caller-owned candidate set. A selector
-// chooses one binding id but cannot add a globally addressed resource.
+// chooses an ordered sequence of binding ids from this projection but cannot
+// add a globally addressed or cross-user binding.
 type Selection struct {
 	UserID        int64
 	ModelID       int64
 	FullName      string
 	RouteStrategy string
+	SilentRetry   bool
 	Candidates    []db.ForwardCandidate
 }
 
-// Selector is the replaceable boundary for the later ordered/random routing
-// layer. It does not perform network I/O or retries.
+// Selector is the route-order interface: it returns the binding ids of one
+// caller-owned projection in the dispatch order. The service re-validates each
+// returned id against the projection before every attempt, so a selector can
+// never dispatch an unprojected or cross-user binding. It performs no network
+// I/O and owns no retry policy; the service drives the attempt loop and the
+// retry boundary.
 type Selector interface {
-	Select(context.Context, Selection) (int64, error)
-}
-
-// FirstSelector is the intentionally minimal runnable selector for the
-// single-attempt stage. Candidate SQL is ordered by (ord,id), so it chooses the
-// first row. Full ordered failover, random selection, and silent retry belong
-// in the routing layer and replace this implementation through Selector.
-type FirstSelector struct{}
-
-func (FirstSelector) Select(_ context.Context, selection Selection) (int64, error) {
-	if len(selection.Candidates) == 0 {
-		return 0, ErrUnboundModel
-	}
-	return selection.Candidates[0].BindingID, nil
+	Select(context.Context, Selection) ([]int64, error)
 }
 
 // Model is the public GET /v1/models projection.
@@ -86,7 +83,13 @@ type ModelList struct {
 
 // AttemptRecord is metadata-only. It deliberately contains no base URL,
 // ciphertext, credential, request JSON, response JSON, or raw error.
+// AttemptID is a random opaque correlation id generated per Forward
+// invocation and shared with the UsageRecord of the same attempt; consumers
+// use it for at-most-once accounting and must never treat client input as an
+// idempotency key.
 type AttemptRecord struct {
+	AttemptID       string
+	AttemptIndex    int
 	UserID          int64
 	ModelID         int64
 	FullName        string
@@ -107,8 +110,11 @@ type AttemptRecord struct {
 
 // UsageRecord is a future accounting input. UsageUnknown is set only for a
 // committed failed stream/response where no valid usage was available; token
-// values are never fabricated.
+// values are never fabricated. AttemptID correlates with the AttemptRecord of
+// the same Forward invocation; it is shared by the successful attempt that
+// committed the response.
 type UsageRecord struct {
+	AttemptID       string
 	UserID          int64
 	ModelID         int64
 	FullName        string
@@ -120,29 +126,64 @@ type UsageRecord struct {
 	UsageUnknown    bool
 }
 
-// Hooks are synchronous integration boundaries. Inputs are bounded metadata
-// only. The current stage does not persist request logs or usage.
-type Hooks struct {
-	Attempt func(AttemptRecord)
-	Usage   func(UsageRecord)
+// FailoverRecord is bounded metadata emitted on each actual failover (one
+// retryable pre-commit upstream failure that advances to the next candidate).
+// It deliberately carries no base URL, endpoint URL, request content, raw
+// upstream body, credential, or diagnostic text -- only the stable failure
+// code and the identifying ids needed by later accounting/log/alert rails.
+type FailoverRecord struct {
+	AttemptID       string
+	UserID          int64
+	ModelID         int64
+	FullName        string
+	BindingID       int64
+	StableErrorCode string
+	AttemptIndex    int
 }
 
-// ServiceConfig wires the ownership repository, replaceable selector, and
-// single-attempt runner. A nil Selector uses FirstSelector.
+// Hooks are synchronous integration boundaries. Inputs are bounded metadata
+// only. Each Forward invocation generates one random opaque AttemptID shared
+// by the Attempt, Usage, and Failover records of that invocation; consumers
+// use it for at-most-once accounting and must never treat client input as an
+// idempotency key. The Attempt hook fires once per actual upstream attempt
+// (each dial); the Usage hook fires at most once per invocation, only for a
+// committed response (at least one body byte written), success or failure:
+// a committed-but-failed stream still counts as a request with usage_unknown
+// when no valid usage was captured; the Failover hook fires on each actual
+// failover (one retryable pre-commit upstream failure that advances to the
+// next candidate) and carries only bounded non-sensitive metadata.
+type Hooks struct {
+	Attempt  func(AttemptRecord)
+	Usage    func(UsageRecord)
+	Failover func(FailoverRecord)
+}
+
+// ServiceConfig wires the ownership repository, an optional selector
+// override, the single-attempt runner, hooks, and the bounded retry backoff.
+// A nil Selector makes the service choose OrderedSelector or RandomSelector
+// per call from the projected route_strategy; a non-nil Selector is used for
+// every call (test injection) and its returned ids are still re-validated
+// against the projection. A zero BackoffConfig selects the system-default
+// exponential backoff; a Base <= 0 disables waiting (tests).
 type ServiceConfig struct {
 	Repository RouteRepository
 	Selector   Selector
 	Runner     AttemptRunner
 	Hooks      Hooks
+	Backoff    BackoffConfig
 	Now        func() time.Time
 }
 
-// Service resolves one platform model and executes one selected attempt.
+// Service resolves one platform model and orchestrates the candidate dispatch
+// loop: it asks the selector for the route order, re-validates each selected
+// binding against the projection, invokes the single-attempt runner per
+// candidate, and applies the silent-retry boundary with bounded backoff.
 type Service struct {
 	repository RouteRepository
 	selector   Selector
 	runner     AttemptRunner
 	hooks      Hooks
+	backoff    BackoffConfig
 	now        func() time.Time
 }
 
@@ -153,17 +194,19 @@ func NewService(config ServiceConfig) (*Service, error) {
 	if config.Runner == nil {
 		return nil, errors.New("forward: attempt runner is required")
 	}
-	if config.Selector == nil {
-		config.Selector = FirstSelector{}
-	}
 	if config.Now == nil {
 		config.Now = time.Now
+	}
+	backoff := config.Backoff
+	if backoff.Base == 0 && backoff.Max == 0 {
+		backoff = BackoffConfig{Base: DefaultBackoffBase, Max: DefaultBackoffMax}
 	}
 	return &Service{
 		repository: config.Repository,
 		selector:   config.Selector,
 		runner:     config.Runner,
 		hooks:      config.Hooks,
+		backoff:    backoff,
 		now:        config.Now,
 	}, nil
 }
@@ -193,11 +236,24 @@ func (s *Service) ListModels(ctx context.Context, userID int64) (ModelList, erro
 	return response, nil
 }
 
-// Forward resolves one opaque full name, asks the injected selector for one
-// candidate, validates that choice against the projected set, and invokes the
-// single-attempt runner exactly once. It never performs silent retry.
+// Forward resolves one opaque full name, asks the selector for the candidate
+// dispatch order, re-validates each selected binding against the projection,
+// and orchestrates the single-attempt runner over that order. The silent-retry
+// boundary is exactly "no response-body byte committed yet": only a pre-commit
+// upstream failure (connection / DNS / upstream error status / protocol
+// pre-body failure, or a target that vanished between selection and dispatch)
+// is retried, and only when the model's silent_retry switch is on. A committed
+// byte, a sink write failure, a client cancellation, or an internal error
+// short-circuits to the final result. The default (silent_retry off) runs
+// exactly one attempt, preserving fail-fast behavior. Each actual failover
+// emits a bounded metadata hook; the Usage hook fires at most once per
+// invocation, only for a committed response (success or failure — a
+// committed-but-failed stream still counts as a request with usage_unknown
+// when no valid usage was captured). Before every attempt the runner
+// re-validates ownership, so a binding deleted/disabled/cache-cleared between
+// selection and dispatch fails closed without dialing.
 func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userID int64, request *openai.ChatRequest) (openai.AttemptResult, error) {
-	if s == nil || s.repository == nil || s.selector == nil || s.runner == nil || ctx == nil || writer == nil || userID <= 0 || request == nil {
+	if s == nil || s.repository == nil || s.runner == nil || ctx == nil || writer == nil || userID <= 0 || request == nil {
 		return openai.AttemptResult{}, ErrInternal
 	}
 	route, err := s.repository.ResolveForwardRoute(ctx, userID, request.Model, MaxRouteCandidates)
@@ -226,9 +282,14 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 		ModelID:       route.ModelID,
 		FullName:      route.FullName,
 		RouteStrategy: route.RouteStrategy,
+		SilentRetry:   route.SilentRetry,
 		Candidates:    append([]db.ForwardCandidate(nil), route.Candidates...),
 	}
-	bindingID, err := s.selector.Select(ctx, selection)
+	selector := s.selector
+	if selector == nil {
+		selector = strategySelector(route.RouteStrategy)
+	}
+	order, err := selector.Select(ctx, selection)
 	clear(selection.Candidates)
 	if err != nil {
 		if errors.Is(err, ErrUnboundModel) {
@@ -236,62 +297,117 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 		}
 		return openai.AttemptResult{}, ErrSelector
 	}
-	candidate, ok := exactCandidate(route.Candidates, route.ModelID, bindingID)
-	if !ok {
+	if len(order) == 0 {
+		return openai.AttemptResult{}, ErrUnboundModel
+	}
+	if len(order) > MaxRouteAttempts {
 		return openai.AttemptResult{}, ErrSelector
 	}
+	candidates := make(map[int64]db.ForwardCandidate, len(route.Candidates))
+	for _, candidate := range route.Candidates {
+		candidates[candidate.BindingID] = candidate
+	}
+	seenOrder := make(map[int64]struct{}, len(order))
+	for _, bindingID := range order {
+		if _, duplicate := seenOrder[bindingID]; duplicate {
+			return openai.AttemptResult{}, ErrSelector
+		}
+		if _, ok := candidates[bindingID]; !ok {
+			return openai.AttemptResult{}, ErrSelector
+		}
+		seenOrder[bindingID] = struct{}{}
+	}
 
-	started := s.now().UTC()
-	result := s.runner.Run(ctx, writer, AttemptInput{
-		UserID:           userID,
-		FullName:         route.FullName,
-		BindingID:        candidate.BindingID,
-		Request:          request,
-		SafetyIdentifier: SafetyIdentifier(userID),
-	})
-	result.Diagnostic = diagnostic.BoundTo(result.Diagnostic, 512)
-	finished := s.now().UTC()
-	if finished.Before(started) {
-		finished = started
+	attemptID, err := newAttemptID()
+	if err != nil {
+		return openai.AttemptResult{}, ErrInternal
 	}
-	stableCode, clientStatus := classifyAttemptResult(result)
-	if result.ClientStatus == 0 {
-		result.ClientStatus = clientStatus
-	}
-	if s.hooks.Attempt != nil {
-		s.hooks.Attempt(AttemptRecord{
-			UserID:          userID,
-			ModelID:         route.ModelID,
-			FullName:        route.FullName,
-			BindingID:       candidate.BindingID,
-			EndpointID:      candidate.EndpointID,
-			EndpointKeyID:   candidate.EndpointKeyID,
-			UpstreamModelID: candidate.UpstreamModelID,
-			Stream:          request.Stream,
-			StartedAt:       started,
-			Duration:        finished.Sub(started),
-			UpstreamStatus:  result.UpstreamStatus,
-			ClientStatus:    result.ClientStatus,
-			Committed:       result.Committed,
-			Success:         result.Success,
-			StableErrorCode: stableCode,
-			SafeDiagnostic:  result.Diagnostic,
+
+	var lastResult openai.AttemptResult
+	for index, bindingID := range order {
+		if ctx.Err() != nil {
+			return canceledAttemptResult(), nil
+		}
+		candidate := candidates[bindingID]
+		started := s.now().UTC()
+		result := s.runner.Run(ctx, writer, AttemptInput{
+			UserID:           userID,
+			FullName:         route.FullName,
+			BindingID:        candidate.BindingID,
+			Request:          request,
+			SafetyIdentifier: SafetyIdentifier(userID),
 		})
+		result.Diagnostic = diagnostic.BoundTo(result.Diagnostic, 512)
+		finished := s.now().UTC()
+		if finished.Before(started) {
+			finished = started
+		}
+		stableCode, clientStatus := classifyAttemptResult(result)
+		if result.ClientStatus == 0 {
+			result.ClientStatus = clientStatus
+		}
+		if s.hooks.Attempt != nil {
+			s.hooks.Attempt(AttemptRecord{
+				AttemptID:       attemptID,
+				AttemptIndex:    index,
+				UserID:          userID,
+				ModelID:         route.ModelID,
+				FullName:        route.FullName,
+				BindingID:       candidate.BindingID,
+				EndpointID:      candidate.EndpointID,
+				EndpointKeyID:   candidate.EndpointKeyID,
+				UpstreamModelID: candidate.UpstreamModelID,
+				Stream:          request.Stream,
+				StartedAt:       started,
+				Duration:        finished.Sub(started),
+				UpstreamStatus:  result.UpstreamStatus,
+				ClientStatus:    result.ClientStatus,
+				Committed:       result.Committed,
+				Success:         result.Success,
+				StableErrorCode: stableCode,
+				SafeDiagnostic:  result.Diagnostic,
+			})
+		}
+		if result.Committed && s.hooks.Usage != nil {
+			s.hooks.Usage(UsageRecord{
+				AttemptID:       attemptID,
+				UserID:          userID,
+				ModelID:         route.ModelID,
+				FullName:        route.FullName,
+				BindingID:       candidate.BindingID,
+				EndpointKeyID:   candidate.EndpointKeyID,
+				UpstreamModelID: candidate.UpstreamModelID,
+				Stream:          request.Stream,
+				Usage:           result.Usage,
+				UsageUnknown:    !result.Success && !result.Usage.Present,
+			})
+		}
+		if result.Success {
+			return result, nil
+		}
+		lastResult = result
+		if !isRetryable(result, route.SilentRetry) || index == len(order)-1 {
+			return result, nil
+		}
+		// An actual failover advances to the next candidate. The bounded
+		// backoff runs first; if the caller cancels during the wait, no further
+		// attempt is made and no failover is recorded for this transition.
+		if !s.backoff.wait(ctx, index) {
+			return canceledAttemptResult(), nil
+		}
+		if s.hooks.Failover != nil {
+			s.hooks.Failover(FailoverRecord{
+				AttemptID:       attemptID,
+				UserID:          userID,
+				ModelID:         route.ModelID,
+				FullName:        route.FullName,
+				BindingID:       candidate.BindingID,
+				StableErrorCode: stableCode,
+				AttemptIndex:    index,
+			})
+		}
 	}
-	if result.Committed && s.hooks.Usage != nil {
-		s.hooks.Usage(UsageRecord{
-			UserID:          userID,
-			ModelID:         route.ModelID,
-			FullName:        route.FullName,
-			BindingID:       candidate.BindingID,
-			EndpointKeyID:   candidate.EndpointKeyID,
-			UpstreamModelID: candidate.UpstreamModelID,
-			Stream:          request.Stream,
-			Usage:           result.Usage,
-			UsageUnknown:    !result.Success && !result.Usage.Present,
-		})
-	}
-	return result, nil
+	return lastResult, nil
 }
 
 // SafetyIdentifier is stable across requests and deliberately domain-separated
@@ -312,16 +428,35 @@ func SafetyIdentifier(userID int64) string {
 	return "nbu_" + encoded
 }
 
-func exactCandidate(candidates []db.ForwardCandidate, modelID, bindingID int64) (db.ForwardCandidate, bool) {
-	if bindingID <= 0 {
-		return db.ForwardCandidate{}, false
+// newAttemptID returns a random opaque correlation id for one Forward
+// invocation. It is never derived from client input and never exposed to
+// clients or upstreams; the same id is shared by the Attempt and Usage hook
+// records of that invocation.
+func newAttemptID() (string, error) {
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", err
 	}
-	for _, candidate := range candidates {
-		if candidate.BindingID == bindingID && candidate.ModelID == modelID && candidate.EndpointID > 0 && candidate.EndpointKeyID > 0 {
-			return candidate, true
-		}
+	encoded := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw[:])
+	clear(raw[:])
+	return encoded, nil
+}
+
+// strategySelector returns the default route-order selector for a strategy.
+// ordered yields the projected (ord, id) order; random yields a fresh
+// stateless permutation per call.
+func strategySelector(strategy string) Selector {
+	if strategy == "random" {
+		return RandomSelector{}
 	}
-	return db.ForwardCandidate{}, false
+	return OrderedSelector{}
+}
+
+// canceledAttemptResult is the final result returned when the caller context
+// is canceled before an attempt or during backoff. No further attempt is made
+// and no body byte is committed.
+func canceledAttemptResult() openai.AttemptResult {
+	return openai.AttemptResult{Failure: openai.FailureCanceled, Diagnostic: "request canceled"}
 }
 
 func classifyAttemptResult(result openai.AttemptResult) (string, int) {

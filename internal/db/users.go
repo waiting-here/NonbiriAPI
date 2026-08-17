@@ -158,6 +158,30 @@ func (s *Store) GetUserByID(id int64) (*User, error) {
 	return u, err
 }
 
+// GetUserRPMLimit returns the user's self-tuned per-minute RPM cap and
+// whether one is stored. A missing user or a NULL cap yields (0, false, nil);
+// callers fall back to the administrator default cap. The stored value is a
+// server-side hint only: the flow-control layer clamps it to the site cap
+// before admission, so an over-large or invalid stored value cannot bypass
+// the per-user ceiling.
+func (s *Store) GetUserRPMLimit(userID int64) (int, bool, error) {
+	if userID <= 0 {
+		return 0, false, ErrNotFound
+	}
+	var value sql.NullInt64
+	err := s.db.QueryRow(`SELECT rpm_limit FROM users WHERE id=?`, userID).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("read user rpm limit: %w", err)
+	}
+	if !value.Valid {
+		return 0, false, nil
+	}
+	return int(value.Int64), true, nil
+}
+
 // GetUserByDiscordID returns a normal Discord user or (nil, nil). The query
 // excludes the environment-owned administrator even if a legacy database has
 // an accidentally populated Discord value on that row.

@@ -72,6 +72,7 @@ export interface PlatformModel {
   model: string;
   full_name: string;
   route_strategy: 'ordered' | 'random';
+  silent_retry: boolean;
   binding_count: number;
   created_at: string;
   updated_at: string;
@@ -236,6 +237,7 @@ function normalizePlatformModel(value: unknown): PlatformModel {
     model: text(recordValue(record, 'model'), 64, '—'),
     full_name: text(recordValue(record, 'full_name'), 160, '—'),
     route_strategy: recordValue(record, 'route_strategy') === 'random' ? 'random' : 'ordered',
+    silent_retry: booleanValue(recordValue(record, 'silent_retry')),
     binding_count: Math.max(0, integerValue(recordValue(record, 'binding_count'))),
     created_at: dateValue(recordValue(record, 'created_at')),
     updated_at: dateValue(recordValue(record, 'updated_at')),

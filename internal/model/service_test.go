@@ -116,7 +116,7 @@ func TestServiceCreateModelValidationMatrix(t *testing.T) {
 		{"over-length model", "p", strings.Repeat("b", 65)},
 	}
 	for _, tc := range invalid {
-		if _, err := ts.svc.CreateModel(ctx, uid, tc.provider, tc.model, nil); !errors.Is(err, ErrInvalidRequest) {
+		if _, err := ts.svc.CreateModel(ctx, uid, tc.provider, tc.model, nil, nil); !errors.Is(err, ErrInvalidRequest) {
 			t.Errorf("%s: err = %v, want ErrInvalidRequest", tc.name, err)
 		}
 	}
@@ -131,7 +131,7 @@ func TestServiceCreateModelValidationMatrix(t *testing.T) {
 		{"unicode interior", "模型", "gpt-4o"},
 	}
 	for _, tc := range valid {
-		if _, err := ts.svc.CreateModel(ctx, uid, tc.provider, tc.model, nil); err != nil {
+		if _, err := ts.svc.CreateModel(ctx, uid, tc.provider, tc.model, nil, nil); err != nil {
 			t.Errorf("%s: unexpected error %v", tc.name, err)
 		}
 	}
@@ -144,20 +144,20 @@ func TestServiceRouteStrategyStrictness(t *testing.T) {
 	uid := ts.seedUser(t, "u1")
 	ctx := context.Background()
 
-	m, err := ts.svc.CreateModel(ctx, uid, "p", "m", nil)
+	m, err := ts.svc.CreateModel(ctx, uid, "p", "m", nil, nil)
 	if err != nil || m.RouteStrategy != "ordered" {
 		t.Fatalf("default strategy = %+v err=%v, want ordered", m, err)
 	}
-	if _, err := ts.svc.CreateModel(ctx, uid, "p2", "m2", strPtr("random")); err != nil {
+	if _, err := ts.svc.CreateModel(ctx, uid, "p2", "m2", strPtr("random"), nil); err != nil {
 		t.Fatalf("random strategy: %v", err)
 	}
 	for _, bad := range []string{"weighted", "ROUND_ROBIN", "Ordered", "random "} {
-		if _, err := ts.svc.CreateModel(ctx, uid, "p3", "m3", strPtr(bad)); !errors.Is(err, ErrInvalidRequest) {
+		if _, err := ts.svc.CreateModel(ctx, uid, "p3", "m3", strPtr(bad), nil); !errors.Is(err, ErrInvalidRequest) {
 			t.Errorf("strategy %q: err = %v, want ErrInvalidRequest", bad, err)
 		}
 	}
 	// Update with an unknown strategy is also refused.
-	if _, err := ts.svc.UpdateModel(ctx, uid, m.ID, nil, nil, strPtr("weighted")); !errors.Is(err, ErrInvalidRequest) {
+	if _, err := ts.svc.UpdateModel(ctx, uid, m.ID, nil, nil, strPtr("weighted"), nil); !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("update strategy err = %v, want ErrInvalidRequest", err)
 	}
 }
@@ -170,23 +170,23 @@ func TestServiceFullNameCollisionCrossSplit(t *testing.T) {
 	bob := ts.seedUser(t, "bob")
 	ctx := context.Background()
 
-	if _, err := ts.svc.CreateModel(ctx, alice, "a/b", "c", nil); err != nil {
+	if _, err := ts.svc.CreateModel(ctx, alice, "a/b", "c", nil, nil); err != nil {
 		t.Fatalf("create a/b + c: %v", err)
 	}
-	if _, err := ts.svc.CreateModel(ctx, alice, "a", "b/c", nil); !errors.Is(err, db.ErrConflict) {
+	if _, err := ts.svc.CreateModel(ctx, alice, "a", "b/c", nil, nil); !errors.Is(err, db.ErrConflict) {
 		t.Fatalf("split collision err = %v, want ErrConflict", err)
 	}
-	bobFirst, err := ts.svc.CreateModel(ctx, bob, "a", "b/c", nil)
+	bobFirst, err := ts.svc.CreateModel(ctx, bob, "a", "b/c", nil, nil)
 	if err != nil {
 		t.Fatalf("cross-user same full name: %v", err)
 	}
-	bobSecond, err := ts.svc.CreateModel(ctx, bob, "x", "y", nil)
+	bobSecond, err := ts.svc.CreateModel(ctx, bob, "x", "y", nil, nil)
 	if err != nil {
 		t.Fatalf("bob second model: %v", err)
 	}
 	// Update bob's second model into the same full name as his first:
 	// field-split collision.
-	if _, err := ts.svc.UpdateModel(ctx, bob, bobSecond.ID, strPtr("a/b"), strPtr("c"), nil); !errors.Is(err, db.ErrConflict) {
+	if _, err := ts.svc.UpdateModel(ctx, bob, bobSecond.ID, strPtr("a/b"), strPtr("c"), nil, nil); !errors.Is(err, db.ErrConflict) {
 		t.Fatalf("update split collision err = %v, want ErrConflict", err)
 	}
 	// bobFirst is untouched.
@@ -202,7 +202,7 @@ func TestServiceBindingValidation(t *testing.T) {
 	uid := ts.seedUser(t, "u1")
 	ctx := context.Background()
 
-	m, err := ts.svc.CreateModel(ctx, uid, "p", "m", nil)
+	m, err := ts.svc.CreateModel(ctx, uid, "p", "m", nil, nil)
 	if err != nil {
 		t.Fatalf("create model: %v", err)
 	}
@@ -243,11 +243,11 @@ func TestServiceBindingCandidateGates(t *testing.T) {
 	bob := ts.seedUser(t, "bob")
 	ctx := context.Background()
 
-	mA, err := ts.svc.CreateModel(ctx, alice, "p", "m", nil)
+	mA, err := ts.svc.CreateModel(ctx, alice, "p", "m", nil, nil)
 	if err != nil {
 		t.Fatalf("create model: %v", err)
 	}
-	mB, err := ts.svc.CreateModel(ctx, bob, "p", "m", nil)
+	mB, err := ts.svc.CreateModel(ctx, bob, "p", "m", nil, nil)
 	if err != nil {
 		t.Fatalf("create bob model: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestServiceDraftAndBindingLifecycle(t *testing.T) {
 	ctx := context.Background()
 
 	// Draft model: zero bindings is legal.
-	m, err := ts.svc.CreateModel(ctx, uid, "draft", "model", nil)
+	m, err := ts.svc.CreateModel(ctx, uid, "draft", "model", nil, nil)
 	if err != nil {
 		t.Fatalf("create draft: %v", err)
 	}
@@ -352,7 +352,7 @@ func TestServiceDraftAndBindingLifecycle(t *testing.T) {
 // TestServiceGuardsNilService verifies nil-receiver and nil-repo guards.
 func TestServiceGuardsNilService(t *testing.T) {
 	ctx := context.Background()
-	if _, err := (*Service)(nil).CreateModel(ctx, 1, "p", "m", nil); !errors.Is(err, ErrInvalidRequest) {
+	if _, err := (*Service)(nil).CreateModel(ctx, 1, "p", "m", nil, nil); !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("nil service create err = %v", err)
 	}
 	if _, err := (*Service)(nil).GetModel(ctx, 1, 1); !errors.Is(err, db.ErrNotFound) {
@@ -362,7 +362,7 @@ func TestServiceGuardsNilService(t *testing.T) {
 		t.Fatalf("nil service delete err = %v", err)
 	}
 	svc := NewService(nil)
-	if _, err := svc.CreateModel(ctx, 1, "p", "m", nil); !errors.Is(err, ErrInvalidRequest) {
+	if _, err := svc.CreateModel(ctx, 1, "p", "m", nil, nil); !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("nil repo create err = %v", err)
 	}
 	if err := svc.DeleteBinding(ctx, 1, 1, 1); !errors.Is(err, db.ErrNotFound) {
@@ -376,3 +376,44 @@ func TestServiceGuardsNilService(t *testing.T) {
 
 func strPtr(s string) *string { return &s }
 func int64Ptr(n int64) *int64 { return &n }
+func boolPtr(b bool) *bool    { return &b }
+
+// TestServiceSilentRetrySwitch verifies the retry switch defaults false, is
+// persisted on create, and is strictly a bool on create/update.
+func TestServiceSilentRetrySwitch(t *testing.T) {
+	ts := newTestService(t)
+	uid := ts.seedUser(t, "retry-svc")
+	ctx := context.Background()
+
+	def, err := ts.svc.CreateModel(ctx, uid, "p", "def", nil, nil)
+	if err != nil || def.SilentRetry {
+		t.Fatalf("default create = %+v err=%v", def, err)
+	}
+	on, err := ts.svc.CreateModel(ctx, uid, "p", "on", nil, boolPtr(true))
+	if err != nil || !on.SilentRetry {
+		t.Fatalf("create on = %+v err=%v", on, err)
+	}
+	off, err := ts.svc.CreateModel(ctx, uid, "p", "off", nil, boolPtr(false))
+	if err != nil || off.SilentRetry {
+		t.Fatalf("create off = %+v err=%v", off, err)
+	}
+
+	got, err := ts.svc.GetModel(ctx, uid, on.ID)
+	if err != nil || !got.SilentRetry {
+		t.Fatalf("get on = %+v err=%v", got, err)
+	}
+
+	flipped, err := ts.svc.UpdateModel(ctx, uid, def.ID, nil, nil, nil, boolPtr(true))
+	if err != nil || !flipped.SilentRetry {
+		t.Fatalf("flip on = %+v err=%v", flipped, err)
+	}
+	cleared, err := ts.svc.UpdateModel(ctx, uid, def.ID, nil, nil, nil, boolPtr(false))
+	if err != nil || cleared.SilentRetry {
+		t.Fatalf("flip off = %+v err=%v", cleared, err)
+	}
+	// nil silentRetry leaves the switch unchanged (still false here).
+	unchanged, err := ts.svc.UpdateModel(ctx, uid, def.ID, nil, nil, nil, nil)
+	if err != nil || unchanged.SilentRetry {
+		t.Fatalf("noop silentRetry = %+v err=%v", unchanged, err)
+	}
+}

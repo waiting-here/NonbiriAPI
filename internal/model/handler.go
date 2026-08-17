@@ -126,7 +126,7 @@ func (h *Handler) createModel(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, derr)
 		return
 	}
-	m, err := h.svc.CreateModel(r.Context(), uid, req.Provider, req.Model, req.RouteStrategy)
+	m, err := h.svc.CreateModel(r.Context(), uid, req.Provider, req.Model, req.RouteStrategy, req.SilentRetry)
 	if err != nil {
 		writeServiceErr(w, err)
 		return
@@ -167,7 +167,7 @@ func (h *Handler) updateModel(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, derr)
 		return
 	}
-	m, err := h.svc.UpdateModel(r.Context(), uid, id, req.Provider, req.Model, req.RouteStrategy)
+	m, err := h.svc.UpdateModel(r.Context(), uid, id, req.Provider, req.Model, req.RouteStrategy, req.SilentRetry)
 	if err != nil {
 		writeServiceErr(w, err)
 		return
@@ -291,12 +291,14 @@ type createModelRequest struct {
 	Provider      string  `json:"provider"`
 	Model         string  `json:"model"`
 	RouteStrategy *string `json:"route_strategy,omitempty"`
+	SilentRetry   *bool   `json:"silent_retry,omitempty"`
 }
 
 type updateModelRequest struct {
 	Provider      *string `json:"provider,omitempty"`
 	Model         *string `json:"model,omitempty"`
 	RouteStrategy *string `json:"route_strategy,omitempty"`
+	SilentRetry   *bool   `json:"silent_retry,omitempty"`
 }
 
 type createBindingRequest struct {
@@ -316,6 +318,7 @@ type modelResp struct {
 	Model         string `json:"model"`
 	FullName      string `json:"full_name"`
 	RouteStrategy string `json:"route_strategy"`
+	SilentRetry   bool   `json:"silent_retry"`
 	BindingCount  int    `json:"binding_count"`
 	CreatedAt     int64  `json:"created_at"`
 	UpdatedAt     int64  `json:"updated_at"`
@@ -331,8 +334,9 @@ type bindingResp struct {
 func modelResponse(m db.Model) modelResp {
 	return modelResp{
 		ID: m.ID, Provider: m.Provider, Model: m.Model, FullName: m.FullName,
-		RouteStrategy: m.RouteStrategy, BindingCount: m.BindingCount,
-		CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
+		RouteStrategy: m.RouteStrategy, SilentRetry: m.SilentRetry,
+		BindingCount: m.BindingCount,
+		CreatedAt:    m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
 }
 

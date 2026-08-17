@@ -254,7 +254,7 @@ func TestHandlerBindingsCRUD(t *testing.T) {
 	h, ts, uid := newTestHandler(t)
 	ctx := context.Background()
 
-	m, err := ts.svc.CreateModel(ctx, uid, "p", "m", nil)
+	m, err := ts.svc.CreateModel(ctx, uid, "p", "m", nil, nil)
 	if err != nil {
 		t.Fatalf("create model: %v", err)
 	}
@@ -473,5 +473,74 @@ func TestHandlerWorksUnderUserSessionMiddleware(t *testing.T) {
 	stack.ServeHTTP(rec3, req3.WithContext(host.WithStation(req3.Context(), host.StationUser)))
 	if rec3.Code != http.StatusUnauthorized {
 		t.Fatalf("bearer-authenticated status = %d, want 401; body=%s", rec3.Code, rec3.Body.String())
+	}
+}
+
+// TestHandlerModelSilentRetry verifies the retry switch is accepted on create,
+// echoed in create/get/list, mutable via patch, and that a non-bool value and an
+// unknown field are rejected (strict validation, no silent default flip).
+func TestHandlerModelSilentRetry(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+
+	rec := doRequest(t, h, http.MethodPost, "/api/models", `{"provider":"p","model":"on","silent_retry":true}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create on status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	body := decodeMap(t, rec.Body.Bytes())
+	id := int64(body["id"].(float64))
+	if body["silent_retry"] != true {
+		t.Fatalf("create on body = %v", body)
+	}
+
+	rec = doRequest(t, h, http.MethodGet, fmt.Sprintf("/api/models/%d", id), "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	body = decodeMap(t, rec.Body.Bytes())
+	if body["silent_retry"] != true {
+		t.Fatalf("get body = %v", body)
+	}
+
+	rec = doRequest(t, h, http.MethodPatch, fmt.Sprintf("/api/models/%d", id), `{"silent_retry":false}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("patch status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	body = decodeMap(t, rec.Body.Bytes())
+	if body["silent_retry"] != false {
+		t.Fatalf("patch body = %v", body)
+	}
+
+	rec = doRequest(t, h, http.MethodPost, "/api/models", `{"provider":"p","model":"def"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("default create status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	body = decodeMap(t, rec.Body.Bytes())
+	if body["silent_retry"] != false {
+		t.Fatalf("default create body = %v", body)
+	}
+
+	// A non-bool silent_retry is rejected at decode time (the field is *bool).
+	rec = doRequest(t, h, http.MethodPost, "/api/models", `{"provider":"p","model":"bad","silent_retry":"true"}`)
+	assertErr(t, rec, http.StatusBadRequest, httperr.CodeInvalidRequest)
+
+	// An unknown field is rejected (DisallowUnknownFields).
+	rec = doRequest(t, h, http.MethodPost, "/api/models", `{"provider":"p","model":"unk","retry_silently":true}`)
+	assertErr(t, rec, http.StatusBadRequest, httperr.CodeInvalidRequest)
+
+	// The list echoes silent_retry for each model.
+	rec = doRequest(t, h, http.MethodGet, "/api/models", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var list []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode list: %v body=%s", err, rec.Body.String())
+	}
+	byName := make(map[string]any, len(list))
+	for _, item := range list {
+		byName[item["full_name"].(string)] = item["silent_retry"]
+	}
+	if byName["p/on"] != false || byName["p/def"] != false {
+		t.Fatalf("list silent_retry projection = %v", byName)
 	}
 }
