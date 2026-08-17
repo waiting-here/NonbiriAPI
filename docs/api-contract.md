@@ -1,14 +1,15 @@
 # NonbiriAPI HTTP API Contract (v1.0.0-alpha.1)
 
-- Status: **draft** (contract freeze point for Phase 0 → Phase 1)
+- Status: **v1.0.0-alpha.1 release contract** (frozen for this release)
 - Scope: v1.0.0-alpha.1 surface only. `/v1/chat/completions` and `/v1/models` are the only
   OpenAI-compatible exit endpoints in alpha.1; embeddings / images / audio / files /
   moderation / batch are deferred past the alpha.
 - Authority: this document aligns to the frozen v1.0.0-alpha.1 requirements, the accepted
   credential / egress / data-lifecycle decisions, and the emitted stable-code set of
-  `internal/httperr`. Endpoint path names and JSON field names are contract drafts and may
-  be tuned during implementation; the entity relationships, invariants, auth model,
-  stable codes, cache policy, and diagnostic shape are the frozen contract.
+  `internal/httperr`. Changes to endpoint paths, JSON fields, stable codes, auth behavior,
+  cache policy, or diagnostic limits require a subsequent release contract and changelog
+  entry; the entity relationships, invariants, auth model, and security boundaries below
+  are the alpha.1 contract.
 
 ## 1. Conventions
 
