@@ -83,6 +83,7 @@
       "deleteKeyTitle": "删除这个端点密钥？",
       "deleteKeyBody": "删除密钥会立即使其拉取模型和绑定不再参与路由，且无法撤销。",
       "deleteKeyConfirm": "删除密钥",
+      "modelFetchFailed": "模型拉取失败",
       "endpointLimit": "达到端点上限时，服务端会拒绝新增而不会改变已有端点。"
     },
     "models": {

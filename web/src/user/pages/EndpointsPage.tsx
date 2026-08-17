@@ -384,6 +384,9 @@ function EndpointCard({ endpoint, onEdit, onDeleted }: { endpoint: Endpoint; onE
         </div>
         <div className="badge-list">
           <StatusBadge active={endpoint.enabled} />
+          {endpoint.model_fetch_failed ? (
+            <StatusBadge danger active={false} label={t('user.endpoints.modelFetchFailed')} />
+          ) : null}
           <button type="button" className="btn btn-secondary" onClick={onEdit}>
             {t('user.endpoints.edit')}
           </button>

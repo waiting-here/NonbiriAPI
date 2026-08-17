@@ -11,8 +11,6 @@ import (
 )
 
 var (
-	// ErrConflict is returned for an identity uniqueness conflict.
-	ErrConflict = errors.New("identity conflict")
 	// ErrAdminProtected prevents ordinary-user operations from changing the
 	// environment-owned administrator identity.
 	ErrAdminProtected = errors.New("administrator identity is protected")

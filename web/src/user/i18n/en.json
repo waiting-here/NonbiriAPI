@@ -83,6 +83,7 @@
       "deleteKeyTitle": "Delete this endpoint key?",
       "deleteKeyBody": "Deleting this key immediately removes its fetched models and bindings from routing. This cannot be undone.",
       "deleteKeyConfirm": "Delete key",
+      "modelFetchFailed": "Model fetch failed",
       "endpointLimit": "If the endpoint limit is reached, the server will reject new endpoints without changing existing ones."
     },
     "models": {

@@ -83,10 +83,15 @@ CREATE TABLE IF NOT EXISTS endpoints (
 	base_url       TEXT NOT NULL,                                  -- normalized canonical value
 	note           TEXT NOT NULL DEFAULT '',
 	enabled        INTEGER NOT NULL DEFAULT 1,
+	model_fetch_failed    INTEGER NOT NULL DEFAULT 0,              -- fetch flag: set when a model fetch for any of this endpoint's keys failed; cleared by the next successful fetch
+	model_fetch_failed_at INTEGER NOT NULL DEFAULT 0,              -- unix seconds of the last failed model fetch; 0 = never failed
 	created_at     INTEGER NOT NULL,
 	updated_at     INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_endpoints_user ON endpoints(user_id);
+-- Alpha one-shot manual migration (dev databases created before this rail):
+--   ALTER TABLE endpoints ADD COLUMN model_fetch_failed    INTEGER NOT NULL DEFAULT 0;
+--   ALTER TABLE endpoints ADD COLUMN model_fetch_failed_at INTEGER NOT NULL DEFAULT 0;
 
 -- ===== endpoint_keys ========================================================
 -- One endpoint may hold multiple keys, each independently noted/enabled. The

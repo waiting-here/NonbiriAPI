@@ -214,6 +214,22 @@
   gap: 0.7rem;
 }
 
+.item-header > div {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.item-header h2,
+.item-header h3 {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.badge-list {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
 .card-title-row,
 .item-header,
 .toolbar {

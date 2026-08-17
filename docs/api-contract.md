@@ -251,7 +251,7 @@ user-level limit means the global default applies.
 
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
-| `GET` | `/api/endpoints` | user session | — | `200` array of `{id, connector_type, base_url, note, enabled, created_at, updated_at}` (key secrets never appear) | `unauthorized` |
+| `GET` | `/api/endpoints` | user session | — | `200` array of `{id, connector_type, base_url, note, enabled, model_fetch_failed, model_fetch_failed_at, created_at, updated_at}` (key secrets never appear) | `unauthorized` |
 | `POST` | `/api/endpoints` | user session | `{base_url, connector_type?, note?, enabled?}` | `201` created endpoint; `base_url` is canonicalized (scheme/host lowercased, trailing dot removed, default ports made explicit, userinfo/query/fragment removed, redundant slashes collapsed) before persistence | `invalid_request`, `unauthorized`, `conflict`, `forbidden` (endpoint cap reached: `min(global_default, user_limit)`) |
 | `GET` | `/api/endpoints/{id}` | user session | — | `200` the endpoint object | `unauthorized`, `not_found` |
 | `PATCH` | `/api/endpoints/{id}` | user session | `{base_url?, note?, enabled?}` | `200` updated endpoint; saving / editing triggers an automatic re-fetch of every enabled key's upstream models | `invalid_request`, `unauthorized`, `not_found`, `forbidden` |
@@ -270,6 +270,11 @@ connector type is immutable after creation (a `PATCH` carrying `connector_type`
 is rejected). In v1.0.0-alpha.1 the registry supports only `openai-compatible`;
 later versions extend the registry in one place.
 
+`model_fetch_failed` / `model_fetch_failed_at` are the endpoint's bounded fetch
+flag: set (with a unix-seconds timestamp) whenever an upstream model fetch for
+any of its keys failed, cleared by the next successful fetch. The flag is
+state only — never a diagnostic or any upstream content.
+
 ### 3.6 Endpoint keys & fetched models
 
 | Method | Path | Auth | Body | Response | Stable codes |
@@ -278,8 +283,8 @@ later versions extend the registry in one place.
 | `POST` | `/api/endpoints/{id}/keys` | user session | `{secret, note?, enabled?}` | `201` created key metadata `{id, display_head, display_tail, note, enabled, created_at, updated_at}` (`secret` is sealed with AES-256-GCM before persistence and never returned); triggers a model fetch for this key when enabled | `invalid_request`, `unauthorized`, `not_found`, `payload_too_large` |
 | `PATCH` | `/api/endpoints/{id}/keys/{keyId}` | user session | `{note?, enabled?}` | `200` updated key `{id, display_head, display_tail, note, enabled, created_at, updated_at}` (the secret is not mutable here; key rotation is delete + add) | `invalid_request`, `unauthorized`, `not_found` |
 | `DELETE` | `/api/endpoints/{id}/keys/{keyId}` | user session | — | `204`; cascades to its fetched-model cache and bindings | `unauthorized`, `not_found` |
-| `GET` | `/api/endpoints/{id}/keys/{keyId}/models` | user session | — | `200` array of `{upstream_model_id, provider, fetched_at, status}` for that (Endpoint, Key) combo | `unauthorized`, `not_found` |
-| `POST` | `/api/endpoints/{id}/keys/{keyId}/models/refresh` | user session | — | `202`; triggers a manual upstream `/v1/models` fetch; on success the cache for that combo is replaced; on failure the cache is cleared, the endpoint is flagged, and a user issue is recorded | `unauthorized`, `not_found`, `rate_limited` |
+| `GET` | `/api/endpoints/{id}/keys/{keyId}/models` | user session | — | `200` array of `{upstream_model_id, provider, fetched_at, status}` for that (Endpoint, Key) combo; empty `[]` when the combo has no cache rows; a missing, cross-user, or wrong-endpoint combo is indistinguishable `not_found` | `unauthorized`, `not_found` |
+| `POST` | `/api/endpoints/{id}/keys/{keyId}/models/refresh` | user session | — | `202` (no body) once the manual fetch is queued; the fetch runs on a bounded worker pool and its outcome is never echoed back; on success the cache for that combo is replaced; on failure the cache is cleared, the endpoint is flagged, and a bounded user issue is recorded | `unauthorized`, `not_found`, `rate_limited`, `service_unavailable` |
 
 The fetched-model cache is keyed per **(Endpoint, Key)** combo: different keys on the same
 endpoint may legitimately return different upstream lists. The server fetches automatically
@@ -289,24 +294,45 @@ count, validated to prevent over-long names polluting logs/DOM/DB. When a key is
 is not applicable (caller key is separate); when an endpoint key is deleted/disabled, its
 cache rows and bindings no longer participate in routing (immediate invalidation by cascade).
 
+Refresh gates: a refresh is accepted only for an enabled endpoint/key owned by the caller; a
+disabled or missing combo is `not_found` (indistinguishable) and never triggers upstream work.
+The `rate_limited` code covers both the per-user manual refresh frequency limit (bounded
+sliding window) and the bounded fetch pool being full; a refresh during shutdown is
+`service_unavailable`. Each (Endpoint, Key) combo has at most one pending/in-flight fetch
+(duplicate refreshes merge), so repeated refreshes never spawn unbounded work. Upstream and
+protocol failures (HTTP status outside 2xx, truncated or malformed JSON, duplicate/empty/
+over-long/control-containing model ids) are not successes: the combo cache is cleared, the
+endpoint's `model_fetch_failed` flag is set, and a bounded, sanitized user issue (`kind`
+`model_fetch_failed`, `ref` the endpoint id) is written atomically with the flag. Issue text
+is a stable short message plus a bounded diagnostic fragment; it never contains the key, the
+full response, or the endpoint URL. HTTP 200 alone never counts as success.
+
 ### 3.7 Models & bindings
 
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
 | `GET` | `/api/models` | user session | — | `200` array of `{id, provider, model, full_name, route_strategy, binding_count, created_at, updated_at}` | `unauthorized` |
-| `POST` | `/api/models` | user session | `{provider, model, route_strategy?}` | `201` created model; `provider`/`model` are free strings that allow `/` (each ≤64, no control chars, no leading/trailing whitespace); the external name is `provider/model` and uniqueness is enforced on that full name | `invalid_request`, `unauthorized`, `conflict` (full-name collision) |
+| `POST` | `/api/models` | user session | `{provider, model, route_strategy?}` | `201` created model; `provider`/`model` are free strings that allow `/` (each ≤64 runes, no control chars, no leading/trailing whitespace); the external name is `provider/model` and uniqueness is enforced on that full name; `route_strategy` defaults to `ordered` and only `ordered`/`random` are accepted | `invalid_request`, `unauthorized`, `conflict` (full-name collision) |
 | `GET` | `/api/models/{id}` | user session | — | `200` the model object | `unauthorized`, `not_found` |
 | `PATCH` | `/api/models/{id}` | user session | `{provider?, model?, route_strategy?}` | `200` updated model (changing `provider/model` recomputes `full_name` and may collide) | `invalid_request`, `unauthorized`, `not_found`, `conflict` |
 | `DELETE` | `/api/models/{id}` | user session | — | `204`; cascades to its bindings | `unauthorized`, `not_found` |
 | `GET` | `/api/models/{id}/bindings` | user session | — | `200` array ordered by `ord`: `{id, endpoint_key_id, upstream_model_id, ord}` | `unauthorized`, `not_found` |
-| `POST` | `/api/models/{id}/bindings` | user session | `{endpoint_key_id, upstream_model_id, ord?}` | `201` created binding; `endpoint_key_id` must belong to one of the user's endpoints; `upstream_model_id` is chosen from that key's fetched cache | `invalid_request`, `unauthorized`, `not_found`, `conflict` (duplicate `(model_id, endpoint_key_id, upstream_model_id)`) |
-| `PATCH` | `/api/models/{id}/bindings/{bId}` | user session | `{ord?, upstream_model_id?}` | `200` updated binding | `invalid_request`, `unauthorized`, `not_found` |
+| `POST` | `/api/models/{id}/bindings` | user session | `{endpoint_key_id, upstream_model_id, ord?}` | `201` created binding; `endpoint_key_id` must belong to one of the user's enabled endpoints and the key itself must be enabled; `upstream_model_id` must exist in that key's fetched cache; `ord` defaults to `0` and must be within `[0, 1000000]` | `invalid_request`, `unauthorized`, `not_found`, `conflict` (duplicate `(model_id, endpoint_key_id, upstream_model_id)`) |
+| `PATCH` | `/api/models/{id}/bindings/{bId}` | user session | `{ord?, upstream_model_id?}` | `200` updated binding; only `ord`/`upstream_model_id` are mutable (the endpoint key never changes through this path); the resulting `upstream_model_id` must still exist in the binding key's fetched cache and the key/endpoint must still be enabled | `invalid_request`, `unauthorized`, `not_found`, `conflict` (duplicate triple after update) |
 | `DELETE` | `/api/models/{id}/bindings/{bId}` | user session | — | `204` | `unauthorized`, `not_found` |
 
 A model may be saved with zero bindings (a draft). Calling a draft model over `/v1/chat/completions`
 yields **503** (see §2.1). `provider`/`model` are stored and matched only as opaque strings
 (never split into path segments for routing; never interpolated into SQL), so `/` has no
 injection surface.
+
+Bounded fields: `provider`/`model` are each ≤64 runes, must be valid UTF-8, must not contain
+control characters, and must not start or end with whitespace (Unicode-aware); interior
+whitespace and `/` are allowed. `upstream_model_id` is an opaque string bounded to ≤512 runes
+with the same character rules; it must match a row of the key's fetched cache exactly, so a
+client can never bind an arbitrary string. `ord` is an integer in `[0, 1000000]`. These bounds
+are enforced server-side on every create and patch; the unique `(user_id, full_name)` and
+`(model_id, endpoint_key_id, upstream_model_id)` constraints are the backstop.
 
 ### 3.8 Account self-service (two-step required)
 

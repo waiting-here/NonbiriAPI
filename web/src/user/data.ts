@@ -43,6 +43,8 @@ export interface Endpoint {
   base_url: string;
   note: string;
   enabled: boolean;
+  model_fetch_failed: boolean;
+  model_fetch_failed_at: string;
   created_at: string;
   updated_at: string;
 }
@@ -180,6 +182,8 @@ function normalizeEndpoint(value: unknown): Endpoint {
     base_url: text(recordValue(record, 'base_url'), 2048, '—'),
     note: text(recordValue(record, 'note'), 512),
     enabled: booleanValue(recordValue(record, 'enabled'), true),
+    model_fetch_failed: booleanValue(recordValue(record, 'model_fetch_failed')),
+    model_fetch_failed_at: dateValue(recordValue(record, 'model_fetch_failed_at')),
     created_at: dateValue(recordValue(record, 'created_at')),
     updated_at: dateValue(recordValue(record, 'updated_at')),
   };

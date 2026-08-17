@@ -125,10 +125,18 @@ export function AuthRequired({ station }: { station: 'user' | 'admin' }) {
   );
 }
 
-export function StatusBadge({ active, label }: { active: boolean; label?: string }) {
+export function StatusBadge({
+  active,
+  label,
+  danger = false,
+}: {
+  active: boolean;
+  label?: string;
+  danger?: boolean;
+}) {
   const { t } = useTranslation();
   return (
-    <span className={`status-badge ${active ? 'is-active' : 'is-inactive'}`}>
+    <span className={`status-badge ${danger ? 'is-danger' : active ? 'is-active' : 'is-inactive'}`}>
       <span className="status-dot" aria-hidden="true" />
       {label ?? (active ? t('common.enabled') : t('common.disabled'))}
     </span>

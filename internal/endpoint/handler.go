@@ -306,13 +306,15 @@ type updateKeyRequest struct {
 }
 
 type endpointResp struct {
-	ID            int64  `json:"id"`
-	ConnectorType string `json:"connector_type"`
-	BaseURL       string `json:"base_url"`
-	Note          string `json:"note"`
-	Enabled       bool   `json:"enabled"`
-	CreatedAt     int64  `json:"created_at"`
-	UpdatedAt     int64  `json:"updated_at"`
+	ID                 int64  `json:"id"`
+	ConnectorType      string `json:"connector_type"`
+	BaseURL            string `json:"base_url"`
+	Note               string `json:"note"`
+	Enabled            bool   `json:"enabled"`
+	ModelFetchFailed   bool   `json:"model_fetch_failed"`
+	ModelFetchFailedAt int64  `json:"model_fetch_failed_at"`
+	CreatedAt          int64  `json:"created_at"`
+	UpdatedAt          int64  `json:"updated_at"`
 }
 
 type endpointKeyResp struct {
@@ -327,13 +329,15 @@ type endpointKeyResp struct {
 
 func endpointResponse(ep db.Endpoint) endpointResp {
 	return endpointResp{
-		ID:            ep.ID,
-		ConnectorType: ep.ConnectorType,
-		BaseURL:       ep.BaseURL,
-		Note:          ep.Note,
-		Enabled:       ep.Enabled,
-		CreatedAt:     ep.CreatedAt,
-		UpdatedAt:     ep.UpdatedAt,
+		ID:                 ep.ID,
+		ConnectorType:      ep.ConnectorType,
+		BaseURL:            ep.BaseURL,
+		Note:               ep.Note,
+		Enabled:            ep.Enabled,
+		ModelFetchFailed:   ep.ModelFetchFailed,
+		ModelFetchFailedAt: ep.ModelFetchFailedAt,
+		CreatedAt:          ep.CreatedAt,
+		UpdatedAt:          ep.UpdatedAt,
 	}
 }
 
