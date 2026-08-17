@@ -23,6 +23,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"nonbiriapi/internal/host"
 	"nonbiriapi/internal/secret"
@@ -52,6 +53,10 @@ type Config struct {
 	masterVault         *secret.Vault
 	DiscordClientID     string
 	DiscordClientSecret string
+	// DiscordOAuthScopes is an optional provider policy value. It is kept in
+	// startup configuration rather than persisted in user data because the
+	// exact scope policy remains configurable.
+	DiscordOAuthScopes string
 	// SiteBaseURL is the canonical public origin of the user station (no
 	// trailing slash, no path/query/fragment/userinfo).
 	SiteBaseURL string
@@ -88,6 +93,7 @@ func Load() (*Config, error) {
 		AdminPassword:       os.Getenv("NONBIRI_ADMIN_PASSWORD"),
 		DiscordClientID:     os.Getenv("NONBIRI_DISCORD_CLIENT_ID"),
 		DiscordClientSecret: os.Getenv("NONBIRI_DISCORD_CLIENT_SECRET"),
+		DiscordOAuthScopes:  os.Getenv("NONBIRI_DISCORD_OAUTH_SCOPES"),
 	}
 
 	var errs []string
@@ -122,17 +128,20 @@ func Load() (*Config, error) {
 		}
 	}
 
-	if strings.TrimSpace(c.AdminUsername) == "" {
-		errs = append(errs, "NONBIRI_ADMIN_USERNAME: required")
+	if err := validateStartupAuthValue("NONBIRI_ADMIN_USERNAME", c.AdminUsername, 128, false); err != nil {
+		errs = append(errs, "NONBIRI_ADMIN_USERNAME: "+err.Error())
 	}
-	if strings.TrimSpace(c.AdminPassword) == "" {
-		errs = append(errs, "NONBIRI_ADMIN_PASSWORD: required")
+	if err := validateStartupAuthValue("NONBIRI_ADMIN_PASSWORD", c.AdminPassword, 4096, false); err != nil {
+		errs = append(errs, "NONBIRI_ADMIN_PASSWORD: "+err.Error())
 	}
-	if strings.TrimSpace(c.DiscordClientID) == "" {
-		errs = append(errs, "NONBIRI_DISCORD_CLIENT_ID: required")
+	if err := validateStartupAuthValue("NONBIRI_DISCORD_CLIENT_ID", c.DiscordClientID, 512, false); err != nil {
+		errs = append(errs, "NONBIRI_DISCORD_CLIENT_ID: "+err.Error())
 	}
-	if strings.TrimSpace(c.DiscordClientSecret) == "" {
-		errs = append(errs, "NONBIRI_DISCORD_CLIENT_SECRET: required")
+	if err := validateStartupAuthValue("NONBIRI_DISCORD_CLIENT_SECRET", c.DiscordClientSecret, 4096, false); err != nil {
+		errs = append(errs, "NONBIRI_DISCORD_CLIENT_SECRET: "+err.Error())
+	}
+	if err := validateStartupAuthValue("NONBIRI_DISCORD_OAUTH_SCOPES", c.DiscordOAuthScopes, 256, true); err != nil {
+		errs = append(errs, "NONBIRI_DISCORD_OAUTH_SCOPES: "+err.Error())
 	}
 
 	siteRaw := strings.TrimRight(strings.TrimSpace(os.Getenv("NONBIRI_SITE_BASE_URL")), "/")
@@ -461,6 +470,21 @@ func secureMasterKeyFileMode(mode os.FileMode, goos string) bool {
 	}
 	perm := mode.Perm()
 	return perm == 0o400 || perm == 0o600
+}
+
+func validateStartupAuthValue(_ string, value string, maxBytes int, allowEmpty bool) error {
+	if !allowEmpty && strings.TrimSpace(value) == "" {
+		return fmt.Errorf("required")
+	}
+	if len(value) > maxBytes || !utf8.ValidString(value) {
+		return fmt.Errorf("too long or invalid text")
+	}
+	for _, r := range value {
+		if r < 0x20 || r == 0x7f {
+			return fmt.Errorf("contains a control character")
+		}
+	}
+	return nil
 }
 
 func getenv(key, def string) string {

@@ -6,8 +6,8 @@ interface PlaceholderPageProps {
 }
 
 /**
- * Generic placeholder rendered for routes whose business pages arrive in a
- * later milestone. Keeps every shell route navigable and keyboard-accessible.
+ * Generic fallback for a route that intentionally has no data view yet. Keeps
+ * every shell route navigable and keyboard-accessible.
  */
 export function PlaceholderPage({ title, description }: PlaceholderPageProps) {
   const { t } = useTranslation();

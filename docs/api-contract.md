@@ -38,6 +38,11 @@ database and returns `{"status":"ok"}`.
 | Admin session | admin station `/admin/api/*` | opaque admin session cookie (same attributes) |
 | Elevated (two-step) | self-service export / delete; destructive admin actions | short-lived elevated-action capability bound to an active session, obtained via a two-step endpoint |
 
+User session cookies are host-only and use `Path=/api`; administrator session cookies are
+host-only and use `Path=/admin`. Both are Secure when the fixed configured site origin (or
+trusted edge protocol context) is HTTPS, HttpOnly, and SameSite=Lax. OAuth state cookies are
+host-only, HttpOnly, SameSite=Lax, short-lived, and scoped to `/api/auth/discord`.
+
 A normal user holds exactly one caller key (`nbk_` prefix, no scope binding). Regeneration
 invalidates the previous key the instant the new row is written; the plaintext is shown once
 at generation time and never persisted in a recoverable form (only an irretrievable SHA-256
@@ -201,14 +206,16 @@ Auth: a valid user session cookie. Banned users are denied. All responses are `n
 
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
-| `GET` | `/api/auth/discord/start` | none | — | `302` to Discord's authorize URL; sets the OAuth `state` cookie (HMAC, short TTL, HttpOnly, SameSite) | `service_unavailable` (503) if Discord end is misconfigured / registration paused |
+| `GET` | `/api/auth/discord/start` | none | — | `302` to Discord's authorize URL; sets the OAuth `state` cookie (HMAC, short TTL, HttpOnly, SameSite) | `service_unavailable` (503) if the Discord end is misconfigured |
 | `GET` | `/api/auth/discord/callback` | OAuth `state` cookie | query: `code`, `state` | on success: sets the user session cookie and `302` to the user SPA; on mismatch/failure: `400 invalid_request` / `401 unauthorized` | `invalid_request`, `unauthorized`, `conflict`, `service_unavailable` |
 | `GET` | `/api/session` | user session | — | `200 {user:{id,username,avatar,lang,is_banned,endpoint_limit,rpm_limit,created_at}}` | `unauthorized` |
 | `POST` | `/api/auth/logout` | user session | — | `204`; clears the session cookie | `unauthorized` |
 
 Registration gate (Discord): registration is allowed only when both the configured
 `discord_guild_id` and `discord_role_id` match the Discord identity. If either is blank,
-registration is paused (already-registered users can still log in). The exact scope/guild/
+registration is paused (the callback returns `service_unavailable` for a new identity),
+while already-registered users can still complete the same OAuth login. The start endpoint
+may still issue a short-lived state so an existing user can log in. The exact scope/guild/
 nickname policy is finalized when Discord is wired.
 
 ### 3.2 Two-step elevation (for self-service export / delete)
@@ -245,7 +252,7 @@ user-level limit means the global default applies.
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
 | `GET` | `/api/endpoints` | user session | — | `200` array of `{id, connector_type, base_url, note, enabled, created_at, updated_at}` (key secrets never appear) | `unauthorized` |
-| `POST` | `/api/endpoints` | user session | `{base_url, note?, enabled?}` | `201` created endpoint; `base_url` is canonicalized (scheme/host lowercased, trailing dot removed, default ports made explicit, userinfo/query/fragment removed, redundant slashes collapsed) before persistence | `invalid_request`, `unauthorized`, `conflict`, `forbidden` (endpoint cap reached: `min(global_default, user_limit)`) |
+| `POST` | `/api/endpoints` | user session | `{base_url, connector_type?, note?, enabled?}` | `201` created endpoint; `base_url` is canonicalized (scheme/host lowercased, trailing dot removed, default ports made explicit, userinfo/query/fragment removed, redundant slashes collapsed) before persistence | `invalid_request`, `unauthorized`, `conflict`, `forbidden` (endpoint cap reached: `min(global_default, user_limit)`) |
 | `GET` | `/api/endpoints/{id}` | user session | — | `200` the endpoint object | `unauthorized`, `not_found` |
 | `PATCH` | `/api/endpoints/{id}` | user session | `{base_url?, note?, enabled?}` | `200` updated endpoint; saving / editing triggers an automatic re-fetch of every enabled key's upstream models | `invalid_request`, `unauthorized`, `not_found`, `forbidden` |
 | `DELETE` | `/api/endpoints/{id}` | user session | — | `204`; cascades to its keys, their fetched-model cache, and their bindings (immediate invalidation) | `unauthorized`, `not_found` |
@@ -256,13 +263,20 @@ Multiple endpoints may share the same canonical `base_url` (no uniqueness on
 endpoints are rejected (`forbidden`) while existing ones are retained. The admin can set a
 per-user endpoint limit and clear it (NULL restores the global default).
 
+`connector_type` defaults to `openai-compatible` and is validated against the
+authoritative connector registry; unknown types are rejected with
+`invalid_request` and never silently fall back to another protocol. The
+connector type is immutable after creation (a `PATCH` carrying `connector_type`
+is rejected). In v1.0.0-alpha.1 the registry supports only `openai-compatible`;
+later versions extend the registry in one place.
+
 ### 3.6 Endpoint keys & fetched models
 
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
-| `GET` | `/api/endpoints/{id}/keys` | user session | — | `200` array of `{id, note, enabled, created_at, updated_at}`; only head/tail display fragments, never the secret | `unauthorized`, `not_found` |
-| `POST` | `/api/endpoints/{id}/keys` | user session | `{secret, note?, enabled?}` | `201` created key metadata (`secret` is encrypted before persistence and never returned); triggers a model fetch for this key | `invalid_request`, `unauthorized`, `not_found`, `payload_too_large` |
-| `PATCH` | `/api/endpoints/{id}/keys/{keyId}` | user session | `{note?, enabled?}` | `200` updated key | `invalid_request`, `unauthorized`, `not_found` |
+| `GET` | `/api/endpoints/{id}/keys` | user session | — | `200` array of `{id, display_head, display_tail, note, enabled, created_at, updated_at}`; display fragments are the first/last few runes of the secret so listings never decrypt; the secret and its ciphertext are never returned | `unauthorized`, `not_found` |
+| `POST` | `/api/endpoints/{id}/keys` | user session | `{secret, note?, enabled?}` | `201` created key metadata `{id, display_head, display_tail, note, enabled, created_at, updated_at}` (`secret` is sealed with AES-256-GCM before persistence and never returned); triggers a model fetch for this key when enabled | `invalid_request`, `unauthorized`, `not_found`, `payload_too_large` |
+| `PATCH` | `/api/endpoints/{id}/keys/{keyId}` | user session | `{note?, enabled?}` | `200` updated key `{id, display_head, display_tail, note, enabled, created_at, updated_at}` (the secret is not mutable here; key rotation is delete + add) | `invalid_request`, `unauthorized`, `not_found` |
 | `DELETE` | `/api/endpoints/{id}/keys/{keyId}` | user session | — | `204`; cascades to its fetched-model cache and bindings | `unauthorized`, `not_found` |
 | `GET` | `/api/endpoints/{id}/keys/{keyId}/models` | user session | — | `200` array of `{upstream_model_id, provider, fetched_at, status}` for that (Endpoint, Key) combo | `unauthorized`, `not_found` |
 | `POST` | `/api/endpoints/{id}/keys/{keyId}/models/refresh` | user session | — | `202`; triggers a manual upstream `/v1/models` fetch; on success the cache for that combo is replaced; on failure the cache is cleared, the endpoint is flagged, and a user issue is recorded | `unauthorized`, `not_found`, `rate_limited` |

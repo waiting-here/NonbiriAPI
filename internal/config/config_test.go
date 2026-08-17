@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -40,6 +41,7 @@ func closeLoadedVault(t *testing.T, c *Config) {
 
 func TestLoadValid(t *testing.T) {
 	allEnvs(t)
+	t.Setenv("NONBIRI_DISCORD_OAUTH_SCOPES", "identify guilds.members.read")
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -66,6 +68,23 @@ func TestLoadValid(t *testing.T) {
 	}
 	if len(c.TrustedProxyCIDRs) != 2 {
 		t.Fatalf("trusted proxies = %d, want 2", len(c.TrustedProxyCIDRs))
+	}
+	if c.DiscordOAuthScopes != "identify guilds.members.read" {
+		t.Fatalf("DiscordOAuthScopes = %q", c.DiscordOAuthScopes)
+	}
+}
+
+func TestAuthStartupValuesRejectControlCharactersAndBounds(t *testing.T) {
+	cases := []string{"NONBIRI_ADMIN_USERNAME", "NONBIRI_ADMIN_PASSWORD", "NONBIRI_DISCORD_CLIENT_ID", "NONBIRI_DISCORD_CLIENT_SECRET", "NONBIRI_DISCORD_OAUTH_SCOPES"}
+	for _, key := range cases {
+		t.Run(key, func(t *testing.T) {
+			if err := validateStartupAuthValue(key, "valid\nvalue", 4096, key == "NONBIRI_DISCORD_OAUTH_SCOPES"); err == nil {
+				t.Fatalf("validateStartupAuthValue accepted control character in %s", key)
+			}
+		})
+	}
+	if err := validateStartupAuthValue("NONBIRI_ADMIN_PASSWORD", strings.Repeat("x", 4097), 4096, false); err == nil {
+		t.Fatal("validateStartupAuthValue accepted an overlong administrator password")
 	}
 }
 

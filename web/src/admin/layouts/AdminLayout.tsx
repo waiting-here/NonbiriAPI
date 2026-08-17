@@ -1,8 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { NavLink, Outlet } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '@shared/components/LanguageSwitcher';
+import { ErrorState, LoadingState } from '@shared/components/States';
+import { apiFetch, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { ThemeToggle } from '@shared/theme/ThemeToggle';
+import { adminKeys, useAdminSession } from '../data';
 
 interface NavItem {
   to: string;
@@ -20,12 +24,130 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/settings', key: 'settings' },
 ];
 
+function AdminLogin({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
+  const { t } = useTranslation();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [validationError, setValidationError] = useState('');
+  const [error, setError] = useState<unknown>(null);
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    setValidationError('');
+    const submittedPassword = password;
+    setPassword('');
+    if (!username.trim() || !submittedPassword) {
+      setValidationError(t('common.formInvalid'));
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiFetch<unknown>('/admin/api/login', {
+        method: 'POST',
+        json: { username: username.trim(), password: submittedPassword },
+      });
+      await onSignedIn();
+    } catch (requestError) {
+      setError(requestError);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="auth-shell">
+      <header className="site-header">
+        <span className="brand">
+          {t('app.name')}
+          <span className="brand-suffix">{t('admin.shell.brandSuffix')}</span>
+        </span>
+        <div className="site-actions">
+          <LanguageSwitcher />
+          <ThemeToggle />
+        </div>
+      </header>
+      <main className="auth-main">
+        <section className="card login-card" aria-labelledby="admin-login-title">
+          <p className="eyebrow">{t('app.name')}</p>
+          <h1 id="admin-login-title">{t('admin.shell.loginTitle')}</h1>
+          <p className="page-description">{t('admin.shell.loginBody')}</p>
+          <form className="login-form" onSubmit={submit} noValidate>
+            <label>
+              <span>{t('admin.shell.username')}</span>
+              <input
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                autoComplete="username"
+                maxLength={128}
+                required
+              />
+            </label>
+            <label>
+              <span>{t('admin.shell.password')}</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="current-password"
+                maxLength={512}
+                required
+              />
+            </label>
+            {validationError ? <p className="field-error" role="alert">{validationError}</p> : null}
+            {error ? <ErrorState error={error} /> : null}
+            <button type="submit" className="btn btn-primary" disabled={busy}>
+              {busy ? t('common.working') : t('admin.shell.login')}
+            </button>
+          </form>
+        </section>
+      </main>
+    </div>
+  );
+}
+
 export function AdminLayout() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const session = useAdminSession();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [logoutError, setLogoutError] = useState<unknown>(null);
+  const [logoutBusy, setLogoutBusy] = useState(false);
 
   useEffect(() => {
     document.title = `${t('app.name')} · ${t('admin.shell.title')}`;
   }, [t]);
+
+  if (session.isPending) return <LoadingState />;
+  if (session.error && !isUnauthorized(session.error) && !isNotFoundError(session.error)) {
+    return <ErrorState error={session.error} onRetry={() => void session.refetch()} />;
+  }
+  if (!session.data) {
+    return (
+      <AdminLogin
+        onSignedIn={async () => {
+          const result = await session.refetch();
+          if (result.error) throw result.error;
+        }}
+      />
+    );
+  }
+
+  const logout = async () => {
+    setLogoutError(null);
+    setLogoutBusy(true);
+    try {
+      await apiFetch<void>('/admin/api/logout', { method: 'POST' });
+      queryClient.removeQueries({ queryKey: adminKeys.all });
+      await session.refetch();
+      setMenuOpen(false);
+    } catch (error) {
+      setLogoutError(error);
+    } finally {
+      setLogoutBusy(false);
+    }
+  };
 
   return (
     <>
@@ -37,18 +159,44 @@ export function AdminLayout() {
           {t('app.name')}
           <span className="brand-suffix">{t('admin.shell.brandSuffix')}</span>
         </span>
+        <button
+          type="button"
+          className="btn btn-secondary mobile-menu-btn admin-menu-btn"
+          aria-expanded={menuOpen}
+          aria-controls="admin-navigation"
+          aria-label={t(menuOpen ? 'shell.closeMenu' : 'shell.openMenu')}
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          {menuOpen ? '×' : '☰'}
+        </button>
         <div className="site-actions">
+          <span className="user-chip">{t('admin.shell.sessionUser', { name: session.data.admin.username })}</span>
           <LanguageSwitcher />
           <ThemeToggle />
+          <button type="button" className="btn btn-secondary" onClick={() => void logout()} disabled={logoutBusy}>
+            {logoutBusy ? t('common.working') : t('common.signOut')}
+          </button>
         </div>
       </header>
+      {menuOpen ? (
+        <button
+          type="button"
+          className="shell-overlay"
+          aria-label={t('shell.closeMenu')}
+          onClick={() => setMenuOpen(false)}
+        />
+      ) : null}
       <div className="admin-shell">
-        <aside className="admin-sidebar" aria-label={t('admin.shell.navLabel')}>
+        <aside
+          id="admin-navigation"
+          className={`admin-sidebar ${menuOpen ? 'is-open' : ''}`}
+          aria-label={t('admin.shell.navLabel')}
+        >
           <nav>
             <ul>
               {NAV_ITEMS.map((item) => (
                 <li key={item.key}>
-                  <NavLink to={item.to} end={item.end}>
+                  <NavLink to={item.to} end={item.end} onClick={() => setMenuOpen(false)}>
                     {t(`admin.${item.key}.nav`)}
                   </NavLink>
                 </li>
@@ -57,6 +205,7 @@ export function AdminLayout() {
           </nav>
         </aside>
         <main id="main" className="admin-content">
+          {logoutError ? <ErrorState error={logoutError} /> : null}
           <Outlet />
         </main>
       </div>

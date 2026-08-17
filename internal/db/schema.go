@@ -91,11 +91,15 @@ CREATE INDEX IF NOT EXISTS idx_endpoints_user ON endpoints(user_id);
 -- ===== endpoint_keys ========================================================
 -- One endpoint may hold multiple keys, each independently noted/enabled. The
 -- upstream secret is persisted only as a versioned AES-256-GCM envelope;
--- plaintext is never a SQL value.
+-- plaintext is never a SQL value. display_head/display_tail carry the first
+-- and last few runes of the secret so list views never have to decrypt: the
+-- ciphertext stays in the row and is read only by the forwarding rail.
 CREATE TABLE IF NOT EXISTS endpoint_keys (
 	id               INTEGER PRIMARY KEY AUTOINCREMENT,
 	endpoint_id       INTEGER NOT NULL REFERENCES endpoints(id) ON DELETE CASCADE,
-	encrypted_secret TEXT NOT NULL,                                -- nbsec:v1:aes-256-gcm:<nonce>:<ciphertext-and-tag> (raw base64url parts)
+	encrypted_secret TEXT NOT NULL,                                -- nbsec:v1:aes-256-gcm:<nonce>:<ciphertext-and-tag> (raw base64url parts); plaintext is never a SQL value
+	display_head     TEXT NOT NULL DEFAULT '',                     -- first 4 runes of the upstream secret; persisted so listings never decrypt (renders "xxxx…yyyy")
+	display_tail     TEXT NOT NULL DEFAULT '',                     -- last 4 runes of the upstream secret; empty when the secret is too short to reveal a tail without re-covering it
 	note             TEXT NOT NULL DEFAULT '',
 	enabled          INTEGER NOT NULL DEFAULT 1,
 	created_at       INTEGER NOT NULL,
