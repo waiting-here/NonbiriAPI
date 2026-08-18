@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatDateTime } from '@shared/utils/datetime';
 import { useTranslation } from 'react-i18next';
 import {
   Card,
@@ -57,7 +58,7 @@ function IssuesContent() {
                   <div className="item-header">
                     <div>
                       <h2>{issue.kind}</h2>
-                      <p className="item-meta">{issue.created_at}</p>
+                      <p className="item-meta">{formatDateTime(issue.created_at)}</p>
                     </div>
                     <StatusBadge
                       active={issue.resolved}

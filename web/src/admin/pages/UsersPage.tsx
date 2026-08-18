@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { formatDateTime } from '@shared/utils/datetime';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -250,7 +251,7 @@ export function UsersPage() {
                         <span className="table-note">{number(user.total_requests)} {t('admin.users.requests')}</span>
                         <span className="table-note">{number(user.total_unknown_usage_requests)} {t('admin.users.unknown')}</span>
                       </td>
-                      <td><ReadOnlyValue value={user.created_at} /></td>
+                      <td><ReadOnlyValue value={formatDateTime(user.created_at)} /></td>
                       <td>
                         <div className="table-actions">
                           <button type="button" className="btn btn-quiet" onClick={() => openAction(user, user.is_banned ? 'unban' : 'ban')}>

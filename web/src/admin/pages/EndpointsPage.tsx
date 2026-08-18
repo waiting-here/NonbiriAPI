@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatDateTime } from '@shared/utils/datetime';
 import { useTranslation } from 'react-i18next';
 import {
   Card,
@@ -62,8 +63,8 @@ export function EndpointsPage() {
                     <td>{endpoint.connector_type}</td>
                     <td>{endpoint.key_count}</td>
                     <td><StatusBadge active={endpoint.enabled} /></td>
-                    <td><ReadOnlyValue value={endpoint.created_at} /></td>
-                    <td><ReadOnlyValue value={endpoint.updated_at} /></td>
+                    <td><ReadOnlyValue value={formatDateTime(endpoint.created_at)} /></td>
+                    <td><ReadOnlyValue value={formatDateTime(endpoint.updated_at)} /></td>
                   </tr>
                 ))}
               </tbody>

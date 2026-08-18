@@ -1,4 +1,5 @@
 import { useId, useState, type FormEvent } from 'react';
+import { formatDateTime } from '@shared/utils/datetime';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
@@ -292,7 +293,7 @@ function EndpointKeyCard({ endpointId, keyData }: { endpointId: string; keyData:
         <div>
           <h3 className="mono">{keyData.display ?? t('user.endpoints.keyHidden')}</h3>
           <p className="item-meta">
-            {keyData.note || t('user.endpoints.keyHidden')} · {keyData.updated_at}
+            {keyData.note || t('user.endpoints.keyHidden')} · {formatDateTime(keyData.updated_at)}
           </p>
         </div>
         <div className="badge-list">
@@ -380,7 +381,7 @@ function EndpointCard({ endpoint, onEdit, onDeleted }: { endpoint: Endpoint; onE
       <div className="item-header">
         <div>
           <h2 className="mono">{endpoint.base_url}</h2>
-          <p className="item-meta">{endpoint.connector_type} · {endpoint.updated_at}</p>
+          <p className="item-meta">{endpoint.connector_type} · {formatDateTime(endpoint.updated_at)}</p>
         </div>
         <div className="badge-list">
           <StatusBadge active={endpoint.enabled} />
