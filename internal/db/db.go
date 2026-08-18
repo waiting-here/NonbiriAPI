@@ -29,7 +29,11 @@ func Open(path string, secrets secret.Codec) (*Store, error) {
 		return nil, fmt.Errorf("open database: secret codec is required")
 	}
 	if dir := filepath.Dir(path); dir != "." && dir != "" && dir != string(filepath.Separator) {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		// A newly created database directory contains private account metadata
+		// and encrypted upstream credentials. Keep it owner-only by default;
+		// operators may pre-create a deliberately shared directory with their
+		// own tighter deployment policy.
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, fmt.Errorf("create db directory: %w", err)
 		}
 	}
