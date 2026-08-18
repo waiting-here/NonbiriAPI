@@ -263,6 +263,7 @@ function EndpointKeyCard({ endpointId, keyData }: { endpointId: string; keyData:
         { method: 'POST' },
       );
       await queryClient.invalidateQueries({ queryKey: userKeys.keyModels(endpointId, keyData.id) });
+      await queryClient.invalidateQueries({ queryKey: userKeys.endpoints });
     } catch (error) {
       setRequestError(error);
     } finally {
