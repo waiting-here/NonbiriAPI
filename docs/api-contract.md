@@ -184,7 +184,13 @@ Before a response crosses the client boundary, upstream key plaintext and cipher
 checked both as literal wire bytes and as decoded JSON string channels. The semantic check
 keeps bounded rolling state per normalized JSON path, so splitting a credential across
 successive `delta.content`, tool-argument, or content-part chunks is rejected before the
-completing fragment is written.
+completing fragment is written. This guard is a layer of defense-in-depth, not a general
+data-loss-prevention filter: it matches only the exact known credential material handed to
+the upstream in the same request (and its close JSON/SSE fragments). It does not detect a
+key that was encoded, truncated, or otherwise transformed, and it does not detect arbitrary
+other sensitive data the upstream may return. A caller key is therefore still handled as a
+sensitive credential and protected by the reverse proxy, storage, and logging boundary; the
+guard is one layer, not a guarantee.
 
 Stable error codes at this endpoint:
 
@@ -550,7 +556,10 @@ resolving an alert with `false` reopens it and clears `resolved_at`.
 
 - **No plaintext upstream secret** is ever returned, listed, logged, exported, or surfaced in
   an error envelope. Literal and semantic response guards also reject a secret split across
-  multiple JSON/SSE fragments. Only head/tail display fragments appear in a key view.
+  multiple JSON/SSE fragments. Only head/tail display fragments appear in a key view. These
+  guards are an exact-match defense-in-depth layer for the known upstream credential only;
+  they are not a general data-loss-prevention filter and do not detect encoded, truncated,
+  or otherwise transformed material, or arbitrary other sensitive upstream data.
 - **`Cache-Control: no-store`** is mandatory and default on every JSON response and every
   error envelope, and is the only cache policy permitted for key/secret/config endpoints.
 - **Stable codes** are the sole machine-facing error identifier; HTTP status is derived from

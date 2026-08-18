@@ -109,6 +109,16 @@ Configure the public user host and the separate admin host in DNS and TLS. The p
 - restrict the admin host independently where possible;
 - avoid logging `Authorization`, cookies, request bodies, or upstream credentials.
 
+Before a forwarded response is returned to a caller, the application scans it for the exact
+upstream credential that was handed to the upstream in the same request, both as literal wire
+bytes and across decoded JSON / SSE string fragments, and truncates the response if that
+credential reappears. This response guard is a defense-in-depth layer, not a general
+data-loss-prevention filter: it matches only the exact known credential, so it does not detect
+an encoded, truncated, or otherwise transformed key, and it does not detect arbitrary other
+sensitive data an upstream may return. Treat each caller key as a sensitive credential and
+protect it at the proxy, storage, and logging boundary; the guard is one layer, not a
+substitute for choosing trusted upstreams and keeping key material private.
+
 Do not trust arbitrary `X-Forwarded-*` headers. The application accepts forwarding metadata only from configured trusted proxy addresses; malformed or duplicate values are discarded wholesale and the direct proxy peer metadata is used instead.
 
 ## Manual update procedure
