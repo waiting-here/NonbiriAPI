@@ -66,9 +66,14 @@ func auditApp(t *testing.T) (*application, *db.Store, *secret.Vault) {
 }
 
 func auditRequest(method, host, path, body string) *http.Request {
-	req := httptest.NewRequest(method, "http://wire.invalid"+path, strings.NewReader(body))
+	req := httptest.NewRequest(method, "https://wire.invalid"+path, strings.NewReader(body))
 	req.Host = host
 	req.RemoteAddr = "198.51.100.9:4242"
+	if method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions &&
+		(path == "/api" || strings.HasPrefix(path, "/api/") || path == "/admin/api" || strings.HasPrefix(path, "/admin/api/")) {
+		req.Header.Set("Origin", "https://"+host)
+		req.Header.Set("Sec-Fetch-Site", "same-origin")
+	}
 	return req
 }
 

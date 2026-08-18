@@ -110,6 +110,62 @@ func TestHostAndPathBoundary(t *testing.T) {
 	}
 }
 
+func TestBrowserSessionAPISameOriginBoundary(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	tests := []struct {
+		name       string
+		method     string
+		host       string
+		path       string
+		origin     []string
+		fetchSite  string
+		cookie     string
+		secure     bool
+		wantStatus int
+	}{
+		{name: "user sibling origin refused", method: http.MethodPost, host: "example.com", path: "/api/caller-key/regenerate", origin: []string{"https://admin.example.com"}, cookie: "nb_session=x", secure: true, wantStatus: http.StatusForbidden},
+		{name: "admin sibling origin refused", method: http.MethodPost, host: "admin.example.com", path: "/admin/api/users/1/unban", origin: []string{"https://example.com"}, cookie: "nb_admin_session=x", secure: true, wantStatus: http.StatusForbidden},
+		{name: "same-site fetch metadata is not same-origin", method: http.MethodPost, host: "admin.example.com", path: "/admin/api/logout", fetchSite: "same-site", cookie: "nb_admin_session=x", secure: true, wantStatus: http.StatusForbidden},
+		{name: "cookie without browser evidence refused", method: http.MethodDelete, host: "example.com", path: "/api/account", cookie: "nb_session=x", secure: true, wantStatus: http.StatusForbidden},
+		{name: "same origin accepted", method: http.MethodPost, host: "example.com", path: "/api/caller-key/regenerate", origin: []string{"https://example.com"}, fetchSite: "same-origin", cookie: "nb_session=x", secure: true, wantStatus: http.StatusNoContent},
+		{name: "default port normalizes", method: http.MethodPatch, host: "admin.example.com:443", path: "/admin/api/site-config/site_name", origin: []string{"https://admin.example.com"}, cookie: "nb_admin_session=x", secure: true, wantStatus: http.StatusNoContent},
+		{name: "nondefault port mismatch refused", method: http.MethodPatch, host: "admin.example.com:8443", path: "/admin/api/site-config/site_name", origin: []string{"https://admin.example.com"}, cookie: "nb_admin_session=x", secure: true, wantStatus: http.StatusForbidden},
+		{name: "scheme mismatch refused", method: http.MethodPost, host: "example.com", path: "/api/logout", origin: []string{"http://example.com"}, cookie: "nb_session=x", secure: true, wantStatus: http.StatusForbidden},
+		{name: "duplicate origin refused", method: http.MethodPost, host: "example.com", path: "/api/logout", origin: []string{"https://example.com", "https://example.com"}, cookie: "nb_session=x", secure: true, wantStatus: http.StatusForbidden},
+		{name: "null origin refused", method: http.MethodPost, host: "example.com", path: "/api/logout", origin: []string{"null"}, cookie: "nb_session=x", secure: true, wantStatus: http.StatusForbidden},
+		{name: "cookie-less CLI remains compatible", method: http.MethodPost, host: "admin.example.com", path: "/admin/api/login", wantStatus: http.StatusNoContent},
+		{name: "bearer API excluded", method: http.MethodPost, host: "example.com", path: "/v1/chat/completions", origin: []string{"https://admin.example.com"}, fetchSite: "same-site", cookie: "unrelated=x", secure: true, wantStatus: http.StatusNoContent},
+		{name: "safe method excluded", method: http.MethodGet, host: "example.com", path: "/api/me", origin: []string{"https://admin.example.com"}, fetchSite: "same-site", cookie: "nb_session=x", secure: true, wantStatus: http.StatusNoContent},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			scheme := "http"
+			if test.secure {
+				scheme = "https"
+			}
+			req := makeRequest(test.method, scheme+"://wire.invalid"+test.path, test.host, "198.51.100.20:4242")
+			for _, value := range test.origin {
+				req.Header.Add("Origin", value)
+			}
+			if test.fetchSite != "" {
+				req.Header.Set("Sec-Fetch-Site", test.fetchSite)
+			}
+			if test.cookie != "" {
+				req.Header.Set("Cookie", test.cookie)
+			}
+			rec := runBoundary(t, testConfig(false), next, req)
+			if rec.Code != test.wantStatus {
+				t.Fatalf("status=%d want=%d body=%q", rec.Code, test.wantStatus, rec.Body.String())
+			}
+			if test.wantStatus == http.StatusForbidden && !strings.Contains(rec.Body.String(), `"code":"forbidden"`) {
+				t.Fatalf("forbidden response=%q", rec.Body.String())
+			}
+		})
+	}
+}
+
 func TestTrustedProxyHeaderBoundary(t *testing.T) {
 	cases := []struct {
 		name       string

@@ -21,6 +21,8 @@ const (
 	maxForwardedHops     = 32
 	maxForwardedProtoLen = 32
 	maxRealIPLen         = 128
+	maxOriginBytes       = 2048
+	maxFetchSiteBytes    = 64
 )
 
 var proxyHeaders = [...]string{
@@ -138,6 +140,10 @@ func (p *policy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if !pathAllowed(station, request.URL.Path) {
 		writeNotFound(w)
+		return
+	}
+	if !browserSessionRequestAllowed(request, info) {
+		writeCrossOriginRefused(w)
 		return
 	}
 	p.next.ServeHTTP(w, request)
@@ -302,6 +308,83 @@ func pathAllowed(station host.Station, path string) bool {
 	return false
 }
 
+// browserSessionRequestAllowed protects cookie-authenticated browser APIs on
+// the two sibling station hosts. SameSite cookies are site-scoped rather than
+// origin-scoped, so a malicious sibling origin can otherwise submit a form to
+// the other station with its host-only cookie attached. Bearer-authenticated
+// /v1 is deliberately excluded. Non-browser requests without cookies remain
+// compatible when they omit browser-only metadata.
+func browserSessionRequestAllowed(r *http.Request, info requestInfo) bool {
+	if r == nil || isSafeMethod(r.Method) || !isBrowserSessionAPIPath(r.URL.Path) {
+		return true
+	}
+
+	origin, originPresent, originValid := oneHeader(r, "Origin", maxOriginBytes)
+	if originPresent && (!originValid || !sameRequestOrigin(origin, r.Host, info.https)) {
+		return false
+	}
+	fetchSite, fetchPresent, fetchValid := oneHeader(r, "Sec-Fetch-Site", maxFetchSiteBytes)
+	if fetchPresent && (!fetchValid || strings.TrimSpace(fetchSite) != "same-origin") {
+		return false
+	}
+	// Modern browsers send Origin on unsafe methods and/or Fetch Metadata.
+	// Requiring at least one signal when a cookie is present also closes the
+	// gap for older user agents instead of treating missing metadata as proof
+	// of same-origin. Cookie-less CLI login requests remain usable.
+	if len(r.Header.Values("Cookie")) > 0 && !originPresent && !fetchPresent {
+		return false
+	}
+	return true
+}
+
+func isSafeMethod(method string) bool {
+	return method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions
+}
+
+func isBrowserSessionAPIPath(path string) bool {
+	return path == "/api" || strings.HasPrefix(path, "/api/") ||
+		path == "/admin/api" || strings.HasPrefix(path, "/admin/api/")
+}
+
+func sameRequestOrigin(rawOrigin, requestHost string, secure bool) bool {
+	if rawOrigin == "" || rawOrigin != strings.TrimSpace(rawOrigin) || rawOrigin == "null" {
+		return false
+	}
+	origin, err := url.Parse(rawOrigin)
+	if err != nil || origin.Opaque != "" || origin.Host == "" || origin.User != nil ||
+		origin.Path != "" || origin.RawPath != "" || origin.RawQuery != "" || origin.ForceQuery || origin.Fragment != "" {
+		return false
+	}
+	scheme := strings.ToLower(origin.Scheme)
+	if (secure && scheme != "https") || (!secure && scheme != "http") {
+		return false
+	}
+	// An Origin header is serialized as exactly scheme://authority. This also
+	// rejects bare trailing '?'/'#' forms that net/url otherwise normalizes.
+	if rawOrigin != scheme+"://"+origin.Host {
+		return false
+	}
+	originAuthority, err := host.Parse(origin.Host)
+	if err != nil {
+		return false
+	}
+	requestAuthority, err := host.Parse(requestHost)
+	if err != nil || originAuthority.Host != requestAuthority.Host {
+		return false
+	}
+	return effectiveOriginPort(originAuthority, scheme) == effectiveOriginPort(requestAuthority, scheme)
+}
+
+func effectiveOriginPort(authority host.Parsed, scheme string) string {
+	if authority.HasPort {
+		return authority.Port
+	}
+	if scheme == "https" {
+		return "443"
+	}
+	return "80"
+}
+
 func isUserAPIPath(path string) bool {
 	return path == "/api" || strings.HasPrefix(path, "/api/") || path == "/v1" || strings.HasPrefix(path, "/v1/")
 }
@@ -312,6 +395,10 @@ func isAdminAPIPath(path string) bool {
 
 func writeMisdirected(w http.ResponseWriter) {
 	httperr.WriteError(w, httperr.New(httperr.CodeInvalidRequest, "misdirected request"))
+}
+
+func writeCrossOriginRefused(w http.ResponseWriter) {
+	httperr.WriteError(w, httperr.New(httperr.CodeForbidden, "cross-origin request refused"))
 }
 
 // API wraps an API route tree. It applies the mandatory no-store policy and
