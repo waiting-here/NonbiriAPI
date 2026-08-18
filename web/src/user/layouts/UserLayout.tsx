@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '@shared/components/LanguageSwitcher';
-import { ErrorState } from '@shared/components/States';
+import { ErrorState, NoticePage } from '@shared/components/States';
 import { apiFetch, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { ThemeToggle } from '@shared/theme/ThemeToggle';
 import { usePublicConfig } from '@shared/query/publicConfig';
@@ -71,6 +71,24 @@ export function UserLayout() {
 
   const signedIn = Boolean(session.data?.user);
   const showSignIn = !signedIn && (isUnauthorized(session.error) || isNotFoundError(session.error));
+
+  // Maintenance mode replaces the whole user station with a notice page so no
+  // site feature is reachable; the admin station (a separate host) is
+  // unaffected and can toggle this off. The public-config query is already in
+  // flight above, so this only takes effect once it resolves.
+  const inMaintenance = config.data?.maintenanceMode === true;
+  if (inMaintenance) {
+    return (
+      <>
+        <a className="skip-link" href="#main">
+          {t('shell.skipToContent')}
+        </a>
+        <main id="main" className="user-main" tabIndex={-1}>
+          <NoticePage titleKey="common.maintenanceTitle" bodyKey="common.maintenanceBody" />
+        </main>
+      </>
+    );
+  }
 
   return (
     <>

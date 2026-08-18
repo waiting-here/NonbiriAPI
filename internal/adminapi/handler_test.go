@@ -847,3 +847,41 @@ func TestRuntimeApplierRealSingletons(t *testing.T) {
 		t.Fatalf("apply with wired rpm controller: %v", err)
 	}
 }
+
+// TestSiteConfigBoolTogglePatch covers the maintenance_mode / registration_open
+// toggles: a JSON bool is accepted and stored as the canonical "1"/"0"; the
+// typed read path echoes a bool; non-bool values (string, number, null) are
+// rejected. The toggles are not runtime keys, so a recording applier stays
+// untouched.
+func TestSiteConfigBoolTogglePatch(t *testing.T) {
+	e := newEnv(t)
+	applier := &recordingApplier{}
+
+	rec := adminPatch(t, e, applier, "/admin/api/site-config/maintenance_mode", map[string]any{"value": true})
+	var patched siteConfigPatchResp
+	decodeJSON(t, rec, &patched)
+	if patched.Key != "maintenance_mode" || patched.Value != true {
+		t.Fatalf("maintenance_mode patch = %+v", patched)
+	}
+
+	rec = adminPatch(t, e, applier, "/admin/api/site-config/registration_open", map[string]any{"value": false})
+	decodeJSON(t, rec, &patched)
+	if patched.Key != "registration_open" || patched.Value != false {
+		t.Fatalf("registration_open patch = %+v", patched)
+	}
+
+	rec = adminGet(t, e, "/admin/api/site-config")
+	var out map[string]any
+	decodeJSON(t, rec, &out)
+	if out["maintenance_mode"] != true {
+		t.Fatalf("maintenance_mode=%v want true", out["maintenance_mode"])
+	}
+	if out["registration_open"] != false {
+		t.Fatalf("registration_open=%v want false", out["registration_open"])
+	}
+
+	for _, bad := range []any{"true", 1, 0, "yes", nil} {
+		rec = adminPatch(t, e, applier, "/admin/api/site-config/maintenance_mode", map[string]any{"value": bad})
+		assertErr(t, rec, http.StatusBadRequest, "invalid_request")
+	}
+}

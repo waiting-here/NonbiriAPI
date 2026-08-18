@@ -70,6 +70,11 @@
     "networkError": "The network request failed. Check your connection and try again.",
     "rateLimited": "Too many requests. Please wait and try again.",
     "invalidResponse": "The service returned an invalid response.",
-    "resourceNotFound": "The requested resource was not found."
+    "resourceNotFound": "The requested resource was not found.",
+    "registrationClosed": "Registration is closed; new sign-ups are not accepted right now.",
+    "maintenanceTitle": "Under maintenance",
+    "maintenanceBody": "The site is under maintenance and temporarily unavailable. Please check back later.",
+    "registrationClosedTitle": "Registration is closed",
+    "registrationClosedBody": "New registrations are not accepted right now. Existing accounts can still sign in."
   }
 }

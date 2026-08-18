@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isApiError, isForbidden, isUnauthorized } from '@shared/query/http';
+import { usePublicConfig } from '@shared/query/publicConfig';
 
 interface PageHeaderProps {
   eyebrow?: string;
@@ -106,7 +107,9 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
 
 export function AuthRequired({ station }: { station: 'user' | 'admin' }) {
   const { t } = useTranslation();
+  const config = usePublicConfig(station === 'user');
   const href = station === 'user' ? '/api/auth/discord/start' : undefined;
+  const registrationClosed = station === 'user' && config.data?.registrationOpen === false;
   return (
     <div className="auth-panel" role="status">
       <span className="auth-mark" aria-hidden="true">
@@ -115,6 +118,7 @@ export function AuthRequired({ station }: { station: 'user' | 'admin' }) {
       <div>
         <h2>{t('common.authRequiredTitle')}</h2>
         <p>{station === 'user' ? t('common.userSignInBody') : t('common.adminSignInBody')}</p>
+        {registrationClosed ? <p className="inline-notice">{t('common.registrationClosed')}</p> : null}
         {href ? (
           <a className="btn btn-primary" href={href}>
             {t('common.signIn')}
@@ -189,5 +193,22 @@ export function ApiNotice({ children }: { children: ReactNode }) {
     <p className="inline-notice" role="status">
       {children}
     </p>
+  );
+}
+
+// NoticePage is a full-page, single-message page used for site-wide states
+// (maintenance, registration closed) that replace normal navigation.
+export function NoticePage({ titleKey, bodyKey }: { titleKey: string; bodyKey: string }) {
+  const { t } = useTranslation();
+  return (
+    <div className="state-panel notice-page" role="status">
+      <span className="state-icon" aria-hidden="true">
+        ⚠
+      </span>
+      <div>
+        <h1>{t(titleKey)}</h1>
+        <p>{t(bodyKey)}</p>
+      </div>
+    </div>
   );
 }

@@ -25,14 +25,14 @@ import (
 
 // Known site_config keys (the authoritative set enforced by the handler).
 const (
-	KeySiteName                       = "site_name"
-	KeySiteLogoURL                    = "site_logo_url"
-	KeyDefaultLocale                  = "default_locale"
-	KeyLegalPrivacyOverrideZh         = "legal_privacy_override_zh"
-	KeyLegalPrivacyOverrideEn         = "legal_privacy_override_en"
-	KeyLegalTermsOverrideZh           = "legal_terms_override_zh"
-	KeyLegalTermsOverrideEn           = "legal_terms_override_en"
-	KeyLegalAuthoritativeLocale       = "legal_authoritative_locale"
+	KeySiteName                  = "site_name"
+	KeySiteLogoURL               = "site_logo_url"
+	KeyDefaultLocale             = "default_locale"
+	KeyLegalPrivacyOverrideZh    = "legal_privacy_override_zh"
+	KeyLegalPrivacyOverrideEn    = "legal_privacy_override_en"
+	KeyLegalTermsOverrideZh      = "legal_terms_override_zh"
+	KeyLegalTermsOverrideEn      = "legal_terms_override_en"
+	KeyLegalAuthoritativeLocale  = "legal_authoritative_locale"
 	KeyDefaultEndpointLimit      = "default_endpoint_limit"
 	KeyDefaultEndpointKeyLimit   = "default_endpoint_key_limit"
 	KeyDefaultModelLimit         = "default_model_limit"
@@ -46,6 +46,8 @@ const (
 	KeyOAuthStartRateLimit       = "oauth_start_rate_limit"
 	KeyOAuthStartRateWindowSecs  = "oauth_start_rate_window_seconds"
 	KeyOAuthStartRatePenaltySecs = "oauth_start_rate_penalty_seconds"
+	KeyMaintenanceMode           = "maintenance_mode"
+	KeyRegistrationOpen          = "registration_open"
 	alertPrefsPrefix             = "alert_prefs_"
 )
 
@@ -53,10 +55,10 @@ const (
 // (ratelimit's default maxEvents), so every accepted value can be applied to
 // the runtime controller without failing.
 const (
-	maxSiteNameBytes        = 256
-	maxSiteLogoURLBytes     = 2048
-	maxLegalOverrideBytes   = 65536
-	maxDiscordGateBytes     = 128
+	maxSiteNameBytes      = 256
+	maxSiteLogoURLBytes   = 2048
+	maxLegalOverrideBytes = 65536
+	maxDiscordGateBytes   = 128
 	maxAlertPrefsBytes    = 512
 	maxSiteConfigKeyLen   = 128 // mirrors the repository site_config key bound
 	maxResourceLimitValue = 10000
@@ -78,6 +80,7 @@ const (
 	kindLocale
 	kindLocaleOpt // "zh" | "en" | "" — an optional locale selector
 	kindInt
+	kindBool          // a toggle stored as the canonical "1"/"0"
 	kindMultilineText // text that preserves newlines/tabs (legal overrides)
 )
 
@@ -111,6 +114,8 @@ var knownSiteConfig = map[string]keySpec{
 	KeyOAuthStartRateLimit:       {kind: kindInt, min: 0, max: maxOAuthStartRateLimit, def: ratelimit.DefaultOAuthStartRateLimit},
 	KeyOAuthStartRateWindowSecs:  {kind: kindInt, min: 1, max: maxOAuthStartRateWindowSecs, def: ratelimit.DefaultOAuthStartRateWindowSeconds},
 	KeyOAuthStartRatePenaltySecs: {kind: kindInt, min: 0, max: maxOAuthStartRatePenaltySecs, def: ratelimit.DefaultOAuthStartRatePenaltySeconds},
+	KeyMaintenanceMode:           {kind: kindBool, def: 0},
+	KeyRegistrationOpen:          {kind: kindBool, def: 1},
 }
 
 // knownSiteConfigKey reports whether key is in the authoritative set
@@ -196,6 +201,14 @@ func typedSiteConfigValue(key, stored string) any {
 				return n
 			}
 			return spec.def
+		case kindBool:
+			if stored == "1" {
+				return true
+			}
+			if stored == "0" {
+				return false
+			}
+			return spec.def != 0
 		case kindLocale:
 			if stored == "zh" || stored == "en" {
 				return stored
@@ -256,6 +269,15 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 				return "", invalid
 			}
 			return num.String(), httperr.Error{}
+		case kindBool:
+			var value bool
+			if err := json.Unmarshal(raw, &value); err != nil {
+				return "", invalid
+			}
+			if value {
+				return "1", httperr.Error{}
+			}
+			return "0", httperr.Error{}
 		case kindLocale:
 			var value string
 			if err := json.Unmarshal(raw, &value); err != nil || (value != "zh" && value != "en") {
@@ -296,9 +318,12 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 }
 
 // publicSiteConfigKeys is the strict allowlist projected by ReadPublicConfig.
-// Only display-oriented keys are exposed to unauthenticated callers;
-// operational, gating and rate-limit keys never appear here. Adding a key
-// to knownSiteConfig does NOT expose it publicly — it must be listed here.
+// Display-oriented keys plus the two public site-state toggles
+// (maintenance_mode, registration_open) are exposed to unauthenticated
+// callers: their state is inherently public, because a closed registration or
+// maintenance notice is shown to every visitor before login. Operational,
+// rate-limit and Discord-gate keys never appear here. Adding a key to
+// knownSiteConfig does NOT expose it publicly — it must be listed here.
 var publicSiteConfigKeys = []string{
 	KeySiteName,
 	KeySiteLogoURL,
@@ -308,6 +333,8 @@ var publicSiteConfigKeys = []string{
 	KeyLegalTermsOverrideZh,
 	KeyLegalTermsOverrideEn,
 	KeyLegalAuthoritativeLocale,
+	KeyMaintenanceMode,
+	KeyRegistrationOpen,
 }
 
 // ReadPublicConfig returns the display-only site_config subset for

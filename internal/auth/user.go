@@ -24,14 +24,15 @@ const DefaultElevatedCapabilityTTL = elevation.DefaultTTL
 // UserRedirectPath are fixed configuration; neither is derived from request
 // Host or forwarding headers.
 type UserAuthConfig struct {
-	Store            *db.Store
-	Provider         DiscordProvider
-	ClientID         string
-	State            *StateManager
-	SiteBaseURL      string
-	RedirectURI      string
-	UserRedirectPath string
-	RegistrationGate RegistrationGateFunc
+	Store                  *db.Store
+	Provider               DiscordProvider
+	ClientID               string
+	State                  *StateManager
+	SiteBaseURL            string
+	RedirectURI            string
+	UserRedirectPath       string
+	RegistrationClosedPath string
+	RegistrationGate       RegistrationGateFunc
 	// ElevatedCapabilityTTL bounds a completed elevation (the second factor
 	// for account self-service). Zero selects DefaultElevatedCapabilityTTL.
 	ElevatedCapabilityTTL time.Duration
@@ -54,18 +55,19 @@ type UserAuthConfig struct {
 // UserAuth exposes handlers, a mountable auth route tree, and middleware for
 // Discord login and user sessions. It does not register process-wide routes.
 type UserAuth struct {
-	store              *db.Store
-	provider           DiscordProvider
-	clientID           string
-	state              *StateManager
-	elevation          *elevation.Manager
-	ownsElevation      bool
-	ownsState          bool
-	siteBaseURL        string
-	redirectURI        string
-	userRedirectPath   string
-	registrationGate   RegistrationGateFunc
-	oauthStartThrottle *ratelimit.IPThrottle
+	store                  *db.Store
+	provider               DiscordProvider
+	clientID               string
+	state                  *StateManager
+	elevation              *elevation.Manager
+	ownsElevation          bool
+	ownsState              bool
+	siteBaseURL            string
+	redirectURI            string
+	userRedirectPath       string
+	registrationClosedPath string
+	registrationGate       RegistrationGateFunc
+	oauthStartThrottle     *ratelimit.IPThrottle
 }
 
 // NewUserAuth validates fixed station configuration and returns a mountable
@@ -106,6 +108,16 @@ func NewUserAuth(config UserAuthConfig) (*UserAuth, error) {
 		}
 		return nil, ErrProviderUnavailable
 	}
+	registrationClosedPath := strings.TrimSpace(config.RegistrationClosedPath)
+	if registrationClosedPath == "" {
+		registrationClosedPath = "/registration-closed"
+	}
+	if !validLocalRedirectPath(registrationClosedPath) {
+		if ownsState {
+			_ = config.State.Close()
+		}
+		return nil, ErrProviderUnavailable
+	}
 	gate := config.RegistrationGate
 	if gate == nil {
 		gate = func(context.Context) (RegistrationGate, error) {
@@ -132,8 +144,8 @@ func NewUserAuth(config UserAuthConfig) (*UserAuth, error) {
 	return &UserAuth{
 		store: config.Store, provider: config.Provider, clientID: config.ClientID, state: config.State,
 		ownsState: ownsState, siteBaseURL: base, redirectURI: redirectURI, userRedirectPath: path,
-		registrationGate: gate, elevation: manager, ownsElevation: ownsElevation,
-		oauthStartThrottle: config.OAuthStartThrottle,
+		registrationClosedPath: registrationClosedPath, registrationGate: gate, elevation: manager,
+		ownsElevation: ownsElevation, oauthStartThrottle: config.OAuthStartThrottle,
 	}, nil
 }
 
@@ -332,6 +344,15 @@ func (a *UserAuth) finishLoginCallback(w http.ResponseWriter, r *http.Request, c
 		return
 	}
 	if user == nil {
+		open, err := a.store.RegistrationOpen()
+		if err != nil {
+			writeStableError(w, httperr.CodeServiceUnavailable, "authentication service unavailable")
+			return
+		}
+		if !open {
+			noStoreRedirect(w, r, a.registrationClosedPath)
+			return
+		}
 		user, err = a.register(identity, login, r.Context())
 		if err != nil {
 			writeAuthFailure(w, err)

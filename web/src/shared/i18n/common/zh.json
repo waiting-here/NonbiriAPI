@@ -70,6 +70,11 @@
     "networkError": "网络请求失败，请检查连接后重试。",
     "rateLimited": "请求过于频繁，请稍后重试。",
     "invalidResponse": "服务端返回了无效响应。",
-    "resourceNotFound": "请求的资源不存在。"
+    "resourceNotFound": "请求的资源不存在。",
+    "registrationClosed": "注册已关闭，暂不接受新用户注册。",
+    "maintenanceTitle": "站点维护中",
+    "maintenanceBody": "站点正在维护，暂时无法访问。请稍后再来。",
+    "registrationClosedTitle": "注册已关闭",
+    "registrationClosedBody": "当前不接受新用户注册。已有账号仍可登录。"
   }
 }

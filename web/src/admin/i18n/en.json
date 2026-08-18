@@ -180,7 +180,9 @@
         "discord_role_id": { "title": "Discord role ID", "description": "Discord server role ID required for signup; blank skips role check." },
         "oauth_start_rate_limit": { "title": "OAuth start rate limit", "description": "Maximum Discord authorizations an IP can start within the window." },
         "oauth_start_rate_window_seconds": { "title": "OAuth start rate window", "description": "Rate-limit window length in seconds for OAuth start." },
-        "oauth_start_rate_penalty_seconds": { "title": "OAuth start rate penalty", "description": "Seconds an IP is temporarily blocked after exceeding the OAuth start limit." }
+        "oauth_start_rate_penalty_seconds": { "title": "OAuth start rate penalty", "description": "Seconds an IP is temporarily blocked after exceeding the OAuth start limit." },
+        "maintenance_mode": { "title": "Maintenance mode", "description": "When on, every user-station page shows a maintenance notice and no site features are usable; the admin station is unaffected. Once the level system lands, only users below the required level will see the notice." },
+        "registration_open": { "title": "Registration open", "description": "When off, new Discord sign-ups are rejected and redirected to a registration-closed notice; existing accounts still sign in." }
       }
     }
   }

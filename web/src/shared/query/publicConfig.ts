@@ -18,6 +18,8 @@ export interface PublicConfig {
   legalTermsOverrideZh: string;
   legalTermsOverrideEn: string;
   legalAuthoritativeLocale: 'zh' | 'en' | '';
+  maintenanceMode: boolean;
+  registrationOpen: boolean;
 }
 
 const HTTP_S = /^https?:\/\//i;
@@ -62,10 +64,12 @@ function normalizePublicConfig(payload: unknown): PublicConfig {
       record.legal_authoritative_locale === 'zh' || record.legal_authoritative_locale === 'en'
         ? (record.legal_authoritative_locale as 'zh' | 'en')
         : '',
+    maintenanceMode: record.maintenance_mode === true,
+    registrationOpen: record.registration_open !== false,
   };
 }
 
-export function usePublicConfig() {
+export function usePublicConfig(enabled = true) {
   return useQuery({
     queryKey: ['public-config'] as const,
     queryFn: async () => {
@@ -73,6 +77,7 @@ export function usePublicConfig() {
       if (payload === undefined) throw new ApiError('invalid_response', 'The server returned an invalid response.', 200);
       return normalizePublicConfig(payload);
     },
+    enabled,
     // Operator changes are infrequent and the response is no-store; a short
     // staleTime keeps a name/logo flip visible on reload without hammering.
     staleTime: 60_000,

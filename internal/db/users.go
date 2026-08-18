@@ -467,3 +467,16 @@ func (s *Store) DiscordRegistrationGate() (guildID, roleID string, err error) {
 	}
 	return strings.TrimSpace(guildID), strings.TrimSpace(roleID), nil
 }
+
+// RegistrationOpen reports whether new-user registration is currently
+// allowed. The default (unset or any value other than "0") is open, matching
+// the pre-existing behavior; an explicit "0" closes registration. Existing
+// users always sign in regardless of this toggle, which is evaluated only on
+// the new-identity branch of the OAuth callback.
+func (s *Store) RegistrationOpen() (bool, error) {
+	raw, err := s.GetSiteConfigValue("registration_open")
+	if err != nil {
+		return true, err
+	}
+	return raw != "0", nil
+}

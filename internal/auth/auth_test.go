@@ -253,6 +253,50 @@ func TestUserOAuthRegistrationPauseAndExistingUserLogin(t *testing.T) {
 	}
 }
 
+// TestUserOAuthRegistrationClosedRedirectsNewUserButAllowsExisting verifies the
+// registration_open site toggle: a closed registration redirects a brand-new
+// identity to the registration-closed notice without creating a user, while an
+// existing identity still signs in (the gate is evaluated only on the
+// new-identity branch).
+func TestUserOAuthRegistrationClosedRedirectsNewUserButAllowsExisting(t *testing.T) {
+	st := authTestStore(t)
+	if err := st.SetSiteConfigValue("registration_open", "0"); err != nil {
+		t.Fatalf("set registration_open: %v", err)
+	}
+	provider := &fakeDiscordProvider{login: DiscordLogin{
+		Identity: DiscordIdentity{ID: "discord-closed", Username: "newcomer", Avatar: "avatar"},
+		HasGuildRole: func(context.Context, string, string) (bool, error) { return true, nil },
+	}}
+	service := newTestUserAuth(t, st, provider, func(context.Context) (RegistrationGate, error) {
+		return RegistrationGate{GuildID: "guild-1", RoleID: "role-1"}, nil
+	})
+
+	startRec, _, state := startOAuth(t, service)
+	cookie := cookieFromResponse(t, startRec, OAuthStateCookieName)
+	closed := httptest.NewRecorder()
+	service.Callback(closed, callbackRequest(state, "code-closed", cookie))
+	if closed.Code != http.StatusFound || closed.Header().Get("Location") != "/registration-closed" {
+		t.Fatalf("closed registration status=%d location=%q body=%q", closed.Code, closed.Header().Get("Location"), closed.Body.String())
+	}
+	if user, err := st.GetUserByDiscordID("discord-closed"); err != nil || user != nil {
+		t.Fatalf("closed registration created user=%#v err=%v", user, err)
+	}
+
+	if _, err := st.CreateDiscordUser("discord-closed", "old", ""); err != nil {
+		t.Fatal(err)
+	}
+	startRec2, _, state2 := startOAuth(t, service)
+	cookie2 := cookieFromResponse(t, startRec2, OAuthStateCookieName)
+	login := httptest.NewRecorder()
+	service.Callback(login, callbackRequest(state2, "code-login", cookie2))
+	if login.Code != http.StatusFound || login.Header().Get("Location") != "/" {
+		t.Fatalf("existing login status=%d location=%q body=%q", login.Code, login.Header().Get("Location"), login.Body.String())
+	}
+	if c := cookieFromResponse(t, login, UserSessionCookieName); c.Value == "" {
+		t.Fatalf("existing login did not mint a session cookie")
+	}
+}
+
 func TestUserOAuthGuildRoleRequiresBothExactValues(t *testing.T) {
 	st := authTestStore(t)
 	provider := &fakeDiscordProvider{login: DiscordLogin{

@@ -189,6 +189,28 @@ func TestUpdateUserLimitsTriStateAndProtection(t *testing.T) {
 	}
 }
 
+func TestRegistrationOpenDefaultAndToggle(t *testing.T) {
+	st := adminStore(t)
+	// Unset defaults to open.
+	if open, err := st.RegistrationOpen(); err != nil || !open {
+		t.Fatalf("default RegistrationOpen = %v, %v, want true", open, err)
+	}
+	// An explicit "0" closes registration; any other stored value keeps it
+	// open so a corrupt or stray row cannot lock existing users out.
+	if err := st.SetSiteConfigValue("registration_open", "0"); err != nil {
+		t.Fatalf("set registration_open: %v", err)
+	}
+	if open, err := st.RegistrationOpen(); err != nil || open {
+		t.Fatalf("closed RegistrationOpen = %v, %v, want false", open, err)
+	}
+	if err := st.SetSiteConfigValue("registration_open", "1"); err != nil {
+		t.Fatalf("set registration_open: %v", err)
+	}
+	if open, err := st.RegistrationOpen(); err != nil || !open {
+		t.Fatalf("open RegistrationOpen = %v, %v, want true", open, err)
+	}
+}
+
 func TestSiteConfigUpsertAndRead(t *testing.T) {
 	st := adminStore(t)
 	if err := st.SetSiteConfigValue("global_rpm", "1200"); err != nil {
