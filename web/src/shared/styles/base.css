@@ -171,6 +171,19 @@ fieldset {
   border: 0;
 }
 
+.theme-select {
+  width: auto;
+  min-height: 2.45rem;
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-sm);
+  background: var(--nb-color-surface);
+  color: var(--nb-color-text);
+  padding: 0.35rem 0.6rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

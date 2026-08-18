@@ -182,19 +182,12 @@
       "completionTokens": "Completion tokens",
       "unknownUsage": "Unknown-usage requests",
       "preferencesTitle": "Preferences",
-      "preferencesBody": "Language and the per-minute request limit are saved server-side and apply to every device.",
+      "preferencesBody": "Your interface language is saved server-side and applies to every device.",
       "preferencesLang": "Language",
-      "preferencesRpm": "Per-minute request limit",
-      "preferencesRpmPlaceholder": "Server default",
-      "preferencesRpmHint": "Leave empty to use the server default. The limit cannot exceed the global cap.",
-      "preferencesRpmInvalid": "Enter a whole number of 1 or more, or leave the field empty.",
       "preferencesSave": "Save preferences",
       "preferencesSaved": "Preferences saved.",
-      "preferencesRestore": "Restore default",
       "securityTitle": "Sensitive account actions",
-      "elevateBody": "Export and deletion require a fresh Discord re-authorization. Start the server flow before attempting either action.",
-      "startElevation": "Start re-authorization",
-      "elevationStarted": "The server authorization flow has started. Return here after completing it.",
+      "elevateBody": "Export and deletion require a fresh Discord re-authorization. Selecting either action redirects you through authorization and returns you here to continue.",
       "elevationUnavailable": "The authorization flow could not be started safely. Try again later.",
       "elevationRequired": "Complete a fresh authorization before using this action.",
       "elevatedToken": "Elevated token (memory only, if provided by the service)",
@@ -213,6 +206,11 @@
       "deleteDone": "The account was deleted."
     },
     "legal": {
+      "authoritativeNotice": "In the event of any conflict between language versions, the {{locale}} version prevails.",
+      "localeName": {
+        "zh": "Chinese",
+        "en": "English"
+      },
       "privacy": {
         "nav": "Privacy",
         "title": "Privacy policy",

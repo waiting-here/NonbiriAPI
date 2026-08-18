@@ -24,6 +24,14 @@
   font-weight: 850;
 }
 
+.brand-logo {
+  width: 1.9rem;
+  height: 1.9rem;
+  flex: 0 0 auto;
+  border-radius: 0.6rem;
+  object-fit: contain;
+}
+
 .brand-suffix {
   color: var(--nb-color-text-muted);
   font-size: 0.82rem;
@@ -129,16 +137,14 @@
 }
 
 .admin-content {
-  width: min(100%, var(--nb-content-width));
+  width: 100%;
   min-width: 0;
-  margin: 0 auto;
   padding: clamp(1.3rem, 3vw, 2.6rem) clamp(1rem, 4vw, 3rem) 4rem;
 }
 
 .user-main {
-  width: min(100%, 76rem);
+  width: 100%;
   min-width: 0;
-  margin: 0 auto;
   padding: clamp(1.4rem, 4vw, 3.25rem) clamp(1rem, 4vw, 2rem) 4rem;
 }
 
@@ -294,8 +300,10 @@
 }
 
 .detail-row {
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 0.2rem 1rem;
+  align-items: baseline;
   min-width: 0;
   padding: 0.65rem 0;
   border-top: 1px solid var(--nb-color-border);
@@ -376,14 +384,16 @@
 }
 
 .btn-quiet {
-  min-height: 2.2rem;
-  padding: 0.4rem 0.65rem;
+  min-height: 2.45rem;
+  padding: 0.55rem 0.85rem;
   background: transparent;
+  border: 1px solid var(--nb-color-border);
   color: var(--nb-color-text-muted);
 }
 
 .btn-quiet:hover:not(:disabled) {
   background: var(--nb-color-surface-alt);
+  border-color: var(--nb-color-border-strong);
   color: var(--nb-color-text);
 }
 
@@ -610,7 +620,7 @@
 
 table {
   width: 100%;
-  min-width: 44rem;
+  min-width: 60rem;
   border-collapse: collapse;
   font-size: 0.88rem;
 }
@@ -730,6 +740,12 @@ tr:first-child td {
   margin-bottom: 0.35rem;
 }
 
+.legal-copy h3 {
+  margin-top: 0.2rem;
+  margin-bottom: 0.3rem;
+  font-size: 1.02rem;
+}
+
 .legal-copy p,
 .legal-copy li {
   color: var(--nb-color-text-muted);
@@ -814,6 +830,7 @@ tr:first-child td {
   display: block;
   color: var(--nb-color-text-muted);
   font-size: 0.82rem;
+  white-space: normal;
 }
 
 .field-group {
@@ -863,6 +880,7 @@ tr:first-child td {
 
 .limit-form {
   min-width: 12rem;
+  max-width: 18rem;
 }
 
 .limit-fields {
@@ -888,7 +906,7 @@ tr:first-child td {
 
 .config-row {
   display: grid;
-  grid-template-columns: minmax(10rem, 0.7fr) minmax(15rem, 1.3fr);
+  grid-template-columns: minmax(12rem, 0.8fr) minmax(15rem, 1.2fr);
   gap: 1rem;
   align-items: start;
   padding: 0.8rem 0;
@@ -902,8 +920,31 @@ tr:first-child td {
 }
 
 .config-control input,
-.config-control select {
+.config-control select,
+.config-control textarea {
+  flex: 1 1 auto;
   min-width: 0;
+}
+
+.config-control textarea {
+  font: inherit;
+  resize: vertical;
+  width: 100%;
+}
+
+.config-control .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.config-key-info {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.config-key-info strong {
+  font-size: 0.92rem;
 }
 
 .config-row .field-error,
@@ -939,8 +980,7 @@ tr:first-child td {
 }
 
 .shell-error {
-  width: min(100%, 76rem);
-  margin: 0 auto;
+  width: 100%;
   padding: 0.8rem 1rem 0;
 }
 
@@ -1099,8 +1139,7 @@ tr:first-child td {
   }
 
   .detail-row {
-    align-items: flex-start;
-    flex-direction: column;
+    grid-template-columns: 1fr;
     gap: 0.2rem;
   }
 

@@ -19,6 +19,15 @@ function ConfigEditor({ name, initialValue }: { name: string; initialValue: Site
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  const typeLabel =
+    typeof initialValue === 'boolean'
+      ? t('admin.settings.booleanValue')
+      : typeof initialValue === 'number'
+        ? t('admin.settings.numberValue')
+        : t('admin.settings.textValue');
+  const title = t(`admin.settings.configKeys.${name}.title`, { defaultValue: name });
+  const description = t(`admin.settings.configKeys.${name}.description`, { defaultValue: '' });
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError('');
@@ -55,9 +64,10 @@ function ConfigEditor({ name, initialValue }: { name: string; initialValue: Site
 
   return (
     <form className="config-row" onSubmit={submit} noValidate>
-      <div>
-        <strong className="mono">{name}</strong>
-        <span className="table-note">{typeof initialValue === 'boolean' ? t('admin.settings.booleanValue') : typeof initialValue === 'number' ? t('admin.settings.numberValue') : t('admin.settings.textValue')}</span>
+      <div className="config-key-info">
+        <strong>{title}</strong>
+        {description ? <span className="table-note">{description}</span> : null}
+        <span className="mono table-note">{name} · {typeLabel}</span>
       </div>
       <div className="config-control">
         {typeof initialValue === 'boolean' ? (
@@ -65,6 +75,15 @@ function ConfigEditor({ name, initialValue }: { name: string; initialValue: Site
             <option value="true">{t('common.yes')}</option>
             <option value="false">{t('common.no')}</option>
           </select>
+        ) : name.startsWith('legal_privacy_override') || name.startsWith('legal_terms_override') ? (
+          <textarea
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            aria-label={name}
+            maxLength={65536}
+            rows={14}
+            spellCheck={false}
+          />
         ) : (
           <input
             type={typeof initialValue === 'number' ? 'number' : 'text'}

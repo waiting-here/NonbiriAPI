@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatDateTime } from '@shared/utils/datetime';
 import { useTranslation } from 'react-i18next';
 import {
   Card,
@@ -66,13 +67,13 @@ export function AlertsPage() {
                       <td>{alert.message}</td>
                       <td><ReadOnlyValue value={alert.ref} /></td>
                       <td><ReadOnlyValue value={alert.subject_user_id} /></td>
-                      <td><ReadOnlyValue value={alert.created_at} /></td>
+                      <td><ReadOnlyValue value={formatDateTime(alert.created_at)} /></td>
                       <td>
                         <StatusBadge
                           active={alert.resolved}
                           label={alert.resolved ? t('admin.alerts.resolvedValue') : t('admin.alerts.open')}
                         />
-                        {alert.resolved_at !== '—' ? <span className="table-note">{alert.resolved_at}</span> : null}
+                        {alert.resolved_at !== '—' ? <span className="table-note">{formatDateTime(alert.resolved_at)}</span> : null}
                         <button
                           type="button"
                           className="btn btn-quiet"

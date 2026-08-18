@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatDateTime } from '@shared/utils/datetime';
 import { useTranslation } from 'react-i18next';
 import {
   Card,
@@ -64,7 +65,7 @@ export function ModelsPage() {
                       />
                     </td>
                     <td>{model.binding_count}</td>
-                    <td><ReadOnlyValue value={model.created_at} /></td>
+                    <td><ReadOnlyValue value={formatDateTime(model.created_at)} /></td>
                   </tr>
                 ))}
               </tbody>

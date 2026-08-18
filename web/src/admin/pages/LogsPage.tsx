@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatDateTime } from '@shared/utils/datetime';
 import { useTranslation } from 'react-i18next';
 import {
   Card,
@@ -130,7 +131,7 @@ export function LogsPage() {
                           '—'
                         )}
                       </td>
-                      <td><ReadOnlyValue value={log.started_at} /></td>
+                      <td><ReadOnlyValue value={formatDateTime(log.started_at)} /></td>
                     </tr>
                   ))}
                 </tbody>

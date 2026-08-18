@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatDateTime } from '@shared/utils/datetime';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -99,11 +100,11 @@ function CallerKeyContent() {
             </div>
             <div className="detail-row">
               <dt>{t('user.keys.created')}</dt>
-              <dd>{metadata.data.created_at}</dd>
+              <dd>{formatDateTime(metadata.data.created_at)}</dd>
             </div>
             <div className="detail-row">
               <dt>{t('user.keys.updated')}</dt>
-              <dd>{metadata.data.updated_at}</dd>
+              <dd>{formatDateTime(metadata.data.updated_at)}</dd>
             </div>
           </dl>
         ) : (

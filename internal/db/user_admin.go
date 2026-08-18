@@ -36,6 +36,10 @@ const (
 	maxUserRPMLimitValue = 100000
 	// maxSiteConfigKeyBytes bounds site_config keys.
 	maxSiteConfigKeyBytes = 128
+	// maxSiteConfigValueBytes bounds site_config values. Legal overrides may
+	// be multi-paragraph documents, so this is larger than the identity text
+	// bound; per-key limits are still enforced by the adminapi registry.
+	maxSiteConfigValueBytes = 65536
 )
 
 // UserLimitPatch is the tri-state update set for users.endpoint_limit,
@@ -199,10 +203,10 @@ func (s *Store) ListUsers(ctx context.Context, query UserListQuery) ([]User, boo
 // bounded and control-character-free; an empty value is allowed (blank values
 // pause the registration gate). Invalid input is ErrConflict.
 func (s *Store) SetSiteConfigValue(key, value string) error {
-	if err := validateSiteConfigText(key, maxSiteConfigKeyBytes, false); err != nil {
+	if err := validateSiteConfigText(key, maxSiteConfigKeyBytes, false, false); err != nil {
 		return ErrConflict
 	}
-	if err := validateSiteConfigText(value, maxConfigValueBytes, true); err != nil {
+	if err := validateSiteConfigText(value, maxSiteConfigValueBytes, true, true); err != nil {
 		return ErrConflict
 	}
 	if _, err := s.db.Exec(`INSERT INTO site_config (key, value, updated_at) VALUES (?, ?, ?)
@@ -230,8 +234,8 @@ func (s *Store) GetAllSiteConfigValues() (map[string]string, error) {
 		if err := rows.Scan(&key, &value); err != nil {
 			return nil, fmt.Errorf("scan site configuration: %w", err)
 		}
-		if validateSiteConfigText(key, maxSiteConfigKeyBytes, false) != nil ||
-			validateSiteConfigText(value, maxConfigValueBytes, true) != nil {
+		if validateSiteConfigText(key, maxSiteConfigKeyBytes, false, false) != nil ||
+			validateSiteConfigText(value, maxSiteConfigValueBytes, true, true) != nil {
 			continue
 		}
 		values[key] = value
@@ -242,7 +246,7 @@ func (s *Store) GetAllSiteConfigValues() (map[string]string, error) {
 	return values, nil
 }
 
-func validateSiteConfigText(value string, maxBytes int, allowEmpty bool) error {
+func validateSiteConfigText(value string, maxBytes int, allowEmpty bool, allowMultiline bool) error {
 	if !allowEmpty && value == "" {
 		return errors.New("site configuration text is required")
 	}
@@ -250,7 +254,7 @@ func validateSiteConfigText(value string, maxBytes int, allowEmpty bool) error {
 		return errors.New("site configuration text is invalid")
 	}
 	for _, r := range value {
-		if unicode.IsControl(r) || r == 0x7f {
+		if (unicode.IsControl(r) || r == 0x7f) && !(allowMultiline && (r == '\n' || r == '\r' || r == '\t')) {
 			return errors.New("site configuration text is invalid")
 		}
 	}

@@ -5,9 +5,10 @@
   "shell": {
     "skipToContent": "跳到主要内容",
     "langLabel": "语言",
-    "themeLabel": "切换主题",
-    "themeLight": "切换到浅色主题",
-    "themeDark": "切换到深色主题",
+    "themeLabel": "主题",
+    "themeLight": "浅色",
+    "themeDark": "深色",
+    "themeSystem": "跟随系统",
     "openMenu": "打开导航",
     "closeMenu": "关闭导航",
     "accountMenu": "账号操作"

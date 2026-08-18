@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { NavLink, Outlet } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '@shared/components/LanguageSwitcher';
+import { usePublicConfig } from '@shared/query/publicConfig';
 import { ErrorState, LoadingState } from '@shared/components/States';
 import { apiFetch, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { ThemeToggle } from '@shared/theme/ThemeToggle';
@@ -26,6 +27,9 @@ const NAV_ITEMS: NavItem[] = [
 
 function AdminLogin({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
   const { t } = useTranslation();
+  const config = usePublicConfig();
+  const siteName = config.data?.siteName || t('app.name');
+  const siteLogoURL = config.data?.siteLogoURL;
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -60,7 +64,10 @@ function AdminLogin({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
     <div className="auth-shell">
       <header className="site-header">
         <span className="brand">
-          {t('app.name')}
+          {siteLogoURL ? (
+            <img className="brand-logo" src={siteLogoURL} alt="" aria-hidden="true" />
+          ) : null}
+          {siteName}
           <span className="brand-suffix">{t('admin.shell.brandSuffix')}</span>
         </span>
         <div className="site-actions">
@@ -70,7 +77,7 @@ function AdminLogin({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
       </header>
       <main className="auth-main">
         <section className="card login-card" aria-labelledby="admin-login-title">
-          <p className="eyebrow">{t('app.name')}</p>
+          <p className="eyebrow">{siteName}</p>
           <h1 id="admin-login-title">{t('admin.shell.loginTitle')}</h1>
           <p className="page-description">{t('admin.shell.loginBody')}</p>
           <form className="login-form" onSubmit={submit} noValidate>
@@ -111,13 +118,16 @@ export function AdminLayout() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const session = useAdminSession();
+  const config = usePublicConfig();
+  const siteName = config.data?.siteName || t('app.name');
+  const siteLogoURL = config.data?.siteLogoURL;
   const [menuOpen, setMenuOpen] = useState(false);
   const [logoutError, setLogoutError] = useState<unknown>(null);
   const [logoutBusy, setLogoutBusy] = useState(false);
 
   useEffect(() => {
-    document.title = `${t('app.name')} · ${t('admin.shell.title')}`;
-  }, [t]);
+    document.title = `${siteName} · ${t('admin.shell.title')}`;
+  }, [t, siteName]);
 
   if (session.isPending) return <LoadingState />;
   if (session.error && !isUnauthorized(session.error) && !isNotFoundError(session.error)) {
@@ -156,7 +166,10 @@ export function AdminLayout() {
       </a>
       <header className="site-header">
         <span className="brand">
-          {t('app.name')}
+          {siteLogoURL ? (
+            <img className="brand-logo" src={siteLogoURL} alt="" aria-hidden="true" />
+          ) : null}
+          {siteName}
           <span className="brand-suffix">{t('admin.shell.brandSuffix')}</span>
         </span>
         <button

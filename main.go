@@ -230,12 +230,6 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		Store: store, Provider: provider, ClientID: cfg.DiscordClientID,
 		SiteBaseURL: cfg.SiteBaseURL, Elevation: sharedElevation,
 		OAuthStartThrottle: oauthStartThrottle,
-		UserRPMLimitCap: func(context.Context) (int, error) {
-			if flowController == nil {
-				return 0, errors.New("flow controller is not wired")
-			}
-			return flowController.Limits().PerUserLimit, nil
-		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("user auth: %w", err)
@@ -402,6 +396,26 @@ func applyPersistedRuntimeConfig(store *db.Store, runtime adminapi.RuntimeApplie
 	return nil
 }
 
+// servePublicConfig handles GET /api/config: an unauthenticated,
+// display-only subset of site_config (site_name, site_logo_url,
+// default_locale). The allowlist lives in adminapi.ReadPublicConfig so the
+// admin registry is the single source of truth and operational keys can
+// never leak here. The response is no-store so an operator's change takes
+// effect on the next page load instead of from a stale cache.
+func servePublicConfig(store *db.Store, w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		httperr.WriteError(w, httperr.New(httperr.CodeMethodNotAllowed, "method not allowed"))
+		return
+	}
+	out, err := adminapi.ReadPublicConfig(store)
+	if err != nil {
+		httperr.WriteError(w, httperr.New(httperr.CodeInternal, "service unavailable"))
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	httperr.WriteJSON(w, http.StatusOK, out)
+}
+
 func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointService *endpoint.Service, fetcher *fetch.Fetcher, modelService *model.Service, logs http.Handler, issueHandler http.Handler, exportHandler http.Handler, lifecycleService *lifecycle.Service, forwardService *forward.Service, flowMiddleware *flowcontrol.Middleware, store *db.Store) http.Handler {
 	userAuthHandler := userAuth.Handler()
 	identity := func(r *http.Request) (int64, error) {
@@ -423,6 +437,8 @@ func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointSe
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		switch {
+		case path == "/api/config":
+			servePublicConfig(store, w, r)
 		case path == "/api/auth/discord/start" || path == "/api/auth/discord/callback" || path == "/api/auth/elevate" || path == "/api/session" || path == "/api/me" || path == "/api/auth/logout" || path == "/api/caller-key" || path == "/api/caller-key/regenerate":
 			userAuthHandler.ServeHTTP(w, r)
 		case path == "/api/me/usage":

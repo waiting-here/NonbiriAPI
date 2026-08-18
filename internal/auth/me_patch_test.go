@@ -1,13 +1,11 @@
 package auth
 
 // PATCH /api/me tests: the session-only self-service profile update. Only
-// lang and the user's own rpm_limit are accepted; rpm_limit is clamped to the
-// global per-user cap (or restored to the default with an explicit null);
-// endpoint_limit / ban state / usage / body user id are never accepted.
+// lang is accepted; endpoint_limit / rpm_limit / ban state / usage / body
+// user id are never accepted. Per-user RPM limits are admin-set only.
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -50,7 +48,7 @@ func meStoreWithCap(t *testing.T, cap int) (*db.Store, *UserAuth) {
 	return st, service
 }
 
-func TestPatchMeLangAndRPMLimit(t *testing.T) {
+func TestPatchMeLang(t *testing.T) {
 	st, service := meStoreWithCap(t, 40)
 	user, err := st.GetUserByDiscordID("discord-1")
 	if err != nil || user == nil {
@@ -73,65 +71,16 @@ func TestPatchMeLangAndRPMLimit(t *testing.T) {
 		t.Fatalf("lang patch user = %+v", envelope.User)
 	}
 
-	// RPM below the cap stores the value.
-	rec = patchMeDirect(t, service, st, user.ID, map[string]any{"rpm_limit": 25})
+	// lang=zh also accepted.
+	rec = patchMeDirect(t, service, st, user.ID, map[string]any{"lang": "zh"})
 	if rec.Code != http.StatusOK {
-		t.Fatalf("rpm patch status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	updated, err := st.GetUserByID(user.ID)
-	if err != nil || updated.RPMLimit == nil || *updated.RPMLimit != 25 {
-		t.Fatalf("rpm stored = %+v err=%v", updated, err)
-	}
-
-	// RPM above the cap is clamped to the cap server-side.
-	rec = patchMeDirect(t, service, st, user.ID, map[string]any{"rpm_limit": 100})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("clamp patch status=%d body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("lang=zh status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
-		t.Fatalf("envelope: %v", err)
+		t.Fatalf("envelope: %v body=%s", err, rec.Body.String())
 	}
-	if envelope.User.RPMLimit == nil || *envelope.User.RPMLimit != 40 {
-		t.Fatalf("clamped rpm = %+v, want 40", envelope.User.RPMLimit)
-	}
-
-	// An explicit null restores the global default.
-	rec = patchMeDirect(t, service, st, user.ID, map[string]any{"rpm_limit": nil})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("null patch status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	updated, err = st.GetUserByID(user.ID)
-	if err != nil || updated.RPMLimit != nil {
-		t.Fatalf("rpm after null = %+v err=%v, want nil", updated, err)
-	}
-	if updated.Lang != "en" {
-		t.Fatalf("lang regressed: %q", updated.Lang)
-	}
-}
-
-func TestPatchMeCapResolverOverride(t *testing.T) {
-	st := authTestStore(t)
-	if _, err := st.CreateUser("discord-1", "alice", ""); err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-	user, err := st.GetUserByDiscordID("discord-1")
-	if err != nil {
-		t.Fatalf("user: %v", err)
-	}
-	service := newTestUserAuth(t, st, &fakeDiscordProvider{login: DiscordLogin{
-		Identity: DiscordIdentity{ID: "discord-1", Username: "alice"},
-	}}, nil)
-	service.userRPMLimitCap = func(context.Context) (int, error) { return 42, nil }
-	rec := patchMeDirect(t, service, st, user.ID, map[string]any{"rpm_limit": 500})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("patch status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	var envelope userEnvelope
-	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
-		t.Fatalf("envelope: %v", err)
-	}
-	if envelope.User.RPMLimit == nil || *envelope.User.RPMLimit != 42 {
-		t.Fatalf("resolver-clamped rpm = %+v, want 42", envelope.User.RPMLimit)
+	if envelope.User.Lang != "zh" {
+		t.Fatalf("lang=zh user = %+v", envelope.User)
 	}
 }
 
@@ -145,10 +94,9 @@ func TestPatchMeRejectsForbiddenFieldsAndMalformedBodies(t *testing.T) {
 	for _, body := range []any{
 		map[string]any{"lang": "fr"},
 		map[string]any{"lang": ""},
-		map[string]any{"rpm_limit": 0},
-		map[string]any{"rpm_limit": -5},
-		map[string]any{"rpm_limit": 1.5},
-		map[string]any{"rpm_limit": "30"},
+		// rpm_limit is admin-set only; self-service updates are rejected.
+		map[string]any{"rpm_limit": 25},
+		map[string]any{"rpm_limit": nil},
 		map[string]any{"endpoint_limit": 10},
 		map[string]any{"is_banned": true},
 		map[string]any{"admin": true},

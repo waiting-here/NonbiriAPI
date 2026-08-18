@@ -1,4 +1,5 @@
 import { useId, useState, type FormEvent } from 'react';
+import { formatDateTime } from '@shared/utils/datetime';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -354,7 +355,7 @@ function ModelCard({ model, onChanged }: { model: PlatformModel; onChanged: () =
         <div>
           <h2 className="mono">{model.full_name}</h2>
           <p className="item-meta">
-            {model.route_strategy === 'ordered' ? t('user.models.ordered') : t('user.models.random')} · {model.updated_at}
+            {model.route_strategy === 'ordered' ? t('user.models.ordered') : t('user.models.random')} · {formatDateTime(model.updated_at)}
           </p>
         </div>
         <div className="badge-list">

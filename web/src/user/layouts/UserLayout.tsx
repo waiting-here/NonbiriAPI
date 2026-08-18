@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '@shared/components/LanguageSwitcher';
 import { ErrorState } from '@shared/components/States';
 import { apiFetch, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { ThemeToggle } from '@shared/theme/ThemeToggle';
+import { usePublicConfig } from '@shared/query/publicConfig';
 import { userKeys, useUserSession } from '../data';
 
 interface NavItem {
@@ -28,6 +29,9 @@ export function UserLayout() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const session = useUserSession();
+  const config = usePublicConfig();
+  const siteName = config.data?.siteName || t('app.name');
+  const siteLogoURL = config.data?.siteLogoURL;
   const [menuOpen, setMenuOpen] = useState(false);
   const logout = useMutation({
     mutationFn: () => apiFetch<void>('/api/auth/logout', { method: 'POST' }),
@@ -40,8 +44,30 @@ export function UserLayout() {
   });
 
   useEffect(() => {
-    document.title = `${t('app.name')} · ${t('user.shell.title')}`;
-  }, [t]);
+    document.title = `${siteName} · ${t('user.shell.title')}`;
+  }, [t, siteName]);
+
+  const location = useLocation();
+  // The OAuth re-authorization callback always returns to the configured
+  // redirect path (default "/"), not to the account page that requested it.
+  // If an account action parked a pending intent in sessionStorage and the
+  // elevated capability is now present, resume on /account where the
+  // AccountPage picks the intent back up.
+  useEffect(() => {
+    let pending = '';
+    try {
+      pending = window.sessionStorage.getItem('nb.pending.elevation') ?? '';
+    } catch {
+      return;
+    }
+    if (pending !== 'export' && pending !== 'delete') return;
+    if (location.pathname === '/account') return;
+    const hasElevated = document.cookie
+      .split(';')
+      .map((part) => part.trim())
+      .some((part) => part.startsWith('nb_elevated='));
+    if (hasElevated) navigate('/account', { replace: true });
+  }, [location.pathname, navigate]);
 
   const signedIn = Boolean(session.data?.user);
   const showSignIn = !signedIn && (isUnauthorized(session.error) || isNotFoundError(session.error));
@@ -52,11 +78,15 @@ export function UserLayout() {
         {t('shell.skipToContent')}
       </a>
       <header className="site-header user-header">
-        <Link className="brand" to="/" aria-label={t('app.name')}>
-          <span className="brand-mark" aria-hidden="true">
-            N
-          </span>
-          <span>{t('app.name')}</span>
+        <Link className="brand" to="/" aria-label={siteName}>
+          {siteLogoURL ? (
+            <img className="brand-logo" src={siteLogoURL} alt="" aria-hidden="true" />
+          ) : (
+            <span className="brand-mark" aria-hidden="true">
+              N
+            </span>
+          )}
+          <span>{siteName}</span>
           <span className="brand-suffix">{t('user.shell.brandSuffix')}</span>
         </Link>
         <button

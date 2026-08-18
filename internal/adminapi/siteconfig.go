@@ -25,8 +25,14 @@ import (
 
 // Known site_config keys (the authoritative set enforced by the handler).
 const (
-	KeySiteName                  = "site_name"
-	KeyDefaultLocale             = "default_locale"
+	KeySiteName                       = "site_name"
+	KeySiteLogoURL                    = "site_logo_url"
+	KeyDefaultLocale                  = "default_locale"
+	KeyLegalPrivacyOverrideZh         = "legal_privacy_override_zh"
+	KeyLegalPrivacyOverrideEn         = "legal_privacy_override_en"
+	KeyLegalTermsOverrideZh           = "legal_terms_override_zh"
+	KeyLegalTermsOverrideEn           = "legal_terms_override_en"
+	KeyLegalAuthoritativeLocale       = "legal_authoritative_locale"
 	KeyDefaultEndpointLimit      = "default_endpoint_limit"
 	KeyDefaultEndpointKeyLimit   = "default_endpoint_key_limit"
 	KeyDefaultModelLimit         = "default_model_limit"
@@ -47,8 +53,10 @@ const (
 // (ratelimit's default maxEvents), so every accepted value can be applied to
 // the runtime controller without failing.
 const (
-	maxSiteNameBytes      = 256
-	maxDiscordGateBytes   = 128
+	maxSiteNameBytes        = 256
+	maxSiteLogoURLBytes     = 2048
+	maxLegalOverrideBytes   = 65536
+	maxDiscordGateBytes     = 128
 	maxAlertPrefsBytes    = 512
 	maxSiteConfigKeyLen   = 128 // mirrors the repository site_config key bound
 	maxResourceLimitValue = 10000
@@ -68,7 +76,9 @@ type valueKind int
 const (
 	kindText valueKind = iota
 	kindLocale
+	kindLocaleOpt // "zh" | "en" | "" — an optional locale selector
 	kindInt
+	kindMultilineText // text that preserves newlines/tabs (legal overrides)
 )
 
 type keySpec struct {
@@ -81,7 +91,13 @@ type keySpec struct {
 // knownSiteConfig maps every exact known key to its typed spec.
 var knownSiteConfig = map[string]keySpec{
 	KeySiteName:                  {kind: kindText, allowEmpty: false, max: maxSiteNameBytes},
+	KeySiteLogoURL:               {kind: kindText, allowEmpty: true, max: maxSiteLogoURLBytes},
 	KeyDefaultLocale:             {kind: kindLocale},
+	KeyLegalPrivacyOverrideZh:    {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
+	KeyLegalPrivacyOverrideEn:    {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
+	KeyLegalTermsOverrideZh:      {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
+	KeyLegalTermsOverrideEn:      {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
+	KeyLegalAuthoritativeLocale:  {kind: kindLocaleOpt},
 	KeyDefaultEndpointLimit:      {kind: kindInt, min: 0, max: maxResourceLimitValue, def: db.DefaultEndpointLimit},
 	KeyDefaultEndpointKeyLimit:   {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultEndpointKeyLimit},
 	KeyDefaultModelLimit:         {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultModelLimit},
@@ -135,6 +151,21 @@ func validConfigText(value string, maxBytes int) bool {
 	return true
 }
 
+// validMultilineText is like validConfigText but permits newlines and tabs so
+// operators can author multi-paragraph legal override text. Other control
+// characters (NUL, ESC, bidi overrides, ...) remain rejected.
+func validMultilineText(value string, maxBytes int) bool {
+	if len(value) > maxBytes || !utf8.ValidString(value) {
+		return false
+	}
+	for _, r := range value {
+		if (unicode.IsControl(r) || r == 0x7f) && r != '\n' && r != '\r' && r != '\t' {
+			return false
+		}
+	}
+	return true
+}
+
 // parseCanonicalInt accepts exactly the canonical decimal form of an integer
 // (no sign, no leading zeros, no surrounding whitespace).
 func parseCanonicalInt(raw string) (int, error) {
@@ -167,6 +198,16 @@ func typedSiteConfigValue(key, stored string) any {
 			return spec.def
 		case kindLocale:
 			if stored == "zh" || stored == "en" {
+				return stored
+			}
+			return ""
+		case kindLocaleOpt:
+			if stored == "zh" || stored == "en" {
+				return stored
+			}
+			return ""
+		case kindMultilineText:
+			if validMultilineText(stored, textMaxFor(key)) {
 				return stored
 			}
 			return ""
@@ -221,6 +262,18 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 				return "", invalid
 			}
 			return value, httperr.Error{}
+		case kindLocaleOpt:
+			var value string
+			if err := json.Unmarshal(raw, &value); err != nil || (value != "" && value != "zh" && value != "en") {
+				return "", invalid
+			}
+			return value, httperr.Error{}
+		case kindMultilineText:
+			var value string
+			if err := json.Unmarshal(raw, &value); err != nil || !validMultilineText(value, textMaxFor(key)) {
+				return "", invalid
+			}
+			return value, httperr.Error{}
 		default:
 			var value string
 			if err := json.Unmarshal(raw, &value); err != nil || !validConfigText(value, textMaxFor(key)) {
@@ -240,4 +293,42 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 		return value, httperr.Error{}
 	}
 	return "", httperr.New(httperr.CodeNotFound, "configuration key not found")
+}
+
+// publicSiteConfigKeys is the strict allowlist projected by ReadPublicConfig.
+// Only display-oriented keys are exposed to unauthenticated callers;
+// operational, gating and rate-limit keys never appear here. Adding a key
+// to knownSiteConfig does NOT expose it publicly — it must be listed here.
+var publicSiteConfigKeys = []string{
+	KeySiteName,
+	KeySiteLogoURL,
+	KeyDefaultLocale,
+	KeyLegalPrivacyOverrideZh,
+	KeyLegalPrivacyOverrideEn,
+	KeyLegalTermsOverrideZh,
+	KeyLegalTermsOverrideEn,
+	KeyLegalAuthoritativeLocale,
+}
+
+// ReadPublicConfig returns the display-only site_config subset for
+// unauthenticated callers (the user station bootstrap). It reads every
+// stored row but projects only the allowlist above through the same typed
+// helper as the admin read path, so a manually corrupted or unknown row
+// can never leak. A missing store yields an empty map rather than panicking.
+func ReadPublicConfig(store *db.Store) (map[string]any, error) {
+	out := make(map[string]any, len(publicSiteConfigKeys))
+	if store == nil {
+		for _, key := range publicSiteConfigKeys {
+			out[key] = typedSiteConfigValue(key, "")
+		}
+		return out, nil
+	}
+	values, err := store.GetAllSiteConfigValues()
+	if err != nil {
+		return nil, err
+	}
+	for _, key := range publicSiteConfigKeys {
+		out[key] = typedSiteConfigValue(key, values[key])
+	}
+	return out, nil
 }

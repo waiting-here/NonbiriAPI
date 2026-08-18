@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { formatDateTime } from '@shared/utils/datetime';
 import { useTranslation } from 'react-i18next';
 import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
 import { isNotFoundError, isUnauthorized } from '@shared/query/http';
@@ -123,7 +124,7 @@ function HomeContent() {
               </div>
               <div className="detail-row">
                 <dt>{t('user.home.accountCreated')}</dt>
-                <dd>{me.data.created_at}</dd>
+                <dd>{formatDateTime(me.data.created_at)}</dd>
               </div>
               <div className="detail-row">
                 <dt>{t('user.home.accountStatus')}</dt>

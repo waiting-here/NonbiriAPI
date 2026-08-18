@@ -356,15 +356,14 @@ export function useUserMe(enabled = true) {
 }
 
 /**
- * Session-only self-service profile update (lang + rpm_limit). rpm_limit is
- * clamped server-side to the global cap; an explicit null restores the
- * global default. endpoint_limit / admin / ban fields are rejected by the
- * server; the browser never sends them.
+ * Session-only self-service profile update (lang only). Per-user RPM
+ * limits are administrator-set; the browser never sends rpm_limit.
+ * endpoint_limit / admin / ban fields are rejected by the server.
  */
 export function useUpdateUserProfile() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (values: { lang?: 'zh' | 'en'; rpm_limit?: number | null }) =>
+    mutationFn: (values: { lang?: 'zh' | 'en' }) =>
       apiFetch<unknown>('/api/me', { method: 'PATCH', json: values }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: userKeys.me });
