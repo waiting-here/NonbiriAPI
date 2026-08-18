@@ -146,8 +146,13 @@ function BindingForm({ modelId, onSaved }: { modelId: string; onSaved: () => voi
       setValidationError(t('common.formInvalid'));
       return;
     }
-    const payload: { endpoint_key_id: string; upstream_model_id: string; ord?: number } = {
-      endpoint_key_id: keyId,
+    const endpointKeyId = Number(keyId);
+    if (!Number.isSafeInteger(endpointKeyId) || endpointKeyId <= 0) {
+      setValidationError(t('common.formInvalid'));
+      return;
+    }
+    const payload: { endpoint_key_id: number; upstream_model_id: string; ord?: number } = {
+      endpoint_key_id: endpointKeyId,
       upstream_model_id: upstreamModelId,
     };
     if (ord.trim()) {
