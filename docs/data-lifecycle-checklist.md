@@ -1,9 +1,6 @@
 # Data Lifecycle Checklist (export / delete / retention / privacy)
 
 > Status: **active** (introduced by the account-deletion rail)
-> Authority: aligns to the frozen v1.0.0-alpha.1 requirements (data lifecycle), DEC-005
-> (credentials), DEC-006 (export/retention/privacy), and AGENTS.md §4.9 (data lifecycle)
-> and §4.10 (async deletion race).
 >
 > Every new user-associated table or column MUST be checked against this list in the same
 > task that introduces it. "User-associated" means any row whose lifecycle is bound to a
@@ -77,7 +74,7 @@ When a task adds a new user-associated table or a new column to one:
    suppression case if the table has a late-write path.
 7. **This table**: add a row above so the next task sees the coverage at a glance.
 
-## Linearization rule (AGENTS §4.10)
+## Linearization rule
 
 Account deletion and late callbacks (usage/log/issue/alert/callback writes) MUST be
 linearized by an atomic conditional write, never by a read-then-write. The shared
