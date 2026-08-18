@@ -10,6 +10,18 @@ const (
 	DefaultIPWindow = time.Minute
 	// DefaultIPPenalty is used for an enabled throttle when Penalty is omitted.
 	DefaultIPPenalty = time.Minute
+	// DefaultOAuthStartRateLimit is the default per-client-IP admission limit
+	// for the unauthenticated OAuth start endpoints (login start and
+	// elevation start). Zero disables application-level admission; the
+	// configured reverse-proxy limit remains the outer boundary. It is the
+	// single source for the matching site_config default.
+	DefaultOAuthStartRateLimit = 10
+	// DefaultOAuthStartRateWindowSeconds is the default sliding-window length,
+	// in whole seconds, for the OAuth start admission throttle.
+	DefaultOAuthStartRateWindowSeconds = 60
+	// DefaultOAuthStartRatePenaltySeconds is the default penalty, in whole
+	// seconds, applied once the OAuth start admission limit is exceeded.
+	DefaultOAuthStartRatePenaltySeconds = 60
 )
 
 // IPThrottleConfig configures an opaque-identity sliding-window throttle.
@@ -294,6 +306,78 @@ func (t *IPThrottle) Close() error {
 	}
 	return nil
 }
+
+// Config returns a consistent snapshot of the active rate parameters
+// (limit, window, penalty). It is the live-apply read companion to
+// Reconfigure: a runtime applier reads the current parameters, mutates the
+// single key being applied, and calls Reconfigure so the other two are
+// preserved. The bounded-store parameters (MaxKeys/MaxHitsPerKey/MaxKeyBytes)
+// are construction-time only and are intentionally not exposed here.
+func (t *IPThrottle) Config() IPThrottleConfig {
+	if t == nil {
+		return IPThrottleConfig{}
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return IPThrottleConfig{
+		Limit:   t.limit,
+		Window:  t.window,
+		Penalty: t.penalty,
+	}
+}
+
+// Reconfigure atomically changes the limit, window, and penalty of an
+// existing throttle without resetting admission state. It is the live-apply
+// hook used by the site-config runtime applier: a validated change takes
+// effect for the next Allow call while in-flight penalties and existing
+// window counters are preserved (mirroring the SetLimits contract of the RPM
+// limiter: a lowered cap waits for old hits to leave the window rather than
+// discarding them). The bounded-store parameters stay at their construction
+// values; only the operator-tunable rate parameters are changed.
+//
+// As with NewIPThrottle, Limit == 0 disables admission accounting (every
+// Allow returns IPDisabled), a zero Window falls back to DefaultIPWindow, and
+// a zero Penalty falls back to DefaultIPPenalty. A Limit larger than the
+// construction-time MaxHitsPerKey is rejected so a live update can never
+// exceed the bounded per-key hit store.
+func (t *IPThrottle) Reconfigure(config IPThrottleConfig) error {
+	if t == nil {
+		return ErrClosed
+	}
+	if config.Limit < 0 {
+		return ErrInvalidConfig
+	}
+	if config.Window == 0 {
+		config.Window = DefaultIPWindow
+	}
+	if err := validateDuration(config.Window, false); err != nil {
+		return err
+	}
+	if config.Penalty == 0 {
+		config.Penalty = DefaultIPPenalty
+	}
+	if err := validateDuration(config.Penalty, false); err != nil {
+		return err
+	}
+	now := t.clock.Now()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed {
+		return ErrClosed
+	}
+	if config.Limit > t.maxHitsPerKey {
+		return ErrInvalidConfig
+	}
+	t.limit = config.Limit
+	t.window = config.Window
+	t.penalty = config.Penalty
+	t.purgeLocked(now)
+	return nil
+}
+
+// SetConfig is an alias for Reconfigure for callers that model the live update
+// as a configuration assignment.
+func (t *IPThrottle) SetConfig(config IPThrottleConfig) error { return t.Reconfigure(config) }
 
 // Shutdown is an alias for Close.
 func (t *IPThrottle) Shutdown() error { return t.Close() }

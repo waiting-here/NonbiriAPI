@@ -46,23 +46,34 @@ type UserAuthConfig struct {
 	// Nil falls back to the persisted default_rpm_per_user site_config value,
 	// then the ratelimit package default.
 	UserRPMLimitCap func(ctx context.Context) (int, error)
+	// OAuthStartThrottle optionally supplies the per-client-IP admission
+	// throttle applied immediately before an OAuth state is issued for login
+	// (GET /api/auth/discord/start) or elevation (POST /api/auth/elevate). It
+	// is the second layer behind the reverse-proxy per-IP limit and stops one
+	// client from exhausting the shared, fail-closed OAuth state pool. Nil
+	// disables application-level admission; a throttle with Limit == 0 admits
+	// all callers and only bounds the identity. The same instance is shared by
+	// both flows and keyed by the trusted-edge ClientIP, and is not owned by
+	// UserAuth (the integration rail closes it alongside the runtime applier).
+	OAuthStartThrottle *ratelimit.IPThrottle
 }
 
 // UserAuth exposes handlers, a mountable auth route tree, and middleware for
 // Discord login and user sessions. It does not register process-wide routes.
 type UserAuth struct {
-	store            *db.Store
-	provider         DiscordProvider
-	clientID         string
-	state            *StateManager
-	elevation        *elevation.Manager
-	ownsElevation    bool
-	ownsState        bool
-	siteBaseURL      string
-	redirectURI      string
-	userRedirectPath string
-	registrationGate RegistrationGateFunc
-	userRPMLimitCap  func(ctx context.Context) (int, error)
+	store              *db.Store
+	provider           DiscordProvider
+	clientID           string
+	state              *StateManager
+	elevation          *elevation.Manager
+	ownsElevation      bool
+	ownsState          bool
+	siteBaseURL        string
+	redirectURI        string
+	userRedirectPath   string
+	registrationGate   RegistrationGateFunc
+	userRPMLimitCap    func(ctx context.Context) (int, error)
+	oauthStartThrottle *ratelimit.IPThrottle
 }
 
 // NewUserAuth validates fixed station configuration and returns a mountable
@@ -130,7 +141,7 @@ func NewUserAuth(config UserAuthConfig) (*UserAuth, error) {
 		store: config.Store, provider: config.Provider, clientID: config.ClientID, state: config.State,
 		ownsState: ownsState, siteBaseURL: base, redirectURI: redirectURI, userRedirectPath: path,
 		registrationGate: gate, elevation: manager, ownsElevation: ownsElevation,
-		userRPMLimitCap: config.UserRPMLimitCap,
+		userRPMLimitCap: config.UserRPMLimitCap, oauthStartThrottle: config.OAuthStartThrottle,
 	}, nil
 }
 
@@ -191,6 +202,9 @@ func (a *UserAuth) StartWithIntent(w http.ResponseWriter, r *http.Request, inten
 		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
 		return
 	}
+	if !a.admitOAuthStart(w, r) {
+		return
+	}
 	state, err := a.state.Issue(StationUser, intent)
 	if err != nil {
 		if errors.Is(err, ErrStateCapacity) {
@@ -211,6 +225,36 @@ func (a *UserAuth) StartWithIntent(w http.ResponseWriter, r *http.Request, inten
 	}
 	SetOAuthStateCookie(w, state, secureCookieForRequest(r, a.siteBaseURL), a.state.ttl)
 	noStoreRedirect(w, r, location)
+}
+
+// admitOAuthStart applies the optional per-client-IP admission throttle that
+// guards the shared, fail-closed OAuth state pool. It runs immediately before
+// a state is issued for login or elevation, on the same throttle instance and
+// the same trusted-edge ClientIP key for both flows. A penalized caller gets
+// 429 with a Retry-After header; any throttle error (a full bounded entry
+// store, a closed throttle, or an overlong identity) fails closed as 503 so a
+// live attack can never evict a real pending state. A nil throttle (or one
+// configured with Limit == 0) admits the caller and the configured
+// reverse-proxy limit remains the outer boundary.
+func (a *UserAuth) admitOAuthStart(w http.ResponseWriter, r *http.Request) bool {
+	if a == nil || a.oauthStartThrottle == nil {
+		return true
+	}
+	identity := httpmw.ClientIP(r)
+	if identity == "" {
+		identity = "unknown"
+	}
+	decision, err := a.oauthStartThrottle.Allow(identity)
+	if err != nil {
+		writeStableError(w, httperr.CodeServiceUnavailable, "authentication service unavailable")
+		return false
+	}
+	if !decision.Allowed {
+		setRetryAfter(w, decision.RetryAfterSeconds)
+		writeStableError(w, httperr.CodeRateLimited, "authentication temporarily unavailable")
+		return false
+	}
+	return true
 }
 
 func validAuthorizationLocation(location, state string) bool {
@@ -560,6 +604,9 @@ func (a *UserAuth) Elevate(w http.ResponseWriter, r *http.Request) {
 	sessionToken := UserSessionToken(r)
 	if sessionToken == "" {
 		writeStableError(w, httperr.CodeUnauthorized, "authentication required")
+		return
+	}
+	if !a.admitOAuthStart(w, r) {
 		return
 	}
 	binding := db.SessionHash(sessionToken)

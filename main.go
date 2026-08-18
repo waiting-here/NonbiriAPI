@@ -217,9 +217,19 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err != nil {
 		return nil, fmt.Errorf("discord provider: %w", err)
 	}
+	oauthStartThrottle, err := ratelimit.NewIPThrottle(ratelimit.IPThrottleConfig{
+		Limit:   ratelimit.DefaultOAuthStartRateLimit,
+		Window:  time.Duration(ratelimit.DefaultOAuthStartRateWindowSeconds) * time.Second,
+		Penalty: time.Duration(ratelimit.DefaultOAuthStartRatePenaltySeconds) * time.Second,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("oauth start throttle: %w", err)
+	}
+	cleanup = append(cleanup, oauthStartThrottle.Close)
 	userAuth, err := auth.NewUserAuth(auth.UserAuthConfig{
 		Store: store, Provider: provider, ClientID: cfg.DiscordClientID,
 		SiteBaseURL: cfg.SiteBaseURL, Elevation: sharedElevation,
+		OAuthStartThrottle: oauthStartThrottle,
 		UserRPMLimitCap: func(context.Context) (int, error) {
 			if flowController == nil {
 				return 0, errors.New("flow controller is not wired")
@@ -282,7 +292,7 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		return nil, fmt.Errorf("flow controller: %w", err)
 	}
 	cleanup = append(cleanup, flowController.Close)
-	runtimeApplier := adminapi.NewRuntimeApplier(flowController, stack)
+	runtimeApplier := adminapi.NewRuntimeApplier(flowController, stack, oauthStartThrottle)
 	if err := applyPersistedRuntimeConfig(store, runtimeApplier); err != nil {
 		return nil, fmt.Errorf("apply persisted runtime configuration: %w", err)
 	}
@@ -369,6 +379,9 @@ func applyPersistedRuntimeConfig(store *db.Store, runtime adminapi.RuntimeApplie
 		adminapi.KeyDefaultRPMPerUser,
 		adminapi.KeyEgressGlobalConc,
 		adminapi.KeyDefaultPerEndpointConc,
+		adminapi.KeyOAuthStartRateLimit,
+		adminapi.KeyOAuthStartRateWindowSecs,
+		adminapi.KeyOAuthStartRatePenaltySecs,
 	} {
 		if value, ok := values[key]; ok {
 			if err := runtime.ApplySiteConfig(context.Background(), key, value); err != nil {

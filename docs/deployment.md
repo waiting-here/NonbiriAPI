@@ -97,8 +97,15 @@ Configure the public user host and the separate admin host in DNS and TLS. The p
 - be the only source included in `NONBIRI_TRUSTED_PROXY_CIDRS`;
 - preserve long-lived SSE responses without imposing a shorter buffering or idle timeout than the application contract;
 - apply both per-client and global rate limits to the unauthenticated
-  `/api/auth/discord/start` route; keep the ten-minute OAuth-state capacity in
-  mind and test the chosen limits without weakening callback availability;
+  `/api/auth/discord/start` route and to the session-gated
+  `/api/auth/elevate` route; keep the ten-minute OAuth-state capacity in
+  mind and test the chosen limits without weakening callback availability.
+  The application additionally enforces an in-process per-client-IP admission
+  throttle on both routes as a second layer (configurable at runtime via the
+  `oauth_start_rate_limit` / `oauth_start_rate_window_seconds` /
+  `oauth_start_rate_penalty_seconds` site_config keys; setting
+  `oauth_start_rate_limit=0` disables it and falls back to the proxy limit
+  alone). The proxy limit remains the outer boundary either way;
 - restrict the admin host independently where possible;
 - avoid logging `Authorization`, cookies, request bodies, or upstream credentials.
 

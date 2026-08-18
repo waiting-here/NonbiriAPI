@@ -118,7 +118,7 @@ Codes below are the emitted set; HTTP status is derived from the code.
 | `not_found` | 404 | unknown model, endpoint, key, model, binding, or resource |
 | `conflict` | 409 | uniqueness violation or illegal state transition |
 | `method_not_allowed` | 405 | path matched but method did not |
-| `rate_limited` | 429 | per-user RPM, global RPM, or concurrency gate exhausted |
+| `rate_limited` | 429 | per-user RPM, global RPM, concurrency gate exhausted, or the per-client-IP OAuth start admission throttle (login start / elevation start) penalizing a caller |
 | `payload_too_large` | 413 | request exceeds the configured size bound |
 | `unbound_model` | 503 | resolved a platform model that has no usable binding (zero-binding draft / all bindings filtered out); a user issue is recorded |
 | `upstream` | 502 | upstream error after the commit boundary, a single attempt's upstream error with silent retry off, or all bindings exhausted under silent retry |
@@ -223,7 +223,7 @@ Auth: a valid user session cookie. Banned users are denied. All responses are `n
 
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
-| `GET` | `/api/auth/discord/start` | none | — | `302` to Discord's authorize URL; sets the OAuth `state` cookie (HMAC, short TTL, HttpOnly, SameSite) | `service_unavailable` (503) if the Discord end is misconfigured |
+| `GET` | `/api/auth/discord/start` | none | — | `302` to Discord's authorize URL; sets the OAuth `state` cookie (HMAC, short TTL, HttpOnly, SameSite). Before a state is issued, a per-client-IP admission throttle (configurable via site_config `oauth_start_rate_*`; `oauth_start_rate_limit=0` disables it) is applied as a second layer behind the reverse-proxy per-IP limit | `rate_limited` (429, with `Retry-After`) when the per-client-IP admission limit is exceeded; `service_unavailable` (503) if the Discord end is misconfigured or the admission throttle's bounded entry store is full (fail-closed, never evicts a live state) |
 | `GET` | `/api/auth/discord/callback` | OAuth `state` cookie | query: `code`, `state` | on success: sets the user session cookie and `302` to the user SPA; on mismatch/failure: `400 invalid_request` / `401 unauthorized` | `invalid_request`, `unauthorized`, `conflict`, `service_unavailable` |
 | `GET` | `/api/session` | user session | — | `200 {user:{id,username,avatar,lang,is_banned,endpoint_limit,rpm_limit,created_at}}` | `unauthorized` |
 | `POST` | `/api/auth/logout` | user session | — | `204`; clears the session cookie | `unauthorized` |
@@ -239,7 +239,7 @@ nickname policy is finalized when Discord is wired.
 
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
-| `POST` | `/api/auth/elevate` | user session | — | initiates a fresh Discord re-authorization for an elevated-action capability (HMAC state, short TTL); on completion the session carries an elevated capability until it expires / is consumed | `unauthorized`, `service_unavailable` |
+| `POST` | `/api/auth/elevate` | user session | — | initiates a fresh Discord re-authorization for an elevated-action capability (HMAC state, short TTL); on completion the session carries an elevated capability until it expires / is consumed. The same per-client-IP admission throttle as login start is applied (shared instance, keyed by ClientIP) before a state is issued | `unauthorized`, `service_unavailable`; `rate_limited` (429, with `Retry-After`) when the shared per-client-IP admission limit is exceeded |
 
 Self-service destructive endpoints (`3.8`) require an **active elevated capability**. The
 carrier is the header `X-Elevated-Token: <token>` (a short-lived, single-use bound capability).

@@ -720,7 +720,7 @@ func TestRuntimeApplierRealSingletons(t *testing.T) {
 	}
 	defer stack.CloseIdleConnections()
 
-	applier := NewRuntimeApplier(controller, stack)
+	applier := NewRuntimeApplier(controller, stack, nil)
 	if err := applier.ApplySiteConfig(context.Background(), "global_rpm", "900"); err != nil {
 		t.Fatalf("apply global_rpm: %v", err)
 	}
@@ -768,14 +768,14 @@ func TestRuntimeApplierRealSingletons(t *testing.T) {
 		t.Fatalf("global limit after failed apply = %d, want 500", limits.GlobalLimit)
 	}
 	// An unwired singleton fails closed on its own keys only.
-	brokenRPM := NewRuntimeApplier(nil, stack)
+	brokenRPM := NewRuntimeApplier(nil, stack, nil)
 	if err := brokenRPM.ApplySiteConfig(context.Background(), "global_rpm", "600"); err == nil {
 		t.Fatalf("apply with nil rpm controller: want error")
 	}
 	if err := brokenRPM.ApplySiteConfig(context.Background(), "egress_global_concurrency", "32"); err != nil {
 		t.Fatalf("apply with wired egress gate: %v", err)
 	}
-	brokenGate := NewRuntimeApplier(controller, nil)
+	brokenGate := NewRuntimeApplier(controller, nil, nil)
 	if err := brokenGate.ApplySiteConfig(context.Background(), "egress_global_concurrency", "32"); err == nil {
 		t.Fatalf("apply with nil egress gate: want error")
 	}

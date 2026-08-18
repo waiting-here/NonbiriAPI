@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"errors"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -185,5 +186,181 @@ func TestIPThrottleCloseIsIdempotent(t *testing.T) {
 	}
 	if _, err := throttle.RetryAfterSeconds("a"); !errors.Is(err, ErrClosed) {
 		t.Fatalf("retry after close = %v", err)
+	}
+}
+
+func TestIPThrottleConfigSnapshotReflectsConstruction(t *testing.T) {
+	clock := newFakeClock()
+	throttle, err := NewIPThrottle(ipTestConfig(), WithClock(clock))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer throttle.Close()
+	config := throttle.Config()
+	if config.Limit != 2 || config.Window != 10*time.Second || config.Penalty != 5*time.Second {
+		t.Fatalf("config snapshot = %#v", config)
+	}
+}
+
+func TestIPThrottleReconfigureChangesRateParameters(t *testing.T) {
+	clock := newFakeClock()
+	throttle, err := NewIPThrottle(IPThrottleConfig{
+		Limit: 2, Window: 10 * time.Second, Penalty: 5 * time.Second,
+		MaxKeys: 4, MaxHitsPerKey: 64, MaxKeyBytes: 16,
+	}, WithClock(clock))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer throttle.Close()
+
+	if err := throttle.Reconfigure(IPThrottleConfig{
+		Limit: 5, Window: 20 * time.Second, Penalty: 10 * time.Second,
+	}); err != nil {
+		t.Fatalf("reconfigure: %v", err)
+	}
+	config := throttle.Config()
+	if config.Limit != 5 || config.Window != 20*time.Second || config.Penalty != 10*time.Second {
+		t.Fatalf("config after reconfigure = %#v", config)
+	}
+	for i := 0; i < 5; i++ {
+		decision, err := throttle.Allow("ip")
+		if err != nil || !decision.Allowed || decision.Limit != 5 {
+			t.Fatalf("allowed attempt %d = %#v, %v", i+1, decision, err)
+		}
+	}
+	decision, err := throttle.Allow("ip")
+	if err != nil || decision.Allowed || decision.Reason != IPPenalty || decision.RetryAfterSeconds != 10 || decision.Limit != 5 {
+		t.Fatalf("penalty after reconfigure = %#v, %v", decision, err)
+	}
+}
+
+func TestIPThrottleReconfigureDisablesAdmission(t *testing.T) {
+	clock := newFakeClock()
+	throttle, err := NewIPThrottle(ipTestConfig(), WithClock(clock))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer throttle.Close()
+	if err := throttle.Reconfigure(IPThrottleConfig{Limit: 0}); err != nil {
+		t.Fatalf("reconfigure disabled: %v", err)
+	}
+	if config := throttle.Config(); config.Limit != 0 {
+		t.Fatalf("disabled config = %#v", config)
+	}
+	for i := 0; i < 50; i++ {
+		decision, err := throttle.Allow("ip")
+		if err != nil || !decision.Allowed || decision.Reason != IPDisabled {
+			t.Fatalf("disabled call %d = %#v, %v", i, decision, err)
+		}
+	}
+}
+
+func TestIPThrottleReconfigurePreservesInFlightPenalty(t *testing.T) {
+	clock := newFakeClock()
+	throttle, err := NewIPThrottle(IPThrottleConfig{
+		Limit: 2, Window: 10 * time.Second, Penalty: 60 * time.Second,
+		MaxKeys: 4, MaxHitsPerKey: 64, MaxKeyBytes: 16,
+	}, WithClock(clock))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer throttle.Close()
+	for i := 0; i < 2; i++ {
+		if decision, err := throttle.Allow("ip"); err != nil || !decision.Allowed {
+			t.Fatalf("fill attempt %d = %#v, %v", i+1, decision, err)
+		}
+	}
+	if decision, err := throttle.Allow("ip"); err != nil || decision.Allowed || decision.Reason != IPPenalty || decision.RetryAfterSeconds != 60 {
+		t.Fatalf("penalty started = %#v, %v", decision, err)
+	}
+	// Raising the limit mid-penalty must not lift the active block: an attacker
+	// who triggered the penalty cannot buy out of it by racing a config update.
+	if err := throttle.Reconfigure(IPThrottleConfig{Limit: 10, Window: 10 * time.Second, Penalty: 60 * time.Second}); err != nil {
+		t.Fatalf("reconfigure: %v", err)
+	}
+	if decision, err := throttle.Allow("ip"); err != nil || decision.Allowed || decision.Reason != IPPenalty || decision.RetryAfterSeconds != 60 {
+		t.Fatalf("penalty not preserved = %#v, %v", decision, err)
+	}
+	clock.Advance(60 * time.Second)
+	for i := 0; i < 10; i++ {
+		decision, err := throttle.Allow("ip")
+		if err != nil || !decision.Allowed || decision.Limit != 10 {
+			t.Fatalf("post-penalty attempt %d with new limit = %#v, %v", i+1, decision, err)
+		}
+	}
+}
+
+func TestIPThrottleReconfigureRejectsInvalidConfig(t *testing.T) {
+	clock := newFakeClock()
+	throttle, err := NewIPThrottle(ipTestConfig(), WithClock(clock))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer throttle.Close()
+	for _, config := range []IPThrottleConfig{
+		{Limit: -1, Window: 10 * time.Second, Penalty: 5 * time.Second},
+		{Limit: 1, Window: -1 * time.Second, Penalty: 5 * time.Second},
+		{Limit: 1, Window: 10 * time.Second, Penalty: -1 * time.Second},
+		// Larger than the construction-time MaxHitsPerKey (4 in ipTestConfig).
+		{Limit: 100, Window: 10 * time.Second, Penalty: 5 * time.Second},
+	} {
+		if err := throttle.Reconfigure(config); !errors.Is(err, ErrInvalidConfig) {
+			t.Fatalf("reconfigure %#v error = %v, want ErrInvalidConfig", config, err)
+		}
+	}
+	// A zero Window/Penalty fall back to the package defaults rather than being
+	// rejected, matching NewIPThrottle.
+	if err := throttle.Reconfigure(IPThrottleConfig{Limit: 1}); err != nil {
+		t.Fatalf("reconfigure with zero window/penalty = %v", err)
+	}
+	if config := throttle.Config(); config.Window != DefaultIPWindow || config.Penalty != DefaultIPPenalty {
+		t.Fatalf("default fallback = %#v", config)
+	}
+}
+
+func TestIPThrottleReconfigureAfterCloseFailsClosed(t *testing.T) {
+	throttle, err := NewIPThrottle(ipTestConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := throttle.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := throttle.Reconfigure(IPThrottleConfig{Limit: 1}); !errors.Is(err, ErrClosed) {
+		t.Fatalf("reconfigure after close = %v, want ErrClosed", err)
+	}
+}
+
+func TestIPThrottleReconfigureConcurrentWithAdmission(t *testing.T) {
+	clock := newFakeClock()
+	throttle, err := NewIPThrottle(IPThrottleConfig{
+		Limit: 64, Window: 10 * time.Second, Penalty: 5 * time.Second,
+		MaxKeys: 8, MaxHitsPerKey: 64, MaxKeyBytes: 16,
+	}, WithClock(clock))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer throttle.Close()
+
+	const callers = 64
+	var wg sync.WaitGroup
+	wg.Add(callers)
+	for i := 0; i < callers; i++ {
+		go func(i int) {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				_, _ = throttle.Allow("ip-" + strconv.Itoa(i%4))
+			}
+		}(i)
+	}
+	for i := 0; i < 100; i++ {
+		limit := (i % 32) + 1
+		_ = throttle.Reconfigure(IPThrottleConfig{
+			Limit: limit, Window: 10 * time.Second, Penalty: 5 * time.Second,
+		})
+	}
+	wg.Wait()
+	if config := throttle.Config(); config.Limit < 1 || config.Limit > 32 {
+		t.Fatalf("final config = %#v", config)
 	}
 }

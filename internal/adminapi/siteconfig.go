@@ -25,16 +25,19 @@ import (
 
 // Known site_config keys (the authoritative set enforced by the handler).
 const (
-	KeySiteName               = "site_name"
-	KeyDefaultLocale          = "default_locale"
-	KeyDefaultEndpointLimit   = "default_endpoint_limit"
-	KeyDefaultRPMPerUser      = "default_rpm_per_user"
-	KeyGlobalRPM              = "global_rpm"
-	KeyDefaultPerEndpointConc = "default_per_endpoint_concurrency"
-	KeyEgressGlobalConc       = "egress_global_concurrency"
-	KeyDiscordGuildID         = "discord_guild_id"
-	KeyDiscordRoleID          = "discord_role_id"
-	alertPrefsPrefix          = "alert_prefs_"
+	KeySiteName                  = "site_name"
+	KeyDefaultLocale             = "default_locale"
+	KeyDefaultEndpointLimit      = "default_endpoint_limit"
+	KeyDefaultRPMPerUser         = "default_rpm_per_user"
+	KeyGlobalRPM                 = "global_rpm"
+	KeyDefaultPerEndpointConc    = "default_per_endpoint_concurrency"
+	KeyEgressGlobalConc          = "egress_global_concurrency"
+	KeyDiscordGuildID            = "discord_guild_id"
+	KeyDiscordRoleID             = "discord_role_id"
+	KeyOAuthStartRateLimit       = "oauth_start_rate_limit"
+	KeyOAuthStartRateWindowSecs  = "oauth_start_rate_window_seconds"
+	KeyOAuthStartRatePenaltySecs = "oauth_start_rate_penalty_seconds"
+	alertPrefsPrefix             = "alert_prefs_"
 )
 
 // Value bounds. RPM caps share the limiter's bounded event-store ceiling
@@ -48,6 +51,13 @@ const (
 	maxEndpointLimitValue = 10000
 	maxRPMValue           = 4096
 	maxConcurrencyValue   = 100000
+	// OAuth start admission bounds. The per-IP limit stays below the ratelimit
+	// IPThrottle default MaxHitsPerKey (4096) so a live reconfigure can never
+	// exceed the bounded per-key hit store; the window/penalty ceilings are one
+	// hour, well beyond the ten-minute OAuth state TTL but still finite.
+	maxOAuthStartRateLimit       = 1000
+	maxOAuthStartRateWindowSecs  = 3600
+	maxOAuthStartRatePenaltySecs = 3600
 )
 
 type valueKind int
@@ -67,15 +77,18 @@ type keySpec struct {
 
 // knownSiteConfig maps every exact known key to its typed spec.
 var knownSiteConfig = map[string]keySpec{
-	KeySiteName:               {kind: kindText, allowEmpty: false, max: maxSiteNameBytes},
-	KeyDefaultLocale:          {kind: kindLocale},
-	KeyDefaultEndpointLimit:   {kind: kindInt, min: 0, max: maxEndpointLimitValue, def: db.DefaultEndpointLimit},
-	KeyDefaultRPMPerUser:      {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMPerUserLimit},
-	KeyGlobalRPM:              {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMGlobalLimit},
-	KeyDefaultPerEndpointConc: {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultPerEndpointConcurrency},
-	KeyEgressGlobalConc:       {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultGlobalConcurrency},
-	KeyDiscordGuildID:         {kind: kindText, allowEmpty: true, max: maxDiscordGateBytes},
-	KeyDiscordRoleID:          {kind: kindText, allowEmpty: true, max: maxDiscordGateBytes},
+	KeySiteName:                  {kind: kindText, allowEmpty: false, max: maxSiteNameBytes},
+	KeyDefaultLocale:             {kind: kindLocale},
+	KeyDefaultEndpointLimit:      {kind: kindInt, min: 0, max: maxEndpointLimitValue, def: db.DefaultEndpointLimit},
+	KeyDefaultRPMPerUser:         {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMPerUserLimit},
+	KeyGlobalRPM:                 {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMGlobalLimit},
+	KeyDefaultPerEndpointConc:    {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultPerEndpointConcurrency},
+	KeyEgressGlobalConc:          {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultGlobalConcurrency},
+	KeyDiscordGuildID:            {kind: kindText, allowEmpty: true, max: maxDiscordGateBytes},
+	KeyDiscordRoleID:             {kind: kindText, allowEmpty: true, max: maxDiscordGateBytes},
+	KeyOAuthStartRateLimit:       {kind: kindInt, min: 0, max: maxOAuthStartRateLimit, def: ratelimit.DefaultOAuthStartRateLimit},
+	KeyOAuthStartRateWindowSecs:  {kind: kindInt, min: 1, max: maxOAuthStartRateWindowSecs, def: ratelimit.DefaultOAuthStartRateWindowSeconds},
+	KeyOAuthStartRatePenaltySecs: {kind: kindInt, min: 0, max: maxOAuthStartRatePenaltySecs, def: ratelimit.DefaultOAuthStartRatePenaltySeconds},
 }
 
 // knownSiteConfigKey reports whether key is in the authoritative set
