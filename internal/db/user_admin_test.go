@@ -216,14 +216,21 @@ func TestSiteConfigUpsertAndRead(t *testing.T) {
 	if err := st.SetSiteConfigValue("bad\nkey", "x"); err != ErrConflict {
 		t.Fatalf("control-char key: err=%v, want ErrConflict", err)
 	}
-	if err := st.SetSiteConfigValue("ok", "line\nbreak"); err != ErrConflict {
-		t.Fatalf("control-char value: err=%v, want ErrConflict", err)
+	// A newline in a value is permitted (legal overrides are multiline), so a
+	// plain text value with a newline is accepted at the storage layer; the
+	// adminapi registry still rejects newlines for single-line keys.
+	if err := st.SetSiteConfigValue("ok", "line\nbreak"); err != nil {
+		t.Fatalf("multiline value: err=%v, want nil", err)
 	}
-	long := make([]byte, maxConfigValueBytes+1)
+	long := make([]byte, maxSiteConfigValueBytes+1)
 	for i := range long {
 		long[i] = 'a'
 	}
 	if err := st.SetSiteConfigValue("ok", string(long)); err != ErrConflict {
 		t.Fatalf("oversized value: err=%v, want ErrConflict", err)
+	}
+	// A NUL (disallowed even for multiline values) is rejected.
+	if err := st.SetSiteConfigValue("ok", "bad\x00value"); err != ErrConflict {
+		t.Fatalf("nul value: err=%v, want ErrConflict", err)
 	}
 }

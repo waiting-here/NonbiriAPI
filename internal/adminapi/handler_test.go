@@ -645,6 +645,12 @@ func TestSiteConfigPatchTypedAndRuntimeApply(t *testing.T) {
 		{"site_name", map[string]any{"value": "a\nb"}},    // control character
 		{"default_locale", map[string]any{"value": "fr"}}, // locale whitelist
 		{"default_locale", map[string]any{"value": "zh"}}, // valid (checked below)
+		{"legal_authoritative_locale", map[string]any{"value": "fr"}},  // optional locale whitelist
+		{"legal_authoritative_locale", map[string]any{"value": ""}},   // valid empty (checked below)
+		{"legal_authoritative_locale", map[string]any{"value": "zh"}}, // valid (checked below)
+		{"legal_terms_override_zh", map[string]any{"value": 42}},                // number for a multiline key
+		{"legal_terms_override_zh", map[string]any{"value": "bad\x00value"}}, // disallowed control char
+		{"legal_terms_override_zh", map[string]any{"value": "valid\nline"}},   // valid multiline (checked below)
 		{"default_endpoint_limit", map[string]any{"value": -1}},
 		{"default_endpoint_key_limit", map[string]any{"value": 0}}, // below min=1
 		{"default_model_limit", map[string]any{"value": 0}},        // below min=1
@@ -655,6 +661,22 @@ func TestSiteConfigPatchTypedAndRuntimeApply(t *testing.T) {
 		if tc.key == "default_locale" && tc.body.(map[string]any)["value"] == "zh" {
 			if rec.Code != http.StatusOK {
 				t.Fatalf("valid locale rejected: status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			continue
+		}
+		// Legal override / authoritative-locale valid cases that must succeed.
+		if tc.key == "legal_authoritative_locale" {
+			v := tc.body.(map[string]any)["value"]
+			if v == "" || v == "zh" {
+				if rec.Code != http.StatusOK {
+					t.Fatalf("valid authoritative locale rejected: status=%d body=%s", rec.Code, rec.Body.String())
+				}
+				continue
+			}
+		}
+		if tc.key == "legal_terms_override_zh" && tc.body.(map[string]any)["value"] == "valid\nline" {
+			if rec.Code != http.StatusOK {
+				t.Fatalf("valid multiline rejected: status=%d body=%s", rec.Code, rec.Body.String())
 			}
 			continue
 		}

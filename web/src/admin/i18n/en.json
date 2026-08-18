@@ -158,7 +158,30 @@
       "numberValue": "Numeric setting",
       "textValue": "Text setting",
       "invalidNumber": "Enter a valid number.",
-      "saved": "Configuration updated on the server."
+      "saved": "Configuration updated on the server.",
+      "configKeys": {
+        "site_name": { "title": "Site name", "description": "Name shown on the user site pages and browser tab." },
+        "site_logo_url": { "title": "Site logo URL", "description": "Logo image URL shown in the site navigation (https preferred); blank shows the default mark." },
+        "default_locale": { "title": "Default locale", "description": "Interface language for first-time visitors; zh or en." },
+        "legal_privacy_override_zh": { "title": "Privacy policy override (Chinese)", "description": "Overrides the built-in privacy policy in Chinese; blank falls back to the template. Supports ## headings, - lists, > notes and paragraphs; newlines preserved." },
+        "legal_privacy_override_en": { "title": "Privacy policy override (English)", "description": "Overrides the built-in privacy policy in English; blank falls back to the template." },
+        "legal_terms_override_zh": { "title": "Terms of service override (Chinese)", "description": "Overrides the built-in terms of service in Chinese; blank falls back to the template." },
+        "legal_terms_override_en": { "title": "Terms of service override (English)", "description": "Overrides the built-in terms of service in English; blank falls back to the template." },
+        "legal_authoritative_locale": { "title": "Authoritative locale", "description": "Declares which language version prevails on conflict; zh or en; blank hides the notice." },
+        "default_endpoint_limit": { "title": "Default endpoint limit", "description": "Maximum number of endpoints each user can create." },
+        "default_endpoint_key_limit": { "title": "Default endpoint key limit", "description": "Maximum upstream keys each endpoint can hold." },
+        "default_model_limit": { "title": "Default model limit", "description": "Maximum platform models each user can create." },
+        "default_binding_limit": { "title": "Default binding limit", "description": "Maximum upstream bindings each platform model can configure." },
+        "default_rpm_per_user": { "title": "Default RPM per user", "description": "Maximum calls per minute each user can make." },
+        "global_rpm": { "title": "Global RPM", "description": "Total calls per minute across all users." },
+        "default_per_endpoint_concurrency": { "title": "Default per-endpoint concurrency", "description": "Maximum concurrent outbound requests per endpoint." },
+        "egress_global_concurrency": { "title": "Egress global concurrency", "description": "Maximum concurrent outbound requests shared across all endpoints." },
+        "discord_guild_id": { "title": "Discord guild ID", "description": "Discord server ID required for signup gating; blank disables gating." },
+        "discord_role_id": { "title": "Discord role ID", "description": "Discord server role ID required for signup; blank skips role check." },
+        "oauth_start_rate_limit": { "title": "OAuth start rate limit", "description": "Maximum Discord authorizations an IP can start within the window." },
+        "oauth_start_rate_window_seconds": { "title": "OAuth start rate window", "description": "Rate-limit window length in seconds for OAuth start." },
+        "oauth_start_rate_penalty_seconds": { "title": "OAuth start rate penalty", "description": "Seconds an IP is temporarily blocked after exceeding the OAuth start limit." }
+      }
     }
   }
 }

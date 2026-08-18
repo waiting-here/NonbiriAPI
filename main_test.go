@@ -154,6 +154,31 @@ func TestApplicationWiringProtectsAllEntryPoints(t *testing.T) {
 	if unknown.Code != http.StatusBadRequest || strings.Contains(unknown.Body.String(), "user placeholder") {
 		t.Fatalf("unknown host response status=%d body=%q", unknown.Code, unknown.Body.String())
 	}
+
+	// The public config bootstrap is unauthenticated but projects only the
+	// display allowlist: site_name / site_logo_url / default_locale. Operational
+	// and secret keys must never appear, and the response is no-store.
+	cfgResp := testHTTPResponse(t, app.handler, http.MethodGet, "127.0.0.1", "/api/config")
+	if cfgResp.Code != http.StatusOK {
+		t.Fatalf("/api/config status=%d body=%s", cfgResp.Code, cfgResp.Body.String())
+	}
+	if cfgResp.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("/api/config cache-control=%q", cfgResp.Header().Get("Cache-Control"))
+	}
+	var cfgBody map[string]any
+	if err := json.Unmarshal(cfgResp.Body.Bytes(), &cfgBody); err != nil {
+		t.Fatalf("/api/config body=%s err=%v", cfgResp.Body.String(), err)
+	}
+	for _, k := range []string{"site_name", "site_logo_url", "default_locale", "legal_privacy_override_zh", "legal_privacy_override_en", "legal_terms_override_zh", "legal_terms_override_en", "legal_authoritative_locale"} {
+		if _, ok := cfgBody[k]; !ok {
+			t.Fatalf("/api/config missing %q: %s", k, cfgResp.Body.String())
+		}
+	}
+	for _, secret := range []string{"default_rpm_per_user", "global_rpm", "discord_guild_id", "discord_role_id", "oauth_start_rate_limit"} {
+		if _, ok := cfgBody[secret]; ok {
+			t.Fatalf("/api/config leaked %q: %s", secret, cfgResp.Body.String())
+		}
+	}
 }
 
 func TestMaintenanceSweepPurgesExpiredSessions(t *testing.T) {
