@@ -2,11 +2,9 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -41,11 +39,6 @@ type UserAuthConfig struct {
 	// Nil creates an owned manager for a standalone auth service; production
 	// should inject one instance shared with lifecycle.
 	Elevation *elevation.Manager
-	// UserRPMLimitCap optionally resolves the current site-wide per-user RPM
-	// ceiling used to clamp self-service rpm_limit updates (PATCH /api/me).
-	// Nil falls back to the persisted default_rpm_per_user site_config value,
-	// then the ratelimit package default.
-	UserRPMLimitCap func(ctx context.Context) (int, error)
 	// OAuthStartThrottle optionally supplies the per-client-IP admission
 	// throttle applied immediately before an OAuth state is issued for login
 	// (GET /api/auth/discord/start) or elevation (POST /api/auth/elevate). It
@@ -72,7 +65,6 @@ type UserAuth struct {
 	redirectURI        string
 	userRedirectPath   string
 	registrationGate   RegistrationGateFunc
-	userRPMLimitCap    func(ctx context.Context) (int, error)
 	oauthStartThrottle *ratelimit.IPThrottle
 }
 
@@ -141,7 +133,7 @@ func NewUserAuth(config UserAuthConfig) (*UserAuth, error) {
 		store: config.Store, provider: config.Provider, clientID: config.ClientID, state: config.State,
 		ownsState: ownsState, siteBaseURL: base, redirectURI: redirectURI, userRedirectPath: path,
 		registrationGate: gate, elevation: manager, ownsElevation: ownsElevation,
-		userRPMLimitCap: config.UserRPMLimitCap, oauthStartThrottle: config.OAuthStartThrottle,
+		oauthStartThrottle: config.OAuthStartThrottle,
 	}, nil
 }
 
@@ -454,12 +446,13 @@ func (a *UserAuth) Session(w http.ResponseWriter, r *http.Request) {
 // Me is the contract-compatible alias for the user profile probe.
 func (a *UserAuth) Me(w http.ResponseWriter, r *http.Request) { a.Session(w, r) }
 
-// PatchMe handles PATCH /api/me: a session-only self-service profile update
-// limited to lang and the user's own rpm_limit. endpoint_limit, admin/ban
-// state, usage, and the body user id are never accepted (unknown fields are
-// rejected by the strict decoder). rpm_limit is clamped to the current global
-// per-user cap; an explicit null restores the global default. The response is
-// the same no-store user envelope as GET /api/me.
+// PatchMe handles PATCH /api/me: a session-only self-service profile
+// update limited to lang. endpoint_limit, rpm_limit, admin/ban state,
+// usage, and the body user id are never accepted (unknown fields are
+// rejected by the strict decoder). The response is the same no-store user
+// envelope as GET /api/me. Per-user RPM limits are administrator-set only;
+// alpha.1 removed the self-service rpm_limit field after trial-run feedback
+// that exposing per-minute rate configuration to end users was misleading.
 func (a *UserAuth) PatchMe(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodPatch) || !requireStation(w, r, host.StationUser) {
 		return
@@ -474,47 +467,22 @@ func (a *UserAuth) PatchMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Lang     *string         `json:"lang"`
-		RPMLimit json.RawMessage `json:"rpm_limit"`
+		Lang *string `json:"lang"`
 	}
 	if !decodeJSONBody(w, r, &body) {
 		return
 	}
-	if body.Lang == nil && body.RPMLimit == nil {
+	if body.Lang == nil {
 		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
 		return
 	}
 	patch := db.UserLimitPatch{}
-	if body.Lang != nil {
-		if *body.Lang != "zh" && *body.Lang != "en" {
-			writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
-			return
-		}
-		patch.LangSet = true
-		patch.Lang = *body.Lang
+	if *body.Lang != "zh" && *body.Lang != "en" {
+		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+		return
 	}
-	if body.RPMLimit != nil {
-		if string(body.RPMLimit) == "null" {
-			// An explicit null restores the global default.
-			patch.RPMLimitSet = true
-		} else {
-			var limit int
-			if err := json.Unmarshal(body.RPMLimit, &limit); err != nil || limit < 1 {
-				writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
-				return
-			}
-			cap, err := a.currentUserRPMLimitCap(r.Context())
-			if err != nil {
-				writeStableError(w, httperr.CodeInternal, "profile update unavailable")
-				return
-			}
-			if limit > cap {
-				limit = cap
-			}
-			patch.RPMLimitSet = true
-			patch.RPMLimit = &limit
-		}
-	}
+	patch.LangSet = true
+	patch.Lang = *body.Lang
 	updated, err := a.store.UpdateUserLimits(user.ID, patch)
 	if err != nil {
 		switch {
@@ -529,29 +497,6 @@ func (a *UserAuth) PatchMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httperr.WriteJSON(w, http.StatusOK, userEnvelope{User: publicUser(updated)})
-}
-
-// currentUserRPMLimitCap resolves the ceiling used to clamp self-service
-// rpm_limit updates: the injected resolver when present, otherwise the
-// persisted default_rpm_per_user site_config value, otherwise the ratelimit
-// package default. The flow-control controller clamps the stored value again
-// at admission, so an over-large stored value can never raise a user's
-// budget.
-func (a *UserAuth) currentUserRPMLimitCap(ctx context.Context) (int, error) {
-	if a.userRPMLimitCap != nil {
-		return a.userRPMLimitCap(ctx)
-	}
-	if a.store != nil {
-		if raw, err := a.store.GetSiteConfigValue("default_rpm_per_user"); err == nil {
-			raw = strings.TrimSpace(raw)
-			if raw != "" {
-				if n, perr := strconv.Atoi(raw); perr == nil && n >= 1 {
-					return n, nil
-				}
-			}
-		}
-	}
-	return ratelimit.DefaultRPMPerUserLimit, nil
 }
 
 // Logout handles POST /api/auth/logout and atomically removes the presented

@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { formatDateTime } from '@shared/utils/datetime';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
@@ -16,6 +17,41 @@ import { UserPageGate } from '../components/UserPageGate';
 
 function number(value: number): string {
   return value.toLocaleString();
+}
+
+// pendingElevation carries the account action that requested a fresh
+// Discord re-authorization across the OAuth round-trip (the callback always
+// lands on the configured redirect path, not back to this page), so the
+// returning user lands directly on the confirmation step instead of having
+// to find a separate "re-authorize" button first.
+const PENDING_ELEVATION_KEY = 'nb.pending.elevation';
+
+type PendingElevation = 'export' | 'delete';
+
+function readPendingElevation(): PendingElevation | null {
+  try {
+    const value = window.sessionStorage.getItem(PENDING_ELEVATION_KEY);
+    return value === 'export' || value === 'delete' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePendingElevation(intent: PendingElevation) {
+  try {
+    window.sessionStorage.setItem(PENDING_ELEVATION_KEY, intent);
+  } catch {
+    // sessionStorage may be unavailable (private mode); the flow degrades to
+    // the manual re-authorize path.
+  }
+}
+
+function clearPendingElevation() {
+  try {
+    window.sessionStorage.removeItem(PENDING_ELEVATION_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 function elevatedTokenFromCookie(): string | undefined {
@@ -78,30 +114,14 @@ function downloadExport(payload: unknown): void {
   URL.revokeObjectURL(url);
 }
 
-function PreferencesForm({ initialLang, initialRpm }: { initialLang: 'zh' | 'en'; initialRpm?: number }) {
+function PreferencesForm({ initialLang }: { initialLang: 'zh' | 'en' }) {
   const { t } = useTranslation();
   const updateProfile = useUpdateUserProfile();
   const [lang, setLang] = useState<'zh' | 'en'>(initialLang);
-  const [rpm, setRpm] = useState(initialRpm === undefined ? '' : String(initialRpm));
-  const [validationError, setValidationError] = useState('');
 
   const save = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setValidationError('');
-    let rpmLimit: number | null = null;
-    if (rpm.trim()) {
-      if (!/^\d+$/.test(rpm.trim())) {
-        setValidationError(t('user.account.preferencesRpmInvalid'));
-        return;
-      }
-      const parsed = Number(rpm.trim());
-      if (!Number.isSafeInteger(parsed) || parsed < 1) {
-        setValidationError(t('user.account.preferencesRpmInvalid'));
-        return;
-      }
-      rpmLimit = parsed;
-    }
-    updateProfile.mutate({ lang, rpm_limit: rpmLimit });
+    updateProfile.mutate({ lang });
   };
 
   return (
@@ -114,33 +134,12 @@ function PreferencesForm({ initialLang, initialRpm }: { initialLang: 'zh' | 'en'
             <option value="en">EN</option>
           </select>
         </label>
-        <label>
-          <span>{t('user.account.preferencesRpm')}</span>
-          <input
-            type="number"
-            min="1"
-            step="1"
-            value={rpm}
-            onChange={(event) => setRpm(event.target.value)}
-            placeholder={t('user.account.preferencesRpmPlaceholder')}
-            aria-label={t('user.account.preferencesRpm')}
-          />
-        </label>
       </div>
-      <small className="muted">{t('user.account.preferencesRpmHint')}</small>
-      {validationError ? <p className="field-error" role="alert">{validationError}</p> : null}
       {updateProfile.error ? <ErrorState error={updateProfile.error} /> : null}
       {updateProfile.isSuccess ? <p className="inline-success" role="status">{t('user.account.preferencesSaved')}</p> : null}
       <div className="table-actions">
         <button type="submit" className="btn btn-quiet" disabled={updateProfile.isPending}>
           {updateProfile.isPending ? t('common.working') : t('user.account.preferencesSave')}
-        </button>
-        <button
-          type="button"
-          className="btn btn-link"
-          onClick={() => setRpm('')}
-        >
-          {t('user.account.preferencesRestore')}
         </button>
       </div>
     </form>
@@ -163,9 +162,8 @@ function PreferencesCard() {
         // query is invalidated by the mutation), so the form always shows
         // the server-authoritative, clamped state.
         <PreferencesForm
-          key={`${me.data.id}-${me.data.lang}-${me.data.rpm_limit ?? 'default'}`}
+          key={`${me.data.id}-${me.data.lang}`}
           initialLang={me.data.lang}
-          initialRpm={me.data.rpm_limit}
         />
       )}
     </Card>
@@ -179,19 +177,33 @@ function AccountContent() {
   const session = useUserSession();
   const me = useUserMe(true);
   const usage = useUserUsage(true);
-  const [elevationStarted, setElevationStarted] = useState(false);
   const [elevationBusy, setElevationBusy] = useState(false);
   const [elevationError, setElevationError] = useState<unknown>(null);
-  const [exportOpen, setExportOpen] = useState(false);
+  // After an OAuth re-authorization round-trip, if this account action
+  // requested it and the elevated capability is now present, resume directly
+  // at the confirmation step. The dialog open-state is seeded from the
+  // pending intent (a lazy initializer) so no setState runs inside an effect;
+  // the effect only clears the one-shot session marker.
+  const [exportOpen, setExportOpen] = useState(
+    () => readPendingElevation() === 'export' && Boolean(elevatedTokenFromCookie()),
+  );
   const [exportBusy, setExportBusy] = useState(false);
   const [exportError, setExportError] = useState<unknown>(null);
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(
+    () => readPendingElevation() === 'delete' && Boolean(elevatedTokenFromCookie()),
+  );
   const [deleteWord, setDeleteWord] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<unknown>(null);
 
-  const startElevation = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  useEffect(() => {
+    // Clear the one-shot pending marker once the dialog has been seeded.
+    if (readPendingElevation() && elevatedTokenFromCookie()) {
+      clearPendingElevation();
+    }
+  }, []);
+
+  const triggerElevation = async (intent: PendingElevation) => {
     setElevationError(null);
     setElevationBusy(true);
     try {
@@ -209,7 +221,7 @@ function AccountContent() {
       if (authorizationUrl.protocol !== 'https:') {
         throw new Error(t('user.account.elevationUnavailable'));
       }
-      setElevationStarted(true);
+      writePendingElevation(intent);
       window.location.assign(authorizationUrl.toString());
     } catch (error) {
       setElevationError(error);
@@ -298,7 +310,7 @@ function AccountContent() {
               </div>
               <div className="detail-row">
                 <dt>{t('user.account.created')}</dt>
-                <dd>{user.created_at}</dd>
+                <dd>{formatDateTime(user.created_at)}</dd>
               </div>
             </dl>
           ) : null}
@@ -325,13 +337,7 @@ function AccountContent() {
       <Card className="danger-zone">
         <h2>{t('user.account.securityTitle')}</h2>
         <p>{t('user.account.elevateBody')}</p>
-        <form onSubmit={(event) => void startElevation(event)} noValidate>
-          <button type="submit" className="btn btn-secondary" disabled={elevationBusy}>
-            {elevationBusy ? t('common.working') : t('user.account.startElevation')}
-          </button>
-        </form>
         {elevationError ? <ErrorState error={elevationError} /> : null}
-        {elevationStarted ? <p className="inline-success" role="status">{t('user.account.elevationStarted')}</p> : null}
         <div className="security-actions">
           <div>
             <h3>{t('user.account.export')}</h3>
@@ -342,11 +348,15 @@ function AccountContent() {
               className="btn btn-primary"
               onClick={() => {
                 setExportError(null);
-                setExportOpen(true);
+                if (elevatedTokenFromCookie()) {
+                  setExportOpen(true);
+                } else {
+                  void triggerElevation('export');
+                }
               }}
-              disabled={exportBusy}
+              disabled={exportBusy || elevationBusy}
             >
-              {exportBusy ? t('common.working') : t('user.account.export')}
+              {exportBusy || elevationBusy ? t('common.working') : t('user.account.export')}
             </button>
           </div>
           <div>
@@ -358,10 +368,15 @@ function AccountContent() {
               onClick={() => {
                 setDeleteWord('');
                 setDeleteError(null);
-                setDeleteOpen(true);
+                if (elevatedTokenFromCookie()) {
+                  setDeleteOpen(true);
+                } else {
+                  void triggerElevation('delete');
+                }
               }}
+              disabled={deleteBusy || elevationBusy}
             >
-              {t('user.account.delete')}
+              {deleteBusy || elevationBusy ? t('common.working') : t('user.account.delete')}
             </button>
           </div>
         </div>
