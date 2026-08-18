@@ -94,7 +94,12 @@ func (a *AdminAuth) Login(w http.ResponseWriter, r *http.Request) {
 	if identity == "" {
 		identity = "unknown"
 	}
-	decision, err := a.throttle.Check(identity, request.Username)
+	// There is exactly one environment-owned administrator identity. Keying
+	// bounded throttle state by attacker-supplied candidate usernames would
+	// let one client exhaust the global entry store with cheap variations and
+	// deny the real administrator. Every candidate therefore shares the fixed
+	// configured account key for that client identity.
+	decision, err := a.throttle.Check(identity, a.username)
 	if err != nil {
 		// A malformed/over-capacity throttle identity fails closed without
 		// exposing implementation state.
@@ -111,7 +116,7 @@ func (a *AdminAuth) Login(w http.ResponseWriter, r *http.Request) {
 	passwordValid := constantTimeCredentialEqual(a.password, request.Password)
 	valid := usernameValid && passwordValid
 	if !valid {
-		failure, failureErr := a.throttle.Failure(identity, request.Username)
+		failure, failureErr := a.throttle.Failure(identity, a.username)
 		if failureErr != nil {
 			writeStableError(w, httperr.CodeRateLimited, "login temporarily unavailable")
 			return
@@ -124,7 +129,7 @@ func (a *AdminAuth) Login(w http.ResponseWriter, r *http.Request) {
 		writeStableError(w, httperr.CodeUnauthorized, "invalid administrator credentials")
 		return
 	}
-	if err := a.throttle.Success(identity, request.Username); err != nil {
+	if err := a.throttle.Success(identity, a.username); err != nil {
 		writeStableError(w, httperr.CodeRateLimited, "login temporarily unavailable")
 		return
 	}

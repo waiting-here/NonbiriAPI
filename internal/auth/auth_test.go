@@ -408,6 +408,33 @@ func TestAdminEnvironmentCredentialsThrottleAndNoPasswordPersistence(t *testing.
 	}
 }
 
+func TestAdminThrottleCannotBeFilledWithCandidateUsernameVariants(t *testing.T) {
+	st := authTestStore(t)
+	config := ratelimit.DefaultLoginThrottleConfig()
+	config.MaxEntries = 1
+	throttle, err := ratelimit.NewLoginThrottle(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer throttle.Close()
+	service, err := NewAdminAuth(AdminAuthConfig{
+		Store: st, Username: "root-user", Password: "correct-password", Throttle: throttle,
+		SiteBaseURL: "https://example.com",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, candidate := range []string{"attacker-name-one", "attacker-name-two"} {
+		body := bytes.NewReader([]byte(`{"username":"` + candidate + `","password":"wrong-password"}`))
+		recorder := httptest.NewRecorder()
+		service.Login(recorder, stationRequest(http.MethodPost, "https://admin.example.com/admin/api/login", host.StationAdmin, body))
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("candidate %q status=%d body=%q; username variation consumed throttle capacity", candidate, recorder.Code, recorder.Body.String())
+		}
+	}
+}
+
 func TestCallerKeyMiddlewareAndBannedImmediateFailure(t *testing.T) {
 	st := authTestStore(t)
 	user, err := st.CreateDiscordUser("discord-caller", "caller", "")
