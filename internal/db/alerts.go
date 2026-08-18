@@ -67,8 +67,16 @@ const (
 	// until an administrator resolves pending alerts of that kind.
 	MaxAdminAlertsPerKind = 100
 	// MaxAdminAlertsTotal bounds retained alert history. It is a hard fail-closed
-	// cap; a later retention policy may remove old resolved rows explicitly.
+	// cap; the resolved-alert retention policy (CleanupResolvedAlerts, see below)
+	// removes old resolved rows periodically so the cap stays available for new
+	// events instead of being consumed by history.
 	MaxAdminAlertsTotal = 10000
+	// ResolvedAlertRetention is the policy retention window for resolved admin
+	// alerts: a resolved row whose resolved_at is older than now minus this
+	// window is removed by CleanupResolvedAlerts. Pending (unresolved) alerts
+	// are never removed by retention — an administrator keeps the chance to act
+	// on them. The value is the frozen 30-day resolved-alert retention policy.
+	ResolvedAlertRetention = 30 * 24 * time.Hour
 )
 
 // Alert kind registry. This is the single authority for alert event kinds:
@@ -343,4 +351,40 @@ WHERE EXISTS (SELECT 1 FROM users WHERE id = ?)
 		return false, fmt.Errorf("record admin alert bounded: rows affected: %w", err)
 	}
 	return affected == 1, nil
+}
+
+// CleanupResolvedAlerts removes resolved admin alerts whose resolved_at is
+// older than the retention window (now - retention). Pending (unresolved)
+// alerts are never removed: an administrator must keep the chance to act on
+// them, so the delete predicates on resolved = 1 and resolved_at alone. The
+// age clock is resolved_at (when the alert was acked), not created_at — a
+// long-pending alert that an administrator only just resolved stays for the
+// full retention window counted from the resolve time.
+//
+// The retention is a parameter so tests and targeted sweeps can pass an
+// explicit window; production passes ResolvedAlertRetention. The cutoff is
+// derived from the service clock (now), never from client input. Only a
+// bounded deleted-row count is returned; no alert content (kind/message/ref)
+// is ever emitted in an error or log line.
+func (s *Store) CleanupResolvedAlerts(ctx context.Context, retention time.Duration) (int64, error) {
+	return s.cleanupResolvedAlertsAt(ctx, time.Now(), retention)
+}
+
+func (s *Store) cleanupResolvedAlertsAt(ctx context.Context, now time.Time, retention time.Duration) (int64, error) {
+	if ctx == nil {
+		return 0, fmt.Errorf("cleanup resolved alerts: context is required")
+	}
+	if retention < 0 {
+		return 0, fmt.Errorf("cleanup resolved alerts: retention must be non-negative")
+	}
+	cutoff := now.UTC().Add(-retention).Unix()
+	result, err := s.db.ExecContext(ctx, `DELETE FROM admin_alerts WHERE resolved = 1 AND resolved_at < ?`, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("cleanup resolved alerts: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("cleanup resolved alerts: rows affected: %w", err)
+	}
+	return affected, nil
 }

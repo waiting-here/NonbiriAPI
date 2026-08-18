@@ -561,3 +561,113 @@ func intString(i int) string {
 	}
 	return string(b[pos:])
 }
+
+func TestCleanupResolvedAlerts(t *testing.T) {
+	st := openTestStore(t, filepath.Join(t.TempDir(), "alerts-retention.db"))
+	defer st.Close()
+	ctx := context.Background()
+
+	// now is captured once so the resolve timestamps and the sweep cutoff are
+	// derived from the same instant, keeping the strict-< boundary deterministic.
+	now := time.Now().UTC()
+	const retention = 30 * 24 * time.Hour
+
+	// a1: resolved 40 days ago -> past retention -> deleted.
+	a1 := seedAlert(t, st, AlertKindFetchFailed, "old-resolved", 0)
+	if _, err := st.SetAdminAlertResolved(ctx, a1, true, now.Add(-40*24*time.Hour).Unix()); err != nil {
+		t.Fatalf("resolve a1: %v", err)
+	}
+	// a2: resolved 5 days ago -> within retention -> kept.
+	a2 := seedAlert(t, st, AlertKindForwardError, "recent-resolved", 0)
+	if _, err := st.SetAdminAlertResolved(ctx, a2, true, now.Add(-5*24*time.Hour).Unix()); err != nil {
+		t.Fatalf("resolve a2: %v", err)
+	}
+	// a3: resolved exactly at the cutoff (now - retention). The predicate is
+	// strict (<), so a row resolved at the cutoff survives.
+	a3 := seedAlert(t, st, AlertKindRegistrationRejected, "boundary-resolved", 0)
+	cutoff := now.Add(-retention)
+	if _, err := st.SetAdminAlertResolved(ctx, a3, true, cutoff.Unix()); err != nil {
+		t.Fatalf("resolve a3: %v", err)
+	}
+	// a4: pending with an ancient created_at. Retention keys off resolved_at,
+	// never created_at, and never touches pending rows; this row survives
+	// regardless of how old created_at is.
+	if _, err := st.RecordAdminAlertBounded(ctx, AdminAlertInput{
+		Kind: AlertKindFetchFailed, Message: "m", Ref: "ancient-pending",
+		SubjectUserID: 0, CreatedAt: now.Add(-365 * 24 * time.Hour),
+	}); err != nil {
+		t.Fatalf("record ancient pending: %v", err)
+	}
+	var a4 int64
+	if err := st.DB().QueryRow(`SELECT id FROM admin_alerts WHERE ref = ?`, "ancient-pending").Scan(&a4); err != nil {
+		t.Fatalf("read back a4: %v", err)
+	}
+	// a5: pending, recently created -> kept (control).
+	a5 := seedAlert(t, st, AlertKindForwardError, "recent-pending", 0)
+
+	deleted, err := st.cleanupResolvedAlertsAt(ctx, now, retention)
+	if err != nil {
+		t.Fatalf("cleanupResolvedAlertsAt: %v", err)
+	}
+	if deleted != 1 {
+		t.Fatalf("deleted = %d, want 1 (only a1 past retention)", deleted)
+	}
+
+	// Survivors: a2, a3 (resolved, within/at boundary), a4, a5 (pending).
+	rows, _, err := st.ListAdminAlerts(ctx, AlertQuery{})
+	if err != nil {
+		t.Fatalf("list after cleanup: %v", err)
+	}
+	got := map[int64]bool{}
+	for _, r := range rows {
+		got[r.ID] = true
+	}
+	for _, want := range []int64{a2, a3, a4, a5} {
+		if !got[want] {
+			t.Errorf("alert %d missing after cleanup", want)
+		}
+	}
+	if got[a1] {
+		t.Errorf("a1 (past retention) still present after cleanup")
+	}
+	if len(rows) != 4 {
+		t.Fatalf("rows after cleanup = %d, want 4: %+v", len(rows), rows)
+	}
+
+	// Idempotent: a second sweep against the same cutoff deletes nothing.
+	deleted2, err := st.cleanupResolvedAlertsAt(ctx, now, retention)
+	if err != nil || deleted2 != 0 {
+		t.Fatalf("second sweep: deleted=%d err=%v, want 0/nil", deleted2, err)
+	}
+
+	// A zero-retention sweep removes every resolved row but no pending row,
+	// proving the resolved predicate and the pending exemption together.
+	deleted3, err := st.cleanupResolvedAlertsAt(ctx, now, 0)
+	if err != nil {
+		t.Fatalf("zero-retention sweep: %v", err)
+	}
+	if deleted3 != 2 { // a2, a3 resolved -> removed
+		t.Fatalf("zero-retention deleted = %d, want 2", deleted3)
+	}
+	remaining, _, err := st.ListAdminAlerts(ctx, AlertQuery{})
+	if err != nil || len(remaining) != 2 { // a4, a5 pending
+		t.Fatalf("after zero-retention: %d rows (err=%v), want 2 pending", len(remaining), err)
+	}
+	for _, r := range remaining {
+		if r.Resolved {
+			t.Errorf("resolved row %d survived zero-retention sweep", r.ID)
+		}
+	}
+}
+
+func TestCleanupResolvedAlertsValidation(t *testing.T) {
+	st := openTestStore(t, filepath.Join(t.TempDir(), "alerts-retention-arg.db"))
+	defer st.Close()
+
+	// A negative retention would back-date the cutoff into the future and wipe
+	// all resolved rows; it is rejected as a programming error. Zero is a
+	// legitimate "purge all resolved" window and is accepted elsewhere.
+	if _, err := st.CleanupResolvedAlerts(context.Background(), -time.Second); err == nil {
+		t.Fatalf("negative retention accepted")
+	}
+}

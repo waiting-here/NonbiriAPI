@@ -24,8 +24,9 @@ be closed before the task is accepted.
    suppression for late writers.
 3. **Retention** — Is there a bounded retention/cleanup policy, or is the data naturally
    bounded by the account lifetime? Request logs are cleaned past 30 days; expired sessions
-   are purged at startup and every six hours by idle/absolute TTL; alerts/issues are bounded
-   by their own caps and resolve state.
+   are purged at startup and every six hours by idle/absolute TTL; resolved admin alerts
+   are removed past 30 days (`CleanupResolvedAlerts` in the same startup + 6h sweep);
+   pending alerts and user issues are bounded by their own caps and resolve state.
 4. **Privacy** — Does the privacy/terms text (zh/en) describe the data, and is untrusted or
    sensitive content bounded/sanitized at every sink? Upstream identifiers/diagnostics live
    only behind `internal/diagnostic.Bound`; secrets never enter logs, errors, CSV, HTML, or
@@ -46,7 +47,7 @@ be closed before the task is accepted.
 | `model_bindings` | `model_id`/`endpoint_key_id` FK CASCADE | yes (endpoint_key_id, upstream_model_id, ord) | cascade on model/key delete (and thus user delete) | account lifetime | opaque ids |
 | `request_logs` | `user_id` FK CASCADE; `endpoint_key_id` FK SET NULL | yes (bounded metadata summary; **no content**) | cascade on user delete; late `RecordRequest` uses `INSERT ... SELECT ... WHERE EXISTS users` (atomic no-op) | **30-day retention cleanup**; at-most-once by `attempt_id` partial unique index | metadata + bounded `error_diag` only; content never persisted |
 | `user_issues` | `user_id` FK CASCADE | yes (kind, message, ref, created_at, resolved) | cascade on user delete; late `RecordUserIssue`/`FailFetch` use `INSERT ... SELECT ... WHERE EXISTS users` (atomic no-op) | hard cap `MaxUserIssuesPerUser` + resolve state | bounded/sanitized message/ref via `diagnostic.BoundTo` |
-| `admin_alerts` | `subject_user_id` **NO FK** (by design) | no (admin-facing, not the user's export) | explicit `DELETE FROM admin_alerts WHERE subject_user_id=?` inside `DeleteUserAccount`; late `RecordAdminAlert`/`RecordAdminAlertBounded` use `INSERT ... SELECT ... WHERE EXISTS users` (atomic no-op) | hard total cap `MaxAdminAlertsTotal` + per-kind pending cap + resolve state | bounded/sanitized message/ref; no secret |
+| `admin_alerts` | `subject_user_id` **NO FK** (by design) | no (admin-facing, not the user's export) | explicit `DELETE FROM admin_alerts WHERE subject_user_id=?` inside `DeleteUserAccount`; late `RecordAdminAlert`/`RecordAdminAlertBounded` use `INSERT ... SELECT ... WHERE EXISTS users` (atomic no-op) | hard total cap `MaxAdminAlertsTotal` + per-kind pending cap + resolve state; **resolved alerts retained 30 days then removed by `CleanupResolvedAlerts` (startup + every 6h via `runMaintenanceSweep`); pending never removed by retention** | bounded/sanitized message/ref; no secret |
 | `site_config` | **no user link** (admin-only runtime config) | n/a (never part of an account export) | n/a (not removed on account deletion; survives as operator configuration) | bounded known-key set (`adminapi` registry) with typed/range/control validation | no secret/upstream material by construction; values are bounded text/ints |
 
 ## Adding a new user-associated table/column — required steps

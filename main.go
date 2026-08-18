@@ -369,6 +369,11 @@ func runMaintenanceSweep(ctx context.Context, store *db.Store, usageService *usa
 			slog.Error("request log retention failed", "err", cleanupErr)
 		}
 	}
+	if store != nil && ctx.Err() == nil {
+		if _, alertErr := store.CleanupResolvedAlerts(ctx, db.ResolvedAlertRetention); alertErr != nil && ctx.Err() == nil {
+			slog.Error("resolved alert retention failed", "err", alertErr)
+		}
+	}
 }
 
 func applyPersistedRuntimeConfig(store *db.Store, runtime adminapi.RuntimeApplier) error {
