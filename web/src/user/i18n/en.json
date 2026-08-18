@@ -166,6 +166,7 @@
       "resolved": "Resolved",
       "resolvedValue": "Acknowledged",
       "resolve": "Acknowledge",
+      "filterResolved": "Resolution status",
       "empty": "No issues returned",
       "emptyBody": "The service has not returned any issue records for this account."
     },

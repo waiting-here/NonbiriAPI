@@ -941,6 +941,44 @@ tr:first-child td {
   font-size: 0.88rem;
 }
 
+.filter-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.65rem 0.8rem;
+  align-items: end;
+  margin-bottom: 1rem;
+  padding: 0.8rem;
+  background: var(--nb-color-surface-raised);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-sm);
+}
+
+.filter-bar label {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+  font-size: 0.84rem;
+  color: var(--nb-color-text-muted);
+}
+
+.filter-bar input,
+.filter-bar select {
+  min-width: 0;
+  min-height: 2.45rem;
+  padding: 0.5rem 0.55rem;
+  font-size: 0.88rem;
+}
+
+.filter-bar .filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.filter-bar .filter-actions .btn {
+  min-height: 2.45rem;
+}
+
 .config-list {
   display: grid;
   gap: 0.7rem;

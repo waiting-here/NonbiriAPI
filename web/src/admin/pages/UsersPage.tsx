@@ -132,7 +132,9 @@ export function UsersPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[1]);
-  const users = useAdminUsers(page, pageSize);
+  const [draftBanned, setDraftBanned] = useState<'all' | 'normal' | 'banned'>('all');
+  const [bannedFilter, setBannedFilter] = useState<boolean | undefined>(undefined);
+  const users = useAdminUsers(page, pageSize, bannedFilter);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [action, setAction] = useState<'ban' | 'unban' | 'delete' | null>(null);
   const [banReason, setBanReason] = useState('');
@@ -217,6 +219,45 @@ export function UsersPage() {
           <h2>{t('admin.users.listTitle')}</h2>
           <span className="muted">{t('common.page', { page })}</span>
         </div>
+        <form
+          className="filter-bar"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setBannedFilter(
+              draftBanned === 'all' ? undefined : draftBanned === 'banned',
+            );
+            setPage(1);
+          }}
+        >
+          <label>
+            <span>{t('admin.users.filterStatus')}</span>
+            <select
+              value={draftBanned}
+              onChange={(event) => setDraftBanned(event.target.value as 'all' | 'normal' | 'banned')}
+              aria-label={t('common.filterBannedAria')}
+            >
+              <option value="all">{t('common.all')}</option>
+              <option value="normal">{t('common.normalStatus')}</option>
+              <option value="banned">{t('common.banned')}</option>
+            </select>
+          </label>
+          <div className="filter-actions">
+            <button type="submit" className="btn btn-quiet">
+              {t('common.applyFilter')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-link"
+              onClick={() => {
+                setDraftBanned('all');
+                setBannedFilter(undefined);
+                setPage(1);
+              }}
+            >
+              {t('common.resetFilter')}
+            </button>
+          </div>
+        </form>
         {users.isPending ? <LoadingState /> : users.error ? <ErrorState error={users.error} onRetry={() => void users.refetch()} /> : users.data.items.length === 0 ? (
           <EmptyState title={t('admin.users.empty')} body={t('admin.users.emptyBody')} />
         ) : (

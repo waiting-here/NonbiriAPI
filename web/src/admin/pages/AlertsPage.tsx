@@ -20,8 +20,10 @@ export function AlertsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[1]);
   const [cursors, setCursors] = useState<Record<number, string>>({});
+  const [draftResolved, setDraftResolved] = useState<'all' | 'unresolved' | 'resolved'>('all');
+  const [resolvedFilter, setResolvedFilter] = useState<boolean | undefined>(undefined);
   const beforeId = page > 1 ? cursors[page - 1] : undefined;
-  const alerts = useAdminAlerts(page, beforeId, pageSize);
+  const alerts = useAdminAlerts(page, resolvedFilter, beforeId, pageSize);
   const resolve = useResolveAdminAlert();
 
   const changePage = (nextPage: number) => {
@@ -51,6 +53,47 @@ export function AlertsPage() {
           <h2>{t('admin.alerts.listTitle')}</h2>
           <span className="muted">{t('common.page', { page })}</span>
         </div>
+        <form
+          className="filter-bar"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setResolvedFilter(
+              draftResolved === 'all' ? undefined : draftResolved === 'resolved',
+            );
+            setPage(1);
+            setCursors({});
+          }}
+        >
+          <label>
+            <span>{t('admin.alerts.filterResolved')}</span>
+            <select
+              value={draftResolved}
+              onChange={(event) => setDraftResolved(event.target.value as 'all' | 'unresolved' | 'resolved')}
+              aria-label={t('common.filterResolvedAria')}
+            >
+              <option value="all">{t('common.all')}</option>
+              <option value="unresolved">{t('common.unresolved')}</option>
+              <option value="resolved">{t('common.resolved')}</option>
+            </select>
+          </label>
+          <div className="filter-actions">
+            <button type="submit" className="btn btn-quiet">
+              {t('common.applyFilter')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-link"
+              onClick={() => {
+                setDraftResolved('all');
+                setResolvedFilter(undefined);
+                setPage(1);
+                setCursors({});
+              }}
+            >
+              {t('common.resetFilter')}
+            </button>
+          </div>
+        </form>
         {resolve.error ? <ErrorState error={resolve.error} /> : null}
         {alerts.isPending ? <LoadingState /> : alerts.error ? <ErrorState error={alerts.error} onRetry={() => void alerts.refetch()} /> : alerts.data.items.length === 0 ? (
           <EmptyState title={t('admin.alerts.empty')} body={t('admin.alerts.emptyBody')} />

@@ -166,6 +166,7 @@
       "resolved": "已解决",
       "resolvedValue": "已确认",
       "resolve": "确认问题",
+      "filterResolved": "解决状态",
       "empty": "没有返回问题",
       "emptyBody": "服务端没有返回属于此账号的问题记录。"
     },
