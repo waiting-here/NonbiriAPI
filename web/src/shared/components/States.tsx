@@ -155,14 +155,60 @@ export function Pagination({
   page,
   hasNext,
   onChange,
+  pageSize,
+  pageSizeOptions,
+  onPageSizeChange,
+  onJumpToPage,
 }: {
   page: number;
   hasNext: boolean;
   onChange: (nextPage: number) => void;
+  /** Current per-page size; enables the page-size selector when changeable. */
+  pageSize?: number;
+  /** Allowed per-page sizes (kept within the server page limits). */
+  pageSizeOptions?: readonly number[];
+  onPageSizeChange?: (pageSize: number) => void;
+  /**
+   * Offset-only page jump. Cursor-paginated lists cannot seek to an
+   * arbitrary page, so callers in cursor mode leave this unset and no
+   * jump control is rendered.
+   */
+  onJumpToPage?: (page: number) => void;
 }) {
   const { t } = useTranslation();
+  const canPickSize =
+    pageSize !== undefined &&
+    onPageSizeChange !== undefined &&
+    pageSizeOptions !== undefined &&
+    pageSizeOptions.length > 0;
+  const jump = (raw: string) => {
+    if (!onJumpToPage) return;
+    const target = Number(raw);
+    if (!Number.isSafeInteger(target) || target < 1 || target === page) return;
+    onJumpToPage(target);
+  };
   return (
     <nav className="pagination" aria-label={t('common.pagination')}>
+      {canPickSize ? (
+        <label className="pagination-option">
+          <span className="pagination-label">{t('common.pageSize')}</span>
+          <select
+            value={String(pageSize)}
+            onChange={(event) => {
+              const next = Number(event.target.value);
+              if (Number.isSafeInteger(next) && pageSizeOptions.includes(next)) {
+                onPageSizeChange(next);
+              }
+            }}
+          >
+            {pageSizeOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       <button
         type="button"
         className="btn btn-secondary"
@@ -180,6 +226,26 @@ export function Pagination({
       >
         {t('common.next')}
       </button>
+      {onJumpToPage ? (
+        <label className="pagination-option">
+          <span className="pagination-label">{t('common.jumpToPage')}</span>
+          <input
+            type="number"
+            min={1}
+            step={1}
+            key={page}
+            defaultValue={page}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                jump(event.currentTarget.value);
+              }
+            }}
+            onBlur={(event) => jump(event.target.value)}
+            aria-label={t('common.jumpToPage')}
+          />
+        </label>
+      ) : null}
     </nav>
   );
 }

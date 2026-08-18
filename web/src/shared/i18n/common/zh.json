@@ -48,6 +48,8 @@
     "page": "第 {{page}} 页",
     "previous": "上一页",
     "next": "下一页",
+    "pageSize": "每页条目数",
+    "jumpToPage": "跳转页码",
     "optional": "可选",
     "required": "必填",
     "characters": "字符",

@@ -107,14 +107,16 @@ export type SiteConfig = Record<string, SiteConfigValue>;
 export const adminKeys = {
   all: ['admin'] as const,
   session: ['admin', 'session'] as const,
-  users: (page: number) => ['admin', 'users', page] as const,
+  users: (page: number, pageSize: number) => ['admin', 'users', page, pageSize] as const,
   usersRoot: ['admin', 'users'] as const,
-  logs: (page: number, beforeId?: string) => ['admin', 'logs', page, beforeId ?? ''] as const,
+  logs: (page: number, beforeId?: string, limit?: number) =>
+    ['admin', 'logs', page, beforeId ?? '', limit ?? ADMIN_PAGE_SIZE] as const,
   logsRoot: ['admin', 'logs'] as const,
   usage: ['admin', 'usage'] as const,
   endpoints: ['admin', 'endpoints'] as const,
   models: ['admin', 'models'] as const,
-  alerts: (page: number, beforeId?: string) => ['admin', 'alerts', page, beforeId ?? ''] as const,
+  alerts: (page: number, beforeId?: string, limit?: number) =>
+    ['admin', 'alerts', page, beforeId ?? '', limit ?? ADMIN_PAGE_SIZE] as const,
   alertsRoot: ['admin', 'alerts'] as const,
   siteConfig: ['admin', 'site-config'] as const,
 };
@@ -312,12 +314,13 @@ export function useAdminSession() {
   });
 }
 
-export function useAdminUsers(page: number, enabled = true) {
+export function useAdminUsers(page: number, pageSize = ADMIN_PAGE_SIZE, enabled = true) {
   return useQuery({
-    queryKey: adminKeys.users(page),
+    queryKey: adminKeys.users(page, pageSize),
     queryFn: async () => {
       const result = pagePayload(
-        await apiFetch<unknown>(`/admin/api/users?page=${page}&page_size=${ADMIN_PAGE_SIZE}`),
+        await apiFetch<unknown>(`/admin/api/users?page=${page}&page_size=${pageSize}`),
+        pageSize,
       );
       return {
         items: result.items.map(normalizeUser),
@@ -329,13 +332,13 @@ export function useAdminUsers(page: number, enabled = true) {
   });
 }
 
-export function useAdminLogs(page: number, beforeId?: string, enabled = true) {
-  const params = new URLSearchParams({ limit: String(ADMIN_PAGE_SIZE + 1) });
+export function useAdminLogs(page: number, beforeId?: string, limit = ADMIN_PAGE_SIZE, enabled = true) {
+  const params = new URLSearchParams({ limit: String(limit + 1) });
   if (beforeId) params.set('before_id', beforeId);
   return useQuery({
-    queryKey: adminKeys.logs(page, beforeId),
+    queryKey: adminKeys.logs(page, beforeId, limit),
     queryFn: async () => {
-      const result = pagePayload(await apiFetch<unknown>(`/admin/api/logs?${params}`));
+      const result = pagePayload(await apiFetch<unknown>(`/admin/api/logs?${params}`), limit);
       return {
         items: result.items.map(normalizeLog),
         hasNext: result.hasNext,
@@ -372,13 +375,13 @@ export function useAdminModels(enabled = true) {
   });
 }
 
-export function useAdminAlerts(page: number, beforeId?: string, enabled = true) {
-  const params = new URLSearchParams({ limit: String(ADMIN_PAGE_SIZE + 1) });
+export function useAdminAlerts(page: number, beforeId?: string, limit = ADMIN_PAGE_SIZE, enabled = true) {
+  const params = new URLSearchParams({ limit: String(limit + 1) });
   if (beforeId) params.set('before_id', beforeId);
   return useQuery({
-    queryKey: adminKeys.alerts(page, beforeId),
+    queryKey: adminKeys.alerts(page, beforeId, limit),
     queryFn: async () => {
-      const result = pagePayload(await apiFetch<unknown>(`/admin/api/alerts?${params}`));
+      const result = pagePayload(await apiFetch<unknown>(`/admin/api/alerts?${params}`), limit);
       return {
         items: result.items.map(normalizeAlert),
         hasNext: result.hasNext,

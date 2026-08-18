@@ -36,6 +36,7 @@
       "description": "查看服务端权威用户记录，并明确执行封禁、限制或删号操作。",
       "listTitle": "用户",
       "username": "用户名",
+      "siteId": "站内 ID",
       "discordId": "Discord ID",
       "status": "状态",
       "limits": "限制",

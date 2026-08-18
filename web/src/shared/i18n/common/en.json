@@ -48,6 +48,8 @@
     "page": "Page {{page}}",
     "previous": "Previous",
     "next": "Next",
+    "pageSize": "Rows per page",
+    "jumpToPage": "Go to page",
     "optional": "Optional",
     "required": "Required",
     "characters": "characters",

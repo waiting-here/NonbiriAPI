@@ -254,10 +254,15 @@
 
 .item-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.8rem;
 }
 
 .item-card {
+  /* Cap the content line length: an unbounded card leaves the header badge
+     stranded against the right edge on wide viewports. Grid tracks do not
+     shrink by themselves, so minmax(0, …) is required on the parent. */
+  max-width: 72rem;
   padding: 1rem;
   background: var(--nb-color-surface-raised);
   border: 1px solid var(--nb-color-border);
@@ -667,8 +672,40 @@ tr:first-child td {
 }
 
 .pagination {
+  flex-wrap: wrap;
   justify-content: center;
   padding-top: 0.4rem;
+}
+
+/* The base label is a stacked form grid; inside the pagination toolbar it
+   must instead be a compact, non-growing inline row. */
+.pagination-option {
+  display: flex;
+  margin: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 400;
+}
+
+.pagination-label {
+  color: var(--nb-color-text-muted);
+  font-size: 0.86rem;
+  white-space: nowrap;
+}
+
+.pagination select {
+  width: auto;
+  min-height: 2.45rem;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.88rem;
+}
+
+.pagination input[type='number'] {
+  width: 5.5rem;
+  min-height: 2.45rem;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.88rem;
 }
 
 .pagination > span {
@@ -892,13 +929,16 @@ tr:first-child td {
 }
 
 .limit-fields label {
-  font-size: 0.76rem;
+  /* Match the table cell font (0.88rem base) and button rhythm so inlined
+     editing controls do not shrink below the surrounding row. */
+  font-size: 0.88rem;
 }
 
 .limit-fields input {
   min-width: 0;
-  padding: 0.4rem 0.45rem;
-  font-size: 0.84rem;
+  min-height: 2.45rem;
+  padding: 0.5rem 0.55rem;
+  font-size: 0.88rem;
 }
 
 .config-list {

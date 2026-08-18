@@ -36,6 +36,7 @@
       "description": "Review server-authoritative user records and apply explicit ban, limit or deletion actions.",
       "listTitle": "Users",
       "username": "Username",
+      "siteId": "Site ID",
       "discordId": "Discord ID",
       "status": "Status",
       "limits": "Limits",

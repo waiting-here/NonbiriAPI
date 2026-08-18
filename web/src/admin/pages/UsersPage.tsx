@@ -17,6 +17,8 @@ import { apiFetch } from '@shared/query/http';
 import { asRecord, hasControlCharacters, optionalText } from '@shared/query/normalize';
 import { adminKeys, type AdminUser, useAdminUsers } from '../data';
 
+const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+
 function number(value: number): string {
   return value.toLocaleString();
 }
@@ -129,7 +131,8 @@ export function UsersPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
-  const users = useAdminUsers(page);
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[1]);
+  const users = useAdminUsers(page, pageSize);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [action, setAction] = useState<'ban' | 'unban' | 'delete' | null>(null);
   const [banReason, setBanReason] = useState('');
@@ -224,6 +227,7 @@ export function UsersPage() {
                 <thead>
                   <tr>
                     <th scope="col">{t('admin.users.username')}</th>
+                    <th scope="col">{t('admin.users.siteId')}</th>
                     <th scope="col">{t('admin.users.discordId')}</th>
                     <th scope="col">{t('admin.users.status')}</th>
                     <th scope="col">{t('admin.users.limits')}</th>
@@ -239,6 +243,7 @@ export function UsersPage() {
                         <strong>{user.username}</strong>
                         {user.banned_reason ? <p className="table-note">{user.banned_reason}</p> : null}
                       </td>
+                      <td><ReadOnlyValue value={user.id} /></td>
                       <td><ReadOnlyValue value={user.discord_id} /></td>
                       <td>
                         <StatusBadge
@@ -267,7 +272,18 @@ export function UsersPage() {
                 </tbody>
               </table>
             </div>
-            <Pagination page={page} hasNext={users.data.hasNext} onChange={setPage} />
+            <Pagination
+              page={page}
+              hasNext={users.data.hasNext}
+              onChange={setPage}
+              pageSize={pageSize}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPage(1);
+              }}
+              onJumpToPage={setPage}
+            />
           </>
         )}
       </Card>

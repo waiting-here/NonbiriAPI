@@ -13,12 +13,15 @@ import {
 } from '@shared/components/States';
 import { useAdminAlerts, useResolveAdminAlert } from '../data';
 
+const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+
 export function AlertsPage() {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[1]);
   const [cursors, setCursors] = useState<Record<number, string>>({});
   const beforeId = page > 1 ? cursors[page - 1] : undefined;
-  const alerts = useAdminAlerts(page, beforeId);
+  const alerts = useAdminAlerts(page, beforeId, pageSize);
   const resolve = useResolveAdminAlert();
 
   const changePage = (nextPage: number) => {
@@ -28,6 +31,12 @@ export function AlertsPage() {
       setCursors((current) => ({ ...current, [page]: nextCursor }));
     }
     setPage(nextPage);
+  };
+
+  const changePageSize = (size: number) => {
+    setPageSize(size);
+    setPage(1);
+    setCursors({});
   };
 
   return (
@@ -88,7 +97,14 @@ export function AlertsPage() {
                 </tbody>
               </table>
             </div>
-            <Pagination page={page} hasNext={alerts.data.hasNext} onChange={changePage} />
+            <Pagination
+              page={page}
+              hasNext={alerts.data.hasNext}
+              onChange={changePage}
+              pageSize={pageSize}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              onPageSizeChange={changePageSize}
+            />
           </>
         )}
       </Card>

@@ -458,14 +458,14 @@ export function useCallerKey(enabled = true) {
  * the server's bounded keyset cursor; the cursor is never placed in a
  * persistent browser store.
  */
-export function useUserIssues(resolved?: boolean, beforeId?: string, enabled = true) {
-  const query = new URLSearchParams({ limit: '20' });
+export function useUserIssues(resolved?: boolean, beforeId?: string, limit = 20, enabled = true) {
+  const query = new URLSearchParams({ limit: String(limit) });
   if (resolved !== undefined) query.set('resolved', resolved ? 'true' : 'false');
   if (beforeId) query.set('before_id', beforeId);
   const filterKey = resolved === undefined ? 'all' : String(resolved);
   return useQuery({
-    queryKey: [...userKeys.issues, filterKey, beforeId ?? ''],
-    queryFn: async () => normalizeIssuePage(await apiFetch<unknown>(`/api/issues?${query}`), 20),
+    queryKey: [...userKeys.issues, filterKey, beforeId ?? '', limit],
+    queryFn: async () => normalizeIssuePage(await apiFetch<unknown>(`/api/issues?${query}`), limit),
     enabled,
   });
 }

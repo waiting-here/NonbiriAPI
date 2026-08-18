@@ -14,12 +14,15 @@ import {
 import { useResolveUserIssue, useUserIssues } from '../data';
 import { UserPageGate } from '../components/UserPageGate';
 
+const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+
 function IssuesContent() {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[1]);
   const [cursors, setCursors] = useState<Record<number, string>>({});
   const beforeId = page > 1 ? cursors[page - 1] : undefined;
-  const issues = useUserIssues(undefined, beforeId);
+  const issues = useUserIssues(undefined, beforeId, pageSize);
   const resolve = useResolveUserIssue();
 
   const changePage = (nextPage: number) => {
@@ -29,6 +32,12 @@ function IssuesContent() {
       setCursors((current) => ({ ...current, [page]: nextCursor }));
     }
     setPage(nextPage);
+  };
+
+  const changePageSize = (size: number) => {
+    setPageSize(size);
+    setPage(1);
+    setCursors({});
   };
 
   return (
@@ -88,7 +97,14 @@ function IssuesContent() {
                 </article>
               ))}
             </div>
-            <Pagination page={page} hasNext={issues.data.hasMore} onChange={changePage} />
+            <Pagination
+              page={page}
+              hasNext={issues.data.hasMore}
+              onChange={changePage}
+              pageSize={pageSize}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              onPageSizeChange={changePageSize}
+            />
           </>
         )}
       </Card>

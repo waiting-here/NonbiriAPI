@@ -12,6 +12,8 @@ import {
 } from '@shared/components/States';
 import { useAdminLogs, useAdminUsage } from '../data';
 
+const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+
 function number(value: number): string {
   return value.toLocaleString();
 }
@@ -23,10 +25,11 @@ function usageText(value: number | undefined): string {
 export function LogsPage() {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[1]);
   const [cursors, setCursors] = useState<Record<number, string>>({});
   const usage = useAdminUsage();
   const beforeId = page > 1 ? cursors[page - 1] : undefined;
-  const logs = useAdminLogs(page, beforeId);
+  const logs = useAdminLogs(page, beforeId, pageSize);
 
   const changePage = (nextPage: number) => {
     if (nextPage > page) {
@@ -35,6 +38,12 @@ export function LogsPage() {
       setCursors((current) => ({ ...current, [page]: nextCursor }));
     }
     setPage(nextPage);
+  };
+
+  const changePageSize = (size: number) => {
+    setPageSize(size);
+    setPage(1);
+    setCursors({});
   };
 
   return (
@@ -137,7 +146,14 @@ export function LogsPage() {
                 </tbody>
               </table>
             </div>
-            <Pagination page={page} hasNext={logs.data.hasNext} onChange={changePage} />
+            <Pagination
+              page={page}
+              hasNext={logs.data.hasNext}
+              onChange={changePage}
+              pageSize={pageSize}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              onPageSizeChange={changePageSize}
+            />
           </>
         )}
       </Card>
