@@ -46,6 +46,7 @@
     "noResultsBody": "Change the filters or try again later.",
     "filter": "Filter",
     "applyFilter": "Apply filter",
+    "search": "Search",
     "resetFilter": "Reset",
     "all": "All",
     "userId": "User ID",

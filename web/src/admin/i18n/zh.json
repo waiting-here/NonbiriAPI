@@ -110,7 +110,9 @@
       "created": "创建时间",
       "updated": "更新时间",
       "empty": "没有端点记录",
-      "emptyBody": "管理员 API 没有返回端点概览记录。"
+      "emptyBody": "管理员 API 没有返回端点概览记录。",
+      "searchPlaceholder": "按基础 URL、备注或用户 ID 搜索",
+      "searchAria": "搜索端点"
     },
     "models": {
       "nav": "模型",
@@ -125,7 +127,9 @@
       "ordered": "按顺序",
       "random": "随机",
       "empty": "没有模型记录",
-      "emptyBody": "管理员 API 没有返回模型概览记录。"
+      "emptyBody": "管理员 API 没有返回模型概览记录。",
+      "searchPlaceholder": "按提供方、模型名、完整名称或用户 ID 搜索",
+      "searchAria": "搜索模型"
     },
     "alerts": {
       "nav": "告警",

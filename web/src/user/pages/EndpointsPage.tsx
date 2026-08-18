@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useId, useMemo, useState, type FormEvent } from 'react';
 import { formatDateTime } from '@shared/utils/datetime';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -466,6 +466,21 @@ function EndpointsContent() {
   const endpoints = useEndpoints(true);
   const [editing, setEditing] = useState<Endpoint | undefined>();
   const [showCreate, setShowCreate] = useState(false);
+  const [query, setQuery] = useState('');
+  const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
+
+  const filtered = useMemo(() => {
+    const data = endpoints.data ?? [];
+    const needle = query.trim().toLowerCase();
+    return data.filter((endpoint) => {
+      if (enabledFilter === 'enabled' && !endpoint.enabled) return false;
+      if (enabledFilter === 'disabled' && endpoint.enabled) return false;
+      if (!needle) return true;
+      return [endpoint.base_url, endpoint.note].some((value) =>
+        value.toLowerCase().includes(needle),
+      );
+    });
+  }, [endpoints.data, query, enabledFilter]);
 
   const invalidateAfterEndpointChange = () => {
     void queryClient.invalidateQueries({ queryKey: userKeys.endpoints });
@@ -523,21 +538,50 @@ function EndpointsContent() {
         <Card>
           <div className="card-title-row">
             <h2>{t('user.endpoints.listTitle')}</h2>
-            <span className="muted">{endpoints.data.length}</span>
+            <span className="muted">{filtered.length}</span>
           </div>
-          <div className="item-list">
-            {endpoints.data.map((endpoint) => (
-              <EndpointCard
-                key={endpoint.id}
-                endpoint={endpoint}
-                onEdit={() => {
-                  setShowCreate(false);
-                  setEditing(endpoint);
-                }}
-                onDeleted={invalidateAfterEndpointChange}
+          <div className="filter-bar" role="search">
+            <label>
+              <span>{t('common.search')}</span>
+              <input
+                type="search"
+                value={query}
+                maxLength={256}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t('user.endpoints.searchPlaceholder')}
+                aria-label={t('user.endpoints.searchAria')}
               />
-            ))}
+            </label>
+            <label>
+              <span>{t('user.endpoints.filterEnabled')}</span>
+              <select
+                value={enabledFilter}
+                onChange={(event) => setEnabledFilter(event.target.value as 'all' | 'enabled' | 'disabled')}
+                aria-label={t('user.endpoints.filterEnabled')}
+              >
+                <option value="all">{t('common.all')}</option>
+                <option value="enabled">{t('common.enabled')}</option>
+                <option value="disabled">{t('common.disabled')}</option>
+              </select>
+            </label>
           </div>
+          {filtered.length === 0 ? (
+            <EmptyState title={t('common.noResults')} body={t('common.noResultsBody')} />
+          ) : (
+            <div className="item-list">
+              {filtered.map((endpoint) => (
+                <EndpointCard
+                  key={endpoint.id}
+                  endpoint={endpoint}
+                  onEdit={() => {
+                    setShowCreate(false);
+                    setEditing(endpoint);
+                  }}
+                  onDeleted={invalidateAfterEndpointChange}
+                />
+              ))}
+            </div>
+          )}
         </Card>
       )}
     </div>

@@ -110,7 +110,9 @@
       "created": "Created",
       "updated": "Updated",
       "empty": "No endpoint records",
-      "emptyBody": "The administrator API returned no endpoint overview records."
+      "emptyBody": "The administrator API returned no endpoint overview records.",
+      "searchPlaceholder": "Search by base URL, note, or user ID",
+      "searchAria": "Search endpoints"
     },
     "models": {
       "nav": "Models",
@@ -125,7 +127,9 @@
       "ordered": "Ordered",
       "random": "Random",
       "empty": "No model records",
-      "emptyBody": "The administrator API returned no model overview records."
+      "emptyBody": "The administrator API returned no model overview records.",
+      "searchPlaceholder": "Search by provider, model, full name, or user ID",
+      "searchAria": "Search models"
     },
     "alerts": {
       "nav": "Alerts",

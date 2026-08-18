@@ -46,6 +46,7 @@
     "noResultsBody": "请调整筛选条件或稍后重试。",
     "filter": "筛选",
     "applyFilter": "应用筛选",
+    "search": "搜索",
     "resetFilter": "重置",
     "all": "全部",
     "userId": "用户 ID",
