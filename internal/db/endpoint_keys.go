@@ -158,6 +158,8 @@ func (s *Store) UpdateEndpointKey(ctx context.Context, userID, endpointID, keyID
 	sets = append(sets, "updated_at=?")
 	args = append(args, now)
 	args = append(args, keyID, endpointID, userID)
+	// #nosec G202 -- sets is restricted to fixed note/enabled/time fragments;
+	// all values and the complete ownership predicate remain parameterized.
 	query := "UPDATE endpoint_keys SET " + joinSets(sets) + " WHERE id=? AND endpoint_id=? AND endpoint_id IN (SELECT id FROM endpoints WHERE user_id=?)"
 	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {

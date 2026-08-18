@@ -190,6 +190,8 @@ func (s *Store) UpdateEndpoint(ctx context.Context, userID, id int64, baseURL *s
 	sets = append(sets, "updated_at=?")
 	args = append(args, now)
 	args = append(args, id, userID)
+	// #nosec G202 -- sets is restricted to constant base_url/note/enabled/time
+	// fragments selected above; all values and ownership keys are bound arguments.
 	query := "UPDATE endpoints SET " + strings.Join(sets, ", ") + " WHERE id=? AND user_id=?"
 	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {

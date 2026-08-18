@@ -162,6 +162,8 @@ func (s *Store) UpdateBinding(ctx context.Context, userID, modelID, bindingID in
 		args = append(args, newUpstream)
 	}
 	args = append(args, bindingID, modelID, modelID, userID, userID, newUpstream)
+	// #nosec G202 -- sets contains only the fixed ord/upstream_model_id fragments
+	// selected above; every model, owner, binding, and value remains parameterized.
 	query := `UPDATE model_bindings SET ` + joinSets(sets) + `
 WHERE id=? AND model_id=?
   AND model_id IN (SELECT id FROM models WHERE id=? AND user_id=?)

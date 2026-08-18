@@ -20,6 +20,9 @@ const (
 )
 
 func sessionCookie(name, value, path string, secure bool, maxAge int, expires time.Time) *http.Cookie {
+	// #nosec G124 -- HttpOnly and SameSite are fixed here. Secure is derived from
+	// the trusted HTTPS edge/configured origin so explicit local HTTP development
+	// remains possible while production HTTPS cookies are always Secure.
 	cookie := &http.Cookie{
 		Name:     name,
 		Value:    value,
@@ -87,6 +90,9 @@ func SetElevatedCookie(w http.ResponseWriter, token string, secure bool, ttl tim
 	if seconds < 1 {
 		seconds = 1
 	}
+	// #nosec G124 -- this short-lived, single-use capability must be readable by
+	// the SPA so it can move the value into X-Elevated-Token. Secure is derived
+	// from the trusted HTTPS edge and SameSite remains fixed below.
 	cookie := &http.Cookie{
 		Name:     ElevatedCookieName,
 		Value:    token,

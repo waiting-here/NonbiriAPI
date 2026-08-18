@@ -158,6 +158,8 @@ func (s *Store) ListAdminAlerts(ctx context.Context, query AlertQuery) (alerts [
 SELECT id, kind, message, ref, subject_user_id, created_at, resolved, resolved_at
 FROM admin_alerts`
 	if len(clauses) > 0 {
+		// #nosec G202 -- clauses contains only fixed resolved/cursor predicates;
+		// every filter value is a bound argument.
 		sqlText += ` WHERE ` + strings.Join(clauses, " AND ")
 	}
 	sqlText += `

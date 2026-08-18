@@ -236,11 +236,16 @@ func (p *HTTPDiscordProvider) getJSON(ctx context.Context, path, accessToken str
 	if p == nil || p.client == nil || ctx == nil || !validateBoundedText(path, 512, false) || !validateBoundedText(accessToken, maxDiscordTokenBytes, false) {
 		return 0, ErrProviderUnauthorized
 	}
+	// #nosec G704 -- apiBase is startup-validated HTTPS (and production uses the
+	// hard-coded Discord origin); every path is an internal constant plus
+	// PathEscape output, never an arbitrary request URL.
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.apiBase+path, nil)
 	if err != nil {
 		return 0, ErrProviderUnavailable
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
+	// #nosec G704 -- the validated fixed provider origin above is the only
+	// destination and the provider client rejects every redirect.
 	resp, err := p.client.Do(req)
 	if err != nil || resp == nil {
 		return 0, ErrProviderUnavailable

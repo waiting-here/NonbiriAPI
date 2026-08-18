@@ -290,6 +290,9 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	outbound.URL.Scheme = c.originScheme
 	outbound.URL.Host = c.originHost
 	outbound.Host = c.originHost
+	// #nosec G704 -- this is the unified SSRF boundary: NewClient validated the
+	// canonical origin and installed a DNS-pinning dialer; the checks above bind
+	// both URL and Host to that exact origin before the request is dispatched.
 	resp, err := c.httpClient.Do(outbound)
 	if err != nil {
 		permit.Release()
