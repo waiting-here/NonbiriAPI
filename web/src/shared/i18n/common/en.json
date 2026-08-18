@@ -5,9 +5,10 @@
   "shell": {
     "skipToContent": "Skip to main content",
     "langLabel": "Language",
-    "themeLabel": "Toggle theme",
-    "themeLight": "Switch to light theme",
-    "themeDark": "Switch to dark theme",
+    "themeLabel": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System",
     "openMenu": "Open navigation",
     "closeMenu": "Close navigation",
     "accountMenu": "Account actions"
