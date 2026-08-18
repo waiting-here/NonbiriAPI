@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,10 +10,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/usage"
 )
 
 func testHTTPConfig() *config.Config {
@@ -150,6 +153,61 @@ func TestApplicationWiringProtectsAllEntryPoints(t *testing.T) {
 	unknown := testHTTPResponse(t, app.handler, http.MethodGet, "198.51.100.10", "/")
 	if unknown.Code != http.StatusBadRequest || strings.Contains(unknown.Body.String(), "user placeholder") {
 		t.Fatalf("unknown host response status=%d body=%q", unknown.Code, unknown.Body.String())
+	}
+}
+
+func TestMaintenanceSweepPurgesExpiredSessions(t *testing.T) {
+	key := bytes.Repeat([]byte{0x4c}, secret.MasterKeyBytes)
+	vault, err := secret.New(key)
+	clear(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := db.Open(filepath.Join(t.TempDir(), "maintenance.db"), vault)
+	if err != nil {
+		_ = vault.Close()
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = store.Close()
+		_ = vault.Close()
+	}()
+
+	now := time.Now().UTC()
+	result, err := store.DB().Exec(`INSERT INTO users (discord_id, username, created_at, updated_at) VALUES ('maintenance-user', 'maintenance-user', ?, ?)`, now.Unix(), now.Unix())
+	if err != nil {
+		t.Fatal(err)
+	}
+	userID, err := result.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.DB().Exec(`INSERT INTO sessions
+		(token_hash, user_id, oauth_state, last_seen_at, expires_at, absolute_expires_at, created_at)
+		VALUES ('expired-session', ?, '', ?, ?, ?, ?), ('live-session', ?, '', ?, ?, ?, ?)`,
+		userID, now.Add(-time.Hour).Unix(), now.Add(-time.Minute).Unix(), now.Add(time.Hour).Unix(), now.Add(-time.Hour).Unix(),
+		userID, now.Unix(), now.Add(time.Hour).Unix(), now.Add(2*time.Hour).Unix(), now.Unix()); err != nil {
+		t.Fatal(err)
+	}
+	usageService, err := usage.NewService(usage.Config{Store: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	runMaintenanceSweep(context.Background(), store, usageService)
+	var count int
+	if err := store.DB().QueryRow(`SELECT COUNT(*) FROM sessions`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("session rows after maintenance=%d, want 1", count)
+	}
+	var tokenHash string
+	if err := store.DB().QueryRow(`SELECT token_hash FROM sessions`).Scan(&tokenHash); err != nil {
+		t.Fatal(err)
+	}
+	if tokenHash != "live-session" {
+		t.Fatalf("remaining session=%q, want live-session", tokenHash)
 	}
 }
 

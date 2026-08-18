@@ -320,25 +320,40 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		exportHandler, lifecycleService, forwardService, flowMiddleware, store)
 	appHandler := buildAdminAndRootAPI(cfg, userAuth, adminAuth, api, adminControls, alertapi.NewHandler(alertapi.HandlerDeps{Store: store}), logapi.NewHandler(logapi.HandlerDeps{Store: store}), lifecycleService, store, forwardService, flowMiddleware)
 
-	retentionCtx, stopRetention := context.WithCancel(context.Background())
-	app = &application{handler: appHandler, stop: stopRetention, close: cleanup}
+	maintenanceCtx, stopMaintenance := context.WithCancel(context.Background())
+	app = &application{handler: appHandler, stop: stopMaintenance, close: cleanup}
 	app.wg.Add(1)
 	go func() {
 		defer app.wg.Done()
 		ticker := time.NewTicker(6 * time.Hour)
 		defer ticker.Stop()
+		runMaintenanceSweep(maintenanceCtx, store, usageService)
 		for {
 			select {
-			case <-retentionCtx.Done():
+			case <-maintenanceCtx.Done():
 				return
 			case <-ticker.C:
-				if _, cleanupErr := usageService.CleanupRequestLogs(retentionCtx); cleanupErr != nil && retentionCtx.Err() == nil {
-					slog.Error("request log retention failed", "err", cleanupErr)
-				}
+				runMaintenanceSweep(maintenanceCtx, store, usageService)
 			}
 		}
 	}()
 	return app, nil
+}
+
+func runMaintenanceSweep(ctx context.Context, store *db.Store, usageService *usage.Service) {
+	if ctx == nil || ctx.Err() != nil {
+		return
+	}
+	if store != nil {
+		if _, purgeErr := store.PurgeExpiredSessions(); purgeErr != nil && ctx.Err() == nil {
+			slog.Error("session retention failed", "err", purgeErr)
+		}
+	}
+	if usageService != nil && ctx.Err() == nil {
+		if _, cleanupErr := usageService.CleanupRequestLogs(ctx); cleanupErr != nil && ctx.Err() == nil {
+			slog.Error("request log retention failed", "err", cleanupErr)
+		}
+	}
 }
 
 func applyPersistedRuntimeConfig(store *db.Store, runtime adminapi.RuntimeApplier) error {
