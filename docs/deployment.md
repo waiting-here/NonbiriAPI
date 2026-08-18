@@ -19,6 +19,8 @@ Use a dedicated system user such as `nonbiriapi`. The service only needs to read
 
 ## Prepare the host
 
+For the ordered walkthrough of preparing the environment file, master key, Discord application, DNS, and trusted-proxy list before the first boot, see [first-run-setup.md](first-run-setup.md); the full variable reference is in [configuration.md](configuration.md). The steps below are the host-level mechanics.
+
 Create the service and directories using the distribution's normal administration tools. For example:
 
 ```sh
