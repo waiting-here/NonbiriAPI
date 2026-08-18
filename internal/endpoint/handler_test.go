@@ -204,15 +204,38 @@ func TestHandlerInvalidPathID(t *testing.T) {
 	}
 }
 
-func TestHandlerEndpointCapForbidden(t *testing.T) {
+func TestHandlerEndpointCapResourceLimitExceeded(t *testing.T) {
 	h, ts := newTestHandler(t)
 	ts.setGlobalLimit(t, "1")
 	rec := doRequest(t, h, http.MethodPost, "/api/endpoints", `{"base_url":"https://example.com/a/"}`)
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("first create = %d, want 201", rec.Code)
+		t.Fatalf("first create = %d, want 201; body=%s", rec.Code, rec.Body.String())
 	}
+	// Second endpoint -> 422 resource_limit_exceeded carrying limit + resource.
 	rec = doRequest(t, h, http.MethodPost, "/api/endpoints", `{"base_url":"https://example.com/b/"}`)
-	assertErr(t, rec, http.StatusForbidden, httperr.CodeForbidden)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("second create = %d, want 422; body=%s", rec.Code, rec.Body.String())
+	}
+	var env struct {
+		Error struct {
+			Code     string `json:"code"`
+			Limit    int    `json:"limit"`
+			Resource string `json:"resource"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("decode: %v; body=%s", err, rec.Body.String())
+	}
+	if env.Error.Code != httperr.CodeResourceLimitExceeded {
+		t.Errorf("code = %q, want %q", env.Error.Code, httperr.CodeResourceLimitExceeded)
+	}
+	if env.Error.Limit != 1 {
+		t.Errorf("limit = %d, want 1", env.Error.Limit)
+	}
+	if env.Error.Resource != "endpoint" {
+		t.Errorf("resource = %q, want endpoint", env.Error.Resource)
+	}
+	assertNoStore(t, rec)
 }
 
 func TestHandlerRejectsUnsafeBaseURL(t *testing.T) {

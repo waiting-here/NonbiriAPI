@@ -433,8 +433,6 @@ func writeServiceErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, db.ErrNotFound):
 		writeErr(w, httperr.New(httperr.CodeNotFound, "not found"))
-	case errors.Is(err, db.ErrEndpointCap):
-		writeErr(w, httperr.New(httperr.CodeForbidden, "endpoint cap reached"))
 	case errors.Is(err, ErrConnectorImmutable):
 		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "connector type cannot be changed"))
 	case errors.Is(err, ErrInvalidRequest):

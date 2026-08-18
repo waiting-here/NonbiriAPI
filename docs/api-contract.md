@@ -288,15 +288,15 @@ neither an admin session nor a caller key can reach it.
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
 | `GET` | `/api/endpoints` | user session | — | `200` array of `{id, connector_type, base_url, note, enabled, model_fetch_failed, model_fetch_failed_at, created_at, updated_at}` (key secrets never appear) | `unauthorized` |
-| `POST` | `/api/endpoints` | user session | `{base_url, connector_type?, note?, enabled?}` | `201` created endpoint; `base_url` is canonicalized (scheme/host lowercased, trailing dot removed, default ports made explicit, userinfo/query/fragment removed, redundant slashes collapsed) before persistence | `invalid_request`, `unauthorized`, `conflict`, `forbidden` (endpoint cap reached: `min(global_default, user_limit)`) |
+| `POST` | `/api/endpoints` | user session | `{base_url, connector_type?, note?, enabled?}` | `201` created endpoint; `base_url` is canonicalized (scheme/host lowercased, trailing dot removed, default ports made explicit, userinfo/query/fragment removed, redundant slashes collapsed) before persistence | `invalid_request`, `unauthorized`, `conflict`, `resource_limit_exceeded` (endpoint cap reached: `min(global_default, user_limit)`) |
 | `GET` | `/api/endpoints/{id}` | user session | — | `200` the endpoint object | `unauthorized`, `not_found` |
-| `PATCH` | `/api/endpoints/{id}` | user session | `{base_url?, note?, enabled?}` | `200` updated endpoint; saving / editing triggers an automatic re-fetch of every enabled key's upstream models | `invalid_request`, `unauthorized`, `not_found`, `forbidden` |
+| `PATCH` | `/api/endpoints/{id}` | user session | `{base_url?, note?, enabled?}` | `200` updated endpoint; saving / editing triggers an automatic re-fetch of every enabled key's upstream models | `invalid_request`, `unauthorized`, `not_found` |
 | `DELETE` | `/api/endpoints/{id}` | user session | — | `204`; cascades to its keys, their fetched-model cache, and their bindings (immediate invalidation) | `unauthorized`, `not_found` |
 
 Multiple endpoints may share the same canonical `base_url` (no uniqueness on
 `base_url`); each keeps independent note/enabled state. The endpoint-count cap is
 `min(global_default, user_endpoint_limit)`; when the current count reaches the cap, new
-endpoints are rejected (`forbidden`) while existing ones are retained. The admin can set a
+endpoints are rejected (`resource_limit_exceeded`) while existing ones are retained. The admin can set a
 per-user endpoint limit and clear it (NULL restores the global default).
 
 `connector_type` defaults to `openai-compatible` and is validated against the

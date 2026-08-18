@@ -14,7 +14,10 @@ var (
 
 	// ErrEndpointCap is returned when a user's endpoint count has reached the
 	// effective cap (min of the global default and the per-user override) and a
-	// new endpoint was refused. Existing endpoints are retained.
+	// new endpoint was refused. Existing endpoints are retained. The repository
+	// actually returns a *CapError wrapping this sentinel so the API boundary can
+	// surface the exact effective cap and resource name; the plain sentinel
+	// exists for errors.Is matching in tests.
 	ErrEndpointCap = errors.New("db: endpoint cap reached")
 
 	// ErrEndpointKeyCap is returned when the key count on one endpoint has
@@ -44,18 +47,19 @@ var (
 // envelope. They are short machine identifiers, never request or secret
 // material.
 const (
+	ResourceEndpoint    = "endpoint"
 	ResourceEndpointKey = "endpoint_key"
 	ResourceModel       = "model"
 	ResourceBinding     = "binding"
 )
 
 // CapError reports that a per-parent resource count reached its configured cap
-// and a new row was refused. It wraps one of ErrEndpointKeyCap / ErrModelCap /
-// ErrBindingCap (so errors.Is still matches the sentinel) and carries the
-// resource name and the exact effective cap in effect at the refusal, so the
-// API boundary can surface a stable resource_limit_exceeded envelope with the
-// limit and resource fields without a second, racy read. It never carries
-// request or secret material.
+// and a new row was refused. It wraps one of ErrEndpointCap / ErrEndpointKeyCap /
+// ErrModelCap / ErrBindingCap (so errors.Is still matches the sentinel) and
+// carries the resource name and the exact effective cap in effect at the
+// refusal, so the API boundary can surface a stable resource_limit_exceeded
+// envelope with the limit and resource fields without a second, racy read. It
+// never carries request or secret material.
 type CapError struct {
 	Resource string
 	Limit    int

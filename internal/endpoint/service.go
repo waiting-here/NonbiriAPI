@@ -398,8 +398,6 @@ func mapRepoError(err error) error {
 	switch {
 	case errors.Is(err, db.ErrNotFound):
 		return db.ErrNotFound
-	case errors.Is(err, db.ErrEndpointCap):
-		return db.ErrEndpointCap
 	case errors.Is(err, db.ErrInvalidSiteConfig):
 		return fmt.Errorf("%w: site config", ErrInvalidRequest)
 	default:
