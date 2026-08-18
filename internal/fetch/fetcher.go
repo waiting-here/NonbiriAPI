@@ -386,10 +386,14 @@ func (f *Fetcher) recordFailure(ctx context.Context, userID, endpointID, keyID i
 	}
 }
 
-// joinModelsURL appends the OpenAI models path to a canonical endpoint base
-// URL (which may carry a mount path, e.g. /api/v1).
+// joinModelsURL appends the OpenAI models resource path to a canonical endpoint
+// base URL. The base URL carries the provider's full API mount up to and
+// including the version segment (for example https://host/v1 or
+// https://host/api/v1); only the resource path is appended, so a base already
+// ending in /v1 never becomes /v1/v1/models. Callers must supply the version
+// segment as part of the endpoint base URL.
 func joinModelsURL(baseURL string) string {
-	return strings.TrimSuffix(baseURL, "/") + "/v1/models"
+	return strings.TrimSuffix(baseURL, "/") + "/models"
 }
 
 // nilCodec mirrors the db package's nil-interface check so a typed-nil Codec

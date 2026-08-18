@@ -35,7 +35,7 @@
       "addTitle": "添加端点",
       "editTitle": "编辑端点",
       "baseUrl": "基础 URL",
-      "baseUrlHint": "请输入 HTTP(S) URL，服务端会执行安全归一化。",
+      "baseUrlHint": "请填入到版本号为止的完整 API 基础地址（例如 https://api.example.com/v1）。系统会在此基础上拼接 /models 与 /chat/completions，请勿额外添加这两个路径。",
       "note": "备注",
       "notePlaceholder": "可选的端点说明",
       "enabled": "启用",

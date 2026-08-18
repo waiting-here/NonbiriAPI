@@ -493,8 +493,14 @@ func validResponseMediaType(response *http.Response, expected string) bool {
 	return true
 }
 
+// chatCompletionsURL appends the chat-completions resource path to a canonical
+// endpoint base URL. The base URL carries the provider's full API mount up to
+// and including the version segment (for example https://host/v1 or
+// https://host/api/v1); only the resource path is appended, so a base already
+// ending in /v1 never becomes /v1/v1/chat/completions. Callers must supply the
+// version segment as part of the endpoint base URL.
 func chatCompletionsURL(baseURL string) string {
-	return strings.TrimSuffix(baseURL, "/") + "/v1/chat/completions"
+	return strings.TrimSuffix(baseURL, "/") + "/chat/completions"
 }
 
 func setJSONResponseHeaders(header http.Header) {

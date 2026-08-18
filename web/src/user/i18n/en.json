@@ -35,7 +35,7 @@
       "addTitle": "Add an endpoint",
       "editTitle": "Edit endpoint",
       "baseUrl": "Base URL",
-      "baseUrlHint": "Use an HTTPS or HTTP URL. The server applies its canonical form.",
+      "baseUrlHint": "Enter the full API base URL up to and including the version path (e.g. https://api.example.com/v1). The system appends /models and /chat/completions; do not add those paths yourself.",
       "note": "Note",
       "notePlaceholder": "Optional context for this endpoint",
       "enabled": "Enabled",
