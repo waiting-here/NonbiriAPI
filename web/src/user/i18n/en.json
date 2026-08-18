@@ -2,8 +2,7 @@
   "user": {
     "shell": {
       "navLabel": "Main navigation",
-      "title": "User console",
-      "brandSuffix": "Your workspace"
+      "title": "User console"
     },
     "home": {
       "nav": "Home",
@@ -94,7 +93,9 @@
       "provider": "Provider",
       "model": "Model name",
       "providerPlaceholder": "example-provider",
+      "providerHint": "Provider and model name combine into provider/model, the platform model name seen by callers.",
       "modelPlaceholder": "example-model",
+      "modelHint": "After creating the model, add a binding that attaches it to an upstream model fetched on an endpoint key before it can be called.",
       "strategy": "Routing strategy",
       "ordered": "Ordered failover",
       "random": "Random selection",

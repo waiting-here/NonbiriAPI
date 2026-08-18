@@ -2,8 +2,7 @@
   "user": {
     "shell": {
       "navLabel": "主导航",
-      "title": "用户中心",
-      "brandSuffix": "你的工作区"
+      "title": "用户中心"
     },
     "home": {
       "nav": "首页",
@@ -94,7 +93,9 @@
       "provider": "提供方",
       "model": "模型名",
       "providerPlaceholder": "example-provider",
+      "providerHint": "提供方与模型名会拼成 provider/model，作为对外暴露的平台模型名。",
       "modelPlaceholder": "example-model",
+      "modelHint": "创建后需为模型添加绑定，挂到端点密钥已拉取的上游模型上才可调用。",
       "strategy": "路由策略",
       "ordered": "按顺序故障转移",
       "random": "随机选择",

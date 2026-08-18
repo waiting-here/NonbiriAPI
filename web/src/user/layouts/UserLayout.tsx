@@ -105,7 +105,6 @@ export function UserLayout() {
             </span>
           )}
           <span>{siteName}</span>
-          <span className="brand-suffix">{t('user.shell.brandSuffix')}</span>
         </Link>
         <button
           type="button"

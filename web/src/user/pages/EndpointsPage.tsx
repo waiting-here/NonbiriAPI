@@ -123,12 +123,12 @@ function EndpointForm({ initial, onCancel, onSaved }: EndpointFormProps) {
             />
           </label>
           <label className="check-field">
-            <span>{t('user.endpoints.enabled')}</span>
             <input
               type="checkbox"
               checked={enabled}
               onChange={(event) => setEnabled(event.target.checked)}
             />
+            <span>{t('user.endpoints.enabled')}</span>
           </label>
         </div>
         {requestError ? <ErrorState error={requestError} /> : null}

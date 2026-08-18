@@ -82,6 +82,7 @@ function ModelForm({ onSaved }: { onSaved: () => void }) {
               required
               aria-invalid={Boolean(validationError)}
             />
+            <small className="muted">{t('user.models.providerHint')}</small>
           </label>
           <label>
             <span>{t('user.models.model')}</span>
@@ -94,6 +95,7 @@ function ModelForm({ onSaved }: { onSaved: () => void }) {
               required
               aria-invalid={Boolean(validationError)}
             />
+            <small className="muted">{t('user.models.modelHint')}</small>
           </label>
           <label>
             <span>{t('user.models.strategy')}</span>

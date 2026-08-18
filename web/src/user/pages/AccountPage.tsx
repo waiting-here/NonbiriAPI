@@ -125,8 +125,8 @@ function PreferencesForm({ initialLang }: { initialLang: 'zh' | 'en' }) {
   };
 
   return (
-    <form className="limit-form" onSubmit={save} noValidate>
-      <div className="limit-fields">
+    <form className="preferences-form" onSubmit={save} noValidate>
+      <div className="preferences-form-row">
         <label>
           <span>{t('user.account.preferencesLang')}</span>
           <select value={lang} onChange={(event) => setLang(event.target.value === 'en' ? 'en' : 'zh')} aria-label={t('user.account.preferencesLang')}>
@@ -134,14 +134,12 @@ function PreferencesForm({ initialLang }: { initialLang: 'zh' | 'en' }) {
             <option value="en">EN</option>
           </select>
         </label>
-      </div>
-      {updateProfile.error ? <ErrorState error={updateProfile.error} /> : null}
-      {updateProfile.isSuccess ? <p className="inline-success" role="status">{t('user.account.preferencesSaved')}</p> : null}
-      <div className="table-actions">
         <button type="submit" className="btn btn-quiet" disabled={updateProfile.isPending}>
           {updateProfile.isPending ? t('common.working') : t('user.account.preferencesSave')}
         </button>
       </div>
+      {updateProfile.error ? <ErrorState error={updateProfile.error} /> : null}
+      {updateProfile.isSuccess ? <p className="inline-success" role="status">{t('user.account.preferencesSaved')}</p> : null}
     </form>
   );
 }
