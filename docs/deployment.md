@@ -7,8 +7,8 @@ The commands are examples. Replace paths, hostnames, users, and package-manager 
 ## Recommended layout
 
 ```text
-/etc/nonbiriapi/admin.env       # 0600, service-user readable
-/etc/nonbiriapi/master.key      # 0600, service-user readable
+/etc/nonbiriapi/admin.env       # 0640, root:nonbiriapi
+/etc/nonbiriapi/master.key      # 0600, nonbiriapi:nonbiriapi
 /opt/nonbiriapi/releases/<ver>/nonbiriapi
 /opt/nonbiriapi/current          # symlink to the active release directory
 /var/lib/nonbiriapi/nonbiriapi.db
@@ -32,8 +32,8 @@ sudo install -d -o root -g root -m 0750 /var/backups/nonbiriapi
 Install the real `admin.env` from [admin.env.example](../admin.env.example), then:
 
 ```sh
-sudo chown root:nonbiriapi /etc/nonbiriapi/admin.env /etc/nonbiriapi/master.key
-sudo chmod 0640 /etc/nonbiriapi/admin.env /etc/nonbiriapi/master.key
+sudo chown root:nonbiriapi /etc/nonbiriapi/admin.env
+sudo chmod 0640 /etc/nonbiriapi/admin.env
 ```
 
 The environment file must set `NONBIRI_DB_PATH=/var/lib/nonbiriapi/nonbiriapi.db` and `NONBIRI_MASTER_KEY_FILE=/etc/nonbiriapi/master.key`. Keep `NONBIRI_LISTEN_ADDR` on loopback when a reverse proxy is in front.
@@ -41,12 +41,14 @@ The environment file must set `NONBIRI_DB_PATH=/var/lib/nonbiriapi/nonbiriapi.db
 Generate the master key once, before the first start. Do not regenerate it for an existing database: a new key makes encrypted upstream credentials unreadable.
 
 ```sh
-openssl rand -hex 32 | sudo tee /etc/nonbiriapi/master.key >/dev/null
-sudo chown root:nonbiriapi /etc/nonbiriapi/master.key
-sudo chmod 0640 /etc/nonbiriapi/master.key
+sudo install -o nonbiriapi -g nonbiriapi -m 0600 /dev/null /etc/nonbiriapi/master.key
+openssl rand -hex 32 | sudo -u nonbiriapi tee /etc/nonbiriapi/master.key >/dev/null
+sudo chmod 0600 /etc/nonbiriapi/master.key
 ```
 
-Replace the example key only before the first database is created. If a real database already exists, preserve its original key.
+Run those key-generation commands only on a new installation: the first command truncates its target. Replace the example key only before the first database is created. If a real database already exists, preserve its original key. The loader deliberately rejects group-readable modes such as `0640`; the service account must own this `0600` file so it can read it without broadening access.
+
+For a manual launch outside the example systemd unit, set `umask 077` first so SQLite database and sidecar files are owner-only. The application creates a missing database directory without group/other access, but it does not override permissions on an operator-created directory.
 
 ## Build a release binary
 
@@ -94,10 +96,13 @@ Configure the public user host and the separate admin host in DNS and TLS. The p
 - forward the original Host and the correct HTTPS scheme;
 - be the only source included in `NONBIRI_TRUSTED_PROXY_CIDRS`;
 - preserve long-lived SSE responses without imposing a shorter buffering or idle timeout than the application contract;
+- apply both per-client and global rate limits to the unauthenticated
+  `/api/auth/discord/start` route; keep the ten-minute OAuth-state capacity in
+  mind and test the chosen limits without weakening callback availability;
 - restrict the admin host independently where possible;
 - avoid logging `Authorization`, cookies, request bodies, or upstream credentials.
 
-Do not trust arbitrary `X-Forwarded-*` headers. The application fails closed for malformed forwarding data and only accepts forwarding metadata from configured trusted proxy addresses.
+Do not trust arbitrary `X-Forwarded-*` headers. The application accepts forwarding metadata only from configured trusted proxy addresses; malformed or duplicate values are discarded wholesale and the direct proxy peer metadata is used instead.
 
 ## Manual update procedure
 

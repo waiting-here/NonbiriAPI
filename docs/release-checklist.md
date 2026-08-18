@@ -28,7 +28,7 @@ This is an operator-facing preparation checklist for the first public GitHub rel
 - [x] Run frontend typecheck, lint, build, and manifest/notices generation.
 - [x] Run `npm ci` followed by `CGO_ENABLED=0 go build -tags dist -trimpath`.
 - [x] Verify a `-tags dist` binary embeds the real admin and user bundles, not the development stubs.
-- [ ] Run dependency, vulnerability, license, and secret scans.
+- [ ] Run dependency, vulnerability, and license scans; run gitleaks against both Git history and the pending diff with the repository's narrow fixture allowlist.
 - [ ] Run a staging deployment with real reverse-proxy headers, disposable Discord OAuth credentials, and a disposable upstream.
 - [ ] Verify backup/restore with the same master key in an isolated database path.
 - [ ] Test graceful shutdown, restart, rollback, retention cleanup, export, and account deletion.

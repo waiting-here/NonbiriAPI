@@ -44,6 +44,13 @@ host-only and use `Path=/admin`. Both are Secure when the fixed configured site 
 trusted edge protocol context) is HTTPS, HttpOnly, and SameSite=Lax. OAuth state cookies are
 host-only, HttpOnly, SameSite=Lax, short-lived, and scoped to `/api/auth/discord`.
 
+Unsafe methods on the cookie-authenticated `/api/*` and `/admin/api/*` surfaces also pass a
+same-origin browser boundary. An `Origin` header must match the validated request scheme,
+host, and effective port; Fetch Metadata, when present, must report `same-origin`. A request
+carrying a cookie but neither signal is refused. This closes sibling-host CSRF because
+SameSite is site-scoped, not origin-scoped. The Bearer-authenticated `/v1/*` surface is not
+subject to this cookie boundary.
+
 A normal user holds exactly one caller key (`nbk_` prefix, no scope binding). Regeneration
 invalidates the previous key the instant the new row is written; the plaintext is shown once
 at generation time and never persisted in a recoverable form (only an irretrievable SHA-256
@@ -150,6 +157,8 @@ Server-side behavior (frozen contract; implementation in a later rail):
    - Failure after the boundary (streaming already started, first byte already sent): **no
      retry**; end the current stream with an error.
    Non-stream requests can retry up to the boundary, same option/default.
+   Route resolution, all attempts, and backoff share one five-minute aggregate deadline; a
+   candidate set never multiplies the single-attempt timeout into a longer logical request.
 4. Inject the OpenAI `safety_identifier` field = a stable, irreversible hash of the calling
    user's id, for upstream per-user risk attribution.
 
@@ -165,6 +174,12 @@ Response — stream (`stream: true`): `Content-Type: text/event-stream`. A seque
 success. If the client disconnects, the cancellation is propagated upstream and concurrent
 slots / reservations are released; any unreadable `usage` is recorded with the
 `usage_unknown` flag rather than fabricated token values.
+
+Before a response crosses the client boundary, upstream key plaintext and ciphertext are
+checked both as literal wire bytes and as decoded JSON string channels. The semantic check
+keeps bounded rolling state per normalized JSON path, so splitting a credential across
+successive `delta.content`, tool-argument, or content-part chunks is rejected before the
+completing fragment is written.
 
 Stable error codes at this endpoint:
 
@@ -498,7 +513,8 @@ resolving an alert with `false` reopens it and clears `resolved_at`.
 ## 5. Cross-cutting requirements
 
 - **No plaintext upstream secret** is ever returned, listed, logged, exported, or surfaced in
-  an error envelope. Only head/tail display fragments appear in a key view.
+  an error envelope. Literal and semantic response guards also reject a secret split across
+  multiple JSON/SSE fragments. Only head/tail display fragments appear in a key view.
 - **`Cache-Control: no-store`** is mandatory and default on every JSON response and every
   error envelope, and is the only cache policy permitted for key/secret/config endpoints.
 - **Stable codes** are the sole machine-facing error identifier; HTTP status is derived from
@@ -510,7 +526,8 @@ resolving an alert with `false` reopens it and clears `resolved_at`.
   upstream text. Frontends render all such fields as text.
 - **Request/response content is never persisted**: `request_logs` and any log entry hold
   metadata and bounded diagnostics only (privacy policy).
-- **30-day retention**: request logs are periodically cleaned past 30 days.
+- **Retention maintenance**: request logs are periodically cleaned past 30 days; expired
+  idle/absolute session rows are purged at startup and every six hours.
 - **Ownership isolation**: every read/write path checks `user_id`; cross-user resources never
   enter the candidate set for routing or listing.
 - **Deterministic routing**: when a full name cannot be resolved to exactly this user's model,

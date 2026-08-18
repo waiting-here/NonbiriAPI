@@ -26,8 +26,9 @@ be closed before the task is accepted.
    `Store.DeleteUserAccount` AND an atomic `INSERT ... SELECT ... WHERE EXISTS users`
    suppression for late writers.
 3. **Retention** — Is there a bounded retention/cleanup policy, or is the data naturally
-   bounded by the account lifetime? Request logs are cleaned past 30 days; sessions expire
-   by idle/absolute TTL; alerts/issues are bounded by their own caps and resolve state.
+   bounded by the account lifetime? Request logs are cleaned past 30 days; expired sessions
+   are purged at startup and every six hours by idle/absolute TTL; alerts/issues are bounded
+   by their own caps and resolve state.
 4. **Privacy** — Does the privacy/terms text (zh/en) describe the data, and is untrusted or
    sensitive content bounded/sanitized at every sink? Upstream identifiers/diagnostics live
    only behind `internal/diagnostic.Bound`; secrets never enter logs, errors, CSV, HTML, or
@@ -39,7 +40,7 @@ be closed before the task is accepted.
 |---|---|---|---|---|---|
 | `users` (identity, lang, limits) | self | yes (whitelisted fields) | row removed by `DeleteUserAccount` | account lifetime | no Discord token/credential stored; profile text bounded |
 | `users` (usage accumulators) | self | yes (totals) | removed with the row | account lifetime (totals are the authoritative counter; `request_logs` is never summed) | metadata only |
-| `sessions` | `user_id` FK CASCADE | no (transient) | cascade on user delete; idle+absolute TTL purge | idle/absolute TTL (`PurgeExpiredSessions`) | opaque hash only; no plaintext token persisted |
+| `sessions` | `user_id` FK CASCADE | no (transient) | cascade on user delete; idle+absolute TTL purge | idle/absolute TTL (`PurgeExpiredSessions` at startup + every 6h) | opaque hash only; no plaintext token persisted |
 | `caller_keys` | `user_id` FK CASCADE | metadata only (`display_head/tail`, timestamps); **plaintext never** | cascade on user delete; regeneration invalidates prior key instantly | account lifetime | SHA-256 hash lookup; plaintext shown once, never persisted |
 | `endpoints` | `user_id` FK CASCADE | yes (metadata: connector, canonical base_url, note, enabled, fetch flag, timestamps) | cascade on user delete | account lifetime | canonical base_url only; no secret |
 | `endpoint_keys` | `endpoint_id` FK CASCADE | metadata only (`display_head/tail`, note, enabled, timestamps); **ciphertext/secret never** | cascade on endpoint delete (and thus user delete) | account lifetime | AES-256-GCM envelope; display fragments only in lists/logs/export |
