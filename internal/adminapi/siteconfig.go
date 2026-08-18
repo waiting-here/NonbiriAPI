@@ -28,6 +28,9 @@ const (
 	KeySiteName                  = "site_name"
 	KeyDefaultLocale             = "default_locale"
 	KeyDefaultEndpointLimit      = "default_endpoint_limit"
+	KeyDefaultEndpointKeyLimit   = "default_endpoint_key_limit"
+	KeyDefaultModelLimit         = "default_model_limit"
+	KeyDefaultBindingLimit       = "default_binding_limit"
 	KeyDefaultRPMPerUser         = "default_rpm_per_user"
 	KeyGlobalRPM                 = "global_rpm"
 	KeyDefaultPerEndpointConc    = "default_per_endpoint_concurrency"
@@ -48,7 +51,7 @@ const (
 	maxDiscordGateBytes   = 128
 	maxAlertPrefsBytes    = 512
 	maxSiteConfigKeyLen   = 128 // mirrors the repository site_config key bound
-	maxEndpointLimitValue = 10000
+	maxResourceLimitValue = 10000
 	maxRPMValue           = 4096
 	maxConcurrencyValue   = 100000
 	// OAuth start admission bounds. The per-IP limit stays below the ratelimit
@@ -79,7 +82,10 @@ type keySpec struct {
 var knownSiteConfig = map[string]keySpec{
 	KeySiteName:                  {kind: kindText, allowEmpty: false, max: maxSiteNameBytes},
 	KeyDefaultLocale:             {kind: kindLocale},
-	KeyDefaultEndpointLimit:      {kind: kindInt, min: 0, max: maxEndpointLimitValue, def: db.DefaultEndpointLimit},
+	KeyDefaultEndpointLimit:      {kind: kindInt, min: 0, max: maxResourceLimitValue, def: db.DefaultEndpointLimit},
+	KeyDefaultEndpointKeyLimit:   {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultEndpointKeyLimit},
+	KeyDefaultModelLimit:         {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultModelLimit},
+	KeyDefaultBindingLimit:       {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultBindingLimit},
 	KeyDefaultRPMPerUser:         {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMPerUserLimit},
 	KeyGlobalRPM:                 {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMGlobalLimit},
 	KeyDefaultPerEndpointConc:    {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultPerEndpointConcurrency},

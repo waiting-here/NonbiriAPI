@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -415,5 +416,134 @@ func TestServiceSilentRetrySwitch(t *testing.T) {
 	unchanged, err := ts.svc.UpdateModel(ctx, uid, def.ID, nil, nil, nil, nil)
 	if err != nil || unchanged.SilentRetry {
 		t.Fatalf("noop silentRetry = %+v err=%v", unchanged, err)
+	}
+}
+
+// --- resource caps (service layer) -----------------------------------------
+
+// setModelLimit upserts the default_model_limit site_config row so a test can
+// adjust the cap mid-run (verifying runtime application).
+func (ts *testService) setModelLimit(t *testing.T, raw string) {
+	t.Helper()
+	if _, err := ts.store.DB().Exec(
+		`INSERT INTO site_config (key, value, updated_at) VALUES ('default_model_limit', ?, 1)
+		 ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`, raw); err != nil {
+		t.Fatalf("set model limit: %v", err)
+	}
+}
+
+// setBindingLimit upserts the default_binding_limit site_config row.
+func (ts *testService) setBindingLimit(t *testing.T, raw string) {
+	t.Helper()
+	if _, err := ts.store.DB().Exec(
+		`INSERT INTO site_config (key, value, updated_at) VALUES ('default_binding_limit', ?, 1)
+		 ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`, raw); err != nil {
+		t.Fatalf("set binding limit: %v", err)
+	}
+}
+
+// TestServiceModelCap covers the per-user platform-model cap through the
+// service layer: the cap-th create succeeds, one over is a *db.CapError
+// carrying resource + limit, a runtime site-config change takes effect
+// immediately, and counts do not cross users.
+func TestServiceModelCap(t *testing.T) {
+	ts := newTestService(t)
+	uid := ts.seedUser(t, "u1")
+	ctx := context.Background()
+
+	cap, err := ts.store.ModelCap(ctx)
+	if err != nil {
+		t.Fatalf("ModelCap: %v", err)
+	}
+	if cap != db.DefaultModelLimit {
+		t.Errorf("unset cap = %d, want %d", cap, db.DefaultModelLimit)
+	}
+
+	ts.setModelLimit(t, "3")
+	cap, _ = ts.store.ModelCap(ctx)
+	if cap != 3 {
+		t.Fatalf("adjusted cap = %d, want 3", cap)
+	}
+	for i := 0; i < cap; i++ {
+		if _, err := ts.svc.CreateModel(ctx, uid, fmt.Sprintf("p%d", i), "m", nil, nil); err != nil {
+			t.Fatalf("create model %d: %v", i, err)
+		}
+	}
+
+	_, err = ts.svc.CreateModel(ctx, uid, "p-extra", "m", nil, nil)
+	var capErr *db.CapError
+	if !errors.As(err, &capErr) {
+		t.Fatalf("over-cap err = %v, want *db.CapError", err)
+	}
+	if capErr.Resource != db.ResourceModel || capErr.Limit != cap {
+		t.Errorf("capErr = %+v, want resource=%q limit=%d", capErr, db.ResourceModel, cap)
+	}
+
+	ts.setModelLimit(t, "5")
+	if _, err := ts.svc.CreateModel(ctx, uid, "p-more", "m", nil, nil); err != nil {
+		t.Fatalf("create after cap raise: %v", err)
+	}
+	count, _ := ts.store.CountModels(ctx, uid)
+	if count != cap+1 {
+		t.Errorf("count after cap raise = %d, want %d", count, cap+1)
+	}
+
+	// Counts do not cross users.
+	bob := ts.seedUser(t, "bob")
+	if c2, _ := ts.store.CountModels(ctx, bob); c2 != 0 {
+		t.Errorf("bob count = %d, want 0", c2)
+	}
+}
+
+// TestServiceBindingCap covers the per-model binding-count cap through the
+// service layer: the cap-th add succeeds, one over is a *db.CapError carrying
+// resource + limit, a runtime site-config change takes effect immediately,
+// and counts do not cross models.
+func TestServiceBindingCap(t *testing.T) {
+	ts := newTestService(t)
+	uid := ts.seedUser(t, "u1")
+	ctx := context.Background()
+	key := ts.seedEndpointKeyAndCache(t, uid, "up-0", "up-1", "up-2", "up-3", "up-4")
+
+	ts.setBindingLimit(t, "3")
+	cap, _ := ts.store.BindingCap(ctx)
+	if cap != 3 {
+		t.Fatalf("adjusted cap = %d, want 3", cap)
+	}
+	m, err := ts.svc.CreateModel(ctx, uid, "p", "m", nil, nil)
+	if err != nil {
+		t.Fatalf("create model: %v", err)
+	}
+	for i := 0; i < cap; i++ {
+		if _, err := ts.svc.CreateBinding(ctx, uid, m.ID, key, fmt.Sprintf("up-%d", i), nil); err != nil {
+			t.Fatalf("create binding %d: %v", i, err)
+		}
+	}
+
+	_, err = ts.svc.CreateBinding(ctx, uid, m.ID, key, fmt.Sprintf("up-%d", cap), nil)
+	var capErr *db.CapError
+	if !errors.As(err, &capErr) {
+		t.Fatalf("over-cap err = %v, want *db.CapError", err)
+	}
+	if capErr.Resource != db.ResourceBinding || capErr.Limit != cap {
+		t.Errorf("capErr = %+v, want resource=%q limit=%d", capErr, db.ResourceBinding, cap)
+	}
+
+	ts.setBindingLimit(t, "5")
+	if _, err := ts.svc.CreateBinding(ctx, uid, m.ID, key, fmt.Sprintf("up-%d", cap), nil); err != nil {
+		t.Fatalf("create after cap raise: %v", err)
+	}
+	count, _ := ts.store.CountBindings(ctx, uid, m.ID)
+	if count != cap+1 {
+		t.Errorf("count after cap raise = %d, want %d", count, cap+1)
+	}
+
+	// Counts do not cross models.
+	m2, err := ts.svc.CreateModel(ctx, uid, "p2", "m", nil, nil)
+	if err != nil {
+		t.Fatalf("create model 2: %v", err)
+	}
+	if c2, _ := ts.store.CountBindings(ctx, uid, m2.ID); c2 != 0 {
+		t.Errorf("second model count = %d, want 0", c2)
 	}
 }

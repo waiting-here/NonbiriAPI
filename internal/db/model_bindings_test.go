@@ -3,7 +3,11 @@ package db
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
+	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -479,4 +483,191 @@ func bindingIDByUpstream(ctx context.Context, st *Store, userID, modelID int64, 
 		`SELECT b.id FROM model_bindings b JOIN models m ON b.model_id=m.id WHERE b.model_id=? AND m.user_id=? AND b.upstream_model_id=?`,
 		modelID, userID, upstream).Scan(&id)
 	return id, err
+}
+
+// --- binding cap ------------------------------------------------------------
+
+// setTestBindingLimit upserts the default_binding_limit site_config row so a
+// test can adjust the cap mid-run (verifying runtime application).
+func setTestBindingLimit(t *testing.T, st *Store, raw string) {
+	t.Helper()
+	if _, err := st.DB().Exec(
+		`INSERT INTO site_config (key, value, updated_at) VALUES ('default_binding_limit', ?, 1)
+		 ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`, raw); err != nil {
+		t.Fatalf("set binding limit: %v", err)
+	}
+}
+
+// mustCreateTestBinding creates a binding with a distinct (key, upstream)
+// triple and fails the test on any error. Used to fill a model up to the
+// binding cap.
+func mustCreateTestBinding(t *testing.T, st *Store, userID, modelID, keyID int64, upstream string) ModelBinding {
+	t.Helper()
+	b, err := st.CreateBinding(context.Background(), userID, modelID, keyID, upstream, 0, testNow)
+	if err != nil {
+		t.Fatalf("CreateBinding %s: %v", upstream, err)
+	}
+	return b
+}
+
+// TestCreateBindingCap covers the per-model binding-count cap: the default
+// when unset, the cap-th create succeeds, the next is a *CapError wrapping
+// ErrBindingCap with the resource name and exact effective cap, no extra row
+// is written, a runtime site-config change takes effect immediately, counts
+// do not cross models, and a cross-user caller neither leaks nor bypasses the
+// ownership guard.
+func TestCreateBindingCap(t *testing.T) {
+	st := newBindingsTestStore(t)
+	ctx := context.Background()
+
+	cap, err := st.BindingCap(ctx)
+	if err != nil {
+		t.Fatalf("BindingCap: %v", err)
+	}
+	if cap != DefaultBindingLimit {
+		t.Errorf("unset cap = %d, want %d", cap, DefaultBindingLimit)
+	}
+
+	alice := seedUserRaw(t, st, "alice")
+	ep := seedEndpointRaw(t, st, alice, true)
+	key := seedEndpointKeyRaw(t, st, ep, true)
+	m := seedModelRaw(t, st, alice, "p", "m")
+
+	setTestBindingLimit(t, st, "3")
+	cap, _ = st.BindingCap(ctx)
+	if cap != 3 {
+		t.Fatalf("adjusted cap = %d, want 3", cap)
+	}
+	// Cache enough upstreams for the cap fills, the refused attempt, and the
+	// cross-model check below.
+	for i := 0; i < cap+2; i++ {
+		seedFetchedModelRaw(t, st, key, fmt.Sprintf("up-%d", i))
+	}
+	for i := 0; i < cap; i++ {
+		mustCreateTestBinding(t, st, alice, m, key, fmt.Sprintf("up-%d", i))
+	}
+	count, _ := st.CountBindings(ctx, alice, m)
+	if count != cap {
+		t.Fatalf("count = %d, want %d", count, cap)
+	}
+
+	_, err = st.CreateBinding(ctx, alice, m, key, fmt.Sprintf("up-%d", cap), 0, testNow)
+	var capErr *CapError
+	if !errors.As(err, &capErr) {
+		t.Fatalf("over-cap err = %v, want *CapError", err)
+	}
+	if !errors.Is(err, ErrBindingCap) {
+		t.Errorf("over-cap err does not match ErrBindingCap: %v", err)
+	}
+	if capErr.Resource != ResourceBinding || capErr.Limit != cap {
+		t.Errorf("capErr = %+v, want resource=%q limit=%d", capErr, ResourceBinding, cap)
+	}
+	count, _ = st.CountBindings(ctx, alice, m)
+	if count != cap {
+		t.Errorf("count after refused create = %d, want %d (no row written)", count, cap)
+	}
+
+	setTestBindingLimit(t, st, "5")
+	mustCreateTestBinding(t, st, alice, m, key, fmt.Sprintf("up-%d", cap))
+	count, _ = st.CountBindings(ctx, alice, m)
+	if count != cap+1 {
+		t.Errorf("count after cap raise = %d, want %d", count, cap+1)
+	}
+
+	// Counts do not cross models: a second model starts at 0.
+	m2 := seedModelRaw(t, st, alice, "p2", "m")
+	if c2, _ := st.CountBindings(ctx, alice, m2); c2 != 0 {
+		t.Errorf("second model count = %d, want 0", c2)
+	}
+	mustCreateTestBinding(t, st, alice, m2, key, "up-0")
+	if c2, _ := st.CountBindings(ctx, alice, m2); c2 != 1 {
+		t.Errorf("second model count after one add = %d, want 1", c2)
+	}
+
+	// A cross-user caller counts 0 on alice's model and the ownership guard
+	// still refuses the create as ErrNotFound.
+	bob := seedUserRaw(t, st, "bob")
+	if cross, _ := st.CountBindings(ctx, bob, m); cross != 0 {
+		t.Errorf("bob counting alice model = %d, want 0", cross)
+	}
+	if _, err := st.CreateBinding(ctx, bob, m, key, "up-0", 0, testNow); !errors.Is(err, ErrNotFound) {
+		t.Errorf("bob create binding on alice model: err=%v, want ErrNotFound", err)
+	}
+}
+
+// TestCreateBindingCapRejectsInvalidSiteConfig asserts a malformed cap surfaces
+// as ErrInvalidSiteConfig (fail closed) and never writes a binding.
+func TestCreateBindingCapRejectsInvalidSiteConfig(t *testing.T) {
+	for _, raw := range []string{"not-a-number", "-3", "  "} {
+		raw := raw
+		t.Run(raw, func(t *testing.T) {
+			st := newBindingsTestStore(t)
+			setTestBindingLimit(t, st, raw)
+			alice := seedUserRaw(t, st, "alice")
+			ep := seedEndpointRaw(t, st, alice, true)
+			key := seedEndpointKeyRaw(t, st, ep, true)
+			seedFetchedModelRaw(t, st, key, "up-a")
+			m := seedModelRaw(t, st, alice, "p", "m")
+			_, err := st.CreateBinding(context.Background(), alice, m, key, "up-a", 0, testNow)
+			if !errors.Is(err, ErrInvalidSiteConfig) {
+				t.Errorf("CreateBinding with global %q: err=%v, want ErrInvalidSiteConfig", raw, err)
+			}
+			count, _ := st.CountBindings(context.Background(), alice, m)
+			if count != 0 {
+				t.Errorf("invalid site_config still produced %d bindings", count)
+			}
+		})
+	}
+}
+
+// TestCreateBindingAtomicCapUnderConcurrency hammers CreateBinding from many
+// goroutines against a small cap; the count-then-insert inside one transaction
+// must never let the cap be breached. Run under -race.
+func TestCreateBindingAtomicCapUnderConcurrency(t *testing.T) {
+	const cap = 8
+	const workers = 64
+	st := newBindingsTestStore(t)
+	ctx := context.Background()
+	setTestBindingLimit(t, st, strconv.Itoa(cap))
+	alice := seedUserRaw(t, st, "alice")
+	ep := seedEndpointRaw(t, st, alice, true)
+	key := seedEndpointKeyRaw(t, st, ep, true)
+	for i := 0; i < workers; i++ {
+		seedFetchedModelRaw(t, st, key, fmt.Sprintf("up-%d", i))
+	}
+	m := seedModelRaw(t, st, alice, "p", "m")
+
+	var wg sync.WaitGroup
+	var succ, capErr atomic.Int64
+	start := make(chan struct{})
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			<-start
+			_, err := st.CreateBinding(ctx, alice, m, key, fmt.Sprintf("up-%d", i), 0, testNow)
+			switch {
+			case err == nil:
+				succ.Add(1)
+			case errors.Is(err, ErrBindingCap):
+				capErr.Add(1)
+			default:
+				t.Errorf("unexpected create error: %v", err)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	if got := succ.Load(); got != int64(cap) {
+		t.Errorf("successes = %d, want %d (cap breached or underfilled)", got, cap)
+	}
+	if got := capErr.Load(); got != int64(workers-cap) {
+		t.Errorf("cap errors = %d, want %d", got, workers-cap)
+	}
+	count, _ := st.CountBindings(ctx, alice, m)
+	if count != cap {
+		t.Errorf("final count = %d, want %d", count, cap)
+	}
 }

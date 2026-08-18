@@ -23,24 +23,26 @@ import (
 
 // Stable error codes. Add new codes; never redefine an existing one.
 const (
-	CodeInternal           = "internal"
-	CodeInvalidRequest     = "invalid_request"
-	CodeUnauthorized       = "unauthorized"
-	CodeForbidden          = "forbidden"
-	CodeNotFound           = "not_found"
-	CodeConflict           = "conflict"
-	CodeMethodNotAllowed   = "method_not_allowed"
-	CodeRateLimited        = "rate_limited"
-	CodePayloadTooLarge    = "payload_too_large"
-	CodeElevationRequired  = "elevated_required"
-	CodeUnboundModel       = "unbound_model"
-	CodeUpstream           = "upstream"
-	CodeServiceUnavailable = "service_unavailable"
+	CodeInternal              = "internal"
+	CodeInvalidRequest        = "invalid_request"
+	CodeUnauthorized          = "unauthorized"
+	CodeForbidden             = "forbidden"
+	CodeNotFound              = "not_found"
+	CodeConflict              = "conflict"
+	CodeMethodNotAllowed      = "method_not_allowed"
+	CodeRateLimited           = "rate_limited"
+	CodePayloadTooLarge       = "payload_too_large"
+	CodeElevationRequired     = "elevated_required"
+	CodeUnboundModel          = "unbound_model"
+	CodeUpstream              = "upstream"
+	CodeServiceUnavailable    = "service_unavailable"
+	CodeResourceLimitExceeded = "resource_limit_exceeded"
 )
 
 const (
 	msgBound       = 1000 // message: short, human-safe, rune limit
 	requestIDBound = 128  // correlation id: finite and control-safe at the wire sink
+	resourceBound  = 64   // resource name: short stable identifier, control-safe at the wire sink
 )
 
 // Error is the inner "error" object of the envelope.
@@ -49,6 +51,8 @@ type Error struct {
 	Message   string `json:"message"`
 	Diag      string `json:"diag,omitempty"`
 	RequestID string `json:"request_id,omitempty"`
+	Limit     int    `json:"limit,omitempty"`
+	Resource  string `json:"resource,omitempty"`
 }
 
 // Envelope is the top-level error response shape.
@@ -72,6 +76,17 @@ func (e Error) WithDiag(diag string) Error {
 // WithRequestID attaches a request correlation id.
 func (e Error) WithRequestID(id string) Error {
 	e.RequestID = sanitizeRequestID(id)
+	return e
+}
+
+// WithResourceLimit attaches the effective cap and resource name to a
+// resource_limit_exceeded error so the caller can report which bounded
+// resource was refused and at what limit. resource is re-sanitized at the
+// wire sink; it is a short stable identifier (never request or secret
+// material).
+func (e Error) WithResourceLimit(resource string, limit int) Error {
+	e.Resource = resource
+	e.Limit = limit
 	return e
 }
 
@@ -101,6 +116,8 @@ func statusOf(code string) int {
 		return http.StatusBadGateway
 	case CodeUnboundModel, CodeServiceUnavailable:
 		return http.StatusServiceUnavailable
+	case CodeResourceLimitExceeded:
+		return http.StatusUnprocessableEntity
 	default:
 		return http.StatusInternalServerError
 	}
@@ -115,6 +132,7 @@ func WriteError(w http.ResponseWriter, e Error) {
 	e.Message = sanitizeMessage(e.Message)
 	e.Diag = sanitizeDiag(e.Diag)
 	e.RequestID = sanitizeRequestID(e.RequestID)
+	e.Resource = sanitizeResource(e.Resource)
 
 	status := statusOf(e.Code)
 	if e.Code == "" {
@@ -151,6 +169,13 @@ func sanitizeDiag(s string) string {
 
 func sanitizeRequestID(s string) string {
 	return controlStrip(boundByRunes(s, requestIDBound))
+}
+
+// sanitizeResource bounds a resource name to resourceBound runes and strips
+// all control characters. It is defense-in-depth at the wire sink: callers
+// supply short stable identifiers.
+func sanitizeResource(s string) string {
+	return controlStrip(boundByRunes(s, resourceBound))
 }
 
 // boundByRunes returns s truncated to at most n runes, UTF-8 safe.

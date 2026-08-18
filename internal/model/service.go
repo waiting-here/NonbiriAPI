@@ -350,11 +350,20 @@ func resolveOrd(ord *int64) (int64, error) {
 // while passing through unknown errors wrapped for diagnostics. It never
 // includes secret material.
 func mapRepoError(err error) error {
+	var capErr *db.CapError
+	if errors.As(err, &capErr) {
+		// A per-parent resource cap refusal carries the resource name and the
+		// exact effective cap; surface it as-is so the handler can build the
+		// resource_limit_exceeded envelope without a second, racy read.
+		return capErr
+	}
 	switch {
 	case errors.Is(err, db.ErrNotFound):
 		return db.ErrNotFound
 	case errors.Is(err, db.ErrConflict):
 		return db.ErrConflict
+	case errors.Is(err, db.ErrInvalidSiteConfig):
+		return fmt.Errorf("%w: site config", ErrInvalidRequest)
 	default:
 		return fmt.Errorf("model: repository error: %w", err)
 	}

@@ -370,6 +370,50 @@ func TestHandlerCrossUserKeyAndEndpointNotFound(t *testing.T) {
 	assertErr(t, rec, http.StatusNotFound, httperr.CodeNotFound)
 }
 
+func TestHandlerEndpointKeyCapResourceLimitExceeded(t *testing.T) {
+	h, ts := newTestHandler(t)
+	ts.setEndpointKeyLimit(t, "1")
+
+	// Create an endpoint to attach keys to.
+	rec := doRequest(t, h, http.MethodPost, "/api/endpoints", `{"base_url":"https://example.com/v1/"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create endpoint = %d, want 201; body=%s", rec.Code, rec.Body.String())
+	}
+	epID := jsonNumber(decodeMap(t, rec.Body.Bytes())["id"])
+
+	// First key -> 201.
+	rec = doRequest(t, h, http.MethodPost, "/api/endpoints/"+itoa(epID)+"/keys", `{"secret":"sk-one-12345678"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("first key = %d, want 201; body=%s", rec.Code, rec.Body.String())
+	}
+
+	// Second key -> 422 resource_limit_exceeded carrying limit + resource.
+	rec = doRequest(t, h, http.MethodPost, "/api/endpoints/"+itoa(epID)+"/keys", `{"secret":"sk-two-12345678"}`)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("second key = %d, want 422; body=%s", rec.Code, rec.Body.String())
+	}
+	var env struct {
+		Error struct {
+			Code     string `json:"code"`
+			Limit    int    `json:"limit"`
+			Resource string `json:"resource"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("decode: %v; body=%s", err, rec.Body.String())
+	}
+	if env.Error.Code != httperr.CodeResourceLimitExceeded {
+		t.Errorf("code = %q, want %q", env.Error.Code, httperr.CodeResourceLimitExceeded)
+	}
+	if env.Error.Limit != 1 {
+		t.Errorf("limit = %d, want 1", env.Error.Limit)
+	}
+	if env.Error.Resource != "endpoint_key" {
+		t.Errorf("resource = %q, want endpoint_key", env.Error.Resource)
+	}
+	assertNoStore(t, rec)
+}
+
 // --- helpers ----------------------------------------------------------------
 
 func jsonNumber(v any) int64 {
