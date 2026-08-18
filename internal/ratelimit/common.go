@@ -164,11 +164,3 @@ func retryAfterSeconds(until, now time.Time) int {
 	}
 	return int(seconds)
 }
-
-func retryAfterDuration(until, now time.Time) time.Duration {
-	seconds := retryAfterSeconds(until, now)
-	if seconds == 0 {
-		return 0
-	}
-	return time.Duration(seconds) * time.Second
-}

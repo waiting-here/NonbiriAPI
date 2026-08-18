@@ -272,6 +272,7 @@ func TestMasterKeyOwnershipCloseAndSafeFormatting(t *testing.T) {
 	clear(opened)
 
 	formatted := fmt.Sprintf("%v %#v", v, v)
+	//lint:ignore SA9005 Deliberately verify that an opaque Vault serializes without exposing its unexported key state.
 	jsonValue, err := json.Marshal(v)
 	if err != nil {
 		t.Fatalf("marshal Vault: %v", err)

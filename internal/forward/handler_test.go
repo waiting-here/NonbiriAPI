@@ -370,7 +370,8 @@ func TestForwardRequestSafetyHooksAndSecretSinks(t *testing.T) {
 			t.Fatalf("authority user=%d safety=%q model=%q body=%s", userID, safety, model, body)
 		}
 	}
-	if SafetyIdentifier(alice.id) == SafetyIdentifier(bob.id) || SafetyIdentifier(alice.id) != SafetyIdentifier(alice.id) {
+	aliceSafety := SafetyIdentifier(alice.id)
+	if aliceSafety == SafetyIdentifier(bob.id) || aliceSafety != SafetyIdentifier(alice.id) {
 		t.Fatal("safety identifiers are not stable and user-distinct")
 	}
 

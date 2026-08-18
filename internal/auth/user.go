@@ -228,17 +228,6 @@ func validAuthorizationLocation(location, state string) bool {
 	return ok && len(values) == 1 && values[0] == state
 }
 
-func fixedExternalURL(raw string) (string, error) {
-	if !validateBoundedText(raw, 4096, false) {
-		return "", ErrProviderUnavailable
-	}
-	parsed, err := url.Parse(raw)
-	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" || (!strings.EqualFold(parsed.Scheme, "https") && !strings.EqualFold(parsed.Scheme, "http")) {
-		return "", ErrProviderUnavailable
-	}
-	return raw, nil
-}
-
 // Callback handles GET /api/auth/discord/callback. It consumes state before
 // exchanging the code, preventing concurrent callback replay.
 func (a *UserAuth) Callback(w http.ResponseWriter, r *http.Request) {

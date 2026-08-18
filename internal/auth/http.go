@@ -167,14 +167,6 @@ func noStoreRedirect(w http.ResponseWriter, r *http.Request, location string) {
 	http.Redirect(w, r, location, http.StatusFound)
 }
 
-func clearAuthCookies(w http.ResponseWriter, r *http.Request, siteBaseURL string) {
-	ClearOAuthStateCookie(w, secureCookieForRequest(r, siteBaseURL))
-}
-
-type methodHandler func(http.ResponseWriter, *http.Request)
-
-func (h methodHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) { h(w, r) }
-
 func setRetryAfter(w http.ResponseWriter, seconds int) {
 	if seconds > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(seconds))

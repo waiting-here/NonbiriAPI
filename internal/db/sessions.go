@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -346,21 +345,3 @@ func (s *Store) SessionRowCount() (int, error) {
 	}
 	return count, nil
 }
-
-// ensure token validation does not accidentally accept a value copied from an
-// unrelated cookie domain. Generated tokens are URL-safe base64, but checking
-// the alphabet here also bounds hash work for malformed requests.
-func isGeneratedSessionToken(token string) bool {
-	if !validateSessionToken(token) {
-		return false
-	}
-	if len(token) != base64.RawURLEncoding.EncodedLen(32) {
-		return false
-	}
-	_, err := base64.RawURLEncoding.DecodeString(token)
-	return err == nil
-}
-
-// Keep strings imported for compatibility with older callers that pass a
-// whitespace-bearing cookie; no raw value is included in any returned error.
-var _ = strings.TrimSpace
