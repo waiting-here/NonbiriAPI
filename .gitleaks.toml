@@ -1,0 +1,19 @@
+title = "NonbiriAPI secret scanning"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Documented caller-key placeholder, never a usable credential"
+targetRules = ["curl-auth-header"]
+condition = "AND"
+regexTarget = "line"
+paths = ['''^README\.md$''']
+regexes = ['''Bearer nbk_REPLACE_WITH_YOUR_CALLER_KEY''']
+
+[[allowlists]]
+description = "Exact endpoint-key parser fixtures"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^internal[\\/]endpoint[\\/]handler_test\.go$''']
+regexes = ['''^(sk-x-1234567890|sk-1234567890|sk-bob-inject-12345)$''']

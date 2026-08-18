@@ -32,7 +32,7 @@ Configure both origins explicitly. Do not expose the admin host on the same publ
 Build-time requirements:
 
 - Go 1.26 or newer in the supported 1.26 series.
-- Node.js 22.12 or newer and npm 12 for the web build.
+- Node.js 22.22 or newer and npm 12 for the web build.
 
 Node.js is not needed to run the finished binary.
 

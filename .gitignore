@@ -41,6 +41,9 @@ $RECYCLE.BIN/
 # Codex CLI (OpenAI)
 .codex/
 
+# Playwright CLI browser snapshots and session logs
+.playwright-cli/
+
 # Pi Coding Agent
 .pi/
 
