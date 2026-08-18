@@ -3,7 +3,9 @@ package secret
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"io"
@@ -39,6 +41,16 @@ var (
 	ErrClosed = errors.New("secret: vault is closed")
 	// ErrUnavailable reports failure of the operating system random source.
 	ErrUnavailable = errors.New("secret: cryptographic operation unavailable")
+	// ErrInvalidSubkeyInfo reports a DeriveSubkey call whose info label is
+	// empty or oversized. The error never includes the info value.
+	ErrInvalidSubkeyInfo = errors.New("secret: invalid subkey info")
+)
+
+const (
+	// SubkeyBytes is the length of a DeriveSubkey output. It matches the
+	// SHA-256 output size so one HKDF block produces the whole subkey.
+	SubkeyBytes        = sha256.Size
+	maxSubkeyInfoBytes = 256
 )
 
 // Codec is the narrow recoverable-secret boundary used by persistence code.
@@ -149,6 +161,51 @@ func (v *Vault) Open(encoded string) ([]byte, error) {
 		return nil, ErrInvalidCiphertext
 	}
 	return plaintext, nil
+}
+
+// DeriveSubkey derives a purpose-bound subkey from the master key using
+// HKDF-SHA256 (RFC 5869). info is a non-empty purpose label; different labels
+// yield independent subkeys, so one rail cannot accidentally reuse another
+// rail's derived material. The master key is read under the read lock; the
+// caller owns the returned subkey and should clear it once it has derived the
+// one-way fingerprint it needs. The output never reveals the master key in a
+// reversible way.
+func (v *Vault) DeriveSubkey(info []byte) ([]byte, error) {
+	if v == nil {
+		return nil, ErrClosed
+	}
+	if len(info) == 0 || len(info) > maxSubkeyInfoBytes {
+		return nil, ErrInvalidSubkeyInfo
+	}
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	if v.closed {
+		return nil, ErrClosed
+	}
+	// HKDF-Extract: PRK = HMAC-SHA256(salt, IKM). RFC 5869 uses a string of
+	// HashLen zero bytes when salt is empty.
+	salt := make([]byte, sha256.Size)
+	prk := hmacSHA256(salt, v.key[:])
+	clear(salt)
+	// HKDF-Expand: a SubkeyBytes output is exactly one SHA-256 block, so T(1)
+	// is the whole output: HMAC-SHA256(PRK, info || 0x01).
+	mac := hmac.New(sha256.New, prk[:])
+	mac.Write(info)
+	mac.Write([]byte{0x01})
+	sum := mac.Sum(nil)
+	out := make([]byte, SubkeyBytes)
+	copy(out, sum)
+	clear(prk[:])
+	clear(sum)
+	return out, nil
+}
+
+func hmacSHA256(key, data []byte) [sha256.Size]byte {
+	mac := hmac.New(sha256.New, key)
+	mac.Write(data)
+	var out [sha256.Size]byte
+	copy(out[:], mac.Sum(nil))
+	return out
 }
 
 // Close clears the Vault's retained master-key bytes on a best-effort basis.

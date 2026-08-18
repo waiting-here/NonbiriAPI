@@ -241,10 +241,15 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		return nil, fmt.Errorf("user auth: %w", err)
 	}
 	cleanup = append(cleanup, userAuth.Close)
+	credGenSubkey, err := vault.DeriveSubkey([]byte("admin-cred-gen-v1"))
+	if err != nil {
+		return nil, fmt.Errorf("admin credential subkey: %w", err)
+	}
 	adminAuth, err := auth.NewAdminAuth(auth.AdminAuthConfig{
 		Store: store, Username: cfg.AdminUsername, Password: cfg.AdminPassword,
-		SiteBaseURL: cfg.SiteBaseURL,
+		CredGenSubkey: credGenSubkey, SiteBaseURL: cfg.SiteBaseURL,
 	})
+	clear(credGenSubkey)
 	if err != nil {
 		return nil, fmt.Errorf("admin auth: %w", err)
 	}

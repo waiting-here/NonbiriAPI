@@ -50,11 +50,19 @@ CREATE TABLE IF NOT EXISTS sessions (
 	last_seen_at        INTEGER NOT NULL,                          -- idle-TTL tracking
 	expires_at          INTEGER NOT NULL,                          -- idle expiry, renewed on activity (sliding)
 	absolute_expires_at INTEGER NOT NULL,                          -- absolute lifetime cap (created_at + absolute TTL), immutable
-	created_at          INTEGER NOT NULL
+	created_at          INTEGER NOT NULL,
+	cred_gen            TEXT NOT NULL DEFAULT ''                   -- opaque credential-generation fingerprint (admin sessions only); empty for user sessions. Rotating the administrator password (env change + restart) changes the fingerprint, so a stale admin session no longer matches and is rejected/deleted at the next request. A plain restart with the same password leaves it unchanged.
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_absolute ON sessions(absolute_expires_at);
+-- Alpha one-shot manual migration (dev databases created before this rail):
+--   ALTER TABLE sessions ADD COLUMN cred_gen TEXT NOT NULL DEFAULT '';
+-- CREATE TABLE IF NOT EXISTS does not alter an existing table; run the statement
+-- once before opening such a database. Existing admin rows receive the empty
+-- default and therefore fail the credential-generation check at next request;
+-- the administrator re-logs in once to obtain a stamped session. User sessions
+-- are unaffected (the column is only compared for administrator sessions).
 
 -- ===== caller_keys ==========================================================
 -- Exactly one caller key per user (user_id is the primary key). Regeneration

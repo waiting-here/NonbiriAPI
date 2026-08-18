@@ -1,8 +1,10 @@
 package auth
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"errors"
 	"net/http"
 
@@ -11,17 +13,23 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 // AdminAuthConfig contains the environment-owned administrator credentials.
 // Password is retained only in this service's process memory and is never
-// passed to the database.
+// passed to the database. CredGenSubkey is a purpose-bound master-key
+// derivation (internal/secret.Vault.DeriveSubkey) used to stamp each admin
+// session with the current password's fingerprint, so rotating the password
+// (env change + restart) revokes existing admin sessions. When empty, no
+// fingerprint is bound (compatibility/tests only).
 type AdminAuthConfig struct {
-	Store       *db.Store
-	Username    string
-	Password    string
-	Throttle    LoginThrottle
-	SiteBaseURL string
+	Store         *db.Store
+	Username      string
+	Password      string
+	CredGenSubkey []byte
+	Throttle      LoginThrottle
+	SiteBaseURL   string
 }
 
 // AdminAuth provides handlers, a mountable route tree, and middleware for the
@@ -30,6 +38,7 @@ type AdminAuth struct {
 	store         *db.Store
 	username      string
 	password      string
+	credGen       string
 	throttle      LoginThrottle
 	siteBaseURL   string
 	ownedThrottle *ratelimit.LoginThrottle
@@ -42,6 +51,13 @@ func NewAdminAuth(config AdminAuthConfig) (*AdminAuth, error) {
 	if config.Store == nil || !validateBoundedText(config.Username, maxUsernameBytes, false) || !validateBoundedText(config.Password, maxPasswordBytes, false) {
 		return nil, ErrProviderUnavailable
 	}
+	credGen := ""
+	if len(config.CredGenSubkey) > 0 {
+		if len(config.CredGenSubkey) != secret.SubkeyBytes {
+			return nil, ErrProviderUnavailable
+		}
+		credGen = computeAdminCredGen(config.CredGenSubkey, config.Password)
+	}
 	base := ""
 	if config.SiteBaseURL != "" {
 		var err error
@@ -50,7 +66,7 @@ func NewAdminAuth(config AdminAuthConfig) (*AdminAuth, error) {
 			return nil, ErrProviderUnavailable
 		}
 	}
-	service := &AdminAuth{store: config.Store, username: config.Username, password: config.Password, throttle: config.Throttle, siteBaseURL: base}
+	service := &AdminAuth{store: config.Store, username: config.Username, password: config.Password, credGen: credGen, throttle: config.Throttle, siteBaseURL: base}
 	if service.throttle == nil {
 		throttle, err := ratelimit.NewLoginThrottle(ratelimit.DefaultLoginThrottleConfig())
 		if err != nil {
@@ -60,6 +76,23 @@ func NewAdminAuth(config AdminAuthConfig) (*AdminAuth, error) {
 		service.ownedThrottle = throttle
 	}
 	return service, nil
+}
+
+// computeAdminCredGen derives the opaque credential-generation fingerprint
+// bound to an administrator session: HMAC-SHA-256(subkey, password), hex
+// encoded. The subkey is a purpose-bound master-key derivation
+// (internal/secret.Vault.DeriveSubkey); the password is the env-configured
+// administrator password. The result is a high-entropy opaque string the
+// database stores and compares atomically; it is not the password and not a
+// raw hash of it, so it cannot be inverted offline without the master key.
+// The subkey is read but never retained by the caller beyond this call.
+func computeAdminCredGen(subkey []byte, password string) string {
+	mac := hmac.New(sha256.New, subkey)
+	mac.Write([]byte(password))
+	raw := mac.Sum(nil)
+	out := hex.EncodeToString(raw)
+	clear(raw)
+	return out
 }
 
 // Close releases an internally-created bounded throttle. Injected throttles
@@ -138,7 +171,7 @@ func (a *AdminAuth) Login(w http.ResponseWriter, r *http.Request) {
 		writeStableError(w, httperr.CodeInternal, "administrator authentication unavailable")
 		return
 	}
-	token, expiry, err := a.store.CreateAdminSession(admin.ID)
+	token, expiry, err := a.store.CreateAdminSessionWithCredGen(admin.ID, a.credGen)
 	if err != nil {
 		writeStableError(w, httperr.CodeInternal, "administrator authentication unavailable")
 		return
@@ -186,7 +219,7 @@ func (a *AdminAuth) Logout(w http.ResponseWriter, r *http.Request) {
 		writeStableError(w, httperr.CodeUnauthorized, "administrator authentication required")
 		return
 	}
-	admin, err := a.store.AuthenticateAdminSession(token)
+	admin, err := a.store.AuthenticateAdminSessionWithCredGen(token, a.credGen)
 	if err != nil || admin == nil {
 		writeStableError(w, httperr.CodeUnauthorized, "administrator authentication required")
 		return
@@ -227,7 +260,7 @@ func (a *AdminAuth) authenticateRequest(r *http.Request) (*db.User, bool) {
 	if token == "" {
 		return nil, false
 	}
-	admin, err := a.store.AuthenticateAdminSession(token)
+	admin, err := a.store.AuthenticateAdminSessionWithCredGen(token, a.credGen)
 	return admin, err == nil && admin != nil && admin.IsAdmin
 }
 

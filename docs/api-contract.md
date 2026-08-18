@@ -424,6 +424,15 @@ rail but the scope (no plaintext secret) is frozen here.
 Auth: a valid admin session cookie. The administrator is env-configured (single row,
 `discord_id` null) and cannot self-register. All responses are `no-store`.
 
+Administrator sessions are bound to the current administrator credential
+generation: rotating the administrator password (changing the env value and
+restarting the process) invalidates every existing admin session at its next
+request, so a leaked or retired password cannot keep an old long-lived admin
+session alive. A plain restart with the same password keeps admin sessions
+alive; only an actual password rotation revokes them. The binding is an opaque
+fingerprint of the password (never the password itself), so the database holds
+no password material.
+
 ### 4.1 Admin auth & elevation
 
 | Method | Path | Auth | Body | Response | Stable codes |

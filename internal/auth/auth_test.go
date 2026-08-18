@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -606,5 +607,192 @@ func TestPublicUserResponseDoesNotContainSecurityMaterial(t *testing.T) {
 		if bytes.Contains(encoded, []byte(forbidden)) {
 			t.Fatalf("public session response contains security field %q: %s", forbidden, encoded)
 		}
+	}
+}
+
+// TestAdminSessionRevokedOnPasswordRotation verifies the administrator
+// password-rotation revocation property: an admin session is stamped with the
+// current password fingerprint, so rotating the password (env change +
+// restart) revokes the pre-rotation long-lived admin session at the next
+// request and deletes the stale row. The opaque fingerprint never appears in
+// a response body or header.
+func TestAdminSessionRevokedOnPasswordRotation(t *testing.T) {
+	st := authTestStore(t)
+	subkey := bytes.Repeat([]byte{0x71}, secret.SubkeyBytes)
+	t.Cleanup(func() { clear(subkey) })
+
+	first, err := NewAdminAuth(AdminAuthConfig{
+		Store: st, Username: "root", Password: "first-password",
+		CredGenSubkey: subkey, SiteBaseURL: "https://example.com",
+	})
+	if err != nil {
+		t.Fatalf("NewAdminAuth (first): %v", err)
+	}
+	defer first.Close()
+	if first.credGen == "" {
+		t.Fatal("admin auth with a subkey did not derive a credential-generation fingerprint")
+	}
+
+	login := httptest.NewRecorder()
+	first.Login(login, stationRequest(http.MethodPost, "https://admin.example.com/admin/api/login",
+		host.StationAdmin, bytes.NewReader([]byte(`{"username":"root","password":"first-password"}`))))
+	if login.Code != http.StatusOK {
+		t.Fatalf("login status=%d body=%s", login.Code, login.Body.String())
+	}
+	cookie := cookieFromResponse(t, login, AdminSessionCookieName)
+	if strings.Contains(login.Body.String(), first.credGen) {
+		t.Fatal("credential-generation fingerprint leaked into the login response body")
+	}
+	if strings.Contains(login.Header().Get("Set-Cookie"), first.credGen) {
+		t.Fatal("credential-generation fingerprint leaked into the login Set-Cookie header")
+	}
+
+	// The session authenticates under the same credential generation.
+	admin, err := st.AuthenticateAdminSessionWithCredGen(cookie.Value, first.credGen)
+	if err != nil || admin == nil || !admin.IsAdmin {
+		t.Fatalf("same-generation AuthenticateAdminSessionWithCredGen = %#v err=%v", admin, err)
+	}
+
+	// Rotating the password (env change + restart) builds a new AdminAuth with
+	// the same subkey but a different password; its fingerprint differs.
+	rotated, err := NewAdminAuth(AdminAuthConfig{
+		Store: st, Username: "root", Password: "second-password",
+		CredGenSubkey: subkey, SiteBaseURL: "https://example.com",
+	})
+	if err != nil {
+		t.Fatalf("NewAdminAuth (rotated): %v", err)
+	}
+	defer rotated.Close()
+	if rotated.credGen == first.credGen {
+		t.Fatal("password rotation did not change the credential-generation fingerprint")
+	}
+
+	// The pre-rotation session is revoked at the next request and the stale
+	// row is deleted, not merely rejected.
+	req := stationRequest(http.MethodGet, "https://admin.example.com/admin/api/session", host.StationAdmin, nil)
+	req.AddCookie(&http.Cookie{Name: AdminSessionCookieName, Value: cookie.Value})
+	rec := httptest.NewRecorder()
+	rotated.Middleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("rotated password authorized a pre-rotation admin session")
+	})).ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("rotated password status=%d body=%s; want 401", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), first.credGen) || strings.Contains(rec.Body.String(), rotated.credGen) {
+		t.Fatal("credential-generation fingerprint leaked into the unauthorized response body")
+	}
+	if count, err := st.SessionRowCount(); err != nil || count != 0 {
+		t.Fatalf("stale admin session row lingered after rotation: count=%d err=%v", count, err)
+	}
+}
+
+// TestAdminSessionSurvivesSamePasswordRestart verifies the counterpart
+// property: a plain restart with the SAME password keeps admin sessions
+// alive, because the fingerprint is unchanged. Only an actual password
+// rotation revokes them.
+func TestAdminSessionSurvivesSamePasswordRestart(t *testing.T) {
+	st := authTestStore(t)
+	subkey := bytes.Repeat([]byte{0x72}, secret.SubkeyBytes)
+	t.Cleanup(func() { clear(subkey) })
+
+	first, err := NewAdminAuth(AdminAuthConfig{
+		Store: st, Username: "root", Password: "stable-password",
+		CredGenSubkey: subkey, SiteBaseURL: "https://example.com",
+	})
+	if err != nil {
+		t.Fatalf("NewAdminAuth (first): %v", err)
+	}
+	defer first.Close()
+
+	login := httptest.NewRecorder()
+	first.Login(login, stationRequest(http.MethodPost, "https://admin.example.com/admin/api/login",
+		host.StationAdmin, bytes.NewReader([]byte(`{"username":"root","password":"stable-password"}`))))
+	if login.Code != http.StatusOK {
+		t.Fatalf("login status=%d body=%s", login.Code, login.Body.String())
+	}
+	cookie := cookieFromResponse(t, login, AdminSessionCookieName)
+
+	// Simulate a plain restart: a freshly built AdminAuth with the same
+	// subkey and the same password derives the same fingerprint.
+	restarted, err := NewAdminAuth(AdminAuthConfig{
+		Store: st, Username: "root", Password: "stable-password",
+		CredGenSubkey: subkey, SiteBaseURL: "https://example.com",
+	})
+	if err != nil {
+		t.Fatalf("NewAdminAuth (restarted): %v", err)
+	}
+	defer restarted.Close()
+	if restarted.credGen != first.credGen {
+		t.Fatal("same password produced a different credential-generation fingerprint")
+	}
+
+	req := stationRequest(http.MethodGet, "https://admin.example.com/admin/api/session", host.StationAdmin, nil)
+	req.AddCookie(&http.Cookie{Name: AdminSessionCookieName, Value: cookie.Value})
+	rec := httptest.NewRecorder()
+	restarted.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})).ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("same-password restart status=%d body=%s; want 204", rec.Code, rec.Body.String())
+	}
+}
+
+// TestAdminAuthNeverDeletesUserSession verifies the cross-station safety of
+// the credential-generation cleanup: a normal user's session token presented
+// to the administrator station is rejected, and its row is never deleted by
+// the administrator auth path's stale-cred_gen cleanup. User sessions carry
+// the empty cred_gen sentinel, so the cleanup predicate excludes them.
+func TestAdminAuthNeverDeletesUserSession(t *testing.T) {
+	st := authTestStore(t)
+	subkey := bytes.Repeat([]byte{0x74}, secret.SubkeyBytes)
+	t.Cleanup(func() { clear(subkey) })
+
+	user, err := st.CreateDiscordUser("discord-cross-station", "alice", "")
+	if err != nil {
+		t.Fatalf("CreateDiscordUser: %v", err)
+	}
+	userToken, _, err := st.CreateUserSession(user.ID)
+	if err != nil {
+		t.Fatalf("CreateUserSession: %v", err)
+	}
+
+	admin, err := NewAdminAuth(AdminAuthConfig{
+		Store: st, Username: "root", Password: "admin-password",
+		CredGenSubkey: subkey, SiteBaseURL: "https://example.com",
+	})
+	if err != nil {
+		t.Fatalf("NewAdminAuth: %v", err)
+	}
+	defer admin.Close()
+
+	req := stationRequest(http.MethodGet, "https://admin.example.com/admin/api/session", host.StationAdmin, nil)
+	req.AddCookie(&http.Cookie{Name: AdminSessionCookieName, Value: userToken})
+	rec := httptest.NewRecorder()
+	admin.Middleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("administrator station accepted a user session token")
+	})).ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("cross-station status=%d body=%s; want 401", rec.Code, rec.Body.String())
+	}
+
+	// The user's own session must still authenticate normally afterwards.
+	resolved, err := st.AuthenticateUserSession(userToken)
+	if err != nil || resolved == nil || resolved.ID != user.ID {
+		t.Fatalf("user session was invalidated by the admin auth path: %#v err=%v", resolved, err)
+	}
+}
+
+// TestAdminAuthRejectsMalformedCredGenSubkey guards the wiring contract: a
+// non-empty subkey of the wrong length fails closed instead of silently
+// disabling the fingerprint check.
+func TestAdminAuthRejectsMalformedCredGenSubkey(t *testing.T) {
+	st := authTestStore(t)
+	bad := bytes.Repeat([]byte{0x73}, secret.SubkeyBytes-1)
+	t.Cleanup(func() { clear(bad) })
+	if _, err := NewAdminAuth(AdminAuthConfig{
+		Store: st, Username: "root", Password: "password",
+		CredGenSubkey: bad, SiteBaseURL: "https://example.com",
+	}); !errors.Is(err, ErrProviderUnavailable) {
+		t.Fatalf("short subkey returned %v, want ErrProviderUnavailable", err)
 	}
 }
