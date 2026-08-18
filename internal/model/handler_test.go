@@ -544,3 +544,86 @@ func TestHandlerModelSilentRetry(t *testing.T) {
 		t.Fatalf("list silent_retry projection = %v", byName)
 	}
 }
+
+// --- resource caps (handler layer) -----------------------------------------
+
+func TestHandlerModelCapResourceLimitExceeded(t *testing.T) {
+	h, ts, _ := newTestHandler(t)
+	ts.setModelLimit(t, "1")
+
+	// First model -> 201.
+	rec := doRequest(t, h, http.MethodPost, "/api/models", `{"provider":"p0","model":"m"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("first model = %d, want 201; body=%s", rec.Code, rec.Body.String())
+	}
+	// Second model -> 422 resource_limit_exceeded carrying limit + resource.
+	rec = doRequest(t, h, http.MethodPost, "/api/models", `{"provider":"p1","model":"m"}`)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("second model = %d, want 422; body=%s", rec.Code, rec.Body.String())
+	}
+	var env struct {
+		Error struct {
+			Code     string `json:"code"`
+			Limit    int    `json:"limit"`
+			Resource string `json:"resource"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("decode: %v; body=%s", err, rec.Body.String())
+	}
+	if env.Error.Code != httperr.CodeResourceLimitExceeded {
+		t.Errorf("code = %q, want %q", env.Error.Code, httperr.CodeResourceLimitExceeded)
+	}
+	if env.Error.Limit != 1 {
+		t.Errorf("limit = %d, want 1", env.Error.Limit)
+	}
+	if env.Error.Resource != "model" {
+		t.Errorf("resource = %q, want model", env.Error.Resource)
+	}
+	assertNoStore(t, rec)
+}
+
+func TestHandlerBindingCapResourceLimitExceeded(t *testing.T) {
+	h, ts, uid := newTestHandler(t)
+	ctx := context.Background()
+	ts.setBindingLimit(t, "1")
+
+	m, err := ts.svc.CreateModel(ctx, uid, "p", "m", nil, nil)
+	if err != nil {
+		t.Fatalf("create model: %v", err)
+	}
+	key := ts.seedEndpointKeyAndCache(t, uid, "up-a", "up-b")
+
+	// First binding -> 201.
+	rec := doRequest(t, h, http.MethodPost, fmt.Sprintf("/api/models/%d/bindings", m.ID),
+		`{"endpoint_key_id":`+fmt.Sprintf("%d", key)+`,"upstream_model_id":"up-a"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("first binding = %d, want 201; body=%s", rec.Code, rec.Body.String())
+	}
+	// Second binding -> 422 resource_limit_exceeded carrying limit + resource.
+	rec = doRequest(t, h, http.MethodPost, fmt.Sprintf("/api/models/%d/bindings", m.ID),
+		`{"endpoint_key_id":`+fmt.Sprintf("%d", key)+`,"upstream_model_id":"up-b"}`)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("second binding = %d, want 422; body=%s", rec.Code, rec.Body.String())
+	}
+	var env struct {
+		Error struct {
+			Code     string `json:"code"`
+			Limit    int    `json:"limit"`
+			Resource string `json:"resource"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("decode: %v; body=%s", err, rec.Body.String())
+	}
+	if env.Error.Code != httperr.CodeResourceLimitExceeded {
+		t.Errorf("code = %q, want %q", env.Error.Code, httperr.CodeResourceLimitExceeded)
+	}
+	if env.Error.Limit != 1 {
+		t.Errorf("limit = %d, want 1", env.Error.Limit)
+	}
+	if env.Error.Resource != "binding" {
+		t.Errorf("resource = %q, want binding", env.Error.Resource)
+	}
+	assertNoStore(t, rec)
+}

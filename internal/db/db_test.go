@@ -2,7 +2,9 @@ package db
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"testing"
 
@@ -80,6 +82,22 @@ func TestSchemaBootstrapsAllEntities(t *testing.T) {
 		if got[i] != name {
 			t.Fatalf("table[%d] = %q, want %q; got=%v", i, got[i], name, got)
 		}
+	}
+}
+
+func TestOpenCreatesPrivateDatabaseDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not expose Unix directory permission bits")
+	}
+	dir := filepath.Join(t.TempDir(), "private", "database")
+	st := openTestStore(t, filepath.Join(dir, "nonbiriapi.db"))
+	defer st.Close()
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		t.Fatalf("new database directory permissions=%#o, want no group/other access", info.Mode().Perm())
 	}
 }
 

@@ -1,9 +1,6 @@
 # Data Lifecycle Checklist (export / delete / retention / privacy)
 
 > Status: **active** (introduced by the account-deletion rail)
-> Authority: aligns to the frozen v1.0.0-alpha.1 requirements (data lifecycle), DEC-005
-> (credentials), DEC-006 (export/retention/privacy), and AGENTS.md §4.9 (data lifecycle)
-> and §4.10 (async deletion race).
 >
 > Every new user-associated table or column MUST be checked against this list in the same
 > task that introduces it. "User-associated" means any row whose lifecycle is bound to a
@@ -26,8 +23,10 @@ be closed before the task is accepted.
    `Store.DeleteUserAccount` AND an atomic `INSERT ... SELECT ... WHERE EXISTS users`
    suppression for late writers.
 3. **Retention** — Is there a bounded retention/cleanup policy, or is the data naturally
-   bounded by the account lifetime? Request logs are cleaned past 30 days; sessions expire
-   by idle/absolute TTL; alerts/issues are bounded by their own caps and resolve state.
+   bounded by the account lifetime? Request logs are cleaned past 30 days; expired sessions
+   are purged at startup and every six hours by idle/absolute TTL; resolved admin alerts
+   are removed past 30 days (`CleanupResolvedAlerts` in the same startup + 6h sweep);
+   pending alerts and user issues are bounded by their own caps and resolve state.
 4. **Privacy** — Does the privacy/terms text (zh/en) describe the data, and is untrusted or
    sensitive content bounded/sanitized at every sink? Upstream identifiers/diagnostics live
    only behind `internal/diagnostic.Bound`; secrets never enter logs, errors, CSV, HTML, or
@@ -39,7 +38,7 @@ be closed before the task is accepted.
 |---|---|---|---|---|---|
 | `users` (identity, lang, limits) | self | yes (whitelisted fields) | row removed by `DeleteUserAccount` | account lifetime | no Discord token/credential stored; profile text bounded |
 | `users` (usage accumulators) | self | yes (totals) | removed with the row | account lifetime (totals are the authoritative counter; `request_logs` is never summed) | metadata only |
-| `sessions` | `user_id` FK CASCADE | no (transient) | cascade on user delete; idle+absolute TTL purge | idle/absolute TTL (`PurgeExpiredSessions`) | opaque hash only; no plaintext token persisted |
+| `sessions` | `user_id` FK CASCADE | no (transient) | cascade on user delete; idle+absolute TTL purge | idle/absolute TTL (`PurgeExpiredSessions` at startup + every 6h) | opaque hash only; no plaintext token persisted |
 | `caller_keys` | `user_id` FK CASCADE | metadata only (`display_head/tail`, timestamps); **plaintext never** | cascade on user delete; regeneration invalidates prior key instantly | account lifetime | SHA-256 hash lookup; plaintext shown once, never persisted |
 | `endpoints` | `user_id` FK CASCADE | yes (metadata: connector, canonical base_url, note, enabled, fetch flag, timestamps) | cascade on user delete | account lifetime | canonical base_url only; no secret |
 | `endpoint_keys` | `endpoint_id` FK CASCADE | metadata only (`display_head/tail`, note, enabled, timestamps); **ciphertext/secret never** | cascade on endpoint delete (and thus user delete) | account lifetime | AES-256-GCM envelope; display fragments only in lists/logs/export |
@@ -48,7 +47,7 @@ be closed before the task is accepted.
 | `model_bindings` | `model_id`/`endpoint_key_id` FK CASCADE | yes (endpoint_key_id, upstream_model_id, ord) | cascade on model/key delete (and thus user delete) | account lifetime | opaque ids |
 | `request_logs` | `user_id` FK CASCADE; `endpoint_key_id` FK SET NULL | yes (bounded metadata summary; **no content**) | cascade on user delete; late `RecordRequest` uses `INSERT ... SELECT ... WHERE EXISTS users` (atomic no-op) | **30-day retention cleanup**; at-most-once by `attempt_id` partial unique index | metadata + bounded `error_diag` only; content never persisted |
 | `user_issues` | `user_id` FK CASCADE | yes (kind, message, ref, created_at, resolved) | cascade on user delete; late `RecordUserIssue`/`FailFetch` use `INSERT ... SELECT ... WHERE EXISTS users` (atomic no-op) | hard cap `MaxUserIssuesPerUser` + resolve state | bounded/sanitized message/ref via `diagnostic.BoundTo` |
-| `admin_alerts` | `subject_user_id` **NO FK** (by design) | no (admin-facing, not the user's export) | explicit `DELETE FROM admin_alerts WHERE subject_user_id=?` inside `DeleteUserAccount`; late `RecordAdminAlert`/`RecordAdminAlertBounded` use `INSERT ... SELECT ... WHERE EXISTS users` (atomic no-op) | hard total cap `MaxAdminAlertsTotal` + per-kind pending cap + resolve state | bounded/sanitized message/ref; no secret |
+| `admin_alerts` | `subject_user_id` **NO FK** (by design) | no (admin-facing, not the user's export) | explicit `DELETE FROM admin_alerts WHERE subject_user_id=?` inside `DeleteUserAccount`; late `RecordAdminAlert`/`RecordAdminAlertBounded` use `INSERT ... SELECT ... WHERE EXISTS users` (atomic no-op) | hard total cap `MaxAdminAlertsTotal` + per-kind pending cap + resolve state; **resolved alerts retained 30 days then removed by `CleanupResolvedAlerts` (startup + every 6h via `runMaintenanceSweep`); pending never removed by retention** | bounded/sanitized message/ref; no secret |
 | `site_config` | **no user link** (admin-only runtime config) | n/a (never part of an account export) | n/a (not removed on account deletion; survives as operator configuration) | bounded known-key set (`adminapi` registry) with typed/range/control validation | no secret/upstream material by construction; values are bounded text/ints |
 
 ## Adding a new user-associated table/column — required steps
@@ -76,7 +75,7 @@ When a task adds a new user-associated table or a new column to one:
    suppression case if the table has a late-write path.
 7. **This table**: add a row above so the next task sees the coverage at a glance.
 
-## Linearization rule (AGENTS §4.10)
+## Linearization rule
 
 Account deletion and late callbacks (usage/log/issue/alert/callback writes) MUST be
 linearized by an atomic conditional write, never by a read-then-write. The shared

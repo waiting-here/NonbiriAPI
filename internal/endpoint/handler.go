@@ -424,11 +424,15 @@ func parsePathID(w http.ResponseWriter, r *http.Request, name string) (int64, bo
 // generic default is internal; validation/cap/not-found are mapped explicitly
 // so callers receive the contracted status and code.
 func writeServiceErr(w http.ResponseWriter, err error) {
+	var capErr *db.CapError
+	if errors.As(err, &capErr) {
+		writeErr(w, httperr.New(httperr.CodeResourceLimitExceeded, "resource limit reached").
+			WithResourceLimit(capErr.Resource, capErr.Limit))
+		return
+	}
 	switch {
 	case errors.Is(err, db.ErrNotFound):
 		writeErr(w, httperr.New(httperr.CodeNotFound, "not found"))
-	case errors.Is(err, db.ErrEndpointCap):
-		writeErr(w, httperr.New(httperr.CodeForbidden, "endpoint cap reached"))
 	case errors.Is(err, ErrConnectorImmutable):
 		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "connector type cannot be changed"))
 	case errors.Is(err, ErrInvalidRequest):

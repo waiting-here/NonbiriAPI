@@ -47,9 +47,21 @@ LEFT JOIN model_bindings b ON b.model_id = m.id
 WHERE m.id = ? AND m.user_id = ?
 GROUP BY m.id`
 
-// CreateModel inserts a platform model for userID. provider/model must already
-// be validated by the service; the repository builds the routing key as the
-// opaque concatenation provider || '/' || model (construction, never
+// DefaultModelLimit is the fallback per-user platform-model cap used when the
+// administrator has not yet set the default_model_limit site_config key. An
+// administrator overrides it at runtime via the site-config endpoint (no
+// restart required). It must be > 0 so a fresh install is usable.
+const DefaultModelLimit = 100
+
+const siteConfigKeyDefaultModelLimit = "default_model_limit"
+
+// CreateModel inserts a platform model for userID. The per-user model-count
+// cap and the current count are read inside the same transaction as the
+// insert, so a concurrent add cannot slip between the count and the write (no
+// read-then-write TOCTOU); when the count has reached the cap a *CapError
+// wrapping ErrModelCap is returned and no row is written. provider/model must
+// already be validated by the service; the repository builds the routing key
+// as the opaque concatenation provider || '/' || model (construction, never
 // interpretation). silentRetry persists the explicit retry switch (false =
 // fail fast, the default). A second model with the same (user_id, full_name) —
 // including a different provider/model split that yields the same external
@@ -66,6 +78,18 @@ func (s *Store) CreateModel(ctx context.Context, userID int64, provider, model, 
 			_ = tx.Rollback()
 		}
 	}()
+
+	cap, err := siteConfigIntLocked(ctx, tx, siteConfigKeyDefaultModelLimit, DefaultModelLimit)
+	if err != nil {
+		return Model{}, err
+	}
+	var count int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM models WHERE user_id=?`, userID).Scan(&count); err != nil {
+		return Model{}, fmt.Errorf("count models: %w", err)
+	}
+	if count >= cap {
+		return Model{}, newCapError(ErrModelCap, ResourceModel, cap)
+	}
 
 	retryInt := 0
 	if silentRetry {
@@ -96,6 +120,23 @@ func (s *Store) CreateModel(ctx context.Context, userID int64, provider, model, 
 		FullName: fullName, RouteStrategy: routeStrategy, SilentRetry: silentRetry,
 		BindingCount: 0, CreatedAt: now, UpdatedAt: now,
 	}, nil
+}
+
+// ModelCap returns the effective per-user platform-model cap: the
+// default_model_limit site_config value or DefaultModelLimit when unset. It is
+// exported for handlers that surface the cap and for tests.
+func (s *Store) ModelCap(ctx context.Context) (int, error) {
+	return siteConfigIntLocked(ctx, s.db, siteConfigKeyDefaultModelLimit, DefaultModelLimit)
+}
+
+// CountModels returns the number of platform models owned by userID. It is
+// exported for tests that assert the cap boundary.
+func (s *Store) CountModels(ctx context.Context, userID int64) (int, error) {
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM models WHERE user_id=?`, userID).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count models: %w", err)
+	}
+	return count, nil
 }
 
 // ListModels returns every platform model owned by userID with its live

@@ -92,6 +92,8 @@ func (s *Store) QueryUserIssues(ctx context.Context, query IssueQuery) (issues [
 		clauses = append(clauses, "id < ?")
 		args = append(args, query.BeforeID)
 	}
+	// #nosec G202 -- clauses contains only the fixed owner/resolved/cursor
+	// predicates selected above; all values are bound through args.
 	sqlText := `
 SELECT id, kind, message, ref, created_at, resolved, resolved_at
 FROM user_issues

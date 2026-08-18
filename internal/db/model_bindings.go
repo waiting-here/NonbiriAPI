@@ -41,15 +41,31 @@ func (s *Store) ListBindings(ctx context.Context, userID, modelID int64) ([]Mode
 	return scanBindings(rows)
 }
 
+// DefaultBindingLimit is the fallback per-platform-model binding-count cap
+// used when the administrator has not yet set the default_binding_limit
+// site_config key. An administrator overrides it at runtime via the
+// site-config endpoint (no restart required). It must be > 0 so a fresh
+// install is usable.
+const DefaultBindingLimit = 50
+
+const siteConfigKeyDefaultBindingLimit = "default_binding_limit"
+
 // CreateBinding inserts a binding from modelID (owned by userID) to an
 // enabled endpoint key of an enabled endpoint owned by the same user, and only
-// for an upstream_model_id present in that key's fetched cache. All checks are
-// one atomic INSERT...SELECT: a cross-user or missing model, a missing or
-// disabled key, a disabled endpoint, and an uncached upstream id all produce
-// zero rows and map to ErrNotFound (indistinguishable, no existence leak). A
-// duplicate (model_id, endpoint_key_id, upstream_model_id) triple is a
-// ErrConflict. ord must already be validated by the service. now is
-// caller-supplied.
+// for an upstream_model_id present in that key's fetched cache. The per-model
+// binding-count cap and the current count are read inside the same
+// transaction as the insert, so a concurrent add cannot slip between the count
+// and the write (no read-then-write TOCTOU); when the count has reached the
+// cap a *CapError wrapping ErrBindingCap is returned and no row is written.
+// The count is ownership-scoped via the models join, so a cross-user or missing
+// model id counts 0 and falls through to the ownership-guarded INSERT...SELECT
+// -> ErrNotFound, never leaking the real owner's binding count. All candidate
+// checks are one atomic INSERT...SELECT: a cross-user or missing model, a
+// missing or disabled key, a disabled endpoint, and an uncached upstream id
+// all produce zero rows and map to ErrNotFound (indistinguishable, no
+// existence leak). A duplicate (model_id, endpoint_key_id, upstream_model_id)
+// triple is a ErrConflict. ord must already be validated by the service. now
+// is caller-supplied.
 func (s *Store) CreateBinding(ctx context.Context, userID, modelID, endpointKeyID int64, upstreamModelID string, ord, now int64) (ModelBinding, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -61,6 +77,21 @@ func (s *Store) CreateBinding(ctx context.Context, userID, modelID, endpointKeyI
 			_ = tx.Rollback()
 		}
 	}()
+
+	cap, err := siteConfigIntLocked(ctx, tx, siteConfigKeyDefaultBindingLimit, DefaultBindingLimit)
+	if err != nil {
+		return ModelBinding{}, err
+	}
+	var count int
+	if err := tx.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM model_bindings b
+JOIN models m ON b.model_id = m.id
+WHERE b.model_id=? AND m.user_id=?`, modelID, userID).Scan(&count); err != nil {
+		return ModelBinding{}, fmt.Errorf("count bindings: %w", err)
+	}
+	if count >= cap {
+		return ModelBinding{}, newCapError(ErrBindingCap, ResourceBinding, cap)
+	}
 
 	res, err := tx.ExecContext(ctx, `
 INSERT INTO model_bindings (model_id, endpoint_key_id, upstream_model_id, ord, created_at)
@@ -102,6 +133,27 @@ WHERE m.id = ? AND m.user_id = ?`,
 		ID: id, ModelID: modelID, EndpointKeyID: endpointKeyID,
 		UpstreamModelID: upstreamModelID, Ord: ord, CreatedAt: now,
 	}, nil
+}
+
+// BindingCap returns the effective per-platform-model binding-count cap: the
+// default_binding_limit site_config value or DefaultBindingLimit when unset.
+// It is exported for handlers that surface the cap and for tests.
+func (s *Store) BindingCap(ctx context.Context) (int, error) {
+	return siteConfigIntLocked(ctx, s.db, siteConfigKeyDefaultBindingLimit, DefaultBindingLimit)
+}
+
+// CountBindings returns the number of bindings on modelID owned by userID
+// (ownership-scoped via the models join, so a cross-user model id counts 0).
+// It is exported for tests that assert the cap boundary.
+func (s *Store) CountBindings(ctx context.Context, userID, modelID int64) (int, error) {
+	var count int
+	if err := s.db.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM model_bindings b
+JOIN models m ON b.model_id = m.id
+WHERE b.model_id=? AND m.user_id=?`, modelID, userID).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count bindings: %w", err)
+	}
+	return count, nil
 }
 
 // UpdateBinding updates the binding bindingID on modelID owned by userID.
@@ -162,6 +214,8 @@ func (s *Store) UpdateBinding(ctx context.Context, userID, modelID, bindingID in
 		args = append(args, newUpstream)
 	}
 	args = append(args, bindingID, modelID, modelID, userID, userID, newUpstream)
+	// #nosec G202 -- sets contains only the fixed ord/upstream_model_id fragments
+	// selected above; every model, owner, binding, and value remains parameterized.
 	query := `UPDATE model_bindings SET ` + joinSets(sets) + `
 WHERE id=? AND model_id=?
   AND model_id IN (SELECT id FROM models WHERE id=? AND user_id=?)

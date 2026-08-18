@@ -6,7 +6,19 @@ The project is currently in alpha. The public compatibility promise is limited t
 
 ## [Unreleased]
 
-- No unreleased changes yet.
+### Changed
+
+- Upgraded the web routing runtime from React Router 7.18.2 to 8.3.0.
+- Raised the frontend build requirement from Node.js 22.12 to 22.22 to match React Router 8.
+
+### Security
+
+- Refuse unsafe cross-origin browser requests to cookie-authenticated user and administrator APIs, including requests between the sibling station hosts.
+- Reject upstream credentials reflected across multiple semantic JSON/SSE string fragments, not only contiguous wire bytes.
+- Apply one aggregate five-minute deadline across route resolution, silent retries, and backoff.
+- Key administrator login throttling by the single configured account instead of attacker-controlled candidate usernames.
+- Purge expired sessions at startup and during the existing six-hour maintenance sweep.
+- Create missing database directories owner-only and align the systemd/key-file guidance with the runtime's strict permission checks.
 
 ## [1.0.0-alpha.1] - 2026-08-17
 

@@ -217,9 +217,19 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err != nil {
 		return nil, fmt.Errorf("discord provider: %w", err)
 	}
+	oauthStartThrottle, err := ratelimit.NewIPThrottle(ratelimit.IPThrottleConfig{
+		Limit:   ratelimit.DefaultOAuthStartRateLimit,
+		Window:  time.Duration(ratelimit.DefaultOAuthStartRateWindowSeconds) * time.Second,
+		Penalty: time.Duration(ratelimit.DefaultOAuthStartRatePenaltySeconds) * time.Second,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("oauth start throttle: %w", err)
+	}
+	cleanup = append(cleanup, oauthStartThrottle.Close)
 	userAuth, err := auth.NewUserAuth(auth.UserAuthConfig{
 		Store: store, Provider: provider, ClientID: cfg.DiscordClientID,
 		SiteBaseURL: cfg.SiteBaseURL, Elevation: sharedElevation,
+		OAuthStartThrottle: oauthStartThrottle,
 		UserRPMLimitCap: func(context.Context) (int, error) {
 			if flowController == nil {
 				return 0, errors.New("flow controller is not wired")
@@ -231,10 +241,15 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		return nil, fmt.Errorf("user auth: %w", err)
 	}
 	cleanup = append(cleanup, userAuth.Close)
+	credGenSubkey, err := vault.DeriveSubkey([]byte("admin-cred-gen-v1"))
+	if err != nil {
+		return nil, fmt.Errorf("admin credential subkey: %w", err)
+	}
 	adminAuth, err := auth.NewAdminAuth(auth.AdminAuthConfig{
 		Store: store, Username: cfg.AdminUsername, Password: cfg.AdminPassword,
-		SiteBaseURL: cfg.SiteBaseURL,
+		CredGenSubkey: credGenSubkey, SiteBaseURL: cfg.SiteBaseURL,
 	})
+	clear(credGenSubkey)
 	if err != nil {
 		return nil, fmt.Errorf("admin auth: %w", err)
 	}
@@ -282,7 +297,7 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		return nil, fmt.Errorf("flow controller: %w", err)
 	}
 	cleanup = append(cleanup, flowController.Close)
-	runtimeApplier := adminapi.NewRuntimeApplier(flowController, stack)
+	runtimeApplier := adminapi.NewRuntimeApplier(flowController, stack, oauthStartThrottle)
 	if err := applyPersistedRuntimeConfig(store, runtimeApplier); err != nil {
 		return nil, fmt.Errorf("apply persisted runtime configuration: %w", err)
 	}
@@ -320,25 +335,45 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		exportHandler, lifecycleService, forwardService, flowMiddleware, store)
 	appHandler := buildAdminAndRootAPI(cfg, userAuth, adminAuth, api, adminControls, alertapi.NewHandler(alertapi.HandlerDeps{Store: store}), logapi.NewHandler(logapi.HandlerDeps{Store: store}), lifecycleService, store, forwardService, flowMiddleware)
 
-	retentionCtx, stopRetention := context.WithCancel(context.Background())
-	app = &application{handler: appHandler, stop: stopRetention, close: cleanup}
+	maintenanceCtx, stopMaintenance := context.WithCancel(context.Background())
+	app = &application{handler: appHandler, stop: stopMaintenance, close: cleanup}
 	app.wg.Add(1)
 	go func() {
 		defer app.wg.Done()
 		ticker := time.NewTicker(6 * time.Hour)
 		defer ticker.Stop()
+		runMaintenanceSweep(maintenanceCtx, store, usageService)
 		for {
 			select {
-			case <-retentionCtx.Done():
+			case <-maintenanceCtx.Done():
 				return
 			case <-ticker.C:
-				if _, cleanupErr := usageService.CleanupRequestLogs(retentionCtx); cleanupErr != nil && retentionCtx.Err() == nil {
-					slog.Error("request log retention failed", "err", cleanupErr)
-				}
+				runMaintenanceSweep(maintenanceCtx, store, usageService)
 			}
 		}
 	}()
 	return app, nil
+}
+
+func runMaintenanceSweep(ctx context.Context, store *db.Store, usageService *usage.Service) {
+	if ctx == nil || ctx.Err() != nil {
+		return
+	}
+	if store != nil {
+		if _, purgeErr := store.PurgeExpiredSessions(); purgeErr != nil && ctx.Err() == nil {
+			slog.Error("session retention failed", "err", purgeErr)
+		}
+	}
+	if usageService != nil && ctx.Err() == nil {
+		if _, cleanupErr := usageService.CleanupRequestLogs(ctx); cleanupErr != nil && ctx.Err() == nil {
+			slog.Error("request log retention failed", "err", cleanupErr)
+		}
+	}
+	if store != nil && ctx.Err() == nil {
+		if _, alertErr := store.CleanupResolvedAlerts(ctx, db.ResolvedAlertRetention); alertErr != nil && ctx.Err() == nil {
+			slog.Error("resolved alert retention failed", "err", alertErr)
+		}
+	}
 }
 
 func applyPersistedRuntimeConfig(store *db.Store, runtime adminapi.RuntimeApplier) error {
@@ -354,6 +389,9 @@ func applyPersistedRuntimeConfig(store *db.Store, runtime adminapi.RuntimeApplie
 		adminapi.KeyDefaultRPMPerUser,
 		adminapi.KeyEgressGlobalConc,
 		adminapi.KeyDefaultPerEndpointConc,
+		adminapi.KeyOAuthStartRateLimit,
+		adminapi.KeyOAuthStartRateWindowSecs,
+		adminapi.KeyOAuthStartRatePenaltySecs,
 	} {
 		if value, ok := values[key]; ok {
 			if err := runtime.ApplySiteConfig(context.Background(), key, value); err != nil {

@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -77,7 +76,7 @@ func generateSessionToken() (string, error) {
 	return token, nil
 }
 
-func (s *Store) createSessionAt(userID int64, admin bool, now time.Time) (string, SessionExpiry, error) {
+func (s *Store) createSessionAtCredGen(userID int64, admin bool, credGen string, now time.Time) (string, SessionExpiry, error) {
 	if userID <= 0 {
 		return "", SessionExpiry{}, ErrNotFound
 	}
@@ -109,8 +108,8 @@ func (s *Store) createSessionAt(userID int64, admin bool, now time.Time) (string
 		return "", SessionExpiry{}, ErrNotFound
 	}
 	_, err = tx.Exec(`INSERT INTO sessions
-		(token_hash, user_id, oauth_state, last_seen_at, expires_at, absolute_expires_at, created_at)
-		VALUES (?, ?, '', ?, ?, ?, ?)`, hashOpaqueToken(token), userID, now.Unix(), idle.Unix(), absolute.Unix(), now.Unix())
+		(token_hash, user_id, oauth_state, last_seen_at, expires_at, absolute_expires_at, created_at, cred_gen)
+		VALUES (?, ?, '', ?, ?, ?, ?, ?)`, hashOpaqueToken(token), userID, now.Unix(), idle.Unix(), absolute.Unix(), now.Unix(), credGen)
 	if err != nil {
 		return "", SessionExpiry{}, fmt.Errorf("create session")
 	}
@@ -120,6 +119,13 @@ func (s *Store) createSessionAt(userID int64, admin bool, now time.Time) (string
 	return token, SessionExpiry{Idle: idle, Absolute: absolute}, nil
 }
 
+// createSessionAt is the compatibility issuer with no credential-generation
+// binding. The stored cred_gen is the empty string, so the row authenticates
+// only through the matching compatibility entry points.
+func (s *Store) createSessionAt(userID int64, admin bool, now time.Time) (string, SessionExpiry, error) {
+	return s.createSessionAtCredGen(userID, admin, "", now)
+}
+
 // CreateUserSession issues a high-entropy opaque user session. Only its hash
 // is written to SQLite.
 func (s *Store) CreateUserSession(userID int64) (string, SessionExpiry, error) {
@@ -127,9 +133,23 @@ func (s *Store) CreateUserSession(userID int64) (string, SessionExpiry, error) {
 }
 
 // CreateAdminSession issues a separate admin-station session for the
-// environment-owned admin row.
+// environment-owned admin row. It is a compatibility entry point: the session
+// is not bound to a credential generation and authenticates only through the
+// matching compatibility entry points. Production callers must use
+// CreateAdminSessionWithCredGen so the row is stamped with the current
+// administrator credential-generation fingerprint.
 func (s *Store) CreateAdminSession(userID int64) (string, SessionExpiry, error) {
 	return s.createSessionAt(userID, true, time.Now())
+}
+
+// CreateAdminSessionWithCredGen issues an admin-station session bound to the
+// supplied opaque credential-generation fingerprint. credGen is an opaque
+// HMAC-SHA-256 fingerprint of the current administrator password (never the
+// password itself, and never a raw SHA-256 of it); the database stores and
+// compares only that opaque string. An empty credGen leaves the row unbound
+// (compatibility) and is accepted only for tests.
+func (s *Store) CreateAdminSessionWithCredGen(userID int64, credGen string) (string, SessionExpiry, error) {
+	return s.createSessionAtCredGen(userID, true, credGen, time.Now())
 }
 
 // CreateSession is a compatibility entry point. The user's server-side role
@@ -146,9 +166,17 @@ func (s *Store) CreateSession(userID int64) (string, SessionExpiry, error) {
 	return s.createSessionAt(userID, user.IsAdmin, time.Now())
 }
 
-// getSessionUserAt resolves a token in one SQLite transaction. The query
-// checks role and ban state at the same serialization point as idle renewal.
-func (s *Store) getSessionUserAt(token string, admin bool, now time.Time) (*User, error) {
+// getSessionUserAtCredGen resolves a token in one SQLite transaction. The
+// query checks role and ban state at the same serialization point as idle
+// renewal. For administrator sessions (admin=true) the stored credential-
+// generation fingerprint is compared atomically in the same SELECT: a row
+// whose cred_gen no longer matches the supplied fingerprint is treated as
+// not-found and deleted, so a rotated administrator password revokes its
+// stale long-lived sessions at the next request. credGen is an opaque
+// high-entropy HMAC fingerprint (never the password), so the SQL string
+// comparison leaks no password material; an empty credGen disables the
+// fingerprint check (compatibility entry points only).
+func (s *Store) getSessionUserAtCredGen(token string, admin bool, credGen string, now time.Time) (*User, error) {
 	if !validateSessionToken(token) {
 		return nil, nil
 	}
@@ -158,23 +186,43 @@ func (s *Store) getSessionUserAt(token string, admin bool, now time.Time) (*User
 	}
 	defer tx.Rollback()
 
-	var user *User
-	var expiresAt, absoluteExpiresAt int64
-	row := tx.QueryRow(`SELECT `+userSelectColumns+`, s.expires_at, s.absolute_expires_at
+	query := `SELECT ` + userSelectColumns + `, s.expires_at, s.absolute_expires_at
 		FROM sessions s JOIN users u ON u.id=s.user_id
-		WHERE s.token_hash=? AND u.is_admin=? AND (? OR u.is_banned=0)`,
-		hashOpaqueToken(token), boolInt(admin), boolInt(admin))
+		WHERE s.token_hash=? AND u.is_admin=? AND (? OR u.is_banned=0)`
+	args := []any{hashOpaqueToken(token), boolInt(admin), boolInt(admin)}
+	if admin && credGen != "" {
+		query += ` AND s.cred_gen=?`
+		args = append(args, credGen)
+	}
+	row := tx.QueryRow(query, args...)
 	// scanUser expects exactly the user projection, so scan the combined row
 	// into a small adapter first and keep the token hash out of the result.
 	var scanned sessionUserScan
 	if err := scanned.scan(row); errors.Is(err, sql.ErrNoRows) {
+		if admin && credGen != "" {
+			// A row whose stored cred_gen no longer matches the current
+			// fingerprint is stale (administrator password was rotated). Drop
+			// it so it cannot linger until idle/absolute expiry. Only
+			// administrator-stamped rows are candidates: user sessions and
+			// compatibility-stamped admin rows carry the empty string, so the
+			// cred_gen<>'' guard excludes them and an administrator-station
+			// lookup can never delete a normal user's session. Legacy NULL
+			// rows (pre-migration) are also excluded and simply fail the check.
+			if _, err := tx.Exec(`DELETE FROM sessions WHERE token_hash=? AND cred_gen<>'' AND cred_gen<>?`,
+				hashOpaqueToken(token), credGen); err != nil {
+				return nil, fmt.Errorf("authenticate session")
+			}
+			if err := tx.Commit(); err != nil {
+				return nil, fmt.Errorf("authenticate session")
+			}
+		}
 		return nil, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("authenticate session")
 	}
-	user = scanned.user
-	expiresAt = scanned.expiresAt
-	absoluteExpiresAt = scanned.absoluteExpiresAt
+	user := scanned.user
+	expiresAt := scanned.expiresAt
+	absoluteExpiresAt := scanned.absoluteExpiresAt
 
 	if now.Unix() >= expiresAt || now.Unix() >= absoluteExpiresAt {
 		if _, err := tx.Exec(`DELETE FROM sessions WHERE token_hash=?`, hashOpaqueToken(token)); err != nil {
@@ -204,6 +252,14 @@ func (s *Store) getSessionUserAt(token string, admin bool, now time.Time) (*User
 		return nil, fmt.Errorf("authenticate session")
 	}
 	return user, nil
+}
+
+// getSessionUserAt is the compatibility resolver with no credential-generation
+// check. It delegates with an empty fingerprint so existing callers keep
+// their behavior; production administrator authentication must use the
+// credGen-aware path through AuthenticateAdminSessionWithCredGen.
+func (s *Store) getSessionUserAt(token string, admin bool, now time.Time) (*User, error) {
+	return s.getSessionUserAtCredGen(token, admin, "", now)
 }
 
 type sessionUserScan struct {
@@ -270,9 +326,22 @@ func (s *Store) AuthenticateUserSession(token string) (*User, error) {
 
 // AuthenticateAdminSession resolves only an administrator session. A normal
 // user session can never enter this domain because the SQL predicate checks
-// is_admin.
+// is_admin. It is a compatibility entry point: no credential-generation
+// fingerprint is checked, so it authenticates only rows stamped with an empty
+// cred_gen. Production callers must use AuthenticateAdminSessionWithCredGen.
 func (s *Store) AuthenticateAdminSession(token string) (*User, error) {
 	return s.getSessionUserAt(token, true, time.Now())
+}
+
+// AuthenticateAdminSessionWithCredGen resolves only an administrator session
+// and, within the same transaction, requires the stored credential-generation
+// fingerprint to equal credGen. A mismatch (administrator password rotated)
+// is treated as not-found and the stale row is deleted; the caller surfaces a
+// standard unauthorized response. credGen is an opaque HMAC fingerprint, not
+// the password. An empty credGen disables the fingerprint check and is
+// accepted only for compatibility/tests.
+func (s *Store) AuthenticateAdminSessionWithCredGen(token, credGen string) (*User, error) {
+	return s.getSessionUserAtCredGen(token, true, credGen, time.Now())
 }
 
 // GetSessionUser is the safe compatibility entry point for user-station
@@ -346,21 +415,3 @@ func (s *Store) SessionRowCount() (int, error) {
 	}
 	return count, nil
 }
-
-// ensure token validation does not accidentally accept a value copied from an
-// unrelated cookie domain. Generated tokens are URL-safe base64, but checking
-// the alphabet here also bounds hash work for malformed requests.
-func isGeneratedSessionToken(token string) bool {
-	if !validateSessionToken(token) {
-		return false
-	}
-	if len(token) != base64.RawURLEncoding.EncodedLen(32) {
-		return false
-	}
-	_, err := base64.RawURLEncoding.DecodeString(token)
-	return err == nil
-}
-
-// Keep strings imported for compatibility with older callers that pass a
-// whitespace-bearing cookie; no raw value is included in any returned error.
-var _ = strings.TrimSpace

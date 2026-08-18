@@ -46,11 +46,11 @@ type queryRowContexter interface {
 
 // CreateEndpoint inserts a new endpoint for userID after an atomic cap check.
 // The cap is min(global default, per-user override); when the current endpoint
-// count has already reached it, ErrEndpointCap is returned and no row is
-// written. connectorType and baseURL must already be validated and
-// canonicalized by the caller (the service layer uses the connector registry
-// and the egress canonical validator); the repository only persists them.
-// now is the caller-supplied unix timestamp so callers control the clock.
+// count has already reached it, a *CapError wrapping ErrEndpointCap is returned
+// and no row is written. connectorType and baseURL must already be validated
+// and canonicalized by the caller (the service layer uses the connector
+// registry and the egress canonical validator); the repository only persists
+// them. now is the caller-supplied unix timestamp so callers control the clock.
 func (s *Store) CreateEndpoint(ctx context.Context, userID int64, connectorType, baseURL, note string, enabled bool, now int64) (Endpoint, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -72,7 +72,7 @@ func (s *Store) CreateEndpoint(ctx context.Context, userID int64, connectorType,
 		return Endpoint{}, fmt.Errorf("count endpoints: %w", err)
 	}
 	if count >= cap {
-		return Endpoint{}, ErrEndpointCap
+		return Endpoint{}, newCapError(ErrEndpointCap, ResourceEndpoint, cap)
 	}
 
 	enabledInt := 0
@@ -190,6 +190,8 @@ func (s *Store) UpdateEndpoint(ctx context.Context, userID, id int64, baseURL *s
 	sets = append(sets, "updated_at=?")
 	args = append(args, now)
 	args = append(args, id, userID)
+	// #nosec G202 -- sets is restricted to constant base_url/note/enabled/time
+	// fragments selected above; all values and ownership keys are bound arguments.
 	query := "UPDATE endpoints SET " + strings.Join(sets, ", ") + " WHERE id=? AND user_id=?"
 	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {

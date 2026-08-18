@@ -32,7 +32,7 @@ alpha.1 只支持 `openai-compatible` 连接器和上述两个 OpenAI-compatible
 构建环境要求：
 
 - Go 1.26 或更新的受支持 1.26 系列。
-- Node.js 22.12 或更新版本，以及用于构建前端的 npm 12。
+- Node.js 22.22 或更新版本，以及用于构建前端的 npm 12。
 
 运行构建完成的二进制不需要 Node.js。
 

@@ -124,6 +124,8 @@ func (s *Store) UpdateUserLimits(userID int64, patch UserLimitPatch) (*User, err
 		return nil, ErrConflict
 	}
 	args = append(args, time.Now().Unix(), userID)
+	// #nosec G202 -- sets contains only the three constant column fragments
+	// selected above; every request-derived value remains a bound argument.
 	if _, err := tx.Exec(`UPDATE users SET `+strings.Join(sets, ", ")+`, updated_at=? WHERE id=? AND is_admin=0`, args...); err != nil {
 		return nil, fmt.Errorf("update user limits: %w", err)
 	}

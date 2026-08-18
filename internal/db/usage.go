@@ -519,6 +519,8 @@ func (s *Store) QueryRequestLogs(ctx context.Context, query LogQuery) ([]Request
 
 	sqlText := `SELECT ` + requestLogSelectColumns + ` FROM request_logs`
 	if len(clauses) > 0 {
+		// #nosec G202 -- clauses is assembled exclusively from the fixed predicates
+		// above and every filter value is passed separately in args.
 		sqlText += ` WHERE ` + strings.Join(clauses, " AND ")
 	}
 	sqlText += ` ORDER BY id DESC LIMIT ?`

@@ -1,5 +1,7 @@
 # NonbiriAPI
 
+[简体中文](README.zh-CN.md)
+
 NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible gateway. It lets each user manage their own upstream endpoints and credentials, discover upstream models, define platform model aliases, and call those aliases through a single `CallerKey`.
 
 > **Release status:** `v1.0.0-alpha.1`. This release is suitable for controlled self-hosted trials. Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
@@ -32,7 +34,7 @@ Configure both origins explicitly. Do not expose the admin host on the same publ
 Build-time requirements:
 
 - Go 1.26 or newer in the supported 1.26 series.
-- Node.js 22.12 or newer and npm 12 for the web build.
+- Node.js 22.22 or newer and npm 12 for the web build.
 
 Node.js is not needed to run the finished binary.
 

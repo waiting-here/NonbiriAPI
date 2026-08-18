@@ -116,6 +116,65 @@ func newSuccessUpstream(content string) *failServer {
 
 func (s *failServer) close() { s.server.Close() }
 
+type fixedRouteRepository struct {
+	route db.ForwardRoute
+}
+
+func (r fixedRouteRepository) ListCallerModels(context.Context, int64, int) ([]db.CallerModel, error) {
+	return nil, nil
+}
+
+func (r fixedRouteRepository) ResolveForwardRoute(context.Context, int64, string, int) (db.ForwardRoute, error) {
+	return r.route, nil
+}
+
+type attemptRunnerFunc func(context.Context, http.ResponseWriter, AttemptInput) openai.AttemptResult
+
+func (f attemptRunnerFunc) Run(ctx context.Context, writer http.ResponseWriter, input AttemptInput) openai.AttemptResult {
+	return f(ctx, writer, input)
+}
+
+func TestForwardAggregateTimeoutReturnsStablePreCommitFailure(t *testing.T) {
+	const userID int64 = 42
+	repository := fixedRouteRepository{route: db.ForwardRoute{
+		ModelID: 1, UserID: userID, FullName: "p/m", RouteStrategy: "ordered", SilentRetry: true,
+		Candidates: []db.ForwardCandidate{{
+			BindingID: 1, ModelID: 1, EndpointID: 1, EndpointKeyID: 1,
+			UpstreamModelID: "upstream/model",
+		}},
+	}}
+	runner := attemptRunnerFunc(func(ctx context.Context, _ http.ResponseWriter, _ AttemptInput) openai.AttemptResult {
+		<-ctx.Done()
+		return openai.AttemptResult{Failure: openai.FailureCanceled, Diagnostic: "request canceled"}
+	})
+	service, err := NewService(ServiceConfig{
+		Repository:     repository,
+		Runner:         runner,
+		Backoff:        BackoffConfig{Base: -1, Max: -1},
+		ForwardTimeout: 20 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	started := time.Now()
+	result, err := service.Forward(context.Background(), httptest.NewRecorder(), userID, &openai.ChatRequest{Model: "p/m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(started); elapsed < 10*time.Millisecond || elapsed > time.Second {
+		t.Fatalf("aggregate timeout elapsed=%v", elapsed)
+	}
+	if result.Success || result.Committed || result.Failure != openai.FailureUpstream ||
+		result.ClientStatus != http.StatusBadGateway || result.Diagnostic != "forward request timed out" {
+		t.Fatalf("aggregate timeout result=%+v", result)
+	}
+
+	if _, err := NewService(ServiceConfig{Repository: repository, Runner: runner, ForwardTimeout: -time.Second}); err == nil {
+		t.Fatal("negative aggregate timeout was accepted")
+	}
+}
+
 // TestRetryBoundaryClassification pins the retry boundary state machine: only
 // a pre-commit upstream failure under silent_retry is retryable.
 func TestRetryBoundaryClassification(t *testing.T) {

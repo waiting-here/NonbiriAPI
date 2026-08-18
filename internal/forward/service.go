@@ -28,8 +28,13 @@ import (
 const (
 	MaxCallerModels    = 1000
 	MaxRouteCandidates = 256
-	maxRouteOrd        = 1_000_000
-	safetyDomain       = "nonbiriapi:safety_identifier:v1\x00"
+	// DefaultForwardTimeout is one aggregate wall-clock budget shared by route
+	// resolution, every silent-retry attempt, and retry backoff. It matches the
+	// default single-attempt egress ceiling without multiplying that ceiling by
+	// the candidate count.
+	DefaultForwardTimeout = 5 * time.Minute
+	maxRouteOrd           = 1_000_000
+	safetyDomain          = "nonbiriapi:safety_identifier:v1\x00"
 )
 
 var (
@@ -164,14 +169,16 @@ type Hooks struct {
 // per call from the projected route_strategy; a non-nil Selector is used for
 // every call (test injection) and its returned ids are still re-validated
 // against the projection. A zero BackoffConfig selects the system-default
-// exponential backoff; a Base <= 0 disables waiting (tests).
+// exponential backoff; a Base <= 0 disables waiting (tests). A zero
+// ForwardTimeout selects DefaultForwardTimeout; negative values are invalid.
 type ServiceConfig struct {
-	Repository RouteRepository
-	Selector   Selector
-	Runner     AttemptRunner
-	Hooks      Hooks
-	Backoff    BackoffConfig
-	Now        func() time.Time
+	Repository     RouteRepository
+	Selector       Selector
+	Runner         AttemptRunner
+	Hooks          Hooks
+	Backoff        BackoffConfig
+	ForwardTimeout time.Duration
+	Now            func() time.Time
 }
 
 // Service resolves one platform model and orchestrates the candidate dispatch
@@ -184,6 +191,7 @@ type Service struct {
 	runner     AttemptRunner
 	hooks      Hooks
 	backoff    BackoffConfig
+	timeout    time.Duration
 	now        func() time.Time
 }
 
@@ -193,6 +201,12 @@ func NewService(config ServiceConfig) (*Service, error) {
 	}
 	if config.Runner == nil {
 		return nil, errors.New("forward: attempt runner is required")
+	}
+	if config.ForwardTimeout < 0 {
+		return nil, errors.New("forward: invocation timeout must not be negative")
+	}
+	if config.ForwardTimeout == 0 {
+		config.ForwardTimeout = DefaultForwardTimeout
 	}
 	if config.Now == nil {
 		config.Now = time.Now
@@ -207,6 +221,7 @@ func NewService(config ServiceConfig) (*Service, error) {
 		runner:     config.Runner,
 		hooks:      config.Hooks,
 		backoff:    backoff,
+		timeout:    config.ForwardTimeout,
 		now:        config.Now,
 	}, nil
 }
@@ -256,8 +271,14 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 	if s == nil || s.repository == nil || s.runner == nil || ctx == nil || writer == nil || userID <= 0 || request == nil {
 		return openai.AttemptResult{}, ErrInternal
 	}
+	parentCtx := ctx
+	ctx, cancel := context.WithTimeout(parentCtx, s.timeout)
+	defer cancel()
 	route, err := s.repository.ResolveForwardRoute(ctx, userID, request.Model, MaxRouteCandidates)
 	if err != nil {
+		if ctx.Err() != nil {
+			return endedContextResult(parentCtx, ctx), nil
+		}
 		switch {
 		case errors.Is(err, db.ErrNotFound):
 			return openai.AttemptResult{}, ErrModelNotFound
@@ -292,6 +313,9 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 	order, err := selector.Select(ctx, selection)
 	clear(selection.Candidates)
 	if err != nil {
+		if ctx.Err() != nil {
+			return endedContextResult(parentCtx, ctx), nil
+		}
 		if errors.Is(err, ErrUnboundModel) {
 			return openai.AttemptResult{}, ErrUnboundModel
 		}
@@ -326,7 +350,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 	var lastResult openai.AttemptResult
 	for index, bindingID := range order {
 		if ctx.Err() != nil {
-			return canceledAttemptResult(), nil
+			return endedContextResult(parentCtx, ctx), nil
 		}
 		candidate := candidates[bindingID]
 		started := s.now().UTC()
@@ -337,6 +361,9 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 			Request:          request,
 			SafetyIdentifier: SafetyIdentifier(userID),
 		})
+		if ctx.Err() != nil && !result.Success && !result.Committed {
+			result = endedContextResult(parentCtx, ctx)
+		}
 		result.Diagnostic = diagnostic.BoundTo(result.Diagnostic, 512)
 		finished := s.now().UTC()
 		if finished.Before(started) {
@@ -393,7 +420,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 		// backoff runs first; if the caller cancels during the wait, no further
 		// attempt is made and no failover is recorded for this transition.
 		if !s.backoff.wait(ctx, index) {
-			return canceledAttemptResult(), nil
+			return endedContextResult(parentCtx, ctx), nil
 		}
 		if s.hooks.Failover != nil {
 			s.hooks.Failover(FailoverRecord{
@@ -457,6 +484,22 @@ func strategySelector(strategy string) Selector {
 // and no body byte is committed.
 func canceledAttemptResult() openai.AttemptResult {
 	return openai.AttemptResult{Failure: openai.FailureCanceled, Diagnostic: "request canceled"}
+}
+
+// endedContextResult distinguishes caller cancellation from the service-owned
+// aggregate deadline. Before commit, the latter is a stable upstream failure
+// so the handler emits 502 instead of returning an empty response. After
+// commit, callers retain the runner's committed result and no fresh envelope
+// is attempted.
+func endedContextResult(parent, bounded context.Context) openai.AttemptResult {
+	if parent != nil && parent.Err() == nil && bounded != nil && errors.Is(bounded.Err(), context.DeadlineExceeded) {
+		return openai.AttemptResult{
+			Failure:      openai.FailureUpstream,
+			ClientStatus: http.StatusBadGateway,
+			Diagnostic:   "forward request timed out",
+		}
+	}
+	return canceledAttemptResult()
 }
 
 func classifyAttemptResult(result openai.AttemptResult) (string, int) {

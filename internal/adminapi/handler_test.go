@@ -538,6 +538,17 @@ func TestSiteConfigRead(t *testing.T) {
 	if v, ok := out["default_per_endpoint_concurrency"].(float64); !ok || v != 8 {
 		t.Fatalf("default_per_endpoint_concurrency = %v", out["default_per_endpoint_concurrency"])
 	}
+	// Resource-count caps default to their implementation-time values when
+	// unset and are typed as integers on read.
+	if v, ok := out["default_endpoint_key_limit"].(float64); !ok || v != 20 {
+		t.Fatalf("default_endpoint_key_limit = %v", out["default_endpoint_key_limit"])
+	}
+	if v, ok := out["default_model_limit"].(float64); !ok || v != 100 {
+		t.Fatalf("default_model_limit = %v", out["default_model_limit"])
+	}
+	if v, ok := out["default_binding_limit"].(float64); !ok || v != 50 {
+		t.Fatalf("default_binding_limit = %v", out["default_binding_limit"])
+	}
 	// The authoritative key set is closed: an unknown stored row is never
 	// projected, even when manually inserted.
 	if err := e.store.SetSiteConfigValue("nonsense_key", "x"); err != nil {
@@ -557,6 +568,34 @@ func TestSiteConfigRead(t *testing.T) {
 
 	// Query parameters are not accepted.
 	rec = adminGet(t, e, "/admin/api/site-config?x=1")
+	assertErr(t, rec, http.StatusBadRequest, "invalid_request")
+}
+
+func TestSiteConfigResourceLimitPatchAndPersist(t *testing.T) {
+	e := newEnv(t)
+	applier := &recordingApplier{}
+
+	// default_model_limit is a DB-only int key (min=1): a valid PATCH is
+	// applied through the applier (a no-op for this key, but recorded) and
+	// persisted; GET returns the typed value.
+	rec := adminPatch(t, e, applier, "/admin/api/site-config/default_model_limit", map[string]any{"value": 200})
+	var patched siteConfigPatchResp
+	decodeJSON(t, rec, &patched)
+	if patched.Key != "default_model_limit" || patched.Value != float64(200) {
+		t.Fatalf("patch resp = %+v", patched)
+	}
+	if len(applier.applied) != 1 || applier.applied[0] != "default_model_limit=200" {
+		t.Fatalf("applied = %v", applier.applied)
+	}
+	rec = adminGet(t, e, "/admin/api/site-config")
+	var out map[string]any
+	decodeJSON(t, rec, &out)
+	if out["default_model_limit"] != float64(200) {
+		t.Fatalf("default_model_limit after patch = %v", out["default_model_limit"])
+	}
+
+	// The bound is enforced: a value above the ceiling is invalid_request.
+	rec = adminPatch(t, e, applier, "/admin/api/site-config/default_binding_limit", map[string]any{"value": 1000000})
 	assertErr(t, rec, http.StatusBadRequest, "invalid_request")
 }
 
@@ -607,6 +646,9 @@ func TestSiteConfigPatchTypedAndRuntimeApply(t *testing.T) {
 		{"default_locale", map[string]any{"value": "fr"}}, // locale whitelist
 		{"default_locale", map[string]any{"value": "zh"}}, // valid (checked below)
 		{"default_endpoint_limit", map[string]any{"value": -1}},
+		{"default_endpoint_key_limit", map[string]any{"value": 0}}, // below min=1
+		{"default_model_limit", map[string]any{"value": 0}},        // below min=1
+		{"default_binding_limit", map[string]any{"value": 0}},      // below min=1
 		{"alert_prefs_x", map[string]any{"value": "line\x00break"}},
 	} {
 		rec := adminPatch(t, e, applier, "/admin/api/site-config/"+tc.key, tc.body)
@@ -720,7 +762,7 @@ func TestRuntimeApplierRealSingletons(t *testing.T) {
 	}
 	defer stack.CloseIdleConnections()
 
-	applier := NewRuntimeApplier(controller, stack)
+	applier := NewRuntimeApplier(controller, stack, nil)
 	if err := applier.ApplySiteConfig(context.Background(), "global_rpm", "900"); err != nil {
 		t.Fatalf("apply global_rpm: %v", err)
 	}
@@ -768,14 +810,14 @@ func TestRuntimeApplierRealSingletons(t *testing.T) {
 		t.Fatalf("global limit after failed apply = %d, want 500", limits.GlobalLimit)
 	}
 	// An unwired singleton fails closed on its own keys only.
-	brokenRPM := NewRuntimeApplier(nil, stack)
+	brokenRPM := NewRuntimeApplier(nil, stack, nil)
 	if err := brokenRPM.ApplySiteConfig(context.Background(), "global_rpm", "600"); err == nil {
 		t.Fatalf("apply with nil rpm controller: want error")
 	}
 	if err := brokenRPM.ApplySiteConfig(context.Background(), "egress_global_concurrency", "32"); err != nil {
 		t.Fatalf("apply with wired egress gate: %v", err)
 	}
-	brokenGate := NewRuntimeApplier(controller, nil)
+	brokenGate := NewRuntimeApplier(controller, nil, nil)
 	if err := brokenGate.ApplySiteConfig(context.Background(), "egress_global_concurrency", "32"); err == nil {
 		t.Fatalf("apply with nil egress gate: want error")
 	}

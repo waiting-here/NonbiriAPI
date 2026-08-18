@@ -4,8 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -317,5 +321,204 @@ func TestEndpointKeyQueriesAreParameterized(t *testing.T) {
 	}
 	if n != 1 {
 		t.Errorf("endpoint_keys count = %d, want 1", n)
+	}
+}
+
+// --- endpoint-key cap -------------------------------------------------------
+
+// setTestEndpointKeyLimit upserts the default_endpoint_key_limit site_config
+// row so a test can adjust the cap mid-run (verifying runtime application).
+func setTestEndpointKeyLimit(t *testing.T, st *Store, raw string) {
+	t.Helper()
+	if _, err := st.DB().Exec(
+		`INSERT INTO site_config (key, value, updated_at) VALUES ('default_endpoint_key_limit', ?, 1)
+		 ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`, raw); err != nil {
+		t.Fatalf("set endpoint key limit: %v", err)
+	}
+}
+
+// sealFixture seals a short stable secret for test setup. It is called on the
+// test goroutine (never inside a worker) so a seal failure fails the test
+// cleanly instead of runtime.Goexit-ing a worker.
+func sealFixture(t *testing.T, st *Store, label string) string {
+	t.Helper()
+	ct, err := st.secrets.Seal([]byte("sk-" + label))
+	if err != nil {
+		t.Fatalf("seal %s: %v", label, err)
+	}
+	return ct
+}
+
+// mustCreateTestEndpointKey creates a key on endpointID owned by userID and
+// fails the test on any error. Used to fill a parent up to its cap.
+func mustCreateTestEndpointKey(t *testing.T, st *Store, userID, endpointID int64, label string) EndpointKey {
+	t.Helper()
+	k, err := st.CreateEndpointKey(context.Background(), userID, endpointID, sealFixture(t, st, label), "h", "t", "", true, 1)
+	if err != nil {
+		t.Fatalf("CreateEndpointKey %s: %v", label, err)
+	}
+	return k
+}
+
+// TestCreateEndpointKeyCap covers the per-endpoint key-count cap: the default
+// when unset, the cap-th create succeeds, the next is a *CapError wrapping
+// ErrEndpointKeyCap with the resource name and exact effective cap, no extra
+// row is written, a runtime site-config change takes effect immediately,
+// counts do not cross endpoints, and a cross-user caller neither leaks nor
+// bypasses the ownership guard.
+func TestCreateEndpointKeyCap(t *testing.T) {
+	st := openTestStore(t, filepath.Join(t.TempDir(), "keycap.db"))
+	defer st.Close()
+	alice := seedTestUser(t, st, "alice", nil)
+	aEP := mustCreateTestEndpoint(t, st, alice, "https://alice.example/v1/")
+
+	// Default cap when the site_config key is unset.
+	cap, err := st.EndpointKeyCap(context.Background())
+	if err != nil {
+		t.Fatalf("EndpointKeyCap: %v", err)
+	}
+	if cap != DefaultEndpointKeyLimit {
+		t.Errorf("unset cap = %d, want %d", cap, DefaultEndpointKeyLimit)
+	}
+
+	// A small cap is applied at runtime; fill to cap so the cap-th succeeds.
+	setTestEndpointKeyLimit(t, st, "3")
+	cap, _ = st.EndpointKeyCap(context.Background())
+	if cap != 3 {
+		t.Fatalf("adjusted cap = %d, want 3", cap)
+	}
+	for i := 0; i < cap; i++ {
+		mustCreateTestEndpointKey(t, st, alice, aEP.ID, fmt.Sprintf("k%d", i))
+	}
+	count, err := st.CountEndpointKeys(context.Background(), alice, aEP.ID)
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != cap {
+		t.Fatalf("count = %d, want %d", count, cap)
+	}
+
+	// One over the cap is refused with a *CapError carrying the limit.
+	_, err = st.CreateEndpointKey(context.Background(), alice, aEP.ID, sealFixture(t, st, "extra"), "h", "t", "", true, 1)
+	var capErr *CapError
+	if !errors.As(err, &capErr) {
+		t.Fatalf("over-cap err = %v, want *CapError", err)
+	}
+	if !errors.Is(err, ErrEndpointKeyCap) {
+		t.Errorf("over-cap err does not match ErrEndpointKeyCap: %v", err)
+	}
+	if capErr.Resource != ResourceEndpointKey || capErr.Limit != cap {
+		t.Errorf("capErr = %+v, want resource=%q limit=%d", capErr, ResourceEndpointKey, cap)
+	}
+	count, _ = st.CountEndpointKeys(context.Background(), alice, aEP.ID)
+	if count != cap {
+		t.Errorf("count after refused create = %d, want %d (no row written)", count, cap)
+	}
+
+	// Raising the cap at runtime lets another key in (no restart).
+	setTestEndpointKeyLimit(t, st, "5")
+	mustCreateTestEndpointKey(t, st, alice, aEP.ID, "more")
+	count, _ = st.CountEndpointKeys(context.Background(), alice, aEP.ID)
+	if count != cap+1 {
+		t.Errorf("count after cap raise = %d, want %d", count, cap+1)
+	}
+
+	// Counts do not cross endpoints: a second endpoint starts at 0.
+	aEP2 := mustCreateTestEndpoint(t, st, alice, "https://alice.example/v2/")
+	if c2, _ := st.CountEndpointKeys(context.Background(), alice, aEP2.ID); c2 != 0 {
+		t.Errorf("second endpoint count = %d, want 0", c2)
+	}
+	mustCreateTestEndpointKey(t, st, alice, aEP2.ID, "other-ep")
+	if c2, _ := st.CountEndpointKeys(context.Background(), alice, aEP2.ID); c2 != 1 {
+		t.Errorf("second endpoint count after one add = %d, want 1", c2)
+	}
+
+	// A cross-user caller counts 0 on alice's endpoint (no count leak) and the
+	// ownership guard still refuses the create as ErrNotFound.
+	bob := seedTestUser(t, st, "bob", nil)
+	if cross, _ := st.CountEndpointKeys(context.Background(), bob, aEP.ID); cross != 0 {
+		t.Errorf("bob counting alice endpoint = %d, want 0", cross)
+	}
+	if _, err := st.CreateEndpointKey(context.Background(), bob, aEP.ID, sealFixture(t, st, "x"), "h", "t", "", true, 1); !errors.Is(err, ErrNotFound) {
+		t.Errorf("bob create on alice endpoint: err=%v, want ErrNotFound", err)
+	}
+}
+
+// TestCreateEndpointKeyCapRejectsInvalidSiteConfig asserts a malformed cap
+// surfaces as ErrInvalidSiteConfig (fail closed) and never writes a key.
+func TestCreateEndpointKeyCapRejectsInvalidSiteConfig(t *testing.T) {
+	for _, raw := range []string{"not-a-number", "-3", "  "} {
+		raw := raw
+		t.Run(raw, func(t *testing.T) {
+			st := openTestStore(t, filepath.Join(t.TempDir(), "keycapcfg.db"))
+			defer st.Close()
+			setTestEndpointKeyLimit(t, st, raw)
+			alice := seedTestUser(t, st, "alice", nil)
+			aEP := mustCreateTestEndpoint(t, st, alice, "https://alice.example/v1/")
+			_, err := st.CreateEndpointKey(context.Background(), alice, aEP.ID, sealFixture(t, st, "x"), "h", "t", "", true, 1)
+			if !errors.Is(err, ErrInvalidSiteConfig) {
+				t.Errorf("CreateEndpointKey with global %q: err=%v, want ErrInvalidSiteConfig", raw, err)
+			}
+			count, _ := st.CountEndpointKeys(context.Background(), alice, aEP.ID)
+			if count != 0 {
+				t.Errorf("invalid site_config still produced %d keys", count)
+			}
+		})
+	}
+}
+
+// TestCreateEndpointKeyAtomicCapUnderConcurrency hammers CreateEndpointKey
+// from many goroutines against a small cap; the count-then-insert inside one
+// transaction must never let the cap be breached. Run under -race.
+func TestCreateEndpointKeyAtomicCapUnderConcurrency(t *testing.T) {
+	const cap = 8
+	const workers = 64
+	st := openTestStore(t, filepath.Join(t.TempDir(), "keycaprace.db"))
+	defer st.Close()
+	setTestEndpointKeyLimit(t, st, strconv.Itoa(cap))
+	alice := seedTestUser(t, st, "alice", nil)
+	aEP := mustCreateTestEndpoint(t, st, alice, "https://alice.example/v1/")
+
+	// Pre-seal each worker's ciphertext on the test goroutine.
+	cts := make([]string, workers)
+	for i := 0; i < workers; i++ {
+		cts[i] = sealFixture(t, st, fmt.Sprintf("w%d", i))
+	}
+
+	var wg sync.WaitGroup
+	var succ, capErr atomic.Int64
+	start := make(chan struct{})
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			<-start
+			_, err := st.CreateEndpointKey(context.Background(), alice, aEP.ID, cts[i], "h", "t", "", true, 1)
+			switch {
+			case err == nil:
+				succ.Add(1)
+			case errors.Is(err, ErrEndpointKeyCap):
+				capErr.Add(1)
+			default:
+				t.Errorf("unexpected create error: %v", err)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	if got := succ.Load(); got != int64(cap) {
+		t.Errorf("successes = %d, want %d (cap breached or underfilled)", got, cap)
+	}
+	if got := capErr.Load(); got != int64(workers-cap) {
+		t.Errorf("cap errors = %d, want %d", got, workers-cap)
+	}
+	count, err := st.CountEndpointKeys(context.Background(), alice, aEP.ID)
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != cap {
+		t.Errorf("final count = %d, want %d", count, cap)
 	}
 }

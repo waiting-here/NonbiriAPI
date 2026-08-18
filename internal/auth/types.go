@@ -195,15 +195,6 @@ type userEnvelope struct {
 	User UserResponse `json:"user"`
 }
 
-// AuthError maps internal identity failures to stable HTTP errors without
-// including input values. Callers should use writeAuthError instead of
-// returning provider/DB error strings.
-type authHTTPError struct {
-	Code    string
-	Status  int
-	Message string
-}
-
 func requireMethod(w http.ResponseWriter, r *http.Request, method string) bool {
 	if r != nil && r.Method == method {
 		return true

@@ -44,6 +44,13 @@ host-only and use `Path=/admin`. Both are Secure when the fixed configured site 
 trusted edge protocol context) is HTTPS, HttpOnly, and SameSite=Lax. OAuth state cookies are
 host-only, HttpOnly, SameSite=Lax, short-lived, and scoped to `/api/auth/discord`.
 
+Unsafe methods on the cookie-authenticated `/api/*` and `/admin/api/*` surfaces also pass a
+same-origin browser boundary. An `Origin` header must match the validated request scheme,
+host, and effective port; Fetch Metadata, when present, must report `same-origin`. A request
+carrying a cookie but neither signal is refused. This closes sibling-host CSRF because
+SameSite is site-scoped, not origin-scoped. The Bearer-authenticated `/v1/*` surface is not
+subject to this cookie boundary.
+
 A normal user holds exactly one caller key (`nbk_` prefix, no scope binding). Regeneration
 invalidates the previous key the instant the new row is written; the plaintext is shown once
 at generation time and never persisted in a recoverable form (only an irretrievable SHA-256
@@ -82,6 +89,10 @@ Every error response is a single JSON object:
   and is marked. It is omitted when empty. It is the only place raw upstream identifiers/error
   text may appear, and only after that shared bounding and sanitization. Frontends render
   `diag` as text, never as HTML or formula-interpreted content.
+- `limit` and `resource` are optional fields carried only by
+  `resource_limit_exceeded` (§1.6): `limit` is the effective integer cap in effect
+  at the refusal and `resource` is the stable resource name (`endpoint_key`, `model`,
+  `binding`). They are omitted by every other code.
 
 ### 1.5 Layered diagnostic recording
 
@@ -111,11 +122,12 @@ Codes below are the emitted set; HTTP status is derived from the code.
 | `not_found` | 404 | unknown model, endpoint, key, model, binding, or resource |
 | `conflict` | 409 | uniqueness violation or illegal state transition |
 | `method_not_allowed` | 405 | path matched but method did not |
-| `rate_limited` | 429 | per-user RPM, global RPM, or concurrency gate exhausted |
+| `rate_limited` | 429 | per-user RPM, global RPM, concurrency gate exhausted, or the per-client-IP OAuth start admission throttle (login start / elevation start) penalizing a caller |
 | `payload_too_large` | 413 | request exceeds the configured size bound |
 | `unbound_model` | 503 | resolved a platform model that has no usable binding (zero-binding draft / all bindings filtered out); a user issue is recorded |
 | `upstream` | 502 | upstream error after the commit boundary, a single attempt's upstream error with silent retry off, or all bindings exhausted under silent retry |
 | `service_unavailable` | 503 | internal service unavailability |
+| `resource_limit_exceeded` | 422 | a per-parent resource count reached the configured cap: endpoint keys per endpoint (`default_endpoint_key_limit`), platform models per user (`default_model_limit`), or bindings per model (`default_binding_limit`); the envelope carries `limit` (the effective cap) and `resource` (the stable name); the count and cap are read inside the same transaction as the insert so a concurrent add cannot breach the cap; existing rows are retained |
 
 ## 2. Platform exit — `/v1/*` (CallerKey Bearer)
 
@@ -150,6 +162,8 @@ Server-side behavior (frozen contract; implementation in a later rail):
    - Failure after the boundary (streaming already started, first byte already sent): **no
      retry**; end the current stream with an error.
    Non-stream requests can retry up to the boundary, same option/default.
+   Route resolution, all attempts, and backoff share one five-minute aggregate deadline; a
+   candidate set never multiplies the single-attempt timeout into a longer logical request.
 4. Inject the OpenAI `safety_identifier` field = a stable, irreversible hash of the calling
    user's id, for upstream per-user risk attribution.
 
@@ -165,6 +179,18 @@ Response — stream (`stream: true`): `Content-Type: text/event-stream`. A seque
 success. If the client disconnects, the cancellation is propagated upstream and concurrent
 slots / reservations are released; any unreadable `usage` is recorded with the
 `usage_unknown` flag rather than fabricated token values.
+
+Before a response crosses the client boundary, upstream key plaintext and ciphertext are
+checked both as literal wire bytes and as decoded JSON string channels. The semantic check
+keeps bounded rolling state per normalized JSON path, so splitting a credential across
+successive `delta.content`, tool-argument, or content-part chunks is rejected before the
+completing fragment is written. This guard is a layer of defense-in-depth, not a general
+data-loss-prevention filter: it matches only the exact known credential material handed to
+the upstream in the same request (and its close JSON/SSE fragments). It does not detect a
+key that was encoded, truncated, or otherwise transformed, and it does not detect arbitrary
+other sensitive data the upstream may return. A caller key is therefore still handled as a
+sensitive credential and protected by the reverse proxy, storage, and logging boundary; the
+guard is one layer, not a guarantee.
 
 Stable error codes at this endpoint:
 
@@ -208,7 +234,7 @@ Auth: a valid user session cookie. Banned users are denied. All responses are `n
 
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
-| `GET` | `/api/auth/discord/start` | none | — | `302` to Discord's authorize URL; sets the OAuth `state` cookie (HMAC, short TTL, HttpOnly, SameSite) | `service_unavailable` (503) if the Discord end is misconfigured |
+| `GET` | `/api/auth/discord/start` | none | — | `302` to Discord's authorize URL; sets the OAuth `state` cookie (HMAC, short TTL, HttpOnly, SameSite). Before a state is issued, a per-client-IP admission throttle (configurable via site_config `oauth_start_rate_*`; `oauth_start_rate_limit=0` disables it) is applied as a second layer behind the reverse-proxy per-IP limit | `rate_limited` (429, with `Retry-After`) when the per-client-IP admission limit is exceeded; `service_unavailable` (503) if the Discord end is misconfigured or the admission throttle's bounded entry store is full (fail-closed, never evicts a live state) |
 | `GET` | `/api/auth/discord/callback` | OAuth `state` cookie | query: `code`, `state` | on success: sets the user session cookie and `302` to the user SPA; on mismatch/failure: `400 invalid_request` / `401 unauthorized` | `invalid_request`, `unauthorized`, `conflict`, `service_unavailable` |
 | `GET` | `/api/session` | user session | — | `200 {user:{id,username,avatar,lang,is_banned,endpoint_limit,rpm_limit,created_at}}` | `unauthorized` |
 | `POST` | `/api/auth/logout` | user session | — | `204`; clears the session cookie | `unauthorized` |
@@ -224,7 +250,7 @@ nickname policy is finalized when Discord is wired.
 
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
-| `POST` | `/api/auth/elevate` | user session | — | initiates a fresh Discord re-authorization for an elevated-action capability (HMAC state, short TTL); on completion the session carries an elevated capability until it expires / is consumed | `unauthorized`, `service_unavailable` |
+| `POST` | `/api/auth/elevate` | user session | — | initiates a fresh Discord re-authorization for an elevated-action capability (HMAC state, short TTL); on completion the session carries an elevated capability until it expires / is consumed. The same per-client-IP admission throttle as login start is applied (shared instance, keyed by ClientIP) before a state is issued | `unauthorized`, `service_unavailable`; `rate_limited` (429, with `Retry-After`) when the shared per-client-IP admission limit is exceeded |
 
 Self-service destructive endpoints (`3.8`) require an **active elevated capability**. The
 carrier is the header `X-Elevated-Token: <token>` (a short-lived, single-use bound capability).
@@ -262,15 +288,15 @@ neither an admin session nor a caller key can reach it.
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
 | `GET` | `/api/endpoints` | user session | — | `200` array of `{id, connector_type, base_url, note, enabled, model_fetch_failed, model_fetch_failed_at, created_at, updated_at}` (key secrets never appear) | `unauthorized` |
-| `POST` | `/api/endpoints` | user session | `{base_url, connector_type?, note?, enabled?}` | `201` created endpoint; `base_url` is canonicalized (scheme/host lowercased, trailing dot removed, default ports made explicit, userinfo/query/fragment removed, redundant slashes collapsed) before persistence | `invalid_request`, `unauthorized`, `conflict`, `forbidden` (endpoint cap reached: `min(global_default, user_limit)`) |
+| `POST` | `/api/endpoints` | user session | `{base_url, connector_type?, note?, enabled?}` | `201` created endpoint; `base_url` is canonicalized (scheme/host lowercased, trailing dot removed, default ports made explicit, userinfo/query/fragment removed, redundant slashes collapsed) before persistence | `invalid_request`, `unauthorized`, `conflict`, `resource_limit_exceeded` (endpoint cap reached: `min(global_default, user_limit)`) |
 | `GET` | `/api/endpoints/{id}` | user session | — | `200` the endpoint object | `unauthorized`, `not_found` |
-| `PATCH` | `/api/endpoints/{id}` | user session | `{base_url?, note?, enabled?}` | `200` updated endpoint; saving / editing triggers an automatic re-fetch of every enabled key's upstream models | `invalid_request`, `unauthorized`, `not_found`, `forbidden` |
+| `PATCH` | `/api/endpoints/{id}` | user session | `{base_url?, note?, enabled?}` | `200` updated endpoint; saving / editing triggers an automatic re-fetch of every enabled key's upstream models | `invalid_request`, `unauthorized`, `not_found` |
 | `DELETE` | `/api/endpoints/{id}` | user session | — | `204`; cascades to its keys, their fetched-model cache, and their bindings (immediate invalidation) | `unauthorized`, `not_found` |
 
 Multiple endpoints may share the same canonical `base_url` (no uniqueness on
 `base_url`); each keeps independent note/enabled state. The endpoint-count cap is
 `min(global_default, user_endpoint_limit)`; when the current count reaches the cap, new
-endpoints are rejected (`forbidden`) while existing ones are retained. The admin can set a
+endpoints are rejected (`resource_limit_exceeded`) while existing ones are retained. The admin can set a
 per-user endpoint limit and clear it (NULL restores the global default).
 
 `connector_type` defaults to `openai-compatible` and is validated against the
@@ -290,11 +316,17 @@ state only — never a diagnostic or any upstream content.
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
 | `GET` | `/api/endpoints/{id}/keys` | user session | — | `200` array of `{id, display_head, display_tail, note, enabled, created_at, updated_at}`; display fragments are the first/last few runes of the secret so listings never decrypt; the secret and its ciphertext are never returned | `unauthorized`, `not_found` |
-| `POST` | `/api/endpoints/{id}/keys` | user session | `{secret, note?, enabled?}` | `201` created key metadata `{id, display_head, display_tail, note, enabled, created_at, updated_at}` (`secret` is sealed with AES-256-GCM before persistence and never returned); triggers a model fetch for this key when enabled | `invalid_request`, `unauthorized`, `not_found`, `payload_too_large` |
+| `POST` | `/api/endpoints/{id}/keys` | user session | `{secret, note?, enabled?}` | `201` created key metadata `{id, display_head, display_tail, note, enabled, created_at, updated_at}` (`secret` is sealed with AES-256-GCM before persistence and never returned); triggers a model fetch for this key when enabled | `invalid_request`, `unauthorized`, `not_found`, `payload_too_large`, `resource_limit_exceeded` |
 | `PATCH` | `/api/endpoints/{id}/keys/{keyId}` | user session | `{note?, enabled?}` | `200` updated key `{id, display_head, display_tail, note, enabled, created_at, updated_at}` (the secret is not mutable here; key rotation is delete + add) | `invalid_request`, `unauthorized`, `not_found` |
 | `DELETE` | `/api/endpoints/{id}/keys/{keyId}` | user session | — | `204`; cascades to its fetched-model cache and bindings | `unauthorized`, `not_found` |
 | `GET` | `/api/endpoints/{id}/keys/{keyId}/models` | user session | — | `200` array of `{upstream_model_id, provider, fetched_at, status}` for that (Endpoint, Key) combo; empty `[]` when the combo has no cache rows; a missing, cross-user, or wrong-endpoint combo is indistinguishable `not_found` | `unauthorized`, `not_found` |
 | `POST` | `/api/endpoints/{id}/keys/{keyId}/models/refresh` | user session | — | `202` (no body) once the manual fetch is queued; the fetch runs on a bounded worker pool and its outcome is never echoed back; on success the cache for that combo is replaced; on failure the cache is cleared, the endpoint is flagged, and a bounded user issue is recorded | `unauthorized`, `not_found`, `rate_limited`, `service_unavailable` |
+
+The per-endpoint key-count cap is `default_endpoint_key_limit` (default 20,
+administrator-adjustable at runtime; see §4.4). When the count of keys on one endpoint
+reaches the cap, a new key is refused with `resource_limit_exceeded` (422) carrying `limit`
+and `resource`=`endpoint_key`; existing keys are retained. The count and the cap are read
+inside the same transaction as the insert, so a concurrent add cannot breach the cap.
 
 The fetched-model cache is keyed per **(Endpoint, Key)** combo: different keys on the same
 endpoint may legitimately return different upstream lists. The server fetches automatically
@@ -322,14 +354,21 @@ full response, or the endpoint URL. HTTP 200 alone never counts as success.
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
 | `GET` | `/api/models` | user session | — | `200` array of `{id, provider, model, full_name, route_strategy, silent_retry, binding_count, created_at, updated_at}` | `unauthorized` |
-| `POST` | `/api/models` | user session | `{provider, model, route_strategy?, silent_retry?}` | `201` created model; `provider`/`model` are free strings that allow `/` (each ≤64 runes, no control chars, no leading/trailing whitespace); the external name is `provider/model` and uniqueness is enforced on that full name; `route_strategy` defaults to `ordered` and only `ordered`/`random` are accepted; `silent_retry` is an optional boolean that defaults to `false` (fail fast) and, when `true`, silently tries the next binding after a pre-commit upstream failure until success or exhaustion (it never retries after any response byte is committed) | `invalid_request`, `unauthorized`, `conflict` (full-name collision) |
+| `POST` | `/api/models` | user session | `{provider, model, route_strategy?, silent_retry?}` | `201` created model; `provider`/`model` are free strings that allow `/` (each ≤64 runes, no control chars, no leading/trailing whitespace); the external name is `provider/model` and uniqueness is enforced on that full name; `route_strategy` defaults to `ordered` and only `ordered`/`random` are accepted; `silent_retry` is an optional boolean that defaults to `false` (fail fast) and, when `true`, silently tries the next binding after a pre-commit upstream failure until success or exhaustion (it never retries after any response byte is committed) | `invalid_request`, `unauthorized`, `conflict` (full-name collision), `resource_limit_exceeded` |
 | `GET` | `/api/models/{id}` | user session | — | `200` the model object | `unauthorized`, `not_found` |
 | `PATCH` | `/api/models/{id}` | user session | `{provider?, model?, route_strategy?, silent_retry?}` | `200` updated model (changing `provider/model` recomputes `full_name` and may collide) | `invalid_request`, `unauthorized`, `not_found`, `conflict` |
 | `DELETE` | `/api/models/{id}` | user session | — | `204`; cascades to its bindings | `unauthorized`, `not_found` |
 | `GET` | `/api/models/{id}/bindings` | user session | — | `200` array ordered by `ord`: `{id, endpoint_key_id, upstream_model_id, ord}` | `unauthorized`, `not_found` |
-| `POST` | `/api/models/{id}/bindings` | user session | `{endpoint_key_id, upstream_model_id, ord?}` | `201` created binding; `endpoint_key_id` must belong to one of the user's enabled endpoints and the key itself must be enabled; `upstream_model_id` must exist in that key's fetched cache; `ord` defaults to `0` and must be within `[0, 1000000]` | `invalid_request`, `unauthorized`, `not_found`, `conflict` (duplicate `(model_id, endpoint_key_id, upstream_model_id)`) |
+| `POST` | `/api/models/{id}/bindings` | user session | `{endpoint_key_id, upstream_model_id, ord?}` | `201` created binding; `endpoint_key_id` must belong to one of the user's enabled endpoints and the key itself must be enabled; `upstream_model_id` must exist in that key's fetched cache; `ord` defaults to `0` and must be within `[0, 1000000]` | `invalid_request`, `unauthorized`, `not_found`, `conflict` (duplicate `(model_id, endpoint_key_id, upstream_model_id)`), `resource_limit_exceeded` |
 | `PATCH` | `/api/models/{id}/bindings/{bId}` | user session | `{ord?, upstream_model_id?}` | `200` updated binding; only `ord`/`upstream_model_id` are mutable (the endpoint key never changes through this path); the resulting `upstream_model_id` must still exist in the binding key's fetched cache and the key/endpoint must still be enabled | `invalid_request`, `unauthorized`, `not_found`, `conflict` (duplicate triple after update) |
 | `DELETE` | `/api/models/{id}/bindings/{bId}` | user session | — | `204` | `unauthorized`, `not_found` |
+
+Platform-model and binding counts are capped per parent: at most `default_model_limit`
+models per user (default 100) and `default_binding_limit` bindings per model (default 50),
+both administrator-adjustable at runtime (see §4.4). When the count reaches the cap a new
+row is refused with `resource_limit_exceeded` (422) carrying `limit` and `resource`
+(`model` or `binding`); existing rows are retained. The count and cap are read inside the
+same transaction as the insert, so a concurrent add cannot breach the cap.
 
 A model may be saved with zero bindings (a draft). Calling a draft model over `/v1/chat/completions`
 yields **503** (see §2.1). `provider`/`model` are stored and matched only as opaque strings
@@ -390,6 +429,15 @@ rail but the scope (no plaintext secret) is frozen here.
 
 Auth: a valid admin session cookie. The administrator is env-configured (single row,
 `discord_id` null) and cannot self-register. All responses are `no-store`.
+
+Administrator sessions are bound to the current administrator credential
+generation: rotating the administrator password (changing the env value and
+restarting the process) invalidates every existing admin session at its next
+request, so a leaked or retired password cannot keep an old long-lived admin
+session alive. A plain restart with the same password keeps admin sessions
+alive; only an actual password rotation revokes them. The binding is an opaque
+fingerprint of the password (never the password itself), so the database holds
+no password material.
 
 ### 4.1 Admin auth & elevation
 
@@ -454,6 +502,9 @@ Known `site_config` keys (the authoritative key set is enforced by the handler):
 
 - `site_name`, `default_locale`
 - `default_endpoint_limit` — global endpoint-count cap default
+- `default_endpoint_key_limit` — global per-endpoint key-count cap default
+- `default_model_limit` — global per-user platform-model cap default
+- `default_binding_limit` — global per-model binding-count cap default
 - `default_rpm_per_user` — global per-user RPM default
 - `global_rpm` — site-wide RPM cap
 - `default_per_endpoint_concurrency` — global per-endpoint concurrency cap (keyed by normalized `base_url`)
@@ -461,9 +512,11 @@ Known `site_config` keys (the authoritative key set is enforced by the handler):
 - `discord_guild_id`, `discord_role_id` — registration gate (both must match to allow new registration; either blank pauses registration)
 - `alert_prefs_*` — administrator alert-center preferences
 
-Values are typed: integer keys (`default_endpoint_limit` `[0,10000]`; RPM keys
-`[1,4096]`, matching the shared limiter's event-store ceiling; concurrency keys
-`[1,100000]`) accept only JSON integers, text keys only JSON strings (bounded,
+Values are typed: integer keys (`default_endpoint_limit` `[0,10000]`; the
+resource-count caps `default_endpoint_key_limit`, `default_model_limit`,
+`default_binding_limit` `[1,10000]`; RPM keys `[1,4096]`, matching the shared
+limiter's event-store ceiling; concurrency keys `[1,100000]`) accept only JSON
+integers, text keys only JSON strings (bounded,
 no control characters), and `default_locale` only `"zh"`/`"en"`. `null` is
 rejected (clearing a per-user limit is expressed through the user-level NULL
 semantics; blanking a text gate value uses `""`). `GET` returns the effective
@@ -476,7 +529,11 @@ Runtime config changes do not require a restart: `default_rpm_per_user` /
 `default_per_endpoint_concurrency` / `egress_global_concurrency` to the shared
 egress gate through the runtime apply hook. A failed runtime apply fails closed
 (DB untouched); a persistence failure after a successful apply reverts the
-runtime singleton to its previous value, so DB and runtime cannot drift.
+runtime singleton to its previous value, so DB and runtime cannot drift. The
+resource-count caps (`default_endpoint_limit`, `default_endpoint_key_limit`,
+`default_model_limit`, `default_binding_limit`) have no runtime singleton: each
+create reads the cap inside its own transaction, so a change takes effect on the
+next create without a restart.
 
 ### 4.5 Admin alerts
 
@@ -498,7 +555,11 @@ resolving an alert with `false` reopens it and clears `resolved_at`.
 ## 5. Cross-cutting requirements
 
 - **No plaintext upstream secret** is ever returned, listed, logged, exported, or surfaced in
-  an error envelope. Only head/tail display fragments appear in a key view.
+  an error envelope. Literal and semantic response guards also reject a secret split across
+  multiple JSON/SSE fragments. Only head/tail display fragments appear in a key view. These
+  guards are an exact-match defense-in-depth layer for the known upstream credential only;
+  they are not a general data-loss-prevention filter and do not detect encoded, truncated,
+  or otherwise transformed material, or arbitrary other sensitive upstream data.
 - **`Cache-Control: no-store`** is mandatory and default on every JSON response and every
   error envelope, and is the only cache policy permitted for key/secret/config endpoints.
 - **Stable codes** are the sole machine-facing error identifier; HTTP status is derived from
@@ -510,7 +571,8 @@ resolving an alert with `false` reopens it and clears `resolved_at`.
   upstream text. Frontends render all such fields as text.
 - **Request/response content is never persisted**: `request_logs` and any log entry hold
   metadata and bounded diagnostics only (privacy policy).
-- **30-day retention**: request logs are periodically cleaned past 30 days.
+- **Retention maintenance**: request logs are periodically cleaned past 30 days; expired
+  idle/absolute session rows are purged at startup and every six hours.
 - **Ownership isolation**: every read/write path checks `user_id`; cross-user resources never
   enter the candidate set for routing or listing.
 - **Deterministic routing**: when a full name cannot be resolved to exactly this user's model,

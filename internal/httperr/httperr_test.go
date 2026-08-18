@@ -51,18 +51,19 @@ func TestEnvelopeShapeAndStableCode(t *testing.T) {
 
 func TestStatusMapping(t *testing.T) {
 	cases := map[string]int{
-		CodeInvalidRequest:     http.StatusBadRequest,
-		CodeUnauthorized:       http.StatusUnauthorized,
-		CodeForbidden:          http.StatusForbidden,
-		CodeNotFound:           http.StatusNotFound,
-		CodeConflict:           http.StatusConflict,
-		CodeMethodNotAllowed:   http.StatusMethodNotAllowed,
-		CodeRateLimited:        http.StatusTooManyRequests,
-		CodePayloadTooLarge:    http.StatusRequestEntityTooLarge,
-		CodeUnboundModel:       http.StatusServiceUnavailable,
-		CodeUpstream:           http.StatusBadGateway,
-		CodeServiceUnavailable: http.StatusServiceUnavailable,
-		CodeInternal:           http.StatusInternalServerError,
+		CodeInvalidRequest:        http.StatusBadRequest,
+		CodeUnauthorized:          http.StatusUnauthorized,
+		CodeForbidden:             http.StatusForbidden,
+		CodeNotFound:              http.StatusNotFound,
+		CodeConflict:              http.StatusConflict,
+		CodeMethodNotAllowed:      http.StatusMethodNotAllowed,
+		CodeRateLimited:           http.StatusTooManyRequests,
+		CodePayloadTooLarge:       http.StatusRequestEntityTooLarge,
+		CodeUnboundModel:          http.StatusServiceUnavailable,
+		CodeUpstream:              http.StatusBadGateway,
+		CodeServiceUnavailable:    http.StatusServiceUnavailable,
+		CodeResourceLimitExceeded: http.StatusUnprocessableEntity,
+		CodeInternal:              http.StatusInternalServerError,
 	}
 	for code, wantStatus := range cases {
 		rec := httptest.NewRecorder()
@@ -226,5 +227,41 @@ func TestEmptyCodeFallsBackToInternal(t *testing.T) {
 	env := decodeEnvelope(t, rec.Body.String())
 	if env.Error.Code != CodeInternal {
 		t.Fatalf("code = %q, want %q", env.Error.Code, CodeInternal)
+	}
+}
+
+func TestResourceLimitExceededEnvelope(t *testing.T) {
+	rec := httptest.NewRecorder()
+	WriteError(rec, New(CodeResourceLimitExceeded, "resource limit reached").
+		WithResourceLimit("endpoint_key", 20))
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", rec.Code)
+	}
+	env := decodeEnvelope(t, rec.Body.String())
+	if env.Error.Code != CodeResourceLimitExceeded {
+		t.Fatalf("code = %q, want %q", env.Error.Code, CodeResourceLimitExceeded)
+	}
+	if env.Error.Limit != 20 {
+		t.Fatalf("limit = %d, want 20", env.Error.Limit)
+	}
+	if env.Error.Resource != "endpoint_key" {
+		t.Fatalf("resource = %q, want endpoint_key", env.Error.Resource)
+	}
+
+	// limit/resource are omitted when unset (a non-resource-limit error).
+	rec2 := httptest.NewRecorder()
+	WriteError(rec2, New(CodeInvalidRequest, "bad"))
+	body := rec2.Body.String()
+	if strings.Contains(body, `"limit"`) || strings.Contains(body, `"resource"`) {
+		t.Fatalf("non-resource-limit error leaked limit/resource: %s", body)
+	}
+
+	// resource is sanitized at the wire sink (defense-in-depth: a caller that
+	// constructs Error directly cannot push control characters to the wire).
+	rec3 := httptest.NewRecorder()
+	WriteError(rec3, Error{Code: CodeResourceLimitExceeded, Resource: "bad\x00resource\n"})
+	if env := decodeEnvelope(t, rec3.Body.String()); env.Error.Resource != "badresource" {
+		t.Fatalf("resource not sanitized: %q", env.Error.Resource)
 	}
 }

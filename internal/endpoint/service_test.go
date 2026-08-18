@@ -93,6 +93,15 @@ func (ts *testService) setGlobalLimit(t *testing.T, raw string) {
 	}
 }
 
+func (ts *testService) setEndpointKeyLimit(t *testing.T, raw string) {
+	t.Helper()
+	if _, err := ts.store.DB().Exec(
+		`INSERT INTO site_config (key, value, updated_at) VALUES ('default_endpoint_key_limit', ?, 1)
+		 ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`, raw); err != nil {
+		t.Fatalf("set endpoint key limit: %v", err)
+	}
+}
+
 func (ts *testService) seedModel(t *testing.T, userID int64, provider, model string) int64 {
 	t.Helper()
 	res, err := ts.store.DB().Exec(
@@ -1032,6 +1041,68 @@ func TestNilServiceGuardsDoNotPanic(t *testing.T) {
 	}
 	if err := s.DeleteEndpointKey(context.Background(), 1, 1, 1); !errors.Is(err, db.ErrNotFound) {
 		t.Errorf("nil Service DeleteEndpointKey err = %v, want not_found", err)
+	}
+}
+
+// TestServiceEndpointKeyCap covers the per-endpoint key-count cap through the
+// service layer: the default when unset, the cap-th add succeeds, one over is
+// a *db.CapError carrying resource + limit, a runtime site-config change takes
+// effect immediately, and counts do not cross endpoints.
+func TestServiceEndpointKeyCap(t *testing.T) {
+	ts := newTestService(t)
+	uid := ts.seedUser(t, nil)
+	ep, err := ts.svc.CreateEndpoint(context.Background(), uid, "", "https://example.com/v1/", nil, nil)
+	if err != nil {
+		t.Fatalf("create endpoint: %v", err)
+	}
+
+	cap, err := ts.store.EndpointKeyCap(context.Background())
+	if err != nil {
+		t.Fatalf("EndpointKeyCap: %v", err)
+	}
+	if cap != db.DefaultEndpointKeyLimit {
+		t.Errorf("unset cap = %d, want %d", cap, db.DefaultEndpointKeyLimit)
+	}
+
+	ts.setEndpointKeyLimit(t, "3")
+	cap, _ = ts.store.EndpointKeyCap(context.Background())
+	if cap != 3 {
+		t.Fatalf("adjusted cap = %d, want 3", cap)
+	}
+	for i := 0; i < cap; i++ {
+		if _, err := ts.svc.CreateEndpointKey(context.Background(), uid, ep.ID, []byte(fmt.Sprintf("sk-%d", i)), nil, nil); err != nil {
+			t.Fatalf("create key %d: %v", i, err)
+		}
+	}
+
+	// One over the cap: the service surfaces *db.CapError so the handler can
+	// build the resource_limit_exceeded envelope.
+	_, err = ts.svc.CreateEndpointKey(context.Background(), uid, ep.ID, []byte("sk-extra"), nil, nil)
+	var capErr *db.CapError
+	if !errors.As(err, &capErr) {
+		t.Fatalf("over-cap err = %v, want *db.CapError", err)
+	}
+	if capErr.Resource != db.ResourceEndpointKey || capErr.Limit != cap {
+		t.Errorf("capErr = %+v, want resource=%q limit=%d", capErr, db.ResourceEndpointKey, cap)
+	}
+
+	// Raising the cap at runtime lets another key in (no restart).
+	ts.setEndpointKeyLimit(t, "5")
+	if _, err := ts.svc.CreateEndpointKey(context.Background(), uid, ep.ID, []byte("sk-more"), nil, nil); err != nil {
+		t.Fatalf("create after cap raise: %v", err)
+	}
+	count, _ := ts.store.CountEndpointKeys(context.Background(), uid, ep.ID)
+	if count != cap+1 {
+		t.Errorf("count after cap raise = %d, want %d", count, cap+1)
+	}
+
+	// Counts do not cross endpoints.
+	ep2, err := ts.svc.CreateEndpoint(context.Background(), uid, "", "https://example.com/v2/", nil, nil)
+	if err != nil {
+		t.Fatalf("create endpoint 2: %v", err)
+	}
+	if c2, _ := ts.store.CountEndpointKeys(context.Background(), uid, ep2.ID); c2 != 0 {
+		t.Errorf("second endpoint count = %d, want 0", c2)
 	}
 }
 

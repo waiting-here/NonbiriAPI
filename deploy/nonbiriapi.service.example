@@ -12,6 +12,7 @@ EnvironmentFile=/etc/nonbiriapi/admin.env
 ExecStart=/opt/nonbiriapi/current/nonbiriapi
 Restart=on-failure
 RestartSec=5s
+UMask=0077
 
 # The process only needs to write its database directory and read its
 # environment/key files. Review these restrictions on the target distribution.

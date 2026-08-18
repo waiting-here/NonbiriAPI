@@ -3,7 +3,11 @@ package db
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
+	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -453,5 +457,161 @@ func TestModelSilentRetryPersistence(t *testing.T) {
 		`INSERT INTO models (user_id, provider, model, full_name, route_strategy, silent_retry, created_at, updated_at) VALUES (?, 'x', 'z', 'x/z', 'ordered', 2, 1, 1)`,
 		uid); err == nil {
 		t.Fatal("DB accepted an out-of-range silent_retry")
+	}
+}
+
+// --- model cap --------------------------------------------------------------
+
+// setTestModelLimit upserts the default_model_limit site_config row so a test
+// can adjust the cap mid-run (verifying runtime application).
+func setTestModelLimit(t *testing.T, st *Store, raw string) {
+	t.Helper()
+	if _, err := st.DB().Exec(
+		`INSERT INTO site_config (key, value, updated_at) VALUES ('default_model_limit', ?, 1)
+		 ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`, raw); err != nil {
+		t.Fatalf("set model limit: %v", err)
+	}
+}
+
+// mustCreateTestModel creates a platform model with a distinct full name and
+// fails the test on any error. Used to fill a user up to the model cap.
+func mustCreateTestModel(t *testing.T, st *Store, userID int64, provider, model string) Model {
+	t.Helper()
+	m, err := st.CreateModel(context.Background(), userID, provider, model, "ordered", false, testNow)
+	if err != nil {
+		t.Fatalf("CreateModel %s/%s: %v", provider, model, err)
+	}
+	return m
+}
+
+// TestCreateModelCap covers the per-user platform-model cap: the default when
+// unset, the cap-th create succeeds, the next is a *CapError wrapping
+// ErrModelCap with the resource name and exact effective cap, no extra row is
+// written, a runtime site-config change takes effect immediately, and counts
+// do not cross users.
+func TestCreateModelCap(t *testing.T) {
+	st := newModelsTestStore(t)
+	ctx := context.Background()
+
+	cap, err := st.ModelCap(ctx)
+	if err != nil {
+		t.Fatalf("ModelCap: %v", err)
+	}
+	if cap != DefaultModelLimit {
+		t.Errorf("unset cap = %d, want %d", cap, DefaultModelLimit)
+	}
+
+	alice := seedUserRaw(t, st, "alice")
+	setTestModelLimit(t, st, "3")
+	cap, _ = st.ModelCap(ctx)
+	if cap != 3 {
+		t.Fatalf("adjusted cap = %d, want 3", cap)
+	}
+	for i := 0; i < cap; i++ {
+		mustCreateTestModel(t, st, alice, fmt.Sprintf("p%d", i), "m")
+	}
+	count, _ := st.CountModels(ctx, alice)
+	if count != cap {
+		t.Fatalf("count = %d, want %d", count, cap)
+	}
+
+	_, err = st.CreateModel(ctx, alice, "p-extra", "m", "ordered", false, testNow)
+	var capErr *CapError
+	if !errors.As(err, &capErr) {
+		t.Fatalf("over-cap err = %v, want *CapError", err)
+	}
+	if !errors.Is(err, ErrModelCap) {
+		t.Errorf("over-cap err does not match ErrModelCap: %v", err)
+	}
+	if capErr.Resource != ResourceModel || capErr.Limit != cap {
+		t.Errorf("capErr = %+v, want resource=%q limit=%d", capErr, ResourceModel, cap)
+	}
+	count, _ = st.CountModels(ctx, alice)
+	if count != cap {
+		t.Errorf("count after refused create = %d, want %d (no row written)", count, cap)
+	}
+
+	setTestModelLimit(t, st, "5")
+	mustCreateTestModel(t, st, alice, "p-more", "m")
+	count, _ = st.CountModels(ctx, alice)
+	if count != cap+1 {
+		t.Errorf("count after cap raise = %d, want %d", count, cap+1)
+	}
+
+	// Counts do not cross users.
+	bob := seedUserRaw(t, st, "bob")
+	if c2, _ := st.CountModels(ctx, bob); c2 != 0 {
+		t.Errorf("bob count = %d, want 0", c2)
+	}
+	mustCreateTestModel(t, st, bob, "p", "m")
+	if c2, _ := st.CountModels(ctx, bob); c2 != 1 {
+		t.Errorf("bob count after one add = %d, want 1", c2)
+	}
+}
+
+// TestCreateModelCapRejectsInvalidSiteConfig asserts a malformed cap surfaces
+// as ErrInvalidSiteConfig (fail closed) and never writes a model.
+func TestCreateModelCapRejectsInvalidSiteConfig(t *testing.T) {
+	for _, raw := range []string{"not-a-number", "-3", "  "} {
+		raw := raw
+		t.Run(raw, func(t *testing.T) {
+			st := newModelsTestStore(t)
+			setTestModelLimit(t, st, raw)
+			alice := seedUserRaw(t, st, "alice")
+			_, err := st.CreateModel(context.Background(), alice, "p", "m", "ordered", false, testNow)
+			if !errors.Is(err, ErrInvalidSiteConfig) {
+				t.Errorf("CreateModel with global %q: err=%v, want ErrInvalidSiteConfig", raw, err)
+			}
+			count, _ := st.CountModels(context.Background(), alice)
+			if count != 0 {
+				t.Errorf("invalid site_config still produced %d models", count)
+			}
+		})
+	}
+}
+
+// TestCreateModelAtomicCapUnderConcurrency hammers CreateModel from many
+// goroutines against a small cap; the count-then-insert inside one transaction
+// must never let the cap be breached. Run under -race.
+func TestCreateModelAtomicCapUnderConcurrency(t *testing.T) {
+	const cap = 8
+	const workers = 64
+	st := newModelsTestStore(t)
+	ctx := context.Background()
+	setTestModelLimit(t, st, strconv.Itoa(cap))
+	alice := seedUserRaw(t, st, "alice")
+
+	var wg sync.WaitGroup
+	var succ, capErr atomic.Int64
+	start := make(chan struct{})
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			<-start
+			_, err := st.CreateModel(ctx, alice, fmt.Sprintf("p%d", i), "m", "ordered", false, testNow)
+			switch {
+			case err == nil:
+				succ.Add(1)
+			case errors.Is(err, ErrModelCap):
+				capErr.Add(1)
+			default:
+				t.Errorf("unexpected create error: %v", err)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	if got := succ.Load(); got != int64(cap) {
+		t.Errorf("successes = %d, want %d (cap breached or underfilled)", got, cap)
+	}
+	if got := capErr.Load(); got != int64(workers-cap) {
+		t.Errorf("cap errors = %d, want %d", got, workers-cap)
+	}
+	count, _ := st.CountModels(ctx, alice)
+	if count != cap {
+		t.Errorf("final count = %d, want %d", count, cap)
 	}
 }

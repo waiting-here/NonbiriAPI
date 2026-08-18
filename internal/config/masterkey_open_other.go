@@ -8,5 +8,9 @@ import "os"
 // The caller still rejects a static symlink and binds the opened descriptor to
 // the Lstat identity. Production deployment targets use the Unix opener.
 func openMasterKeyFilePlatform(path string) (*os.File, error) {
+	// #nosec G304 -- the operator deliberately selects this startup key path;
+	// the caller Lstats it, binds the opened descriptor with os.SameFile, requires
+	// a regular file, rechecks identity/metadata after a bounded read, and never
+	// uses the bytes as another pathname.
 	return os.Open(path)
 }

@@ -77,6 +77,8 @@ func shuffleCandidates(candidates []db.ForwardCandidate) []db.ForwardCandidate {
 		s1 = binary.LittleEndian.Uint64(seed[0:8])
 		s2 = binary.LittleEndian.Uint64(seed[8:16])
 	}
+	// #nosec G404 -- route order carries no cryptographic property; the local
+	// PRNG is independently seeded from crypto/rand and only shuffles candidates.
 	rng := mrand.New(mrand.NewPCG(s1, s2))
 	rng.Shuffle(len(out), func(i, j int) { out[i], out[j] = out[j], out[i] })
 	return out

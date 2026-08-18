@@ -272,6 +272,7 @@ func TestMasterKeyOwnershipCloseAndSafeFormatting(t *testing.T) {
 	clear(opened)
 
 	formatted := fmt.Sprintf("%v %#v", v, v)
+	//lint:ignore SA9005 Deliberately verify that an opaque Vault serializes without exposing its unexported key state.
 	jsonValue, err := json.Marshal(v)
 	if err != nil {
 		t.Fatalf("marshal Vault: %v", err)
@@ -336,6 +337,124 @@ func TestConcurrentSealOpen(t *testing.T) {
 				if !equal {
 					errs <- errors.New("concurrent round trip changed bytes")
 					return
+				}
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Error(err)
+	}
+}
+
+func TestDeriveSubkeyIsPurposeBoundStableAndOneWay(t *testing.T) {
+	v := newTestVault(t, 0x9a)
+	admin, err := v.DeriveSubkey([]byte("admin-cred-gen-v1"))
+	if err != nil {
+		t.Fatalf("first DeriveSubkey returned an error: %v", err)
+	}
+	defer clear(admin)
+	if len(admin) != SubkeyBytes {
+		t.Fatalf("subkey length=%d, want %d", len(admin), SubkeyBytes)
+	}
+
+	adminAgain, err := v.DeriveSubkey([]byte("admin-cred-gen-v1"))
+	if err != nil {
+		t.Fatalf("second DeriveSubkey returned an error: %v", err)
+	}
+	defer clear(adminAgain)
+	if !bytes.Equal(admin, adminAgain) {
+		t.Fatal("the same info label produced a different subkey")
+	}
+
+	other, err := v.DeriveSubkey([]byte("endpoint-key-envelope-v1"))
+	if err != nil {
+		t.Fatalf("third DeriveSubkey returned an error: %v", err)
+	}
+	defer clear(other)
+	if bytes.Equal(admin, other) {
+		t.Fatal("different info labels produced the same subkey")
+	}
+
+	// The derived subkey must not equal or contain the master-key material.
+	masterMarker := hex.EncodeToString(bytes.Repeat([]byte{0x9a}, MasterKeyBytes))
+	adminHex := hex.EncodeToString(admin)
+	if adminHex == masterMarker || strings.Contains(adminHex, masterMarker) {
+		t.Fatal("a derived subkey exposed master-key material")
+	}
+
+	// A second vault with a different master key derives a different subkey
+	// for the same info label, so the subkey is bound to the master key.
+	v2 := newTestVault(t, 0x9b)
+	admin2, err := v2.DeriveSubkey([]byte("admin-cred-gen-v1"))
+	if err != nil {
+		t.Fatalf("v2 DeriveSubkey returned an error: %v", err)
+	}
+	defer clear(admin2)
+	if bytes.Equal(admin, admin2) {
+		t.Fatal("different master keys produced the same subkey")
+	}
+}
+
+func TestDeriveSubkeyRejectsBadInfoAndClosedVault(t *testing.T) {
+	v := newTestVault(t, 0x9c)
+	for _, info := range [][]byte{nil, {}, bytes.Repeat([]byte{0x01}, maxSubkeyInfoBytes+1)} {
+		if _, err := v.DeriveSubkey(info); !errors.Is(err, ErrInvalidSubkeyInfo) {
+			t.Fatalf("info len=%d returned %v, want ErrInvalidSubkeyInfo", len(info), err)
+		}
+	}
+	// An exactly-max info label is accepted.
+	maxInfo := bytes.Repeat([]byte{0x02}, maxSubkeyInfoBytes)
+	out, err := v.DeriveSubkey(maxInfo)
+	if err != nil {
+		t.Fatalf("max-length info returned an error: %v", err)
+	}
+	clear(out)
+
+	if err := v.Close(); err != nil {
+		t.Fatalf("Close returned an error: %v", err)
+	}
+	if _, err := v.DeriveSubkey([]byte("admin-cred-gen-v1")); !errors.Is(err, ErrClosed) {
+		t.Fatalf("closed vault DeriveSubkey returned %v, want ErrClosed", err)
+	}
+}
+
+func TestDeriveSubkeyIsConcurrencySafeWithSealOpen(t *testing.T) {
+	v := newTestVault(t, 0x8d)
+	const workers = 16
+	const iterations = 32
+	start := make(chan struct{})
+	errs := make(chan error, workers)
+	var wg sync.WaitGroup
+	for worker := 0; worker < workers; worker++ {
+		worker := worker
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			for iteration := 0; iteration < iterations; iteration++ {
+				if worker%2 == 0 {
+					subkey, err := v.DeriveSubkey([]byte(fmt.Sprintf("purpose-%d", worker)))
+					if err != nil {
+						errs <- fmt.Errorf("concurrent DeriveSubkey failed: %w", err)
+						return
+					}
+					clear(subkey)
+				} else {
+					plaintext := []byte(fmt.Sprintf("mix-worker-%d-iter-%d", worker, iteration))
+					envelope, err := v.Seal(plaintext)
+					if err != nil {
+						errs <- errors.New("concurrent Seal failed")
+						return
+					}
+					opened, err := v.Open(envelope)
+					if err != nil {
+						errs <- errors.New("concurrent Open failed")
+						return
+					}
+					clear(opened)
 				}
 			}
 		}()

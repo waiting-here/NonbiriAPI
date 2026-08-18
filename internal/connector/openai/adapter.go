@@ -220,7 +220,7 @@ func (a *Adapter) Attempt(ctx context.Context, writer http.ResponseWriter, targe
 		return result
 	}
 
-	guard := newSensitiveGuard(target.credential.bearer, target.credential.ciphertext)
+	guard := newResponseGuard(target.credential.bearer, target.credential.ciphertext)
 	defer guard.Clear()
 	httpRequest.Header.Set("Authorization", "Bearer "+string(target.credential.bearer))
 	// The guard has irreversibly fingerprinted both values and the request
@@ -264,7 +264,7 @@ func (a *Adapter) Attempt(ctx context.Context, writer http.ResponseWriter, targe
 	return a.nonStream(ctx, writer, response, guard)
 }
 
-func (a *Adapter) nonStream(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard *sensitiveGuard) AttemptResult {
+func (a *Adapter) nonStream(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard *responseGuard) AttemptResult {
 	if response.ContentLength > a.maxJSONResponseBytes {
 		return upstreamFailure("upstream response exceeded its limit", response.StatusCode)
 	}
@@ -276,12 +276,15 @@ func (a *Adapter) nonStream(ctx context.Context, writer http.ResponseWriter, res
 		return upstreamFailure(classifyReadFailure(err), response.StatusCode)
 	}
 	defer clear(body)
-	if !validProtocolBytes(body) || guard.Contains(body) {
-		return upstreamFailure("upstream response was rejected", response.StatusCode)
+	if !validProtocolBytes(body) {
+		return upstreamFailure("upstream response was invalid", response.StatusCode)
 	}
 	usage, err := validateCompletion(body)
 	if err != nil {
 		return upstreamFailure("upstream response was invalid", response.StatusCode)
+	}
+	if guard.ContainsJSON(body, body) {
+		return upstreamFailure("upstream response was rejected", response.StatusCode)
 	}
 	if ctx.Err() != nil {
 		return canceledFailure()
@@ -303,7 +306,7 @@ func (a *Adapter) nonStream(ctx context.Context, writer http.ResponseWriter, res
 	}
 }
 
-func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard *sensitiveGuard) AttemptResult {
+func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard *responseGuard) AttemptResult {
 	// Do not drive parser delivery from response.Request.Context: the egress
 	// managed body cancels that internal context on ordinary EOF to release its
 	// permit. A caller-derived parser context lets already-parsed events drain
@@ -344,7 +347,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 				return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream ended without a chunk")
 			}
 			frame := []byte("data: [DONE]\n\n")
-			if guard.Contains(frame) {
+			if guard.ContainsBytes(frame) {
 				return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream was rejected")
 			}
 			wrote, writeErr := a.writeStreamFrame(writer, controller, frame)
@@ -372,8 +375,9 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 		frame = append(frame, "data: "...)
 		frame = append(frame, compact...)
 		frame = append(frame, '\n', '\n')
+		rejected := guard.ContainsJSON(frame, compact)
 		clear(compact)
-		if guard.Contains(frame) {
+		if rejected {
 			clear(frame)
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream was rejected")
 		}
