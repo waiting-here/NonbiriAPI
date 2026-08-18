@@ -214,6 +214,35 @@ func TestAdapterStreamRejectsSensitiveReflectionBeforeAndAfterCommit(t *testing.
 	}
 }
 
+func TestAdapterStreamRejectsSensitiveReflectionSplitAcrossSemanticChunks(t *testing.T) {
+	const secret = "sk-reflected-across-two-chunks"
+	first, second := secret[:len(secret)/2], secret[len(secret)/2:]
+	firstChunk := strings.Replace(validChunk, `"ok"`, fmt.Sprintf("%q", first), 1)
+	secondChunk := strings.Replace(validChunk, `"ok"`, fmt.Sprintf("%q", second), 1)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writeSSE(writer,
+			"data: "+firstChunk+"\n\n",
+			"data: "+secondChunk+"\n\n",
+			"data: [DONE]\n\n",
+		)
+	}))
+	defer server.Close()
+
+	adapter := adapterForServer(t, server.URL, nil, nil)
+	recorder := httptest.NewRecorder()
+	result := adapter.Attempt(context.Background(), recorder,
+		testTarget(server.URL, []byte(secret), []byte("cipher-split-stream")), streamRequest(t), "nbu_safe")
+	if result.Success || result.Failure != FailureUpstream || !result.Committed {
+		t.Fatalf("result=%+v body=%q", result, recorder.Body.String())
+	}
+	if strings.Contains(recorder.Body.String(), second) || strings.Contains(recorder.Body.String(), "[DONE]") {
+		t.Fatalf("second sensitive fragment or terminal marker crossed the response boundary: %q", recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), `"error"`) {
+		t.Fatalf("post-commit rejection lacked safe error frame: %q", recorder.Body.String())
+	}
+}
+
 type signalingRecorder struct {
 	*httptest.ResponseRecorder
 	wrote chan struct{}

@@ -244,6 +244,30 @@ func TestAdapterNonStreamRejectsStatusProtocolTruncationAndSensitiveReflection(t
 	}
 }
 
+func TestAdapterNonStreamRejectsSensitiveReflectionSplitAcrossContentParts(t *testing.T) {
+	const secret = "sk-reflected-across-content-parts"
+	first, second := secret[:len(secret)/2], secret[len(secret)/2:]
+	content := fmt.Sprintf(`"content":[{"type":"text","text":%q},{"type":"text","text":%q}]`, first, second)
+	body := strings.Replace(validCompletion, `"content":"ok"`, content, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(writer, body)
+	}))
+	defer server.Close()
+
+	adapter := adapterForServer(t, server.URL, nil, nil)
+	recorder := httptest.NewRecorder()
+	request := decodeAdapterRequest(t, `{"model":"platform/model","messages":[]}`)
+	result := adapter.Attempt(context.Background(), recorder,
+		testTarget(server.URL, []byte(secret), []byte("cipher-content-parts")), request, "nbu_safe")
+	if result.Success || result.Committed || result.Failure != FailureUpstream || !strings.Contains(result.Diagnostic, "rejected") {
+		t.Fatalf("result=%+v body=%q", result, recorder.Body.String())
+	}
+	if recorder.Body.Len() != 0 || strings.Contains(result.Diagnostic, secret) {
+		t.Fatalf("semantic content-part reflection crossed a response/diagnostic boundary: %q / %q", recorder.Body.String(), result.Diagnostic)
+	}
+}
+
 func TestAdapterRedirectAndEnvironmentProxyStayInsideEgress(t *testing.T) {
 	var redirectHits atomic.Int32
 	redirectTarget := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
