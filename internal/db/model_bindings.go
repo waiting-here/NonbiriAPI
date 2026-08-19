@@ -14,17 +14,21 @@ import (
 // (updates only touch ord / upstream_model_id), so a binding cannot be
 // re-pointed at another key or user through the update path.
 type ModelBinding struct {
-	ID              int64
-	ModelID         int64
-	EndpointKeyID   int64
-	UpstreamModelID string
-	Ord             int64
-	CreatedAt       int64
-	EndpointBaseURL string // the bound key's endpoint base_url, resolved for display
+	ID                     int64
+	ModelID                int64
+	EndpointKeyID          int64
+	UpstreamModelID        string
+	Ord                    int64
+	CreatedAt              int64
+	EndpointBaseURL        string // the bound key's endpoint base_url, resolved for display
+	EndpointKeyDisplayHead string // persisted masked head of the bound key's secret
+	EndpointKeyDisplayTail string // persisted masked tail of the bound key's secret
+	EndpointKeyNote        string // the bound key's operator note, if any
+	EndpointNote           string // the bound endpoint's operator note, if any
 }
 
 const bindingSelectSQL = `
-SELECT b.id, b.model_id, b.endpoint_key_id, b.upstream_model_id, b.ord, b.created_at, e.base_url
+SELECT b.id, b.model_id, b.endpoint_key_id, b.upstream_model_id, b.ord, b.created_at, e.base_url, ek.display_head, ek.display_tail, ek.note, e.note
 FROM model_bindings b
 JOIN models m ON b.model_id = m.id
 JOIN endpoint_keys ek ON ek.id = b.endpoint_key_id
@@ -381,7 +385,7 @@ WHERE id=? AND model_id=?
 
 func scanBindingRow(row *sql.Row) (ModelBinding, error) {
 	var b ModelBinding
-	err := row.Scan(&b.ID, &b.ModelID, &b.EndpointKeyID, &b.UpstreamModelID, &b.Ord, &b.CreatedAt, &b.EndpointBaseURL)
+	err := row.Scan(&b.ID, &b.ModelID, &b.EndpointKeyID, &b.UpstreamModelID, &b.Ord, &b.CreatedAt, &b.EndpointBaseURL, &b.EndpointKeyDisplayHead, &b.EndpointKeyDisplayTail, &b.EndpointKeyNote, &b.EndpointNote)
 	if err != nil {
 		return ModelBinding{}, err
 	}
@@ -392,7 +396,7 @@ func scanBindings(rows *sql.Rows) ([]ModelBinding, error) {
 	var out []ModelBinding
 	for rows.Next() {
 		var b ModelBinding
-		if err := rows.Scan(&b.ID, &b.ModelID, &b.EndpointKeyID, &b.UpstreamModelID, &b.Ord, &b.CreatedAt, &b.EndpointBaseURL); err != nil {
+		if err := rows.Scan(&b.ID, &b.ModelID, &b.EndpointKeyID, &b.UpstreamModelID, &b.Ord, &b.CreatedAt, &b.EndpointBaseURL, &b.EndpointKeyDisplayHead, &b.EndpointKeyDisplayTail, &b.EndpointKeyNote, &b.EndpointNote); err != nil {
 			return nil, fmt.Errorf("scan binding: %w", err)
 		}
 		out = append(out, b)

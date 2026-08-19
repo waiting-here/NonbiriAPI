@@ -86,6 +86,10 @@ export interface ModelBinding {
   endpoint_key_id: string;
   upstream_model_id: string;
   endpoint_base_url: string;
+  /** Optional masked preview of the bound key's secret (head…tail). */
+  endpoint_key_display?: string;
+  endpoint_key_note: string;
+  endpoint_note: string;
   ord: number;
 }
 
@@ -224,15 +228,22 @@ function safeDisplayFragment(value: unknown, max = 64): string | undefined {
   return candidate && (candidate.includes('…') || candidate.includes('...')) ? candidate : undefined;
 }
 
-function fragmentFromRecord(record: UnknownRecord): string | undefined {
-  const directDisplay = safeDisplayFragment(recordValue(record, 'display'));
-  const head = optionalText(recordValue(record, 'display_head'), 4) ?? optionalText(recordValue(record, 'secret_head'), 4);
-  const tail = optionalText(recordValue(record, 'display_tail'), 4) ?? optionalText(recordValue(record, 'secret_tail'), 4);
-  if (directDisplay) return directDisplay;
+// Build the masked key preview (head…tail) from persisted first/last fragments.
+// Returns undefined when neither fragment is present (e.g. very short secrets
+// where both fragments are suppressed to avoid re-covering the whole secret).
+function formatFragment(head: string | undefined, tail: string | undefined): string | undefined {
   if (head && tail) return `${head}…${tail}`;
   if (head) return `${head}…`;
   if (tail) return `…${tail}`;
   return undefined;
+}
+
+function fragmentFromRecord(record: UnknownRecord): string | undefined {
+  const directDisplay = safeDisplayFragment(recordValue(record, 'display'));
+  if (directDisplay) return directDisplay;
+  const head = optionalText(recordValue(record, 'display_head'), 4) ?? optionalText(recordValue(record, 'secret_head'), 4);
+  const tail = optionalText(recordValue(record, 'display_tail'), 4) ?? optionalText(recordValue(record, 'secret_tail'), 4);
+  return formatFragment(head, tail);
 }
 
 function normalizeEndpointKey(value: unknown): EndpointKey {
@@ -275,11 +286,17 @@ function normalizePlatformModel(value: unknown): PlatformModel {
 
 function normalizeBinding(value: unknown): ModelBinding {
   const record = asRecord(value) ?? {};
+  const keyHead = optionalText(recordValue(record, 'endpoint_key_display_head'), 4);
+  const keyTail = optionalText(recordValue(record, 'endpoint_key_display_tail'), 4);
+  const keyDisplay = formatFragment(keyHead, keyTail);
   return {
     id: idValue(recordValue(record, 'id')),
     endpoint_key_id: idValue(recordValue(record, 'endpoint_key_id')),
     upstream_model_id: text(recordValue(record, 'upstream_model_id'), 256, '—'),
     endpoint_base_url: text(recordValue(record, 'endpoint_base_url'), 2048, '—'),
+    ...(keyDisplay ? { endpoint_key_display: keyDisplay } : {}),
+    endpoint_key_note: text(recordValue(record, 'endpoint_key_note'), 512),
+    endpoint_note: text(recordValue(record, 'endpoint_note'), 512),
     ord: Math.max(0, integerValue(recordValue(record, 'ord'))),
   };
 }

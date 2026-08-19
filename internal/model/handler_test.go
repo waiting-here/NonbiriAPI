@@ -298,6 +298,17 @@ func TestHandlerBindingsCRUD(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), `"endpoint_base_url":"https://example.com"`) {
 		t.Fatalf("list bindings missing endpoint_base_url: %s", rec.Body.String())
 	}
+	// The bound key's masked display fragments are projected for disambiguation;
+	// the full ciphertext marker must never reach the binding list.
+	if !strings.Contains(rec.Body.String(), `"endpoint_key_display_head":"abcd"`) {
+		t.Fatalf("list bindings missing endpoint_key_display_head: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"endpoint_key_display_tail":"wxyz"`) {
+		t.Fatalf("list bindings missing endpoint_key_display_tail: %s", rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "LEAKMARK") {
+		t.Fatalf("list bindings leaked ciphertext: %s", rec.Body.String())
+	}
 
 	// Patch binding -> 200.
 	rec = doRequest(t, h, http.MethodPatch, fmt.Sprintf("/api/models/%d/bindings/%d", m.ID, bID),

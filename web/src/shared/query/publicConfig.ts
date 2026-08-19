@@ -69,11 +69,11 @@ function normalizePublicConfig(payload: unknown): PublicConfig {
   };
 }
 
-export function usePublicConfig(enabled = true) {
+export function usePublicConfig(enabled = true, path = '/api/config') {
   return useQuery({
     queryKey: ['public-config'] as const,
     queryFn: async () => {
-      const payload = await apiFetch<unknown>('/api/config');
+      const payload = await apiFetch<unknown>(path);
       if (payload === undefined) throw new ApiError('invalid_response', 'The server returned an invalid response.', 200);
       return normalizePublicConfig(payload);
     },

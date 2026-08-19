@@ -476,6 +476,8 @@ func buildAdminAndRootAPI(cfg *config.Config, userAuth *auth.UserAuth, adminAuth
 	adminAuthHandler := adminAuth.Handler()
 	adminBoundary := httpmw.API(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.URL.Path == "/admin/api/config":
+			servePublicConfig(store, w, r)
 		case r.URL.Path == "/admin/api/login" || r.URL.Path == "/admin/api/logout" || r.URL.Path == "/admin/api/session":
 			adminAuthHandler.ServeHTTP(w, r)
 		case r.URL.Path == "/admin/api/auth/elevate":

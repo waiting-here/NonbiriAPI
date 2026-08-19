@@ -372,7 +372,14 @@ function BindingRow({
         <strong className="mono">{binding.upstream_model_id}</strong>
         <span className="table-note">
           {t('user.models.endpoint')}: <span className="mono">{binding.endpoint_base_url}</span>
+          {binding.endpoint_note ? <> · {binding.endpoint_note}</> : null}
         </span>
+        {(binding.endpoint_key_display || binding.endpoint_key_note) ? (
+          <span className="table-note">
+            {t('user.models.key')}: <span className="mono">{binding.endpoint_key_display || '—'}</span>
+            {binding.endpoint_key_note ? <> · {binding.endpoint_key_note}</> : null}
+          </span>
+        ) : null}
       </div>
       <div className="table-actions">
         <button type="button" className="btn btn-danger" onClick={() => setDeleteOpen(true)}>
