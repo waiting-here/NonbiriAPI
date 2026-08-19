@@ -104,15 +104,18 @@ func TestAuditEgressCanonicalizationMatrix(t *testing.T) {
 		want string
 	}{
 		{"scheme case", "HTTPS://Example.COM:443/v1", "https://example.com:443/v1"},
-		{"trailing dot", "http://example.com./v1", "http://example.com:80/v1"},
-		{"explicit default port", "http://example.com:80/v1", "http://example.com:80/v1"},
-		{"default https port removed", "https://example.com:443/v1", "https://example.com:443/v1"},
-		{"double slashes collapsed", "http://example.com//v1//chat", "http://example.com:80/v1/chat"},
-		{"query stripped", "http://example.com/v1?token=abc", "http://example.com:80/v1"},
-		{"fragment stripped", "http://example.com/v1#frag", "http://example.com:80/v1"},
+		{"https default port not appended", "https://example.com/v1", "https://example.com/v1"},
+		{"http default port not appended", "http://example.com/v1", "http://example.com/v1"},
+		{"explicit default http port kept", "http://example.com:80/v1", "http://example.com:80/v1"},
+		{"explicit default https port kept", "https://example.com:443/v1", "https://example.com:443/v1"},
+		{"explicit non-default port kept", "https://example.com:8443/v1", "https://example.com:8443/v1"},
+		{"trailing dot", "http://example.com./v1", "http://example.com/v1"},
+		{"double slashes collapsed", "http://example.com//v1//chat", "http://example.com/v1/chat"},
+		{"query stripped", "http://example.com/v1?token=abc", "http://example.com/v1"},
+		{"fragment stripped", "http://example.com/v1#frag", "http://example.com/v1"},
 		{"bracketed ipv6", "http://[2001:4860:4860::8888]:8080/v1", "http://[2001:4860:4860::8888]:8080/v1"},
-		{"path preserved", "http://example.com/a/b/", "http://example.com:80/a/b/"},
-		{"underscore label", "http://api_v1.example.com/v1", "http://api_v1.example.com:80/v1"},
+		{"path preserved", "http://example.com/a/b/", "http://example.com/a/b/"},
+		{"underscore label", "http://api_v1.example.com/v1", "http://api_v1.example.com/v1"},
 	}
 	for _, tc := range valid {
 		t.Run("valid/"+tc.name, func(t *testing.T) {
@@ -151,8 +154,8 @@ func TestAuditEgressCanonicalizationMatrix(t *testing.T) {
 	// normalization ("去 userinfo/query/fragment") so an accidental
 	// credential in a base URL never survives into the stored endpoint.
 	for _, tc := range []struct{ in, want string }{
-		{"http://user:pass@example.com/v1", "http://example.com:80/v1"},
-		{"http://exa@mple.com/v1", "http://mple.com:80/v1"},
+		{"http://user:pass@example.com/v1", "http://example.com/v1"},
+		{"http://exa@mple.com/v1", "http://mple.com/v1"},
 	} {
 		got, err := policy.ValidateBaseURL(tc.in)
 		if err != nil {

@@ -179,7 +179,7 @@ func (s *Stack) NewClient(baseURL string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, origin, parsed, err := canonicalizeBaseURL(canonical, false)
+	_, origin, parsed, _, err := canonicalizeBaseURL(canonical, false)
 	if err != nil {
 		return nil, err
 	}

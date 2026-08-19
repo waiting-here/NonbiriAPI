@@ -137,7 +137,7 @@ func TestEgressPolicyBaseURLValidation(t *testing.T) {
 	if withoutSlash == withSlash {
 		t.Fatalf("trailing slash distinction was lost: %q", withoutSlash)
 	}
-	if withoutSlash != "https://example.com:443/v1" || withSlash != "https://example.com:443/v1/" {
+	if withoutSlash != "https://example.com/v1" || withSlash != "https://example.com/v1/" {
 		t.Fatalf("unexpected path normalization: %q / %q", withoutSlash, withSlash)
 	}
 
@@ -186,7 +186,7 @@ func TestEgressPolicyExactOriginOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, err := policy.ValidateBaseURL("https://private.example/api/"); err != nil || got != "https://private.example:443/api/" {
+	if got, err := policy.ValidateBaseURL("https://private.example/api/"); err != nil || got != "https://private.example/api/" {
 		t.Fatalf("allowlist default-port equivalence = %q, %v", got, err)
 	}
 }

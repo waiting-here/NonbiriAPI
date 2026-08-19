@@ -105,7 +105,7 @@ func NewEgressPolicy(entries []string) (*EgressPolicy, error) {
 		if strings.TrimSpace(entry) == "" {
 			continue
 		}
-		_, origin, _, err := canonicalizeBaseURL(entry, true)
+		_, origin, _, _, err := canonicalizeBaseURL(entry, true)
 		if err != nil {
 			return nil, fmt.Errorf("invalid egress allowlist entry %d: %w", i+1, err)
 		}
@@ -120,7 +120,7 @@ func NewEgressPolicy(entries []string) (*EgressPolicy, error) {
 // origin must be identical, preventing the endpoint form from becoming an IP
 // discovery oracle. Every dial performs the authoritative DNS and self check.
 func (p *EgressPolicy) ValidateBaseURL(raw string) (string, error) {
-	canonical, origin, parsed, err := canonicalizeBaseURL(raw, false)
+	_, origin, parsed, explicitPort, err := canonicalizeBaseURL(raw, false)
 	if err != nil {
 		return "", err
 	}
@@ -135,7 +135,7 @@ func (p *EgressPolicy) ValidateBaseURL(raw string) (string, error) {
 			return "", invalidBaseURL("non-public IP addresses require an exact-origin allowlist entry")
 		}
 	}
-	return canonical, nil
+	return displayBaseURL(parsed, explicitPort), nil
 }
 
 // AddSelfOrigins registers the process's public station names, every A/AAAA
@@ -191,7 +191,7 @@ func (p *EgressPolicy) AddSelfOrigins(parent context.Context, cfg *config.Config
 	addDefaultStationOrigins(selfOrigins, userHost, userPort)
 
 	if strings.TrimSpace(cfg.SiteBaseURL) != "" {
-		_, siteOrigin, _, siteErr := canonicalizeBaseURL(cfg.SiteBaseURL, true)
+		_, siteOrigin, _, _, siteErr := canonicalizeBaseURL(cfg.SiteBaseURL, true)
 		if siteErr != nil {
 			return fmt.Errorf("invalid user station origin: %w", siteErr)
 		}
@@ -318,7 +318,7 @@ func parseConfiguredHost(raw string) (host string, port string, err error) {
 		return "", "", nil
 	}
 	if strings.Contains(raw, "://") {
-		_, _, parsed, parseErr := canonicalizeBaseURL(raw, true)
+		_, _, parsed, _, parseErr := canonicalizeBaseURL(raw, true)
 		if parseErr != nil {
 			return "", "", parseErr
 		}
@@ -372,46 +372,47 @@ func parseConfiguredHost(raw string) (host string, port string, err error) {
 	return canonical, "", hostErr
 }
 
-func canonicalizeBaseURL(raw string, exactOrigin bool) (canonical string, origin string, parsed *url.URL, err error) {
+func canonicalizeBaseURL(raw string, exactOrigin bool) (canonical string, origin string, parsed *url.URL, explicitPort bool, err error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "", "", nil, invalidBaseURL("URL is required")
+		return "", "", nil, false, invalidBaseURL("URL is required")
 	}
 	if len(raw) > maxBaseURLBytes {
-		return "", "", nil, invalidBaseURL("URL is too long")
+		return "", "", nil, false, invalidBaseURL("URL is too long")
 	}
 	if !utf8.ValidString(raw) || hasUnsafeControl(raw) {
-		return "", "", nil, invalidBaseURL("URL contains invalid characters")
+		return "", "", nil, false, invalidBaseURL("URL contains invalid characters")
 	}
 
 	u, parseErr := url.Parse(raw)
 	if parseErr != nil {
-		return "", "", nil, invalidBaseURL("malformed URL")
+		return "", "", nil, false, invalidBaseURL("malformed URL")
 	}
 	if u.Opaque != "" {
-		return "", "", nil, invalidBaseURL("opaque URLs are not supported")
+		return "", "", nil, false, invalidBaseURL("opaque URLs are not supported")
 	}
 	scheme := strings.ToLower(u.Scheme)
 	if scheme != "http" && scheme != "https" {
-		return "", "", nil, invalidBaseURL("scheme must be http or https")
+		return "", "", nil, false, invalidBaseURL("scheme must be http or https")
 	}
 	if u.Host == "" || u.Hostname() == "" {
-		return "", "", nil, invalidBaseURL("hostname is required")
+		return "", "", nil, false, invalidBaseURL("hostname is required")
 	}
 	if strings.Contains(u.Host, "\\") {
-		return "", "", nil, invalidBaseURL("hostname contains an invalid character")
+		return "", "", nil, false, invalidBaseURL("hostname contains an invalid character")
 	}
 	if exactOrigin && (u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "") {
-		return "", "", nil, invalidBaseURL("allowlist entries must be exact origins")
+		return "", "", nil, false, invalidBaseURL("allowlist entries must be exact origins")
 	}
 
 	host, hostErr := canonicalHost(u.Hostname())
 	if hostErr != nil {
-		return "", "", nil, hostErr
+		return "", "", nil, false, hostErr
 	}
 	port := u.Port()
+	explicitPort = port != ""
 	if strings.HasSuffix(u.Host, ":") {
-		return "", "", nil, invalidBaseURL("port is invalid")
+		return "", "", nil, false, invalidBaseURL("port is invalid")
 	}
 	if port == "" {
 		if scheme == "https" {
@@ -422,14 +423,14 @@ func canonicalizeBaseURL(raw string, exactOrigin bool) (canonical string, origin
 	} else {
 		port, err = parsePort(port)
 		if err != nil {
-			return "", "", nil, invalidBaseURL("port is invalid")
+			return "", "", nil, false, invalidBaseURL("port is invalid")
 		}
 	}
 
 	escapedPath := u.EscapedPath()
 	if exactOrigin {
 		if escapedPath != "" && escapedPath != "/" {
-			return "", "", nil, invalidBaseURL("allowlist entries must not contain a path")
+			return "", "", nil, false, invalidBaseURL("allowlist entries must not contain a path")
 		}
 		escapedPath = ""
 	} else {
@@ -437,16 +438,40 @@ func canonicalizeBaseURL(raw string, exactOrigin bool) (canonical string, origin
 	}
 
 	origin = originKey(scheme, host, port)
+	// The internal canonical URL always carries the explicit port. This form
+	// drives the dialer (NewClient), the gate concurrency key, and origin
+	// matching, so equivalent default ports collapse to one key. The
+	// operator-facing display form (which omits an auto-appended default
+	// port) is derived by ValidateBaseURL from the explicitPort flag below.
 	normalized := &url.URL{Scheme: scheme, Host: net.JoinHostPort(host, port)}
 	if escapedPath != "" {
 		path, unescapeErr := url.PathUnescape(escapedPath)
 		if unescapeErr != nil {
-			return "", "", nil, invalidBaseURL("path contains an invalid escape")
+			return "", "", nil, false, invalidBaseURL("path contains an invalid escape")
 		}
 		normalized.Path = path
 		normalized.RawPath = escapedPath
 	}
-	return normalized.String(), origin, normalized, nil
+	return normalized.String(), origin, normalized, explicitPort, nil
+}
+
+// displayBaseURL renders the operator-facing canonical form from the internal
+// canonical URL. The internal form always carries the explicit port (used by
+// the dialer, the gate concurrency key, and origin matching); the display
+// form preserves the operator's input by omitting a port they did not type,
+// while a port they did type is kept verbatim. IPv6 literals are bracketed
+// with or without a port. This is the only place the stored/shown base URL
+// diverges from the internal security form.
+func displayBaseURL(internal *url.URL, explicitPort bool) string {
+	if explicitPort {
+		return internal.String()
+	}
+	host := internal.Hostname()
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	display := &url.URL{Scheme: internal.Scheme, Host: host, Path: internal.Path, RawPath: internal.RawPath}
+	return display.String()
 }
 
 func canonicalHost(raw string) (string, error) {

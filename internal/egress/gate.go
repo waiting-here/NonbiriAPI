@@ -97,7 +97,7 @@ func (g *Gate) Acquire(ctx context.Context, baseURL string) (*Permit, error) {
 	if ctx == nil {
 		return nil, errors.New("egress concurrency context is required")
 	}
-	canonical, _, _, err := canonicalizeBaseURL(baseURL, false)
+	canonical, _, _, _, err := canonicalizeBaseURL(baseURL, false)
 	if err != nil {
 		return nil, err
 	}
