@@ -28,6 +28,13 @@ function SignedOutHome() {
           <a className="btn btn-primary" href="/api/auth/discord/start">
             {t('common.signIn')}
           </a>
+          <p className="legal-reminder">
+            {t('user.home.legalReminderPre')}
+            <Link to="/terms">{t('user.home.legalReminderTerms')}</Link>
+            {t('user.home.legalReminderAnd')}
+            <Link to="/privacy">{t('user.home.legalReminderPrivacy')}</Link>
+            {t('user.home.legalReminderPost')}
+          </p>
         </div>
       </section>
       <Card>
