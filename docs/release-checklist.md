@@ -7,8 +7,8 @@ This is an operator-facing preparation checklist for the first public GitHub rel
 - [x] Confirm the canonical GitHub URL: `https://github.com/waiting-here/NonbiriAPI` and SSH remote `git@waiting-here:waiting-here/NonbiriAPI.git`.
 - [x] Set the Go module path to `github.com/waiting-here/NonbiriAPI`.
 - [x] Set the copyright holder to `waiting-here`; document AGPL-3.0 in `NOTICE` and the README.
-- [ ] Align the frontend package, API contract, changelog, and the replacement `v1.0.0-alpha.1` tag after the final dependency and test fixes; the Go binary version is identified by the tag and VCS metadata.
-- [ ] Review the final diff on `master`; create the annotated release tag only after the required CI checks pass, then keep it immutable.
+- [x] Align the frontend package, API contract, changelog, and the replacement `v1.0.0-alpha.1` tag after the final dependency and test fixes; the Go binary version is identified by the tag and VCS metadata.
+- [x] Review the final diff on `master`; create the annotated release tag only after the required CI checks pass, then keep it immutable.
 
 ## Documentation and legal
 
