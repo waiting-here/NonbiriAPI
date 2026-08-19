@@ -40,5 +40,4 @@ The project is currently in alpha. The public compatibility promise is limited t
 - Purge expired sessions at startup and during the existing six-hour maintenance sweep.
 - Create missing database directories owner-only and align the systemd/key-file guidance with the runtime's strict permission checks.
 
-[Unreleased]: https://github.com/waiting-here/NonbiriAPI/compare/v1.0.0-alpha.1...HEAD
 [1.0.0-alpha.1]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.1
