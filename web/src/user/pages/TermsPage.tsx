@@ -18,7 +18,7 @@ export function TermsPage() {
           <p className="eyebrow">{t('app.name')}</p>
           <h1>{t('user.legal.terms.title')}</h1>
           <p className="page-description">{t('user.legal.terms.intro')}</p>
-          <p className="legal-notice">{t('user.legal.terms.notice')}</p>
+          {!hasOverride ? <p className="legal-notice">{t('user.legal.terms.notice')}</p> : null}
           {authoritative ? (
             <p className="legal-notice" role="note">
               {t('user.legal.authoritativeNotice', { locale: authoritativeName })}

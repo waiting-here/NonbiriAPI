@@ -18,7 +18,7 @@ export function PrivacyPage() {
           <p className="eyebrow">{t('app.name')}</p>
           <h1>{t('user.legal.privacy.title')}</h1>
           <p className="page-description">{t('user.legal.privacy.intro')}</p>
-          <p className="legal-notice">{t('user.legal.privacy.notice')}</p>
+          {!hasOverride ? <p className="legal-notice">{t('user.legal.privacy.notice')}</p> : null}
           {authoritative ? (
             <p className="legal-notice" role="note">
               {t('user.legal.authoritativeNotice', { locale: authoritativeName })}
