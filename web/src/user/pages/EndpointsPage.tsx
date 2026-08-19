@@ -356,7 +356,10 @@ function EndpointCard({ endpoint, onEdit, onDeleted }: { endpoint: Endpoint; onE
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [requestError, setRequestError] = useState<unknown>(null);
   const [deleting, setDeleting] = useState(false);
-  const keys = useEndpointKeys(endpoint.id, open);
+  // Fetch the key list up front so its count is visible in the collapsed
+  // card header (the per-endpoint key list is server-capped, so the fan-out
+  // is bounded; the same cached query backs the expanded panel below).
+  const keys = useEndpointKeys(endpoint.id);
 
   const remove = async () => {
     setRequestError(null);
@@ -405,7 +408,7 @@ function EndpointCard({ endpoint, onEdit, onDeleted }: { endpoint: Endpoint; onE
         </div>
         <div className="detail-row">
           <dt>{t('user.endpoints.keyTitle')}</dt>
-          <dd>{open && keys.data ? t('user.endpoints.keyCount', { count: keys.data.length }) : '—'}</dd>
+          <dd>{keys.data ? t('user.endpoints.keyCount', { count: keys.data.length }) : '—'}</dd>
         </div>
       </dl>
       <div className="form-actions">

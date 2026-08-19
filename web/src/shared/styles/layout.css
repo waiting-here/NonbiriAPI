@@ -2,7 +2,7 @@
 
 .brand {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.45rem;
   color: var(--nb-color-text);
   font-size: 1.05rem;
@@ -154,8 +154,13 @@
 }
 
 .user-main {
+  /* Cap and center the reading column: an unbounded main area leaves cards
+     pinned to the left with a large empty right side on wide viewports. The
+     cap also bounds text line length now that paragraphs have no own cap. */
   width: 100%;
+  max-width: 72rem;
   min-width: 0;
+  margin-inline: auto;
   padding: clamp(1.4rem, 4vw, 3.25rem) clamp(1rem, 4vw, 2rem) 4rem;
 }
 
@@ -270,10 +275,8 @@
 }
 
 .item-card {
-  /* Cap the content line length: an unbounded card leaves the header badge
-     stranded against the right edge on wide viewports. Grid tracks do not
-     shrink by themselves, so minmax(0, …) is required on the parent. */
-  max-width: 72rem;
+  /* No own width cap: the centered .user-main container bounds the width, so
+     the card fills it on desktop and shrinks with it on narrow viewports. */
   padding: 1rem;
   background: var(--nb-color-surface-raised);
   border: 1px solid var(--nb-color-border);
@@ -570,6 +573,12 @@
   padding: 0.65rem 0.8rem;
   color: var(--nb-color-text-muted);
   font-size: 0.86rem;
+}
+
+.legal-reminder {
+  margin: 0.75rem 0 0;
+  color: var(--nb-color-text-muted);
+  font-size: 0.84rem;
 }
 
 .diagnostic {
@@ -873,6 +882,59 @@ tr:first-child td {
   border-bottom: 0;
 }
 
+.binding-row-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.binding-row-info .mono {
+  overflow-wrap: anywhere;
+}
+
+.drag-handle {
+  display: inline-flex;
+  flex: none;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.9rem;
+  min-height: 2.1rem;
+  margin-left: -0.35rem;
+  border: 1px dashed transparent;
+  border-radius: var(--nb-radius-sm);
+  color: var(--nb-color-text-muted);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.drag-handle:hover,
+.drag-handle:focus-visible {
+  color: var(--nb-color-accent);
+  border-color: var(--nb-color-accent);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-handle.is-disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.binding-row.is-dragging {
+  opacity: 0.5;
+}
+
+.binding-row.drop-before {
+  box-shadow: inset 0 2px 0 0 var(--nb-color-accent);
+}
+
+.binding-row.drop-after {
+  box-shadow: inset 0 -2px 0 0 var(--nb-color-accent);
+}
+
 .plain-list li > span:last-child,
 .table-note {
   display: block;
@@ -1104,10 +1166,6 @@ tr:first-child td {
   border: 1px solid var(--nb-color-border);
   border-radius: var(--nb-radius-sm);
   background: var(--nb-color-surface-raised);
-}
-
-.security-actions p {
-  max-width: 65ch;
 }
 
 .preferences-form {

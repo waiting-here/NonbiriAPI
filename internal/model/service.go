@@ -44,6 +44,7 @@ type Repository interface {
 	ListBindings(ctx context.Context, userID, modelID int64) ([]db.ModelBinding, error)
 	CreateBinding(ctx context.Context, userID, modelID, endpointKeyID int64, upstreamModelID string, ord, now int64) (db.ModelBinding, error)
 	UpdateBinding(ctx context.Context, userID, modelID, bindingID int64, ord *int64, upstreamModelID *string, now int64) (db.ModelBinding, error)
+	ReorderBindings(ctx context.Context, userID, modelID int64, order []int64) ([]db.ModelBinding, error)
 	DeleteBinding(ctx context.Context, userID, modelID, bindingID int64) error
 }
 
@@ -248,6 +249,24 @@ func (s *Service) DeleteBinding(ctx context.Context, userID, modelID, bindingID 
 		return mapRepoError(err)
 	}
 	return nil
+}
+
+// ReorderBindings reassigns the ord of every binding on a model owned by
+// userID to the position of its id in order. The order array must be an exact
+// permutation of the model's current binding ids; a stale or mismatched array
+// is a conflict. The store reassigns all positions in one transaction.
+func (s *Service) ReorderBindings(ctx context.Context, userID, modelID int64, order []int64) ([]db.ModelBinding, error) {
+	if s == nil || s.repo == nil || userID <= 0 || modelID <= 0 {
+		return nil, db.ErrNotFound
+	}
+	if _, err := s.repo.GetModel(ctx, userID, modelID); err != nil {
+		return nil, mapRepoError(err)
+	}
+	bindings, err := s.repo.ReorderBindings(ctx, userID, modelID, order)
+	if err != nil {
+		return nil, mapRepoError(err)
+	}
+	return bindings, nil
 }
 
 // --- validation -------------------------------------------------------------

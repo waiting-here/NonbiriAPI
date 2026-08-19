@@ -129,6 +129,18 @@ export function AdminLayout() {
     document.title = `${siteName} · ${t('admin.shell.title')}`;
   }, [t, siteName]);
 
+  // Sync the browser tab icon with the configured site logo. The default
+  // mark is baked into index.html; capture it on mount so clearing the logo
+  // restores it instead of leaving a stale icon.
+  const [defaultIcon] = useState(
+    () => document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.href ?? '',
+  );
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (!link) return;
+    link.href = siteLogoURL || defaultIcon;
+  }, [siteLogoURL, defaultIcon]);
+
   if (session.isPending) return <LoadingState />;
   if (session.error && !isUnauthorized(session.error) && !isNotFoundError(session.error)) {
     return <ErrorState error={session.error} onRetry={() => void session.refetch()} />;

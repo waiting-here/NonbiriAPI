@@ -16,6 +16,7 @@ import { hasControlCharacters } from '@shared/query/normalize';
 import {
   type ModelBinding,
   type PlatformModel,
+  normalizeBindingList,
   useEndpointKeys,
   useEndpoints,
   useKeyModels,
@@ -131,7 +132,6 @@ function BindingForm({ modelId, onSaved }: { modelId: string; onSaved: () => voi
   const [endpointId, setEndpointId] = useState('');
   const [keyId, setKeyId] = useState('');
   const [upstreamModelId, setUpstreamModelId] = useState('');
-  const [ord, setOrd] = useState('');
   const [requestError, setRequestError] = useState<unknown>(null);
   const [validationError, setValidationError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -153,21 +153,7 @@ function BindingForm({ modelId, onSaved }: { modelId: string; onSaved: () => voi
       setValidationError(t('common.formInvalid'));
       return;
     }
-    const payload: { endpoint_key_id: number; upstream_model_id: string; ord?: number } = {
-      endpoint_key_id: endpointKeyId,
-      upstream_model_id: upstreamModelId,
-    };
-    if (ord.trim()) {
-      if (!/^\d+$/.test(ord.trim())) {
-        setValidationError(t('user.models.invalidOrder'));
-        return;
-      }
-      payload.ord = Number(ord.trim());
-      if (!Number.isSafeInteger(payload.ord) || payload.ord < 0) {
-        setValidationError(t('user.models.invalidOrder'));
-        return;
-      }
-    }
+    const payload = { endpoint_key_id: endpointKeyId, upstream_model_id: upstreamModelId };
     setBusy(true);
     try {
       await apiFetch<unknown>(`/api/models/${encodeURIComponent(modelId)}/bindings`, {
@@ -175,7 +161,6 @@ function BindingForm({ modelId, onSaved }: { modelId: string; onSaved: () => voi
         json: payload,
       });
       setUpstreamModelId('');
-      setOrd('');
       onSaved();
     } catch (error) {
       setRequestError(error);
@@ -260,10 +245,6 @@ function BindingForm({ modelId, onSaved }: { modelId: string; onSaved: () => voi
             <small className="muted">{t('user.models.noFetchedModels')}</small>
           ) : null}
         </div>
-        <label>
-          <span>{t('user.models.order')} <em>{t('common.optional')}</em></span>
-          <input type="number" min="0" step="1" value={ord} onChange={(event) => setOrd(event.target.value)} />
-        </label>
       </div>
       {validationError ? <p className="field-error" role="alert">{validationError}</p> : null}
       {requestError ? <ErrorState error={requestError} /> : null}
@@ -276,7 +257,39 @@ function BindingForm({ modelId, onSaved }: { modelId: string; onSaved: () => voi
   );
 }
 
-function BindingRow({ modelId, binding, onDeleted }: { modelId: string; binding: ModelBinding; onDeleted: () => void }) {
+interface BindingRowProps {
+  modelId: string;
+  binding: ModelBinding;
+  index: number;
+  /** True only under the ordered strategy, where row order steers routing. */
+  canReorder: boolean;
+  /** Temporarily disables drag and keyboard moves while a reorder request runs. */
+  reorderDisabled: boolean;
+  dragging: boolean;
+  dropIndicator: 'before' | 'after' | null;
+  onDragStart: (index: number) => void;
+  onDragTarget: (index: number, after: boolean) => void;
+  onDragEnd: () => void;
+  onDropAt: () => void;
+  onKeyboardMove: (index: number, delta: number) => void;
+  onDeleted: () => void;
+}
+
+function BindingRow({
+  modelId,
+  binding,
+  index,
+  canReorder,
+  reorderDisabled,
+  dragging,
+  dropIndicator,
+  onDragStart,
+  onDragTarget,
+  onDragEnd,
+  onDropAt,
+  onKeyboardMove,
+  onDeleted,
+}: BindingRowProps) {
   const { t } = useTranslation();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -299,11 +312,67 @@ function BindingRow({ modelId, binding, onDeleted }: { modelId: string; binding:
     }
   };
 
+  const rowClass = ['binding-row'];
+  if (dragging) rowClass.push('is-dragging');
+  if (dropIndicator === 'before') rowClass.push('drop-before');
+  if (dropIndicator === 'after') rowClass.push('drop-after');
+
   return (
-    <li className="binding-row">
-      <div>
+    <li
+      className={rowClass.join(' ')}
+      onDragEnter={(event) => {
+        if (canReorder && !reorderDisabled) event.preventDefault();
+      }}
+      onDragOver={(event) => {
+        if (!canReorder || reorderDisabled) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        const rect = event.currentTarget.getBoundingClientRect();
+        onDragTarget(index, event.clientY > rect.top + rect.height / 2);
+      }}
+      onDrop={(event) => {
+        if (!canReorder || reorderDisabled) return;
+        event.preventDefault();
+        onDropAt();
+      }}
+    >
+      {canReorder ? (
+        <span
+          className={reorderDisabled ? 'drag-handle is-disabled' : 'drag-handle'}
+          role="button"
+          tabIndex={0}
+          aria-label={t('user.models.dragToReorder')}
+          aria-disabled={reorderDisabled}
+          draggable={!reorderDisabled}
+          onDragStart={(event) => {
+            if (reorderDisabled) {
+              event.preventDefault();
+              return;
+            }
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', binding.id);
+            onDragStart(index);
+          }}
+          onDragEnd={onDragEnd}
+          onKeyDown={(event) => {
+            if (reorderDisabled) return;
+            if (event.key === 'ArrowUp') {
+              event.preventDefault();
+              onKeyboardMove(index, -1);
+            } else if (event.key === 'ArrowDown') {
+              event.preventDefault();
+              onKeyboardMove(index, 1);
+            }
+          }}
+        >
+          ⠿
+        </span>
+      ) : null}
+      <div className="binding-row-info">
         <strong className="mono">{binding.upstream_model_id}</strong>
-        <span className="table-note">{t('user.models.key')}: {binding.endpoint_key_id} · {t('user.models.order')}: {binding.ord}</span>
+        <span className="table-note">
+          {t('user.models.endpoint')}: <span className="mono">{binding.endpoint_base_url}</span>
+        </span>
       </div>
       <div className="table-actions">
         <button type="button" className="btn btn-danger" onClick={() => setDeleteOpen(true)}>
@@ -334,11 +403,81 @@ function ModelCard({ model, onChanged }: { model: PlatformModel; onChanged: () =
   const [error, setError] = useState<unknown>(null);
   const [deleting, setDeleting] = useState(false);
   const bindings = useModelBindings(model.id, open);
+  // Drag indexes address gaps between rows: dropIndex n means insert before
+  // the row currently at index n (n = length appends at the end).
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [reorderBusy, setReorderBusy] = useState(false);
+  const [reorderError, setReorderError] = useState<unknown>(null);
+  const canReorder = model.route_strategy === 'ordered';
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: userKeys.models });
     void queryClient.invalidateQueries({ queryKey: userKeys.bindings(model.id) });
     void queryClient.invalidateQueries({ queryKey: userKeys.bindingsRoot });
+  };
+
+  const clearDragState = () => {
+    setDragIndex(null);
+    setDropIndex(null);
+  };
+
+  const applyReorder = async (next: ModelBinding[]) => {
+    if (reorderBusy) return;
+    const queryKey = userKeys.bindings(model.id);
+    const previous = queryClient.getQueryData<ModelBinding[]>(queryKey);
+    setReorderError(null);
+    setReorderBusy(true);
+    queryClient.setQueryData(queryKey, next);
+    try {
+      const payload = await apiFetch<unknown>(
+        `/api/models/${encodeURIComponent(model.id)}/bindings/order`,
+        { method: 'PUT', json: { order: next.map((binding) => Number(binding.id)) } },
+      );
+      queryClient.setQueryData(queryKey, normalizeBindingList(payload));
+    } catch (requestError) {
+      if (previous === undefined) {
+        queryClient.removeQueries({ queryKey });
+      } else {
+        queryClient.setQueryData(queryKey, previous);
+      }
+      void queryClient.invalidateQueries({ queryKey });
+      setReorderError(requestError);
+    } finally {
+      setReorderBusy(false);
+    }
+  };
+
+  const handleDrop = () => {
+    const from = dragIndex;
+    const to = dropIndex;
+    clearDragState();
+    const list = bindings.data;
+    if (from === null || to === null || !list) return;
+    if (from === to || from + 1 === to) return;
+    const next = [...list];
+    const [moved] = next.splice(from, 1);
+    next.splice(to > from ? to - 1 : to, 0, moved);
+    void applyReorder(next);
+  };
+
+  const moveBinding = (from: number, delta: number) => {
+    const list = bindings.data;
+    if (!list || reorderBusy) return;
+    const to = from + delta;
+    if (to < 0 || to >= list.length) return;
+    const next = [...list];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    void applyReorder(next);
+  };
+
+  const dropIndicatorFor = (index: number): 'before' | 'after' | null => {
+    if (dragIndex === null || dropIndex === null || !bindings.data) return null;
+    if (dropIndex === dragIndex || dropIndex === dragIndex + 1) return null;
+    if (dropIndex === index) return 'before';
+    if (dropIndex === index + 1 && index === bindings.data.length - 1) return 'after';
+    return null;
   };
 
   const remove = async () => {
@@ -402,19 +541,39 @@ function ModelCard({ model, onChanged }: { model: PlatformModel; onChanged: () =
           ) : bindings.data.length === 0 ? (
             <EmptyState title={t('user.models.noBindings')} body={t('user.models.noBindingsBody')} />
           ) : (
-            <ul className="binding-list">
-              {bindings.data.map((binding) => (
-                <BindingRow
-                  key={binding.id}
-                  modelId={model.id}
-                  binding={binding}
-                  onDeleted={() => {
-                    invalidate();
-                    onChanged();
-                  }}
-                />
-              ))}
-            </ul>
+            <>
+              {reorderError ? <ErrorState error={reorderError} /> : null}
+              {model.route_strategy === 'random' ? (
+                <p className="table-note">{t('user.models.randomOrderNote')}</p>
+              ) : null}
+              <ul className="binding-list">
+                {bindings.data.map((binding, index) => (
+                  <BindingRow
+                    key={binding.id}
+                    modelId={model.id}
+                    binding={binding}
+                    index={index}
+                    canReorder={canReorder}
+                    reorderDisabled={reorderBusy}
+                    dragging={dragIndex === index}
+                    dropIndicator={dropIndicatorFor(index)}
+                    onDragStart={(i) => {
+                      setDragIndex(i);
+                      setDropIndex(null);
+                      setReorderError(null);
+                    }}
+                    onDragTarget={(i, after) => setDropIndex(after ? i + 1 : i)}
+                    onDragEnd={clearDragState}
+                    onDropAt={handleDrop}
+                    onKeyboardMove={moveBinding}
+                    onDeleted={() => {
+                      invalidate();
+                      onChanged();
+                    }}
+                  />
+                ))}
+              </ul>
+            </>
           )}
         </div>
       ) : null}

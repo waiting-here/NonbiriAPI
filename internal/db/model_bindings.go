@@ -20,12 +20,15 @@ type ModelBinding struct {
 	UpstreamModelID string
 	Ord             int64
 	CreatedAt       int64
+	EndpointBaseURL string // the bound key's endpoint base_url, resolved for display
 }
 
 const bindingSelectSQL = `
-SELECT b.id, b.model_id, b.endpoint_key_id, b.upstream_model_id, b.ord, b.created_at
+SELECT b.id, b.model_id, b.endpoint_key_id, b.upstream_model_id, b.ord, b.created_at, e.base_url
 FROM model_bindings b
 JOIN models m ON b.model_id = m.id
+JOIN endpoint_keys ek ON ek.id = b.endpoint_key_id
+JOIN endpoints e ON ek.endpoint_id = e.id AND e.user_id = m.user_id
 WHERE b.model_id=? AND m.user_id=?`
 
 // ListBindings returns the bindings of modelID owned by userID, ordered by
@@ -275,9 +278,110 @@ func (s *Store) DeleteBinding(ctx context.Context, userID, modelID, bindingID in
 	return nil
 }
 
+// maxReorderBindings bounds the accepted order slice length. It is well above
+// the per-model binding cap (DefaultBindingLimit) so a legitimate reorder never
+// hits it, while a pathologically large payload is rejected before any work.
+const maxReorderBindings = 200
+
+// ReorderBindings atomically reassigns the ord of every binding on modelID
+// (owned by userID) to the position of its id in order. The order slice must
+// list exactly the model's current binding ids once each (no missing, extra,
+// duplicate, or foreign id); any mismatch is ErrConflict (the request is stale
+// relative to the current binding set). The whole reassignment is one
+// transaction, so a partial reorder never commits. Ownership is enforced at
+// the read (the current-id set is user-scoped) and again at every update.
+func (s *Store) ReorderBindings(ctx context.Context, userID, modelID int64, order []int64) ([]ModelBinding, error) {
+	if userID <= 0 || modelID <= 0 {
+		return nil, ErrNotFound
+	}
+	if len(order) > maxReorderBindings {
+		return nil, ErrConflict
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin reorder bindings: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	// Read the model's current binding ids, ownership-scoped via the models join.
+	rows, err := tx.QueryContext(ctx, `
+SELECT b.id FROM model_bindings b
+JOIN models m ON b.model_id = m.id
+WHERE b.model_id=? AND m.user_id=?
+ORDER BY b.ord, b.id`, modelID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("read binding ids for reorder: %w", err)
+	}
+	current := make(map[int64]struct{}, len(order))
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan binding id for reorder: %w", err)
+		}
+		current[id] = struct{}{}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate binding ids for reorder: %w", err)
+	}
+
+	// The order array must be an exact permutation of the current binding set.
+	if len(order) != len(current) {
+		return nil, ErrConflict
+	}
+	seen := make(map[int64]struct{}, len(order))
+	for _, id := range order {
+		if id <= 0 {
+			return nil, ErrConflict
+		}
+		if _, dup := seen[id]; dup {
+			return nil, ErrConflict
+		}
+		if _, ok := current[id]; !ok {
+			return nil, ErrConflict
+		}
+		seen[id] = struct{}{}
+	}
+
+	for i, id := range order {
+		res, err := tx.ExecContext(ctx, `
+UPDATE model_bindings SET ord=?
+WHERE id=? AND model_id=?
+  AND model_id IN (SELECT id FROM models WHERE id=? AND user_id=?)`,
+			int64(i), id, modelID, modelID, userID)
+		if err != nil {
+			return nil, fmt.Errorf("reorder binding: %w", err)
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return nil, fmt.Errorf("reorder binding rows affected: %w", err)
+		}
+		if affected == 0 {
+			return nil, ErrNotFound
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit reorder bindings: %w", err)
+	}
+	committed = true
+
+	bindings, err := s.ListBindings(ctx, userID, modelID)
+	if err != nil {
+		return nil, fmt.Errorf("reread bindings after reorder: %w", err)
+	}
+	return bindings, nil
+}
+
 func scanBindingRow(row *sql.Row) (ModelBinding, error) {
 	var b ModelBinding
-	err := row.Scan(&b.ID, &b.ModelID, &b.EndpointKeyID, &b.UpstreamModelID, &b.Ord, &b.CreatedAt)
+	err := row.Scan(&b.ID, &b.ModelID, &b.EndpointKeyID, &b.UpstreamModelID, &b.Ord, &b.CreatedAt, &b.EndpointBaseURL)
 	if err != nil {
 		return ModelBinding{}, err
 	}
@@ -288,7 +392,7 @@ func scanBindings(rows *sql.Rows) ([]ModelBinding, error) {
 	var out []ModelBinding
 	for rows.Next() {
 		var b ModelBinding
-		if err := rows.Scan(&b.ID, &b.ModelID, &b.EndpointKeyID, &b.UpstreamModelID, &b.Ord, &b.CreatedAt); err != nil {
+		if err := rows.Scan(&b.ID, &b.ModelID, &b.EndpointKeyID, &b.UpstreamModelID, &b.Ord, &b.CreatedAt, &b.EndpointBaseURL); err != nil {
 			return nil, fmt.Errorf("scan binding: %w", err)
 		}
 		out = append(out, b)

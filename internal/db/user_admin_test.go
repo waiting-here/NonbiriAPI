@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -344,6 +345,42 @@ func TestSiteConfigUpsertAndRead(t *testing.T) {
 	// adminapi registry still rejects newlines for single-line keys.
 	if err := st.SetSiteConfigValue("ok", "line\nbreak"); err != nil {
 		t.Fatalf("multiline value: err=%v, want nil", err)
+	}
+	// The read path must accept multiline values too: GetSiteConfigValue must
+	// not reject a stored value just because it contains newlines. This is the
+	// regression guard for the legal-override save bug (validateIdentityText was
+	// used on read, rejecting newlines and capping at 4096 bytes).
+	got, err := st.GetSiteConfigValue("ok")
+	if err != nil || got != "line\nbreak" {
+		t.Fatalf("GetSiteConfigValue multiline = %q, %v", got, err)
+	}
+	// A document over the old 4096-byte identity cap but under the 64 KiB
+	// multiline cap round-trips through both write and read.
+	big := strings.Repeat("line of legal text.\n", 230) // 4.6 KiB > 4096, with newlines
+	if len(big) <= 4096 {
+		t.Fatalf("test big document too short: %d", len(big))
+	}
+	if err := st.SetSiteConfigValue("legal_privacy_override_zh", big); err != nil {
+		t.Fatalf("SetSiteConfigValue big multiline: err=%v", err)
+	}
+	if got, err := st.GetSiteConfigValue("legal_privacy_override_zh"); err != nil || got != big {
+		t.Fatalf("GetSiteConfigValue big multiline round-trip = %q (len=%d), %v", got, len(got), err)
+	}
+	// The 64 KiB ceiling round-trips at the storage layer (the admin HTTP
+	// body limit is smaller; that boundary is covered by the adminapi tests).
+	ceiling := strings.Repeat("x\n", 32768) // 65536 bytes, with newlines
+	if len(ceiling) != maxSiteConfigValueBytes {
+		t.Fatalf("ceiling len=%d want %d", len(ceiling), maxSiteConfigValueBytes)
+	}
+	if err := st.SetSiteConfigValue("legal_terms_override_zh", ceiling); err != nil {
+		t.Fatalf("SetSiteConfigValue ceiling: err=%v", err)
+	}
+	if got, err := st.GetSiteConfigValue("legal_terms_override_zh"); err != nil || got != ceiling {
+		t.Fatalf("GetSiteConfigValue ceiling round-trip = %q (len=%d), %v", got, len(got), err)
+	}
+	over := strings.Repeat("x", maxSiteConfigValueBytes+1)
+	if err := st.SetSiteConfigValue("legal_terms_override_zh", over); err != ErrConflict {
+		t.Fatalf("over-ceiling: err=%v, want ErrConflict", err)
 	}
 	long := make([]byte, maxSiteConfigValueBytes+1)
 	for i := range long {
