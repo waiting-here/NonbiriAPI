@@ -354,11 +354,15 @@ type modelResp struct {
 }
 
 type bindingResp struct {
-	ID              int64  `json:"id"`
-	EndpointKeyID   int64  `json:"endpoint_key_id"`
-	EndpointBaseURL string `json:"endpoint_base_url"`
-	UpstreamModelID string `json:"upstream_model_id"`
-	Ord             int64  `json:"ord"`
+	ID                     int64  `json:"id"`
+	EndpointKeyID          int64  `json:"endpoint_key_id"`
+	EndpointBaseURL        string `json:"endpoint_base_url"`
+	EndpointNote           string `json:"endpoint_note,omitempty"`
+	EndpointKeyDisplayHead string `json:"endpoint_key_display_head,omitempty"`
+	EndpointKeyDisplayTail string `json:"endpoint_key_display_tail,omitempty"`
+	EndpointKeyNote        string `json:"endpoint_key_note,omitempty"`
+	UpstreamModelID        string `json:"upstream_model_id"`
+	Ord                    int64  `json:"ord"`
 }
 
 func modelResponse(m db.Model) modelResp {
@@ -381,6 +385,8 @@ func modelListResponse(models []db.Model) []modelResp {
 func bindingResponse(b db.ModelBinding) bindingResp {
 	return bindingResp{
 		ID: b.ID, EndpointKeyID: b.EndpointKeyID, EndpointBaseURL: b.EndpointBaseURL,
+		EndpointNote: b.EndpointNote, EndpointKeyDisplayHead: b.EndpointKeyDisplayHead,
+		EndpointKeyDisplayTail: b.EndpointKeyDisplayTail, EndpointKeyNote: b.EndpointKeyNote,
 		UpstreamModelID: b.UpstreamModelID, Ord: b.Ord,
 	}
 }
