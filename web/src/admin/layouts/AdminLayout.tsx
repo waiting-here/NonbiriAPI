@@ -27,7 +27,7 @@ const NAV_ITEMS: NavItem[] = [
 
 function AdminLogin({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
   const { t } = useTranslation();
-  const config = usePublicConfig();
+  const config = usePublicConfig(true, '/admin/api/config');
   const siteName = config.data?.siteName || t('app.name');
   const siteLogoURL = config.data?.siteLogoURL;
   const [username, setUsername] = useState('');
@@ -118,7 +118,7 @@ export function AdminLayout() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const session = useAdminSession();
-  const config = usePublicConfig();
+  const config = usePublicConfig(true, '/admin/api/config');
   const siteName = config.data?.siteName || t('app.name');
   const siteLogoURL = config.data?.siteLogoURL;
   const [menuOpen, setMenuOpen] = useState(false);

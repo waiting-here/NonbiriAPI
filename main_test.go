@@ -58,6 +58,7 @@ func TestHTTPHandlerStationAndPathMatrix(t *testing.T) {
 		{name: "user v1 not found", host: "example.com", path: "/v1/models", wantStatus: http.StatusNotFound, wantBody: `"code":"not_found"`},
 		{name: "admin api not found", host: "admin.example.com", path: "/admin/api/unknown", wantStatus: http.StatusNotFound, wantBody: `"code":"not_found"`},
 		{name: "admin cannot reach user api", host: "admin.example.com", path: "/api/unknown", wantStatus: http.StatusNotFound, wantBody: `"code":"not_found"`},
+		{name: "admin cannot reach user config", host: "admin.example.com", path: "/api/config", wantStatus: http.StatusNotFound, wantBody: `"code":"not_found"`},
 		{name: "admin cannot reach user v1", host: "admin.example.com", path: "/v1/models", wantStatus: http.StatusNotFound, wantBody: `"code":"not_found"`},
 		{name: "user cannot reach admin api", host: "example.com", path: "/admin/api/unknown", wantStatus: http.StatusNotFound, wantBody: `"code":"not_found"`},
 		{name: "unknown host is not user", host: "other.example.com", path: "/", wantStatus: http.StatusBadRequest, wantBody: `"code":"invalid_request"`},
@@ -177,6 +178,33 @@ func TestApplicationWiringProtectsAllEntryPoints(t *testing.T) {
 	for _, secret := range []string{"default_rpm_per_user", "global_rpm", "discord_guild_id", "discord_role_id", "oauth_start_rate_limit"} {
 		if _, ok := cfgBody[secret]; ok {
 			t.Fatalf("/api/config leaked %q: %s", secret, cfgResp.Body.String())
+		}
+	}
+
+	// The admin station lives on a separate host and the host boundary blocks
+	// user API paths there, so the admin shell fetches the same display-only
+	// public config from /admin/api/config. It must be unauthenticated (the
+	// admin login screen needs the site name/logo before signing in), project
+	// the same allowlist, reject secrets, and be no-store.
+	adminCfgResp := testHTTPResponse(t, app.handler, http.MethodGet, "127.0.0.2", "/admin/api/config")
+	if adminCfgResp.Code != http.StatusOK {
+		t.Fatalf("/admin/api/config status=%d body=%s", adminCfgResp.Code, adminCfgResp.Body.String())
+	}
+	if adminCfgResp.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("/admin/api/config cache-control=%q", adminCfgResp.Header().Get("Cache-Control"))
+	}
+	var adminCfgBody map[string]any
+	if err := json.Unmarshal(adminCfgResp.Body.Bytes(), &adminCfgBody); err != nil {
+		t.Fatalf("/admin/api/config body=%s err=%v", adminCfgResp.Body.String(), err)
+	}
+	for _, k := range []string{"site_name", "site_logo_url", "default_locale", "legal_privacy_override_zh", "legal_privacy_override_en", "legal_terms_override_zh", "legal_terms_override_en", "legal_authoritative_locale"} {
+		if _, ok := adminCfgBody[k]; !ok {
+			t.Fatalf("/admin/api/config missing %q: %s", k, adminCfgResp.Body.String())
+		}
+	}
+	for _, secret := range []string{"default_rpm_per_user", "global_rpm", "discord_guild_id", "discord_role_id", "oauth_start_rate_limit"} {
+		if _, ok := adminCfgBody[secret]; ok {
+			t.Fatalf("/admin/api/config leaked %q: %s", secret, adminCfgResp.Body.String())
 		}
 	}
 }
