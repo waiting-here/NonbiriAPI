@@ -85,6 +85,7 @@ export interface ModelBinding {
   id: string;
   endpoint_key_id: string;
   upstream_model_id: string;
+  endpoint_base_url: string;
   ord: number;
 }
 
@@ -278,8 +279,17 @@ function normalizeBinding(value: unknown): ModelBinding {
     id: idValue(recordValue(record, 'id')),
     endpoint_key_id: idValue(recordValue(record, 'endpoint_key_id')),
     upstream_model_id: text(recordValue(record, 'upstream_model_id'), 256, '—'),
+    endpoint_base_url: text(recordValue(record, 'endpoint_base_url'), 2048, '—'),
     ord: Math.max(0, integerValue(recordValue(record, 'ord'))),
   };
+}
+
+/**
+ * Normalize a binding list payload. The reorder endpoint returns the same
+ * array shape as the list endpoint, so both paths share this normalizer.
+ */
+export function normalizeBindingList(value: unknown): ModelBinding[] {
+  return listPayload(value).map(normalizeBinding);
 }
 
 function normalizeCallerKey(value: unknown): CallerKeyMetadata {
@@ -445,9 +455,9 @@ export function useModelBindings(modelId: string | undefined, enabled = true) {
     queryKey: modelId ? userKeys.bindings(modelId) : ['user', 'bindings', 'none'],
     queryFn: async () => {
       if (!modelId) return [];
-      return listPayload(
+      return normalizeBindingList(
         await apiFetch<unknown>(`/api/models/${encodeURIComponent(modelId)}/bindings`),
-      ).map(normalizeBinding);
+      );
     },
     enabled: enabled && Boolean(modelId),
   });
