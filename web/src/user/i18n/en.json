@@ -3,7 +3,7 @@
     "shell": {
       "navLabel": "Main navigation",
       "title": "User console",
-      "brandSuffix": "Your workspace"
+      "avatarAlt": "Avatar"
     },
     "home": {
       "nav": "Home",
@@ -35,7 +35,7 @@
       "addTitle": "Add an endpoint",
       "editTitle": "Edit endpoint",
       "baseUrl": "Base URL",
-      "baseUrlHint": "Use an HTTPS or HTTP URL. The server applies its canonical form.",
+      "baseUrlHint": "Enter the full API base URL up to and including the version path (e.g. https://api.example.com/v1). The system appends /models and /chat/completions; do not add those paths yourself.",
       "note": "Note",
       "notePlaceholder": "Optional context for this endpoint",
       "enabled": "Enabled",
@@ -53,6 +53,9 @@
       "noEndpoints": "No endpoints yet",
       "noEndpointsBody": "Add an endpoint to begin fetching the models available to your keys.",
       "listTitle": "Your endpoints",
+      "searchPlaceholder": "Search by base URL or note",
+      "searchAria": "Search endpoints",
+      "filterEnabled": "Enabled status",
       "keyTitle": "Endpoint keys",
       "keyCount": "{{count}} keys",
       "addKey": "Add key",
@@ -94,13 +97,17 @@
       "provider": "Provider",
       "model": "Model name",
       "providerPlaceholder": "example-provider",
+      "providerHint": "Provider and model name combine into provider/model, the platform model name seen by callers.",
       "modelPlaceholder": "example-model",
+      "modelHint": "After creating the model, add a binding that attaches it to an upstream model fetched on an endpoint key before it can be called.",
       "strategy": "Routing strategy",
       "ordered": "Ordered failover",
       "random": "Random selection",
       "silentRetry": "Silent retry on upstream failure",
       "create": "Create model",
       "listTitle": "Your platform models",
+      "searchPlaceholder": "Search by full name or provider",
+      "searchAria": "Search models",
       "noModels": "No platform models yet",
       "noModelsBody": "Create a model name before adding bindings.",
       "bindings": "Bindings",
@@ -165,6 +172,7 @@
       "resolved": "Resolved",
       "resolvedValue": "Acknowledged",
       "resolve": "Acknowledge",
+      "filterResolved": "Resolution status",
       "empty": "No issues returned",
       "emptyBody": "The service has not returned any issue records for this account."
     },

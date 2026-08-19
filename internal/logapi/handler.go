@@ -120,7 +120,7 @@ func (h *Handler) userUsage(w http.ResponseWriter, r *http.Request) {
 	httperr.WriteJSON(w, http.StatusOK, usageTotalsResponse(totals))
 }
 
-// adminLogs handles GET /admin/api/logs: a bounded, keyset-paginated page of
+// adminLogs handles GET /admin/api/logs: a bounded, offset-paginated page of
 // metadata-only request-log rows across all users, newest first.
 func (h *Handler) adminLogs(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
@@ -135,12 +135,12 @@ func (h *Handler) adminLogs(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, derr)
 		return
 	}
-	logs, err := h.store.QueryRequestLogs(r.Context(), query)
+	logs, hasMore, err := h.store.QueryRequestLogs(r.Context(), query)
 	if err != nil {
 		writeRepoErr(w, err)
 		return
 	}
-	httperr.WriteJSON(w, http.StatusOK, logListResponse(logs))
+	httperr.WriteJSON(w, http.StatusOK, logListResponse(logs, hasMore))
 }
 
 // adminUsage handles GET /admin/api/usage. group_by=site (default) returns

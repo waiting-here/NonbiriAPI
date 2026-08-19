@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '@shared/components/LanguageSwitcher';
-import { ErrorState } from '@shared/components/States';
+import { ErrorState, NoticePage } from '@shared/components/States';
 import { apiFetch, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { ThemeToggle } from '@shared/theme/ThemeToggle';
 import { usePublicConfig } from '@shared/query/publicConfig';
@@ -70,7 +70,30 @@ export function UserLayout() {
   }, [location.pathname, navigate]);
 
   const signedIn = Boolean(session.data?.user);
+  const profile = session.data?.user;
+  // Server nickname / avatar win over the global Discord profile; either may
+  // be absent, in which case the global value (or nothing) is shown.
+  const displayName = profile ? profile.guild_nick || profile.username : '';
+  const profileAvatar = profile ? profile.guild_avatar_url || profile.avatar_url || '' : '';
   const showSignIn = !signedIn && (isUnauthorized(session.error) || isNotFoundError(session.error));
+
+  // Maintenance mode replaces the whole user station with a notice page so no
+  // site feature is reachable; the admin station (a separate host) is
+  // unaffected and can toggle this off. The public-config query is already in
+  // flight above, so this only takes effect once it resolves.
+  const inMaintenance = config.data?.maintenanceMode === true;
+  if (inMaintenance) {
+    return (
+      <>
+        <a className="skip-link" href="#main">
+          {t('shell.skipToContent')}
+        </a>
+        <main id="main" className="user-main" tabIndex={-1}>
+          <NoticePage titleKey="common.maintenanceTitle" bodyKey="common.maintenanceBody" />
+        </main>
+      </>
+    );
+  }
 
   return (
     <>
@@ -87,7 +110,6 @@ export function UserLayout() {
             </span>
           )}
           <span>{siteName}</span>
-          <span className="brand-suffix">{t('user.shell.brandSuffix')}</span>
         </Link>
         <button
           type="button"
@@ -115,7 +137,14 @@ export function UserLayout() {
           </ul>
         </nav>
         <div className="site-actions">
-          {signedIn ? <span className="user-chip">{session.data?.user.username}</span> : null}
+          {signedIn ? (
+            <span className="user-chip">
+              {profileAvatar ? (
+                <img className="user-chip-avatar" src={profileAvatar} alt={t('user.shell.avatarAlt')} />
+              ) : null}
+              <span>{displayName}</span>
+            </span>
+          ) : null}
           <LanguageSwitcher />
           <ThemeToggle />
           {signedIn ? (

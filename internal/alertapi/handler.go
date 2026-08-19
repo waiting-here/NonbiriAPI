@@ -78,7 +78,7 @@ func stationIs(w http.ResponseWriter, r *http.Request, expected host.Station) bo
 	return false
 }
 
-// adminAlerts handles GET /admin/api/alerts: a bounded, keyset-paginated page
+// adminAlerts handles GET /admin/api/alerts: a bounded, offset-paginated page
 // of alert rows, newest first, with an optional resolved filter.
 func (h *Handler) adminAlerts(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
@@ -93,12 +93,12 @@ func (h *Handler) adminAlerts(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, derr)
 		return
 	}
-	alerts, _, err := h.store.ListAdminAlerts(r.Context(), query)
+	alerts, hasMore, err := h.store.ListAdminAlerts(r.Context(), query)
 	if err != nil {
 		writeRepoErr(w, err)
 		return
 	}
-	httperr.WriteJSON(w, http.StatusOK, alertListResponse(alerts))
+	httperr.WriteJSON(w, http.StatusOK, alertListResponse(alerts, hasMore))
 }
 
 // resolveAlert handles POST /admin/api/alerts/{id}/resolve: the idempotent

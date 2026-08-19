@@ -281,7 +281,7 @@ func TestIssuesListOwnershipAndPagination(t *testing.T) {
 
 	mount := newUserMount(t, env)
 
-	r := stationRequest(http.MethodGet, "/api/issues?limit=2", host.StationUser)
+	r := stationRequest(http.MethodGet, "/api/issues?page_size=2", host.StationUser)
 	r.AddCookie(userCookie(t, env))
 	rec := do(t, mount, r)
 	assertOK(t, rec)
@@ -302,10 +302,8 @@ func TestIssuesListOwnershipAndPagination(t *testing.T) {
 		t.Fatalf("created_at=%v", items[0]["created_at"])
 	}
 
-	// Page 2 via the keyset cursor.
-	r = stationRequest(http.MethodGet,
-		fmt.Sprintf("/api/issues?limit=2&before_id=%d", int64(items[1]["id"].(float64))),
-		host.StationUser)
+	// Page 2 via offset.
+	r = stationRequest(http.MethodGet, "/api/issues?page=2&page_size=2", host.StationUser)
 	r.AddCookie(userCookie(t, env))
 	rec = do(t, mount, r)
 	assertOK(t, rec)
@@ -384,14 +382,16 @@ func TestIssuesListStrictParams(t *testing.T) {
 		"?resolved=1",
 		"?resolved=TRUE",
 		"?resolved=true&resolved=false",
-		"?before_id=0",
-		"?before_id=-1",
-		"?before_id=abc",
-		"?before_id=1&before_id=2",
-		"?limit=abc",
-		"?limit=1&limit=2",
+		"?page=0",
+		"?page=-1",
+		"?page=abc",
+		"?page=1&page=2",
+		"?page_size=0",
+		"?page_size=-1",
+		"?page_size=abc",
+		"?page_size=1&page_size=2",
 		"?unknown=1",
-		"?limit=2&extra=1",
+		"?page_size=2&extra=1",
 		"?" + strings.Repeat("x", 9000),
 	}
 	for _, q := range cases {
@@ -401,9 +401,9 @@ func TestIssuesListStrictParams(t *testing.T) {
 		assertErr(t, rec, http.StatusBadRequest, httperr.CodeInvalidRequest)
 	}
 
-	// Clamping: limit=0 and oversized limits are accepted and clamped (never
-	// rejected, mirroring the log-query parser).
-	for _, q := range []string{"?limit=0", "?limit=99999", "?limit=0&resolved=false"} {
+	// page_size >= 1 is clamped to the page bound (never rejected); an explicit
+	// page is accepted.
+	for _, q := range []string{"?page_size=99999", "?page=1&page_size=1"} {
 		r := stationRequest(http.MethodGet, "/api/issues"+q, host.StationUser)
 		r.AddCookie(userCookie(t, env))
 		rec := do(t, mount, r)

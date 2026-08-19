@@ -181,7 +181,7 @@ func TestAuditIssueAlertCapsAndLateWriteSuppression(t *testing.T) {
 	if !ok {
 		t.Fatal("issue insert unexpectedly suppressed")
 	}
-	issues, _, err := store.QueryUserIssues(context.Background(), db.IssueQuery{UserID: user.ID, Limit: 10})
+	issues, _, err := store.QueryUserIssues(context.Background(), db.IssueQuery{UserID: user.ID, PageSize: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +229,7 @@ func TestAuditIssueAlertCapsAndLateWriteSuppression(t *testing.T) {
 	if ok {
 		t.Fatal("late issue write after deletion was inserted")
 	}
-	issues, _, err = store.QueryUserIssues(context.Background(), db.IssueQuery{UserID: user.ID, Limit: 10})
+	issues, _, err = store.QueryUserIssues(context.Background(), db.IssueQuery{UserID: user.ID, PageSize: 10})
 	if err != nil {
 		t.Fatal(err)
 	}

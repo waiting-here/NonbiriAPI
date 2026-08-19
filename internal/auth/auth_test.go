@@ -176,8 +176,11 @@ func TestUserOAuthGateSessionAndReplay(t *testing.T) {
 	st := authTestStore(t)
 	provider := &fakeDiscordProvider{login: DiscordLogin{
 		Identity: DiscordIdentity{ID: "discord-1", Username: "alice", Avatar: "avatar"},
-		HasGuildRole: func(_ context.Context, guildID, roleID string) (bool, error) {
-			return guildID == "guild-1" && roleID == "role-1", nil
+		GuildMember: func(_ context.Context, guildID string) (GuildMember, error) {
+			if guildID == "guild-1" {
+				return GuildMember{Roles: []string{"role-1"}, Nick: "alice-server"}, nil
+			}
+			return GuildMember{}, nil
 		},
 	}}
 	gate := func(context.Context) (RegistrationGate, error) {
@@ -213,6 +216,71 @@ func TestUserOAuthGateSessionAndReplay(t *testing.T) {
 	service.Callback(replay, callbackRequest(state, "code-1", stateCookie))
 	if replay.Code != http.StatusUnauthorized || strings.Contains(replay.Body.String(), state) || strings.Contains(replay.Body.String(), "code-1") {
 		t.Fatalf("replay response status=%d body=%q", replay.Code, replay.Body.String())
+	}
+}
+
+func TestUserOAuthStoresAndRefreshesGuildSnapshot(t *testing.T) {
+	st := authTestStore(t)
+	// Registration: the guild member carries a server nickname and a server
+	// avatar hash; both should be stored as a snapshot on the new user.
+	provider := &fakeDiscordProvider{login: DiscordLogin{
+		Identity:    DiscordIdentity{ID: "discord-guild", Username: "global-name", Avatar: "global-avatar"},
+		GuildMember: func(_ context.Context, guildID string) (GuildMember, error) {
+			if guildID == "guild-1" {
+				return GuildMember{Roles: []string{"role-1"}, Nick: "server-name", Avatar: "guild-avatar-hash"}, nil
+			}
+			return GuildMember{}, nil
+		},
+	}}
+	service := newTestUserAuth(t, st, provider, func(context.Context) (RegistrationGate, error) {
+		return RegistrationGate{GuildID: "guild-1", RoleID: "role-1"}, nil
+	})
+
+	startRec, _, state := startOAuth(t, service)
+	stateCookie := cookieFromResponse(t, startRec, OAuthStateCookieName)
+	rec := httptest.NewRecorder()
+	service.Callback(rec, callbackRequest(state, "code-guild", stateCookie))
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/" {
+		t.Fatalf("register status=%d location=%q body=%s", rec.Code, rec.Header().Get("Location"), rec.Body.String())
+	}
+	user, err := st.GetUserByDiscordID("discord-guild")
+	if err != nil || user == nil {
+		t.Fatalf("registered user=%#v err=%v", user, err)
+	}
+	if user.GuildNick != "server-name" {
+		t.Fatalf("guild nick after register=%q want server-name", user.GuildNick)
+	}
+	if user.GuildAvatarURL == "" || !strings.Contains(user.GuildAvatarURL, "guild-avatar-hash") {
+		t.Fatalf("guild avatar url after register=%q want guild-avatar-hash", user.GuildAvatarURL)
+	}
+
+	// Login (existing user): a fresh OAuth start refreshes the snapshot with
+	// the member's current nickname and avatar.
+	provider.login = DiscordLogin{
+		Identity:    DiscordIdentity{ID: "discord-guild", Username: "global-name", Avatar: "global-avatar"},
+		GuildMember: func(_ context.Context, guildID string) (GuildMember, error) {
+			if guildID == "guild-1" {
+				return GuildMember{Roles: []string{"role-1"}, Nick: "updated-name", Avatar: "updated-hash"}, nil
+			}
+			return GuildMember{}, nil
+		},
+	}
+	startRec2, _, state2 := startOAuth(t, service)
+	stateCookie2 := cookieFromResponse(t, startRec2, OAuthStateCookieName)
+	login := httptest.NewRecorder()
+	service.Callback(login, callbackRequest(state2, "code-guild-2", stateCookie2))
+	if login.Code != http.StatusFound || login.Header().Get("Location") != "/" {
+		t.Fatalf("login status=%d location=%q body=%s", login.Code, login.Header().Get("Location"), login.Body.String())
+	}
+	user, err = st.GetUserByDiscordID("discord-guild")
+	if err != nil || user == nil {
+		t.Fatalf("user after login=%#v err=%v", user, err)
+	}
+	if user.GuildNick != "updated-name" {
+		t.Fatalf("guild nick after login=%q want updated-name", user.GuildNick)
+	}
+	if user.GuildAvatarURL == "" || !strings.Contains(user.GuildAvatarURL, "updated-hash") {
+		t.Fatalf("guild avatar url after login=%q want updated-hash", user.GuildAvatarURL)
 	}
 }
 
@@ -253,12 +321,61 @@ func TestUserOAuthRegistrationPauseAndExistingUserLogin(t *testing.T) {
 	}
 }
 
+// TestUserOAuthRegistrationClosedRedirectsNewUserButAllowsExisting verifies the
+// registration_open site toggle: a closed registration redirects a brand-new
+// identity to the registration-closed notice without creating a user, while an
+// existing identity still signs in (the gate is evaluated only on the
+// new-identity branch).
+func TestUserOAuthRegistrationClosedRedirectsNewUserButAllowsExisting(t *testing.T) {
+	st := authTestStore(t)
+	if err := st.SetSiteConfigValue("registration_open", "0"); err != nil {
+		t.Fatalf("set registration_open: %v", err)
+	}
+	provider := &fakeDiscordProvider{login: DiscordLogin{
+		Identity: DiscordIdentity{ID: "discord-closed", Username: "newcomer", Avatar: "avatar"},
+		GuildMember: func(context.Context, string) (GuildMember, error) {
+			return GuildMember{Roles: []string{"role-1"}}, nil
+		},
+	}}
+	service := newTestUserAuth(t, st, provider, func(context.Context) (RegistrationGate, error) {
+		return RegistrationGate{GuildID: "guild-1", RoleID: "role-1"}, nil
+	})
+
+	startRec, _, state := startOAuth(t, service)
+	cookie := cookieFromResponse(t, startRec, OAuthStateCookieName)
+	closed := httptest.NewRecorder()
+	service.Callback(closed, callbackRequest(state, "code-closed", cookie))
+	if closed.Code != http.StatusFound || closed.Header().Get("Location") != "/registration-closed" {
+		t.Fatalf("closed registration status=%d location=%q body=%q", closed.Code, closed.Header().Get("Location"), closed.Body.String())
+	}
+	if user, err := st.GetUserByDiscordID("discord-closed"); err != nil || user != nil {
+		t.Fatalf("closed registration created user=%#v err=%v", user, err)
+	}
+
+	if _, err := st.CreateDiscordUser("discord-closed", "old", ""); err != nil {
+		t.Fatal(err)
+	}
+	startRec2, _, state2 := startOAuth(t, service)
+	cookie2 := cookieFromResponse(t, startRec2, OAuthStateCookieName)
+	login := httptest.NewRecorder()
+	service.Callback(login, callbackRequest(state2, "code-login", cookie2))
+	if login.Code != http.StatusFound || login.Header().Get("Location") != "/" {
+		t.Fatalf("existing login status=%d location=%q body=%q", login.Code, login.Header().Get("Location"), login.Body.String())
+	}
+	if c := cookieFromResponse(t, login, UserSessionCookieName); c.Value == "" {
+		t.Fatalf("existing login did not mint a session cookie")
+	}
+}
+
 func TestUserOAuthGuildRoleRequiresBothExactValues(t *testing.T) {
 	st := authTestStore(t)
 	provider := &fakeDiscordProvider{login: DiscordLogin{
 		Identity: DiscordIdentity{ID: "discord-mismatch", Username: "alice"},
-		HasGuildRole: func(_ context.Context, guildID, roleID string) (bool, error) {
-			return guildID == "guild-good" && roleID == "role-good", nil
+		GuildMember: func(_ context.Context, guildID string) (GuildMember, error) {
+			if guildID == "guild-good" {
+				return GuildMember{Roles: []string{"role-good"}}, nil
+			}
+			return GuildMember{}, nil
 		},
 	}}
 	service := newTestUserAuth(t, st, provider, func(context.Context) (RegistrationGate, error) {

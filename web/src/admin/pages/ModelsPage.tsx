@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatDateTime } from '@shared/utils/datetime';
 import { useTranslation } from 'react-i18next';
 import {
@@ -17,6 +17,23 @@ export function ModelsPage() {
   const { t } = useTranslation();
   const models = useAdminModels();
   const [page, setPage] = useState(1);
+  const [query, setQuery] = useState('');
+
+  const filtered = useMemo(() => {
+    const data = models.data ?? [];
+    const needle = query.trim().toLowerCase();
+    if (!needle) return data;
+    return data.filter((model) =>
+      [model.provider, model.model, model.full_name, model.user_id].some((value) =>
+        value.toLowerCase().includes(needle),
+      ),
+    );
+  }, [models.data, query]);
+
+  const onQueryChange = (value: string) => {
+    setQuery(value);
+    setPage(1);
+  };
 
   return (
     <div className="page">
@@ -28,7 +45,20 @@ export function ModelsPage() {
       <Card>
         <div className="card-title-row">
           <h2>{t('admin.models.listTitle')}</h2>
-          {models.data ? <span className="muted">{models.data.length}</span> : null}
+          {models.data ? <span className="muted">{filtered.length}</span> : null}
+        </div>
+        <div className="filter-bar" role="search">
+          <label>
+            <span>{t('common.search')}</span>
+            <input
+              type="search"
+              value={query}
+              maxLength={256}
+              onChange={(event) => onQueryChange(event.target.value)}
+              placeholder={t('admin.models.searchPlaceholder')}
+              aria-label={t('admin.models.searchAria')}
+            />
+          </label>
         </div>
         {models.isPending ? (
           <LoadingState />
@@ -36,6 +66,8 @@ export function ModelsPage() {
           <ErrorState error={models.error} onRetry={() => void models.refetch()} />
         ) : models.data.length === 0 ? (
           <EmptyState title={t('admin.models.empty')} body={t('admin.models.emptyBody')} />
+        ) : filtered.length === 0 ? (
+          <EmptyState title={t('common.noResults')} body={t('common.noResultsBody')} />
         ) : (
           <>
           <div className="table-wrap">
@@ -51,7 +83,7 @@ export function ModelsPage() {
                 </tr>
               </thead>
               <tbody>
-                {models.data.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE).map((model) => (
+                {filtered.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE).map((model) => (
                   <tr key={model.id}>
                     <td><ReadOnlyValue value={model.user_id} /></td>
                     <td>
@@ -73,7 +105,7 @@ export function ModelsPage() {
           </div>
           <Pagination
             page={page}
-            hasNext={page * ADMIN_PAGE_SIZE < models.data.length}
+            hasNext={page * ADMIN_PAGE_SIZE < filtered.length}
             onChange={setPage}
           />
           </>

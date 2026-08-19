@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isApiError, isForbidden, isUnauthorized } from '@shared/query/http';
+import { usePublicConfig } from '@shared/query/publicConfig';
 
 interface PageHeaderProps {
   eyebrow?: string;
@@ -106,7 +107,9 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
 
 export function AuthRequired({ station }: { station: 'user' | 'admin' }) {
   const { t } = useTranslation();
+  const config = usePublicConfig(station === 'user');
   const href = station === 'user' ? '/api/auth/discord/start' : undefined;
+  const registrationClosed = station === 'user' && config.data?.registrationOpen === false;
   return (
     <div className="auth-panel" role="status">
       <span className="auth-mark" aria-hidden="true">
@@ -115,6 +118,7 @@ export function AuthRequired({ station }: { station: 'user' | 'admin' }) {
       <div>
         <h2>{t('common.authRequiredTitle')}</h2>
         <p>{station === 'user' ? t('common.userSignInBody') : t('common.adminSignInBody')}</p>
+        {registrationClosed ? <p className="inline-notice">{t('common.registrationClosed')}</p> : null}
         {href ? (
           <a className="btn btn-primary" href={href}>
             {t('common.signIn')}
@@ -151,14 +155,60 @@ export function Pagination({
   page,
   hasNext,
   onChange,
+  pageSize,
+  pageSizeOptions,
+  onPageSizeChange,
+  onJumpToPage,
 }: {
   page: number;
   hasNext: boolean;
   onChange: (nextPage: number) => void;
+  /** Current per-page size; enables the page-size selector when changeable. */
+  pageSize?: number;
+  /** Allowed per-page sizes (kept within the server page limits). */
+  pageSizeOptions?: readonly number[];
+  onPageSizeChange?: (pageSize: number) => void;
+  /**
+   * Offset-only page jump. Cursor-paginated lists cannot seek to an
+   * arbitrary page, so callers in cursor mode leave this unset and no
+   * jump control is rendered.
+   */
+  onJumpToPage?: (page: number) => void;
 }) {
   const { t } = useTranslation();
+  const canPickSize =
+    pageSize !== undefined &&
+    onPageSizeChange !== undefined &&
+    pageSizeOptions !== undefined &&
+    pageSizeOptions.length > 0;
+  const jump = (raw: string) => {
+    if (!onJumpToPage) return;
+    const target = Number(raw);
+    if (!Number.isSafeInteger(target) || target < 1 || target === page) return;
+    onJumpToPage(target);
+  };
   return (
     <nav className="pagination" aria-label={t('common.pagination')}>
+      {canPickSize ? (
+        <label className="pagination-option">
+          <span className="pagination-label">{t('common.pageSize')}</span>
+          <select
+            value={String(pageSize)}
+            onChange={(event) => {
+              const next = Number(event.target.value);
+              if (Number.isSafeInteger(next) && pageSizeOptions.includes(next)) {
+                onPageSizeChange(next);
+              }
+            }}
+          >
+            {pageSizeOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       <button
         type="button"
         className="btn btn-secondary"
@@ -176,6 +226,26 @@ export function Pagination({
       >
         {t('common.next')}
       </button>
+      {onJumpToPage ? (
+        <label className="pagination-option">
+          <span className="pagination-label">{t('common.jumpToPage')}</span>
+          <input
+            type="number"
+            min={1}
+            step={1}
+            key={page}
+            defaultValue={page}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                jump(event.currentTarget.value);
+              }
+            }}
+            onBlur={(event) => jump(event.target.value)}
+            aria-label={t('common.jumpToPage')}
+          />
+        </label>
+      ) : null}
     </nav>
   );
 }
@@ -189,5 +259,22 @@ export function ApiNotice({ children }: { children: ReactNode }) {
     <p className="inline-notice" role="status">
       {children}
     </p>
+  );
+}
+
+// NoticePage is a full-page, single-message page used for site-wide states
+// (maintenance, registration closed) that replace normal navigation.
+export function NoticePage({ titleKey, bodyKey }: { titleKey: string; bodyKey: string }) {
+  const { t } = useTranslation();
+  return (
+    <div className="state-panel notice-page" role="status">
+      <span className="state-icon" aria-hidden="true">
+        ⚠
+      </span>
+      <div>
+        <h1>{t(titleKey)}</h1>
+        <p>{t(bodyKey)}</p>
+      </div>
+    </div>
   );
 }

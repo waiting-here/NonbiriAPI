@@ -23,6 +23,7 @@ const (
 	maxUsernameBytes    = 256
 	maxAvatarBytes      = 1024
 	maxBanReasonBytes   = 1024
+	maxAvatarURLBytes   = 2048
 	maxConfigValueBytes = 4096
 )
 
@@ -34,6 +35,8 @@ type User struct {
 	DiscordID                 string
 	Username                  string
 	Avatar                    string
+	GuildNick                 string
+	GuildAvatarURL            string
 	IsAdmin                   bool
 	IsBanned                  bool
 	BannedReason              string
@@ -79,6 +82,20 @@ func validateDiscordIdentity(discordID, username, avatar string) error {
 	return nil
 }
 
+// validateGuildProfile bounds the server-nickname and server-avatar snapshot
+// captured at OAuth time. guild_nick is optional (a member without a server
+// nickname keeps the empty string so the caller falls back to the global
+// username); guild_avatar_url is a full CDN URL built by the auth layer.
+func validateGuildProfile(guildNick, guildAvatarURL string) error {
+	if err := validateIdentityText(guildNick, maxUsernameBytes, true); err != nil {
+		return err
+	}
+	if err := validateIdentityText(guildAvatarURL, maxAvatarURLBytes, true); err != nil {
+		return err
+	}
+	return nil
+}
+
 func validateBanReason(reason string) error {
 	if err := validateIdentityText(reason, maxBanReasonBytes, true); err != nil {
 		return err
@@ -91,6 +108,8 @@ const userSelectColumns = `
 	COALESCE(u.discord_id, ''),
 	u.username,
 	u.avatar,
+	u.guild_nick,
+	u.guild_avatar_url,
 	u.is_admin,
 	u.is_banned,
 	u.banned_reason,
@@ -116,6 +135,8 @@ func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 		&u.DiscordID,
 		&u.Username,
 		&u.Avatar,
+		&u.GuildNick,
+		&u.GuildAvatarURL,
 		&isAdmin,
 		&isBanned,
 		&u.BannedReason,
@@ -223,8 +244,11 @@ func (s *Store) CreateDiscordUser(discordID, username, avatar string) (*User, er
 // creates the first row for a Discord id. It returns created=true only for a
 // newly inserted normal user. The caller performs the registration gate before
 // invoking this method for a missing identity.
-func (s *Store) FindOrCreateDiscordUser(discordID, username, avatar string) (user *User, created bool, err error) {
+func (s *Store) FindOrCreateDiscordUser(discordID, username, avatar, guildNick, guildAvatarURL string) (user *User, created bool, err error) {
 	if err := validateDiscordIdentity(discordID, username, avatar); err != nil {
+		return nil, false, ErrConflict
+	}
+	if err := validateGuildProfile(guildNick, guildAvatarURL); err != nil {
 		return nil, false, ErrConflict
 	}
 	tx, err := s.db.Begin()
@@ -237,7 +261,7 @@ func (s *Store) FindOrCreateDiscordUser(discordID, username, avatar string) (use
 	err = tx.QueryRow(`SELECT id FROM users WHERE discord_id=? AND is_admin=0`, discordID).Scan(&id)
 	switch {
 	case err == nil:
-		if _, err := tx.Exec(`UPDATE users SET username=?, avatar=?, updated_at=? WHERE id=? AND is_admin=0`, username, avatar, time.Now().Unix(), id); err != nil {
+		if _, err := tx.Exec(`UPDATE users SET username=?, avatar=?, guild_nick=?, guild_avatar_url=?, updated_at=? WHERE id=? AND is_admin=0`, username, avatar, guildNick, guildAvatarURL, time.Now().Unix(), id); err != nil {
 			return nil, false, fmt.Errorf("refresh user: %w", err)
 		}
 		if err := tx.Commit(); err != nil {
@@ -251,8 +275,8 @@ func (s *Store) FindOrCreateDiscordUser(discordID, username, avatar string) (use
 
 	now := time.Now().Unix()
 	result, err := tx.Exec(`INSERT INTO users
-		(discord_id, username, avatar, is_admin, is_banned, banned_reason, created_at, updated_at)
-		VALUES (?, ?, ?, 0, 0, '', ?, ?)`, discordID, username, avatar, now, now)
+		(discord_id, username, avatar, guild_nick, guild_avatar_url, is_admin, is_banned, banned_reason, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, 0, 0, '', ?, ?)`, discordID, username, avatar, guildNick, guildAvatarURL, now, now)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			return nil, false, ErrConflict
@@ -273,7 +297,7 @@ func (s *Store) FindOrCreateDiscordUser(discordID, username, avatar string) (use
 // CreateUser is retained as a concise repository entry point for the identity
 // rail; it creates only a normal Discord user.
 func (s *Store) CreateUser(discordID, username, avatar string) (*User, error) {
-	user, created, err := s.FindOrCreateDiscordUser(discordID, username, avatar)
+	user, created, err := s.FindOrCreateDiscordUser(discordID, username, avatar, "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -324,11 +348,11 @@ func (s *Store) EnsureAdminUser(username string) (*User, error) {
 }
 
 // UpdateUserProfile refreshes only bounded, non-secret provider metadata.
-func (s *Store) UpdateUserProfile(userID int64, username, avatar string) error {
-	if userID <= 0 || validateIdentityText(username, maxUsernameBytes, false) != nil || validateIdentityText(avatar, maxAvatarBytes, true) != nil {
+func (s *Store) UpdateUserProfile(userID int64, username, avatar, guildNick, guildAvatarURL string) error {
+	if userID <= 0 || validateIdentityText(username, maxUsernameBytes, false) != nil || validateIdentityText(avatar, maxAvatarBytes, true) != nil || validateGuildProfile(guildNick, guildAvatarURL) != nil {
 		return ErrConflict
 	}
-	result, err := s.db.Exec(`UPDATE users SET username=?, avatar=?, updated_at=? WHERE id=? AND is_admin=0`, username, avatar, time.Now().Unix(), userID)
+	result, err := s.db.Exec(`UPDATE users SET username=?, avatar=?, guild_nick=?, guild_avatar_url=?, updated_at=? WHERE id=? AND is_admin=0`, username, avatar, guildNick, guildAvatarURL, time.Now().Unix(), userID)
 	if err != nil {
 		return fmt.Errorf("update user profile: %w", err)
 	}
@@ -466,4 +490,17 @@ func (s *Store) DiscordRegistrationGate() (guildID, roleID string, err error) {
 		return "", "", err
 	}
 	return strings.TrimSpace(guildID), strings.TrimSpace(roleID), nil
+}
+
+// RegistrationOpen reports whether new-user registration is currently
+// allowed. The default (unset or any value other than "0") is open, matching
+// the pre-existing behavior; an explicit "0" closes registration. Existing
+// users always sign in regardless of this toggle, which is evaluated only on
+// the new-identity branch of the OAuth callback.
+func (s *Store) RegistrationOpen() (bool, error) {
+	raw, err := s.GetSiteConfigValue("registration_open")
+	if err != nil {
+		return true, err
+	}
+	return raw != "0", nil
 }

@@ -36,6 +36,7 @@
       "description": "查看服务端权威用户记录，并明确执行封禁、限制或删号操作。",
       "listTitle": "用户",
       "username": "用户名",
+      "siteId": "站内 ID",
       "discordId": "Discord ID",
       "status": "状态",
       "limits": "限制",
@@ -44,6 +45,9 @@
       "actions": "操作",
       "active": "正常",
       "banned": "已封禁",
+      "filterStatus": "封禁状态",
+      "searchPlaceholder": "按用户名或 Discord ID 搜索",
+      "searchAria": "搜索用户",
       "ban": "封禁",
       "unban": "解封",
       "delete": "删除",
@@ -108,7 +112,9 @@
       "created": "创建时间",
       "updated": "更新时间",
       "empty": "没有端点记录",
-      "emptyBody": "管理员 API 没有返回端点概览记录。"
+      "emptyBody": "管理员 API 没有返回端点概览记录。",
+      "searchPlaceholder": "按基础 URL、备注或用户 ID 搜索",
+      "searchAria": "搜索端点"
     },
     "models": {
       "nav": "模型",
@@ -123,7 +129,9 @@
       "ordered": "按顺序",
       "random": "随机",
       "empty": "没有模型记录",
-      "emptyBody": "管理员 API 没有返回模型概览记录。"
+      "emptyBody": "管理员 API 没有返回模型概览记录。",
+      "searchPlaceholder": "按提供方、模型名、完整名称或用户 ID 搜索",
+      "searchAria": "搜索模型"
     },
     "alerts": {
       "nav": "告警",
@@ -138,6 +146,7 @@
       "resolved": "状态",
       "open": "未解决",
       "resolvedValue": "已解决",
+      "filterResolved": "解决状态",
       "resolve": "解决",
       "reopen": "重新打开",
       "empty": "没有返回告警",
@@ -180,7 +189,9 @@
         "discord_role_id": { "title": "Discord 身份组 ID", "description": "注册所需的服务器身份组 ID；留空则不校验身份组。" },
         "oauth_start_rate_limit": { "title": "OAuth 启动限频次数", "description": "每个 IP 在窗口内可发起 Discord 授权的次数上限。" },
         "oauth_start_rate_window_seconds": { "title": "OAuth 启动限频窗口", "description": "OAuth 启动限频的统计窗口秒数。" },
-        "oauth_start_rate_penalty_seconds": { "title": "OAuth 启动限频惩罚", "description": "超过限频后该 IP 被临时拒绝授权的秒数。" }
+        "oauth_start_rate_penalty_seconds": { "title": "OAuth 启动限频惩罚", "description": "超过限频后该 IP 被临时拒绝授权的秒数。" },
+        "maintenance_mode": { "title": "维护模式", "description": "开启后，用户站所有页面都会显示维护提示，新访问者与已登录用户均无法使用站点功能；管理员站不受影响。未来等级系统上线后，将仅对未达等级的用户显示维护提示。" },
+        "registration_open": { "title": "开放注册", "description": "关闭后，新用户通过 Discord 注册会被拒绝并跳转到注册关闭提示页；已有账号仍可正常登录。" }
       }
     }
   }

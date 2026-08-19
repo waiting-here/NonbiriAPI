@@ -1,5 +1,6 @@
 import { createBrowserRouter } from 'react-router';
 import { NotFoundPage } from '@shared/components/NotFoundPage';
+import { NoticePage } from '@shared/components/States';
 import { RouteErrorPage } from '@shared/components/RouteErrorPage';
 import { UserLayout } from './layouts/UserLayout';
 import { HomePage } from './pages/HomePage';
@@ -25,6 +26,8 @@ export const router = createBrowserRouter([
       { path: 'account', element: <AccountPage /> },
       { path: 'privacy', element: <PrivacyPage /> },
       { path: 'terms', element: <TermsPage /> },
+      { path: 'maintenance', element: <NoticePage titleKey="common.maintenanceTitle" bodyKey="common.maintenanceBody" /> },
+      { path: 'registration-closed', element: <NoticePage titleKey="common.registrationClosedTitle" bodyKey="common.registrationClosedBody" /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },

@@ -295,7 +295,7 @@ func TestUsageNonStreamValidUsage(t *testing.T) {
 	}
 	assertUserTotals(t, fixture.store, user.id, 1, 2, 3, 0)
 
-	logs, err := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{Limit: 10})
+	logs, _, err := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{PageSize: 10})
 	if err != nil || len(logs) != 1 {
 		t.Fatalf("logs = %+v err=%v", logs, err)
 	}
@@ -324,7 +324,7 @@ func TestUsageNonStreamWithoutUsageCountsUnknown(t *testing.T) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 	assertUserTotals(t, fixture.store, user.id, 1, 0, 0, 1)
-	logs, _ := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{Limit: 10})
+	logs, _, _ := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{PageSize: 10})
 	if len(logs) != 1 || !logs[0].UsageUnknown || logs[0].TotalTokens != 0 || logs[0].StatusCode != 200 {
 		t.Fatalf("logs = %+v", logs)
 	}
@@ -369,7 +369,7 @@ func TestUsageStreamDoneUsage(t *testing.T) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 	assertUserTotals(t, fixture.store, user.id, 1, 4, 6, 0)
-	logs, _ := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{Limit: 10})
+	logs, _, _ := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{PageSize: 10})
 	if len(logs) != 1 || logs[0].UsageUnknown || logs[0].TotalTokens != 10 || logs[0].StatusCode != 200 {
 		t.Fatalf("logs = %+v", logs)
 	}
@@ -390,7 +390,7 @@ func TestUsageStreamAbnormalEOFAfterCommit(t *testing.T) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 	assertUserTotals(t, fixture.store, user.id, 1, 0, 0, 1)
-	logs, _ := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{Limit: 10})
+	logs, _, _ := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{PageSize: 10})
 	if len(logs) != 1 || !logs[0].UsageUnknown || logs[0].TotalTokens != 0 ||
 		logs[0].StatusCode != 200 || logs[0].ErrorCode != "upstream" {
 		t.Fatalf("logs = %+v", logs)
@@ -452,7 +452,7 @@ func TestUsageStreamCanceledAfterCommit(t *testing.T) {
 		t.Fatalf("canceled stream wrote a terminal frame: %q", recorder.String())
 	}
 	assertUserTotals(t, fixture.store, user.id, 1, 0, 0, 1)
-	logs, _ := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{Limit: 10})
+	logs, _, _ := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{PageSize: 10})
 	if len(logs) != 1 || !logs[0].UsageUnknown || logs[0].TotalTokens != 0 || logs[0].StatusCode != 200 {
 		t.Fatalf("logs = %+v", logs)
 	}
@@ -528,7 +528,7 @@ func TestUsageDuplicateHookDeliveryIsAtMostOnce(t *testing.T) {
 	service.HandleUsage(usageRecord)
 
 	assertUserTotals(t, store, userID, 1, 2, 3, 0)
-	logs, _ := store.QueryRequestLogs(context.Background(), db.LogQuery{Limit: 10})
+	logs, _, _ := store.QueryRequestLogs(context.Background(), db.LogQuery{PageSize: 10})
 	if len(logs) != 1 {
 		t.Fatalf("duplicate hook delivery persisted %d rows", len(logs))
 	}
@@ -548,7 +548,7 @@ func TestUsageOrphanUsageRecordFallsBackToZeroMetadata(t *testing.T) {
 		Usage: openai.Usage{Present: false},
 	})
 	assertUserTotals(t, store, userID, 1, 0, 0, 1)
-	logs, _ := store.QueryRequestLogs(context.Background(), db.LogQuery{Limit: 10})
+	logs, _, _ := store.QueryRequestLogs(context.Background(), db.LogQuery{PageSize: 10})
 	if len(logs) != 1 || logs[0].StatusCode != 0 || logs[0].DurationMs != 0 ||
 		!logs[0].UsageUnknown || logs[0].Model != "" {
 		t.Fatalf("orphan fallback log = %+v", logs)
@@ -630,7 +630,7 @@ func TestUsageConcurrentRequestsNoLostAccounting(t *testing.T) {
 		t.Fatalf("upstream hits = %d, want %d", got, workers)
 	}
 	assertUserTotals(t, fixture.store, user.id, workers, 2*workers, 3*workers, 0)
-	logs, _ := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{Limit: 10_000})
+	logs, _, _ := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{PageSize: 10_000})
 	if len(logs) != workers {
 		t.Fatalf("log rows = %d, want %d", len(logs), workers)
 	}
@@ -706,7 +706,7 @@ func TestUsageFailoverCommittedAttemptCountedOnce(t *testing.T) {
 	// Exactly one accounted request, with the second (committed) attempt's
 	// metadata: the pre-commit failure is not counted.
 	assertUserTotals(t, fixture.store, user.id, 1, 2, 3, 0)
-	logs, _ := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{Limit: 10})
+	logs, _, _ := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{PageSize: 10})
 	if len(logs) != 1 || logs[0].ErrorCode != "" || logs[0].UsageUnknown || logs[0].TotalTokens != 5 {
 		t.Fatalf("logs = %+v", logs)
 	}

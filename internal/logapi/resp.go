@@ -104,10 +104,17 @@ func logRowResponse(l db.RequestLog) logRowResp {
 	}
 }
 
-func logListResponse(logs []db.RequestLog) []logRowResp {
-	out := make([]logRowResp, 0, len(logs))
+// logListResp is one page of request-log rows plus the explicit has_more
+// flag, so the client never infers pagination from a raw page size.
+type logListResp struct {
+	Data    []logRowResp `json:"data"`
+	HasMore bool         `json:"has_more"`
+}
+
+func logListResponse(logs []db.RequestLog, hasMore bool) logListResp {
+	out := logListResp{Data: make([]logRowResp, 0, len(logs)), HasMore: hasMore}
 	for _, l := range logs {
-		out = append(out, logRowResponse(l))
+		out.Data = append(out.Data, logRowResponse(l))
 	}
 	return out
 }

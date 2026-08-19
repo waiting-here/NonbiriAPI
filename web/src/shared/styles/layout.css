@@ -101,16 +101,27 @@
 }
 
 .mobile-menu-btn {
-  display: none;
+  display: none !important;
 }
 
 .user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   max-width: 11rem;
   overflow: hidden;
   color: var(--nb-color-text-muted);
   font-size: 0.82rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.user-chip-avatar {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
 .admin-shell {
@@ -254,10 +265,15 @@
 
 .item-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.8rem;
 }
 
 .item-card {
+  /* Cap the content line length: an unbounded card leaves the header badge
+     stranded against the right edge on wide viewports. Grid tracks do not
+     shrink by themselves, so minmax(0, …) is required on the parent. */
+  max-width: 72rem;
   padding: 1rem;
   background: var(--nb-color-surface-raised);
   border: 1px solid var(--nb-color-border);
@@ -667,8 +683,40 @@ tr:first-child td {
 }
 
 .pagination {
+  flex-wrap: wrap;
   justify-content: center;
   padding-top: 0.4rem;
+}
+
+/* The base label is a stacked form grid; inside the pagination toolbar it
+   must instead be a compact, non-growing inline row. */
+.pagination-option {
+  display: flex;
+  margin: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 400;
+}
+
+.pagination-label {
+  color: var(--nb-color-text-muted);
+  font-size: 0.86rem;
+  white-space: nowrap;
+}
+
+.pagination select {
+  width: auto;
+  min-height: 2.45rem;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.88rem;
+}
+
+.pagination input[type='number'] {
+  width: 5.5rem;
+  min-height: 2.45rem;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.88rem;
 }
 
 .pagination > span {
@@ -847,8 +895,10 @@ tr:first-child td {
 .check-field {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 0.5rem;
   min-height: 2.5rem;
+  width: fit-content;
 }
 
 .check-field input {
@@ -890,13 +940,54 @@ tr:first-child td {
 }
 
 .limit-fields label {
-  font-size: 0.76rem;
+  /* Match the table cell font (0.88rem base) and button rhythm so inlined
+     editing controls do not shrink below the surrounding row. */
+  font-size: 0.88rem;
 }
 
 .limit-fields input {
   min-width: 0;
-  padding: 0.4rem 0.45rem;
+  min-height: 2.45rem;
+  padding: 0.5rem 0.55rem;
+  font-size: 0.88rem;
+}
+
+.filter-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.65rem 0.8rem;
+  align-items: end;
+  margin-bottom: 1rem;
+  padding: 0.8rem;
+  background: var(--nb-color-surface-raised);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-sm);
+}
+
+.filter-bar label {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
   font-size: 0.84rem;
+  color: var(--nb-color-text-muted);
+}
+
+.filter-bar input,
+.filter-bar select {
+  min-width: 0;
+  min-height: 2.45rem;
+  padding: 0.5rem 0.55rem;
+  font-size: 0.88rem;
+}
+
+.filter-bar .filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.filter-bar .filter-actions .btn {
+  min-height: 2.45rem;
 }
 
 .config-list {
@@ -1015,6 +1106,55 @@ tr:first-child td {
   background: var(--nb-color-surface-raised);
 }
 
+.security-actions p {
+  max-width: 65ch;
+}
+
+.preferences-form {
+  max-width: 30rem;
+}
+
+.preferences-form .inline-success {
+  margin-top: 0.6rem;
+}
+
+.preferences-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.55rem;
+}
+
+.preferences-form-row label {
+  display: grid;
+  flex: 1 1 12rem;
+  max-width: 18rem;
+  gap: 0.3rem;
+}
+
+.preferences-form-row .btn {
+  flex: 0 0 auto;
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  align-self: end;
+  min-height: 2.5rem;
+  font-size: 0.92rem;
+}
+
+.checkbox-label input {
+  width: auto;
+  min-width: 1.15rem;
+  accent-color: var(--nb-color-accent);
+}
+
+.checkbox-label > span {
+  font-size: inherit;
+}
+
 .secret-label {
   display: block;
   color: var(--nb-color-text-muted);
@@ -1043,7 +1183,7 @@ tr:first-child td {
 
 @media (max-width: 52rem) {
   .mobile-menu-btn {
-    display: inline-flex;
+    display: inline-flex !important;
     order: 2;
   }
 
@@ -1107,6 +1247,10 @@ tr:first-child td {
   .config-row,
   .security-actions {
     grid-template-columns: 1fr;
+  }
+
+  .preferences-form-row label {
+    max-width: none;
   }
 
   .config-row .field-error,

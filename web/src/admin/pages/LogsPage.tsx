@@ -10,7 +10,17 @@ import {
   Pagination,
   ReadOnlyValue,
 } from '@shared/components/States';
-import { useAdminLogs, useAdminUsage } from '../data';
+import { type AdminLogFilter, useAdminLogs, useAdminUsage } from '../data';
+
+const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+
+/** Convert a datetime-local field value to unix seconds; empty means unset. */
+function datetimeLocalToUnix(value: string): number | undefined {
+  if (!value.trim()) return undefined;
+  const millis = Date.parse(value);
+  if (!Number.isFinite(millis)) return undefined;
+  return Math.max(0, Math.floor(millis / 1000));
+}
 
 function number(value: number): string {
   return value.toLocaleString();
@@ -23,18 +33,53 @@ function usageText(value: number | undefined): string {
 export function LogsPage() {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
-  const [cursors, setCursors] = useState<Record<number, string>>({});
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[1]);
+  // Draft inputs feed appliedFilter only via Apply; a changed filter always
+  // restarts offset paging at page 1 rather than mixing pages across filters.
+  const [draftUserId, setDraftUserId] = useState('');
+  const [draftModel, setDraftModel] = useState('');
+  const [draftStatus, setDraftStatus] = useState('');
+  const [draftFrom, setDraftFrom] = useState('');
+  const [draftTo, setDraftTo] = useState('');
+  const [appliedFilter, setAppliedFilter] = useState<AdminLogFilter>({});
   const usage = useAdminUsage();
-  const beforeId = page > 1 ? cursors[page - 1] : undefined;
-  const logs = useAdminLogs(page, beforeId);
+  const logs = useAdminLogs(page, appliedFilter, pageSize);
 
-  const changePage = (nextPage: number) => {
-    if (nextPage > page) {
-      const nextCursor = logs.data?.nextCursor;
-      if (!nextCursor) return;
-      setCursors((current) => ({ ...current, [page]: nextCursor }));
+  const applyFilter = () => {
+    const next: AdminLogFilter = {};
+    const userId = draftUserId.trim();
+    if (userId && /^\d+$/.test(userId)) next.userId = userId;
+    const model = draftModel.trim();
+    if (model) next.model = model.slice(0, 160);
+    // The server status filter is one exact 100..599 code, so the field is a
+    // numeric input, not a band; a band would silently drop other codes in
+    // the same range.
+    const status = draftStatus.trim();
+    if (status && /^\d{3}$/.test(status)) {
+      const code = Number(status);
+      if (code >= 100 && code <= 599) next.status = status;
     }
-    setPage(nextPage);
+    const fromUnix = datetimeLocalToUnix(draftFrom);
+    const toUnix = datetimeLocalToUnix(draftTo);
+    if (fromUnix !== undefined) next.fromUnix = fromUnix;
+    if (toUnix !== undefined) next.toUnix = toUnix;
+    setAppliedFilter(next);
+    setPage(1);
+  };
+
+  const resetFilter = () => {
+    setDraftUserId('');
+    setDraftModel('');
+    setDraftStatus('');
+    setDraftFrom('');
+    setDraftTo('');
+    setAppliedFilter({});
+    setPage(1);
+  };
+
+  const changePageSize = (size: number) => {
+    setPageSize(size);
+    setPage(1);
   };
 
   return (
@@ -78,6 +123,74 @@ export function LogsPage() {
           <h2>{t('admin.logs.logsTitle')}</h2>
           <span className="muted">{t('common.page', { page })}</span>
         </div>
+        <form
+          className="filter-bar"
+          onSubmit={(event) => {
+            event.preventDefault();
+            applyFilter();
+          }}
+        >
+          <label>
+            <span>{t('common.userId')}</span>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              inputMode="numeric"
+              value={draftUserId}
+              onChange={(event) => setDraftUserId(event.target.value)}
+              aria-label={t('common.filterUserIdAria')}
+            />
+          </label>
+          <label>
+            <span>{t('common.model')}</span>
+            <input
+              type="text"
+              value={draftModel}
+              maxLength={160}
+              onChange={(event) => setDraftModel(event.target.value)}
+              aria-label={t('common.filterModelAria')}
+            />
+          </label>
+          <label>
+            <span>{t('common.status')}</span>
+            <input
+              type="number"
+              min="100"
+              max="599"
+              step="1"
+              value={draftStatus}
+              onChange={(event) => setDraftStatus(event.target.value)}
+              aria-label={t('common.filterStatusAria')}
+            />
+          </label>
+          <label>
+            <span>{t('common.from')}</span>
+            <input
+              type="datetime-local"
+              value={draftFrom}
+              onChange={(event) => setDraftFrom(event.target.value)}
+              aria-label={t('common.filterFromAria')}
+            />
+          </label>
+          <label>
+            <span>{t('common.to')}</span>
+            <input
+              type="datetime-local"
+              value={draftTo}
+              onChange={(event) => setDraftTo(event.target.value)}
+              aria-label={t('common.filterToAria')}
+            />
+          </label>
+          <div className="filter-actions">
+            <button type="submit" className="btn btn-quiet">
+              {t('common.applyFilter')}
+            </button>
+            <button type="button" className="btn btn-link" onClick={resetFilter}>
+              {t('common.resetFilter')}
+            </button>
+          </div>
+        </form>
         {logs.isPending ? <LoadingState /> : logs.error ? <ErrorState error={logs.error} onRetry={() => void logs.refetch()} /> : logs.data.items.length === 0 ? (
           <EmptyState title={t('admin.logs.noLogs')} body={t('admin.logs.noLogsBody')} />
         ) : (
@@ -137,7 +250,15 @@ export function LogsPage() {
                 </tbody>
               </table>
             </div>
-            <Pagination page={page} hasNext={logs.data.hasNext} onChange={changePage} />
+            <Pagination
+              page={page}
+              hasNext={logs.data.hasNext}
+              onChange={setPage}
+              pageSize={pageSize}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              onPageSizeChange={changePageSize}
+              onJumpToPage={setPage}
+            />
           </>
         )}
       </Card>

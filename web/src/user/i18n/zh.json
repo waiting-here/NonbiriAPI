@@ -3,7 +3,7 @@
     "shell": {
       "navLabel": "主导航",
       "title": "用户中心",
-      "brandSuffix": "你的工作区"
+      "avatarAlt": "头像"
     },
     "home": {
       "nav": "首页",
@@ -35,7 +35,7 @@
       "addTitle": "添加端点",
       "editTitle": "编辑端点",
       "baseUrl": "基础 URL",
-      "baseUrlHint": "请输入 HTTP(S) URL，服务端会执行安全归一化。",
+      "baseUrlHint": "请填入到版本号为止的完整 API 基础地址（例如 https://api.example.com/v1）。系统会在此基础上拼接 /models 与 /chat/completions，请勿额外添加这两个路径。",
       "note": "备注",
       "notePlaceholder": "可选的端点说明",
       "enabled": "启用",
@@ -53,6 +53,9 @@
       "noEndpoints": "还没有端点",
       "noEndpointsBody": "添加端点后，才能拉取该密钥可访问的上游模型。",
       "listTitle": "你的端点",
+      "searchPlaceholder": "按基础 URL 或备注搜索",
+      "searchAria": "搜索端点",
+      "filterEnabled": "启用状态",
       "keyTitle": "端点密钥",
       "keyCount": "{{count}} 个密钥",
       "addKey": "添加密钥",
@@ -94,13 +97,17 @@
       "provider": "提供方",
       "model": "模型名",
       "providerPlaceholder": "example-provider",
+      "providerHint": "提供方与模型名会拼成 provider/model，作为对外暴露的平台模型名。",
       "modelPlaceholder": "example-model",
+      "modelHint": "创建后需为模型添加绑定，挂到端点密钥已拉取的上游模型上才可调用。",
       "strategy": "路由策略",
       "ordered": "按顺序故障转移",
       "random": "随机选择",
       "silentRetry": "上游失败时静默重试",
       "create": "创建模型",
       "listTitle": "你的平台模型",
+      "searchPlaceholder": "按完整名称或提供方搜索",
+      "searchAria": "搜索模型",
       "noModels": "还没有平台模型",
       "noModelsBody": "先创建模型名称，再添加绑定。",
       "bindings": "绑定",
@@ -165,6 +172,7 @@
       "resolved": "已解决",
       "resolvedValue": "已确认",
       "resolve": "确认问题",
+      "filterResolved": "解决状态",
       "empty": "没有返回问题",
       "emptyBody": "服务端没有返回属于此账号的问题记录。"
     },

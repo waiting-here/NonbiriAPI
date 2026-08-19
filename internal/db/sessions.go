@@ -278,6 +278,8 @@ func (s *sessionUserScan) scan(row interface{ Scan(...any) error }) error {
 		&u.DiscordID,
 		&u.Username,
 		&u.Avatar,
+		&u.GuildNick,
+		&u.GuildAvatarURL,
 		&isAdmin,
 		&isBanned,
 		&u.BannedReason,

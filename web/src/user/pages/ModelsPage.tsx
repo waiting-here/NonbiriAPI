@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useId, useMemo, useState, type FormEvent } from 'react';
 import { formatDateTime } from '@shared/utils/datetime';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -82,6 +82,7 @@ function ModelForm({ onSaved }: { onSaved: () => void }) {
               required
               aria-invalid={Boolean(validationError)}
             />
+            <small className="muted">{t('user.models.providerHint')}</small>
           </label>
           <label>
             <span>{t('user.models.model')}</span>
@@ -94,6 +95,7 @@ function ModelForm({ onSaved }: { onSaved: () => void }) {
               required
               aria-invalid={Boolean(validationError)}
             />
+            <small className="muted">{t('user.models.modelHint')}</small>
           </label>
           <label>
             <span>{t('user.models.strategy')}</span>
@@ -146,8 +148,13 @@ function BindingForm({ modelId, onSaved }: { modelId: string; onSaved: () => voi
       setValidationError(t('common.formInvalid'));
       return;
     }
-    const payload: { endpoint_key_id: string; upstream_model_id: string; ord?: number } = {
-      endpoint_key_id: keyId,
+    const endpointKeyId = Number(keyId);
+    if (!Number.isSafeInteger(endpointKeyId) || endpointKeyId <= 0) {
+      setValidationError(t('common.formInvalid'));
+      return;
+    }
+    const payload: { endpoint_key_id: number; upstream_model_id: string; ord?: number } = {
+      endpoint_key_id: endpointKeyId,
       upstream_model_id: upstreamModelId,
     };
     if (ord.trim()) {
@@ -430,6 +437,16 @@ function ModelsContent() {
   const queryClient = useQueryClient();
   const models = usePlatformModels(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const filtered = useMemo(() => {
+    const data = models.data ?? [];
+    const needle = query.trim().toLowerCase();
+    if (!needle) return data;
+    return data.filter((model) =>
+      [model.full_name, model.provider].some((value) => value.toLowerCase().includes(needle)),
+    );
+  }, [models.data, query]);
 
   if (models.isPending) return <LoadingState />;
   if (models.error) return <ErrorState error={models.error} onRetry={() => void models.refetch()} />;
@@ -465,11 +482,28 @@ function ModelsContent() {
         <Card>
           <div className="card-title-row">
             <h2>{t('user.models.listTitle')}</h2>
-            <span className="muted">{models.data.length}</span>
+            <span className="muted">{filtered.length}</span>
           </div>
-          <div className="item-list">
-            {models.data.map((model) => <ModelCard key={model.id} model={model} onChanged={invalidateModels} />)}
+          <div className="filter-bar" role="search">
+            <label>
+              <span>{t('common.search')}</span>
+              <input
+                type="search"
+                value={query}
+                maxLength={256}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t('user.models.searchPlaceholder')}
+                aria-label={t('user.models.searchAria')}
+              />
+            </label>
           </div>
+          {filtered.length === 0 ? (
+            <EmptyState title={t('common.noResults')} body={t('common.noResultsBody')} />
+          ) : (
+            <div className="item-list">
+              {filtered.map((model) => <ModelCard key={model.id} model={model} onChanged={invalidateModels} />)}
+            </div>
+          )}
         </Card>
       )}
     </div>

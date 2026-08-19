@@ -18,6 +18,9 @@ export interface UserSummary {
   id: string;
   username: string;
   avatar?: string;
+  avatar_url?: string;
+  guild_nick: string;
+  guild_avatar_url?: string;
   lang: 'zh' | 'en';
   is_banned: boolean;
   blocked_reason?: string;
@@ -144,6 +147,13 @@ function normalizeUser(value: unknown): UserSummary {
     username: text(recordValue(record, 'username'), 128, '—'),
     ...(optionalText(recordValue(record, 'avatar'), 512)
       ? { avatar: optionalText(recordValue(record, 'avatar'), 512) }
+      : {}),
+    ...(optionalText(recordValue(record, 'avatar_url'), 512)
+      ? { avatar_url: optionalText(recordValue(record, 'avatar_url'), 512) }
+      : {}),
+    guild_nick: text(recordValue(record, 'guild_nick'), 128),
+    ...(optionalText(recordValue(record, 'guild_avatar_url'), 512)
+      ? { guild_avatar_url: optionalText(recordValue(record, 'guild_avatar_url'), 512) }
       : {}),
     lang,
     is_banned: booleanValue(recordValue(record, 'is_banned')),
@@ -454,18 +464,18 @@ export function useCallerKey(enabled = true) {
 
 /**
  * The user issue center page. resolved is a tri-state: undefined shows every
- * issue, true only acknowledged ones, false only open ones. Pagination uses
- * the server's bounded keyset cursor; the cursor is never placed in a
- * persistent browser store.
+ * issue, true only acknowledged ones, false only open ones. Pagination is
+ * server-side offset paging (page + page_size) inside a `{data, has_more}`
+ * envelope, so any page can be sought directly.
  */
-export function useUserIssues(resolved?: boolean, beforeId?: string, enabled = true) {
-  const query = new URLSearchParams({ limit: '20' });
+export function useUserIssues(page: number, resolved?: boolean, pageSize = 20, enabled = true) {
+  const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   if (resolved !== undefined) query.set('resolved', resolved ? 'true' : 'false');
-  if (beforeId) query.set('before_id', beforeId);
   const filterKey = resolved === undefined ? 'all' : String(resolved);
   return useQuery({
-    queryKey: [...userKeys.issues, filterKey, beforeId ?? ''],
-    queryFn: async () => normalizeIssuePage(await apiFetch<unknown>(`/api/issues?${query}`), 20),
+    queryKey: [...userKeys.issues, filterKey, page, pageSize],
+    queryFn: async () =>
+      normalizeIssuePage(await apiFetch<unknown>(`/api/issues?${query}`), pageSize),
     enabled,
   });
 }

@@ -104,7 +104,7 @@ func TestRecordRequestValidUsageAndAccumulators(t *testing.T) {
 		t.Fatal("log row count != 1")
 	}
 
-	logs, err := store.QueryRequestLogs(context.Background(), LogQuery{UserID: userID, Limit: 10})
+	logs, _, err := store.QueryRequestLogs(context.Background(), LogQuery{UserID: userID, PageSize: 10})
 	if err != nil {
 		t.Fatalf("QueryRequestLogs: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestRecordRequestUsageUnknownNoFabricatedTokens(t *testing.T) {
 	if totals.TotalRequests != 1 || totals.TotalPromptTokens != 0 || totals.TotalCompletionTokens != 0 || totals.TotalUnknownUsageRequests != 1 {
 		t.Fatalf("totals = %+v", totals)
 	}
-	logs, _ := store.QueryRequestLogs(context.Background(), LogQuery{Limit: 10})
+	logs, _, _ := store.QueryRequestLogs(context.Background(), LogQuery{PageSize: 10})
 	if len(logs) != 1 || !logs[0].UsageUnknown || logs[0].PromptTokens != 0 || logs[0].TotalTokens != 0 {
 		t.Fatalf("logs = %+v", logs)
 	}
@@ -161,7 +161,7 @@ func TestRecordRequestInconsistentTripleStoredAsIs(t *testing.T) {
 	if totals.TotalPromptTokens != 2 || totals.TotalCompletionTokens != 3 {
 		t.Fatalf("totals = %+v", totals)
 	}
-	logs, _ := store.QueryRequestLogs(context.Background(), LogQuery{Limit: 10})
+	logs, _, _ := store.QueryRequestLogs(context.Background(), LogQuery{PageSize: 10})
 	if logs[0].PromptTokens != 2 || logs[0].CompletionTokens != 3 || logs[0].TotalTokens != 999 {
 		t.Fatalf("log = %+v", logs[0])
 	}
@@ -228,7 +228,7 @@ func TestRecordRequestDeletedKeyKeepsLogRow(t *testing.T) {
 	if err := store.RecordRequest(context.Background(), usageInput(userID, keyID)); err != nil {
 		t.Fatalf("RecordRequest with a deleted key must keep the log: %v", err)
 	}
-	logs, _ := store.QueryRequestLogs(context.Background(), LogQuery{Limit: 10})
+	logs, _, _ := store.QueryRequestLogs(context.Background(), LogQuery{PageSize: 10})
 	if len(logs) != 1 || logs[0].EndpointKeyID != 0 {
 		t.Fatalf("logs = %+v", logs)
 	}
@@ -329,7 +329,7 @@ func TestRecordRequestBoundsDiagnostic(t *testing.T) {
 	if err := store.RecordRequest(context.Background(), input); err != nil {
 		t.Fatalf("RecordRequest: %v", err)
 	}
-	logs, _ := store.QueryRequestLogs(context.Background(), LogQuery{Limit: 10})
+	logs, _, _ := store.QueryRequestLogs(context.Background(), LogQuery{PageSize: 10})
 	if len(logs) != 1 {
 		t.Fatal("missing log row")
 	}
@@ -344,7 +344,7 @@ func TestRecordRequestBoundsDiagnostic(t *testing.T) {
 	}
 }
 
-func TestQueryRequestLogsFiltersAndKeysetPagination(t *testing.T) {
+func TestQueryRequestLogsFiltersAndOffsetPagination(t *testing.T) {
 	store := openTestStore(t, filepath.Join(t.TempDir(), "usage.db"))
 	defer store.Close()
 	alice := seedUsageUser(t, store, "alice")
@@ -379,7 +379,7 @@ func TestQueryRequestLogsFiltersAndKeysetPagination(t *testing.T) {
 	}
 
 	// User filter: only alice's rows, newest first.
-	logs, err := store.QueryRequestLogs(context.Background(), LogQuery{UserID: alice, Limit: 10})
+	logs, _, err := store.QueryRequestLogs(context.Background(), LogQuery{UserID: alice, PageSize: 10})
 	if err != nil {
 		t.Fatalf("QueryRequestLogs: %v", err)
 	}
@@ -393,45 +393,49 @@ func TestQueryRequestLogsFiltersAndKeysetPagination(t *testing.T) {
 	}
 
 	// Status filter.
-	status, err := store.QueryRequestLogs(context.Background(), LogQuery{Status: 502, Limit: 10})
+	status, _, err := store.QueryRequestLogs(context.Background(), LogQuery{Status: 502, PageSize: 10})
 	if err != nil || len(status) != 1 || status[0].UserID != bob {
 		t.Fatalf("status filter = %+v err=%v", status, err)
 	}
 
 	// Time-range filter: started_at in [base+2min, base+4min).
-	ranged, err := store.QueryRequestLogs(context.Background(), LogQuery{
+	ranged, _, err := store.QueryRequestLogs(context.Background(), LogQuery{
 		FromUnix: base.Add(2 * time.Minute).Unix(),
 		ToUnix:   base.Add(4 * time.Minute).Unix(),
-		Limit:    10,
+		PageSize: 10,
 	})
 	if err != nil || len(ranged) != 2 {
 		t.Fatalf("range filter = %+v err=%v", ranged, err)
 	}
 
-	// Keyset pagination: page of 2, then continue from the last id.
-	page1, err := store.QueryRequestLogs(context.Background(), LogQuery{Limit: 2})
-	if err != nil || len(page1) != 2 {
-		t.Fatalf("page1 = %+v err=%v", page1, err)
+	// Offset pagination: page of 2, then the next pages.
+	page1, hasMore1, err := store.QueryRequestLogs(context.Background(), LogQuery{PageSize: 2})
+	if err != nil || len(page1) != 2 || !hasMore1 {
+		t.Fatalf("page1 = %+v err=%v hasMore=%v", page1, err, hasMore1)
 	}
-	page2, err := store.QueryRequestLogs(context.Background(), LogQuery{BeforeID: page1[len(page1)-1].ID, Limit: 10})
-	if err != nil || len(page2) != 4 {
-		t.Fatalf("page2 = %+v err=%v", page2, err)
+	page2, hasMore2, err := store.QueryRequestLogs(context.Background(), LogQuery{Page: 2, PageSize: 2})
+	if err != nil || len(page2) != 2 || !hasMore2 {
+		t.Fatalf("page2 = %+v err=%v hasMore=%v", page2, err, hasMore2)
+	}
+	page3, hasMore3, err := store.QueryRequestLogs(context.Background(), LogQuery{Page: 3, PageSize: 2})
+	if err != nil || len(page3) != 2 || hasMore3 {
+		t.Fatalf("page3 = %+v err=%v hasMore=%v", page3, err, hasMore3)
 	}
 	seen := make(map[int64]bool)
-	for _, log := range append(append([]RequestLog(nil), page1...), page2...) {
+	for _, log := range append(append([]RequestLog(nil), page1...), append(page2, page3...)...) {
 		if seen[log.ID] {
-			t.Fatalf("keyset pages overlap at id %d", log.ID)
+			t.Fatalf("pages overlap at id %d", log.ID)
 		}
 		seen[log.ID] = true
 	}
 	if len(seen) != 6 {
-		t.Fatalf("keyset pages missed rows: %d", len(seen))
+		t.Fatalf("pages missed rows: %d", len(seen))
 	}
 
-	// Limit clamp: never exceeds the page bound.
-	huge, err := store.QueryRequestLogs(context.Background(), LogQuery{Limit: 1_000_000})
+	// Page-size clamp: never exceeds the page bound.
+	huge, _, err := store.QueryRequestLogs(context.Background(), LogQuery{PageSize: 1_000_000})
 	if err != nil || len(huge) > MaxLogPageLimit {
-		t.Fatalf("limit clamp = %d err=%v", len(huge), err)
+		t.Fatalf("page-size clamp = %d err=%v", len(huge), err)
 	}
 }
 

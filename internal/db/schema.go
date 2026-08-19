@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS users (
 	discord_id                   TEXT UNIQUE,                       -- NULL for the administrator (env-configured, no Discord identity)
 	username                     TEXT NOT NULL DEFAULT '',
 	avatar                       TEXT NOT NULL DEFAULT '',
+	guild_nick                   TEXT NOT NULL DEFAULT '',
+	guild_avatar_url             TEXT NOT NULL DEFAULT '',
 	is_admin                     INTEGER NOT NULL DEFAULT 0,
 	is_banned                    INTEGER NOT NULL DEFAULT 0,         -- instant invalidation: a banned user's caller key fails request-time auth
 	banned_reason                TEXT NOT NULL DEFAULT '',

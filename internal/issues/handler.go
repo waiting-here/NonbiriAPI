@@ -80,9 +80,9 @@ func stationIs(w http.ResponseWriter, r *http.Request, expected host.Station) bo
 }
 
 // listIssues handles GET /api/issues: one bounded, ownership-scoped page of
-// the caller's issues, newest first, with an optional resolved filter and a
-// keyset cursor. The shape is fixed by the API contract; cross-user rows are
-// excluded in SQL and never enter the projection.
+// the caller's issues, newest first, with an optional resolved filter and
+// offset pagination. The shape is fixed by the API contract; cross-user rows
+// are excluded in SQL and never enter the projection.
 func (h *Handler) listIssues(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeErr(w, httperr.New(httperr.CodeServiceUnavailable, "issue service unavailable"))

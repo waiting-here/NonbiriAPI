@@ -62,13 +62,25 @@ type DiscordIdentity struct {
 	RoleIDs    []string
 }
 
+// GuildMember is the server-scoped profile fetched from the registration
+// guild: the member's server nickname (empty when they have none), their
+// server-specific avatar hash (empty when they use the global avatar), and
+// the role ids needed for the registration-gate role check. It is captured
+// alongside the role check so the same authorized call also refreshes the
+// displayed nickname and avatar snapshot.
+type GuildMember struct {
+	Nick   string
+	Avatar string
+	Roles  []string
+}
+
 // DiscordLogin carries an identity and a transient membership capability. The
 // HTTP implementation closes over an in-memory access token only for the
 // duration of the callback; it never returns that token to callers or stores
 // it. Tests and alternate providers may populate GuildID/RoleIDs instead.
 type DiscordLogin struct {
-	Identity     DiscordIdentity
-	HasGuildRole func(context.Context, string, string) (bool, error)
+	Identity    DiscordIdentity
+	GuildMember func(context.Context, string) (GuildMember, error)
 }
 
 // DiscordProvider is deliberately narrow so provider-specific credentials and
@@ -160,15 +172,18 @@ func AdminFromContext(ctx context.Context) (*db.User, bool) {
 // UserResponse is the bounded public user shape used by /api/session and
 // /api/me. No Discord access token, session token, or caller key is included.
 type UserResponse struct {
-	ID            int64     `json:"id"`
-	Username      string    `json:"username"`
-	Avatar        string    `json:"avatar"`
-	Lang          string    `json:"lang"`
-	IsBanned      bool      `json:"is_banned"`
-	BlockedReason string    `json:"blocked_reason,omitempty"`
-	EndpointLimit *int      `json:"endpoint_limit"`
-	RPMLimit      *int      `json:"rpm_limit"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID             int64     `json:"id"`
+	Username       string    `json:"username"`
+	Avatar         string    `json:"avatar"`
+	AvatarURL      string    `json:"avatar_url"`
+	GuildNick      string    `json:"guild_nick"`
+	GuildAvatarURL string    `json:"guild_avatar_url"`
+	Lang           string    `json:"lang"`
+	IsBanned       bool      `json:"is_banned"`
+	BlockedReason  string    `json:"blocked_reason,omitempty"`
+	EndpointLimit  *int      `json:"endpoint_limit"`
+	RPMLimit       *int      `json:"rpm_limit"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 func publicUser(user *db.User) UserResponse {
@@ -177,6 +192,8 @@ func publicUser(user *db.User) UserResponse {
 	}
 	return UserResponse{
 		ID: user.ID, Username: user.Username, Avatar: user.Avatar, Lang: user.Lang,
+		AvatarURL: discordAvatarURL(user.DiscordID, user.Avatar),
+		GuildNick: user.GuildNick, GuildAvatarURL: user.GuildAvatarURL,
 		IsBanned: user.IsBanned, BlockedReason: user.BannedReason,
 		EndpointLimit: user.EndpointLimit, RPMLimit: user.RPMLimit, CreatedAt: user.CreatedAt,
 	}

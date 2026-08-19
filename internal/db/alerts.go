@@ -5,10 +5,9 @@ package db
 //
 // Read path:
 //
-//   - ListAdminAlerts returns one keyset-paginated page (id DESC, stable
-//     against concurrent inserts) with an optional resolved filter. The page
-//     size is clamped and the table is never loaded in full: hasMore is
-//     derived from one extra fetched row.
+//   - ListAdminAlerts returns one offset-paginated page (id DESC) with an
+//     optional resolved filter. The page size is clamped and the table is
+//     never loaded in full: hasMore is derived from one extra fetched row.
 //   - kind/message/ref are re-bounded through diagnostic.BoundTo on the read
 //     side as the final sink policy, so even a future writer that bypasses
 //     the write boundary cannot project an unbounded or line-forging value.
@@ -122,20 +121,13 @@ type AdminAlert struct {
 }
 
 // AlertQuery is the bounded, parameterized admin-alert filter. Every filter
-// is optional. Results are ordered id DESC and keyset-paginated with
-// BeforeID (rows with id < BeforeID), which stays stable against concurrent
-// inserts.
+// is optional. Results are ordered id DESC and offset-paginated with
+// Page/PageSize (LIMIT page_size+1 OFFSET (page-1)*page_size), so a client
+// never infers pagination from a raw page size.
 type AlertQuery struct {
 	Resolved *bool // nil = both states; true/false filters one state
-	BeforeID int64 // keyset cursor; 0 = newest page
-	Limit    int   // clamped to 1..MaxAdminAlertsPageLimit
-}
-
-func (q AlertQuery) validate() error {
-	if q.BeforeID < 0 {
-		return fmt.Errorf("alert query: cursor is invalid")
-	}
-	return nil
+	Page     int   // 1-based; values below 1 are treated as 1
+	PageSize int   // clamped to 1..MaxAdminAlertsPageLimit; 0 selects the default
 }
 
 // ListAdminAlerts returns at most one page of alerts matching the filter,
@@ -144,12 +136,16 @@ func (q AlertQuery) validate() error {
 // query is needed and no full-table scan ever happens. kind/message/ref are
 // re-bounded through diagnostic.BoundTo as the final read-side sink.
 func (s *Store) ListAdminAlerts(ctx context.Context, query AlertQuery) (alerts []AdminAlert, hasMore bool, err error) {
-	if err := query.validate(); err != nil {
-		return nil, false, err
+	page := query.Page
+	if page < 1 {
+		page = 1
 	}
-	limit := query.Limit
-	if limit <= 0 || limit > MaxAdminAlertsPageLimit {
-		limit = MaxAdminAlertsPageLimit
+	pageSize := query.PageSize
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	if pageSize > MaxAdminAlertsPageLimit {
+		pageSize = MaxAdminAlertsPageLimit
 	}
 
 	var clauses []string
@@ -158,22 +154,18 @@ func (s *Store) ListAdminAlerts(ctx context.Context, query AlertQuery) (alerts [
 		clauses = append(clauses, "resolved = ?")
 		args = append(args, boolInt(*query.Resolved))
 	}
-	if query.BeforeID > 0 {
-		clauses = append(clauses, "id < ?")
-		args = append(args, query.BeforeID)
-	}
 	sqlText := `
 SELECT id, kind, message, ref, subject_user_id, created_at, resolved, resolved_at
 FROM admin_alerts`
 	if len(clauses) > 0 {
-		// #nosec G202 -- clauses contains only fixed resolved/cursor predicates;
+		// #nosec G202 -- clauses contains only fixed resolved predicates;
 		// every filter value is a bound argument.
 		sqlText += ` WHERE ` + strings.Join(clauses, " AND ")
 	}
 	sqlText += `
 ORDER BY id DESC
-LIMIT ?`
-	args = append(args, limit+1)
+LIMIT ? OFFSET ?`
+	args = append(args, pageSize+1, (page-1)*pageSize)
 
 	rows, err := s.db.QueryContext(ctx, sqlText, args...)
 	if err != nil {
@@ -181,7 +173,7 @@ LIMIT ?`
 	}
 	defer rows.Close()
 
-	alerts = make([]AdminAlert, 0, min(limit, 32))
+	alerts = make([]AdminAlert, 0, min(pageSize, 32))
 	for rows.Next() {
 		var (
 			row        AdminAlert
@@ -205,16 +197,13 @@ LIMIT ?`
 			row.ResolvedAt = time.Unix(resolvedAt.Int64, 0).UTC()
 		}
 		alerts = append(alerts, row)
-		if len(alerts) == limit {
-			// The extra row (if any) is consumed below to set hasMore.
-			break
-		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, false, fmt.Errorf("iterate admin alerts: %w", err)
 	}
-	if len(alerts) == limit && rows.Next() {
-		hasMore = true
+	hasMore = len(alerts) > pageSize
+	if hasMore {
+		alerts = alerts[:pageSize]
 	}
 	return alerts, hasMore, nil
 }

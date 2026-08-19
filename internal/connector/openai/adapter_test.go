@@ -59,6 +59,26 @@ func adapterStack(t *testing.T, allowed []string, mutate func(*egress.StackOptio
 	return stack
 }
 
+// TestChatCompletionsURLContract locks the endpoint base-URL contract: the
+// base URL carries the full API mount including the version segment, so only
+// the resource path is appended. A base already ending in /v1 must never
+// produce /v1/v1/chat/completions.
+func TestChatCompletionsURLContract(t *testing.T) {
+	cases := []struct {
+		base, want string
+	}{
+		{"https://api.example.com/v1", "https://api.example.com/v1/chat/completions"},
+		{"https://api.example.com/v1/", "https://api.example.com/v1/chat/completions"},
+		{"https://api.example.com/api/v1", "https://api.example.com/api/v1/chat/completions"},
+		{"https://api.example.com", "https://api.example.com/chat/completions"},
+	}
+	for _, c := range cases {
+		if got := chatCompletionsURL(c.base); got != c.want {
+			t.Errorf("chatCompletionsURL(%q) = %q, want %q", c.base, got, c.want)
+		}
+	}
+}
+
 func adapterForServer(t *testing.T, serverURL string, configMutate func(*AdapterConfig), stackMutate func(*egress.StackOptions)) *Adapter {
 	t.Helper()
 	stack := adapterStack(t, []string{serverURL}, stackMutate)
@@ -130,7 +150,7 @@ func TestAdapterNonStreamRequestAuthorityAndSafeResponseHeaders(t *testing.T) {
 	secret := []byte(secretText)
 	ciphertext := []byte(ciphertextText)
 	recorder := httptest.NewRecorder()
-	result := adapter.Attempt(context.Background(), recorder, testTarget(server.URL+"/mount/", secret, ciphertext), request, "nbu_authoritative")
+	result := adapter.Attempt(context.Background(), recorder, testTarget(server.URL+"/mount/v1", secret, ciphertext), request, "nbu_authoritative")
 	if !result.Success || !result.Committed || result.Failure != FailureNone || result.ClientStatus != http.StatusOK {
 		t.Fatalf("result = %+v body=%s", result, recorder.Body.String())
 	}

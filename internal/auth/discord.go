@@ -167,8 +167,8 @@ func (p *HTTPDiscordProvider) Exchange(ctx context.Context, code, redirectURI st
 	}
 	return DiscordLogin{
 		Identity: identity,
-		HasGuildRole: func(memberCtx context.Context, guildID, roleID string) (bool, error) {
-			return p.fetchGuildRole(memberCtx, accessToken, guildID, roleID)
+		GuildMember: func(memberCtx context.Context, guildID string) (GuildMember, error) {
+			return p.fetchGuildMember(memberCtx, accessToken, guildID)
 		},
 	}, nil
 }
@@ -200,36 +200,73 @@ func (p *HTTPDiscordProvider) fetchIdentity(ctx context.Context, accessToken str
 	return DiscordIdentity{ID: response.ID, Username: username, GlobalName: response.GlobalName, Avatar: response.Avatar}, nil
 }
 
-func (p *HTTPDiscordProvider) fetchGuildRole(ctx context.Context, accessToken, guildID, roleID string) (bool, error) {
-	if !validateBoundedText(guildID, 128, false) || !validateBoundedText(roleID, 128, false) {
-		return false, ErrGuildRoleMismatch
+func (p *HTTPDiscordProvider) fetchGuildMember(ctx context.Context, accessToken, guildID string) (GuildMember, error) {
+	if !validateBoundedText(guildID, 128, false) {
+		return GuildMember{}, ErrGuildRoleMismatch
 	}
 	var response struct {
-		Roles []string `json:"roles"`
+		Roles  []string `json:"roles"`
+		Nick   string   `json:"nick"`
+		Avatar string   `json:"avatar"`
 	}
 	path := "/users/@me/guilds/" + url.PathEscape(guildID) + "/member"
 	status, err := p.getJSON(ctx, path, accessToken, &response)
 	if err != nil {
-		return false, ErrProviderUnavailable
+		return GuildMember{}, ErrProviderUnavailable
 	}
+	// 404/403/401 means the member is not in the guild (or the token lost
+	// access). That is a definitive non-membership, not a transport failure:
+	// registration treats it as a role mismatch and login lets the empty
+	// member clear the snapshot so the chip falls back to the global profile.
 	if status == http.StatusNotFound || status == http.StatusForbidden || status == http.StatusUnauthorized {
-		return false, nil
+		return GuildMember{}, nil
 	}
 	if status != http.StatusOK {
-		return false, ErrProviderUnavailable
+		return GuildMember{}, ErrProviderUnavailable
 	}
 	if len(response.Roles) > maxDiscordRoleIDs {
-		return false, ErrInvalidIdentity
+		return GuildMember{}, ErrInvalidIdentity
 	}
 	for _, role := range response.Roles {
 		if !validateBoundedText(role, 128, false) {
-			return false, ErrInvalidIdentity
-		}
-		if role == roleID {
-			return true, nil
+			return GuildMember{}, ErrInvalidIdentity
 		}
 	}
-	return false, nil
+	if !validateBoundedText(response.Nick, maxUsernameBytes, true) || !validateBoundedText(response.Avatar, 1024, true) {
+		return GuildMember{}, ErrInvalidIdentity
+	}
+	return GuildMember{Nick: response.Nick, Avatar: response.Avatar, Roles: response.Roles}, nil
+}
+
+const discordCDNBase = "https://cdn.discordapp.com"
+
+// discordAvatarURL builds the global avatar CDN URL for a Discord user. The
+// avatar value stored on the user is the raw hash from /users/@me; the CDN URL
+// needs the user id and the right extension (animated avatars have a hash
+// beginning with "a_" and use gif). An empty id or hash means no avatar.
+func discordAvatarURL(discordID, hash string) string {
+	if discordID == "" || hash == "" {
+		return ""
+	}
+	ext := ".png"
+	if strings.HasPrefix(hash, "a_") {
+		ext = ".gif"
+	}
+	return discordCDNBase + "/avatars/" + discordID + "/" + hash + ext + "?size=64"
+}
+
+// discordGuildAvatarURL builds the server-specific avatar CDN URL. A guild
+// member avatar overrides the global one inside that server; an empty hash
+// means the member uses their global avatar and the caller falls back.
+func discordGuildAvatarURL(guildID, discordID, hash string) string {
+	if guildID == "" || discordID == "" || hash == "" {
+		return ""
+	}
+	ext := ".png"
+	if strings.HasPrefix(hash, "a_") {
+		ext = ".gif"
+	}
+	return discordCDNBase + "/guilds/" + guildID + "/users/" + discordID + "/avatars/" + hash + ext + "?size=64"
 }
 
 func (p *HTTPDiscordProvider) getJSON(ctx context.Context, path, accessToken string, dst any) (int, error) {

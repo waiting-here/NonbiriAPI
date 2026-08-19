@@ -775,3 +775,23 @@ func TestFetchVaultClosedFailsClosed(t *testing.T) {
 		t.Errorf("closed vault did not flag the endpoint")
 	}
 }
+
+// TestJoinModelsURLContract locks the endpoint base-URL contract: the base
+// URL carries the full API mount including the version segment, so only the
+// resource path is appended. A base already ending in /v1 must never produce
+// /v1/v1/models.
+func TestJoinModelsURLContract(t *testing.T) {
+	cases := []struct {
+		base, want string
+	}{
+		{"https://api.example.com/v1", "https://api.example.com/v1/models"},
+		{"https://api.example.com/v1/", "https://api.example.com/v1/models"},
+		{"https://api.example.com/api/v1", "https://api.example.com/api/v1/models"},
+		{"https://api.example.com", "https://api.example.com/models"},
+	}
+	for _, c := range cases {
+		if got := joinModelsURL(c.base); got != c.want {
+			t.Errorf("joinModelsURL(%q) = %q, want %q", c.base, got, c.want)
+		}
+	}
+}

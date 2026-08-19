@@ -24,14 +24,15 @@ const DefaultElevatedCapabilityTTL = elevation.DefaultTTL
 // UserRedirectPath are fixed configuration; neither is derived from request
 // Host or forwarding headers.
 type UserAuthConfig struct {
-	Store            *db.Store
-	Provider         DiscordProvider
-	ClientID         string
-	State            *StateManager
-	SiteBaseURL      string
-	RedirectURI      string
-	UserRedirectPath string
-	RegistrationGate RegistrationGateFunc
+	Store                  *db.Store
+	Provider               DiscordProvider
+	ClientID               string
+	State                  *StateManager
+	SiteBaseURL            string
+	RedirectURI            string
+	UserRedirectPath       string
+	RegistrationClosedPath string
+	RegistrationGate       RegistrationGateFunc
 	// ElevatedCapabilityTTL bounds a completed elevation (the second factor
 	// for account self-service). Zero selects DefaultElevatedCapabilityTTL.
 	ElevatedCapabilityTTL time.Duration
@@ -54,18 +55,19 @@ type UserAuthConfig struct {
 // UserAuth exposes handlers, a mountable auth route tree, and middleware for
 // Discord login and user sessions. It does not register process-wide routes.
 type UserAuth struct {
-	store              *db.Store
-	provider           DiscordProvider
-	clientID           string
-	state              *StateManager
-	elevation          *elevation.Manager
-	ownsElevation      bool
-	ownsState          bool
-	siteBaseURL        string
-	redirectURI        string
-	userRedirectPath   string
-	registrationGate   RegistrationGateFunc
-	oauthStartThrottle *ratelimit.IPThrottle
+	store                  *db.Store
+	provider               DiscordProvider
+	clientID               string
+	state                  *StateManager
+	elevation              *elevation.Manager
+	ownsElevation          bool
+	ownsState              bool
+	siteBaseURL            string
+	redirectURI            string
+	userRedirectPath       string
+	registrationClosedPath string
+	registrationGate       RegistrationGateFunc
+	oauthStartThrottle     *ratelimit.IPThrottle
 }
 
 // NewUserAuth validates fixed station configuration and returns a mountable
@@ -106,6 +108,16 @@ func NewUserAuth(config UserAuthConfig) (*UserAuth, error) {
 		}
 		return nil, ErrProviderUnavailable
 	}
+	registrationClosedPath := strings.TrimSpace(config.RegistrationClosedPath)
+	if registrationClosedPath == "" {
+		registrationClosedPath = "/registration-closed"
+	}
+	if !validLocalRedirectPath(registrationClosedPath) {
+		if ownsState {
+			_ = config.State.Close()
+		}
+		return nil, ErrProviderUnavailable
+	}
 	gate := config.RegistrationGate
 	if gate == nil {
 		gate = func(context.Context) (RegistrationGate, error) {
@@ -132,8 +144,8 @@ func NewUserAuth(config UserAuthConfig) (*UserAuth, error) {
 	return &UserAuth{
 		store: config.Store, provider: config.Provider, clientID: config.ClientID, state: config.State,
 		ownsState: ownsState, siteBaseURL: base, redirectURI: redirectURI, userRedirectPath: path,
-		registrationGate: gate, elevation: manager, ownsElevation: ownsElevation,
-		oauthStartThrottle: config.OAuthStartThrottle,
+		registrationClosedPath: registrationClosedPath, registrationGate: gate, elevation: manager,
+		ownsElevation: ownsElevation, oauthStartThrottle: config.OAuthStartThrottle,
 	}, nil
 }
 
@@ -332,6 +344,15 @@ func (a *UserAuth) finishLoginCallback(w http.ResponseWriter, r *http.Request, c
 		return
 	}
 	if user == nil {
+		open, err := a.store.RegistrationOpen()
+		if err != nil {
+			writeStableError(w, httperr.CodeServiceUnavailable, "authentication service unavailable")
+			return
+		}
+		if !open {
+			noStoreRedirect(w, r, a.registrationClosedPath)
+			return
+		}
 		user, err = a.register(identity, login, r.Context())
 		if err != nil {
 			writeAuthFailure(w, err)
@@ -342,12 +363,28 @@ func (a *UserAuth) finishLoginCallback(w http.ResponseWriter, r *http.Request, c
 			writeStableError(w, httperr.CodeUnauthorized, "authentication failed")
 			return
 		}
-		if err := a.store.UpdateUserProfile(user.ID, identity.Username, identity.Avatar); err != nil {
+		// Refresh the server-nickname and server-avatar snapshot on login. The
+		// guild member is fetched only when a registration guild is configured;
+		// a definitive non-membership (404) returns an empty member and clears
+		// the snapshot so the chip falls back to the global profile, while a
+		// transport or server error keeps the existing snapshot.
+		guildNick, guildAvatarURL := user.GuildNick, user.GuildAvatarURL
+		if login.GuildMember != nil {
+			if gate, gerr := a.registrationGate(r.Context()); gerr == nil && validateBoundedText(gate.GuildID, 128, false) {
+				if member, merr := login.GuildMember(r.Context(), gate.GuildID); merr == nil {
+					guildNick = member.Nick
+					guildAvatarURL = discordGuildAvatarURL(gate.GuildID, identity.ID, member.Avatar)
+				}
+			}
+		}
+		if err := a.store.UpdateUserProfile(user.ID, identity.Username, identity.Avatar, guildNick, guildAvatarURL); err != nil {
 			writeStableError(w, httperr.CodeInternal, "authentication failed")
 			return
 		}
 		user.Username = identity.Username
 		user.Avatar = identity.Avatar
+		user.GuildNick = guildNick
+		user.GuildAvatarURL = guildAvatarURL
 	}
 
 	token, expiry, err := a.store.CreateUserSession(user.ID)
@@ -376,22 +413,25 @@ func (a *UserAuth) register(identity DiscordIdentity, login DiscordLogin, ctx co
 	if !validateBoundedText(gate.GuildID, 128, false) || !validateBoundedText(gate.RoleID, 128, false) {
 		return nil, ErrRegistrationPaused
 	}
+	var member GuildMember
 	var matches bool
-	if login.HasGuildRole != nil {
-		matches, err = login.HasGuildRole(ctx, gate.GuildID, gate.RoleID)
+	if login.GuildMember != nil {
+		member, err = login.GuildMember(ctx, gate.GuildID)
+		if err != nil {
+			return nil, ErrProviderUnavailable
+		}
+		matches = containsString(member.Roles, gate.RoleID)
 	} else {
 		if !validateMembershipMetadata(identity) {
 			return nil, ErrInvalidIdentity
 		}
 		matches = identity.GuildID == gate.GuildID && containsString(identity.RoleIDs, gate.RoleID)
 	}
-	if err != nil {
-		return nil, ErrProviderUnavailable
-	}
 	if !matches {
 		return nil, ErrGuildRoleMismatch
 	}
-	user, _, err := a.store.FindOrCreateDiscordUser(identity.ID, identity.Username, identity.Avatar)
+	guildAvatarURL := discordGuildAvatarURL(gate.GuildID, identity.ID, member.Avatar)
+	user, _, err := a.store.FindOrCreateDiscordUser(identity.ID, identity.Username, identity.Avatar, member.Nick, guildAvatarURL)
 	if errors.Is(err, db.ErrConflict) {
 		// Another callback may have won the unique Discord id race. Resolve the
 		// committed row, then let the caller apply the normal ban check.

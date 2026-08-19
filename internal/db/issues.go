@@ -1,7 +1,7 @@
 package db
 
 // User-issue center repository: ownership-scoped listing with
-// keyset pagination and the one-way resolve ack.
+// offset pagination and the one-way resolve ack.
 //
 // Reads never filter a full table in memory: user_id is a mandatory SQL
 // predicate, so cross-user issues can never enter the candidate set. Writes
@@ -36,20 +36,18 @@ const MaxIssuePageLimit = 100
 const MaxUserIssuesPerUser = 1000
 
 // IssueQuery is the bounded, parameterized user-issue filter. UserID is
-// mandatory: every query is scoped to exactly one owner.
+// mandatory: every query is scoped to exactly one owner. Results are ordered
+// id DESC and offset-paginated with Page/PageSize.
 type IssueQuery struct {
 	UserID   int64 // required, > 0: ownership scope
 	Resolved *bool // nil = both states; true/false filters one state
-	BeforeID int64 // keyset cursor (rows with id < BeforeID); 0 = newest page
-	Limit    int   // clamped to 1..MaxIssuePageLimit
+	Page     int   // 1-based; values below 1 are treated as 1
+	PageSize int   // clamped to 1..MaxIssuePageLimit; 0 selects the default
 }
 
 func (q IssueQuery) validate() error {
 	if q.UserID <= 0 {
 		return fmt.Errorf("issue query: user id is required")
-	}
-	if q.BeforeID < 0 {
-		return fmt.Errorf("issue query: cursor is invalid")
 	}
 	return nil
 }
@@ -67,19 +65,26 @@ type UserIssue struct {
 }
 
 // QueryUserIssues returns at most one page of the owner's issues, newest
-// first (id DESC, stable against concurrent inserts). hasMore reports whether
-// another page exists past the returned rows; it is computed from one extra
-// fetched row, so no second query is needed and no full-table scan ever
-// happens. kind/message/ref are re-bounded through diagnostic.BoundTo as the
-// final read-side sink: even a future writer that bypasses the write boundary
-// cannot project an unbounded or line-forging value.
+// first (id DESC). hasMore reports whether another page exists past the
+// returned rows; it is computed from one extra fetched row, so no second
+// query is needed and no full-table scan ever happens. kind/message/ref are
+// re-bounded through diagnostic.BoundTo as the final read-side sink: even a
+// future writer that bypasses the write boundary cannot project an unbounded
+// or line-forging value.
 func (s *Store) QueryUserIssues(ctx context.Context, query IssueQuery) (issues []UserIssue, hasMore bool, err error) {
 	if err := query.validate(); err != nil {
 		return nil, false, err
 	}
-	limit := query.Limit
-	if limit <= 0 || limit > MaxIssuePageLimit {
-		limit = MaxIssuePageLimit
+	page := query.Page
+	if page < 1 {
+		page = 1
+	}
+	pageSize := query.PageSize
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	if pageSize > MaxIssuePageLimit {
+		pageSize = MaxIssuePageLimit
 	}
 
 	clauses := []string{"user_id = ?"}
@@ -88,19 +93,15 @@ func (s *Store) QueryUserIssues(ctx context.Context, query IssueQuery) (issues [
 		clauses = append(clauses, "resolved = ?")
 		args = append(args, boolInt(*query.Resolved))
 	}
-	if query.BeforeID > 0 {
-		clauses = append(clauses, "id < ?")
-		args = append(args, query.BeforeID)
-	}
-	// #nosec G202 -- clauses contains only the fixed owner/resolved/cursor
+	// #nosec G202 -- clauses contains only the fixed owner/resolved
 	// predicates selected above; all values are bound through args.
 	sqlText := `
 SELECT id, kind, message, ref, created_at, resolved, resolved_at
 FROM user_issues
 WHERE ` + strings.Join(clauses, " AND ") + `
 ORDER BY id DESC
-LIMIT ?`
-	args = append(args, limit+1)
+LIMIT ? OFFSET ?`
+	args = append(args, pageSize+1, (page-1)*pageSize)
 
 	rows, err := s.db.QueryContext(ctx, sqlText, args...)
 	if err != nil {
@@ -108,7 +109,7 @@ LIMIT ?`
 	}
 	defer rows.Close()
 
-	issues = make([]UserIssue, 0, min(limit, 32))
+	issues = make([]UserIssue, 0, min(pageSize, 32))
 	for rows.Next() {
 		var (
 			row        UserIssue
@@ -128,16 +129,13 @@ LIMIT ?`
 			row.ResolvedAt = time.Unix(resolvedAt.Int64, 0).UTC()
 		}
 		issues = append(issues, row)
-		if len(issues) == limit {
-			// The extra row (if any) is consumed below to set hasMore.
-			break
-		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, false, fmt.Errorf("iterate user issues: %w", err)
 	}
-	if len(issues) == limit && rows.Next() {
-		hasMore = true
+	hasMore = len(issues) > pageSize
+	if hasMore {
+		issues = issues[:pageSize]
 	}
 	return issues, hasMore, nil
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatDateTime } from '@shared/utils/datetime';
 import { useTranslation } from 'react-i18next';
 import {
@@ -17,6 +17,23 @@ export function EndpointsPage() {
   const { t } = useTranslation();
   const endpoints = useAdminEndpoints();
   const [page, setPage] = useState(1);
+  const [query, setQuery] = useState('');
+
+  const filtered = useMemo(() => {
+    const data = endpoints.data ?? [];
+    const needle = query.trim().toLowerCase();
+    if (!needle) return data;
+    return data.filter((endpoint) =>
+      [endpoint.base_url, endpoint.note, endpoint.user_id].some((value) =>
+        value.toLowerCase().includes(needle),
+      ),
+    );
+  }, [endpoints.data, query]);
+
+  const onQueryChange = (value: string) => {
+    setQuery(value);
+    setPage(1);
+  };
 
   return (
     <div className="page">
@@ -28,7 +45,20 @@ export function EndpointsPage() {
       <Card>
         <div className="card-title-row">
           <h2>{t('admin.endpoints.listTitle')}</h2>
-          {endpoints.data ? <span className="muted">{endpoints.data.length}</span> : null}
+          {endpoints.data ? <span className="muted">{filtered.length}</span> : null}
+        </div>
+        <div className="filter-bar" role="search">
+          <label>
+            <span>{t('common.search')}</span>
+            <input
+              type="search"
+              value={query}
+              maxLength={256}
+              onChange={(event) => onQueryChange(event.target.value)}
+              placeholder={t('admin.endpoints.searchPlaceholder')}
+              aria-label={t('admin.endpoints.searchAria')}
+            />
+          </label>
         </div>
         {endpoints.isPending ? (
           <LoadingState />
@@ -36,6 +66,8 @@ export function EndpointsPage() {
           <ErrorState error={endpoints.error} onRetry={() => void endpoints.refetch()} />
         ) : endpoints.data.length === 0 ? (
           <EmptyState title={t('admin.endpoints.empty')} body={t('admin.endpoints.emptyBody')} />
+        ) : filtered.length === 0 ? (
+          <EmptyState title={t('common.noResults')} body={t('common.noResultsBody')} />
         ) : (
           <>
           <div className="table-wrap">
@@ -53,7 +85,7 @@ export function EndpointsPage() {
                 </tr>
               </thead>
               <tbody>
-                {endpoints.data.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE).map((endpoint) => (
+                {filtered.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE).map((endpoint) => (
                   <tr key={endpoint.id}>
                     <td><ReadOnlyValue value={endpoint.user_id} /></td>
                     <td>
@@ -72,7 +104,7 @@ export function EndpointsPage() {
           </div>
           <Pagination
             page={page}
-            hasNext={page * ADMIN_PAGE_SIZE < endpoints.data.length}
+            hasNext={page * ADMIN_PAGE_SIZE < filtered.length}
             onChange={setPage}
           />
           </>

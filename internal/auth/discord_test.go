@@ -35,7 +35,7 @@ func TestHTTPDiscordProviderExchangeIdentityAndMembership(t *testing.T) {
 				return
 			}
 			receivedToken.Add(1)
-			_, _ = w.Write([]byte(`{"roles":["other-role","role-id"]}`))
+			_, _ = w.Write([]byte(`{"roles":["other-role","role-id"],"nick":"Server Nick","avatar":"guild-avatar-hash"}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -67,9 +67,15 @@ func TestHTTPDiscordProviderExchangeIdentityAndMembership(t *testing.T) {
 	if login.Identity.ID != "discord-id" || login.Identity.Username != "Global Name" {
 		t.Fatalf("identity=%#v", login.Identity)
 	}
-	matched, err := login.HasGuildRole(context.Background(), "guild-id", "role-id")
-	if err != nil || !matched {
-		t.Fatalf("HasGuildRole matched=%t err=%v", matched, err)
+	member, err := login.GuildMember(context.Background(), "guild-id")
+	if err != nil {
+		t.Fatalf("GuildMember err=%v", err)
+	}
+	if member.Nick != "Server Nick" || member.Avatar != "guild-avatar-hash" {
+		t.Fatalf("GuildMember nick=%q avatar=%q", member.Nick, member.Avatar)
+	}
+	if !containsString(member.Roles, "role-id") {
+		t.Fatalf("GuildMember roles=%v want role-id", member.Roles)
 	}
 	if receivedToken.Load() != 2 {
 		t.Fatalf("provider did not perform both token-authenticated calls: %d", receivedToken.Load())

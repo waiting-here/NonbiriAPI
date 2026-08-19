@@ -62,6 +62,8 @@ func TestReadPublicConfigProjectsOnlyAllowlist(t *testing.T) {
 		"legal_privacy_override_zh",
 		"legal_terms_override_en",
 		"legal_terms_override_zh",
+		"maintenance_mode",
+		"registration_open",
 		"site_logo_url",
 		"site_name",
 	}
@@ -82,6 +84,12 @@ func TestReadPublicConfigProjectsOnlyAllowlist(t *testing.T) {
 	}
 	if out["default_locale"] != "zh" {
 		t.Fatalf("default_locale=%v", out["default_locale"])
+	}
+	if out["maintenance_mode"] != false {
+		t.Fatalf("maintenance_mode=%v want false", out["maintenance_mode"])
+	}
+	if out["registration_open"] != true {
+		t.Fatalf("registration_open=%v want true", out["registration_open"])
 	}
 
 	// Defensive: none of the sensitive values may appear anywhere in the
@@ -126,6 +134,12 @@ func TestReadPublicConfigEmptyStoreYieldsDefaults(t *testing.T) {
 	if out["legal_authoritative_locale"] != "" {
 		t.Fatalf("legal_authoritative_locale=%v want empty", out["legal_authoritative_locale"])
 	}
+	if out["maintenance_mode"] != false {
+		t.Fatalf("maintenance_mode=%v want false", out["maintenance_mode"])
+	}
+	if out["registration_open"] != true {
+		t.Fatalf("registration_open=%v want true", out["registration_open"])
+	}
 }
 
 func TestReadPublicConfigNilStoreYieldsDefaults(t *testing.T) {
@@ -135,6 +149,9 @@ func TestReadPublicConfigNilStoreYieldsDefaults(t *testing.T) {
 	}
 	if out["site_name"] != "" || out["site_logo_url"] != "" || out["default_locale"] != "" {
 		t.Fatalf("nil store projection=%v want all defaults", out)
+	}
+	if out["maintenance_mode"] != false || out["registration_open"] != true {
+		t.Fatalf("nil store toggles=%v want maintenance=false registration=true", out)
 	}
 }
 
