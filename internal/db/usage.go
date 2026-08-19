@@ -443,17 +443,17 @@ FROM users WHERE id = ?`, userID).
 }
 
 // LogQuery is the bounded, parameterized admin request-log filter. Every
-// filter is optional. Results are ordered id DESC and keyset-paginated with
-// BeforeID (rows with id < BeforeID), which stays stable against concurrent
-// inserts.
+// filter is optional. Results are ordered id DESC and offset-paginated with
+// Page/PageSize (LIMIT page_size+1 OFFSET (page-1)*page_size), so a client
+// never infers pagination from a raw page size.
 type LogQuery struct {
 	UserID   int64  // > 0 restricts to one user
 	Model    string // exact platform full_name; "" = no filter
 	Status   int    // 0 = no filter; otherwise a 100..599 status code
 	FromUnix int64  // started_at >= FromUnix; 0 = unbounded
 	ToUnix   int64  // started_at < ToUnix; 0 = unbounded
-	BeforeID int64  // keyset cursor; 0 = newest page
-	Limit    int    // clamped to 1..MaxLogPageLimit
+	Page     int    // 1-based; values below 1 are treated as 1
+	PageSize int    // clamped to 1..MaxLogPageLimit; 0 selects the default
 }
 
 func (q LogQuery) validate() error {
@@ -469,25 +469,28 @@ func (q LogQuery) validate() error {
 	if q.FromUnix < 0 || q.ToUnix < 0 || (q.FromUnix > 0 && q.ToUnix > 0 && q.FromUnix > q.ToUnix) {
 		return fmt.Errorf("log query: time range is invalid")
 	}
-	if q.BeforeID < 0 {
-		return fmt.Errorf("log query: cursor is invalid")
-	}
 	return nil
 }
 
 // QueryRequestLogs returns at most one page of metadata-only log rows
 // matching the filter, newest first. The result is bounded by the clamped
-// Limit; no request/response content is ever projected.
-func (s *Store) QueryRequestLogs(ctx context.Context, query LogQuery) ([]RequestLog, error) {
+// PageSize; no request/response content is ever projected. The second return
+// value reports whether another page follows, so a client never infers
+// pagination from a raw page size.
+func (s *Store) QueryRequestLogs(ctx context.Context, query LogQuery) ([]RequestLog, bool, error) {
 	if err := query.validate(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	limit := query.Limit
-	if limit <= 0 {
-		limit = MaxLogPageLimit
+	page := query.Page
+	if page < 1 {
+		page = 1
 	}
-	if limit > MaxLogPageLimit {
-		limit = MaxLogPageLimit
+	pageSize := query.PageSize
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	if pageSize > MaxLogPageLimit {
+		pageSize = MaxLogPageLimit
 	}
 
 	var clauses []string
@@ -512,10 +515,6 @@ func (s *Store) QueryRequestLogs(ctx context.Context, query LogQuery) ([]Request
 		clauses = append(clauses, "started_at < ?")
 		args = append(args, query.ToUnix)
 	}
-	if query.BeforeID > 0 {
-		clauses = append(clauses, "id < ?")
-		args = append(args, query.BeforeID)
-	}
 
 	sqlText := `SELECT ` + requestLogSelectColumns + ` FROM request_logs`
 	if len(clauses) > 0 {
@@ -523,27 +522,31 @@ func (s *Store) QueryRequestLogs(ctx context.Context, query LogQuery) ([]Request
 		// above and every filter value is passed separately in args.
 		sqlText += ` WHERE ` + strings.Join(clauses, " AND ")
 	}
-	sqlText += ` ORDER BY id DESC LIMIT ?`
-	args = append(args, limit)
+	sqlText += ` ORDER BY id DESC LIMIT ? OFFSET ?`
+	args = append(args, pageSize+1, (page-1)*pageSize)
 
 	rows, err := s.db.QueryContext(ctx, sqlText, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query request logs: %w", err)
+		return nil, false, fmt.Errorf("query request logs: %w", err)
 	}
 	defer rows.Close()
 
-	logs := make([]RequestLog, 0, min(limit, 32))
+	logs := make([]RequestLog, 0, min(pageSize, 32))
 	for rows.Next() {
 		log, err := scanRequestLog(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan request log: %w", err)
+			return nil, false, fmt.Errorf("scan request log: %w", err)
 		}
 		logs = append(logs, log)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate request logs: %w", err)
+		return nil, false, fmt.Errorf("iterate request logs: %w", err)
 	}
-	return logs, nil
+	hasMore := len(logs) > pageSize
+	if hasMore {
+		logs = logs[:pageSize]
+	}
+	return logs, hasMore, nil
 }
 
 // AggregateUsage returns site-wide accumulator totals across all normal

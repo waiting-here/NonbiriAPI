@@ -224,6 +224,19 @@ func assertJSONKeys(t *testing.T, body []byte, wantKeys ...string) map[string]an
 	return m
 }
 
+// decodeLogs unpacks the {data, has_more} log-list envelope.
+func decodeLogs(t *testing.T, rec *httptest.ResponseRecorder) ([]map[string]any, bool) {
+	t.Helper()
+	var body struct {
+		Data    []map[string]any `json:"data"`
+		HasMore bool             `json:"has_more"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode logs: %v; body=%s", err, rec.Body.String())
+	}
+	return body.Data, body.HasMore
+}
+
 // --- user usage -------------------------------------------------------------
 
 func TestMeUsageAuthIsolation(t *testing.T) {
@@ -355,10 +368,7 @@ func TestAdminLogsFilters(t *testing.T) {
 		r.AddCookie(adminCookie(t, env))
 		rec := do(t, h, r)
 		assertOK(t, rec)
-		var rows []map[string]any
-		if err := json.Unmarshal(rec.Body.Bytes(), &rows); err != nil {
-			t.Fatalf("decode logs: %v; body=%s", err, rec.Body.String())
-		}
+		rows, _ := decodeLogs(t, rec)
 		return rows
 	}
 	ids := func(rows []map[string]any) []int64 {
@@ -454,10 +464,7 @@ func TestAdminLogsPagination(t *testing.T) {
 		r.AddCookie(adminCookie(t, env))
 		rec := do(t, h, r)
 		assertOK(t, rec)
-		var rows []map[string]any
-		if err := json.Unmarshal(rec.Body.Bytes(), &rows); err != nil {
-			t.Fatalf("decode logs: %v", err)
-		}
+		rows, _ := decodeLogs(t, rec)
 		out := make([]int64, 0, len(rows))
 		for _, row := range rows {
 			out = append(out, int64(row["id"].(float64)))
@@ -465,15 +472,10 @@ func TestAdminLogsPagination(t *testing.T) {
 		return out
 	}
 
-	// Keyset walk with limit=3 covers every row exactly once, newest first.
+	// Offset walk with page_size=3 covers every row exactly once, newest first.
 	var walked []int64
-	var cursor int64
-	for {
-		query := "?limit=3"
-		if cursor > 0 {
-			query += fmt.Sprintf("&before_id=%d", cursor)
-		}
-		page := get(query)
+	for n := 1; ; n++ {
+		page := get(fmt.Sprintf("?page=%d&page_size=3", n))
 		if len(page) == 0 {
 			break
 		}
@@ -483,18 +485,17 @@ func TestAdminLogsPagination(t *testing.T) {
 			}
 		}
 		walked = append(walked, page...)
-		cursor = page[len(page)-1]
+		if len(page) < 3 {
+			break
+		}
 	}
 	if len(walked) != 7 || !idsContains(walked, 1, 2, 3, 4, 5, 6, 7) {
 		t.Fatalf("walked ids = %v, want all 7 exactly once", walked)
 	}
 
-	// limit=0 clamps to 1 row; limit=1000 clamps to the page bound.
-	if page := get("?limit=0"); len(page) != 1 || page[0] != 7 {
-		t.Fatalf("limit=0 page = %v", page)
-	}
-	if page := get("?limit=1000"); len(page) != 7 {
-		t.Fatalf("limit=1000 page = %v", page)
+	// page_size=1000 clamps to the page bound and returns the full first page.
+	if page := get("?page_size=1000"); len(page) != 7 {
+		t.Fatalf("page_size=1000 page = %v", page)
 	}
 }
 
@@ -504,16 +505,13 @@ func TestAdminLogsPageLimitBound(t *testing.T) {
 		seedLog(t, env, env.user.ID, fmt.Sprintf("attempt-bulk-%d", i), "p1/m1", 200, 1700002000+int64(i), "")
 	}
 	h := newAdminMount(t, env)
-	r := stationRequest(http.MethodGet, "/admin/api/logs?limit=1000", host.StationAdmin)
+	r := stationRequest(http.MethodGet, "/admin/api/logs?page_size=1000", host.StationAdmin)
 	r.AddCookie(adminCookie(t, env))
 	rec := do(t, h, r)
 	assertOK(t, rec)
-	var rows []map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &rows); err != nil {
-		t.Fatalf("decode logs: %v", err)
-	}
-	if len(rows) != db.MaxLogPageLimit {
-		t.Fatalf("page rows = %d, want %d", len(rows), db.MaxLogPageLimit)
+	rows, hasMore := decodeLogs(t, rec)
+	if len(rows) != db.MaxLogPageLimit || !hasMore {
+		t.Fatalf("page rows = %d hasMore=%v, want %d/true", len(rows), hasMore, db.MaxLogPageLimit)
 	}
 }
 
@@ -543,10 +541,14 @@ func TestAdminLogsInvalidParams(t *testing.T) {
 		"?from=abc",
 		"?from=20&to=10",
 		"?to=abc",
-		"?before_id=0",
-		"?before_id=-1",
-		"?before_id=abc",
-		"?limit=abc",
+		"?page=0",
+		"?page=-1",
+		"?page=abc",
+		"?page=1&page=2",
+		"?page_size=0",
+		"?page_size=-1",
+		"?page_size=abc",
+		"?page_size=1&page_size=2",
 		"?model=",
 		"?model=ab%0Acd",
 		"?model=" + strings.Repeat("x", 600),
@@ -567,8 +569,9 @@ func TestAdminLogsInvalidParams(t *testing.T) {
 	if strings.Contains(rec.Body.String(), "1=1") {
 		t.Fatalf("injection leaked into SQL or response: %s", rec.Body.String())
 	}
-	if got := strings.TrimSpace(rec.Body.String()); got != "[]" {
-		t.Fatalf("injection model matched rows: %s", got)
+	rows, _ := decodeLogs(t, rec)
+	if len(rows) != 0 {
+		t.Fatalf("injection model matched rows: %v", rows)
 	}
 }
 
@@ -585,10 +588,7 @@ func TestAdminLogsDiagBounded(t *testing.T) {
 	rec := do(t, h, r)
 	assertOK(t, rec)
 
-	var rows []map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &rows); err != nil {
-		t.Fatalf("decode logs: %v", err)
-	}
+	rows, _ := decodeLogs(t, rec)
 	if len(rows) != 1 {
 		t.Fatalf("rows = %d, want 1", len(rows))
 	}
@@ -879,10 +879,7 @@ func TestAdminLogsRowShape(t *testing.T) {
 	rec := do(t, h, r)
 	assertOK(t, rec)
 
-	var rows []map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &rows); err != nil {
-		t.Fatalf("decode logs: %v", err)
-	}
+	rows, _ := decodeLogs(t, rec)
 	if len(rows) != 1 {
 		t.Fatalf("rows = %d, want 1", len(rows))
 	}

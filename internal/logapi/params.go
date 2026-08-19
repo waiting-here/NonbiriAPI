@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	// DefaultLogPageLimit is the page size used when limit is omitted.
-	DefaultLogPageLimit = 100
+	// defaultLogPageSize is the page size used when page_size is omitted.
+	defaultLogPageSize = 20
 	// maxModelFilterRunes mirrors the repository's stored-text bound for the
 	// platform model filter.
 	maxModelFilterRunes = 512
@@ -32,15 +32,15 @@ const (
 // parseLogQuery builds a bounded db.LogQuery from strict single-value query
 // parameters. Unknown parameters, repeated parameters, unparseable or
 // out-of-range values, and over-long inputs are rejected with
-// invalid_request. limit clamps into [1, db.MaxLogPageLimit] and defaults to
-// DefaultLogPageLimit when omitted.
+// invalid_request. page defaults to 1 and must be >= 1; page_size defaults
+// to 20 and clamps into [1, db.MaxLogPageLimit].
 func parseLogQuery(r *http.Request) (db.LogQuery, httperr.Error) {
 	invalid := httperr.New(httperr.CodeInvalidRequest, "invalid query parameter")
 	if r == nil || r.URL == nil || len(r.URL.RawQuery) > maxRawQueryBytes ||
-		!onlyParams(r, "user_id", "model", "status", "from", "to", "before_id", "limit") {
+		!onlyParams(r, "user_id", "model", "status", "from", "to", "page", "page_size") {
 		return db.LogQuery{}, invalid
 	}
-	q := db.LogQuery{Limit: DefaultLogPageLimit}
+	q := db.LogQuery{Page: 1, PageSize: defaultLogPageSize}
 
 	if v, present, ok := singleValue(r, "user_id"); present {
 		if !ok {
@@ -91,38 +91,36 @@ func parseLogQuery(r *http.Request) (db.LogQuery, httperr.Error) {
 	if q.FromUnix > 0 && q.ToUnix > 0 && q.FromUnix > q.ToUnix {
 		return db.LogQuery{}, invalid
 	}
-	if v, present, ok := singleValue(r, "before_id"); present {
-		if !ok {
-			return db.LogQuery{}, invalid
-		}
-		id, err := strconv.ParseInt(v, 10, 64)
-		if err != nil || id <= 0 {
-			return db.LogQuery{}, invalid
-		}
-		q.BeforeID = id
-	}
-	if v, present, ok := singleValue(r, "limit"); present {
+	if v, present, ok := singleValue(r, "page"); present {
 		if !ok {
 			return db.LogQuery{}, invalid
 		}
 		n, err := strconv.Atoi(v)
-		if err != nil {
+		if err != nil || n < 1 {
 			return db.LogQuery{}, invalid
 		}
-		if n < 1 {
-			n = 1
+		q.Page = n
+	}
+	if v, present, ok := singleValue(r, "page_size"); present {
+		if !ok {
+			return db.LogQuery{}, invalid
+		}
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			return db.LogQuery{}, invalid
 		}
 		if n > db.MaxLogPageLimit {
 			n = db.MaxLogPageLimit
 		}
-		q.Limit = n
+		q.PageSize = n
 	}
 
 	// Every value above is pre-validated against the repository's own rules
 	// (user id > 0, model stored-text bounds, status 100..599, non-negative
-	// non-inverted time range, positive cursor), so QueryRequestLogs can never
-	// see an invalid filter. The repository re-validates defensively; a
-	// failure there maps to internal error without echoing anything.
+	// non-inverted time range, 1-based page and clamped page size), so
+	// QueryRequestLogs can never see an invalid filter. The repository
+	// re-validates defensively; a failure there maps to internal error without
+	// echoing anything.
 	return q, httperr.Error{}
 }
 

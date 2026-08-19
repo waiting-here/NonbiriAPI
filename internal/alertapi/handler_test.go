@@ -186,13 +186,16 @@ func assertErr(t *testing.T, rec *httptest.ResponseRecorder, wantStatus int, wan
 	}
 }
 
-func decodeAlerts(t *testing.T, rec *httptest.ResponseRecorder) []map[string]any {
+func decodeAlerts(t *testing.T, rec *httptest.ResponseRecorder) ([]map[string]any, bool) {
 	t.Helper()
-	var rows []map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &rows); err != nil {
+	var body struct {
+		Data    []map[string]any `json:"data"`
+		HasMore bool             `json:"has_more"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode alerts: %v; body=%s", err, rec.Body.String())
 	}
-	return rows
+	return body.Data, body.HasMore
 }
 
 func decodeAlert(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
@@ -272,7 +275,8 @@ func TestAdminAlertsListShapeAndFilter(t *testing.T) {
 		r.AddCookie(adminCookie(t, env))
 		rec := do(t, h, r)
 		assertOK(t, rec)
-		return decodeAlerts(t, rec)
+		rows, _ := decodeAlerts(t, rec)
+		return rows
 	}
 
 	// All alerts, newest first, exact contract shape.
@@ -339,8 +343,9 @@ func TestAdminAlertsListShapeAndFilter(t *testing.T) {
 	r.AddCookie(adminCookie(t, env))
 	rec := do(t, h, r)
 	assertOK(t, rec)
-	if got := strings.TrimSpace(rec.Body.String()); got != "[]" {
-		t.Fatalf("empty list body = %s, want []", got)
+	rows, _ = decodeAlerts(t, rec)
+	if len(rows) != 0 {
+		t.Fatalf("empty list = %v, want no rows", rows)
 	}
 }
 
@@ -357,7 +362,7 @@ func TestAdminAlertsPagination(t *testing.T) {
 		r.AddCookie(adminCookie(t, env))
 		rec := do(t, h, r)
 		assertOK(t, rec)
-		rows := decodeAlerts(t, rec)
+		rows, _ := decodeAlerts(t, rec)
 		out := make([]int64, 0, len(rows))
 		for _, row := range rows {
 			out = append(out, int64(row["id"].(float64)))
@@ -365,15 +370,10 @@ func TestAdminAlertsPagination(t *testing.T) {
 		return out
 	}
 
-	// Keyset walk with limit=3 covers every alert exactly once, newest first.
+	// Offset walk with page_size=3 covers every alert exactly once, newest first.
 	var walked []int64
-	var cursor int64
-	for {
-		query := "?limit=3"
-		if cursor > 0 {
-			query += fmt.Sprintf("&before_id=%d", cursor)
-		}
-		page := get(query)
+	for n := 1; ; n++ {
+		page := get(fmt.Sprintf("?page=%d&page_size=3", n))
 		if len(page) == 0 {
 			break
 		}
@@ -383,7 +383,9 @@ func TestAdminAlertsPagination(t *testing.T) {
 			}
 		}
 		walked = append(walked, page...)
-		cursor = page[len(page)-1]
+		if len(page) < 3 {
+			break
+		}
 	}
 	if len(walked) != 7 {
 		t.Fatalf("walked %d alerts, want 7: %v", len(walked), walked)
@@ -396,12 +398,10 @@ func TestAdminAlertsPagination(t *testing.T) {
 		seen[id] = true
 	}
 
-	// limit clamps into [1, db.MaxAdminAlertsPageLimit].
-	if page := get("?limit=0"); len(page) != 1 || page[0] != 7 {
-		t.Fatalf("limit=0 page = %v", page)
-	}
-	if page := get("?limit=1000"); len(page) != 7 {
-		t.Fatalf("limit=1000 page = %v", page)
+	// page_size=1000 clamps into [1, db.MaxAdminAlertsPageLimit] and returns
+	// the full first page.
+	if page := get("?page_size=1000"); len(page) != 7 {
+		t.Fatalf("page_size=1000 page = %v", page)
 	}
 }
 
@@ -423,13 +423,15 @@ func TestAdminAlertsInvalidParams(t *testing.T) {
 		"?resolved=1",
 		"?resolved=true&resolved=false",
 		"?resolved=",
-		"?before_id=abc",
-		"?before_id=0",
-		"?before_id=-1",
-		"?before_id=1&before_id=2",
-		"?limit=abc",
-		"?limit=1&limit=2",
-		"?resolved=true&before_id=1%20OR%201=1",
+		"?page=0",
+		"?page=-1",
+		"?page=abc",
+		"?page=1&page=2",
+		"?page_size=0",
+		"?page_size=-1",
+		"?page_size=abc",
+		"?page_size=1&page_size=2",
+		"?resolved=true&page=1%20OR%201=1",
 	}
 	for _, query := range bad {
 		rec := request(query)
@@ -440,9 +442,9 @@ func TestAdminAlertsInvalidParams(t *testing.T) {
 		assertErr(t, rec, http.StatusBadRequest, httperr.CodeInvalidRequest)
 	}
 
-	// Injection-shaped before_id is a parse failure (never SQL, never rows):
-	// the stable invalid_request envelope is returned with no echo.
-	rec := request("?before_id=1%27%20OR%201%3D1--")
+	// Injection-shaped page is a parse failure (never SQL, never rows): the
+	// stable invalid_request envelope is returned with no echo.
+	rec := request("?page=1%27%20OR%201%3D1--")
 	assertErr(t, rec, http.StatusBadRequest, httperr.CodeInvalidRequest)
 	if strings.Contains(rec.Body.String(), "1=1") {
 		t.Fatalf("injection leaked into the response: %s", rec.Body.String())
@@ -567,7 +569,7 @@ func TestAdminAlertsResolveErrors(t *testing.T) {
 	r.AddCookie(adminCookie(t, env))
 	rec = do(t, h, r)
 	assertOK(t, rec)
-	rows := decodeAlerts(t, rec)
+	rows, _ := decodeAlerts(t, rec)
 	if len(rows) != 1 || rows[0]["resolved"] != false {
 		t.Fatalf("alert state after failed attempts = %+v", rows)
 	}
@@ -610,7 +612,7 @@ func TestAdminAlertsOutputBounded(t *testing.T) {
 	rec := do(t, h, r)
 	assertOK(t, rec)
 
-	rows := decodeAlerts(t, rec)
+	rows, _ := decodeAlerts(t, rec)
 	if len(rows) != 1 {
 		t.Fatalf("rows = %d, want 1", len(rows))
 	}

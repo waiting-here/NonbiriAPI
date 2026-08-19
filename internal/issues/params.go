@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	// defaultIssueLimit is the page size used when limit is omitted.
-	defaultIssueLimit = 100
+	// defaultIssuePageSize is the page size used when page_size is omitted.
+	defaultIssuePageSize = 20
 	// maxRawQueryBytes bounds the whole query string before parsing. The
 	// parameter set is small and values are bounded individually; a larger
 	// query cannot be legitimate.
@@ -25,18 +25,19 @@ const (
 )
 
 // parseIssueQuery builds a bounded db.IssueQuery from strict single-value
-// query parameters. Only resolved / before_id / limit are accepted; anything
-// else (including repeats) is invalid_request. limit clamps into
-// [1, db.MaxIssuePageLimit] and defaults to defaultIssueLimit when omitted.
-// The owner id is not a parameter: it always comes from the session principal
-// inside the handler, so no query can ever select another user's issues.
+// query parameters. Only resolved / page / page_size are accepted; anything
+// else (including repeats) is invalid_request. page defaults to 1 and must
+// be >= 1; page_size defaults to 20 and clamps into
+// [1, db.MaxIssuePageLimit]. The owner id is not a parameter: it always
+// comes from the session principal inside the handler, so no query can ever
+// select another user's issues.
 func parseIssueQuery(r *http.Request) (db.IssueQuery, httperr.Error) {
 	invalid := httperr.New(httperr.CodeInvalidRequest, "invalid query parameter")
 	if r == nil || r.URL == nil || len(r.URL.RawQuery) > maxRawQueryBytes ||
-		!onlyParams(r, "resolved", "before_id", "limit") {
+		!onlyParams(r, "resolved", "page", "page_size") {
 		return db.IssueQuery{}, invalid
 	}
-	q := db.IssueQuery{Limit: defaultIssueLimit}
+	q := db.IssueQuery{Page: 1, PageSize: defaultIssuePageSize}
 
 	if v, present, ok := singleValue(r, "resolved"); present {
 		if !ok {
@@ -53,31 +54,28 @@ func parseIssueQuery(r *http.Request) (db.IssueQuery, httperr.Error) {
 		}
 		q.Resolved = &resolved
 	}
-	if v, present, ok := singleValue(r, "before_id"); present {
-		if !ok {
-			return db.IssueQuery{}, invalid
-		}
-		id, err := strconv.ParseInt(v, 10, 64)
-		if err != nil || id <= 0 {
-			return db.IssueQuery{}, invalid
-		}
-		q.BeforeID = id
-	}
-	if v, present, ok := singleValue(r, "limit"); present {
+	if v, present, ok := singleValue(r, "page"); present {
 		if !ok {
 			return db.IssueQuery{}, invalid
 		}
 		n, err := strconv.Atoi(v)
-		if err != nil {
+		if err != nil || n < 1 {
 			return db.IssueQuery{}, invalid
 		}
-		if n < 1 {
-			n = 1
+		q.Page = n
+	}
+	if v, present, ok := singleValue(r, "page_size"); present {
+		if !ok {
+			return db.IssueQuery{}, invalid
+		}
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			return db.IssueQuery{}, invalid
 		}
 		if n > db.MaxIssuePageLimit {
 			n = db.MaxIssuePageLimit
 		}
-		q.Limit = n
+		q.PageSize = n
 	}
 
 	// The owner predicate is mandatory and never comes from this parser; the

@@ -57,30 +57,25 @@ func TestListAdminAlertsPagination(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	// Keyset walk with limit=3 covers every alert exactly once, newest first.
+	// Offset walk with page_size=3 covers every alert exactly once, newest first.
 	var walked []int64
-	var cursor int64
-	for {
-		page, hasMore, err := st.ListAdminAlerts(ctx, AlertQuery{Limit: 3, BeforeID: cursor})
+	for n := 1; ; n++ {
+		rows, hasMore, err := st.ListAdminAlerts(ctx, AlertQuery{Page: n, PageSize: 3})
 		if err != nil {
-			t.Fatalf("ListAdminAlerts: %v", err)
+			t.Fatalf("ListAdminAlerts page %d: %v", n, err)
 		}
-		if len(page) == 0 {
-			t.Fatalf("page empty before end of walk (cursor=%d)", cursor)
+		if len(rows) == 0 {
+			t.Fatalf("page %d empty before end of walk", n)
 		}
-		for i := 1; i < len(page); i++ {
-			if page[i].ID >= page[i-1].ID {
-				t.Fatalf("page not strictly descending: %v", page)
+		for i := 1; i < len(rows); i++ {
+			if rows[i].ID >= rows[i-1].ID {
+				t.Fatalf("page %d not strictly descending: %v", n, rows)
 			}
 		}
-		walked = append(walked, pageID(page)...)
-		if len(page) < 3 || !hasMore {
-			if hasMore {
-				t.Fatalf("hasMore on a partial last page")
-			}
+		walked = append(walked, pageID(rows)...)
+		if !hasMore {
 			break
 		}
-		cursor = page[len(page)-1].ID
 	}
 	if len(walked) != 7 {
 		t.Fatalf("walked %d alerts, want 7: %v", len(walked), walked)
@@ -93,23 +88,28 @@ func TestListAdminAlertsPagination(t *testing.T) {
 		seen[id] = true
 	}
 
-	// limit clamp: 0 and huge values both clamp to the page bound; the page
-	// itself never exceeds the table size.
-	page, _, err := st.ListAdminAlerts(ctx, AlertQuery{Limit: 0})
+	// Page-size clamp: 0 and huge values both clamp to a valid bound; the
+	// page itself never exceeds the table size.
+	page, _, err := st.ListAdminAlerts(ctx, AlertQuery{PageSize: 0})
 	if err != nil {
-		t.Fatalf("ListAdminAlerts limit=0: %v", err)
+		t.Fatalf("ListAdminAlerts page_size=0: %v", err)
 	}
 	if len(page) != 7 {
-		t.Fatalf("limit=0 page = %d rows, want 7 (table size, clamped page bound)", len(page))
+		t.Fatalf("page_size=0 page = %d rows, want 7 (table size, clamped page bound)", len(page))
 	}
-	page, _, err = st.ListAdminAlerts(ctx, AlertQuery{Limit: 1000})
+	page, _, err = st.ListAdminAlerts(ctx, AlertQuery{PageSize: 1000})
 	if err != nil || len(page) != 7 {
-		t.Fatalf("limit=1000 page = %d rows (err=%v), want 7", len(page), err)
+		t.Fatalf("page_size=1000 page = %d rows (err=%v), want 7", len(page), err)
 	}
 
-	// Negative cursor is rejected by validation.
-	if _, _, err := st.ListAdminAlerts(ctx, AlertQuery{BeforeID: -1}); err == nil {
-		t.Fatalf("negative cursor accepted")
+	// page=0 behaves as page 1 (clamped); page=2 starts past the first page.
+	first, _, err := st.ListAdminAlerts(ctx, AlertQuery{Page: 0, PageSize: 3})
+	if err != nil || len(first) != 3 || first[0].ID != 7 {
+		t.Fatalf("page=0 clamp = %v err=%v, want first 3 newest-first", first, err)
+	}
+	second, _, err := st.ListAdminAlerts(ctx, AlertQuery{Page: 2, PageSize: 3})
+	if err != nil || len(second) != 3 || second[0].ID != 4 {
+		t.Fatalf("page=2 = %v err=%v, want ids [4 3 2]", second, err)
 	}
 }
 
@@ -164,13 +164,13 @@ func TestListAdminAlertsResolvedFilter(t *testing.T) {
 		}
 	}
 
-	// Keyset + resolved filter: resolving an alert mid-walk stays consistent.
+	// Offset walk with the resolved filter returns the resolved alerts
+	// newest first.
 	var seen []int64
-	var cursor int64
-	for {
-		page, hasMore, err := st.ListAdminAlerts(ctx, AlertQuery{Resolved: &resolved, Limit: 1, BeforeID: cursor})
+	for n := 1; ; n++ {
+		page, hasMore, err := st.ListAdminAlerts(ctx, AlertQuery{Resolved: &resolved, Page: n, PageSize: 1})
 		if err != nil {
-			t.Fatalf("keyset resolved walk: %v", err)
+			t.Fatalf("offset resolved walk: %v", err)
 		}
 		if len(page) == 0 {
 			break
@@ -179,7 +179,6 @@ func TestListAdminAlertsResolvedFilter(t *testing.T) {
 		if !hasMore {
 			break
 		}
-		cursor = page[0].ID
 	}
 	if len(seen) != 2 || seen[0] != a3 || seen[1] != a1 {
 		t.Fatalf("resolved walk = %v, want [%d %d]", seen, a3, a1)

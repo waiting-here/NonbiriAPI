@@ -50,7 +50,7 @@ func TestQueryUserIssuesOwnershipScoped(t *testing.T) {
 	seedIssue(t, st, b, "k_b3", "msg b3", "r", testNow+5)
 	idA3 := seedIssue(t, st, a, "k_a3", "msg a3", "r", testNow+6)
 
-	rows, hasMore, err := st.QueryUserIssues(ctx, IssueQuery{UserID: a, Limit: 100})
+	rows, hasMore, err := st.QueryUserIssues(ctx, IssueQuery{UserID: a, PageSize: 100})
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
@@ -82,8 +82,8 @@ func TestQueryUserIssuesPagination(t *testing.T) {
 		ids = append(ids, seedIssue(t, st, uid, "k", "m", "r", testNow+int64(i)))
 	}
 
-	// First page: limit 2 -> 2 rows + hasMore.
-	rows, hasMore, err := st.QueryUserIssues(ctx, IssueQuery{UserID: uid, Limit: 2})
+	// First page: page_size 2 -> 2 rows + hasMore.
+	rows, hasMore, err := st.QueryUserIssues(ctx, IssueQuery{UserID: uid, Page: 1, PageSize: 2})
 	if err != nil {
 		t.Fatalf("query page 1: %v", err)
 	}
@@ -94,8 +94,8 @@ func TestQueryUserIssuesPagination(t *testing.T) {
 		t.Fatalf("page 1 wrong: len=%d first=%d second=%d", len(rows), rows[0].ID, rows[1].ID)
 	}
 
-	// Second page: keyset cursor after the last seen id.
-	rows, hasMore, err = st.QueryUserIssues(ctx, IssueQuery{UserID: uid, Limit: 2, BeforeID: rows[1].ID})
+	// Second page: offset past the first page.
+	rows, hasMore, err = st.QueryUserIssues(ctx, IssueQuery{UserID: uid, Page: 2, PageSize: 2})
 	if err != nil {
 		t.Fatalf("query page 2: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestQueryUserIssuesPagination(t *testing.T) {
 	}
 
 	// Third page: one remaining row, no more.
-	rows, hasMore, err = st.QueryUserIssues(ctx, IssueQuery{UserID: uid, Limit: 2, BeforeID: rows[1].ID})
+	rows, hasMore, err = st.QueryUserIssues(ctx, IssueQuery{UserID: uid, Page: 3, PageSize: 2})
 	if err != nil {
 		t.Fatalf("query page 3: %v", err)
 	}
@@ -118,18 +118,18 @@ func TestQueryUserIssuesPagination(t *testing.T) {
 		t.Fatalf("page 3 wrong: len=%d", len(rows))
 	}
 
-	// Limit clamping: 0 / negative / oversized all clamp to valid bounds.
-	rows, hasMore, err = st.QueryUserIssues(ctx, IssueQuery{UserID: uid, Limit: 0})
+	// Page-size clamping: 0 / negative / oversized all clamp to valid bounds.
+	rows, hasMore, err = st.QueryUserIssues(ctx, IssueQuery{UserID: uid, PageSize: 0})
 	if err != nil || len(rows) != 5 || hasMore {
-		t.Fatalf("limit=0: err=%v len=%d hasMore=%v", err, len(rows), hasMore)
+		t.Fatalf("page_size=0: err=%v len=%d hasMore=%v", err, len(rows), hasMore)
 	}
-	rows, hasMore, err = st.QueryUserIssues(ctx, IssueQuery{UserID: uid, Limit: -3})
+	rows, hasMore, err = st.QueryUserIssues(ctx, IssueQuery{UserID: uid, PageSize: -3})
 	if err != nil || len(rows) != 5 || hasMore {
-		t.Fatalf("limit=-3: err=%v len=%d hasMore=%v", err, len(rows), hasMore)
+		t.Fatalf("page_size=-3: err=%v len=%d hasMore=%v", err, len(rows), hasMore)
 	}
-	rows, hasMore, err = st.QueryUserIssues(ctx, IssueQuery{UserID: uid, Limit: 99999})
+	rows, hasMore, err = st.QueryUserIssues(ctx, IssueQuery{UserID: uid, PageSize: 99999})
 	if err != nil || len(rows) != 5 || hasMore {
-		t.Fatalf("limit=99999: err=%v len=%d hasMore=%v", err, len(rows), hasMore)
+		t.Fatalf("page_size=99999: err=%v len=%d hasMore=%v", err, len(rows), hasMore)
 	}
 }
 
@@ -174,8 +174,11 @@ func TestQueryUserIssuesValidate(t *testing.T) {
 	if _, _, err := st.QueryUserIssues(ctx, IssueQuery{UserID: 0}); err == nil {
 		t.Fatalf("query without owner accepted")
 	}
-	if _, _, err := st.QueryUserIssues(ctx, IssueQuery{UserID: 1, BeforeID: -1}); err == nil {
-		t.Fatalf("query with negative cursor accepted")
+	// A page far past the end returns an empty page (no error, no hasMore).
+	uid := seedUserRaw(t, st, "validate-user")
+	rows, hasMore, err := st.QueryUserIssues(ctx, IssueQuery{UserID: uid, Page: 1000, PageSize: 10})
+	if err != nil || hasMore || len(rows) != 0 {
+		t.Fatalf("past-end page: rows=%d hasMore=%v err=%v", len(rows), hasMore, err)
 	}
 }
 
@@ -245,7 +248,7 @@ VALUES (?, ?, ?, ?, ?)`,
 		t.Fatalf("raw insert: %v", err)
 	}
 
-	rows, _, err := st.QueryUserIssues(ctx, IssueQuery{UserID: uid, Limit: 10})
+	rows, _, err := st.QueryUserIssues(ctx, IssueQuery{UserID: uid, PageSize: 10})
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}

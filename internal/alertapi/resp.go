@@ -43,10 +43,17 @@ func alertResponse(a db.AdminAlert) alertResp {
 	}
 }
 
-func alertListResponse(alerts []db.AdminAlert) []alertResp {
-	out := make([]alertResp, 0, len(alerts))
+// alertListResp is one page of alert rows plus the explicit has_more flag,
+// so the client never infers pagination from a raw page size.
+type alertListResp struct {
+	Data    []alertResp `json:"data"`
+	HasMore bool        `json:"has_more"`
+}
+
+func alertListResponse(alerts []db.AdminAlert, hasMore bool) alertListResp {
+	out := alertListResp{Data: make([]alertResp, 0, len(alerts)), HasMore: hasMore}
 	for _, a := range alerts {
-		out = append(out, alertResponse(a))
+		out.Data = append(out.Data, alertResponse(a))
 	}
 	return out
 }

@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	// DefaultAlertPageLimit is the page size used when limit is omitted.
-	DefaultAlertPageLimit = 100
+	// defaultAlertPageSize is the page size used when page_size is omitted.
+	defaultAlertPageSize = 20
 	// maxRawQueryBytes bounds the whole query string before parsing. The
 	// parameter set is small and values are bounded individually; a larger
 	// query cannot be legitimate.
@@ -35,15 +35,16 @@ const (
 // parseAlertsQuery builds a bounded db.AlertQuery from strict single-value
 // query parameters. Unknown parameters, repeated parameters, unparseable or
 // out-of-range values, and over-long inputs are rejected with
-// invalid_request. resolved accepts true/false; limit clamps into
-// [1, db.MaxAdminAlertsPageLimit] and defaults to DefaultAlertPageLimit.
+// invalid_request. resolved accepts true/false; page defaults to 1 and must
+// be >= 1; page_size defaults to 20 and clamps into
+// [1, db.MaxAdminAlertsPageLimit].
 func parseAlertsQuery(r *http.Request) (db.AlertQuery, httperr.Error) {
 	invalid := httperr.New(httperr.CodeInvalidRequest, "invalid query parameter")
 	if r == nil || r.URL == nil || len(r.URL.RawQuery) > maxRawQueryBytes ||
-		!onlyParams(r, "resolved", "before_id", "limit") {
+		!onlyParams(r, "resolved", "page", "page_size") {
 		return db.AlertQuery{}, invalid
 	}
-	q := db.AlertQuery{Limit: DefaultAlertPageLimit}
+	q := db.AlertQuery{Page: 1, PageSize: defaultAlertPageSize}
 
 	if v, present, ok := singleValue(r, "resolved"); present {
 		if !ok {
@@ -60,35 +61,32 @@ func parseAlertsQuery(r *http.Request) (db.AlertQuery, httperr.Error) {
 			return db.AlertQuery{}, invalid
 		}
 	}
-	if v, present, ok := singleValue(r, "before_id"); present {
-		if !ok {
-			return db.AlertQuery{}, invalid
-		}
-		id, err := strconv.ParseInt(v, 10, 64)
-		if err != nil || id <= 0 {
-			return db.AlertQuery{}, invalid
-		}
-		q.BeforeID = id
-	}
-	if v, present, ok := singleValue(r, "limit"); present {
+	if v, present, ok := singleValue(r, "page"); present {
 		if !ok {
 			return db.AlertQuery{}, invalid
 		}
 		n, err := strconv.Atoi(v)
-		if err != nil {
+		if err != nil || n < 1 {
 			return db.AlertQuery{}, invalid
 		}
-		if n < 1 {
-			n = 1
+		q.Page = n
+	}
+	if v, present, ok := singleValue(r, "page_size"); present {
+		if !ok {
+			return db.AlertQuery{}, invalid
+		}
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			return db.AlertQuery{}, invalid
 		}
 		if n > db.MaxAdminAlertsPageLimit {
 			n = db.MaxAdminAlertsPageLimit
 		}
-		q.Limit = n
+		q.PageSize = n
 	}
 
 	// Every value above is pre-validated against the repository's own rules
-	// (strict boolean, positive cursor, clamped page size), so
+	// (strict boolean, 1-based page and clamped page size), so
 	// ListAdminAlerts can never see an invalid filter. The repository
 	// re-validates defensively; a failure there maps to internal error
 	// without echoing anything.
