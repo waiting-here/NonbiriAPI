@@ -2,7 +2,8 @@
   "user": {
     "shell": {
       "navLabel": "Main navigation",
-      "title": "User console"
+      "title": "User console",
+      "avatarAlt": "Avatar"
     },
     "home": {
       "nav": "Home",

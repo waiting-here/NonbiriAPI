@@ -2,7 +2,8 @@
   "user": {
     "shell": {
       "navLabel": "主导航",
-      "title": "用户中心"
+      "title": "用户中心",
+      "avatarAlt": "头像"
     },
     "home": {
       "nav": "首页",

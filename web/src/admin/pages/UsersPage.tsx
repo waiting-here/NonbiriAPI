@@ -134,7 +134,9 @@ export function UsersPage() {
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[1]);
   const [draftBanned, setDraftBanned] = useState<'all' | 'normal' | 'banned'>('all');
   const [bannedFilter, setBannedFilter] = useState<boolean | undefined>(undefined);
-  const users = useAdminUsers(page, pageSize, bannedFilter);
+  const [draftQ, setDraftQ] = useState('');
+  const [appliedQ, setAppliedQ] = useState('');
+  const users = useAdminUsers(page, pageSize, bannedFilter, appliedQ || undefined);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [action, setAction] = useState<'ban' | 'unban' | 'delete' | null>(null);
   const [banReason, setBanReason] = useState('');
@@ -226,9 +228,21 @@ export function UsersPage() {
             setBannedFilter(
               draftBanned === 'all' ? undefined : draftBanned === 'banned',
             );
+            setAppliedQ(draftQ.trim());
             setPage(1);
           }}
         >
+          <label>
+            <span>{t('common.search')}</span>
+            <input
+              type="search"
+              value={draftQ}
+              maxLength={128}
+              onChange={(event) => setDraftQ(event.target.value)}
+              placeholder={t('admin.users.searchPlaceholder')}
+              aria-label={t('admin.users.searchAria')}
+            />
+          </label>
           <label>
             <span>{t('admin.users.filterStatus')}</span>
             <select
@@ -251,6 +265,8 @@ export function UsersPage() {
               onClick={() => {
                 setDraftBanned('all');
                 setBannedFilter(undefined);
+                setDraftQ('');
+                setAppliedQ('');
                 setPage(1);
               }}
             >

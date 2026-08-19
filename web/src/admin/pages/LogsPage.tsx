@@ -34,9 +34,8 @@ export function LogsPage() {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[1]);
-  const [cursors, setCursors] = useState<Record<number, string>>({});
   // Draft inputs feed appliedFilter only via Apply; a changed filter always
-  // restarts the cursor chain, never reusing a before_id from the old filter.
+  // restarts offset paging at page 1 rather than mixing pages across filters.
   const [draftUserId, setDraftUserId] = useState('');
   const [draftModel, setDraftModel] = useState('');
   const [draftStatus, setDraftStatus] = useState('');
@@ -44,8 +43,7 @@ export function LogsPage() {
   const [draftTo, setDraftTo] = useState('');
   const [appliedFilter, setAppliedFilter] = useState<AdminLogFilter>({});
   const usage = useAdminUsage();
-  const beforeId = page > 1 ? cursors[page - 1] : undefined;
-  const logs = useAdminLogs(page, appliedFilter, beforeId, pageSize);
+  const logs = useAdminLogs(page, appliedFilter, pageSize);
 
   const applyFilter = () => {
     const next: AdminLogFilter = {};
@@ -67,7 +65,6 @@ export function LogsPage() {
     if (toUnix !== undefined) next.toUnix = toUnix;
     setAppliedFilter(next);
     setPage(1);
-    setCursors({});
   };
 
   const resetFilter = () => {
@@ -78,22 +75,11 @@ export function LogsPage() {
     setDraftTo('');
     setAppliedFilter({});
     setPage(1);
-    setCursors({});
-  };
-
-  const changePage = (nextPage: number) => {
-    if (nextPage > page) {
-      const nextCursor = logs.data?.nextCursor;
-      if (!nextCursor) return;
-      setCursors((current) => ({ ...current, [page]: nextCursor }));
-    }
-    setPage(nextPage);
   };
 
   const changePageSize = (size: number) => {
     setPageSize(size);
     setPage(1);
-    setCursors({});
   };
 
   return (
@@ -267,10 +253,11 @@ export function LogsPage() {
             <Pagination
               page={page}
               hasNext={logs.data.hasNext}
-              onChange={changePage}
+              onChange={setPage}
               pageSize={pageSize}
               pageSizeOptions={PAGE_SIZE_OPTIONS}
               onPageSizeChange={changePageSize}
+              onJumpToPage={setPage}
             />
           </>
         )}

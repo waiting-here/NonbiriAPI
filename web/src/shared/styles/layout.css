@@ -105,12 +105,23 @@
 }
 
 .user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   max-width: 11rem;
   overflow: hidden;
   color: var(--nb-color-text-muted);
   font-size: 0.82rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.user-chip-avatar {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
 .admin-shell {

@@ -20,26 +20,14 @@ function IssuesContent() {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[1]);
-  const [cursors, setCursors] = useState<Record<number, string>>({});
   const [draftResolved, setDraftResolved] = useState<'all' | 'unresolved' | 'resolved'>('all');
   const [resolvedFilter, setResolvedFilter] = useState<boolean | undefined>(undefined);
-  const beforeId = page > 1 ? cursors[page - 1] : undefined;
-  const issues = useUserIssues(resolvedFilter, beforeId, pageSize);
+  const issues = useUserIssues(page, resolvedFilter, pageSize);
   const resolve = useResolveUserIssue();
-
-  const changePage = (nextPage: number) => {
-    if (nextPage > page) {
-      const nextCursor = issues.data?.nextCursor;
-      if (!nextCursor) return;
-      setCursors((current) => ({ ...current, [page]: nextCursor }));
-    }
-    setPage(nextPage);
-  };
 
   const changePageSize = (size: number) => {
     setPageSize(size);
     setPage(1);
-    setCursors({});
   };
 
   return (
@@ -63,7 +51,6 @@ function IssuesContent() {
               draftResolved === 'all' ? undefined : draftResolved === 'resolved',
             );
             setPage(1);
-            setCursors({});
           }}
         >
           <label>
@@ -89,7 +76,6 @@ function IssuesContent() {
                 setDraftResolved('all');
                 setResolvedFilter(undefined);
                 setPage(1);
-                setCursors({});
               }}
             >
               {t('common.resetFilter')}
@@ -143,10 +129,11 @@ function IssuesContent() {
             <Pagination
               page={page}
               hasNext={issues.data.hasMore}
-              onChange={changePage}
+              onChange={setPage}
               pageSize={pageSize}
               pageSizeOptions={PAGE_SIZE_OPTIONS}
               onPageSizeChange={changePageSize}
+              onJumpToPage={setPage}
             />
           </>
         )}

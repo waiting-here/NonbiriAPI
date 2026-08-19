@@ -46,6 +46,8 @@
       "active": "Active",
       "banned": "Banned",
       "filterStatus": "Ban status",
+      "searchPlaceholder": "Search by username or Discord ID",
+      "searchAria": "Search users",
       "ban": "Ban",
       "unban": "Unban",
       "delete": "Delete",

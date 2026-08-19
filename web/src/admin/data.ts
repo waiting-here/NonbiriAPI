@@ -115,10 +115,17 @@ export type SiteConfig = Record<string, SiteConfigValue>;
 export const adminKeys = {
   all: ['admin'] as const,
   session: ['admin', 'session'] as const,
-  users: (page: number, pageSize: number, isBanned?: boolean) =>
-    ['admin', 'users', page, pageSize, isBanned === undefined ? 'all' : String(isBanned)] as const,
+  users: (page: number, pageSize: number, isBanned?: boolean, q?: string) =>
+    [
+      'admin',
+      'users',
+      page,
+      pageSize,
+      isBanned === undefined ? 'all' : String(isBanned),
+      q ?? '',
+    ] as const,
   usersRoot: ['admin', 'users'] as const,
-  logs: (page: number, filter: AdminLogFilter, beforeId?: string, limit?: number) =>
+  logs: (page: number, filter: AdminLogFilter, pageSize?: number) =>
     [
       'admin',
       'logs',
@@ -128,21 +135,19 @@ export const adminKeys = {
       filter.status ?? '',
       filter.fromUnix ?? '',
       filter.toUnix ?? '',
-      beforeId ?? '',
-      limit ?? ADMIN_PAGE_SIZE,
+      pageSize ?? ADMIN_PAGE_SIZE,
     ] as const,
   logsRoot: ['admin', 'logs'] as const,
   usage: ['admin', 'usage'] as const,
   endpoints: ['admin', 'endpoints'] as const,
   models: ['admin', 'models'] as const,
-  alerts: (page: number, resolved?: boolean, beforeId?: string, limit?: number) =>
+  alerts: (page: number, resolved?: boolean, pageSize?: number) =>
     [
       'admin',
       'alerts',
       page,
       resolved === undefined ? 'all' : String(resolved),
-      beforeId ?? '',
-      limit ?? ADMIN_PAGE_SIZE,
+      pageSize ?? ADMIN_PAGE_SIZE,
     ] as const,
   alertsRoot: ['admin', 'alerts'] as const,
   siteConfig: ['admin', 'site-config'] as const,
@@ -341,11 +346,18 @@ export function useAdminSession() {
   });
 }
 
-export function useAdminUsers(page: number, pageSize = ADMIN_PAGE_SIZE, isBanned?: boolean, enabled = true) {
+export function useAdminUsers(
+  page: number,
+  pageSize = ADMIN_PAGE_SIZE,
+  isBanned?: boolean,
+  q?: string,
+  enabled = true,
+) {
   const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   if (isBanned !== undefined) params.set('is_banned', isBanned ? 'true' : 'false');
+  if (q) params.set('q', q);
   return useQuery({
-    queryKey: adminKeys.users(page, pageSize, isBanned),
+    queryKey: adminKeys.users(page, pageSize, isBanned, q),
     queryFn: async () => {
       const result = pagePayload(
         await apiFetch<unknown>(`/admin/api/users?${params}`),
@@ -364,21 +376,19 @@ export function useAdminUsers(page: number, pageSize = ADMIN_PAGE_SIZE, isBanned
 export function useAdminLogs(
   page: number,
   filter: AdminLogFilter = {},
-  beforeId?: string,
-  limit = ADMIN_PAGE_SIZE,
+  pageSize = ADMIN_PAGE_SIZE,
   enabled = true,
 ) {
-  const params = new URLSearchParams({ limit: String(limit + 1) });
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   if (filter.userId) params.set('user_id', filter.userId);
   if (filter.model) params.set('model', filter.model);
   if (filter.status) params.set('status', filter.status);
   if (filter.fromUnix !== undefined) params.set('from', String(filter.fromUnix));
   if (filter.toUnix !== undefined) params.set('to', String(filter.toUnix));
-  if (beforeId) params.set('before_id', beforeId);
   return useQuery({
-    queryKey: adminKeys.logs(page, filter, beforeId, limit),
+    queryKey: adminKeys.logs(page, filter, pageSize),
     queryFn: async () => {
-      const result = pagePayload(await apiFetch<unknown>(`/admin/api/logs?${params}`), limit);
+      const result = pagePayload(await apiFetch<unknown>(`/admin/api/logs?${params}`), pageSize);
       return {
         items: result.items.map(normalizeLog),
         hasNext: result.hasNext,
@@ -418,17 +428,15 @@ export function useAdminModels(enabled = true) {
 export function useAdminAlerts(
   page: number,
   resolved?: boolean,
-  beforeId?: string,
-  limit = ADMIN_PAGE_SIZE,
+  pageSize = ADMIN_PAGE_SIZE,
   enabled = true,
 ) {
-  const params = new URLSearchParams({ limit: String(limit + 1) });
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   if (resolved !== undefined) params.set('resolved', resolved ? 'true' : 'false');
-  if (beforeId) params.set('before_id', beforeId);
   return useQuery({
-    queryKey: adminKeys.alerts(page, resolved, beforeId, limit),
+    queryKey: adminKeys.alerts(page, resolved, pageSize),
     queryFn: async () => {
-      const result = pagePayload(await apiFetch<unknown>(`/admin/api/alerts?${params}`), limit);
+      const result = pagePayload(await apiFetch<unknown>(`/admin/api/alerts?${params}`), pageSize);
       return {
         items: result.items.map(normalizeAlert),
         hasNext: result.hasNext,

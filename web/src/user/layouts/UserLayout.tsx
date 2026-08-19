@@ -70,6 +70,11 @@ export function UserLayout() {
   }, [location.pathname, navigate]);
 
   const signedIn = Boolean(session.data?.user);
+  const profile = session.data?.user;
+  // Server nickname / avatar win over the global Discord profile; either may
+  // be absent, in which case the global value (or nothing) is shown.
+  const displayName = profile ? profile.guild_nick || profile.username : '';
+  const profileAvatar = profile ? profile.guild_avatar_url || profile.avatar_url || '' : '';
   const showSignIn = !signedIn && (isUnauthorized(session.error) || isNotFoundError(session.error));
 
   // Maintenance mode replaces the whole user station with a notice page so no
@@ -132,7 +137,14 @@ export function UserLayout() {
           </ul>
         </nav>
         <div className="site-actions">
-          {signedIn ? <span className="user-chip">{session.data?.user.username}</span> : null}
+          {signedIn ? (
+            <span className="user-chip">
+              {profileAvatar ? (
+                <img className="user-chip-avatar" src={profileAvatar} alt={t('user.shell.avatarAlt')} />
+              ) : null}
+              <span>{displayName}</span>
+            </span>
+          ) : null}
           <LanguageSwitcher />
           <ThemeToggle />
           {signedIn ? (

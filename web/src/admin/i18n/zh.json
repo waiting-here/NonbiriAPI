@@ -46,6 +46,8 @@
       "active": "正常",
       "banned": "已封禁",
       "filterStatus": "封禁状态",
+      "searchPlaceholder": "按用户名或 Discord ID 搜索",
+      "searchAria": "搜索用户",
       "ban": "封禁",
       "unban": "解封",
       "delete": "删除",
