@@ -795,6 +795,61 @@ func TestSiteConfigPatchTypedAndRuntimeApply(t *testing.T) {
 	}
 }
 
+// TestSiteConfigLegalOverrideAcceptsLargeDocument guards the multiline legal
+// override keys. textMaxFor must return the per-key max (maxLegalOverrideBytes,
+// 64 KiB) for kindMultilineText keys, not the generic maxSiteNameBytes fallback
+// (256). A real privacy policy is several KiB; before the fix any value over
+// 256 bytes was rejected as "invalid configuration value".
+func TestSiteConfigLegalOverrideAcceptsLargeDocument(t *testing.T) {
+	e := newEnv(t)
+	applier := &recordingApplier{}
+
+	// A representative multi-paragraph document, well over both the 256-byte
+	// generic text bound (the old textMaxFor bug) and the 4096-byte identity
+	// cap (the old GetSiteConfigValue bug), but under the admin body limit.
+	doc := strings.Repeat("## Section\n\nA paragraph of privacy text.\n", 120) // ~7.7 KiB
+	if len(doc) <= 4096 {
+		t.Fatalf("test document too short: %d bytes", len(doc))
+	}
+	for _, k := range []string{
+		"legal_privacy_override_zh", "legal_privacy_override_en",
+		"legal_terms_override_zh", "legal_terms_override_en",
+	} {
+		rec := adminPatch(t, e, applier, "/admin/api/site-config/"+k, map[string]any{"value": doc})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("PATCH %s (len=%d): status=%d body=%s", k, len(doc), rec.Code, rec.Body.String())
+		}
+	}
+
+	// Re-saving an existing multiline override must succeed too: the read-back
+	// of the previous value is what triggered the 500 before the
+	// GetSiteConfigValue fix (it rejected newlines via validateIdentityText).
+	rec := adminPatch(t, e, applier, "/admin/api/site-config/legal_privacy_override_zh", map[string]any{"value": "## Replacement\n\nShorter doc.\n"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("re-PATCH over existing multiline: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// Values over the 16 KiB admin body limit are rejected by the HTTP layer
+	// (413), independent of the 64 KiB config ceiling; the storage-layer
+	// ceiling is covered by the db tests directly.
+	overBody := strings.Repeat("x", 17*1024)
+	rec = adminPatch(t, e, applier, "/admin/api/site-config/legal_privacy_override_zh", map[string]any{"value": overBody})
+	assertErr(t, rec, http.StatusRequestEntityTooLarge, "payload_too_large")
+
+	// The persisted value round-trips through the admin read path unchanged.
+	rec = adminGet(t, e, "/admin/api/site-config")
+	var out map[string]any
+	decodeJSON(t, rec, &out)
+	for _, k := range []string{"legal_privacy_override_en", "legal_terms_override_zh", "legal_terms_override_en"} {
+		if out[k] != doc {
+			t.Fatalf("%s round-trip = %v, want len=%d", k, out[k], len(doc))
+		}
+	}
+	if out["legal_privacy_override_zh"] != "## Replacement\n\nShorter doc.\n" {
+		t.Fatalf("legal_privacy_override_zh round-trip = %v", out["legal_privacy_override_zh"])
+	}
+}
+
 func TestSiteConfigPatchPersistFailureRevertsRuntime(t *testing.T) {
 	e := newEnv(t)
 	applier := &recordingApplier{}

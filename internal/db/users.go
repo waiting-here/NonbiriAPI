@@ -24,7 +24,6 @@ const (
 	maxAvatarBytes      = 1024
 	maxBanReasonBytes   = 1024
 	maxAvatarURLBytes   = 2048
-	maxConfigValueBytes = 4096
 )
 
 // User is the server-authoritative identity used by later authorization and
@@ -471,7 +470,7 @@ func (s *Store) GetSiteConfigValue(key string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("read site configuration: %w", err)
 	}
-	if validateIdentityText(value, maxConfigValueBytes, true) != nil {
+	if validateSiteConfigText(value, maxSiteConfigValueBytes, true, true) != nil {
 		return "", fmt.Errorf("site configuration is invalid")
 	}
 	return value, nil

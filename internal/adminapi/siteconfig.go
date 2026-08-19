@@ -133,7 +133,7 @@ func knownSiteConfigKey(key string) bool {
 
 // textMaxFor returns the byte bound for a text key.
 func textMaxFor(key string) int {
-	if spec, ok := knownSiteConfig[key]; ok && spec.kind == kindText {
+	if spec, ok := knownSiteConfig[key]; ok && (spec.kind == kindText || spec.kind == kindMultilineText) {
 		if spec.max > 0 {
 			return spec.max
 		}
