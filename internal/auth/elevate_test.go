@@ -283,8 +283,11 @@ func TestElevationStateCannotCompleteLoginAndViceVersa(t *testing.T) {
 	st := authTestStore(t)
 	provider := &fakeDiscordProvider{login: DiscordLogin{
 		Identity: DiscordIdentity{ID: "discord-login", Username: "alice"},
-		HasGuildRole: func(_ context.Context, guildID, roleID string) (bool, error) {
-			return guildID == "guild-1" && roleID == "role-1", nil
+		GuildMember: func(_ context.Context, guildID string) (GuildMember, error) {
+			if guildID == "guild-1" {
+				return GuildMember{Roles: []string{"role-1"}}, nil
+			}
+			return GuildMember{}, nil
 		},
 	}}
 	gate := func(context.Context) (RegistrationGate, error) {

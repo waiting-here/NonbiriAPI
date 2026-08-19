@@ -363,12 +363,28 @@ func (a *UserAuth) finishLoginCallback(w http.ResponseWriter, r *http.Request, c
 			writeStableError(w, httperr.CodeUnauthorized, "authentication failed")
 			return
 		}
-		if err := a.store.UpdateUserProfile(user.ID, identity.Username, identity.Avatar); err != nil {
+		// Refresh the server-nickname and server-avatar snapshot on login. The
+		// guild member is fetched only when a registration guild is configured;
+		// a definitive non-membership (404) returns an empty member and clears
+		// the snapshot so the chip falls back to the global profile, while a
+		// transport or server error keeps the existing snapshot.
+		guildNick, guildAvatarURL := user.GuildNick, user.GuildAvatarURL
+		if login.GuildMember != nil {
+			if gate, gerr := a.registrationGate(r.Context()); gerr == nil && validateBoundedText(gate.GuildID, 128, false) {
+				if member, merr := login.GuildMember(r.Context(), gate.GuildID); merr == nil {
+					guildNick = member.Nick
+					guildAvatarURL = discordGuildAvatarURL(gate.GuildID, identity.ID, member.Avatar)
+				}
+			}
+		}
+		if err := a.store.UpdateUserProfile(user.ID, identity.Username, identity.Avatar, guildNick, guildAvatarURL); err != nil {
 			writeStableError(w, httperr.CodeInternal, "authentication failed")
 			return
 		}
 		user.Username = identity.Username
 		user.Avatar = identity.Avatar
+		user.GuildNick = guildNick
+		user.GuildAvatarURL = guildAvatarURL
 	}
 
 	token, expiry, err := a.store.CreateUserSession(user.ID)
@@ -397,22 +413,25 @@ func (a *UserAuth) register(identity DiscordIdentity, login DiscordLogin, ctx co
 	if !validateBoundedText(gate.GuildID, 128, false) || !validateBoundedText(gate.RoleID, 128, false) {
 		return nil, ErrRegistrationPaused
 	}
+	var member GuildMember
 	var matches bool
-	if login.HasGuildRole != nil {
-		matches, err = login.HasGuildRole(ctx, gate.GuildID, gate.RoleID)
+	if login.GuildMember != nil {
+		member, err = login.GuildMember(ctx, gate.GuildID)
+		if err != nil {
+			return nil, ErrProviderUnavailable
+		}
+		matches = containsString(member.Roles, gate.RoleID)
 	} else {
 		if !validateMembershipMetadata(identity) {
 			return nil, ErrInvalidIdentity
 		}
 		matches = identity.GuildID == gate.GuildID && containsString(identity.RoleIDs, gate.RoleID)
 	}
-	if err != nil {
-		return nil, ErrProviderUnavailable
-	}
 	if !matches {
 		return nil, ErrGuildRoleMismatch
 	}
-	user, _, err := a.store.FindOrCreateDiscordUser(identity.ID, identity.Username, identity.Avatar)
+	guildAvatarURL := discordGuildAvatarURL(gate.GuildID, identity.ID, member.Avatar)
+	user, _, err := a.store.FindOrCreateDiscordUser(identity.ID, identity.Username, identity.Avatar, member.Nick, guildAvatarURL)
 	if errors.Is(err, db.ErrConflict) {
 		// Another callback may have won the unique Discord id race. Resolve the
 		// committed row, then let the caller apply the normal ban check.

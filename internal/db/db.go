@@ -60,8 +60,55 @@ func Open(path string, secrets secret.Codec) (*Store, error) {
 		_ = d.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
+	if err := ensureUsersGuildColumns(d); err != nil {
+		_ = d.Close()
+		return nil, fmt.Errorf("migrate users guild columns: %w", err)
+	}
 
 	return &Store{db: d, secrets: secrets}, nil
+}
+
+// ensureUsersGuildColumns adds guild_nick and guild_avatar_url to a users
+// table created before they existed. CREATE TABLE IF NOT EXISTS does not
+// alter an existing table, so an alpha database on an earlier schema is
+// migrated in place. The PRAGMA check makes it idempotent.
+func ensureUsersGuildColumns(d *sql.DB) error {
+	rows, err := d.Query(`PRAGMA table_info(users)`)
+	if err != nil {
+		return err
+	}
+	hasGuildNick := false
+	hasGuildAvatarURL := false
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		switch name {
+		case "guild_nick":
+			hasGuildNick = true
+		case "guild_avatar_url":
+			hasGuildAvatarURL = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if !hasGuildNick {
+		if _, err := d.Exec(`ALTER TABLE users ADD COLUMN guild_nick TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if !hasGuildAvatarURL {
+		if _, err := d.Exec(`ALTER TABLE users ADD COLUMN guild_avatar_url TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func nilSecretCodec(codec secret.Codec) bool {
