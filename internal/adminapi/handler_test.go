@@ -333,6 +333,90 @@ func TestAdminUsersList(t *testing.T) {
 	}
 }
 
+func TestAdminUsersSearchFilter(t *testing.T) {
+	e := newEnv(t)
+	alice1 := e.seedUser(t, "alice-1")
+	alice2 := e.seedUser(t, "alice-2")
+	e.seedUser(t, "bob")
+	if err := e.store.BanUser(alice1.ID, "spam"); err != nil {
+		t.Fatalf("BanUser: %v", err)
+	}
+
+	list := func(query string) []userResp {
+		t.Helper()
+		rec := adminGet(t, e, "/admin/api/users"+query)
+		var page struct {
+			Data    []userResp `json:"data"`
+			HasMore bool       `json:"has_more"`
+		}
+		decodeJSON(t, rec, &page)
+		return page.Data
+	}
+	has := func(rows []userResp, want int64) bool {
+		for _, r := range rows {
+			if r.ID == want {
+				return true
+			}
+		}
+		return false
+	}
+
+	// No q: all three users.
+	if rows := list(""); len(rows) != 3 {
+		t.Fatalf("no q: len=%d, want 3", len(rows))
+	}
+
+	// q filters by username and discord_id substring.
+	rows := list("?q=alice")
+	if len(rows) != 2 || !has(rows, alice1.ID) || !has(rows, alice2.ID) {
+		t.Fatalf("q=alice: want alice-1+alice-2, got %d rows", len(rows))
+	}
+
+	// q stacks with is_banned.
+	rows = list("?q=alice&is_banned=true")
+	if len(rows) != 1 || rows[0].ID != alice1.ID {
+		t.Fatalf("q=alice banned: want only alice-1, got %d rows", len(rows))
+	}
+	rows = list("?q=alice&is_banned=false")
+	if len(rows) != 1 || rows[0].ID != alice2.ID {
+		t.Fatalf("q=alice active: want only alice-2, got %d rows", len(rows))
+	}
+
+	// Empty q is accepted (no filter).
+	if rows := list("?q="); len(rows) != 3 {
+		t.Fatalf("q= empty: len=%d, want 3", len(rows))
+	}
+
+	// Unknown parameter is still rejected even when q is present.
+	rec := adminGet(t, e, "/admin/api/users?q=alice&unknown=1")
+	assertErr(t, rec, http.StatusBadRequest, "invalid_request")
+
+	// Invalid q values are rejected: over-long, control character, NUL.
+	for _, query := range []string{
+		"?q=" + strings.Repeat("x", 129),
+		"?q=ab%0Acd",
+		"?q=ab%00cd",
+	} {
+		rec := adminGet(t, e, "/admin/api/users"+query)
+		assertErr(t, rec, http.StatusBadRequest, "invalid_request")
+	}
+
+	// LIKE metacharacters in q are escaped: a literal "%" matches only the
+	// user whose identity contains a literal %.
+	pct, err := e.store.CreateUser("discord-pct", "100%done", "")
+	if err != nil {
+		t.Fatalf("CreateUser pct: %v", err)
+	}
+	rows = list("?q=100%25done") // %25 decodes to a literal %
+	if len(rows) != 1 || rows[0].ID != pct.ID {
+		t.Fatalf("q=100%%done: want only the literal-%% user, got %d rows", len(rows))
+	}
+	rows = list("?q=%25") // bare "%" -> only the literal-% user
+	if len(rows) != 1 || rows[0].ID != pct.ID {
+		t.Fatalf("q=%%: want only the literal-%% user, got %d rows", len(rows))
+	}
+}
+
 func TestAdminUserDetail(t *testing.T) {
 	e := newEnv(t)
 	u := e.seedUser(t, "discord-u1")

@@ -141,9 +141,10 @@ func (s *Store) UpdateUserLimits(userID int64, patch UserLimitPatch) (*User, err
 
 // UserListQuery is the bounded, parameterized admin user-list filter.
 type UserListQuery struct {
-	Page       int   // 1-based; values below 1 are treated as 1
-	PageSize   int   // clamped to 1..MaxUserListPageSize; 0 selects the default
-	BannedOnly *bool // nil = every state; true = banned only; false = active only
+	Page       int    // 1-based; values below 1 are treated as 1
+	PageSize   int    // clamped to 1..MaxUserListPageSize; 0 selects the default
+	BannedOnly *bool  // nil = every state; true = banned only; false = active only
+	Q          string // optional substring filter on username/discord_id; "" = no filter
 }
 
 // ListUsers returns one page of normal users ordered by id ascending. The
@@ -172,6 +173,17 @@ func (s *Store) ListUsers(ctx context.Context, query UserListQuery) ([]User, boo
 			sqlText += ` AND u.is_banned=0`
 		}
 	}
+	if query.Q != "" {
+		// Substring search on username or discord_id. The LIKE pattern escapes
+		// the LIKE metacharacters (\, %, _) so user input can never widen the
+		// match into a wildcard, and ESCAPE '\' activates the escape. The
+		// leading % makes a btree index unusable, so none is added: at alpha
+		// scale a full scan of the bounded user set is sufficient and an index
+		// here would only mislead.
+		pattern := likePattern(query.Q)
+		sqlText += ` AND (u.username LIKE ? ESCAPE '\' OR u.discord_id LIKE ? ESCAPE '\')`
+		args = append(args, pattern, pattern)
+	}
 	sqlText += ` ORDER BY u.id ASC LIMIT ? OFFSET ?`
 	args = append(args, pageSize+1, (page-1)*pageSize)
 
@@ -197,6 +209,17 @@ func (s *Store) ListUsers(ctx context.Context, query UserListQuery) ([]User, boo
 		users = users[:pageSize]
 	}
 	return users, hasMore, nil
+}
+
+// likePattern escapes the LIKE metacharacters (\, %, _) in q so a literal
+// user search string can never widen the match into a wildcard, then wraps it
+// as a substring match (%q%). It must be paired with LIKE ... ESCAPE '\' so
+// the backslash is treated as the escape character. strings.NewReplacer does
+// all replacements in one non-overlapping pass and never re-scans its output,
+// so the backslashes added for % and _ are not themselves escaped twice.
+func likePattern(q string) string {
+	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(q)
+	return "%" + escaped + "%"
 }
 
 // SetSiteConfigValue upserts one runtime site_config row. Keys and values are

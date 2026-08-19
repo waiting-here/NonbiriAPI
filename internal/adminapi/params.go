@@ -8,6 +8,9 @@ package adminapi
 import (
 	"net/http"
 	"strconv"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
@@ -16,16 +19,19 @@ import (
 const (
 	defaultUserPageSize = 20
 	maxRawQueryBytes    = 8192
+	// maxSearchQueryRunes bounds the optional admin user-search filter.
+	maxSearchQueryRunes = 128
 )
 
 // parseUserListQuery builds a bounded db.UserListQuery from strict
 // single-value query parameters. page defaults to 1 and must be >= 1;
 // page_size defaults to 20 and clamps into [1, db.MaxUserListPageSize];
-// is_banned accepts exactly "true"/"false".
+// is_banned accepts exactly "true"/"false"; q is an optional trimmed
+// substring filter on username/discord_id (empty means no filter).
 func parseUserListQuery(r *http.Request) (db.UserListQuery, httperr.Error) {
 	invalid := httperr.New(httperr.CodeInvalidRequest, "invalid query parameter")
 	if r == nil || r.URL == nil || len(r.URL.RawQuery) > maxRawQueryBytes ||
-		!onlyParams(r, "page", "page_size", "is_banned") {
+		!onlyParams(r, "page", "page_size", "is_banned", "q") {
 		return db.UserListQuery{}, invalid
 	}
 	q := db.UserListQuery{Page: 1, PageSize: defaultUserPageSize}
@@ -59,6 +65,15 @@ func parseUserListQuery(r *http.Request) (db.UserListQuery, httperr.Error) {
 		}
 		banned := v == "true"
 		q.BannedOnly = &banned
+	}
+	if v, present, ok := singleValue(r, "q"); present {
+		if !ok {
+			return db.UserListQuery{}, invalid
+		}
+		q.Q = strings.TrimSpace(v)
+		if !validSearchQuery(q.Q) {
+			return db.UserListQuery{}, invalid
+		}
 	}
 	return q, httperr.Error{}
 }
@@ -102,4 +117,25 @@ func singleValue(r *http.Request, name string) (value string, present, ok bool) 
 		return "", true, false
 	}
 	return values[0], true, true
+}
+
+// validSearchQuery mirrors the bounded-text rules for the admin user-search
+// filter: valid UTF-8, at most maxSearchQueryRunes runes, no C0 controls or
+// DEL, and no leading/trailing whitespace. An empty value is valid and means
+// no filter (the repository omits the LIKE predicate).
+func validSearchQuery(s string) bool {
+	if s == "" {
+		return true
+	}
+	if !utf8.ValidString(s) || utf8.RuneCountInString(s) > maxSearchQueryRunes {
+		return false
+	}
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	first, _ := utf8.DecodeRuneInString(s)
+	last, _ := utf8.DecodeLastRuneInString(s)
+	return !unicode.IsSpace(first) && !unicode.IsSpace(last)
 }

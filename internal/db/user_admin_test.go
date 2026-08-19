@@ -120,6 +120,107 @@ func TestListUsersPaginationFilterAndAdminExclusion(t *testing.T) {
 	}
 }
 
+func TestListUsersSearchFilter(t *testing.T) {
+	st := adminStore(t)
+	if _, err := st.EnsureAdminUser("root"); err != nil {
+		t.Fatalf("EnsureAdminUser: %v", err)
+	}
+	alice, err := st.CreateUser("discord-1234", "alice", "")
+	if err != nil {
+		t.Fatalf("CreateUser alice: %v", err)
+	}
+	if _, err := st.CreateUser("discord-5678", "bob", ""); err != nil {
+		t.Fatalf("CreateUser bob: %v", err)
+	}
+	carol, err := st.CreateUser("discord-alice", "carol", "")
+	if err != nil {
+		t.Fatalf("CreateUser carol: %v", err)
+	}
+	if _, err := st.CreateUser("discord-pct", "100%done", ""); err != nil {
+		t.Fatalf("CreateUser pct: %v", err)
+	}
+	under, err := st.CreateUser("discord-under", "a_b", "")
+	if err != nil {
+		t.Fatalf("CreateUser under: %v", err)
+	}
+	if _, err := st.CreateUser("discord-axb", "axb", ""); err != nil {
+		t.Fatalf("CreateUser axb: %v", err)
+	}
+	if err := st.BanUser(alice.ID, "spam"); err != nil {
+		t.Fatalf("BanUser: %v", err)
+	}
+
+	has := func(rows []User, want int64) bool {
+		for _, u := range rows {
+			if u.ID == want {
+				return true
+			}
+		}
+		return false
+	}
+	list := func(q string, banned *bool) []User {
+		t.Helper()
+		rows, _, err := st.ListUsers(context.Background(), UserListQuery{Page: 1, PageSize: 100, Q: q, BannedOnly: banned})
+		if err != nil {
+			t.Fatalf("ListUsers q=%q: %v", q, err)
+		}
+		return rows
+	}
+
+	// Empty Q: no filter, all six normal users (admin excluded).
+	if rows := list("", nil); len(rows) != 6 {
+		t.Fatalf("empty Q: len=%d, want 6", len(rows))
+	}
+
+	// Match by username substring (alice) and discord_id substring (carol's
+	// discord_id is "discord-alice").
+	rows := list("alice", nil)
+	if len(rows) != 2 || !has(rows, alice.ID) || !has(rows, carol.ID) {
+		t.Fatalf("q=alice: want alice+carol, got %d rows", len(rows))
+	}
+
+	// Q stacked with the banned filter.
+	banned := true
+	rows = list("alice", &banned)
+	if len(rows) != 1 || rows[0].ID != alice.ID {
+		t.Fatalf("q=alice banned: want only alice, got %d rows", len(rows))
+	}
+	active := false
+	rows = list("alice", &active)
+	if len(rows) != 1 || rows[0].ID != carol.ID {
+		t.Fatalf("q=alice active: want only carol, got %d rows", len(rows))
+	}
+
+	// Match by discord_id only.
+	rows = list("1234", nil)
+	if len(rows) != 1 || rows[0].ID != alice.ID {
+		t.Fatalf("q=1234: want only alice, got %d rows", len(rows))
+	}
+
+	// No match.
+	if rows := list("zzz", nil); len(rows) != 0 {
+		t.Fatalf("q=zzz: want 0, got %d", len(rows))
+	}
+
+	// LIKE metacharacter % is escaped: "100%done" matches literally, and a
+	// bare "%" matches only the username containing a literal %.
+	rows = list("100%done", nil)
+	if len(rows) != 1 || rows[0].Username != "100%done" {
+		t.Fatalf("q=100%%done: want only the literal-%% user, got %d", len(rows))
+	}
+	rows = list("%", nil)
+	if len(rows) != 1 || rows[0].Username != "100%done" {
+		t.Fatalf("q=%%: want only the literal-%% user, got %d", len(rows))
+	}
+
+	// LIKE metacharacter _ is escaped: "a_b" matches only the literal a_b,
+	// never "axb" (which would match if _ stayed a single-char wildcard).
+	rows = list("a_b", nil)
+	if len(rows) != 1 || rows[0].ID != under.ID {
+		t.Fatalf("q=a_b: want only literal a_b, got %d", len(rows))
+	}
+}
+
 func ptrBool(v bool) *bool { return &v }
 
 func TestUpdateUserLimitsTriStateAndProtection(t *testing.T) {
