@@ -79,6 +79,15 @@ func decodeMap(t *testing.T, body []byte) map[string]any {
 	return m
 }
 
+func decodeArray(t *testing.T, body []byte) []map[string]any {
+	t.Helper()
+	var arr []map[string]any
+	if err := json.Unmarshal(body, &arr); err != nil {
+		t.Fatalf("decode json array: %v; body=%q", err, body)
+	}
+	return arr
+}
+
 func assertNoStore(t *testing.T, rec *httptest.ResponseRecorder) {
 	t.Helper()
 	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
@@ -286,6 +295,9 @@ func TestHandlerBindingsCRUD(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), `"upstream_model_id":"up-a"`) {
 		t.Fatalf("list bindings body = %s", rec.Body.String())
 	}
+	if !strings.Contains(rec.Body.String(), `"endpoint_base_url":"https://example.com"`) {
+		t.Fatalf("list bindings missing endpoint_base_url: %s", rec.Body.String())
+	}
 
 	// Patch binding -> 200.
 	rec = doRequest(t, h, http.MethodPatch, fmt.Sprintf("/api/models/%d/bindings/%d", m.ID, bID),
@@ -339,7 +351,79 @@ func TestHandlerBindingsCRUD(t *testing.T) {
 	}
 }
 
-// --- SessionIdentity --------------------------------------------------------
+// TestHandlerReorderBindings covers the PUT .../bindings/order endpoint:
+// reordering commits the new ord positions, a stale or partial order array is
+// a conflict, and a cross-user model is not found.
+func TestHandlerReorderBindings(t *testing.T) {
+	h, ts, uid := newTestHandler(t)
+	ctx := context.Background()
+
+	m, err := ts.svc.CreateModel(ctx, uid, "p", "m", nil, nil)
+	if err != nil {
+		t.Fatalf("create model: %v", err)
+	}
+	key := ts.seedEndpointKeyAndCache(t, uid, "up-a", "up-b", "up-c")
+
+	// Create three bindings; collect their ids from the list response.
+	for _, up := range []string{"up-a", "up-b", "up-c"} {
+		rec := doRequest(t, h, http.MethodPost, fmt.Sprintf("/api/models/%d/bindings", m.ID),
+			`{"endpoint_key_id":`+fmt.Sprintf("%d", key)+`,"upstream_model_id":"`+up+`"}`)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create binding %s: status=%d body=%s", up, rec.Code, rec.Body.String())
+		}
+	}
+	list := decodeArray(t, doRequest(t, h, http.MethodGet, fmt.Sprintf("/api/models/%d/bindings", m.ID), "").Body.Bytes())
+	ids := make([]int64, len(list))
+	for i, b := range list {
+		ids[i] = int64(b["id"].(float64))
+		// New bindings default to ord 0; the list is ordered by (ord, id), so
+		// they appear in creation (id) order with ord 0 each.
+		if b["ord"].(float64) != 0 {
+			t.Fatalf("initial ord at %d = %v, want 0", i, b["ord"])
+		}
+	}
+
+	// Reverse the order and PUT it; the response is the reordered list.
+	reversed := []int64{ids[2], ids[1], ids[0]}
+	rec := doRequest(t, h, http.MethodPut, fmt.Sprintf("/api/models/%d/bindings/order", m.ID),
+		`{"order":[`+fmt.Sprintf("%d,%d,%d", reversed[0], reversed[1], reversed[2])+`]}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reorder status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	assertNoStore(t, rec)
+	got := decodeArray(t, rec.Body.Bytes())
+	for i, b := range got {
+		if int64(b["id"].(float64)) != reversed[i] {
+			t.Fatalf("reordered position %d = id %v, want %d", i, b["id"], reversed[i])
+		}
+		if b["ord"].(float64) != float64(i) {
+			t.Fatalf("ord after reorder at %d = %v, want %d", i, b["ord"], i)
+		}
+		if b["endpoint_base_url"] != "https://example.com" {
+			t.Fatalf("endpoint_base_url missing in reorder response: %v", b["endpoint_base_url"])
+		}
+	}
+
+	// A stale order (missing one id) is a conflict.
+	rec = doRequest(t, h, http.MethodPut, fmt.Sprintf("/api/models/%d/bindings/order", m.ID),
+		`{"order":[`+fmt.Sprintf("%d,%d", reversed[0], reversed[1])+`]}`)
+	assertErr(t, rec, http.StatusConflict, httperr.CodeConflict)
+
+	// An order with a foreign id is a conflict.
+	rec = doRequest(t, h, http.MethodPut, fmt.Sprintf("/api/models/%d/bindings/order", m.ID),
+		`{"order":[`+fmt.Sprintf("%d,%d,99999", reversed[0], reversed[1])+`]}`)
+	assertErr(t, rec, http.StatusConflict, httperr.CodeConflict)
+
+	// A duplicate id in the order is a conflict.
+	rec = doRequest(t, h, http.MethodPut, fmt.Sprintf("/api/models/%d/bindings/order", m.ID),
+		`{"order":[`+fmt.Sprintf("%d,%d,%d", reversed[0], reversed[0], reversed[1])+`]}`)
+	assertErr(t, rec, http.StatusConflict, httperr.CodeConflict)
+
+	// A cross-user model is not found (no existence leak).
+	rec = doRequest(t, h, http.MethodPut, fmt.Sprintf("/api/models/%d/bindings/order", m.ID+99999),
+		`{"order":[]}`)
+	assertErr(t, rec, http.StatusNotFound, httperr.CodeNotFound)
+}
 
 // stubProvider satisfies auth.DiscordProvider with no-ops; it is only needed
 // to construct the user auth service for the session middleware.

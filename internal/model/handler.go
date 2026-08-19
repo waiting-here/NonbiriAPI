@@ -77,6 +77,7 @@ func NewHandler(deps HandlerDeps) http.Handler {
 	h.mux.HandleFunc("DELETE /api/models/{id}", h.deleteModel)
 	h.mux.HandleFunc("GET /api/models/{id}/bindings", h.listBindings)
 	h.mux.HandleFunc("POST /api/models/{id}/bindings", h.createBinding)
+	h.mux.HandleFunc("PUT /api/models/{id}/bindings/order", h.reorderBindings)
 	h.mux.HandleFunc("PATCH /api/models/{id}/bindings/{bId}", h.updateBinding)
 	h.mux.HandleFunc("DELETE /api/models/{id}/bindings/{bId}", h.deleteBinding)
 	return h
@@ -236,6 +237,30 @@ func (h *Handler) createBinding(w http.ResponseWriter, r *http.Request) {
 	httperr.WriteJSON(w, http.StatusCreated, bindingResponse(b))
 }
 
+func (h *Handler) reorderBindings(w http.ResponseWriter, r *http.Request) {
+	uid, ok := h.authenticate(r)
+	if !ok {
+		writeErr(w, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+		return
+	}
+	modelID, ok := parsePathID(w, r, "id")
+	if !ok {
+		return
+	}
+	var req reorderBindingsRequest
+	if derr := decodeModelRequest(r, &req); derr.Code != "" {
+		writeErr(w, derr)
+		return
+	}
+	bindings, err := h.svc.ReorderBindings(r.Context(), uid, modelID, req.Order)
+	if err != nil {
+		writeServiceErr(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	httperr.WriteJSON(w, http.StatusOK, bindingListResponse(bindings))
+}
+
 func (h *Handler) updateBinding(w http.ResponseWriter, r *http.Request) {
 	uid, ok := h.authenticate(r)
 	if !ok {
@@ -307,6 +332,10 @@ type createBindingRequest struct {
 	Ord             *int64 `json:"ord,omitempty"`
 }
 
+type reorderBindingsRequest struct {
+	Order []int64 `json:"order"`
+}
+
 type updateBindingRequest struct {
 	Ord             *int64  `json:"ord,omitempty"`
 	UpstreamModelID *string `json:"upstream_model_id,omitempty"`
@@ -327,6 +356,7 @@ type modelResp struct {
 type bindingResp struct {
 	ID              int64  `json:"id"`
 	EndpointKeyID   int64  `json:"endpoint_key_id"`
+	EndpointBaseURL string `json:"endpoint_base_url"`
 	UpstreamModelID string `json:"upstream_model_id"`
 	Ord             int64  `json:"ord"`
 }
@@ -350,7 +380,7 @@ func modelListResponse(models []db.Model) []modelResp {
 
 func bindingResponse(b db.ModelBinding) bindingResp {
 	return bindingResp{
-		ID: b.ID, EndpointKeyID: b.EndpointKeyID,
+		ID: b.ID, EndpointKeyID: b.EndpointKeyID, EndpointBaseURL: b.EndpointBaseURL,
 		UpstreamModelID: b.UpstreamModelID, Ord: b.Ord,
 	}
 }
