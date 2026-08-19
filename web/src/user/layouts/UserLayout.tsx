@@ -47,6 +47,18 @@ export function UserLayout() {
     document.title = `${siteName} · ${t('user.shell.title')}`;
   }, [t, siteName]);
 
+  // Sync the browser tab icon with the configured site logo. The default
+  // mark is baked into index.html; capture it on mount so clearing the logo
+  // restores it instead of leaving a stale icon.
+  const [defaultIcon] = useState(
+    () => document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.href ?? '',
+  );
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (!link) return;
+    link.href = siteLogoURL || defaultIcon;
+  }, [siteLogoURL, defaultIcon]);
+
   const location = useLocation();
   // The OAuth re-authorization callback always returns to the configured
   // redirect path (default "/"), not to the account page that requested it.
