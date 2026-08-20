@@ -16,7 +16,9 @@ Use **Settings → Branches** (or a repository ruleset) and create a rule for `m
 - require the `Go checks` and `Web checks` status checks;
 - block force pushes and branch deletion;
 - require conversation resolution;
-- do not permit bypassing the rule unless an emergency recovery path is intentionally retained.
+- do not permit bypassing the rule for routine or emergency changes.
+
+Direct updates to `master` are disabled: all changes, including emergency fixes, must arrive through a pull request from another branch. Keep local `master` aligned with `origin/master`; do not locally merge a feature branch into `master` and then try to push it.
 
 For a single-maintainer repository, requiring an approving review can make the owner unable to merge their own pull requests. Start with required status checks and no approval count, or add a trusted second maintainer before requiring one approval.
 
