@@ -74,12 +74,21 @@ never shadow a redeploy.
 Every error response is a single JSON object:
 
 ```json
-{ "error": { "code": "<stable>", "message": "<human, bounded>",
+{ "error": { "code": "<stable>", "source": "platform|upstream", "message": "<human, bounded>",
              "diag": "<optional, bounded upstream context>", "request_id": "<optional>" } }
 ```
 
 - `code` is a stable machine identifier. Codes may be added; an existing one is never
   redefined for a new meaning. Unknown codes map to HTTP 500 internally.
+- `source` is always present and is exactly `platform` or `upstream`. It is derived at the
+  single wire sink from the code and locked to it — `upstream` for `upstream`, `platform` for
+  every other stable code (and the unknown-code fallback) — so a caller never has to infer
+  origin from a message prefix, and a hand-constructed error can neither omit `source` nor
+  forge a different attribution than its code. An explicit caller-set `source` can confirm but
+  never override the code-derived value: an upstream code is always `upstream` and a platform
+  code is always `platform`; any explicit value that disagrees (or is invalid) is dropped in
+  favor of the code-derived default. *(Unreleased security amendment: the `source` field and
+  its locked-to-code derivation are not part of the published `v1.0.0-alpha.1` contract.)*
 - `message` is bounded to 1000 runes and stripped of all C0 control characters and DEL; it
   carries a short human-safe summary and **never** raw upstream identifiers or text.
 - `diag` is bounded to 4096 bytes (the untrusted-upstream diagnostic resource limit) by
@@ -126,8 +135,15 @@ Codes below are the emitted set; HTTP status is derived from the code.
 | `payload_too_large` | 413 | request exceeds the configured size bound |
 | `unbound_model` | 503 | resolved a platform model that has no usable binding (zero-binding draft / all bindings filtered out); a user issue is recorded |
 | `upstream` | 502 | upstream error after the commit boundary, a single attempt's upstream error with silent retry off, or all bindings exhausted under silent retry |
-| `service_unavailable` | 503 | internal service unavailability |
+| `service_unavailable` | 503 | internal service unavailability, or the server-side maintenance gate refusing user-station API and `/v1/*` while `maintenance_mode` is on (§6) |
 | `resource_limit_exceeded` | 422 | a per-parent resource count reached the configured cap: endpoint keys per endpoint (`default_endpoint_key_limit`), platform models per user (`default_model_limit`), or bindings per model (`default_binding_limit`); the envelope carries `limit` (the effective cap) and `resource` (the stable name); the count and cap are read inside the same transaction as the insert so a concurrent add cannot breach the cap; existing rows are retained |
+| `insufficient_credits` | 403 | reserved stable code for the economy rail (悠哉积分不足); `source` is `platform`; the business trigger is wired in a later phase |
+| `feature_disabled` | 403 | reserved stable code for a feature gate (e.g. sign-in disabled / timezone not configured); `source` is `platform`; the business trigger is wired in a later phase |
+| `charity_suspended` | 403 | reserved stable code for a charity suspension; `source` is `platform`; the business trigger is wired in a later phase |
+
+*(Unreleased security amendment: the `service_unavailable` maintenance-gate meaning and
+the `insufficient_credits` / `feature_disabled` / `charity_suspended` reserved codes are not
+part of the published `v1.0.0-alpha.1` contract; no business trigger is wired yet.)*
 
 ## 2. Platform exit — `/v1/*` (CallerKey Bearer)
 
@@ -206,7 +222,11 @@ Stable error codes at this endpoint:
 | `internal` | 500 | unexpected failure |
 
 (within an already-started stream, an error is emitted as an SSE error frame rather than a
-fresh HTTP error envelope, because the response status and headers have already been written.)
+fresh HTTP error envelope, because the response status and headers have already been written.
+The SSE error frame carries the same stable `{"error":{"code","source","message"}}` shape as
+the JSON envelope — `source` is derived at the shared wire sink, not from a message prefix —
+and never carries a free-form upstream body, the legacy `type` field, or the terminal `[DONE]`
+marker; an incomplete stream is never synthesized as a success.)
 
 ### 2.2 `GET /v1/models`
 
@@ -589,3 +609,39 @@ resolving an alert with `false` reopens it and clears `resolved_at`.
   the request is rejected (`not_found` / `unauthorized` as applicable), never guessed.
 - **Atomic late-callback handling**: account deletion and late callbacks are linearized by an
   atomic conditional write, never by a read-then-write.
+
+## 6. Server-side maintenance gate
+
+*(Unreleased security amendment: this section is not part of the published
+`v1.0.0-alpha.1` contract; it describes the current development branch.)*
+
+`maintenance_mode` is a server-side authoritative admission gate, not a front-end-only notice.
+It is an atomically live-applied process-wide boolean: a toggle through the admin site-config
+endpoint takes effect for the very next request, including for already-issued user sessions
+and caller keys, and survives a restart by loading the persisted value at startup. The gate
+is checked after the host/station edge and before any auth or business logic, so it cannot
+be bypassed by holding a valid credential.
+
+While on, the user-station API and the OpenAI-compatible exit are refused with a stable
+`503 service_unavailable` envelope (`source: platform`, `Cache-Control: no-store`) for every
+path except a strict allowlist:
+
+- `/healthz` (both stations);
+- the public site-config endpoints (`/api/config`, `/admin/api/config`) — so the user SPA can
+  learn maintenance is on and render the notice, and the admin login screen can render before
+  signing in;
+- `/api/auth/logout` — so an already-logged-in user can end their session.
+
+Everything else under `/api/*` (session, `me`, OAuth start/callback/elevate, endpoints,
+models, issues, account export/delete, caller-key management) and all of `/v1/*` returns
+`503`. The admin station (`/admin/api/*`) is never routed through the gate, so an operator can
+always sign in, inspect configuration, and toggle maintenance off. The front-end maintenance
+notice (shown from the public `maintenance_mode` value) is consistent with the server-side
+`503`: both report the site as temporarily unavailable.
+
+A live toggle applies the value to the runtime singleton first and then persists
+it; a persistence failure reverts the runtime singleton to its previous value
+(or the frozen canonical default when no prior row existed) so database and
+runtime cannot drift; a failed runtime apply leaves both unchanged (fail
+closed). Concurrent patches to the same key are serialized per handler so their
+apply and persist orders cannot interleave and drift the two apart.
