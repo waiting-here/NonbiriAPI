@@ -20,6 +20,8 @@ Use **Settings → Branches** (or a repository ruleset) and create a rule for `m
 
 Direct updates to `master` are disabled: all changes, including emergency fixes, must arrive through a pull request from another branch. Keep local `master` aligned with `origin/master`; do not locally merge a feature branch into `master` and then try to push it.
 
+For a multi-part version, maintainers may use a milestone integration branch (for example, `dev/v1.0.0-alpha.2`), merge locally reviewed short-lived branches into it, and open one final pull request from that integration branch to `master`. The integration branch must remain buildable after each merge; local per-change review and gates are still required because the final pull request is not a substitute for incremental review.
+
 For a single-maintainer repository, requiring an approving review can make the owner unable to merge their own pull requests. Start with required status checks and no approval count, or add a trusted second maintainer before requiring one approval.
 
 ## Recommended repository options

@@ -49,7 +49,7 @@ Every new user-associated field must have an export, deletion, retention, and pr
 
 ## Commit and pull request guidance
 
-`master` is protected and PR-only. Create a short-lived branch, commit there, and merge only through a GitHub pull request after required checks pass. Do not commit or push directly to `master`, including for emergency fixes.
+`master` is protected and PR-only; never commit or push directly to it, including for emergency fixes. Maintainers may designate a version integration branch, merge reviewed short-lived work branches into it locally, and open one final GitHub pull request to `master` after the complete version passes its gates. Contributors should confirm the intended base branch before starting work.
 
 Use a concise public commit subject such as:
 

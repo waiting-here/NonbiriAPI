@@ -58,6 +58,7 @@ CGO_ENABLED=0 go build -tags dist -trimpath -o nonbiriapi .
 ## Repository and publication
 
 - [ ] Review the final `git diff`, tracked generated files, executable bits, LF endings, and sensitive-file status.
+- [ ] If a version integration branch was used, review the complete merge-base-to-head diff and commit history, then open its single final pull request to the protected default branch.
 - [ ] Confirm required `Go checks` and `Web checks` pass on the exact release commit and branch protection remains active.
 - [ ] Confirm private vulnerability reporting is reachable and no deployment secrets are present in Actions/release settings.
 - [ ] Prepare release notes with upgrade, backup, migration, rollback, known limitations, and checksums/artifacts as applicable.
