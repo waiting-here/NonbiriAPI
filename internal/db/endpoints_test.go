@@ -80,7 +80,7 @@ func TestCreateEndpointOwnershipInSQL(t *testing.T) {
 	}
 
 	// Cross-user update is not_found and does not mutate alice's row.
-	if _, err := st.UpdateEndpoint(context.Background(), bob, aEP.ID, strPtrDB("https://bob.example/v2/"), nil, nil, 2); !errors.Is(err, ErrNotFound) {
+	if _, _, err := st.UpdateEndpoint(context.Background(), bob, aEP.ID, strPtrDB("https://bob.example/v2/"), nil, nil, 2); !errors.Is(err, ErrNotFound) {
 		t.Errorf("bob update alice endpoint: err=%v, want not_found", err)
 	}
 	still, err := st.GetEndpoint(context.Background(), alice, aEP.ID)
@@ -258,49 +258,246 @@ func TestCreateEndpointAtomicCapUnderConcurrency(t *testing.T) {
 	}
 }
 
-// TestUpdateEndpointFieldsAndUpdatedAt asserts partial updates touch only the
-// supplied fields, bump updated_at, and return the canonical row.
-func TestUpdateEndpointFieldsAndUpdatedAt(t *testing.T) {
+// TestUpdateEndpointFieldsAndChangeMask asserts partial updates touch only
+// actual changes, preserve updated_at for no-ops, and return an exact mask.
+func TestUpdateEndpointFieldsAndChangeMask(t *testing.T) {
 	st := openTestStore(t, filepath.Join(t.TempDir(), "upd.db"))
 	defer st.Close()
 	uid := seedTestUser(t, st, "u", nil)
 	ep := mustCreateTestEndpoint(t, st, uid, "https://example.com/v1/")
 
-	// No-op update returns the row and verifies ownership.
-	got, err := st.UpdateEndpoint(context.Background(), uid, ep.ID, nil, nil, nil, 99)
+	got, changes, err := st.UpdateEndpoint(context.Background(), uid, ep.ID, nil, nil, nil, 99)
 	if err != nil {
-		t.Fatalf("noop update: %v", err)
+		t.Fatalf("unchanged update: %v", err)
 	}
-	if got.BaseURL != ep.BaseURL || got.UpdatedAt != ep.UpdatedAt {
-		t.Errorf("noop update altered row: %+v", got)
+	if changes != 0 || got.BaseURL != ep.BaseURL || got.UpdatedAt != ep.UpdatedAt {
+		t.Errorf("unchanged update returned row=%+v changes=%b", got, changes)
 	}
-	// No-op update for a cross-user id is not_found.
-	if _, err := st.UpdateEndpoint(context.Background(), uid+999, ep.ID, nil, nil, nil, 99); !errors.Is(err, ErrNotFound) {
-		t.Errorf("noop update cross-user: err=%v, want not_found", err)
+	if _, _, err := st.UpdateEndpoint(context.Background(), uid+999, ep.ID, nil, nil, nil, 99); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unchanged update cross-user: err=%v, want not_found", err)
 	}
 
-	// Partial: note + enabled, base_url untouched.
-	updated, err := st.UpdateEndpoint(context.Background(), uid, ep.ID, nil, strPtrDB("note 1"), boolPtrDB(false), 5)
+	updated, changes, err := st.UpdateEndpoint(context.Background(), uid, ep.ID, nil, strPtrDB("note 1"), boolPtrDB(false), 5)
 	if err != nil {
 		t.Fatalf("update note+enabled: %v", err)
 	}
-	if updated.Note != "note 1" || updated.Enabled {
+	wantChanges := EndpointChangeNote | EndpointChangeEnabled
+	if changes != wantChanges {
+		t.Errorf("note+enabled changes = %b, want %b", changes, wantChanges)
+	}
+	if updated.Note != "note 1" || updated.Enabled || updated.BaseURL != ep.BaseURL || updated.UpdatedAt != 5 {
 		t.Errorf("updated = %+v", updated)
 	}
-	if updated.BaseURL != ep.BaseURL {
-		t.Errorf("update altered base_url: %q vs %q", updated.BaseURL, ep.BaseURL)
-	}
-	if updated.UpdatedAt != 5 {
-		t.Errorf("updated_at = %d, want 5", updated.UpdatedAt)
-	}
 
-	// base_url change persists.
-	updated, err = st.UpdateEndpoint(context.Background(), uid, ep.ID, strPtrDB("https://example.com/v2/"), nil, nil, 6)
+	updated, changes, err = st.UpdateEndpoint(context.Background(), uid, ep.ID, strPtrDB("https://example.com/v2/"), nil, nil, 6)
 	if err != nil {
 		t.Fatalf("update base_url: %v", err)
 	}
+	wantChanges = EndpointChangeBaseURL | EndpointChangeUpstreamPath
+	if changes != wantChanges {
+		t.Errorf("path changes = %b, want %b", changes, wantChanges)
+	}
 	if updated.BaseURL != "https://example.com/v2/" || updated.UpdatedAt != 6 {
 		t.Errorf("updated = %+v", updated)
+	}
+
+	// Explicitly spelling the effective default port changes the stored display
+	// form but not the security target or path, so it must not carry a fetch bit.
+	updated, changes, err = st.UpdateEndpoint(context.Background(), uid, ep.ID, strPtrDB("https://example.com:443/v2/"), nil, nil, 7)
+	if err != nil {
+		t.Fatalf("update display form: %v", err)
+	}
+	if changes != EndpointChangeBaseURL || updated.BaseURL != "https://example.com:443/v2/" {
+		t.Errorf("display-form update row=%+v changes=%b", updated, changes)
+	}
+}
+
+func TestUpdateEndpointBlocksOriginChangeWithAnyExistingKey(t *testing.T) {
+	st := openTestStore(t, filepath.Join(t.TempDir(), "origin.db"))
+	defer st.Close()
+	uid := seedTestUser(t, st, "u", nil)
+	ep := mustCreateTestEndpoint(t, st, uid, "https://old.example/v1/")
+	ciphertext, err := st.secrets.Seal([]byte("sk-origin-boundary"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := st.CreateEndpointKey(context.Background(), uid, ep.ID, ciphertext, "head", "tail", "", false, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, nextURL := range []string{
+		"http://old.example/v1/",
+		"https://old.example:444/v1/",
+		"https://attacker.example/v1/",
+	} {
+		updated, changes, updateErr := st.UpdateEndpoint(context.Background(), uid, ep.ID,
+			&nextURL, strPtrDB("must not persist"), boolPtrDB(false), 3)
+		if !errors.Is(updateErr, ErrEndpointOriginConflict) {
+			t.Fatalf("origin update to %q error = %v, want ErrEndpointOriginConflict", nextURL, updateErr)
+		}
+		if changes != 0 || updated != (Endpoint{}) {
+			t.Fatalf("conflicting update returned row=%+v changes=%b", updated, changes)
+		}
+		unchanged, getErr := st.GetEndpoint(context.Background(), uid, ep.ID)
+		if getErr != nil {
+			t.Fatal(getErr)
+		}
+		if unchanged.BaseURL != ep.BaseURL || unchanged.Note != ep.Note || unchanged.Enabled != ep.Enabled || unchanged.UpdatedAt != ep.UpdatedAt {
+			t.Fatalf("conflicting update partially persisted: %+v", unchanged)
+		}
+	}
+
+	if err := st.DeleteEndpointKey(context.Background(), uid, ep.ID, key.ID); err != nil {
+		t.Fatal(err)
+	}
+	updated, changes, err := st.UpdateEndpoint(context.Background(), uid, ep.ID,
+		strPtrDB("https://new.example/v1/"), nil, nil, 4)
+	if err != nil {
+		t.Fatalf("origin update after key deletion: %v", err)
+	}
+	wantChanges := EndpointChangeBaseURL | EndpointChangeOrigin
+	if changes != wantChanges || updated.BaseURL != "https://new.example/v1/" {
+		t.Fatalf("origin update row=%+v changes=%b want=%b", updated, changes, wantChanges)
+	}
+}
+
+// TestEndpointOriginUpdateLinearizesWithKeyCreateAndDelete repeatedly races
+// the origin guard against key writes. A test-only insert audit records the
+// endpoint URL observed by each key insertion, proving that a successful move
+// linearizes before a new key rather than moving an already-inserted key.
+func TestEndpointOriginUpdateLinearizesWithKeyCreateAndDelete(t *testing.T) {
+	st := openTestStore(t, filepath.Join(t.TempDir(), "origin-race.db"))
+	defer st.Close()
+	setTestGlobalLimit(t, st, "200")
+	uid := seedTestUser(t, st, "u", nil)
+	if _, err := st.DB().Exec(`
+CREATE TABLE endpoint_key_origin_audit (
+    key_id INTEGER PRIMARY KEY,
+    base_url TEXT NOT NULL
+);
+CREATE TRIGGER endpoint_key_origin_audit_insert
+AFTER INSERT ON endpoint_keys
+BEGIN
+    INSERT INTO endpoint_key_origin_audit (key_id, base_url)
+    SELECT NEW.id, base_url FROM endpoints WHERE id=NEW.endpoint_id;
+END;`); err != nil {
+		t.Fatalf("install insert audit: %v", err)
+	}
+
+	type updateResult struct {
+		ep      Endpoint
+		changes EndpointChangeMask
+		err     error
+	}
+	type createResult struct {
+		key EndpointKey
+		err error
+	}
+
+	for i := 0; i < 32; i++ {
+		oldURL := fmt.Sprintf("https://old-create-%d.example/v1/", i)
+		newURL := fmt.Sprintf("https://new-create-%d.example/v1/", i)
+		ep := mustCreateTestEndpoint(t, st, uid, oldURL)
+		ciphertext, err := st.secrets.Seal([]byte(fmt.Sprintf("sk-create-%d", i)))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		start := make(chan struct{})
+		updates := make(chan updateResult, 1)
+		creates := make(chan createResult, 1)
+		go func() {
+			<-start
+			updated, changes, err := st.UpdateEndpoint(context.Background(), uid, ep.ID, &newURL, nil, nil, 10)
+			updates <- updateResult{ep: updated, changes: changes, err: err}
+		}()
+		go func() {
+			<-start
+			key, err := st.CreateEndpointKey(context.Background(), uid, ep.ID, ciphertext, "head", "tail", "", true, 10)
+			creates <- createResult{key: key, err: err}
+		}()
+		close(start)
+
+		create := <-creates
+		update := <-updates
+		if create.err != nil {
+			t.Fatalf("round %d create: %v", i, create.err)
+		}
+		var insertedAt string
+		if err := st.DB().QueryRow(`SELECT base_url FROM endpoint_key_origin_audit WHERE key_id=?`, create.key.ID).Scan(&insertedAt); err != nil {
+			t.Fatalf("round %d read insert audit: %v", i, err)
+		}
+		final, err := st.GetEndpoint(context.Background(), uid, ep.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch {
+		case update.err == nil:
+			wantChanges := EndpointChangeBaseURL | EndpointChangeOrigin
+			if update.changes != wantChanges || update.ep.BaseURL != newURL || final.BaseURL != newURL || insertedAt != newURL {
+				t.Fatalf("round %d successful move was not before insert: update=%+v final=%q inserted_at=%q", i, update, final.BaseURL, insertedAt)
+			}
+		case errors.Is(update.err, ErrEndpointOriginConflict):
+			if update.changes != 0 || final.BaseURL != oldURL || insertedAt != oldURL {
+				t.Fatalf("round %d conflicting move changed state: update=%+v final=%q inserted_at=%q", i, update, final.BaseURL, insertedAt)
+			}
+		default:
+			t.Fatalf("round %d update: %v", i, update.err)
+		}
+	}
+
+	for i := 0; i < 32; i++ {
+		oldURL := fmt.Sprintf("https://old-delete-%d.example/v1/", i)
+		newURL := fmt.Sprintf("https://new-delete-%d.example/v1/", i)
+		ep := mustCreateTestEndpoint(t, st, uid, oldURL)
+		ciphertext, err := st.secrets.Seal([]byte(fmt.Sprintf("sk-delete-%d", i)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		key, err := st.CreateEndpointKey(context.Background(), uid, ep.ID, ciphertext, "head", "tail", "", true, 20)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		start := make(chan struct{})
+		updates := make(chan updateResult, 1)
+		deletes := make(chan error, 1)
+		go func() {
+			<-start
+			updated, changes, err := st.UpdateEndpoint(context.Background(), uid, ep.ID, &newURL, nil, nil, 21)
+			updates <- updateResult{ep: updated, changes: changes, err: err}
+		}()
+		go func() {
+			<-start
+			deletes <- st.DeleteEndpointKey(context.Background(), uid, ep.ID, key.ID)
+		}()
+		close(start)
+
+		if err := <-deletes; err != nil {
+			t.Fatalf("round %d delete: %v", i, err)
+		}
+		update := <-updates
+		final, err := st.GetEndpoint(context.Background(), uid, ep.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		count, err := st.CountEndpointKeys(context.Background(), uid, ep.ID)
+		if err != nil || count != 0 {
+			t.Fatalf("round %d final key count=%d err=%v", i, count, err)
+		}
+		switch {
+		case update.err == nil:
+			if final.BaseURL != newURL || update.changes != EndpointChangeBaseURL|EndpointChangeOrigin {
+				t.Fatalf("round %d successful post-delete move: update=%+v final=%q", i, update, final.BaseURL)
+			}
+		case errors.Is(update.err, ErrEndpointOriginConflict):
+			if final.BaseURL != oldURL || update.changes != 0 {
+				t.Fatalf("round %d conflicting pre-delete move: update=%+v final=%q", i, update, final.BaseURL)
+			}
+		default:
+			t.Fatalf("round %d update: %v", i, update.err)
+		}
 	}
 }
 

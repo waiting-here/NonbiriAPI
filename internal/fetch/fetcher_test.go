@@ -465,7 +465,7 @@ func TestFetchDisabledKeyIsNoOp(t *testing.T) {
 		t.Fatalf("seed cache: %v", err)
 	}
 	// Disable the endpoint itself.
-	if _, err := f.store.UpdateEndpoint(context.Background(), uid, epID, nil, nil, boolPtr(false), 2); err != nil {
+	if _, _, err := f.store.UpdateEndpoint(context.Background(), uid, epID, nil, nil, boolPtr(false), 2); err != nil {
 		t.Fatalf("disable endpoint: %v", err)
 	}
 

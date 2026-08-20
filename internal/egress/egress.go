@@ -138,6 +138,17 @@ func (p *EgressPolicy) ValidateBaseURL(raw string) (string, error) {
 	return displayBaseURL(parsed, explicitPort), nil
 }
 
+// CanonicalEndpointTarget returns the security-normalized target URL and its
+// canonical origin. The target always includes the effective port, while the
+// origin is exactly scheme + canonical host + effective port; path is excluded
+// from the origin. Callers use this pure parser only after ValidateBaseURL has
+// admitted a value, so origin and path comparisons share the egress boundary's
+// single URL authority without performing DNS or policy checks a second time.
+func CanonicalEndpointTarget(raw string) (target string, origin string, err error) {
+	target, origin, _, _, err = canonicalizeBaseURL(raw, false)
+	return target, origin, err
+}
+
 // AddSelfOrigins registers the process's public station names, every A/AAAA
 // answer for those names, and the listener's local addresses and port. It must
 // succeed before Stack.NewClient can create a dialing client. Hostname origins

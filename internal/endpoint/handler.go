@@ -435,6 +435,8 @@ func writeServiceErr(w http.ResponseWriter, err error) {
 		writeErr(w, httperr.New(httperr.CodeNotFound, "not found"))
 	case errors.Is(err, ErrConnectorImmutable):
 		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "connector type cannot be changed"))
+	case errors.Is(err, db.ErrEndpointOriginConflict):
+		writeErr(w, httperr.New(httperr.CodeConflict, "delete all endpoint keys before changing the endpoint origin"))
 	case errors.Is(err, ErrInvalidRequest):
 		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
 	case errors.Is(err, ErrPayloadTooLarge):

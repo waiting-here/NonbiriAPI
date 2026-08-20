@@ -190,6 +190,56 @@ func TestHandlerEndpointCRUDStatusAndCodes(t *testing.T) {
 	}
 }
 
+func TestHandlerEndpointPatchRejectsEmptyAndSameValues(t *testing.T) {
+	h, ts := newTestHandler(t)
+	rec := doRequest(t, h, http.MethodPost, "/api/endpoints", `{"base_url":"https://example.com/v1/"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d; body=%s", rec.Code, rec.Body.String())
+	}
+	epID := jsonNumber(decodeMap(t, rec.Body.Bytes())["id"])
+	baselineCalls := ts.hook.count()
+
+	for _, body := range []string{
+		`{}`,
+		`{"base_url":"HTTPS://EXAMPLE.COM./v1/"}`,
+		`{"note":"","enabled":true}`,
+	} {
+		rec = doRequest(t, h, http.MethodPatch, "/api/endpoints/"+itoa(epID), body)
+		assertErr(t, rec, http.StatusBadRequest, httperr.CodeInvalidRequest)
+	}
+	if got := ts.hook.count(); got != baselineCalls {
+		t.Fatalf("invalid patches triggered %d fetches", got-baselineCalls)
+	}
+}
+
+func TestHandlerEndpointOriginConflictIsReadableAndNonSensitive(t *testing.T) {
+	h, ts := newTestHandler(t)
+	rec := doRequest(t, h, http.MethodPost, "/api/endpoints", `{"base_url":"https://old.example/v1/"}`)
+	epID := jsonNumber(decodeMap(t, rec.Body.Bytes())["id"])
+	const secret = "sk-handler-origin-secret-1234"
+	rec = doRequest(t, h, http.MethodPost, "/api/endpoints/"+itoa(epID)+"/keys", `{"secret":"`+secret+`","enabled":false}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create key status = %d; body=%s", rec.Code, rec.Body.String())
+	}
+	baselineCalls := ts.hook.count()
+
+	rec = doRequest(t, h, http.MethodPatch, "/api/endpoints/"+itoa(epID),
+		`{"base_url":"https://attacker.example/v1/"}`)
+	assertErr(t, rec, http.StatusConflict, httperr.CodeConflict)
+	body := rec.Body.String()
+	for _, forbidden := range []string{secret, "https://old.example", "https://attacker.example"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("conflict response contains sensitive target material: %s", body)
+		}
+	}
+	if !strings.Contains(body, "delete all endpoint keys") {
+		t.Fatalf("conflict response is not actionable: %s", body)
+	}
+	if got := ts.hook.count(); got != baselineCalls {
+		t.Fatalf("conflicting patch triggered %d fetches", got-baselineCalls)
+	}
+}
+
 func TestHandlerGetUnknownEndpointNotFound(t *testing.T) {
 	h, _ := newTestHandler(t)
 	rec := doRequest(t, h, http.MethodGet, "/api/endpoints/9999", "")

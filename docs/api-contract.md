@@ -1,15 +1,15 @@
-# NonbiriAPI HTTP API Contract (v1.0.0-alpha.1)
+# NonbiriAPI HTTP API Contract (v1.0.0-alpha.1 + unreleased security amendments)
 
-- Status: **v1.0.0-alpha.1 release contract** (frozen for this release)
+- Status: **v1.0.0-alpha.1 release contract with explicitly marked unreleased hardening**
 - Scope: v1.0.0-alpha.1 surface only. `/v1/chat/completions` and `/v1/models` are the only
   OpenAI-compatible exit endpoints in alpha.1; embeddings / images / audio / files /
   moderation / batch are deferred past the alpha.
-- Authority: this document aligns to the frozen v1.0.0-alpha.1 requirements, the accepted
-  credential / egress / data-lifecycle decisions, and the emitted stable-code set of
-  `internal/httperr`. Changes to endpoint paths, JSON fields, stable codes, auth behavior,
-  cache policy, or diagnostic limits require a subsequent release contract and changelog
-  entry; the entity relationships, invariants, auth model, and security boundaries below
-  are the alpha.1 contract.
+- Authority: the base contract aligns to tag `v1.0.0-alpha.1`, its frozen requirements, the
+  accepted credential / egress / data-lifecycle decisions, and the emitted stable-code set
+  of `internal/httperr`. Text explicitly labeled **Unreleased security amendment** describes
+  the current development branch and is not a claim about the published tag. Other changes
+  to endpoint paths, JSON fields, stable codes, auth behavior, cache policy, or diagnostic
+  limits require a subsequent release contract and changelog entry.
 
 ## 1. Conventions
 
@@ -288,9 +288,9 @@ neither an admin session nor a caller key can reach it.
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
 | `GET` | `/api/endpoints` | user session | — | `200` array of `{id, connector_type, base_url, note, enabled, model_fetch_failed, model_fetch_failed_at, created_at, updated_at}` (key secrets never appear) | `unauthorized` |
-| `POST` | `/api/endpoints` | user session | `{base_url, connector_type?, note?, enabled?}` | `201` created endpoint; `base_url` is canonicalized (scheme/host lowercased, trailing dot removed, default ports made explicit, userinfo/query/fragment removed, redundant slashes collapsed) before persistence | `invalid_request`, `unauthorized`, `conflict`, `resource_limit_exceeded` (endpoint cap reached: `min(global_default, user_limit)`) |
+| `POST` | `/api/endpoints` | user session | `{base_url, connector_type?, note?, enabled?}` | `201` created endpoint; `base_url` is canonicalized (scheme/host lowercased, trailing dot removed, userinfo/query/fragment removed, redundant slashes collapsed; an explicitly typed port is preserved while an implicit default is omitted from persistence but normalized in the internal origin key) | `invalid_request`, `unauthorized`, `conflict`, `resource_limit_exceeded` (endpoint cap reached: `min(global_default, user_limit)`) |
 | `GET` | `/api/endpoints/{id}` | user session | — | `200` the endpoint object | `unauthorized`, `not_found` |
-| `PATCH` | `/api/endpoints/{id}` | user session | `{base_url?, note?, enabled?}` | `200` updated endpoint; saving / editing triggers an automatic re-fetch of every enabled key's upstream models | `invalid_request`, `unauthorized`, `not_found` |
+| `PATCH` | `/api/endpoints/{id}` | user session | `{base_url?, note?, enabled?}` | `200` updated endpoint; an empty or wholly unchanged patch is rejected; when any key exists, `base_url` may change only within the same canonical origin (scheme + canonical host + effective port) | `invalid_request`, `unauthorized`, `not_found`, `conflict` |
 | `DELETE` | `/api/endpoints/{id}` | user session | — | `204`; cascades to its keys, their fetched-model cache, and their bindings (immediate invalidation) | `unauthorized`, `not_found` |
 
 Multiple endpoints may share the same canonical `base_url` (no uniqueness on
@@ -311,6 +311,16 @@ flag: set (with a unix-seconds timestamp) whenever an upstream model fetch for
 any of its keys failed, cleared by the next successful fetch. The flag is
 state only — never a diagnostic or any upstream content.
 
+**Unreleased security amendment:** Endpoint updates enforce the credential/origin boundary in the same database
+transaction as the update and key-existence check. An endpoint with any key
+(enabled or disabled) cannot move to another canonical origin; delete all keys,
+change the origin, then add new keys. A path change within the same origin is
+allowed. Empty objects and patches whose supplied values are all unchanged are
+`invalid_request`. Automatic model fetching runs only after an actual same-origin
+path change or a disabled-to-enabled endpoint transition; note-only changes,
+representation-only URL changes, and enabled-to-disabled transitions do not
+fetch. A rejected update is atomic and never queues a fetch.
+
 ### 3.6 Endpoint keys & fetched models
 
 | Method | Path | Auth | Body | Response | Stable codes |
@@ -330,8 +340,8 @@ inside the same transaction as the insert, so a concurrent add cannot breach the
 
 The fetched-model cache is keyed per **(Endpoint, Key)** combo: different keys on the same
 endpoint may legitimately return different upstream lists. The server fetches automatically
-once after an endpoint save/edit or key add, and only manually thereafter (no background
-refresh). Fetched upstream model identifiers are treated as untrusted: bounded in size and
+for the endpoint changes described above and after an enabled key is added, and only manually
+thereafter (no background refresh). Fetched upstream model identifiers are treated as untrusted: bounded in size and
 count, validated to prevent over-long names polluting logs/DOM/DB. When a key is regenerated
 is not applicable (caller key is separate); when an endpoint key is deleted/disabled, its
 cache rows and bindings no longer participate in routing (immediate invalidation by cascade).

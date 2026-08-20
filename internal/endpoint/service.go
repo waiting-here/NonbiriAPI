@@ -61,7 +61,7 @@ type Repository interface {
 	CreateEndpoint(ctx context.Context, userID int64, connectorType, baseURL, note string, enabled bool, now int64) (db.Endpoint, error)
 	ListEndpoints(ctx context.Context, userID int64) ([]db.Endpoint, error)
 	GetEndpoint(ctx context.Context, userID, id int64) (db.Endpoint, error)
-	UpdateEndpoint(ctx context.Context, userID, id int64, baseURL *string, note *string, enabled *bool, now int64) (db.Endpoint, error)
+	UpdateEndpoint(ctx context.Context, userID, id int64, baseURL *string, note *string, enabled *bool, now int64) (db.Endpoint, db.EndpointChangeMask, error)
 	DeleteEndpoint(ctx context.Context, userID, id int64) error
 	EndpointCap(ctx context.Context, userID int64) (int, error)
 
@@ -174,14 +174,19 @@ func (s *Service) GetEndpoint(ctx context.Context, userID, id int64) (db.Endpoin
 
 // UpdateEndpoint updates an endpoint owned by userID. connectorType must be nil
 // (the connector type is immutable). When baseURL is non-nil it is
-// re-canonicalized by the egress boundary. After a committed update the fetch
-// hook is invoked once per enabled key.
+// re-canonicalized by the egress boundary. The repository compares values,
+// checks key existence, and applies the update in one transaction. Empty and
+// wholly unchanged patches are rejected. After commit, fetching occurs only
+// for a same-origin upstream path change or a disabled-to-enabled transition.
 func (s *Service) UpdateEndpoint(ctx context.Context, userID, id int64, baseURL *string, note *string, enabled *bool, connectorType *string) (db.Endpoint, error) {
 	if s == nil || s.repo == nil || userID <= 0 || id <= 0 {
 		return db.Endpoint{}, db.ErrNotFound
 	}
 	if connectorType != nil {
 		return db.Endpoint{}, ErrConnectorImmutable
+	}
+	if baseURL == nil && note == nil && enabled == nil {
+		return db.Endpoint{}, ErrInvalidRequest
 	}
 	var canonical *string
 	if baseURL != nil {
@@ -201,11 +206,17 @@ func (s *Service) UpdateEndpoint(ctx context.Context, userID, id int64, baseURL 
 	}
 	now := s.now()
 
-	ep, err := s.repo.UpdateEndpoint(ctx, userID, id, canonical, notePtr, enabled, now)
+	ep, changes, err := s.repo.UpdateEndpoint(ctx, userID, id, canonical, notePtr, enabled, now)
 	if err != nil {
 		return db.Endpoint{}, mapRepoError(err)
 	}
-	s.triggerFetchForEnabledKeys(ctx, userID, ep.ID)
+	if changes == 0 {
+		return db.Endpoint{}, ErrInvalidRequest
+	}
+	if changes.Has(db.EndpointChangeUpstreamPath) ||
+		(changes.Has(db.EndpointChangeEnabled) && ep.Enabled) {
+		s.triggerFetchForEnabledKeys(ctx, userID, ep.ID)
+	}
 	return ep, nil
 }
 
@@ -398,6 +409,8 @@ func mapRepoError(err error) error {
 	switch {
 	case errors.Is(err, db.ErrNotFound):
 		return db.ErrNotFound
+	case errors.Is(err, db.ErrEndpointOriginConflict):
+		return db.ErrEndpointOriginConflict
 	case errors.Is(err, db.ErrInvalidSiteConfig):
 		return fmt.Errorf("%w: site config", ErrInvalidRequest)
 	default:
