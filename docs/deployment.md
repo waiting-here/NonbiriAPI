@@ -7,7 +7,7 @@ The commands are examples. Replace paths, hostnames, users, and package-manager 
 ## Recommended layout
 
 ```text
-/etc/nonbiriapi/admin.env       # 0640, root:nonbiriapi
+/etc/nonbiriapi/admin.env       # 0640, root:nonbiriapi (secret-bearing; dedicated group only)
 /etc/nonbiriapi/master.key      # 0600, nonbiriapi:nonbiriapi
 /opt/nonbiriapi/releases/<ver>/nonbiriapi
 /opt/nonbiriapi/current          # symlink to the active release directory
@@ -24,7 +24,7 @@ For the ordered walkthrough of preparing the environment file, master key, Disco
 Create the service and directories using the distribution's normal administration tools. For example:
 
 ```sh
-sudo useradd --system --home /var/lib/nonbiriapi --shell /usr/sbin/nologin nonbiriapi
+sudo useradd --system --user-group --home /var/lib/nonbiriapi --shell /usr/sbin/nologin nonbiriapi
 sudo install -d -o nonbiriapi -g nonbiriapi -m 0750 /var/lib/nonbiriapi
 sudo install -d -o root -g nonbiriapi -m 0750 /etc/nonbiriapi
 sudo install -d -o root -g root -m 0755 /opt/nonbiriapi/releases
@@ -38,7 +38,7 @@ sudo chown root:nonbiriapi /etc/nonbiriapi/admin.env
 sudo chmod 0640 /etc/nonbiriapi/admin.env
 ```
 
-The environment file must set `NONBIRI_DB_PATH=/var/lib/nonbiriapi/nonbiriapi.db` and `NONBIRI_MASTER_KEY_FILE=/etc/nonbiriapi/master.key`. Keep `NONBIRI_LISTEN_ADDR` on loopback when a reverse proxy is in front.
+The environment file must set `NONBIRI_DB_PATH=/var/lib/nonbiriapi/nonbiriapi.db` and `NONBIRI_MASTER_KEY_FILE=/etc/nonbiriapi/master.key`. It contains the administrator password and Discord client secret, so `nonbiriapi` must be a dedicated group with no unrelated members. Keep `NONBIRI_LISTEN_ADDR` on loopback when a reverse proxy is in front.
 
 Generate the master key once, before the first start. Do not regenerate it for an existing database: a new key makes encrypted upstream credentials unreadable.
 
@@ -48,13 +48,13 @@ openssl rand -hex 32 | sudo -u nonbiriapi tee /etc/nonbiriapi/master.key >/dev/n
 sudo chmod 0600 /etc/nonbiriapi/master.key
 ```
 
-Run those key-generation commands only on a new installation: the first command truncates its target. Replace the example key only before the first database is created. If a real database already exists, preserve its original key. The loader deliberately rejects group-readable modes such as `0640`; the service account must own this `0600` file so it can read it without broadening access.
+Run those key-generation commands only on a new installation: the first command truncates its target. Replace the example key only before the first database is created. If a real database already exists, preserve its original key. The loader deliberately rejects group-readable modes such as `0640`; the service account must own the file. Unix mode `0400` or `0600` is accepted (`0600` is used by the generation commands).
 
 For a manual launch outside the example systemd unit, set `umask 077` first so SQLite database and sidecar files are owner-only. The application creates a missing database directory without group/other access, but it does not override permissions on an operator-created directory.
 
 ## Build a release binary
 
-Build on a controlled build host or in a clean checkout:
+Build on a controlled build host or in a clean checkout. The race gate requires a working C compiler for Go's race detector; the final production build remains `CGO_ENABLED=0`.
 
 ```sh
 npm --prefix web ci
@@ -62,19 +62,23 @@ npm --prefix web run typecheck
 npm --prefix web run lint
 npm --prefix web run build
 scripts/check-go.sh
+scripts/race-check.sh
 CGO_ENABLED=0 go build -tags dist -trimpath -o nonbiriapi .
 ```
 
 The `dist` build tag is required for the real frontend. An untagged binary contains development placeholder pages. Verify the output before installation with `go version -m ./nonbiriapi` and a temporary configuration/database.
 
-Install into a versioned directory and update the symlink atomically:
+Install into a versioned directory and publish the symlink with a same-filesystem rename:
 
 ```sh
 release=/opt/nonbiriapi/releases/1.0.0-alpha.1
 sudo install -d -o root -g root -m 0755 "$release"
 sudo install -o root -g root -m 0755 nonbiriapi "$release/nonbiriapi"
-sudo ln -sfn "$release" /opt/nonbiriapi/current
+sudo ln -sfn "$release" /opt/nonbiriapi/current.next
+sudo mv -Tf /opt/nonbiriapi/current.next /opt/nonbiriapi/current
 ```
+
+On the intended Ubuntu target, `mv -T` replaces the symlink itself rather than following it; creating the temporary link and renaming it avoids an unlink/create gap.
 
 Keep at least one previous release directory until the new release has passed its health and functional checks.
 
@@ -100,8 +104,7 @@ Configure the public user host and the separate admin host in DNS and TLS. The p
 - preserve long-lived SSE responses without imposing a shorter buffering or idle timeout than the application contract;
 - apply both per-client and global rate limits to the unauthenticated
   `/api/auth/discord/start` route and to the session-gated
-  `/api/auth/elevate` route; keep the ten-minute OAuth-state capacity in
-  mind and test the chosen limits without weakening callback availability.
+  `/api/auth/elevate` route; OAuth states expire after ten minutes and the shared in-process pending-state store holds at most 4096 live entries. Test chosen limits without weakening callback availability.
   The application additionally enforces an in-process per-client-IP admission
   throttle on both routes as a second layer (configurable at runtime via the
   `oauth_start_rate_limit` / `oauth_start_rate_window_seconds` /
@@ -122,6 +125,28 @@ protect it at the proxy, storage, and logging boundary; the guard is one layer, 
 substitute for choosing trusted upstreams and keeping key material private.
 
 Do not trust arbitrary `X-Forwarded-*` headers. The application accepts forwarding metadata only from configured trusted proxy addresses; malformed or duplicate values are discarded wholesale and the direct proxy peer metadata is used instead.
+
+### Nginx and Cloudflare notes
+
+When Nginx is on the same host, keep the application on loopback and set `NONBIRI_TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128`; the application trusts Nginx, not the whole Cloudflare address space. If Cloudflare proxies the public host, configure Nginx `set_real_ip_from` from Cloudflare's **current official IPv4/IPv6 lists**, use `real_ip_header CF-Connecting-IP`, enable `real_ip_recursive`, and preferably firewall the public TLS ports to those ranges. Do not copy a stale hard-coded range list from this document.
+
+After Nginx has validated the direct peer, discard any client-supplied forwarding chain and send one canonical client address to the application. A representative location block is:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_http_version 1.1;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-For $remote_addr;
+
+    proxy_buffering off;
+    proxy_read_timeout 310s;
+    proxy_send_timeout 310s;
+}
+```
+
+Use separate `server` blocks/certificates for user and administrator hosts so the administrator host can have stricter network or identity controls. Adjust the upstream port and timeouts to the actual deployment; test SSE through the complete Cloudflare → Nginx → application path.
 
 ## Manual update procedure
 
@@ -151,7 +176,8 @@ Do not trust arbitrary `X-Forwarded-*` headers. The application accepts forwardi
 6. Point `/opt/nonbiriapi/current` at the new release and start the service:
 
    ```sh
-   sudo ln -sfn /opt/nonbiriapi/releases/1.0.0-alpha.1 /opt/nonbiriapi/current
+   sudo ln -sfn /opt/nonbiriapi/releases/1.0.0-alpha.1 /opt/nonbiriapi/current.next
+   sudo mv -Tf /opt/nonbiriapi/current.next /opt/nonbiriapi/current
    sudo systemctl start nonbiriapi.service
    sudo systemctl status nonbiriapi.service
    ```

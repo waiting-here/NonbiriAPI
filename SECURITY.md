@@ -8,7 +8,7 @@ Only the latest published release and the current development branch are expecte
 
 Please do not disclose an unpatched vulnerability in a public issue, discussion, log, screenshot, or pull request.
 
-Use GitHub's **Private vulnerability reporting** for this repository after it is enabled in the repository settings. If it is not yet enabled, contact the repository maintainers through a private channel listed in the repository profile and include only the minimum information needed to reproduce the issue. Do not include live credentials, caller keys, master keys, production databases, or personal data.
+Use GitHub's [Private vulnerability reporting form](https://github.com/waiting-here/NonbiriAPI/security/advisories/new), which is enabled for this repository. If GitHub makes that form unavailable, use a private maintainer channel from the repository profile; do not fall back to a public issue with vulnerability details. Do not include live credentials, caller keys, master keys, production databases, or personal data.
 
 A useful report includes:
 

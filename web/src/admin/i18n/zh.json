@@ -185,12 +185,12 @@
         "global_rpm": { "title": "全局每分钟请求上限", "description": "全站所有用户每分钟调用请求数总和上限。" },
         "default_per_endpoint_concurrency": { "title": "默认每端点并发", "description": "单个端点的最大并发出站请求数。" },
         "egress_global_concurrency": { "title": "出站全局并发", "description": "全站所有端点共享的最大并发出站请求数。" },
-        "discord_guild_id": { "title": "Discord 服务器 ID", "description": "注册门禁所需的 Discord 服务器 ID；留空则停用门禁。" },
-        "discord_role_id": { "title": "Discord 身份组 ID", "description": "注册所需的服务器身份组 ID；留空则不校验身份组。" },
+        "discord_guild_id": { "title": "Discord 服务器 ID", "description": "注册所需的服务器 ID；本项或身份组 ID 任一留空都会暂停新注册。" },
+        "discord_role_id": { "title": "Discord 身份组 ID", "description": "注册所需的服务器身份组；本项或服务器 ID 任一留空都会暂停新注册。" },
         "oauth_start_rate_limit": { "title": "OAuth 启动限频次数", "description": "每个 IP 在窗口内可发起 Discord 授权的次数上限。" },
         "oauth_start_rate_window_seconds": { "title": "OAuth 启动限频窗口", "description": "OAuth 启动限频的统计窗口秒数。" },
         "oauth_start_rate_penalty_seconds": { "title": "OAuth 启动限频惩罚", "description": "超过限频后该 IP 被临时拒绝授权的秒数。" },
-        "maintenance_mode": { "title": "维护模式", "description": "开启后，用户站所有页面都会显示维护提示，新访问者与已登录用户均无法使用站点功能；管理员站不受影响。未来等级系统上线后，将仅对未达等级的用户显示维护提示。" },
+        "maintenance_mode": { "title": "维护模式", "description": "开启后，用户 Web 应用会被维护提示替代，管理员 Web 应用不受影响。这只是界面提示，不会在服务端关闭 /v1 或已鉴权 API。" },
         "registration_open": { "title": "开放注册", "description": "关闭后，新用户通过 Discord 注册会被拒绝并跳转到注册关闭提示页；已有账号仍可正常登录。" }
       }
     }

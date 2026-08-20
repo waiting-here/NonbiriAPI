@@ -1,56 +1,65 @@
-# v1.0.0-alpha.1 release checklist
+# Release checklist
 
-This is an operator-facing preparation checklist for the first public GitHub release. It is not a substitute for the security, deployment, or legal review.
+Use this checklist for every release candidate. It is not evidence that an item passed: record results in the release process, keep real secrets/private deployment details out of the repository, and do not create a tag until every required item is complete. This reusable checklist supersedes the one-time alpha.1 checklist, which remains available in repository history.
 
-## Repository and versioning
+## Scope, version, and compatibility
 
-- [x] Confirm the canonical GitHub URL: `https://github.com/waiting-here/NonbiriAPI` and SSH remote `git@waiting-here:waiting-here/NonbiriAPI.git`.
-- [x] Set the Go module path to `github.com/waiting-here/NonbiriAPI`.
-- [x] Set the copyright holder to `waiting-here`; document AGPL-3.0 in `NOTICE` and the README.
-- [x] Align the frontend package, API contract, changelog, and the replacement `v1.0.0-alpha.1` tag after the final dependency and test fixes; the Go binary version is identified by the tag and VCS metadata.
-- [x] Review the final diff on `master`; create the annotated release tag only after the required CI checks pass, then keep it immutable.
+- [ ] Freeze the release requirements and API/behavior compatibility statement.
+- [ ] Update version references in the changelog, package metadata, README, API contract, and deployment examples.
+- [ ] Document connector/API limitations, database migration requirements, downgrade limits, and rollback procedure.
+- [ ] Confirm every public behavior in the release notes is implemented and tested; do not describe planned features as shipped.
+- [ ] Review dependencies, generated notices, license obligations, and source-availability requirements.
 
-## Documentation and legal
+## Data lifecycle and legal
 
-- [x] English and Chinese README skeletons.
-- [x] Changelog skeleton.
-- [x] Environment variable example.
-- [x] systemd/VPS deployment guide and unit example.
-- [x] Security, contribution, conduct, and support guidance.
-- [x] Publish deployer-safe README, privacy, terms, and support templates; instance-specific legal details remain an operator prerequisite before accepting real users.
-- [ ] Confirm effective date, operator identity, contact channel, jurisdiction, and data-processing disclosures.
-- [x] Generate and review the frontend third-party notices for the source release.
-- [x] Alpha.1 is source-only; the annotated tag identifies the exact corresponding source archive, so no binary source-offer attachment is required.
+- [ ] For every new user-associated table/column, complete [data-lifecycle-checklist.md](data-lifecycle-checklist.md): export, delete, retention, privacy, late writes, and tests.
+- [ ] Verify account export never includes plaintext/ciphertext secrets, OAuth tokens, caller-key plaintext, or request/response content.
+- [ ] Verify account deletion and late callbacks remain atomically linearized.
+- [ ] Update the embedded Chinese/English privacy and terms templates for shipped data processing and permissions.
+- [ ] Require each operator to review effective date, identity/contact, jurisdiction, subprocessors, backups, and instance-specific legal overrides before onboarding users.
 
-## Build and verification
+## Clean build and automated checks
 
-- [x] Run `scripts/check-go.sh` and `scripts/race-check.sh` from the release checkout.
-- [x] Run frontend typecheck, lint, build, and manifest/notices generation.
-- [x] Run `npm ci` followed by `CGO_ENABLED=0 go build -tags dist -trimpath`.
-- [x] Verify a `-tags dist` binary embeds the real admin and user bundles, not the development stubs.
-- [ ] Run dependency, vulnerability, and license scans; run gitleaks against both Git history and the pending diff with the repository's narrow fixture allowlist.
-- [ ] Run a staging deployment with real reverse-proxy headers, disposable Discord OAuth credentials, and a disposable upstream.
-- [ ] Verify backup/restore with the same master key in an isolated database path.
-- [ ] Test graceful shutdown, restart, rollback, retention cleanup, export, and account deletion.
-- [ ] Record SHA256 checksums and, if available, SBOM/provenance/signatures.
+Run from a clean release checkout and preserve every command's real exit status:
 
-## GitHub settings
+```sh
+npm --prefix web ci
+npm --prefix web run typecheck
+npm --prefix web run lint
+npm --prefix web run build
+scripts/check-go.sh
+scripts/race-check.sh
+CGO_ENABLED=0 go build -tags dist -trimpath -o nonbiriapi .
+```
 
-- [x] Add a CI workflow with read-only contents permissions.
-- [x] No release-artifact workflow is required for the alpha.1 source-only release; prebuilt artifacts are deferred.
-- [x] Enable branch protection for `master` with the required `Go checks` and `Web checks` statuses and no force pushes/deletion.
-- [x] Private vulnerability reporting is enabled by the repository owner; remaining GitHub security features can be enabled incrementally.
-- [x] Add issue forms and pull-request template.
-- [x] Add code ownership for `@waiting-here`.
-- [ ] Configure repository description, topics, license metadata, default branch, and release as a pre-release.
-- [x] Enable Dependabot version updates and complete the branch-protection settings described in `docs/github-settings.md`.
-- [ ] Enable and verify secret scanning and push protection if supported by the repository plan.
+- [ ] Confirm the frontend build regenerated `web/THIRD_PARTY_NOTICES.md` from the clean install and the diff is expected.
+- [ ] Confirm the `-tags dist` binary embeds both real station bundles rather than development placeholders.
+- [ ] Inspect `go version -m ./nonbiriapi`; record source commit, toolchain, target OS/architecture, and SHA256.
+- [ ] Run static/dependency/vulnerability/license scans and gitleaks against both history and the exact release diff.
+- [ ] If publishing binaries, produce the decided checksums, SBOM/provenance/signatures and complete license/source offer; otherwise state source-only clearly.
 
-## Deployment decisions still needed
+## Security and integration
 
-- Supported VPS distribution and CPU architectures.
-- [x] Alpha.1 deployment artifact: source-first systemd deployment; Docker is deferred.
-- [x] Defer optional prebuilt binaries; alpha.1 is source-first.
-- Public user/admin hostnames and reverse-proxy implementation.
-- Database backup location, retention, and restore owner.
-- [x] No pre-alpha database migration guarantee is needed; alpha.1 is the first release.
+- [ ] Independently review authentication, ownership, station isolation, egress, secret handling, response bounds, stream termination/cancellation, rate/concurrency limits, and no-store behavior.
+- [ ] Run focused race/shuffle/attack regressions for changed security, accounting, deletion, or callback paths.
+- [ ] Exercise non-streaming, streaming, cancellation, abnormal EOF, malformed usage, retry boundaries, and client disconnects against a disposable upstream.
+- [ ] Verify real Discord OAuth with disposable credentials and the intended registration gate.
+- [ ] Verify the complete TLS/reverse-proxy/real-IP path, both host boundaries, SSE buffering/timeouts, and unauthenticated admission limits.
+- [ ] Check that logs, errors, alerts, CSV/JSON exports, HTML/text rendering, and generated artifacts contain no secrets or private deployment data.
+
+## Migration, backup, and staging
+
+- [ ] Stop writes and take a protected SQLite backup including applicable WAL/SHM sidecars, or use a tested SQLite backup API.
+- [ ] Restore the backup in an isolated path with the same master key and verify it before migration.
+- [ ] Test forward migration, restart recovery, retention cleanup, and the documented rollback/downgrade path on staging data.
+- [ ] Test graceful shutdown, restart, previous-binary rollback, account export/deletion, and any new scheduled maintenance.
+- [ ] Run a staging soak with representative concurrency and verify resource/memory/connection cleanup.
+
+## Repository and publication
+
+- [ ] Review the final `git diff`, tracked generated files, executable bits, LF endings, and sensitive-file status.
+- [ ] Confirm required `Go checks` and `Web checks` pass on the exact release commit and branch protection remains active.
+- [ ] Confirm private vulnerability reporting is reachable and no deployment secrets are present in Actions/release settings.
+- [ ] Prepare release notes with upgrade, backup, migration, rollback, known limitations, and checksums/artifacts as applicable.
+- [ ] Create an annotated immutable tag only after owner authorization and green CI; never move a published tag silently.
+- [ ] Mark alpha/beta releases as pre-releases, verify the public release page, and perform post-publication smoke/download checks.

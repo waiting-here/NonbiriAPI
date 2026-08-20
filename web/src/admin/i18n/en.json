@@ -185,12 +185,12 @@
         "global_rpm": { "title": "Global RPM", "description": "Total calls per minute across all users." },
         "default_per_endpoint_concurrency": { "title": "Default per-endpoint concurrency", "description": "Maximum concurrent outbound requests per endpoint." },
         "egress_global_concurrency": { "title": "Egress global concurrency", "description": "Maximum concurrent outbound requests shared across all endpoints." },
-        "discord_guild_id": { "title": "Discord guild ID", "description": "Discord server ID required for signup gating; blank disables gating." },
-        "discord_role_id": { "title": "Discord role ID", "description": "Discord server role ID required for signup; blank skips role check." },
+        "discord_guild_id": { "title": "Discord guild ID", "description": "Discord server ID required for signup; if this or the role ID is blank, new registration is paused." },
+        "discord_role_id": { "title": "Discord role ID", "description": "Discord server role required for signup; if this or the guild ID is blank, new registration is paused." },
         "oauth_start_rate_limit": { "title": "OAuth start rate limit", "description": "Maximum Discord authorizations an IP can start within the window." },
         "oauth_start_rate_window_seconds": { "title": "OAuth start rate window", "description": "Rate-limit window length in seconds for OAuth start." },
         "oauth_start_rate_penalty_seconds": { "title": "OAuth start rate penalty", "description": "Seconds an IP is temporarily blocked after exceeding the OAuth start limit." },
-        "maintenance_mode": { "title": "Maintenance mode", "description": "When on, every user-station page shows a maintenance notice and no site features are usable; the admin station is unaffected. Once the level system lands, only users below the required level will see the notice." },
+        "maintenance_mode": { "title": "Maintenance mode", "description": "When on, the user web application is replaced by a maintenance notice; the admin web application is unaffected. This is a UI notice, not a server-side shutdown of /v1 or authenticated API routes." },
         "registration_open": { "title": "Registration open", "description": "When off, new Discord sign-ups are rejected and redirected to a registration-closed notice; existing accounts still sign in." }
       }
     }

@@ -4,11 +4,9 @@ These settings live in GitHub and cannot be applied by `git push` or stored comp
 
 ## Private vulnerability reporting
 
-1. Open **Settings → Code security and analysis**.
-2. Under **Private vulnerability reporting**, click **Enable**.
-3. Keep repository notifications enabled for `@waiting-here`.
+Private vulnerability reporting is enabled. Periodically verify it under **Settings → Code security and analysis**, test that the repository's private advisory form is reachable, and keep owner/security notifications enabled.
 
-`SECURITY.md` remains useful for deployment guidance, but GitHub's private reporting form is the preferred vulnerability channel once enabled.
+`SECURITY.md` remains useful for deployment guidance; GitHub's private reporting form is the preferred vulnerability channel.
 
 ## Protect `master`
 
@@ -27,7 +25,7 @@ For a single-maintainer repository, requiring an approving review can make the o
 - Keep **Allow auto-merge** disabled until the checks and review process are familiar.
 - Enable Dependabot version updates using the committed `.github/dependabot.yml`.
 - Enable secret scanning and push protection if the repository plan provides them.
-- Set the default branch to `master` and publish alpha.1 as a pre-release.
+- Keep the default branch as `master`; `v1.0.0-alpha.1` is already published as a pre-release. Mark future alpha releases as pre-releases as well.
 - Keep Actions permissions at the workflow default of read-only contents; do not add deployment secrets to the CI workflow.
 
 ## Release and access hygiene
@@ -35,3 +33,4 @@ For a single-maintainer repository, requiring an approving review can make the o
 - Do not put VPS credentials, OAuth secrets, master keys, database files or private trial URLs in repository settings, issues or workflow logs.
 - Add release and signing permissions only when a separate release workflow is introduced.
 - Review `CODEOWNERS` whenever maintainers change.
+- Discussions are currently disabled; do not direct users there unless the feature and moderation/support policy are deliberately enabled.

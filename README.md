@@ -2,7 +2,7 @@
 
 [简体中文](README.zh-CN.md)
 
-NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible gateway. It lets each user manage their own upstream endpoints and credentials, discover upstream models, define platform model aliases, and call those aliases through a single `CallerKey`.
+NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible gateway. It lets each user manage their own upstream endpoints and credentials, discover upstream models, define user-owned platform model names, and call those models through a single `CallerKey`.
 
 > **Release status:** `v1.0.0-alpha.1`. This release is suitable for controlled self-hosted trials. Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
 >
@@ -12,7 +12,7 @@ NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible gateway. 
 
 - OpenAI-compatible `/v1/models` and `/v1/chat/completions` endpoints.
 - Discord OAuth user sign-in and a separate administrator station.
-- Per-user endpoints, encrypted upstream credentials, model discovery, aliases, bindings, ordered/random routing, and opt-in pre-commit retry.
+- Per-user endpoints, encrypted upstream credentials, model discovery, platform model names, bindings, ordered/random routing, and opt-in pre-commit retry.
 - SSRF, DNS-rebinding, redirect, proxy, response-size, timeout, cancellation, concurrency, and streaming safeguards.
 - Encrypted-at-rest upstream secrets; plaintext credentials are not returned in lists, logs, alerts, or account exports.
 - Request metadata, usage accounting, retention cleanup, account export/deletion, issues, alerts, and runtime limits.
@@ -27,37 +27,38 @@ One binary serves two host-isolated stations:
 - **User station:** user self-service APIs, `/v1/*`, and the user web application.
 - **Admin station:** administrator APIs and the administrator web application.
 
-Configure both origins explicitly. Do not expose the admin host on the same public hostname as the user station.
+Configure a user origin and a distinct administrator host. `NONBIRI_ADMIN_HOST` may be omitted when the derived `admin.<user-host>` name is correct; never expose both stations on the same hostname.
 
-## Quick start from source
+## Build from source
 
 Build-time requirements:
 
-- Go 1.26 or newer in the supported 1.26 series.
+- Go 1.26.x.
 - Node.js 22.22 or newer and npm 12 for the web build.
 
 Node.js is not needed to run the finished binary.
 
 ```sh
-cp admin.env.example admin.env
-chmod 600 admin.env
-
-# Create a key outside the repository and make it readable only by the service user.
-openssl rand -hex 32 > master.key
-chmod 600 master.key
-# Set NONBIRI_MASTER_KEY_FILE in admin.env to the absolute path of master.key.
-
 npm --prefix web ci
+npm --prefix web run typecheck
+npm --prefix web run lint
 npm --prefix web run build
-CGO_ENABLED=0 go build -tags dist -o nonbiriapi .
+scripts/check-go.sh
+CGO_ENABLED=0 go build -tags dist -trimpath -o nonbiriapi .
+```
 
+The untagged Go build embeds development placeholder pages. A usable binary must be built after `npm --prefix web run build` with `-tags dist`.
+
+Before running it, copy `admin.env.example` to a **private path outside the checkout**, replace every `CHANGE_ME` value, and change the production-shaped `/etc` and `/var` paths for your environment. Generate the master key at the absolute path configured by `NONBIRI_MASTER_KEY_FILE`; do not create it in the repository. Then load that file and start the binary:
+
+```sh
 set -a
-. ./admin.env
+. /absolute/private/path/admin.env
 set +a
 ./nonbiriapi
 ```
 
-The untagged Go build embeds a development placeholder UI. A usable release binary must be built after `npm run build` with `-tags dist`.
+For the ordered key, permission, Discord, DNS, and reverse-proxy setup, follow [First-run configuration preparation](docs/first-run-setup.md).
 
 ## Configuration
 
@@ -66,7 +67,7 @@ The untagged Go build embeds a development placeholder UI. A usable release bina
 - `NONBIRI_MASTER_KEY_FILE` or `NONBIRI_MASTER_KEY` (exactly one; a 32-byte key).
 - `NONBIRI_ADMIN_USERNAME` and `NONBIRI_ADMIN_PASSWORD`.
 - `NONBIRI_DISCORD_CLIENT_ID` and `NONBIRI_DISCORD_CLIENT_SECRET`.
-- `NONBIRI_SITE_BASE_URL` and the separate `NONBIRI_ADMIN_HOST`.
+- `NONBIRI_SITE_BASE_URL`; optionally `NONBIRI_ADMIN_HOST` when the derived `admin.<user-host>` value is not suitable.
 
 Keep `admin.env`, the master-key file, and the database outside the Git working tree. Never commit real credentials or a real database.
 

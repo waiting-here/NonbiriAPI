@@ -7,10 +7,7 @@ for the build, systemd unit, and reverse-proxy mechanics see
 [deployment.md](deployment.md), and for the full variable reference see
 [configuration.md](configuration.md).
 
-The process reads its startup configuration **only at boot** and fails fast with
-a list of every offending field if anything is missing or malformed, so a
-misconfigured security root never comes up silently. Prepare the items below in
-order; the last section is the exact validation the first boot will run.
+The process reads its startup environment **only at boot**. The configuration loader accumulates its validated-field errors so a malformed security root never comes up silently; OS-level failures such as an unusable listen address or database path are reported when those resources are opened. Prepare the items below in order; the last section summarizes the loader checks.
 
 ## 0. Decide these first
 
@@ -36,7 +33,7 @@ Use the host's normal administration tools (full commands in
 [deployment.md](deployment.md#prepare-the-host)):
 
 ```sh
-sudo useradd --system --home /var/lib/nonbiriapi --shell /usr/sbin/nologin nonbiriapi
+sudo useradd --system --user-group --home /var/lib/nonbiriapi --shell /usr/sbin/nologin nonbiriapi
 sudo install -d -o nonbiriapi -g nonbiriapi -m 0750 /var/lib/nonbiriapi
 sudo install -d -o root   -g nonbiriapi -m 0750 /etc/nonbiriapi
 ```
@@ -65,24 +62,20 @@ openssl rand -hex 32 | sudo -u nonbiriapi tee /etc/nonbiriapi/master.key >/dev/n
 sudo chmod 0600 /etc/nonbiriapi/master.key
 ```
 
-The key file **must be `0600` and owned by the service account**. The loader
-deliberately rejects group-readable modes such as `0640`, so the service account
-must own the file to read it without broadening access. Run the truncating
+The key file must be owned by the service account and owner-only: Unix mode `0400` or `0600` is accepted (`0600` is used during generation). The loader deliberately rejects group-readable modes such as `0640`, so the service account must own the file to read it without broadening access. Run the truncating
 `install` line only on a brand-new installation.
 
 ## 3. Prepare the environment file
 
-Copy [`admin.env.example`](../admin.env.example) to `/etc/nonbiriapi/admin.env`
-and fill in every value. Then restrict it:
+Copy [`admin.env.example`](../admin.env.example) to `/etc/nonbiriapi/admin.env`,
+then replace every `CHANGE_ME` placeholder and review each optional value. Then restrict it:
 
 ```sh
 sudo chown root:nonbiriapi /etc/nonbiriapi/admin.env
 sudo chmod 0640 /etc/nonbiriapi/admin.env
 ```
 
-Unlike the master key, the env file is group-readable (`0640`, `root:nonbiriapi`)
-because it carries non-secret routing/config values; only the master key and
-secrets must be tighter. Walk through each variable:
+The environment file contains secrets, including the administrator password and Discord client secret (and possibly SMTP credentials). The example `0640 root:nonbiriapi` layout is acceptable only when `nonbiriapi` is a dedicated group with no unrelated members: root owns the file and the service account needs group-read access. Use an equivalently restrictive owner-only layout if your service manager supports it. Walk through each variable:
 
 ### Listener and storage
 
@@ -124,7 +117,7 @@ Setting both is a startup error.
 | --- | --- | --- |
 | `NONBIRI_DISCORD_CLIENT_ID` | yes | 1–512 bytes, from the Discord developer portal. |
 | `NONBIRI_DISCORD_CLIENT_SECRET` | yes | 1–4096 bytes, from the portal. |
-| `NONBIRI_DISCORD_OAUTH_SCOPES` | no | Leave unset to use the default policy (identity + guild-member lookup). |
+| `NONBIRI_DISCORD_OAUTH_SCOPES` | no | Leave unset to use `identify guilds.members.read`. If overridden while registration is enabled, retain both scopes; `identify` alone cannot check guild membership. |
 
 In the Discord application settings, set the OAuth redirect URI to
 `https://<user-host>/api/auth/discord/callback` (the user station, not the admin
@@ -166,27 +159,24 @@ integer in `[1,65535]` (default 587), `NONBIRI_SMTP_TLS` is `starttls` or
 
 Before the first boot, confirm:
 
-- `/etc/nonbiriapi/master.key` — `0600`, owned by `nonbiriapi:nonbiriapi`.
-- `/etc/nonbiriapi/admin.env` — `0640`, owned by `root:nonbiriapi`.
+- `/etc/nonbiriapi/master.key` — `0400` or `0600`, owned by `nonbiriapi:nonbiriapi`.
+- `/etc/nonbiriapi/admin.env` — `0640`, owned by `root:nonbiriapi`, with `nonbiriapi` a dedicated group containing no unrelated accounts.
 - `/var/lib/nonbiriapi` — `0750`, owned by `nonbiriapi:nonbiriapi` (writable by the service).
 - No secret appears in the repository, in a backup that is not key-grade, or in a
   shell history file. Treat the database and backups as carefully as the master
   key — they contain encrypted upstream credentials and private account data.
 
-## 5. What the first boot validates
+## 5. What the configuration loader validates
 
-The loader collects every problem and reports them all at once, so fix the
-whole list rather than one-at-a-time. The first boot fails if any of these is
-true:
+The loader collects the validation problems below and reports them together. Resource-opening failures (for example, an invalid/unavailable listen address or unwritable database directory) are separate startup errors. The configuration load fails if any of these is true:
 
 - No master key, or both `NONBIRI_MASTER_KEY` and `NONBIRI_MASTER_KEY_FILE` set,
-  or the value does not decode to exactly 32 bytes.
+  or the value does not decode to exactly 32 bytes; on Unix the file must also be a stable owner-only regular file (no final symlink, mode `0400`/`0600`).
 - `NONBIRI_ADMIN_USERNAME`, `NONBIRI_ADMIN_PASSWORD`,
-  `NONBIRI_DISCORD_CLIENT_ID`, or `NONBIRI_DISCORD_CLIENT_SECRET` empty.
+  `NONBIRI_DISCORD_CLIENT_ID`, or `NONBIRI_DISCORD_CLIENT_SECRET` is empty, over its bound, invalid UTF-8, or contains a control character; a scope override is also bounded/control-free.
 - `NONBIRI_SITE_BASE_URL` missing, or not an `http`/`https` origin (userinfo,
   path, query, or fragment present).
 - The admin host equals the user host, or is not a valid hostname.
-- `NONBIRI_LISTEN_ADDR` empty.
 - `NONBIRI_TRUSTED_PROXY_CIDRS` malformed (use `none` to disable cleanly).
 - Any `NONBIRI_SMTP_*` field malformed when `NONBIRI_SMTP_HOST` is set.
 
@@ -220,7 +210,7 @@ minimum acceptance bar.
 ## 7. Do not
 
 - Do not regenerate the master key for an existing database.
-- Do not commit `admin.env`, `master.key`, or any real secret to the repository.
+- Do not commit `admin.env`, `master.key`, or any real secret to the repository; the environment file itself is secret-bearing.
 - Do not widen `NONBIRI_TRUSTED_PROXY_CIDRS` beyond the reverse proxy.
 - Do not bind the listener to a public interface when a reverse proxy is in
   front.

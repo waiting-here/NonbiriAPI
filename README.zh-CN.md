@@ -1,6 +1,6 @@
 # NonbiriAPI
 
-NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 网关。用户可以管理自己持有的上游端点和凭据，拉取上游模型，创建平台模型别名，并通过一个 `CallerKey` 调用这些模型。
+NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 网关。用户可以管理自己持有的上游端点和凭据，拉取上游模型，创建用户自己的平台模型名称，并通过一个 `CallerKey` 调用这些模型。
 
 > **发布状态：** `v1.0.0-alpha.1`。本版本适合受控的自托管试运行。正式开放给用户前，请先阅读部署、备份、隐私和安全文档。
 >
@@ -10,7 +10,7 @@ NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 网关。
 
 - OpenAI-compatible `/v1/models` 与 `/v1/chat/completions`。
 - Discord OAuth 普通用户登录，以及独立的管理员站点。
-- 用户级端点、加密上游凭据、模型发现、别名、绑定、顺序/随机路由，以及可选的提交前重试。
+- 用户级端点、加密上游凭据、模型发现、平台模型命名、绑定、顺序/随机路由，以及可选的提交前重试。
 - SSRF、DNS 重绑定、重定向、代理、响应大小、超时、取消、并发和流式安全边界。
 - 上游密钥加密保存；明文凭据不会出现在列表、日志、告警或账号导出中。
 - 请求元数据、用量统计、留存清理、账号导出/删除、问题中心、告警中心和运行时限制。
@@ -25,37 +25,38 @@ alpha.1 只支持 `openai-compatible` 连接器和上述两个 OpenAI-compatible
 - **用户站点：** 用户自助 API、`/v1/*` 和用户 Web 应用。
 - **管理员站点：** 管理员 API 和管理员 Web 应用。
 
-必须明确配置两个不同的站点 Origin。不要把管理员站点和用户站点暴露在同一个公网主机名下。
+必须使用互不相同的用户站与管理员站主机名。若派生的 `admin.<用户主机>` 正确，可以省略 `NONBIRI_ADMIN_HOST`；绝不能把两个站点暴露在同一个主机名下。
 
-## 从源码快速开始
+## 从源码构建
 
 构建环境要求：
 
-- Go 1.26 或更新的受支持 1.26 系列。
+- Go 1.26.x。
 - Node.js 22.22 或更新版本，以及用于构建前端的 npm 12。
 
 运行构建完成的二进制不需要 Node.js。
 
 ```sh
-cp admin.env.example admin.env
-chmod 600 admin.env
-
-# 在仓库外生成密钥，并只授予服务用户读取权限。
-openssl rand -hex 32 > master.key
-chmod 600 master.key
-# 在 admin.env 中把 NONBIRI_MASTER_KEY_FILE 设置为 master.key 的绝对路径。
-
 npm --prefix web ci
+npm --prefix web run typecheck
+npm --prefix web run lint
 npm --prefix web run build
-CGO_ENABLED=0 go build -tags dist -o nonbiriapi .
+scripts/check-go.sh
+CGO_ENABLED=0 go build -tags dist -trimpath -o nonbiriapi .
+```
 
+不带 build tag 的 Go 构建会嵌入开发占位页面。可用二进制必须先执行 `npm --prefix web run build`，再使用 `-tags dist` 编译。
+
+运行前，把 `admin.env.example` 复制到 **Git 工作树外的私有路径**，替换全部 `CHANGE_ME`，并按实际环境修改示例中的 `/etc`、`/var` 生产路径。主密钥必须生成在 `NONBIRI_MASTER_KEY_FILE` 指定的绝对路径，不能落在仓库内。然后加载私有环境文件并启动：
+
+```sh
 set -a
-. ./admin.env
+. /绝对/私有/路径/admin.env
 set +a
 ./nonbiriapi
 ```
 
-不带 build tag 的 Go 构建会嵌入开发占位页面。可用的发布二进制必须先执行前端构建，再使用 `-tags dist` 编译。
+密钥权限、Discord、DNS 和反向代理的完整顺序见[首次运行配置准备](docs/first-run-setup.md)。
 
 ## 配置
 
@@ -64,7 +65,7 @@ set +a
 - `NONBIRI_MASTER_KEY_FILE` 或 `NONBIRI_MASTER_KEY`（二选一，解码后必须是 32 字节）。
 - `NONBIRI_ADMIN_USERNAME` 与 `NONBIRI_ADMIN_PASSWORD`。
 - `NONBIRI_DISCORD_CLIENT_ID` 与 `NONBIRI_DISCORD_CLIENT_SECRET`。
-- `NONBIRI_SITE_BASE_URL` 与独立的 `NONBIRI_ADMIN_HOST`。
+- `NONBIRI_SITE_BASE_URL`；若派生的 `admin.<用户主机>` 不适用，再设置 `NONBIRI_ADMIN_HOST`。
 
 `admin.env`、主密钥文件和数据库都应放在 Git 工作树之外。不要提交真实凭据或真实数据库。
 

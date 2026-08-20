@@ -34,32 +34,78 @@ async function metadataFor(name) {
     );
     return {
       version: found.entry.version ?? '?',
-      license: licenseOf(meta),
-      homepage: homepageOf(meta),
+      license: licenseOf(meta, found.entry),
+      homepage: homepageOf(meta, found.entry),
     };
   } catch {
-    return { version: found.entry.version ?? '?', license: 'Unknown', homepage: '' };
+    return {
+      version: found.entry.version ?? '?',
+      license: licenseOf(found.entry),
+      homepage: homepageOf(found.entry),
+    };
   }
 }
 
-function licenseOf(meta) {
-  const value = meta.license ?? meta.licenses?.[0];
+function licenseOf(meta, fallback = {}) {
+  const value = meta.license ?? meta.licenses?.[0] ?? fallback.license ?? fallback.licenses?.[0];
   if (!value) return 'Unknown';
   if (typeof value === 'string') return value;
   if (typeof value === 'object' && typeof value.type === 'string') return value.type;
   return 'Unknown';
 }
 
-function homepageOf(meta) {
-  if (typeof meta.homepage === 'string') return meta.homepage;
-  if (typeof meta.repository === 'string') return meta.repository;
-  if (meta.repository && typeof meta.repository === 'object') {
-    const url = meta.repository.url;
-    if (typeof url === 'string') {
-      return url.replace(/^git\+/, '').replace(/\.git$/, '');
-    }
+function homepageOf(meta, fallback = {}) {
+  const repositoryURL = (value) => {
+    if (typeof value === 'string') return value;
+    if (value && typeof value === 'object' && typeof value.url === 'string') return value.url;
+    return '';
+  };
+  const candidate =
+    (typeof meta.homepage === 'string' && meta.homepage) ||
+    repositoryURL(meta.repository) ||
+    (typeof fallback.homepage === 'string' && fallback.homepage) ||
+    repositoryURL(fallback.repository);
+  return normalizeProjectURL(candidate);
+}
+
+function normalizeProjectURL(value) {
+  let url = String(value ?? '').trim();
+  if (!url) return '';
+
+  url = url.replace(/^git\+/, '');
+  if (/^[\w.-]+\/[\w./-]+(?:#.*)?$/.test(url)) {
+    url = `https://github.com/${url}`;
+  } else if (url.startsWith('github:')) {
+    url = `https://github.com/${url.slice('github:'.length)}`;
+  } else if (/^git@github\.com:/.test(url)) {
+    url = `https://github.com/${url.slice('git@github.com:'.length)}`;
+  } else if (/^ssh:\/\/git@github\.com\//.test(url)) {
+    url = `https://github.com/${url.slice('ssh://git@github.com/'.length)}`;
+  } else if (/^git:\/\/github\.com\//.test(url)) {
+    url = `https://github.com/${url.slice('git://github.com/'.length)}`;
+  } else if (/^http:\/\/github\.com\//.test(url)) {
+    url = `https://github.com/${url.slice('http://github.com/'.length)}`;
   }
-  return '';
+
+  const hashIndex = url.indexOf('#');
+  const base = hashIndex >= 0 ? url.slice(0, hashIndex) : url;
+  const fragment = hashIndex >= 0 ? url.slice(hashIndex) : '';
+  url = `${base.replace(/\.git$/, '')}${fragment}`;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : '';
+  } catch {
+    return '';
+  }
+}
+
+function tableCell(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('|', '\\|')
+    .replace(/[\r\n]+/g, ' ');
 }
 
 function licenseCell(license) {
@@ -93,7 +139,9 @@ async function markdownTable(names) {
   const rows = [];
   for (const name of [...names].sort()) {
     const meta = (await metadataFor(name)) ?? { version: '?', license: 'Unknown', homepage: '' };
-    rows.push(`| ${name} | ${meta.version} | ${licenseCell(meta.license)} | ${meta.homepage} |`);
+    rows.push(
+      `| ${tableCell(name)} | ${tableCell(meta.version)} | ${tableCell(licenseCell(meta.license))} | ${tableCell(meta.homepage)} |`,
+    );
   }
   return ['| Package | Version | License | Homepage |', '| --- | --- | --- | --- |', ...rows].join(
     '\n',

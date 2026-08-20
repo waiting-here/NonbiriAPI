@@ -7,7 +7,7 @@ NonbiriAPI is an alpha self-hosted project. Before asking for help:
 3. Confirm the relevant Host, TLS/reverse-proxy, database, master-key, and environment-file settings.
 4. Reproduce with the smallest safe configuration possible.
 
-Use GitHub Issues for reproducible bugs and documentation problems. Use discussions or the project support channel for usage questions when those features are enabled for the repository. Use [SECURITY.md](SECURITY.md) for vulnerabilities; do not publish sensitive security details in an issue.
+Use the GitHub bug-report form for reproducible bugs and documentation problems, and the feature-request form for proposals. This repository does not currently offer a general usage-support channel or enabled Discussions; self-hosting assistance is best-effort. Use [SECURITY.md](SECURITY.md) for vulnerabilities and never publish sensitive security details in an issue.
 
 Never attach:
 

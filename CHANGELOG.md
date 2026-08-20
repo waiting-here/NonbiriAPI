@@ -11,7 +11,7 @@ The project is currently in alpha. The public compatibility promise is limited t
 - Self-hosted Go service with embedded React user and administrator stations.
 - Discord OAuth user authentication and environment-configured administrator authentication.
 - User-owned API endpoints and endpoint keys with encrypted-at-rest upstream secrets.
-- OpenAI-compatible model discovery, platform model aliases, endpoint-key bindings, ordered/random routing, and opt-in pre-commit retry.
+- OpenAI-compatible model discovery, user-owned platform model names, endpoint-key bindings, ordered/random routing, and opt-in pre-commit retry.
 - OpenAI-compatible `/v1/models` and `/v1/chat/completions` CallerKey APIs, including non-streaming and SSE responses.
 - SSRF, DNS-rebinding, redirect, proxy, timeout, response-size, concurrency, cancellation, and stream-flow safeguards.
 - Per-user/global RPM admission control and per-endpoint concurrency limits.

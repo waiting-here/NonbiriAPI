@@ -397,8 +397,8 @@ func applyPersistedRuntimeConfig(store *db.Store, runtime adminapi.RuntimeApplie
 }
 
 // servePublicConfig handles GET /api/config: an unauthenticated,
-// display-only subset of site_config (site_name, site_logo_url,
-// default_locale). The allowlist lives in adminapi.ReadPublicConfig so the
+// display/legal subset of site_config plus the public maintenance and
+// registration toggles. The allowlist lives in adminapi.ReadPublicConfig so the
 // admin registry is the single source of truth and operational keys can
 // never leak here. The response is no-store so an operator's change takes
 // effect on the next page load instead of from a stale cache.
