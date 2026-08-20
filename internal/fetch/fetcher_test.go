@@ -193,6 +193,18 @@ func (f *fetchFixture) seedComboForUser(t *testing.T, uid int64, baseURL string)
 	return uid, ep.ID, k.ID
 }
 
+// seedCombos creates n distinct (endpoint, key) combos for one user on the
+// upstream URL, returning the (userID, endpointID, keyID) triples.
+func (f *fetchFixture) seedCombos(t *testing.T, uid int64, n int) [][3]int64 {
+	t.Helper()
+	out := make([][3]int64, n)
+	for i := 0; i < n; i++ {
+		u, ep, k := f.seedComboForUser(t, uid, f.upstream.URL)
+		out[i] = [3]int64{u, ep, k}
+	}
+	return out
+}
+
 func (f *fetchFixture) seedUser(t *testing.T, discordID string) int64 {
 	t.Helper()
 	res, err := f.store.DB().Exec(
@@ -793,5 +805,86 @@ func TestJoinModelsURLContract(t *testing.T) {
 		if got := joinModelsURL(c.base); got != c.want {
 			t.Errorf("joinModelsURL(%q) = %q, want %q", c.base, got, c.want)
 		}
+	}
+}
+
+// TestFetcherSharedAdmissionAutoAndManual asserts that automatic and manual
+// refreshes share one per-user admission budget: a burst of automatic fetches
+// exhausts the per-user RPM, after which both an extra automatic fetch and a
+// manual refresh are denied for that user, while a different user (its own
+// budget) is still admitted. The pool per-user cap is raised so only the shared
+// RPM binds.
+func TestFetcherSharedAdmissionAutoAndManual(t *testing.T) {
+	f := newFetchFixture(t, func(cfg *FetcherConfig, opts *egress.StackOptions) {
+		cfg.Workers = 4
+		cfg.QueueSize = 32
+		cfg.PerUserCap = 32 // isolate the shared RPM bound from the pool cap
+		opts.Concurrency = egress.ConcurrencyLimits{Global: 100, PerEndpoint: 100}
+	})
+	f.setHandler(f.blockHandler) // keep admitted jobs running so slots stay taken
+
+	alice := f.seedUser(t, "alice")
+	aCombos := f.seedCombos(t, alice, 11)
+	ctx := context.Background()
+
+	// 10 automatic fetches consume the full per-user admission budget.
+	for i := 0; i < 10; i++ {
+		c := aCombos[i]
+		if err := f.fetcher.FetchModels(ctx, c[0], c[1], c[2]); err != nil {
+			t.Fatalf("auto fetch[%d]: %v", i, err)
+		}
+	}
+	// Budget exhausted: the 11th automatic fetch is rate-limited.
+	c11 := aCombos[10]
+	if err := f.fetcher.FetchModels(ctx, c11[0], c11[1], c11[2]); !errors.Is(err, ErrRefreshRateLimited) {
+		t.Errorf("11th auto fetch: err=%v, want ErrRefreshRateLimited (shared budget exhausted)", err)
+	}
+	// Manual refresh shares the same budget: it is also denied for alice.
+	c0 := aCombos[0]
+	if err := f.fetcher.RefreshManual(ctx, c0[0], c0[1], c0[2]); !errors.Is(err, ErrRefreshRateLimited) {
+		t.Errorf("manual refresh after exhaustion: err=%v, want ErrRefreshRateLimited", err)
+	}
+	// A different user has its own budget: its first fetch is admitted.
+	bob := f.seedUser(t, "bob")
+	bCombos := f.seedCombos(t, bob, 1)
+	bc := bCombos[0]
+	if err := f.fetcher.FetchModels(ctx, bc[0], bc[1], bc[2]); err != nil {
+		t.Errorf("bob fetch: err=%v, want nil (independent per-user budget)", err)
+	}
+}
+
+// TestFetcherPerUserPoolCap asserts the pool's per-user pending+running cap is
+// honored through the Fetcher: with the RPM raised so it does not bind, one
+// user's distinct fetches are capped and the overflow is busy, while another
+// user is unaffected.
+func TestFetcherPerUserPoolCap(t *testing.T) {
+	f := newFetchFixture(t, func(cfg *FetcherConfig, opts *egress.StackOptions) {
+		cfg.Workers = 4
+		cfg.QueueSize = 32
+		cfg.PerUserCap = 4
+		cfg.RefreshPerUserPerMinute = 100 // isolate the pool per-user cap from the RPM
+		opts.Concurrency = egress.ConcurrencyLimits{Global: 100, PerEndpoint: 100}
+	})
+	f.setHandler(f.blockHandler)
+
+	alice := f.seedUser(t, "alice")
+	aCombos := f.seedCombos(t, alice, 5)
+	ctx := context.Background()
+	for i := 0; i < 4; i++ {
+		c := aCombos[i]
+		if err := f.fetcher.FetchModels(ctx, c[0], c[1], c[2]); err != nil {
+			t.Fatalf("auto fetch[%d]: %v", i, err)
+		}
+	}
+	c5 := aCombos[4]
+	if err := f.fetcher.FetchModels(ctx, c5[0], c5[1], c5[2]); !errors.Is(err, ErrPoolBusy) {
+		t.Errorf("5th auto fetch: err=%v, want ErrPoolBusy (per-user pool cap)", err)
+	}
+	// alice's cap does not block bob.
+	bob := f.seedUser(t, "bob")
+	bCombos := f.seedCombos(t, bob, 1)
+	bc := bCombos[0]
+	if err := f.fetcher.FetchModels(ctx, bc[0], bc[1], bc[2]); err != nil {
+		t.Errorf("bob fetch: err=%v, want nil (independent per-user cap)", err)
 	}
 }
