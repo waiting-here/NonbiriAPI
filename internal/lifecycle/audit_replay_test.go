@@ -359,15 +359,11 @@ func TestAuditExportContainsNoPlaintextSecrets(t *testing.T) {
 	if _, err := store.SetCallerKey(user.ID); err != nil {
 		t.Fatal(err)
 	}
-	ciphertext, err := vault.Seal([]byte("sk-plaintext-must-never-export"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	ep, err := store.CreateEndpoint(context.Background(), user.ID, "openai-compatible", "https://upstream.example:443/v1", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.CreateEndpointKey(context.Background(), user.ID, ep.ID, ciphertext, "head", "tail", "note", true, time.Now().Unix()); err != nil {
+	if _, err := store.CreateEndpointKey(context.Background(), user.ID, ep.ID, []byte("sk-plaintext-must-never-export"), "head", "tail", "note", true, time.Now().Unix()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.CreateModel(context.Background(), user.ID, "p", "m", "ordered", false, time.Now().Unix()); err != nil {
@@ -381,7 +377,7 @@ func TestAuditExportContainsNoPlaintextSecrets(t *testing.T) {
 	text := string(payload)
 	for _, needle := range []string{
 		"sk-plaintext-must-never-export",
-		"nbsec:v1:aes-256-gcm",
+		"nbsec:v2:aes-256-gcm",
 	} {
 		if strings.Contains(text, needle) {
 			t.Fatalf("export leaks %q", needle)

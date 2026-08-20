@@ -12,6 +12,7 @@ The project is currently in alpha. The public compatibility promise is limited t
 
 ### Security
 
+- Bind each encrypted endpoint credential to its user, endpoint, key id, and canonical origin with a contextual AES-256-GCM envelope. Existing credentials migrate transactionally before serving traffic; fetch and forwarding no longer accept legacy envelopes at runtime.
 - Prevent an endpoint with any stored upstream key from changing to a different canonical origin; changing origins now requires deleting the old keys and entering credentials again after the endpoint is updated.
 
 ## [1.0.0-alpha.1] - 2026-08-19

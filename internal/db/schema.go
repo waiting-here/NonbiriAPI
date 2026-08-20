@@ -112,7 +112,7 @@ CREATE INDEX IF NOT EXISTS idx_endpoints_user ON endpoints(user_id);
 CREATE TABLE IF NOT EXISTS endpoint_keys (
 	id               INTEGER PRIMARY KEY AUTOINCREMENT,
 	endpoint_id       INTEGER NOT NULL REFERENCES endpoints(id) ON DELETE CASCADE,
-	encrypted_secret TEXT NOT NULL,                                -- nbsec:v1:aes-256-gcm:<nonce>:<ciphertext-and-tag> (raw base64url parts); plaintext is never a SQL value
+	encrypted_secret TEXT NOT NULL,                                -- nbsec:v2:aes-256-gcm:<nonce>:<ciphertext-and-tag> (raw base64url parts); context-bound; plaintext is never a SQL value
 	display_head     TEXT NOT NULL DEFAULT '',                     -- first 4 runes of the upstream secret; persisted so listings never decrypt (renders "xxxx…yyyy")
 	display_tail     TEXT NOT NULL DEFAULT '',                     -- last 4 runes of the upstream secret; empty when the secret is too short to reveal a tail without re-covering it
 	note             TEXT NOT NULL DEFAULT '',

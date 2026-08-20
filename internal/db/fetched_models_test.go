@@ -13,13 +13,13 @@ import (
 // plaintext, returning the key id and its stored ciphertext.
 func mustCreateTestKey(t *testing.T, st *Store, userID, endpointID int64, plaintext string, enabled bool) (int64, string) {
 	t.Helper()
-	ciphertext, err := st.secrets.Seal([]byte(plaintext))
-	if err != nil {
-		t.Fatalf("seal: %v", err)
-	}
-	k, err := st.CreateEndpointKey(context.Background(), userID, endpointID, ciphertext, "head", "tail", "note", enabled, 1)
+	k, err := st.CreateEndpointKey(context.Background(), userID, endpointID, []byte(plaintext), "head", "tail", "note", enabled, 1)
 	if err != nil {
 		t.Fatalf("create key: %v", err)
+	}
+	ciphertext, err := st.GetEndpointKeyCiphertext(context.Background(), userID, endpointID, k.ID)
+	if err != nil {
+		t.Fatalf("read stored ciphertext: %v", err)
 	}
 	return k.ID, ciphertext
 }
@@ -92,7 +92,7 @@ func TestGetEndpointKeyCiphertextOwnership(t *testing.T) {
 		t.Errorf("ciphertext = %q, want stored envelope verbatim", got)
 	}
 	// The envelope decrypts to the original plaintext (and is clearable).
-	pt, err := st.secrets.Open(got)
+	pt, err := st.secrets.OpenForContext(got, testEndpointKeyContext(t, alice, ep, keyID))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

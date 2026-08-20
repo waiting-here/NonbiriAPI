@@ -161,11 +161,7 @@ func (f *usageFixture) addRoute(t *testing.T, userID int64, baseURL, provider, m
 	if err != nil {
 		t.Fatal(err)
 	}
-	ciphertext, err := f.vault.Seal([]byte(upstreamSecret))
-	if err != nil {
-		t.Fatal(err)
-	}
-	keyRow, err := f.store.CreateEndpointKey(ctx, userID, endpointRow.ID, ciphertext, "head", "tail", "", true, time.Now().Unix())
+	keyRow, err := f.store.CreateEndpointKey(ctx, userID, endpointRow.ID, []byte(upstreamSecret), "head", "tail", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -669,11 +665,11 @@ func TestUsageFailoverCommittedAttemptCountedOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keyFirst, err := fixture.store.CreateEndpointKey(ctx, user.id, endpointFirst.ID, mustSeal(t, fixture.vault, firstSecret), "", "", "", true, time.Now().Unix())
+	keyFirst, err := fixture.store.CreateEndpointKey(ctx, user.id, endpointFirst.ID, []byte(firstSecret), "", "", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}
-	keySecond, err := fixture.store.CreateEndpointKey(ctx, user.id, endpointSecond.ID, mustSeal(t, fixture.vault, secondSecret), "", "", "", true, time.Now().Unix())
+	keySecond, err := fixture.store.CreateEndpointKey(ctx, user.id, endpointSecond.ID, []byte(secondSecret), "", "", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -722,15 +718,6 @@ func TestUsageFailoverCommittedAttemptCountedOnce(t *testing.T) {
 		t.Fatalf("log row references the wrong attempt's key: %d want %d", keyID, secondKey)
 	}
 	assertLogsLeakFree(t, fixture.store, firstSecret, secondSecret, first.URL, second.URL)
-}
-
-func mustSeal(t *testing.T, vault *secret.Vault, plaintext string) string {
-	t.Helper()
-	ciphertext, err := vault.Seal([]byte(plaintext))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return ciphertext
 }
 
 // --- raw store helpers (no egress stack needed) ---

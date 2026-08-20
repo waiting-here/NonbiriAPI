@@ -335,7 +335,14 @@ state only — never a diagnostic or any upstream content.
 transaction as the update and key-existence check. An endpoint with any key
 (enabled or disabled) cannot move to another canonical origin; delete all keys,
 change the origin, then add new keys. A path change within the same origin is
-allowed. Empty objects and patches whose supplied values are all unchanged are
+allowed. Persisted endpoint credentials use a contextual `nbsec:v2` AES-256-GCM
+envelope authenticated against purpose, version, user id, endpoint id, key id,
+and the egress-canonical origin. Creating a key allocates its row id and seals
+the credential in the same database transaction. Startup upgrades valid
+`nbsec:v1` rows before any listener or worker starts; one invalid or unknown row
+rolls back the whole credential batch and prevents startup. Runtime fetch and
+forwarding accept only v2 under the exact context and never retry v1. Empty
+objects and patches whose supplied values are all unchanged are
 `invalid_request`. Automatic model fetching runs only after an actual same-origin
 path change or a disabled-to-enabled endpoint transition; note-only changes,
 representation-only URL changes, and enabled-to-disabled transitions do not
@@ -346,7 +353,7 @@ fetch. A rejected update is atomic and never queues a fetch.
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
 | `GET` | `/api/endpoints/{id}/keys` | user session | — | `200` array of `{id, display_head, display_tail, note, enabled, created_at, updated_at}`; display fragments are the first/last few runes of the secret so listings never decrypt; the secret and its ciphertext are never returned | `unauthorized`, `not_found` |
-| `POST` | `/api/endpoints/{id}/keys` | user session | `{secret, note?, enabled?}` | `201` created key metadata `{id, display_head, display_tail, note, enabled, created_at, updated_at}` (`secret` is sealed with AES-256-GCM before persistence and never returned); triggers a model fetch for this key when enabled | `invalid_request`, `unauthorized`, `not_found`, `payload_too_large`, `resource_limit_exceeded` |
+| `POST` | `/api/endpoints/{id}/keys` | user session | `{secret, note?, enabled?}` | `201` created key metadata `{id, display_head, display_tail, note, enabled, created_at, updated_at}` (`secret` is sealed with contextual AES-256-GCM after its uncommitted row id is allocated and before the same transaction commits; plaintext is never a SQL value and is never returned); triggers a model fetch for this key when enabled | `invalid_request`, `unauthorized`, `not_found`, `payload_too_large`, `resource_limit_exceeded` |
 | `PATCH` | `/api/endpoints/{id}/keys/{keyId}` | user session | `{note?, enabled?}` | `200` updated key `{id, display_head, display_tail, note, enabled, created_at, updated_at}` (the secret is not mutable here; key rotation is delete + add) | `invalid_request`, `unauthorized`, `not_found` |
 | `DELETE` | `/api/endpoints/{id}/keys/{keyId}` | user session | — | `204`; cascades to its fetched-model cache and bindings | `unauthorized`, `not_found` |
 | `GET` | `/api/endpoints/{id}/keys/{keyId}/models` | user session | — | `200` array of `{upstream_model_id, provider, fetched_at, status}` for that (Endpoint, Key) combo; empty `[]` when the combo has no cache rows; a missing, cross-user, or wrong-endpoint combo is indistinguishable `not_found` | `unauthorized`, `not_found` |

@@ -216,9 +216,12 @@ func (h *Handler) createKey(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, derr)
 		return
 	}
-	// Convert the string secret to bytes for the codec boundary; the service
-	// clears this slice once sealing is done.
-	key, err := h.svc.CreateEndpointKey(r.Context(), uid, endpointID, []byte(req.Secret), req.Note, req.Enabled)
+	// Transfer the decoded secret into a clearable slice and drop the request
+	// field before entering the transactional persistence boundary.
+	plaintext := []byte(req.Secret)
+	req.Secret = ""
+	defer clear(plaintext)
+	key, err := h.svc.CreateEndpointKey(r.Context(), uid, endpointID, plaintext, req.Note, req.Enabled)
 	if err != nil {
 		writeServiceErr(w, err)
 		return

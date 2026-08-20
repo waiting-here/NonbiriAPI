@@ -2,6 +2,7 @@ package db
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -45,14 +46,6 @@ func TestEndpointSecretPersistsOnlyAsCiphertext(t *testing.T) {
 
 	plaintext := []byte("database-plaintext-leak-sentinel-7f31")
 	defer clear(plaintext)
-	encoded, err := vault.Seal(plaintext)
-	if err != nil {
-		t.Fatalf("Seal: %v", err)
-	}
-	if encoded == string(plaintext) || strings.Contains(encoded, string(plaintext)) {
-		t.Fatal("Seal output contains plaintext")
-	}
-
 	st, err := Open(path, vault)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
@@ -64,18 +57,20 @@ func TestEndpointSecretPersistsOnlyAsCiphertext(t *testing.T) {
 	if _, err := d.Exec(`INSERT INTO endpoints (user_id, connector_type, base_url, created_at, updated_at) VALUES (1, 'openai-compatible', 'https://example.com', 1, 1)`); err != nil {
 		t.Fatalf("seed endpoint: %v", err)
 	}
-	if _, err := d.Exec(`INSERT INTO endpoint_keys (endpoint_id, encrypted_secret, note, enabled, created_at, updated_at) VALUES (1, ?, 'metadata-only', 1, 1, 1)`, encoded); err != nil {
-		t.Fatalf("insert encrypted endpoint key: %v", err)
+	created, err := st.CreateEndpointKey(context.Background(), 1, 1, bytes.Clone(plaintext), "", "", "metadata-only", true, 1)
+	if err != nil {
+		t.Fatalf("create encrypted endpoint key: %v", err)
 	}
 
 	var stored string
-	if err := d.QueryRow(`SELECT encrypted_secret FROM endpoint_keys WHERE id=1`).Scan(&stored); err != nil {
+	if err := d.QueryRow(`SELECT encrypted_secret FROM endpoint_keys WHERE id=?`, created.ID).Scan(&stored); err != nil {
 		t.Fatalf("read encrypted endpoint key: %v", err)
 	}
-	if stored != encoded || stored == string(plaintext) || strings.Contains(stored, string(plaintext)) {
-		t.Fatal("database did not retain exactly the ciphertext envelope")
+	if !strings.HasPrefix(stored, "nbsec:v2:aes-256-gcm:") || stored == string(plaintext) || strings.Contains(stored, string(plaintext)) {
+		t.Fatal("database did not retain a contextual ciphertext envelope")
 	}
-	opened, err := st.secrets.Open(stored)
+	endpoint := Endpoint{ID: 1, BaseURL: "https://example.com"}
+	opened, err := st.secrets.OpenForContext(stored, testEndpointKeyContext(t, 1, endpoint, created.ID))
 	if err != nil {
 		t.Fatalf("decrypt stored endpoint key: %v", err)
 	}
@@ -98,17 +93,17 @@ func TestEndpointSecretPersistsOnlyAsCiphertext(t *testing.T) {
 		t.Fatalf("reopen: %v", err)
 	}
 	d = st.DB()
-	if _, err := d.Exec(`UPDATE endpoint_keys SET enabled=0, updated_at=2 WHERE id=1`); err != nil {
+	if _, err := d.Exec(`UPDATE endpoint_keys SET enabled=0, updated_at=2 WHERE id=?`, created.ID); err != nil {
 		t.Fatalf("disable endpoint key: %v", err)
 	}
 	var disabled int
-	if err := d.QueryRow(`SELECT encrypted_secret, enabled FROM endpoint_keys WHERE id=1`).Scan(&stored, &disabled); err != nil {
+	if err := d.QueryRow(`SELECT encrypted_secret, enabled FROM endpoint_keys WHERE id=?`, created.ID).Scan(&stored, &disabled); err != nil {
 		t.Fatalf("read disabled endpoint key: %v", err)
 	}
-	if disabled != 0 || stored != encoded || strings.Contains(stored, string(plaintext)) {
+	if disabled != 0 || !strings.HasPrefix(stored, "nbsec:v2:aes-256-gcm:") || strings.Contains(stored, string(plaintext)) {
 		t.Fatal("disabling an endpoint key altered or exposed its secret material")
 	}
-	if _, err := d.Exec(`DELETE FROM endpoint_keys WHERE id=1`); err != nil {
+	if _, err := d.Exec(`DELETE FROM endpoint_keys WHERE id=?`, created.ID); err != nil {
 		t.Fatalf("delete endpoint key: %v", err)
 	}
 	var count int

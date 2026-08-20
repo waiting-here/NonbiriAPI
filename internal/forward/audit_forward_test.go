@@ -154,11 +154,7 @@ func (f *auditFixture) addBinding(t *testing.T, userID, modelID int64, baseURL, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	ciphertext, err := f.vault.Seal([]byte(upstreamSecret))
-	if err != nil {
-		t.Fatal(err)
-	}
-	ek, err := f.store.CreateEndpointKey(context.Background(), userID, ep.ID, ciphertext, "head", "tail", "", true, time.Now().Unix())
+	ek, err := f.store.CreateEndpointKey(context.Background(), userID, ep.ID, []byte(upstreamSecret), "head", "tail", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}

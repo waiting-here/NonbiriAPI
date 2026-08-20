@@ -98,7 +98,7 @@ func seedExportFixture(t *testing.T, st *db.Store) *db.User {
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, err := st.CreateEndpointKey(ctx, user.ID, ep.ID, "nbsec:v1:aes-256-gcm:aaaa", "head", "tail", "my key", true, 100)
+	key, err := st.CreateEndpointKey(ctx, user.ID, ep.ID, []byte("sk-lifecycle-export"), "head", "tail", "my key", true, 100)
 	if err != nil {
 		t.Fatal(err)
 	}

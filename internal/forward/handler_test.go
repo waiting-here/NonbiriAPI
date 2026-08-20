@@ -47,6 +47,13 @@ func (c *countingCodec) Open(ciphertext string) ([]byte, error) {
 	c.opens.Add(1)
 	return c.vault.Open(ciphertext)
 }
+func (c *countingCodec) SealForContext(plaintext []byte, credentialContext secret.EndpointKeyContext) (string, error) {
+	return c.vault.SealForContext(plaintext, credentialContext)
+}
+func (c *countingCodec) OpenForContext(ciphertext string, credentialContext secret.EndpointKeyContext) ([]byte, error) {
+	c.opens.Add(1)
+	return c.vault.OpenForContext(ciphertext, credentialContext)
+}
 
 type forwardFixture struct {
 	store    *db.Store
@@ -180,11 +187,11 @@ func (f *forwardFixture) addRoute(t *testing.T, userID int64, baseURL, provider,
 	if err != nil {
 		t.Fatal(err)
 	}
-	ciphertext, err := f.codec.Seal([]byte(upstreamSecret))
+	keyRow, err := f.store.CreateEndpointKey(context.Background(), userID, endpointRow.ID, []byte(upstreamSecret), "head", "tail", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}
-	keyRow, err := f.store.CreateEndpointKey(context.Background(), userID, endpointRow.ID, ciphertext, "head", "tail", "", true, time.Now().Unix())
+	ciphertext, err := f.store.GetEndpointKeyCiphertext(context.Background(), userID, endpointRow.ID, keyRow.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -463,8 +470,7 @@ func TestSingleAttemptDoesNotSilentlyRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cipher, _ := fixture.codec.Seal([]byte("sk-second"))
-	secondKey, err := fixture.store.CreateEndpointKey(context.Background(), user.id, secondEndpoint.ID, cipher, "", "", "", true, 2)
+	secondKey, err := fixture.store.CreateEndpointKey(context.Background(), user.id, secondEndpoint.ID, []byte("sk-second"), "", "", "", true, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -502,7 +508,7 @@ func TestForwardSSRFAndUnknownConnectorFailClosedWithoutSensitiveDiagnostics(t *
 		t.Fatal(err)
 	}
 	blocked := performCaller(fixture.handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, body))
-	if blocked.Code != http.StatusBadGateway || responseCode(t, blocked) != httperr.CodeUpstream {
+	if blocked.Code != http.StatusInternalServerError || responseCode(t, blocked) != httperr.CodeInternal {
 		t.Fatalf("blocked status=%d body=%s", blocked.Code, blocked.Body.String())
 	}
 	for _, forbidden := range []string{"169.254.169.254", "latest/meta-data", "sk-blocked-secret", route.cipher} {
@@ -515,7 +521,7 @@ func TestForwardSSRFAndUnknownConnectorFailClosedWithoutSensitiveDiagnostics(t *
 		t.Fatal(err)
 	}
 	self := performCaller(fixture.handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, body))
-	if self.Code != http.StatusBadGateway || responseCode(t, self) != httperr.CodeUpstream || strings.Contains(self.Body.String(), "gateway.example") {
+	if self.Code != http.StatusInternalServerError || responseCode(t, self) != httperr.CodeInternal || strings.Contains(self.Body.String(), "gateway.example") {
 		t.Fatalf("self-origin status=%d body=%s", self.Code, self.Body.String())
 	}
 
@@ -537,6 +543,83 @@ func TestForwardSSRFAndUnknownConnectorFailClosedWithoutSensitiveDiagnostics(t *
 	corrupt := performCaller(fixture.handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, body))
 	if corrupt.Code != http.StatusInternalServerError || responseCode(t, corrupt) != httperr.CodeInternal || strings.Contains(corrupt.Body.String(), corruptCiphertext) {
 		t.Fatalf("corrupt credential status=%d body=%s", corrupt.Code, corrupt.Body.String())
+	}
+}
+
+func TestForwardContextExchangeAndLegacyEnvelopeNeverDial(t *testing.T) {
+	for _, attack := range []string{"user", "endpoint", "key", "origin", "legacy", "future", "oversized", "oversized-origin"} {
+		attack := attack
+		t.Run(attack, func(t *testing.T) {
+			var hits atomic.Int32
+			upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+				hits.Add(1)
+				writer.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(writer, forwardCompletion("must-not-be-reached"))
+			}))
+			defer upstream.Close()
+			fixture := newForwardFixture(t, []string{upstream.URL}, Hooks{}, nil, nil)
+			user := fixture.addUser(t, "context-"+attack)
+			route := fixture.addRoute(t, user.id, upstream.URL, "p", "m", "upstream/model", "context-secret-marker", 0)
+			endpointRow, err := fixture.store.GetEndpoint(context.Background(), user.id, route.endpoint)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, origin, err := egress.CanonicalEndpointTarget(endpointRow.BaseURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			wrongUser, wrongEndpoint, wrongKey, wrongOrigin := user.id, route.endpoint, route.keyID, origin
+			switch attack {
+			case "user":
+				wrongUser++
+			case "endpoint":
+				wrongEndpoint++
+			case "key":
+				wrongKey++
+			case "origin":
+				wrongOrigin = "https://forward-context-exchange.example:443"
+			}
+			var ciphertext string
+			switch attack {
+			case "legacy":
+				ciphertext, err = fixture.codec.Seal([]byte("legacy-forward-fallback-marker"))
+			case "future":
+				ciphertext = strings.Replace(route.cipher, ":v2:", ":v7:", 1)
+			case "oversized":
+				ciphertext = strings.Repeat("A", 129<<10)
+			case "oversized-origin":
+				ciphertext = route.cipher
+				if _, updateErr := fixture.store.DB().Exec(`UPDATE endpoints SET base_url=? WHERE id=?`, strings.Repeat("a", 4097), route.endpoint); updateErr != nil {
+					t.Fatal(updateErr)
+				}
+			default:
+				credentialContext, contextErr := secret.NewEndpointKeyContext(wrongUser, wrongEndpoint, wrongKey, wrongOrigin)
+				if contextErr != nil {
+					t.Fatal(contextErr)
+				}
+				ciphertext, err = fixture.codec.SealForContext([]byte("context-exchange-secret-marker"), credentialContext)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := fixture.store.DB().Exec(`UPDATE endpoint_keys SET encrypted_secret=? WHERE id=?`, ciphertext, route.keyID); err != nil {
+				t.Fatal(err)
+			}
+
+			response := performCaller(fixture.handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, `{"model":"p/m","messages":[]}`))
+			if response.Code != http.StatusInternalServerError || responseCode(t, response) != httperr.CodeInternal {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+			if got := hits.Load(); got != 0 {
+				t.Fatalf("wrong context dialed upstream %d times", got)
+			}
+			for _, marker := range []string{ciphertext, origin, wrongOrigin, "context-exchange", "legacy-forward", "credential unavailable"} {
+				if strings.Contains(response.Body.String(), marker) {
+					t.Fatal("credential failure exposed protected detail")
+				}
+			}
+		})
 	}
 }
 

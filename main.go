@@ -78,6 +78,12 @@ func main() {
 		return
 	}
 	defer func() { _ = store.Close() }()
+	if err := store.MigrateEndpointKeyEnvelopes(context.Background()); err != nil {
+		slog.Error("database credential migration failed")
+		_ = store.Close()
+		_ = secretVault.Close()
+		os.Exit(1)
+	}
 	slog.Info("database ready", "path", cfg.DBPath)
 
 	app, err := buildApplication(cfg, store, secretVault)
@@ -259,7 +265,7 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	cleanup = append(cleanup, modelFetcher.Close)
 
 	endpointService := endpoint.NewService(endpoint.ServiceDeps{
-		Repo: store, URLs: stack, Secrets: vault, Connectors: registry, Hook: modelFetcher,
+		Repo: store, URLs: stack, Connectors: registry, Hook: modelFetcher,
 	})
 	modelService := model.NewService(store)
 	openAIAdapter, err := openai.NewAdapter(openai.AdapterConfig{Stack: stack})

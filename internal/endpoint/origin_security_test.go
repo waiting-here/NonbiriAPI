@@ -198,7 +198,7 @@ func TestEndpointOriginChangeCannotExfiltrateStoredCredential(t *testing.T) {
 	}
 	fetchHook := &countingFetchHook{inner: fetcher}
 	endpointService := endpoint.NewService(endpoint.ServiceDeps{
-		Repo: store, URLs: stack, Secrets: vault, Connectors: registry, Hook: fetchHook,
+		Repo: store, URLs: stack, Connectors: registry, Hook: fetchHook,
 		Now: func() int64 { return 10 },
 	})
 	ep, err := endpointService.CreateEndpoint(context.Background(), user.ID,

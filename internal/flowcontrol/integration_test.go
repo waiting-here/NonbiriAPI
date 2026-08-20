@@ -48,6 +48,13 @@ func (c *countingCodec) Open(ciphertext string) ([]byte, error) {
 	c.opens.Add(1)
 	return c.vault.Open(ciphertext)
 }
+func (c *countingCodec) SealForContext(plaintext []byte, credentialContext secret.EndpointKeyContext) (string, error) {
+	return c.vault.SealForContext(plaintext, credentialContext)
+}
+func (c *countingCodec) OpenForContext(ciphertext string, credentialContext secret.EndpointKeyContext) ([]byte, error) {
+	c.opens.Add(1)
+	return c.vault.OpenForContext(ciphertext, credentialContext)
+}
 
 type integrationFixture struct {
 	store      *db.Store
@@ -182,11 +189,7 @@ func (f *integrationFixture) addRoute(t *testing.T, userID int64) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ciphertext, err := f.codec.Seal([]byte("sk-flowcontrol-upstream"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	keyRow, err := f.store.CreateEndpointKey(context.Background(), userID, endpointRow.ID, ciphertext, "head", "tail", "", true, time.Now().Unix())
+	keyRow, err := f.store.CreateEndpointKey(context.Background(), userID, endpointRow.ID, []byte("sk-flowcontrol-upstream"), "head", "tail", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}
