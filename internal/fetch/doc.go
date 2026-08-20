@@ -11,10 +11,10 @@
 //     response ceiling, concurrency gate, cancellation); no direct
 //     http.Client exists in this package.
 //   - The upstream key is read only through the ownership-scoped ciphertext
-//     accessor, decrypted with secret.Codec.Open, and the plaintext is
-//     cleared as soon as the egress request returns. Ciphertext or
-//     plaintext never reach metadata, responses, logs, issue messages, or the
-//     cache.
+//     accessor and opened with its authenticated user/endpoint/key/canonical-
+//     origin context. The plaintext is cleared as soon as the egress request
+//     returns. Ciphertext or plaintext never reach metadata, responses, logs,
+//     issue messages, or the cache.
 //   - Upstream JSON is parsed with hard bounds (count, id/provider rune
 //     limits, byte ceiling, duplicate/control/truncation rejection); failure
 //     clears the combo cache, flags the endpoint, and writes a bounded,

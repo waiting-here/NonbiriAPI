@@ -182,11 +182,7 @@ func (f *fetchFixture) seedComboForUser(t *testing.T, uid int64, baseURL string)
 	if err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	ciphertext, err := f.vault.Seal([]byte("sk-upstream-secret-0123456789"))
-	if err != nil {
-		t.Fatalf("seal: %v", err)
-	}
-	k, err := f.store.CreateEndpointKey(context.Background(), uid, ep.ID, ciphertext, "sk-up", "6789", "note", true, 1)
+	k, err := f.store.CreateEndpointKey(context.Background(), uid, ep.ID, []byte("sk-upstream-secret-0123456789"), "sk-up", "6789", "note", true, 1)
 	if err != nil {
 		t.Fatalf("create key: %v", err)
 	}
@@ -556,8 +552,85 @@ func TestFetchTamperedEnvelopeFailsClosed(t *testing.T) {
 	if strings.Contains(msg, "nbsec") || strings.Contains(msg, "AAAA") {
 		t.Errorf("issue leaks envelope material: %q", msg)
 	}
-	if !strings.Contains(msg, "decrypt") {
-		t.Errorf("issue = %q, want decrypt summary", msg)
+	if msg != "model fetch failed: credential unavailable" {
+		t.Errorf("issue = %q, want opaque credential summary", msg)
+	}
+}
+
+func TestFetchContextExchangeAndLegacyEnvelopeNeverDial(t *testing.T) {
+	for _, attack := range []string{"user", "endpoint", "key", "origin", "legacy", "future", "oversized", "oversized-origin"} {
+		attack := attack
+		t.Run(attack, func(t *testing.T) {
+			f := newFetchFixture(t, nil)
+			f.setHandler(modelsHandler("must-not-be-reached"))
+			uid, endpointID, keyID := f.seedCombo(t, f.upstream.URL)
+			state, err := f.store.GetEndpointKeyFetchState(context.Background(), uid, endpointID, keyID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, origin, err := egress.CanonicalEndpointTarget(state.BaseURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			wrongUser, wrongEndpoint, wrongKey, wrongOrigin := uid, endpointID, keyID, origin
+			switch attack {
+			case "user":
+				wrongUser++
+			case "endpoint":
+				wrongEndpoint++
+			case "key":
+				wrongKey++
+			case "origin":
+				wrongOrigin = "https://context-exchange.example:443"
+			}
+			var ciphertext string
+			switch attack {
+			case "legacy":
+				ciphertext, err = f.vault.Seal([]byte("legacy-runtime-fallback-marker"))
+			case "future":
+				ciphertext, err = f.store.GetEndpointKeyCiphertext(context.Background(), uid, endpointID, keyID)
+				ciphertext = strings.Replace(ciphertext, ":v2:", ":v8:", 1)
+			case "oversized":
+				ciphertext = strings.Repeat("A", 129<<10)
+			case "oversized-origin":
+				ciphertext, err = f.store.GetEndpointKeyCiphertext(context.Background(), uid, endpointID, keyID)
+				if _, updateErr := f.store.DB().Exec(`UPDATE endpoints SET base_url=? WHERE id=?`, strings.Repeat("a", 4097), endpointID); updateErr != nil {
+					t.Fatal(updateErr)
+				}
+			default:
+				credentialContext, contextErr := secret.NewEndpointKeyContext(wrongUser, wrongEndpoint, wrongKey, wrongOrigin)
+				if contextErr != nil {
+					t.Fatal(contextErr)
+				}
+				ciphertext, err = f.vault.SealForContext([]byte("context-exchange-secret-marker"), credentialContext)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := f.store.DB().Exec(`UPDATE endpoint_keys SET encrypted_secret=? WHERE id=?`, ciphertext, keyID); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := f.fetcher.fetchOne(context.Background(), uid, endpointID, keyID); err != nil {
+				t.Fatalf("fetchOne: %v", err)
+			}
+			if hits := f.hits.Load(); hits != 0 {
+				t.Fatalf("wrong context dialed upstream %d times", hits)
+			}
+			if auth := f.lastAuth.Load(); auth != nil {
+				t.Fatal("wrong context constructed an authorization header")
+			}
+			message := f.issueMessage(t, uid)
+			if message != "model fetch failed: credential unavailable" {
+				t.Fatalf("issue=%q, want opaque credential failure", message)
+			}
+			for _, marker := range []string{ciphertext, origin, wrongOrigin, "context-exchange", "legacy-runtime"} {
+				if strings.Contains(message, marker) {
+					t.Fatal("credential failure exposed protected context")
+				}
+			}
+		})
 	}
 }
 

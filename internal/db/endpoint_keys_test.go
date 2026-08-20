@@ -11,7 +11,23 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
+
+func testEndpointKeyContext(t *testing.T, userID int64, endpoint Endpoint, keyID int64) secret.EndpointKeyContext {
+	t.Helper()
+	_, origin, err := egress.CanonicalEndpointTarget(endpoint.BaseURL)
+	if err != nil {
+		t.Fatalf("canonical endpoint target: %v", err)
+	}
+	credentialContext, err := secret.NewEndpointKeyContext(userID, endpoint.ID, keyID, origin)
+	if err != nil {
+		t.Fatalf("endpoint key context: %v", err)
+	}
+	return credentialContext
+}
 
 // TestCreateEndpointKeyOwnershipAtomicInsert asserts the INSERT...SELECT
 // ownership guard: a key is created only when the endpoint exists and belongs
@@ -23,17 +39,14 @@ func TestCreateEndpointKeyOwnershipAtomicInsert(t *testing.T) {
 	bob := seedTestUser(t, st, "bob", nil)
 	aEP := mustCreateTestEndpoint(t, st, alice, "https://alice.example/v1/")
 
-	ciphertext, err := st.secrets.Seal([]byte("sk-test"))
-	if err != nil {
-		t.Fatalf("seal: %v", err)
-	}
+	plaintext := []byte("sk-test")
 
 	// Missing endpoint id.
-	if _, err := st.CreateEndpointKey(context.Background(), alice, aEP.ID+999, ciphertext, "h", "t", "note", true, 1); !errors.Is(err, ErrNotFound) {
+	if _, err := st.CreateEndpointKey(context.Background(), alice, aEP.ID+999, bytes.Clone(plaintext), "h", "t", "note", true, 1); !errors.Is(err, ErrNotFound) {
 		t.Errorf("create key on missing endpoint: err=%v, want not_found", err)
 	}
 	// Cross-user endpoint.
-	if _, err := st.CreateEndpointKey(context.Background(), bob, aEP.ID, ciphertext, "h", "t", "note", true, 1); !errors.Is(err, ErrNotFound) {
+	if _, err := st.CreateEndpointKey(context.Background(), bob, aEP.ID, bytes.Clone(plaintext), "h", "t", "note", true, 1); !errors.Is(err, ErrNotFound) {
 		t.Errorf("create key on alice endpoint as bob: err=%v, want not_found", err)
 	}
 	// No key rows inserted by the failed attempts.
@@ -46,7 +59,7 @@ func TestCreateEndpointKeyOwnershipAtomicInsert(t *testing.T) {
 	}
 
 	// Owner success.
-	k, err := st.CreateEndpointKey(context.Background(), alice, aEP.ID, ciphertext, "h", "t", "note", true, 1)
+	k, err := st.CreateEndpointKey(context.Background(), alice, aEP.ID, bytes.Clone(plaintext), "h", "t", "note", true, 1)
 	if err != nil {
 		t.Fatalf("owner create key: %v", err)
 	}
@@ -65,11 +78,7 @@ func TestCreateEndpointKeyPersistsCiphertextAndDisplay(t *testing.T) {
 	ep := mustCreateTestEndpoint(t, st, uid, "https://example.com/v1/")
 
 	plaintext := []byte("sk-repo-roundtrip-XYZW")
-	ciphertext, err := st.secrets.Seal(plaintext)
-	if err != nil {
-		t.Fatalf("seal: %v", err)
-	}
-	k, err := st.CreateEndpointKey(context.Background(), uid, ep.ID, ciphertext, "head", "tail", "my note", true, 1)
+	k, err := st.CreateEndpointKey(context.Background(), uid, ep.ID, bytes.Clone(plaintext), "head", "tail", "my note", true, 1)
 	if err != nil {
 		t.Fatalf("create key: %v", err)
 	}
@@ -79,8 +88,8 @@ func TestCreateEndpointKeyPersistsCiphertextAndDisplay(t *testing.T) {
 		Scan(&stored, &head, &tail, &note); err != nil {
 		t.Fatalf("read row: %v", err)
 	}
-	if stored != ciphertext {
-		t.Errorf("encrypted_secret not stored verbatim: got %q want %q", stored, ciphertext)
+	if !strings.HasPrefix(stored, "nbsec:v2:aes-256-gcm:") {
+		t.Fatal("encrypted_secret is not a contextual envelope")
 	}
 	if stored == string(plaintext) || strings.Contains(stored, string(plaintext)) {
 		t.Fatal("encrypted_secret contains plaintext")
@@ -88,7 +97,7 @@ func TestCreateEndpointKeyPersistsCiphertextAndDisplay(t *testing.T) {
 	if head != "head" || tail != "tail" || note != "my note" {
 		t.Errorf("display/note = (%q,%q,%q), want (head,tail,my note)", head, tail, note)
 	}
-	opened, err := st.secrets.Open(stored)
+	opened, err := st.secrets.OpenForContext(stored, testEndpointKeyContext(t, uid, ep, k.ID))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -108,11 +117,7 @@ func TestListEndpointKeysExcludesCiphertext(t *testing.T) {
 	ep := mustCreateTestEndpoint(t, st, uid, "https://example.com/v1/")
 
 	plaintext := []byte("sk-list-repo-12345678")
-	ciphertext, err := st.secrets.Seal(plaintext)
-	if err != nil {
-		t.Fatalf("seal: %v", err)
-	}
-	if _, err := st.CreateEndpointKey(context.Background(), uid, ep.ID, ciphertext, "h", "t", "note", true, 1); err != nil {
+	if _, err := st.CreateEndpointKey(context.Background(), uid, ep.ID, bytes.Clone(plaintext), "h", "t", "note", true, 1); err != nil {
 		t.Fatalf("create key: %v", err)
 	}
 
@@ -142,11 +147,7 @@ func TestListEndpointKeysCrossUserEmpty(t *testing.T) {
 	bob := seedTestUser(t, st, "bob", nil)
 	aEP := mustCreateTestEndpoint(t, st, alice, "https://alice.example/v1/")
 
-	ciphertext, err := st.secrets.Seal([]byte("sk-x"))
-	if err != nil {
-		t.Fatalf("seal: %v", err)
-	}
-	if _, err := st.CreateEndpointKey(context.Background(), alice, aEP.ID, ciphertext, "h", "t", "", true, 1); err != nil {
+	if _, err := st.CreateEndpointKey(context.Background(), alice, aEP.ID, []byte("sk-x"), "h", "t", "", true, 1); err != nil {
 		t.Fatalf("create key: %v", err)
 	}
 
@@ -167,13 +168,11 @@ func TestListEnabledEndpointKeysFiltersDisabled(t *testing.T) {
 	uid := seedTestUser(t, st, "u", nil)
 	ep := mustCreateTestEndpoint(t, st, uid, "https://example.com/v1/")
 
-	ct, _ := st.secrets.Seal([]byte("sk-a"))
-	on, err := st.CreateEndpointKey(context.Background(), uid, ep.ID, ct, "a", "a", "", true, 1)
+	on, err := st.CreateEndpointKey(context.Background(), uid, ep.ID, []byte("sk-a"), "a", "a", "", true, 1)
 	if err != nil {
 		t.Fatalf("create on: %v", err)
 	}
-	ct2, _ := st.secrets.Seal([]byte("sk-b"))
-	off, err := st.CreateEndpointKey(context.Background(), uid, ep.ID, ct2, "b", "b", "", false, 1)
+	off, err := st.CreateEndpointKey(context.Background(), uid, ep.ID, []byte("sk-b"), "b", "b", "", false, 1)
 	if err != nil {
 		t.Fatalf("create off: %v", err)
 	}
@@ -209,8 +208,7 @@ func TestUpdateEndpointKeyOwnershipAndEndpointScoped(t *testing.T) {
 	aEP := mustCreateTestEndpoint(t, st, alice, "https://alice.example/v1/")
 	bEP := mustCreateTestEndpoint(t, st, bob, "https://bob.example/v1/")
 
-	ct, _ := st.secrets.Seal([]byte("sk-alice"))
-	aKey, err := st.CreateEndpointKey(context.Background(), alice, aEP.ID, ct, "h", "t", "", true, 1)
+	aKey, err := st.CreateEndpointKey(context.Background(), alice, aEP.ID, []byte("sk-alice"), "h", "t", "", true, 1)
 	if err != nil {
 		t.Fatalf("create alice key: %v", err)
 	}
@@ -250,8 +248,7 @@ func TestDeleteEndpointKeyOwnershipAndCascade(t *testing.T) {
 	aEP := mustCreateTestEndpoint(t, st, alice, "https://alice.example/v1/")
 	bEP := mustCreateTestEndpoint(t, st, bob, "https://bob.example/v1/")
 
-	ct, _ := st.secrets.Seal([]byte("sk-alice"))
-	aKey, err := st.CreateEndpointKey(context.Background(), alice, aEP.ID, ct, "h", "t", "", true, 1)
+	aKey, err := st.CreateEndpointKey(context.Background(), alice, aEP.ID, []byte("sk-alice"), "h", "t", "", true, 1)
 	if err != nil {
 		t.Fatalf("create alice key: %v", err)
 	}
@@ -306,9 +303,8 @@ func TestEndpointKeyQueriesAreParameterized(t *testing.T) {
 	uid := seedTestUser(t, st, "u", nil)
 	ep := mustCreateTestEndpoint(t, st, uid, "https://example.com/v1/")
 
-	ct, _ := st.secrets.Seal([]byte("sk"))
 	injection := "'; DROP TABLE endpoint_keys; --"
-	k, err := st.CreateEndpointKey(context.Background(), uid, ep.ID, ct, "h", "t", injection, true, 1)
+	k, err := st.CreateEndpointKey(context.Background(), uid, ep.ID, []byte("sk"), "h", "t", injection, true, 1)
 	if err != nil {
 		t.Fatalf("create with injection note: %v", err)
 	}
@@ -337,23 +333,15 @@ func setTestEndpointKeyLimit(t *testing.T, st *Store, raw string) {
 	}
 }
 
-// sealFixture seals a short stable secret for test setup. It is called on the
-// test goroutine (never inside a worker) so a seal failure fails the test
-// cleanly instead of runtime.Goexit-ing a worker.
-func sealFixture(t *testing.T, st *Store, label string) string {
-	t.Helper()
-	ct, err := st.secrets.Seal([]byte("sk-" + label))
-	if err != nil {
-		t.Fatalf("seal %s: %v", label, err)
-	}
-	return ct
+func secretFixture(label string) []byte {
+	return []byte("sk-" + label)
 }
 
 // mustCreateTestEndpointKey creates a key on endpointID owned by userID and
 // fails the test on any error. Used to fill a parent up to its cap.
 func mustCreateTestEndpointKey(t *testing.T, st *Store, userID, endpointID int64, label string) EndpointKey {
 	t.Helper()
-	k, err := st.CreateEndpointKey(context.Background(), userID, endpointID, sealFixture(t, st, label), "h", "t", "", true, 1)
+	k, err := st.CreateEndpointKey(context.Background(), userID, endpointID, secretFixture(label), "h", "t", "", true, 1)
 	if err != nil {
 		t.Fatalf("CreateEndpointKey %s: %v", label, err)
 	}
@@ -399,7 +387,7 @@ func TestCreateEndpointKeyCap(t *testing.T) {
 	}
 
 	// One over the cap is refused with a *CapError carrying the limit.
-	_, err = st.CreateEndpointKey(context.Background(), alice, aEP.ID, sealFixture(t, st, "extra"), "h", "t", "", true, 1)
+	_, err = st.CreateEndpointKey(context.Background(), alice, aEP.ID, secretFixture("extra"), "h", "t", "", true, 1)
 	var capErr *CapError
 	if !errors.As(err, &capErr) {
 		t.Fatalf("over-cap err = %v, want *CapError", err)
@@ -439,7 +427,7 @@ func TestCreateEndpointKeyCap(t *testing.T) {
 	if cross, _ := st.CountEndpointKeys(context.Background(), bob, aEP.ID); cross != 0 {
 		t.Errorf("bob counting alice endpoint = %d, want 0", cross)
 	}
-	if _, err := st.CreateEndpointKey(context.Background(), bob, aEP.ID, sealFixture(t, st, "x"), "h", "t", "", true, 1); !errors.Is(err, ErrNotFound) {
+	if _, err := st.CreateEndpointKey(context.Background(), bob, aEP.ID, secretFixture("x"), "h", "t", "", true, 1); !errors.Is(err, ErrNotFound) {
 		t.Errorf("bob create on alice endpoint: err=%v, want ErrNotFound", err)
 	}
 }
@@ -455,7 +443,7 @@ func TestCreateEndpointKeyCapRejectsInvalidSiteConfig(t *testing.T) {
 			setTestEndpointKeyLimit(t, st, raw)
 			alice := seedTestUser(t, st, "alice", nil)
 			aEP := mustCreateTestEndpoint(t, st, alice, "https://alice.example/v1/")
-			_, err := st.CreateEndpointKey(context.Background(), alice, aEP.ID, sealFixture(t, st, "x"), "h", "t", "", true, 1)
+			_, err := st.CreateEndpointKey(context.Background(), alice, aEP.ID, secretFixture("x"), "h", "t", "", true, 1)
 			if !errors.Is(err, ErrInvalidSiteConfig) {
 				t.Errorf("CreateEndpointKey with global %q: err=%v, want ErrInvalidSiteConfig", raw, err)
 			}
@@ -479,10 +467,11 @@ func TestCreateEndpointKeyAtomicCapUnderConcurrency(t *testing.T) {
 	alice := seedTestUser(t, st, "alice", nil)
 	aEP := mustCreateTestEndpoint(t, st, alice, "https://alice.example/v1/")
 
-	// Pre-seal each worker's ciphertext on the test goroutine.
-	cts := make([]string, workers)
+	// Give each worker an independently owned plaintext slice because the
+	// repository consumes and clears it.
+	plaintexts := make([][]byte, workers)
 	for i := 0; i < workers; i++ {
-		cts[i] = sealFixture(t, st, fmt.Sprintf("w%d", i))
+		plaintexts[i] = secretFixture(fmt.Sprintf("w%d", i))
 	}
 
 	var wg sync.WaitGroup
@@ -494,7 +483,7 @@ func TestCreateEndpointKeyAtomicCapUnderConcurrency(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			_, err := st.CreateEndpointKey(context.Background(), alice, aEP.ID, cts[i], "h", "t", "", true, 1)
+			_, err := st.CreateEndpointKey(context.Background(), alice, aEP.ID, plaintexts[i], "h", "t", "", true, 1)
 			switch {
 			case err == nil:
 				succ.Add(1)

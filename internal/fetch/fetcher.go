@@ -48,7 +48,7 @@ const (
 type FetcherConfig struct {
 	Store    *db.Store
 	Stack    *egress.Stack
-	Secrets  secret.Codec
+	Secrets  secret.ContextOpener
 	Registry *endpoint.Registry
 	Now      func() int64
 
@@ -62,11 +62,12 @@ type FetcherConfig struct {
 // endpoint.FetchHook (see FetchModels) so the endpoint rail can trigger one
 // automatic fetch after a save/edit/key-add, and it drives the manual refresh
 // route. All outbound work goes through the shared egress Stack; all secret
-// reads go through the ownership-scoped ciphertext accessor + secret.Codec.
+// reads go through the ownership-scoped ciphertext accessor and are opened
+// only with their authenticated user/endpoint/key/canonical-origin context.
 type Fetcher struct {
 	store    *db.Store
 	stack    *egress.Stack
-	secrets  secret.Codec
+	secrets  secret.ContextOpener
 	registry *endpoint.Registry
 	now      func() int64
 
@@ -245,6 +246,10 @@ func (f *Fetcher) fetchOne(ctx context.Context, userID, endpointID, keyID int64)
 		if errors.Is(err, db.ErrNotFound) {
 			return nil // combo deleted before this job ran.
 		}
+		if errors.Is(err, db.ErrEndpointCredentialUnavailable) {
+			f.recordFailure(ctx, userID, endpointID, keyID, "credential unavailable")
+			return nil
+		}
 		return fmt.Errorf("read fetch state: %w", err)
 	}
 	if !state.EndpointEnabled || !state.KeyEnabled {
@@ -266,13 +271,30 @@ func (f *Fetcher) fetchOne(ctx context.Context, userID, endpointID, keyID int64)
 		if errors.Is(err, db.ErrNotFound) {
 			return nil
 		}
+		if errors.Is(err, db.ErrEndpointCredentialUnavailable) {
+			f.recordFailure(ctx, userID, endpointID, keyID, "credential unavailable")
+			return nil
+		}
 		return fmt.Errorf("read endpoint key ciphertext: %w", err)
 	}
-	plaintext, err := f.secrets.Open(ciphertext)
+	_, canonicalOrigin, err := egress.CanonicalEndpointTarget(state.BaseURL)
 	if err != nil {
-		// Never include the envelope or the error detail: it is deliberately
-		// opaque so a key rotation or tampering cannot become an oracle.
-		f.recordFailure(ctx, userID, endpointID, keyID, "endpoint key could not be decrypted")
+		ciphertext = ""
+		f.recordFailure(ctx, userID, endpointID, keyID, "credential unavailable")
+		return nil
+	}
+	credentialContext, err := secret.NewEndpointKeyContext(userID, endpointID, keyID, canonicalOrigin)
+	canonicalOrigin = ""
+	if err != nil {
+		ciphertext = ""
+		f.recordFailure(ctx, userID, endpointID, keyID, "credential unavailable")
+		return nil
+	}
+	plaintext, err := f.secrets.OpenForContext(ciphertext, credentialContext)
+	ciphertext = ""
+	if err != nil {
+		// Every malformed envelope and context mismatch follows one opaque path.
+		f.recordFailure(ctx, userID, endpointID, keyID, "credential unavailable")
 		return nil
 	}
 	defer clear(plaintext)
@@ -413,9 +435,9 @@ func joinModelsURL(baseURL string) string {
 	return strings.TrimSuffix(baseURL, "/") + "/models"
 }
 
-// nilCodec mirrors the db package's nil-interface check so a typed-nil Codec
-// cannot slip past construction.
-func nilCodec(codec secret.Codec) bool {
+// nilCodec mirrors the db package's nil-interface check so a typed-nil
+// contextual opener cannot slip past construction.
+func nilCodec(codec secret.ContextOpener) bool {
 	if codec == nil {
 		return true
 	}

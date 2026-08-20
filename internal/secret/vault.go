@@ -6,11 +6,9 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"errors"
 	"io"
 	"log/slog"
-	"strings"
 	"sync"
 )
 
@@ -22,11 +20,6 @@ const (
 	// body limit. Endpoint handlers must apply an equal or stricter semantic
 	// and request-size limit before calling Seal.
 	MaxPlaintextBytes = 64 << 10
-
-	envelopeHeader = "nbsec:v1:aes-256-gcm"
-	envelopePrefix = envelopeHeader + ":"
-	gcmNonceBytes  = 12
-	gcmTagBytes    = 16
 )
 
 var (
@@ -41,6 +34,9 @@ var (
 	ErrClosed = errors.New("secret: vault is closed")
 	// ErrUnavailable reports failure of the operating system random source.
 	ErrUnavailable = errors.New("secret: cryptographic operation unavailable")
+	// ErrInvalidContext reports a malformed endpoint-credential context. It
+	// never includes the rejected identifiers or origin.
+	ErrInvalidContext = errors.New("secret: invalid credential context")
 	// ErrInvalidSubkeyInfo reports a DeriveSubkey call whose info label is
 	// empty or oversized. The error never includes the info value.
 	ErrInvalidSubkeyInfo = errors.New("secret: invalid subkey info")
@@ -53,10 +49,22 @@ const (
 	maxSubkeyInfoBytes = 256
 )
 
-// Codec is the narrow recoverable-secret boundary used by persistence code.
-// Implementations must never return plaintext from formatting or logging
-// methods. Decryption is available only through an explicit Open call.
+// ContextOpener is the only recoverable-secret capability exposed to outbound
+// code. It cannot open a legacy envelope or seal new material.
+type ContextOpener interface {
+	OpenForContext(ciphertext string, context EndpointKeyContext) ([]byte, error)
+}
+
+// ContextCodec adds contextual sealing for the persistence boundary.
+type ContextCodec interface {
+	ContextOpener
+	SealForContext(plaintext []byte, context EndpointKeyContext) (string, error)
+}
+
+// Codec extends the runtime contextual boundary with legacy operations needed
+// by persistence migration and restore compatibility.
 type Codec interface {
+	ContextCodec
 	Seal(plaintext []byte) (string, error)
 	Open(ciphertext string) ([]byte, error)
 }
@@ -90,10 +98,47 @@ func New(masterKey []byte) (*Vault, error) {
 	return v, nil
 }
 
-// Seal encrypts a non-empty plaintext into the documented, persistence-safe
-// envelope. A fresh random nonce is used for every call. Plaintext larger than
-// MaxPlaintextBytes is rejected before cryptographic allocation.
+// Seal encrypts a non-empty plaintext into the legacy envelope. It is retained
+// for restore and migration tooling; new persistence paths must call
+// SealForContext. A fresh random nonce is used for every call.
 func (v *Vault) Seal(plaintext []byte) (string, error) {
+	return v.seal(plaintext, []byte(legacyEnvelopeHeader), legacyEnvelopePrefix)
+}
+
+// Open authenticates and decrypts only a legacy envelope. It deliberately does
+// not accept the contextual envelope. Runtime outbound paths must call
+// OpenForContext instead.
+func (v *Vault) Open(encoded string) ([]byte, error) {
+	return v.open(encoded, legacyEnvelopePrefix, []byte(legacyEnvelopeHeader))
+}
+
+// SealForContext encrypts a non-empty endpoint credential into the contextual
+// envelope. Purpose, version, user, endpoint, key, and canonical origin are
+// authenticated through an unambiguous length-prefixed associated-data
+// encoding. The associated data is not persisted in the envelope.
+func (v *Vault) SealForContext(plaintext []byte, context EndpointKeyContext) (string, error) {
+	aad, ok := context.associatedData()
+	if !ok {
+		return "", ErrInvalidContext
+	}
+	defer clear(aad)
+	return v.seal(plaintext, aad, contextEnvelopePrefix)
+}
+
+// OpenForContext authenticates and decrypts only a contextual envelope under
+// the exact supplied identity and canonical origin. Malformed envelopes,
+// invalid contexts, wrong keys, and every context mismatch collapse to
+// ErrInvalidCiphertext.
+func (v *Vault) OpenForContext(encoded string, context EndpointKeyContext) ([]byte, error) {
+	aad, ok := context.associatedData()
+	if !ok {
+		return nil, ErrInvalidCiphertext
+	}
+	defer clear(aad)
+	return v.open(encoded, contextEnvelopePrefix, aad)
+}
+
+func (v *Vault) seal(plaintext, aad []byte, prefix string) (string, error) {
 	if len(plaintext) == 0 || len(plaintext) > MaxPlaintextBytes {
 		return "", ErrInvalidPlaintext
 	}
@@ -106,7 +151,6 @@ func (v *Vault) Seal(plaintext []byte) (string, error) {
 	if v.closed {
 		return "", ErrClosed
 	}
-
 	gcm, err := v.gcmLocked()
 	if err != nil {
 		return "", ErrUnavailable
@@ -115,25 +159,12 @@ func (v *Vault) Seal(plaintext []byte) (string, error) {
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return "", ErrUnavailable
 	}
-	sealed := gcm.Seal(nil, nonce, plaintext, []byte(envelopeHeader))
-
-	nonceText := base64.RawURLEncoding.EncodeToString(nonce)
-	sealedText := base64.RawURLEncoding.EncodeToString(sealed)
-	var out strings.Builder
-	out.Grow(len(envelopePrefix) + len(nonceText) + 1 + len(sealedText))
-	out.WriteString(envelopePrefix)
-	out.WriteString(nonceText)
-	out.WriteByte(':')
-	out.WriteString(sealedText)
-	return out.String(), nil
+	sealed := gcm.Seal(nil, nonce, plaintext, aad)
+	return encodeEnvelope(prefix, nonce, sealed), nil
 }
 
-// Open authenticates and decrypts a ciphertext produced by Seal. Every
-// malformed envelope, wrong-key use, and authentication failure returns
-// ErrInvalidCiphertext with no input material in the error. The caller owns the
-// returned plaintext and should clear it promptly.
-func (v *Vault) Open(encoded string) ([]byte, error) {
-	nonce, sealed, ok := parseEnvelope(encoded)
+func (v *Vault) open(encoded, prefix string, aad []byte) ([]byte, error) {
+	nonce, sealed, ok := parseEnvelope(encoded, prefix)
 	if !ok {
 		return nil, ErrInvalidCiphertext
 	}
@@ -146,12 +177,11 @@ func (v *Vault) Open(encoded string) ([]byte, error) {
 	if v.closed {
 		return nil, ErrClosed
 	}
-
 	gcm, err := v.gcmLocked()
 	if err != nil {
 		return nil, ErrUnavailable
 	}
-	plaintext, err := gcm.Open(nil, nonce, sealed, []byte(envelopeHeader))
+	plaintext, err := gcm.Open(nil, nonce, sealed, aad)
 	if err != nil {
 		clear(plaintext)
 		return nil, ErrInvalidCiphertext
@@ -240,53 +270,4 @@ func (v *Vault) gcmLocked() (cipher.AEAD, error) {
 		return nil, err
 	}
 	return cipher.NewGCMWithNonceSize(block, gcmNonceBytes)
-}
-
-func parseEnvelope(encoded string) ([]byte, []byte, bool) {
-	maxNonceText := base64.RawURLEncoding.EncodedLen(gcmNonceBytes)
-	maxSealedText := base64.RawURLEncoding.EncodedLen(MaxPlaintextBytes + gcmTagBytes)
-	maxEnvelopeBytes := len(envelopePrefix) + maxNonceText + 1 + maxSealedText
-	if len(encoded) > maxEnvelopeBytes || !strings.HasPrefix(encoded, envelopePrefix) {
-		return nil, nil, false
-	}
-
-	rest := encoded[len(envelopePrefix):]
-	nonceText, sealedText, found := strings.Cut(rest, ":")
-	if !found || strings.ContainsRune(sealedText, ':') {
-		return nil, nil, false
-	}
-	if len(nonceText) != maxNonceText {
-		return nil, nil, false
-	}
-
-	nonce, ok := decodeCanonicalRawURL(nonceText, gcmNonceBytes, gcmNonceBytes)
-	if !ok {
-		return nil, nil, false
-	}
-	sealed, ok := decodeCanonicalRawURL(sealedText, gcmTagBytes+1, MaxPlaintextBytes+gcmTagBytes)
-	if !ok {
-		return nil, nil, false
-	}
-	return nonce, sealed, true
-}
-
-func decodeCanonicalRawURL(encoded string, minBytes, maxBytes int) ([]byte, bool) {
-	if encoded == "" || len(encoded) > base64.RawURLEncoding.EncodedLen(maxBytes) {
-		return nil, false
-	}
-	for i := 0; i < len(encoded); i++ {
-		c := encoded[i]
-		if !((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
-			(c >= '0' && c <= '9') || c == '-' || c == '_') {
-			return nil, false
-		}
-	}
-	decoded, err := base64.RawURLEncoding.DecodeString(encoded)
-	if err != nil || len(decoded) < minBytes || len(decoded) > maxBytes {
-		return nil, false
-	}
-	if base64.RawURLEncoding.EncodeToString(decoded) != encoded {
-		return nil, false
-	}
-	return decoded, true
 }

@@ -9,7 +9,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
-	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 // Service-level sentinel errors. The handler maps these (and the db sentinels)
@@ -65,7 +64,7 @@ type Repository interface {
 	DeleteEndpoint(ctx context.Context, userID, id int64) error
 	EndpointCap(ctx context.Context, userID int64) (int, error)
 
-	CreateEndpointKey(ctx context.Context, userID, endpointID int64, encryptedSecret, displayHead, displayTail, note string, enabled bool, now int64) (db.EndpointKey, error)
+	CreateEndpointKey(ctx context.Context, userID, endpointID int64, secretPlaintext []byte, displayHead, displayTail, note string, enabled bool, now int64) (db.EndpointKey, error)
 	ListEndpointKeys(ctx context.Context, userID, endpointID int64) ([]db.EndpointKey, error)
 	ListEnabledEndpointKeys(ctx context.Context, userID, endpointID int64) ([]db.EndpointKey, error)
 	UpdateEndpointKey(ctx context.Context, userID, endpointID, keyID int64, note *string, enabled *bool, now int64) (db.EndpointKey, error)
@@ -78,7 +77,6 @@ type Repository interface {
 type ServiceDeps struct {
 	Repo       Repository
 	URLs       BaseURLValidator // *egress.EgressPolicy
-	Secrets    secret.Codec     // *secret.Vault
 	Connectors *Registry
 	Hook       FetchHook // nil = no-op
 	Now        func() int64
@@ -89,7 +87,6 @@ type ServiceDeps struct {
 type Service struct {
 	repo       Repository
 	urls       BaseURLValidator
-	secrets    secret.Codec
 	connectors *Registry
 	hook       FetchHook
 	now        func() int64
@@ -104,7 +101,6 @@ func NewService(deps ServiceDeps) *Service {
 	return &Service{
 		repo:       deps.Repo,
 		urls:       deps.URLs,
-		secrets:    deps.Secrets,
 		connectors: deps.Connectors,
 		hook:       deps.Hook,
 		now:        deps.Now,
@@ -232,13 +228,14 @@ func (s *Service) DeleteEndpoint(ctx context.Context, userID, id int64) error {
 	return nil
 }
 
-// CreateEndpointKey adds a key to endpointID owned by userID. secretPlaintext
-// is sealed with the secret codec and never reaches the repository; only the
-// ciphertext and persisted head/tail display fragments are stored. After a
-// committed add the fetch hook is invoked for this key when it is enabled.
+// CreateEndpointKey adds a key to endpointID owned by userID. The repository
+// consumes the plaintext and performs row allocation plus contextual sealing
+// inside one transaction; plaintext is never a SQL value. Only ciphertext and
+// persisted head/tail display fragments are stored. After a committed add the
+// fetch hook is invoked for this key when it is enabled.
 func (s *Service) CreateEndpointKey(ctx context.Context, userID, endpointID int64, secretPlaintext []byte, note *string, enabled *bool) (db.EndpointKey, error) {
 	defer clear(secretPlaintext)
-	if s == nil || s.repo == nil || s.secrets == nil {
+	if s == nil || s.repo == nil {
 		return db.EndpointKey{}, ErrInvalidRequest
 	}
 	if userID <= 0 || endpointID <= 0 {
@@ -253,20 +250,13 @@ func (s *Service) CreateEndpointKey(ctx context.Context, userID, endpointID int6
 	}
 	head, tail := displayFragments(secretPlaintext)
 
-	// Seal before any DB call. The plaintext is cleared the moment sealing (or
-	// its validation) is done; no copy of it outlives this function.
-	ciphertext, err := s.secrets.Seal(secretPlaintext)
-	if err != nil {
-		return db.EndpointKey{}, fmt.Errorf("%w: seal endpoint key", ErrInvalidRequest)
-	}
-
 	enabledVal := true
 	if enabled != nil {
 		enabledVal = *enabled
 	}
 	now := s.now()
 
-	key, err := s.repo.CreateEndpointKey(ctx, userID, endpointID, ciphertext, head, tail, noteStr, enabledVal, now)
+	key, err := s.repo.CreateEndpointKey(ctx, userID, endpointID, secretPlaintext, head, tail, noteStr, enabledVal, now)
 	if err != nil {
 		return db.EndpointKey{}, mapRepoError(err)
 	}
@@ -431,10 +421,13 @@ func validateSecret(plaintext []byte) error {
 	if !utf8.Valid(plaintext) {
 		return fmt.Errorf("%w: secret is invalid", ErrInvalidRequest)
 	}
-	for _, r := range string(plaintext) {
+	remaining := plaintext
+	for len(remaining) > 0 {
+		r, size := utf8.DecodeRune(remaining)
 		if r < 0x20 || r == 0x7f {
 			return fmt.Errorf("%w: secret contains control characters", ErrInvalidRequest)
 		}
+		remaining = remaining[size:]
 	}
 	return nil
 }
@@ -489,19 +482,35 @@ func validateBoundedText(value string, maxRunes int) error {
 // tail is cleared. Otherwise head and tail expose only the first and last few
 // runes with the middle hidden.
 func displayFragments(secret []byte) (head, tail string) {
-	runes := []rune(string(secret))
-	n := len(runes)
-	if n == 0 {
+	var first [DisplayFragLen]rune
+	var last [DisplayFragLen]rune
+	count := 0
+	for len(secret) > 0 {
+		r, size := utf8.DecodeRune(secret)
+		if size == 0 {
+			break
+		}
+		if count < DisplayFragLen {
+			first[count] = r
+		}
+		last[count%DisplayFragLen] = r
+		count++
+		secret = secret[size:]
+	}
+	if count <= DisplayFragLen {
 		return "", ""
 	}
-	if n <= DisplayFragLen {
-		return "", ""
-	}
-	head = string(runes[:DisplayFragLen])
-	if n <= 2*DisplayFragLen {
+	head = string(first[:])
+	if count <= 2*DisplayFragLen {
 		return head, ""
 	}
-	tail = string(runes[n-DisplayFragLen:])
+	orderedTail := make([]rune, DisplayFragLen)
+	start := count % DisplayFragLen
+	for i := range orderedTail {
+		orderedTail[i] = last[(start+i)%DisplayFragLen]
+	}
+	tail = string(orderedTail)
+	clear(orderedTail)
 	return head, tail
 }
 

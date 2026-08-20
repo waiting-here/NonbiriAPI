@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 // EndpointKey carries the metadata and display fragments of an endpoint key.
@@ -31,7 +34,11 @@ type EndpointKey struct {
 // (no restart required). It must be > 0 so a fresh install is usable.
 const DefaultEndpointKeyLimit = 20
 
-const siteConfigKeyDefaultEndpointKeyLimit = "default_endpoint_key_limit"
+const (
+	siteConfigKeyDefaultEndpointKeyLimit = "default_endpoint_key_limit"
+	maxStoredEndpointBaseURLBytes        = 4096
+	maxEndpointCredentialEnvelopeBytes   = 128 << 10
+)
 
 // siteConfigIntLocked reads one non-negative integer site_config key inside a
 // transaction (or over *sql.DB). Unset falls back to def; an empty, negative
@@ -61,19 +68,14 @@ func siteConfigIntLocked(ctx context.Context, q queryRowContexter, key string, d
 	return n, nil
 }
 
-// CreateEndpointKey inserts a new key for endpointID owned by userID. The per
-// endpoint key-count cap and the current count are read inside the same
-// transaction as the insert, so a concurrent add cannot slip between the count
-// and the write (no read-then-write TOCTOU); when the count has reached the
-// cap a *CapError wrapping ErrEndpointKeyCap is returned and no row is
-// written. The count is ownership-scoped via the endpoints join, so a
-// cross-user or missing endpoint id counts 0 and falls through to the
-// ownership-guarded INSERT...SELECT -> ErrNotFound, never leaking the real
-// owner's key count. encryptedSecret is the already-sealed AES-256-GCM
-// envelope produced by secret.Codec; the repository never receives plaintext.
-// displayHead/displayTail are the persisted first/last fragments so listings
-// never decrypt. now is the caller-supplied unix timestamp.
-func (s *Store) CreateEndpointKey(ctx context.Context, userID, endpointID int64, encryptedSecret, displayHead, displayTail, note string, enabled bool, now int64) (EndpointKey, error) {
+// CreateEndpointKey creates a context-bound key for endpointID owned by
+// userID. It consumes and clears secretPlaintext. The cap check, ownership-
+// guarded placeholder insert, contextual seal, ciphertext update, and commit
+// share one transaction. The placeholder is therefore never visible to
+// another connection and every failure rolls it back. The plaintext is never
+// supplied to a SQL operation.
+func (s *Store) CreateEndpointKey(ctx context.Context, userID, endpointID int64, secretPlaintext []byte, displayHead, displayTail, note string, enabled bool, now int64) (EndpointKey, error) {
+	defer clear(secretPlaintext)
 	enabledInt := 0
 	if enabled {
 		enabledInt = 1
@@ -105,17 +107,17 @@ WHERE ek.endpoint_id=? AND e.user_id=?`, endpointID, userID).Scan(&count); err !
 		return EndpointKey{}, newCapError(ErrEndpointKeyCap, ResourceEndpointKey, cap)
 	}
 
-	// The SELECT guards ownership atomically: the INSERT produces zero rows
-	// when the endpoint does not exist or belongs to another user, which we
-	// report as ErrNotFound (indistinguishable from a missing endpoint).
+	// Ownership and the initial row allocation are one SQL statement. The
+	// empty ciphertext is an uncommitted placeholder used only to obtain the
+	// database-assigned key id required by the authenticated context.
 	res, err := tx.ExecContext(ctx, `
 INSERT INTO endpoint_keys (endpoint_id, encrypted_secret, display_head, display_tail, note, enabled, created_at, updated_at)
-SELECT ?, ?, ?, ?, ?, ?, ?, ?
+SELECT ?, '', ?, ?, ?, ?, ?, ?
 FROM endpoints
 WHERE id=? AND user_id=?`,
-		endpointID, encryptedSecret, displayHead, displayTail, note, enabledInt, now, now, endpointID, userID)
+		endpointID, displayHead, displayTail, note, enabledInt, now, now, endpointID, userID)
 	if err != nil {
-		return EndpointKey{}, fmt.Errorf("insert endpoint key: %w", err)
+		return EndpointKey{}, fmt.Errorf("insert endpoint key placeholder: %w", err)
 	}
 	affected, err := res.RowsAffected()
 	if err != nil {
@@ -125,11 +127,48 @@ WHERE id=? AND user_id=?`,
 		return EndpointKey{}, ErrNotFound
 	}
 	id, err := res.LastInsertId()
+	if err != nil || id <= 0 {
+		return EndpointKey{}, ErrEndpointCredentialUnavailable
+	}
+
+	var baseURL sql.NullString
+	if err := tx.QueryRowContext(ctx, `
+SELECT CASE WHEN length(CAST(base_url AS BLOB)) BETWEEN 1 AND ? THEN base_url END
+FROM endpoints
+WHERE id=? AND user_id=?`, maxStoredEndpointBaseURLBytes, endpointID, userID).Scan(&baseURL); err != nil || !baseURL.Valid {
+		return EndpointKey{}, ErrEndpointCredentialUnavailable
+	}
+	_, canonicalOrigin, err := egress.CanonicalEndpointTarget(baseURL.String)
+	baseURL.String = ""
 	if err != nil {
-		return EndpointKey{}, fmt.Errorf("endpoint key last insert id: %w", err)
+		return EndpointKey{}, ErrEndpointCredentialUnavailable
+	}
+	credentialContext, err := secret.NewEndpointKeyContext(userID, endpointID, id, canonicalOrigin)
+	canonicalOrigin = ""
+	if err != nil {
+		return EndpointKey{}, ErrEndpointCredentialUnavailable
+	}
+	ciphertext, err := s.secrets.SealForContext(secretPlaintext, credentialContext)
+	clear(secretPlaintext)
+	if err != nil {
+		return EndpointKey{}, ErrEndpointCredentialUnavailable
+	}
+	res, err = tx.ExecContext(ctx, `
+UPDATE endpoint_keys
+SET encrypted_secret=?
+WHERE id=? AND endpoint_id=?
+  AND endpoint_id IN (SELECT id FROM endpoints WHERE id=? AND user_id=?)`,
+		ciphertext, id, endpointID, endpointID, userID)
+	ciphertext = ""
+	if err != nil {
+		return EndpointKey{}, ErrEndpointCredentialUnavailable
+	}
+	affected, err = res.RowsAffected()
+	if err != nil || affected != 1 {
+		return EndpointKey{}, ErrEndpointCredentialUnavailable
 	}
 	if err := tx.Commit(); err != nil {
-		return EndpointKey{}, fmt.Errorf("commit create endpoint key: %w", err)
+		return EndpointKey{}, ErrEndpointCredentialUnavailable
 	}
 	committed = true
 	return EndpointKey{

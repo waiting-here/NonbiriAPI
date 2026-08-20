@@ -41,6 +41,10 @@ var (
 	// cap invariant is present but malformed (non-integer or negative where a
 	// non-negative integer is required).
 	ErrInvalidSiteConfig = errors.New("db: invalid site config")
+
+	// ErrEndpointCredentialUnavailable collapses invalid stored envelope or
+	// authenticated-context projections without carrying any protected value.
+	ErrEndpointCredentialUnavailable = errors.New("db: endpoint credential unavailable")
 )
 
 // Stable resource names carried by CapError and the resource_limit_exceeded

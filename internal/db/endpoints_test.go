@@ -317,11 +317,7 @@ func TestUpdateEndpointBlocksOriginChangeWithAnyExistingKey(t *testing.T) {
 	defer st.Close()
 	uid := seedTestUser(t, st, "u", nil)
 	ep := mustCreateTestEndpoint(t, st, uid, "https://old.example/v1/")
-	ciphertext, err := st.secrets.Seal([]byte("sk-origin-boundary"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	key, err := st.CreateEndpointKey(context.Background(), uid, ep.ID, ciphertext, "head", "tail", "", false, 2)
+	key, err := st.CreateEndpointKey(context.Background(), uid, ep.ID, []byte("sk-origin-boundary"), "head", "tail", "", false, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -399,10 +395,7 @@ END;`); err != nil {
 		oldURL := fmt.Sprintf("https://old-create-%d.example/v1/", i)
 		newURL := fmt.Sprintf("https://new-create-%d.example/v1/", i)
 		ep := mustCreateTestEndpoint(t, st, uid, oldURL)
-		ciphertext, err := st.secrets.Seal([]byte(fmt.Sprintf("sk-create-%d", i)))
-		if err != nil {
-			t.Fatal(err)
-		}
+		plaintext := []byte(fmt.Sprintf("sk-create-%d", i))
 
 		start := make(chan struct{})
 		updates := make(chan updateResult, 1)
@@ -414,7 +407,7 @@ END;`); err != nil {
 		}()
 		go func() {
 			<-start
-			key, err := st.CreateEndpointKey(context.Background(), uid, ep.ID, ciphertext, "head", "tail", "", true, 10)
+			key, err := st.CreateEndpointKey(context.Background(), uid, ep.ID, plaintext, "head", "tail", "", true, 10)
 			creates <- createResult{key: key, err: err}
 		}()
 		close(start)
@@ -451,11 +444,7 @@ END;`); err != nil {
 		oldURL := fmt.Sprintf("https://old-delete-%d.example/v1/", i)
 		newURL := fmt.Sprintf("https://new-delete-%d.example/v1/", i)
 		ep := mustCreateTestEndpoint(t, st, uid, oldURL)
-		ciphertext, err := st.secrets.Seal([]byte(fmt.Sprintf("sk-delete-%d", i)))
-		if err != nil {
-			t.Fatal(err)
-		}
-		key, err := st.CreateEndpointKey(context.Background(), uid, ep.ID, ciphertext, "head", "tail", "", true, 20)
+		key, err := st.CreateEndpointKey(context.Background(), uid, ep.ID, []byte(fmt.Sprintf("sk-delete-%d", i)), "head", "tail", "", true, 20)
 		if err != nil {
 			t.Fatal(err)
 		}

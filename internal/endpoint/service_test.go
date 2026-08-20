@@ -55,12 +55,24 @@ func newTestService(t *testing.T) *testService {
 	svc := NewService(ServiceDeps{
 		Repo:       store,
 		URLs:       policy,
-		Secrets:    vault,
 		Connectors: NewRegistry(),
 		Hook:       hook,
 		Now:        func() int64 { return 1 },
 	})
 	return &testService{svc: svc, store: store, vault: vault, policy: policy, hook: hook, path: path}
+}
+
+func serviceCredentialContext(t *testing.T, userID int64, ep db.Endpoint, keyID int64) secret.EndpointKeyContext {
+	t.Helper()
+	_, origin, err := egress.CanonicalEndpointTarget(ep.BaseURL)
+	if err != nil {
+		t.Fatalf("canonical endpoint target: %v", err)
+	}
+	credentialContext, err := secret.NewEndpointKeyContext(userID, ep.ID, keyID, origin)
+	if err != nil {
+		t.Fatalf("credential context: %v", err)
+	}
+	return credentialContext
 }
 
 // seedUser inserts a users row and returns its id. A non-nil endpointLimit
@@ -764,10 +776,10 @@ func TestCreateEndpointKeySealsAndStoresDisplayFragments(t *testing.T) {
 	if err := ts.store.DB().QueryRow(`SELECT encrypted_secret FROM endpoint_keys WHERE id=?`, k.ID).Scan(&stored); err != nil {
 		t.Fatalf("read encrypted_secret: %v", err)
 	}
-	if stored == string(plaintext) || strings.Contains(stored, string(plaintext)) {
-		t.Fatal("encrypted_secret contains plaintext")
+	if !strings.HasPrefix(stored, "nbsec:v2:aes-256-gcm:") || stored == string(plaintext) || strings.Contains(stored, string(plaintext)) {
+		t.Fatal("encrypted_secret is not a contextual envelope or contains plaintext")
 	}
-	opened, err := ts.vault.Open(stored)
+	opened, err := ts.vault.OpenForContext(stored, serviceCredentialContext(t, uid, ep, k.ID))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -1038,14 +1050,15 @@ func TestSecretEnvelopeWrongKeyAndTamperFail(t *testing.T) {
 		t.Fatalf("create other vault: %v", err)
 	}
 	defer otherVault.Close()
-	if _, err := otherVault.Open(ciphertext); err == nil {
-		t.Fatal("Open with a wrong master key unexpectedly succeeded")
+	credentialContext := serviceCredentialContext(t, uid, ep, k.ID)
+	if _, err := otherVault.OpenForContext(ciphertext, credentialContext); err == nil {
+		t.Fatal("OpenForContext with a wrong master key unexpectedly succeeded")
 	}
 
 	// A single-byte tamper of the ciphertext portion must fail authentication.
 	tampered := toggleLastBase64(ciphertext)
-	if _, err := ts.vault.Open(tampered); err == nil {
-		t.Fatal("Open accepted a tampered ciphertext")
+	if _, err := ts.vault.OpenForContext(tampered, credentialContext); err == nil {
+		t.Fatal("OpenForContext accepted a tampered ciphertext")
 	}
 }
 
@@ -1115,6 +1128,7 @@ func TestDisplayFragmentsEdgeCases(t *testing.T) {
 		{"abcdefgh", "abcd", ""},
 		{"abcdefghi", "abcd", "fghi"}, // 9: head+tail, 1 hidden
 		{"abcdefghij", "abcd", "ghij"},
+		{"日本語abcdef終", "日本語a", "def終"},
 		{"_sk-abcdefghijklmnopqrstuvwxyz0123456789_", "_sk-", "789_"},
 	}
 	for _, tc := range cases {

@@ -158,7 +158,17 @@ Do not trust arbitrary `X-Forwarded-*` headers. The application accepts forwardi
 
 7. Verify both configured hosts through the reverse proxy, then inspect the journal for startup errors. Confirm the user station, admin station, login boundary, and `/healthz` response. Do not treat a running process alone as a successful deployment.
 
-If the binary fails to start, stop it, restore the previous symlink, and start the previous release. Do not delete the database or rotate the master key during rollback. If a future release introduces a schema migration, follow its explicit migration instructions and retain the pre-migration backup.
+If the binary fails to start, stop it, restore the previous symlink, and start the previous release. Do not delete the database or rotate the master key during rollback.
+
+The unreleased credential-envelope upgrade is a one-way in-place migration. On
+startup, the new binary upgrades endpoint credentials transactionally before it
+starts any HTTP listener or background worker. Any invalid credential aborts
+the complete credential batch and startup; it never leaves a partially upgraded
+batch serving traffic. Before installing this upgrade, stop the service and
+back up the database together with any WAL/SHM sidecars, the current binary, and
+the unchanged master key. Do not run the old binary against a database that has
+completed the credential migration. Downgrade only by restoring the complete
+pre-upgrade backup and then starting the old binary.
 
 ## Backup and restore test
 
@@ -166,7 +176,7 @@ A backup is not complete until it has been restored in an isolated directory wit
 
 ## Alpha limitations
 
-- The schema is bootstrapped idempotently; alpha.1 has no versioned migration framework.
+- The schema is bootstrapped idempotently. There is no general versioned migration framework; the unreleased credential-envelope upgrade uses one dedicated, idempotent startup migrator.
 - SMTP settings are reserved and do not send alert email in this release.
 - Real Discord OAuth and upstream success flows must be tested with disposable staging credentials before public operation.
 - Choose a maintenance window for every update and keep a known-good binary, environment backup, and database backup together.
