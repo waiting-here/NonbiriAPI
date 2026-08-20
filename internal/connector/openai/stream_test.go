@@ -348,6 +348,75 @@ func TestAdapterStreamBackpressureDeadlineCancelsUpstream(t *testing.T) {
 	}
 }
 
+func TestAdapterStreamPostCommitErrorFrameHasStableSource(t *testing.T) {
+	// A post-commit failure (here: a chunk that reflects the upstream secret) is
+	// emitted as an in-stream SSE error frame. The frame must carry the same
+	// {error:{code,source,message}} shape as the JSON envelope, with source
+	// = upstream derived at the shared wire sink — not a [upstream] string
+	// prefix and not a free-form upstream body.
+	const secret = "sk-postcommit-source"
+	const ciphertext = "nbsec:v1:postcommit-cipher"
+	reflected := strings.Replace(validChunk, `"ok"`, fmt.Sprintf("%q", secret), 1)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writeSSE(writer,
+			"data: "+validChunk+"\n\n",
+			"data: "+reflected+"\n\n",
+			"data: [DONE]\n\n",
+		)
+	}))
+	defer server.Close()
+	adapter := adapterForServer(t, server.URL, nil, nil)
+	recorder := httptest.NewRecorder()
+	result := adapter.Attempt(context.Background(), recorder,
+		testTarget(server.URL, []byte(secret), []byte(ciphertext)), streamRequest(t), "nbu_safe")
+	if result.Success || result.Failure != FailureUpstream || !result.Committed {
+		t.Fatalf("result=%+v body=%q", result, recorder.Body.String())
+	}
+	body := recorder.Body.String()
+	if strings.Contains(body, secret) || strings.Contains(body, ciphertext) || strings.Contains(body, "[DONE]") {
+		t.Fatalf("post-commit frame leaked secret or synthesized done: %q", body)
+	}
+	// Locate the error frame: it is the only data: line carrying an "error" object.
+	var frameBody struct {
+		Error struct {
+			Code    string `json:"code"`
+			Source  string `json:"source"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	found := false
+	for _, line := range strings.Split(body, "\n") {
+		if !strings.HasPrefix(line, "data: ") || !strings.Contains(line, `"error"`) {
+			continue
+		}
+		payload := strings.TrimPrefix(line, "data: ")
+		if err := json.Unmarshal([]byte(payload), &frameBody); err != nil {
+			t.Fatalf("error frame not JSON: %v; %q", err, payload)
+		}
+		found = true
+		break
+	}
+	if !found {
+		t.Fatalf("no error frame in body: %q", body)
+	}
+	if frameBody.Error.Code != "upstream" {
+		t.Fatalf("frame code = %q, want upstream", frameBody.Error.Code)
+	}
+	if frameBody.Error.Source != "upstream" {
+		t.Fatalf("frame source = %q, want upstream", frameBody.Error.Source)
+	}
+	if frameBody.Error.Message != "upstream stream failed" {
+		t.Fatalf("frame message = %q", frameBody.Error.Message)
+	}
+	// The legacy free-form "type" field is gone; the frame carries exactly the
+	// stable code/source/message triple.
+	for _, forbidden := range []string{"upstream_error", `"type"`, `"diag"`, `"request_id"`} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("frame retained non-stable field %q: %q", forbidden, body)
+		}
+	}
+}
+
 func TestAdapterStreamAbnormalEOFIsFailure(t *testing.T) {
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		hijacker, ok := writer.(http.Hijacker)

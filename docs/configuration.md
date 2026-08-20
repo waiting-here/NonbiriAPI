@@ -32,7 +32,8 @@ After signing in to the admin station, the site configuration page can change th
 - `default_endpoint_limit`;
 - `default_rpm_per_user` and `global_rpm`;
 - `default_per_endpoint_concurrency` and `egress_global_concurrency`;
-- `discord_guild_id` and `discord_role_id`.
+- `discord_guild_id` and `discord_role_id`;
+- `maintenance_mode` — a server-side authoritative admission gate. While on, the server refuses every user-station `/api/*` and `/v1/*` request with a stable `503 service_unavailable` envelope (`source: platform`, `no-store`) except a strict allowlist (`/healthz`, the public config endpoints, and `/api/auth/logout`); already-issued user sessions and caller keys are affected immediately. The admin station is never gated, so an operator can always toggle this off. The toggle is atomically live-applied and loaded from the database at startup. See `docs/api-contract.md` §6 for the full route matrix and semantics.
 
 The Discord registration gate is intentionally restrictive: a new account must satisfy both the configured guild and role. For a private-server trial, set both IDs to the trial server and role in the administrator site configuration. Keep the server and role identifiers private unless disclosure is necessary.
 

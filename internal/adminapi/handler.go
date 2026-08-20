@@ -31,6 +31,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -51,11 +52,16 @@ type HandlerDeps struct {
 }
 
 // Handler is the mountable admin-controls route tree, wrapped in the shared
-// no-store API boundary. A nil store fails every route closed.
+// no-store API boundary. A nil store fails every route closed. The
+// siteConfigMu serializes the site-config PATCH read→runtime apply→persist→
+// revert step per handler so concurrent patches to the same key cannot
+// interleave their apply and persist orders and leave the database and the
+// runtime singleton drifted apart.
 type Handler struct {
-	store   *db.Store
-	runtime RuntimeApplier
-	mux     *http.ServeMux
+	store        *db.Store
+	runtime      RuntimeApplier
+	mux          *http.ServeMux
+	siteConfigMu sync.Mutex
 }
 
 // NewHandler builds the route tree. It is meant to be wrapped by the admin
@@ -335,10 +341,12 @@ func (h *Handler) getSiteConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 // patchSiteConfig handles PATCH /admin/api/site-config/{key}. The value is
-// validated against the key's typed spec, applied to the runtime singletons
-// through the optional applier (fail closed: a failed apply leaves runtime
-// and DB untouched), then persisted. A persistence failure after a
-// successful apply reverts the runtime singleton to its previous value so DB
+// validated against the key's typed spec, then the read→runtime apply→persist→
+// revert step runs under the handler's site-config lock so concurrent patches to
+// the same key cannot interleave. The runtime singleton is applied first (fail
+// closed: a failed apply leaves runtime and DB untouched), then the value is
+// persisted; a persistence failure reverts the runtime singleton to its previous
+// value (or the frozen canonical default when the prior row was missing) so DB
 // and runtime cannot drift.
 func (h *Handler) patchSiteConfig(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
@@ -368,6 +376,13 @@ func (h *Handler) patchSiteConfig(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, derr)
 		return
 	}
+	// Serialize the read→apply→persist→revert step per handler so concurrent
+	// patches to the same key cannot interleave: without this lock one patch's
+	// runtime apply could land between another's apply and persist (or a revert
+	// could use a stale previous), leaving the persisted value and the live
+	// runtime singleton disagreed.
+	h.siteConfigMu.Lock()
+	defer h.siteConfigMu.Unlock()
 	previous, err := h.store.GetSiteConfigValue(key)
 	if err != nil {
 		writeRepoErr(w, err)

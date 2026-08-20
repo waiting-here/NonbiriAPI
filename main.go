@@ -34,6 +34,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/issues"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 	"github.com/waiting-here/NonbiriAPI/internal/logapi"
+	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/model"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -291,7 +292,8 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		return nil, fmt.Errorf("flow controller: %w", err)
 	}
 	cleanup = append(cleanup, flowController.Close)
-	runtimeApplier := adminapi.NewRuntimeApplier(flowController, stack, oauthStartThrottle)
+	maintenanceGate := maintenance.New()
+	runtimeApplier := adminapi.NewRuntimeApplier(flowController, stack, oauthStartThrottle, maintenanceGate)
 	if err := applyPersistedRuntimeConfig(store, runtimeApplier); err != nil {
 		return nil, fmt.Errorf("apply persisted runtime configuration: %w", err)
 	}
@@ -327,7 +329,13 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		logapi.NewHandler(logapi.HandlerDeps{Store: store}),
 		issues.NewHandler(issues.HandlerDeps{Store: store}),
 		exportHandler, lifecycleService, forwardService, flowMiddleware, store)
-	appHandler := buildAdminAndRootAPI(cfg, userAuth, adminAuth, api, adminControls, alertapi.NewHandler(alertapi.HandlerDeps{Store: store}), logapi.NewHandler(logapi.HandlerDeps{Store: store}), lifecycleService, store, forwardService, flowMiddleware)
+	// The maintenance gate sits after the host/station edge (which only lets
+	// /api/* and /v1/* reach the user station) and before any auth or business
+	// handler. It is live-applied from site_config and loaded from the DB at
+	// startup, so a toggle takes effect immediately for already-issued
+	// sessions and caller keys; the admin station is never routed through it.
+	gatedAPI := maintenance.GateMiddleware(maintenanceGate, api)
+	appHandler := buildAdminAndRootAPI(cfg, userAuth, adminAuth, gatedAPI, adminControls, alertapi.NewHandler(alertapi.HandlerDeps{Store: store}), logapi.NewHandler(logapi.HandlerDeps{Store: store}), lifecycleService, store, forwardService, flowMiddleware)
 
 	maintenanceCtx, stopMaintenance := context.WithCancel(context.Background())
 	app = &application{handler: appHandler, stop: stopMaintenance, close: cleanup}
@@ -386,6 +394,7 @@ func applyPersistedRuntimeConfig(store *db.Store, runtime adminapi.RuntimeApplie
 		adminapi.KeyOAuthStartRateLimit,
 		adminapi.KeyOAuthStartRateWindowSecs,
 		adminapi.KeyOAuthStartRatePenaltySecs,
+		adminapi.KeyMaintenanceMode,
 	} {
 		if value, ok := values[key]; ok {
 			if err := runtime.ApplySiteConfig(context.Background(), key, value); err != nil {
