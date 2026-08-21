@@ -204,11 +204,17 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	handler := newExportHandler(t, st, user, &fakeElevation{allowCount: 1}, nil)
 
 	// The usage summary carries the four-bucket totals alongside the legacy
-	// mirrors; record one known request so the projection is exercised.
+	// mirrors; record one known request so the projection is exercised. The
+	// timezone offset is configured first so the same request also lands in
+	// the user's own daily activity summary (schema v2 section).
+	if err := st.SetSiteTimezoneOffsetMinutes(330); err != nil {
+		t.Fatal(err)
+	}
 	if err := st.RecordRequest(context.Background(), db.RequestLogInput{
 		AttemptID: "export-usage-attempt", UserID: user.ID, Model: "provider/model",
 		StatusCode: 200, StartedAt: time.Unix(1700000000, 0).UTC(), CompletedAt: time.Unix(1700000001, 0).UTC(),
 		UncachedInputTokens: 2, CacheWriteInputTokens: 3, CacheReadInputTokens: 5, OutputTokens: 7,
+		Activity: &db.ActivityDelta{APIRequests: 1, UncachedInputTokens: 2, CacheWriteInputTokens: 3, CacheReadInputTokens: 5, OutputTokens: 7},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -267,11 +273,22 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 		LogSummary struct {
 			TotalLogs int64 `json:"total_logs"`
 		} `json:"log_summary"`
+		ActivityDaily []struct {
+			Day                   int64 `json:"day"`
+			ProductActive         bool  `json:"product_active"`
+			APIRequests           int64 `json:"api_requests"`
+			UncachedInputTokens   int64 `json:"uncached_input_tokens"`
+			CacheWriteInputTokens int64 `json:"cache_write_input_tokens"`
+			CacheReadInputTokens  int64 `json:"cache_read_input_tokens"`
+			OutputTokens          int64 `json:"output_tokens"`
+			Checkins              int64 `json:"checkins"`
+			ConsoleWrites         int64 `json:"console_writes"`
+		} `json:"activity_daily"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &pkg); err != nil {
 		t.Fatalf("decode package: %v body=%s", err, rec.Body.String())
 	}
-	if pkg.SchemaVersion != 1 || pkg.User.ID != user.ID || pkg.User.Discord != "discord-export" || pkg.User.Username != "alice" {
+	if pkg.SchemaVersion != 2 || pkg.User.ID != user.ID || pkg.User.Discord != "discord-export" || pkg.User.Username != "alice" {
 		t.Fatalf("package header=%+v", pkg)
 	}
 	if len(pkg.Endpoints) != 1 || pkg.Endpoints[0].BaseURL != "https://upstream.example/v1/" || len(pkg.Endpoints[0].Keys) != 1 || pkg.Endpoints[0].Keys[0].DisplayHead != "head" {
@@ -290,6 +307,17 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 		pkg.Usage.TotalCacheReadInputTokens != 5 || pkg.Usage.TotalOutputTokens != 7 ||
 		pkg.Usage.TotalPromptTokens != 10 || pkg.Usage.TotalCompletionTokens != 7 {
 		t.Fatalf("usage buckets=%+v", pkg.Usage)
+	}
+	// The user's own daily activity summary is exported (schema v2); the
+	// site-wide rollup table is never part of a personal export.
+	if len(pkg.ActivityDaily) != 1 {
+		t.Fatalf("activity_daily=%+v", pkg.ActivityDaily)
+	}
+	day := pkg.ActivityDaily[0]
+	if day.ProductActive != true || day.APIRequests != 1 || day.UncachedInputTokens != 2 ||
+		day.CacheWriteInputTokens != 3 || day.CacheReadInputTokens != 5 || day.OutputTokens != 7 ||
+		day.ConsoleWrites != 0 || day.Checkins != 0 {
+		t.Fatalf("activity_daily row=%+v", day)
 	}
 
 	// Whitelist enforcement: no secret material anywhere in the package.

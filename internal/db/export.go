@@ -125,6 +125,65 @@ LIMIT ?`, userID, limit+1)
 	return scanExportBindings(rows, limit)
 }
 
+// ActivityDailyExportRow is one site-local day of the user's own activity
+// summary for the export package. Metadata only: counters and day keys, no
+// model names, no request content.
+type ActivityDailyExportRow struct {
+	Day                   int64 `json:"day"`
+	ProductActive         bool  `json:"product_active"`
+	APIRequests           int64 `json:"api_requests"`
+	UncachedInputTokens   int64 `json:"uncached_input_tokens"`
+	CacheWriteInputTokens int64 `json:"cache_write_input_tokens"`
+	CacheReadInputTokens  int64 `json:"cache_read_input_tokens"`
+	OutputTokens          int64 `json:"output_tokens"`
+	Checkins              int64 `json:"checkins"`
+	ConsoleWrites         int64 `json:"console_writes"`
+	GameActive            bool  `json:"game_active"`
+	GameRounds            int64 `json:"game_rounds"`
+}
+
+// ListExportActivityDaily returns up to limit daily activity summary rows
+// owned by userID, newest day first. Retention bounds the table to 400 days,
+// so the collection is naturally finite; crossing the explicit limit still
+// fails closed like every other export projection.
+func (s *Store) ListExportActivityDaily(ctx context.Context, userID int64, limit int) ([]ActivityDailyExportRow, error) {
+	if userID <= 0 {
+		return nil, ErrNotFound
+	}
+	if limit <= 0 || limit > ExportCollectionLimit {
+		return nil, ErrExportLimit
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT day, product_active, api_requests,
+       uncached_input_tokens, cache_write_input_tokens, cache_read_input_tokens, output_tokens,
+       checkins, console_writes, game_active, game_rounds
+FROM user_activity_daily WHERE user_id=? ORDER BY day DESC LIMIT ?`, userID, limit+1)
+	if err != nil {
+		return nil, fmt.Errorf("export activity daily: %w", err)
+	}
+	defer rows.Close()
+	out := make([]ActivityDailyExportRow, 0, min(limit, 64))
+	for rows.Next() {
+		var row ActivityDailyExportRow
+		var productActive, gameActive int
+		if err := rows.Scan(&row.Day, &productActive, &row.APIRequests,
+			&row.UncachedInputTokens, &row.CacheWriteInputTokens, &row.CacheReadInputTokens, &row.OutputTokens,
+			&row.Checkins, &row.ConsoleWrites, &gameActive, &row.GameRounds); err != nil {
+			return nil, fmt.Errorf("export activity daily: %w", err)
+		}
+		row.ProductActive = productActive == 1
+		row.GameActive = gameActive == 1
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("export activity daily: %w", err)
+	}
+	if len(out) > limit {
+		return nil, ErrExportLimit
+	}
+	return out, nil
+}
+
 // ExportLogSummaryForUser aggregates the user's request-log metadata into one
 // bounded summary row. A user with no logs yields an all-zero summary, never
 // an error; a missing user yields ErrNotFound.

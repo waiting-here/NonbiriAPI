@@ -233,6 +233,10 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	if err != nil {
 		return nil, err
 	}
+	activityDaily, err := s.store.ListExportActivityDaily(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
 
 	keysByEndpoint := make(map[int64][]exportKey, len(keys))
 	for _, key := range keys {
@@ -250,7 +254,7 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	}
 
 	packageValue := exportPackage{
-		SchemaVersion: 1,
+		SchemaVersion: 2,
 		ExportedAt:    time.Now().UTC(),
 		User: exportUser{
 			ID: user.ID, DiscordID: user.DiscordID, Username: user.Username, Avatar: user.Avatar,
@@ -276,6 +280,10 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 			UsageUnknownLogs: logSummary.UsageUnknownLogs,
 			AvgDurationMs:    logSummary.AvgDurationMs,
 		},
+		ActivityDaily: make([]db.ActivityDailyExportRow, 0, len(activityDaily)),
+	}
+	for _, day := range activityDaily {
+		packageValue.ActivityDaily = append(packageValue.ActivityDaily, day)
 	}
 	for _, ep := range endpoints {
 		packageValue.Endpoints = append(packageValue.Endpoints, exportEndpoint{
@@ -323,6 +331,10 @@ type exportPackage struct {
 	CallerKey     *exportCallerKey `json:"caller_key,omitempty"`
 	Usage         exportUsage      `json:"usage"`
 	LogSummary    exportLogSummary `json:"log_summary"`
+	// ActivityDaily is the user's own per-day activity summary (schema v2):
+	// counters and site-local day keys only — no model names and no request
+	// content. The site-wide rollup table is never part of a personal export.
+	ActivityDaily []db.ActivityDailyExportRow `json:"activity_daily"`
 }
 
 type exportUser struct {

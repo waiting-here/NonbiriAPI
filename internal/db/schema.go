@@ -285,6 +285,59 @@ CREATE INDEX IF NOT EXISTS idx_admin_alerts_created ON admin_alerts(created_at);
 CREATE INDEX IF NOT EXISTS idx_admin_alerts_subject_user ON admin_alerts(subject_user_id);
 CREATE INDEX IF NOT EXISTS idx_admin_alerts_unresolved ON admin_alerts(resolved, created_at);
 
+-- ===== user_activity_daily =================================================
+-- Per-user daily product-activity aggregation behind the administrator
+-- activity screen. day is the site-local day key: the unix seconds of that
+-- day's local midnight under the explicitly configured fixed site offset
+-- (see timezone.go). A day key is never generated while the offset is unset,
+-- so no row can ever exist that a later offset change would re-bucket.
+-- product_active marks a day on which the user did at least one successful
+-- API request, check-in, or console write; protocol failures and pre-dispatch
+-- failures never count. The four token buckets mirror request_logs' neutral
+-- mutually exclusive form. game_active/game_rounds are reserved columns for a
+-- future game rail: alpha.2 never writes a non-zero value into them.
+CREATE TABLE IF NOT EXISTS user_activity_daily (
+	day            INTEGER NOT NULL,                                -- site-local day key (unix seconds of local midnight); no implicit-UTC fallback
+	user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	product_active INTEGER NOT NULL DEFAULT 0 CHECK(product_active IN (0,1)),
+	api_requests   INTEGER NOT NULL DEFAULT 0,
+	uncached_input_tokens    INTEGER NOT NULL DEFAULT 0,
+	cache_write_input_tokens INTEGER NOT NULL DEFAULT 0,
+	cache_read_input_tokens  INTEGER NOT NULL DEFAULT 0,
+	output_tokens            INTEGER NOT NULL DEFAULT 0,
+	checkins       INTEGER NOT NULL DEFAULT 0,
+	console_writes INTEGER NOT NULL DEFAULT 0,
+	game_active    INTEGER NOT NULL DEFAULT 0 CHECK(game_active IN (0,1)),  -- reserved; alpha.2 keeps 0
+	game_rounds    INTEGER NOT NULL DEFAULT 0,                      -- reserved; alpha.2 keeps 0
+	updated_at     INTEGER NOT NULL,
+	PRIMARY KEY (day, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_activity_user ON user_activity_daily(user_id);
+
+-- ===== site_activity_daily ==================================================
+-- Site-wide daily rollup of user_activity_daily. The counters are the exact
+-- sum over that day's per-user rows and are recomputed from the surviving
+-- rows inside the same transaction whenever a user is deleted, so a deleted
+-- account can never leave a contribution behind. distinct_product_users
+-- counts users whose row had product_active=1 that day; it is suppressed to
+-- JSON null at the API boundary when it is below the k-anonymity threshold.
+-- game_active/game_rounds stay 0 in alpha.2 (reserved).
+CREATE TABLE IF NOT EXISTS site_activity_daily (
+	day            INTEGER PRIMARY KEY,                             -- site-local day key, same semantics as user_activity_daily.day
+	product_active INTEGER NOT NULL DEFAULT 0 CHECK(product_active IN (0,1)),
+	api_requests   INTEGER NOT NULL DEFAULT 0,
+	uncached_input_tokens    INTEGER NOT NULL DEFAULT 0,
+	cache_write_input_tokens INTEGER NOT NULL DEFAULT 0,
+	cache_read_input_tokens  INTEGER NOT NULL DEFAULT 0,
+	output_tokens            INTEGER NOT NULL DEFAULT 0,
+	checkins       INTEGER NOT NULL DEFAULT 0,
+	console_writes INTEGER NOT NULL DEFAULT 0,
+	game_active    INTEGER NOT NULL DEFAULT 0 CHECK(game_active IN (0,1)),  -- reserved; alpha.2 keeps 0
+	game_rounds    INTEGER NOT NULL DEFAULT 0,                      -- reserved; alpha.2 keeps 0
+	distinct_product_users INTEGER NOT NULL DEFAULT 0,
+	updated_at     INTEGER NOT NULL
+);
+
 -- ===== site_config ==========================================================
 -- Runtime key/value configuration surfaced via the administrator station.
 CREATE TABLE IF NOT EXISTS site_config (
