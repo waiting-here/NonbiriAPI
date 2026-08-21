@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
@@ -175,6 +176,13 @@ func AdminFromContext(ctx context.Context) (*db.User, bool) {
 // authenticated caller is never actively banned (a ban deletes its sessions),
 // but a charity-eligibility suspension can be in force while the account
 // itself remains usable.
+//
+// Additive level/economy projection (implementation contract §6.2): credits
+// and donation_credit are canonical decimal milli-credit strings;
+// effective_level is the server-authoritative resolved level for THIS request
+// (read paths may lazily persist an auto-level promotion); manual_level is
+// the nullable manual override (null = automatic). Level is display/state
+// data only — capability decisions are made server-side per use.
 type UserResponse struct {
 	ID                    int64     `json:"id"`
 	Username              string    `json:"username"`
@@ -189,6 +197,10 @@ type UserResponse struct {
 	CharitySuspendedUntil *int64    `json:"charity_suspended_until"`
 	EndpointLimit         *int      `json:"endpoint_limit"`
 	RPMLimit              *int      `json:"rpm_limit"`
+	Credits               string    `json:"credits"`
+	DonationCredit        string    `json:"donation_credit"`
+	EffectiveLevel        int       `json:"effective_level"`
+	ManualLevel           *int      `json:"manual_level"`
 	CreatedAt             time.Time `json:"created_at"`
 }
 
@@ -201,7 +213,11 @@ func unixSecondsPtr(t *time.Time) *int64 {
 	return &v
 }
 
-func publicUser(user *db.User) UserResponse {
+// publicUser projects the user row with the effective level resolved for this
+// request by the authoritative resolver. effectiveLevel must come from
+// db.Store.ResolveEffectiveLevel (it may have lazily persisted a promotion);
+// callers never recompute a level from thresholds themselves.
+func publicUser(user *db.User, effectiveLevel int) UserResponse {
 	if user == nil {
 		return UserResponse{}
 	}
@@ -213,6 +229,10 @@ func publicUser(user *db.User) UserResponse {
 		BannedUntil:           unixSecondsPtr(user.BannedUntil),
 		CharitySuspendedUntil: unixSecondsPtr(user.CharitySuspendedUntil),
 		EndpointLimit:         user.EndpointLimit, RPMLimit: user.RPMLimit, CreatedAt: user.CreatedAt,
+		Credits:        credits.FormatAmount(user.Credits),
+		DonationCredit: credits.FormatAmount(user.DonationCredit),
+		EffectiveLevel: effectiveLevel,
+		ManualLevel:    user.Level,
 	}
 }
 

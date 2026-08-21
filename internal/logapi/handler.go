@@ -21,13 +21,15 @@
 // httperr boundary.
 //
 // Level-5 steward mount point (frozen prefix /api/steward/, logs subpath
-// StewardLogsPath): the level5 session middleware is not implemented yet, so
-// no steward route is registered here. When it lands, it must wrap this
-// package's mux (or an equivalent one) with middleware that re-resolves the
-// effective level >= 5 on every request from server-authoritative state, and
-// reuse the administrator projection (db.QueryAdminRequestLogs) — which by
-// construction excludes user notes and user-chosen model names. No steward
-// capability may be reachable through the plain user-session routes.
+// StewardLogsPath): the authorization frame now exists (internal/steward:
+// user-station boundary, user-session middleware and a per-request live
+// effective-level >= 5 gate, registering no business route itself), but the
+// steward logs route is still NOT registered anywhere. When its rail lands,
+// it must register StewardLogsPath through steward.Handler.Handle so every
+// request re-resolves the effective level >= 5 from server-authoritative
+// state, and reuse the administrator projection (db.QueryAdminRequestLogs) —
+// which by construction excludes user notes and user-chosen model names. No
+// steward capability may be reachable through the plain user-session routes.
 package logapi
 
 import (
@@ -46,12 +48,13 @@ type HandlerDeps struct {
 	Store *db.Store
 }
 
-// Steward route mount points for the level-5 co-management rail. The level5
-// session middleware is not implemented yet, so these paths are deliberately
-// NOT registered on any mux: an unauthenticated or under-privileged route must
-// not exist even as a 403. When the level5 rail lands, register StewardLogsPath
-// on the user station behind that middleware and serve the administrator
-// projection through it (see the package comment).
+// Steward route mount points for the level-5 co-management rail. The
+// authorization frame lives in internal/steward (per-request live level >= 5
+// gate), but the steward logs business route is deliberately still NOT
+// registered on any mux: an unauthenticated or under-privileged route must
+// not exist even as a 403. When the steward logs rail lands, register
+// StewardLogsPath through steward.Handler.Handle on the user station and
+// serve the administrator projection through it (see the package comment).
 const (
 	StewardLogsPath = "/api/steward/logs"
 )

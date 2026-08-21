@@ -201,7 +201,16 @@ func TestExportRateLimitedPerUser(t *testing.T) {
 func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	st := lifecycleTestStore(t)
 	user := seedExportFixture(t, st)
-	handler := newExportHandler(t, st, user, &fakeElevation{allowCount: 1}, nil)
+	// This test resolves the CURRENT row (not the seed-time snapshot) so the
+	// level state set below is projected exactly as a live session would see
+	// it.
+	handler := NewHandler(HandlerDeps{
+		Store: st,
+		Resolve: func(*http.Request) (*db.User, error) {
+			return st.GetUserByID(user.ID)
+		},
+		Elevation: &fakeElevation{allowCount: 1},
+	})
 
 	// The usage summary carries the four-bucket totals alongside the legacy
 	// mirrors; record one known request so the projection is exercised. The
@@ -226,6 +235,13 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// Level state exports as small integers: a manual override set just for
+	// this assertion and the untouched automatic high-water mark. The handler
+	// above resolves the current row, so no fixture refresh is needed.
+	manualLevel := 2
+	if _, err := st.SetUserManualLevel(user.ID, &manualLevel); err != nil {
+		t.Fatalf("set manual level: %v", err)
+	}
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, exportRequest("cap-token"))
 	if rec.Code != http.StatusOK {
@@ -244,9 +260,11 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	var pkg struct {
 		SchemaVersion int `json:"schema_version"`
 		User          struct {
-			ID       int64  `json:"id"`
-			Discord  string `json:"discord_id"`
-			Username string `json:"username"`
+			ID          int64  `json:"id"`
+			Discord     string `json:"discord_id"`
+			Username    string `json:"username"`
+			ManualLevel *int   `json:"manual_level"`
+			AutoLevel   int    `json:"auto_level"`
 		} `json:"user"`
 		CreditLedger []struct {
 			ID                  int64  `json:"id"`
@@ -306,6 +324,9 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	}
 	if pkg.SchemaVersion != 2 || pkg.User.ID != user.ID || pkg.User.Discord != "discord-export" || pkg.User.Username != "alice" {
 		t.Fatalf("package header=%+v", pkg)
+	}
+	if pkg.User.ManualLevel == nil || *pkg.User.ManualLevel != 2 || pkg.User.AutoLevel != 1 {
+		t.Fatalf("level export = (%+v, %d), want (2, 1)", pkg.User.ManualLevel, pkg.User.AutoLevel)
 	}
 	if len(pkg.Endpoints) != 1 || pkg.Endpoints[0].BaseURL != "https://upstream.example/v1/" || len(pkg.Endpoints[0].Keys) != 1 || pkg.Endpoints[0].Keys[0].DisplayHead != "head" {
 		t.Fatalf("endpoints=%+v", pkg.Endpoints)

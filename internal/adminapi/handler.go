@@ -167,9 +167,12 @@ func (h *Handler) getUser(w http.ResponseWriter, r *http.Request) {
 // patchUser handles PATCH /admin/api/users/{id}. Two disjoint modes:
 //
 //  1. profile mode: endpoint_limit / rpm_limit (nullable; NULL restores the
-//     global default) and lang. rpm_limit is rejected above the current global
-//     per-user cap; the administrator raises that cap via default_rpm_per_user
-//     first.
+//     global default), lang, and level (nullable; NULL resets the manual
+//     override so the automatic high-water mark applies again; an integer
+//     1..5 is a manual override, level 5 included). rpm_limit is rejected
+//     above the current global per-user cap; the administrator raises that
+//     cap via default_rpm_per_user first. Setting level on the administrator
+//     row is forbidden (administrators are excluded from the level system).
 //  2. economy mode: credits / donation_credit are canonical decimal-string
 //     INCREMENTS (deltas, never target balances). Either delta requires
 //     operation_id (idempotency key, client namespace) and a bounded reason;
@@ -194,6 +197,7 @@ func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {
 		EndpointLimit  json.RawMessage `json:"endpoint_limit"`
 		RPMLimit       json.RawMessage `json:"rpm_limit"`
 		Lang           *string         `json:"lang"`
+		Level          json.RawMessage `json:"level"`
 		Credits        *string         `json:"credits"`
 		DonationCredit *string         `json:"donation_credit"`
 		OperationID    *string         `json:"operation_id"`
@@ -204,7 +208,8 @@ func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {
 	}
 	economyMode := body.Credits != nil || body.DonationCredit != nil ||
 		body.OperationID != nil || body.Reason != nil
-	profileMode := body.EndpointLimit != nil || body.RPMLimit != nil || body.Lang != nil
+	profileMode := body.EndpointLimit != nil || body.RPMLimit != nil || body.Lang != nil ||
+		body.Level != nil
 	if economyMode && profileMode {
 		writeErr(w, httperr.New(httperr.CodeInvalidRequest,
 			"credit adjustments cannot be mixed with other fields"))
@@ -226,6 +231,20 @@ func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {
 		}
 		patch.EndpointLimitSet = true
 		patch.EndpointLimit = value
+	}
+	if present, value, ok := nullableInt(body.Level); present {
+		// level is tri-state like the limit fields: absent = unchanged,
+		// explicit null = reset to automatic, integer = manual override.
+		if !ok {
+			writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid level"))
+			return
+		}
+		if value != nil && (*value < db.MinLevel || *value > db.MaxLevel) {
+			writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid level"))
+			return
+		}
+		patch.LevelSet = true
+		patch.Level = value
 	}
 	if present, value, ok := nullableInt(body.RPMLimit); present {
 		if !ok {
@@ -273,6 +292,7 @@ func (h *Handler) patchUserCreditDelta(w http.ResponseWriter, r *http.Request, a
 	EndpointLimit  json.RawMessage `json:"endpoint_limit"`
 	RPMLimit       json.RawMessage `json:"rpm_limit"`
 	Lang           *string         `json:"lang"`
+	Level          json.RawMessage `json:"level"`
 	Credits        *string         `json:"credits"`
 	DonationCredit *string         `json:"donation_credit"`
 	OperationID    *string         `json:"operation_id"`
@@ -511,6 +531,33 @@ func (h *Handler) patchSiteConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		httperr.WriteJSON(w, http.StatusOK, siteConfigPatchResp{Key: key, Value: int(n)})
+		return
+	}
+	// The three level promotion thresholds have their own atomic repository
+	// path: the enabled-chain cross-validation and the write share one
+	// transaction (never a separate read-then-write). Like the timezone
+	// offset they have no runtime singleton — every level resolution reads
+	// the authoritative site_config snapshot — so they bypass the generic
+	// apply/persist step below. The write still records the administrator's
+	// console write as product activity inside that same transaction, exactly
+	// like the generic site-config path.
+	if key == KeyLevelThreshold2Milli || key == KeyLevelThreshold3Milli || key == KeyLevelThreshold4Milli {
+		n, perr := strconv.ParseInt(value, 10, 64)
+		if perr != nil {
+			writeErr(w, httperr.New(httperr.CodeInternal, "configuration update failed"))
+			return
+		}
+		if err := h.store.SetLevelThresholdMilli(r.Context(), key, n, admin.ID, time.Now()); err != nil {
+			if errors.Is(err, db.ErrConflict) {
+				writeErr(w, httperr.New(httperr.CodeConflict,
+					"enabled level thresholds must be strictly increasing"))
+				return
+			}
+			slog.Error("site config update failed", "key", key, "err", err)
+			writeErr(w, httperr.New(httperr.CodeInternal, "configuration update failed"))
+			return
+		}
+		httperr.WriteJSON(w, http.StatusOK, siteConfigPatchResp{Key: key, Value: value})
 		return
 	}
 	// Serialize the read→apply→persist→revert step per handler so concurrent

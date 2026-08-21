@@ -265,7 +265,8 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 			ID: user.ID, DiscordID: user.DiscordID, Username: user.Username, Avatar: user.Avatar,
 			Lang: user.Lang, Credits: credits.FormatAmount(user.Credits),
 			DonationCredit: credits.FormatAmount(user.DonationCredit),
-			EndpointLimit:  user.EndpointLimit, RPMLimit: user.RPMLimit,
+			ManualLevel:    user.Level, AutoLevel: user.AutoLevel,
+			EndpointLimit: user.EndpointLimit, RPMLimit: user.RPMLimit,
 			CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt,
 		},
 		Endpoints: make([]exportEndpoint, 0, len(endpoints)),
@@ -360,12 +361,18 @@ type exportUser struct {
 	Lang      string `json:"lang"`
 	// Economic balances as canonical decimal strings: the signed consumption
 	// balance and the cumulative donor-reward balance.
-	Credits        string    `json:"credits"`
-	DonationCredit string    `json:"donation_credit"`
-	EndpointLimit  *int      `json:"endpoint_limit"`
-	RPMLimit       *int      `json:"rpm_limit"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	Credits        string `json:"credits"`
+	DonationCredit string `json:"donation_credit"`
+	// Level state (small integer state values, not economic amounts):
+	// manual_level is the nullable manual override (null = automatic);
+	// auto_level is the persisted automatic high-water mark (1..4). No
+	// violation-window or threshold-configuration data is exported.
+	ManualLevel   *int      `json:"manual_level"`
+	AutoLevel     int       `json:"auto_level"`
+	EndpointLimit *int      `json:"endpoint_limit"`
+	RPMLimit      *int      `json:"rpm_limit"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 type exportEndpoint struct {

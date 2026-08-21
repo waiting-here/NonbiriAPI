@@ -283,7 +283,7 @@ Auth: a valid user session cookie. Banned users are denied. All responses are `n
 |---|---|---|---|---|---|
 | `GET` | `/api/auth/discord/start` | none | — | `302` to Discord's authorize URL; sets the OAuth `state` cookie (HMAC, short TTL, HttpOnly, SameSite). Before a state is issued, a per-client-IP admission throttle (configurable via site_config `oauth_start_rate_*`; `oauth_start_rate_limit=0` disables it) is applied as a second layer behind the reverse-proxy per-IP limit | `rate_limited` (429, with `Retry-After`) when the per-client-IP admission limit is exceeded; `service_unavailable` (503) if the Discord end is misconfigured or the admission throttle's bounded entry store is full (fail-closed, never evicts a live state) |
 | `GET` | `/api/auth/discord/callback` | OAuth `state` cookie | query: `code`, `state` | on success: sets the user session cookie and `302` to the user SPA; on mismatch/failure: `400 invalid_request` / `401 unauthorized` | `invalid_request`, `unauthorized`, `conflict`, `service_unavailable` |
-| `GET` | `/api/session` | user session | — | `200 {user:{id,username,avatar,avatar_url,guild_nick,guild_avatar_url,lang,is_banned,blocked_reason?,banned_until,charity_suspended_until,endpoint_limit,rpm_limit,created_at}}`; `banned_until`/`charity_suspended_until` are nullable unix seconds | `unauthorized` |
+| `GET` | `/api/session` | user session | — | `200 {user:{id,username,avatar,avatar_url,guild_nick,guild_avatar_url,lang,is_banned,blocked_reason?,banned_until,charity_suspended_until,endpoint_limit,rpm_limit,credits,donation_credit,effective_level,manual_level,created_at}}`; `banned_until`/`charity_suspended_until` are nullable unix seconds; `credits`/`donation_credit` are canonical decimal milli-credit strings (`credits` may carry `-`); `effective_level` is the server-authoritative level resolved for this request (a due automatic promotion is lazily persisted by that same resolution); `manual_level` is the nullable manual override (`null` = automatic) and is display/state data only — capability decisions are made server-side per use | `unauthorized` |
 | `POST` | `/api/auth/logout` | user session | — | `204`; clears the session cookie | `unauthorized` |
 
 Registration gate (Discord): registration is allowed only when `registration_open` is true and both the configured `discord_guild_id` and `discord_role_id` match the Discord identity. If either ID is blank or registration is closed, registration is paused (the callback returns `service_unavailable` for a new identity),
@@ -453,7 +453,11 @@ Both endpoints require `X-Elevated-Token` from §3.2.
 | `POST` | `/api/account/delete` | user session + elevated | `{confirm:"DELETE"}` | `204`; deletes the account and all linked data (endpoints, keys, models, bindings, request logs, caller key, alerts/callbacks); late callbacks against a deleted account are atomically suppressed server-side so the insert no-ops; the current session is invalidated | `elevated_required`, `unauthorized`, `conflict`, `internal` |
 
 The export package excludes upstream secret material by policy; it carries enough metadata to
-be usable as a portable account snapshot. The package uses `schema_version: 1` and an explicit server-side field whitelist; future database columns do not enter it automatically.
+be usable as a portable account snapshot. The package uses `schema_version: 2` and an explicit server-side field whitelist; future database columns do not enter it automatically.
+The user section carries the economy balances as canonical decimal strings (`credits`,
+`donation_credit`) and the level state as small integers (`manual_level` nullable — `null`
+means automatic — and `auto_level`, the persisted automatic high-water mark); no
+violation-window or threshold-configuration data is exported.
 
 ### 3.9 User issues
 
@@ -482,6 +486,28 @@ be usable as a portable account snapshot. The package uses `schema_version: 1` a
   nor strand an unresolved one. The administrator alert center (`admin_alerts`) is a
   separate surface and is never reached through these routes.
 
+### 3.10 Level-5 steward prefix — `/api/steward/*`
+
+The frozen co-management prefix for effective level ≥ 5 users, served on the **user station**
+with the ordinary user session cookie. This contract lands the authorization frame only:
+
+- **Live authorization**: every request re-resolves the server-authoritative effective level
+  and requires ≥ 5; nothing is cached. A demotion or a manual-level reset revokes an existing
+  session on its very next request (`403 forbidden`). Level 5 is reachable only through an
+  administrator manual override (automatic levels stop at 4).
+- **Station/session boundary**: requests arriving on the admin station (or an unknown
+  station) are refused before any identity is consulted, and an administrator session is
+  never accepted — the steward capability is not an administrator capability and cannot be
+  borrowed in either direction.
+- **Envelope ordering**: an unauthenticated caller gets `401 unauthorized`; an authenticated
+  caller below level 5 gets `403 forbidden` — including for sub-paths that have no business
+  route — so the frame never reveals which steward routes exist. A level-5 caller hitting an
+  unregistered sub-path gets the ordinary `404 not_found` envelope.
+- **Current state**: no business route is registered yet (steward logs and donation reviews
+  land with their own rails). Sub-handlers receive only an opaque steward identity
+  (user id + role); they never see another user's rows by construction of those future
+  projections.
+
 ## 4. Admin station — `/admin/api/*` (admin session cookie)
 
 Auth: a valid admin session cookie. The administrator is env-configured (single row,
@@ -509,16 +535,16 @@ no password material.
 
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
-| `GET` | `/admin/api/users` | admin session | query: `page`, `page_size`, `is_banned?`, `q?` | `200 {data:[…], has_more}`; each row is `{id, username, avatar, discord_id, is_banned, banned_reason, banned_until, auto_banned, charity_suspended_until, endpoint_limit, rpm_limit, lang, total_requests, total_prompt_tokens, total_completion_tokens, total_unknown_usage_requests, credits_balance, donation_credit_balance, created_at}` | `invalid_request`, `unauthorized`, `forbidden` |
+| `GET` | `/admin/api/users` | admin session | query: `page`, `page_size`, `is_banned?`, `q?` | `200 {data:[…], has_more}`; each row is `{id, username, avatar, discord_id, is_banned, banned_reason, banned_until, auto_banned, charity_suspended_until, endpoint_limit, rpm_limit, lang, total_requests, total_prompt_tokens, total_completion_tokens, total_unknown_usage_requests, credits_balance, donation_credit_balance, level, auto_level, created_at}` | `invalid_request`, `unauthorized`, `forbidden` |
 | `GET` | `/admin/api/users/{id}` | admin session | — | `200` the same user shape with full usage metadata | `unauthorized`, `forbidden`, `not_found` |
-| `PATCH` | `/admin/api/users/{id}` | admin session | profile mode `{endpoint_limit?, rpm_limit?, lang?}` **or** economy mode `{credits?, donation_credit?, operation_id, reason}` — never both in one request | `200` updated user; profile mode: explicit null clears a limit to the global default; economy mode: the balances AFTER the (first) application are returned as `credits_balance` / `donation_credit_balance` | `invalid_request`, `unauthorized`, `forbidden`, `not_found`, `conflict`, `insufficient_credits` |
+| `PATCH` | `/admin/api/users/{id}` | admin session | profile mode `{endpoint_limit?, rpm_limit?, lang?, level?}` **or** economy mode `{credits?, donation_credit?, operation_id, reason}` — never both in one request | `200` updated user; profile mode: explicit null clears a limit to the global default (or resets `level` to automatic); economy mode: the balances AFTER the (first) application are returned as `credits_balance` / `donation_credit_balance` | `invalid_request`, `unauthorized`, `forbidden`, `not_found`, `conflict`, `insufficient_credits` |
 | `POST` | `/admin/api/users/{id}/ban` | admin session | `{reason?, duration_seconds?}`; absent or null duration = permanent, positive integer = lazy expiry deadline in seconds | `204`; atomically sets the ban (clearing `auto_banned`), deletes sessions, and deletes the caller key | `unauthorized`, `forbidden`, `not_found`, `invalid_request` |
 | `POST` | `/admin/api/users/{id}/unban` | admin session | — | `204`; clears the ban/reason/deadline but does not recreate a caller key | `unauthorized`, `forbidden`, `not_found` |
 | `DELETE` | `/admin/api/users/{id}` | admin session + `X-Elevated-Token` | — | `204`; same cleanup and late-write suppression guarantees as §3.8 | `elevated_required`, `unauthorized`, `forbidden`, `not_found`, `internal` |
 
 Pagination is 1-based: `page` defaults to 1 and `page_size` defaults to 20 and clamps to `[1,100]`. Unknown, repeated, or malformed query parameters are `invalid_request`. The administrator row is never a list candidate and no response includes caller-key or session material.
 
-`PATCH` accepts two disjoint modes. Profile mode accepts only `endpoint_limit` (integer `≥0`), `rpm_limit` (integer `≥1` and no greater than `default_rpm_per_user`), and `lang` (`zh`/`en`). Explicit `null` clears either limit; an absent field is unchanged.
+`PATCH` accepts two disjoint modes. Profile mode accepts only `endpoint_limit` (integer `≥0`), `rpm_limit` (integer `≥1` and no greater than `default_rpm_per_user`), `lang` (`zh`/`en`), and `level` (integer `1..5` or `null`). Explicit `null` clears either limit or resets `level` to automatic; an absent field is unchanged. `level` is the manual override: a stored `1..5` wins over the automatic level (level 5 — the steward capability — is reachable only this way), a reset returns the user to the persisted automatic high-water mark, and the override never disturbs that mark itself. Setting `level` on the administrator row is `forbidden` (administrators are excluded from the level system). Every user row projects `level` (nullable) and `auto_level` (the persisted automatic high-water mark, `1..4`); the effective level is resolved server-side per use and never projected as a list field.
 
 Economy mode adjusts the user's milli-credit balances: `credits` (signed consumption balance) and/or `donation_credit` (cumulative donor reward) are canonical decimal-string **increments** applied server-side — never target balances, so a caller can never name an after-value. Either delta requires `operation_id` (an idempotency key of 1..128 ASCII token characters that must not use the reserved `sys.` system namespace) and a non-empty bounded `reason` (≤1024 runes). The adjustment and its append-only audit ledger entry commit in one transaction; retrying with the same `operation_id` returns the FIRST application's result instead of applying twice. The economy and profile modes must never be mixed in one request (`invalid_request`). A `donation_credit` result below zero is refused with `conflict`; the consumption balance may legitimately go negative through settlement paths. Responses use the names `credits_balance` / `donation_credit_balance` so a delta can never be confused with the resulting balance; both are canonical decimal strings everywhere they appear.
 
@@ -552,7 +578,7 @@ Plaintext upstream secrets never appear in any admin overview, log, or usage res
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
 | `GET` | `/admin/api/site-config` | admin session | — | `200` object of known keys → values (see below) | `unauthorized`, `forbidden` |
-| `PATCH` | `/admin/api/site-config/{key}` | admin session | `{value}` | `200` updated value | `invalid_request`, `unauthorized`, `forbidden`, `not_found` |
+| `PATCH` | `/admin/api/site-config/{key}` | admin session | `{value}` | `200` updated value | `invalid_request`, `unauthorized`, `forbidden`, `not_found`, `conflict` (a `level_threshold_*_milli` write whose enabled chain is not strictly increasing) |
 
 Known `site_config` keys (the authoritative key set is enforced by the handler):
 
@@ -570,9 +596,10 @@ Known `site_config` keys (the authoritative key set is enforced by the handler):
 - `oauth_start_rate_limit`, `oauth_start_rate_window_seconds`, `oauth_start_rate_penalty_seconds` — in-process per-client-IP OAuth/elevation-start admission
 - `maintenance_mode`, `registration_open` — public boolean site-state toggles
 - `site_timezone_offset_minutes` — nullable integer, multiple of 30 in `[-720,+840]`; JSON `null` (the default) means "not configured" and is distinct from an explicit `0` (UTC). While unset, site-day-key features are force-disabled behind the ordinary `feature_disabled` error without revealing why. Once any check-in or activity row exists the value is frozen: every further write — including rewriting the identical value or after those rows are cleaned up — is refused with `conflict`. Clearing it with JSON `null` is always rejected
+- `level_threshold_2_milli`, `level_threshold_3_milli`, `level_threshold_4_milli` — the automatic level-promotion thresholds on the cumulative `donation_credit` balance, as canonical non-negative decimal milli-credit strings (`"0"`, the default, disables that level's automatic promotion). The enabled (>0) subset must be strictly increasing in level order; a disabled middle level is allowed and produces a skip (e.g. `0` / `0` / `"50000000"` promotes a qualifying user straight to level 4). The chain cross-validation and the write share one transaction, so a rejected combination (equal or decreasing enabled values) is `conflict` and nothing is written. A threshold change never recomputes any stored level: the automatic level is a persisted only-ever-raised high-water mark, lazily promoted on the next authoritative resolution, and there is no automatic downgrade in alpha.2 (raising a threshold or negatively correcting `donation_credit` leaves existing marks untouched)
 - `alert_prefs_*` — bounded administrator alert-center preference namespace
 
-Values are typed: integer keys (`default_endpoint_limit` `[0,10000]`; resource-count caps `[1,10000]`; RPM keys `[1,4096]`; concurrency keys `[1,100000]`; OAuth limit `[0,1000]`, window `[1,3600]`, penalty `[0,3600]`) accept only JSON integers. Boolean keys accept only JSON booleans. Single-line text is bounded/control-free; the four legal overrides accept bounded multiline text (≤65536 bytes, preserving newline/tab while rejecting other controls); `default_locale` is exactly `zh`/`en`, and `legal_authoritative_locale` also permits blank. `site_timezone_offset_minutes` accepts only a canonical JSON integer within its range and projects as JSON `null` while unset or manually corrupted. `null` is rejected for every other key (clearing a per-user limit is expressed through the user-level NULL
+Values are typed: integer keys (`default_endpoint_limit` `[0,10000]`; resource-count caps `[1,10000]`; RPM keys `[1,4096]`; concurrency keys `[1,100000]`; OAuth limit `[0,1000]`, window `[1,3600]`, penalty `[0,3600]`) accept only JSON integers. Boolean keys accept only JSON booleans. The three `level_threshold_*_milli` keys accept only canonical non-negative decimal strings (no exponent, `+`, leading zeros, whitespace, or negative values) and project as JSON strings, `"0"` while unset or manually corrupted. Single-line text is bounded/control-free; the four legal overrides accept bounded multiline text (≤65536 bytes, preserving newline/tab while rejecting other controls); `default_locale` is exactly `zh`/`en`, and `legal_authoritative_locale` also permits blank. `site_timezone_offset_minutes` accepts only a canonical JSON integer within its range and projects as JSON `null` while unset or manually corrupted. `null` is rejected for every other key (clearing a per-user limit is expressed through the user-level NULL
 semantics; blanking a text gate value uses `""`). `GET` returns the effective
 typed value for every known key (documented defaults when unset; `null` for the
 nullable timezone key) and never
