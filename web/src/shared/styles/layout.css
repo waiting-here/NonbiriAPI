@@ -998,6 +998,34 @@ tr:first-child td {
   gap: 0.45rem;
 }
 
+/* Expandable endpoint-overview group row: the toggle button and the indented
+   per-user detail table rendered in the following row. */
+.row-toggle {
+  min-height: 2.2rem;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.82rem;
+}
+
+.detail-row > td {
+  background: var(--nb-color-surface-raised);
+}
+
+.subtable {
+  min-width: 0;
+  font-size: 0.84rem;
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-sm);
+  overflow: hidden;
+}
+
+.subtable th {
+  font-size: 0.72rem;
+}
+
+.subtable tr:first-child td {
+  border-top: 0;
+}
+
 .limit-form {
   min-width: 12rem;
   max-width: 18rem;
