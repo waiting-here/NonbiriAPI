@@ -12,6 +12,7 @@ import { IssuesPage } from './pages/IssuesPage';
 import { AccountPage } from './pages/AccountPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { TermsPage } from './pages/TermsPage';
+import { StewardPage } from './pages/StewardPage';
 
 export const router = createBrowserRouter([
   {
@@ -26,6 +27,7 @@ export const router = createBrowserRouter([
       { path: 'logs', element: <LogsPage /> },
       { path: 'issues', element: <IssuesPage /> },
       { path: 'account', element: <AccountPage /> },
+      { path: 'steward', element: <StewardPage /> },
       { path: 'privacy', element: <PrivacyPage /> },
       { path: 'terms', element: <TermsPage /> },
       { path: 'maintenance', element: <NoticePage titleKey="common.maintenanceTitle" bodyKey="common.maintenanceBody" /> },

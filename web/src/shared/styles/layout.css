@@ -1065,6 +1065,36 @@ tr:first-child td {
   font-size: 0.88rem;
 }
 
+/* Per-user expanded edit panel: limits, credit deltas, level and ban control
+   stacked under the row they belong to. */
+.manage-row > td {
+  padding: 0.2rem 0.6rem 0.8rem;
+}
+
+.manage-panel {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.manage-panel .limit-form {
+  max-width: 26rem;
+}
+
+.manage-section {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.manage-section + .manage-section {
+  border-top: 1px solid var(--nb-color-border);
+  padding-top: 0.8rem;
+}
+
+.manage-section h3 {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
 .filter-bar {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
