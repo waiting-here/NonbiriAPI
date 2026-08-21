@@ -25,6 +25,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
 	"github.com/waiting-here/NonbiriAPI/internal/forward"
@@ -58,7 +59,9 @@ func newUsageFixture(t *testing.T, allowed []string, mutateConfig func(*usage.Co
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := db.Open(filepath.Join(t.TempDir(), "usage.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "usage.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatal(err)
@@ -110,14 +113,20 @@ func newUsageFixture(t *testing.T, allowed []string, mutateConfig func(*usage.Co
 	if err != nil {
 		t.Fatal(err)
 	}
+	safetyIdentifierKey, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
+	if err != nil {
+		t.Fatal(err)
+	}
 	service, err := forward.NewService(forward.ServiceConfig{
-		Repository: store,
-		Runner:     runner,
+		Repository:          store,
+		Runner:              runner,
+		SafetyIdentifierKey: safetyIdentifierKey,
 		Hooks: forward.Hooks{
 			Attempt: usageService.HandleAttempt,
 			Usage:   usageService.HandleUsage,
 		},
 	})
+	clear(safetyIdentifierKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,6 +134,7 @@ func newUsageFixture(t *testing.T, allowed []string, mutateConfig func(*usage.Co
 	wrapped := auth.CallerKeyMiddleware(store, exit)
 	fixture := &usageFixture{store: store, vault: vault, stack: stack, handler: wrapped, service: usageService}
 	t.Cleanup(func() {
+		_ = service.Close()
 		stack.CloseIdleConnections()
 		_ = store.Close()
 		_ = vault.Close()
@@ -161,11 +171,7 @@ func (f *usageFixture) addRoute(t *testing.T, userID int64, baseURL, provider, m
 	if err != nil {
 		t.Fatal(err)
 	}
-	ciphertext, err := f.vault.Seal([]byte(upstreamSecret))
-	if err != nil {
-		t.Fatal(err)
-	}
-	keyRow, err := f.store.CreateEndpointKey(ctx, userID, endpointRow.ID, ciphertext, "head", "tail", "", true, time.Now().Unix())
+	keyRow, err := f.store.CreateEndpointKey(ctx, userID, endpointRow.ID, []byte(upstreamSecret), "head", "tail", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -669,11 +675,11 @@ func TestUsageFailoverCommittedAttemptCountedOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keyFirst, err := fixture.store.CreateEndpointKey(ctx, user.id, endpointFirst.ID, mustSeal(t, fixture.vault, firstSecret), "", "", "", true, time.Now().Unix())
+	keyFirst, err := fixture.store.CreateEndpointKey(ctx, user.id, endpointFirst.ID, []byte(firstSecret), "", "", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}
-	keySecond, err := fixture.store.CreateEndpointKey(ctx, user.id, endpointSecond.ID, mustSeal(t, fixture.vault, secondSecret), "", "", "", true, time.Now().Unix())
+	keySecond, err := fixture.store.CreateEndpointKey(ctx, user.id, endpointSecond.ID, []byte(secondSecret), "", "", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -724,15 +730,6 @@ func TestUsageFailoverCommittedAttemptCountedOnce(t *testing.T) {
 	assertLogsLeakFree(t, fixture.store, firstSecret, secondSecret, first.URL, second.URL)
 }
 
-func mustSeal(t *testing.T, vault *secret.Vault, plaintext string) string {
-	t.Helper()
-	ciphertext, err := vault.Seal([]byte(plaintext))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return ciphertext
-}
-
 // --- raw store helpers (no egress stack needed) ---
 
 func openRawUsageStore(t *testing.T) *db.Store {
@@ -743,7 +740,9 @@ func openRawUsageStore(t *testing.T) *db.Store {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := db.Open(filepath.Join(t.TempDir(), "raw-usage.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "raw-usage.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatal(err)

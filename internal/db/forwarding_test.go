@@ -10,25 +10,19 @@ import (
 
 func seedForwardKey(t *testing.T, store *Store, endpointID int64, plaintext string, enabled bool) (int64, string) {
 	t.Helper()
-	ciphertext, err := store.secrets.Seal([]byte(plaintext))
+	var userID int64
+	if err := store.DB().QueryRow(`SELECT user_id FROM endpoints WHERE id=?`, endpointID).Scan(&userID); err != nil {
+		t.Fatalf("read endpoint owner: %v", err)
+	}
+	key, err := store.CreateEndpointKey(context.Background(), userID, endpointID, []byte(plaintext), "", "", "", enabled, 1)
 	if err != nil {
-		t.Fatalf("seal key: %v", err)
+		t.Fatalf("create key: %v", err)
 	}
-	enabledInt := 0
-	if enabled {
-		enabledInt = 1
-	}
-	result, err := store.DB().Exec(`
-INSERT INTO endpoint_keys (endpoint_id, encrypted_secret, enabled, created_at, updated_at)
-VALUES (?, ?, ?, 1, 1)`, endpointID, ciphertext, enabledInt)
+	ciphertext, err := store.GetEndpointKeyCiphertext(context.Background(), userID, endpointID, key.ID)
 	if err != nil {
-		t.Fatalf("insert key: %v", err)
+		t.Fatalf("read key ciphertext: %v", err)
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		t.Fatalf("key id: %v", err)
-	}
-	return id, ciphertext
+	return key.ID, ciphertext
 }
 
 func seedForwardBinding(t *testing.T, store *Store, modelID, keyID int64, upstream string, ord int64) int64 {

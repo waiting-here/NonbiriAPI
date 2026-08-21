@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -89,7 +90,9 @@ func authTestStore(t *testing.T) *db.Store {
 	if err != nil {
 		t.Fatalf("secret.New: %v", err)
 	}
-	st, err := db.Open(filepath.Join(t.TempDir(), "auth.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "auth.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	st, err := db.Open(dbPath, vault)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatalf("db.Open: %v", err)

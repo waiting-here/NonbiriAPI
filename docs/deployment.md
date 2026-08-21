@@ -25,7 +25,7 @@ Create the service and directories using the distribution's normal administratio
 
 ```sh
 sudo useradd --system --user-group --home /var/lib/nonbiriapi --shell /usr/sbin/nologin nonbiriapi
-sudo install -d -o nonbiriapi -g nonbiriapi -m 0750 /var/lib/nonbiriapi
+sudo install -d -o nonbiriapi -g nonbiriapi -m 0700 /var/lib/nonbiriapi
 sudo install -d -o root -g nonbiriapi -m 0750 /etc/nonbiriapi
 sudo install -d -o root -g root -m 0755 /opt/nonbiriapi/releases
 sudo install -d -o root -g root -m 0750 /var/backups/nonbiriapi
@@ -50,7 +50,7 @@ sudo chmod 0600 /etc/nonbiriapi/master.key
 
 Run those key-generation commands only on a new installation: the first command truncates its target. Replace the example key only before the first database is created. If a real database already exists, preserve its original key. The loader deliberately rejects group-readable modes such as `0640`; the service account must own the file. Unix mode `0400` or `0600` is accepted (`0600` is used by the generation commands).
 
-For a manual launch outside the example systemd unit, set `umask 077` first so SQLite database and sidecar files are owner-only. The application creates a missing database directory without group/other access, but it does not override permissions on an operator-created directory.
+For a manual launch outside the example systemd unit, the application itself now enforces owner-only access to the database directory and files: on startup it resolves the database directory to an absolute path (so the current directory for a relative database path and root for a root-level path are covered too) and verifies it is owned by the current account and grants no group or other access, and it tightens the database file and its `-wal`/`-shm` sidecars to `0600`. If it cannot verify owner-only access it refuses to start, so a non-standard launch no longer depends on the operator remembering `umask`. Create the database directory with mode `0700` owned by the service account; a pre-existing database file left world-readable (for example `0644`) is tightened to `0600`, while a group/other-accessible directory, a wrong owner, or a symlink or non-regular file at the database path or its `-wal`/`-shm` sidecars causes startup to fail closed (sidecars are checked before the database is opened). SQLite creates the `-wal` and `-shm` sidecars with the same mode as the database file, so once the database is `0600` every later sidecar creation is owner-only as well. Setting `umask 077` remains useful as a defense-in-depth layer but is no longer the sole protection.
 
 ## Build a release binary
 
@@ -184,7 +184,17 @@ Use separate `server` blocks/certificates for user and administrator hosts so th
 
 7. Verify both configured hosts through the reverse proxy, then inspect the journal for startup errors. Confirm the user station, admin station, login boundary, and `/healthz` response. Do not treat a running process alone as a successful deployment.
 
-If the binary fails to start, stop it, restore the previous symlink, and start the previous release. Do not delete the database or rotate the master key during rollback. If a future release introduces a schema migration, follow its explicit migration instructions and retain the pre-migration backup.
+If the binary fails to start, stop it, restore the previous symlink, and start the previous release. Do not delete the database or rotate the master key during rollback.
+
+The unreleased credential-envelope upgrade is a one-way in-place migration. On
+startup, the new binary upgrades endpoint credentials transactionally before it
+starts any HTTP listener or background worker. Any invalid credential aborts
+the complete credential batch and startup; it never leaves a partially upgraded
+batch serving traffic. Before installing this upgrade, stop the service and
+back up the database together with any WAL/SHM sidecars, the current binary, and
+the unchanged master key. Do not run the old binary against a database that has
+completed the credential migration. Downgrade only by restoring the complete
+pre-upgrade backup and then starting the old binary.
 
 ## Backup and restore test
 
@@ -192,7 +202,7 @@ A backup is not complete until it has been restored in an isolated directory wit
 
 ## Alpha limitations
 
-- The schema is bootstrapped idempotently; alpha.1 has no versioned migration framework.
+- The schema is bootstrapped idempotently. There is no general versioned migration framework; the unreleased credential-envelope upgrade uses one dedicated, idempotent startup migrator.
 - SMTP settings are reserved and do not send alert email in this release.
 - Real Discord OAuth and upstream success flows must be tested with disposable staging credentials before public operation.
 - Choose a maintenance window for every update and keep a known-good binary, environment backup, and database backup together.

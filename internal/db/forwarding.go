@@ -47,9 +47,10 @@ type ForwardCandidate struct {
 	Ord             int64
 }
 
-// ForwardTarget is the final dispatch projection. Its sealed credential is
-// private and can only be transferred once through TakeEncryptedSecret; it
-// must never enter a response, diagnostic, hook, or log record.
+// ForwardTarget is the final dispatch projection. Its identifiers and base URL
+// supply the authenticated credential context. The sealed credential is private
+// and can only be transferred once through TakeEncryptedSecret; it must never
+// enter a response, diagnostic, hook, or log record.
 type ForwardTarget struct {
 	BindingID       int64
 	EndpointID      int64
@@ -235,8 +236,12 @@ func (s *Store) GetForwardTarget(ctx context.Context, userID int64, fullName str
 		return ForwardTarget{}, ErrNotFound
 	}
 	var target ForwardTarget
+	var baseURL, ciphertext sql.NullString
 	err := s.db.QueryRowContext(ctx, `
-SELECT b.id, e.id, ek.id, e.connector_type, e.base_url, b.upstream_model_id, ek.encrypted_secret
+SELECT b.id, e.id, ek.id, e.connector_type,
+       CASE WHEN length(CAST(e.base_url AS BLOB)) BETWEEN 1 AND ? THEN e.base_url END,
+       b.upstream_model_id,
+       CASE WHEN length(CAST(ek.encrypted_secret AS BLOB)) BETWEEN 1 AND ? THEN ek.encrypted_secret END
 FROM model_bindings b
 JOIN models m
   ON m.id=b.model_id
@@ -254,15 +259,15 @@ JOIN fetched_models fm
   ON fm.endpoint_key_id=ek.id
  AND fm.upstream_model_id=b.upstream_model_id
  AND fm.status='ok'
-WHERE b.id=?`, userID, fullName, userID, bindingID).
+WHERE b.id=?`, maxStoredEndpointBaseURLBytes, maxEndpointCredentialEnvelopeBytes, userID, fullName, userID, bindingID).
 		Scan(
 			&target.BindingID,
 			&target.EndpointID,
 			&target.EndpointKeyID,
 			&target.ConnectorType,
-			&target.BaseURL,
+			&baseURL,
 			&target.UpstreamModelID,
-			&target.encryptedSecret,
+			&ciphertext,
 		)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -270,5 +275,10 @@ WHERE b.id=?`, userID, fullName, userID, bindingID).
 		}
 		return ForwardTarget{}, fmt.Errorf("read forward target: %w", err)
 	}
+	if !baseURL.Valid || !ciphertext.Valid {
+		return ForwardTarget{}, ErrEndpointCredentialUnavailable
+	}
+	target.BaseURL = baseURL.String
+	target.encryptedSecret = ciphertext.String
 	return target, nil
 }

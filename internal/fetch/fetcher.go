@@ -21,15 +21,19 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
-// Defaults for the bounded refresh machinery. The pool (workers + queue)
-// bounds global fetch concurrency; the per-user limiter bounds manual refresh
-// frequency. Automatic hook fetches are bounded by the pool only.
+// Defaults for the bounded refresh machinery. The pool (workers + queue +
+// per-user pending/running bound) bounds global and per-user fetch
+// concurrency and dispatches round-robin across users; the per-user limiter
+// is the shared admission budget consumed by both automatic hook fetches and
+// manual refreshes.
 const (
 	DefaultWorkers                 = 4
 	DefaultQueueSize               = 32
+	DefaultPerUserCap              = 8
 	DefaultRefreshPerUserPerMinute = 10
 	maxWorkers                     = 64
 	maxQueueSize                   = 1024
+	maxPerUserCap                  = 1024
 	// maxIssueDiagBytes bounds the upstream-derived fragment that may appear
 	// in a user issue message after the shared diagnostic boundary.
 	maxIssueDiagBytes = 512
@@ -39,17 +43,18 @@ const (
 )
 
 // FetcherConfig wires a Fetcher. Store, Stack, Secrets, and Registry are
-// mandatory; Workers/QueueSize/RefreshPerUserPerMinute default to the package
-// constants when <= 0.
+// mandatory; Workers/QueueSize/PerUserCap/RefreshPerUserPerMinute default to
+// the package constants when <= 0.
 type FetcherConfig struct {
 	Store    *db.Store
 	Stack    *egress.Stack
-	Secrets  secret.Codec
+	Secrets  secret.ContextOpener
 	Registry *endpoint.Registry
 	Now      func() int64
 
 	Workers                 int
 	QueueSize               int
+	PerUserCap              int
 	RefreshPerUserPerMinute int
 }
 
@@ -57,11 +62,12 @@ type FetcherConfig struct {
 // endpoint.FetchHook (see FetchModels) so the endpoint rail can trigger one
 // automatic fetch after a save/edit/key-add, and it drives the manual refresh
 // route. All outbound work goes through the shared egress Stack; all secret
-// reads go through the ownership-scoped ciphertext accessor + secret.Codec.
+// reads go through the ownership-scoped ciphertext accessor and are opened
+// only with their authenticated user/endpoint/key/canonical-origin context.
 type Fetcher struct {
 	store    *db.Store
 	stack    *egress.Stack
-	secrets  secret.Codec
+	secrets  secret.ContextOpener
 	registry *endpoint.Registry
 	now      func() int64
 
@@ -102,6 +108,13 @@ func NewFetcher(cfg FetcherConfig) (*Fetcher, error) {
 	if queueSize > maxQueueSize {
 		queueSize = maxQueueSize
 	}
+	perUserCap := cfg.PerUserCap
+	if perUserCap <= 0 {
+		perUserCap = DefaultPerUserCap
+	}
+	if perUserCap > maxPerUserCap {
+		perUserCap = maxPerUserCap
+	}
 	perUser := cfg.RefreshPerUserPerMinute
 	if perUser <= 0 {
 		perUser = DefaultRefreshPerUserPerMinute
@@ -117,7 +130,7 @@ func NewFetcher(cfg FetcherConfig) (*Fetcher, error) {
 		registry: cfg.Registry,
 		now:      cfg.Now,
 	}
-	f.pool = newPool(context.Background(), workers, queueSize, f.runJob)
+	f.pool = newPool(context.Background(), workers, queueSize, perUserCap, f.runJob)
 	rpm, err := ratelimit.NewRPM(ratelimit.RPMConfig{
 		Window:       time.Minute,
 		GlobalLimit:  4 * perUser,
@@ -155,30 +168,35 @@ var _ endpoint.FetchHook = (*Fetcher)(nil)
 // FetchModels implements endpoint.FetchHook. It submits an automatic fetch
 // for the (Endpoint, Key) combo and returns once the job is queued (or
 // merged into an already-pending fetch); it never blocks on upstream work and
-// never fails an already-committed endpoint save. A full queue is reported as
-// an error (logged by the endpoint rail, which then drops the fetch). The
-// request context only gates submission: a request already cancelled at
-// submit time is skipped, while a queued fetch outlives its originating
-// request (the pool owns cancellation via Close).
+// never fails an already-committed endpoint save. Automatic and manual
+// refreshes share the same per-user admission budget, so a burst of edits
+// cannot bypass the per-user bound. A full queue or an exhausted budget is
+// reported as an error (logged by the endpoint rail, which then drops the
+// fetch). The request context only gates submission: a request already
+// cancelled at submit time is skipped, while a queued fetch outlives its
+// originating request (the pool owns cancellation via Close).
 func (f *Fetcher) FetchModels(ctx context.Context, userID, endpointID, keyID int64) error {
-	if f == nil || f.pool == nil {
-		return errors.New("fetch: fetcher is not available")
-	}
 	if ctx == nil {
 		return errors.New("fetch: context is required")
 	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return f.pool.Submit(jobKey{userID: userID, endpointID: endpointID, keyID: keyID})
+	return f.admit(ctx, userID, endpointID, keyID)
 }
 
 // RefreshManual submits a user-requested refresh and reports whether the
-// request passes the per-user frequency limiter and the bounded pool. It
-// returns nil when the fetch is queued (or already pending), ErrPoolBusy when
-// the queue is full (rate_limited at the API), ErrPoolClosed during
+// request passes the shared per-user admission budget and the bounded pool.
+// It returns nil when the fetch is queued (or already pending), ErrPoolBusy
+// when a bound is reached (rate_limited at the API), ErrPoolClosed during
 // shutdown (service_unavailable), and rate-limit errors from the RPM.
 func (f *Fetcher) RefreshManual(ctx context.Context, userID, endpointID, keyID int64) error {
+	return f.admit(ctx, userID, endpointID, keyID)
+}
+
+// admit is the shared per-user admission path for automatic and manual
+// refreshes. Both consume the same per-user RPM budget so neither source can
+// bypass the other; a duplicate combo is merged by the pool without spawning
+// new work. The pool's per-user and global bounds surface as ErrPoolBusy, an
+// exhausted budget as ErrRefreshRateLimited, and shutdown as ErrPoolClosed.
+func (f *Fetcher) admit(ctx context.Context, userID, endpointID, keyID int64) error {
 	if f == nil || f.pool == nil {
 		return errors.New("fetch: fetcher is not available")
 	}
@@ -203,9 +221,9 @@ func (f *Fetcher) RefreshManual(ctx context.Context, userID, endpointID, keyID i
 	return f.pool.Submit(jobKey{userID: userID, endpointID: endpointID, keyID: keyID})
 }
 
-// ErrRefreshRateLimited reports that the per-user manual refresh frequency
-// limit was reached.
-var ErrRefreshRateLimited = errors.New("fetch: manual refresh rate limit reached")
+// ErrRefreshRateLimited reports that the shared per-user automatic/manual
+// refresh frequency limit was reached.
+var ErrRefreshRateLimited = errors.New("fetch: refresh rate limit reached")
 
 // runJob executes one queued fetch. All ownership checks are in SQL; a combo
 // that vanished or was disabled meanwhile is a silent no-op.
@@ -228,6 +246,10 @@ func (f *Fetcher) fetchOne(ctx context.Context, userID, endpointID, keyID int64)
 		if errors.Is(err, db.ErrNotFound) {
 			return nil // combo deleted before this job ran.
 		}
+		if errors.Is(err, db.ErrEndpointCredentialUnavailable) {
+			f.recordFailure(ctx, userID, endpointID, keyID, "credential unavailable")
+			return nil
+		}
 		return fmt.Errorf("read fetch state: %w", err)
 	}
 	if !state.EndpointEnabled || !state.KeyEnabled {
@@ -249,13 +271,30 @@ func (f *Fetcher) fetchOne(ctx context.Context, userID, endpointID, keyID int64)
 		if errors.Is(err, db.ErrNotFound) {
 			return nil
 		}
+		if errors.Is(err, db.ErrEndpointCredentialUnavailable) {
+			f.recordFailure(ctx, userID, endpointID, keyID, "credential unavailable")
+			return nil
+		}
 		return fmt.Errorf("read endpoint key ciphertext: %w", err)
 	}
-	plaintext, err := f.secrets.Open(ciphertext)
+	_, canonicalOrigin, err := egress.CanonicalEndpointTarget(state.BaseURL)
 	if err != nil {
-		// Never include the envelope or the error detail: it is deliberately
-		// opaque so a key rotation or tampering cannot become an oracle.
-		f.recordFailure(ctx, userID, endpointID, keyID, "endpoint key could not be decrypted")
+		ciphertext = ""
+		f.recordFailure(ctx, userID, endpointID, keyID, "credential unavailable")
+		return nil
+	}
+	credentialContext, err := secret.NewEndpointKeyContext(userID, endpointID, keyID, canonicalOrigin)
+	canonicalOrigin = ""
+	if err != nil {
+		ciphertext = ""
+		f.recordFailure(ctx, userID, endpointID, keyID, "credential unavailable")
+		return nil
+	}
+	plaintext, err := f.secrets.OpenForContext(ciphertext, credentialContext)
+	ciphertext = ""
+	if err != nil {
+		// Every malformed envelope and context mismatch follows one opaque path.
+		f.recordFailure(ctx, userID, endpointID, keyID, "credential unavailable")
 		return nil
 	}
 	defer clear(plaintext)
@@ -396,9 +435,9 @@ func joinModelsURL(baseURL string) string {
 	return strings.TrimSuffix(baseURL, "/") + "/models"
 }
 
-// nilCodec mirrors the db package's nil-interface check so a typed-nil Codec
-// cannot slip past construction.
-func nilCodec(codec secret.Codec) bool {
+// nilCodec mirrors the db package's nil-interface check so a typed-nil
+// contextual opener cannot slip past construction.
+func nilCodec(codec secret.ContextOpener) bool {
 	if codec == nil {
 		return true
 	}

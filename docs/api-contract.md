@@ -1,10 +1,10 @@
-# NonbiriAPI HTTP API Contract (v1.0.0-alpha.1)
+# NonbiriAPI HTTP API Contract (v1.0.0-alpha.1 + unreleased security amendments)
 
-- Status: **v1.0.0-alpha.1 release contract** (frozen for this release)
+- Status: **v1.0.0-alpha.1 release contract with explicitly marked unreleased hardening**
 - Scope: v1.0.0-alpha.1 surface only. `/v1/chat/completions` and `/v1/models` are the only
   OpenAI-compatible exit endpoints in alpha.1; embeddings / images / audio / files /
   moderation / batch are deferred past the alpha.
-- Authority: this document describes the surface shipped by tag `v1.0.0-alpha.1`, aligned to the frozen requirements, accepted credential/egress/data-lifecycle decisions, and the emitted stable-code set of `internal/httperr`. Documentation errata may correct an omitted or misstated shipped field without changing runtime behavior; behavioral compatibility changes require a subsequent release contract and changelog entry.
+- Authority: this document describes the surface shipped by tag `v1.0.0-alpha.1`, aligned to the frozen requirements, accepted credential/egress/data-lifecycle decisions, and the emitted stable-code set of `internal/httperr`. Text explicitly labeled **Unreleased security amendment** describes this development branch and is not a claim about the published tag. Documentation errata may correct an omitted or misstated shipped field without changing runtime behavior; other changes to endpoint paths, JSON fields, stable codes, auth behavior, cache policy, or diagnostic limits require a subsequent release contract and changelog entry.
 
 ## 1. Conventions
 
@@ -69,12 +69,21 @@ never shadow a redeploy.
 Every error response is a single JSON object:
 
 ```json
-{ "error": { "code": "<stable>", "message": "<human, bounded>",
+{ "error": { "code": "<stable>", "source": "platform|upstream", "message": "<human, bounded>",
              "diag": "<optional, bounded upstream context>", "request_id": "<optional>" } }
 ```
 
 - `code` is a stable machine identifier. Codes may be added; an existing one is never
   redefined for a new meaning. Unknown codes map to HTTP 500 internally.
+- `source` is always present and is exactly `platform` or `upstream`. It is derived at the
+  single wire sink from the code and locked to it — `upstream` for `upstream`, `platform` for
+  every other stable code (and the unknown-code fallback) — so a caller never has to infer
+  origin from a message prefix, and a hand-constructed error can neither omit `source` nor
+  forge a different attribution than its code. An explicit caller-set `source` can confirm but
+  never override the code-derived value: an upstream code is always `upstream` and a platform
+  code is always `platform`; any explicit value that disagrees (or is invalid) is dropped in
+  favor of the code-derived default. *(Unreleased security amendment: the `source` field and
+  its locked-to-code derivation are not part of the published `v1.0.0-alpha.1` contract.)*
 - `message` is bounded to 1000 runes and stripped of all C0 control characters and DEL; it
   carries a short human-safe summary and **never** raw upstream identifiers or text.
 - `diag` is bounded to 4096 bytes (the untrusted-upstream diagnostic resource limit) by
@@ -122,8 +131,15 @@ Codes below are the emitted set; HTTP status is derived from the code. Route tab
 | `elevated_required` | 403 | destructive/export action lacks a valid, unexpired, unused capability bound to the current session |
 | `unbound_model` | 503 | resolved a platform model that has no usable binding (zero-binding draft / all bindings filtered out); a user issue is recorded |
 | `upstream` | 502 | upstream error after the commit boundary, a single attempt's upstream error with silent retry off, or all bindings exhausted under silent retry |
-| `service_unavailable` | 503 | internal service unavailability |
-| `resource_limit_exceeded` | 422 | a resource count reached the configured cap: endpoints per user (effective minimum of `default_endpoint_limit` and the user override), endpoint keys per endpoint (`default_endpoint_key_limit`), platform models per user (`default_model_limit`), or bindings per model (`default_binding_limit`); the envelope carries `limit` (the effective cap) and `resource` (the stable name); the count and cap are read inside the same transaction as the insert so a concurrent add cannot breach the cap; existing rows are retained |
+| `service_unavailable` | 503 | internal service unavailability, or the server-side maintenance gate refusing user-station API and `/v1/*` while `maintenance_mode` is on (§6) |
+| `resource_limit_exceeded` | 422 | a per-parent resource count reached the configured cap: endpoints per user (effective minimum of `default_endpoint_limit` and the user override), endpoint keys per endpoint (`default_endpoint_key_limit`), platform models per user (`default_model_limit`), or bindings per model (`default_binding_limit`); the envelope carries `limit` (the effective cap) and `resource` (the stable name); the count and cap are read inside the same transaction as the insert so a concurrent add cannot breach the cap; existing rows are retained |
+| `insufficient_credits` | 403 | reserved stable code for the economy rail (悠哉积分不足); `source` is `platform`; the business trigger is wired in a later phase |
+| `feature_disabled` | 403 | reserved stable code for a feature gate (e.g. sign-in disabled / timezone not configured); `source` is `platform`; the business trigger is wired in a later phase |
+| `charity_suspended` | 403 | reserved stable code for a charity suspension; `source` is `platform`; the business trigger is wired in a later phase |
+
+*(Unreleased security amendment: the `service_unavailable` maintenance-gate meaning and
+the `insufficient_credits` / `feature_disabled` / `charity_suspended` reserved codes are not
+part of the published `v1.0.0-alpha.1` contract; no business trigger is wired yet.)*
 
 ## 2. Platform exit — `/v1/*` (CallerKey Bearer)
 
@@ -158,8 +174,25 @@ Server-side behavior (shipped contract):
    Non-stream requests can retry up to the boundary, same option/default.
    Route resolution, all attempts, and backoff share one five-minute aggregate deadline; a
    candidate set never multiplies the single-attempt timeout into a longer logical request.
-4. Inject the OpenAI `safety_identifier` field = a stable, irreversible hash of the calling
-   user's id, for upstream per-user risk attribution.
+4. Inject the OpenAI `safety_identifier` field for upstream per-user risk attribution.
+
+**Unreleased security amendment:** the development branch sends only the versioned form
+`nbu_v2_` followed by the 52-character RFC 4648 base32 (without padding) encoding of an
+HMAC-SHA-256 digest. The process derives a dedicated 32-byte key from the Vault with purpose
+`nonbiriapi:safety-identifier:v2`; the HMAC message is that fixed purpose followed by the
+calling user's positive int64 id as exactly eight big-endian bytes. The resulting 59-character
+pseudonym is stable for the same deployment key and user, differs across users or deployment
+keys, and contains neither the raw id nor a publicly verifiable unkeyed digest. A caller-supplied
+`safety_identifier` is overwritten, and no legacy identifier is also sent.
+
+The derived key exists only in process memory: it is not persisted, logged, returned by the
+platform API, or sent upstream. Missing or invalid key injection fails application wiring; once
+the forwarding service begins shutdown it admits no new operations, waits for in-flight
+operations, then best-effort clears its retained key copy. This rollout intentionally rotates
+all identifiers emitted by the published alpha.1 implementation once. Upstream risk history
+keyed only by the previous value will not automatically carry over, because there is no dual-send
+or legacy fallback. After that cutover, retaining the same deployment master key preserves
+identifier continuity; a deployment using a different master key produces a different pseudonym.
 
 Response — non-stream (`stream` false/omitted): standard OpenAI Chat Completions response,
 including `usage` (`prompt_tokens`, `completion_tokens`, `total_tokens`) when the upstream
@@ -199,7 +232,11 @@ Stable error codes at this endpoint:
 | `internal` | 500 | unexpected failure |
 
 (within an already-started stream, an error is emitted as an SSE error frame rather than a
-fresh HTTP error envelope, because the response status and headers have already been written.)
+fresh HTTP error envelope, because the response status and headers have already been written.
+The SSE error frame carries the same stable `{"error":{"code","source","message"}}` shape as
+the JSON envelope — `source` is derived at the shared wire sink, not from a message prefix —
+and never carries a free-form upstream body, the legacy `type` field, or the terminal `[DONE]`
+marker; an incomplete stream is never synthesized as a success.)
 
 ### 2.2 `GET /v1/models`
 
@@ -273,7 +310,7 @@ neither an admin session nor a caller key can reach it.
 | `GET` | `/api/endpoints` | user session | — | `200` array of `{id, connector_type, base_url, note, enabled, model_fetch_failed, model_fetch_failed_at, created_at, updated_at}` (key secrets never appear) | `unauthorized` |
 | `POST` | `/api/endpoints` | user session | `{base_url, connector_type?, note?, enabled?}` | `201` created endpoint; `base_url` is canonicalized (scheme/host lowercased, trailing dot removed, userinfo/query/fragment removed, redundant slashes collapsed; an explicitly typed port is preserved while an implicit default port is omitted from display/persistence but normalized in the internal origin key) | `invalid_request`, `unauthorized`, `conflict`, `resource_limit_exceeded` (endpoint cap reached: `min(global_default, user_limit)`) |
 | `GET` | `/api/endpoints/{id}` | user session | — | `200` the endpoint object | `unauthorized`, `not_found` |
-| `PATCH` | `/api/endpoints/{id}` | user session | `{base_url?, note?, enabled?}` | `200` updated endpoint; saving / editing triggers an automatic re-fetch of every enabled key's upstream models | `invalid_request`, `unauthorized`, `not_found` |
+| `PATCH` | `/api/endpoints/{id}` | user session | `{base_url?, note?, enabled?}` | `200` updated endpoint; an empty or wholly unchanged patch is rejected; when any key exists, `base_url` may change only within the same canonical origin (scheme + canonical host + effective port) | `invalid_request`, `unauthorized`, `not_found`, `conflict` |
 | `DELETE` | `/api/endpoints/{id}` | user session | — | `204`; cascades to its keys, their fetched-model cache, and their bindings (immediate invalidation) | `unauthorized`, `not_found` |
 
 Multiple endpoints may share the same canonical `base_url` (no uniqueness on
@@ -294,12 +331,29 @@ flag: set (with a unix-seconds timestamp) whenever an upstream model fetch for
 any of its keys failed, cleared by the next successful fetch. The flag is
 state only — never a diagnostic or any upstream content.
 
+**Unreleased security amendment:** Endpoint updates enforce the credential/origin boundary in the same database
+transaction as the update and key-existence check. An endpoint with any key
+(enabled or disabled) cannot move to another canonical origin; delete all keys,
+change the origin, then add new keys. A path change within the same origin is
+allowed. Persisted endpoint credentials use a contextual `nbsec:v2` AES-256-GCM
+envelope authenticated against purpose, version, user id, endpoint id, key id,
+and the egress-canonical origin. Creating a key allocates its row id and seals
+the credential in the same database transaction. Startup upgrades valid
+`nbsec:v1` rows before any listener or worker starts; one invalid or unknown row
+rolls back the whole credential batch and prevents startup. Runtime fetch and
+forwarding accept only v2 under the exact context and never retry v1. Empty
+objects and patches whose supplied values are all unchanged are
+`invalid_request`. Automatic model fetching runs only after an actual same-origin
+path change or a disabled-to-enabled endpoint transition; note-only changes,
+representation-only URL changes, and enabled-to-disabled transitions do not
+fetch. A rejected update is atomic and never queues a fetch.
+
 ### 3.6 Endpoint keys & fetched models
 
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
 | `GET` | `/api/endpoints/{id}/keys` | user session | — | `200` array of `{id, display_head, display_tail, note, enabled, created_at, updated_at}`; display fragments are the first/last few runes of the secret so listings never decrypt; the secret and its ciphertext are never returned | `unauthorized`, `not_found` |
-| `POST` | `/api/endpoints/{id}/keys` | user session | `{secret, note?, enabled?}` | `201` created key metadata `{id, display_head, display_tail, note, enabled, created_at, updated_at}` (`secret` is sealed with AES-256-GCM before persistence and never returned); triggers a model fetch for this key when enabled | `invalid_request`, `unauthorized`, `not_found`, `payload_too_large`, `resource_limit_exceeded` |
+| `POST` | `/api/endpoints/{id}/keys` | user session | `{secret, note?, enabled?}` | `201` created key metadata `{id, display_head, display_tail, note, enabled, created_at, updated_at}` (`secret` is sealed with contextual AES-256-GCM after its uncommitted row id is allocated and before the same transaction commits; plaintext is never a SQL value and is never returned); triggers a model fetch for this key when enabled | `invalid_request`, `unauthorized`, `not_found`, `payload_too_large`, `resource_limit_exceeded` |
 | `PATCH` | `/api/endpoints/{id}/keys/{keyId}` | user session | `{note?, enabled?}` | `200` updated key `{id, display_head, display_tail, note, enabled, created_at, updated_at}` (the secret is not mutable here; key rotation is delete + add) | `invalid_request`, `unauthorized`, `not_found` |
 | `DELETE` | `/api/endpoints/{id}/keys/{keyId}` | user session | — | `204`; cascades to its fetched-model cache and bindings | `unauthorized`, `not_found` |
 | `GET` | `/api/endpoints/{id}/keys/{keyId}/models` | user session | — | `200` array of `{upstream_model_id, provider, fetched_at, status}` for that (Endpoint, Key) combo; empty `[]` when the combo has no cache rows; a missing, cross-user, or wrong-endpoint combo is indistinguishable `not_found` | `unauthorized`, `not_found` |
@@ -313,8 +367,8 @@ inside the same transaction as the insert, so a concurrent add cannot breach the
 
 The fetched-model cache is keyed per **(Endpoint, Key)** combo: different keys on the same
 endpoint may legitimately return different upstream lists. The server fetches automatically
-once after an endpoint save/edit or key add, and only manually thereafter (no background
-refresh). Fetched upstream model identifiers are treated as untrusted: bounded in size and
+for the endpoint changes described above and after an enabled key is added, and only manually
+thereafter (no background refresh). Fetched upstream model identifiers are treated as untrusted: bounded in size and
 count, validated to prevent over-long names polluting logs/DOM/DB. When a key is regenerated
 is not applicable (caller key is separate); when an endpoint key is disabled, its cached rows/bindings remain stored but are filtered from routing; deleting it removes cache rows/bindings by cascade.
 
@@ -546,3 +600,39 @@ resolving an alert with `false` reopens it and clears `resolved_at`.
   the request is rejected (`not_found` / `unauthorized` as applicable), never guessed.
 - **Atomic late-callback handling**: account deletion and late callbacks are linearized by an
   atomic conditional write, never by a read-then-write.
+
+## 6. Server-side maintenance gate
+
+*(Unreleased security amendment: this section is not part of the published
+`v1.0.0-alpha.1` contract; it describes the current development branch.)*
+
+`maintenance_mode` is a server-side authoritative admission gate, not a front-end-only notice.
+It is an atomically live-applied process-wide boolean: a toggle through the admin site-config
+endpoint takes effect for the very next request, including for already-issued user sessions
+and caller keys, and survives a restart by loading the persisted value at startup. The gate
+is checked after the host/station edge and before any auth or business logic, so it cannot
+be bypassed by holding a valid credential.
+
+While on, the user-station API and the OpenAI-compatible exit are refused with a stable
+`503 service_unavailable` envelope (`source: platform`, `Cache-Control: no-store`) for every
+path except a strict allowlist:
+
+- `/healthz` (both stations);
+- the public site-config endpoints (`/api/config`, `/admin/api/config`) — so the user SPA can
+  learn maintenance is on and render the notice, and the admin login screen can render before
+  signing in;
+- `/api/auth/logout` — so an already-logged-in user can end their session.
+
+Everything else under `/api/*` (session, `me`, OAuth start/callback/elevate, endpoints,
+models, issues, account export/delete, caller-key management) and all of `/v1/*` returns
+`503`. The admin station (`/admin/api/*`) is never routed through the gate, so an operator can
+always sign in, inspect configuration, and toggle maintenance off. The front-end maintenance
+notice (shown from the public `maintenance_mode` value) is consistent with the server-side
+`503`: both report the site as temporarily unavailable.
+
+A live toggle applies the value to the runtime singleton first and then persists
+it; a persistence failure reverts the runtime singleton to its previous value
+(or the frozen canonical default when no prior row existed) so database and
+runtime cannot drift; a failed runtime apply leaves both unchanged (fail
+closed). Concurrent patches to the same key are serialized per handler so their
+apply and persist orders cannot interleave and drift the two apart.

@@ -216,9 +216,12 @@ func (h *Handler) createKey(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, derr)
 		return
 	}
-	// Convert the string secret to bytes for the codec boundary; the service
-	// clears this slice once sealing is done.
-	key, err := h.svc.CreateEndpointKey(r.Context(), uid, endpointID, []byte(req.Secret), req.Note, req.Enabled)
+	// Transfer the decoded secret into a clearable slice and drop the request
+	// field before entering the transactional persistence boundary.
+	plaintext := []byte(req.Secret)
+	req.Secret = ""
+	defer clear(plaintext)
+	key, err := h.svc.CreateEndpointKey(r.Context(), uid, endpointID, plaintext, req.Note, req.Enabled)
 	if err != nil {
 		writeServiceErr(w, err)
 		return
@@ -435,6 +438,8 @@ func writeServiceErr(w http.ResponseWriter, err error) {
 		writeErr(w, httperr.New(httperr.CodeNotFound, "not found"))
 	case errors.Is(err, ErrConnectorImmutable):
 		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "connector type cannot be changed"))
+	case errors.Is(err, db.ErrEndpointOriginConflict):
+		writeErr(w, httperr.New(httperr.CodeConflict, "delete all endpoint keys before changing the endpoint origin"))
 	case errors.Is(err, ErrInvalidRequest):
 		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
 	case errors.Is(err, ErrPayloadTooLarge):

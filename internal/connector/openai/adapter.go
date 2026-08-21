@@ -14,6 +14,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
 
 const (
@@ -400,7 +401,13 @@ func (a *Adapter) streamProtocolFailure(writer http.ResponseWriter, controller *
 		result.Usage = usage
 		return result
 	}
-	frame := []byte(`data: {"error":{"code":"upstream","message":"upstream stream failed","type":"upstream_error"}}` + "\n\n")
+	// Once any byte is committed, the response status and headers are already
+	// written, so the failure can only be emitted as an in-stream SSE error
+	// frame — never a second HTTP envelope. The frame uses the same stable
+	// {error:{code,source,message}} shape as the JSON envelope, with source
+	// derived at the shared wire sink (upstream for an upstream stream
+	// failure), so a client never has to infer attribution from a prefix.
+	frame := httperr.SSEErrorFrame(httperr.New(httperr.CodeUpstream, "upstream stream failed"))
 	_, err := a.writeStreamFrame(writer, controller, frame)
 	if err != nil {
 		return sinkFailureWithCommit(true, usage)

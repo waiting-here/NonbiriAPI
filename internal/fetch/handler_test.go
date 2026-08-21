@@ -67,11 +67,7 @@ func TestHandlerListModels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	ciphertext, err := f.vault.Seal([]byte("sk-list"))
-	if err != nil {
-		t.Fatalf("seal: %v", err)
-	}
-	key, err := f.store.CreateEndpointKey(context.Background(), uid, ep.ID, ciphertext, "h", "t", "n", true, 1)
+	key, err := f.store.CreateEndpointKey(context.Background(), uid, ep.ID, []byte("sk-list"), "h", "t", "n", true, 1)
 	if err != nil {
 		t.Fatalf("create key: %v", err)
 	}
@@ -111,7 +107,7 @@ func TestHandlerListModels(t *testing.T) {
 	}
 
 	// Empty cache for an owned combo: 200 [].
-	key2, err := f.store.CreateEndpointKey(context.Background(), uid, ep.ID, ciphertext, "h", "t", "n", true, 2)
+	key2, err := f.store.CreateEndpointKey(context.Background(), uid, ep.ID, []byte("sk-list-2"), "h", "t", "n", true, 2)
 	if err != nil {
 		t.Fatalf("create key2: %v", err)
 	}

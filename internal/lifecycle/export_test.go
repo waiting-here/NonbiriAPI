@@ -16,6 +16,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
@@ -50,7 +51,9 @@ func lifecycleTestStore(t *testing.T) *db.Store {
 	if err != nil {
 		t.Fatalf("secret.New: %v", err)
 	}
-	st, err := db.Open(filepath.Join(t.TempDir(), "lifecycle.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "lifecycle.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	st, err := db.Open(dbPath, vault)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatalf("db.Open: %v", err)
@@ -98,7 +101,7 @@ func seedExportFixture(t *testing.T, st *db.Store) *db.User {
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, err := st.CreateEndpointKey(ctx, user.ID, ep.ID, "nbsec:v1:aes-256-gcm:aaaa", "head", "tail", "my key", true, 100)
+	key, err := st.CreateEndpointKey(ctx, user.ID, ep.ID, []byte("sk-lifecycle-export"), "head", "tail", "my key", true, 100)
 	if err != nil {
 		t.Fatal(err)
 	}

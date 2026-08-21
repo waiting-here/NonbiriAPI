@@ -19,6 +19,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
 	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
@@ -47,6 +48,13 @@ func (c *countingCodec) Seal(plaintext []byte) (string, error) { return c.vault.
 func (c *countingCodec) Open(ciphertext string) ([]byte, error) {
 	c.opens.Add(1)
 	return c.vault.Open(ciphertext)
+}
+func (c *countingCodec) SealForContext(plaintext []byte, credentialContext secret.EndpointKeyContext) (string, error) {
+	return c.vault.SealForContext(plaintext, credentialContext)
+}
+func (c *countingCodec) OpenForContext(ciphertext string, credentialContext secret.EndpointKeyContext) ([]byte, error) {
+	c.opens.Add(1)
+	return c.vault.OpenForContext(ciphertext, credentialContext)
 }
 
 type integrationFixture struct {
@@ -91,7 +99,9 @@ func newIntegrationFixture(t *testing.T, rpmConfig ratelimit.RPMConfig) *integra
 		t.Fatal(err)
 	}
 	codec := &countingCodec{vault: vault}
-	store, err := db.Open(filepath.Join(t.TempDir(), "flowcontrol.db"), codec)
+	dbPath := filepath.Join(t.TempDir(), "flowcontrol.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, codec)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatal(err)
@@ -129,7 +139,16 @@ func newIntegrationFixture(t *testing.T, rpmConfig ratelimit.RPMConfig) *integra
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := forward.NewService(forward.ServiceConfig{Repository: store, Runner: runner})
+	safetyIdentifierKey, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := forward.NewService(forward.ServiceConfig{
+		Repository:          store,
+		Runner:              runner,
+		SafetyIdentifierKey: safetyIdentifierKey,
+	})
+	clear(safetyIdentifierKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,6 +163,7 @@ func newIntegrationFixture(t *testing.T, rpmConfig ratelimit.RPMConfig) *integra
 	}
 	wrapped := auth.CallerKeyMiddleware(store, middleware.Wrap(exit))
 	t.Cleanup(func() {
+		_ = service.Close()
 		controller.Close()
 		stack.CloseIdleConnections()
 		_ = store.Close()
@@ -182,11 +202,7 @@ func (f *integrationFixture) addRoute(t *testing.T, userID int64) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ciphertext, err := f.codec.Seal([]byte("sk-flowcontrol-upstream"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	keyRow, err := f.store.CreateEndpointKey(context.Background(), userID, endpointRow.ID, ciphertext, "head", "tail", "", true, time.Now().Unix())
+	keyRow, err := f.store.CreateEndpointKey(context.Background(), userID, endpointRow.ID, []byte("sk-flowcontrol-upstream"), "head", "tail", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}

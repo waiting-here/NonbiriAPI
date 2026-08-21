@@ -8,6 +8,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -47,7 +48,7 @@ type AttemptRunner interface {
 // connector registry, and protocol adapters.
 type SecureRunnerConfig struct {
 	Repository TargetRepository
-	Secrets    secret.Codec
+	Secrets    secret.ContextOpener
 	Registry   *endpoint.Registry
 	Adapters   []Adapter
 }
@@ -57,7 +58,7 @@ type SecureRunnerConfig struct {
 // the exact registered adapter. It owns no retry policy.
 type SecureRunner struct {
 	repository TargetRepository
-	secrets    secret.Codec
+	secrets    secret.ContextOpener
 	registry   *endpoint.Registry
 	adapters   map[endpoint.ConnectorType]Adapter
 }
@@ -110,6 +111,9 @@ func (r *SecureRunner) Run(ctx context.Context, writer http.ResponseWriter, inpu
 		if errors.Is(err, db.ErrNotFound) {
 			return openai.AttemptResult{Failure: openai.FailureUpstream, Diagnostic: "selected upstream target is no longer available"}
 		}
+		if errors.Is(err, db.ErrEndpointCredentialUnavailable) {
+			return internalAttemptFailure("credential unavailable")
+		}
 		return internalAttemptFailure("forwarding target lookup failed")
 	}
 	connectorType, err := r.registry.MustValidate(endpoint.ConnectorType(target.ConnectorType))
@@ -123,17 +127,30 @@ func (r *SecureRunner) Run(ctx context.Context, writer http.ResponseWriter, inpu
 		return internalAttemptFailure("forwarding connector is unavailable")
 	}
 
+	_, canonicalOrigin, err := egress.CanonicalEndpointTarget(target.BaseURL)
+	if err != nil {
+		target.DiscardEncryptedSecret()
+		return internalAttemptFailure("credential unavailable")
+	}
+	credentialContext, err := secret.NewEndpointKeyContext(
+		input.UserID, target.EndpointID, target.EndpointKeyID, canonicalOrigin,
+	)
+	canonicalOrigin = ""
+	if err != nil {
+		target.DiscardEncryptedSecret()
+		return internalAttemptFailure("credential unavailable")
+	}
 	ciphertext := target.TakeEncryptedSecret()
 	if len(ciphertext) == 0 || len(ciphertext) > maxForwardCiphertextBytes {
 		ciphertext = ""
-		return internalAttemptFailure("forwarding credential is unavailable")
+		return internalAttemptFailure("credential unavailable")
 	}
 	ciphertextBytes := []byte(ciphertext)
-	plaintext, err := r.secrets.Open(ciphertext)
+	plaintext, err := r.secrets.OpenForContext(ciphertext, credentialContext)
 	ciphertext = ""
 	if err != nil {
 		clear(ciphertextBytes)
-		return internalAttemptFailure("forwarding credential is unavailable")
+		return internalAttemptFailure("credential unavailable")
 	}
 	defer clear(plaintext)
 	defer clear(ciphertextBytes)
@@ -167,7 +184,7 @@ func nilAdapter(adapter Adapter) bool {
 	}
 }
 
-func nilCodec(codec secret.Codec) bool {
+func nilCodec(codec secret.ContextOpener) bool {
 	if codec == nil {
 		return true
 	}

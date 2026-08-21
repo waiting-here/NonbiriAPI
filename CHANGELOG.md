@@ -4,6 +4,17 @@ All notable changes to NonbiriAPI are documented here.
 
 The project is currently in alpha. The public compatibility promise is limited to the documented `v1.0.0-alpha.1` release contract.
 
+## [Unreleased]
+
+### Changed
+
+- Automatic model discovery now runs only after an endpoint's upstream path actually changes, after a disabled endpoint is enabled, or after an enabled key is added; empty, unchanged, and note-only endpoint updates no longer enqueue fetches.
+
+### Security
+
+- Bind each encrypted endpoint credential to its user, endpoint, key id, and canonical origin with a contextual AES-256-GCM envelope. Existing credentials migrate transactionally before serving traffic; fetch and forwarding no longer accept legacy envelopes at runtime.
+- Prevent an endpoint with any stored upstream key from changing to a different canonical origin; changing origins now requires deleting the old keys and entering credentials again after the endpoint is updated.
+
 ## [1.0.0-alpha.1] - 2026-08-19
 
 ### Added

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
 )
 
 // Endpoint is a user's configured upstream endpoint. It is the trust root for
@@ -27,6 +29,28 @@ type Endpoint struct {
 	CreatedAt          int64
 	UpdatedAt          int64
 }
+
+// EndpointChangeMask reports which persisted or upstream-significant values
+// actually changed in one atomic endpoint update. Overlapping bits are
+// intentional: a path or origin change also carries EndpointChangeBaseURL.
+type EndpointChangeMask uint8
+
+const (
+	EndpointChangeBaseURL EndpointChangeMask = 1 << iota
+	EndpointChangeUpstreamPath
+	EndpointChangeOrigin
+	EndpointChangeNote
+	EndpointChangeEnabled
+)
+
+// Has reports whether every bit in change is present.
+func (m EndpointChangeMask) Has(change EndpointChangeMask) bool {
+	return m&change == change
+}
+
+// ErrEndpointOriginConflict prevents a credential-bearing endpoint from being
+// moved to a different canonical origin. It contains no URL or key material.
+var ErrEndpointOriginConflict = errors.New("db: endpoint origin change conflicts with existing keys")
 
 // DefaultEndpointLimit is the fallback global endpoint-count cap used when the
 // administrator has not yet set the default_endpoint_limit site_config key. It
@@ -134,14 +158,16 @@ func (s *Store) GetEndpoint(ctx context.Context, userID, id int64) (Endpoint, er
 	return ep, nil
 }
 
-// UpdateEndpoint atomically updates the endpoint with id owned by userID. A
-// nil argument leaves that field unchanged. A missing or cross-user id yields
-// ErrNotFound. now updates updated_at. The caller must canonicalize baseURL
-// (when non-nil) via the egress validator before calling.
-func (s *Store) UpdateEndpoint(ctx context.Context, userID, id int64, baseURL *string, note *string, enabled *bool, now int64) (Endpoint, error) {
+// UpdateEndpoint atomically reads and updates the endpoint with id owned by
+// userID and returns a mask of actual changes. A nil argument leaves that field
+// unchanged. The transaction also checks key existence before any canonical
+// origin change: when at least one key exists, the entire update fails with
+// ErrEndpointOriginConflict. A missing or cross-user id yields ErrNotFound.
+// The caller must validate and canonicalize baseURL through egress first.
+func (s *Store) UpdateEndpoint(ctx context.Context, userID, id int64, baseURL *string, note *string, enabled *bool, now int64) (Endpoint, EndpointChangeMask, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return Endpoint{}, fmt.Errorf("begin update endpoint: %w", err)
+		return Endpoint{}, 0, fmt.Errorf("begin update endpoint: %w", err)
 	}
 	committed := false
 	defer func() {
@@ -150,17 +176,69 @@ func (s *Store) UpdateEndpoint(ctx context.Context, userID, id int64, baseURL *s
 		}
 	}()
 
+	row := tx.QueryRowContext(ctx,
+		`SELECT id, user_id, connector_type, base_url, note, enabled, model_fetch_failed, model_fetch_failed_at, created_at, updated_at FROM endpoints WHERE id=? AND user_id=?`, id, userID)
+	current, err := scanEndpointRow(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Endpoint{}, 0, ErrNotFound
+		}
+		return Endpoint{}, 0, fmt.Errorf("read endpoint for update: %w", err)
+	}
+
+	var changes EndpointChangeMask
+	if baseURL != nil && *baseURL != current.BaseURL {
+		currentTarget, currentOrigin, parseErr := egress.CanonicalEndpointTarget(current.BaseURL)
+		if parseErr != nil {
+			return Endpoint{}, 0, fmt.Errorf("parse stored endpoint target: %w", parseErr)
+		}
+		nextTarget, nextOrigin, parseErr := egress.CanonicalEndpointTarget(*baseURL)
+		if parseErr != nil {
+			return Endpoint{}, 0, fmt.Errorf("parse updated endpoint target: %w", parseErr)
+		}
+
+		changes |= EndpointChangeBaseURL
+		switch {
+		case currentOrigin != nextOrigin:
+			var hasKeys int
+			if err := tx.QueryRowContext(ctx,
+				`SELECT EXISTS(SELECT 1 FROM endpoint_keys WHERE endpoint_id=?)`, id).Scan(&hasKeys); err != nil {
+				return Endpoint{}, 0, fmt.Errorf("check endpoint keys for origin update: %w", err)
+			}
+			if hasKeys != 0 {
+				return Endpoint{}, 0, ErrEndpointOriginConflict
+			}
+			changes |= EndpointChangeOrigin
+		case currentTarget != nextTarget:
+			changes |= EndpointChangeUpstreamPath
+		}
+	}
+	if note != nil && *note != current.Note {
+		changes |= EndpointChangeNote
+	}
+	if enabled != nil && *enabled != current.Enabled {
+		changes |= EndpointChangeEnabled
+	}
+
+	if changes == 0 {
+		if err := tx.Commit(); err != nil {
+			return Endpoint{}, 0, fmt.Errorf("commit unchanged endpoint update: %w", err)
+		}
+		committed = true
+		return current, 0, nil
+	}
+
 	sets := make([]string, 0, 4)
 	args := make([]any, 0, 6)
-	if baseURL != nil {
+	if changes.Has(EndpointChangeBaseURL) {
 		sets = append(sets, "base_url=?")
 		args = append(args, *baseURL)
 	}
-	if note != nil {
+	if changes.Has(EndpointChangeNote) {
 		sets = append(sets, "note=?")
 		args = append(args, *note)
 	}
-	if enabled != nil {
+	if changes.Has(EndpointChangeEnabled) {
 		enabledInt := 0
 		if *enabled {
 			enabledInt = 1
@@ -168,54 +246,35 @@ func (s *Store) UpdateEndpoint(ctx context.Context, userID, id int64, baseURL *s
 		sets = append(sets, "enabled=?")
 		args = append(args, enabledInt)
 	}
-	if len(sets) == 0 {
-		// No fields to change: still verify ownership and return the row so the
-		// handler can echo the canonical endpoint without a separate round-trip.
-		row := tx.QueryRowContext(ctx,
-			`SELECT id, user_id, connector_type, base_url, note, enabled, model_fetch_failed, model_fetch_failed_at, created_at, updated_at FROM endpoints WHERE id=? AND user_id=?`, id, userID)
-		ep, err := scanEndpointRow(row)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return Endpoint{}, ErrNotFound
-			}
-			return Endpoint{}, fmt.Errorf("read endpoint for update: %w", err)
-		}
-		if err := tx.Commit(); err != nil {
-			return Endpoint{}, fmt.Errorf("commit noop update: %w", err)
-		}
-		committed = true
-		return ep, nil
-	}
-
 	sets = append(sets, "updated_at=?")
-	args = append(args, now)
-	args = append(args, id, userID)
-	// #nosec G202 -- sets is restricted to constant base_url/note/enabled/time
-	// fragments selected above; all values and ownership keys are bound arguments.
+	args = append(args, now, id, userID)
+
+	// #nosec G202 -- sets contains only constant base_url/note/enabled/time
+	// fragments selected above; values and ownership keys are bound arguments.
 	query := "UPDATE endpoints SET " + strings.Join(sets, ", ") + " WHERE id=? AND user_id=?"
 	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
-		return Endpoint{}, fmt.Errorf("update endpoint: %w", err)
+		return Endpoint{}, 0, fmt.Errorf("update endpoint: %w", err)
 	}
 	affected, err := res.RowsAffected()
 	if err != nil {
-		return Endpoint{}, fmt.Errorf("update endpoint rows affected: %w", err)
+		return Endpoint{}, 0, fmt.Errorf("update endpoint rows affected: %w", err)
 	}
-	if affected == 0 {
-		return Endpoint{}, ErrNotFound
+	if affected != 1 {
+		return Endpoint{}, 0, ErrNotFound
 	}
 
-	row := tx.QueryRowContext(ctx,
+	row = tx.QueryRowContext(ctx,
 		`SELECT id, user_id, connector_type, base_url, note, enabled, model_fetch_failed, model_fetch_failed_at, created_at, updated_at FROM endpoints WHERE id=? AND user_id=?`, id, userID)
-	ep, err := scanEndpointRow(row)
+	updated, err := scanEndpointRow(row)
 	if err != nil {
-		return Endpoint{}, fmt.Errorf("read updated endpoint: %w", err)
+		return Endpoint{}, 0, fmt.Errorf("read updated endpoint: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return Endpoint{}, fmt.Errorf("commit update endpoint: %w", err)
+		return Endpoint{}, 0, fmt.Errorf("commit update endpoint: %w", err)
 	}
 	committed = true
-	return ep, nil
+	return updated, changes, nil
 }
 
 // DeleteEndpoint deletes the endpoint with id owned by userID. Cascading

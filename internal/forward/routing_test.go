@@ -30,11 +30,11 @@ func (f *forwardFixture) addRouteCfg(t *testing.T, userID int64, baseURL, provid
 	if err != nil {
 		t.Fatal(err)
 	}
-	ciphertext, err := f.codec.Seal([]byte(upstreamSecret))
+	keyRow, err := f.store.CreateEndpointKey(context.Background(), userID, endpointRow.ID, []byte(upstreamSecret), "head", "tail", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}
-	keyRow, err := f.store.CreateEndpointKey(context.Background(), userID, endpointRow.ID, ciphertext, "head", "tail", "", true, time.Now().Unix())
+	ciphertext, err := f.store.GetEndpointKeyCiphertext(context.Background(), userID, endpointRow.ID, keyRow.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,11 +69,7 @@ func (f *forwardFixture) addBindingToModel(t *testing.T, userID, modelID int64, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	ciphertext, err := f.codec.Seal([]byte(upstreamSecret))
-	if err != nil {
-		t.Fatal(err)
-	}
-	keyRow, err := f.store.CreateEndpointKey(context.Background(), userID, endpointRow.ID, ciphertext, "head", "tail", "", true, time.Now().Unix())
+	keyRow, err := f.store.CreateEndpointKey(context.Background(), userID, endpointRow.ID, []byte(upstreamSecret), "head", "tail", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,15 +143,19 @@ func TestForwardAggregateTimeoutReturnsStablePreCommitFailure(t *testing.T) {
 		<-ctx.Done()
 		return openai.AttemptResult{Failure: openai.FailureCanceled, Diagnostic: "request canceled"}
 	})
+	safetyIdentifierKey := randomSafetyIdentifierKey(t)
 	service, err := NewService(ServiceConfig{
-		Repository:     repository,
-		Runner:         runner,
-		Backoff:        BackoffConfig{Base: -1, Max: -1},
-		ForwardTimeout: 20 * time.Millisecond,
+		Repository:          repository,
+		Runner:              runner,
+		Backoff:             BackoffConfig{Base: -1, Max: -1},
+		ForwardTimeout:      20 * time.Millisecond,
+		SafetyIdentifierKey: safetyIdentifierKey,
 	})
+	clear(safetyIdentifierKey)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = service.Close() })
 
 	started := time.Now()
 	result, err := service.Forward(context.Background(), httptest.NewRecorder(), userID, &openai.ChatRequest{Model: "p/m"})
@@ -170,7 +170,18 @@ func TestForwardAggregateTimeoutReturnsStablePreCommitFailure(t *testing.T) {
 		t.Fatalf("aggregate timeout result=%+v", result)
 	}
 
-	if _, err := NewService(ServiceConfig{Repository: repository, Runner: runner, ForwardTimeout: -time.Second}); err == nil {
+	invalidConfigKey := randomSafetyIdentifierKey(t)
+	invalidService, invalidErr := NewService(ServiceConfig{
+		Repository:          repository,
+		Runner:              runner,
+		ForwardTimeout:      -time.Second,
+		SafetyIdentifierKey: invalidConfigKey,
+	})
+	clear(invalidConfigKey)
+	if invalidService != nil {
+		_ = invalidService.Close()
+	}
+	if invalidErr == nil {
 		t.Fatal("negative aggregate timeout was accepted")
 	}
 }

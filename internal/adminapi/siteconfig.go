@@ -188,6 +188,23 @@ func parseCanonicalInt(raw string) (int, error) {
 	return n, nil
 }
 
+// parseCanonicalBool accepts exactly the canonical stored form of a toggle:
+// the bytes "1" (enabled) or "0" (disabled). Any other value — including
+// "true"/"false", surrounding whitespace, or an empty string — is an error, so
+// a corrupted or non-canonical row can never silently flip the runtime
+// singleton in an unexpected direction. Unlike parseCanonicalInt it does not
+// trim surrounding whitespace: the stored form is byte-exact.
+func parseCanonicalBool(raw string) (bool, error) {
+	switch raw {
+	case "1":
+		return true, nil
+	case "0":
+		return false, nil
+	default:
+		return false, errors.New("configuration value is not a canonical boolean")
+	}
+}
+
 // typedSiteConfigValue converts a stored site_config string into the wire
 // value for a known key. Int keys fall back to the documented default when
 // unset or when a stored value is not a canonical integer in range, so a

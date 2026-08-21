@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 	"github.com/waiting-here/NonbiriAPI/internal/usage"
 )
@@ -32,7 +33,9 @@ func newRetentionStore(t *testing.T) *db.Store {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = vault.Close() })
-	store, err := db.Open(filepath.Join(t.TempDir(), "retention.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "retention.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -474,7 +477,9 @@ func TestCleanupAfterStoreCloseFailsStable(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer vault.Close()
-	store, err := db.Open(filepath.Join(t.TempDir(), "closed.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "closed.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
 	if err != nil {
 		t.Fatal(err)
 	}

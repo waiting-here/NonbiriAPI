@@ -26,6 +26,8 @@ If registration is enabled, an OAuth scope override must retain both identity an
 
 The master key is not a normal setting. Back it up securely, keep its Unix file mode owner-only (`0400` or `0600`), and never replace it for an existing database. Losing it makes encrypted upstream credentials unrecoverable. The environment file also contains secrets (administrator password and OAuth client secret, and possibly SMTP credentials), so keep it readable only by root and the dedicated service account.
 
+The database directory and file hold encrypted upstream credentials and private account metadata. On Unix, the application enforces owner-only access at startup: the database parent directory must be owned by the service account with mode `0700` (no group or other access), and the database file together with its `-wal` and `-shm` sidecars are tightened to `0600` and verified. The parent directory is resolved to an absolute path, so the check also covers the current directory for a relative database path and root for a root-level path. If owner-only access cannot be guaranteed — a group/other-accessible directory, a wrong owner, a symlink or non-regular file at the database path or its `-wal`/`-shm` sidecars (rejected before the database is opened), or a failed permission check — the process refuses to start. A pre-existing world-readable database file is tightened to `0600`; startup no longer depends on the operator setting `umask`. SQLite creates the `-wal`/`-shm` sidecars with the same mode as the database file, so once the database is `0600` later sidecar creation is owner-only too. On Windows, POSIX permission bits are not synthesized or checked; run the service under a dedicated account and configure an ACL that grants access only to that account and administrators, and verify the ACL in a supported test environment.
+
 ## Runtime administrator settings
 
 The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values shown below are current alpha.1 behavior.
@@ -51,7 +53,7 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | `oauth_start_rate_limit` | integer `[0,1000]` | 10 starts per client IP; `0` disables the in-process layer |
 | `oauth_start_rate_window_seconds` | integer `[1,3600]` | 60-second window |
 | `oauth_start_rate_penalty_seconds` | integer `[0,3600]` | 60-second penalty; `0` disables the penalty duration |
-| `maintenance_mode` | boolean | `false`; replaces the **user web application** with a maintenance notice, but does not server-disable `/v1/*` or authenticated APIs |
+| `maintenance_mode` | boolean | `false`; **changed from alpha.1 (unreleased security amendment)**: now a server-side authoritative admission gate — while on, every user-station `/api/*` and `/v1/*` request is refused with a stable `503 service_unavailable` envelope (`source: platform`, `no-store`) except a strict allowlist (`/healthz`, the public config endpoints, and `/api/auth/logout`); already-issued user sessions and caller keys are affected immediately; the admin station is never gated; atomically live-applied and loaded from the database at startup. Route matrix in `docs/api-contract.md` §6 |
 | `registration_open` | boolean | `true`; when false, new registration is refused while existing accounts may sign in |
 | `alert_prefs_*` | single-line text, ≤512 bytes | administrator alert-center preferences |
 
