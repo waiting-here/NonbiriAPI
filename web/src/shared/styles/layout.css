@@ -878,6 +878,7 @@ tr:first-child td {
 .plain-list li,
 .binding-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.8rem;
@@ -941,6 +942,20 @@ tr:first-child td {
 
 .binding-row.drop-after {
   box-shadow: inset 0 -2px 0 0 var(--nb-color-accent);
+}
+
+/* Inline binding editor spans the full row width below the summary line. */
+.binding-edit-form {
+  flex: 1 1 100%;
+  margin-top: 0.35rem;
+  padding: 0.75rem;
+  border: 1px dashed var(--nb-color-border);
+  border-radius: var(--nb-radius-sm);
+  background: var(--nb-color-surface);
+}
+
+.binding-edit-form h4 {
+  margin: 0 0 0.6rem;
 }
 
 .plain-list li > span:last-child,

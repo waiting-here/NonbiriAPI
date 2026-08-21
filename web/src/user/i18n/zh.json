@@ -140,7 +140,17 @@
       "invalidParts": "提供方和模型名必填，长度最多 64 个字符，不能含控制字符，也不能有首尾空白。",
       "noEndpointKeys": "没有可用于绑定的启用端点密钥。",
       "noFetchedModels": "此密钥没有可用的已拉取模型。",
-      "draft": "草稿：没有绑定"
+      "draft": "草稿：没有绑定",
+      "editTitle": "编辑平台模型",
+      "editBinding": "编辑绑定",
+      "editBindingTitle": "编辑上游绑定",
+      "ord": "顺序序号",
+      "ordHint": "0–1000000 的整数；按顺序策略下数值越小越优先调用。",
+      "ordInvalid": "顺序序号必须是 0 到 1000000 之间的整数。",
+      "currentUpstream": "当前值（不在已拉取列表中）",
+      "charityPrefixForbidden": "提供方不能以「[公益]」开头：该前缀保留给公益模型。",
+      "charityPrefixRejected": "保存被拒绝：「[公益]」前缀保留给公益模型，请改用其他提供方名称。",
+      "nameConflict": "平台模型名称与已有模型重复，请换一个提供方或模型名。"
     },
     "keys": {
       "nav": "调用密钥",
