@@ -103,7 +103,7 @@ func TestRecordRequestValidUsageAndAccumulators(t *testing.T) {
 		t.Fatal("log row count != 1")
 	}
 
-	logs, _, err := store.QueryRequestLogs(context.Background(), LogQuery{UserID: userID, PageSize: 10})
+	logs, _, err := store.QueryUserRequestLogs(context.Background(), userID, UserLogQuery{PageSize: 10})
 	if err != nil {
 		t.Fatalf("QueryRequestLogs: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestRecordRequestValidUsageAndAccumulators(t *testing.T) {
 		t.Fatalf("logs = %+v", logs)
 	}
 	log := logs[0]
-	if log.UserID != userID || log.Model != "opaque/provider/model" || log.EndpointKeyID != keyID ||
+	if log.Model != "opaque/provider/model" || log.EndpointKeyID != keyID ||
 		log.UpstreamModelID != "upstream/model" || log.StatusCode != 200 || log.DurationMs != 12 ||
 		log.PromptTokens != 2 || log.CompletionTokens != 3 || log.TotalTokens != 5 ||
 		log.UsageUnknown || log.ErrorCode != "" || log.ErrorDiag != "" ||
@@ -139,7 +139,7 @@ func TestRecordRequestUsageUnknownNoFabricatedTokens(t *testing.T) {
 	if totals.TotalRequests != 1 || totals.TotalPromptTokens != 0 || totals.TotalCompletionTokens != 0 || totals.TotalUnknownUsageRequests != 1 {
 		t.Fatalf("totals = %+v", totals)
 	}
-	logs, _, _ := store.QueryRequestLogs(context.Background(), LogQuery{PageSize: 10})
+	logs, _, _ := store.QueryUserRequestLogs(context.Background(), userID, UserLogQuery{PageSize: 10})
 	if len(logs) != 1 || !logs[0].UsageUnknown || logs[0].PromptTokens != 0 || logs[0].TotalTokens != 0 {
 		t.Fatalf("logs = %+v", logs)
 	}
@@ -162,7 +162,7 @@ func TestRecordRequestMirrorColumnsDerivedFromBuckets(t *testing.T) {
 	if totals.TotalPromptTokens != 10 || totals.TotalCompletionTokens != 7 || totals.TotalUncachedInputTokens != 2 || totals.TotalCacheWriteInputTokens != 3 || totals.TotalCacheReadInputTokens != 5 || totals.TotalOutputTokens != 7 {
 		t.Fatalf("totals = %+v", totals)
 	}
-	logs, _, _ := store.QueryRequestLogs(context.Background(), LogQuery{PageSize: 10})
+	logs, _, _ := store.QueryUserRequestLogs(context.Background(), userID, UserLogQuery{PageSize: 10})
 	log := logs[0]
 	if log.PromptTokens != 10 || log.CompletionTokens != 7 || log.TotalTokens != 17 ||
 		log.UncachedInputTokens != 2 || log.CacheWriteInputTokens != 3 || log.CacheReadInputTokens != 5 || log.OutputTokens != 7 {
@@ -231,7 +231,7 @@ func TestRecordRequestDeletedKeyKeepsLogRow(t *testing.T) {
 	if err := store.RecordRequest(context.Background(), usageInput(userID, keyID)); err != nil {
 		t.Fatalf("RecordRequest with a deleted key must keep the log: %v", err)
 	}
-	logs, _, _ := store.QueryRequestLogs(context.Background(), LogQuery{PageSize: 10})
+	logs, _, _ := store.QueryUserRequestLogs(context.Background(), userID, UserLogQuery{PageSize: 10})
 	if len(logs) != 1 || logs[0].EndpointKeyID != 0 {
 		t.Fatalf("logs = %+v", logs)
 	}
@@ -334,7 +334,7 @@ func TestRecordRequestBoundsDiagnostic(t *testing.T) {
 	if err := store.RecordRequest(context.Background(), input); err != nil {
 		t.Fatalf("RecordRequest: %v", err)
 	}
-	logs, _, _ := store.QueryRequestLogs(context.Background(), LogQuery{PageSize: 10})
+	logs, _, _ := store.QueryUserRequestLogs(context.Background(), userID, UserLogQuery{PageSize: 10})
 	if len(logs) != 1 {
 		t.Fatal("missing log row")
 	}
@@ -349,7 +349,7 @@ func TestRecordRequestBoundsDiagnostic(t *testing.T) {
 	}
 }
 
-func TestQueryRequestLogsFiltersAndOffsetPagination(t *testing.T) {
+func TestQueryAdminRequestLogsFiltersAndOffsetPagination(t *testing.T) {
 	store := openTestStore(t, filepath.Join(t.TempDir(), "usage.db"))
 	defer store.Close()
 	alice := seedUsageUser(t, store, "alice")
@@ -384,7 +384,7 @@ func TestQueryRequestLogsFiltersAndOffsetPagination(t *testing.T) {
 	}
 
 	// User filter: only alice's rows, newest first.
-	logs, _, err := store.QueryRequestLogs(context.Background(), LogQuery{UserID: alice, PageSize: 10})
+	logs, _, err := store.QueryAdminRequestLogs(context.Background(), AdminLogQuery{UserID: alice, PageSize: 10})
 	if err != nil {
 		t.Fatalf("QueryRequestLogs: %v", err)
 	}
@@ -398,13 +398,13 @@ func TestQueryRequestLogsFiltersAndOffsetPagination(t *testing.T) {
 	}
 
 	// Status filter.
-	status, _, err := store.QueryRequestLogs(context.Background(), LogQuery{Status: 502, PageSize: 10})
+	status, _, err := store.QueryAdminRequestLogs(context.Background(), AdminLogQuery{Status: 502, PageSize: 10})
 	if err != nil || len(status) != 1 || status[0].UserID != bob {
 		t.Fatalf("status filter = %+v err=%v", status, err)
 	}
 
 	// Time-range filter: started_at in [base+2min, base+4min).
-	ranged, _, err := store.QueryRequestLogs(context.Background(), LogQuery{
+	ranged, _, err := store.QueryAdminRequestLogs(context.Background(), AdminLogQuery{
 		FromUnix: base.Add(2 * time.Minute).Unix(),
 		ToUnix:   base.Add(4 * time.Minute).Unix(),
 		PageSize: 10,
@@ -414,20 +414,20 @@ func TestQueryRequestLogsFiltersAndOffsetPagination(t *testing.T) {
 	}
 
 	// Offset pagination: page of 2, then the next pages.
-	page1, hasMore1, err := store.QueryRequestLogs(context.Background(), LogQuery{PageSize: 2})
+	page1, hasMore1, err := store.QueryAdminRequestLogs(context.Background(), AdminLogQuery{PageSize: 2})
 	if err != nil || len(page1) != 2 || !hasMore1 {
 		t.Fatalf("page1 = %+v err=%v hasMore=%v", page1, err, hasMore1)
 	}
-	page2, hasMore2, err := store.QueryRequestLogs(context.Background(), LogQuery{Page: 2, PageSize: 2})
+	page2, hasMore2, err := store.QueryAdminRequestLogs(context.Background(), AdminLogQuery{Page: 2, PageSize: 2})
 	if err != nil || len(page2) != 2 || !hasMore2 {
 		t.Fatalf("page2 = %+v err=%v hasMore=%v", page2, err, hasMore2)
 	}
-	page3, hasMore3, err := store.QueryRequestLogs(context.Background(), LogQuery{Page: 3, PageSize: 2})
+	page3, hasMore3, err := store.QueryAdminRequestLogs(context.Background(), AdminLogQuery{Page: 3, PageSize: 2})
 	if err != nil || len(page3) != 2 || hasMore3 {
 		t.Fatalf("page3 = %+v err=%v hasMore=%v", page3, err, hasMore3)
 	}
 	seen := make(map[int64]bool)
-	for _, log := range append(append([]RequestLog(nil), page1...), append(page2, page3...)...) {
+	for _, log := range append(append([]AdminRequestLog(nil), page1...), append(page2, page3...)...) {
 		if seen[log.ID] {
 			t.Fatalf("pages overlap at id %d", log.ID)
 		}
@@ -438,7 +438,7 @@ func TestQueryRequestLogsFiltersAndOffsetPagination(t *testing.T) {
 	}
 
 	// Page-size clamp: never exceeds the page bound.
-	huge, _, err := store.QueryRequestLogs(context.Background(), LogQuery{PageSize: 1_000_000})
+	huge, _, err := store.QueryAdminRequestLogs(context.Background(), AdminLogQuery{PageSize: 1_000_000})
 	if err != nil || len(huge) > MaxLogPageLimit {
 		t.Fatalf("page-size clamp = %d err=%v", len(huge), err)
 	}

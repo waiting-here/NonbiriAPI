@@ -471,7 +471,7 @@ func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointSe
 			servePublicConfig(store, w, r)
 		case path == "/api/auth/discord/start" || path == "/api/auth/discord/callback" || path == "/api/auth/elevate" || path == "/api/session" || path == "/api/me" || path == "/api/auth/logout" || path == "/api/caller-key" || path == "/api/caller-key/regenerate":
 			userAuthHandler.ServeHTTP(w, r)
-		case path == "/api/me/usage":
+		case path == "/api/me/usage" || path == "/api/logs" || path == "/api/logs/options":
 			userLogs.ServeHTTP(w, r)
 		case path == "/api/issues" || strings.HasPrefix(path, "/api/issues/"):
 			userIssues.ServeHTTP(w, r)
@@ -522,7 +522,7 @@ func buildAdminAndRootAPI(cfg *config.Config, userAuth *auth.UserAuth, adminAuth
 			}
 		case r.URL.Path == "/admin/api/site-config" || strings.HasPrefix(r.URL.Path, "/admin/api/site-config/"):
 			adminControlsHandler.ServeHTTP(w, r)
-		case r.URL.Path == "/admin/api/logs" || r.URL.Path == "/admin/api/usage" || strings.HasPrefix(r.URL.Path, "/admin/api/overview/"):
+		case r.URL.Path == "/admin/api/logs" || strings.HasPrefix(r.URL.Path, "/admin/api/logs/") || r.URL.Path == "/admin/api/usage" || strings.HasPrefix(r.URL.Path, "/admin/api/overview/"):
 			adminLogs.ServeHTTP(w, r)
 		case r.URL.Path == "/admin/api/alerts" || strings.HasPrefix(r.URL.Path, "/admin/api/alerts/"):
 			adminAlerts.ServeHTTP(w, r)
