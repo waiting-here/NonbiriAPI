@@ -283,13 +283,21 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err != nil {
 		return nil, fmt.Errorf("usage service: %w", err)
 	}
+	safetyIdentifierKey, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
+	if err != nil {
+		return nil, fmt.Errorf("safety identifier subkey: %w", err)
+	}
 	forwardService, err := forward.NewService(forward.ServiceConfig{
-		Repository: store, Runner: secureRunner,
-		Hooks: forward.Hooks{Attempt: usageService.HandleAttempt, Usage: usageService.HandleUsage},
+		Repository:          store,
+		Runner:              secureRunner,
+		Hooks:               forward.Hooks{Attempt: usageService.HandleAttempt, Usage: usageService.HandleUsage},
+		SafetyIdentifierKey: safetyIdentifierKey,
 	})
+	clear(safetyIdentifierKey)
 	if err != nil {
 		return nil, fmt.Errorf("forward service: %w", err)
 	}
+	cleanup = append(cleanup, forwardService.Close)
 	flowController, err = flowcontrol.New(flowcontrol.Config{
 		RPM:        ratelimit.DefaultRPMConfig(),
 		UserLimits: flowcontrol.DBUserLimitResolver(store),

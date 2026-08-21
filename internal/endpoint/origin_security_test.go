@@ -275,14 +275,21 @@ func TestEndpointOriginChangeCannotExfiltrateStoredCredential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	forwardService, err := forward.NewService(forward.ServiceConfig{
-		Repository: store,
-		Runner:     runner,
-		Backoff:    forward.BackoffConfig{Base: -1, Max: -1},
-	})
+	safetyIdentifierKey, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
 	if err != nil {
 		t.Fatal(err)
 	}
+	forwardService, err := forward.NewService(forward.ServiceConfig{
+		Repository:          store,
+		Runner:              runner,
+		Backoff:             forward.BackoffConfig{Base: -1, Max: -1},
+		SafetyIdentifierKey: safetyIdentifierKey,
+	})
+	clear(safetyIdentifierKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = forwardService.Close() })
 	chatRequest, err := openai.DecodeChatRequest(strings.NewReader(
 		`{"model":"provider/model","messages":[{"role":"user","content":"hello"}]}`), openai.MaxRequestBodyBytes)
 	if err != nil {

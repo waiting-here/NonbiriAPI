@@ -8,6 +8,10 @@ package forward_test
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base32"
+	"encoding/binary"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -53,6 +57,24 @@ func auditChunk(content string) string {
 
 const auditUsageChunk = `{"id":"c","object":"chat.completion.chunk","created":1,"model":"up/model","choices":[],"usage":{"prompt_tokens":3,"completion_tokens":7,"total_tokens":10}}`
 
+func auditSafetyIdentifier(t *testing.T, vault *secret.Vault, userID int64) string {
+	t.Helper()
+	key, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(key)
+	message := make([]byte, len(forward.SafetyIdentifierSubkeyInfo)+8)
+	copy(message, forward.SafetyIdentifierSubkeyInfo)
+	binary.BigEndian.PutUint64(message[len(forward.SafetyIdentifierSubkeyInfo):], uint64(userID))
+	mac := hmac.New(sha256.New, key)
+	_, _ = mac.Write(message)
+	clear(message)
+	digest := mac.Sum(nil)
+	defer clear(digest)
+	return "nbu_v2_" + base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(digest)
+}
+
 func newAuditFixture(t *testing.T, upstreamURLs []string, hooks forward.Hooks) *auditFixture {
 	return newAuditFixtureWithTimeout(t, upstreamURLs, hooks, 10*time.Second)
 }
@@ -97,10 +119,18 @@ func newAuditFixtureWithTimeout(t *testing.T, upstreamURLs []string, hooks forwa
 	if err != nil {
 		t.Fatal(err)
 	}
+	safetyIdentifierKey, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
+	if err != nil {
+		t.Fatal(err)
+	}
 	service, err := forward.NewService(forward.ServiceConfig{
-		Repository: store, Runner: runner, Hooks: hooks,
-		Backoff: forward.BackoffConfig{Base: 5 * time.Millisecond, Max: 10 * time.Millisecond},
+		Repository:          store,
+		Runner:              runner,
+		Hooks:               hooks,
+		Backoff:             forward.BackoffConfig{Base: 5 * time.Millisecond, Max: 10 * time.Millisecond},
+		SafetyIdentifierKey: safetyIdentifierKey,
 	})
+	clear(safetyIdentifierKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,6 +138,7 @@ func newAuditFixtureWithTimeout(t *testing.T, upstreamURLs []string, hooks forwa
 	handler := auth.CallerKeyMiddleware(store, exit)
 	fixture := &auditFixture{store: store, vault: vault, stack: stack, handler: handler, service: service, hooks: hooks, registry: registry}
 	t.Cleanup(func() {
+		_ = service.Close()
 		stack.CloseIdleConnections()
 		_ = store.Close()
 		_ = vault.Close()
@@ -350,11 +381,14 @@ func TestAuditForwardSafetyIdentifierInjected(t *testing.T) {
 	if !ok || safety == "" {
 		t.Fatalf("safety_identifier missing: %v", payload)
 	}
-	if want := forward.SafetyIdentifier(user.id); safety != want {
+	if want := auditSafetyIdentifier(t, fixture.vault, user.id); safety != want {
 		t.Fatalf("safety_identifier=%q want=%q", safety, want)
 	}
-	if strings.Contains(safety, strconv.FormatInt(user.id, 10)) {
-		t.Fatalf("safety_identifier embeds the raw user id: %q", safety)
+	if len(safety) != 59 || !strings.HasPrefix(safety, "nbu_v2_") || strings.ContainsRune(safety, '=') {
+		t.Fatalf("safety_identifier has non-canonical v2 format: %q", safety)
+	}
+	if safety == strconv.FormatInt(user.id, 10) {
+		t.Fatalf("safety_identifier is the raw user id: %q", safety)
 	}
 }
 
