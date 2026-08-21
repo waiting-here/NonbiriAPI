@@ -171,19 +171,34 @@ func AdminFromContext(ctx context.Context) (*db.User, bool) {
 
 // UserResponse is the bounded public user shape used by /api/session and
 // /api/me. No Discord access token, session token, or caller key is included.
+// banned_until / charity_suspended_until are nullable unix seconds; an
+// authenticated caller is never actively banned (a ban deletes its sessions),
+// but a charity-eligibility suspension can be in force while the account
+// itself remains usable.
 type UserResponse struct {
-	ID             int64     `json:"id"`
-	Username       string    `json:"username"`
-	Avatar         string    `json:"avatar"`
-	AvatarURL      string    `json:"avatar_url"`
-	GuildNick      string    `json:"guild_nick"`
-	GuildAvatarURL string    `json:"guild_avatar_url"`
-	Lang           string    `json:"lang"`
-	IsBanned       bool      `json:"is_banned"`
-	BlockedReason  string    `json:"blocked_reason,omitempty"`
-	EndpointLimit  *int      `json:"endpoint_limit"`
-	RPMLimit       *int      `json:"rpm_limit"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID                    int64     `json:"id"`
+	Username              string    `json:"username"`
+	Avatar                string    `json:"avatar"`
+	AvatarURL             string    `json:"avatar_url"`
+	GuildNick             string    `json:"guild_nick"`
+	GuildAvatarURL        string    `json:"guild_avatar_url"`
+	Lang                  string    `json:"lang"`
+	IsBanned              bool      `json:"is_banned"`
+	BlockedReason         string    `json:"blocked_reason,omitempty"`
+	BannedUntil           *int64    `json:"banned_until"`
+	CharitySuspendedUntil *int64    `json:"charity_suspended_until"`
+	EndpointLimit         *int      `json:"endpoint_limit"`
+	RPMLimit              *int      `json:"rpm_limit"`
+	CreatedAt             time.Time `json:"created_at"`
+}
+
+// unixSecondsPtr projects a nullable deadline as a JSON number pointer.
+func unixSecondsPtr(t *time.Time) *int64 {
+	if t == nil {
+		return nil
+	}
+	v := t.Unix()
+	return &v
 }
 
 func publicUser(user *db.User) UserResponse {
@@ -195,7 +210,9 @@ func publicUser(user *db.User) UserResponse {
 		AvatarURL: discordAvatarURL(user.DiscordID, user.Avatar),
 		GuildNick: user.GuildNick, GuildAvatarURL: user.GuildAvatarURL,
 		IsBanned: user.IsBanned, BlockedReason: user.BannedReason,
-		EndpointLimit: user.EndpointLimit, RPMLimit: user.RPMLimit, CreatedAt: user.CreatedAt,
+		BannedUntil:           unixSecondsPtr(user.BannedUntil),
+		CharitySuspendedUntil: unixSecondsPtr(user.CharitySuspendedUntil),
+		EndpointLimit:         user.EndpointLimit, RPMLimit: user.RPMLimit, CreatedAt: user.CreatedAt,
 	}
 }
 

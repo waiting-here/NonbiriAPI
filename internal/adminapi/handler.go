@@ -253,9 +253,12 @@ func (h *Handler) currentRPMLimitCap(ctx context.Context) (int, error) {
 	return ratelimit.DefaultRPMPerUserLimit, nil
 }
 
-// banUser handles POST /admin/api/users/{id}/ban. The repository performs the
-// ban, session deletion, and caller-key deletion in one transaction, so
-// request-time auth and platform-exit auth are invalidated atomically.
+// banUser handles POST /admin/api/users/{id}/ban. The body carries an
+// optional bounded reason and an optional duration_seconds: absent or null
+// means permanent, a positive integer sets a lazy expiry deadline. The
+// repository performs the ban, session deletion, and caller-key deletion in
+// one transaction, so request-time auth and platform-exit auth are
+// invalidated atomically. A manual ban always clears the auto_banned flag.
 func (h *Handler) banUser(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeErr(w, httperr.New(httperr.CodeServiceUnavailable, "service unavailable"))
@@ -269,12 +272,22 @@ func (h *Handler) banUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Reason string `json:"reason"`
+		Reason          string          `json:"reason"`
+		DurationSeconds json.RawMessage `json:"duration_seconds"`
 	}
 	if !decodeOptionalJSONBody(w, r, &body) {
 		return
 	}
-	if err := h.store.BanUser(id, body.Reason); err != nil {
+	ban := db.UserBan{Reason: body.Reason}
+	if body.DurationSeconds != nil && string(body.DurationSeconds) != "null" {
+		var duration int64
+		if err := json.Unmarshal(body.DurationSeconds, &duration); err != nil || duration < 1 || duration > db.MaxBanDurationSeconds {
+			writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid ban duration"))
+			return
+		}
+		ban.DurationSeconds = duration
+	}
+	if err := h.store.BanUserWithOptions(id, ban); err != nil {
 		writeLimitErr(w, err)
 		return
 	}
@@ -374,6 +387,29 @@ func (h *Handler) patchSiteConfig(w http.ResponseWriter, r *http.Request) {
 	value, derr := validateSiteConfigValue(key, body.Value)
 	if derr.Code != "" {
 		writeErr(w, derr)
+		return
+	}
+	// The timezone offset has its own atomic immutability guard in the
+	// repository (freeze check and upsert share one write transaction) and no
+	// runtime singleton: every consumer reads the authoritative value per
+	// business transaction. It therefore bypasses the generic apply/persist
+	// path below.
+	if key == KeySiteTimezoneOffsetMinutes {
+		n, perr := strconv.ParseInt(value, 10, 64)
+		if perr != nil {
+			writeErr(w, httperr.New(httperr.CodeInternal, "configuration update failed"))
+			return
+		}
+		if err := h.store.SetSiteTimezoneOffsetMinutes(int(n)); err != nil {
+			if errors.Is(err, db.ErrConflict) {
+				writeErr(w, httperr.New(httperr.CodeConflict, "site timezone can no longer be changed"))
+				return
+			}
+			slog.Error("site config update failed", "key", key, "err", err)
+			writeErr(w, httperr.New(httperr.CodeInternal, "configuration update failed"))
+			return
+		}
+		httperr.WriteJSON(w, http.StatusOK, siteConfigPatchResp{Key: key, Value: int(n)})
 		return
 	}
 	// Serialize the read→apply→persist→revert step per handler so concurrent

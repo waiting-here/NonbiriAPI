@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -96,16 +97,25 @@ func (s *Store) createSessionAtCredGen(userID int64, admin bool, credGen string,
 	}
 	defer tx.Rollback()
 	var isAdmin, isBanned int
-	if err := tx.QueryRow(`SELECT is_admin, is_banned FROM users WHERE id=?`, userID).Scan(&isAdmin, &isBanned); errors.Is(err, sql.ErrNoRows) {
+	var bannedUntil sql.NullInt64
+	if err := tx.QueryRow(`SELECT is_admin, is_banned, banned_until FROM users WHERE id=?`, userID).Scan(&isAdmin, &isBanned, &bannedUntil); errors.Is(err, sql.ErrNoRows) {
 		return "", SessionExpiry{}, ErrNotFound
 	} else if err != nil {
 		return "", SessionExpiry{}, fmt.Errorf("create session")
 	}
-	if (isAdmin != 0) != admin || (!admin && isBanned != 0) {
-		if !admin && isBanned != 0 {
-			return "", SessionExpiry{}, ErrBanned
-		}
+	if (isAdmin != 0) != admin {
 		return "", SessionExpiry{}, ErrNotFound
+	}
+	if !admin && isBanned != 0 && !(bannedUntil.Valid && bannedUntil.Int64 <= now.Unix()) {
+		// A due deadline ban counts as not banned; the lazy lift below (or a
+		// later read) converges the stored row. A permanent ban (NULL) and a
+		// future deadline still refuse session creation.
+		return "", SessionExpiry{}, ErrBanned
+	}
+	if !admin && isBanned != 0 {
+		if _, err := liftDueUserBanTx(tx, userID, now.Unix()); err != nil {
+			return "", SessionExpiry{}, fmt.Errorf("create session")
+		}
 	}
 	_, err = tx.Exec(`INSERT INTO sessions
 		(token_hash, user_id, oauth_state, last_seen_at, expires_at, absolute_expires_at, created_at, cred_gen)
@@ -188,8 +198,14 @@ func (s *Store) getSessionUserAtCredGen(token string, admin bool, credGen string
 
 	query := `SELECT ` + userSelectColumns + `, s.expires_at, s.absolute_expires_at
 		FROM sessions s JOIN users u ON u.id=s.user_id
-		WHERE s.token_hash=? AND u.is_admin=? AND (? OR u.is_banned=0)`
-	args := []any{hashOpaqueToken(token), boolInt(admin), boolInt(admin)}
+		WHERE s.token_hash=? AND u.is_admin=?
+		AND (? OR (u.is_banned=0 OR (u.banned_until IS NOT NULL AND u.banned_until<=?)))`
+	// The ban predicate treats a due deadline as not banned so the very first
+	// read after expiry succeeds; the conditional lift below converges the
+	// stored row. A permanent ban (banned_until NULL) still fails the
+	// predicate. Charity suspension never blocks authentication, so it carries
+	// no predicate here.
+	args := []any{hashOpaqueToken(token), boolInt(admin), boolInt(admin), now.Unix()}
 	if admin && credGen != "" {
 		query += ` AND s.cred_gen=?`
 		args = append(args, credGen)
@@ -223,6 +239,35 @@ func (s *Store) getSessionUserAtCredGen(token string, admin bool, credGen string
 	user := scanned.user
 	expiresAt := scanned.expiresAt
 	absoluteExpiresAt := scanned.absoluteExpiresAt
+
+	if !admin {
+		// Lazy on-read recovery inside the same transaction that authenticated
+		// the session: a due ban deadline or suspension deadline is lifted
+		// atomically before commit.
+		nowUnix := now.Unix()
+		if user.IsBanned && user.BannedUntil != nil && user.BannedUntil.Unix() <= nowUnix {
+			lifted, err := liftDueUserBanTx(tx, user.ID, nowUnix)
+			if err != nil {
+				return nil, fmt.Errorf("authenticate session")
+			}
+			if lifted {
+				slog.Info("temporal user ban expired and was lifted lazily", "user_id", user.ID)
+			}
+			user.IsBanned = false
+			user.BannedReason = ""
+			user.BannedUntil = nil
+		}
+		if user.CharitySuspendedUntil != nil && user.CharitySuspendedUntil.Unix() <= nowUnix {
+			cleared, err := clearDueCharitySuspensionTx(tx, user.ID, nowUnix)
+			if err != nil {
+				return nil, fmt.Errorf("authenticate session")
+			}
+			if cleared {
+				slog.Info("charity eligibility suspension expired and was cleared lazily", "user_id", user.ID)
+			}
+			user.CharitySuspendedUntil = nil
+		}
+	}
 
 	if now.Unix() >= expiresAt || now.Unix() >= absoluteExpiresAt {
 		if _, err := tx.Exec(`DELETE FROM sessions WHERE token_hash=?`, hashOpaqueToken(token)); err != nil {
@@ -271,6 +316,8 @@ type sessionUserScan struct {
 func (s *sessionUserScan) scan(row interface{ Scan(...any) error }) error {
 	var u User
 	var isAdmin, isBanned int
+	var bannedUntil, charitySuspendedUntil sql.NullInt64
+	var autoBanned int
 	var endpointLimit, rpmLimit sql.NullInt64
 	var createdAt, updatedAt int64
 	if err := row.Scan(
@@ -283,6 +330,9 @@ func (s *sessionUserScan) scan(row interface{ Scan(...any) error }) error {
 		&isAdmin,
 		&isBanned,
 		&u.BannedReason,
+		&bannedUntil,
+		&autoBanned,
+		&charitySuspendedUntil,
 		&endpointLimit,
 		&rpmLimit,
 		&u.TotalRequests,
@@ -299,6 +349,9 @@ func (s *sessionUserScan) scan(row interface{ Scan(...any) error }) error {
 	}
 	u.IsAdmin = isAdmin != 0
 	u.IsBanned = isBanned != 0
+	u.AutoBanned = autoBanned != 0
+	u.BannedUntil = nullUnixTime(bannedUntil)
+	u.CharitySuspendedUntil = nullUnixTime(charitySuspendedUntil)
 	if endpointLimit.Valid {
 		value := int(endpointLimit.Int64)
 		u.EndpointLimit = &value

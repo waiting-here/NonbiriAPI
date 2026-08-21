@@ -37,6 +37,7 @@ be closed before the task is accepted.
 | Table / column | User link | Export | Delete | Retention | Privacy |
 |---|---|---|---|---|---|
 | `users` (identity, lang, limits) | self | yes (whitelisted fields) | row removed by `DeleteUserAccount` | account lifetime | no Discord token/credential stored; profile text bounded |
+| `users` (ban/suspension columns: `banned_until`, `auto_banned`, `charity_suspended_until`) | self | current state only (`banned_until`/`charity_suspended_until` nullable unix seconds in `/api/session` and `/api/me`; no violation-window data exported) | removed with the row | account lifetime; due deadlines are lifted lazily by an atomic conditional update on read (logged, never alerted) | deadlines are server-set timestamps, never user content; the unset-vs-configured reason for feature gates is never exposed to normal users |
 | `users` (usage accumulators) | self | yes (totals) | removed with the row | account lifetime (totals are the authoritative counter; `request_logs` is never summed) | metadata only |
 | `sessions` | `user_id` FK CASCADE | no (transient) | cascade on user delete; idle+absolute TTL purge | idle/absolute TTL (`PurgeExpiredSessions` at startup + every 6h) | opaque hash only; no plaintext token persisted |
 | `caller_keys` | `user_id` FK CASCADE | metadata only (`display_head/tail`, timestamps); **plaintext never** | cascade on user delete; regeneration invalidates prior key instantly | account lifetime | SHA-256 hash lookup; plaintext shown once, never persisted |

@@ -29,6 +29,9 @@ CREATE TABLE IF NOT EXISTS users (
 	is_admin                     INTEGER NOT NULL DEFAULT 0,
 	is_banned                    INTEGER NOT NULL DEFAULT 0,         -- instant invalidation: a banned user's caller key fails request-time auth
 	banned_reason                TEXT NOT NULL DEFAULT '',
+	banned_until                 INTEGER,                           -- while is_banned=1: NULL = permanent ban, non-NULL = unix-seconds deadline; a due deadline is lifted lazily by an atomic conditional UPDATE on read (logged, never alerted)
+	auto_banned                  INTEGER NOT NULL DEFAULT 0,        -- whether the most recent effective ban was rule-driven (1) or manual (0); every manual ban clears it
+	charity_suspended_until      INTEGER,                           -- charity-eligibility suspension deadline (unix seconds); lifted lazily on read exactly like banned_until
 	endpoint_limit               INTEGER,                           -- nullable admin per-user endpoint-count cap override; NULL = global default; clearing to NULL restores the default
 	rpm_limit                    INTEGER,                           -- nullable user self-tuned per-minute RPM within the admin cap; NULL = admin global default
 	total_requests               INTEGER NOT NULL DEFAULT 0,
@@ -59,6 +62,9 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_absolute ON sessions(absolute_expires_at);
 -- Alpha one-shot manual migration (dev databases created before this rail):
+--   ALTER TABLE users ADD COLUMN banned_until INTEGER;
+--   ALTER TABLE users ADD COLUMN auto_banned INTEGER NOT NULL DEFAULT 0;
+--   ALTER TABLE users ADD COLUMN charity_suspended_until INTEGER;
 --   ALTER TABLE sessions ADD COLUMN cred_gen TEXT NOT NULL DEFAULT '';
 -- CREATE TABLE IF NOT EXISTS does not alter an existing table; run the statement
 -- once before opening such a database. Existing admin rows receive the empty

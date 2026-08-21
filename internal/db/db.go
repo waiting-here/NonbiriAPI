@@ -68,6 +68,10 @@ func Open(path string, secrets secret.Codec) (*Store, error) {
 		_ = d.Close()
 		return nil, fmt.Errorf("migrate users guild columns: %w", err)
 	}
+	if err := ensureUsersTemporalBanColumns(d); err != nil {
+		_ = d.Close()
+		return nil, fmt.Errorf("migrate users temporal ban columns: %w", err)
+	}
 
 	// Enforce owner-only permissions on the database file and its WAL/SHM
 	// sidecars after SQLite has created them. On Unix this chmod+fstat-verifies
@@ -191,6 +195,51 @@ func ensureUsersGuildColumns(d *sql.DB) error {
 	}
 	if !hasGuildAvatarURL {
 		if _, err := d.Exec(`ALTER TABLE users ADD COLUMN guild_avatar_url TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ensureUsersTemporalBanColumns adds the temporal ban/suspension columns to a
+// users table created before they existed. CREATE TABLE IF NOT EXISTS does not
+// alter an existing table, so an earlier database is migrated in place. The
+// PRAGMA check makes it idempotent. Existing rows receive the neutral defaults:
+// no deadline (permanent semantics never apply while is_banned=0), auto_banned=0.
+func ensureUsersTemporalBanColumns(d *sql.DB) error {
+	specs := []struct {
+		name string
+		sql  string
+	}{
+		{"banned_until", `ALTER TABLE users ADD COLUMN banned_until INTEGER`},
+		{"auto_banned", `ALTER TABLE users ADD COLUMN auto_banned INTEGER NOT NULL DEFAULT 0`},
+		{"charity_suspended_until", `ALTER TABLE users ADD COLUMN charity_suspended_until INTEGER`},
+	}
+	rows, err := d.Query(`PRAGMA table_info(users)`)
+	if err != nil {
+		return err
+	}
+	present := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		present[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+	for _, spec := range specs {
+		if present[spec.name] {
+			continue
+		}
+		if _, err := d.Exec(spec.sql); err != nil {
 			return err
 		}
 	}
