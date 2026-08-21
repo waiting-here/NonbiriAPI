@@ -55,7 +55,14 @@ type User struct {
 	Credits int64
 	// DonationCredit is the cumulative donor-reward balance in milli-credits.
 	// The application layer keeps it non-negative.
-	DonationCredit            int64
+	DonationCredit int64
+	// Level is the nullable manual level override (1..5; nil = automatic).
+	// It never applies to the administrator row (administrators are excluded
+	// from the level system). See levels.go for the authoritative resolver.
+	Level *int
+	// AutoLevel is the persistent automatic-level high-water mark (1..4). It
+	// is only ever raised (lazy CAS promotion); there is no downgrade path.
+	AutoLevel                 int
 	EndpointLimit             *int
 	RPMLimit                  *int
 	TotalRequests             int64
@@ -160,6 +167,8 @@ const userSelectColumns = `
 	u.total_unknown_usage_requests,
 	u.credits,
 	u.donation_credit,
+	u.level,
+	u.auto_level,
 	u.lang,
 	u.created_at,
 	u.updated_at`
@@ -171,7 +180,7 @@ func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	var isAdmin, isBanned int
 	var bannedUntil, charitySuspendedUntil sql.NullInt64
 	var autoBanned int
-	var endpointLimit, rpmLimit sql.NullInt64
+	var endpointLimit, rpmLimit, level sql.NullInt64
 	var createdAt, updatedAt int64
 	if err := row.Scan(
 		&u.ID,
@@ -194,6 +203,8 @@ func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 		&u.TotalUnknownUsageRequests,
 		&u.Credits,
 		&u.DonationCredit,
+		&level,
+		&u.AutoLevel,
 		&u.Lang,
 		&createdAt,
 		&updatedAt,
@@ -212,6 +223,10 @@ func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	if rpmLimit.Valid {
 		value := int(rpmLimit.Int64)
 		u.RPMLimit = &value
+	}
+	if level.Valid {
+		value := int(level.Int64)
+		u.Level = &value
 	}
 	u.CreatedAt = time.Unix(createdAt, 0).UTC()
 	u.UpdatedAt = time.Unix(updatedAt, 0).UTC()

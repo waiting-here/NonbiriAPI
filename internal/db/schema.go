@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS users (
 	total_unknown_usage_requests INTEGER NOT NULL DEFAULT 0,        -- truncated/no-usage request count; no token values are fabricated
 	credits                       INTEGER NOT NULL DEFAULT 0,        -- signed consumption balance in milli-credits; may go negative (settled over-reservation, admin-configured penalties); deliberately NO non-negative CHECK
 	donation_credit               INTEGER NOT NULL DEFAULT 0,        -- cumulative donor-reward balance in milli-credits; kept non-negative at the application layer (a result below 0 is rejected)
+	level                         INTEGER,                           -- nullable manual level override; NULL = automatic (auto_level high-water mark applies); non-NULL is 1..5 and is administrator-set (level 5 is manual-only); the administrator row never carries a level
+	auto_level                    INTEGER NOT NULL DEFAULT 1,        -- persistent automatic-level high-water mark, 1..4; raised lazily by a conditional UPDATE when donation_credit reaches an enabled threshold; there is NO downgrade path in alpha.2 (threshold raises and negative corrections never lower it)
 	total_uncached_input_tokens    INTEGER NOT NULL DEFAULT 0,      -- four-bucket accumulator (authoritative)
 	total_cache_write_input_tokens INTEGER NOT NULL DEFAULT 0,      -- four-bucket accumulator (authoritative)
 	total_cache_read_input_tokens  INTEGER NOT NULL DEFAULT 0,      -- four-bucket accumulator (authoritative)

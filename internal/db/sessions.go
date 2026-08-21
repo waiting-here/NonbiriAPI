@@ -318,7 +318,7 @@ func (s *sessionUserScan) scan(row interface{ Scan(...any) error }) error {
 	var isAdmin, isBanned int
 	var bannedUntil, charitySuspendedUntil sql.NullInt64
 	var autoBanned int
-	var endpointLimit, rpmLimit sql.NullInt64
+	var endpointLimit, rpmLimit, level sql.NullInt64
 	var createdAt, updatedAt int64
 	if err := row.Scan(
 		&u.ID,
@@ -341,6 +341,8 @@ func (s *sessionUserScan) scan(row interface{ Scan(...any) error }) error {
 		&u.TotalUnknownUsageRequests,
 		&u.Credits,
 		&u.DonationCredit,
+		&level,
+		&u.AutoLevel,
 		&u.Lang,
 		&createdAt,
 		&updatedAt,
@@ -361,6 +363,10 @@ func (s *sessionUserScan) scan(row interface{ Scan(...any) error }) error {
 	if rpmLimit.Valid {
 		value := int(rpmLimit.Int64)
 		u.RPMLimit = &value
+	}
+	if level.Valid {
+		value := int(level.Int64)
+		u.Level = &value
 	}
 	u.CreatedAt = time.Unix(createdAt, 0).UTC()
 	u.UpdatedAt = time.Unix(updatedAt, 0).UTC()

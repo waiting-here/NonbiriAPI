@@ -17,6 +17,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
@@ -52,7 +53,15 @@ const (
 	// site timezone has never been configured and must never be mistaken for
 	// an explicit UTC (0). It is frozen once any checkin/activity data exists.
 	KeySiteTimezoneOffsetMinutes = "site_timezone_offset_minutes"
-	alertPrefsPrefix             = "alert_prefs_"
+	// Level promotion thresholds (implementation contract §4.1): canonical
+	// non-negative decimal milli-credit strings; "0" (the default, also shown
+	// while unset) disables that level's automatic promotion. The enabled
+	// chain must be strictly increasing in level order; the cross-validation
+	// and the write share one repository transaction.
+	KeyLevelThreshold2Milli = "level_threshold_2_milli"
+	KeyLevelThreshold3Milli = "level_threshold_3_milli"
+	KeyLevelThreshold4Milli = "level_threshold_4_milli"
+	alertPrefsPrefix        = "alert_prefs_"
 )
 
 // Value bounds. RPM caps share the limiter's bounded event-store ceiling
@@ -90,6 +99,10 @@ const (
 	// of 30 in [-720,+840]) and an atomic immutability guard; GET returns
 	// JSON null while unset.
 	kindTimezoneOffset
+	// kindAmount is a canonical non-negative decimal milli-credit string (the
+	// economy wire form). GET projects a JSON string ("0" while unset or when
+	// a stored row is corrupt); PATCH accepts only the canonical form.
+	kindAmount
 )
 
 type keySpec struct {
@@ -125,6 +138,9 @@ var knownSiteConfig = map[string]keySpec{
 	KeyMaintenanceMode:           {kind: kindBool, def: 0},
 	KeyRegistrationOpen:          {kind: kindBool, def: 1},
 	KeySiteTimezoneOffsetMinutes: {kind: kindTimezoneOffset},
+	KeyLevelThreshold2Milli:      {kind: kindAmount},
+	KeyLevelThreshold3Milli:      {kind: kindAmount},
+	KeyLevelThreshold4Milli:      {kind: kindAmount},
 }
 
 // knownSiteConfigKey reports whether key is in the authoritative set
@@ -252,6 +268,14 @@ func typedSiteConfigValue(key, stored string) any {
 				return n
 			}
 			return nil
+		case kindAmount:
+			// Unset or a corrupt row projects as the canonical "0" (that
+			// level's promotion is disabled), matching the frozen default;
+			// a stored negative value can never pass the write path.
+			if v, err := credits.ParseAmount(stored); err == nil && v >= 0 {
+				return credits.FormatAmount(v)
+			}
+			return credits.FormatAmount(0)
 		case kindMultilineText:
 			if validMultilineText(stored, textMaxFor(key)) {
 				return stored
@@ -340,6 +364,19 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 				return "", invalid
 			}
 			return num.String(), httperr.Error{}
+		case kindAmount:
+			var value string
+			if err := json.Unmarshal(raw, &value); err != nil {
+				return "", invalid
+			}
+			// Canonical non-negative decimal string only: no exponent, "+",
+			// leading zeros, whitespace or "-0" (credits.ParseAmount), and
+			// no negative threshold.
+			n, err := credits.ParseAmount(value)
+			if err != nil || n < 0 {
+				return "", invalid
+			}
+			return credits.FormatAmount(n), httperr.Error{}
 		case kindMultilineText:
 			var value string
 			if err := json.Unmarshal(raw, &value); err != nil || !validMultilineText(value, textMaxFor(key)) {

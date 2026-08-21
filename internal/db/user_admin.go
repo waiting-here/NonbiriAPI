@@ -43,12 +43,15 @@ const (
 )
 
 // UserLimitPatch is the tri-state update set for users.endpoint_limit,
-// users.rpm_limit and users.lang.
+// users.rpm_limit, users.lang and users.level.
 //
-//   - EndpointLimitSet / RPMLimitSet report whether the field was present in
-//     the request. A present field with a nil pointer clears the stored value
-//     (NULL = restore the global default); a non-nil pointer stores the value.
+//   - EndpointLimitSet / RPMLimitSet / LevelSet report whether the field was
+//     present in the request. A present field with a nil pointer clears the
+//     stored value (NULL = restore the global default / automatic level); a
+//     non-nil pointer stores the value.
 //   - LangSet selects a lang change ("zh" or "en" only; no NULL semantics).
+//   - Level, when set, must be nil (reset to automatic) or within
+//     [MinLevel, MaxLevel]; it never touches the auto_level high-water mark.
 type UserLimitPatch struct {
 	EndpointLimitSet bool
 	EndpointLimit    *int
@@ -56,6 +59,8 @@ type UserLimitPatch struct {
 	RPMLimit         *int
 	LangSet          bool
 	Lang             string
+	LevelSet         bool
+	Level            *int
 }
 
 func (p UserLimitPatch) validate() error {
@@ -68,6 +73,9 @@ func (p UserLimitPatch) validate() error {
 		return ErrConflict
 	}
 	if p.LangSet && p.Lang != "zh" && p.Lang != "en" {
+		return ErrConflict
+	}
+	if p.LevelSet && p.Level != nil && (*p.Level < MinLevel || *p.Level > MaxLevel) {
 		return ErrConflict
 	}
 	return nil
@@ -124,11 +132,19 @@ func (s *Store) UpdateUserLimits(userID int64, patch UserLimitPatch) (*User, err
 		sets = append(sets, "lang=?")
 		args = append(args, patch.Lang)
 	}
+	if patch.LevelSet {
+		sets = append(sets, "level=?")
+		if patch.Level == nil {
+			args = append(args, nil)
+		} else {
+			args = append(args, *patch.Level)
+		}
+	}
 	if len(sets) == 0 {
 		return nil, ErrConflict
 	}
 	args = append(args, time.Now().Unix(), userID)
-	// #nosec G202 -- sets contains only the three constant column fragments
+	// #nosec G202 -- sets contains only the four constant column fragments
 	// selected above; every request-derived value remains a bound argument.
 	if _, err := tx.Exec(`UPDATE users SET `+strings.Join(sets, ", ")+`, updated_at=? WHERE id=? AND is_admin=0`, args...); err != nil {
 		return nil, fmt.Errorf("update user limits: %w", err)

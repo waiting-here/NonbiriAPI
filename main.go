@@ -39,6 +39,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/model"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/steward"
 	"github.com/waiting-here/NonbiriAPI/internal/usage"
 	"github.com/waiting-here/NonbiriAPI/web"
 )
@@ -346,10 +347,15 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		Store:   store,
 		Runtime: runtimeApplier,
 	})
+	// The level-5 co-management frame: user-station session middleware plus a
+	// per-request live level>=5 gate. No business route is registered yet
+	// (later rails attach through steward.Handler.Handle); the frame itself
+	// still answers the prefix with the stable 403/404 envelopes.
+	stewardAPI := steward.New(steward.Deps{UserAuth: userAuth, Store: store})
 	api := buildUserAPI(userAuth, adminAuth, endpointService, modelFetcher, modelService,
 		logapi.NewHandler(logapi.HandlerDeps{Store: store}),
 		issues.NewHandler(issues.HandlerDeps{Store: store}),
-		exportHandler, lifecycleService, forwardService, flowMiddleware, store)
+		exportHandler, lifecycleService, forwardService, flowMiddleware, store, stewardAPI.Handler())
 	// The maintenance gate sits after the host/station edge (which only lets
 	// /api/* and /v1/* reach the user station) and before any auth or business
 	// handler. It is live-applied from site_config and loaded from the DB at
@@ -464,7 +470,7 @@ func servePublicConfig(store *db.Store, w http.ResponseWriter, r *http.Request) 
 	httperr.WriteJSON(w, http.StatusOK, out)
 }
 
-func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointService *endpoint.Service, fetcher *fetch.Fetcher, modelService *model.Service, logs http.Handler, issueHandler http.Handler, exportHandler http.Handler, lifecycleService *lifecycle.Service, forwardService *forward.Service, flowMiddleware *flowcontrol.Middleware, store *db.Store) http.Handler {
+func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointService *endpoint.Service, fetcher *fetch.Fetcher, modelService *model.Service, logs http.Handler, issueHandler http.Handler, exportHandler http.Handler, lifecycleService *lifecycle.Service, forwardService *forward.Service, flowMiddleware *flowcontrol.Middleware, store *db.Store, stewardHandler http.Handler) http.Handler {
 	userAuthHandler := userAuth.Handler()
 	identity := func(r *http.Request) (int64, error) {
 		user, ok := auth.UserFromContext(r.Context())
@@ -493,6 +499,10 @@ func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointSe
 			userLogs.ServeHTTP(w, r)
 		case path == "/api/issues" || strings.HasPrefix(path, "/api/issues/"):
 			userIssues.ServeHTTP(w, r)
+		case strings.HasPrefix(path, "/api/steward/"):
+			// Level-5 co-management prefix (user station only; the frame
+			// itself re-checks the station, the session, and the live level).
+			stewardHandler.ServeHTTP(w, r)
 		case path == "/api/account/export" || path == "/api/account/delete":
 			if path == "/api/account/export" {
 				userExport.ServeHTTP(w, r)

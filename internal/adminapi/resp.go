@@ -38,7 +38,14 @@ type userResp struct {
 	// being confused with the resulting balance.
 	CreditsBalance        string `json:"credits_balance"`
 	DonationCreditBalance string `json:"donation_credit_balance"`
-	CreatedAt             int64  `json:"created_at"`
+	// Level state: level is the nullable manual override (null = automatic);
+	// auto_level is the persisted automatic high-water mark (1..4). The
+	// effective level is NOT projected here — it is resolved authoritatively
+	// per use by the level resolver, and list reads must not trigger lazy
+	// promotions. The administrator row is never projected through this shape.
+	Level     *int  `json:"level"`
+	AutoLevel int   `json:"auto_level"`
+	CreatedAt int64 `json:"created_at"`
 }
 
 // unixSecondsPtr projects a nullable deadline as a JSON number pointer.
@@ -80,6 +87,8 @@ func userResponse(u *db.User) userResp {
 		TotalUnknownUsageRequests: u.TotalUnknownUsageRequests,
 		CreditsBalance:            credits.FormatAmount(u.Credits),
 		DonationCreditBalance:     credits.FormatAmount(u.DonationCredit),
+		Level:                     u.Level,
+		AutoLevel:                 u.AutoLevel,
 		CreatedAt:                 u.CreatedAt.Unix(),
 	}
 }

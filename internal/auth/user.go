@@ -470,7 +470,10 @@ func containsString(values []string, want string) bool {
 	return false
 }
 
-// Session handles GET /api/session.
+// Session handles GET /api/session. The response projects the account's
+// economy balances and the effective level resolved for this request by the
+// authoritative resolver (a due auto-level promotion is lazily persisted by
+// that same resolution).
 func (a *UserAuth) Session(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodGet) || !requireStation(w, r, host.StationUser) {
 		return
@@ -480,7 +483,12 @@ func (a *UserAuth) Session(w http.ResponseWriter, r *http.Request) {
 		writeStableError(w, httperr.CodeUnauthorized, "authentication required")
 		return
 	}
-	httperr.WriteJSON(w, http.StatusOK, userEnvelope{User: publicUser(user)})
+	effectiveLevel, err := a.store.ResolveEffectiveLevel(r.Context(), user.ID)
+	if err != nil {
+		writeStableError(w, httperr.CodeInternal, "profile unavailable")
+		return
+	}
+	httperr.WriteJSON(w, http.StatusOK, userEnvelope{User: publicUser(user, effectiveLevel)})
 }
 
 // Me is the contract-compatible alias for the user profile probe.
@@ -536,7 +544,12 @@ func (a *UserAuth) PatchMe(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	httperr.WriteJSON(w, http.StatusOK, userEnvelope{User: publicUser(updated)})
+	effectiveLevel, err := a.store.ResolveEffectiveLevel(r.Context(), updated.ID)
+	if err != nil {
+		writeStableError(w, httperr.CodeInternal, "profile update unavailable")
+		return
+	}
+	httperr.WriteJSON(w, http.StatusOK, userEnvelope{User: publicUser(updated, effectiveLevel)})
 }
 
 // Logout handles POST /api/auth/logout and atomically removes the presented

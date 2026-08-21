@@ -80,6 +80,10 @@ func Open(path string, secrets secret.Codec) (*Store, error) {
 		_ = d.Close()
 		return nil, fmt.Errorf("migrate user economy columns: %w", err)
 	}
+	if err := ensureUsersLevelColumns(d); err != nil {
+		_ = d.Close()
+		return nil, fmt.Errorf("migrate user level columns: %w", err)
+	}
 
 	// Enforce owner-only permissions on the database file and its WAL/SHM
 	// sidecars after SQLite has created them. On Unix this chmod+fstat-verifies
@@ -298,6 +302,20 @@ func ensureUsersEconomyColumns(d *sql.DB) error {
 	specs := []columnSpec{
 		{"credits", `ALTER TABLE users ADD COLUMN credits INTEGER NOT NULL DEFAULT 0`},
 		{"donation_credit", `ALTER TABLE users ADD COLUMN donation_credit INTEGER NOT NULL DEFAULT 0`},
+	}
+	return ensureColumns(d, "users", specs)
+}
+
+// ensureUsersLevelColumns adds the manual level override and the automatic
+// level high-water mark to a users table created before they existed. CREATE
+// TABLE IF NOT EXISTS does not alter an existing table, so an earlier database
+// is migrated in place; the PRAGMA check makes it idempotent. Existing rows
+// receive the neutral defaults: level NULL (automatic) and auto_level 1, so
+// nobody gains or loses a capability through the migration itself.
+func ensureUsersLevelColumns(d *sql.DB) error {
+	specs := []columnSpec{
+		{"level", `ALTER TABLE users ADD COLUMN level INTEGER`},
+		{"auto_level", `ALTER TABLE users ADD COLUMN auto_level INTEGER NOT NULL DEFAULT 1`},
 	}
 	return ensureColumns(d, "users", specs)
 }
