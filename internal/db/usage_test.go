@@ -58,19 +58,18 @@ func seedUsageKey(t *testing.T, store *Store, userID int64) int64 {
 
 func usageInput(userID, keyID int64) RequestLogInput {
 	return RequestLogInput{
-		AttemptID:        "attempt-usage-1",
-		UserID:           userID,
-		Model:            "opaque/provider/model",
-		EndpointKeyID:    keyID,
-		UpstreamModelID:  "upstream/model",
-		StatusCode:       200,
-		DurationMs:       12,
-		StartedAt:        time.Unix(1700000000, 0).UTC(),
-		CompletedAt:      time.Unix(1700000000, 0).Add(12 * time.Millisecond).UTC(),
-		PromptTokens:     2,
-		CompletionTokens: 3,
-		TotalTokens:      5,
-		UsageUnknown:     false,
+		AttemptID:           "attempt-usage-1",
+		UserID:              userID,
+		Model:               "opaque/provider/model",
+		EndpointKeyID:       keyID,
+		UpstreamModelID:     "upstream/model",
+		StatusCode:          200,
+		DurationMs:          12,
+		StartedAt:           time.Unix(1700000000, 0).UTC(),
+		CompletedAt:         time.Unix(1700000000, 0).Add(12 * time.Millisecond).UTC(),
+		UncachedInputTokens: 2,
+		OutputTokens:        3,
+		UsageUnknown:        false,
 	}
 }
 
@@ -129,7 +128,7 @@ func TestRecordRequestUsageUnknownNoFabricatedTokens(t *testing.T) {
 	input := usageInput(userID, 0)
 	input.AttemptID = "attempt-unknown"
 	input.UsageUnknown = true
-	input.PromptTokens, input.CompletionTokens, input.TotalTokens = 0, 0, 0
+	input.UncachedInputTokens, input.OutputTokens = 0, 0
 	if err := store.RecordRequest(context.Background(), input); err != nil {
 		t.Fatalf("RecordRequest: %v", err)
 	}
@@ -146,24 +145,28 @@ func TestRecordRequestUsageUnknownNoFabricatedTokens(t *testing.T) {
 	}
 }
 
-func TestRecordRequestInconsistentTripleStoredAsIs(t *testing.T) {
+func TestRecordRequestMirrorColumnsDerivedFromBuckets(t *testing.T) {
 	store := openTestStore(t, filepath.Join(t.TempDir(), "usage.db"))
 	defer store.Close()
 	userID := seedUsageUser(t, store, "u1")
 
 	input := usageInput(userID, 0)
-	input.AttemptID = "attempt-inconsistent"
-	input.PromptTokens, input.CompletionTokens, input.TotalTokens = 2, 3, 999
+	input.AttemptID = "attempt-mirror"
+	input.UncachedInputTokens, input.CacheWriteInputTokens, input.CacheReadInputTokens, input.OutputTokens = 2, 3, 5, 7
 	if err := store.RecordRequest(context.Background(), input); err != nil {
 		t.Fatalf("RecordRequest: %v", err)
 	}
+	// prompt mirror = sum of the three input buckets; completion = output;
+	// total = prompt + output. The buckets themselves are authoritative.
 	totals, _ := store.GetUserUsage(context.Background(), userID)
-	if totals.TotalPromptTokens != 2 || totals.TotalCompletionTokens != 3 {
+	if totals.TotalPromptTokens != 10 || totals.TotalCompletionTokens != 7 || totals.TotalUncachedInputTokens != 2 || totals.TotalCacheWriteInputTokens != 3 || totals.TotalCacheReadInputTokens != 5 || totals.TotalOutputTokens != 7 {
 		t.Fatalf("totals = %+v", totals)
 	}
 	logs, _, _ := store.QueryRequestLogs(context.Background(), LogQuery{PageSize: 10})
-	if logs[0].PromptTokens != 2 || logs[0].CompletionTokens != 3 || logs[0].TotalTokens != 999 {
-		t.Fatalf("log = %+v", logs[0])
+	log := logs[0]
+	if log.PromptTokens != 10 || log.CompletionTokens != 7 || log.TotalTokens != 17 ||
+		log.UncachedInputTokens != 2 || log.CacheWriteInputTokens != 3 || log.CacheReadInputTokens != 5 || log.OutputTokens != 7 {
+		t.Fatalf("log = %+v", log)
 	}
 }
 
@@ -298,8 +301,10 @@ func TestRecordRequestValidationRejects(t *testing.T) {
 		{"oversized duration", func(i *RequestLogInput) { i.DurationMs = MaxDurationMs + 1 }},
 		{"zero started", func(i *RequestLogInput) { i.StartedAt = time.Time{} }},
 		{"completed before started", func(i *RequestLogInput) { i.CompletedAt = i.StartedAt.Add(-time.Second) }},
-		{"negative tokens", func(i *RequestLogInput) { i.PromptTokens = -1 }},
-		{"oversized tokens", func(i *RequestLogInput) { i.TotalTokens = MaxTokenDelta + 1 }},
+		{"negative tokens", func(i *RequestLogInput) { i.UncachedInputTokens = -1 }},
+		{"negative output tokens", func(i *RequestLogInput) { i.OutputTokens = -1 }},
+		{"oversized tokens", func(i *RequestLogInput) { i.CacheReadInputTokens = MaxTokenDelta + 1 }},
+		{"unknown usage with token values", func(i *RequestLogInput) { i.UsageUnknown, i.OutputTokens = true, 1 }},
 		{"unstable error code", func(i *RequestLogInput) { i.ErrorCode = "selector" }},
 	}
 	for _, test := range tests {

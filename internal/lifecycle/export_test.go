@@ -203,6 +203,15 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	user := seedExportFixture(t, st)
 	handler := newExportHandler(t, st, user, &fakeElevation{allowCount: 1}, nil)
 
+	// The usage summary carries the four-bucket totals alongside the legacy
+	// mirrors; record one known request so the projection is exercised.
+	if err := st.RecordRequest(context.Background(), db.RequestLogInput{
+		AttemptID: "export-usage-attempt", UserID: user.ID, Model: "provider/model",
+		StatusCode: 200, StartedAt: time.Unix(1700000000, 0).UTC(), CompletedAt: time.Unix(1700000001, 0).UTC(),
+		UncachedInputTokens: 2, CacheWriteInputTokens: 3, CacheReadInputTokens: 5, OutputTokens: 7,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, exportRequest("cap-token"))
 	if rec.Code != http.StatusOK {
@@ -247,7 +256,13 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 			Display string `json:"display"`
 		} `json:"caller_key"`
 		Usage struct {
-			TotalRequests int64 `json:"total_requests"`
+			TotalRequests              int64 `json:"total_requests"`
+			TotalUncachedInputTokens   int64 `json:"total_uncached_input_tokens"`
+			TotalCacheWriteInputTokens int64 `json:"total_cache_write_input_tokens"`
+			TotalCacheReadInputTokens  int64 `json:"total_cache_read_input_tokens"`
+			TotalOutputTokens          int64 `json:"total_output_tokens"`
+			TotalPromptTokens          int64 `json:"total_prompt_tokens"`
+			TotalCompletionTokens      int64 `json:"total_completion_tokens"`
 		} `json:"usage"`
 		LogSummary struct {
 			TotalLogs int64 `json:"total_logs"`
@@ -268,8 +283,13 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	if !strings.HasPrefix(pkg.CallerKey.Display, "nbk_") {
 		t.Fatalf("caller key display=%q", pkg.CallerKey.Display)
 	}
-	if pkg.Usage.TotalRequests != 0 || pkg.LogSummary.TotalLogs != 0 {
+	if pkg.Usage.TotalRequests != 1 || pkg.LogSummary.TotalLogs != 1 {
 		t.Fatalf("usage=%+v logs=%+v", pkg.Usage, pkg.LogSummary)
+	}
+	if pkg.Usage.TotalUncachedInputTokens != 2 || pkg.Usage.TotalCacheWriteInputTokens != 3 ||
+		pkg.Usage.TotalCacheReadInputTokens != 5 || pkg.Usage.TotalOutputTokens != 7 ||
+		pkg.Usage.TotalPromptTokens != 10 || pkg.Usage.TotalCompletionTokens != 7 {
+		t.Fatalf("usage buckets=%+v", pkg.Usage)
 	}
 
 	// Whitelist enforcement: no secret material anywhere in the package.

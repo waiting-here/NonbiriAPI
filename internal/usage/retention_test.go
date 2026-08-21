@@ -232,13 +232,13 @@ func TestCleanupPreservesUserAccumulators(t *testing.T) {
 	old := now.Add(-60 * 24 * time.Hour)
 	for i := 0; i < 2; i++ {
 		input := db.RequestLogInput{
-			AttemptID:    fmt.Sprintf("acc-%d", i),
-			UserID:       userID,
-			Model:        "opaque/provider/model",
-			StatusCode:   200,
-			StartedAt:    old,
-			CompletedAt:  old,
-			PromptTokens: 5,
+			AttemptID:           fmt.Sprintf("acc-%d", i),
+			UserID:              userID,
+			Model:               "opaque/provider/model",
+			StatusCode:          200,
+			StartedAt:           old,
+			CompletedAt:         old,
+			UncachedInputTokens: 5,
 		}
 		if err := store.RecordRequest(context.Background(), input); err != nil {
 			t.Fatalf("RecordRequest: %v", err)
@@ -411,13 +411,13 @@ func TestCleanupConcurrentWithRecordRequest(t *testing.T) {
 			defer wg.Done()
 			for i := 0; i < perWriter; i++ {
 				input := db.RequestLogInput{
-					AttemptID:    fmt.Sprintf("conc-%d-%d", w, i),
-					UserID:       userID,
-					Model:        "opaque/provider/model",
-					StatusCode:   200,
-					StartedAt:    old,
-					CompletedAt:  old,
-					PromptTokens: 1,
+					AttemptID:           fmt.Sprintf("conc-%d-%d", w, i),
+					UserID:              userID,
+					Model:               "opaque/provider/model",
+					StatusCode:          200,
+					StartedAt:           old,
+					CompletedAt:         old,
+					UncachedInputTokens: 1,
 				}
 				if err := store.RecordRequest(context.Background(), input); err != nil {
 					failures.Add(1)

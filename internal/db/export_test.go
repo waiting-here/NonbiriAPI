@@ -152,9 +152,8 @@ func TestExportLogSummaryAggregates(t *testing.T) {
 		input.DurationMs = durationMs
 		input.UsageUnknown = unknown
 		if unknown {
-			input.PromptTokens = 0
-			input.CompletionTokens = 0
-			input.TotalTokens = 0
+			input.UncachedInputTokens = 0
+			input.OutputTokens = 0
 		}
 		input.StartedAt = now.Add(offset)
 		input.CompletedAt = now.Add(offset).Add(time.Second)

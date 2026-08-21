@@ -85,7 +85,7 @@ func TestForwardStreamingHTTPContract(t *testing.T) {
 				t.Fatalf("SSE error presence mismatch body=%q", body)
 			}
 			if test.wantDone {
-				if len(usageRecords) != 1 || !usageRecords[0].Usage.Present || usageRecords[0].Usage.TotalTokens != 10 || usageRecords[0].UsageUnknown {
+				if len(usageRecords) != 1 || !usageRecords[0].Usage.Present || usageRecords[0].Usage.UncachedInputTokens != 4 || usageRecords[0].Usage.OutputTokens != 6 || usageRecords[0].UsageUnknown {
 					t.Fatalf("usage records=%+v", usageRecords)
 				}
 			}

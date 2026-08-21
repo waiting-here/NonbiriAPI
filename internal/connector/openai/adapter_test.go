@@ -159,7 +159,7 @@ func TestAdapterNonStreamRequestAuthorityAndSafeResponseHeaders(t *testing.T) {
 	if !result.Success || !result.Committed || result.Failure != FailureNone || result.ClientStatus != http.StatusOK {
 		t.Fatalf("result = %+v body=%s", result, recorder.Body.String())
 	}
-	if result.Usage.TotalTokens != 5 || !result.Usage.Present {
+	if result.Usage.UncachedInputTokens != 2 || result.Usage.OutputTokens != 3 || !result.Usage.Present {
 		t.Fatalf("usage = %+v", result.Usage)
 	}
 	if upstreamPath != "/mount/v1/chat/completions" || upstreamHost != strings.TrimPrefix(server.URL, "http://") {

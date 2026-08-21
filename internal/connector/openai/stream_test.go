@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -73,7 +74,7 @@ func TestAdapterStreamValidChunksUsageAndDone(t *testing.T) {
 	if !result.Success || !result.Committed || result.Failure != FailureNone {
 		t.Fatalf("result=%+v body=%s", result, recorder.Body.String())
 	}
-	if !result.Usage.Present || result.Usage.TotalTokens != 18 {
+	if !result.Usage.Present || result.Usage.UncachedInputTokens != 7 || result.Usage.OutputTokens != 11 {
 		t.Fatalf("usage=%+v", result.Usage)
 	}
 	body := recorder.Body.String()
@@ -85,6 +86,129 @@ func TestAdapterStreamValidChunksUsageAndDone(t *testing.T) {
 	}
 	if recorder.Header().Get("Content-Type") != "text/event-stream" || recorder.Header().Get("Cache-Control") != "no-store" || recorder.Header().Get("X-Accel-Buffering") != "no" || recorder.Header().Get("Set-Cookie") != "" || recorder.Header().Get("Location") != "" {
 		t.Fatalf("headers=%v", recorder.Header())
+	}
+}
+
+// TestAdapterStreamRepeatedUsageChunk keeps one consistent repeated usage
+// object but degrades contradictory repeats to unknown: token values are
+// never fabricated from self-contradicting upstream data.
+func TestAdapterStreamRepeatedUsageChunk(t *testing.T) {
+	usageChunk := func(prompt, completion int) string {
+		return `{"id":"chatcmpl-1","object":"chat.completion.chunk","created":1700000000,"model":"upstream/model","choices":[],"usage":{"prompt_tokens":` + strconv.Itoa(prompt) + `,"completion_tokens":` + strconv.Itoa(completion) + `,"total_tokens":` + strconv.Itoa(prompt+completion) + `}}`
+	}
+	tests := []struct {
+		name         string
+		usageFrames  []string
+		wantPresent  bool
+		wantUncached int64
+		wantOutput   int64
+	}{
+		{
+			name:        "identical repeat is idempotent",
+			usageFrames: []string{usageChunk(7, 11), usageChunk(7, 11)},
+			wantPresent: true, wantUncached: 7, wantOutput: 11,
+		},
+		{
+			name:        "contradictory repeat degrades to unknown",
+			usageFrames: []string{usageChunk(7, 11), usageChunk(8, 11)},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			frames := []string{"data: " + validChunk + "\n\n"}
+			for _, frame := range test.usageFrames {
+				frames = append(frames, "data: "+frame+"\n\n")
+			}
+			frames = append(frames, "data: [DONE]\n\n")
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				writeSSE(writer, frames...)
+			}))
+			defer server.Close()
+			adapter := adapterForServer(t, server.URL, nil, nil)
+			recorder := httptest.NewRecorder()
+			result := adapter.Attempt(context.Background(), recorder,
+				testTarget(server.URL, []byte("sk-stream"), []byte("cipher-stream")), streamRequest(t), "nbu_safe")
+			if !result.Success || !result.Committed || result.Failure != FailureNone {
+				t.Fatalf("result=%+v body=%s", result, recorder.Body.String())
+			}
+			if result.Usage.Present != test.wantPresent {
+				t.Fatalf("usage=%+v wantPresent=%v", result.Usage, test.wantPresent)
+			}
+			if test.wantPresent && (result.Usage.UncachedInputTokens != test.wantUncached || result.Usage.OutputTokens != test.wantOutput) {
+				t.Fatalf("usage=%+v", result.Usage)
+			}
+		})
+	}
+}
+
+// TestAdapterStreamMalformedUsagePoisonsWholeRequestUsage verifies that a
+// malformed usage object poisons the whole request's usage and a later
+// valid-looking chunk cannot resurrect it; the stream itself still succeeds.
+func TestAdapterStreamMalformedUsagePoisonsWholeRequestUsage(t *testing.T) {
+	malformed := `{"id":"chatcmpl-1","object":"chat.completion.chunk","created":1700000000,"model":"upstream/model","choices":[],"usage":{"prompt_tokens":5,"completion_tokens":1,"total_tokens":6,"prompt_tokens_details":{"cached_tokens":9}}}`
+	valid := `{"id":"chatcmpl-1","object":"chat.completion.chunk","created":1700000000,"model":"upstream/model","choices":[],"usage":{"prompt_tokens":7,"completion_tokens":11,"total_tokens":18}}`
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writeSSE(writer,
+			"data: "+validChunk+"\n\n",
+			"data: "+malformed+"\n\n",
+			"data: "+valid+"\n\n",
+			"data: [DONE]\n\n",
+		)
+	}))
+	defer server.Close()
+	adapter := adapterForServer(t, server.URL, nil, nil)
+	recorder := httptest.NewRecorder()
+	result := adapter.Attempt(context.Background(), recorder,
+		testTarget(server.URL, []byte("sk-stream"), []byte("cipher-stream")), streamRequest(t), "nbu_safe")
+	if !result.Success || !result.Committed || result.Failure != FailureNone {
+		t.Fatalf("result=%+v body=%s", result, recorder.Body.String())
+	}
+	if result.Usage.Present {
+		t.Fatalf("poisoned usage resurrected: %+v", result.Usage)
+	}
+	if !strings.Contains(recorder.Body.String(), "[DONE]") {
+		t.Fatalf("client stream missing DONE: %q", recorder.Body.String())
+	}
+}
+
+// TestAdapterStreamTruncationAfterUsageChunkKeepsUsage proves that a valid
+// usage object received before an abnormal termination survives in the
+// attempt result for downstream accounting, even though the stream never
+// reached protocol termination ([DONE]) and therefore fails.
+func TestAdapterStreamTruncationAfterUsageChunkKeepsUsage(t *testing.T) {
+	usageChunk := `{"id":"chatcmpl-1","object":"chat.completion.chunk","created":1700000000,"model":"upstream/model","choices":[],"usage":{"prompt_tokens":7,"completion_tokens":11,"total_tokens":18}}`
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		hijacker, ok := writer.(http.Hijacker)
+		if !ok {
+			t.Error("hijacking unsupported")
+			return
+		}
+		conn, buffer, err := hijacker.Hijack()
+		if err != nil {
+			t.Errorf("hijack: %v", err)
+			return
+		}
+		defer conn.Close()
+		// Raw response with no content-length and an abrupt close after two
+		// events: the stream truncates before [DONE].
+		_, _ = fmt.Fprintf(buffer, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n")
+		_, _ = fmt.Fprintf(buffer, "data: %s\n\ndata: %s\n\n", compactTestJSON(validChunk), compactTestJSON(usageChunk))
+		_ = buffer.Flush()
+	}))
+	server.Start()
+	defer server.Close()
+	adapter := adapterForServer(t, server.URL, nil, nil)
+	recorder := httptest.NewRecorder()
+	result := adapter.Attempt(context.Background(), recorder,
+		testTarget(server.URL, []byte("sk-truncated"), []byte("cipher-truncated")), streamRequest(t), "nbu_safe")
+	if result.Success || result.Failure != FailureUpstream {
+		t.Fatalf("truncated stream result=%+v", result)
+	}
+	if strings.Contains(recorder.Body.String(), "[DONE]") {
+		t.Fatalf("truncated stream synthesized DONE: %q", recorder.Body.String())
+	}
+	if !result.Usage.Present || result.Usage.UncachedInputTokens != 7 || result.Usage.OutputTokens != 11 {
+		t.Fatalf("valid usage lost on truncation: %+v", result.Usage)
 	}
 }
 

@@ -208,10 +208,20 @@ returned it. HTTP 200 alone is not success; success requires a complete, protoco
 Response — stream (`stream: true`): `Content-Type: text/event-stream`. A sequence of
 `data: <json chunk>\n\n` frames shaped as OpenAI Chat Completions chunks, terminated by
 `data: [DONE]\n\n`. When the caller asked for usage and the upstream supports it, an accurate
-`usage` is taken from the terminal chunk. HTTP 200 is not success: an explicit `[DONE]` frame is required; an incomplete stream is never synthesized as a
+`usage` is taken from the terminal usage chunk (which arrives after the last content chunk,
+before `[DONE]`, so the stream is always read to termination). HTTP 200 is not success: an explicit `[DONE]` frame is required; an incomplete stream is never synthesized as a
 success. If the client disconnects, the cancellation is propagated upstream and concurrent
 slots / reservations are released; any unreadable `usage` is recorded with the
 `usage_unknown` flag rather than fabricated token values.
+
+Usage accounting (internal): when the upstream returns a protocol-valid `usage` object, it is
+normalized into mutually exclusive non-negative token buckets — uncached input
+(`prompt_tokens − cached_tokens − cache_write_tokens`), cache write
+(`prompt_tokens_details.cache_write_tokens`, 0 when absent), cache read
+(`prompt_tokens_details.cached_tokens`), and output (`completion_tokens`). A present but
+malformed `usage` (negative or non-integer token values, cache sub-items exceeding the prompt
+total, contradictory repeated values) degrades the whole request's usage to `usage_unknown`;
+no token value is ever fabricated. The caller-visible wire shapes are unchanged.
 
 Before a response crosses the client boundary, upstream key plaintext and ciphertext are
 checked both as literal wire bytes and as decoded JSON string channels. The semantic check

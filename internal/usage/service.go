@@ -177,14 +177,15 @@ func (s *Service) HandleUsage(record forward.UsageRecord) {
 	s.mu.Unlock()
 
 	input := db.RequestLogInput{
-		AttemptID:        record.AttemptID,
-		UserID:           record.UserID,
-		EndpointKeyID:    record.EndpointKeyID,
-		UpstreamModelID:  record.UpstreamModelID,
-		PromptTokens:     record.Usage.PromptTokens,
-		CompletionTokens: record.Usage.CompletionTokens,
-		TotalTokens:      record.Usage.TotalTokens,
-		// A committed attempt without a valid usage triple is a truncated /
+		AttemptID:             record.AttemptID,
+		UserID:                record.UserID,
+		EndpointKeyID:         record.EndpointKeyID,
+		UpstreamModelID:       record.UpstreamModelID,
+		UncachedInputTokens:   record.Usage.UncachedInputTokens,
+		CacheWriteInputTokens: record.Usage.CacheWriteInputTokens,
+		CacheReadInputTokens:  record.Usage.CacheReadInputTokens,
+		OutputTokens:          record.Usage.OutputTokens,
+		// A committed attempt without a valid usage object is a truncated /
 		// no-usage request: count it, never fabricate token values.
 		UsageUnknown: !record.Usage.Present,
 	}
