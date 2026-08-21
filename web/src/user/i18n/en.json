@@ -140,7 +140,17 @@
       "invalidParts": "Provider and model are required, must be at most 64 characters, and cannot contain control characters or surrounding whitespace.",
       "noEndpointKeys": "No enabled endpoint keys are available for binding.",
       "noFetchedModels": "No fetched models are available for this key.",
-      "draft": "Draft: no bindings"
+      "draft": "Draft: no bindings",
+      "editTitle": "Edit platform model",
+      "editBinding": "Edit binding",
+      "editBindingTitle": "Edit upstream binding",
+      "ord": "Order index",
+      "ordHint": "An integer from 0 to 1000000; lower values are tried first under the ordered strategy.",
+      "ordInvalid": "The order index must be an integer between 0 and 1000000.",
+      "currentUpstream": "Current value (not in the fetched list)",
+      "charityPrefixForbidden": "The provider cannot start with \"[公益]\": that prefix is reserved for charity models.",
+      "charityPrefixRejected": "Rejected: the \"[公益]\" prefix is reserved for charity models. Choose a different provider name.",
+      "nameConflict": "This platform model name already exists. Choose a different provider or model name."
     },
     "keys": {
       "nav": "Caller key",

@@ -480,6 +480,114 @@ export function useModelBindings(modelId: string | undefined, enabled = true) {
   });
 }
 
+export interface UpdateModelInput {
+  modelId: string;
+  provider?: string;
+  model?: string;
+  route_strategy?: 'ordered' | 'random';
+  silent_retry?: boolean;
+}
+
+/**
+ * Patch one of the caller's platform models. Only supplied fields change;
+ * changing provider/model recomputes full_name server-side and a colliding
+ * name comes back as conflict. The response is normalized so callers can
+ * read the authoritative updated row.
+ */
+export function useUpdateModel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ modelId, ...patch }: UpdateModelInput) => {
+      const payload = await apiFetch<unknown>(
+        `/api/models/${encodeURIComponent(modelId)}`,
+        { method: 'PATCH', json: patch },
+      );
+      if (!asRecord(payload)) {
+        throw new ApiError('invalid_response', 'The server returned an invalid model.', 200);
+      }
+      return normalizePlatformModel(payload);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: userKeys.models });
+    },
+  });
+}
+
+export interface UpdateBindingInput {
+  modelId: string;
+  bindingId: string;
+  ord?: number;
+  upstream_model_id?: string;
+}
+
+/**
+ * Patch one existing binding. Only ord/upstream_model_id are mutable through
+ * this path (the bound endpoint key never changes); the server validates the
+ * resulting upstream id against the key's fetched cache and returns the
+ * enriched binding row.
+ */
+export function useUpdateBinding() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ modelId, bindingId, ...patch }: UpdateBindingInput) => {
+      const payload = await apiFetch<unknown>(
+        `/api/models/${encodeURIComponent(modelId)}/bindings/${encodeURIComponent(bindingId)}`,
+        { method: 'PATCH', json: patch },
+      );
+      if (!asRecord(payload)) {
+        throw new ApiError('invalid_response', 'The server returned an invalid binding.', 200);
+      }
+      return normalizeBinding(payload);
+    },
+    onSuccess: (_updated, variables) => {
+      // The ordered list view is authoritative; models refresh updated_at.
+      void queryClient.invalidateQueries({ queryKey: userKeys.bindings(variables.modelId) });
+      void queryClient.invalidateQueries({ queryKey: userKeys.models });
+    },
+  });
+}
+
+/**
+ * Fetched upstream-model options for one existing binding. A binding row
+ * carries its key id and the endpoint base_url but not the endpoint id, so
+ * the owning endpoint is resolved by matching base_url candidates and then
+ * key membership (key ids are globally unique). Both lists are server-capped,
+ * keeping the sequential probe bounded. When no enabled owner resolves — for
+ * example the endpoint or key was disabled after the binding was created —
+ * the query yields an empty option list instead of a fabricated one.
+ */
+export function useBindingUpstreamModels(
+  binding: Pick<ModelBinding, 'endpoint_key_id' | 'endpoint_base_url'> | undefined,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: binding
+      ? [...userKeys.keyModelsRoot, 'binding', binding.endpoint_key_id]
+      : [...userKeys.keyModelsRoot, 'binding', 'none'],
+    queryFn: async () => {
+      if (!binding) return [];
+      const endpoints = listPayload(await apiFetch<unknown>('/api/endpoints')).map(normalizeEndpoint);
+      const candidates = endpoints.filter(
+        (endpoint) => endpoint.enabled && endpoint.base_url === binding.endpoint_base_url,
+      );
+      for (const endpoint of candidates) {
+        const keys = listPayload(
+          await apiFetch<unknown>(`/api/endpoints/${encodeURIComponent(endpoint.id)}/keys`),
+        ).map(normalizeEndpointKey);
+        if (!keys.some((key) => key.id === binding.endpoint_key_id)) continue;
+        return listPayload(
+          await apiFetch<unknown>(
+            `/api/endpoints/${encodeURIComponent(endpoint.id)}/keys/${encodeURIComponent(binding.endpoint_key_id)}/models`,
+          ),
+        ).map(normalizeUpstreamModel);
+      }
+      return [];
+    },
+    enabled: enabled && Boolean(binding),
+    staleTime: 15_000,
+  });
+}
+
 export function useCallerKey(enabled = true) {
   return useQuery({
     queryKey: userKeys.callerKey,
