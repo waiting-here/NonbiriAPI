@@ -181,6 +181,7 @@ func (s *Service) HandleUsage(record forward.UsageRecord) {
 		UserID:                record.UserID,
 		EndpointKeyID:         record.EndpointKeyID,
 		UpstreamModelID:       record.UpstreamModelID,
+		EndpointBaseURL:       record.EndpointBaseURL,
 		UncachedInputTokens:   record.Usage.UncachedInputTokens,
 		CacheWriteInputTokens: record.Usage.CacheWriteInputTokens,
 		CacheReadInputTokens:  record.Usage.CacheReadInputTokens,

@@ -93,15 +93,20 @@ func (Target) LogValue() slog.Value {
 
 // AttemptResult contains only bounded metadata safe for forwarding hooks.
 // Diagnostic is locally generated and never includes raw upstream text.
+// EndpointBaseURL carries the canonical base URL actually dialed so the
+// frozen log contract's dispatch-time snapshot can be persisted; it is the
+// owner-visible value already stored plaintext in the endpoint row, never a
+// credential, secret material, or request/response content.
 type AttemptResult struct {
-	Success        bool
-	Committed      bool
-	SinkFailed     bool
-	Failure        FailureKind
-	Diagnostic     string
-	UpstreamStatus int
-	ClientStatus   int
-	Usage          Usage
+	Success          bool
+	Committed        bool
+	SinkFailed       bool
+	Failure          FailureKind
+	Diagnostic       string
+	UpstreamStatus   int
+	ClientStatus     int
+	EndpointBaseURL  string
+	Usage            Usage
 }
 
 // AdapterConfig sets finite protocol bounds. A zero value selects the default;

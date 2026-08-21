@@ -160,6 +160,11 @@ func (r *SecureRunner) Run(ctx context.Context, writer http.ResponseWriter, inpu
 		target.UpstreamModelID,
 		openai.NewCredential(plaintext, ciphertextBytes),
 	), input.Request, input.SafetyIdentifier)
+	// The frozen log contract requires the dispatch-time canonical base-URL
+	// snapshot on every committed request. The base URL is the owner-visible
+	// endpoint value, never credential material; it travels as bounded
+	// metadata alongside the other attempt fields.
+	result.EndpointBaseURL = target.BaseURL
 	// Adapter clears both slices before dialing; these clears are a backstop
 	// for a rejected adapter call and make the ownership transfer explicit.
 	clear(plaintext)

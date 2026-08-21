@@ -217,8 +217,8 @@ CREATE TABLE IF NOT EXISTS request_logs (
 	model             TEXT NOT NULL DEFAULT '',                    -- platform model full_name
 	endpoint_key_id   INTEGER REFERENCES endpoint_keys(id) ON DELETE SET NULL,  -- nullable (routing may fail before key selection); key deletion nulls the ref but keeps the log
 	upstream_model_id TEXT NOT NULL DEFAULT '',
-	route_kind        TEXT NOT NULL DEFAULT 'personal',            -- 'personal' | 'charity'; business routing writes it in a later rail
-	endpoint_base_url TEXT NOT NULL DEFAULT '',                    -- bounded canonical base-URL snapshot at dispatch; empty until a later rail writes it
+	route_kind        TEXT NOT NULL DEFAULT 'personal',            -- 'personal' | 'charity'; charity business routing writes it in a later rail
+	endpoint_base_url TEXT NOT NULL DEFAULT '',                    -- bounded canonical base-URL snapshot at dispatch; written by the personal forward path, charity in a later rail
 	status_code       INTEGER NOT NULL DEFAULT 0,
 	duration_ms       INTEGER NOT NULL DEFAULT 0,
 	started_at        INTEGER NOT NULL,

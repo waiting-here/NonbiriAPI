@@ -84,8 +84,11 @@ type ModelList struct {
 	Data   []Model `json:"data"`
 }
 
-// AttemptRecord is metadata-only. It deliberately contains no base URL,
-// ciphertext, credential, request JSON, response JSON, or raw error.
+// AttemptRecord is metadata-only. It deliberately contains no ciphertext,
+// credential, request JSON, response JSON, or raw error. EndpointBaseURL is
+// the bounded canonical base URL actually dialed, required by the frozen log
+// contract's dispatch-time snapshot; it is the owner-visible endpoint value,
+// never credential material.
 // AttemptID is a random opaque correlation id generated per Forward
 // invocation and shared with the UsageRecord of the same attempt; consumers
 // use it for at-most-once accounting and must never treat client input as an
@@ -109,6 +112,7 @@ type AttemptRecord struct {
 	Success         bool
 	StableErrorCode string
 	SafeDiagnostic  string
+	EndpointBaseURL string
 }
 
 // UsageRecord is a future accounting input. Usage carries the connector's
@@ -129,6 +133,10 @@ type UsageRecord struct {
 	Stream          bool
 	Usage           openai.Usage
 	UsageUnknown    bool
+	// EndpointBaseURL is the bounded dispatch-time canonical base-URL
+	// snapshot required by the frozen log contract; owner-visible endpoint
+	// metadata, never credential material.
+	EndpointBaseURL string
 }
 
 // FailoverRecord is bounded metadata emitted on each actual failover (one
@@ -457,6 +465,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 				Success:         result.Success,
 				StableErrorCode: stableCode,
 				SafeDiagnostic:  result.Diagnostic,
+				EndpointBaseURL: result.EndpointBaseURL,
 			})
 		}
 		if result.Committed && s.hooks.Usage != nil {
@@ -471,6 +480,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 				Stream:          request.Stream,
 				Usage:           result.Usage,
 				UsageUnknown:    !result.Success && !result.Usage.Present,
+				EndpointBaseURL: result.EndpointBaseURL,
 			})
 		}
 		if result.Success {

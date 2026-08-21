@@ -319,11 +319,15 @@ func TestUsageNonStreamValidUsage(t *testing.T) {
 	}
 	log := logs[0]
 	if log.Model != "p/m" || log.EndpointKeyID == 0 || log.UpstreamModelID != "upstream/model" ||
+		log.EndpointBaseURL != upstream.URL ||
 		log.StatusCode != 200 || log.PromptTokens != 2 || log.CompletionTokens != 3 || log.TotalTokens != 5 ||
 		log.UsageUnknown || log.ErrorCode != "" || log.StartedAt.IsZero() || log.CompletedAt.Before(log.StartedAt) {
 		t.Fatalf("log row = %+v", log)
 	}
-	assertLogsLeakFree(t, fixture.store, upstreamSecret, promptMarker, upstream.URL)
+	// The dispatch-time canonical base-URL snapshot is owner-visible metadata
+	// per the frozen log contract; only secrets and request content must stay
+	// out of the persisted rows.
+	assertLogsLeakFree(t, fixture.store, upstreamSecret, promptMarker)
 }
 
 func TestUsageNonStreamWithoutUsageCountsUnknown(t *testing.T) {
@@ -410,10 +414,10 @@ func TestUsageStreamAbnormalEOFAfterCommit(t *testing.T) {
 	assertUserTotals(t, fixture.store, user.id, 1, 0, 0, 1)
 	logs, _, _ := fixture.store.QueryUserRequestLogs(context.Background(), user.id, db.UserLogQuery{PageSize: 10})
 	if len(logs) != 1 || !logs[0].UsageUnknown || logs[0].TotalTokens != 0 ||
-		logs[0].StatusCode != 200 || logs[0].ErrorCode != "upstream" {
+		logs[0].StatusCode != 200 || logs[0].ErrorCode != "upstream" || logs[0].EndpointBaseURL != upstream.URL {
 		t.Fatalf("logs = %+v", logs)
 	}
-	assertLogsLeakFree(t, fixture.store, "sk-stream-trunc", upstream.URL)
+	assertLogsLeakFree(t, fixture.store, "sk-stream-trunc")
 }
 
 func TestUsageStreamCanceledAfterCommit(t *testing.T) {
@@ -652,7 +656,7 @@ func TestUsageConcurrentRequestsNoLostAccounting(t *testing.T) {
 	if len(logs) != workers {
 		t.Fatalf("log rows = %d, want %d", len(logs), workers)
 	}
-	assertLogsLeakFree(t, fixture.store, "sk-concurrent", upstream.URL)
+	assertLogsLeakFree(t, fixture.store, "sk-concurrent")
 }
 
 func TestUsageFailoverCommittedAttemptCountedOnce(t *testing.T) {
@@ -729,8 +733,14 @@ func TestUsageFailoverCommittedAttemptCountedOnce(t *testing.T) {
 		t.Fatalf("logs = %+v", logs)
 	}
 	var keyID int64
-	if err := fixture.store.DB().QueryRow(`SELECT endpoint_key_id FROM request_logs LIMIT 1`).Scan(&keyID); err != nil {
+	var committedBaseURL string
+	if err := fixture.store.DB().QueryRow(`SELECT endpoint_key_id, endpoint_base_url FROM request_logs LIMIT 1`).Scan(&keyID, &committedBaseURL); err != nil {
 		t.Fatalf("read key id: %v", err)
+	}
+	// The snapshot must reference the attempt that actually committed (the
+	// second binding), not the failed pre-commit candidate.
+	if committedBaseURL != second.URL {
+		t.Fatalf("endpoint_base_url = %q, want committed %q", committedBaseURL, second.URL)
 	}
 	var secondKey int64
 	if err := fixture.store.DB().QueryRow(`SELECT ek.id FROM endpoint_keys ek JOIN endpoints e ON e.id=ek.endpoint_id WHERE e.base_url=?`, second.URL).Scan(&secondKey); err != nil {
@@ -739,7 +749,7 @@ func TestUsageFailoverCommittedAttemptCountedOnce(t *testing.T) {
 	if keyID != secondKey {
 		t.Fatalf("log row references the wrong attempt's key: %d want %d", keyID, secondKey)
 	}
-	assertLogsLeakFree(t, fixture.store, firstSecret, secondSecret, first.URL, second.URL)
+	assertLogsLeakFree(t, fixture.store, firstSecret, secondSecret)
 }
 
 // --- raw store helpers (no egress stack needed) ---

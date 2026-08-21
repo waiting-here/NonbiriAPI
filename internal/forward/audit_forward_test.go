@@ -254,9 +254,14 @@ func TestAuditForwardStreamExplicitDoneAndUsage(t *testing.T) {
 	defer upstream.Close()
 	var usageMu sync.Mutex
 	var usageRecords []forward.UsageRecord
+	var attemptRecords []forward.AttemptRecord
 	hook := forward.Hooks{Usage: func(record forward.UsageRecord) {
 		usageMu.Lock()
 		usageRecords = append(usageRecords, record)
+		usageMu.Unlock()
+	}, Attempt: func(record forward.AttemptRecord) {
+		usageMu.Lock()
+		attemptRecords = append(attemptRecords, record)
 		usageMu.Unlock()
 	}}
 	fixture := newAuditFixture(t, []string{upstream.URL}, hook)
@@ -281,6 +286,14 @@ func TestAuditForwardStreamExplicitDoneAndUsage(t *testing.T) {
 	defer usageMu.Unlock()
 	if len(usageRecords) != 1 || !usageRecords[0].Usage.Present || usageRecords[0].Usage.UncachedInputTokens != 3 || usageRecords[0].Usage.OutputTokens != 7 || usageRecords[0].UsageUnknown {
 		t.Fatalf("usage records=%+v", usageRecords)
+	}
+	// The frozen log contract's dispatch-time canonical base-URL snapshot must
+	// reach both the attempt and the committed usage record.
+	if len(attemptRecords) != 1 || attemptRecords[0].EndpointBaseURL != upstream.URL {
+		t.Fatalf("attempt records=%+v", attemptRecords)
+	}
+	if usageRecords[0].EndpointBaseURL != upstream.URL {
+		t.Fatalf("usage endpoint_base_url = %q, want %q", usageRecords[0].EndpointBaseURL, upstream.URL)
 	}
 }
 

@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
 func seedUsageUser(t *testing.T, store *Store, discordID string) int64 {
@@ -117,6 +119,43 @@ func TestRecordRequestValidUsageAndAccumulators(t *testing.T) {
 		log.UsageUnknown || log.ErrorCode != "" || log.ErrorDiag != "" ||
 		!log.StartedAt.Equal(time.Unix(1700000000, 0).UTC()) {
 		t.Fatalf("log row = %+v", log)
+	}
+}
+
+func TestRecordRequestEndpointBaseURLSnapshotBoundedAtSink(t *testing.T) {
+	store := openTestStore(t, filepath.Join(t.TempDir(), "usage.db"))
+	defer store.Close()
+	userID := seedUsageUser(t, store, "u1")
+
+	input := usageInput(userID, 0)
+	input.AttemptID = "attempt-base-url"
+	input.EndpointBaseURL = "https://ep.example/v1"
+	if err := store.RecordRequest(context.Background(), input); err != nil {
+		t.Fatalf("RecordRequest: %v", err)
+	}
+
+	// An overlong value with control characters is bounded at the sink (same
+	// policy as error_diag), never rejected: accounting must not fail because
+	// of a malformed snapshot.
+	bounded := usageInput(userID, 0)
+	bounded.AttemptID = "attempt-base-url-bound"
+	bounded.EndpointBaseURL = strings.Repeat("a\x01", diagnostic.MaxBytes) + "b"
+	if err := store.RecordRequest(context.Background(), bounded); err != nil {
+		t.Fatalf("RecordRequest bounded: %v", err)
+	}
+
+	var stored string
+	if err := store.DB().QueryRow(`SELECT endpoint_base_url FROM request_logs WHERE attempt_id = 'attempt-base-url'`).Scan(&stored); err != nil {
+		t.Fatalf("read snapshot: %v", err)
+	}
+	if stored != "https://ep.example/v1" {
+		t.Fatalf("endpoint_base_url = %q", stored)
+	}
+	if err := store.DB().QueryRow(`SELECT endpoint_base_url FROM request_logs WHERE attempt_id = 'attempt-base-url-bound'`).Scan(&stored); err != nil {
+		t.Fatalf("read bounded snapshot: %v", err)
+	}
+	if len(stored) > diagnostic.MaxBytes || strings.ContainsRune(stored, '\x01') || !strings.HasSuffix(stored, diagnostic.TruncationMarker) {
+		t.Fatalf("bounded endpoint_base_url = %d bytes, tail %q", len(stored), stored[len(stored)-min(20, len(stored)):])
 	}
 }
 

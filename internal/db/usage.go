@@ -76,15 +76,18 @@ var stableErrorCodes = map[string]bool{"": true, "upstream": true, "internal": t
 // values use the neutral mutually exclusive four-bucket form (all non-negative);
 // the legacy prompt/completion/total mirror columns are derived here, never
 // accepted separately, so there is exactly one source of truth. No
-// request/response content, credential, base URL, header, or ciphertext may
-// ever be passed here; the repository applies diagnostic.Bound to ErrorDiag
-// as the final sink policy.
+// request/response content, credential, header, or ciphertext may ever be
+// passed here. EndpointBaseURL carries the frozen log contract's bounded
+// dispatch-time canonical base-URL snapshot (owner-visible endpoint metadata,
+// never credential material); the repository applies diagnostic.Bound to
+// ErrorDiag and EndpointBaseURL as the final sink policy.
 type RequestLogInput struct {
 	AttemptID             string
 	UserID                int64
 	Model                 string // platform model full_name ("" when unknown)
 	EndpointKeyID         int64  // 0 when no key was selected or it was deleted
 	UpstreamModelID       string
+	EndpointBaseURL       string
 	StatusCode            int
 	DurationMs            int64
 	StartedAt             time.Time
@@ -204,6 +207,7 @@ func (s *Store) RecordRequest(ctx context.Context, input RequestLogInput) error 
 	completedUnix := input.CompletedAt.Unix()
 	unknown := boolToInt(input.UsageUnknown)
 	diag := diagnostic.Bound(input.ErrorDiag)
+	baseURL := diagnostic.Bound(input.EndpointBaseURL)
 
 	// Derive the legacy compatibility mirrors from the four buckets. The
 	// per-request bounds above (each bucket <= MaxTokenDelta) mean these sums
@@ -233,7 +237,7 @@ INSERT INTO request_logs
 	(attempt_id, user_id, model, endpoint_key_id, upstream_model_id, status_code, duration_ms,
 	 started_at, completed_at, prompt_tokens, completion_tokens, total_tokens,
 	 uncached_input_tokens, cache_write_input_tokens, cache_read_input_tokens, output_tokens,
-	 usage_unknown, error_code, error_diag)
+	 usage_unknown, error_code, error_diag, endpoint_base_url)
 SELECT
        ?,
        ?,
@@ -257,6 +261,7 @@ SELECT
        ?,
        ?,
        ?,
+       ?,
        ?
 FROM users WHERE id = ?`,
 		input.AttemptID, input.UserID, input.Model,
@@ -264,7 +269,7 @@ FROM users WHERE id = ?`,
 		input.UpstreamModelID, input.StatusCode, input.DurationMs,
 		startedUnix, completedUnix, promptMirror, completionMirror, totalMirror,
 		input.UncachedInputTokens, input.CacheWriteInputTokens, input.CacheReadInputTokens, input.OutputTokens,
-		unknown, input.ErrorCode, diag, input.UserID)
+		unknown, input.ErrorCode, diag, baseURL, input.UserID)
 	if err != nil {
 		if isConstraintError(err) {
 			// A duplicate attempt correlation id means the same accounted
