@@ -464,6 +464,10 @@ func writeServiceErr(w http.ResponseWriter, err error) {
 		writeErr(w, httperr.New(httperr.CodeNotFound, "not found"))
 	case errors.Is(err, db.ErrConflict):
 		writeErr(w, httperr.New(httperr.CodeConflict, "conflict"))
+	case errors.Is(err, ErrCharityPrefixReserved):
+		// Readable dedicated message: the reserved charity prefix is quoted so
+		// clients can explain the rejection without parsing a generic text.
+		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "provider must not start with the reserved [公益] prefix"))
 	case errors.Is(err, ErrInvalidRequest):
 		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
 	default:
