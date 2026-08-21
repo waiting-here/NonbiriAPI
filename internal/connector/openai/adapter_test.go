@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 )
@@ -82,7 +83,11 @@ func TestChatCompletionsURLContract(t *testing.T) {
 func adapterForServer(t *testing.T, serverURL string, configMutate func(*AdapterConfig), stackMutate func(*egress.StackOptions)) *Adapter {
 	t.Helper()
 	stack := adapterStack(t, []string{serverURL}, stackMutate)
-	adapterConfig := AdapterConfig{Stack: stack}
+	localBackend, err := backend.NewLocal(stack)
+	if err != nil {
+		t.Fatalf("NewLocal: %v", err)
+	}
+	adapterConfig := AdapterConfig{Backend: localBackend}
 	if configMutate != nil {
 		configMutate(&adapterConfig)
 	}

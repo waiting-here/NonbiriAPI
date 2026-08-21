@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
@@ -106,7 +107,9 @@ type AttemptResult struct {
 // AdapterConfig sets finite protocol bounds. A zero value selects the default;
 // configured values may tighten but never widen the shared egress body limit.
 type AdapterConfig struct {
-	Stack *egress.Stack
+	// Backend is the shared outbound execution boundary. Production wiring
+	// passes the single LocalBackend over the process-wide egress Stack.
+	Backend backend.Backend
 
 	MaxJSONResponseBytes int64
 	MaxStreamBytes       int64
@@ -118,7 +121,7 @@ type AdapterConfig struct {
 // Adapter translates one OpenAI-compatible chat request/response attempt. It
 // never owns routing, retries, persistence, or caller authentication.
 type Adapter struct {
-	stack                *egress.Stack
+	backend              backend.Backend
 	maxJSONResponseBytes int64
 	maxStreamBytes       int64
 	maxSSELineBytes      int
@@ -127,8 +130,8 @@ type Adapter struct {
 }
 
 func NewAdapter(config AdapterConfig) (*Adapter, error) {
-	if config.Stack == nil {
-		return nil, errors.New("openai connector: egress stack is required")
+	if backend.IsNil(config.Backend) {
+		return nil, errors.New("openai connector: egress backend is required")
 	}
 	if config.MaxJSONResponseBytes < 0 || config.MaxStreamBytes < 0 || config.MaxSSELineBytes < 0 || config.MaxSSEEventBytes < 0 || config.StreamWriteTimeout < 0 {
 		return nil, errors.New("openai connector: limits must not be negative")
@@ -148,7 +151,7 @@ func NewAdapter(config AdapterConfig) (*Adapter, error) {
 	if config.StreamWriteTimeout == 0 {
 		config.StreamWriteTimeout = DefaultStreamWriteTimeout
 	}
-	sharedMax := config.Stack.MaxResponseBytes()
+	sharedMax := config.Backend.MaxResponseBytes()
 	if config.MaxJSONResponseBytes > sharedMax {
 		config.MaxJSONResponseBytes = sharedMax
 	}
@@ -165,7 +168,7 @@ func NewAdapter(config AdapterConfig) (*Adapter, error) {
 		config.MaxSSEEventBytes = int(config.MaxStreamBytes)
 	}
 	return &Adapter{
-		stack:                config.Stack,
+		backend:              config.Backend,
 		maxJSONResponseBytes: config.MaxJSONResponseBytes,
 		maxStreamBytes:       config.MaxStreamBytes,
 		maxSSELineBytes:      config.MaxSSELineBytes,
@@ -187,7 +190,7 @@ func (*Adapter) ConnectorType() endpoint.ConnectorType {
 func (a *Adapter) Attempt(ctx context.Context, writer http.ResponseWriter, target Target, request *ChatRequest, safetyIdentifier string) AttemptResult {
 	result := AttemptResult{Failure: FailureInternal, Diagnostic: "forwarding attempt unavailable"}
 	defer target.credential.clear()
-	if a == nil || a.stack == nil || ctx == nil || writer == nil || request == nil {
+	if a == nil || a.backend == nil || ctx == nil || writer == nil || request == nil {
 		return result
 	}
 	if request.Stream {
@@ -197,7 +200,7 @@ func (a *Adapter) Attempt(ctx context.Context, writer http.ResponseWriter, targe
 		}
 	}
 
-	client, err := a.stack.NewClient(target.baseURL)
+	client, err := a.backend.Open(target.baseURL)
 	if err != nil {
 		return upstreamFailure("upstream endpoint was refused", 0)
 	}

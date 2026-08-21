@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
@@ -44,6 +45,7 @@ type fetchFixture struct {
 	store    *db.Store
 	vault    *secret.Vault
 	stack    *egress.Stack
+	backend  *backend.LocalBackend
 	fetcher  *Fetcher
 	upstream *httptest.Server
 
@@ -133,7 +135,11 @@ func newFetchFixture(t *testing.T, mutate func(*FetcherConfig, *egress.StackOpti
 		t.Fatalf("self origins: %v", err)
 	}
 	f.stack = stack
-	cfg.Stack = stack
+	f.backend, err = backend.NewLocal(stack)
+	if err != nil {
+		t.Fatalf("local backend: %v", err)
+	}
+	cfg.Backend = f.backend
 
 	fetcher, err := NewFetcher(cfg)
 	if err != nil {
@@ -812,16 +818,20 @@ func TestFetchHookAfterCloseErrors(t *testing.T) {
 // collaborators.
 func TestFetcherValidation(t *testing.T) {
 	f := newFetchFixture(t, nil)
-	if _, err := NewFetcher(FetcherConfig{Store: nil, Stack: f.stack, Secrets: f.vault, Registry: endpoint.NewRegistry()}); err == nil {
+	if _, err := NewFetcher(FetcherConfig{Store: nil, Backend: f.backend, Secrets: f.vault, Registry: endpoint.NewRegistry()}); err == nil {
 		t.Errorf("nil store accepted")
 	}
-	if _, err := NewFetcher(FetcherConfig{Store: f.store, Stack: nil, Secrets: f.vault, Registry: endpoint.NewRegistry()}); err == nil {
-		t.Errorf("nil stack accepted")
+	if _, err := NewFetcher(FetcherConfig{Store: f.store, Backend: nil, Secrets: f.vault, Registry: endpoint.NewRegistry()}); err == nil {
+		t.Errorf("nil backend accepted")
 	}
-	if _, err := NewFetcher(FetcherConfig{Store: f.store, Stack: f.stack, Secrets: nil, Registry: endpoint.NewRegistry()}); err == nil {
+	var typedNilBackend *backend.LocalBackend
+	if _, err := NewFetcher(FetcherConfig{Store: f.store, Backend: typedNilBackend, Secrets: f.vault, Registry: endpoint.NewRegistry()}); err == nil {
+		t.Errorf("typed-nil backend accepted")
+	}
+	if _, err := NewFetcher(FetcherConfig{Store: f.store, Backend: f.backend, Secrets: nil, Registry: endpoint.NewRegistry()}); err == nil {
 		t.Errorf("nil secrets accepted")
 	}
-	if _, err := NewFetcher(FetcherConfig{Store: f.store, Stack: f.stack, Secrets: f.vault, Registry: nil}); err == nil {
+	if _, err := NewFetcher(FetcherConfig{Store: f.store, Backend: f.backend, Secrets: f.vault, Registry: nil}); err == nil {
 		t.Errorf("nil registry accepted")
 	}
 }
