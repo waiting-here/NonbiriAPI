@@ -6,6 +6,7 @@ package db
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -91,17 +92,14 @@ func TestSiteTimezoneFrozenOnceDataExists(t *testing.T) {
 		t.Fatalf("initial set: %v", err)
 	}
 
-	// Create a minimal checkins-shaped table with one row.
-	if _, err := st.DB().Exec(`CREATE TABLE checkins (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		user_id INTEGER NOT NULL,
-		day INTEGER NOT NULL,
-		award INTEGER NOT NULL,
-		created_at INTEGER NOT NULL
-	)`); err != nil {
-		t.Fatalf("create checkins: %v", err)
+	// One check-in row (the schema-created table, real FK owner) is temporal
+	// data.
+	user, err := st.CreateUser("discord-tz-freeze", "tz-freeze", "")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
 	}
-	if _, err := st.DB().Exec(`INSERT INTO checkins (user_id, day, award, created_at) VALUES (1, 0, 1, 0)`); err != nil {
+	if _, err := st.DB().Exec(`INSERT INTO checkins (user_id, day, award, operation_id, created_at)
+		VALUES (?, 0, 1, ?, 0)`, user.ID, "sys.checkin."+fmt.Sprint(user.ID)+".0"); err != nil {
 		t.Fatalf("insert checkin: %v", err)
 	}
 	if err := st.SetSiteTimezoneOffsetMinutes(120); !errors.Is(err, ErrConflict) {
@@ -130,14 +128,9 @@ func TestSiteTimezoneFrozenOnceDataExists(t *testing.T) {
 func TestSiteTimezoneFreezeVsSetRace(t *testing.T) {
 	st := openTestStore(t, filepath.Join(t.TempDir(), "tz-race.db"))
 	defer st.Close()
-	if _, err := st.DB().Exec(`CREATE TABLE checkins (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		user_id INTEGER NOT NULL,
-		day INTEGER NOT NULL,
-		award INTEGER NOT NULL,
-		created_at INTEGER NOT NULL
-	)`); err != nil {
-		t.Fatalf("create checkins: %v", err)
+	user, err := st.CreateUser("discord-tz-race", "tz-race", "")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
 	}
 
 	stop := make(chan struct{})
@@ -152,11 +145,13 @@ func TestSiteTimezoneFreezeVsSetRace(t *testing.T) {
 				return
 			default:
 			}
-			if _, err := st.DB().Exec(`INSERT INTO checkins (user_id, day, award, created_at) VALUES (1, ?, 1, ?)`, i, i); err != nil {
+			if _, err := st.DB().Exec(
+				`INSERT INTO checkins (user_id, day, award, operation_id, created_at) VALUES (?, ?, 1, ?, ?)`,
+				user.ID, i, fmt.Sprintf("sys.checkin.%d.%d", user.ID, i), i); err != nil {
 				t.Errorf("insert checkin: %v", err)
 				return
 			}
-			if _, err := st.DB().Exec(`DELETE FROM checkins WHERE user_id=1`); err != nil {
+			if _, err := st.DB().Exec(`DELETE FROM checkins WHERE user_id=?`, user.ID); err != nil {
 				t.Errorf("delete checkins: %v", err)
 				return
 			}

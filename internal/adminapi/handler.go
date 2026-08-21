@@ -560,6 +560,32 @@ func (h *Handler) patchSiteConfig(w http.ResponseWriter, r *http.Request) {
 		httperr.WriteJSON(w, http.StatusOK, siteConfigPatchResp{Key: key, Value: value})
 		return
 	}
+	// The check-in award bounds are a cross-validated PAIR: like the level
+	// thresholds they have no runtime singleton (every business transaction
+	// reads the authoritative site_config snapshot), but PATCHing either bound
+	// must validate min<=max against the other key's current value in ONE
+	// transaction — never a separate read-then-write. The repository path also
+	// records the administrator's console write as product activity inside
+	// that same transaction, exactly like the threshold and generic paths.
+	if key == KeyCheckinAwardMinMilli || key == KeyCheckinAwardMaxMilli {
+		n, perr := strconv.ParseInt(value, 10, 64)
+		if perr != nil {
+			writeErr(w, httperr.New(httperr.CodeInternal, "configuration update failed"))
+			return
+		}
+		if err := h.store.SetCheckinAwardBoundMilli(r.Context(), key, n, admin.ID, time.Now()); err != nil {
+			if errors.Is(err, db.ErrConflict) {
+				writeErr(w, httperr.New(httperr.CodeConflict,
+					"check-in award minimum must not exceed the maximum"))
+				return
+			}
+			slog.Error("site config update failed", "key", key, "err", err)
+			writeErr(w, httperr.New(httperr.CodeInternal, "configuration update failed"))
+			return
+		}
+		httperr.WriteJSON(w, http.StatusOK, siteConfigPatchResp{Key: key, Value: value})
+		return
+	}
 	// Serialize the read→apply→persist→revert step per handler so concurrent
 	// patches to the same key cannot interleave: without this lock one patch's
 	// runtime apply could land between another's apply and persist (or a revert

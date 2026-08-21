@@ -61,6 +61,15 @@ const (
 	KeyLevelThreshold2Milli = "level_threshold_2_milli"
 	KeyLevelThreshold3Milli = "level_threshold_3_milli"
 	KeyLevelThreshold4Milli = "level_threshold_4_milli"
+	// Check-in switch and economy thresholds (implementation contract §4.1).
+	// checkin_mode is the frozen three-way switch: enabled / level_gated
+	// (only effective level >= 3 may check in) / disabled (the default). The
+	// two award bounds are a cross-validated pair: PATCHing either validates
+	// min <= max against the other key's current value in ONE transaction.
+	KeyCheckinMode          = "checkin_mode"
+	KeyCheckinAwardMinMilli = "checkin_award_min_milli"
+	KeyCheckinAwardMaxMilli = "checkin_award_max_milli"
+	KeyCreditsCapMilli      = "credits_cap_milli"
 	alertPrefsPrefix        = "alert_prefs_"
 )
 
@@ -100,9 +109,14 @@ const (
 	// JSON null while unset.
 	kindTimezoneOffset
 	// kindAmount is a canonical non-negative decimal milli-credit string (the
-	// economy wire form). GET projects a JSON string ("0" while unset or when
-	// a stored row is corrupt); PATCH accepts only the canonical form.
+	// economy wire form). GET projects a JSON string (the key's documented
+	// default while unset or when a stored row is corrupt); PATCH accepts only
+	// the canonical form.
 	kindAmount
+	// kindEnum is a closed string enumeration (see keySpec.allowed). GET
+	// projects the stored value when it is a member and the documented default
+	// otherwise; PATCH accepts exactly the member strings.
+	kindEnum
 )
 
 type keySpec struct {
@@ -110,6 +124,13 @@ type keySpec struct {
 	min, max   int
 	def        int  // int keys: effective default when unset
 	allowEmpty bool // text keys: "" is a valid value (blank pauses the gate)
+	// defAmount is the amount keys' documented default in milli-credits,
+	// projected while unset or when a stored row is corrupt.
+	defAmount int64
+	// allowed is the closed member set of a kindEnum key; defStr is its
+	// documented default (projected while unset or corrupt).
+	allowed []string
+	defStr  string
 }
 
 // knownSiteConfig maps every exact known key to its typed spec.
@@ -141,6 +162,12 @@ var knownSiteConfig = map[string]keySpec{
 	KeyLevelThreshold2Milli:      {kind: kindAmount},
 	KeyLevelThreshold3Milli:      {kind: kindAmount},
 	KeyLevelThreshold4Milli:      {kind: kindAmount},
+	KeyCheckinMode: {kind: kindEnum,
+		allowed: []string{db.CheckinModeEnabled, db.CheckinModeLevelGated, db.CheckinModeDisabled},
+		defStr:  db.CheckinModeDisabled},
+	KeyCheckinAwardMinMilli: {kind: kindAmount, defAmount: db.DefaultCheckinAwardMinMilli},
+	KeyCheckinAwardMaxMilli: {kind: kindAmount, defAmount: db.DefaultCheckinAwardMaxMilli},
+	KeyCreditsCapMilli:      {kind: kindAmount, defAmount: db.DefaultCreditsCapMilli},
 }
 
 // knownSiteConfigKey reports whether key is in the authoritative set
@@ -269,13 +296,23 @@ func typedSiteConfigValue(key, stored string) any {
 			}
 			return nil
 		case kindAmount:
-			// Unset or a corrupt row projects as the canonical "0" (that
-			// level's promotion is disabled), matching the frozen default;
-			// a stored negative value can never pass the write path.
+			// Unset or a corrupt row projects as the key's documented default
+			// (level thresholds read "0" = that promotion is disabled; the
+			// check-in keys read their frozen defaults). A stored negative
+			// value can never pass the write path.
 			if v, err := credits.ParseAmount(stored); err == nil && v >= 0 {
 				return credits.FormatAmount(v)
 			}
-			return credits.FormatAmount(0)
+			return credits.FormatAmount(spec.defAmount)
+		case kindEnum:
+			// Unset or a non-member row projects as the documented default:
+			// fail closed, never an implicit enabled state.
+			for _, allowed := range spec.allowed {
+				if stored == allowed {
+					return stored
+				}
+			}
+			return spec.defStr
 		case kindMultilineText:
 			if validMultilineText(stored, textMaxFor(key)) {
 				return stored
@@ -371,12 +408,23 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 			}
 			// Canonical non-negative decimal string only: no exponent, "+",
 			// leading zeros, whitespace or "-0" (credits.ParseAmount), and
-			// no negative threshold.
+			// no negative amount.
 			n, err := credits.ParseAmount(value)
 			if err != nil || n < 0 {
 				return "", invalid
 			}
 			return credits.FormatAmount(n), httperr.Error{}
+		case kindEnum:
+			var value string
+			if err := json.Unmarshal(raw, &value); err != nil {
+				return "", invalid
+			}
+			for _, allowed := range spec.allowed {
+				if value == allowed {
+					return value, httperr.Error{}
+				}
+			}
+			return "", invalid
 		case kindMultilineText:
 			var value string
 			if err := json.Unmarshal(raw, &value); err != nil || !validMultilineText(value, textMaxFor(key)) {

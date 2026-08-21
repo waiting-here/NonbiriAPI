@@ -43,6 +43,11 @@ const (
 	CodeInsufficientCredits = "insufficient_credits"
 	CodeFeatureDisabled     = "feature_disabled"
 	CodeCharitySuspended    = "charity_suspended"
+	// Check-in codes (additive alpha.2 wire contract): a second check-in on
+	// the same site-local day is a conflict, and the check-in credits-cap
+	// threshold is a platform admission refusal.
+	CodeAlreadyCheckedIn  = "already_checked_in"
+	CodeCheckinCapReached = "checkin_cap_reached"
 )
 
 // Source is the stable origin attribution every error carries. It tells the
@@ -114,11 +119,12 @@ func statusOf(code string) int {
 		return http.StatusBadRequest
 	case CodeUnauthorized:
 		return http.StatusUnauthorized
-	case CodeForbidden, CodeElevationRequired, CodeInsufficientCredits, CodeFeatureDisabled, CodeCharitySuspended:
+	case CodeForbidden, CodeElevationRequired, CodeInsufficientCredits, CodeFeatureDisabled,
+		CodeCharitySuspended, CodeCheckinCapReached:
 		return http.StatusForbidden
 	case CodeNotFound:
 		return http.StatusNotFound
-	case CodeConflict:
+	case CodeConflict, CodeAlreadyCheckedIn:
 		return http.StatusConflict
 	case CodeMethodNotAllowed:
 		return http.StatusMethodNotAllowed

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -242,6 +243,24 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	if _, err := st.SetUserManualLevel(user.ID, &manualLevel); err != nil {
 		t.Fatalf("set manual level: %v", err)
 	}
+	// One check-in with a deterministic award gives the checkins section
+	// (schema v2) a known row: site-local date + award string only.
+	if err := st.SetSiteConfigValueWithActivity(context.Background(), db.CheckinModeKey,
+		db.CheckinModeEnabled, user.ID, time.Unix(1700000000, 0).UTC()); err != nil {
+		t.Fatal(err)
+	}
+	for key, value := range map[string]int64{
+		db.CheckinAwardMinMilliKey: 1000,
+		db.CheckinAwardMaxMilliKey: 1000,
+	} {
+		if _, err := st.DB().Exec(`INSERT INTO site_config (key, value, updated_at) VALUES (?, ?, 0)
+			ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, strconv.FormatInt(value, 10)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := st.Checkin(context.Background(), user.ID, time.Unix(1700000000, 0).UTC()); err != nil {
+		t.Fatalf("checkin: %v", err)
+	}
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, exportRequest("cap-token"))
 	if rec.Code != http.StatusOK {
@@ -318,6 +337,10 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 			Checkins              int64 `json:"checkins"`
 			ConsoleWrites         int64 `json:"console_writes"`
 		} `json:"activity_daily"`
+		Checkins []struct {
+			Day        string `json:"day"`
+			AwardMilli string `json:"award_milli"`
+		} `json:"checkins"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &pkg); err != nil {
 		t.Fatalf("decode package: %v body=%s", err, rec.Body.String())
@@ -340,10 +363,18 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	if pkg.Usage.TotalRequests != 1 || pkg.LogSummary.TotalLogs != 1 {
 		t.Fatalf("usage=%+v logs=%+v", pkg.Usage, pkg.LogSummary)
 	}
-	// Credit ledger section: exactly the seeded entry with canonical string
-	// values and the bounded reason; nothing else ever enters this section.
-	if len(pkg.CreditLedger) != 1 {
-		t.Fatalf("credit_ledger rows=%d, want 1", len(pkg.CreditLedger))
+	// Credit ledger section: exactly the seeded entries (the adjustment and
+	// the deterministic check-in award) with canonical string values and the
+	// bounded reason; nothing else ever enters this section.
+	if len(pkg.CreditLedger) != 2 {
+		t.Fatalf("credit_ledger rows=%d, want 2", len(pkg.CreditLedger))
+	}
+	kinds := map[string]bool{}
+	for _, entry := range pkg.CreditLedger {
+		kinds[entry.Kind] = true
+	}
+	if !kinds["admin_adjustment"] || !kinds["checkin_award"] {
+		t.Fatalf("credit_ledger kinds=%v", kinds)
 	}
 	entry := pkg.CreditLedger[0]
 	if entry.Kind != "admin_adjustment" || entry.CreditsDelta != "12345" ||
@@ -363,8 +394,18 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	day := pkg.ActivityDaily[0]
 	if day.ProductActive != true || day.APIRequests != 1 || day.UncachedInputTokens != 2 ||
 		day.CacheWriteInputTokens != 3 || day.CacheReadInputTokens != 5 || day.OutputTokens != 7 ||
-		day.ConsoleWrites != 0 || day.Checkins != 0 {
+		day.ConsoleWrites != 1 || day.Checkins != 1 {
 		t.Fatalf("activity_daily row=%+v", day)
+	}
+	// The check-in history section (schema v2): the site-local calendar date
+	// under the configured +330 offset and the award as a canonical decimal
+	// string — no streak, no location, nothing else.
+	if len(pkg.Checkins) != 1 {
+		t.Fatalf("checkins=%+v", pkg.Checkins)
+	}
+	wantDate := time.Unix(db.SiteDayKey(1700000000, 330)+330*60, 0).UTC().Format("2006-01-02")
+	if pkg.Checkins[0].Day != wantDate || pkg.Checkins[0].AwardMilli != "1000" {
+		t.Fatalf("checkins row=%+v, want (%q, \"1000\")", pkg.Checkins[0], wantDate)
 	}
 
 	// Whitelist enforcement: no secret material anywhere in the package.

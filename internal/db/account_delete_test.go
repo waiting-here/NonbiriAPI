@@ -90,7 +90,7 @@ func assertUserGone(t *testing.T, st *Store, uid int64) {
 	}
 	for _, table := range []string{"sessions", "caller_keys", "endpoints", "endpoint_keys",
 		"fetched_models", "model_bindings", "models", "request_logs", "user_issues", "user_activity_daily",
-		"credit_ledger"} {
+		"credit_ledger", "checkins"} {
 		// user_issues/request_logs/sessions/caller_keys/endpoints/models key on user_id;
 		// endpoint_keys/fetched_models/model_bindings are reached via cascade and have no
 		// user_id column, so count them globally after a user delete (they must be empty

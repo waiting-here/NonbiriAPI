@@ -242,6 +242,10 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	if err != nil {
 		return nil, err
 	}
+	checkins, err := s.store.ListExportCheckins(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
 
 	keysByEndpoint := make(map[int64][]exportKey, len(keys))
 	for _, key := range keys {
@@ -290,12 +294,16 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 		},
 		ActivityDaily: make([]db.ActivityDailyExportRow, 0, len(activityDaily)),
 		CreditLedger:  make([]db.CreditLedgerExportRow, 0, len(creditLedger)),
+		Checkins:      make([]db.CheckinExportRow, 0, len(checkins)),
 	}
 	for _, day := range activityDaily {
 		packageValue.ActivityDaily = append(packageValue.ActivityDaily, day)
 	}
 	for _, entry := range creditLedger {
 		packageValue.CreditLedger = append(packageValue.CreditLedger, entry)
+	}
+	for _, row := range checkins {
+		packageValue.Checkins = append(packageValue.Checkins, row)
 	}
 	for _, ep := range endpoints {
 		packageValue.Endpoints = append(packageValue.Endpoints, exportEndpoint{
@@ -351,6 +359,10 @@ type exportPackage struct {
 	// counters and site-local day keys only — no model names and no request
 	// content. The site-wide rollup table is never part of a personal export.
 	ActivityDaily []db.ActivityDailyExportRow `json:"activity_daily"`
+	// Checkins is the user's own check-in history (schema v2): the site-local
+	// calendar date and the granted award per day — no streak and no location
+	// data exists anywhere in the table.
+	Checkins []db.CheckinExportRow `json:"checkins"`
 }
 
 type exportUser struct {

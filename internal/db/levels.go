@@ -204,11 +204,29 @@ func (s *Store) ResolveEffectiveLevel(ctx context.Context, userID int64) (int, e
 	}
 	defer tx.Rollback()
 
+	level, err := s.resolveEffectiveLevelTx(ctx, tx, userID)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("resolve effective level: %w", err)
+	}
+	return level, nil
+}
+
+// resolveEffectiveLevelTx is the in-transaction resolver used both by
+// ResolveEffectiveLevel and by same-transaction business writes that need the
+// authoritative effective level as part of their admission decision (the
+// check-in rail). The caller owns the transaction lifecycle; the semantics are
+// exactly the standalone resolver's (manual override wins, lazy CAS promotion
+// of the persisted high-water mark, no downgrade path, administrator row
+// excluded, corrupt stored levels refused).
+func (s *Store) resolveEffectiveLevelTx(ctx context.Context, tx *sql.Tx, userID int64) (int, error) {
 	var isAdmin int
 	var level sql.NullInt64
 	var autoLevel int
 	var donationCredit int64
-	err = tx.QueryRowContext(ctx,
+	err := tx.QueryRowContext(ctx,
 		`SELECT is_admin, level, auto_level, donation_credit FROM users WHERE id=?`, userID,
 	).Scan(&isAdmin, &level, &autoLevel, &donationCredit)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -227,9 +245,6 @@ func (s *Store) ResolveEffectiveLevel(ctx context.Context, userID int64) (int, e
 		value := int(level.Int64)
 		if value < MinLevel || value > MaxLevel {
 			return 0, fmt.Errorf("resolve effective level: stored level %d is out of range", value)
-		}
-		if err := tx.Commit(); err != nil {
-			return 0, fmt.Errorf("resolve effective level: %w", err)
 		}
 		return value, nil
 	}
@@ -255,20 +270,16 @@ func (s *Store) ResolveEffectiveLevel(ctx context.Context, userID int64) (int, e
 			return 0, fmt.Errorf("resolve effective level: promote: %w", err)
 		}
 		if affected == 1 {
-			if err := tx.Commit(); err != nil {
-				return 0, fmt.Errorf("resolve effective level: %w", err)
-			}
 			return target, nil
 		}
 		// The conditional update missed: a concurrent resolution already
 		// promoted this user at least as high. Re-read the committed mark so
-		// this call returns the newest value, never a stale snapshot.
+		// this call returns the newest value, never a stale snapshot. The
+		// re-read sees the same single-writer serialization point as the rest
+		// of this transaction.
 		if err := tx.QueryRowContext(ctx, `SELECT auto_level FROM users WHERE id=?`, userID).Scan(&autoLevel); err != nil {
 			return 0, fmt.Errorf("resolve effective level: re-read: %w", err)
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("resolve effective level: %w", err)
 	}
 	return autoLevel, nil
 }
