@@ -180,8 +180,25 @@ Server-side behavior (frozen contract; implementation in a later rail):
    Non-stream requests can retry up to the boundary, same option/default.
    Route resolution, all attempts, and backoff share one five-minute aggregate deadline; a
    candidate set never multiplies the single-attempt timeout into a longer logical request.
-4. Inject the OpenAI `safety_identifier` field = a stable, irreversible hash of the calling
-   user's id, for upstream per-user risk attribution.
+4. Inject the OpenAI `safety_identifier` field for upstream per-user risk attribution.
+
+**Unreleased security amendment:** the development branch sends only the versioned form
+`nbu_v2_` followed by the 52-character RFC 4648 base32 (without padding) encoding of an
+HMAC-SHA-256 digest. The process derives a dedicated 32-byte key from the Vault with purpose
+`nonbiriapi:safety-identifier:v2`; the HMAC message is that fixed purpose followed by the
+calling user's positive int64 id as exactly eight big-endian bytes. The resulting 59-character
+pseudonym is stable for the same deployment key and user, differs across users or deployment
+keys, and contains neither the raw id nor a publicly verifiable unkeyed digest. A caller-supplied
+`safety_identifier` is overwritten, and no legacy identifier is also sent.
+
+The derived key exists only in process memory: it is not persisted, logged, returned by the
+platform API, or sent upstream. Missing or invalid key injection fails application wiring; once
+the forwarding service begins shutdown it admits no new operations, waits for in-flight
+operations, then best-effort clears its retained key copy. This rollout intentionally rotates
+all identifiers emitted by the published alpha.1 implementation once. Upstream risk history
+keyed only by the previous value will not automatically carry over, because there is no dual-send
+or legacy fallback. After that cutover, retaining the same deployment master key preserves
+identifier continuity; a deployment using a different master key produces a different pseudonym.
 
 Response — non-stream (`stream` false/omitted): standard OpenAI Chat Completions response,
 including `usage` (`prompt_tokens`, `completion_tokens`, `total_tokens`) when the upstream

@@ -10,12 +10,11 @@ package forward
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base32"
 	"errors"
+	"log/slog"
 	"net/http"
-	"strconv"
-	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -34,7 +33,6 @@ const (
 	// the candidate count.
 	DefaultForwardTimeout = 5 * time.Minute
 	maxRouteOrd           = 1_000_000
-	safetyDomain          = "nonbiriapi:safety_identifier:v1\x00"
 )
 
 var (
@@ -164,7 +162,10 @@ type Hooks struct {
 }
 
 // ServiceConfig wires the ownership repository, an optional selector
-// override, the single-attempt runner, hooks, and the bounded retry backoff.
+// override, the single-attempt runner, hooks, the deployment-derived safety
+// identifier key, and the bounded retry backoff. SafetyIdentifierKey must be
+// the exact 32-byte output of the Vault purpose derivation; NewService copies
+// it, and the caller should clear its input immediately after construction.
 // A nil Selector makes the service choose OrderedSelector or RandomSelector
 // per call from the projected route_strategy; a non-nil Selector is used for
 // every call (test injection) and its returned ids are still re-validated
@@ -172,13 +173,25 @@ type Hooks struct {
 // exponential backoff; a Base <= 0 disables waiting (tests). A zero
 // ForwardTimeout selects DefaultForwardTimeout; negative values are invalid.
 type ServiceConfig struct {
-	Repository     RouteRepository
-	Selector       Selector
-	Runner         AttemptRunner
-	Hooks          Hooks
-	Backoff        BackoffConfig
-	ForwardTimeout time.Duration
-	Now            func() time.Time
+	Repository          RouteRepository
+	Selector            Selector
+	Runner              AttemptRunner
+	Hooks               Hooks
+	Backoff             BackoffConfig
+	ForwardTimeout      time.Duration
+	Now                 func() time.Time
+	SafetyIdentifierKey []byte
+}
+
+// String prevents routine formatting from exposing injected key material.
+func (ServiceConfig) String() string { return "[forward service config]" }
+
+// GoString prevents detailed formatting from exposing injected key material.
+func (ServiceConfig) GoString() string { return "[forward service config]" }
+
+// LogValue prevents structured logging from exposing injected key material.
+func (ServiceConfig) LogValue() slog.Value {
+	return slog.StringValue("[forward service config]")
 }
 
 // Service resolves one platform model and orchestrates the candidate dispatch
@@ -186,13 +199,16 @@ type ServiceConfig struct {
 // binding against the projection, invokes the single-attempt runner per
 // candidate, and applies the silent-retry boundary with bounded backoff.
 type Service struct {
-	repository RouteRepository
-	selector   Selector
-	runner     AttemptRunner
-	hooks      Hooks
-	backoff    BackoffConfig
-	timeout    time.Duration
-	now        func() time.Time
+	lifecycle         sync.RWMutex
+	closed            bool
+	repository        RouteRepository
+	selector          Selector
+	runner            AttemptRunner
+	hooks             Hooks
+	backoff           BackoffConfig
+	timeout           time.Duration
+	now               func() time.Time
+	safetyIdentifiers *safetyIdentifierGenerator
 }
 
 func NewService(config ServiceConfig) (*Service, error) {
@@ -205,6 +221,10 @@ func NewService(config ServiceConfig) (*Service, error) {
 	if config.ForwardTimeout < 0 {
 		return nil, errors.New("forward: invocation timeout must not be negative")
 	}
+	identifierGenerator, err := newSafetyIdentifierGenerator(config.SafetyIdentifierKey)
+	if err != nil {
+		return nil, err
+	}
 	if config.ForwardTimeout == 0 {
 		config.ForwardTimeout = DefaultForwardTimeout
 	}
@@ -216,20 +236,53 @@ func NewService(config ServiceConfig) (*Service, error) {
 		backoff = BackoffConfig{Base: DefaultBackoffBase, Max: DefaultBackoffMax}
 	}
 	return &Service{
-		repository: config.Repository,
-		selector:   config.Selector,
-		runner:     config.Runner,
-		hooks:      config.Hooks,
-		backoff:    backoff,
-		timeout:    config.ForwardTimeout,
-		now:        config.Now,
+		repository:        config.Repository,
+		selector:          config.Selector,
+		runner:            config.Runner,
+		hooks:             config.Hooks,
+		backoff:           backoff,
+		timeout:           config.ForwardTimeout,
+		now:               config.Now,
+		safetyIdentifiers: identifierGenerator,
 	}, nil
 }
+
+// Close prevents new operations, waits for in-flight service calls, and
+// clears the retained safety-identifier subkey on a best-effort basis.
+func (s *Service) Close() error {
+	if s == nil {
+		return nil
+	}
+	s.lifecycle.Lock()
+	defer s.lifecycle.Unlock()
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+	if s.safetyIdentifiers == nil {
+		return nil
+	}
+	return s.safetyIdentifiers.close()
+}
+
+// String prevents routine formatting from traversing into key-bearing state.
+func (*Service) String() string { return "[forward service]" }
+
+// GoString prevents detailed formatting from traversing into key-bearing state.
+func (*Service) GoString() string { return "[forward service]" }
+
+// LogValue prevents structured logging from traversing into key-bearing state.
+func (*Service) LogValue() slog.Value { return slog.StringValue("[forward service]") }
 
 // ListModels returns only userID's platform models. It never reads a binding,
 // fetched upstream model, endpoint key, ciphertext, or Vault.
 func (s *Service) ListModels(ctx context.Context, userID int64) (ModelList, error) {
-	if s == nil || s.repository == nil || ctx == nil || userID <= 0 {
+	if s == nil || ctx == nil || userID <= 0 {
+		return ModelList{}, ErrInternal
+	}
+	s.lifecycle.RLock()
+	defer s.lifecycle.RUnlock()
+	if s.closed || s.repository == nil {
 		return ModelList{}, ErrInternal
 	}
 	models, err := s.repository.ListCallerModels(ctx, userID, MaxCallerModels)
@@ -268,7 +321,16 @@ func (s *Service) ListModels(ctx context.Context, userID int64) (ModelList, erro
 // re-validates ownership, so a binding deleted/disabled/cache-cleared between
 // selection and dispatch fails closed without dialing.
 func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userID int64, request *openai.ChatRequest) (openai.AttemptResult, error) {
-	if s == nil || s.repository == nil || s.runner == nil || ctx == nil || writer == nil || userID <= 0 || request == nil {
+	if s == nil || ctx == nil || writer == nil || userID <= 0 || request == nil {
+		return openai.AttemptResult{}, ErrInternal
+	}
+	s.lifecycle.RLock()
+	defer s.lifecycle.RUnlock()
+	if s.closed || s.repository == nil || s.runner == nil || s.safetyIdentifiers == nil {
+		return openai.AttemptResult{}, ErrInternal
+	}
+	safetyIdentifier, err := s.safetyIdentifiers.generate(userID)
+	if err != nil {
 		return openai.AttemptResult{}, ErrInternal
 	}
 	parentCtx := ctx
@@ -359,7 +421,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 			FullName:         route.FullName,
 			BindingID:        candidate.BindingID,
 			Request:          request,
-			SafetyIdentifier: SafetyIdentifier(userID),
+			SafetyIdentifier: safetyIdentifier,
 		})
 		if ctx.Err() != nil && !result.Success && !result.Committed {
 			result = endedContextResult(parentCtx, ctx)
@@ -435,24 +497,6 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 		}
 	}
 	return lastResult, nil
-}
-
-// SafetyIdentifier is stable across requests and deliberately domain-separated
-// from every other SHA-256 use. The raw numeric id is never included in the
-// result. A prefix keeps the value recognizable as a platform-generated token
-// without revealing tenant identity.
-func SafetyIdentifier(userID int64) string {
-	hash := sha256.New()
-	_, _ = hash.Write([]byte(safetyDomain))
-	_, _ = hash.Write([]byte(strconv.FormatInt(userID, 10)))
-	sum := hash.Sum(nil)
-	encoded := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(sum)
-	// RFC 4648 base32's six digit symbols are mapped to lowercase letters;
-	// together with uppercase A-Z this remains a one-to-one 32-symbol alphabet
-	// while guaranteeing that a decimal user id cannot appear verbatim.
-	encoded = strings.NewReplacer("2", "a", "3", "b", "4", "c", "5", "d", "6", "e", "7", "f").Replace(encoded)
-	clear(sum)
-	return "nbu_" + encoded
 }
 
 // newAttemptID returns a random opaque correlation id for one Forward

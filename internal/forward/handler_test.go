@@ -143,13 +143,16 @@ func newForwardFixtureCfg(t *testing.T, allowed []string, hooks Hooks, selector 
 	if err != nil {
 		t.Fatal(err)
 	}
+	safetyIdentifierKey := derivedSafetyIdentifierKey(t, vault)
 	service, err := NewService(ServiceConfig{
-		Repository: store,
-		Selector:   selector,
-		Runner:     runner,
-		Hooks:      hooks,
-		Backoff:    backoff,
+		Repository:          store,
+		Selector:            selector,
+		Runner:              runner,
+		Hooks:               hooks,
+		Backoff:             backoff,
+		SafetyIdentifierKey: safetyIdentifierKey,
 	})
+	clear(safetyIdentifierKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,6 +160,7 @@ func newForwardFixtureCfg(t *testing.T, allowed []string, hooks Hooks, selector 
 	wrapped := auth.CallerKeyMiddleware(store, exit)
 	fixture := &forwardFixture{store: store, codec: codec, stack: stack, registry: registry, handler: wrapped, service: service}
 	t.Cleanup(func() {
+		_ = service.Close()
 		stack.CloseIdleConnections()
 		_ = store.Close()
 		_ = vault.Close()
@@ -373,12 +377,18 @@ func TestForwardRequestSafetyHooksAndSecretSinks(t *testing.T) {
 		var safety, model string
 		_ = json.Unmarshal(root["safety_identifier"], &safety)
 		_ = json.Unmarshal(root["model"], &model)
-		if safety != SafetyIdentifier(userID) || safety == "forged" || strings.Contains(safety, strconv.FormatInt(userID, 10)) || model != "upstream/model" || !bytes.Contains(root["unknown"], []byte("true")) {
-			t.Fatalf("authority user=%d safety=%q model=%q body=%s", userID, safety, model, body)
+		wantSafety := expectedSafetyIdentifier(t, fixture.codec.vault, userID)
+		if safety != wantSafety || safety == "forged" || safety == strconv.FormatInt(userID, 10) || model != "upstream/model" || !bytes.Contains(root["unknown"], []byte("true")) {
+			t.Fatalf("authority user=%d safety=%q want=%q model=%q body=%s", userID, safety, wantSafety, model, body)
+		}
+		assertSafetyIdentifierFormat(t, safety)
+		if bytes.Count(body, []byte(`"safety_identifier"`)) != 1 || strings.Contains(safety, "nbu_v1_") {
+			t.Fatalf("non-canonical safety identifier emission user=%d body=%s", userID, body)
 		}
 	}
-	aliceSafety := SafetyIdentifier(alice.id)
-	if aliceSafety == SafetyIdentifier(bob.id) || aliceSafety != SafetyIdentifier(alice.id) {
+	aliceSafety := expectedSafetyIdentifier(t, fixture.codec.vault, alice.id)
+	bobSafety := expectedSafetyIdentifier(t, fixture.codec.vault, bob.id)
+	if aliceSafety == bobSafety || aliceSafety != expectedSafetyIdentifier(t, fixture.codec.vault, alice.id) {
 		t.Fatal("safety identifiers are not stable and user-distinct")
 	}
 
@@ -753,9 +763,6 @@ func TestHandlerMethodAndIdentityBoundaries(t *testing.T) {
 func TestSecureRunnerConstructionAndTargetInvalidation(t *testing.T) {
 	if _, err := NewSecureRunner(SecureRunnerConfig{}); err == nil {
 		t.Fatal("empty runner config accepted")
-	}
-	if SafetyIdentifier(10) == SafetyIdentifier(11) || strings.Contains(SafetyIdentifier(10), "10") {
-		t.Fatal("safety identifier isolation failed")
 	}
 	if !errors.Is(ErrModelNotFound, ErrModelNotFound) {
 		t.Fatal("sentinel sanity")

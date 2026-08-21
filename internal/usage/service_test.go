@@ -110,14 +110,20 @@ func newUsageFixture(t *testing.T, allowed []string, mutateConfig func(*usage.Co
 	if err != nil {
 		t.Fatal(err)
 	}
+	safetyIdentifierKey, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
+	if err != nil {
+		t.Fatal(err)
+	}
 	service, err := forward.NewService(forward.ServiceConfig{
-		Repository: store,
-		Runner:     runner,
+		Repository:          store,
+		Runner:              runner,
+		SafetyIdentifierKey: safetyIdentifierKey,
 		Hooks: forward.Hooks{
 			Attempt: usageService.HandleAttempt,
 			Usage:   usageService.HandleUsage,
 		},
 	})
+	clear(safetyIdentifierKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,6 +131,7 @@ func newUsageFixture(t *testing.T, allowed []string, mutateConfig func(*usage.Co
 	wrapped := auth.CallerKeyMiddleware(store, exit)
 	fixture := &usageFixture{store: store, vault: vault, stack: stack, handler: wrapped, service: usageService}
 	t.Cleanup(func() {
+		_ = service.Close()
 		stack.CloseIdleConnections()
 		_ = store.Close()
 		_ = vault.Close()

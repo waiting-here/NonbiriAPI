@@ -136,7 +136,16 @@ func newIntegrationFixture(t *testing.T, rpmConfig ratelimit.RPMConfig) *integra
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := forward.NewService(forward.ServiceConfig{Repository: store, Runner: runner})
+	safetyIdentifierKey, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := forward.NewService(forward.ServiceConfig{
+		Repository:          store,
+		Runner:              runner,
+		SafetyIdentifierKey: safetyIdentifierKey,
+	})
+	clear(safetyIdentifierKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,6 +160,7 @@ func newIntegrationFixture(t *testing.T, rpmConfig ratelimit.RPMConfig) *integra
 	}
 	wrapped := auth.CallerKeyMiddleware(store, middleware.Wrap(exit))
 	t.Cleanup(func() {
+		_ = service.Close()
 		controller.Close()
 		stack.CloseIdleConnections()
 		_ = store.Close()
