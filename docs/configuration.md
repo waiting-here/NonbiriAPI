@@ -55,6 +55,7 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | `oauth_start_rate_penalty_seconds` | integer `[0,3600]` | 60-second penalty; `0` disables the penalty duration |
 | `maintenance_mode` | boolean | `false`; **changed from alpha.1 (unreleased security amendment)**: now a server-side authoritative admission gate — while on, every user-station `/api/*` and `/v1/*` request is refused with a stable `503 service_unavailable` envelope (`source: platform`, `no-store`) except a strict allowlist (`/healthz`, the public config endpoints, and `/api/auth/logout`); already-issued user sessions and caller keys are affected immediately; the admin station is never gated; atomically live-applied and loaded from the database at startup. Route matrix in `docs/api-contract.md` §6 |
 | `registration_open` | boolean | `true`; when false, new registration is refused while existing accounts may sign in |
+| `site_timezone_offset_minutes` | nullable integer; multiple of 30 in `[-720,+840]` | **null (default) = not configured** — distinct from an explicit `0` (UTC). While unset, site-day-key features (check-in, activity) are force-disabled for normal users behind the ordinary feature-disabled error without revealing why. Once any check-in or activity row exists, the value is frozen: every further write is refused with `conflict`, even rewriting the identical value or after those rows are later cleaned up. The offset is read authoritatively per business transaction; there is no runtime singleton |
 | `alert_prefs_*` | single-line text, ≤512 bytes | administrator alert-center preferences |
 
 ### Registration gate
@@ -69,7 +70,7 @@ If either ID is blank, new registration is paused; blank does **not** mean “sk
 
 ### Runtime application
 
-RPM and concurrency settings update the shared in-process controllers immediately. Resource-count caps are read transactionally on each create. Display, legal, registration, OAuth-admission, and maintenance values are read from the database without rebuilding; responses are `no-store`.
+RPM and concurrency settings update the shared in-process controllers immediately. Resource-count caps are read transactionally on each create. Display, legal, registration, OAuth-admission, and maintenance values are read from the database without rebuilding; responses are `no-store`. The site timezone offset carries no runtime singleton: consumers resolve it per transaction and fail closed when it is unset.
 
 `GET /api/config` (and the admin-host bootstrap equivalent) exposes only the display/legal values plus `maintenance_mode` and `registration_open`. It never exposes operational rate limits, Discord gate IDs, alert preferences, or secrets.
 

@@ -167,18 +167,27 @@ func (s *Store) GetCallerKey(userID int64) (*CallerKey, error) {
 }
 
 // GetUserByCallerKey resolves a bearer key by SHA-256 lookup and checks ban
-// state in the same query. The plaintext is never a SQL value.
+// state in the same query. A due deadline ban counts as not banned here (the
+// lazy lift converges the stored row right after), while a permanent ban
+// (banned_until NULL) still fails the lookup. The plaintext is never a SQL
+// value.
 func (s *Store) GetUserByCallerKey(key string) (*User, error) {
 	if !validateCallerKey(key) {
 		return nil, nil
 	}
+	nowUnix := time.Now().Unix()
 	user, err := scanUser(s.db.QueryRow(`SELECT `+userSelectColumns+`
 		FROM caller_keys c JOIN users u ON u.id=c.user_id
-		WHERE c.key_hash=? AND u.is_admin=0 AND u.is_banned=0`, hashCallerKey(key)))
+		WHERE c.key_hash=? AND u.is_admin=0
+		AND (u.is_banned=0 OR (u.banned_until IS NOT NULL AND u.banned_until<=?))`, hashCallerKey(key), nowUnix))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
-	return user, err
+	if err != nil {
+		return nil, err
+	}
+	s.reconcileUserTemporalState(user, time.Now())
+	return user, nil
 }
 
 // CallerKeyExists reports whether a user has a currently stored key row.

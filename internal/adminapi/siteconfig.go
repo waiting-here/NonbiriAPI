@@ -48,6 +48,10 @@ const (
 	KeyOAuthStartRatePenaltySecs = "oauth_start_rate_penalty_seconds"
 	KeyMaintenanceMode           = "maintenance_mode"
 	KeyRegistrationOpen          = "registration_open"
+	// KeySiteTimezoneOffsetMinutes is nullable: unset (JSON null) means the
+	// site timezone has never been configured and must never be mistaken for
+	// an explicit UTC (0). It is frozen once any checkin/activity data exists.
+	KeySiteTimezoneOffsetMinutes = "site_timezone_offset_minutes"
 	alertPrefsPrefix             = "alert_prefs_"
 )
 
@@ -82,6 +86,10 @@ const (
 	kindInt
 	kindBool          // a toggle stored as the canonical "1"/"0"
 	kindMultilineText // text that preserves newlines/tabs (legal overrides)
+	// kindTimezoneOffset is a nullable int with its own validation (multiple
+	// of 30 in [-720,+840]) and an atomic immutability guard; GET returns
+	// JSON null while unset.
+	kindTimezoneOffset
 )
 
 type keySpec struct {
@@ -116,6 +124,7 @@ var knownSiteConfig = map[string]keySpec{
 	KeyOAuthStartRatePenaltySecs: {kind: kindInt, min: 0, max: maxOAuthStartRatePenaltySecs, def: ratelimit.DefaultOAuthStartRatePenaltySeconds},
 	KeyMaintenanceMode:           {kind: kindBool, def: 0},
 	KeyRegistrationOpen:          {kind: kindBool, def: 1},
+	KeySiteTimezoneOffsetMinutes: {kind: kindTimezoneOffset},
 }
 
 // knownSiteConfigKey reports whether key is in the authoritative set
@@ -236,6 +245,13 @@ func typedSiteConfigValue(key, stored string) any {
 				return stored
 			}
 			return ""
+		case kindTimezoneOffset:
+			// Unset or a manually corrupted row projects as null: the admin
+			// station must see "not configured", never a fabricated default.
+			if n, err := parseCanonicalInt(stored); err == nil && db.ValidSiteTimezoneOffset(n) {
+				return n
+			}
+			return nil
 		case kindMultilineText:
 			if validMultilineText(stored, textMaxFor(key)) {
 				return stored
@@ -261,8 +277,9 @@ func typedSiteConfigValue(key, stored string) any {
 // spec and returns the canonical stored string. A non-JSON type, an
 // out-of-range or non-integral number, or an out-of-bounds text is
 // invalid_request. JSON null is always rejected: clearing an int cap is
-// expressed through the per-user/user-level NULL semantics, and clearing a
-// text value is expressed as "".
+// expressed through the per-user/user-level NULL semantics, clearing a text
+// value is expressed as "", and the timezone offset cannot be cleared at all
+// once configured.
 func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.Error) {
 	invalid := httperr.New(httperr.CodeInvalidRequest, "invalid configuration value")
 	if spec, ok := knownSiteConfig[key]; ok {
@@ -307,6 +324,22 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 				return "", invalid
 			}
 			return value, httperr.Error{}
+		case kindTimezoneOffset:
+			dec := json.NewDecoder(bytes.NewReader(raw))
+			dec.UseNumber()
+			var decoded any
+			if err := dec.Decode(&decoded); err != nil {
+				return "", invalid
+			}
+			num, ok := decoded.(json.Number)
+			if !ok {
+				return "", invalid
+			}
+			n, err := num.Int64()
+			if err != nil || strconv.FormatInt(n, 10) != num.String() || !db.ValidSiteTimezoneOffset(int(n)) {
+				return "", invalid
+			}
+			return num.String(), httperr.Error{}
 		case kindMultilineText:
 			var value string
 			if err := json.Unmarshal(raw, &value); err != nil || !validMultilineText(value, textMaxFor(key)) {

@@ -55,6 +55,13 @@ A banned user's caller key is treated as invalid at request time, so a banned ke
 platform-exit auth with `unauthorized`. Banning also keeps the user's sessions out of further
 use.
 
+A ban may be permanent or carry an expiry deadline (`banned_until`, unix seconds). A ban whose
+deadline has passed counts as not banned at every authentication check and is lifted lazily by
+an atomic conditional update on read (logged, never alerted); a permanent ban never lifts
+itself. Banning always deletes the user's sessions and caller key in the same transaction, so
+an expiring temporary ban does not resurrect old credentials: the user signs in and generates
+a new caller key.
+
 ### 1.3 Cache policy
 
 `Cache-Control: no-store` is the default for the whole API: every JSON success written through
@@ -266,7 +273,7 @@ Auth: a valid user session cookie. Banned users are denied. All responses are `n
 |---|---|---|---|---|---|
 | `GET` | `/api/auth/discord/start` | none | — | `302` to Discord's authorize URL; sets the OAuth `state` cookie (HMAC, short TTL, HttpOnly, SameSite). Before a state is issued, a per-client-IP admission throttle (configurable via site_config `oauth_start_rate_*`; `oauth_start_rate_limit=0` disables it) is applied as a second layer behind the reverse-proxy per-IP limit | `rate_limited` (429, with `Retry-After`) when the per-client-IP admission limit is exceeded; `service_unavailable` (503) if the Discord end is misconfigured or the admission throttle's bounded entry store is full (fail-closed, never evicts a live state) |
 | `GET` | `/api/auth/discord/callback` | OAuth `state` cookie | query: `code`, `state` | on success: sets the user session cookie and `302` to the user SPA; on mismatch/failure: `400 invalid_request` / `401 unauthorized` | `invalid_request`, `unauthorized`, `conflict`, `service_unavailable` |
-| `GET` | `/api/session` | user session | — | `200 {user:{id,username,avatar,avatar_url,guild_nick,guild_avatar_url,lang,is_banned,blocked_reason?,endpoint_limit,rpm_limit,created_at}}` | `unauthorized` |
+| `GET` | `/api/session` | user session | — | `200 {user:{id,username,avatar,avatar_url,guild_nick,guild_avatar_url,lang,is_banned,blocked_reason?,banned_until,charity_suspended_until,endpoint_limit,rpm_limit,created_at}}`; `banned_until`/`charity_suspended_until` are nullable unix seconds | `unauthorized` |
 | `POST` | `/api/auth/logout` | user session | — | `204`; clears the session cookie | `unauthorized` |
 
 Registration gate (Discord): registration is allowed only when `registration_open` is true and both the configured `discord_guild_id` and `discord_role_id` match the Discord identity. If either ID is blank or registration is closed, registration is paused (the callback returns `service_unavailable` for a new identity),
@@ -488,11 +495,11 @@ no password material.
 
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
-| `GET` | `/admin/api/users` | admin session | query: `page`, `page_size`, `is_banned?` | `200 {data:[…], has_more}`; each row is `{id, username, avatar, discord_id, is_banned, banned_reason, endpoint_limit, rpm_limit, lang, total_requests, total_prompt_tokens, total_completion_tokens, total_unknown_usage_requests, created_at}` | `invalid_request`, `unauthorized`, `forbidden` |
+| `GET` | `/admin/api/users` | admin session | query: `page`, `page_size`, `is_banned?` | `200 {data:[…], has_more}`; each row is `{id, username, avatar, discord_id, is_banned, banned_reason, banned_until, auto_banned, charity_suspended_until, endpoint_limit, rpm_limit, lang, total_requests, total_prompt_tokens, total_completion_tokens, total_unknown_usage_requests, created_at}` | `invalid_request`, `unauthorized`, `forbidden` |
 | `GET` | `/admin/api/users/{id}` | admin session | — | `200` the same user shape with full usage metadata | `unauthorized`, `forbidden`, `not_found` |
 | `PATCH` | `/admin/api/users/{id}` | admin session | `{endpoint_limit?, rpm_limit?, lang?}` | `200` updated user; explicit null clears a limit to the global default | `invalid_request`, `unauthorized`, `forbidden`, `not_found` |
-| `POST` | `/admin/api/users/{id}/ban` | admin session | `{reason?}` | `204`; atomically sets the ban, deletes sessions, and deletes the caller key | `unauthorized`, `forbidden`, `not_found` |
-| `POST` | `/admin/api/users/{id}/unban` | admin session | — | `204`; clears the ban/reason but does not recreate a caller key | `unauthorized`, `forbidden`, `not_found` |
+| `POST` | `/admin/api/users/{id}/ban` | admin session | `{reason?, duration_seconds?}`; absent or null duration = permanent, positive integer = lazy expiry deadline in seconds | `204`; atomically sets the ban (clearing `auto_banned`), deletes sessions, and deletes the caller key | `unauthorized`, `forbidden`, `not_found`, `invalid_request` |
+| `POST` | `/admin/api/users/{id}/unban` | admin session | — | `204`; clears the ban/reason/deadline but does not recreate a caller key | `unauthorized`, `forbidden`, `not_found` |
 | `DELETE` | `/admin/api/users/{id}` | admin session + `X-Elevated-Token` | — | `204`; same cleanup and late-write suppression guarantees as §3.8 | `elevated_required`, `unauthorized`, `forbidden`, `not_found`, `internal` |
 
 Pagination is 1-based: `page` defaults to 1 and `page_size` defaults to 20 and clamps to `[1,100]`. Unknown, repeated, or malformed query parameters are `invalid_request`. The administrator row is never a list candidate and no response includes caller-key or session material.
@@ -500,6 +507,8 @@ Pagination is 1-based: `page` defaults to 1 and `page_size` defaults to 20 and c
 `PATCH` accepts only `endpoint_limit` (integer `≥0`), `rpm_limit` (integer `≥1` and no greater than `default_rpm_per_user`), and `lang` (`zh`/`en`). Explicit `null` clears either limit; an absent field is unchanged. Unknown fields, trailing JSON, an empty body, and oversized bodies are `invalid_request`.
 
 A ban reason is optional, bounded to 1024 bytes, and control-character-free. Ban invalidation is transactional. Unban restores access eligibility only; the user must generate a new caller key.
+
+Ban durations: presets are expressed as seconds (`3600` / `86400` / `604800` / `2592000`); any positive integer up to ten years is accepted as a custom duration. Every manual ban clears the stored `auto_banned` provenance flag; rule-driven bans set it. The user list/detail projections expose `banned_until`, `auto_banned`, and `charity_suspended_until` (nullable unix seconds).
 
 ### 4.3 Global logs, usage, overview
 
