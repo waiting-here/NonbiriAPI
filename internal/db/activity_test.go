@@ -451,10 +451,11 @@ func TestConsoleWriteRecordsActivity(t *testing.T) {
 	if writes != 2 || distinct != 1 {
 		t.Fatalf("console_writes=%d distinct=%d, want 2/1", writes, distinct)
 	}
-	// The timezone freeze marker must NOT have been set by these writes:
-	// console activity creates temporal data through the normal tables only.
-	if got := countRows(t, st, `SELECT COUNT(*) FROM site_config WHERE key=?`, timezoneLockKey); got != 0 {
-		t.Fatalf("timezone lock unexpectedly present")
+	// The first temporal-data writer durably freezes the site timezone offset
+	// (same transaction as the business insert): console activity counts, so
+	// retention cleanup can never make the offset mutable again.
+	if got := countRows(t, st, `SELECT COUNT(*) FROM site_config WHERE key=?`, timezoneLockKey); got != 1 {
+		t.Fatalf("timezone lock rows = %d, want 1 after the first activity row", got)
 	}
 }
 

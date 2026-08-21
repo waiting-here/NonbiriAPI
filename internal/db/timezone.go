@@ -15,9 +15,13 @@ package db
 // historical day keys can never be re-bucketed under a different offset. The
 // guard is enforced inside the same write transaction as the upsert (never
 // by a separate read-then-write), and a permanent marker row records the
-// freeze so retention cannot unfreeze the key.
+// freeze so retention cannot unfreeze the key. The marker is written both
+// when a configuration write is refused over existing data and by the first
+// temporal-data writer itself (see freezeTimezoneTx), so the freeze can never
+// depend on rows that a later cleanup could remove.
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -241,4 +245,35 @@ func tableExistsTx(tx *sql.Tx, name string) (bool, error) {
 		return false, err
 	}
 	return count > 0, nil
+}
+
+// timezoneTableEmptyTx reports whether a freeze table currently holds no row.
+// The index-backed EXISTS probe is O(1) on the hot path (every activity write);
+// only the table's first-ever row pays the lock upsert that follows. The table
+// name comes only from the internal freeze call sites, never from request
+// text.
+func timezoneTableEmptyTx(ctx context.Context, tx *sql.Tx, table string) (bool, error) {
+	var exists int
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM `+table+` LIMIT 1)`).Scan(&exists); err != nil {
+		return false, fmt.Errorf("timezone freeze probe: %w", err)
+	}
+	return exists == 0, nil
+}
+
+// freezeTimezoneTx durably writes the permanent freeze marker inside the
+// caller's transaction. The refusals in SetSiteTimezoneOffsetMinutes already
+// freeze when data exists at configuration time, but retention cleanup and
+// account deletion can later empty every freeze table; without this marker the
+// offset would become mutable again and historical day keys could be
+// re-bucketed. Every first temporal-data writer therefore upserts the marker
+// in the same transaction as its business insert. The upsert is idempotent and
+// race-safe by construction (the single SQLite writer serializes whole
+// transactions, and ON CONFLICT rewrites the same '1').
+func freezeTimezoneTx(ctx context.Context, tx *sql.Tx, nowUnix int64) error {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO site_config (key, value, updated_at) VALUES (?, '1', ?)
+		ON CONFLICT(key) DO UPDATE SET value='1', updated_at=excluded.updated_at`,
+		timezoneLockKey, nowUnix); err != nil {
+		return fmt.Errorf("freeze site timezone: %w", err)
+	}
+	return nil
 }

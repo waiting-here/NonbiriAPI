@@ -153,16 +153,8 @@ func TestSiteTimezonePatchValidation(t *testing.T) {
 func TestSiteTimezonePatchConflictOnceDataExists(t *testing.T) {
 	e := newEnv(t)
 
-	if _, err := e.store.DB().Exec(`CREATE TABLE checkins (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		user_id INTEGER NOT NULL,
-		day INTEGER NOT NULL,
-		award INTEGER NOT NULL,
-		created_at INTEGER NOT NULL
-	)`); err != nil {
-		t.Fatalf("create checkins: %v", err)
-	}
-	if _, err := e.store.DB().Exec(`INSERT INTO checkins (user_id, day, award, created_at) VALUES (1, 0, 1, 0)`); err != nil {
+	if _, err := e.store.DB().Exec(`INSERT INTO checkins (user_id, day, award, operation_id, created_at)
+		VALUES (1, 0, 1, 'sys.checkin.1.0', 0)`); err != nil {
 		t.Fatalf("insert checkin: %v", err)
 	}
 

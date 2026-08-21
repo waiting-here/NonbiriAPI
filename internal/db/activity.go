@@ -57,10 +57,9 @@ const (
 
 // ActivityDelta is one trigger's contribution to the daily aggregation. All
 // fields must be non-negative and bounded; a delta with no contribution is
-// rejected. Check-in contributions are provisioned here for the future
-// check-in rail: no alpha.2 code path passes a non-zero Checkins value yet,
-// and the field becomes live the moment that rail records its business write
-// with RecordActivity (or the in-transaction helper) in the same transaction.
+// rejected. A successful check-in contributes Checkins=1 through the
+// in-transaction helper in the same transaction as its business write (see
+// checkins.go); game contributions stay reserved for a future rail.
 type ActivityDelta struct {
 	APIRequests           int64
 	UncachedInputTokens   int64
@@ -143,12 +142,21 @@ func (s *Store) RecordActivity(ctx context.Context, userID int64, at time.Time, 
 // exists (late-write linearization); in that case the site rollup is not
 // touched either, so no orphan contribution can be created.
 func recordActivityTx(ctx context.Context, tx *sql.Tx, userID, dayKey int64, delta ActivityDelta, nowUnix int64) (bool, error) {
+	// Whether this is the first temporal row ever decides whether the write
+	// must durably freeze the site timezone offset (see freezeTimezoneTx). The
+	// probe runs before this transaction's own insert; the index-backed EXISTS
+	// scan is O(1) on the hot path and only the first-ever row pays the lock
+	// upsert after the insert lands.
+	firstTemporalRow, err := timezoneTableEmptyTx(ctx, tx, "user_activity_daily")
+	if err != nil {
+		return false, err
+	}
 	// Whether the user was already product-active on this day decides whether
 	// the site rollup's distinct counter increments. Reading it here is safe:
 	// the single SQLite writer serializes whole transactions, so no other
 	// transaction can interleave between this read and the writes below.
 	var wasActive int
-	err := tx.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		`SELECT product_active FROM user_activity_daily WHERE day = ? AND user_id = ?`,
 		dayKey, userID).Scan(&wasActive)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -243,6 +251,15 @@ WHERE api_requests                 <= ?
 	}
 	if affected != 1 {
 		return true, fmt.Errorf("site activity aggregate overflow; write failed closed")
+	}
+	// The first temporal row ever durably freezes the site timezone offset in
+	// this same transaction: retention cleanup must never be able to empty the
+	// freeze tables and make the offset mutable again. Idempotent for every
+	// later write (the probe above already short-circuited them).
+	if firstTemporalRow {
+		if err := freezeTimezoneTx(ctx, tx, nowUnix); err != nil {
+			return true, err
+		}
 	}
 	return true, nil
 }

@@ -372,6 +372,29 @@ CREATE TABLE IF NOT EXISTS credit_ledger (
 );
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_user ON credit_ledger(user_id, id);
 
+-- ===== checkins =============================================================
+-- One check-in per user per site-local day (frozen §2.4). day is the site-local
+-- day key: the unix seconds of that local midnight under the explicitly
+-- configured fixed site offset (see timezone.go). UNIQUE(user_id, day) IS the
+-- one-per-day rule: the write path never pre-checks "already checked in
+-- today" (no read-then-write); a race is decided by the constraint and
+-- consumes neither the day nor the award. award is the actual granted amount
+-- in milli-credits (non-negative, drawn uniformly from the configured
+-- inclusive [min,max] range at insert time; the client never supplies it).
+-- operation_id is the ledger idempotency key derived from the unforgeable
+-- (user, day) identity in the reserved system namespace; the check-in row,
+-- the balance update and its credit_ledger row commit in one transaction.
+-- Rows live for the account lifecycle (no time-based retention sweep).
+CREATE TABLE IF NOT EXISTS checkins (
+	id           INTEGER PRIMARY KEY AUTOINCREMENT,
+	user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	day          INTEGER NOT NULL,                               -- site-local day key (unix seconds of local midnight); no implicit-UTC fallback
+	award        INTEGER NOT NULL CHECK(award >= 0),            -- actual granted amount, milli-credits; drawn in the inclusive [min,max] range at insert time
+	operation_id TEXT NOT NULL UNIQUE,                           -- "sys.checkin.<userID>.<day>"; the row's ledger idempotency key
+	created_at   INTEGER NOT NULL,
+	UNIQUE(user_id, day)
+);
+
 -- ===== site_config ==========================================================
 -- Runtime key/value configuration surfaced via the administrator station.
 CREATE TABLE IF NOT EXISTS site_config (

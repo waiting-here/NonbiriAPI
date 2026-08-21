@@ -21,6 +21,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/applog"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
+	"github.com/waiting-here/NonbiriAPI/internal/checkin"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -352,9 +353,11 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	// (later rails attach through steward.Handler.Handle); the frame itself
 	// still answers the prefix with the stable 403/404 envelopes.
 	stewardAPI := steward.New(steward.Deps{UserAuth: userAuth, Store: store})
+	checkinAPI := checkin.New(checkin.Deps{UserAuth: userAuth, Store: store})
 	api := buildUserAPI(userAuth, adminAuth, endpointService, modelFetcher, modelService,
 		logapi.NewHandler(logapi.HandlerDeps{Store: store}),
 		issues.NewHandler(issues.HandlerDeps{Store: store}),
+		checkinAPI.Handler(),
 		exportHandler, lifecycleService, forwardService, flowMiddleware, store, stewardAPI.Handler())
 	// The maintenance gate sits after the host/station edge (which only lets
 	// /api/* and /v1/* reach the user station) and before any auth or business
@@ -470,7 +473,7 @@ func servePublicConfig(store *db.Store, w http.ResponseWriter, r *http.Request) 
 	httperr.WriteJSON(w, http.StatusOK, out)
 }
 
-func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointService *endpoint.Service, fetcher *fetch.Fetcher, modelService *model.Service, logs http.Handler, issueHandler http.Handler, exportHandler http.Handler, lifecycleService *lifecycle.Service, forwardService *forward.Service, flowMiddleware *flowcontrol.Middleware, store *db.Store, stewardHandler http.Handler) http.Handler {
+func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointService *endpoint.Service, fetcher *fetch.Fetcher, modelService *model.Service, logs http.Handler, issueHandler http.Handler, checkinHandler http.Handler, exportHandler http.Handler, lifecycleService *lifecycle.Service, forwardService *forward.Service, flowMiddleware *flowcontrol.Middleware, store *db.Store, stewardHandler http.Handler) http.Handler {
 	userAuthHandler := userAuth.Handler()
 	identity := func(r *http.Request) (int64, error) {
 		user, ok := auth.UserFromContext(r.Context())
@@ -484,6 +487,9 @@ func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointSe
 	modelHandler := userAuth.Middleware(model.NewHandler(model.HandlerDeps{Service: modelService, Identity: model.SessionIdentity}))
 	userLogs := userAuth.Middleware(logs)
 	userIssues := userAuth.Middleware(issueHandler)
+	// The check-in tree wires its own user-session middleware (steward-style):
+	// its handlers still re-check the station and the session principal.
+	userCheckin := checkinHandler
 	userExport := userAuth.Middleware(exportHandler)
 	userDelete := userAuth.Middleware(httpmw.API(http.HandlerFunc(lifecycleService.DeleteOwnAccountHandler)))
 	forwardHandler := auth.CallerKeyMiddleware(store, flowMiddleware.Wrap(forward.NewHandler(forward.HandlerDeps{Service: forwardService, Identity: forward.CallerIdentity})))
@@ -499,6 +505,10 @@ func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointSe
 			userLogs.ServeHTTP(w, r)
 		case path == "/api/issues" || strings.HasPrefix(path, "/api/issues/"):
 			userIssues.ServeHTTP(w, r)
+		case path == "/api/checkin":
+			// Daily check-in (user station only; the shared user-session
+			// middleware enforces the station and the session).
+			userCheckin.ServeHTTP(w, r)
 		case strings.HasPrefix(path, "/api/steward/"):
 			// Level-5 co-management prefix (user station only; the frame
 			// itself re-checks the station, the session, and the live level).

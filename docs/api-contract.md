@@ -141,8 +141,10 @@ Codes below are the emitted set; HTTP status is derived from the code. Route tab
 | `service_unavailable` | 503 | internal service unavailability, or the server-side maintenance gate refusing user-station API and `/v1/*` while `maintenance_mode` is on (§6) |
 | `resource_limit_exceeded` | 422 | a per-parent resource count reached the configured cap: endpoints per user (effective minimum of `default_endpoint_limit` and the user override), endpoint keys per endpoint (`default_endpoint_key_limit`), platform models per user (`default_model_limit`), or bindings per model (`default_binding_limit`); the envelope carries `limit` (the effective cap) and `resource` (the stable name); the count and cap are read inside the same transaction as the insert so a concurrent add cannot breach the cap; existing rows are retained |
 | `insufficient_credits` | 403 | reserved stable code for the economy rail (悠哉积分不足); `source` is `platform`; the business trigger is wired in a later phase |
-| `feature_disabled` | 403 | reserved stable code for a feature gate (e.g. sign-in disabled / timezone not configured); `source` is `platform`; the business trigger is wired in a later phase |
+| `feature_disabled` | 403 | stable code for a feature gate; `source` is `platform`; the check-in rail (§3.11) is the wired trigger: every unavailable cause — timezone not configured, check-in disabled, a level-gated denial, or a corrupt configuration — is the identical envelope (code, status, message, source) so the reason is never revealed |
 | `charity_suspended` | 403 | reserved stable code for a charity suspension; `source` is `platform`; the business trigger is wired in a later phase |
+| `already_checked_in` | 409 | the user already checked in on the current site-local day (今日已签到); the day was consumed by the earlier successful check-in, not by this attempt; `source` is `platform` |
+| `checkin_cap_reached` | 403 | the user's credit balance has reached the configured check-in threshold (`credits_cap_milli`) at an effective level below the bypass (≥3); the refusal does NOT consume the day; the message contains 悠哉积分已达签到上限; `source` is `platform` |
 
 *(Unreleased security amendment: the `service_unavailable` maintenance-gate meaning and
 the `insufficient_credits` / `feature_disabled` / `charity_suspended` reserved codes are not
@@ -508,6 +510,38 @@ with the ordinary user session cookie. This contract lands the authorization fra
   (user id + role); they never see another user's rows by construction of those future
   projections.
 
+### 3.11 Daily check-in
+
+| Method | Path | Auth | Body | Response | Stable codes |
+|---|---|---|---|---|---|
+| `GET` | `/api/checkin` | user session | — (any query parameter is `invalid_request`) | while unavailable: `200 {"enabled":false}` and NOTHING else (no reason, no day, no range — timezone-unset is indistinguishable from every other disabled cause); while available: `200 {"enabled":true,"checked_in_today":bool,"credits":string,"award_min_milli":string,"award_max_milli":string,"credits_cap_milli":string}` — all amounts canonical decimal milli-credit strings (`credits` may carry `-`). The status read performs no writes and never triggers the lazy level promotion | `invalid_request`, `unauthorized`, `internal` |
+| `POST` | `/api/checkin` | user session | — (any body or query parameter is `invalid_request`; the client never supplies the award or the day) | `200 {"award_milli":string,"credits":string}` — the drawn award and the new post-award balance, both canonical decimal strings | `invalid_request`, `unauthorized`, `forbidden`, `not_found`, `conflict`, `internal` |
+
+Behavior (frozen §I, implementation contract §2.4/§6.3):
+
+- **One per day, by constraint**: the site-local day key is computed from the explicitly
+  configured fixed offset; one check-in per user per day is enforced by the database
+  `UNIQUE(user_id, day)` constraint inside a single transaction that also applies the
+  award to `credits`, appends the `checkin_award` ledger row and records the check-in in
+  the product-activity rollup. A duplicate attempt returns `already_checked_in` (409)
+  and writes nothing.
+- **Three-way switch**: `checkin_mode` is `enabled`, `level_gated` (only effective
+  level ≥ 3 may check in), or `disabled` (the default). While the site timezone is not
+  configured the feature behaves exactly like `disabled` — the user sees the identical
+  `feature_disabled` (403) envelope with the identical message in every refused cause.
+- **Cap as a threshold, not a truncation**: `credits_cap_milli` = 0 means no threshold
+  (never a global switch-off — the switch is `checkin_mode`); otherwise a user whose
+  `credits` balance has reached the cap is refused `checkin_cap_reached` (403) WITHOUT
+  consuming the day, unless the effective level is ≥ 3 (bypass). An admitted award may
+  push the balance above the cap; it is never truncated. The cap only gates check-in
+  admission, never charity consumption.
+- **Random award**: a uniform integer in the inclusive `[award_min_milli,
+  award_max_milli]` range (default 40,000,000–60,000,000), drawn server-side with
+  crypto/rand rejection sampling (no modulo bias); a corrupt range fails closed as the
+  same `feature_disabled` envelope instead of fabricating a draw.
+- **No streaks, no make-up check-ins**: the table records date and award only; there is
+  no streak, location, or device data anywhere, and no token detection.
+
 ## 4. Admin station — `/admin/api/*` (admin session cookie)
 
 Auth: a valid admin session cookie. The administrator is env-configured (single row,
@@ -578,7 +612,7 @@ Plaintext upstream secrets never appear in any admin overview, log, or usage res
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
 | `GET` | `/admin/api/site-config` | admin session | — | `200` object of known keys → values (see below) | `unauthorized`, `forbidden` |
-| `PATCH` | `/admin/api/site-config/{key}` | admin session | `{value}` | `200` updated value | `invalid_request`, `unauthorized`, `forbidden`, `not_found`, `conflict` (a `level_threshold_*_milli` write whose enabled chain is not strictly increasing) |
+| `PATCH` | `/admin/api/site-config/{key}` | admin session | `{value}` | `200` updated value | `invalid_request`, `unauthorized`, `forbidden`, `not_found`, `conflict` (a `level_threshold_*_milli` write whose enabled chain is not strictly increasing, or a `checkin_award_*_milli` write whose resulting pair has min > max) |
 
 Known `site_config` keys (the authoritative key set is enforced by the handler):
 
@@ -597,9 +631,12 @@ Known `site_config` keys (the authoritative key set is enforced by the handler):
 - `maintenance_mode`, `registration_open` — public boolean site-state toggles
 - `site_timezone_offset_minutes` — nullable integer, multiple of 30 in `[-720,+840]`; JSON `null` (the default) means "not configured" and is distinct from an explicit `0` (UTC). While unset, site-day-key features are force-disabled behind the ordinary `feature_disabled` error without revealing why. Once any check-in or activity row exists the value is frozen: every further write — including rewriting the identical value or after those rows are cleaned up — is refused with `conflict`. Clearing it with JSON `null` is always rejected
 - `level_threshold_2_milli`, `level_threshold_3_milli`, `level_threshold_4_milli` — the automatic level-promotion thresholds on the cumulative `donation_credit` balance, as canonical non-negative decimal milli-credit strings (`"0"`, the default, disables that level's automatic promotion). The enabled (>0) subset must be strictly increasing in level order; a disabled middle level is allowed and produces a skip (e.g. `0` / `0` / `"50000000"` promotes a qualifying user straight to level 4). The chain cross-validation and the write share one transaction, so a rejected combination (equal or decreasing enabled values) is `conflict` and nothing is written. A threshold change never recomputes any stored level: the automatic level is a persisted only-ever-raised high-water mark, lazily promoted on the next authoritative resolution, and there is no automatic downgrade in alpha.2 (raising a threshold or negatively correcting `donation_credit` leaves existing marks untouched)
+- `checkin_mode` — the check-in three-way switch (§3.11), exactly `enabled` / `level_gated` / `disabled`; the default is `disabled`. An unknown stored value reads as `disabled` (fail closed, never an implicit enabled state)
+- `checkin_award_min_milli`, `checkin_award_max_milli` — the daily check-in award range bounds (§3.11), as canonical non-negative decimal milli-credit strings; defaults `"40000000"` / `"60000000"` (4–6 USD equivalent). The pair is cross-validated: PATCHing either bound validates `min <= max` against the other key's current value in ONE transaction, so a rejected pair is `conflict` and nothing is written. Both write paths record the administrator console write as product activity in that same transaction
+- `credits_cap_milli` — the check-in admission threshold (§3.11) as a canonical non-negative decimal milli-credit string; default `"250000000"` (25 USD equivalent). `0` = no threshold. It gates check-in admission only (effective level ≥ 3 bypasses) and never truncates an awarded amount
 - `alert_prefs_*` — bounded administrator alert-center preference namespace
 
-Values are typed: integer keys (`default_endpoint_limit` `[0,10000]`; resource-count caps `[1,10000]`; RPM keys `[1,4096]`; concurrency keys `[1,100000]`; OAuth limit `[0,1000]`, window `[1,3600]`, penalty `[0,3600]`) accept only JSON integers. Boolean keys accept only JSON booleans. The three `level_threshold_*_milli` keys accept only canonical non-negative decimal strings (no exponent, `+`, leading zeros, whitespace, or negative values) and project as JSON strings, `"0"` while unset or manually corrupted. Single-line text is bounded/control-free; the four legal overrides accept bounded multiline text (≤65536 bytes, preserving newline/tab while rejecting other controls); `default_locale` is exactly `zh`/`en`, and `legal_authoritative_locale` also permits blank. `site_timezone_offset_minutes` accepts only a canonical JSON integer within its range and projects as JSON `null` while unset or manually corrupted. `null` is rejected for every other key (clearing a per-user limit is expressed through the user-level NULL
+Values are typed: integer keys (`default_endpoint_limit` `[0,10000]`; resource-count caps `[1,10000]`; RPM keys `[1,4096]`; concurrency keys `[1,100000]`; OAuth limit `[0,1000]`, window `[1,3600]`, penalty `[0,3600]`) accept only JSON integers. Boolean keys accept only JSON booleans. The amount keys (`level_threshold_*_milli`, `checkin_award_min_milli`, `checkin_award_max_milli`, `credits_cap_milli`) accept only canonical non-negative decimal strings (no exponent, `+`, leading zeros, whitespace, or negative values) and project as JSON strings — `"0"` for the level thresholds and each key's documented default for the check-in keys while unset or manually corrupted. `checkin_mode` accepts exactly the member strings of its three-way switch. Single-line text is bounded/control-free; the four legal overrides accept bounded multiline text (≤65536 bytes, preserving newline/tab while rejecting other controls); `default_locale` is exactly `zh`/`en`, and `legal_authoritative_locale` also permits blank. `site_timezone_offset_minutes` accepts only a canonical JSON integer within its range and projects as JSON `null` while unset or manually corrupted. `null` is rejected for every other key (clearing a per-user limit is expressed through the user-level NULL
 semantics; blanking a text gate value uses `""`). `GET` returns the effective
 typed value for every known key (documented defaults when unset; `null` for the
 nullable timezone key) and never
@@ -617,7 +654,11 @@ runtime singleton to its previous value, so DB and runtime cannot drift. The
 resource-count caps (`default_endpoint_limit`, `default_endpoint_key_limit`,
 `default_model_limit`, `default_binding_limit`) have no runtime singleton: each
 create reads the cap inside its own transaction, so a change takes effect on the
-next create without a restart.
+next create without a restart. The same per-transaction authoritative read
+applies to the level thresholds and the check-in keys (`checkin_mode`,
+`checkin_award_*_milli`, `credits_cap_milli`): every check-in admission reads
+its own consistent snapshot, so a change takes effect on the next check-in
+without a restart.
 
 ### 4.5 Admin alerts
 
