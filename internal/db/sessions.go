@@ -339,6 +339,8 @@ func (s *sessionUserScan) scan(row interface{ Scan(...any) error }) error {
 		&u.TotalPromptTokens,
 		&u.TotalCompletionTokens,
 		&u.TotalUnknownUsageRequests,
+		&u.Credits,
+		&u.DonationCredit,
 		&u.Lang,
 		&createdAt,
 		&updatedAt,

@@ -76,6 +76,10 @@ func Open(path string, secrets secret.Codec) (*Store, error) {
 		_ = d.Close()
 		return nil, fmt.Errorf("migrate usage bucket columns: %w", err)
 	}
+	if err := ensureUsersEconomyColumns(d); err != nil {
+		_ = d.Close()
+		return nil, fmt.Errorf("migrate user economy columns: %w", err)
+	}
 
 	// Enforce owner-only permissions on the database file and its WAL/SHM
 	// sidecars after SQLite has created them. On Unix this chmod+fstat-verifies
@@ -280,6 +284,22 @@ WHERE uncached_input_tokens    = 0
 type columnSpec struct {
 	name string
 	sql  string
+}
+
+// ensureUsersEconomyColumns adds the signed consumption balance and the
+// cumulative donor-reward balance to a users table created before they
+// existed. CREATE TABLE IF NOT EXISTS does not alter an existing table, so an
+// earlier database is migrated in place; the PRAGMA check makes it idempotent.
+// Existing rows receive 0 for both balances. credits deliberately carries no
+// non-negative CHECK (the frozen contract allows a negative balance after an
+// over-reservation settles or an administrator-configured penalty lands);
+// donation_credit's non-negativity is enforced at the application layer.
+func ensureUsersEconomyColumns(d *sql.DB) error {
+	specs := []columnSpec{
+		{"credits", `ALTER TABLE users ADD COLUMN credits INTEGER NOT NULL DEFAULT 0`},
+		{"donation_credit", `ALTER TABLE users ADD COLUMN donation_credit INTEGER NOT NULL DEFAULT 0`},
+	}
+	return ensureColumns(d, "users", specs)
 }
 
 // ensureColumns adds each missing column of table according to specs, using

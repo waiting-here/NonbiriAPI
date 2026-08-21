@@ -64,6 +64,13 @@ func seedFullyPopulatedUser(t *testing.T, st *Store, discordID string) int64 {
 	}); err != nil {
 		t.Fatalf("record site-wide alert: %v", err)
 	}
+	// Credit ledger rows (admin adjustment) must cascade with the account.
+	if _, err := st.ApplyAdminCreditAdjustment(ctx, AdminCreditAdjustment{
+		TargetUserID: uid, ActorUserID: uid, OperationID: "seed-ledger-" + discordID,
+		Reason: "seed", CreditsSet: true, CreditsDelta: 1234,
+	}); err != nil {
+		t.Fatalf("seed credit adjustment: %v", err)
+	}
 	return uid
 }
 
@@ -82,7 +89,8 @@ func assertUserGone(t *testing.T, st *Store, uid int64) {
 		t.Fatalf("users rows=%d, want 0 (resurrection)", got)
 	}
 	for _, table := range []string{"sessions", "caller_keys", "endpoints", "endpoint_keys",
-		"fetched_models", "model_bindings", "models", "request_logs", "user_issues", "user_activity_daily"} {
+		"fetched_models", "model_bindings", "models", "request_logs", "user_issues", "user_activity_daily",
+		"credit_ledger"} {
 		// user_issues/request_logs/sessions/caller_keys/endpoints/models key on user_id;
 		// endpoint_keys/fetched_models/model_bindings are reached via cascade and have no
 		// user_id column, so count them globally after a user delete (they must be empty

@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS users (
 	total_prompt_tokens          INTEGER NOT NULL DEFAULT 0,        -- compatibility mirror: sum of the three input buckets
 	total_completion_tokens      INTEGER NOT NULL DEFAULT 0,        -- compatibility mirror: output bucket
 	total_unknown_usage_requests INTEGER NOT NULL DEFAULT 0,        -- truncated/no-usage request count; no token values are fabricated
+	credits                       INTEGER NOT NULL DEFAULT 0,        -- signed consumption balance in milli-credits; may go negative (settled over-reservation, admin-configured penalties); deliberately NO non-negative CHECK
+	donation_credit               INTEGER NOT NULL DEFAULT 0,        -- cumulative donor-reward balance in milli-credits; kept non-negative at the application layer (a result below 0 is rejected)
 	total_uncached_input_tokens    INTEGER NOT NULL DEFAULT 0,      -- four-bucket accumulator (authoritative)
 	total_cache_write_input_tokens INTEGER NOT NULL DEFAULT 0,      -- four-bucket accumulator (authoritative)
 	total_cache_read_input_tokens  INTEGER NOT NULL DEFAULT 0,      -- four-bucket accumulator (authoritative)
@@ -337,6 +339,36 @@ CREATE TABLE IF NOT EXISTS site_activity_daily (
 	distinct_product_users INTEGER NOT NULL DEFAULT 0,
 	updated_at     INTEGER NOT NULL
 );
+
+-- ===== credit_ledger =======================================================
+-- Append-only accounting ledger. Every balance change on users.credits /
+-- users.donation_credit commits in the SAME transaction as its ledger row, so
+-- a balance can never drift from its audit trail. operation_id is the global
+-- idempotency key: a retried write returns the first result instead of
+-- applying twice (UNIQUE backs the in-transaction replay check). System
+-- operation ids derive from unforgeable internal reservation/check-in
+-- identities and always carry the reserved "sys." namespace prefix; client-
+-- supplied operation ids (administrator adjustments) must never use that
+-- namespace, so the two id spaces cannot collide or overwrite each other.
+-- actor_user_id records which administrator made an adjustment (nullable,
+-- SET NULL on that account's deletion); reservation_id is a plain correlation
+-- id without a FK by design (the reservations table lands with charity routing
+-- and outlives individual retention windows differently).
+CREATE TABLE IF NOT EXISTS credit_ledger (
+	id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+	operation_id          TEXT NOT NULL UNIQUE,
+	user_id               INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	actor_user_id         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+	kind                  TEXT NOT NULL CHECK(kind IN ('admin_adjustment','checkin_award','charity_reserve','charity_release','charity_settlement','donor_reward','anti_abuse_penalty')),
+	credits_delta         INTEGER NOT NULL DEFAULT 0,
+	donation_credit_delta INTEGER NOT NULL DEFAULT 0,
+	credits_after         INTEGER NOT NULL,                      -- balance snapshot after this entry; authoritative for replays
+	donation_credit_after INTEGER NOT NULL,
+	reservation_id        INTEGER,                               -- nullable correlation id, deliberately NO FK
+	reason                TEXT NOT NULL DEFAULT '',              -- bounded human-readable reason (admin adjustments); never secret material
+	created_at            INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_credit_ledger_user ON credit_ledger(user_id, id);
 
 -- ===== site_config ==========================================================
 -- Runtime key/value configuration surfaced via the administrator station.

@@ -48,7 +48,14 @@ type User struct {
 	AutoBanned bool
 	// CharitySuspendedUntil suspends charity-feature eligibility only. A due
 	// deadline is cleared lazily on read exactly like BannedUntil.
-	CharitySuspendedUntil     *time.Time
+	CharitySuspendedUntil *time.Time
+	// Credits is the signed consumption balance in milli-credits. It may be
+	// negative (settled over-reservation, administrator-configured penalty);
+	// every change commits together with its credit_ledger row.
+	Credits int64
+	// DonationCredit is the cumulative donor-reward balance in milli-credits.
+	// The application layer keeps it non-negative.
+	DonationCredit            int64
 	EndpointLimit             *int
 	RPMLimit                  *int
 	TotalRequests             int64
@@ -151,6 +158,8 @@ const userSelectColumns = `
 	u.total_prompt_tokens,
 	u.total_completion_tokens,
 	u.total_unknown_usage_requests,
+	u.credits,
+	u.donation_credit,
 	u.lang,
 	u.created_at,
 	u.updated_at`
@@ -183,6 +192,8 @@ func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 		&u.TotalPromptTokens,
 		&u.TotalCompletionTokens,
 		&u.TotalUnknownUsageRequests,
+		&u.Credits,
+		&u.DonationCredit,
 		&u.Lang,
 		&createdAt,
 		&updatedAt,

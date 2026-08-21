@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
@@ -237,6 +238,10 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	if err != nil {
 		return nil, err
 	}
+	creditLedger, err := s.store.ListExportCreditLedger(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
 
 	keysByEndpoint := make(map[int64][]exportKey, len(keys))
 	for _, key := range keys {
@@ -258,7 +263,9 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 		ExportedAt:    time.Now().UTC(),
 		User: exportUser{
 			ID: user.ID, DiscordID: user.DiscordID, Username: user.Username, Avatar: user.Avatar,
-			Lang: user.Lang, EndpointLimit: user.EndpointLimit, RPMLimit: user.RPMLimit,
+			Lang: user.Lang, Credits: credits.FormatAmount(user.Credits),
+			DonationCredit: credits.FormatAmount(user.DonationCredit),
+			EndpointLimit:  user.EndpointLimit, RPMLimit: user.RPMLimit,
 			CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt,
 		},
 		Endpoints: make([]exportEndpoint, 0, len(endpoints)),
@@ -281,9 +288,13 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 			AvgDurationMs:    logSummary.AvgDurationMs,
 		},
 		ActivityDaily: make([]db.ActivityDailyExportRow, 0, len(activityDaily)),
+		CreditLedger:  make([]db.CreditLedgerExportRow, 0, len(creditLedger)),
 	}
 	for _, day := range activityDaily {
 		packageValue.ActivityDaily = append(packageValue.ActivityDaily, day)
+	}
+	for _, entry := range creditLedger {
+		packageValue.CreditLedger = append(packageValue.CreditLedger, entry)
 	}
 	for _, ep := range endpoints {
 		packageValue.Endpoints = append(packageValue.Endpoints, exportEndpoint{
@@ -331,6 +342,10 @@ type exportPackage struct {
 	CallerKey     *exportCallerKey `json:"caller_key,omitempty"`
 	Usage         exportUsage      `json:"usage"`
 	LogSummary    exportLogSummary `json:"log_summary"`
+	// CreditLedger is the user's own append-only credit history (schema v2):
+	// kind, deltas, resulting balances and a bounded reason. Economic values
+	// are canonical decimal strings; the actor is an opaque nullable id.
+	CreditLedger []db.CreditLedgerExportRow `json:"credit_ledger"`
 	// ActivityDaily is the user's own per-day activity summary (schema v2):
 	// counters and site-local day keys only — no model names and no request
 	// content. The site-wide rollup table is never part of a personal export.
@@ -338,15 +353,19 @@ type exportPackage struct {
 }
 
 type exportUser struct {
-	ID            int64     `json:"id"`
-	DiscordID     string    `json:"discord_id"`
-	Username      string    `json:"username"`
-	Avatar        string    `json:"avatar"`
-	Lang          string    `json:"lang"`
-	EndpointLimit *int      `json:"endpoint_limit"`
-	RPMLimit      *int      `json:"rpm_limit"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID        int64  `json:"id"`
+	DiscordID string `json:"discord_id"`
+	Username  string `json:"username"`
+	Avatar    string `json:"avatar"`
+	Lang      string `json:"lang"`
+	// Economic balances as canonical decimal strings: the signed consumption
+	// balance and the cumulative donor-reward balance.
+	Credits        string    `json:"credits"`
+	DonationCredit string    `json:"donation_credit"`
+	EndpointLimit  *int      `json:"endpoint_limit"`
+	RPMLimit       *int      `json:"rpm_limit"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 type exportEndpoint struct {

@@ -3,7 +3,9 @@
 //
 //	GET    /admin/api/users                  list (bounded page + filters)
 //	GET    /admin/api/users/{id}             detail with usage metadata
-//	PATCH  /admin/api/users/{id}             endpoint_limit / rpm_limit / lang
+//	PATCH  /admin/api/users/{id}             endpoint_limit / rpm_limit / lang;
+//	                                        or idempotent credits/donation_credit
+//	                                        delta adjustments (never both modes)
 //	POST   /admin/api/users/{id}/ban         ban (same-transaction session and
 //	                                        caller-key invalidation)
 //	POST   /admin/api/users/{id}/unban       unban
@@ -36,6 +38,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
@@ -161,16 +164,26 @@ func (h *Handler) getUser(w http.ResponseWriter, r *http.Request) {
 	httperr.WriteJSON(w, http.StatusOK, userResponse(user))
 }
 
-// patchUser handles PATCH /admin/api/users/{id}: endpoint_limit / rpm_limit
-// (nullable; NULL restores the global default) and lang. rpm_limit is
-// rejected above the current global per-user cap; the administrator raises
-// that cap via default_rpm_per_user first.
+// patchUser handles PATCH /admin/api/users/{id}. Two disjoint modes:
+//
+//  1. profile mode: endpoint_limit / rpm_limit (nullable; NULL restores the
+//     global default) and lang. rpm_limit is rejected above the current global
+//     per-user cap; the administrator raises that cap via default_rpm_per_user
+//     first.
+//  2. economy mode: credits / donation_credit are canonical decimal-string
+//     INCREMENTS (deltas, never target balances). Either delta requires
+//     operation_id (idempotency key, client namespace) and a bounded reason;
+//     the two modes must never mix in one request. A retried operation id
+//     returns the FIRST application's result; responses carry
+//     credits_balance / donation_credit_balance so a delta can never be
+//     confused with the resulting balance.
 func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeErr(w, httperr.New(httperr.CodeServiceUnavailable, "service unavailable"))
 		return
 	}
-	if _, ok := h.requireAdmin(w, r); !ok {
+	admin, ok := h.requireAdmin(w, r)
+	if !ok {
 		return
 	}
 	id, ok := pathUserID(w, r)
@@ -178,14 +191,30 @@ func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		EndpointLimit json.RawMessage `json:"endpoint_limit"`
-		RPMLimit      json.RawMessage `json:"rpm_limit"`
-		Lang          *string         `json:"lang"`
+		EndpointLimit  json.RawMessage `json:"endpoint_limit"`
+		RPMLimit       json.RawMessage `json:"rpm_limit"`
+		Lang           *string         `json:"lang"`
+		Credits        *string         `json:"credits"`
+		DonationCredit *string         `json:"donation_credit"`
+		OperationID    *string         `json:"operation_id"`
+		Reason         *string         `json:"reason"`
 	}
 	if !decodeJSONBody(w, r, &body) {
 		return
 	}
-	if body.EndpointLimit == nil && body.RPMLimit == nil && body.Lang == nil {
+	economyMode := body.Credits != nil || body.DonationCredit != nil ||
+		body.OperationID != nil || body.Reason != nil
+	profileMode := body.EndpointLimit != nil || body.RPMLimit != nil || body.Lang != nil
+	if economyMode && profileMode {
+		writeErr(w, httperr.New(httperr.CodeInvalidRequest,
+			"credit adjustments cannot be mixed with other fields"))
+		return
+	}
+	if economyMode {
+		h.patchUserCreditDelta(w, r, admin, id, &body)
+		return
+	}
+	if !profileMode {
 		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "no fields to update"))
 		return
 	}
@@ -235,6 +264,72 @@ func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httperr.WriteJSON(w, http.StatusOK, userResponse(updated))
+}
+
+// patchUserCreditDelta applies the economy mode of PATCH
+// /admin/api/users/{id}: at least one decimal-string delta plus the required
+// operation_id and reason, applied as one idempotent ledger operation.
+func (h *Handler) patchUserCreditDelta(w http.ResponseWriter, r *http.Request, admin *db.User, id int64, body *struct {
+	EndpointLimit  json.RawMessage `json:"endpoint_limit"`
+	RPMLimit       json.RawMessage `json:"rpm_limit"`
+	Lang           *string         `json:"lang"`
+	Credits        *string         `json:"credits"`
+	DonationCredit *string         `json:"donation_credit"`
+	OperationID    *string         `json:"operation_id"`
+	Reason         *string         `json:"reason"`
+}) {
+	invalid := func() {
+		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid credit adjustment"))
+	}
+	if body.OperationID == nil || body.Reason == nil || (body.Credits == nil && body.DonationCredit == nil) {
+		// operation_id and reason are mandatory for every delta; bare metadata
+		// fields without any delta are also invalid.
+		invalid()
+		return
+	}
+	operationID := strings.TrimSpace(*body.OperationID)
+	adj := db.AdminCreditAdjustment{
+		TargetUserID: id,
+		ActorUserID:  admin.ID,
+		OperationID:  operationID,
+		Reason:       strings.TrimSpace(*body.Reason),
+	}
+	if body.Credits != nil {
+		delta, err := credits.ParseAmount(*body.Credits)
+		if err != nil {
+			invalid()
+			return
+		}
+		adj.CreditsSet = true
+		adj.CreditsDelta = delta
+	}
+	if body.DonationCredit != nil {
+		delta, err := credits.ParseAmount(*body.DonationCredit)
+		if err != nil {
+			invalid()
+			return
+		}
+		adj.DonationSet = true
+		adj.DonationDelta = delta
+	}
+	result, err := h.store.ApplyAdminCreditAdjustment(r.Context(), adj)
+	if err != nil {
+		writeLimitErr(w, err)
+		return
+	}
+	updated, err := h.store.GetUserByID(id)
+	if err != nil || updated == nil || updated.IsAdmin {
+		writeErr(w, httperr.New(httperr.CodeNotFound, "user not found"))
+		return
+	}
+	// Respond with the balances as of THIS operation's application (the first
+	// one when the operation id is a replay), not the live balance: a retry
+	// that arrives after further unrelated adjustments must still return the
+	// first application's result, exactly as the ledger recorded it.
+	resp := userResponse(updated)
+	resp.CreditsBalance = credits.FormatAmount(result.CreditsAfter)
+	resp.DonationCreditBalance = credits.FormatAmount(result.DonationCreditAfter)
+	httperr.WriteJSON(w, http.StatusOK, resp)
 }
 
 // currentRPMLimitCap resolves the global per-user RPM ceiling: the
@@ -556,6 +651,13 @@ func writeLimitErr(w http.ResponseWriter, err error) {
 		writeErr(w, httperr.New(httperr.CodeNotFound, "user not found"))
 	case errors.Is(err, db.ErrAdminProtected):
 		writeErr(w, httperr.New(httperr.CodeForbidden, "administrator identity is protected"))
+	case errors.Is(err, db.ErrInsufficientCredits):
+		writeErr(w, httperr.New(httperr.CodeInsufficientCredits, "悠哉积分不足"))
+	case errors.Is(err, db.ErrDonationCreditNegative):
+		// The refusal depends on the server-side balance, not on the request
+		// shape alone, so it is a conflict rather than a validation failure.
+		writeErr(w, httperr.New(httperr.CodeConflict,
+			"adjustment would make donation credit negative"))
 	case errors.Is(err, db.ErrConflict):
 		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
 	default:
