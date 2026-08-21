@@ -20,8 +20,6 @@
       "endpointsTitle": "端点概览",
       "modelsTitle": "模型概览",
       "requests": "请求数",
-      "promptTokens": "提示词 token",
-      "completionTokens": "补全 token",
       "unknownUsage": "用量未知的请求",
       "users": "用户",
       "endpoints": "端点",
@@ -92,9 +90,6 @@
       "usage": "用量",
       "diagnostic": "诊断",
       "started": "开始时间",
-      "promptTokens": "提示词",
-      "completionTokens": "补全",
-      "totalTokens": "总计",
       "unknownUsage": "用量未知",
       "noLogs": "没有日志记录",
       "noLogsBody": "管理员 API 没有返回这一页的日志。"

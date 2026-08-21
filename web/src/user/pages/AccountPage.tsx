@@ -14,10 +14,8 @@ import { apiFetch } from '@shared/query/http';
 import { asRecord, hasControlCharacters } from '@shared/query/normalize';
 import { useUserMe, useUserSession, useUserUsage, useUpdateUserProfile, userKeys } from '../data';
 import { UserPageGate } from '../components/UserPageGate';
-
-function number(value: number): string {
-  return value.toLocaleString();
-}
+import { CompactNumber } from '@shared/components/CompactNumber';
+import { formatCompact, formatCount } from '@shared/utils/formatNumber';
 
 // pendingElevation carries the account action that requested a fresh
 // Discord re-authorization across the OAuth round-trip (the callback always
@@ -321,10 +319,10 @@ function AccountContent() {
             <ErrorState error={usage.error} onRetry={() => void usage.refetch()} />
           ) : (
             <dl className="detail-grid">
-              <div className="detail-row"><dt>{t('user.account.requests')}</dt><dd>{number(usage.data.total_requests)}</dd></div>
-              <div className="detail-row"><dt>{t('user.account.promptTokens')}</dt><dd>{number(usage.data.total_prompt_tokens)}</dd></div>
-              <div className="detail-row"><dt>{t('user.account.completionTokens')}</dt><dd>{number(usage.data.total_completion_tokens)}</dd></div>
-              <div className="detail-row"><dt>{t('user.account.unknownUsage')}</dt><dd>{number(usage.data.total_unknown_usage_requests)}</dd></div>
+              <div className="detail-row"><dt>{t('user.account.requests')}</dt><dd>{formatCount(usage.data.total_requests).display}</dd></div>
+              <div className="detail-row"><dt>{t('common.tokens.input')}</dt><dd><CompactNumber value={formatCompact(usage.data.total_prompt_tokens)} /></dd></div>
+              <div className="detail-row"><dt>{t('common.tokens.output')}</dt><dd><CompactNumber value={formatCompact(usage.data.total_completion_tokens)} /></dd></div>
+              <div className="detail-row"><dt>{t('user.account.unknownUsage')}</dt><dd>{formatCount(usage.data.total_unknown_usage_requests).display}</dd></div>
             </dl>
           )}
         </Card>

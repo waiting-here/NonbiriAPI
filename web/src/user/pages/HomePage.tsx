@@ -3,11 +3,9 @@ import { formatDateTime } from '@shared/utils/datetime';
 import { useTranslation } from 'react-i18next';
 import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
 import { isNotFoundError, isUnauthorized } from '@shared/query/http';
+import { CompactNumber } from '@shared/components/CompactNumber';
+import { formatCompact, formatCount } from '@shared/utils/formatNumber';
 import { useUserMe, useUserSession, useUserUsage } from '../data';
-
-function number(value: number): string {
-  return value.toLocaleString();
-}
 
 function SignedOutHome() {
   const { t } = useTranslation();
@@ -79,19 +77,25 @@ function HomeContent() {
           <div className="metric-grid">
             <div className="metric-card">
               <p>{t('user.home.requests')}</p>
-              <strong className="metric-value">{number(usage.data.total_requests)}</strong>
+              <strong className="metric-value">{formatCount(usage.data.total_requests).display}</strong>
             </div>
             <div className="metric-card">
-              <p>{t('user.home.promptTokens')}</p>
-              <strong className="metric-value">{number(usage.data.total_prompt_tokens)}</strong>
+              <p>{t('common.tokens.input')}</p>
+              <strong className="metric-value">
+                <CompactNumber value={formatCompact(usage.data.total_prompt_tokens)} />
+              </strong>
             </div>
             <div className="metric-card">
-              <p>{t('user.home.completionTokens')}</p>
-              <strong className="metric-value">{number(usage.data.total_completion_tokens)}</strong>
+              <p>{t('common.tokens.output')}</p>
+              <strong className="metric-value">
+                <CompactNumber value={formatCompact(usage.data.total_completion_tokens)} />
+              </strong>
             </div>
             <div className="metric-card">
               <p>{t('user.home.unknownUsage')}</p>
-              <strong className="metric-value">{number(usage.data.total_unknown_usage_requests)}</strong>
+              <strong className="metric-value">
+                {formatCount(usage.data.total_unknown_usage_requests).display}
+              </strong>
             </div>
           </div>
         )}

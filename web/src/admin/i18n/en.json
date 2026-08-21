@@ -20,8 +20,6 @@
       "endpointsTitle": "Endpoint overview",
       "modelsTitle": "Model overview",
       "requests": "Requests",
-      "promptTokens": "Prompt tokens",
-      "completionTokens": "Completion tokens",
       "unknownUsage": "Unknown-usage requests",
       "users": "Users",
       "endpoints": "Endpoints",
@@ -92,9 +90,6 @@
       "usage": "Usage",
       "diagnostic": "Diagnostic",
       "started": "Started",
-      "promptTokens": "Prompt",
-      "completionTokens": "Completion",
-      "totalTokens": "Total",
       "unknownUsage": "Unknown usage",
       "noLogs": "No log records",
       "noLogsBody": "The administrator API returned no logs for this page."

@@ -7,17 +7,17 @@ import {
   LoadingState,
   PageHeader,
 } from '@shared/components/States';
+import { CompactNumber } from '@shared/components/CompactNumber';
+import { formatCompact, formatCount, type FormattedNumber } from '@shared/utils/formatNumber';
 import { useAdminEndpoints, useAdminModels, useAdminUsage } from '../data';
 
-function number(value: number): string {
-  return value.toLocaleString();
-}
-
-function UsageMetric({ label, value }: { label: string; value: number }) {
+function UsageMetric({ label, value }: { label: string; value: FormattedNumber }) {
   return (
     <div className="metric-card">
       <p>{label}</p>
-      <strong className="metric-value">{number(value)}</strong>
+      <strong className="metric-value">
+        <CompactNumber value={value} />
+      </strong>
     </div>
   );
 }
@@ -45,7 +45,9 @@ function OverviewCard({
     <Card>
       <div className="card-title-row">
         <h2>{title}</h2>
-        {count !== undefined ? <strong className="metric-inline">{number(count)}</strong> : null}
+        {count !== undefined ? (
+          <strong className="metric-inline">{formatCount(count).display}</strong>
+        ) : null}
       </div>
       {loading ? <LoadingState /> : error ? <ErrorState error={error} /> : count === 0 ? <EmptyState title={emptyTitle} body={emptyBody} /> : null}
       <div className="form-actions">
@@ -81,15 +83,15 @@ export function DashboardPage() {
           <ErrorState error={usage.error} onRetry={() => void usage.refetch()} />
         ) : (
           <div className="metric-grid">
-            <UsageMetric label={t('admin.dashboard.requests')} value={usage.data.total_requests} />
-            <UsageMetric label={t('admin.dashboard.promptTokens')} value={usage.data.total_prompt_tokens} />
+            <UsageMetric label={t('admin.dashboard.requests')} value={formatCount(usage.data.total_requests)} />
+            <UsageMetric label={t('common.tokens.input')} value={formatCompact(usage.data.total_prompt_tokens)} />
             <UsageMetric
-              label={t('admin.dashboard.completionTokens')}
-              value={usage.data.total_completion_tokens}
+              label={t('common.tokens.output')}
+              value={formatCompact(usage.data.total_completion_tokens)}
             />
             <UsageMetric
               label={t('admin.dashboard.unknownUsage')}
-              value={usage.data.total_unknown_usage_requests}
+              value={formatCount(usage.data.total_unknown_usage_requests)}
             />
           </div>
         )}

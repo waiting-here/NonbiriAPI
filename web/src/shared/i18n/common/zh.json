@@ -58,6 +58,14 @@
     "unresolved": "未解决",
     "from": "开始时间",
     "to": "结束时间",
+    "tokens": {
+      "input": "输入 token",
+      "output": "输出 token",
+      "total": "token 总计",
+      "inputShort": "输入",
+      "outputShort": "输出",
+      "totalShort": "总计"
+    },
     "pagination": "分页",
     "page": "第 {{page}} 页",
     "previous": "上一页",
