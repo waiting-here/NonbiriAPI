@@ -315,12 +315,16 @@ func TestMeUsageShape(t *testing.T) {
 	rec := do(t, h, r)
 	assertOK(t, rec)
 
-	body := assertJSONKeys(t, rec.Body.Bytes(), "total_requests", "total_prompt_tokens", "total_completion_tokens", "total_unknown_usage_requests")
+	body := assertJSONKeys(t, rec.Body.Bytes(), "total_requests", "total_uncached_input_tokens", "total_cache_write_input_tokens", "total_cache_read_input_tokens", "total_output_tokens", "total_prompt_tokens", "total_completion_tokens", "total_unknown_usage_requests")
 	for key, want := range map[string]float64{
-		"total_requests":               1,
-		"total_prompt_tokens":          1,
-		"total_completion_tokens":      2,
-		"total_unknown_usage_requests": 0,
+		"total_requests":                 1,
+		"total_uncached_input_tokens":    1,
+		"total_cache_write_input_tokens": 0,
+		"total_cache_read_input_tokens":  0,
+		"total_output_tokens":            2,
+		"total_prompt_tokens":            1,
+		"total_completion_tokens":        2,
+		"total_unknown_usage_requests":   0,
 	} {
 		if got, ok := body[key].(float64); !ok || got != want {
 			t.Errorf("%s = %v, want %v", key, body[key], want)
@@ -331,7 +335,7 @@ func TestMeUsageShape(t *testing.T) {
 	seedLog(t, env, env.user.ID, "attempt-shape-2", "p1/m1", 200, 1700000003, "")
 	rec = do(t, h, r)
 	assertOK(t, rec)
-	body = assertJSONKeys(t, rec.Body.Bytes(), "total_requests", "total_prompt_tokens", "total_completion_tokens", "total_unknown_usage_requests")
+	body = assertJSONKeys(t, rec.Body.Bytes(), "total_requests", "total_uncached_input_tokens", "total_cache_write_input_tokens", "total_cache_read_input_tokens", "total_output_tokens", "total_prompt_tokens", "total_completion_tokens", "total_unknown_usage_requests")
 	if body["total_requests"].(float64) != 2 {
 		t.Errorf("total_requests after second log = %v, want 2", body["total_requests"])
 	}
@@ -669,18 +673,21 @@ func TestAdminUsageSiteAndByUser(t *testing.T) {
 	// Site-wide totals exclude the administrator row.
 	rec := get("")
 	assertOK(t, rec)
-	body := assertJSONKeys(t, rec.Body.Bytes(), "total_requests", "total_prompt_tokens", "total_completion_tokens", "total_unknown_usage_requests")
+	body := assertJSONKeys(t, rec.Body.Bytes(), "total_requests", "total_uncached_input_tokens", "total_cache_write_input_tokens", "total_cache_read_input_tokens", "total_output_tokens", "total_prompt_tokens", "total_completion_tokens", "total_unknown_usage_requests")
 	if body["total_requests"].(float64) != 3 {
 		t.Errorf("site total_requests = %v, want 3 (admin row excluded)", body["total_requests"])
 	}
 	if body["total_prompt_tokens"].(float64) != 3 || body["total_completion_tokens"].(float64) != 6 || body["total_unknown_usage_requests"].(float64) != 0 {
 		t.Errorf("site totals = %v", body)
 	}
+	if body["total_uncached_input_tokens"].(float64) != 3 || body["total_output_tokens"].(float64) != 6 {
+		t.Errorf("site four-bucket totals = %v", body)
+	}
 
 	// Explicit group_by=site keeps the same shape.
 	rec = get("?group_by=site")
 	assertOK(t, rec)
-	assertJSONKeys(t, rec.Body.Bytes(), "total_requests", "total_prompt_tokens", "total_completion_tokens", "total_unknown_usage_requests")
+	assertJSONKeys(t, rec.Body.Bytes(), "total_requests", "total_uncached_input_tokens", "total_cache_write_input_tokens", "total_cache_read_input_tokens", "total_output_tokens", "total_prompt_tokens", "total_completion_tokens", "total_unknown_usage_requests")
 
 	// By-user: ordered by total requests descending, administrator excluded.
 	rec = get("?group_by=user")

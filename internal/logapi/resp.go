@@ -8,12 +8,19 @@ package logapi
 import "github.com/waiting-here/NonbiriAPI/internal/db"
 
 // usageTotalsResp is the stable usage-totals shape shared by /api/me/usage
-// and the site-wide admin aggregation.
+// and the site-wide admin aggregation. The four token buckets are the
+// authoritative counters (frozen contract §6.2 additive change); the legacy
+// prompt/completion totals remain compatibility mirrors for one version
+// period.
 type usageTotalsResp struct {
-	TotalRequests             int64 `json:"total_requests"`
-	TotalPromptTokens         int64 `json:"total_prompt_tokens"`
-	TotalCompletionTokens     int64 `json:"total_completion_tokens"`
-	TotalUnknownUsageRequests int64 `json:"total_unknown_usage_requests"`
+	TotalRequests              int64 `json:"total_requests"`
+	TotalUncachedInputTokens   int64 `json:"total_uncached_input_tokens"`
+	TotalCacheWriteInputTokens int64 `json:"total_cache_write_input_tokens"`
+	TotalCacheReadInputTokens  int64 `json:"total_cache_read_input_tokens"`
+	TotalOutputTokens          int64 `json:"total_output_tokens"`
+	TotalPromptTokens          int64 `json:"total_prompt_tokens"`
+	TotalCompletionTokens      int64 `json:"total_completion_tokens"`
+	TotalUnknownUsageRequests  int64 `json:"total_unknown_usage_requests"`
 }
 
 // logRowResp is one metadata-only request-log row for the administrator
@@ -114,10 +121,14 @@ type endpointOverviewGroupResp struct {
 
 func usageTotalsResponse(t db.UsageTotals) usageTotalsResp {
 	return usageTotalsResp{
-		TotalRequests:             t.TotalRequests,
-		TotalPromptTokens:         t.TotalPromptTokens,
-		TotalCompletionTokens:     t.TotalCompletionTokens,
-		TotalUnknownUsageRequests: t.TotalUnknownUsageRequests,
+		TotalRequests:              t.TotalRequests,
+		TotalUncachedInputTokens:   t.TotalUncachedInputTokens,
+		TotalCacheWriteInputTokens: t.TotalCacheWriteInputTokens,
+		TotalCacheReadInputTokens:  t.TotalCacheReadInputTokens,
+		TotalOutputTokens:          t.TotalOutputTokens,
+		TotalPromptTokens:          t.TotalPromptTokens,
+		TotalCompletionTokens:      t.TotalCompletionTokens,
+		TotalUnknownUsageRequests:  t.TotalUnknownUsageRequests,
 	}
 }
 
