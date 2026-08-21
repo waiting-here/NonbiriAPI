@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -29,6 +30,17 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
+
+// mustLocalBackend wraps the shared stack in the single production Backend so
+// adapter and fetcher tests exercise the same delegation path as production.
+func mustLocalBackend(t *testing.T, stack *egress.Stack) *backend.LocalBackend {
+	t.Helper()
+	local, err := backend.NewLocal(stack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return local
+}
 
 type countingFetchHook struct {
 	inner endpoint.FetchHook
@@ -187,7 +199,7 @@ func TestEndpointOriginChangeCannotExfiltrateStoredCredential(t *testing.T) {
 
 	registry := endpoint.NewRegistry()
 	fetcher, err := fetch.NewFetcher(fetch.FetcherConfig{
-		Store: store, Stack: stack, Secrets: vault, Registry: registry,
+		Store: store, Backend: mustLocalBackend(t, stack), Secrets: vault, Registry: registry,
 		Workers: 1, QueueSize: 4, Now: func() int64 { return 10 },
 	})
 	if err != nil {
@@ -268,7 +280,7 @@ func TestEndpointOriginChangeCannotExfiltrateStoredCredential(t *testing.T) {
 	if _, err := store.CreateBinding(context.Background(), user.ID, model.ID, key.ID, "upstream-model", 0, 11); err != nil {
 		t.Fatal(err)
 	}
-	adapter, err := openai.NewAdapter(openai.AdapterConfig{Stack: stack})
+	adapter, err := openai.NewAdapter(openai.AdapterConfig{Backend: mustLocalBackend(t, stack)})
 	if err != nil {
 		t.Fatal(err)
 	}

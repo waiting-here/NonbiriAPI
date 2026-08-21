@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
@@ -42,12 +43,12 @@ const (
 	maxErrorBodyDiagBytes = 4 << 10
 )
 
-// FetcherConfig wires a Fetcher. Store, Stack, Secrets, and Registry are
+// FetcherConfig wires a Fetcher. Store, Backend, Secrets, and Registry are
 // mandatory; Workers/QueueSize/PerUserCap/RefreshPerUserPerMinute default to
 // the package constants when <= 0.
 type FetcherConfig struct {
 	Store    *db.Store
-	Stack    *egress.Stack
+	Backend  backend.Backend
 	Secrets  secret.ContextOpener
 	Registry *endpoint.Registry
 	Now      func() int64
@@ -61,12 +62,13 @@ type FetcherConfig struct {
 // Fetcher discovers upstream models per (Endpoint, Key) combo. It implements
 // endpoint.FetchHook (see FetchModels) so the endpoint rail can trigger one
 // automatic fetch after a save/edit/key-add, and it drives the manual refresh
-// route. All outbound work goes through the shared egress Stack; all secret
+// route. All outbound work goes through the shared egress backend (the single
+// process-wide outbound boundary); all secret
 // reads go through the ownership-scoped ciphertext accessor and are opened
 // only with their authenticated user/endpoint/key/canonical-origin context.
 type Fetcher struct {
 	store    *db.Store
-	stack    *egress.Stack
+	backend  backend.Backend
 	secrets  secret.ContextOpener
 	registry *endpoint.Registry
 	now      func() int64
@@ -82,8 +84,8 @@ func NewFetcher(cfg FetcherConfig) (*Fetcher, error) {
 	if cfg.Store == nil {
 		return nil, errors.New("fetch: store is required")
 	}
-	if cfg.Stack == nil {
-		return nil, errors.New("fetch: egress stack is required")
+	if backend.IsNil(cfg.Backend) {
+		return nil, errors.New("fetch: egress backend is required")
 	}
 	if nilCodec(cfg.Secrets) {
 		return nil, errors.New("fetch: secret codec is required")
@@ -125,7 +127,7 @@ func NewFetcher(cfg FetcherConfig) (*Fetcher, error) {
 
 	f := &Fetcher{
 		store:    cfg.Store,
-		stack:    cfg.Stack,
+		backend:  cfg.Backend,
 		secrets:  cfg.Secrets,
 		registry: cfg.Registry,
 		now:      cfg.Now,
@@ -337,7 +339,7 @@ func (f *Fetcher) fetchOne(ctx context.Context, userID, endpointID, keyID int64)
 // non-empty bounded diagnostic (never the URL, key, or full body); on success
 // it returns the validated models and an empty diagnostic.
 func (f *Fetcher) fetchUpstream(ctx context.Context, baseURL string, keyPlaintext []byte) ([]Model, string) {
-	client, err := f.stack.NewClient(baseURL)
+	client, err := f.backend.Open(baseURL)
 	if err != nil {
 		return nil, boundedDiag("egress client unavailable", err.Error())
 	}

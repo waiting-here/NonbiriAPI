@@ -20,6 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/alertapi"
 	"github.com/waiting-here/NonbiriAPI/internal/applog"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -208,6 +209,12 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err := stack.AddSelfOrigins(context.Background(), cfg); err != nil {
 		return nil, fmt.Errorf("egress self origins: %w", err)
 	}
+	// The single outbound execution boundary: every connector and the model
+	// fetcher open their clients through this one wrapper of the one Stack.
+	localBackend, err := backend.NewLocal(stack)
+	if err != nil {
+		return nil, fmt.Errorf("egress backend: %w", err)
+	}
 
 	registry := endpoint.NewRegistry()
 	var flowController *flowcontrol.Controller
@@ -257,7 +264,7 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	cleanup = append(cleanup, adminAuth.Close)
 
 	modelFetcher, err := fetch.NewFetcher(fetch.FetcherConfig{
-		Store: store, Stack: stack, Secrets: vault, Registry: registry,
+		Store: store, Backend: localBackend, Secrets: vault, Registry: registry,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("model fetcher: %w", err)
@@ -268,7 +275,7 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		Repo: store, URLs: stack, Connectors: registry, Hook: modelFetcher,
 	})
 	modelService := model.NewService(store)
-	openAIAdapter, err := openai.NewAdapter(openai.AdapterConfig{Stack: stack})
+	openAIAdapter, err := openai.NewAdapter(openai.AdapterConfig{Backend: localBackend})
 	if err != nil {
 		return nil, fmt.Errorf("openai adapter: %w", err)
 	}
