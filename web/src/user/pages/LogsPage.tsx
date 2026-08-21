@@ -20,32 +20,27 @@ import {
   type LogFilterField,
 } from '@shared/components/log';
 import { CompactNumber } from '@shared/components/CompactNumber';
-import { formatCompact, formatCount } from '@shared/utils/formatNumber';
+import { formatCount } from '@shared/utils/formatNumber';
+import { UserPageGate } from '../components/UserPageGate';
 import {
-  adminLogExportPath,
-  useAdminLogs,
-  useAdminUsage,
-  type AdminLogFilter,
-  type AdminRequestLog,
+  useUserLogOptions,
+  useUserLogs,
+  type UserRequestLog,
 } from '../data';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 const DEFAULT_PAGE_SIZE = 20;
 
-// Frozen administrator filter set, mirrored in the URL query string.
-const TEXT_PARAMS = ['user_id', 'endpoint_base_url', 'upstream_model', 'error_code', 'status'] as const;
+// Frozen user filter set, mirrored in the URL query string. Ownership comes
+// exclusively from the session; there is no user_id parameter and no export.
+const TEXT_PARAMS = ['model', 'error_code', 'status'] as const;
 
-function buildApiFilter(filters: Record<string, string>): AdminLogFilter {
-  const next: AdminLogFilter = {};
-  const userId = filters.user_id?.trim();
-  if (userId && /^\d+$/.test(userId)) next.userId = userId;
-  const baseURL = filters.endpoint_base_url?.trim();
-  if (baseURL) next.endpointBaseURL = baseURL.slice(0, 512);
-  const upstream = filters.upstream_model?.trim();
-  if (upstream) next.upstreamModel = upstream.slice(0, 512);
+function buildApiFilter(filters: Record<string, string>) {
+  const next: { model?: string; errorCode?: string; status?: string } = {};
+  const model = filters.model?.trim();
+  if (model) next.model = model.slice(0, 512);
   const errorCode = filters.error_code?.trim();
   if (errorCode) next.errorCode = errorCode.slice(0, 512);
-  // The server status filter is one exact 100..599 code, not a band.
   const status = filters.status?.trim();
   if (status && /^\d{3}$/.test(status)) {
     const code = Number(status);
@@ -54,12 +49,12 @@ function buildApiFilter(filters: Record<string, string>): AdminLogFilter {
   return next;
 }
 
-export function LogsPage() {
+function LogsContent() {
   const { t } = useTranslation();
   const { state, patch } = useLogUrlState(TEXT_PARAMS, DEFAULT_PAGE_SIZE);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const usage = useAdminUsage();
+  const options = useUserLogOptions();
   const filter = useMemo(
     () => ({
       ...buildApiFilter(state.filters),
@@ -68,7 +63,7 @@ export function LogsPage() {
     }),
     [state.filters, state.fromUnix, state.toUnix],
   );
-  const logs = useAdminLogs(state.page, filter, state.pageSize);
+  const logs = useUserLogs(state.page, filter, state.pageSize);
 
   const applyFilters = (next: {
     filters: Record<string, string>;
@@ -85,23 +80,11 @@ export function LogsPage() {
 
   const fields: LogFilterField[] = [
     {
-      name: 'user_id',
-      label: t('common.userId'),
-      ariaLabel: t('common.filterUserIdAria'),
-      inputType: 'number',
-      maxLength: 19,
-    },
-    {
-      name: 'endpoint_base_url',
-      label: t('logs.endpointBaseUrl'),
-      ariaLabel: t('logs.endpointBaseUrlAria'),
-      maxLength: 512,
-    },
-    {
-      name: 'upstream_model',
-      label: t('logs.upstreamModel'),
-      ariaLabel: t('logs.upstreamModelAria'),
+      name: 'model',
+      label: t('common.model'),
+      ariaLabel: t('common.filterModelAria'),
       maxLength: 256,
+      suggestions: options.data?.models,
     },
     {
       name: 'error_code',
@@ -118,23 +101,42 @@ export function LogsPage() {
     },
   ];
 
-  const columns: LogColumn<AdminRequestLog>[] = [
+  const columns: LogColumn<UserRequestLog>[] = [
     {
       key: 'started_at',
       header: t('logs.time'),
       render: (row) => <span title={formatDateTime(row.completed_at)}>{formatDateTime(row.started_at)}</span>,
     },
-    { key: 'user_id', header: t('common.userId'), render: (row) => <span className="mono">{row.user_id}</span> },
-    { key: 'route_kind', header: t('logs.routeKind'), render: (row) => row.route_kind },
     {
-      key: 'endpoint_base_url',
-      header: t('logs.endpointBaseUrl'),
-      render: (row) => <span className="mono read-only-value">{row.endpoint_base_url}</span>,
+      key: 'model',
+      header: t('common.model'),
+      render: (row) => (
+        <>
+          <span className="mono">{row.model}</span>
+          <br />
+          <span className="table-note">{row.upstream_model_id}</span>
+        </>
+      ),
     },
     {
-      key: 'upstream_model_id',
-      header: t('logs.upstreamModel'),
-      render: (row) => <span className="mono">{row.upstream_model_id}</span>,
+      key: 'note',
+      header: t('logs.note'),
+      // Notes are the current values of the caller's own resources; both are
+      // empty once a resource has been deleted, which renders as a dash.
+      render: (row) =>
+        row.endpoint_note || row.key_note ? (
+          <>
+            {row.endpoint_note || '—'}
+            {row.key_note ? (
+              <>
+                <br />
+                <span className="table-note">{row.key_note}</span>
+              </>
+            ) : null}
+          </>
+        ) : (
+          '—'
+        ),
     },
     {
       key: 'status_code',
@@ -155,7 +157,9 @@ export function LogsPage() {
           <>
             <span className="mono">{row.error_code || '—'}</span>
             <br />
-            <span className="table-note">{t(`logs.errorSource${row.error_source === 'upstream' ? 'Upstream' : 'Platform'}`)}</span>
+            <span className="table-note">
+              {t(`logs.errorSource${row.error_source === 'upstream' ? 'Upstream' : 'Platform'}`)}
+            </span>
           </>
         ) : (
           '—'
@@ -165,16 +169,18 @@ export function LogsPage() {
 
   const selected = selectedId ? logs.data?.items.find((row) => row.id === selectedId) : undefined;
 
-  const detailFields = (row: AdminRequestLog): LogDetailField[] => [
+  const detailFields = (row: UserRequestLog): LogDetailField[] => [
     { label: t('logs.logId'), value: <span className="mono">{row.id}</span> },
-    { label: t('common.userId'), value: <span className="mono">{row.user_id}</span> },
+    { label: t('common.model'), value: <span className="mono">{row.model}</span> },
+    { label: t('logs.upstreamModel'), value: <span className="mono">{row.upstream_model_id}</span> },
     { label: t('logs.routeKind'), value: row.route_kind },
     {
       label: t('logs.endpointBaseUrl'),
       value: <span className="mono read-only-value">{row.endpoint_base_url}</span>,
     },
-    { label: t('logs.upstreamModel'), value: <span className="mono">{row.upstream_model_id}</span> },
     { label: t('logs.endpointKeyId'), value: <span className="mono">{row.endpoint_key_id}</span> },
+    { label: t('logs.endpointNote'), value: row.endpoint_note || '—' },
+    { label: t('logs.keyNote'), value: row.key_note || '—' },
     { label: t('logs.statusCode'), value: row.status_code > 0 ? row.status_code : '—' },
     { label: t('logs.duration'), value: `${formatCount(row.duration_ms).display} ms` },
     { label: t('logs.startedAt'), value: formatDateTime(row.started_at) },
@@ -192,10 +198,7 @@ export function LogsPage() {
       value: <CompactNumber value={formatCount(row.cache_read_input_tokens)} />,
     },
     { label: t('logs.bucketOutput'), value: <CompactNumber value={formatCount(row.output_tokens)} /> },
-    {
-      label: t('logs.usageUnknown'),
-      value: row.usage_unknown ? t('common.yes') : t('common.no'),
-    },
+    { label: t('logs.usageUnknown'), value: row.usage_unknown ? t('common.yes') : t('common.no') },
     { label: t('logs.errorCode'), value: row.error_code || '—' },
     {
       label: t('logs.errorSource'),
@@ -210,65 +213,13 @@ export function LogsPage() {
     <div className="page">
       <PageHeader
         eyebrow={t('app.name')}
-        title={t('admin.logs.title')}
-        description={t('admin.logs.description')}
+        title={t('user.logs.title')}
+        description={t('user.logs.description')}
       />
       <Card>
         <div className="card-title-row">
-          <h2>{t('admin.logs.usageTitle')}</h2>
-        </div>
-        {usage.isPending ? (
-          <LoadingState />
-        ) : usage.error ? (
-          <ErrorState error={usage.error} onRetry={() => void usage.refetch()} />
-        ) : (
-          <div className="metric-grid">
-            <div className="metric-card">
-              <p>{t('admin.dashboard.requests')}</p>
-              <strong className="metric-value">{formatCount(usage.data.total_requests).display}</strong>
-            </div>
-            <div className="metric-card">
-              <p>{t('common.tokens.input')}</p>
-              <strong className="metric-value">
-                <CompactNumber value={formatCompact(usage.data.total_prompt_tokens)} />
-              </strong>
-            </div>
-            <div className="metric-card">
-              <p>{t('common.tokens.output')}</p>
-              <strong className="metric-value">
-                <CompactNumber value={formatCompact(usage.data.total_completion_tokens)} />
-              </strong>
-            </div>
-            <div className="metric-card">
-              <p>{t('admin.dashboard.unknownUsage')}</p>
-              <strong className="metric-value">
-                {formatCount(usage.data.total_unknown_usage_requests).display}
-              </strong>
-            </div>
-          </div>
-        )}
-      </Card>
-      <Card>
-        <div className="card-title-row">
-          <h2>{t('admin.logs.logsTitle')}</h2>
-          <div className="card-actions">
-            <a
-              className="btn btn-secondary"
-              href={adminLogExportPath(filter, 'csv')}
-              download
-              aria-label={t('admin.logs.exportCsv')}
-            >
-              {t('admin.logs.exportCsv')}
-            </a>
-            <a
-              className="btn btn-secondary"
-              href={adminLogExportPath(filter, 'json')}
-              download
-              aria-label={t('admin.logs.exportJson')}
-            >
-              {t('admin.logs.exportJson')}
-            </a>
-          </div>
+          <h2>{t('user.logs.listTitle')}</h2>
+          <span className="muted">{t('common.page', { page: state.page })}</span>
         </div>
         <LogFilters fields={fields} state={state} onApply={applyFilters} />
         {logs.isPending ? (
@@ -276,11 +227,14 @@ export function LogsPage() {
         ) : logs.error ? (
           <ErrorState error={logs.error} onRetry={() => void logs.refetch()} />
         ) : logs.data.items.length === 0 ? (
-          <EmptyState title={t('admin.logs.noLogs')} body={t('admin.logs.noLogsBody')} />
+          <EmptyState
+            title={state.page > 1 ? t('common.noResults') : t('user.logs.empty')}
+            body={state.page > 1 ? t('common.noResultsBody') : t('user.logs.emptyBody')}
+          />
         ) : (
           <>
             <LogTable
-              caption={t('admin.logs.logsTitle')}
+              caption={t('user.logs.listTitle')}
               columns={columns}
               rows={logs.data.items}
               rowKey={(row) => row.id}
@@ -297,7 +251,7 @@ export function LogsPage() {
             />
             <Pagination
               page={state.page}
-              hasNext={logs.data.hasNext}
+              hasNext={logs.data.hasMore}
               onChange={(page) => patch({ page })}
               pageSize={state.pageSize}
               pageSizeOptions={PAGE_SIZE_OPTIONS}
@@ -318,7 +272,7 @@ export function LogsPage() {
                 label: t('logs.diag'),
                 text: [
                   `id=${selected.id}`,
-                  `user_id=${selected.user_id}`,
+                  `model=${selected.model}`,
                   `route_kind=${selected.route_kind}`,
                   `status_code=${selected.status_code}`,
                   `error_code=${selected.error_code}`,
@@ -333,5 +287,13 @@ export function LogsPage() {
         }
       />
     </div>
+  );
+}
+
+export function LogsPage() {
+  return (
+    <UserPageGate>
+      <LogsContent />
+    </UserPageGate>
   );
 }

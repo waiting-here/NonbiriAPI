@@ -7,6 +7,7 @@ import { HomePage } from './pages/HomePage';
 import { EndpointsPage } from './pages/EndpointsPage';
 import { ModelsPage } from './pages/ModelsPage';
 import { KeysPage } from './pages/KeysPage';
+import { LogsPage } from './pages/LogsPage';
 import { IssuesPage } from './pages/IssuesPage';
 import { AccountPage } from './pages/AccountPage';
 import { PrivacyPage } from './pages/PrivacyPage';
@@ -22,6 +23,7 @@ export const router = createBrowserRouter([
       { path: 'endpoints', element: <EndpointsPage /> },
       { path: 'models', element: <ModelsPage /> },
       { path: 'keys', element: <KeysPage /> },
+      { path: 'logs', element: <LogsPage /> },
       { path: 'issues', element: <IssuesPage /> },
       { path: 'account', element: <AccountPage /> },
       { path: 'privacy', element: <PrivacyPage /> },

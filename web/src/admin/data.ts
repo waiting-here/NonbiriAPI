@@ -42,27 +42,45 @@ export interface AdminUser {
   created_at: string;
 }
 
-export interface AdminLog {
+/**
+ * One metadata-only administrator log row (frozen projection). There is no
+ * user-chosen platform model name and no note field on this shape; the
+ * normalizer whitelists exactly these fields, so anything else a faulty
+ * server might send is dropped before it can reach the query cache.
+ */
+export interface AdminRequestLog {
   id: string;
   user_id: string;
-  model: string;
+  route_kind: string;
+  endpoint_base_url: string;
   endpoint_key_id: string;
   upstream_model_id: string;
   status_code: number;
   duration_ms: number;
-  started_at: string;
-  completed_at: string;
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  total_tokens?: number;
+  /** Unix seconds. */
+  started_at: number;
+  /** Unix seconds. */
+  completed_at: number;
+  uncached_input_tokens: number;
+  cache_write_input_tokens: number;
+  cache_read_input_tokens: number;
+  output_tokens: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
   usage_unknown: boolean;
   error_code: string;
+  error_source: string;
   error_diag: string;
+  attempt_id: string;
 }
 
+/** Frozen administrator filter set — exact equality on the server. */
 export interface AdminLogFilter {
   userId?: string;
-  model?: string;
+  endpointBaseURL?: string;
+  upstreamModel?: string;
+  errorCode?: string;
   status?: string;
   fromUnix?: number;
   toUnix?: number;
@@ -129,7 +147,9 @@ export const adminKeys = {
       'logs',
       page,
       filter.userId ?? '',
-      filter.model ?? '',
+      filter.endpointBaseURL ?? '',
+      filter.upstreamModel ?? '',
+      filter.errorCode ?? '',
       filter.status ?? '',
       filter.fromUnix ?? '',
       filter.toUnix ?? '',
@@ -223,33 +243,42 @@ function normalizeUser(payload: unknown): AdminUser {
   };
 }
 
-function normalizeLog(payload: unknown): AdminLog {
+function unixSecondsValue(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+    return Math.trunc(value);
+  }
+  return 0;
+}
+
+function normalizeLog(payload: unknown): AdminRequestLog {
   const record = asRecord(payload) ?? {};
-  const prompt = recordValue(record, 'prompt_tokens');
-  const completion = recordValue(record, 'completion_tokens');
-  const total = recordValue(record, 'total_tokens');
+  const bucket = (key: string): number => {
+    const raw = recordValue(record, key);
+    return typeof raw === 'number' && Number.isSafeInteger(raw) && raw >= 0 ? raw : 0;
+  };
   return {
     id: idValue(recordValue(record, 'id')),
     user_id: idValue(recordValue(record, 'user_id')),
-    model: text(recordValue(record, 'model'), 256, '—'),
+    route_kind: text(recordValue(record, 'route_kind'), 64, '—'),
+    endpoint_base_url: text(recordValue(record, 'endpoint_base_url'), 2048, '—'),
     endpoint_key_id: idValue(recordValue(record, 'endpoint_key_id')),
     upstream_model_id: text(recordValue(record, 'upstream_model_id'), 256, '—'),
     status_code: Math.max(0, integerValue(recordValue(record, 'status_code'))),
     duration_ms: Math.max(0, integerValue(recordValue(record, 'duration_ms'))),
-    started_at: dateValue(recordValue(record, 'started_at')),
-    completed_at: dateValue(recordValue(record, 'completed_at')),
-    ...(typeof prompt === 'number' && Number.isFinite(prompt)
-      ? { prompt_tokens: Math.max(0, Math.trunc(prompt)) }
-      : {}),
-    ...(typeof completion === 'number' && Number.isFinite(completion)
-      ? { completion_tokens: Math.max(0, Math.trunc(completion)) }
-      : {}),
-    ...(typeof total === 'number' && Number.isFinite(total)
-      ? { total_tokens: Math.max(0, Math.trunc(total)) }
-      : {}),
+    started_at: unixSecondsValue(recordValue(record, 'started_at')),
+    completed_at: unixSecondsValue(recordValue(record, 'completed_at')),
+    uncached_input_tokens: bucket('uncached_input_tokens'),
+    cache_write_input_tokens: bucket('cache_write_input_tokens'),
+    cache_read_input_tokens: bucket('cache_read_input_tokens'),
+    output_tokens: bucket('output_tokens'),
+    prompt_tokens: bucket('prompt_tokens'),
+    completion_tokens: bucket('completion_tokens'),
+    total_tokens: bucket('total_tokens'),
     usage_unknown: booleanValue(recordValue(record, 'usage_unknown')),
     error_code: text(recordValue(record, 'error_code'), 96),
+    error_source: text(recordValue(record, 'error_source'), 32),
     error_diag: text(recordValue(record, 'error_diag'), 4096),
+    attempt_id: text(recordValue(record, 'attempt_id'), 128),
   };
 }
 
@@ -357,6 +386,11 @@ export function useAdminUsers(
   });
 }
 
+/**
+ * Server-paginated administrator log list. The frozen filter set is exact
+ * equality on the server; the client sends only non-empty single values and
+ * never a platform model name or note filter.
+ */
 export function useAdminLogs(
   page: number,
   filter: AdminLogFilter = {},
@@ -365,7 +399,9 @@ export function useAdminLogs(
 ) {
   const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   if (filter.userId) params.set('user_id', filter.userId);
-  if (filter.model) params.set('model', filter.model);
+  if (filter.endpointBaseURL) params.set('endpoint_base_url', filter.endpointBaseURL);
+  if (filter.upstreamModel) params.set('upstream_model', filter.upstreamModel);
+  if (filter.errorCode) params.set('error_code', filter.errorCode);
   if (filter.status) params.set('status', filter.status);
   if (filter.fromUnix !== undefined) params.set('from', String(filter.fromUnix));
   if (filter.toUnix !== undefined) params.set('to', String(filter.toUnix));
@@ -377,10 +413,28 @@ export function useAdminLogs(
         items: result.items.map(normalizeLog),
         hasNext: result.hasNext,
         ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
-      } satisfies AdminPage<AdminLog>;
+      } satisfies AdminPage<AdminRequestLog>;
     },
     enabled,
   });
+}
+
+/**
+ * Builds the admin export download path (CSV or JSON) for the current
+ * filter. Export endpoints reject paging parameters, so none are sent; the
+ * browser only ever follows this link — it never parses or renders the file.
+ */
+export function adminLogExportPath(filter: AdminLogFilter, format: 'csv' | 'json'): string {
+  const params = new URLSearchParams();
+  if (filter.userId) params.set('user_id', filter.userId);
+  if (filter.endpointBaseURL) params.set('endpoint_base_url', filter.endpointBaseURL);
+  if (filter.upstreamModel) params.set('upstream_model', filter.upstreamModel);
+  if (filter.errorCode) params.set('error_code', filter.errorCode);
+  if (filter.status) params.set('status', filter.status);
+  if (filter.fromUnix !== undefined) params.set('from', String(filter.fromUnix));
+  if (filter.toUnix !== undefined) params.set('to', String(filter.toUnix));
+  const query = params.toString();
+  return `/admin/api/logs/export.${format}${query ? `?${query}` : ''}`;
 }
 
 export function useAdminUsage(enabled = true) {
