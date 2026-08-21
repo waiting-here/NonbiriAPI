@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -18,7 +19,29 @@ var (
 	// ErrInvalidRequest is a validation failure (bad provider/model/strategy,
 	// out-of-range ord, malformed upstream id, etc.).
 	ErrInvalidRequest = errors.New("model: invalid request")
+
+	// ErrCharityPrefixReserved rejects a provider that starts with the
+	// reserved charity namespace prefix. Charity models live in their own
+	// table and are surfaced as [公益]provider/model; a user model with that
+	// provider would pollute the charity namespace and mislead users, so the
+	// prefix is refused at create and update time (frozen requirement §K).
+	// It wraps ErrInvalidRequest so generic invalid-request handling still
+	// applies; the handler maps it to a readable dedicated message.
+	ErrCharityPrefixReserved = fmt.Errorf("%w: provider uses the reserved charity prefix", ErrInvalidRequest)
 )
+
+// CharityModelPrefix is the namespace reserved for charity models. User
+// platform models must never start their provider with it.
+const CharityModelPrefix = "[公益]"
+
+// validateProviderNamespace refuses the reserved charity prefix in a user
+// model's provider half.
+func validateProviderNamespace(provider string) error {
+	if strings.HasPrefix(provider, CharityModelPrefix) {
+		return ErrCharityPrefixReserved
+	}
+	return nil
+}
 
 // Field bounds. provider/model are bounded to MaxNamePartRunes runes each,
 // allowing '/' and regular characters but rejecting control characters and
@@ -77,6 +100,9 @@ func (s *Service) CreateModel(ctx context.Context, userID int64, provider, model
 	if err := validateNamePart("provider", provider); err != nil {
 		return db.Model{}, err
 	}
+	if err := validateProviderNamespace(provider); err != nil {
+		return db.Model{}, err
+	}
 	if err := validateNamePart("model", model); err != nil {
 		return db.Model{}, err
 	}
@@ -130,6 +156,9 @@ func (s *Service) UpdateModel(ctx context.Context, userID, id int64, provider, m
 	}
 	if provider != nil {
 		if err := validateNamePart("provider", *provider); err != nil {
+			return db.Model{}, err
+		}
+		if err := validateProviderNamespace(*provider); err != nil {
 			return db.Model{}, err
 		}
 	}
