@@ -28,7 +28,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -53,8 +52,9 @@ const (
 	MaxDurationMs = int64(1) << 30
 	// maxLogStatus bounds the stored client-facing status code.
 	maxLogStatus = 599
-	// MaxLogPageLimit bounds one request-log page.
-	MaxLogPageLimit = 200
+	// MaxLogPageLimit bounds one request-log page (frozen contract: default
+	// page size 20, clamp [1,100], shared by the user and admin log screens).
+	MaxLogPageLimit = 100
 	// MaxCleanupBatch bounds one retention-cleanup delete batch.
 	MaxCleanupBatch = 1000
 	// MaxUsageByUserLimit bounds the per-user usage aggregation page.
@@ -417,62 +417,6 @@ func (s *Store) DeleteRequestLogsBefore(ctx context.Context, beforeUnix int64, l
 	return affected, nil
 }
 
-// RequestLog is the stable metadata-only log projection backing the admin
-// request-log screen. It contains no request/response content, credential,
-// base URL, or header material. The four-bucket fields are the authoritative
-// per-request values; prompt/completion/total are compatibility mirrors.
-type RequestLog struct {
-	ID                    int64
-	UserID                int64
-	Model                 string
-	EndpointKeyID         int64 // 0 when no key was selected or it was deleted later
-	UpstreamModelID       string
-	StatusCode            int
-	DurationMs            int64
-	StartedAt             time.Time
-	CompletedAt           time.Time
-	UncachedInputTokens   int64
-	CacheWriteInputTokens int64
-	CacheReadInputTokens  int64
-	OutputTokens          int64
-	PromptTokens          int64
-	CompletionTokens      int64
-	TotalTokens           int64
-	UsageUnknown          bool
-	ErrorCode             string
-	ErrorDiag             string
-}
-
-const requestLogSelectColumns = `
-	id, user_id, model, endpoint_key_id, upstream_model_id, status_code, duration_ms,
-	started_at, completed_at,
-	uncached_input_tokens, cache_write_input_tokens, cache_read_input_tokens, output_tokens,
-	prompt_tokens, completion_tokens, total_tokens,
-	usage_unknown, error_code, error_diag`
-
-func scanRequestLog(scanner interface{ Scan(...any) error }) (RequestLog, error) {
-	var log RequestLog
-	var endpointKeyID sql.NullInt64
-	var usageUnknown int
-	var startedAt, completedAt int64
-	if err := scanner.Scan(
-		&log.ID, &log.UserID, &log.Model, &endpointKeyID, &log.UpstreamModelID,
-		&log.StatusCode, &log.DurationMs, &startedAt, &completedAt,
-		&log.UncachedInputTokens, &log.CacheWriteInputTokens, &log.CacheReadInputTokens, &log.OutputTokens,
-		&log.PromptTokens, &log.CompletionTokens, &log.TotalTokens,
-		&usageUnknown, &log.ErrorCode, &log.ErrorDiag,
-	); err != nil {
-		return RequestLog{}, err
-	}
-	if endpointKeyID.Valid {
-		log.EndpointKeyID = endpointKeyID.Int64
-	}
-	log.UsageUnknown = usageUnknown != 0
-	log.StartedAt = time.Unix(startedAt, 0).UTC()
-	log.CompletedAt = time.Unix(completedAt, 0).UTC()
-	return log, nil
-}
-
 // UsageTotals is the server-authoritative per-user usage projection backing
 // GET /api/me/usage and the admin usage screens. Metadata only. The four-bucket
 // totals are authoritative; total_prompt/completion remain compatible mirrors.
@@ -512,113 +456,6 @@ FROM users WHERE id = ?`, userID).
 		return UsageTotals{}, fmt.Errorf("read user usage: %w", err)
 	}
 	return totals, nil
-}
-
-// LogQuery is the bounded, parameterized admin request-log filter. Every
-// filter is optional. Results are ordered id DESC and offset-paginated with
-// Page/PageSize (LIMIT page_size+1 OFFSET (page-1)*page_size), so a client
-// never infers pagination from a raw page size.
-type LogQuery struct {
-	UserID   int64  // > 0 restricts to one user
-	Model    string // exact platform full_name; "" = no filter
-	Status   int    // 0 = no filter; otherwise a 100..599 status code
-	FromUnix int64  // started_at >= FromUnix; 0 = unbounded
-	ToUnix   int64  // started_at < ToUnix; 0 = unbounded
-	Page     int    // 1-based; values below 1 are treated as 1
-	PageSize int    // clamped to 1..MaxLogPageLimit; 0 selects the default
-}
-
-func (q LogQuery) validate() error {
-	if q.UserID < 0 {
-		return fmt.Errorf("log query: user id is invalid")
-	}
-	if !validOptionalStoredText(q.Model, maxLogModelRunes) {
-		return fmt.Errorf("log query: model is invalid")
-	}
-	if q.Status != 0 && (q.Status < 100 || q.Status > maxLogStatus) {
-		return fmt.Errorf("log query: status is out of range")
-	}
-	if q.FromUnix < 0 || q.ToUnix < 0 || (q.FromUnix > 0 && q.ToUnix > 0 && q.FromUnix > q.ToUnix) {
-		return fmt.Errorf("log query: time range is invalid")
-	}
-	return nil
-}
-
-// QueryRequestLogs returns at most one page of metadata-only log rows
-// matching the filter, newest first. The result is bounded by the clamped
-// PageSize; no request/response content is ever projected. The second return
-// value reports whether another page follows, so a client never infers
-// pagination from a raw page size.
-func (s *Store) QueryRequestLogs(ctx context.Context, query LogQuery) ([]RequestLog, bool, error) {
-	if err := query.validate(); err != nil {
-		return nil, false, err
-	}
-	page := query.Page
-	if page < 1 {
-		page = 1
-	}
-	pageSize := query.PageSize
-	if pageSize < 1 {
-		pageSize = 20
-	}
-	if pageSize > MaxLogPageLimit {
-		pageSize = MaxLogPageLimit
-	}
-
-	var clauses []string
-	var args []any
-	if query.UserID > 0 {
-		clauses = append(clauses, "user_id = ?")
-		args = append(args, query.UserID)
-	}
-	if query.Model != "" {
-		clauses = append(clauses, "model = ?")
-		args = append(args, query.Model)
-	}
-	if query.Status != 0 {
-		clauses = append(clauses, "status_code = ?")
-		args = append(args, query.Status)
-	}
-	if query.FromUnix > 0 {
-		clauses = append(clauses, "started_at >= ?")
-		args = append(args, query.FromUnix)
-	}
-	if query.ToUnix > 0 {
-		clauses = append(clauses, "started_at < ?")
-		args = append(args, query.ToUnix)
-	}
-
-	sqlText := `SELECT ` + requestLogSelectColumns + ` FROM request_logs`
-	if len(clauses) > 0 {
-		// #nosec G202 -- clauses is assembled exclusively from the fixed predicates
-		// above and every filter value is passed separately in args.
-		sqlText += ` WHERE ` + strings.Join(clauses, " AND ")
-	}
-	sqlText += ` ORDER BY id DESC LIMIT ? OFFSET ?`
-	args = append(args, pageSize+1, (page-1)*pageSize)
-
-	rows, err := s.db.QueryContext(ctx, sqlText, args...)
-	if err != nil {
-		return nil, false, fmt.Errorf("query request logs: %w", err)
-	}
-	defer rows.Close()
-
-	logs := make([]RequestLog, 0, min(pageSize, 32))
-	for rows.Next() {
-		log, err := scanRequestLog(rows)
-		if err != nil {
-			return nil, false, fmt.Errorf("scan request log: %w", err)
-		}
-		logs = append(logs, log)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, false, fmt.Errorf("iterate request logs: %w", err)
-	}
-	hasMore := len(logs) > pageSize
-	if hasMore {
-		logs = logs[:pageSize]
-	}
-	return logs, hasMore, nil
 }
 
 // AggregateUsage returns site-wide accumulator totals across all normal

@@ -99,6 +99,27 @@ func seedLog(t *testing.T, env *testEnv, userID int64, attempt, model string, st
 	}
 }
 
+// seedUpstreamLog records one accounted request carrying an explicit upstream
+// model id (the plain seedLog leaves it empty).
+func seedUpstreamLog(t *testing.T, env *testEnv, userID int64, attempt, model, upstream string, status int, unix int64) {
+	t.Helper()
+	input := db.RequestLogInput{
+		AttemptID:           attempt,
+		UserID:              userID,
+		Model:               model,
+		UpstreamModelID:     upstream,
+		StatusCode:          status,
+		DurationMs:          7,
+		StartedAt:           time.Unix(unix, 0).UTC(),
+		CompletedAt:         time.Unix(unix, 0).UTC().Add(7 * time.Millisecond),
+		UncachedInputTokens: 1,
+		OutputTokens:        2,
+	}
+	if err := env.store.RecordRequest(context.Background(), input); err != nil {
+		t.Fatalf("RecordRequest(%s): %v", attempt, err)
+	}
+}
+
 // --- mount helpers (real session middlewares) ------------------------------
 
 func newUserMount(t *testing.T, env *testEnv) http.Handler {
@@ -358,7 +379,7 @@ func TestAdminLogsFilters(t *testing.T) {
 	user2 := seedSecondUser(t, env)
 	// user1: A(200,p1/m1,100), B(429,p1/m1,200), C(200,p2/m2,300); user2: D(200,p1/m1,400)
 	seedLog(t, env, env.user.ID, "attempt-f-a", "p1/m1", 200, 1700000100, "")
-	seedLog(t, env, env.user.ID, "attempt-f-b", "p1/m1", 429, 1700000200, "")
+	seedLog(t, env, env.user.ID, "attempt-f-b", "p1/m1", 429, 1700000200, "upstream boom")
 	seedLog(t, env, env.user.ID, "attempt-f-c", "p2/m2", 200, 1700000300, "")
 	seedLog(t, env, user2.ID, "attempt-f-d", "p1/m1", 200, 1700000400, "")
 
@@ -403,10 +424,24 @@ func TestAdminLogsFilters(t *testing.T) {
 		t.Fatalf("user2 filter rows = %v", ids(rows))
 	}
 
-	// model filter is an exact match.
-	rows = get("?model=p1%2Fm1")
-	if len(rows) != 3 || !idsContains(ids(rows), 1, 2, 4) {
-		t.Fatalf("model filter rows = %v", ids(rows))
+	// The user-chosen platform model name is not an administrator filter
+	// (user-private naming): the parameter itself is invalid_request.
+	rModel := stationRequest(http.MethodGet, "/admin/api/logs?model=p1%2Fm1", host.StationAdmin)
+	rModel.AddCookie(adminCookie(t, env))
+	assertErr(t, do(t, h, rModel), http.StatusBadRequest, httperr.CodeInvalidRequest)
+
+	// upstream_model is an exact match against the stored upstream model id
+	// (seeded later, see the combined-filter block).
+	rows = get("?upstream_model=upstream%2Falpha")
+	if len(rows) != 0 {
+		t.Fatalf("upstream_model filter rows = %v", ids(rows))
+	}
+
+	// error_code is an exact match against the stable stored code. Only the
+	// diag-bearing row (attempt-f-b, seeded with a diagnostic) carries it.
+	rows = get("?error_code=upstream")
+	if len(rows) != 1 || ids(rows)[0] != 2 {
+		t.Fatalf("error_code filter rows = %v", ids(rows))
 	}
 
 	// status filter.
@@ -429,9 +464,12 @@ func TestAdminLogsFilters(t *testing.T) {
 		t.Fatalf("range filter rows = %v", ids(rows))
 	}
 
-	// Combined filters.
-	rows = get(fmt.Sprintf("?user_id=%d&model=p1%%2Fm1&status=200", env.user.ID))
-	if len(rows) != 1 || ids(rows)[0] != 1 {
+	// Combined filters (the user-chosen model name is not part of the admin
+	// filter set, so the combination uses upstream_model). Seed the matching
+	// row here so the earlier range assertions above stay untouched.
+	seedUpstreamLog(t, env, env.user.ID, "attempt-f-e", "p1/m1", "upstream/alpha", 200, 1700000500)
+	rows = get(fmt.Sprintf("?user_id=%d&upstream_model=upstream%%2Falpha&status=200", env.user.ID))
+	if len(rows) != 1 || ids(rows)[0] != 5 {
 		t.Fatalf("combined filter rows = %v", ids(rows))
 	}
 }
@@ -566,7 +604,7 @@ func TestAdminLogsInvalidParams(t *testing.T) {
 	}
 
 	// Injection-shaped values are parameterized: never an error, never rows.
-	rec := request("?model=p1%2Fm1%27%20OR%201%3D1--")
+	rec := request("?upstream_model=p1%2Fm1%27%20OR%201%3D1--")
 	assertOK(t, rec)
 	if strings.Contains(rec.Body.String(), "1=1") {
 		t.Fatalf("injection leaked into SQL or response: %s", rec.Body.String())
@@ -920,14 +958,24 @@ func TestAdminLogsRowShape(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("rows = %d, want 1", len(rows))
 	}
-	assertJSONKeys(t, mustJSON(t, rows[0]), "id", "user_id", "model", "endpoint_key_id", "upstream_model_id",
-		"status_code", "duration_ms", "started_at", "completed_at", "prompt_tokens",
-		"completion_tokens", "total_tokens", "usage_unknown", "error_code", "error_diag")
+	assertJSONKeys(t, mustJSON(t, rows[0]), "id", "user_id", "route_kind", "endpoint_base_url",
+		"endpoint_key_id", "upstream_model_id", "status_code", "duration_ms", "started_at",
+		"completed_at", "uncached_input_tokens", "cache_write_input_tokens", "cache_read_input_tokens",
+		"output_tokens", "prompt_tokens", "completion_tokens", "total_tokens", "usage_unknown",
+		"error_code", "error_source", "error_diag", "attempt_id")
 	row := rows[0]
-	if row["user_id"].(float64) != float64(env.user.ID) || row["model"] != "p1/m1" ||
+	if row["user_id"].(float64) != float64(env.user.ID) ||
 		row["status_code"].(float64) != 502 || row["error_code"] != "upstream" ||
+		row["error_source"] != "platform" || row["route_kind"] != "personal" ||
 		row["duration_ms"].(float64) != 7 || row["usage_unknown"] != false {
 		t.Errorf("row = %v", row)
+	}
+	// The user-chosen platform model name and any note field do not exist in
+	// the admin shape at all.
+	for _, forbidden := range []string{"model", "note"} {
+		if _, ok := row[forbidden]; ok {
+			t.Errorf("admin log row carries forbidden key %q", forbidden)
+		}
 	}
 	// No content or credential fields exist in the shape.
 	lower := strings.ToLower(rec.Body.String())
