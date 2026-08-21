@@ -10,6 +10,287 @@ import {
 } from '@shared/components/States';
 import { apiFetch } from '@shared/query/http';
 import { adminKeys, type SiteConfigValue, useSiteConfig } from '../data';
+import {
+  displayCreditsToMilliString,
+  milliStringToDisplayInput,
+} from '../utils/economyInput';
+
+// The economy & level keys get dedicated typed editors; the generic key list
+// keeps every other known key.
+const ECONOMY_KEYS = [
+  'site_timezone_offset_minutes',
+  'checkin_mode',
+  'checkin_award_min_milli',
+  'checkin_award_max_milli',
+  'credits_cap_milli',
+  'level_threshold_2_milli',
+  'level_threshold_3_milli',
+  'level_threshold_4_milli',
+] as const;
+
+const ECONOMY_KEY_SET = new Set<string>(ECONOMY_KEYS);
+
+const CHECKIN_MODES = ['enabled', 'level_gated', 'disabled'] as const;
+
+// Bounded offset display: UTC+08:00 / UTC-05:30.
+function formatOffset(minutes: number): string {
+  const sign = minutes < 0 ? '-' : '+';
+  const abs = Math.abs(minutes);
+  const hours = String(Math.floor(abs / 60)).padStart(2, '0');
+  const mins = String(abs % 60).padStart(2, '0');
+  return `UTC${sign}${hours}:${mins}`;
+}
+
+// Shared PATCH helper for one typed editor: shows the server message verbatim
+// (including readable conflict refusals) and refetches the config on success.
+function useConfigPatch() {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+  const patch = async (key: string, value: unknown): Promise<void> => {
+    setError('');
+    setSaved(false);
+    setBusy(true);
+    try {
+      await apiFetch<unknown>(`/admin/api/site-config/${encodeURIComponent(key)}`, {
+        method: 'PATCH',
+        json: { value },
+      });
+      await queryClient.invalidateQueries({ queryKey: adminKeys.siteConfig });
+      setSaved(true);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : t('common.errorBody'));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return { busy, error, saved, patch };
+}
+
+function EditorFeedback({ error, saved }: { error: string; saved: boolean }) {
+  const { t } = useTranslation();
+  return (
+    <>
+      {error ? <p className="field-error" role="alert">{error}</p> : null}
+      {saved ? <p className="inline-success" role="status">{t('admin.settings.saved')}</p> : null}
+    </>
+  );
+}
+
+// Nullable site timezone: JSON null means "never configured" and is distinct
+// from an explicit UTC (0). Once any day-keyed data exists the value is
+// permanently frozen server-side and every further write is a conflict.
+function TimezoneEditor({ value }: { value: number | null }) {
+  const { t } = useTranslation();
+  const [input, setInput] = useState(value === null ? '' : String(value));
+  const [validationError, setValidationError] = useState('');
+  const { busy, error, saved, patch } = useConfigPatch();
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setValidationError('');
+    const trimmed = input.trim();
+    const parsed = Number(trimmed);
+    if (
+      !/^-?\d+$/.test(trimmed) ||
+      !Number.isSafeInteger(parsed) ||
+      parsed < -720 ||
+      parsed > 840 ||
+      parsed % 30 !== 0
+    ) {
+      setValidationError(t('admin.settings.economy.timezoneInvalid'));
+      return;
+    }
+    await patch('site_timezone_offset_minutes', parsed);
+  };
+
+  return (
+    <form className="config-row" onSubmit={submit} noValidate>
+      <div className="config-key-info">
+        <strong>{t('admin.settings.economy.timezoneTitle')}</strong>
+        <span className="table-note">{t('admin.settings.economy.timezoneDescription')}</span>
+        <span className="mono table-note">site_timezone_offset_minutes</span>
+      </div>
+      <div className="config-control">
+        {value === null ? (
+          <>
+            <p className="field-error" role="alert">
+              {t('admin.settings.economy.timezoneNotSet')}
+            </p>
+            <p className="inline-notice">
+              {t('admin.settings.economy.timezoneNotSetBody')}
+            </p>
+          </>
+        ) : (
+          <span className="table-note">
+            {t('admin.settings.economy.timezoneCurrent', { value: formatOffset(value) })}
+          </span>
+        )}
+        <p className="inline-notice">{t('admin.settings.economy.timezoneFreezeWarning')}</p>
+        <label>
+          <span>{t('admin.settings.economy.timezoneInput')}</span>
+          <input
+            type="number"
+            step="30"
+            min="-720"
+            max="840"
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            placeholder="480"
+            aria-label={t('admin.settings.economy.timezoneInput')}
+          />
+        </label>
+        {validationError ? <p className="field-error" role="alert">{validationError}</p> : null}
+        <EditorFeedback error={error} saved={saved} />
+        <button type="submit" className="btn btn-secondary" disabled={busy}>
+          {busy ? t('common.working') : t('admin.settings.save')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function CheckinModeEditor({ value }: { value: string }) {
+  const { t } = useTranslation();
+  const initial = (CHECKIN_MODES as readonly string[]).includes(value) ? value : 'disabled';
+  const [selection, setSelection] = useState<string>(initial);
+  const { busy, error, saved, patch } = useConfigPatch();
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await patch('checkin_mode', selection);
+  };
+
+  return (
+    <form className="config-row" onSubmit={submit} noValidate>
+      <div className="config-key-info">
+        <strong>{t('admin.settings.economy.checkinModeTitle')}</strong>
+        <span className="table-note">{t('admin.settings.economy.checkinModeDescription')}</span>
+        <span className="mono table-note">checkin_mode</span>
+      </div>
+      <div className="config-control">
+        <select
+          value={selection}
+          onChange={(event) => setSelection(event.target.value)}
+          aria-label={t('admin.settings.economy.checkinModeTitle')}
+        >
+          {CHECKIN_MODES.map((mode) => (
+            <option key={mode} value={mode}>
+              {t(`admin.settings.economy.checkinMode.${mode}`)}
+            </option>
+          ))}
+        </select>
+        <EditorFeedback error={error} saved={saved} />
+        <button type="submit" className="btn btn-secondary" disabled={busy}>
+          {busy ? t('common.working') : t('admin.settings.save')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// A display-credits amount editor: the input is in whole (fractional to three
+// digits) display credits and is converted to the canonical milli string via
+// the BigInt helpers — never through Number().
+function AmountEditor({
+  name,
+  value,
+  title,
+  hint,
+}: {
+  name: string;
+  value: string;
+  title: string;
+  hint: string;
+}) {
+  const { t } = useTranslation();
+  const [input, setInput] = useState(milliStringToDisplayInput(value));
+  const [validationError, setValidationError] = useState('');
+  const { busy, error, saved, patch } = useConfigPatch();
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setValidationError('');
+    const milli = displayCreditsToMilliString(input);
+    if (milli === null) {
+      setValidationError(t('admin.settings.economy.amountInvalid'));
+      return;
+    }
+    await patch(name, milli);
+  };
+
+  return (
+    <form className="config-row" onSubmit={submit} noValidate>
+      <div className="config-key-info">
+        <strong>{title}</strong>
+        <span className="table-note">{hint}</span>
+        <span className="mono table-note">{name}</span>
+      </div>
+      <div className="config-control">
+        <input
+          type="text"
+          inputMode="decimal"
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          aria-label={title}
+        />
+        {validationError ? <p className="field-error" role="alert">{validationError}</p> : null}
+        <EditorFeedback error={error} saved={saved} />
+        <button type="submit" className="btn btn-secondary" disabled={busy}>
+          {busy ? t('common.working') : t('admin.settings.save')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function EconomySection({ config }: { config: Record<string, SiteConfigValue> }) {
+  const { t } = useTranslation();
+  const timezone = config['site_timezone_offset_minutes'];
+  const checkinMode = config['checkin_mode'];
+  const read = (key: string): string => (typeof config[key] === 'string' ? String(config[key]) : '0');
+  return (
+    <Card>
+      <div className="card-title-row">
+        <h2>{t('admin.settings.economy.title')}</h2>
+      </div>
+      <p className="inline-notice">{t('admin.settings.economy.description')}</p>
+      <div className="config-list">
+        <TimezoneEditor value={typeof timezone === 'number' ? timezone : null} />
+        <CheckinModeEditor value={typeof checkinMode === 'string' ? checkinMode : 'disabled'} />
+        <AmountEditor
+          name="checkin_award_min_milli"
+          value={read('checkin_award_min_milli')}
+          title={t('admin.settings.economy.awardMinTitle')}
+          hint={t('admin.settings.economy.awardMinHint')}
+        />
+        <AmountEditor
+          name="checkin_award_max_milli"
+          value={read('checkin_award_max_milli')}
+          title={t('admin.settings.economy.awardMaxTitle')}
+          hint={t('admin.settings.economy.awardMaxHint')}
+        />
+        <AmountEditor
+          name="credits_cap_milli"
+          value={read('credits_cap_milli')}
+          title={t('admin.settings.economy.capTitle')}
+          hint={t('admin.settings.economy.capHint')}
+        />
+        {[2, 3, 4].map((level) => (
+          <AmountEditor
+            key={`level_threshold_${level}_milli`}
+            name={`level_threshold_${level}_milli`}
+            value={read(`level_threshold_${level}_milli`)}
+            title={t('admin.settings.economy.thresholdTitle', { level })}
+            hint={t('admin.settings.economy.thresholdHint')}
+          />
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 function ConfigEditor({ name, initialValue }: { name: string; initialValue: SiteConfigValue }) {
   const { t } = useTranslation();
@@ -114,27 +395,37 @@ export function SettingsPage() {
         title={t('admin.settings.title')}
         description={t('admin.settings.description')}
       />
-      <Card>
-        <div className="card-title-row">
-          <h2>{t('admin.settings.listTitle')}</h2>
-        </div>
-        <p className="inline-notice">{t('admin.settings.sensitiveHint')}</p>
-        {config.isPending ? (
+      {config.isPending ? (
+        <Card>
           <LoadingState />
-        ) : config.error ? (
+        </Card>
+      ) : config.error ? (
+        <Card>
           <ErrorState error={config.error} onRetry={() => void config.refetch()} />
-        ) : Object.keys(config.data).length === 0 ? (
+        </Card>
+      ) : Object.keys(config.data).length === 0 ? (
+        <Card>
           <EmptyState title={t('admin.settings.empty')} body={t('admin.settings.emptyBody')} />
-        ) : (
-          <div className="config-list">
-            {Object.entries(config.data)
-              .sort(([left], [right]) => left.localeCompare(right))
-              .map(([name, value]) => (
-                <ConfigEditor key={name} name={name} initialValue={value} />
-              ))}
-          </div>
-        )}
-      </Card>
+        </Card>
+      ) : (
+        <>
+          <EconomySection config={config.data} />
+          <Card>
+            <div className="card-title-row">
+              <h2>{t('admin.settings.listTitle')}</h2>
+            </div>
+            <p className="inline-notice">{t('admin.settings.sensitiveHint')}</p>
+            <div className="config-list">
+              {Object.entries(config.data)
+                .filter(([name]) => !ECONOMY_KEY_SET.has(name))
+                .sort(([left], [right]) => left.localeCompare(right))
+                .map(([name, value]) => (
+                  <ConfigEditor key={name} name={name} initialValue={value} />
+                ))}
+            </div>
+          </Card>
+        </>
+      )}
     </div>
   );
 }

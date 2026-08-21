@@ -29,7 +29,36 @@
       "accountCreated": "创建时间",
       "accountStatus": "状态",
       "active": "正常",
-      "banned": "已封禁"
+      "banned": "已封禁",
+      "economySectionTitle": "积分、等级与签到",
+      "economyTitle": "积分与等级",
+      "creditsBalance": "悠哉积分",
+      "donationCredit": "捐赠回馈积分",
+      "level": "当前等级",
+      "levelValue": "Lv{{level}}",
+      "levelManualSuffix": "（管理员设定）",
+      "levelHint": "等级由服务端解析；手动设定优先于自动等级，本页不做任何计算。",
+      "exactMilli": "精确值：{{value}} 毫积分"
+    },
+    "checkin": {
+      "title": "每日签到",
+      "unavailable": "签到未启用",
+      "today": "今日状态",
+      "checkedIn": "已签到",
+      "notCheckedIn": "未签到",
+      "awardRange": "奖励范围（积分）",
+      "threshold": "签到门槛（积分）",
+      "thresholdNone": "无上限",
+      "thresholdHint": "门槛只影响能否签到：达到后服务端会拒绝新签到，不会截断已发放的奖励。",
+      "submit": "立即签到",
+      "done": "签到成功：获得 {{award}} 积分，当前悠哉积分 {{credits}}。"
+    },
+    "steward": {
+      "nav": "协管",
+      "title": "协管中心",
+      "description": "等级 5 的协管入口。能否使用协管能力始终由服务端决定。",
+      "comingTitle": "协管功能即将上线",
+      "comingBody": "协管能力（日志协查、捐赠审核等）尚未开放。此页面不会提供或模拟任何协管操作。"
     },
     "endpoints": {
       "nav": "端点",

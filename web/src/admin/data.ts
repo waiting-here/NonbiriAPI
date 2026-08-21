@@ -33,12 +33,22 @@ export interface AdminUser {
   discord_id: string;
   is_banned: boolean;
   banned_reason: string;
+  /** Nullable ban deadline as unix seconds; absent while there is none. */
+  banned_until?: number;
   endpoint_limit?: number;
   rpm_limit?: number;
   total_requests: number;
   total_prompt_tokens: number;
   total_completion_tokens: number;
   total_unknown_usage_requests: number;
+  /** Canonical decimal milli-credit string; the signed consumption balance. */
+  credits_balance: string;
+  /** Canonical decimal milli-credit string; the non-negative donor reward. */
+  donation_credit_balance: string;
+  /** Manual level override (1..5); absent means no override (automatic). */
+  level?: number;
+  /** Persisted automatic high-water level (1..4). */
+  auto_level: number;
   created_at: string;
 }
 
@@ -175,6 +185,18 @@ function recordValue(record: UnknownRecord, key: string): unknown {
   return record[key];
 }
 
+// Economy amounts stay canonical decimal milli-credit strings end to end (the
+// shared formatter renders them; they never pass through Number()). A
+// malformed value stays '' and renders as a placeholder.
+function amountValue(value: unknown): string {
+  return typeof value === 'string' && value.length <= 32 ? value : '';
+}
+
+// Nullable integer projection: present only for a finite number.
+function optionalNumberValue(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 interface PagePayload {
   items: unknown[];
   hasNext: boolean;
@@ -217,6 +239,9 @@ function normalizeUser(payload: unknown): AdminUser {
   const record = asRecord(payload) ?? {};
   const endpointLimit = recordValue(record, 'endpoint_limit');
   const rpmLimit = recordValue(record, 'rpm_limit');
+  const bannedUntil = optionalNumberValue(recordValue(record, 'banned_until'));
+  const level = optionalNumberValue(recordValue(record, 'level'));
+  const autoLevel = optionalNumberValue(recordValue(record, 'auto_level'));
   return {
     id: idValue(recordValue(record, 'id')),
     username: text(recordValue(record, 'username'), 128, '—'),
@@ -226,6 +251,9 @@ function normalizeUser(payload: unknown): AdminUser {
     discord_id: text(recordValue(record, 'discord_id'), 128, '—'),
     is_banned: booleanValue(recordValue(record, 'is_banned')),
     banned_reason: text(recordValue(record, 'banned_reason'), 512),
+    ...(bannedUntil !== undefined && bannedUntil >= 0
+      ? { banned_until: Math.trunc(bannedUntil) }
+      : {}),
     ...(typeof endpointLimit === 'number' && Number.isFinite(endpointLimit)
       ? { endpoint_limit: Math.max(0, Math.trunc(endpointLimit)) }
       : {}),
@@ -239,6 +267,11 @@ function normalizeUser(payload: unknown): AdminUser {
       0,
       integerValue(recordValue(record, 'total_unknown_usage_requests')),
     ),
+    credits_balance: amountValue(recordValue(record, 'credits_balance')),
+    donation_credit_balance: amountValue(recordValue(record, 'donation_credit_balance')),
+    ...(level !== undefined && level >= 1 && level <= 5 ? { level: Math.trunc(level) } : {}),
+    auto_level:
+      autoLevel !== undefined && autoLevel >= 1 && autoLevel <= 4 ? Math.trunc(autoLevel) : 1,
     created_at: dateValue(recordValue(record, 'created_at')),
   };
 }
@@ -516,6 +549,120 @@ export function useResolveAdminAlert() {
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: adminKeys.alertsRoot });
+    },
+  });
+}
+
+export interface AdminCreditAdjustmentInput {
+  userId: string;
+  /** Canonical decimal milli-credit delta; omitted when the field is blank. */
+  creditsDelta?: string;
+  /** Canonical decimal milli-credit delta; omitted when the field is blank. */
+  donationCreditDelta?: string;
+  /**
+   * Idempotency key. One key per logical confirmation: a retry of the same
+   * submission reuses it verbatim (the server returns the first application's
+   * result), a changed submission gets a fresh key.
+   */
+  operationId: string;
+  /** Bounded, non-empty reason required by the server for every adjustment. */
+  reason: string;
+}
+
+/**
+ * The economy mode of PATCH /admin/api/users/{id}: canonical decimal-string
+ * DELTAS (never target balances) plus the mandatory operation_id and reason.
+ * The request carries no profile/ban field — the modes are mutually exclusive
+ * server-side. The response's credit balances are the balances as of THIS
+ * operation's application (the first one on an operation-id replay), so the
+ * returned row is rendered as-is; the user list is refetched, never patched.
+ */
+export function useAdminAdjustUserCredits() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: AdminCreditAdjustmentInput) => {
+      const json: Record<string, string> = {
+        operation_id: input.operationId,
+        reason: input.reason,
+      };
+      if (input.creditsDelta !== undefined) json.credits = input.creditsDelta;
+      if (input.donationCreditDelta !== undefined) json.donation_credit = input.donationCreditDelta;
+      const payload = await apiFetch<unknown>(
+        `/admin/api/users/${encodeURIComponent(input.userId)}`,
+        { method: 'PATCH', json },
+      );
+      if (!asRecord(payload)) {
+        throw new ApiError('invalid_response', 'The server returned an invalid user.', 200);
+      }
+      return normalizeUser(payload);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: adminKeys.usersRoot });
+    },
+  });
+}
+
+/**
+ * The level tri-state of the profile mode: a number 1..5 sets the manual
+ * override, null resets to the automatic high-water mark. Only the level
+ * field is sent (profile mode must not mix with economy fields).
+ */
+export function useAdminUpdateUserLevel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ userId, level }: { userId: string; level: number | null }) => {
+      const payload = await apiFetch<unknown>(`/admin/api/users/${encodeURIComponent(userId)}`, {
+        method: 'PATCH',
+        json: { level },
+      });
+      if (!asRecord(payload)) {
+        throw new ApiError('invalid_response', 'The server returned an invalid user.', 200);
+      }
+      return normalizeUser(payload);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: adminKeys.usersRoot });
+    },
+  });
+}
+
+export interface AdminBanInput {
+  userId: string;
+  /** Optional bounded reason. */
+  reason?: string;
+  /**
+   * Ban lifetime in seconds. Omitted (undefined) means a permanent ban; the
+   * server stores the resulting absolute deadline and reports banned_until.
+   */
+  durationSeconds?: number;
+}
+
+/** POST /admin/api/users/{id}/ban — sessions and caller keys die atomically. */
+export function useAdminBanUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, reason, durationSeconds }: AdminBanInput) =>
+      apiFetch<void>(`/admin/api/users/${encodeURIComponent(userId)}/ban`, {
+        method: 'POST',
+        json: {
+          ...(reason ? { reason } : {}),
+          ...(durationSeconds !== undefined ? { duration_seconds: durationSeconds } : {}),
+        },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: adminKeys.usersRoot });
+    },
+  });
+}
+
+/** POST /admin/api/users/{id}/unban — no body; the user re-issues their key. */
+export function useAdminUnbanUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) =>
+      apiFetch<void>(`/admin/api/users/${encodeURIComponent(userId)}/unban`, { method: 'POST' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: adminKeys.usersRoot });
     },
   });
 }

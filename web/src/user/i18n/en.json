@@ -29,7 +29,36 @@
       "accountCreated": "Account created",
       "accountStatus": "Status",
       "active": "Active",
-      "banned": "Banned"
+      "banned": "Banned",
+      "economySectionTitle": "Credits, level & check-in",
+      "economyTitle": "Credits & level",
+      "creditsBalance": "Nonbiri credits",
+      "donationCredit": "Donor reward credits",
+      "level": "Current level",
+      "levelValue": "Lv{{level}}",
+      "levelManualSuffix": " (set by admin)",
+      "levelHint": "The level is resolved by the server; a manual override takes precedence over the automatic level. This page computes nothing.",
+      "exactMilli": "exact value: {{value}} milli-credits"
+    },
+    "checkin": {
+      "title": "Daily check-in",
+      "unavailable": "Check-in is not available",
+      "today": "Today",
+      "checkedIn": "Checked in",
+      "notCheckedIn": "Not checked in yet",
+      "awardRange": "Award range (credits)",
+      "threshold": "Check-in threshold (credits)",
+      "thresholdNone": "No limit",
+      "thresholdHint": "The threshold only gates admission: once reached the server refuses new check-ins; an admitted award is never truncated.",
+      "submit": "Check in",
+      "done": "Checked in: awarded {{award}} credits; the Nonbiri credits balance is now {{credits}}."
+    },
+    "steward": {
+      "nav": "Steward",
+      "title": "Steward center",
+      "description": "The level-5 co-management entry. Whether steward capabilities apply is always decided server-side.",
+      "comingTitle": "Steward tools are coming",
+      "comingBody": "Co-management capabilities (log review, donation review, and more) are not open yet. This page does not provide or simulate any steward action."
     },
     "endpoints": {
       "nav": "Endpoints",

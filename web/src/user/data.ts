@@ -27,7 +27,39 @@ export interface UserSummary {
   blocked_reason?: string;
   endpoint_limit?: number;
   rpm_limit?: number;
+  /** Canonical decimal milli-credit string; the signed consumption balance. */
+  credits: string;
+  /** Canonical decimal milli-credit string; the non-negative donor reward. */
+  donation_credit: string;
+  /** Server-resolved effective level (1..5) for the request. */
+  effective_level: number;
+  /** Manual override when non-null; absent means the automatic level applies. */
+  manual_level?: number;
+  /** Nullable ban deadline as unix seconds; absent while there is none. */
+  banned_until?: number;
   created_at: string;
+}
+
+/**
+ * The check-in status projection. While the feature is unavailable the server
+ * sends exactly `{enabled:false}` — never a reason — so the unavailable shape
+ * carries nothing else either.
+ */
+export type CheckinStatus =
+  | { enabled: false }
+  | {
+      enabled: true;
+      checked_in_today: boolean;
+      credits: string;
+      award_min_milli: string;
+      award_max_milli: string;
+      credits_cap_milli: string;
+    };
+
+/** The committed outcome of one successful check-in (server-drawn award). */
+export interface CheckinResult {
+  award_milli: string;
+  credits: string;
 }
 
 export interface UserSessionResponse {
@@ -204,10 +236,28 @@ export const userKeys = {
     ] as const,
   logsRoot: ['user', 'logs'] as const,
   logOptions: ['user', 'log-options'] as const,
+  checkin: ['user', 'checkin'] as const,
 };
 
 function recordValue(record: UnknownRecord, key: string): unknown {
   return record[key];
+}
+
+// Economy amounts are canonical decimal milli-credit strings. The whitelist
+// keeps the wire string untouched (never Number()); a malformed value stays ''
+// and the shared formatter degrades it to a placeholder instead of guessing.
+function amountValue(value: unknown): string {
+  return typeof value === 'string' && value.length <= 32 ? value : '';
+}
+
+// Nullable integer projection: present only for a finite number.
+function optionalNumberValue(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function levelValue(value: unknown, fallback: number): number {
+  const parsed = optionalNumberValue(value);
+  return parsed !== undefined && parsed >= 1 && parsed <= 5 ? Math.trunc(parsed) : fallback;
 }
 
 function normalizeUser(value: unknown): UserSummary {
@@ -215,6 +265,8 @@ function normalizeUser(value: unknown): UserSummary {
   const lang = recordValue(record, 'lang') === 'zh' ? 'zh' : 'en';
   const endpointLimit = recordValue(record, 'endpoint_limit');
   const rpmLimit = recordValue(record, 'rpm_limit');
+  const manualLevel = optionalNumberValue(recordValue(record, 'manual_level'));
+  const bannedUntil = optionalNumberValue(recordValue(record, 'banned_until'));
   return {
     id: idValue(recordValue(record, 'id')),
     username: text(recordValue(record, 'username'), 128, '—'),
@@ -239,6 +291,13 @@ function normalizeUser(value: unknown): UserSummary {
     ...(typeof rpmLimit === 'number' && Number.isFinite(rpmLimit)
       ? { rpm_limit: Math.max(0, Math.trunc(rpmLimit)) }
       : {}),
+    credits: amountValue(recordValue(record, 'credits')),
+    donation_credit: amountValue(recordValue(record, 'donation_credit')),
+    effective_level: levelValue(recordValue(record, 'effective_level'), 1),
+    ...(manualLevel !== undefined && manualLevel >= 1 && manualLevel <= 5
+      ? { manual_level: Math.trunc(manualLevel) }
+      : {}),
+    ...(bannedUntil !== undefined && bannedUntil >= 0 ? { banned_until: Math.trunc(bannedUntil) } : {}),
     created_at: dateValue(recordValue(record, 'created_at')),
   };
 }
@@ -793,5 +852,80 @@ export function useUserLogOptions(enabled = true) {
     },
     enabled,
     staleTime: 30_000,
+  });
+}
+
+/**
+ * Normalizes the GET /api/checkin projection. While unavailable the payload is
+ * exactly `{enabled:false}` with no reason; while enabled every amount is a
+ * canonical decimal milli-credit string the page renders through the shared
+ * formatter (never Number()). A missing or malformed field fails the query
+ * rather than letting the page invent an award range or status.
+ */
+function normalizeCheckinStatus(payload: unknown): CheckinStatus {
+  const record = asRecord(payload);
+  if (!record) {
+    throw new ApiError('invalid_response', 'The server returned an invalid check-in status.', 200);
+  }
+  if (recordValue(record, 'enabled') !== true) {
+    return { enabled: false };
+  }
+  const requiredAmount = (key: string): string => {
+    const value = amountValue(recordValue(record, key));
+    if (!value) {
+      throw new ApiError('invalid_response', 'The server returned an invalid check-in status.', 200);
+    }
+    return value;
+  };
+  return {
+    enabled: true,
+    checked_in_today: booleanValue(recordValue(record, 'checked_in_today')),
+    credits: requiredAmount('credits'),
+    award_min_milli: requiredAmount('award_min_milli'),
+    award_max_milli: requiredAmount('award_max_milli'),
+    credits_cap_milli: requiredAmount('credits_cap_milli'),
+  };
+}
+
+/** The read-only daily check-in status; the server decides availability. */
+export function useCheckinStatus(enabled = true) {
+  return useQuery({
+    queryKey: userKeys.checkin,
+    queryFn: async () => normalizeCheckinStatus(await apiFetch<unknown>('/api/checkin')),
+    enabled,
+    staleTime: 5_000,
+  });
+}
+
+/**
+ * The atomic daily check-in. The client supplies nothing (no award, no day);
+ * the mutation returns the server-drawn award and the new balance. Balances
+ * are never patched locally — the session and check-in queries are invalidated
+ * so the refetch is authoritative.
+ */
+export function useCheckin() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const record = asRecord(await apiFetch<unknown>('/api/checkin', { method: 'POST' }));
+      const award = record ? amountValue(recordValue(record, 'award_milli')) : '';
+      const credits = record ? amountValue(recordValue(record, 'credits')) : '';
+      if (!award || !credits) {
+        throw new ApiError('invalid_response', 'The server returned an invalid check-in result.', 200);
+      }
+      return { award_milli: award, credits } satisfies CheckinResult;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: userKeys.session });
+      void queryClient.invalidateQueries({ queryKey: userKeys.me });
+      void queryClient.invalidateQueries({ queryKey: userKeys.checkin });
+    },
+    onError: (error) => {
+      // A 409 means the day was already consumed: refetch and settle into the
+      // checked-in state instead of leaving a stale "not checked in" view.
+      if (error instanceof ApiError && error.code === 'already_checked_in') {
+        void queryClient.invalidateQueries({ queryKey: userKeys.checkin });
+      }
+    },
   });
 }
