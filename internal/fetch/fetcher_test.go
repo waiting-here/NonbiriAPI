@@ -17,6 +17,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -94,6 +95,7 @@ func newFetchFixture(t *testing.T, mutate func(*FetcherConfig, *egress.StackOpti
 	f.vault = vault
 
 	path := filepath.Join(t.TempDir(), "fetch.db")
+	dbtest.EnsureOwnerOnlyParent(t, path)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatalf("db open: %v", err)

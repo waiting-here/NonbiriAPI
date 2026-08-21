@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -36,6 +37,7 @@ func TestOpenRequiresSecretCodec(t *testing.T) {
 func TestEndpointSecretPersistsOnlyAsCiphertext(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "secret-boundary.db")
+	dbtest.EnsureOwnerOnlyParent(t, path)
 	key := bytes.Repeat([]byte{0x93}, secret.MasterKeyBytes)
 	vault, err := secret.New(key)
 	clear(key)
