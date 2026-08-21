@@ -16,12 +16,9 @@ import {
 import { apiFetch } from '@shared/query/http';
 import { asRecord, hasControlCharacters, optionalText } from '@shared/query/normalize';
 import { adminKeys, type AdminUser, useAdminUsers } from '../data';
+import { formatCount } from '@shared/utils/formatNumber';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
-
-function number(value: number): string {
-  return value.toLocaleString();
-}
 
 function elevatedToken(payload: unknown): string | undefined {
   const record = asRecord(payload);
@@ -310,8 +307,8 @@ export function UsersPage() {
                       </td>
                       <td><UserLimits user={user} /></td>
                       <td>
-                        <span className="table-note">{number(user.total_requests)} {t('admin.users.requests')}</span>
-                        <span className="table-note">{number(user.total_unknown_usage_requests)} {t('admin.users.unknown')}</span>
+                        <span className="table-note">{formatCount(user.total_requests).display} {t('admin.users.requests')}</span>
+                        <span className="table-note">{formatCount(user.total_unknown_usage_requests).display} {t('admin.users.unknown')}</span>
                       </td>
                       <td><ReadOnlyValue value={formatDateTime(user.created_at)} /></td>
                       <td>

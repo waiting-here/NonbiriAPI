@@ -11,6 +11,8 @@ import {
   ReadOnlyValue,
 } from '@shared/components/States';
 import { type AdminLogFilter, useAdminLogs, useAdminUsage } from '../data';
+import { CompactNumber } from '@shared/components/CompactNumber';
+import { formatCompact, formatCount, type FormattedNumber } from '@shared/utils/formatNumber';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 
@@ -22,12 +24,8 @@ function datetimeLocalToUnix(value: string): number | undefined {
   return Math.max(0, Math.floor(millis / 1000));
 }
 
-function number(value: number): string {
-  return value.toLocaleString();
-}
-
-function usageText(value: number | undefined): string {
-  return value === undefined ? '—' : number(value);
+function usageValue(value: number | undefined): FormattedNumber {
+  return value === undefined ? { display: '—', exact: '—', abbreviated: false } : formatCompact(value);
 }
 
 export function LogsPage() {
@@ -101,19 +99,25 @@ export function LogsPage() {
           <div className="metric-grid">
             <div className="metric-card">
               <p>{t('admin.dashboard.requests')}</p>
-              <strong className="metric-value">{number(usage.data.total_requests)}</strong>
+              <strong className="metric-value">{formatCount(usage.data.total_requests).display}</strong>
             </div>
             <div className="metric-card">
-              <p>{t('admin.dashboard.promptTokens')}</p>
-              <strong className="metric-value">{number(usage.data.total_prompt_tokens)}</strong>
+              <p>{t('common.tokens.input')}</p>
+              <strong className="metric-value">
+                <CompactNumber value={formatCompact(usage.data.total_prompt_tokens)} />
+              </strong>
             </div>
             <div className="metric-card">
-              <p>{t('admin.dashboard.completionTokens')}</p>
-              <strong className="metric-value">{number(usage.data.total_completion_tokens)}</strong>
+              <p>{t('common.tokens.output')}</p>
+              <strong className="metric-value">
+                <CompactNumber value={formatCompact(usage.data.total_completion_tokens)} />
+              </strong>
             </div>
             <div className="metric-card">
               <p>{t('admin.dashboard.unknownUsage')}</p>
-              <strong className="metric-value">{number(usage.data.total_unknown_usage_requests)}</strong>
+              <strong className="metric-value">
+                {formatCount(usage.data.total_unknown_usage_requests).display}
+              </strong>
             </div>
           </div>
         )}
@@ -226,11 +230,11 @@ export function LogsPage() {
                           <span className="status-badge is-inactive">{t('admin.logs.unknownUsage')}</span>
                         ) : (
                           <span className="table-note">
-                            {t('admin.logs.promptTokens')}: {usageText(log.prompt_tokens)}
+                            {t('common.tokens.inputShort')}: <CompactNumber value={usageValue(log.prompt_tokens)} />
                             <br />
-                            {t('admin.logs.completionTokens')}: {usageText(log.completion_tokens)}
+                            {t('common.tokens.outputShort')}: <CompactNumber value={usageValue(log.completion_tokens)} />
                             <br />
-                            {t('admin.logs.totalTokens')}: {usageText(log.total_tokens)}
+                            {t('common.tokens.totalShort')}: <CompactNumber value={usageValue(log.total_tokens)} />
                           </span>
                         )}
                       </td>

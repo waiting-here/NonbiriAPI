@@ -636,6 +636,14 @@
   white-space: nowrap;
 }
 
+/* Abbreviated large numbers (K/M/B/T): the dotted underline hints that the
+   exact value is available via hover or keyboard focus. */
+.compact-number {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2em;
+}
+
 .table-wrap {
   width: 100%;
   overflow-x: auto;

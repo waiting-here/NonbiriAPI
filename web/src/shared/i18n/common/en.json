@@ -58,6 +58,14 @@
     "unresolved": "Unresolved",
     "from": "From",
     "to": "To",
+    "tokens": {
+      "input": "Input tokens",
+      "output": "Output tokens",
+      "total": "Total tokens",
+      "inputShort": "Input",
+      "outputShort": "Output",
+      "totalShort": "Total"
+    },
     "pagination": "Pagination",
     "page": "Page {{page}}",
     "previous": "Previous",
