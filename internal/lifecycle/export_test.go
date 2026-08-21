@@ -218,6 +218,14 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// Credit balances and ledger entries are part of the export (schema v2):
+	// one adjustment gives the projection known string values.
+	if _, err := st.ApplyAdminCreditAdjustment(context.Background(), db.AdminCreditAdjustment{
+		TargetUserID: user.ID, ActorUserID: user.ID, OperationID: "export-ledger-1",
+		Reason: "export fixture", CreditsSet: true, CreditsDelta: 12345, DonationSet: true, DonationDelta: 678,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, exportRequest("cap-token"))
 	if rec.Code != http.StatusOK {
@@ -240,6 +248,14 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 			Discord  string `json:"discord_id"`
 			Username string `json:"username"`
 		} `json:"user"`
+		CreditLedger []struct {
+			ID                  int64  `json:"id"`
+			Kind                string `json:"kind"`
+			CreditsDelta        string `json:"credits_delta"`
+			DonationCreditDelta string `json:"donation_credit_delta"`
+			CreditsAfter        string `json:"credits_after"`
+			Reason              string `json:"reason"`
+		} `json:"credit_ledger"`
 		Endpoints []struct {
 			ID      int64  `json:"id"`
 			BaseURL string `json:"base_url"`
@@ -302,6 +318,16 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	}
 	if pkg.Usage.TotalRequests != 1 || pkg.LogSummary.TotalLogs != 1 {
 		t.Fatalf("usage=%+v logs=%+v", pkg.Usage, pkg.LogSummary)
+	}
+	// Credit ledger section: exactly the seeded entry with canonical string
+	// values and the bounded reason; nothing else ever enters this section.
+	if len(pkg.CreditLedger) != 1 {
+		t.Fatalf("credit_ledger rows=%d, want 1", len(pkg.CreditLedger))
+	}
+	entry := pkg.CreditLedger[0]
+	if entry.Kind != "admin_adjustment" || entry.CreditsDelta != "12345" ||
+		entry.DonationCreditDelta != "678" || entry.CreditsAfter != "12345" || entry.Reason != "export fixture" {
+		t.Fatalf("credit_ledger entry=%+v", entry)
 	}
 	if pkg.Usage.TotalUncachedInputTokens != 2 || pkg.Usage.TotalCacheWriteInputTokens != 3 ||
 		pkg.Usage.TotalCacheReadInputTokens != 5 || pkg.Usage.TotalOutputTokens != 7 ||

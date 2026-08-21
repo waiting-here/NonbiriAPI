@@ -64,6 +64,7 @@ var expectedTables = []string{
 	"models",
 	"model_bindings",
 	"request_logs",
+	"credit_ledger",
 	"user_issues",
 	"admin_alerts",
 	"user_activity_daily",

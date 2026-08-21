@@ -8,6 +8,7 @@ package adminapi
 import (
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
@@ -31,7 +32,13 @@ type userResp struct {
 	TotalPromptTokens         int64  `json:"total_prompt_tokens"`
 	TotalCompletionTokens     int64  `json:"total_completion_tokens"`
 	TotalUnknownUsageRequests int64  `json:"total_unknown_usage_requests"`
-	CreatedAt                 int64  `json:"created_at"`
+	// Economic balances are canonical decimal strings (never JSON numbers):
+	// credits_balance is the signed consumption balance, the
+	// donation_credit_balance name keeps a delta adjustment response from
+	// being confused with the resulting balance.
+	CreditsBalance        string `json:"credits_balance"`
+	DonationCreditBalance string `json:"donation_credit_balance"`
+	CreatedAt             int64  `json:"created_at"`
 }
 
 // unixSecondsPtr projects a nullable deadline as a JSON number pointer.
@@ -71,6 +78,8 @@ func userResponse(u *db.User) userResp {
 		TotalPromptTokens:         u.TotalPromptTokens,
 		TotalCompletionTokens:     u.TotalCompletionTokens,
 		TotalUnknownUsageRequests: u.TotalUnknownUsageRequests,
+		CreditsBalance:            credits.FormatAmount(u.Credits),
+		DonationCreditBalance:     credits.FormatAmount(u.DonationCredit),
 		CreatedAt:                 u.CreatedAt.Unix(),
 	}
 }
