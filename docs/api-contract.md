@@ -546,11 +546,13 @@ Known `site_config` keys (the authoritative key set is enforced by the handler):
 - `discord_guild_id`, `discord_role_id` — registration gate (both must match to allow new registration; either blank pauses registration)
 - `oauth_start_rate_limit`, `oauth_start_rate_window_seconds`, `oauth_start_rate_penalty_seconds` — in-process per-client-IP OAuth/elevation-start admission
 - `maintenance_mode`, `registration_open` — public boolean site-state toggles
+- `site_timezone_offset_minutes` — nullable integer, multiple of 30 in `[-720,+840]`; JSON `null` (the default) means "not configured" and is distinct from an explicit `0` (UTC). While unset, site-day-key features are force-disabled behind the ordinary `feature_disabled` error without revealing why. Once any check-in or activity row exists the value is frozen: every further write — including rewriting the identical value or after those rows are cleaned up — is refused with `conflict`. Clearing it with JSON `null` is always rejected
 - `alert_prefs_*` — bounded administrator alert-center preference namespace
 
-Values are typed: integer keys (`default_endpoint_limit` `[0,10000]`; resource-count caps `[1,10000]`; RPM keys `[1,4096]`; concurrency keys `[1,100000]`; OAuth limit `[0,1000]`, window `[1,3600]`, penalty `[0,3600]`) accept only JSON integers. Boolean keys accept only JSON booleans. Single-line text is bounded/control-free; the four legal overrides accept bounded multiline text (≤65536 bytes, preserving newline/tab while rejecting other controls); `default_locale` is exactly `zh`/`en`, and `legal_authoritative_locale` also permits blank. `null` is rejected (clearing a per-user limit is expressed through the user-level NULL
+Values are typed: integer keys (`default_endpoint_limit` `[0,10000]`; resource-count caps `[1,10000]`; RPM keys `[1,4096]`; concurrency keys `[1,100000]`; OAuth limit `[0,1000]`, window `[1,3600]`, penalty `[0,3600]`) accept only JSON integers. Boolean keys accept only JSON booleans. Single-line text is bounded/control-free; the four legal overrides accept bounded multiline text (≤65536 bytes, preserving newline/tab while rejecting other controls); `default_locale` is exactly `zh`/`en`, and `legal_authoritative_locale` also permits blank. `site_timezone_offset_minutes` accepts only a canonical JSON integer within its range and projects as JSON `null` while unset or manually corrupted. `null` is rejected for every other key (clearing a per-user limit is expressed through the user-level NULL
 semantics; blanking a text gate value uses `""`). `GET` returns the effective
-typed value for every known key (documented defaults when unset) and never
+typed value for every known key (documented defaults when unset; `null` for the
+nullable timezone key) and never
 projects an unknown stored row; `PATCH` of an unknown key is `not_found`.
 `PATCH` responds `200 {key, value}` with the applied typed value.
 
