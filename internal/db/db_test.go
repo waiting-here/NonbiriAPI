@@ -66,6 +66,8 @@ var expectedTables = []string{
 	"request_logs",
 	"user_issues",
 	"admin_alerts",
+	"user_activity_daily",
+	"site_activity_daily",
 	"site_config",
 }
 

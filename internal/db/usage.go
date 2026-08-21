@@ -96,6 +96,12 @@ type RequestLogInput struct {
 	UsageUnknown          bool
 	ErrorCode             string
 	ErrorDiag             string
+	// Activity, when non-nil, records this committed request as one
+	// successful product-activity event (user + site daily aggregation) in
+	// the same transaction as the log row and accumulators. While the site
+	// timezone offset is unset it is silently skipped: no day key is ever
+	// generated under an implicit default.
+	Activity *ActivityDelta
 }
 
 func (i RequestLogInput) validate() error {
@@ -136,6 +142,11 @@ func (i RequestLogInput) validate() error {
 	}
 	if len(i.ErrorCode) > maxLogErrorCodeLen || !stableErrorCodes[i.ErrorCode] {
 		return fmt.Errorf("usage: error code is not stable")
+	}
+	if i.Activity != nil {
+		if err := i.Activity.validate(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -323,6 +334,21 @@ WHERE id = ?
 	}
 	if updated != 1 {
 		return fmt.Errorf("user usage accumulator overflow; accounting failed closed")
+	}
+	if input.Activity != nil {
+		// Same-transaction product-activity recording for the committed
+		// request. The day key resolves from the authoritative offset inside
+		// this transaction; an unset offset means activity is disabled and the
+		// skip must not fail the accounting. The user row exists here (the log
+		// insert above selected FROM users), so the write cannot be suppressed.
+		dayKey, terr := siteDayKeyAtTx(tx, completedUnix)
+		if errors.Is(terr, ErrTimezoneUnavailable) {
+			// Activity disabled: keep the request accounting, skip the rollup.
+		} else if terr != nil {
+			return fmt.Errorf("resolve activity day key: %w", terr)
+		} else if _, aerr := recordActivityTx(ctx, tx, input.UserID, dayKey, *input.Activity, completedUnix); aerr != nil {
+			return fmt.Errorf("record request activity: %w", aerr)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit request record: %w", err)

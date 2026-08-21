@@ -8,11 +8,22 @@ package db
 //     a single transaction. Most children are removed by the schema's
 //     ON DELETE CASCADE (sessions, caller_keys, endpoints -> endpoint_keys ->
 //     fetched_models / model_bindings, models -> model_bindings, request_logs,
-//     user_issues). admin_alerts.subject_user_id has NO foreign key on purpose
-//     (see schema.go): existing orphan alerts for the deleted user are removed
-//     explicitly here, and FUTURE late callbacks are suppressed atomically by
-//     RecordAdminAlert's INSERT ... SELECT ... WHERE EXISTS users so no new
-//     orphan can ever be written.
+//     user_issues, user_activity_daily). admin_alerts.subject_user_id has NO
+//     foreign key on purpose (see schema.go): existing orphan alerts for the
+//     deleted user are removed explicitly here, and FUTURE late callbacks are
+//     suppressed atomically by RecordAdminAlert's INSERT ... SELECT ... WHERE
+//     EXISTS users so no new orphan can ever be written.
+//
+//     Activity rollup: before the user row is deleted, the affected site-local
+//     day keys are captured from user_activity_daily (bounded to the newest
+//     400 by the retention sweep; defensively capped here too). After the
+//     cascade removes the user's rows, every affected day's site_activity_daily
+//     row is recomputed from the surviving per-user rows inside this same
+//     transaction — and dropped entirely when no rows remain — so a deleted
+//     account can never leave a contribution in the site rollup. A late
+//     activity write linearizes against this transaction through the single
+//     SQLite writer: it either commits first (its day is captured and
+//     recomputed) or its INSERT ... WHERE EXISTS users no-ops after the delete.
 //   - RecordAdminAlert is the atomic late-callback suppression hook for the
 //     administrator alert center (track V and any other late writer). A
 //     user-subject alert is inserted only while the subject user still exists;
@@ -98,10 +109,19 @@ func (s *Store) DeleteUserAccount(ctx context.Context, userID int64) error {
 		return fmt.Errorf("delete account: clean orphan alerts: %w", err)
 	}
 
-	// 2. Atomic conditional delete of the user. is_admin=0 in the WHERE is the
+	// 2. Capture the site-local days this user contributed activity to, so the
+	//    site rollup can be recomputed after the cascade. Retention keeps at
+	//    most 400 days per user; the LIMIT is a defensive bound, not the
+	//    primary guarantee.
+	days, err := distinctActivityDaysTx(ctx, tx, userID)
+	if err != nil {
+		return fmt.Errorf("delete account: collect activity days: %w", err)
+	}
+
+	// 3. Atomic conditional delete of the user. is_admin=0 in the WHERE is the
 	//    administrator-protection backstop; the cascade removes sessions,
 	//    caller_keys, endpoints (+keys+fetched_models+bindings), models
-	//    (+bindings), request_logs, and user_issues.
+	//    (+bindings), request_logs, user_issues, and user_activity_daily.
 	res, err := tx.ExecContext(ctx, `DELETE FROM users WHERE id = ? AND is_admin = 0`, userID)
 	if err != nil {
 		return fmt.Errorf("delete account: delete user: %w", err)
@@ -111,6 +131,14 @@ func (s *Store) DeleteUserAccount(ctx context.Context, userID int64) error {
 		return fmt.Errorf("delete account: rows affected: %w", err)
 	}
 	if affected == 1 {
+		// 4. Recompute each affected day's site rollup from the surviving
+		//    per-user rows (the cascade has already removed this user's rows),
+		//    dropping days with no remaining contributor entirely.
+		for _, day := range days {
+			if err := recomputeSiteActivityDayTx(ctx, tx, day); err != nil {
+				return fmt.Errorf("delete account: recompute site activity: %w", err)
+			}
+		}
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("delete account: commit: %w", err)
 		}
@@ -118,7 +146,7 @@ func (s *Store) DeleteUserAccount(ctx context.Context, userID int64) error {
 		return nil
 	}
 
-	// 3. Zero rows affected: either the row is the administrator or it is
+	// 5. Zero rows affected: either the row is the administrator or it is
 	//    already gone. Classify for the right stable error. This read never
 	//    gates the delete (the delete already ran); it only reports.
 	var isAdmin int

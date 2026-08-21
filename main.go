@@ -397,6 +397,24 @@ func runMaintenanceSweep(ctx context.Context, store *db.Store, usageService *usa
 			slog.Error("resolved alert retention failed", "err", alertErr)
 		}
 	}
+	if store != nil && ctx.Err() == nil {
+		// Activity retention: day keys older than the frozen 400-day window are
+		// removed in bounded batches. An unset site timezone skips the sweep —
+		// no activity row can exist without a configured offset.
+		cutoff, cutoffErr := store.ActivityRetentionCutoffDay(time.Now().Unix())
+		switch {
+		case errors.Is(cutoffErr, db.ErrTimezoneUnavailable):
+			// Activity disabled: nothing to sweep.
+		case cutoffErr != nil:
+			slog.Error("activity retention cutoff failed", "err", cutoffErr)
+		default:
+			if _, early, actErr := store.CleanupActivityBefore(ctx, cutoff); actErr != nil && ctx.Err() == nil {
+				slog.Error("activity retention failed", "err", actErr)
+			} else if early && ctx.Err() == nil {
+				slog.Info("activity retention stopped early; resuming next sweep")
+			}
+		}
+	}
 }
 
 func applyPersistedRuntimeConfig(store *db.Store, runtime adminapi.RuntimeApplier) error {

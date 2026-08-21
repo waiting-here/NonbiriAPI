@@ -68,6 +68,17 @@ func (s *Store) SiteTimezoneOffsetMinutes() (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	offset, perr := parseSiteTimezoneOffset(raw)
+	if perr != nil {
+		return 0, ErrTimezoneUnavailable
+	}
+	return int(offset), nil
+}
+
+// parseSiteTimezoneOffset parses a stored site_config value into a validated
+// offset. A missing row is an empty string and fails closed like any other
+// invalid value: an unset offset never falls back to an implicit default.
+func parseSiteTimezoneOffset(raw string) (int64, error) {
 	n, perr := strconv.Atoi(strings.TrimSpace(raw))
 	// Require the canonical decimal form: a manually corrupted or
 	// non-canonical row ("+30", "030", ...) fails closed instead of being
@@ -75,7 +86,33 @@ func (s *Store) SiteTimezoneOffsetMinutes() (int, error) {
 	if perr != nil || strconv.FormatInt(int64(n), 10) != strings.TrimSpace(raw) || !ValidSiteTimezoneOffset(n) {
 		return 0, ErrTimezoneUnavailable
 	}
-	return n, nil
+	return int64(n), nil
+}
+
+// siteDayKeyAtTx is the in-transaction variant of SiteDayKeyAt: it resolves
+// the configured offset from site_config inside the caller's transaction so
+// the day key and the business write it buckets share one consistent read of
+// the authoritative value. An unset or corrupt offset yields
+// ErrTimezoneUnavailable; callers treat that as "activity disabled" and skip
+// the write instead of generating a key under an implicit default.
+func siteDayKeyAtTx(tx *sql.Tx, unixSeconds int64) (int64, error) {
+	var raw sql.NullString
+	err := tx.QueryRow(`SELECT value FROM site_config WHERE key = ?`, SiteTimezoneKey).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrTimezoneUnavailable
+	}
+	if err != nil {
+		return 0, err
+	}
+	stored := ""
+	if raw.Valid {
+		stored = raw.String
+	}
+	offset, perr := parseSiteTimezoneOffset(stored)
+	if perr != nil {
+		return 0, ErrTimezoneUnavailable
+	}
+	return SiteDayKey(unixSeconds, offset), nil
 }
 
 // SiteDayKeyAt returns the site-local day key for a UTC unix instant: the

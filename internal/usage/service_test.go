@@ -780,3 +780,127 @@ func seedRawUser(t *testing.T, store *db.Store) int64 {
 	}
 	return id
 }
+
+func TestUsageRecordsDailyActivity(t *testing.T) {
+	store := openRawUsageStore(t)
+	// An explicit offset must be configured before any day key is generated.
+	if err := store.SetSiteTimezoneOffsetMinutes(330); err != nil {
+		t.Fatal(err)
+	}
+	userID := seedRawUser(t, store)
+
+	service, err := usage.NewService(usage.Config{Store: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := time.Unix(1700000000, 0).UTC()
+	attempt := forward.AttemptRecord{
+		AttemptID: "activity-attempt", UserID: userID, FullName: "p/m",
+		StartedAt: started, Duration: 10 * time.Millisecond, ClientStatus: 200,
+		Success: true,
+	}
+	usageRecord := forward.UsageRecord{
+		AttemptID: "activity-attempt", UserID: userID, FullName: "p/m",
+		Usage: openai.Usage{UncachedInputTokens: 2, CacheReadInputTokens: 4, OutputTokens: 3, Present: true},
+	}
+	service.HandleAttempt(attempt)
+	// A duplicate delivery of the same committed hook must not double-count
+	// the daily activity rollup either.
+	service.HandleUsage(usageRecord)
+	service.HandleUsage(usageRecord)
+
+	var requests, uncached, cacheRead, output int64
+	if err := store.DB().QueryRow(`SELECT api_requests, uncached_input_tokens,
+		cache_read_input_tokens, output_tokens FROM user_activity_daily WHERE user_id=?`, userID).
+		Scan(&requests, &uncached, &cacheRead, &output); err != nil {
+		t.Fatalf("read user activity: %v", err)
+	}
+	if requests != 1 || uncached != 2 || cacheRead != 4 || output != 3 {
+		t.Fatalf("user activity = (%d,%d,%d,%d), want (1,2,4,3)", requests, uncached, cacheRead, output)
+	}
+	var siteRequests, distinct int64
+	if err := store.DB().QueryRow(`SELECT api_requests, distinct_product_users FROM site_activity_daily`).
+		Scan(&siteRequests, &distinct); err != nil {
+		t.Fatalf("read site activity: %v", err)
+	}
+	if siteRequests != 1 || distinct != 1 {
+		t.Fatalf("site activity = (%d,%d), want (1,1)", siteRequests, distinct)
+	}
+}
+
+// A committed-but-failed request (protocol failure after commit, e.g. an
+// upstream error mid-stream) is accounted as a request but is never successful
+// API activity per the frozen contract; neither is an orphan usage record with
+// no attempt metadata (unknown success).
+func TestUsageFailedRequestNotActivity(t *testing.T) {
+	store := openRawUsageStore(t)
+	if err := store.SetSiteTimezoneOffsetMinutes(330); err != nil {
+		t.Fatal(err)
+	}
+	userID := seedRawUser(t, store)
+
+	service, err := usage.NewService(usage.Config{Store: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := time.Unix(1700000000, 0).UTC()
+	service.HandleAttempt(forward.AttemptRecord{
+		AttemptID: "failed-attempt", UserID: userID, FullName: "p/m",
+		StartedAt: started, Duration: 10 * time.Millisecond, ClientStatus: 502,
+		StableErrorCode: "upstream", Success: false,
+	})
+	service.HandleUsage(forward.UsageRecord{
+		AttemptID: "failed-attempt", UserID: userID, FullName: "p/m",
+		Usage: openai.Usage{UncachedInputTokens: 5, OutputTokens: 5, Present: true},
+	})
+	// Orphan usage record: success unknown, must not fabricate activity.
+	service.HandleUsage(forward.UsageRecord{
+		AttemptID: "orphan-attempt", UserID: userID, FullName: "p/m",
+		Usage: openai.Usage{UncachedInputTokens: 7, OutputTokens: 7, Present: true},
+	})
+
+	assertUserTotals(t, store, userID, 2, 12, 12, 0)
+	rows, err := store.DB().Query(`SELECT COUNT(*) FROM user_activity_daily`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var n int
+		if err := rows.Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Fatalf("failed/orphan requests recorded daily activity rows: %d", n)
+		}
+	}
+}
+
+func TestUsageActivitySkippedWithoutTimezone(t *testing.T) {
+	store := openRawUsageStore(t)
+	userID := seedRawUser(t, store)
+
+	service, err := usage.NewService(usage.Config{Store: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.HandleUsage(forward.UsageRecord{
+		AttemptID: "no-tz-attempt", UserID: userID,
+		Usage: openai.Usage{UncachedInputTokens: 1, OutputTokens: 1, Present: true},
+	})
+	assertUserTotals(t, store, userID, 1, 1, 1, 0)
+	rows, err := store.DB().Query(`SELECT COUNT(*) FROM user_activity_daily`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var n int
+		if err := rows.Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Fatalf("activity rows written without a configured timezone: %d", n)
+		}
+	}
+}

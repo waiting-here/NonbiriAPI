@@ -9,6 +9,7 @@
 //	POST   /admin/api/users/{id}/unban       unban
 //	GET    /admin/api/site-config            known keys -> typed values
 //	PATCH  /admin/api/site-config/{key}      update one known value
+//	GET    /admin/api/activity               daily site activity rollups (k-anonymity suppressed)
 //
 // Authorization is admin-session-only by construction: every route checks the
 // admin station and the admin principal itself, so a user session, caller
@@ -32,6 +33,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -76,6 +78,7 @@ func NewHandler(deps HandlerDeps) http.Handler {
 	h.mux.HandleFunc("POST /admin/api/users/{id}/unban", h.unbanUser)
 	h.mux.HandleFunc("GET /admin/api/site-config", h.getSiteConfig)
 	h.mux.HandleFunc("PATCH /admin/api/site-config/{key}", h.patchSiteConfig)
+	h.mux.HandleFunc("GET /admin/api/activity", h.getActivity)
 	return httpmw.API(h.mux)
 }
 
@@ -366,7 +369,8 @@ func (h *Handler) patchSiteConfig(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, httperr.New(httperr.CodeServiceUnavailable, "service unavailable"))
 		return
 	}
-	if _, ok := h.requireAdmin(w, r); !ok {
+	admin, ok := h.requireAdmin(w, r)
+	if !ok {
 		return
 	}
 	key := r.PathValue("key")
@@ -393,7 +397,9 @@ func (h *Handler) patchSiteConfig(w http.ResponseWriter, r *http.Request) {
 	// repository (freeze check and upsert share one write transaction) and no
 	// runtime singleton: every consumer reads the authoritative value per
 	// business transaction. It therefore bypasses the generic apply/persist
-	// path below.
+	// path below. It is also deliberately exempt from the console-write
+	// activity hook: recording activity would create temporal data and
+	// instantly freeze the very offset being configured for the first time.
 	if key == KeySiteTimezoneOffsetMinutes {
 		n, perr := strconv.ParseInt(value, 10, 64)
 		if perr != nil {
@@ -425,7 +431,10 @@ func (h *Handler) patchSiteConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := applyThenPersist(r.Context(), h.runtime, key, value, previous, func() error {
-		return h.store.SetSiteConfigValue(key, value)
+		// One transaction persists the value and records the administrator's
+		// console write as product activity; while the site timezone offset is
+		// unset the activity half is skipped inside that same transaction.
+		return h.store.SetSiteConfigValueWithActivity(r.Context(), key, value, admin.ID, time.Now())
 	}); err != nil {
 		slog.Error("site config update failed", "key", key, "err", err)
 		writeErr(w, httperr.New(httperr.CodeInternal, "configuration update failed"))

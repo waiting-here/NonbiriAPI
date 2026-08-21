@@ -189,6 +189,22 @@ func (s *Service) HandleUsage(record forward.UsageRecord) {
 		// no-usage request: count it, never fabricate token values.
 		UsageUnknown: !record.Usage.Present,
 	}
+	if ok && entry.record.Success {
+		// A protocol-successful committed request is one product-activity
+		// event; the four token buckets flow into the same day's rollup.
+		// Pre-commit failures never reach this hook, and committed-but-failed
+		// requests (Success=false, e.g. an upstream error mid-stream) are not
+		// successful API activity per the frozen contract. An orphan usage
+		// record with no attempt metadata has unknown success and must not
+		// fabricate an activity event either.
+		input.Activity = &db.ActivityDelta{
+			APIRequests:           1,
+			UncachedInputTokens:   record.Usage.UncachedInputTokens,
+			CacheWriteInputTokens: record.Usage.CacheWriteInputTokens,
+			CacheReadInputTokens:  record.Usage.CacheReadInputTokens,
+			OutputTokens:          record.Usage.OutputTokens,
+		}
+	}
 	if ok {
 		input.Model = entry.record.FullName
 		input.StatusCode = entry.record.ClientStatus
