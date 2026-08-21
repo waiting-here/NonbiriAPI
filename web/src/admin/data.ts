@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiFetch } from '@shared/query/http';
 import {
+  asArray,
   asRecord,
   booleanValue,
   dateValue,
@@ -74,28 +75,25 @@ export interface AdminUsage {
   total_unknown_usage_requests: number;
 }
 
-export interface AdminEndpointOverview {
-  id: string;
+/** One user's expandable entry inside a grouped overview row (frozen metadata only). */
+export interface AdminEndpointUserSummary {
   user_id: string;
-  connector_type: string;
-  base_url: string;
-  note: string;
-  enabled: boolean;
+  endpoint_count: number;
   key_count: number;
-  created_at: string;
-  updated_at: string;
+  enabled_count: number;
 }
 
-export interface AdminModelOverview {
-  id: string;
-  user_id: string;
-  provider: string;
-  model: string;
-  full_name: string;
-  route_strategy: 'ordered' | 'random';
-  silent_retry: boolean;
-  binding_count: number;
-  created_at: string;
+/**
+ * One canonical base_url's admin overview group. The normalizer whitelists
+ * exactly these fields, so a note, username, Discord identifier, or secret
+ * can never enter the request cache even if a faulty server sent one.
+ */
+export interface AdminEndpointOverviewGroup {
+  base_url: string;
+  user_count: number;
+  endpoint_count: number;
+  key_count: number;
+  users: AdminEndpointUserSummary[];
 }
 
 export interface AdminAlert {
@@ -139,8 +137,8 @@ export const adminKeys = {
     ] as const,
   logsRoot: ['admin', 'logs'] as const,
   usage: ['admin', 'usage'] as const,
-  endpoints: ['admin', 'endpoints'] as const,
-  models: ['admin', 'models'] as const,
+  endpoints: (page: number, pageSize: number, filter: string) =>
+    ['admin', 'endpoints', page, pageSize, filter] as const,
   alerts: (page: number, resolved?: boolean, pageSize?: number) =>
     [
       'admin',
@@ -184,13 +182,6 @@ function pagePayload(payload: unknown, pageSize = ADMIN_PAGE_SIZE): PagePayload 
     hasNext,
     ...(hasNext && cursor && cursor !== '—' ? { nextCursor: cursor } : {}),
   };
-}
-
-function listPayload(payload: unknown): unknown[] {
-  if (!isListPayload(payload)) {
-    throw new ApiError('invalid_response', 'The server returned an invalid list.', 200);
-  }
-  return listResult(payload, 1000).items;
 }
 
 function normalizeSession(payload: unknown): AdminSessionResponse {
@@ -280,33 +271,26 @@ function normalizeUsage(payload: unknown): AdminUsage {
   };
 }
 
-function normalizeEndpoint(payload: unknown): AdminEndpointOverview {
+function normalizeEndpointUser(payload: unknown): AdminEndpointUserSummary {
   const record = asRecord(payload) ?? {};
   return {
-    id: idValue(recordValue(record, 'id')),
     user_id: idValue(recordValue(record, 'user_id')),
-    connector_type: text(recordValue(record, 'connector_type'), 96, 'openai-compatible'),
-    base_url: text(recordValue(record, 'base_url'), 2048, '—'),
-    note: text(recordValue(record, 'note'), 512),
-    enabled: booleanValue(recordValue(record, 'enabled'), true),
+    endpoint_count: Math.max(0, integerValue(recordValue(record, 'endpoint_count'))),
     key_count: Math.max(0, integerValue(recordValue(record, 'key_count'))),
-    created_at: dateValue(recordValue(record, 'created_at')),
-    updated_at: dateValue(recordValue(record, 'updated_at')),
+    enabled_count: Math.max(0, integerValue(recordValue(record, 'enabled_count'))),
   };
 }
 
-function normalizeModel(payload: unknown): AdminModelOverview {
+// Field whitelist only: any extra server field (note, username, Discord ID,
+// secret material) is dropped here before it can reach the query cache.
+function normalizeEndpointGroup(payload: unknown): AdminEndpointOverviewGroup {
   const record = asRecord(payload) ?? {};
   return {
-    id: idValue(recordValue(record, 'id')),
-    user_id: idValue(recordValue(record, 'user_id')),
-    provider: text(recordValue(record, 'provider'), 64, '—'),
-    model: text(recordValue(record, 'model'), 64, '—'),
-    full_name: text(recordValue(record, 'full_name'), 160, '—'),
-    route_strategy: recordValue(record, 'route_strategy') === 'random' ? 'random' : 'ordered',
-    silent_retry: booleanValue(recordValue(record, 'silent_retry')),
-    binding_count: Math.max(0, integerValue(recordValue(record, 'binding_count'))),
-    created_at: dateValue(recordValue(record, 'created_at')),
+    base_url: text(recordValue(record, 'base_url'), 2048, '—'),
+    user_count: Math.max(0, integerValue(recordValue(record, 'user_count'))),
+    endpoint_count: Math.max(0, integerValue(recordValue(record, 'endpoint_count'))),
+    key_count: Math.max(0, integerValue(recordValue(record, 'key_count'))),
+    users: asArray(recordValue(record, 'users')).map(normalizeEndpointUser),
   };
 }
 
@@ -407,20 +391,32 @@ export function useAdminUsage(enabled = true) {
   });
 }
 
-export function useAdminEndpoints(enabled = true) {
+/**
+ * Server-paginated grouped endpoint overview. Page, page size, and the
+ * literal base_url substring filter are all server-evaluated; the client
+ * never rebuilds a full cross-user list and never merges URLs itself.
+ */
+export function useAdminEndpointOverview(
+  page: number,
+  pageSize = ADMIN_PAGE_SIZE,
+  filter = '',
+  enabled = true,
+) {
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  if (filter) params.set('filter', filter);
   return useQuery({
-    queryKey: adminKeys.endpoints,
-    queryFn: async () =>
-      listPayload(await apiFetch<unknown>('/admin/api/overview/endpoints')).map(normalizeEndpoint),
-    enabled,
-  });
-}
-
-export function useAdminModels(enabled = true) {
-  return useQuery({
-    queryKey: adminKeys.models,
-    queryFn: async () =>
-      listPayload(await apiFetch<unknown>('/admin/api/overview/models')).map(normalizeModel),
+    queryKey: adminKeys.endpoints(page, pageSize, filter),
+    queryFn: async () => {
+      const payload = await apiFetch<unknown>(`/admin/api/overview/endpoints?${params}`);
+      if (!isListPayload(payload)) {
+        throw new ApiError('invalid_response', 'The server returned an invalid list.', 200);
+      }
+      const result = listResult(payload, pageSize);
+      return {
+        items: result.items.map(normalizeEndpointGroup),
+        hasMore: result.hasNext,
+      } satisfies { items: AdminEndpointOverviewGroup[]; hasMore: boolean };
+    },
     enabled,
   });
 }

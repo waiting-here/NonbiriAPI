@@ -9,7 +9,7 @@ import {
 } from '@shared/components/States';
 import { CompactNumber } from '@shared/components/CompactNumber';
 import { formatCompact, formatCount, type FormattedNumber } from '@shared/utils/formatNumber';
-import { useAdminEndpoints, useAdminModels, useAdminUsage } from '../data';
+import { useAdminEndpointOverview, useAdminUsage } from '../data';
 
 function UsageMetric({ label, value }: { label: string; value: FormattedNumber }) {
   return (
@@ -62,8 +62,7 @@ function OverviewCard({
 export function DashboardPage() {
   const { t } = useTranslation();
   const usage = useAdminUsage();
-  const endpoints = useAdminEndpoints();
-  const models = useAdminModels();
+  const endpoints = useAdminEndpointOverview(1, 1);
 
   return (
     <div className="page">
@@ -100,23 +99,13 @@ export function DashboardPage() {
       <div className="split-grid">
         <OverviewCard
           title={t('admin.dashboard.endpointsTitle')}
-          count={endpoints.data?.length}
+          count={undefined}
           loading={endpoints.isPending}
           error={endpoints.error}
           emptyTitle={t('admin.endpoints.empty')}
           emptyBody={t('admin.endpoints.emptyBody')}
           link="/endpoints"
           linkLabel={t('admin.dashboard.viewEndpoints')}
-        />
-        <OverviewCard
-          title={t('admin.dashboard.modelsTitle')}
-          count={models.data?.length}
-          loading={models.isPending}
-          error={models.error}
-          emptyTitle={t('admin.models.empty')}
-          emptyBody={t('admin.models.emptyBody')}
-          link="/models"
-          linkLabel={t('admin.dashboard.viewModels')}
         />
       </div>
     </div>

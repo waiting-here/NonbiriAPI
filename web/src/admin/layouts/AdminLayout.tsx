@@ -20,7 +20,6 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/users', key: 'users' },
   { to: '/logs', key: 'logs' },
   { to: '/endpoints', key: 'endpoints' },
-  { to: '/models', key: 'models' },
   { to: '/alerts', key: 'alerts' },
   { to: '/settings', key: 'settings' },
 ];
