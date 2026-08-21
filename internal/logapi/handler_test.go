@@ -690,7 +690,7 @@ func TestAdminUsageSiteAndByUser(t *testing.T) {
 func seedEndpointRows(t *testing.T, env *testEnv, userID int64, baseURL string, keyCount int) int64 {
 	t.Helper()
 	now := time.Now().Unix()
-	res, err := env.store.DB().Exec(`INSERT INTO endpoints (user_id, connector_type, base_url, note, enabled, created_at, updated_at) VALUES (?, 'openai-compatible', ?, 'note '||?, 1, ?, ?)`,
+	res, err := env.store.DB().Exec(`INSERT INTO endpoints (user_id, connector_type, base_url, note, enabled, created_at, updated_at) VALUES (?, 'openai-compatible', ?, 'private-note-'||?, 1, ?, ?)`,
 		userID, baseURL, baseURL, now, now)
 	if err != nil {
 		t.Fatalf("seed endpoint: %v", err)
@@ -711,9 +711,13 @@ func seedEndpointRows(t *testing.T, env *testEnv, userID int64, baseURL string, 
 func TestAdminOverviewEndpoints(t *testing.T) {
 	env := newTestEnv(t)
 	user2 := seedSecondUser(t, env)
-	e1 := seedEndpointRows(t, env, env.user.ID, "https://one.example", 2)
-	e2 := seedEndpointRows(t, env, user2.ID, "https://two.example", 1)
-	e3 := seedEndpointRows(t, env, env.user.ID, "https://three.example", 0)
+	// One cross-user shared canonical URL group (with a same-user duplicate
+	// entry) plus two singleton groups.
+	seedEndpointRows(t, env, env.user.ID, "https://one.example", 2)
+	seedEndpointRows(t, env, user2.ID, "https://one.example", 1)
+	seedEndpointRows(t, env, user2.ID, "https://one.example", 0)
+	seedEndpointRows(t, env, env.user.ID, "https://two.example:8443/v1", 1)
+	seedEndpointRows(t, env, user2.ID, "https://three.example", 0)
 
 	h := newAdminMount(t, env)
 	r := stationRequest(http.MethodGet, "/admin/api/overview/endpoints", host.StationAdmin)
@@ -721,117 +725,148 @@ func TestAdminOverviewEndpoints(t *testing.T) {
 	rec := do(t, h, r)
 	assertOK(t, rec)
 
-	var rows []map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &rows); err != nil {
+	var resp struct {
+		Data    []map[string]any `json:"data"`
+		HasMore bool             `json:"has_more"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode overview: %v; body=%s", err, rec.Body.String())
 	}
-	if len(rows) != 3 {
-		t.Fatalf("overview rows = %d, want 3: %+v", len(rows), rows)
+	if len(resp.Data) != 3 || resp.HasMore {
+		t.Fatalf("groups = %d has_more = %v, want 3 false: %+v", len(resp.Data), resp.HasMore, resp.Data)
 	}
-	want := []struct {
-		id       int64
-		userID   int64
-		keyCount float64
-		enabled  bool
-	}{
-		{id: e1, userID: env.user.ID, keyCount: 2, enabled: true},
-		{id: e2, userID: user2.ID, keyCount: 1, enabled: true},
-		{id: e3, userID: env.user.ID, keyCount: 0, enabled: true},
+	// Stable ordering: stored canonical base_url ascending.
+	wantURLs := []string{"https://one.example", "https://three.example", "https://two.example:8443/v1"}
+	wantCounts := [][3]int{ // {user_count, endpoint_count, key_count}
+		{2, 3, 3},
+		{1, 1, 0},
+		{1, 1, 1},
 	}
-	for i, row := range rows {
-		if int64(row["id"].(float64)) != want[i].id || int64(row["user_id"].(float64)) != want[i].userID ||
-			row["key_count"].(float64) != want[i].keyCount || row["enabled"].(bool) != want[i].enabled ||
-			row["connector_type"] != "openai-compatible" || row["base_url"] == "" || row["note"] == "" ||
-			row["created_at"].(float64) == 0 || row["updated_at"].(float64) == 0 {
-			t.Errorf("row %d = %v", i, row)
+	for i, g := range resp.Data {
+		if g["base_url"] != wantURLs[i] {
+			t.Errorf("group %d base_url = %v, want %v", i, g["base_url"], wantURLs[i])
+		}
+		counts := wantCounts[i]
+		if int(g["user_count"].(float64)) != counts[0] || int(g["endpoint_count"].(float64)) != counts[1] ||
+			int(g["key_count"].(float64)) != counts[2] {
+			t.Errorf("group %d counts = %v, want %v", i, g, counts)
 		}
 	}
+	// Expandable per-user entries of the shared group, ordered by user_id.
+	sharedUsers, _ := resp.Data[0]["users"].([]any)
+	if len(sharedUsers) != 2 {
+		t.Fatalf("shared users = %d, want 2: %+v", len(sharedUsers), resp.Data[0])
+	}
+	first := sharedUsers[0].(map[string]any)
+	second := sharedUsers[1].(map[string]any)
+	if int64(first["user_id"].(float64)) != env.user.ID || first["endpoint_count"].(float64) != 1 ||
+		first["key_count"].(float64) != 2 || first["enabled_count"].(float64) != 1 {
+		t.Errorf("first user entry = %v", first)
+	}
+	if int64(second["user_id"].(float64)) != user2.ID || second["endpoint_count"].(float64) != 2 ||
+		second["key_count"].(float64) != 1 || second["enabled_count"].(float64) != 2 {
+		t.Errorf("second user entry = %v", second)
+	}
+	// Exact wire shapes: frozen metadata only.
+	assertJSONKeys(t, mustJSON(t, resp.Data[0]), "base_url", "user_count", "endpoint_count", "key_count", "users")
+	assertJSONKeys(t, mustJSON(t, first), "user_id", "endpoint_count", "key_count", "enabled_count")
 
-	// No secret, ciphertext, or display fragment anywhere in the response.
+	// Privacy negatives: no secret/ciphertext/display fragment, no user-private
+	// note material, no username or Discord identifier anywhere.
 	lower := strings.ToLower(rec.Body.String())
-	for _, forbidden := range []string{"secret", "cipher", "nbsec", "encrypted", "abcd", "wxyz"} {
+	for _, forbidden := range []string{"secret", "cipher", "nbsec", "encrypted", "abcd", "wxyz",
+		"note", "username", "discord_id", "avatar"} {
 		if strings.Contains(lower, forbidden) {
 			t.Errorf("overview response contains %q: %s", forbidden, rec.Body.String())
 		}
 	}
 }
 
-func seedModelRows(t *testing.T, env *testEnv, userID int64, provider, model string, silentRetry bool, bindingCount int) (int64, int64) {
-	t.Helper()
-	now := time.Now().Unix()
-	// One endpoint + key so bindings have a legal FK target.
-	epRes, err := env.store.DB().Exec(`INSERT INTO endpoints (user_id, connector_type, base_url, created_at, updated_at) VALUES (?, 'openai-compatible', 'https://upstream.example', ?, ?)`,
-		userID, now, now)
-	if err != nil {
-		t.Fatalf("seed model endpoint: %v", err)
-	}
-	epID, _ := epRes.LastInsertId()
-	keyRes, err := env.store.DB().Exec(`INSERT INTO endpoint_keys (endpoint_id, encrypted_secret, created_at, updated_at) VALUES (?, 'nbsec:v1:aes-256-gcm:test-secret', ?, ?)`,
-		epID, now, now)
-	if err != nil {
-		t.Fatalf("seed model key: %v", err)
-	}
-	keyID, _ := keyRes.LastInsertId()
-
-	retryInt := 0
-	if silentRetry {
-		retryInt = 1
-	}
-	modelRes, err := env.store.DB().Exec(`INSERT INTO models (user_id, provider, model, full_name, route_strategy, silent_retry, created_at, updated_at) VALUES (?, ?, ?, ?, 'random', ?, ?, ?)`,
-		userID, provider, model, provider+"/"+model, retryInt, now, now)
-	if err != nil {
-		t.Fatalf("seed model: %v", err)
-	}
-	modelID, _ := modelRes.LastInsertId()
-	for i := 0; i < bindingCount; i++ {
-		if _, err := env.store.DB().Exec(`INSERT INTO model_bindings (model_id, endpoint_key_id, upstream_model_id, ord, created_at) VALUES (?, ?, ?, ?, ?)`,
-			modelID, keyID, fmt.Sprintf("upstream/model-%d", i), i, now); err != nil {
-			t.Fatalf("seed binding: %v", err)
-		}
-	}
-	return modelID, keyID
-}
-
-func TestAdminOverviewModels(t *testing.T) {
+func TestAdminOverviewEndpointsPaginationAndFilter(t *testing.T) {
 	env := newTestEnv(t)
-	user2 := seedSecondUser(t, env)
-	m1, _ := seedModelRows(t, env, env.user.ID, "prov1", "mod1", true, 2)
-	m2, _ := seedModelRows(t, env, user2.ID, "prov2", "mod2", false, 0)
+	u := env.user.ID
+	seedEndpointRows(t, env, u, "https://alpha.example", 0)
+	seedEndpointRows(t, env, u, "https://beta.example", 1)
+	seedEndpointRows(t, env, u, "https://gamma.example/x", 0)
 
 	h := newAdminMount(t, env)
+	type listResp struct {
+		Data    []map[string]any `json:"data"`
+		HasMore bool             `json:"has_more"`
+	}
+	get := func(query string) (*httptest.ResponseRecorder, listResp) {
+		t.Helper()
+		r := stationRequest(http.MethodGet, "/admin/api/overview/endpoints"+query, host.StationAdmin)
+		r.AddCookie(adminCookie(t, env))
+		rec := do(t, h, r)
+		var resp listResp
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode %q: %v; body=%s", query, err, rec.Body.String())
+		}
+		return rec, resp
+	}
+
+	// Page size 2 walks three groups in stable order without drift.
+	_, page1 := get("?page_size=2")
+	if len(page1.Data) != 2 || !page1.HasMore ||
+		page1.Data[0]["base_url"] != "https://alpha.example" || page1.Data[1]["base_url"] != "https://beta.example" {
+		t.Errorf("page 1 = %+v", page1)
+	}
+	rec, page2 := get("?page=2&page_size=2")
+	if rec.Code != http.StatusOK || len(page2.Data) != 1 || page2.HasMore ||
+		page2.Data[0]["base_url"] != "https://gamma.example/x" {
+		t.Errorf("page 2 = %+v", page2)
+	}
+	// Filter narrows to matching groups only.
+	_, filtered := get("?filter=gamma")
+	if len(filtered.Data) != 1 || filtered.Data[0]["base_url"] != "https://gamma.example/x" {
+		t.Errorf("filtered = %+v", filtered)
+	}
+	// Out-of-range page is an empty success, not an error.
+	rec, empty := get("?page=99")
+	if rec.Code != http.StatusOK || len(empty.Data) != 0 || empty.HasMore {
+		t.Errorf("out-of-range page = (%d, %+v)", rec.Code, empty)
+	}
+	// page_size above the cap is clamped, not rejected.
+	rec, clamped := get("?page_size=101")
+	if rec.Code != http.StatusOK || len(clamped.Data) != 3 || clamped.HasMore {
+		t.Errorf("clamped page_size = (%d, %+v)", rec.Code, clamped)
+	}
+}
+
+func TestAdminOverviewEndpointsQueryValidation(t *testing.T) {
+	env := newTestEnv(t)
+	seedEndpointRows(t, env, env.user.ID, "https://one.example", 0)
+	h := newAdminMount(t, env)
+
+	for _, query := range []string{
+		"?foo=1",
+		"?page=0",
+		"?page=-1",
+		"?page=abc",
+		"?page=1&page=2",
+		"?page_size=0",
+		"?page_size=-5",
+		"?page_size=abc",
+		"?page_size=20&page_size=40",
+		"?filter=",
+		"?filter=%20leading",
+		"?filter=trailing%20",
+		"?filter=a&filter=b",
+		"?page=1&bogus=x",
+	} {
+		r := stationRequest(http.MethodGet, "/admin/api/overview/endpoints"+query, host.StationAdmin)
+		r.AddCookie(adminCookie(t, env))
+		rec := do(t, h, r)
+		assertErr(t, rec, http.StatusBadRequest, httperr.CodeInvalidRequest)
+	}
+
+	// The models overview route is removed: it must be a stable 404, not a
+	// silent alias of the endpoints overview.
 	r := stationRequest(http.MethodGet, "/admin/api/overview/models", host.StationAdmin)
 	r.AddCookie(adminCookie(t, env))
 	rec := do(t, h, r)
-	assertOK(t, rec)
-
-	var rows []map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &rows); err != nil {
-		t.Fatalf("decode overview: %v; body=%s", err, rec.Body.String())
-	}
-	if len(rows) != 2 {
-		t.Fatalf("overview rows = %d, want 2: %+v", len(rows), rows)
-	}
-	first, second := rows[0], rows[1]
-	// Contract shape: exactly these keys, no updated_at.
-	assertJSONKeys(t, mustJSON(t, first), "id", "user_id", "provider", "model", "full_name", "route_strategy", "silent_retry", "binding_count", "created_at")
-	if int64(first["id"].(float64)) != m1 || int64(first["user_id"].(float64)) != env.user.ID ||
-		first["provider"] != "prov1" || first["model"] != "mod1" || first["full_name"] != "prov1/mod1" ||
-		first["route_strategy"] != "random" || first["silent_retry"].(bool) != true || first["binding_count"].(float64) != 2 {
-		t.Errorf("first model row = %v", first)
-	}
-	if int64(second["id"].(float64)) != m2 || int64(second["user_id"].(float64)) != user2.ID ||
-		second["full_name"] != "prov2/mod2" || second["silent_retry"].(bool) != false || second["binding_count"].(float64) != 0 {
-		t.Errorf("second model row = %v", second)
-	}
-	if _, ok := first["updated_at"]; ok {
-		t.Errorf("model overview must not carry updated_at per contract: %v", first)
-	}
-
-	// Overview routes take no query parameters.
-	r2 := stationRequest(http.MethodGet, "/admin/api/overview/models?limit=5", host.StationAdmin)
-	r2.AddCookie(adminCookie(t, env))
-	rec = do(t, h, r2)
-	assertErr(t, rec, http.StatusBadRequest, httperr.CodeInvalidRequest)
+	assertErr(t, rec, http.StatusNotFound, httperr.CodeNotFound)
 }
 
 func mustJSON(t *testing.T, v any) []byte {
