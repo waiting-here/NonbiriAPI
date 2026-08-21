@@ -48,31 +48,24 @@ type usageByUserResp struct {
 	Users []usageByUserRowResp `json:"users"`
 }
 
-// endpointOverviewResp is one endpoint's admin overview row. Key secrets and
-// their ciphertext never appear.
-type endpointOverviewResp struct {
-	ID            int64  `json:"id"`
-	UserID        int64  `json:"user_id"`
-	ConnectorType string `json:"connector_type"`
-	BaseURL       string `json:"base_url"`
-	Note          string `json:"note"`
-	Enabled       bool   `json:"enabled"`
-	KeyCount      int    `json:"key_count"`
-	CreatedAt     int64  `json:"created_at"`
-	UpdatedAt     int64  `json:"updated_at"`
+// endpointOverviewUserResp is one user's expandable entry inside a grouped
+// overview row: frozen metadata only — no username, Discord identifier,
+// endpoint/key note, or any secret-bearing field.
+type endpointOverviewUserResp struct {
+	UserID        int64 `json:"user_id"`
+	EndpointCount int   `json:"endpoint_count"`
+	KeyCount      int   `json:"key_count"`
+	EnabledCount  int   `json:"enabled_count"`
 }
 
-// modelOverviewResp is one platform model's admin overview row.
-type modelOverviewResp struct {
-	ID            int64  `json:"id"`
-	UserID        int64  `json:"user_id"`
-	Provider      string `json:"provider"`
-	Model         string `json:"model"`
-	FullName      string `json:"full_name"`
-	RouteStrategy string `json:"route_strategy"`
-	SilentRetry   bool   `json:"silent_retry"`
-	BindingCount  int    `json:"binding_count"`
-	CreatedAt     int64  `json:"created_at"`
+// endpointOverviewGroupResp is one canonical base_url's admin overview row.
+// Key secrets, their ciphertext, and user-private notes never appear.
+type endpointOverviewGroupResp struct {
+	BaseURL       string                     `json:"base_url"`
+	UserCount     int                        `json:"user_count"`
+	EndpointCount int                        `json:"endpoint_count"`
+	KeyCount      int                        `json:"key_count"`
+	Users         []endpointOverviewUserResp `json:"users"`
 }
 
 func usageTotalsResponse(t db.UsageTotals) usageTotalsResp {
@@ -133,37 +126,32 @@ func usageByUserResponse(rows []db.UserUsageRow) usageByUserResp {
 	return out
 }
 
-func endpointOverviewResponse(eps []db.EndpointOverview) []endpointOverviewResp {
-	out := make([]endpointOverviewResp, 0, len(eps))
-	for _, ep := range eps {
-		out = append(out, endpointOverviewResp{
-			ID:            ep.ID,
-			UserID:        ep.UserID,
-			ConnectorType: ep.ConnectorType,
-			BaseURL:       ep.BaseURL,
-			Note:          ep.Note,
-			Enabled:       ep.Enabled,
-			KeyCount:      ep.KeyCount,
-			CreatedAt:     ep.CreatedAt,
-			UpdatedAt:     ep.UpdatedAt,
-		})
-	}
-	return out
+// endpointOverviewListResp is one page of grouped endpoint-overview rows
+// plus the explicit has_more flag, so the client never infers pagination
+// from a raw page size.
+type endpointOverviewListResp struct {
+	Data    []endpointOverviewGroupResp `json:"data"`
+	HasMore bool                        `json:"has_more"`
 }
 
-func modelOverviewResponse(models []db.ModelOverview) []modelOverviewResp {
-	out := make([]modelOverviewResp, 0, len(models))
-	for _, m := range models {
-		out = append(out, modelOverviewResp{
-			ID:            m.ID,
-			UserID:        m.UserID,
-			Provider:      m.Provider,
-			Model:         m.Model,
-			FullName:      m.FullName,
-			RouteStrategy: m.RouteStrategy,
-			SilentRetry:   m.SilentRetry,
-			BindingCount:  m.BindingCount,
-			CreatedAt:     m.CreatedAt,
+func endpointOverviewResponse(groups []db.EndpointOverviewGroup, hasMore bool) endpointOverviewListResp {
+	out := endpointOverviewListResp{Data: make([]endpointOverviewGroupResp, 0, len(groups)), HasMore: hasMore}
+	for _, g := range groups {
+		users := make([]endpointOverviewUserResp, 0, len(g.Users))
+		for _, u := range g.Users {
+			users = append(users, endpointOverviewUserResp{
+				UserID:        u.UserID,
+				EndpointCount: u.EndpointCount,
+				KeyCount:      u.KeyCount,
+				EnabledCount:  u.EnabledCount,
+			})
+		}
+		out.Data = append(out.Data, endpointOverviewGroupResp{
+			BaseURL:       g.BaseURL,
+			UserCount:     g.UserCount,
+			EndpointCount: g.EndpointCount,
+			KeyCount:      g.KeyCount,
+			Users:         users,
 		})
 	}
 	return out

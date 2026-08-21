@@ -53,7 +53,7 @@ func parseLogQuery(r *http.Request) (db.LogQuery, httperr.Error) {
 		q.UserID = id
 	}
 	if v, present, ok := singleValue(r, "model"); present {
-		if !ok || !validModelFilter(v) {
+		if !ok || !validStoredTextFilter(v) {
 			return db.LogQuery{}, invalid
 		}
 		q.Model = v
@@ -124,6 +124,53 @@ func parseLogQuery(r *http.Request) (db.LogQuery, httperr.Error) {
 	return q, httperr.Error{}
 }
 
+// parseEndpointOverviewQuery builds a bounded db.EndpointOverviewQuery from
+// strict single-value query parameters for /admin/api/overview/endpoints.
+// Unknown parameters, repeated parameters, unparseable or out-of-range
+// values, and over-long inputs are rejected with invalid_request. page
+// defaults to 1 and must be >= 1; page_size defaults to 20 and clamps into
+// [1, db.MaxOverviewPageLimit]; filter is an optional literal substring
+// matched against the stored canonical base_url.
+func parseEndpointOverviewQuery(r *http.Request) (db.EndpointOverviewQuery, httperr.Error) {
+	invalid := httperr.New(httperr.CodeInvalidRequest, "invalid query parameter")
+	if r == nil || r.URL == nil || len(r.URL.RawQuery) > maxRawQueryBytes ||
+		!onlyParams(r, "page", "page_size", "filter") {
+		return db.EndpointOverviewQuery{}, invalid
+	}
+	q := db.EndpointOverviewQuery{Page: 1, PageSize: defaultLogPageSize}
+
+	if v, present, ok := singleValue(r, "page"); present {
+		if !ok {
+			return db.EndpointOverviewQuery{}, invalid
+		}
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			return db.EndpointOverviewQuery{}, invalid
+		}
+		q.Page = n
+	}
+	if v, present, ok := singleValue(r, "page_size"); present {
+		if !ok {
+			return db.EndpointOverviewQuery{}, invalid
+		}
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			return db.EndpointOverviewQuery{}, invalid
+		}
+		if n > db.MaxOverviewPageLimit {
+			n = db.MaxOverviewPageLimit
+		}
+		q.PageSize = n
+	}
+	if v, present, ok := singleValue(r, "filter"); present {
+		if !ok || !validStoredTextFilter(v) {
+			return db.EndpointOverviewQuery{}, invalid
+		}
+		q.Filter = v
+	}
+	return q, httperr.Error{}
+}
+
 // parseUsageQuery reads the aggregation selector for /admin/api/usage.
 // group_by=site (default) selects site-wide totals; group_by=user selects
 // per-user totals ordered by total requests descending. limit clamps into
@@ -161,15 +208,6 @@ func parseUsageQuery(r *http.Request) (groupBy string, limit int, derr httperr.E
 	return groupBy, limit, httperr.Error{}
 }
 
-// rejectUnknownParams rejects any query parameter for routes that take none.
-func rejectUnknownParams(r *http.Request) httperr.Error {
-	if r == nil || r.URL == nil || len(r.URL.RawQuery) > maxRawQueryBytes ||
-		!onlyParams(r) {
-		return httperr.New(httperr.CodeInvalidRequest, "invalid query parameter")
-	}
-	return httperr.Error{}
-}
-
 // onlyParams reports whether every query key is one of the allowed names.
 func onlyParams(r *http.Request, allowed ...string) bool {
 	values := r.URL.Query()
@@ -202,11 +240,12 @@ func singleValue(r *http.Request, name string) (value string, present, ok bool) 
 	return values[0], true, true
 }
 
-// validModelFilter mirrors the repository's stored-text rules for the
-// platform model filter: valid UTF-8, at most maxModelFilterRunes runes, no
-// C0 controls or DEL, and no leading/trailing whitespace. An empty value is
-// rejected here: a client that wants no model filter omits the parameter.
-func validModelFilter(s string) bool {
+// validStoredTextFilter mirrors the repository's stored-text rules for a
+// free-text filter (platform model name, endpoint base_url substring): valid
+// UTF-8, at most maxModelFilterRunes runes, no C0 controls or DEL, and no
+// leading/trailing whitespace. An empty value is rejected here: a client
+// that wants no filter omits the parameter.
+func validStoredTextFilter(s string) bool {
 	if s == "" || !utf8.ValidString(s) || utf8.RuneCountInString(s) > maxModelFilterRunes {
 		return false
 	}

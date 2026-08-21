@@ -5,7 +5,6 @@
 //   - GET /admin/api/logs                (admin session only)
 //   - GET /admin/api/usage               (admin session only)
 //   - GET /admin/api/overview/endpoints  (admin session only)
-//   - GET /admin/api/overview/models     (admin session only)
 //
 // Authorization is session-only by construction: a user-session principal can
 // read exactly its own usage; an admin-session principal the global metadata
@@ -52,7 +51,6 @@ func NewHandler(deps HandlerDeps) http.Handler {
 	h.mux.HandleFunc("GET /admin/api/logs", h.adminLogs)
 	h.mux.HandleFunc("GET /admin/api/usage", h.adminUsage)
 	h.mux.HandleFunc("GET /admin/api/overview/endpoints", h.adminOverviewEndpoints)
-	h.mux.HandleFunc("GET /admin/api/overview/models", h.adminOverviewModels)
 	return httpmw.API(h.mux)
 }
 
@@ -177,9 +175,11 @@ func (h *Handler) adminUsage(w http.ResponseWriter, r *http.Request) {
 	httperr.WriteJSON(w, http.StatusOK, usageTotalsResponse(totals))
 }
 
-// adminOverviewEndpoints handles GET /admin/api/overview/endpoints: endpoint
-// metadata across all users plus live key counts. The projection never
-// selects or decrypts a key secret.
+// adminOverviewEndpoints handles GET /admin/api/overview/endpoints: endpoints
+// grouped by their stored canonical base_url with user/endpoint/key counts
+// and the per-user expandable entries, server-paginated with stable ordering.
+// The projection never selects or decrypts a key secret and never projects a
+// note, username, or Discord identifier.
 func (h *Handler) adminOverviewEndpoints(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeErr(w, httperr.New(httperr.CodeServiceUnavailable, "usage service unavailable"))
@@ -188,38 +188,17 @@ func (h *Handler) adminOverviewEndpoints(w http.ResponseWriter, r *http.Request)
 	if _, ok := h.requireAdminSession(w, r); !ok {
 		return
 	}
-	if derr := rejectUnknownParams(r); derr.Code != "" {
+	query, derr := parseEndpointOverviewQuery(r)
+	if derr.Code != "" {
 		writeErr(w, derr)
 		return
 	}
-	eps, err := h.store.ListEndpointsOverview(r.Context())
+	groups, hasMore, err := h.store.ListEndpointOverviewGroups(r.Context(), query)
 	if err != nil {
 		writeRepoErr(w, err)
 		return
 	}
-	httperr.WriteJSON(w, http.StatusOK, endpointOverviewResponse(eps))
-}
-
-// adminOverviewModels handles GET /admin/api/overview/models: platform model
-// metadata across all users plus live binding counts.
-func (h *Handler) adminOverviewModels(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeErr(w, httperr.New(httperr.CodeServiceUnavailable, "usage service unavailable"))
-		return
-	}
-	if _, ok := h.requireAdminSession(w, r); !ok {
-		return
-	}
-	if derr := rejectUnknownParams(r); derr.Code != "" {
-		writeErr(w, derr)
-		return
-	}
-	models, err := h.store.ListModelsOverview(r.Context())
-	if err != nil {
-		writeRepoErr(w, err)
-		return
-	}
-	httperr.WriteJSON(w, http.StatusOK, modelOverviewResponse(models))
+	httperr.WriteJSON(w, http.StatusOK, endpointOverviewResponse(groups, hasMore))
 }
 
 // writeRepoErr maps repository failures to the stable envelope. These
