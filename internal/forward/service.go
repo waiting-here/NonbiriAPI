@@ -111,11 +111,13 @@ type AttemptRecord struct {
 	SafeDiagnostic  string
 }
 
-// UsageRecord is a future accounting input. UsageUnknown is set only for a
-// committed failed stream/response where no valid usage was available; token
-// values are never fabricated. AttemptID correlates with the AttemptRecord of
-// the same Forward invocation; it is shared by the successful attempt that
-// committed the response.
+// UsageRecord is a future accounting input. Usage carries the connector's
+// normalized four-bucket token metadata (uncached input / cache write /
+// cache read / output, all non-negative) and is passed through unchanged;
+// UsageUnknown is set only for a committed failed stream/response where no
+// valid usage was available; token values are never fabricated. AttemptID
+// correlates with the AttemptRecord of the same Forward invocation; it is
+// shared by the successful attempt that committed the response.
 type UsageRecord struct {
 	AttemptID       string
 	UserID          int64

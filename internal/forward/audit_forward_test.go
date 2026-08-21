@@ -279,7 +279,7 @@ func TestAuditForwardStreamExplicitDoneAndUsage(t *testing.T) {
 	}
 	usageMu.Lock()
 	defer usageMu.Unlock()
-	if len(usageRecords) != 1 || !usageRecords[0].Usage.Present || usageRecords[0].Usage.TotalTokens != 10 || usageRecords[0].UsageUnknown {
+	if len(usageRecords) != 1 || !usageRecords[0].Usage.Present || usageRecords[0].Usage.UncachedInputTokens != 3 || usageRecords[0].Usage.OutputTokens != 7 || usageRecords[0].UsageUnknown {
 		t.Fatalf("usage records=%+v", usageRecords)
 	}
 }

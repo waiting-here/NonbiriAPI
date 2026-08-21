@@ -80,16 +80,15 @@ func seedSecondUser(t *testing.T, env *testEnv) *db.User {
 func seedLog(t *testing.T, env *testEnv, userID int64, attempt, model string, status int, unix int64, diag string) {
 	t.Helper()
 	input := db.RequestLogInput{
-		AttemptID:        attempt,
-		UserID:           userID,
-		Model:            model,
-		StatusCode:       status,
-		DurationMs:       7,
-		StartedAt:        time.Unix(unix, 0).UTC(),
-		CompletedAt:      time.Unix(unix, 0).UTC().Add(7 * time.Millisecond),
-		PromptTokens:     1,
-		CompletionTokens: 2,
-		TotalTokens:      3,
+		AttemptID:           attempt,
+		UserID:              userID,
+		Model:               model,
+		StatusCode:          status,
+		DurationMs:          7,
+		StartedAt:           time.Unix(unix, 0).UTC(),
+		CompletedAt:         time.Unix(unix, 0).UTC().Add(7 * time.Millisecond),
+		UncachedInputTokens: 1,
+		OutputTokens:        2,
 	}
 	if diag != "" {
 		input.ErrorCode = "upstream"

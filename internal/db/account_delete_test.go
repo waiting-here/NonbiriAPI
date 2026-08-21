@@ -40,7 +40,7 @@ func seedFullyPopulatedUser(t *testing.T, st *Store, discordID string) int64 {
 		AttemptID: "att-" + discordID, UserID: uid, Model: "prov/m",
 		EndpointKeyID: kid, UpstreamModelID: "upstream-1",
 		StatusCode: 200, DurationMs: 5, StartedAt: time.Unix(testNow, 0), CompletedAt: time.Unix(testNow+1, 0),
-		PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15,
+		UncachedInputTokens: 10, OutputTokens: 5,
 	}); err != nil {
 		t.Fatalf("record request: %v", err)
 	}
@@ -342,7 +342,7 @@ func TestDeleteVsLateCallbacksLinearized(t *testing.T) {
 						AttemptID: fmt.Sprintf("race-att-%d-%d", seed, j), UserID: uid,
 						Model: "prov/m", StatusCode: 200, DurationMs: 1,
 						StartedAt: time.Unix(testNow, 0), CompletedAt: time.Unix(testNow+1, 0),
-						PromptTokens: 1, CompletionTokens: 1, TotalTokens: 2,
+						UncachedInputTokens: 1, OutputTokens: 1,
 					})
 					if err != nil {
 						t.Errorf("late request: %v", err)
@@ -400,7 +400,7 @@ func TestRepeatedDeleteAndCallbackShuffle(t *testing.T) {
 					AttemptID: fmt.Sprintf("s-att-%d", role), UserID: uid,
 					Model: "prov/m", StatusCode: 200, DurationMs: 1,
 					StartedAt: time.Unix(testNow, 0), CompletedAt: time.Unix(testNow+1, 0),
-					PromptTokens: 1, CompletionTokens: 1, TotalTokens: 2,
+					UncachedInputTokens: 1, OutputTokens: 1,
 				})
 			}(i)
 		}

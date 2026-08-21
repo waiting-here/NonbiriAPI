@@ -72,6 +72,10 @@ func Open(path string, secrets secret.Codec) (*Store, error) {
 		_ = d.Close()
 		return nil, fmt.Errorf("migrate users temporal ban columns: %w", err)
 	}
+	if err := ensureUsageBucketColumns(d); err != nil {
+		_ = d.Close()
+		return nil, fmt.Errorf("migrate usage bucket columns: %w", err)
+	}
 
 	// Enforce owner-only permissions on the database file and its WAL/SHM
 	// sidecars after SQLite has created them. On Unix this chmod+fstat-verifies
@@ -206,6 +210,113 @@ func ensureUsersGuildColumns(d *sql.DB) error {
 // alter an existing table, so an earlier database is migrated in place. The
 // PRAGMA check makes it idempotent. Existing rows receive the neutral defaults:
 // no deadline (permanent semantics never apply while is_banned=0), auto_banned=0.
+// ensureUsageBucketColumns adds the neutral four-bucket token columns to the
+// users and request_logs tables created before they existed, then backfills
+// historical rows. CREATE TABLE IF NOT EXISTS does not alter an existing
+// table, so an earlier database is migrated in place; the PRAGMA check makes
+// it idempotent.
+//
+// Backfill rule (run once per row by construction): a historical row predates
+// cache-aware collection and carries no cache split, so its legacy prompt
+// total is provisionally recorded as uncached input and its legacy completion
+// total as output, with both cache buckets left at zero. This projection is
+// deliberately conservative and is NEVER valid for retroactive billing of
+// cache-differentiated pricing. The predicate (all four buckets still zero)
+// cannot double-apply: after backfill any row with recorded usage has a
+// non-zero bucket, and an all-zero row is only ever rewritten with zeros.
+func ensureUsageBucketColumns(d *sql.DB) error {
+	userSpecs := []columnSpec{
+		{"total_uncached_input_tokens", `ALTER TABLE users ADD COLUMN total_uncached_input_tokens INTEGER NOT NULL DEFAULT 0`},
+		{"total_cache_write_input_tokens", `ALTER TABLE users ADD COLUMN total_cache_write_input_tokens INTEGER NOT NULL DEFAULT 0`},
+		{"total_cache_read_input_tokens", `ALTER TABLE users ADD COLUMN total_cache_read_input_tokens INTEGER NOT NULL DEFAULT 0`},
+		{"total_output_tokens", `ALTER TABLE users ADD COLUMN total_output_tokens INTEGER NOT NULL DEFAULT 0`},
+	}
+	if err := ensureColumns(d, "users", userSpecs); err != nil {
+		return err
+	}
+	logSpecs := []columnSpec{
+		{"route_kind", `ALTER TABLE request_logs ADD COLUMN route_kind TEXT NOT NULL DEFAULT 'personal'`},
+		{"endpoint_base_url", `ALTER TABLE request_logs ADD COLUMN endpoint_base_url TEXT NOT NULL DEFAULT ''`},
+		{"uncached_input_tokens", `ALTER TABLE request_logs ADD COLUMN uncached_input_tokens INTEGER NOT NULL DEFAULT 0`},
+		{"cache_write_input_tokens", `ALTER TABLE request_logs ADD COLUMN cache_write_input_tokens INTEGER NOT NULL DEFAULT 0`},
+		{"cache_read_input_tokens", `ALTER TABLE request_logs ADD COLUMN cache_read_input_tokens INTEGER NOT NULL DEFAULT 0`},
+		{"output_tokens", `ALTER TABLE request_logs ADD COLUMN output_tokens INTEGER NOT NULL DEFAULT 0`},
+		{"error_source", `ALTER TABLE request_logs ADD COLUMN error_source TEXT NOT NULL DEFAULT 'platform'`},
+		{"charity_reservation_id", `ALTER TABLE request_logs ADD COLUMN charity_reservation_id INTEGER`},
+		{"original_charge", `ALTER TABLE request_logs ADD COLUMN original_charge INTEGER NOT NULL DEFAULT 0`},
+		{"user_charge", `ALTER TABLE request_logs ADD COLUMN user_charge INTEGER NOT NULL DEFAULT 0`},
+		{"donor_reward", `ALTER TABLE request_logs ADD COLUMN donor_reward INTEGER NOT NULL DEFAULT 0`},
+	}
+	if err := ensureColumns(d, "request_logs", logSpecs); err != nil {
+		return err
+	}
+	// Historical users rows: legacy prompt/completion totals become the
+	// uncached/output buckets; cache buckets stay zero (no historical split).
+	if _, err := d.Exec(`
+UPDATE users SET
+	total_uncached_input_tokens = total_prompt_tokens,
+	total_output_tokens         = total_completion_tokens
+WHERE total_uncached_input_tokens = 0
+  AND total_cache_write_input_tokens = 0
+  AND total_cache_read_input_tokens  = 0
+  AND total_output_tokens            = 0`); err != nil {
+		return fmt.Errorf("backfill users usage buckets: %w", err)
+	}
+	// Historical request_logs rows: same conservative projection.
+	if _, err := d.Exec(`
+UPDATE request_logs SET
+	uncached_input_tokens = prompt_tokens,
+	output_tokens         = completion_tokens
+WHERE uncached_input_tokens    = 0
+  AND cache_write_input_tokens = 0
+  AND cache_read_input_tokens  = 0
+  AND output_tokens            = 0`); err != nil {
+		return fmt.Errorf("backfill request_logs usage buckets: %w", err)
+	}
+	return nil
+}
+
+// columnSpec names one column and the ALTER TABLE statement that adds it.
+type columnSpec struct {
+	name string
+	sql  string
+}
+
+// ensureColumns adds each missing column of table according to specs, using
+// PRAGMA table_info for idempotence.
+func ensureColumns(d *sql.DB, table string, specs []columnSpec) error {
+	rows, err := d.Query(fmt.Sprintf(`PRAGMA table_info(%s)`, table)) // #nosec G201 -- table is a compile-time constant at every call site
+	if err != nil {
+		return err
+	}
+	present := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		present[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	for _, spec := range specs {
+		if present[spec.name] {
+			continue
+		}
+		if _, err := d.Exec(spec.sql); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func ensureUsersTemporalBanColumns(d *sql.DB) error {
 	specs := []struct {
 		name string

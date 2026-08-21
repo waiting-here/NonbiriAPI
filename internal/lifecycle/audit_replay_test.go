@@ -287,14 +287,14 @@ func TestAuditRetentionAndUsageAggregation(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		if err := store.RecordRequest(context.Background(), db.RequestLogInput{
 			AttemptID: "a-fresh-" + strconv.Itoa(i), UserID: user.ID, StatusCode: 200, StartedAt: fresh, CompletedAt: fresh.Add(time.Second),
-			PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15,
+			UncachedInputTokens: 10, OutputTokens: 5,
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if err := store.RecordRequest(context.Background(), db.RequestLogInput{
 		AttemptID: "a-old", UserID: user.ID, StatusCode: 200, StartedAt: old, CompletedAt: old.Add(time.Second),
-		PromptTokens: 100, CompletionTokens: 50, TotalTokens: 150,
+		UncachedInputTokens: 100, OutputTokens: 50,
 	}); err != nil {
 		t.Fatal(err)
 	}

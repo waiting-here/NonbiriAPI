@@ -538,7 +538,7 @@ func TestUsageDuplicateHookDeliveryIsAtMostOnce(t *testing.T) {
 	usageRecord := forward.UsageRecord{
 		AttemptID: "attempt-duplicate", UserID: userID, FullName: "p/m", EndpointKeyID: 7,
 		UpstreamModelID: "upstream/model",
-		Usage:           openai.Usage{PromptTokens: 2, CompletionTokens: 3, TotalTokens: 5, Present: true},
+		Usage:           openai.Usage{UncachedInputTokens: 2, OutputTokens: 3, Present: true},
 	}
 	service.HandleAttempt(attempt)
 	// The same committed usage hook delivered twice must not double-accumulate.

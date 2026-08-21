@@ -260,10 +260,14 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 		Endpoints: make([]exportEndpoint, 0, len(endpoints)),
 		Models:    make([]exportModel, 0, len(models)),
 		Usage: exportUsage{
-			TotalRequests:             usage.TotalRequests,
-			TotalPromptTokens:         usage.TotalPromptTokens,
-			TotalCompletionTokens:     usage.TotalCompletionTokens,
-			TotalUnknownUsageRequests: usage.TotalUnknownUsageRequests,
+			TotalRequests:              usage.TotalRequests,
+			TotalUncachedInputTokens:   usage.TotalUncachedInputTokens,
+			TotalCacheWriteInputTokens: usage.TotalCacheWriteInputTokens,
+			TotalCacheReadInputTokens:  usage.TotalCacheReadInputTokens,
+			TotalOutputTokens:          usage.TotalOutputTokens,
+			TotalPromptTokens:          usage.TotalPromptTokens,
+			TotalCompletionTokens:      usage.TotalCompletionTokens,
+			TotalUnknownUsageRequests:  usage.TotalUnknownUsageRequests,
 		},
 		LogSummary: exportLogSummary{
 			TotalLogs:        logSummary.TotalLogs,
@@ -385,7 +389,16 @@ type exportCallerKey struct {
 }
 
 type exportUsage struct {
-	TotalRequests             int64 `json:"total_requests"`
+	TotalRequests              int64 `json:"total_requests"`
+	TotalUncachedInputTokens   int64 `json:"total_uncached_input_tokens"`
+	TotalCacheWriteInputTokens int64 `json:"total_cache_write_input_tokens"`
+	TotalCacheReadInputTokens  int64 `json:"total_cache_read_input_tokens"`
+	TotalOutputTokens          int64 `json:"total_output_tokens"`
+	// Compatibility mirrors: total_prompt_tokens is the sum of the three
+	// input buckets, total_completion_tokens the output bucket. Rows recorded
+	// before cache-aware collection carry no cache split (their legacy totals
+	// were backfilled into the uncached/output buckets) and are never valid
+	// for retroactive billing of cache-differentiated pricing.
 	TotalPromptTokens         int64 `json:"total_prompt_tokens"`
 	TotalCompletionTokens     int64 `json:"total_completion_tokens"`
 	TotalUnknownUsageRequests int64 `json:"total_unknown_usage_requests"`

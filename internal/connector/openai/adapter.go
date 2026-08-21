@@ -330,6 +330,13 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 	committed := false
 	seenChunk := false
 	usage := Usage{}
+	// usageCaptured records that a valid usage chunk was seen; usagePoisoned
+	// records that the upstream contradicted itself (a malformed usage object
+	// or two different usage values). Once poisoned, the whole request's
+	// usage stays unknown: no token value is ever fabricated from
+	// contradictory data, and a later valid-looking chunk cannot resurrect it.
+	usageCaptured := false
+	usagePoisoned := false
 
 	for {
 		event, ok, nextErr := nextSSEEvent(streamCtx, events, errs)
@@ -371,7 +378,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 		if len(event.Data) == 0 || len(event.Data) > a.maxSSEEventBytes || !validProtocolBytes([]byte(event.Data)) {
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream chunk exceeded protocol bounds")
 		}
-		compact, chunkUsage, err := validateChunk([]byte(event.Data))
+		compact, chunkUsage, chunkUsageMalformed, err := validateChunk([]byte(event.Data))
 		if err != nil {
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream chunk was invalid")
 		}
@@ -392,8 +399,21 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 			return sinkFailureWithCommit(committed, usage)
 		}
 		seenChunk = true
-		if chunkUsage.Present {
-			usage = chunkUsage
+		switch {
+		case chunkUsageMalformed:
+			usagePoisoned = true
+			usage = Usage{}
+		case chunkUsage.Present && !usagePoisoned:
+			if usageCaptured {
+				if chunkUsage != usage {
+					// Contradictory repeated usage: degrade to unknown.
+					usagePoisoned = true
+					usage = Usage{}
+				}
+			} else {
+				usage = chunkUsage
+				usageCaptured = true
+			}
 		}
 	}
 }
