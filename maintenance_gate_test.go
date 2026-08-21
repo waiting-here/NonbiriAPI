@@ -20,6 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/adminapi"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -40,7 +41,9 @@ func maintenanceApp(t *testing.T) (app *application, store *db.Store, user *db.U
 		SiteBaseURL: "https://" + auditUserHost, TrustedProxyCIDRs: []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")},
 		AdminUsername: "root", AdminPassword: "correct-horse-battery", DiscordClientID: "client-id", DiscordClientSecret: "client-secret",
 	}
-	store, err = db.Open(filepath.Join(t.TempDir(), "maintenance-gate.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "maintenance-gate.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err = db.Open(dbPath, vault)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatalf("db.Open: %v", err)
@@ -296,7 +299,9 @@ func TestMaintenanceGateLoadsFromDBOnStartup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("secret.New: %v", err)
 	}
-	store, err := db.Open(filepath.Join(t.TempDir(), "maintenance-restart.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "maintenance-restart.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatalf("db.Open: %v", err)

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -50,6 +51,7 @@ func TestCreateEndpointKeyPlaceholderIsNeverVisible(t *testing.T) {
 		release: make(chan struct{}),
 	}
 	path := filepath.Join(t.TempDir(), "placeholder.db")
+	dbtest.EnsureOwnerOnlyParent(t, path)
 	store, err := Open(path, codec)
 	if err != nil {
 		t.Fatal(err)

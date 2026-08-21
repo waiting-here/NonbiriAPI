@@ -15,6 +15,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -46,7 +47,9 @@ func newTestEnv(t *testing.T) *testEnv {
 		t.Fatalf("secret.New: %v", err)
 	}
 	t.Cleanup(func() { _ = vault.Close() })
-	store, err := db.Open(filepath.Join(t.TempDir(), "alertapi.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "alertapi.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
 	if err != nil {
 		t.Fatalf("db.Open: %v", err)
 	}

@@ -21,6 +21,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
@@ -99,7 +100,9 @@ func newForwardFixtureCfg(t *testing.T, allowed []string, hooks Hooks, selector 
 		t.Fatal(err)
 	}
 	codec := &countingCodec{vault: vault}
-	store, err := db.Open(filepath.Join(t.TempDir(), "forward.db"), codec)
+	dbPath := filepath.Join(t.TempDir(), "forward.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, codec)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatal(err)

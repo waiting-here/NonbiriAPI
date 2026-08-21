@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -32,7 +33,9 @@ func newLifecycleFixture(t *testing.T) (*lifecycle.Service, *db.Store, *elevatio
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := db.Open(filepath.Join(t.TempDir(), "audit-lifecycle.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "audit-lifecycle.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatal(err)
@@ -343,7 +346,9 @@ func TestAuditExportContainsNoPlaintextSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := db.Open(filepath.Join(t.TempDir(), "audit-export.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "audit-export.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatal(err)

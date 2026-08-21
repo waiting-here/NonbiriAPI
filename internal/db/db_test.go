@@ -6,8 +6,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -20,11 +22,33 @@ func openTestStore(t *testing.T, path string) *Store {
 		t.Fatalf("create test secret vault: %v", err)
 	}
 	t.Cleanup(func() { _ = vault.Close() })
+	dbtest.EnsureOwnerOnlyParent(t, path)
 	st, err := Open(path, vault)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 	return st
+}
+
+// privateDBDir returns a fresh owner-only directory beneath t.TempDir() for
+// database tests that expect Open to succeed. Go's testing.T.TempDir() creates
+// the returned subdirectory with os.Mkdir(.., 0o777), so under a normal umask
+// (0022) it is 0755 and grants group/other access. The S6 strict parent check
+// (implementation contract §8.5) rejects any group/other access on the
+// database parent, so tests open the database in an explicit 0700 parent to
+// satisfy the contract for the right reason rather than relying on the no-op
+// check on Windows. Tests that exercise a permissive parent call Open directly
+// with a deliberately bad directory and do not use this helper.
+func privateDBDir(t *testing.T) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "dbdir")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatalf("create private db dir: %v", err)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatalf("chmod private db dir: %v", err)
+	}
+	return dir
 }
 
 // expectedTables lists every entity table the contract requires. A name here
@@ -98,6 +122,34 @@ func TestOpenCreatesPrivateDatabaseDirectory(t *testing.T) {
 	}
 	if info.Mode().Perm()&0o077 != 0 {
 		t.Fatalf("new database directory permissions=%#o, want no group/other access", info.Mode().Perm())
+	}
+}
+
+// TestOpenRejectsDirectoryAsDBPath verifies a directory at the configured
+// database path is refused before SQLite attempts to open it. This shared
+// check runs on every platform; the path-shape guard does not depend on POSIX
+// permission bits. The database is opened in a 0700 parent (privateDBDir) so
+// on Unix the failure is provably from the path-shape guard ("database file"),
+// not from the strict parent check ("database directory").
+func TestOpenRejectsDirectoryAsDBPath(t *testing.T) {
+	dir := privateDBDir(t)
+	dbPath := filepath.Join(dir, "is-a-dir")
+	if err := os.Mkdir(dbPath, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	key := bytes.Repeat([]byte{0x29}, secret.MasterKeyBytes)
+	vault, err := secret.New(key)
+	clear(key)
+	if err != nil {
+		t.Fatalf("create vault: %v", err)
+	}
+	defer vault.Close()
+	_, err = Open(dbPath, vault)
+	if err == nil {
+		t.Fatal("Open accepted a directory as the database path")
+	}
+	if !strings.Contains(err.Error(), "database file") {
+		t.Fatalf("Open failed for the wrong reason (want path-shape guard, got %q): %v", err.Error(), err)
 	}
 }
 

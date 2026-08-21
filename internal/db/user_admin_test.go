@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -20,7 +21,9 @@ func adminStore(t *testing.T) *Store {
 		t.Fatalf("secret.New: %v", err)
 	}
 	t.Cleanup(func() { _ = vault.Close() })
-	st, err := Open(filepath.Join(t.TempDir(), "admin.db"), vault)
+	path := filepath.Join(t.TempDir(), "admin.db")
+	dbtest.EnsureOwnerOnlyParent(t, path)
+	st, err := Open(path, vault)
 	if err != nil {
 		t.Fatalf("db.Open: %v", err)
 	}

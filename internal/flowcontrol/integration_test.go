@@ -19,6 +19,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
 	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
@@ -98,7 +99,9 @@ func newIntegrationFixture(t *testing.T, rpmConfig ratelimit.RPMConfig) *integra
 		t.Fatal(err)
 	}
 	codec := &countingCodec{vault: vault}
-	store, err := db.Open(filepath.Join(t.TempDir(), "flowcontrol.db"), codec)
+	dbPath := filepath.Join(t.TempDir(), "flowcontrol.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, codec)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatal(err)

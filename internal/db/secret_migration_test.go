@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -29,6 +30,7 @@ func migrationVault(t *testing.T) *secret.Vault {
 
 func openMigrationStore(t *testing.T, path string, vault secret.Codec) *Store {
 	t.Helper()
+	dbtest.EnsureOwnerOnlyParent(t, path)
 	store, err := Open(path, vault)
 	if err != nil {
 		t.Fatalf("open migration store: %v", err)
