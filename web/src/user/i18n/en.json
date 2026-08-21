@@ -284,6 +284,14 @@
         "changesTitle": "Changes and contact",
         "changesBody": "The operator may update these terms for a new release or operational change. Material changes should state an effective date and be communicated as required by applicable law. Continued use after the effective date constitutes acceptance where legally valid; otherwise stop using the service and contact the operator. The operator must publish a contact channel and governing-law statement before production use."
       }
+    },
+    "logs": {
+      "nav": "Logs",
+      "title": "Request logs",
+      "description": "View metadata and token usage of your own requests. Request and response content is not shown.",
+      "listTitle": "Request records",
+      "empty": "No log records",
+      "emptyBody": "No requests from your account match the current filters."
     }
   }
 }

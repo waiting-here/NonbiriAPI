@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiFetch } from '@shared/query/http';
 import {
+  asArray,
   asRecord,
   booleanValue,
   dateValue,
@@ -119,6 +120,59 @@ export interface IssuePage {
   nextCursor?: string;
 }
 
+/**
+ * One metadata-only log row of the session principal's own requests (frozen
+ * projection). key_note / endpoint_note are the current notes of the
+ * caller's own resources and are empty once a resource is deleted;
+ * endpoint_base_url is the durable dispatch-time snapshot. The normalizer
+ * whitelists exactly these fields.
+ */
+export interface UserRequestLog {
+  id: string;
+  route_kind: string;
+  model: string;
+  endpoint_key_id: string;
+  key_note: string;
+  endpoint_note: string;
+  endpoint_base_url: string;
+  upstream_model_id: string;
+  status_code: number;
+  duration_ms: number;
+  /** Unix seconds. */
+  started_at: number;
+  /** Unix seconds. */
+  completed_at: number;
+  uncached_input_tokens: number;
+  cache_write_input_tokens: number;
+  cache_read_input_tokens: number;
+  output_tokens: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  usage_unknown: boolean;
+  error_code: string;
+  error_source: string;
+  error_diag: string;
+  attempt_id: string;
+}
+
+export interface UserLogFilter {
+  model?: string;
+  errorCode?: string;
+  status?: string;
+  fromUnix?: number;
+  toUnix?: number;
+}
+
+export interface UserLogPage {
+  items: UserRequestLog[];
+  hasMore: boolean;
+}
+
+export interface UserLogOptions {
+  models: string[];
+}
+
 export const userKeys = {
   all: ['user'] as const,
   session: ['user', 'session'] as const,
@@ -136,6 +190,20 @@ export const userKeys = {
   callerKey: ['user', 'caller-key'] as const,
   issues: ['user', 'issues'] as const,
   issueResolve: (issueId: string) => ['user', 'issues', 'resolve', issueId] as const,
+  logs: (page: number, filter: UserLogFilter, pageSize: number) =>
+    [
+      'user',
+      'logs',
+      page,
+      filter.model ?? '',
+      filter.errorCode ?? '',
+      filter.status ?? '',
+      filter.fromUnix ?? '',
+      filter.toUnix ?? '',
+      pageSize,
+    ] as const,
+  logsRoot: ['user', 'logs'] as const,
+  logOptions: ['user', 'log-options'] as const,
 };
 
 function recordValue(record: UnknownRecord, key: string): unknown {
@@ -353,6 +421,60 @@ function normalizeIssuePage(value: unknown, pageSize = 20): IssuePage {
     hasMore,
     ...(hasMore && last && last.id !== '—' ? { nextCursor: last.id } : {}),
   };
+}
+
+function unixSecondsValue(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+    return Math.trunc(value);
+  }
+  return 0;
+}
+
+function normalizeUserLog(payload: unknown): UserRequestLog {
+  const record = asRecord(payload) ?? {};
+  const bucket = (key: string): number => {
+    const raw = recordValue(record, key);
+    return typeof raw === 'number' && Number.isSafeInteger(raw) && raw >= 0 ? raw : 0;
+  };
+  return {
+    id: idValue(recordValue(record, 'id')),
+    route_kind: text(recordValue(record, 'route_kind'), 64, '—'),
+    model: text(recordValue(record, 'model'), 256, '—'),
+    endpoint_key_id: idValue(recordValue(record, 'endpoint_key_id')),
+    key_note: text(recordValue(record, 'key_note'), 512),
+    endpoint_note: text(recordValue(record, 'endpoint_note'), 512),
+    endpoint_base_url: text(recordValue(record, 'endpoint_base_url'), 2048, '—'),
+    upstream_model_id: text(recordValue(record, 'upstream_model_id'), 256, '—'),
+    status_code: Math.max(0, integerValue(recordValue(record, 'status_code'))),
+    duration_ms: Math.max(0, integerValue(recordValue(record, 'duration_ms'))),
+    started_at: unixSecondsValue(recordValue(record, 'started_at')),
+    completed_at: unixSecondsValue(recordValue(record, 'completed_at')),
+    uncached_input_tokens: bucket('uncached_input_tokens'),
+    cache_write_input_tokens: bucket('cache_write_input_tokens'),
+    cache_read_input_tokens: bucket('cache_read_input_tokens'),
+    output_tokens: bucket('output_tokens'),
+    prompt_tokens: bucket('prompt_tokens'),
+    completion_tokens: bucket('completion_tokens'),
+    total_tokens: bucket('total_tokens'),
+    usage_unknown: booleanValue(recordValue(record, 'usage_unknown')),
+    error_code: text(recordValue(record, 'error_code'), 96),
+    error_source: text(recordValue(record, 'error_source'), 32),
+    error_diag: text(recordValue(record, 'error_diag'), 4096),
+    attempt_id: text(recordValue(record, 'attempt_id'), 128),
+  };
+}
+
+/**
+ * Normalize one paginated log page `{data, has_more}`. Ownership is enforced
+ * server-side; the browser only renders what the session principal owns.
+ */
+function normalizeUserLogPage(value: unknown): UserLogPage {
+  if (!isListPayload(value)) {
+    throw new ApiError('invalid_response', 'The server returned an invalid log list.', 200);
+  }
+  const record = asRecord(value);
+  const hasMore = typeof record?.has_more === 'boolean' ? record.has_more : false;
+  return { items: listResult(value).items.map(normalizeUserLog), hasMore };
 }
 
 /** Validate the one-time response without ever normalizing it into a query. */
@@ -624,5 +746,52 @@ export function useResolveUserIssue() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: userKeys.issues });
     },
+  });
+}
+
+/**
+ * Server-paginated list of the session principal's own request logs. The
+ * frozen filter set is exact equality on the server; only non-empty single
+ * values are sent, and there is no user-side export.
+ */
+export function useUserLogs(
+  page: number,
+  filter: UserLogFilter = {},
+  pageSize = 20,
+  enabled = true,
+) {
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  if (filter.model) params.set('model', filter.model);
+  if (filter.errorCode) params.set('error_code', filter.errorCode);
+  if (filter.status) params.set('status', filter.status);
+  if (filter.fromUnix !== undefined) params.set('from', String(filter.fromUnix));
+  if (filter.toUnix !== undefined) params.set('to', String(filter.toUnix));
+  return useQuery({
+    queryKey: userKeys.logs(page, filter, pageSize),
+    queryFn: async () => normalizeUserLogPage(await apiFetch<unknown>(`/api/logs?${params}`)),
+    enabled,
+  });
+}
+
+/**
+ * Bounded candidate list of the caller's own platform model names for the
+ * model filter dropdown. The server never substring-searches logs; any
+ * narrowing happens locally against this capped list.
+ */
+export function useUserLogOptions(enabled = true) {
+  return useQuery({
+    queryKey: userKeys.logOptions,
+    queryFn: async (): Promise<UserLogOptions> => {
+      const record = asRecord(await apiFetch<unknown>('/api/logs/options'));
+      if (!record) {
+        throw new ApiError('invalid_response', 'The server returned an invalid option list.', 200);
+      }
+      const models = asArray(record.models)
+        .map((value) => text(value, 256))
+        .filter((value) => value.length > 0);
+      return { models };
+    },
+    enabled,
+    staleTime: 30_000,
   });
 }
