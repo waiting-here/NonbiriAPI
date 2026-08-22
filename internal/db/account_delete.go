@@ -132,6 +132,14 @@ DELETE FROM donation_key_claims WHERE donation_key_id IN (
 		return fmt.Errorf("delete account: remove donation claims: %w", err)
 	}
 
+	// 1c. Converge in-flight charity reservations INSIDE this transaction
+	//    (frozen §5.4): reserved rows release (refund), dispatched rows commit
+	//    under unknown-usage semantics. A late settlement callback can only
+	//    observe a terminal state afterwards and becomes an atomic no-op.
+	if err := s.convergeCharityReservationsForUserDeleteTx(ctx, tx, userID, time.Now().Unix()); err != nil {
+		return fmt.Errorf("delete account: converge charity reservations: %w", err)
+	}
+
 	// 2. Capture the site-local days this user contributed activity to, so the
 	//    site rollup can be recomputed after the cascade. Retention keeps at
 	//    most 400 days per user; the LIMIT is a defensive bound, not the

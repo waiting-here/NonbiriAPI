@@ -22,6 +22,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	"github.com/waiting-here/NonbiriAPI/internal/charity"
+	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	"github.com/waiting-here/NonbiriAPI/internal/checkin"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
@@ -284,8 +285,11 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		return nil, fmt.Errorf("openai adapter: %w", err)
 	}
 	secureRunner, err := forward.NewSecureRunner(forward.SecureRunnerConfig{
-		Repository: store, Secrets: vault, Registry: registry,
-		Adapters: []forward.Adapter{openAIAdapter},
+		Repository:     store,
+		CharityTargets: store,
+		Secrets:        vault,
+		Registry:       registry,
+		Adapters:       []forward.Adapter{openAIAdapter},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("secure runner: %w", err)
@@ -298,6 +302,11 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err != nil {
 		return nil, fmt.Errorf("safety identifier subkey: %w", err)
 	}
+	safetyIdentifierFactory, err := forward.NewSafetyIdentifierFactory(safetyIdentifierKey)
+	if err != nil {
+		clear(safetyIdentifierKey)
+		return nil, fmt.Errorf("safety identifier factory: %w", err)
+	}
 	forwardService, err := forward.NewService(forward.ServiceConfig{
 		Repository:          store,
 		Runner:              secureRunner,
@@ -309,6 +318,20 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		return nil, fmt.Errorf("forward service: %w", err)
 	}
 	cleanup = append(cleanup, forwardService.Close)
+	charityService, err := charityrouting.NewService(charityrouting.ServiceConfig{
+		Store:             store,
+		Runner:            secureRunner,
+		SafetyIdentifiers: safetyIdentifierFactory,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("charity routing service: %w", err)
+	}
+	cleanup = append(cleanup, safetyIdentifierFactory.Close)
+	cleanup = append(cleanup, charityService.Close)
+	// Startup recovery converges stalled reservations from a previous process
+	// before any request can be in flight (frozen §5.4). The periodic sweep
+	// re-runs recovery at the start of every 6h maintenance round.
+	charityService.RecoverAll(context.Background(), true)
 	flowController, err = flowcontrol.New(flowcontrol.Config{
 		RPM:        ratelimit.DefaultRPMConfig(),
 		UserLimits: flowcontrol.DBUserLimitResolver(store),
@@ -329,6 +352,7 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 
 	lifecycleService, err := lifecycle.NewService(lifecycle.Config{
 		Store: store, Elevation: sharedElevation, AdminVerifier: adminAuth,
+		PreDeleteUser: charityService.CancelUserContexts,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("lifecycle service: %w", err)
@@ -423,7 +447,7 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		issues.NewHandler(issues.HandlerDeps{Store: store}),
 		checkinAPI.Handler(),
 		httpmw.API(donation.NewHandler(donationSvc, sessionIdentity)),
-		exportHandler, lifecycleService, forwardService, flowMiddleware, store, stewardAPI.Handler())
+		exportHandler, lifecycleService, forwardService, charityService, flowMiddleware, store, stewardAPI.Handler())
 	// The maintenance gate sits after the host/station edge (which only lets
 	// /api/* and /v1/* reach the user station) and before any auth or business
 	// handler. It is live-applied from site_config and loaded from the DB at
@@ -440,22 +464,28 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		defer app.wg.Done()
 		ticker := time.NewTicker(6 * time.Hour)
 		defer ticker.Stop()
-		runMaintenanceSweep(maintenanceCtx, store, usageService)
+		runMaintenanceSweep(maintenanceCtx, store, usageService, charityService)
 		for {
 			select {
 			case <-maintenanceCtx.Done():
 				return
 			case <-ticker.C:
-				runMaintenanceSweep(maintenanceCtx, store, usageService)
+				runMaintenanceSweep(maintenanceCtx, store, usageService, charityService)
 			}
 		}
 	}()
 	return app, nil
 }
 
-func runMaintenanceSweep(ctx context.Context, store *db.Store, usageService *usage.Service) {
+func runMaintenanceSweep(ctx context.Context, store *db.Store, usageService *usage.Service, charityService *charityrouting.Service) {
 	if ctx == nil || ctx.Err() != nil {
 		return
+	}
+	// Recovery runs FIRST (frozen §5.4): converge stalled charity reservations
+	// before any retention sweep so a crashed in-flight call is settled
+	// before its log row could be aged out.
+	if charityService != nil && ctx.Err() == nil {
+		charityService.RecoverAll(ctx, false)
 	}
 	if store != nil {
 		if _, purgeErr := store.PurgeExpiredSessions(); purgeErr != nil && ctx.Err() == nil {
@@ -549,7 +579,7 @@ func sessionIdentity(r *http.Request) (int64, error) {
 	return user.ID, nil
 }
 
-func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointService *endpoint.Service, fetcher *fetch.Fetcher, modelService *model.Service, logs http.Handler, issueHandler http.Handler, checkinHandler http.Handler, donationsHandler http.Handler, exportHandler http.Handler, lifecycleService *lifecycle.Service, forwardService *forward.Service, flowMiddleware *flowcontrol.Middleware, store *db.Store, stewardHandler http.Handler) http.Handler {
+func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointService *endpoint.Service, fetcher *fetch.Fetcher, modelService *model.Service, logs http.Handler, issueHandler http.Handler, checkinHandler http.Handler, donationsHandler http.Handler, exportHandler http.Handler, lifecycleService *lifecycle.Service, forwardService *forward.Service, charityService *charityrouting.Service, flowMiddleware *flowcontrol.Middleware, store *db.Store, stewardHandler http.Handler) http.Handler {
 	userAuthHandler := userAuth.Handler()
 	identity := func(r *http.Request) (int64, error) {
 		user, ok := auth.UserFromContext(r.Context())
@@ -568,7 +598,7 @@ func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointSe
 	userCheckin := checkinHandler
 	userExport := userAuth.Middleware(exportHandler)
 	userDelete := userAuth.Middleware(httpmw.API(http.HandlerFunc(lifecycleService.DeleteOwnAccountHandler)))
-	forwardHandler := auth.CallerKeyMiddleware(store, flowMiddleware.Wrap(forward.NewHandler(forward.HandlerDeps{Service: forwardService, Identity: forward.CallerIdentity})))
+	forwardHandler := auth.CallerKeyMiddleware(store, flowMiddleware.Wrap(forward.NewHandler(forward.HandlerDeps{Service: forwardService, Charity: charityService, Identity: forward.CallerIdentity})))
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path

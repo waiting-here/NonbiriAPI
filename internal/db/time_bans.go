@@ -47,7 +47,7 @@ func liftDueUserBanTx(tx *sql.Tx, userID, nowUnix int64) (bool, error) {
 // clearDueCharitySuspensionTx clears one expired suspension inside an
 // existing transaction and reports whether a row changed.
 func clearDueCharitySuspensionTx(tx *sql.Tx, userID, nowUnix int64) (bool, error) {
-	result, err := tx.Exec(clearDueCharitySuspensionSQL, nowUnix, userID)
+	result, err := tx.Exec(clearDueCharitySuspensionSQL, nowUnix, userID, nowUnix)
 	if err != nil {
 		return false, err
 	}
