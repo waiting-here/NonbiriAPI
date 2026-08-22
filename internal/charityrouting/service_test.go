@@ -550,6 +550,39 @@ func (w *zeroByteResponseWriter) Write(p []byte) (int, error) {
 
 func (w *zeroByteResponseWriter) WriteHeader(int) {}
 
+// partialResponseWriter delivers a strict prefix of every non-empty write.
+// It models a client sink that accepted some body bytes before returning a
+// short-write error; any delivered byte must keep the reservation dispatched.
+type partialResponseWriter struct {
+	hdr       http.Header
+	delivered int
+	maxBytes  int
+}
+
+func (w *partialResponseWriter) Header() http.Header {
+	if w.hdr == nil {
+		w.hdr = make(http.Header)
+	}
+	return w.hdr
+}
+
+func (w *partialResponseWriter) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	n := w.maxBytes
+	if n <= 0 || n >= len(p) {
+		n = len(p) - 1
+	}
+	if n == 0 {
+		n = 1
+	}
+	w.delivered += n
+	return n, errors.New("test: partial write")
+}
+
+func (w *partialResponseWriter) WriteHeader(int) {}
+
 // TestServiceForwardZeroByteSinkReleasesNotCharges: the first real body write
 // delivers zero bytes (sink failure). The frozen dispatch boundary ("first
 // body byte successfully submitted") was NOT crossed, so the reservation must
@@ -655,7 +688,7 @@ func TestServiceForwardShortWriteStaysDispatched(t *testing.T) {
 	}}}
 	svc, consumerID, _ := seedServiceFixture(t, store, runner, 1, true, 10_000)
 
-	rec := httptest.NewRecorder() // delivers all bytes (n = len)
+	rec := &partialResponseWriter{maxBytes: 3}
 	req := &openai.ChatRequest{Model: "[公益]donor/charity"}
 	result, err := svc.Forward(context.Background(), rec, consumerID, req)
 	if err != nil {
@@ -663,6 +696,9 @@ func TestServiceForwardShortWriteStaysDispatched(t *testing.T) {
 	}
 	if !result.Committed {
 		t.Fatalf("result.Committed = false, want true (bytes were delivered)")
+	}
+	if rec.delivered <= 0 || rec.delivered >= len(runner.responses[0].body) {
+		t.Fatalf("delivered bytes = %d, want 0 < n < %d", rec.delivered, len(runner.responses[0].body))
 	}
 	var state string
 	var unknown int
