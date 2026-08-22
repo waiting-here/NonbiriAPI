@@ -77,16 +77,15 @@ type Repository interface {
 	RecordRequest(ctx context.Context, input db.RequestLogInput) error
 }
 
-// ServiceConfig wires the repository, runner, safety-identifier factory and
-// logger. Now defaults to time.Now; ForwardTimeout defaults to
+// ServiceConfig wires the repository and runner. The shared safety-identifier
+// factory is owned by SecureRunner. Now defaults to time.Now; ForwardTimeout defaults to
 // DefaultForwardTimeout.
 type ServiceConfig struct {
-	Store             Repository
-	Runner            Runner
-	SafetyIdentifiers *forward.SafetyIdentifierFactory
-	Logger            *slog.Logger
-	Now               func() time.Time
-	ForwardTimeout    time.Duration
+	Store          Repository
+	Runner         Runner
+	Logger         *slog.Logger
+	Now            func() time.Time
+	ForwardTimeout time.Duration
 	// PreflightHook runs after request decoding but before route reservation or
 	// any upstream dispatch. It is optional so the charity rail remains usable
 	// in focused tests and in deployments without the anti-abuse policy.
@@ -96,14 +95,13 @@ type ServiceConfig struct {
 // Service orchestrates one logical charity call end-to-end. Exactly one user
 // reserve exists per invocation; retries move only the donated-key reserve.
 type Service struct {
-	store             Repository
-	runner            Runner
-	safetyIdentifiers *forward.SafetyIdentifierFactory
-	logger            *slog.Logger
-	now               func() time.Time
-	timeout           time.Duration
-	preflight         func(context.Context, int64, *openai.ChatRequest) error
-	limits            *keyLimiter
+	store     Repository
+	runner    Runner
+	logger    *slog.Logger
+	now       func() time.Time
+	timeout   time.Duration
+	preflight func(context.Context, int64, *openai.ChatRequest) error
+	limits    *keyLimiter
 
 	mu      sync.Mutex
 	nextCtx uint64
@@ -116,9 +114,6 @@ func NewService(config ServiceConfig) (*Service, error) {
 	}
 	if config.Runner == nil {
 		return nil, errors.New("charityrouting: runner is required")
-	}
-	if config.SafetyIdentifiers == nil {
-		return nil, errors.New("charityrouting: safety identifier factory is required")
 	}
 	if config.ForwardTimeout < 0 {
 		return nil, errors.New("charityrouting: timeout must not be negative")
@@ -133,15 +128,14 @@ func NewService(config ServiceConfig) (*Service, error) {
 		config.Logger = slog.Default()
 	}
 	return &Service{
-		store:             config.Store,
-		runner:            config.Runner,
-		safetyIdentifiers: config.SafetyIdentifiers,
-		logger:            config.Logger,
-		now:               config.Now,
-		timeout:           config.ForwardTimeout,
-		preflight:         config.PreflightHook,
-		limits:            newKeyLimiter(),
-		active:            make(map[int64]map[uint64]context.CancelFunc),
+		store:     config.Store,
+		runner:    config.Runner,
+		logger:    config.Logger,
+		now:       config.Now,
+		timeout:   config.ForwardTimeout,
+		preflight: config.PreflightHook,
+		limits:    newKeyLimiter(),
+		active:    make(map[int64]map[uint64]context.CancelFunc),
 	}, nil
 }
 
@@ -293,11 +287,6 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 		return openai.AttemptResult{}, ErrModelNotFound
 	}
 
-	safetyIdentifier, err := s.safetyIdentifiers.Generate(userID)
-	if err != nil {
-		return openai.AttemptResult{}, ErrInternal
-	}
-
 	parentCtx := ctx
 	callCtx, cancel := context.WithTimeout(parentCtx, s.timeout)
 	defer cancel()
@@ -446,10 +435,11 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 			})
 		started := s.now()
 		result := s.runner.RunCharity(callCtx, dw, forward.CharityAttemptInput{
-			BindingID:        candidate.BindingID,
-			Now:              nowUnix,
-			Request:          request,
-			SafetyIdentifier: safetyIdentifier,
+			BindingID:      candidate.BindingID,
+			FullName:       route.Model.FullName,
+			Now:            nowUnix,
+			ConsumerUserID: userID,
+			Request:        request,
 		})
 		if callCtx.Err() != nil && !result.Committed {
 			result = endedContextResult(parentCtx, callCtx)

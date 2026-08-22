@@ -142,25 +142,29 @@ func newIntegrationFixture(t *testing.T, rpmConfig ratelimit.RPMConfig) *integra
 	if err != nil {
 		t.Fatal(err)
 	}
-	runner, err := forward.NewSecureRunner(forward.SecureRunnerConfig{
-		Repository: store,
-		Secrets:    codec,
-		Registry:   registry,
-		Adapters:   []forward.Adapter{adapter},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	safetyIdentifierKey, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := forward.NewService(forward.ServiceConfig{
-		Repository:          store,
-		Runner:              runner,
-		SafetyIdentifierKey: safetyIdentifierKey,
-	})
+	safetyIdentifierFactory, err := forward.NewSafetyIdentifierFactory(safetyIdentifierKey)
 	clear(safetyIdentifierKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner, err := forward.NewSecureRunner(forward.SecureRunnerConfig{
+		Repository:        store,
+		Secrets:           codec,
+		Registry:          registry,
+		Adapters:          []forward.Adapter{adapter},
+		SafetyIdentifiers: safetyIdentifierFactory,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := forward.NewService(forward.ServiceConfig{
+		Repository: store,
+		Runner:     runner,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,6 +180,7 @@ func newIntegrationFixture(t *testing.T, rpmConfig ratelimit.RPMConfig) *integra
 	wrapped := auth.CallerKeyMiddleware(store, middleware.Wrap(exit))
 	t.Cleanup(func() {
 		_ = service.Close()
+		_ = safetyIdentifierFactory.Close()
 		controller.Close()
 		stack.CloseIdleConnections()
 		_ = store.Close()

@@ -108,11 +108,21 @@ func newUsageFixture(t *testing.T, allowed []string, mutateConfig func(*usage.Co
 	if err != nil {
 		t.Fatal(err)
 	}
+	safetyIdentifierKey, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	safetyIdentifierFactory, err := forward.NewSafetyIdentifierFactory(safetyIdentifierKey)
+	clear(safetyIdentifierKey)
+	if err != nil {
+		t.Fatal(err)
+	}
 	runner, err := forward.NewSecureRunner(forward.SecureRunnerConfig{
-		Repository: store,
-		Secrets:    vault,
-		Registry:   registry,
-		Adapters:   []forward.Adapter{adapter},
+		Repository:        store,
+		Secrets:           vault,
+		Registry:          registry,
+		Adapters:          []forward.Adapter{adapter},
+		SafetyIdentifiers: safetyIdentifierFactory,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -125,20 +135,14 @@ func newUsageFixture(t *testing.T, allowed []string, mutateConfig func(*usage.Co
 	if err != nil {
 		t.Fatal(err)
 	}
-	safetyIdentifierKey, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
-	if err != nil {
-		t.Fatal(err)
-	}
 	service, err := forward.NewService(forward.ServiceConfig{
-		Repository:          store,
-		Runner:              runner,
-		SafetyIdentifierKey: safetyIdentifierKey,
+		Repository: store,
+		Runner:     runner,
 		Hooks: forward.Hooks{
 			Attempt: usageService.HandleAttempt,
 			Usage:   usageService.HandleUsage,
 		},
 	})
-	clear(safetyIdentifierKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,6 +151,7 @@ func newUsageFixture(t *testing.T, allowed []string, mutateConfig func(*usage.Co
 	fixture := &usageFixture{store: store, vault: vault, stack: stack, handler: wrapped, service: usageService}
 	t.Cleanup(func() {
 		_ = service.Close()
+		_ = safetyIdentifierFactory.Close()
 		stack.CloseIdleConnections()
 		_ = store.Close()
 		_ = vault.Close()

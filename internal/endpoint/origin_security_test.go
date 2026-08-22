@@ -284,27 +284,31 @@ func TestEndpointOriginChangeCannotExfiltrateStoredCredential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runner, err := forward.NewSecureRunner(forward.SecureRunnerConfig{
-		Repository: store, Secrets: vault, Registry: registry, Adapters: []forward.Adapter{adapter},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	safetyIdentifierKey, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
 	if err != nil {
 		t.Fatal(err)
 	}
-	forwardService, err := forward.NewService(forward.ServiceConfig{
-		Repository:          store,
-		Runner:              runner,
-		Backoff:             forward.BackoffConfig{Base: -1, Max: -1},
-		SafetyIdentifierKey: safetyIdentifierKey,
-	})
+	safetyIdentifierFactory, err := forward.NewSafetyIdentifierFactory(safetyIdentifierKey)
 	clear(safetyIdentifierKey)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = forwardService.Close() })
+	runner, err := forward.NewSecureRunner(forward.SecureRunnerConfig{
+		Repository: store, Secrets: vault, Registry: registry, Adapters: []forward.Adapter{adapter},
+		SafetyIdentifiers: safetyIdentifierFactory,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	forwardService, err := forward.NewService(forward.ServiceConfig{
+		Repository: store,
+		Runner:     runner,
+		Backoff:    forward.BackoffConfig{Base: -1, Max: -1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = forwardService.Close(); _ = safetyIdentifierFactory.Close() })
 	chatRequest, err := openai.DecodeChatRequest(strings.NewReader(
 		`{"model":"provider/model","messages":[{"role":"user","content":"hello"}]}`), openai.MaxRequestBodyBytes)
 	if err != nil {

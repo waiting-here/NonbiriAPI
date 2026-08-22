@@ -19,8 +19,12 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
+
+const testSafetyOrigin = "https://example.com:443"
 
 func randomSafetyIdentifierKey(t *testing.T) []byte {
 	t.Helper()
@@ -40,8 +44,16 @@ func derivedSafetyIdentifierKey(t *testing.T, vault *secret.Vault) []byte {
 	return key
 }
 
-func expectedSafetyIdentifier(t *testing.T, vault *secret.Vault, userID int64) string {
+func expectedSafetyIdentifier(t *testing.T, vault *secret.Vault, userID int64, rawTarget ...string) string {
 	t.Helper()
+	origin := testSafetyOrigin
+	if len(rawTarget) > 0 {
+		var err error
+		_, origin, err = egress.CanonicalEndpointTarget(rawTarget[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	key := derivedSafetyIdentifierKey(t, vault)
 	generator, err := newSafetyIdentifierGenerator(key)
 	clear(key)
@@ -49,7 +61,7 @@ func expectedSafetyIdentifier(t *testing.T, vault *secret.Vault, userID int64) s
 		t.Fatal(err)
 	}
 	defer generator.close()
-	identifier, err := generator.generate(userID)
+	identifier, err := generator.generate(userID, origin)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,12 +106,12 @@ func TestSafetyIdentifierGeneratorKnownVectorStabilityAndBounds(t *testing.T) {
 	clear(key)
 	t.Cleanup(func() { _ = generator.close() })
 
-	const expected = "nbu_v2_BSU5XHEZS4BWDEVKDYYB57RKIGHCMSOMFRR7AWF3DFJ4DLIUFTIA"
-	first, err := generator.generate(42)
+	const expected = "nbu_v3_NM6BXU63RFI3GVH33OZWLE46NBCXAHWEO44VIW7P7ED33KT5F2RA"
+	first, err := generator.generate(42, testSafetyOrigin)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := generator.generate(42)
+	second, err := generator.generate(42, testSafetyOrigin)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +120,7 @@ func TestSafetyIdentifierGeneratorKnownVectorStabilityAndBounds(t *testing.T) {
 	}
 	assertSafetyIdentifierFormat(t, first)
 
-	otherUser, err := generator.generate(43)
+	otherUser, err := generator.generate(43, testSafetyOrigin)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,14 +129,14 @@ func TestSafetyIdentifierGeneratorKnownVectorStabilityAndBounds(t *testing.T) {
 	}
 	assertSafetyIdentifierFormat(t, otherUser)
 
-	maximumUser, err := generator.generate(9223372036854775807)
+	maximumUser, err := generator.generate(9223372036854775807, testSafetyOrigin)
 	if err != nil {
 		t.Fatal(err)
 	}
 	assertSafetyIdentifierFormat(t, maximumUser)
 
 	for _, userID := range []int64{0, -1, -9223372036854775807 - 1} {
-		if identifier, err := generator.generate(userID); !errors.Is(err, errInvalidSafetyIdentifierID) || identifier != "" {
+		if identifier, err := generator.generate(userID, testSafetyOrigin); !errors.Is(err, errInvalidSafetyIdentifierID) || identifier != "" {
 			t.Fatalf("userID=%d identifier=%q err=%v", userID, identifier, err)
 		}
 	}
@@ -153,16 +165,148 @@ func TestSafetyIdentifierGeneratorKeyAndDeploymentSeparation(t *testing.T) {
 		_ = second.close()
 	})
 
-	firstID, err := first.generate(731337)
+	firstID, err := first.generate(731337, testSafetyOrigin)
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondID, err := second.generate(731337)
+	secondID, err := second.generate(731337, testSafetyOrigin)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if firstID == secondID {
 		t.Fatal("different deployment-derived keys produced the same identifier")
+	}
+}
+
+func TestSafetyIdentifierFactoryBindsCanonicalOrigin(t *testing.T) {
+	key := bytes.Repeat([]byte{0x41}, safetyIdentifierKeyBytes)
+	factory, err := NewSafetyIdentifierFactory(key)
+	clear(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = factory.Close() })
+
+	_, firstOrigin, err := egress.CanonicalEndpointTarget("HTTPS://EXAMPLE.COM./api/v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, sameOrigin, err := egress.CanonicalEndpointTarget("https://example.com:443/another/path")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstOrigin != sameOrigin {
+		t.Fatalf("path changed origin: %q != %q", firstOrigin, sameOrigin)
+	}
+	first, err := factory.Generate(42, firstOrigin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	samePathOrigin, err := factory.Generate(42, sameOrigin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != samePathOrigin {
+		t.Fatal("same user and origin changed identifier across paths")
+	}
+	_, httpOrigin, err := egress.CanonicalEndpointTarget("http://example.com/api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, otherHost, err := egress.CanonicalEndpointTarget("https://other.example/api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, otherPort, err := egress.CanonicalEndpointTarget("https://example.com:8443/api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for label, origin := range map[string]string{"scheme": httpOrigin, "host": otherHost, "port": otherPort} {
+		other, genErr := factory.Generate(42, origin)
+		if genErr != nil {
+			t.Fatalf("%s origin: %v", label, genErr)
+		}
+		if other == first {
+			t.Fatalf("%s change did not rotate identifier", label)
+		}
+	}
+	otherUser, err := factory.Generate(43, firstOrigin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if otherUser == first {
+		t.Fatal("different users shared an origin-scoped identifier")
+	}
+	for _, invalid := range []string{
+		"https://example.com",
+		"https://EXAMPLE.com:443",
+		"https://example.com:443/path",
+		"https://example.com?query=1",
+		"not-an-origin",
+	} {
+		if got, genErr := factory.Generate(42, invalid); !errors.Is(genErr, errInvalidSafetyIdentifierOrigin) || got != "" {
+			t.Fatalf("invalid origin %q got=%q err=%v", invalid, got, genErr)
+		}
+	}
+}
+
+type dispatchSafetyRepo struct{ target db.ForwardTarget }
+
+func (r dispatchSafetyRepo) GetForwardTarget(context.Context, int64, string, int64) (db.ForwardTarget, error) {
+	return r.target, nil
+}
+
+type dispatchSafetyCodec struct{ opens atomic.Int32 }
+
+func (c *dispatchSafetyCodec) OpenForContext(string, secret.EndpointKeyContext) ([]byte, error) {
+	c.opens.Add(1)
+	return []byte("secret"), nil
+}
+
+type dispatchSafetyAdapter struct{ calls atomic.Int32 }
+
+func (*dispatchSafetyAdapter) ConnectorType() endpoint.ConnectorType {
+	return endpoint.ConnectorOpenAICompatible
+}
+
+func (a *dispatchSafetyAdapter) Attempt(context.Context, http.ResponseWriter, openai.Target, *openai.ChatRequest, string) openai.AttemptResult {
+	a.calls.Add(1)
+	return openai.AttemptResult{Success: true, Committed: true}
+}
+
+func TestSecureRunnerMissingOrClosedFactoryFailsBeforeDecryptOrDial(t *testing.T) {
+	codec := &dispatchSafetyCodec{}
+	adapter := &dispatchSafetyAdapter{}
+	config := SecureRunnerConfig{
+		Repository: dispatchSafetyRepo{target: db.ForwardTarget{
+			BindingID: 1, EndpointID: 2, EndpointKeyID: 3,
+			ConnectorType: string(endpoint.ConnectorOpenAICompatible), BaseURL: testSafetyOrigin,
+			UpstreamModelID: "up/model",
+		}},
+		Secrets: codec, Registry: endpoint.NewRegistry(), Adapters: []Adapter{adapter},
+	}
+	if runner, err := NewSecureRunner(config); err == nil || runner != nil {
+		t.Fatalf("missing factory runner=%v err=%v", runner, err)
+	}
+	key := randomSafetyIdentifierKey(t)
+	factory, err := NewSafetyIdentifierFactory(key)
+	clear(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := factory.Close(); err != nil {
+		t.Fatal(err)
+	}
+	config.SafetyIdentifiers = factory
+	runner, err := NewSecureRunner(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := runner.Run(context.Background(), httptest.NewRecorder(), AttemptInput{
+		UserID: 7, FullName: "p/m", BindingID: 1, Request: &openai.ChatRequest{Model: "p/m"},
+	})
+	if result.Failure != openai.FailureInternal || codec.opens.Load() != 0 || adapter.calls.Load() != 0 {
+		t.Fatalf("closed factory result=%+v decryptions=%d adapter_calls=%d", result, codec.opens.Load(), adapter.calls.Load())
 	}
 }
 
@@ -178,7 +322,7 @@ func TestSafetyIdentifierGeneratorRejectsMissingKeyAndClearsOnClose(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	config := ServiceConfig{SafetyIdentifierKey: key}
+	config := ServiceConfig{}
 	var logOutput bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logOutput, nil))
 	logger.Info("format safety identifier state", "generator", generator, "config", config)
@@ -195,7 +339,7 @@ func TestSafetyIdentifierGeneratorRejectsMissingKeyAndClearsOnClose(t *testing.T
 	if err := generator.close(); err != nil {
 		t.Fatalf("second close: %v", err)
 	}
-	if identifier, err := generator.generate(1); !errors.Is(err, errSafetyIdentifierClosed) || identifier != "" {
+	if identifier, err := generator.generate(1, testSafetyOrigin); !errors.Is(err, errSafetyIdentifierClosed) || identifier != "" {
 		t.Fatalf("generate after close identifier=%q err=%v", identifier, err)
 	}
 	if !generator.closed || !bytes.Equal(generator.key[:], make([]byte, safetyIdentifierKeyBytes)) {
@@ -210,7 +354,7 @@ func TestSafetyIdentifierGeneratorConcurrentGenerationAndClose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, err := generator.generate(919191)
+	want, err := generator.generate(919191, testSafetyOrigin)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +371,7 @@ func TestSafetyIdentifierGeneratorConcurrentGenerationAndClose(t *testing.T) {
 			<-start
 			reportedReady := false
 			for {
-				identifier, generateErr := generator.generate(919191)
+				identifier, generateErr := generator.generate(919191, testSafetyOrigin)
 				if !reportedReady {
 					ready <- struct{}{}
 					reportedReady = true
@@ -258,7 +402,7 @@ func TestSafetyIdentifierGeneratorConcurrentGenerationAndClose(t *testing.T) {
 	for err := range errs {
 		t.Error(err)
 	}
-	if identifier, err := generator.generate(919191); !errors.Is(err, errSafetyIdentifierClosed) || identifier != "" {
+	if identifier, err := generator.generate(919191, testSafetyOrigin); !errors.Is(err, errSafetyIdentifierClosed) || identifier != "" {
 		t.Fatalf("post-close generation identifier=%q err=%v", identifier, err)
 	}
 }
@@ -273,7 +417,7 @@ func TestSafetyIdentifierNoKeyMillionCandidateEnumeration(t *testing.T) {
 	defer generator.close()
 
 	const targetUserID int64 = 731337
-	target, err := generator.generate(targetUserID)
+	target, err := generator.generate(targetUserID, testSafetyOrigin)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +432,7 @@ func TestSafetyIdentifierNoKeyMillionCandidateEnumeration(t *testing.T) {
 	// attacker without the deployment key: hash the exact public purpose and
 	// every positive fixed-width candidate. None can verify the keyed target.
 	for candidate := int64(1); candidate <= 1_000_000; candidate++ {
-		message := safetyIdentifierMessage(candidate)
+		message := safetyIdentifierMessage(candidate, testSafetyOrigin)
 		publicDigest := sha256.Sum256(message[:])
 		if bytes.Equal(publicDigest[:], targetDigest) {
 			clear(message[:])
@@ -337,40 +481,20 @@ func (r *safetyIdentifierRunner) Run(ctx context.Context, _ http.ResponseWriter,
 
 func newSafetyIdentifierServiceForTest(t *testing.T, repository RouteRepository, runner AttemptRunner) *Service {
 	t.Helper()
-	key := randomSafetyIdentifierKey(t)
 	service, err := NewService(ServiceConfig{
-		Repository:          repository,
-		Runner:              runner,
-		SafetyIdentifierKey: key,
+		Repository: repository,
+		Runner:     runner,
 	})
-	clear(key)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return service
 }
 
-func TestForwardServiceRequiresLiveSafetyIdentifierGenerator(t *testing.T) {
+func TestForwardServiceCloseStopsNewOperations(t *testing.T) {
 	repository := &safetyIdentifierRepository{}
 	runner := &safetyIdentifierRunner{}
-	for _, key := range [][]byte{nil, make([]byte, safetyIdentifierKeyBytes-1), make([]byte, safetyIdentifierKeyBytes+1)} {
-		service, err := NewService(ServiceConfig{Repository: repository, Runner: runner, SafetyIdentifierKey: key})
-		if !errors.Is(err, errInvalidSafetyIdentifierKey) || service != nil {
-			t.Fatalf("key length=%d service=%v err=%v", len(key), service, err)
-		}
-	}
-
 	service := newSafetyIdentifierServiceForTest(t, repository, runner)
-	if err := service.safetyIdentifiers.close(); err != nil {
-		t.Fatal(err)
-	}
-	result, err := service.Forward(context.Background(), httptest.NewRecorder(), 1, &openai.ChatRequest{Model: "p/m"})
-	if !errors.Is(err, ErrInternal) || result != (openai.AttemptResult{}) {
-		t.Fatalf("closed generator result=%+v err=%v", result, err)
-	}
-	if repository.resolveCalls.Load() != 0 || runner.runCalls.Load() != 0 {
-		t.Fatalf("closed generator reached repository/runner: resolves=%d runs=%d", repository.resolveCalls.Load(), runner.runCalls.Load())
-	}
 	if err := service.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -395,8 +519,7 @@ func TestForwardServiceCloseWaitsForInflightAndThenFailsClosed(t *testing.T) {
 		forwardDone <- forwardErr
 	}()
 	input := <-entered
-	assertSafetyIdentifierFormat(t, input.SafetyIdentifier)
-	if input.UserID != userID || strings.HasPrefix(input.SafetyIdentifier, "nbu_") && !strings.HasPrefix(input.SafetyIdentifier, safetyIdentifierPrefix) {
+	if input.UserID != userID {
 		t.Fatalf("runner input=%+v", input)
 	}
 
@@ -419,8 +542,8 @@ func TestForwardServiceCloseWaitsForInflightAndThenFailsClosed(t *testing.T) {
 	if err := <-closeDone; err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	if !service.closed || !service.safetyIdentifiers.closed || !bytes.Equal(service.safetyIdentifiers.key[:], make([]byte, safetyIdentifierKeyBytes)) {
-		t.Fatal("service close did not clear retained safety identifier state")
+	if !service.closed {
+		t.Fatal("service close did not mark service closed")
 	}
 
 	beforeRuns := runner.runCalls.Load()
