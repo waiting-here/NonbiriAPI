@@ -34,7 +34,7 @@ Use the host's normal administration tools (full commands in
 
 ```sh
 sudo useradd --system --user-group --home /var/lib/nonbiriapi --shell /usr/sbin/nologin nonbiriapi
-sudo install -d -o nonbiriapi -g nonbiriapi -m 0750 /var/lib/nonbiriapi
+sudo install -d -o nonbiriapi -g nonbiriapi -m 0700 /var/lib/nonbiriapi
 sudo install -d -o root   -g nonbiriapi -m 0750 /etc/nonbiriapi
 ```
 
@@ -161,7 +161,7 @@ Before the first boot, confirm:
 
 - `/etc/nonbiriapi/master.key` — `0400` or `0600`, owned by `nonbiriapi:nonbiriapi`.
 - `/etc/nonbiriapi/admin.env` — `0640`, owned by `root:nonbiriapi`, with `nonbiriapi` a dedicated group containing no unrelated accounts.
-- `/var/lib/nonbiriapi` — `0750`, owned by `nonbiriapi:nonbiriapi` (writable by the service).
+- `/var/lib/nonbiriapi` — `0700`, owned by `nonbiriapi:nonbiriapi` (required by the runtime owner-only check).
 - No secret appears in the repository, in a backup that is not key-grade, or in a
   shell history file. Treat the database and backups as carefully as the master
   key — they contain encrypted upstream credentials and private account data.

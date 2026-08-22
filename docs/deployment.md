@@ -1,6 +1,6 @@
 # VPS deployment with systemd
 
-This guide describes the first supported operating model for `v1.0.0-alpha.1`: one compiled binary, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS. See [configuration.md](configuration.md) for the full environment and runtime-settings reference.
+This guide describes the supported single-instance operating model introduced for `v1.0.0-alpha.1` and used by the current `v1.0.0-alpha.2` development branch: one compiled binary, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS. See [configuration.md](configuration.md) for the full environment and runtime-settings reference.
 
 The commands are examples. Replace paths, hostnames, users, and package-manager commands for the target VPS. Do not copy real secrets into a Git checkout.
 
@@ -68,10 +68,11 @@ CGO_ENABLED=0 go build -tags dist -trimpath -o nonbiriapi .
 
 The `dist` build tag is required for the real frontend. An untagged binary contains development placeholder pages. Verify the output before installation with `go version -m ./nonbiriapi` and a temporary configuration/database.
 
-Install into a versioned directory and publish the symlink with a same-filesystem rename:
+Install into a versioned directory and publish the symlink with a same-filesystem rename. Set `version` to the release being installed:
 
 ```sh
-release=/opt/nonbiriapi/releases/1.0.0-alpha.1
+version=1.0.0-alpha.2
+release=/opt/nonbiriapi/releases/$version
 sudo install -d -o root -g root -m 0755 "$release"
 sudo install -o root -g root -m 0755 nonbiriapi "$release/nonbiriapi"
 sudo ln -sfn "$release" /opt/nonbiriapi/current.next
@@ -176,7 +177,8 @@ Use separate `server` blocks/certificates for user and administrator hosts so th
 6. Point `/opt/nonbiriapi/current` at the new release and start the service:
 
    ```sh
-   sudo ln -sfn /opt/nonbiriapi/releases/1.0.0-alpha.1 /opt/nonbiriapi/current.next
+   version=1.0.0-alpha.2  # replace with the release being installed
+   sudo ln -sfn "/opt/nonbiriapi/releases/$version" /opt/nonbiriapi/current.next
    sudo mv -Tf /opt/nonbiriapi/current.next /opt/nonbiriapi/current
    sudo systemctl start nonbiriapi.service
    sudo systemctl status nonbiriapi.service
@@ -205,49 +207,8 @@ A backup is not complete until it has been restored in an isolated directory wit
 Alpha.2 is a pre-1.0 development release with breaking schema changes. Always keep a tested backup before upgrading.
 
 1. **Stop the service and back up.** Follow the [manual update procedure](#manual-update-procedure): stop the service, then copy the database and any existing `-wal`/`-shm` sidecars as one protected set. Keep the old binary, environment file, master key and database backup together.
-2. **New tables are automatic.** Tables introduced by alpha.2 use `CREATE TABLE IF NOT EXISTS` and are created on the first boot of the new binary. The bootstrap is idempotent.
-3. **Alter existing tables before first boot.** Run these one-shot statements against the stopped database before starting the alpha.2 binary. Do not run them again against the same database.
-
-   ```sql
-   -- users table (new columns for bans, economy, levels, four-bucket tokens)
-   ALTER TABLE users ADD COLUMN banned_until INTEGER;
-   ALTER TABLE users ADD COLUMN auto_banned INTEGER NOT NULL DEFAULT 0;
-   ALTER TABLE users ADD COLUMN charity_suspended_until INTEGER;
-   ALTER TABLE users ADD COLUMN credits INTEGER NOT NULL DEFAULT 0;
-   ALTER TABLE users ADD COLUMN donation_credit INTEGER NOT NULL DEFAULT 0;
-   ALTER TABLE users ADD COLUMN level INTEGER;
-   ALTER TABLE users ADD COLUMN auto_level INTEGER NOT NULL DEFAULT 1;
-   ALTER TABLE users ADD COLUMN total_uncached_input_tokens INTEGER NOT NULL DEFAULT 0;
-   ALTER TABLE users ADD COLUMN total_cache_write_input_tokens INTEGER NOT NULL DEFAULT 0;
-   ALTER TABLE users ADD COLUMN total_cache_read_input_tokens INTEGER NOT NULL DEFAULT 0;
-   ALTER TABLE users ADD COLUMN total_output_tokens INTEGER NOT NULL DEFAULT 0;
-
-   -- sessions table (credential-generation fingerprint for admin session rotation)
-   ALTER TABLE sessions ADD COLUMN cred_gen TEXT NOT NULL DEFAULT '';
-
-   -- endpoints table (fetch failure tracking)
-   ALTER TABLE endpoints ADD COLUMN model_fetch_failed INTEGER NOT NULL DEFAULT 0;
-   ALTER TABLE endpoints ADD COLUMN model_fetch_failed_at INTEGER NOT NULL DEFAULT 0;
-
-   -- models table (silent retry switch)
-   ALTER TABLE models ADD COLUMN silent_retry INTEGER NOT NULL DEFAULT 0;
-
-   -- request_logs table (four-bucket tokens, attempt dedup, charity columns)
-   ALTER TABLE request_logs ADD COLUMN attempt_id TEXT;
-   ALTER TABLE request_logs ADD COLUMN route_kind TEXT NOT NULL DEFAULT 'personal';
-   ALTER TABLE request_logs ADD COLUMN endpoint_base_url TEXT NOT NULL DEFAULT '';
-   ALTER TABLE request_logs ADD COLUMN error_source TEXT NOT NULL DEFAULT 'platform';
-   ALTER TABLE request_logs ADD COLUMN charity_reservation_id INTEGER;
-   ALTER TABLE request_logs ADD COLUMN original_charge INTEGER NOT NULL DEFAULT 0;
-   ALTER TABLE request_logs ADD COLUMN user_charge INTEGER NOT NULL DEFAULT 0;
-   ALTER TABLE request_logs ADD COLUMN donor_reward INTEGER NOT NULL DEFAULT 0;
-   ALTER TABLE request_logs ADD COLUMN uncached_input_tokens INTEGER NOT NULL DEFAULT 0;
-   ALTER TABLE request_logs ADD COLUMN cache_write_input_tokens INTEGER NOT NULL DEFAULT 0;
-   ALTER TABLE request_logs ADD COLUMN cache_read_input_tokens INTEGER NOT NULL DEFAULT 0;
-   ALTER TABLE request_logs ADD COLUMN output_tokens INTEGER NOT NULL DEFAULT 0;
-   CREATE UNIQUE INDEX IF NOT EXISTS idx_request_logs_attempt ON request_logs(attempt_id) WHERE attempt_id IS NOT NULL;
-   ```
-
+2. **New tables are automatic.** Tables introduced by alpha.2 use idempotent bootstrap statements and are created on the first boot of the new binary. The bootstrap is safe to repeat.
+3. **Existing-table columns are automatic.** On first boot, the alpha.2 binary idempotently adds its missing columns and backfills the legacy usage projection. Do not run hand-written `ALTER TABLE` statements: repeating them against a database that has already started under alpha.2 will fail with duplicate-column errors.
 4. **Credential envelope migration.** On startup, the binary upgrades endpoint-key envelopes automatically in an idempotent, transactional migration. The old binary cannot read the new envelope format; downgrade only by restoring the complete pre-upgrade backup.
 5. **Fresh database alternative.** For test or staging, delete the database and let the new binary create a fresh one. Keep and reuse the same master key; do not generate a replacement key for an existing deployment.
 6. **Breaking changes are expected.** Alpha is a pre-1.0 development phase. A versioned migration framework is planned for after 1.0, so always back up before an upgrade.
@@ -256,6 +217,6 @@ Alpha.2 is a pre-1.0 development release with breaking schema changes. Always ke
 ## Alpha limitations
 
 - The schema is bootstrapped idempotently. There is no general versioned migration framework; the unreleased credential-envelope upgrade uses one dedicated, idempotent startup migrator.
-- SMTP settings are reserved and do not send alert email in this release.
+- SMTP settings are reserved and do not send alert email in the alpha releases.
 - Real Discord OAuth and upstream success flows must be tested with disposable staging credentials before public operation.
 - Choose a maintenance window for every update and keep a known-good binary, environment backup, and database backup together.

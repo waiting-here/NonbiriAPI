@@ -20,7 +20,7 @@ Copy [admin.env.example](../admin.env.example) to a private path outside the che
 | `NONBIRI_SITE_BASE_URL` | yes | canonical public origin of the user station |
 | `NONBIRI_ADMIN_HOST` | no | separate admin host; blank/unset derives `admin.<user-host>` (explicit value required for IPv6 user hosts) |
 | `NONBIRI_TRUSTED_PROXY_CIDRS` | no | peers allowed to supply forwarding metadata; defaults to loopback ranges; `none` disables trust |
-| `NONBIRI_SMTP_*` | no | parsed/reserved only; alpha.1 does not send alert email |
+| `NONBIRI_SMTP_*` | no | parsed/reserved only; the alpha releases do not send alert email |
 
 If registration is enabled, an OAuth scope override must retain both identity and guild-member access; `identify` alone cannot satisfy the guild/role registration gate.
 
@@ -30,7 +30,7 @@ The database directory and file hold encrypted upstream credentials and private 
 
 ## Runtime administrator settings
 
-The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values shown below are current alpha.1 behavior.
+The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values shown below describe the current alpha.2 development branch; alpha.2-only keys are unavailable to an unupgraded alpha.1 deployment.
 
 | Key | Type / range | Default and effect |
 | --- | --- | --- |
@@ -73,7 +73,7 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | `site_timezone_offset_minutes` | nullable integer; multiple of 30 in `[-720,+840]` | **null (default) = not configured** — distinct from an explicit `0` (UTC). While unset, site-day-key features (check-in, activity) are force-disabled for normal users behind the ordinary feature-disabled error without revealing why. Once any check-in or activity row exists, the value is frozen: every further write is refused with `conflict`, even rewriting the identical value or after those rows are later cleaned up. The offset is read authoritatively per business transaction; there is no runtime singleton |
 | `level_threshold_2_milli` | canonical non-negative decimal milli-credit string | `"0"`; donation-credit threshold for automatic promotion to level 2; `"0"` disables that level's promotion; enabled thresholds must be strictly increasing in level order and are cross-validated in the same transaction as the write |
 | `level_threshold_3_milli` | canonical non-negative decimal milli-credit string | `"0"`; same rules as `level_threshold_2_milli`, for level 3; level 3 also bypasses the check-in credits cap |
-| `level_threshold_4_milli` | canonical non-negative decimal milli-credit string | `"0"`; same rules as `level_threshold_2_milli`, for level 4 (steward access) |
+| `level_threshold_4_milli` | canonical non-negative decimal milli-credit string | `"0"`; same rules as `level_threshold_2_milli`, for level 4; level 5 steward access remains manual-only |
 | `checkin_mode` | enum: `enabled` / `level_gated` / `disabled` | `disabled`; `level_gated` admits only effective level ≥3; an unset timezone or any other unavailable cause returns the identical feature-disabled error |
 | `checkin_award_min_milli` | canonical non-negative decimal milli-credit string | `"40000000"`; inclusive lower bound of the uniformly drawn daily award; cross-validated `min ≤ max` against `checkin_award_max_milli` in one transaction |
 | `checkin_award_max_milli` | canonical non-negative decimal milli-credit string | `"60000000"`; inclusive upper bound of the daily award |

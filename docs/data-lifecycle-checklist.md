@@ -32,7 +32,7 @@ be closed before the task is accepted.
    only behind `internal/diagnostic.Bound`; secrets never enter logs, errors, CSV, HTML, or
    export.
 
-## Current coverage (as of the account-deletion rail)
+## Current coverage (alpha.2 Phase E lifecycle audit)
 
 | Table / column | User link | Export | Delete | Retention | Privacy |
 |---|---|---|---|---|---|

@@ -1,6 +1,6 @@
 # Release checklist
 
-Use this checklist for every release candidate. It is not evidence that an item passed: record results in the release process, keep real secrets/private deployment details out of the repository, and do not create a tag until every required item is complete. This reusable checklist supersedes the one-time alpha.1 checklist, which remains available in repository history.
+Use this checklist for every release candidate. It is not evidence that an item passed: record results in the release process, keep real secrets/private deployment details out of the repository, and do not create a tag until every required item is complete. This reusable checklist supersedes the one-time alpha.1 checklist, which remains in the archived alpha.1 task record for historical reference.
 
 ## Scope, version, and compatibility
 
