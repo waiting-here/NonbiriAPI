@@ -1,5 +1,6 @@
 import { createBrowserRouter } from 'react-router';
 import { NotFoundPage } from '@shared/components/NotFoundPage';
+import { LoadingState } from '@shared/components/States';
 import { RouteErrorPage } from '@shared/components/RouteErrorPage';
 import { AdminLayout } from './layouts/AdminLayout';
 
@@ -7,6 +8,7 @@ export const router = createBrowserRouter([
   {
     path: '/',
     element: <AdminLayout />,
+    hydrateFallbackElement: <LoadingState />,
     errorElement: <RouteErrorPage />,
     children: [
       { index: true, lazy: async () => ({ Component: (await import('./pages/DashboardPage')).DashboardPage }) },

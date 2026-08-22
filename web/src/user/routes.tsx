@@ -1,6 +1,6 @@
 import { createBrowserRouter } from 'react-router';
 import { NotFoundPage } from '@shared/components/NotFoundPage';
-import { NoticePage } from '@shared/components/States';
+import { LoadingState, NoticePage } from '@shared/components/States';
 import { RouteErrorPage } from '@shared/components/RouteErrorPage';
 import { UserLayout } from './layouts/UserLayout';
 
@@ -8,6 +8,7 @@ export const router = createBrowserRouter([
   {
     path: '/',
     element: <UserLayout />,
+    hydrateFallbackElement: <LoadingState />,
     errorElement: <RouteErrorPage />,
     children: [
       { index: true, lazy: async () => ({ Component: (await import('./pages/HomePage')).HomePage }) },

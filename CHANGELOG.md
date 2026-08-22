@@ -38,6 +38,8 @@ The project is currently in alpha. The latest published compatibility promise re
 
 - Charity donation self-service routes (`/api/donations`) now apply user-session middleware, fixing a wiring omission that caused authenticated requests to receive 401.
 - Charity dispatch now passes the selected full model name into its final candidate revalidation and projects the endpoint/key identifiers required by the contextual credential envelope; this fixes a parameter/projection omission that otherwise stopped a real charity attempt before decryption and dialing.
+- Wide log and management tables now stay inside their horizontal scroll container instead of expanding the whole page on narrow viewports.
+- Both stations provide an explicit initial loading fallback for lazy page routes, avoiding the React Router hydration warning during a direct page load.
 
 ### Changed
 
