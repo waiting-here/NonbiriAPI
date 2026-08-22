@@ -515,7 +515,8 @@ violation-window or threshold-configuration data is exported.
 ### 3.10 Level-5 steward prefix — `/api/steward/*`
 
 The frozen co-management prefix for effective level ≥ 5 users, served on the **user station**
-with the ordinary user session cookie. This contract lands the authorization frame only:
+with the ordinary user session cookie. This contract lands the authorization frame and the
+full-site log co-management route:
 
 - **Live authorization**: every request re-resolves the server-authoritative effective level
   and requires ≥ 5; nothing is cached. A demotion or a manual-level reset revokes an existing
@@ -529,11 +530,20 @@ with the ordinary user session cookie. This contract lands the authorization fra
   caller below level 5 gets `403 forbidden` — including for sub-paths that have no business
   route — so the frame never reveals which steward routes exist. A level-5 caller hitting an
   unregistered sub-path gets the ordinary `404 not_found` envelope.
+- **Full-site logs**: `GET /api/steward/logs` serves the level-5 full-site request-log
+  projection (frozen §G, clarification §1.8). It reuses the administrator log shape and the
+  bounded `page`/`page_size` + filter parameters, but applies the steward de-privacy
+  projection: on `route_kind='charity'` rows the donor's `endpoint_key_id`, `endpoint_base_url`
+  and `upstream_model_id` are blanked, because a level-5 steward co-manages site-wide
+  log/activity, not donor resources. The steward therefore sees the consumer's `user_id`,
+  `route_kind`, `endpoint_base_url`/`upstream_model_id` (for personal rows), `status_code`,
+  token buckets and bounded `error_diag` — never a user-chosen platform model name, a note,
+  a Discord identity, or any donated resource. No bulk CSV/JSON export is exposed here.
 - **Current state**: the donation review surface (`/api/steward/donations…`, §3.12) is mounted;
-  charity model management is available under the same prefix (`/api/steward/charity-models…`, §4.6).
-  Sub-handlers receive only an opaque steward identity
-  (user id + role); they never see another user's rows by construction of those
-  projections.
+  charity model management is available under the same prefix (`/api/steward/charity-models…`, §4.6);
+  full-site logs are available at `/api/steward/logs`. Sub-handlers receive only an opaque
+  steward identity (user id + role); they never see another user's rows by construction of
+  those projections.
 
 ### 3.11 Daily check-in
 

@@ -121,6 +121,25 @@ const adminLogSelectColumns = `
 	rl.prompt_tokens, rl.completion_tokens, rl.total_tokens,
 	rl.usage_unknown, rl.error_code, rl.error_source, rl.error_diag, rl.attempt_id`
 
+// stewardLogSelectColumns mirrors adminLogSelectColumns except that charity
+// rows (route_kind='charity') carry the DONOR's endpoint/key/upstream model as
+// the dispatch target. A level-5 steward co-manages site-wide LOG/activity,
+// not donor resources, so the donor's upstream identity is blanked for charity
+// rows (endpoint_key_id → NULL, endpoint_base_url → ”, upstream_model_id →
+// ”). The steward still sees the consumer's user id, route kind, status,
+// tokens and bounded diagnostic — the minimal de-privacy projection for
+// full-site log co-management (frozen §G, clarification §1.8). Personal rows
+// are unaffected: their endpoint belongs to the logging user.
+const stewardLogSelectColumns = `
+	rl.id, rl.user_id, rl.route_kind,
+	CASE WHEN rl.route_kind='charity' THEN '' ELSE rl.endpoint_base_url END,
+	CASE WHEN rl.route_kind='charity' THEN NULL ELSE rl.endpoint_key_id END,
+	CASE WHEN rl.route_kind='charity' THEN '' ELSE rl.upstream_model_id END,
+	rl.status_code, rl.duration_ms, rl.started_at, rl.completed_at,
+	rl.uncached_input_tokens, rl.cache_write_input_tokens, rl.cache_read_input_tokens, rl.output_tokens,
+	rl.prompt_tokens, rl.completion_tokens, rl.total_tokens,
+	rl.usage_unknown, rl.error_code, rl.error_source, rl.error_diag, rl.attempt_id`
+
 func scanAdminRequestLog(scanner interface{ Scan(...any) error }) (AdminRequestLog, error) {
 	var log AdminRequestLog
 	var endpointKeyID sql.NullInt64
@@ -317,6 +336,85 @@ func (s *Store) QueryAdminRequestLogs(ctx context.Context, query AdminLogQuery) 
 	}
 	if err := rows.Err(); err != nil {
 		return nil, false, fmt.Errorf("iterate admin request logs: %w", err)
+	}
+	hasMore := len(logs) > pageSize
+	if hasMore {
+		logs = logs[:pageSize]
+	}
+	return logs, hasMore, nil
+}
+
+// QueryStewardRequestLogs is the level-5 full-site log projection for the
+// user-station co-management rail (frozen §G, clarification §1.8). It accepts
+// the same bounded filter as the administrator query and reuses the same
+// AdminRequestLog shape, but applies the steward de-privacy projection
+// (stewardLogSelectColumns): charity rows never reveal the donor's endpoint
+// key id, base URL or upstream model id. The steward therefore sees the same
+// metadata the administrator sees for personal rows, and for charity rows sees
+// only the consumer's identity, route kind, status, tokens and bounded
+// diagnostic — never the donated resource that served the call.
+func (s *Store) QueryStewardRequestLogs(ctx context.Context, query AdminLogQuery) ([]AdminRequestLog, bool, error) {
+	if err := query.validate(); err != nil {
+		return nil, false, err
+	}
+	page, pageSize := clampLogPage(query.Page, query.PageSize)
+
+	var clauses []string
+	var args []any
+	if query.UserID > 0 {
+		clauses = append(clauses, "rl.user_id = ?")
+		args = append(args, query.UserID)
+	}
+	if query.EndpointBaseURL != "" {
+		clauses = append(clauses, "rl.endpoint_base_url = ?")
+		args = append(args, query.EndpointBaseURL)
+	}
+	if query.UpstreamModel != "" {
+		clauses = append(clauses, "rl.upstream_model_id = ?")
+		args = append(args, query.UpstreamModel)
+	}
+	if query.ErrorCode != "" {
+		clauses = append(clauses, "rl.error_code = ?")
+		args = append(args, query.ErrorCode)
+	}
+	if query.Status != 0 {
+		clauses = append(clauses, "rl.status_code = ?")
+		args = append(args, query.Status)
+	}
+	if query.FromUnix > 0 {
+		clauses = append(clauses, "rl.started_at >= ?")
+		args = append(args, query.FromUnix)
+	}
+	if query.ToUnix > 0 {
+		clauses = append(clauses, "rl.started_at < ?")
+		args = append(args, query.ToUnix)
+	}
+
+	sqlText := `SELECT ` + stewardLogSelectColumns + ` FROM request_logs rl`
+	if len(clauses) > 0 {
+		// #nosec G202 -- clauses is assembled exclusively from the fixed predicates
+		// above and every filter value is passed separately in args.
+		sqlText += ` WHERE ` + strings.Join(clauses, " AND ")
+	}
+	sqlText += ` ORDER BY rl.id DESC LIMIT ? OFFSET ?`
+	args = append(args, pageSize+1, (page-1)*pageSize)
+
+	rows, err := s.db.QueryContext(ctx, sqlText, args...)
+	if err != nil {
+		return nil, false, fmt.Errorf("query steward request logs: %w", err)
+	}
+	defer rows.Close()
+
+	logs := make([]AdminRequestLog, 0, min(pageSize, 32))
+	for rows.Next() {
+		log, err := scanAdminRequestLog(rows)
+		if err != nil {
+			return nil, false, fmt.Errorf("scan steward request log: %w", err)
+		}
+		logs = append(logs, log)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, fmt.Errorf("iterate steward request logs: %w", err)
 	}
 	hasMore := len(logs) > pageSize
 	if hasMore {

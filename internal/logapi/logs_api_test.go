@@ -1,10 +1,11 @@
 package logapi
 
 // HTTP-level tests for the redesigned user log screen, the bounded options
-// endpoint, and the administrator CSV/JSON export: cross-user isolation over
-// real session middlewares, strict query-parameter rejection, CSV formula
-// injection defense, fail-closed export bounds, and the unmounted level5
-// steward mount point.
+// endpoint, the administrator CSV/JSON export, and the level-5 steward
+// full-site log route: cross-user isolation over real session middlewares,
+// strict query-parameter rejection, CSV formula injection defense, fail-closed
+// export bounds, and the steward de-privacy projection behind its live level-5
+// gate.
 
 import (
 	"context"
@@ -16,9 +17,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/steward"
 )
 
 func userGet(t *testing.T, env *testEnv, path string) *httptest.ResponseRecorder {
@@ -312,20 +315,166 @@ func TestAdminExportStrictParamsAndFailClosed(t *testing.T) {
 	}
 }
 
-func TestStewardMountPointNotRegistered(t *testing.T) {
+func TestStewardLogsRoute(t *testing.T) {
 	env := newTestEnv(t)
-	// The level5 middleware does not exist yet, so no steward route may be
-	// reachable through either station's handler tree — not even as an auth
-	// failure. The constant documents the future mount point only.
 	if StewardLogsPath != "/api/steward/logs" {
 		t.Fatalf("StewardLogsPath = %q", StewardLogsPath)
 	}
-	rec := userGet(t, env, StewardLogsPath)
-	if rec.Code == http.StatusOK {
-		t.Fatalf("steward path is mounted without its middleware: %d", rec.Code)
+	user2 := seedSecondUser(t, env)
+
+	// Three rows across two users: the steward must see the FULL site (all
+	// users), newest first. The charity row carries the donor's upstream URL
+	// and model; the steward projection must blank them.
+	seedLog(t, env, env.user.ID, "steward-own-personal", "p/own", 200, 1700000100, "")
+	seedLog(t, env, user2.ID, "steward-other-personal", "p/other", 502, 1700000200, "boom")
+	seedLog(t, env, env.user.ID, "steward-charity", "", 200, 1700000300, "")
+	if _, err := env.store.DB().Exec(`UPDATE request_logs SET endpoint_base_url='https://own.example/v1', upstream_model_id='own/up' WHERE attempt_id='steward-own-personal'`); err != nil {
+		t.Fatal(err)
 	}
-	rec = adminGet(t, env, "/admin/api/steward/logs")
-	if rec.Code == http.StatusOK {
-		t.Fatalf("steward path mounted on the admin station")
+	if _, err := env.store.DB().Exec(`UPDATE request_logs SET endpoint_base_url='https://other.example/v1', upstream_model_id='other/up' WHERE attempt_id='steward-other-personal'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.store.DB().Exec(`UPDATE request_logs SET route_kind='charity', endpoint_base_url='https://donor.example/v1', upstream_model_id='donor/up-model' WHERE attempt_id='steward-charity'`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Build the real steward frame with the logs sub-handler registered, exactly
+	// as main.go mounts it.
+	userAuth, err := auth.NewUserAuth(auth.UserAuthConfig{
+		Store: env.store, Provider: stubProvider{}, ClientID: "client-id",
+		SiteBaseURL: "https://example.com",
+	})
+	if err != nil {
+		t.Fatalf("NewUserAuth: %v", err)
+	}
+	t.Cleanup(func() { _ = userAuth.Close() })
+	frame := steward.New(steward.Deps{UserAuth: userAuth, Store: env.store})
+	frame.Handle(http.MethodGet, StewardLogsPath, StewardLogsSub(env.store))
+
+	stewardGet := func(t *testing.T, station host.Station, cookie *http.Cookie, path string) *httptest.ResponseRecorder {
+		t.Helper()
+		r := stationRequest(http.MethodGet, path, station)
+		if cookie != nil {
+			r.AddCookie(cookie)
+		}
+		return do(t, frame.Handler(), r)
+	}
+	userCookieVal := func(t *testing.T, uid int64) *http.Cookie {
+		t.Helper()
+		tok, _, err := env.store.CreateUserSession(uid)
+		if err != nil {
+			t.Fatalf("CreateUserSession: %v", err)
+		}
+		return &http.Cookie{Name: auth.UserSessionCookieName, Value: tok}
+	}
+	setLevel := func(t *testing.T, uid int64, level *int) {
+		t.Helper()
+		if _, err := env.store.SetUserManualLevel(uid, level); err != nil {
+			t.Fatalf("SetUserManualLevel: %v", err)
+		}
+	}
+	codeOf := func(t *testing.T, rec *httptest.ResponseRecorder) (int, string) {
+		t.Helper()
+		var env struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &env)
+		return rec.Code, env.Error.Code
+	}
+
+	// Authorization matrix.
+	cookie := userCookieVal(t, env.user.ID)
+	if code, c := codeOf(t, stewardGet(t, host.StationUser, nil, StewardLogsPath)); code != http.StatusUnauthorized || c != "unauthorized" {
+		t.Fatalf("anonymous = (%d, %s), want 401 unauthorized", code, c)
+	}
+	if code, c := codeOf(t, stewardGet(t, host.StationUser, cookie, StewardLogsPath)); code != http.StatusForbidden || c != "forbidden" {
+		t.Fatalf("level<5 = (%d, %s), want 403 forbidden", code, c)
+	}
+	// Admin station is refused before identity (the prefix is user-station only).
+	if code, c := codeOf(t, stewardGet(t, host.StationAdmin, cookie, StewardLogsPath)); code != http.StatusForbidden || c != "forbidden" {
+		t.Fatalf("admin station = (%d, %s), want 403 forbidden", code, c)
+	}
+	// An administrator session on the user station is not a steward identity.
+	adminTok, _, _ := env.store.CreateAdminSession(env.admin.ID)
+	adminCookie := &http.Cookie{Name: auth.UserSessionCookieName, Value: adminTok}
+	if code := stewardGet(t, host.StationUser, adminCookie, StewardLogsPath).Code; code != http.StatusUnauthorized && code != http.StatusForbidden {
+		t.Fatalf("admin session on user station = %d, want 401/403", code)
+	}
+
+	// Grant level 5 on the SAME session: the very next request opens the route.
+	five := 5
+	setLevel(t, env.user.ID, &five)
+	rec := stewardGet(t, host.StationUser, cookie, StewardLogsPath)
+	assertOK(t, rec)
+	rows, hasMore := decodeLogs(t, rec)
+	if len(rows) != 3 || hasMore {
+		t.Fatalf("rows = %d hasMore=%v, want 3/false (full-site, newest first)", len(rows), hasMore)
+	}
+	// Newest first: steward-charity (1700000300), other-personal, own-personal.
+	if rows[0]["route_kind"] != "charity" || rows[1]["route_kind"] != "personal" || rows[2]["route_kind"] != "personal" {
+		t.Fatalf("row order wrong: %v %v %v", rows[0]["route_kind"], rows[1]["route_kind"], rows[2]["route_kind"])
+	}
+
+	// The charity row never reveals donor resources: endpoint_key_id=0,
+	// endpoint_base_url="", upstream_model_id="". The personal rows keep their
+	// own endpoint/upstream model.
+	charityRow := rows[0]
+	if charityRow["endpoint_key_id"].(float64) != 0 || charityRow["endpoint_base_url"] != "" || charityRow["upstream_model_id"] != "" {
+		t.Fatalf("charity row leaks donor resource: %v", charityRow)
+	}
+	if charityRow["user_id"].(float64) != float64(env.user.ID) {
+		t.Fatalf("charity row user_id = %v, want consumer %d", charityRow["user_id"], env.user.ID)
+	}
+	if charityRow["route_kind"] != "charity" || charityRow["status_code"].(float64) != 200 {
+		t.Fatalf("charity row metadata wrong: %v", charityRow)
+	}
+	otherRow := rows[1]
+	if otherRow["endpoint_base_url"] != "https://other.example/v1" || otherRow["upstream_model_id"] != "other/up" {
+		t.Fatalf("personal row lost its own endpoint/upstream: %v", otherRow)
+	}
+	if otherRow["user_id"].(float64) != float64(user2.ID) {
+		t.Fatalf("other row user_id = %v, want %d", otherRow["user_id"], user2.ID)
+	}
+
+	// Frozen de-privacy boundary: no user-chosen platform model name, no note,
+	// no Discord identity ever appears on the steward projection.
+	for _, row := range rows {
+		for _, forbidden := range []string{"model", "note", "key_note", "endpoint_note", "discord_id", "username"} {
+			if _, ok := row[forbidden]; ok {
+				t.Errorf("steward row carries forbidden key %q: %v", forbidden, row)
+			}
+		}
+	}
+
+	// Filters and pagination work on the steward route too.
+	rec = stewardGet(t, host.StationUser, cookie, StewardLogsPath+"?status=200")
+	assertOK(t, rec)
+	rows, _ = decodeLogs(t, rec)
+	if len(rows) != 2 {
+		t.Fatalf("status=200 rows = %d, want 2", len(rows))
+	}
+	rec = stewardGet(t, host.StationUser, cookie, StewardLogsPath+"?page_size=1&page=1")
+	assertOK(t, rec)
+	rows, hasMore = decodeLogs(t, rec)
+	if len(rows) != 1 || !hasMore {
+		t.Fatalf("paged rows = %d hasMore=%v, want 1/true", len(rows), hasMore)
+	}
+	rec = stewardGet(t, host.StationUser, cookie, StewardLogsPath+"?unknown=1")
+	assertErr(t, rec, http.StatusBadRequest, httperr.CodeInvalidRequest)
+
+	// Live demotion: reset the manual level on the SAME session and the very
+	// next request is already forbidden (no session refresh, no caching).
+	setLevel(t, env.user.ID, nil)
+	if code, c := codeOf(t, stewardGet(t, host.StationUser, cookie, StewardLogsPath)); code != http.StatusForbidden || c != "forbidden" {
+		t.Fatalf("demoted = (%d, %s), want 403 forbidden", code, c)
+	}
+
+	// The route is NOT reachable through the plain user/admin log handler
+	// trees (which have no steward frame): it 404s there, never bypassing the
+	// level-5 gate.
+	if rec := userGet(t, env, StewardLogsPath); rec.Code != http.StatusNotFound {
+		t.Fatalf("plain user mount = %d, want 404 (steward route not on the user tree)", rec.Code)
 	}
 }

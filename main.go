@@ -429,6 +429,9 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	registerSteward := func(method, suffix string, sub func(w http.ResponseWriter, r *http.Request, p steward.Principal)) {
 		stewardAPI.Handle(method, "/api/steward"+suffix, sub)
 	}
+	// Level-5 full-site log co-management (frozen §G, clarification §1.8): the
+	// user-station steward projection, never the administrator host/session.
+	registerSteward("GET", "/logs", logapi.StewardLogsSub(store))
 	registerSteward("GET", "/donations", func(w http.ResponseWriter, r *http.Request, p steward.Principal) {
 		stewardReview.ListSub(w, r, donation.ReviewerIdentity{UserID: p.UserID, Role: p.Role})
 	})
