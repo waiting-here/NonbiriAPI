@@ -225,3 +225,66 @@ func TestDeleteRequestLogsBeforeLimitClamped(t *testing.T) {
 		t.Fatalf("deleted = %d, want 2", deleted)
 	}
 }
+
+func TestCleanupTerminalCharityReservationsRetentionAndBound(t *testing.T) {
+	store := openTestStore(t, filepath.Join(t.TempDir(), "retention.db"))
+	defer store.Close()
+	userID := seedUsageUser(t, store, "u-charity-retention")
+	cutoff := time.Now().Unix() - 400*24*60*60
+
+	insertReservation := func(attempt, state string, createdAt int64, finalizedAt *int64) {
+		t.Helper()
+		if _, err := store.DB().Exec(`INSERT INTO charity_reservations
+			(user_id, attempt_id, state, pricing_mode, discount_percent,
+			 created_at, finalized_at, updated_at)
+			VALUES (?, ?, ?, 'per_request', 100, ?, ?, ?)`,
+			userID, attempt, state, createdAt, finalizedAt, createdAt); err != nil {
+			t.Fatalf("insert charity reservation %s: %v", attempt, err)
+		}
+	}
+
+	oldFinalized := cutoff - 1
+	recentFinalized := cutoff
+	insertReservation("old-committed", "committed", cutoff-10, &oldFinalized)
+	insertReservation("old-released", "released", cutoff-9, &oldFinalized)
+	insertReservation("inflight-reserved", "reserved", cutoff-8, nil)
+	insertReservation("inflight-dispatched", "dispatched", cutoff-7, nil)
+	insertReservation("recent-committed", "committed", cutoff, &recentFinalized)
+	insertReservation("recent-released", "released", cutoff, &recentFinalized)
+
+	// The cleanup has a hard bound of 50 batches × 200 rows. More than that
+	// amount of eligible work must report remaining=true for the next sweep.
+	for i := 0; i < 10001; i++ {
+		insertReservation(fmt.Sprintf("bulk-old-%d", i), "committed", cutoff-100, &oldFinalized)
+	}
+
+	removed, remaining, err := store.CleanupTerminalCharityReservations(context.Background(), cutoff)
+	if err != nil {
+		t.Fatalf("first charity cleanup: %v", err)
+	}
+	if removed != 10000 || !remaining {
+		t.Fatalf("first cleanup removed=%d remaining=%v, want 10000,true", removed, remaining)
+	}
+
+	removed, remaining, err = store.CleanupTerminalCharityReservations(context.Background(), cutoff)
+	if err != nil {
+		t.Fatalf("second charity cleanup: %v", err)
+	}
+	if removed != 3 || remaining {
+		t.Fatalf("second cleanup removed=%d remaining=%v, want 3,false", removed, remaining)
+	}
+
+	var total, inflight, recent int
+	if err := store.DB().QueryRow(`SELECT COUNT(*) FROM charity_reservations`).Scan(&total); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB().QueryRow(`SELECT COUNT(*) FROM charity_reservations WHERE state IN ('reserved','dispatched')`).Scan(&inflight); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB().QueryRow(`SELECT COUNT(*) FROM charity_reservations WHERE state IN ('committed','released') AND finalized_at >= ?`, cutoff).Scan(&recent); err != nil {
+		t.Fatal(err)
+	}
+	if total != 4 || inflight != 2 || recent != 2 {
+		t.Fatalf("remaining reservations total=%d inflight=%d recent=%d, want 4,2,2", total, inflight, recent)
+	}
+}

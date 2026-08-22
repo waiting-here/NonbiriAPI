@@ -250,6 +250,14 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	if err != nil {
 		return nil, err
 	}
+	charityReservations, err := s.store.ListExportCharityReservations(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
+	donorRewards, err := s.store.ListExportDonorRewards(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
 
 	keysByEndpoint := make(map[int64][]exportKey, len(keys))
 	for _, key := range keys {
@@ -296,10 +304,12 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 			UsageUnknownLogs: logSummary.UsageUnknownLogs,
 			AvgDurationMs:    logSummary.AvgDurationMs,
 		},
-		ActivityDaily: make([]db.ActivityDailyExportRow, 0, len(activityDaily)),
-		CreditLedger:  make([]db.CreditLedgerExportRow, 0, len(creditLedger)),
-		Checkins:      make([]db.CheckinExportRow, 0, len(checkins)),
-		Donations:     make([]db.DonationExportRow, 0, len(donations)),
+		ActivityDaily:       make([]db.ActivityDailyExportRow, 0, len(activityDaily)),
+		CreditLedger:        make([]db.CreditLedgerExportRow, 0, len(creditLedger)),
+		Checkins:            make([]db.CheckinExportRow, 0, len(checkins)),
+		Donations:           make([]db.DonationExportRow, 0, len(donations)),
+		CharityReservations: make([]db.CharityReservationExportRow, 0, len(charityReservations)),
+		DonorRewards:        make([]db.DonorRewardExportRow, 0, len(donorRewards)),
 	}
 	for _, day := range activityDaily {
 		packageValue.ActivityDaily = append(packageValue.ActivityDaily, day)
@@ -312,6 +322,12 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	}
 	for _, row := range donations {
 		packageValue.Donations = append(packageValue.Donations, row)
+	}
+	for _, row := range charityReservations {
+		packageValue.CharityReservations = append(packageValue.CharityReservations, row)
+	}
+	for _, row := range donorRewards {
+		packageValue.DonorRewards = append(packageValue.DonorRewards, row)
 	}
 	for _, ep := range endpoints {
 		packageValue.Endpoints = append(packageValue.Endpoints, exportEndpoint{
@@ -376,6 +392,12 @@ type exportPackage struct {
 	// the append-only review history. No secret, ciphertext, or key-note field
 	// exists on these rows by construction.
 	Donations []db.DonationExportRow `json:"donations"`
+	// CharityReservations is the consumer's own bounded reservation summary;
+	// it deliberately excludes donated-resource identifiers and URLs.
+	CharityReservations []db.CharityReservationExportRow `json:"charity_reservations"`
+	// DonorRewards is the donor's own reward summary; it never includes
+	// consumer identity or request data.
+	DonorRewards []db.DonorRewardExportRow `json:"donor_rewards"`
 }
 
 type exportUser struct {

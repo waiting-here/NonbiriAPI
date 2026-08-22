@@ -227,7 +227,7 @@ func TestUserOAuthStoresAndRefreshesGuildSnapshot(t *testing.T) {
 	// Registration: the guild member carries a server nickname and a server
 	// avatar hash; both should be stored as a snapshot on the new user.
 	provider := &fakeDiscordProvider{login: DiscordLogin{
-		Identity:    DiscordIdentity{ID: "discord-guild", Username: "global-name", Avatar: "global-avatar"},
+		Identity: DiscordIdentity{ID: "discord-guild", Username: "global-name", Avatar: "global-avatar"},
 		GuildMember: func(_ context.Context, guildID string) (GuildMember, error) {
 			if guildID == "guild-1" {
 				return GuildMember{Roles: []string{"role-1"}, Nick: "server-name", Avatar: "guild-avatar-hash"}, nil
@@ -260,7 +260,7 @@ func TestUserOAuthStoresAndRefreshesGuildSnapshot(t *testing.T) {
 	// Login (existing user): a fresh OAuth start refreshes the snapshot with
 	// the member's current nickname and avatar.
 	provider.login = DiscordLogin{
-		Identity:    DiscordIdentity{ID: "discord-guild", Username: "global-name", Avatar: "global-avatar"},
+		Identity: DiscordIdentity{ID: "discord-guild", Username: "global-name", Avatar: "global-avatar"},
 		GuildMember: func(_ context.Context, guildID string) (GuildMember, error) {
 			if guildID == "guild-1" {
 				return GuildMember{Roles: []string{"role-1"}, Nick: "updated-name", Avatar: "updated-hash"}, nil

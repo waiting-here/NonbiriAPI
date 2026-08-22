@@ -98,15 +98,15 @@ func (Target) LogValue() slog.Value {
 // owner-visible value already stored plaintext in the endpoint row, never a
 // credential, secret material, or request/response content.
 type AttemptResult struct {
-	Success          bool
-	Committed        bool
-	SinkFailed       bool
-	Failure          FailureKind
-	Diagnostic       string
-	UpstreamStatus   int
-	ClientStatus     int
-	EndpointBaseURL  string
-	Usage            Usage
+	Success         bool
+	Committed       bool
+	SinkFailed      bool
+	Failure         FailureKind
+	Diagnostic      string
+	UpstreamStatus  int
+	ClientStatus    int
+	EndpointBaseURL string
+	Usage           Usage
 }
 
 // AdapterConfig sets finite protocol bounds. A zero value selects the default;
