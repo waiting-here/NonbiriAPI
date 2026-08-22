@@ -13,6 +13,7 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"time"
 )
@@ -108,4 +109,36 @@ func (s *Store) clearDueCharitySuspension(userID, nowUnix int64) (bool, error) {
 	}
 	count, err := result.RowsAffected()
 	return count == 1, err
+}
+
+// SuspendCharityUntil atomically applies a charity-only suspension deadline.
+// It never changes is_banned, sessions, or caller keys. A later deadline may
+// replace an earlier one, but a concurrent stale action can never shorten an
+// already stronger suspension. Due deadlines are treated as expired by the
+// same conditional expression used by the lazy read path.
+func (s *Store) SuspendCharityUntil(userID, nowUnix, durationSeconds int64) error {
+	if userID <= 0 || nowUnix <= 0 || durationSeconds <= 0 || durationSeconds > MaxBanDurationSeconds {
+		return ErrConflict
+	}
+	until := nowUnix + durationSeconds
+	if until < nowUnix {
+		return ErrConflict
+	}
+	result, err := s.db.Exec(`UPDATE users
+		SET charity_suspended_until=CASE
+			WHEN charity_suspended_until IS NULL OR charity_suspended_until<=? OR charity_suspended_until<? THEN ?
+			ELSE charity_suspended_until END,
+			updated_at=?
+		WHERE id=? AND is_admin=0`, nowUnix, until, until, nowUnix, userID)
+	if err != nil {
+		return fmt.Errorf("suspend charity: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("suspend charity: %w", err)
+	}
+	if count != 1 {
+		return ErrNotFound
+	}
+	return nil
 }

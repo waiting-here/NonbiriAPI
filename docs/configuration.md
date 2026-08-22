@@ -57,6 +57,18 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | `charity_enabled` | boolean | `false`; charity system master switch — while off, no new charity routing happens and the price table is hidden; in-flight reservations still settle |
 | `donation_accept_enabled` | boolean | `false`; gates new donation submissions only; review/routing of existing donations is unaffected |
 | `charity_token_reserve_milli` | nullable canonical positive decimal milli-credit string | **null (default) = not configured** — distinct from an explicit value; while unset, per-token charity models cannot be enabled or routed (fail closed); PATCH rejects `null` and non-positive values |
+| `rpm_ban_threshold` | integer `[0,4096]` | `5`; count of effective per-user RPM denials before an automatic 24-hour ban; `0` disables |
+| `rpm_ban_window_seconds` | integer `[1,316224000]` | `86400`; in-memory RPM violation window |
+| `rpm_ban_duration_seconds` | integer `[1,316224000]` | `86400`; automatic ban duration |
+| `charity_min_chars` | integer `[0,1048576]` | `20`; counted Unicode message runes before a charity request is dispatched; `0` disables |
+| `charity_violation_deduct_milli` | canonical non-negative decimal string | `"0"`; per-violation penalty, allowed to make credits negative |
+| `charity_violation_ban_seconds` | integer `[0,316224000]` | `0`; single-violation automatic ban duration |
+| `charity_violation_window_seconds` | integer `[1,316224000]` | `86400`; in-memory short-content window |
+| `charity_violation_ban_threshold` | integer `[0,4096]` | `0`; violations needed for a window ban |
+| `charity_violation_window_ban_seconds` | integer `[0,316224000]` | `0`; window-ban duration |
+| `charity_suspend_window_seconds` | integer `[1,316224000]` | `86400`; in-memory charity-suspension window |
+| `charity_suspend_threshold` | integer `[0,4096]` | `0`; violations needed for a charity-only suspension |
+| `charity_suspend_duration_seconds` | integer `[0,316224000]` | `0`; charity-only suspension duration |
 | `registration_open` | boolean | `true`; when false, new registration is refused while existing accounts may sign in |
 | `site_timezone_offset_minutes` | nullable integer; multiple of 30 in `[-720,+840]` | **null (default) = not configured** — distinct from an explicit `0` (UTC). While unset, site-day-key features (check-in, activity) are force-disabled for normal users behind the ordinary feature-disabled error without revealing why. Once any check-in or activity row exists, the value is frozen: every further write is refused with `conflict`, even rewriting the identical value or after those rows are later cleaned up. The offset is read authoritatively per business transaction; there is no runtime singleton |
 | `alert_prefs_*` | single-line text, ≤512 bytes | administrator alert-center preferences |

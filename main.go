@@ -18,6 +18,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/adminapi"
 	"github.com/waiting-here/NonbiriAPI/internal/alertapi"
+	"github.com/waiting-here/NonbiriAPI/internal/antiabuse"
 	"github.com/waiting-here/NonbiriAPI/internal/applog"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
@@ -318,10 +319,15 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		return nil, fmt.Errorf("forward service: %w", err)
 	}
 	cleanup = append(cleanup, forwardService.Close)
+	antiAbuseService, err := antiabuse.NewService(antiabuse.ServiceConfig{Store: store})
+	if err != nil {
+		return nil, fmt.Errorf("anti-abuse service: %w", err)
+	}
 	charityService, err := charityrouting.NewService(charityrouting.ServiceConfig{
 		Store:             store,
 		Runner:            secureRunner,
 		SafetyIdentifiers: safetyIdentifierFactory,
+		PreflightHook:     antiAbuseService.Preflight,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("charity routing service: %w", err)
@@ -335,6 +341,13 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	flowController, err = flowcontrol.New(flowcontrol.Config{
 		RPM:        ratelimit.DefaultRPMConfig(),
 		UserLimits: flowcontrol.DBUserLimitResolver(store),
+		OnDenied: func(ctx context.Context, userID int64, reason ratelimit.RPMReason) {
+			user, lookupErr := store.GetUserByID(userID)
+			if lookupErr != nil || user == nil {
+				return
+			}
+			antiAbuseService.RPMDenied(ctx, userID, user.IsAdmin, reason)
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("flow controller: %w", err)
@@ -352,7 +365,10 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 
 	lifecycleService, err := lifecycle.NewService(lifecycle.Config{
 		Store: store, Elevation: sharedElevation, AdminVerifier: adminAuth,
-		PreDeleteUser: charityService.CancelUserContexts,
+		PreDeleteUser: func(userID int64) {
+			charityService.CancelUserContexts(userID)
+			antiAbuseService.ForgetUser(userID)
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("lifecycle service: %w", err)
@@ -464,20 +480,20 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		defer app.wg.Done()
 		ticker := time.NewTicker(6 * time.Hour)
 		defer ticker.Stop()
-		runMaintenanceSweep(maintenanceCtx, store, usageService, charityService)
+		runMaintenanceSweep(maintenanceCtx, store, usageService, charityService, antiAbuseService)
 		for {
 			select {
 			case <-maintenanceCtx.Done():
 				return
 			case <-ticker.C:
-				runMaintenanceSweep(maintenanceCtx, store, usageService, charityService)
+				runMaintenanceSweep(maintenanceCtx, store, usageService, charityService, antiAbuseService)
 			}
 		}
 	}()
 	return app, nil
 }
 
-func runMaintenanceSweep(ctx context.Context, store *db.Store, usageService *usage.Service, charityService *charityrouting.Service) {
+func runMaintenanceSweep(ctx context.Context, store *db.Store, usageService *usage.Service, charityService *charityrouting.Service, antiAbuseServices ...*antiabuse.Service) {
 	if ctx == nil || ctx.Err() != nil {
 		return
 	}
@@ -486,6 +502,11 @@ func runMaintenanceSweep(ctx context.Context, store *db.Store, usageService *usa
 	// before its log row could be aged out.
 	if charityService != nil && ctx.Err() == nil {
 		charityService.RecoverAll(ctx, false)
+	}
+	for _, service := range antiAbuseServices {
+		if service != nil && ctx.Err() == nil {
+			service.Cleanup()
+		}
 	}
 	if store != nil {
 		if _, purgeErr := store.PurgeExpiredSessions(); purgeErr != nil && ctx.Err() == nil {

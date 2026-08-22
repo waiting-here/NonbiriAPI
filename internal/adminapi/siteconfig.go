@@ -17,6 +17,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/antiabuse"
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
@@ -81,7 +82,21 @@ const (
 	// per-token charity model disabled (fail closed). It must never be
 	// mistaken for an explicit 0.
 	KeyCharityTokenReserveMilli = "charity_token_reserve_milli"
-	alertPrefsPrefix            = "alert_prefs_"
+	// Anti-abuse policy keys are process-independent values; the policy rail
+	// reads them authoritatively for each relevant event.
+	KeyRPMBanThreshold                  = antiabuse.KeyRPMBanThreshold
+	KeyRPMBanWindowSeconds              = antiabuse.KeyRPMBanWindowSeconds
+	KeyRPMBanDurationSeconds            = antiabuse.KeyRPMBanDurationSeconds
+	KeyCharityMinChars                  = antiabuse.KeyCharityMinChars
+	KeyCharityViolationDeductMilli      = antiabuse.KeyCharityViolationDeductMilli
+	KeyCharityViolationBanSeconds       = antiabuse.KeyCharityViolationBanSeconds
+	KeyCharityViolationWindowSeconds    = antiabuse.KeyCharityViolationWindowSeconds
+	KeyCharityViolationBanThreshold     = antiabuse.KeyCharityViolationBanThreshold
+	KeyCharityViolationWindowBanSeconds = antiabuse.KeyCharityViolationWindowBanSeconds
+	KeyCharitySuspendWindowSeconds      = antiabuse.KeyCharitySuspendWindowSeconds
+	KeyCharitySuspendThreshold          = antiabuse.KeyCharitySuspendThreshold
+	KeyCharitySuspendDurationSeconds    = antiabuse.KeyCharitySuspendDurationSeconds
+	alertPrefsPrefix                    = "alert_prefs_"
 )
 
 // Value bounds. RPM caps share the limiter's bounded event-store ceiling
@@ -104,6 +119,9 @@ const (
 	maxOAuthStartRateLimit       = 1000
 	maxOAuthStartRateWindowSecs  = 3600
 	maxOAuthStartRatePenaltySecs = 3600
+	maxAntiAbuseSeconds          = int(db.MaxBanDurationSeconds)
+	maxAntiAbuseThreshold        = 4096
+	maxCharityMinChars           = antiabuse.MaxCharityContentRuneCount
 )
 
 type valueKind int
@@ -182,12 +200,24 @@ var knownSiteConfig = map[string]keySpec{
 	KeyCheckinMode: {kind: kindEnum,
 		allowed: []string{db.CheckinModeEnabled, db.CheckinModeLevelGated, db.CheckinModeDisabled},
 		defStr:  db.CheckinModeDisabled},
-	KeyCheckinAwardMinMilli:     {kind: kindAmount, defAmount: db.DefaultCheckinAwardMinMilli},
-	KeyCheckinAwardMaxMilli:     {kind: kindAmount, defAmount: db.DefaultCheckinAwardMaxMilli},
-	KeyCreditsCapMilli:          {kind: kindAmount, defAmount: db.DefaultCreditsCapMilli},
-	KeyCharityEnabled:           {kind: kindBool, def: 0},
-	KeyDonationAcceptEnabled:    {kind: kindBool, def: 0},
-	KeyCharityTokenReserveMilli: {kind: kindOptionalAmount},
+	KeyCheckinAwardMinMilli:             {kind: kindAmount, defAmount: db.DefaultCheckinAwardMinMilli},
+	KeyCheckinAwardMaxMilli:             {kind: kindAmount, defAmount: db.DefaultCheckinAwardMaxMilli},
+	KeyCreditsCapMilli:                  {kind: kindAmount, defAmount: db.DefaultCreditsCapMilli},
+	KeyCharityEnabled:                   {kind: kindBool, def: 0},
+	KeyDonationAcceptEnabled:            {kind: kindBool, def: 0},
+	KeyCharityTokenReserveMilli:         {kind: kindOptionalAmount},
+	KeyRPMBanThreshold:                  {kind: kindInt, min: 0, max: maxAntiAbuseThreshold, def: antiabuse.DefaultRPMBanThreshold},
+	KeyRPMBanWindowSeconds:              {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultViolationWindow.Seconds())},
+	KeyRPMBanDurationSeconds:            {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultViolationWindow.Seconds())},
+	KeyCharityMinChars:                  {kind: kindInt, min: 0, max: maxCharityMinChars, def: antiabuse.DefaultCharityMinChars},
+	KeyCharityViolationDeductMilli:      {kind: kindAmount, defAmount: 0},
+	KeyCharityViolationBanSeconds:       {kind: kindInt, min: 0, max: maxAntiAbuseSeconds, def: 0},
+	KeyCharityViolationWindowSeconds:    {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultViolationWindow.Seconds())},
+	KeyCharityViolationBanThreshold:     {kind: kindInt, min: 0, max: maxAntiAbuseThreshold, def: 0},
+	KeyCharityViolationWindowBanSeconds: {kind: kindInt, min: 0, max: maxAntiAbuseSeconds, def: 0},
+	KeyCharitySuspendWindowSeconds:      {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultSuspendWindow.Seconds())},
+	KeyCharitySuspendThreshold:          {kind: kindInt, min: 0, max: maxAntiAbuseThreshold, def: 0},
+	KeyCharitySuspendDurationSeconds:    {kind: kindInt, min: 0, max: maxAntiAbuseSeconds, def: 0},
 }
 
 // knownSiteConfigKey reports whether key is in the authoritative set

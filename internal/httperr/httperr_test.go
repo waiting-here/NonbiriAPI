@@ -74,6 +74,7 @@ func TestStatusMapping(t *testing.T) {
 		CodeInsufficientCredits:   http.StatusForbidden,
 		CodeFeatureDisabled:       http.StatusForbidden,
 		CodeCharitySuspended:      http.StatusForbidden,
+		CodeContentTooShort:       http.StatusBadRequest,
 		CodeInternal:              http.StatusInternalServerError,
 	}
 	for code, wantStatus := range cases {
@@ -102,6 +103,7 @@ func TestSourceAttributionDerivedAtWireSink(t *testing.T) {
 		CodePayloadTooLarge, CodeElevationRequired, CodeUnboundModel,
 		CodeServiceUnavailable, CodeResourceLimitExceeded,
 		CodeInsufficientCredits, CodeFeatureDisabled, CodeCharitySuspended,
+		CodeContentTooShort,
 	}
 	for _, code := range upstream {
 		rec := httptest.NewRecorder()
