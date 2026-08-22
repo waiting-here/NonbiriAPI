@@ -200,6 +200,59 @@ pre-upgrade backup and then starting the old binary.
 
 A backup is not complete until it has been restored in an isolated directory with the same master key and opened by a test instance. Test this before onboarding users and periodically thereafter. Never test restoration against the production database path.
 
+## Upgrading from alpha.1 to alpha.2
+
+Alpha.2 is a pre-1.0 development release with breaking schema changes. Always keep a tested backup before upgrading.
+
+1. **Stop the service and back up.** Follow the [manual update procedure](#manual-update-procedure): stop the service, then copy the database and any existing `-wal`/`-shm` sidecars as one protected set. Keep the old binary, environment file, master key and database backup together.
+2. **New tables are automatic.** Tables introduced by alpha.2 use `CREATE TABLE IF NOT EXISTS` and are created on the first boot of the new binary. The bootstrap is idempotent.
+3. **Alter existing tables before first boot.** Run these one-shot statements against the stopped database before starting the alpha.2 binary. Do not run them again against the same database.
+
+   ```sql
+   -- users table (new columns for bans, economy, levels, four-bucket tokens)
+   ALTER TABLE users ADD COLUMN banned_until INTEGER;
+   ALTER TABLE users ADD COLUMN auto_banned INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE users ADD COLUMN charity_suspended_until INTEGER;
+   ALTER TABLE users ADD COLUMN credits INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE users ADD COLUMN donation_credit INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE users ADD COLUMN level INTEGER;
+   ALTER TABLE users ADD COLUMN auto_level INTEGER NOT NULL DEFAULT 1;
+   ALTER TABLE users ADD COLUMN total_uncached_input_tokens INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE users ADD COLUMN total_cache_write_input_tokens INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE users ADD COLUMN total_cache_read_input_tokens INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE users ADD COLUMN total_output_tokens INTEGER NOT NULL DEFAULT 0;
+
+   -- sessions table (credential-generation fingerprint for admin session rotation)
+   ALTER TABLE sessions ADD COLUMN cred_gen TEXT NOT NULL DEFAULT '';
+
+   -- endpoints table (fetch failure tracking)
+   ALTER TABLE endpoints ADD COLUMN model_fetch_failed INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE endpoints ADD COLUMN model_fetch_failed_at INTEGER NOT NULL DEFAULT 0;
+
+   -- models table (silent retry switch)
+   ALTER TABLE models ADD COLUMN silent_retry INTEGER NOT NULL DEFAULT 0;
+
+   -- request_logs table (four-bucket tokens, attempt dedup, charity columns)
+   ALTER TABLE request_logs ADD COLUMN attempt_id TEXT;
+   ALTER TABLE request_logs ADD COLUMN route_kind TEXT NOT NULL DEFAULT 'personal';
+   ALTER TABLE request_logs ADD COLUMN endpoint_base_url TEXT NOT NULL DEFAULT '';
+   ALTER TABLE request_logs ADD COLUMN error_source TEXT NOT NULL DEFAULT 'platform';
+   ALTER TABLE request_logs ADD COLUMN charity_reservation_id INTEGER;
+   ALTER TABLE request_logs ADD COLUMN original_charge INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE request_logs ADD COLUMN user_charge INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE request_logs ADD COLUMN donor_reward INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE request_logs ADD COLUMN uncached_input_tokens INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE request_logs ADD COLUMN cache_write_input_tokens INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE request_logs ADD COLUMN cache_read_input_tokens INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE request_logs ADD COLUMN output_tokens INTEGER NOT NULL DEFAULT 0;
+   CREATE UNIQUE INDEX IF NOT EXISTS idx_request_logs_attempt ON request_logs(attempt_id) WHERE attempt_id IS NOT NULL;
+   ```
+
+4. **Credential envelope migration.** On startup, the binary upgrades endpoint-key envelopes automatically in an idempotent, transactional migration. The old binary cannot read the new envelope format; downgrade only by restoring the complete pre-upgrade backup.
+5. **Fresh database alternative.** For test or staging, delete the database and let the new binary create a fresh one. Keep and reuse the same master key; do not generate a replacement key for an existing deployment.
+6. **Breaking changes are expected.** Alpha is a pre-1.0 development phase. A versioned migration framework is planned for after 1.0, so always back up before an upgrade.
+7. **Rollback.** Stop the new service, restore the complete pre-upgrade backup (database plus sidecars), and start the old binary. Never run the old binary against a database that has completed the credential migration or schema changes.
+
 ## Alpha limitations
 
 - The schema is bootstrapped idempotently. There is no general versioned migration framework; the unreleased credential-envelope upgrade uses one dedicated, idempotent startup migrator.

@@ -541,6 +541,17 @@ func runMaintenanceSweep(ctx context.Context, store *db.Store, usageService *usa
 			}
 		}
 	}
+	if store != nil && ctx.Err() == nil {
+		// Terminal charity reservations share the frozen 400-day retention
+		// window. Recovery above must run first so in-flight rows are settled;
+		// the cleanup itself never removes in-flight reservations.
+		cutoff := time.Now().Unix() - 400*24*60*60
+		if _, early, cleanupErr := store.CleanupTerminalCharityReservations(ctx, cutoff); cleanupErr != nil && ctx.Err() == nil {
+			slog.Error("charity reservation retention failed", "err", cleanupErr)
+		} else if early && ctx.Err() == nil {
+			slog.Info("charity reservation retention stopped early; resuming next sweep")
+		}
+	}
 }
 
 func applyPersistedRuntimeConfig(store *db.Store, runtime adminapi.RuntimeApplier) error {

@@ -261,6 +261,34 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	if _, err := st.Checkin(context.Background(), user.ID, time.Unix(1700000000, 0).UTC()); err != nil {
 		t.Fatalf("checkin: %v", err)
 	}
+	// Seed both sides of the charity export boundary: one reservation consumed
+	// by this user and one reservation against this user's donated resource.
+	donor, err := st.CreateDiscordUser("discord-export-donor", "donor", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []struct {
+		attempt string
+		owner   int64
+		donor   int64
+		model   string
+		reward  int64
+	}{
+		{attempt: "export-charity-consumer", owner: user.ID, donor: donor.ID, model: "[公益]/consumer", reward: 0},
+		{attempt: "export-charity-donor", owner: donor.ID, donor: user.ID, model: "[公益]/donor", reward: 250},
+	} {
+		if _, err := st.DB().Exec(`INSERT INTO charity_reservations
+			(user_id, donor_user_id, attempt_id, model_snapshot, state, pricing_mode,
+			discount_percent, user_reserved, key_reserved, original_charge, user_charge,
+			donor_reward, usage_uncached_input_tokens, usage_cache_write_input_tokens,
+			usage_cache_read_input_tokens, usage_output_tokens, usage_unknown,
+			created_at, finalized_at, updated_at)
+			VALUES (?, ?, ?, ?, 'committed', 'per_request', 100, 1000, 1200,
+				1200, 1000, ?, 2, 3, 5, 7, 0, 1700000000, 1700000001, 1700000001)`,
+			row.owner, row.donor, row.attempt, row.model, row.reward); err != nil {
+			t.Fatalf("seed charity reservation %s: %v", row.attempt, err)
+		}
+	}
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, exportRequest("cap-token"))
 	if rec.Code != http.StatusOK {
@@ -341,6 +369,17 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 			Day        string `json:"day"`
 			AwardMilli string `json:"award_milli"`
 		} `json:"checkins"`
+		CharityReservations []struct {
+			Model               string `json:"model"`
+			State               string `json:"state"`
+			UserReservedMilli   string `json:"user_reserved_milli"`
+			OriginalChargeMilli string `json:"original_charge_milli"`
+			UncachedInputTokens int64  `json:"uncached_input_tokens"`
+		} `json:"charity_reservations"`
+		DonorRewards []struct {
+			Model            string `json:"model"`
+			DonorRewardMilli string `json:"donor_reward_milli"`
+		} `json:"donor_rewards"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &pkg); err != nil {
 		t.Fatalf("decode package: %v body=%s", err, rec.Body.String())
@@ -406,6 +445,18 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	wantDate := time.Unix(db.SiteDayKey(1700000000, 330)+330*60, 0).UTC().Format("2006-01-02")
 	if pkg.Checkins[0].Day != wantDate || pkg.Checkins[0].AwardMilli != "1000" {
 		t.Fatalf("checkins row=%+v, want (%q, \"1000\")", pkg.Checkins[0], wantDate)
+	}
+	if len(pkg.CharityReservations) != 1 {
+		t.Fatalf("charity_reservations=%+v", pkg.CharityReservations)
+	}
+	reservation := pkg.CharityReservations[0]
+	if reservation.Model != "[公益]/consumer" || reservation.State != "committed" ||
+		reservation.UserReservedMilli != "1000" || reservation.OriginalChargeMilli != "1200" ||
+		reservation.UncachedInputTokens != 2 {
+		t.Fatalf("charity reservation row=%+v", reservation)
+	}
+	if len(pkg.DonorRewards) != 1 || pkg.DonorRewards[0].Model != "[公益]/donor" || pkg.DonorRewards[0].DonorRewardMilli != "250" {
+		t.Fatalf("donor_rewards=%+v", pkg.DonorRewards)
 	}
 
 	// Whitelist enforcement: no secret material anywhere in the package.
