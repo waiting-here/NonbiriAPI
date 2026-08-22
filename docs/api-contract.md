@@ -505,9 +505,10 @@ with the ordinary user session cookie. This contract lands the authorization fra
   caller below level 5 gets `403 forbidden` — including for sub-paths that have no business
   route — so the frame never reveals which steward routes exist. A level-5 caller hitting an
   unregistered sub-path gets the ordinary `404 not_found` envelope.
-- **Current state**: no business route is registered yet (steward logs and donation reviews
-  land with their own rails). Sub-handlers receive only an opaque steward identity
-  (user id + role); they never see another user's rows by construction of those future
+- **Current state**: the donation review surface (`/api/steward/donations…`, §3.12) is mounted;
+  charity model management is available under the same prefix (`/api/steward/charity-models…`, §4.6).
+  Sub-handlers receive only an opaque steward identity
+  (user id + role); they never see another user's rows by construction of those
   projections.
 
 ### 3.11 Daily check-in
@@ -541,6 +542,46 @@ Behavior (frozen §I, implementation contract §2.4/§6.3):
   same `feature_disabled` envelope instead of fabricating a draw.
 - **No streaks, no make-up check-ins**: the table records date and award only; there is
   no streak, location, or device data anywhere, and no token detection.
+
+### 3.12 Charity donations — `/api/donations` (user station)
+
+*(Unreleased alpha.2 amendment: frozen §J/§L, implementation contract §2.6/§6.3.)*
+
+One donation = one owned endpoint plus at least one key. The review decision (approve/reject)
+covers the WHOLE donation; the per-key concurrency/RPM/cap limits are attributes of the
+donation-key rows (§L). All economic values are canonical decimal milli-credit strings;
+no response ever contains secret material or key notes.
+
+| Method | Path | Auth | Body / query | Response | Stable codes |
+|---|---|---|---|---|---|
+| `GET` | `/api/donations` | user session | strict single-valued `page` (from 1) / `page_size` (`[1,100]`, default 20); any other parameter is `invalid_request` | `200 {data:[donation], total, has_more}` (keys/reviews omitted) | `invalid_request`, `unauthorized`, `internal` |
+| `POST` | `/api/donations` | user session | `{description (required, ≤1024 runes), expires_at? (positive unix seconds or null = never), existing_endpoint:{endpoint_id, key_ids[], keys?:[{endpoint_key_id, max_concurrency?, rpm_limit?}]}}` OR `new_endpoint:{connector_type?, base_url, note?, enabled?, keys:[{secret, note?, max_concurrency?, rpm_limit?}]}` — exactly one form | `201` donation with keys | `invalid_request`, `unauthorized`, `forbidden` (`feature_disabled` while `donation_accept_enabled` is off), `not_found`, `conflict` (a selected physical key is already claimed by another active donation), `payload_too_large` (secret too long / body cap), `resource_limit_exceeded` (endpoint/key caps) , `internal` |
+| `GET` | `/api/donations/{id}` | user session | — | `200` donation + `keys[]` + `reviews[]` (append-only audit of the caller's own submission) | `invalid_request`, `unauthorized`, `not_found`, `internal` |
+| `PATCH` | `/api/donations/{id}` | user session | pending-only owner edit: `{description?, expires_at? (null clears), keys?:{key_ids[], limits?[]}}`; empty body is `invalid_request` | `200` updated donation | `invalid_request`, `unauthorized`, `conflict` (already reviewed/deleted, or a replacement key is claimed elsewhere), `not_found`, `internal` |
+| `DELETE` | `/api/donations/{id}` | user session | — (any query parameter is `invalid_request`) | `204` soft delete: claims released, status `deleted`, audit entry appended | `invalid_request`, `unauthorized`, `conflict` (already deleted), `not_found`, `internal` |
+
+Behavior:
+
+- **Intake gate**: POST alone requires `donation_accept_enabled`; a closed switch returns
+  `feature_disabled` (403) and never blocks review, listing, editing, or deletion of existing
+  donations (frozen §J.4.5).
+- **Nested creation is one transaction**: the `new_endpoint` form creates the personal endpoint,
+  seals every fresh secret contextually, inserts the donation keys and acquires all claims in a
+  single transaction; ANY failure — including a claim conflict — rolls back the whole submission,
+  leaving no orphan endpoint, no residual ciphertext, no half-created donation.
+- **Physical key claim**: while the donation is pending, ALL of its keys hold claims; after
+  approval only enabled keys do. The claim is an INSERT into `donation_key_claims` whose primary
+  key on the physical key decides conflicts atomically; a conflicting claim aborts the whole
+  operation with `conflict`. Nothing is ever merged and per-key limits are never stacked.
+- **Per-key limits**: `max_concurrency`/`rpm_limit` are non-negative JSON numbers (`0` =
+  unlimited, bounded ceilings); they throttle ONLY charity routing, never the donor's own use
+  of their key. `credits_usage_cap_milli`/`credits_used_milli`/`credits_reserved_milli` are set
+  by reviewers and projected as canonical decimal strings.
+- **Endpoint/key deletion guard**: deleting an endpoint or key referenced by a pending or
+  approved+enabled donation fails with `conflict` (§3.5/§3.6); account deletion converges claims
+  first and then cascades.
+- **Review surface**: administrators use `/admin/api/donations…` and level-5 stewards
+  `/api/steward/donations…` (§4.6); both share one service layer with per-frame identity.
 
 ## 4. Admin station — `/admin/api/*` (admin session cookie)
 
@@ -634,9 +675,12 @@ Known `site_config` keys (the authoritative key set is enforced by the handler):
 - `checkin_mode` — the check-in three-way switch (§3.11), exactly `enabled` / `level_gated` / `disabled`; the default is `disabled`. An unknown stored value reads as `disabled` (fail closed, never an implicit enabled state)
 - `checkin_award_min_milli`, `checkin_award_max_milli` — the daily check-in award range bounds (§3.11), as canonical non-negative decimal milli-credit strings; defaults `"40000000"` / `"60000000"` (4–6 USD equivalent). The pair is cross-validated: PATCHing either bound validates `min <= max` against the other key's current value in ONE transaction, so a rejected pair is `conflict` and nothing is written. Both write paths record the administrator console write as product activity in that same transaction
 - `credits_cap_milli` — the check-in admission threshold (§3.11) as a canonical non-negative decimal milli-credit string; default `"250000000"` (25 USD equivalent). `0` = no threshold. It gates check-in admission only (effective level ≥ 3 bypasses) and never truncates an awarded amount
+- `charity_enabled` — boolean, default `false`; the charity system master switch (frozen §J.4.5). While off, no new charity routing happens and the price table is hidden; in-flight reservations still settle
+- `donation_accept_enabled` — boolean, default `false`; gates NEW donation submissions only (§3.12); review/routing of existing donations is unaffected
+- `charity_token_reserve_milli` — nullable canonical positive decimal milli-credit string; **JSON `null` (the default) means "not configured"** and keeps every per-token charity model disabled (fail closed) — it can never be mistaken for an explicit `0`, and PATCH rejects both `null` and non-positive values
 - `alert_prefs_*` — bounded administrator alert-center preference namespace
 
-Values are typed: integer keys (`default_endpoint_limit` `[0,10000]`; resource-count caps `[1,10000]`; RPM keys `[1,4096]`; concurrency keys `[1,100000]`; OAuth limit `[0,1000]`, window `[1,3600]`, penalty `[0,3600]`) accept only JSON integers. Boolean keys accept only JSON booleans. The amount keys (`level_threshold_*_milli`, `checkin_award_min_milli`, `checkin_award_max_milli`, `credits_cap_milli`) accept only canonical non-negative decimal strings (no exponent, `+`, leading zeros, whitespace, or negative values) and project as JSON strings — `"0"` for the level thresholds and each key's documented default for the check-in keys while unset or manually corrupted. `checkin_mode` accepts exactly the member strings of its three-way switch. Single-line text is bounded/control-free; the four legal overrides accept bounded multiline text (≤65536 bytes, preserving newline/tab while rejecting other controls); `default_locale` is exactly `zh`/`en`, and `legal_authoritative_locale` also permits blank. `site_timezone_offset_minutes` accepts only a canonical JSON integer within its range and projects as JSON `null` while unset or manually corrupted. `null` is rejected for every other key (clearing a per-user limit is expressed through the user-level NULL
+Values are typed: integer keys (`default_endpoint_limit` `[0,10000]`; resource-count caps `[1,10000]`; RPM keys `[1,4096]`; concurrency keys `[1,100000]`; OAuth limit `[0,1000]`, window `[1,3600]`, penalty `[0,3600]`) accept only JSON integers. Boolean keys accept only JSON booleans. The amount keys (`level_threshold_*_milli`, `checkin_award_min_milli`, `checkin_award_max_milli`, `credits_cap_milli`) accept only canonical non-negative decimal strings (no exponent, `+`, leading zeros, whitespace, or negative values) and project as JSON strings — `"0"` for the level thresholds and each key's documented default for the check-in keys while unset or manually corrupted. `charity_token_reserve_milli` is the one OPTIONAL amount key: it accepts only a canonical positive decimal string, projects JSON `null` while unset (never an implicit zero), and rejects `null`/zero on PATCH so "not configured" stays unambiguous. `checkin_mode` accepts exactly the member strings of its three-way switch. Single-line text is bounded/control-free; the four legal overrides accept bounded multiline text (≤65536 bytes, preserving newline/tab while rejecting other controls); `default_locale` is exactly `zh`/`en`, and `legal_authoritative_locale` also permits blank. `site_timezone_offset_minutes` accepts only a canonical JSON integer within its range and projects as JSON `null` while unset or manually corrupted. `null` is rejected for every other key (clearing a per-user limit is expressed through the user-level NULL
 semantics; blanking a text gate value uses `""`). `GET` returns the effective
 typed value for every known key (documented defaults when unset; `null` for the
 nullable timezone key) and never
@@ -676,6 +720,49 @@ keyset-paginated newest-first (`id` descending, `before_id` exclusive) with a cl
 size; `resolved_at`/`subject_user_id` are `null` when absent. `resolve` is idempotent: a
 repeated call for the same target state succeeds and keeps the original `resolved_at`;
 resolving an alert with `false` reopens it and clears `resolved_at`.
+
+### 4.6 Donation review & charity model management (admin + steward)
+
+*(Unreleased alpha.2 amendment: frozen §J.4/J.5, implementation contract §6.4.)*
+
+Administrators reach these routes under `/admin/api/…` with an admin session; level-5 stewards
+reach the SAME operations under `/api/steward/…` on the user station (§3.10, live-resolved
+effective level ≥ 5). Both frames share one service layer; authorization is re-validated
+server-side on every mutation and every operation appends an entry to the donation's
+append-only review audit. There is no admin-side creation of donations on behalf of users.
+
+| Method | Path | Body | Response | Stable codes |
+|---|---|---|---|---|
+| `GET` | `/donations` | strict `page`/`page_size`, optional single `status` (`pending/approved/rejected/deleted`) | `{data:[donation], total, has_more}` | `unauthorized`/`forbidden` (frame), `invalid_request`, `internal` |
+| `GET` | `/donations/{id}` | — | full donation + keys + review history | `not_found`, `invalid_request` |
+| `PATCH` | `/donations/{id}` | `{action: approve\|reject\|enable\|disable\|update, note?, expires_at?, keys?:[{id, max_concurrency?, rpm_limit?, credits_usage_cap_milli? (decimal string), enabled?}]}` | updated donation | `conflict` (wrong current state or a claim conflict), `invalid_request`, `not_found` |
+| `DELETE` | `/donations/{id}` | — | `204` soft delete (claims released, audit entry appended) | `conflict` (already deleted), `not_found` |
+| `GET`/`POST` | `/charity-models` , `/charity-models/{id}` | see below | charity model rows + last-100 success rate | standard set |
+| `PATCH`/`DELETE` | `/charity-models/{id}` | partial fields | updated / `204` | `conflict` (duplicate routing key), `not_found` |
+| `GET`/`POST` | `/charity-models/{id}/bindings` ; `PATCH`/`DELETE` …`/bindings/{bindingId}` | binding CRUD | binding rows with display fragments only | `not_found` (any candidate-predicate failure is indistinguishable from a missing row), `conflict` (duplicate triple) |
+
+Behavior:
+
+- **Whole-donation decisions**: approve requires status `pending` and defaults the donation to
+  enabled; reject requires `pending`; enable/disable require `approved`. Reviewers may adjust the
+  frozen fields at any decision — expiry, per-key limits, per-key `credits_usage_cap_milli`
+  (string wire), and per-key enabled flag; disabling a key releases its claim in the same
+  transaction, enabling re-acquires it (`conflict` when another active donation holds it).
+- **Review history is never hard-deleted**: DELETE is soft; only account-lifecycle cascade
+  removes audit rows.
+- **Charity models**: `full_name = '[公益]'provider'/'model'` is derived server-side and UNIQUE;
+  exactly one pricing table is interpretable (the non-current table's fields are zeroed on
+  write); prices/rewards are non-negative integer milli-credit values (per-request fixed price,
+  or per-million-token for each of the four buckets); `discount_percent ∈ [0,100]` (100 =
+  original price, 0 = free) with an optional `[start,end)` interval that yields the original
+  price before start/at-or-after end or while disabled.
+- **Token reserve fail closed**: creating OR enabling a `per_token` model while
+  `charity_token_reserve_milli` is unset/non-positive fails with `conflict` — checked in the
+  same transaction as the write.
+- **Binding candidate predicate** (verified inside the INSERT..SELECT itself, never
+  read-then-write): the charity model must be enabled; the donation approved+enabled and
+  unexpired; the donation key enabled WITH a live claim; the physical endpoint/key alive and
+  enabled; the upstream id present in that key's fetched cache.
 
 ## 5. Cross-cutting requirements
 

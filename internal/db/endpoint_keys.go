@@ -76,10 +76,6 @@ func siteConfigIntLocked(ctx context.Context, q queryRowContexter, key string, d
 // supplied to a SQL operation.
 func (s *Store) CreateEndpointKey(ctx context.Context, userID, endpointID int64, secretPlaintext []byte, displayHead, displayTail, note string, enabled bool, now int64) (EndpointKey, error) {
 	defer clear(secretPlaintext)
-	enabledInt := 0
-	if enabled {
-		enabledInt = 1
-	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -92,80 +88,9 @@ func (s *Store) CreateEndpointKey(ctx context.Context, userID, endpointID int64,
 		}
 	}()
 
-	cap, err := siteConfigIntLocked(ctx, tx, siteConfigKeyDefaultEndpointKeyLimit, DefaultEndpointKeyLimit)
+	id, err := s.createEndpointKeyTx(ctx, tx, userID, endpointID, secretPlaintext, displayHead, displayTail, note, enabled, now)
 	if err != nil {
 		return EndpointKey{}, err
-	}
-	var count int
-	if err := tx.QueryRowContext(ctx, `
-SELECT COUNT(*) FROM endpoint_keys ek
-JOIN endpoints e ON ek.endpoint_id = e.id
-WHERE ek.endpoint_id=? AND e.user_id=?`, endpointID, userID).Scan(&count); err != nil {
-		return EndpointKey{}, fmt.Errorf("count endpoint keys: %w", err)
-	}
-	if count >= cap {
-		return EndpointKey{}, newCapError(ErrEndpointKeyCap, ResourceEndpointKey, cap)
-	}
-
-	// Ownership and the initial row allocation are one SQL statement. The
-	// empty ciphertext is an uncommitted placeholder used only to obtain the
-	// database-assigned key id required by the authenticated context.
-	res, err := tx.ExecContext(ctx, `
-INSERT INTO endpoint_keys (endpoint_id, encrypted_secret, display_head, display_tail, note, enabled, created_at, updated_at)
-SELECT ?, '', ?, ?, ?, ?, ?, ?
-FROM endpoints
-WHERE id=? AND user_id=?`,
-		endpointID, displayHead, displayTail, note, enabledInt, now, now, endpointID, userID)
-	if err != nil {
-		return EndpointKey{}, fmt.Errorf("insert endpoint key placeholder: %w", err)
-	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return EndpointKey{}, fmt.Errorf("insert endpoint key rows affected: %w", err)
-	}
-	if affected == 0 {
-		return EndpointKey{}, ErrNotFound
-	}
-	id, err := res.LastInsertId()
-	if err != nil || id <= 0 {
-		return EndpointKey{}, ErrEndpointCredentialUnavailable
-	}
-
-	var baseURL sql.NullString
-	if err := tx.QueryRowContext(ctx, `
-SELECT CASE WHEN length(CAST(base_url AS BLOB)) BETWEEN 1 AND ? THEN base_url END
-FROM endpoints
-WHERE id=? AND user_id=?`, maxStoredEndpointBaseURLBytes, endpointID, userID).Scan(&baseURL); err != nil || !baseURL.Valid {
-		return EndpointKey{}, ErrEndpointCredentialUnavailable
-	}
-	_, canonicalOrigin, err := egress.CanonicalEndpointTarget(baseURL.String)
-	baseURL.String = ""
-	if err != nil {
-		return EndpointKey{}, ErrEndpointCredentialUnavailable
-	}
-	credentialContext, err := secret.NewEndpointKeyContext(userID, endpointID, id, canonicalOrigin)
-	canonicalOrigin = ""
-	if err != nil {
-		return EndpointKey{}, ErrEndpointCredentialUnavailable
-	}
-	ciphertext, err := s.secrets.SealForContext(secretPlaintext, credentialContext)
-	clear(secretPlaintext)
-	if err != nil {
-		return EndpointKey{}, ErrEndpointCredentialUnavailable
-	}
-	res, err = tx.ExecContext(ctx, `
-UPDATE endpoint_keys
-SET encrypted_secret=?
-WHERE id=? AND endpoint_id=?
-  AND endpoint_id IN (SELECT id FROM endpoints WHERE id=? AND user_id=?)`,
-		ciphertext, id, endpointID, endpointID, userID)
-	ciphertext = ""
-	if err != nil {
-		return EndpointKey{}, ErrEndpointCredentialUnavailable
-	}
-	affected, err = res.RowsAffected()
-	if err != nil || affected != 1 {
-		return EndpointKey{}, ErrEndpointCredentialUnavailable
 	}
 	if err := tx.Commit(); err != nil {
 		return EndpointKey{}, ErrEndpointCredentialUnavailable
@@ -181,6 +106,100 @@ WHERE id=? AND endpoint_id=?
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}, nil
+}
+
+// createEndpointKeyTx performs the whole cap-check → ownership-guarded
+// placeholder insert → contextual seal → ciphertext-update sequence INSIDE the
+// caller's transaction. It is the shared primitive behind CreateEndpointKey
+// and the nested donation creation (which must create personal resources and
+// the pending donation in ONE transaction so any failure rolls everything
+// back). The caller owns the transaction lifecycle and the final commit; the
+// placeholder is never visible to another connection because the enclosing
+// transaction is the only writer. On return (success or error) the plaintext
+// has been consumed and cleared.
+func (s *Store) createEndpointKeyTx(ctx context.Context, tx *sql.Tx, userID, endpointID int64, secretPlaintext []byte, displayHead, displayTail, note string, enabled bool, now int64) (int64, error) {
+	defer clear(secretPlaintext)
+	enabledInt := 0
+	if enabled {
+		enabledInt = 1
+	}
+
+	cap, err := siteConfigIntLocked(ctx, tx, siteConfigKeyDefaultEndpointKeyLimit, DefaultEndpointKeyLimit)
+	if err != nil {
+		return 0, err
+	}
+	var count int
+	if err := tx.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM endpoint_keys ek
+JOIN endpoints e ON ek.endpoint_id = e.id
+WHERE ek.endpoint_id=? AND e.user_id=?`, endpointID, userID).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count endpoint keys: %w", err)
+	}
+	if count >= cap {
+		return 0, newCapError(ErrEndpointKeyCap, ResourceEndpointKey, cap)
+	}
+
+	// Ownership and the initial row allocation are one SQL statement. The
+	// empty ciphertext is an uncommitted placeholder used only to obtain the
+	// database-assigned key id required by the authenticated context.
+	res, err := tx.ExecContext(ctx, `
+INSERT INTO endpoint_keys (endpoint_id, encrypted_secret, display_head, display_tail, note, enabled, created_at, updated_at)
+SELECT ?, '', ?, ?, ?, ?, ?, ?
+FROM endpoints
+WHERE id=? AND user_id=?`,
+		endpointID, displayHead, displayTail, note, enabledInt, now, now, endpointID, userID)
+	if err != nil {
+		return 0, fmt.Errorf("insert endpoint key placeholder: %w", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("insert endpoint key rows affected: %w", err)
+	}
+	if affected == 0 {
+		return 0, ErrNotFound
+	}
+	id, err := res.LastInsertId()
+	if err != nil || id <= 0 {
+		return 0, ErrEndpointCredentialUnavailable
+	}
+
+	var baseURL sql.NullString
+	if err := tx.QueryRowContext(ctx, `
+SELECT CASE WHEN length(CAST(base_url AS BLOB)) BETWEEN 1 AND ? THEN base_url END
+FROM endpoints
+WHERE id=? AND user_id=?`, maxStoredEndpointBaseURLBytes, endpointID, userID).Scan(&baseURL); err != nil || !baseURL.Valid {
+		return 0, ErrEndpointCredentialUnavailable
+	}
+	_, canonicalOrigin, err := egress.CanonicalEndpointTarget(baseURL.String)
+	baseURL.String = ""
+	if err != nil {
+		return 0, ErrEndpointCredentialUnavailable
+	}
+	credentialContext, err := secret.NewEndpointKeyContext(userID, endpointID, id, canonicalOrigin)
+	canonicalOrigin = ""
+	if err != nil {
+		return 0, ErrEndpointCredentialUnavailable
+	}
+	ciphertext, err := s.secrets.SealForContext(secretPlaintext, credentialContext)
+	clear(secretPlaintext)
+	if err != nil {
+		return 0, ErrEndpointCredentialUnavailable
+	}
+	res, err = tx.ExecContext(ctx, `
+UPDATE endpoint_keys
+SET encrypted_secret=?
+WHERE id=? AND endpoint_id=?
+  AND endpoint_id IN (SELECT id FROM endpoints WHERE id=? AND user_id=?)`,
+		ciphertext, id, endpointID, endpointID, userID)
+	ciphertext = ""
+	if err != nil {
+		return 0, ErrEndpointCredentialUnavailable
+	}
+	affected, err = res.RowsAffected()
+	if err != nil || affected != 1 {
+		return 0, ErrEndpointCredentialUnavailable
+	}
+	return id, nil
 }
 
 // EndpointKeyCap returns the effective per-endpoint key-count cap: the
@@ -325,11 +344,28 @@ func (s *Store) UpdateEndpointKey(ctx context.Context, userID, endpointID, keyID
 // the key must belong to endpointID AND endpointID must belong to userID, so a
 // cross-user id and a same-user wrong-endpoint path both yield ErrNotFound with
 // no read-then-write race.
+// The deletion is refused with ErrResourceInActiveDonation while a pending or
+// approved+enabled donation references this key; guard, delete and the claims
+// table's RESTRICT constraint share one transaction.
 func (s *Store) DeleteEndpointKey(ctx context.Context, userID, endpointID, keyID int64) error {
-	res, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("delete endpoint key: begin: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	if err := refuseActiveDonationRefsTx(ctx, tx,
+		`SELECT id FROM endpoint_keys WHERE id=? AND endpoint_id=?`, keyID, endpointID); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx,
 		`DELETE FROM endpoint_keys WHERE id=? AND endpoint_id=? AND endpoint_id IN (SELECT id FROM endpoints WHERE user_id=?)`, keyID, endpointID, userID)
 	if err != nil {
-		return fmt.Errorf("delete endpoint key: %w", err)
+		return classifyResourceRefusal(err)
 	}
 	affected, err := res.RowsAffected()
 	if err != nil {
@@ -338,6 +374,10 @@ func (s *Store) DeleteEndpointKey(ctx context.Context, userID, endpointID, keyID
 	if affected == 0 {
 		return ErrNotFound
 	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("delete endpoint key: commit: %w", err)
+	}
+	committed = true
 	return nil
 }
 

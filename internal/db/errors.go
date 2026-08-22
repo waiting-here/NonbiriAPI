@@ -37,6 +37,27 @@ var (
 	// wraps it.
 	ErrBindingCap = errors.New("db: model binding cap reached")
 
+	// ErrDonationKeyClaimConflict reports that a physical endpoint key is
+	// already claimed by ANOTHER donation's key while that donation is pending
+	// or approved+enabled. The claim constraint decided the race; nothing was
+	// merged and no limit was stacked.
+	ErrDonationKeyClaimConflict = errors.New("db: endpoint key is already claimed by another donation")
+	// ErrInvalidValue reports that a caller-supplied value failed a bounded
+	// shape/range/membership rule decidable from the value ALONE (length,
+	// charset, sign, enum membership, request-local interval sanity). API
+	// boundaries map it to invalid_request; ErrConflict stays reserved for
+	// refusals that depend on current stored state or another row.
+	ErrInvalidValue = errors.New("db: invalid value")
+	// ErrResourceInActiveDonation reports that an endpoint/key deletion was
+	// refused because a pending or approved+enabled donation still references
+	// it. The API boundary maps it to a stable conflict envelope.
+	ErrResourceInActiveDonation = errors.New("db: resource is referenced by an active donation")
+	// ErrCharityTokenReserveMissing reports that a per-token charity model was
+	// enabled (or created enabled) while charity_token_reserve_milli is unset
+	// or non-positive: the token mode fails closed until the administrator
+	// configures an explicit reserve price.
+	ErrCharityTokenReserveMissing = errors.New("db: charity token reserve price is not configured")
+
 	// ErrInvalidSiteConfig is returned when a site_config value used by a
 	// cap invariant is present but malformed (non-integer or negative where a
 	// non-negative integer is required).
@@ -55,6 +76,7 @@ const (
 	ResourceEndpointKey = "endpoint_key"
 	ResourceModel       = "model"
 	ResourceBinding     = "binding"
+	ResourceDonation    = "donation"
 )
 
 // CapError reports that a per-parent resource count reached its configured cap

@@ -246,6 +246,10 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	if err != nil {
 		return nil, err
 	}
+	donations, err := s.store.ListExportDonations(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
 
 	keysByEndpoint := make(map[int64][]exportKey, len(keys))
 	for _, key := range keys {
@@ -295,6 +299,7 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 		ActivityDaily: make([]db.ActivityDailyExportRow, 0, len(activityDaily)),
 		CreditLedger:  make([]db.CreditLedgerExportRow, 0, len(creditLedger)),
 		Checkins:      make([]db.CheckinExportRow, 0, len(checkins)),
+		Donations:     make([]db.DonationExportRow, 0, len(donations)),
 	}
 	for _, day := range activityDaily {
 		packageValue.ActivityDaily = append(packageValue.ActivityDaily, day)
@@ -304,6 +309,9 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	}
 	for _, row := range checkins {
 		packageValue.Checkins = append(packageValue.Checkins, row)
+	}
+	for _, row := range donations {
+		packageValue.Donations = append(packageValue.Donations, row)
 	}
 	for _, ep := range endpoints {
 		packageValue.Endpoints = append(packageValue.Endpoints, exportEndpoint{
@@ -363,6 +371,11 @@ type exportPackage struct {
 	// calendar date and the granted award per day — no streak and no location
 	// data exists anywhere in the table.
 	Checkins []db.CheckinExportRow `json:"checkins"`
+	// Donations is the donor's own charity submissions (schema v2): safe
+	// metadata, per-key display fragments and limits as decimal strings, and
+	// the append-only review history. No secret, ciphertext, or key-note field
+	// exists on these rows by construction.
+	Donations []db.DonationExportRow `json:"donations"`
 }
 
 type exportUser struct {
