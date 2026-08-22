@@ -140,15 +140,15 @@ Codes below are the emitted set; HTTP status is derived from the code. Route tab
 | `upstream` | 502 | upstream error after the commit boundary, a single attempt's upstream error with silent retry off, or all bindings exhausted under silent retry |
 | `service_unavailable` | 503 | internal service unavailability, or the server-side maintenance gate refusing user-station API and `/v1/*` while `maintenance_mode` is on (§6) |
 | `resource_limit_exceeded` | 422 | a per-parent resource count reached the configured cap: endpoints per user (effective minimum of `default_endpoint_limit` and the user override), endpoint keys per endpoint (`default_endpoint_key_limit`), platform models per user (`default_model_limit`), or bindings per model (`default_binding_limit`); the envelope carries `limit` (the effective cap) and `resource` (the stable name); the count and cap are read inside the same transaction as the insert so a concurrent add cannot breach the cap; existing rows are retained |
-| `insufficient_credits` | 403 | reserved stable code for the economy rail (悠哉积分不足); `source` is `platform`; the business trigger is wired in a later phase |
+| `insufficient_credits` | 403 | the caller's 悠哉积分 balance cannot cover the action: an administrator credit adjustment that would push the balance below its floor, or a charity routing admission whose pre-reserve debit fails the conditional balance check (the refusal happens strictly before any upstream dispatch); `source` is `platform` |
 | `feature_disabled` | 403 | stable code for a feature gate; `source` is `platform`; the check-in rail (§3.11) is the wired trigger: every unavailable cause — timezone not configured, check-in disabled, a level-gated denial, or a corrupt configuration — is the identical envelope (code, status, message, source) so the reason is never revealed |
-| `charity_suspended` | 403 | reserved stable code for a charity suspension; `source` is `platform`; the business trigger is wired in a later phase |
+| `charity_suspended` | 403 | the caller's charity eligibility is currently suspended (`charity_suspended_until` in the future); charity routing refuses before any reservation or dispatch, while everything outside the charity rail keeps working; `source` is `platform` |
 | `already_checked_in` | 409 | the user already checked in on the current site-local day (今日已签到); the day was consumed by the earlier successful check-in, not by this attempt; `source` is `platform` |
 | `checkin_cap_reached` | 403 | the user's credit balance has reached the configured check-in threshold (`credits_cap_milli`) at an effective level below the bypass (≥3); the refusal does NOT consume the day; the message contains 悠哉积分已达签到上限; `source` is `platform` |
 
-*(Unreleased security amendment: the `service_unavailable` maintenance-gate meaning and
-the `insufficient_credits` / `feature_disabled` / `charity_suspended` reserved codes are not
-part of the published `v1.0.0-alpha.1` contract; no business trigger is wired yet.)*
+*(Unreleased amendment: the `service_unavailable` maintenance-gate meaning and the
+`insufficient_credits` / `feature_disabled` / `charity_suspended` business triggers are not
+part of the published `v1.0.0-alpha.1` contract.)*
 
 ## 2. Platform exit — `/v1/*` (CallerKey Bearer)
 
@@ -237,17 +237,35 @@ other sensitive data the upstream may return. A caller key is therefore still ha
 sensitive credential and protected by the reverse proxy, storage, and logging boundary; the
 guard is one layer, not a guarantee.
 
+**Charity namespace (`[公益]`-prefixed `model`, additive).** A `model` starting with the reserved
+prefix `[公益]` never resolves against personal models: it routes through the charity rail against
+administrator-curated charity models backed by donated endpoint keys. The two namespaces are
+disjoint by construction. Charity resolution requires the site-wide `charity_enabled` switch, a
+non-suspended caller, and at least one live candidate chain (approved+enabled donation, enabled
+donation key with a physical claim, enabled endpoint/key, fetched-model cache hit); every chain
+element is re-verified inside one SELECT immediately before each dispatch attempt. One logical
+call takes exactly one user credit pre-reserve; retries across donated keys atomically swap only
+the donated key's reserve. Per-donation-key concurrency/RPM/usage-cap limits gate each candidate
+after selection and before dispatch; a refused key moves to the next candidate and never feeds
+any auto-ban statistic; when every key refuses, the exit is `rate_limited`. The first legal
+response-body byte is the accounting commit boundary; usage settlement uses the price/discount
+snapshot taken at reservation time and can drive the caller's balance negative or cross the
+donated key's cap by frozen design.
+
 Stable error codes at this endpoint:
 
 | code | HTTP | When |
 |---|---|---|
 | `unauthorized` | 401 | missing / invalid / banned caller key |
 | `forbidden` | 403 | request reached a forbidden station/security boundary; model ownership itself is resolved only inside the authenticated caller's tenant |
-| `not_found` | 404 | `model` did not resolve to one of the caller's platform models |
-| `rate_limited` | 429 | per-user RPM, global RPM, or concurrency exhausted |
+| `not_found` | 404 | `model` did not resolve to one of the caller's platform models (a disabled or absent `[公益]` model is indistinguishable from this) |
+| `rate_limited` | 429 | per-user RPM, global RPM, or concurrency exhausted; for `[公益]` models also when every donated key refused its per-key admission |
 | `payload_too_large` | 413 | request body exceeds the configured size bound |
-| `unbound_model` | 503 | the resolved model has no usable binding (zero-binding draft / all bindings filtered out) — a user issue is recorded |
+| `unbound_model` | 503 | the resolved model has no usable binding (zero-binding draft / all bindings filtered out) — a user issue is recorded; for `[公益]` models, no donated candidate chain is currently usable or the per-token reserve price is unconfigured (fail closed) |
 | `upstream` | 502 | upstream error after the commit boundary, single-attempt upstream error with silent retry off, or all bindings exhausted under silent retry |
+| `feature_disabled` | 403 | `[公益]` routing while the site-wide charity switch is off |
+| `charity_suspended` | 403 | `[公益]` routing while the caller's charity eligibility is suspended |
+| `insufficient_credits` | 403 | `[公益]` pre-reserve debit failed the conditional balance check (never dispatched) |
 | `internal` | 500 | unexpected failure |
 
 (within an already-started stream, an error is emitted as an SSE error frame rather than a
@@ -272,6 +290,10 @@ Response (`200`, `no-store`):
 - `id` is the platform model full name `provider/model` (the exact routing key).
 - `owned_by` is the model's `provider`.
 - Only the caller's models appear; cross-user resources are never candidates.
+- **Charity projection (additive)**: while the site-wide `charity_enabled` switch is on, every
+  enabled `[公益]…` charity model that has at least one usable donated-candidate chain is appended
+  after the caller's own models (same entry shape; `owned_by` carries the curated provider name).
+  While the switch is off the projection is empty — never an error.
 
 Stable error codes: `unauthorized` (401); `rate_limited` (429); `internal` (500).
 
@@ -309,7 +331,7 @@ A request without / with an expired / with an already-consumed token is `403 ele
 | `GET` | `/api/me` | user session | — | same `{user:{…}}` envelope and fields as `/api/session` | `unauthorized` |
 | `PATCH` | `/api/me` | user session | `{lang}` | `200` same updated `{user:{…}}` envelope; `lang` is exactly `zh` or `en` | `invalid_request`, `unauthorized` |
 | `GET` | `/api/me/usage` | user session | — | `200 {total_requests, total_uncached_input_tokens, total_cache_write_input_tokens, total_cache_read_input_tokens, total_output_tokens, total_prompt_tokens, total_completion_tokens, total_unknown_usage_requests}`; the four token buckets are the authoritative counters, the legacy prompt/completion totals remain compatibility mirrors | `unauthorized` |
-| `GET` | `/api/logs` | user session | optional single-valued `model`, `error_code`, `status`, `from`, `to`, `page`, `page_size` | `200 {data:[…], has_more}`; each metadata-only row of the session principal's own requests is `{id, route_kind, model, endpoint_key_id, key_note, endpoint_note, endpoint_base_url, upstream_model_id, status_code, duration_ms, started_at, completed_at, uncached_input_tokens, cache_write_input_tokens, cache_read_input_tokens, output_tokens, prompt_tokens, completion_tokens, total_tokens, usage_unknown, error_code, error_source, error_diag, attempt_id}`; `key_note`/`endpoint_note` are the current notes of the caller's own resources and are empty once a resource is deleted; `endpoint_base_url` is the dispatch-time snapshot | `invalid_request`, `unauthorized`, `internal` |
+| `GET` | `/api/logs` | user session | optional single-valued `model`, `error_code`, `status`, `from`, `to`, `page`, `page_size` | `200 {data:[…], has_more}`; each metadata-only row of the session principal's own requests is `{id, route_kind, model, endpoint_key_id, key_note, endpoint_note, endpoint_base_url, upstream_model_id, status_code, duration_ms, started_at, completed_at, uncached_input_tokens, cache_write_input_tokens, cache_read_input_tokens, output_tokens, prompt_tokens, completion_tokens, total_tokens, usage_unknown, error_code, error_source, error_diag, attempt_id}`; `key_note`/`endpoint_note` are the current notes of the caller's own resources and are empty once a resource is deleted; `endpoint_base_url` is the dispatch-time snapshot; rows with `route_kind='charity'` served through a donated key blank `endpoint_key_id`, `endpoint_base_url`, and `upstream_model_id` so donated resources are never exposed to the consumer | `invalid_request`, `unauthorized`, `internal` |
 | `GET` | `/api/logs/options` | user session | — (any query parameter is `invalid_request`) | `200 {models:[…]}` — distinct non-empty platform model names from the caller's own retained logs, ascending, bounded server-side; the client may fuzzy-search this list locally but the server never substring-searches logs | `invalid_request`, `unauthorized`, `internal` |
 
 A null stored user-level RPM limit means the administrator's global default applies. Normal users cannot change it.

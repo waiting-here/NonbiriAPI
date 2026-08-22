@@ -99,6 +99,15 @@ type RequestLogInput struct {
 	UsageUnknown          bool
 	ErrorCode             string
 	ErrorDiag             string
+	// RouteKind distinguishes the two routing namespaces ('personal'|'charity')
+	// and defaults to 'personal' for every pre-charity writer. Charity business
+	// values (reservation correlation and the three charge columns) are written
+	// by the charity routing rail; personal rows keep the zero defaults.
+	RouteKind            string
+	CharityReservationID int64 // 0 = none; deliberately NO FK (30d vs 400d retention)
+	OriginalChargeMilli  int64 // charity pre-discount price, milli-credits; >= 0
+	UserChargeMilli      int64 // charity discounted payment, milli-credits; >= 0
+	DonorRewardMilli     int64 // charity donor reward accrued, milli-credits; >= 0
 	// Activity, when non-nil, records this committed request as one
 	// successful product-activity event (user + site daily aggregation) in
 	// the same transaction as the log row and accumulators. While the site
@@ -146,6 +155,12 @@ func (i RequestLogInput) validate() error {
 	if len(i.ErrorCode) > maxLogErrorCodeLen || !stableErrorCodes[i.ErrorCode] {
 		return fmt.Errorf("usage: error code is not stable")
 	}
+	if i.RouteKind != "" && i.RouteKind != "personal" && i.RouteKind != "charity" {
+		return fmt.Errorf("usage: route kind is not stable")
+	}
+	if i.OriginalChargeMilli < 0 || i.UserChargeMilli < 0 || i.DonorRewardMilli < 0 {
+		return fmt.Errorf("usage: charity charge is negative")
+	}
 	if i.Activity != nil {
 		if err := i.Activity.validate(); err != nil {
 			return err
@@ -189,6 +204,9 @@ func validOptionalStoredText(value string, maxRunes int) bool {
 // (see the package comment). Any validation, constraint, or overflow failure
 // rolls the whole transaction back: no partial state is ever committed.
 func (s *Store) RecordRequest(ctx context.Context, input RequestLogInput) error {
+	if input.RouteKind == "" {
+		input.RouteKind = "personal" // pre-charity writers keep the neutral default
+	}
 	if err := input.validate(); err != nil {
 		return err
 	}
@@ -237,7 +255,8 @@ INSERT INTO request_logs
 	(attempt_id, user_id, model, endpoint_key_id, upstream_model_id, status_code, duration_ms,
 	 started_at, completed_at, prompt_tokens, completion_tokens, total_tokens,
 	 uncached_input_tokens, cache_write_input_tokens, cache_read_input_tokens, output_tokens,
-	 usage_unknown, error_code, error_diag, endpoint_base_url)
+	 usage_unknown, error_code, error_diag, endpoint_base_url,
+	 route_kind, charity_reservation_id, original_charge, user_charge, donor_reward)
 SELECT
        ?,
        ?,
@@ -262,6 +281,11 @@ SELECT
        ?,
        ?,
        ?,
+       ?,
+       ?,
+       ?,
+       ?,
+       ?,
        ?
 FROM users WHERE id = ?`,
 		input.AttemptID, input.UserID, input.Model,
@@ -269,7 +293,10 @@ FROM users WHERE id = ?`,
 		input.UpstreamModelID, input.StatusCode, input.DurationMs,
 		startedUnix, completedUnix, promptMirror, completionMirror, totalMirror,
 		input.UncachedInputTokens, input.CacheWriteInputTokens, input.CacheReadInputTokens, input.OutputTokens,
-		unknown, input.ErrorCode, diag, baseURL, input.UserID)
+		unknown, input.ErrorCode, diag, baseURL,
+		input.RouteKind, nullInt64ForZero(input.CharityReservationID),
+		input.OriginalChargeMilli, input.UserChargeMilli, input.DonorRewardMilli,
+		input.UserID)
 	if err != nil {
 		if isConstraintError(err) {
 			// A duplicate attempt correlation id means the same accounted
@@ -367,6 +394,14 @@ func boolToInt(value bool) int {
 		return 1
 	}
 	return 0
+}
+
+// nullInt64ForZero maps a zero correlation id to SQL NULL.
+func nullInt64ForZero(v int64) any {
+	if v > 0 {
+		return v
+	}
+	return nil
 }
 
 // addNonNegative adds two values already validated non-negative and reports

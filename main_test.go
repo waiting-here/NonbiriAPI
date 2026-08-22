@@ -252,7 +252,7 @@ func TestMaintenanceSweepPurgesExpiredSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runMaintenanceSweep(context.Background(), store, usageService)
+	runMaintenanceSweep(context.Background(), store, usageService, nil)
 	var count int
 	if err := store.DB().QueryRow(`SELECT COUNT(*) FROM sessions`).Scan(&count); err != nil {
 		t.Fatal(err)

@@ -398,9 +398,18 @@ func (s *Store) QueryUserRequestLogs(ctx context.Context, userID int64, query Us
 	// endpoint belongs to the logging user, and a deleted key/endpoint simply
 	// yields empty notes (LEFT JOIN + COALESCE). Notes are current values by
 	// design; endpoint_base_url is the durable dispatch snapshot column.
-	sqlText := `SELECT rl.id, rl.route_kind, rl.model, rl.endpoint_key_id,
+	//
+	// Charity rows (route_kind='charity') carry the DONOR's endpoint/key as the
+	// dispatch target; the consumer must never learn donor resources from their
+	// own log projection (frozen §7). The CASE expressions blank the donor's
+	// endpoint key id, base URL, and upstream model id for charity rows; the
+	// admin station reads the authoritative reservation for that correlation.
+	sqlText := `SELECT rl.id, rl.route_kind, rl.model,
+		CASE WHEN rl.route_kind='charity' THEN 0 ELSE rl.endpoint_key_id END,
 		COALESCE(ek.note, ''), COALESCE(e.note, ''),
-		rl.endpoint_base_url, rl.upstream_model_id, rl.status_code, rl.duration_ms,
+		CASE WHEN rl.route_kind='charity' THEN '' ELSE rl.endpoint_base_url END,
+		CASE WHEN rl.route_kind='charity' THEN '' ELSE rl.upstream_model_id END,
+		rl.status_code, rl.duration_ms,
 		rl.started_at, rl.completed_at,
 		rl.uncached_input_tokens, rl.cache_write_input_tokens, rl.cache_read_input_tokens, rl.output_tokens,
 		rl.prompt_tokens, rl.completion_tokens, rl.total_tokens,

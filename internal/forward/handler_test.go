@@ -783,3 +783,102 @@ func TestSecureRunnerConstructionAndTargetInvalidation(t *testing.T) {
 		t.Fatal("sentinel sanity")
 	}
 }
+
+// fakeCharityRail is the test double for the [公益] routing exit. It records
+// whether Forward was invoked and what model name it received.
+type fakeCharityRail struct {
+	models    []db.CallerModel
+	forwardOK bool
+	recvModel string
+	recvUser  int64
+}
+
+func (f *fakeCharityRail) ListCallerModels(ctx context.Context) ([]db.CallerModel, error) {
+	return f.models, nil
+}
+
+func (f *fakeCharityRail) Forward(ctx context.Context, writer http.ResponseWriter, userID int64, request *openai.ChatRequest) (openai.AttemptResult, error) {
+	f.recvUser = userID
+	f.recvModel = request.Model
+	if f.forwardOK {
+		_, _ = writer.Write([]byte(`{"id":"x","object":"chat.completion","created":1,"model":"up","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`))
+		return openai.AttemptResult{Success: true, Committed: true, Usage: openai.Usage{OutputTokens: 1, Present: true}}, nil
+	}
+	return openai.AttemptResult{Failure: openai.FailureUpstream, Diagnostic: "charity unavailable"}, nil
+}
+
+// TestHandlerCharityPrefixRoutingAndModelMerge verifies namespace isolation:
+// /v1/models merges personal and [公益] projections; /v1/chat/completions
+// dispatches by the [公益] prefix to the charity rail and never to the
+// personal service; a [公益] model with no charity rail wired is 404.
+func TestHandlerCharityPrefixRoutingAndModelMerge(t *testing.T) {
+	fixture := newForwardFixture(t, []string{"https://upstream.example"}, Hooks{}, nil, nil)
+	user := fixture.addUser(t, "charity-routing")
+	fixture.addRoute(t, user.id, "https://upstream.example", "personal", "mine", "up/mine", "secret-mine", 0)
+
+	// Build a fresh handler that wires a fake charity rail alongside the
+	// fixture's real personal service.
+	rail := &fakeCharityRail{
+		forwardOK: true,
+		models:    []db.CallerModel{{FullName: "[公益]donor/charity", Provider: "donor", CreatedAt: 1}},
+	}
+	exit := NewHandler(HandlerDeps{Service: fixture.service, Charity: rail, Identity: CallerIdentity})
+	handler := auth.CallerKeyMiddleware(fixture.store, exit)
+
+	// /v1/models lists both personal and charity models.
+	resp := performCaller(handler, callerRequest(http.MethodGet, "/v1/models", user.key, ""))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("models status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var list ModelList
+	if err := json.Unmarshal(resp.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode models: %v", err)
+	}
+	havePersonal, haveCharity := false, false
+	for _, m := range list.Data {
+		if m.ID == "personal/mine" {
+			havePersonal = true
+		}
+		if m.ID == "[公益]donor/charity" {
+			haveCharity = true
+		}
+	}
+	if !havePersonal || !haveCharity {
+		t.Fatalf("models = %+v, want both personal/mine and [公益]donor/charity", list.Data)
+	}
+
+	// A [公益] chat request routes to the charity rail, not the personal service.
+	body := `{"model":"[公益]donor/charity","messages":[{"role":"user","content":"hi"}]}`
+	resp = performCaller(handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, body))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("charity chat status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	if rail.recvUser != user.id {
+		t.Fatalf("charity rail received user=%d, want %d", rail.recvUser, user.id)
+	}
+	if rail.recvModel != "[公益]donor/charity" {
+		t.Fatalf("charity rail received model=%q", rail.recvModel)
+	}
+
+	// A personal chat request never reaches the charity rail.
+	rail.recvModel = ""
+	personalBody := `{"model":"personal/mine","messages":[{"role":"user","content":"hi"}]}`
+	performCaller(handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, personalBody))
+	if rail.recvModel != "" {
+		t.Fatalf("personal request reached charity rail: %q", rail.recvModel)
+	}
+}
+
+// TestHandlerCharityPrefixWithoutRailIs404 verifies that a personal-only
+// deployment (no charity rail wired) refuses [公益] models with 404.
+func TestHandlerCharityPrefixWithoutRailIs404(t *testing.T) {
+	fixture := newForwardFixture(t, []string{"https://upstream.example"}, Hooks{}, nil, nil)
+	user := fixture.addUser(t, "charity-only")
+	exit := NewHandler(HandlerDeps{Service: fixture.service, Charity: nil, Identity: CallerIdentity})
+	handler := auth.CallerKeyMiddleware(fixture.store, exit)
+	body := `{"model":"[公益]donor/charity","messages":[{"role":"user","content":"hi"}]}`
+	resp := performCaller(handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, body))
+	if resp.Code != http.StatusNotFound || responseCode(t, resp) != httperr.CodeNotFound {
+		t.Fatalf("no-rail charity status=%d body=%s, want 404/not_found", resp.Code, resp.Body.String())
+	}
+}

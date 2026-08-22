@@ -97,6 +97,41 @@ func (g *safetyIdentifierGenerator) close() error {
 	return nil
 }
 
+// SafetyIdentifierFactory is the exported handle for rails outside this
+// package (the charity routing exit) that must mint the same per-user safety
+// identifier from the same derived subkey. It wraps the same generator the
+// personal forwarding service uses, so one deployment never emits two
+// different identifiers for the same user.
+type SafetyIdentifierFactory struct {
+	inner *safetyIdentifierGenerator
+}
+
+// NewSafetyIdentifierFactory builds a factory over one 32-byte purpose-derived
+// subkey. The input is copied; clear it after construction.
+func NewSafetyIdentifierFactory(key []byte) (*SafetyIdentifierFactory, error) {
+	inner, err := newSafetyIdentifierGenerator(key)
+	if err != nil {
+		return nil, err
+	}
+	return &SafetyIdentifierFactory{inner: inner}, nil
+}
+
+// Generate mints one stable per-user identifier.
+func (f *SafetyIdentifierFactory) Generate(userID int64) (string, error) {
+	if f == nil || f.inner == nil {
+		return "", errSafetyIdentifierClosed
+	}
+	return f.inner.generate(userID)
+}
+
+// Close clears the retained subkey. Idempotent.
+func (f *SafetyIdentifierFactory) Close() error {
+	if f == nil || f.inner == nil {
+		return nil
+	}
+	return f.inner.close()
+}
+
 // String prevents routine formatting from exposing the retained derived key.
 func (*safetyIdentifierGenerator) String() string {
 	return "[redacted safety identifier generator]"

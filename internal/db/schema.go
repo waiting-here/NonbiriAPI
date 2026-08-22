@@ -551,6 +551,62 @@ CREATE TABLE IF NOT EXISTS charity_model_outcomes (
 	PRIMARY KEY (model_id, slot)
 );
 
+-- ===== charity_reservations ================================================
+-- One row per logical charity call (frozen implementation contract §2.8).
+-- attempt_id is a random opaque correlation id generated per invocation and
+-- UNIQUE: a repeated settlement/recovery callback can never apply twice.
+-- The pricing/discount snapshot is taken at creation; later configuration
+-- changes never affect an in-flight settlement, and recovery reads ONLY these
+-- persisted values (never current site_config). donor_user_id uses SET NULL so
+-- terminal rows keep the consumer's summary after the donor account is gone;
+-- a late reward can never resurrect a deleted donor (the reward write is an
+-- atomic no-op against a missing user). charity_model_id/donation_key_id use
+-- SET NULL for the same reason. All amounts and token counts are non-negative
+-- integers (milli-credits / tokens); there is no float anywhere.
+CREATE TABLE IF NOT EXISTS charity_reservations (
+	id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+	user_id                  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	donor_user_id            INTEGER REFERENCES users(id) ON DELETE SET NULL,
+	charity_model_id         INTEGER REFERENCES charity_models(id) ON DELETE SET NULL,
+	donation_key_id          INTEGER REFERENCES donation_keys(id) ON DELETE SET NULL,
+	attempt_id               TEXT NOT NULL UNIQUE,
+	model_snapshot           TEXT NOT NULL DEFAULT '',      -- bounded full_name snapshot at creation
+	base_url                 TEXT NOT NULL DEFAULT '',      -- bounded canonical base-URL snapshot of the dispatched endpoint (safe metadata)
+	upstream_model           TEXT NOT NULL DEFAULT '',
+	state                    TEXT NOT NULL CHECK(state IN ('reserved','dispatched','committed','released')),
+	pricing_mode             TEXT NOT NULL CHECK(pricing_mode IN ('per_request','per_token')),
+	discount_percent         INTEGER NOT NULL CHECK(discount_percent BETWEEN 0 AND 100),
+	request_user_price       INTEGER NOT NULL DEFAULT 0 CHECK(request_user_price >= 0),
+	request_donor_reward     INTEGER NOT NULL DEFAULT 0 CHECK(request_donor_reward >= 0),
+	uncached_user_price      INTEGER NOT NULL DEFAULT 0 CHECK(uncached_user_price >= 0),   -- milli-credits per million tokens
+	cache_write_user_price   INTEGER NOT NULL DEFAULT 0 CHECK(cache_write_user_price >= 0),
+	cache_read_user_price    INTEGER NOT NULL DEFAULT 0 CHECK(cache_read_user_price >= 0),
+	output_user_price        INTEGER NOT NULL DEFAULT 0 CHECK(output_user_price >= 0),
+	uncached_donor_reward    INTEGER NOT NULL DEFAULT 0 CHECK(uncached_donor_reward >= 0),
+	cache_write_donor_reward INTEGER NOT NULL DEFAULT 0 CHECK(cache_write_donor_reward >= 0),
+	cache_read_donor_reward  INTEGER NOT NULL DEFAULT 0 CHECK(cache_read_donor_reward >= 0),
+	output_donor_reward      INTEGER NOT NULL DEFAULT 0 CHECK(output_donor_reward >= 0),
+	token_reserve_milli      INTEGER NOT NULL DEFAULT 0 CHECK(token_reserve_milli >= 0),    -- global per-token reserve snapshot used at creation
+	user_reserved            INTEGER NOT NULL DEFAULT 0 CHECK(user_reserved >= 0),
+	key_reserved             INTEGER NOT NULL DEFAULT 0 CHECK(key_reserved >= 0),
+	original_charge          INTEGER NOT NULL DEFAULT 0 CHECK(original_charge >= 0),        -- pre-discount actual/settled price, milli-credits
+	user_charge              INTEGER NOT NULL DEFAULT 0 CHECK(user_charge >= 0),            -- discounted actual payment, milli-credits
+	donor_reward             INTEGER NOT NULL DEFAULT 0 CHECK(donor_reward >= 0),
+	usage_uncached_input_tokens    INTEGER NOT NULL DEFAULT 0 CHECK(usage_uncached_input_tokens >= 0),
+	usage_cache_write_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(usage_cache_write_input_tokens >= 0),
+	usage_cache_read_input_tokens  INTEGER NOT NULL DEFAULT 0 CHECK(usage_cache_read_input_tokens >= 0),
+	usage_output_tokens            INTEGER NOT NULL DEFAULT 0 CHECK(usage_output_tokens >= 0),
+	usage_unknown            INTEGER NOT NULL DEFAULT 0 CHECK(usage_unknown IN (0,1)),
+	created_at               INTEGER NOT NULL,
+	dispatched_at            INTEGER,
+	finalized_at             INTEGER,
+	updated_at               INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_charity_reservations_attempt ON charity_reservations(attempt_id);
+CREATE INDEX IF NOT EXISTS idx_charity_reservations_state_created ON charity_reservations(state, created_at);
+CREATE INDEX IF NOT EXISTS idx_charity_reservations_user ON charity_reservations(user_id);
+CREATE INDEX IF NOT EXISTS idx_charity_reservations_key_state ON charity_reservations(donation_key_id, state);
+
 -- ===== site_config ==========================================================
 -- Runtime key/value configuration surfaced via the administrator station.
 CREATE TABLE IF NOT EXISTS site_config (

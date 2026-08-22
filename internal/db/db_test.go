@@ -78,6 +78,7 @@ var expectedTables = []string{
 	"charity_model_bindings",
 	"charity_model_stats",
 	"charity_model_outcomes",
+	"charity_reservations",
 	"site_config",
 }
 
