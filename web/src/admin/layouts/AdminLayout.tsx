@@ -22,6 +22,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/endpoints', key: 'endpoints' },
   { to: '/alerts', key: 'alerts' },
   { to: '/settings', key: 'settings' },
+  { to: '/charity', key: 'charity' },
 ];
 
 function AdminLogin({ onSignedIn }: { onSignedIn: () => Promise<void> }) {

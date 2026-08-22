@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next';
-import { Card, PageHeader } from '@shared/components/States';
+import { CharityManagement } from '@shared/components/CharityManagement';
+import { Card, LoadingState, PageHeader } from '@shared/components/States';
+import { useUserSession } from '../data';
 
 /**
  * Level-5 co-management placeholder. The nav entry is display-gated by the
@@ -9,17 +11,15 @@ import { Card, PageHeader } from '@shared/components/States';
  */
 export function StewardPage() {
   const { t } = useTranslation();
-  return (
-    <div className="page">
-      <PageHeader
-        eyebrow={t('app.name')}
-        title={t('user.steward.title')}
-        description={t('user.steward.description')}
-      />
-      <Card>
-        <h2>{t('user.steward.comingTitle')}</h2>
-        <p className="muted">{t('user.steward.comingBody')}</p>
-      </Card>
-    </div>
-  );
+  const session = useUserSession();
+  if (session.isPending) return <LoadingState />;
+  if (session.data?.user.effective_level !== 5) {
+    return (
+      <div className="page">
+        <PageHeader eyebrow={t('app.name')} title={t('user.steward.title')} description={t('user.steward.description')} />
+        <Card><p className="field-error" role="alert">{t('user.steward.accessDenied')}</p></Card>
+      </div>
+    );
+  }
+  return <CharityManagement frame="steward" />;
 }
