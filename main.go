@@ -462,7 +462,7 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		logapi.NewHandler(logapi.HandlerDeps{Store: store}),
 		issues.NewHandler(issues.HandlerDeps{Store: store}),
 		checkinAPI.Handler(),
-		httpmw.API(donation.NewHandler(donationSvc, sessionIdentity)),
+		userAuth.Middleware(httpmw.API(donation.NewHandler(donationSvc, sessionIdentity))),
 		exportHandler, lifecycleService, forwardService, charityService, flowMiddleware, store, stewardAPI.Handler())
 	// The maintenance gate sits after the host/station edge (which only lets
 	// /api/* and /v1/* reach the user station) and before any auth or business
