@@ -235,6 +235,67 @@ func TestAdminLogFiltersExactMatch(t *testing.T) {
 	}
 }
 
+func TestStewardResourceFiltersExcludeCharitySnapshots(t *testing.T) {
+	store := openTestStore(t, filepath.Join(t.TempDir(), "logs.db"))
+	defer store.Close()
+	consumer := seedUsageUser(t, store, "consumer")
+	personal := logInput(consumer, 0, "steward-filter-personal", "p/m", "personal/up")
+	if err := store.RecordRequest(context.Background(), personal); err != nil {
+		t.Fatalf("RecordRequest personal: %v", err)
+	}
+	charity := logInput(consumer, 0, "steward-filter-charity", "[公益]p/m", "donor/up")
+	if err := store.RecordRequest(context.Background(), charity); err != nil {
+		t.Fatalf("RecordRequest charity: %v", err)
+	}
+	if _, err := store.DB().Exec(`UPDATE request_logs SET route_kind='charity', endpoint_base_url='https://donor.example/v1' WHERE attempt_id='steward-filter-charity'`); err != nil {
+		t.Fatalf("mark charity row: %v", err)
+	}
+	if _, err := store.DB().Exec(`UPDATE request_logs SET endpoint_base_url='https://personal.example/v1' WHERE attempt_id='steward-filter-personal'`); err != nil {
+		t.Fatalf("set personal snapshot: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name  string
+		query AdminLogQuery
+		want  string
+	}{
+		{
+			name:  "donor base URL does not match charity",
+			query: AdminLogQuery{EndpointBaseURL: "https://donor.example/v1", PageSize: 10},
+		},
+		{
+			name:  "donor upstream model does not match charity",
+			query: AdminLogQuery{UpstreamModel: "donor/up", PageSize: 10},
+		},
+		{
+			name:  "personal base URL remains filterable",
+			query: AdminLogQuery{EndpointBaseURL: "https://personal.example/v1", PageSize: 10},
+			want:  "steward-filter-personal",
+		},
+		{
+			name:  "personal upstream model remains filterable",
+			query: AdminLogQuery{UpstreamModel: "personal/up", PageSize: 10},
+			want:  "steward-filter-personal",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rows, _, err := store.QueryStewardRequestLogs(context.Background(), tc.query)
+			if err != nil {
+				t.Fatalf("QueryStewardRequestLogs: %v", err)
+			}
+			if tc.want == "" {
+				if len(rows) != 0 {
+					t.Fatalf("rows = %+v, donor charity row must not match", rows)
+				}
+				return
+			}
+			if len(rows) != 1 || rows[0].AttemptID != tc.want || rows[0].RouteKind != "personal" {
+				t.Fatalf("rows = %+v, want personal row %q", rows, tc.want)
+			}
+		})
+	}
+}
+
 func TestUserLogFiltersAndOptionsBounded(t *testing.T) {
 	store := openTestStore(t, filepath.Join(t.TempDir(), "logs.db"))
 	defer store.Close()

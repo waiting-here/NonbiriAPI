@@ -455,6 +455,26 @@ func TestStewardLogsRoute(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("status=200 rows = %d, want 2", len(rows))
 	}
+	// Resource filters operate on the visible steward projection. Even an
+	// exact guess of a donor URL/model must not turn the hidden charity
+	// snapshot into an equality oracle.
+	for _, query := range []string{
+		"?endpoint_base_url=https%3A%2F%2Fdonor.example%2Fv1",
+		"?upstream_model=donor%2Fup-model",
+	} {
+		rec = stewardGet(t, host.StationUser, cookie, StewardLogsPath+query)
+		assertOK(t, rec)
+		rows, hasMore = decodeLogs(t, rec)
+		if len(rows) != 0 || hasMore {
+			t.Fatalf("donor resource filter %q returned rows=%v hasMore=%v", query, rows, hasMore)
+		}
+	}
+	rec = stewardGet(t, host.StationUser, cookie, StewardLogsPath+"?endpoint_base_url=https%3A%2F%2Fown.example%2Fv1")
+	assertOK(t, rec)
+	rows, hasMore = decodeLogs(t, rec)
+	if len(rows) != 1 || hasMore || rows[0]["attempt_id"] != "steward-own-personal" {
+		t.Fatalf("visible personal resource filter rows=%v hasMore=%v", rows, hasMore)
+	}
 	rec = stewardGet(t, host.StationUser, cookie, StewardLogsPath+"?page_size=1&page=1")
 	assertOK(t, rec)
 	rows, hasMore = decodeLogs(t, rec)
