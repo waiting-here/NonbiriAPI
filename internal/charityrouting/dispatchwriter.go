@@ -94,10 +94,15 @@ func (d *dispatchWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-// Flush satisfies http.Flusher for the streaming path and for
-// http.ResponseController's deadline handling.
+// Flush satisfies http.Flusher for the streaming path and lets
+// http.ResponseController drive a flush through this wrapper.
 func (d *dispatchWriter) Flush() {
 	if flusher, ok := d.ResponseWriter.(http.Flusher); ok {
 		flusher.Flush()
 	}
 }
+
+// Unwrap lets http.NewResponseController reach optional interfaces on the
+// underlying writer, including SetWriteDeadline, without bypassing this
+// wrapper's Write/CAS boundary.
+func (d *dispatchWriter) Unwrap() http.ResponseWriter { return d.ResponseWriter }
