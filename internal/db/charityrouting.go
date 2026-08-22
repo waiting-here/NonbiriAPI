@@ -231,11 +231,12 @@ type CharityForwardTarget struct {
 }
 
 // GetCharityForwardTarget revalidates one charity binding immediately before
-// dispatch. The full candidate predicate runs again inside this single SELECT,
-// so a donation/key/claim/endpoint/cache death between selection and dispatch
-// fails closed as ErrNotFound without dialing or decrypting anything.
-func (s *Store) GetCharityForwardTarget(ctx context.Context, bindingID int64, now int64) (CharityForwardTarget, error) {
-	if bindingID <= 0 {
+// dispatch. The selected full name and full candidate predicate run again
+// inside this single SELECT, so a model mismatch or donation/key/claim/
+// endpoint/cache death between selection and dispatch fails closed as
+// ErrNotFound without dialing or decrypting anything.
+func (s *Store) GetCharityForwardTarget(ctx context.Context, bindingID int64, fullName string, now int64) (CharityForwardTarget, error) {
+	if bindingID <= 0 || fullName == "" {
 		return CharityForwardTarget{}, ErrNotFound
 	}
 	var (
@@ -244,14 +245,15 @@ func (s *Store) GetCharityForwardTarget(ctx context.Context, bindingID int64, no
 		ciphertext sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx, `
-SELECT b.id, b.donation_key_id, d.user_id, e.connector_type,
+SELECT b.id, b.donation_key_id, d.user_id, e.id, ek.id, e.connector_type,
        CASE WHEN length(CAST(e.base_url AS BLOB)) BETWEEN 1 AND ? THEN e.base_url END,
        b.upstream_model_id,
        CASE WHEN length(CAST(ek.encrypted_secret AS BLOB)) BETWEEN 1 AND ? THEN ek.encrypted_secret END
 `+charityCandidatePredicate+`
   AND b.id = ?`,
-		maxStoredEndpointBaseURLBytes, maxEndpointCredentialEnvelopeBytes, now, bindingID).
-		Scan(&target.BindingID, &target.DonationKeyID, &target.DonorUserID, &target.ConnectorType,
+		maxStoredEndpointBaseURLBytes, maxEndpointCredentialEnvelopeBytes, fullName, now, bindingID).
+		Scan(&target.BindingID, &target.DonationKeyID, &target.DonorUserID,
+			&target.EndpointID, &target.EndpointKeyID, &target.ConnectorType,
 			&baseURL, &target.UpstreamModelID, &ciphertext)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -263,6 +265,7 @@ SELECT b.id, b.donation_key_id, d.user_id, e.connector_type,
 		return CharityForwardTarget{}, ErrEndpointCredentialUnavailable
 	}
 	target.BaseURL = baseURL.String
+	target.ForwardTarget.BindingID = target.BindingID
 	target.encryptedSecret = ciphertext.String
 	return target, nil
 }

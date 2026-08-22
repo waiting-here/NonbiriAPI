@@ -26,7 +26,7 @@ type TargetRepository interface {
 // DONOR identity because the sealed envelope is bound to the donor's ownership
 // scope — never to the consumer's.
 type CharityTargetRepository interface {
-	GetCharityForwardTarget(ctx context.Context, bindingID int64, now int64) (db.CharityForwardTarget, error)
+	GetCharityForwardTarget(ctx context.Context, bindingID int64, fullName string, now int64) (db.CharityForwardTarget, error)
 }
 
 // Adapter is one protocol implementation admitted by the endpoint registry.
@@ -38,11 +38,10 @@ type Adapter interface {
 
 // AttemptInput is the non-sensitive input handed to a single attempt runner.
 type AttemptInput struct {
-	UserID           int64
-	FullName         string
-	BindingID        int64
-	Request          *openai.ChatRequest
-	SafetyIdentifier string
+	UserID    int64
+	FullName  string
+	BindingID int64
+	Request   *openai.ChatRequest
 }
 
 const maxForwardCiphertextBytes = 128 << 10
@@ -58,22 +57,24 @@ type AttemptRunner interface {
 // connector registry, and protocol adapters. CharityTargets is the optional
 // charity-path projection; when absent, RunCharity fails closed.
 type SecureRunnerConfig struct {
-	Repository     TargetRepository
-	CharityTargets CharityTargetRepository
-	Secrets        secret.ContextOpener
-	Registry       *endpoint.Registry
-	Adapters       []Adapter
+	Repository        TargetRepository
+	CharityTargets    CharityTargetRepository
+	Secrets           secret.ContextOpener
+	Registry          *endpoint.Registry
+	Adapters          []Adapter
+	SafetyIdentifiers *SafetyIdentifierFactory
 }
 
 // SecureRunner revalidates a selected binding, decrypts its credential for
 // only the duration needed to construct the outbound request, and delegates to
 // the exact registered adapter. It owns no retry policy.
 type SecureRunner struct {
-	repository     TargetRepository
-	charityTargets CharityTargetRepository
-	secrets        secret.ContextOpener
-	registry       *endpoint.Registry
-	adapters       map[endpoint.ConnectorType]Adapter
+	repository        TargetRepository
+	charityTargets    CharityTargetRepository
+	secrets           secret.ContextOpener
+	registry          *endpoint.Registry
+	adapters          map[endpoint.ConnectorType]Adapter
+	safetyIdentifiers *SafetyIdentifierFactory
 }
 
 func NewSecureRunner(config SecureRunnerConfig) (*SecureRunner, error) {
@@ -85,6 +86,9 @@ func NewSecureRunner(config SecureRunnerConfig) (*SecureRunner, error) {
 	}
 	if config.Registry == nil {
 		return nil, errors.New("forward: connector registry is required")
+	}
+	if config.SafetyIdentifiers == nil {
+		return nil, errors.New("forward: safety identifier factory is required")
 	}
 	adapters := make(map[endpoint.ConnectorType]Adapter, len(config.Adapters))
 	for _, adapter := range config.Adapters {
@@ -104,11 +108,12 @@ func NewSecureRunner(config SecureRunnerConfig) (*SecureRunner, error) {
 		return nil, errors.New("forward: at least one connector adapter is required")
 	}
 	return &SecureRunner{
-		repository:     config.Repository,
-		charityTargets: config.CharityTargets,
-		secrets:        config.Secrets,
-		registry:       config.Registry,
-		adapters:       adapters,
+		repository:        config.Repository,
+		charityTargets:    config.CharityTargets,
+		secrets:           config.Secrets,
+		registry:          config.Registry,
+		adapters:          adapters,
+		safetyIdentifiers: config.SafetyIdentifiers,
 	}, nil
 }
 
@@ -131,21 +136,23 @@ func (r *SecureRunner) Run(ctx context.Context, writer http.ResponseWriter, inpu
 		return internalAttemptFailure("forwarding target lookup failed")
 	}
 	return r.dispatch(ctx, writer, dispatchInput{
-		ownerUserID:      input.UserID,
-		preDecrypted:     target,
-		request:          input.Request,
-		safetyIdentifier: input.SafetyIdentifier,
+		ownerUserID:    input.UserID,
+		preDecrypted:   target,
+		request:        input.Request,
+		consumerUserID: input.UserID,
 	})
 }
 
 // CharityAttemptInput is the non-sensitive input of one charity-path attempt.
-// The consumer's identity never reaches this boundary: credential context and
-// ownership checks are entirely donor-scoped.
+// ConsumerUserID is used only to generate the origin-scoped safety_identifier;
+// it is never used for decryption or ownership. Credential context and
+// ownership checks remain entirely donor-scoped.
 type CharityAttemptInput struct {
-	BindingID        int64
-	Now              int64 // authoritative unix time for the expiry predicate
-	Request          *openai.ChatRequest
-	SafetyIdentifier string
+	BindingID      int64
+	FullName       string
+	Now            int64 // authoritative unix time for the expiry predicate
+	ConsumerUserID int64 // consumer identity used only for safety_identifier
+	Request        *openai.ChatRequest
 }
 
 // RunCharity revalidates one charity binding through the full candidate
@@ -159,7 +166,7 @@ func (r *SecureRunner) RunCharity(ctx context.Context, writer http.ResponseWrite
 		return openai.AttemptResult{Failure: openai.FailureCanceled, Diagnostic: "request canceled"}
 	}
 
-	target, err := r.charityTargets.GetCharityForwardTarget(ctx, input.BindingID, input.Now)
+	target, err := r.charityTargets.GetCharityForwardTarget(ctx, input.BindingID, input.FullName, input.Now)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			return openai.AttemptResult{Failure: openai.FailureUpstream, Diagnostic: "selected upstream target is no longer available"}
@@ -170,20 +177,20 @@ func (r *SecureRunner) RunCharity(ctx context.Context, writer http.ResponseWrite
 		return internalAttemptFailure("charity target lookup failed")
 	}
 	return r.dispatch(ctx, writer, dispatchInput{
-		ownerUserID:      target.DonorUserID,
-		preDecrypted:     target.ForwardTarget,
-		request:          input.Request,
-		safetyIdentifier: input.SafetyIdentifier,
+		ownerUserID:    target.DonorUserID,
+		preDecrypted:   target.ForwardTarget,
+		request:        input.Request,
+		consumerUserID: input.ConsumerUserID,
 	})
 }
 
 // dispatchInput carries one revalidated projection plus protocol inputs into
 // the shared decrypt-and-dispatch flow.
 type dispatchInput struct {
-	ownerUserID      int64
-	preDecrypted     db.ForwardTarget
-	request          *openai.ChatRequest
-	safetyIdentifier string
+	ownerUserID    int64
+	consumerUserID int64
+	preDecrypted   db.ForwardTarget
+	request        *openai.ChatRequest
 }
 
 func (r *SecureRunner) dispatch(ctx context.Context, writer http.ResponseWriter, in dispatchInput) openai.AttemptResult {
@@ -203,6 +210,15 @@ func (r *SecureRunner) dispatch(ctx context.Context, writer http.ResponseWriter,
 	if err != nil {
 		target.DiscardEncryptedSecret()
 		return internalAttemptFailure("credential unavailable")
+	}
+	if in.consumerUserID <= 0 || r.safetyIdentifiers == nil {
+		target.DiscardEncryptedSecret()
+		return internalAttemptFailure("safety identifier unavailable")
+	}
+	safetyIdentifier, err := r.safetyIdentifiers.Generate(in.consumerUserID, canonicalOrigin)
+	if err != nil {
+		target.DiscardEncryptedSecret()
+		return internalAttemptFailure("safety identifier unavailable")
 	}
 	credentialContext, err := secret.NewEndpointKeyContext(
 		in.ownerUserID, target.EndpointID, target.EndpointKeyID, canonicalOrigin,
@@ -231,7 +247,7 @@ func (r *SecureRunner) dispatch(ctx context.Context, writer http.ResponseWriter,
 		target.BaseURL,
 		target.UpstreamModelID,
 		openai.NewCredential(plaintext, ciphertextBytes),
-	), in.request, in.safetyIdentifier)
+	), in.request, safetyIdentifier)
 	// The frozen log contract requires the dispatch-time canonical base-URL
 	// snapshot on every committed request. The base URL is the owner-visible
 	// endpoint value, never credential material; it travels as bounded

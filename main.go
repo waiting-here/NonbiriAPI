@@ -285,12 +285,25 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err != nil {
 		return nil, fmt.Errorf("openai adapter: %w", err)
 	}
+	safetyIdentifierKey, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
+	if err != nil {
+		return nil, fmt.Errorf("safety identifier subkey: %w", err)
+	}
+	safetyIdentifierFactory, err := forward.NewSafetyIdentifierFactory(safetyIdentifierKey)
+	clear(safetyIdentifierKey)
+	if err != nil {
+		return nil, fmt.Errorf("safety identifier factory: %w", err)
+	}
+	// Register the shared factory before either service so reverse cleanup
+	// stops the services first and clears the subkey last.
+	cleanup = append(cleanup, safetyIdentifierFactory.Close)
 	secureRunner, err := forward.NewSecureRunner(forward.SecureRunnerConfig{
-		Repository:     store,
-		CharityTargets: store,
-		Secrets:        vault,
-		Registry:       registry,
-		Adapters:       []forward.Adapter{openAIAdapter},
+		Repository:        store,
+		CharityTargets:    store,
+		Secrets:           vault,
+		Registry:          registry,
+		Adapters:          []forward.Adapter{openAIAdapter},
+		SafetyIdentifiers: safetyIdentifierFactory,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("secure runner: %w", err)
@@ -299,22 +312,11 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err != nil {
 		return nil, fmt.Errorf("usage service: %w", err)
 	}
-	safetyIdentifierKey, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
-	if err != nil {
-		return nil, fmt.Errorf("safety identifier subkey: %w", err)
-	}
-	safetyIdentifierFactory, err := forward.NewSafetyIdentifierFactory(safetyIdentifierKey)
-	if err != nil {
-		clear(safetyIdentifierKey)
-		return nil, fmt.Errorf("safety identifier factory: %w", err)
-	}
 	forwardService, err := forward.NewService(forward.ServiceConfig{
-		Repository:          store,
-		Runner:              secureRunner,
-		Hooks:               forward.Hooks{Attempt: usageService.HandleAttempt, Usage: usageService.HandleUsage},
-		SafetyIdentifierKey: safetyIdentifierKey,
+		Repository: store,
+		Runner:     secureRunner,
+		Hooks:      forward.Hooks{Attempt: usageService.HandleAttempt, Usage: usageService.HandleUsage},
 	})
-	clear(safetyIdentifierKey)
 	if err != nil {
 		return nil, fmt.Errorf("forward service: %w", err)
 	}
@@ -324,15 +326,13 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		return nil, fmt.Errorf("anti-abuse service: %w", err)
 	}
 	charityService, err := charityrouting.NewService(charityrouting.ServiceConfig{
-		Store:             store,
-		Runner:            secureRunner,
-		SafetyIdentifiers: safetyIdentifierFactory,
-		PreflightHook:     antiAbuseService.Preflight,
+		Store:         store,
+		Runner:        secureRunner,
+		PreflightHook: antiAbuseService.Preflight,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("charity routing service: %w", err)
 	}
-	cleanup = append(cleanup, safetyIdentifierFactory.Close)
 	cleanup = append(cleanup, charityService.Close)
 	// Startup recovery converges stalled reservations from a previous process
 	// before any request can be in flight (frozen §5.4). The periodic sweep

@@ -143,15 +143,12 @@ func TestForwardAggregateTimeoutReturnsStablePreCommitFailure(t *testing.T) {
 		<-ctx.Done()
 		return openai.AttemptResult{Failure: openai.FailureCanceled, Diagnostic: "request canceled"}
 	})
-	safetyIdentifierKey := randomSafetyIdentifierKey(t)
 	service, err := NewService(ServiceConfig{
-		Repository:          repository,
-		Runner:              runner,
-		Backoff:             BackoffConfig{Base: -1, Max: -1},
-		ForwardTimeout:      20 * time.Millisecond,
-		SafetyIdentifierKey: safetyIdentifierKey,
+		Repository:     repository,
+		Runner:         runner,
+		Backoff:        BackoffConfig{Base: -1, Max: -1},
+		ForwardTimeout: 20 * time.Millisecond,
 	})
-	clear(safetyIdentifierKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,14 +167,11 @@ func TestForwardAggregateTimeoutReturnsStablePreCommitFailure(t *testing.T) {
 		t.Fatalf("aggregate timeout result=%+v", result)
 	}
 
-	invalidConfigKey := randomSafetyIdentifierKey(t)
 	invalidService, invalidErr := NewService(ServiceConfig{
-		Repository:          repository,
-		Runner:              runner,
-		ForwardTimeout:      -time.Second,
-		SafetyIdentifierKey: invalidConfigKey,
+		Repository:     repository,
+		Runner:         runner,
+		ForwardTimeout: -time.Second,
 	})
-	clear(invalidConfigKey)
 	if invalidService != nil {
 		_ = invalidService.Close()
 	}

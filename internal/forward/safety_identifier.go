@@ -8,27 +8,33 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
+	"unicode/utf8"
+
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
 )
 
 const (
-	// SafetyIdentifierSubkeyInfo is the purpose label used both by the Vault
-	// HKDF boundary and as the fixed prefix of the HMAC message. The message is
-	// these exact bytes followed immediately by one eight-byte big-endian,
-	// positive int64 user identifier.
-	SafetyIdentifierSubkeyInfo = "nonbiriapi:safety-identifier:v2"
+	// SafetyIdentifierSubkeyInfo is the dedicated v3 purpose/version label for
+	// the Vault-derived safety identifier subkey. The HMAC message includes
+	// these exact bytes, a four-byte canonical-origin length plus its bytes,
+	// then one eight-byte big-endian positive user id.
+	SafetyIdentifierSubkeyInfo = safetyIdentifierPurpose + ":" + safetyIdentifierVersion
+	safetyIdentifierPurpose    = "nonbiriapi:safety-identifier"
+	safetyIdentifierVersion    = "v3"
 
-	safetyIdentifierPrefix       = "nbu_v2_"
+	safetyIdentifierPrefix       = "nbu_v3_"
 	safetyIdentifierKeyBytes     = sha256.Size
 	safetyIdentifierUserIDBytes  = 8
-	safetyIdentifierMessageBytes = len(SafetyIdentifierSubkeyInfo) + safetyIdentifierUserIDBytes
+	safetyIdentifierLengthPrefix = 4
 	safetyIdentifierDigestText   = 52
 	safetyIdentifierLength       = len(safetyIdentifierPrefix) + safetyIdentifierDigestText
 )
 
 var (
-	errInvalidSafetyIdentifierKey = errors.New("forward: invalid safety identifier key")
-	errSafetyIdentifierClosed     = errors.New("forward: safety identifier generator is closed")
-	errInvalidSafetyIdentifierID  = errors.New("forward: invalid safety identifier user")
+	errInvalidSafetyIdentifierKey    = errors.New("forward: invalid safety identifier key")
+	errSafetyIdentifierClosed        = errors.New("forward: safety identifier generator is closed")
+	errInvalidSafetyIdentifierID     = errors.New("forward: invalid safety identifier user")
+	errInvalidSafetyIdentifierOrigin = errors.New("forward: invalid safety identifier origin")
 )
 
 // safetyIdentifierGenerator owns one purpose-derived key copied at
@@ -50,12 +56,15 @@ func newSafetyIdentifierGenerator(key []byte) (*safetyIdentifierGenerator, error
 	return generator, nil
 }
 
-func (g *safetyIdentifierGenerator) generate(userID int64) (string, error) {
+func (g *safetyIdentifierGenerator) generate(userID int64, canonicalOrigin string) (string, error) {
 	if g == nil {
 		return "", errSafetyIdentifierClosed
 	}
 	if userID <= 0 {
 		return "", errInvalidSafetyIdentifierID
+	}
+	if !validSafetyIdentifierOrigin(canonicalOrigin) {
+		return "", errInvalidSafetyIdentifierOrigin
 	}
 
 	g.mu.RLock()
@@ -64,7 +73,7 @@ func (g *safetyIdentifierGenerator) generate(userID int64) (string, error) {
 		return "", errSafetyIdentifierClosed
 	}
 
-	message := safetyIdentifierMessage(userID)
+	message := safetyIdentifierMessage(userID, canonicalOrigin)
 	mac := hmac.New(sha256.New, g.key[:])
 	_, _ = mac.Write(message[:])
 	digest := mac.Sum(nil)
@@ -77,10 +86,18 @@ func (g *safetyIdentifierGenerator) generate(userID int64) (string, error) {
 	return identifier, nil
 }
 
-func safetyIdentifierMessage(userID int64) [safetyIdentifierMessageBytes]byte {
-	var message [safetyIdentifierMessageBytes]byte
-	copy(message[:], SafetyIdentifierSubkeyInfo)
-	binary.BigEndian.PutUint64(message[len(SafetyIdentifierSubkeyInfo):], uint64(userID))
+func safetyIdentifierMessage(userID int64, canonicalOrigin string) []byte {
+	total := len(SafetyIdentifierSubkeyInfo) + safetyIdentifierLengthPrefix + len(canonicalOrigin) + safetyIdentifierUserIDBytes
+	message := make([]byte, 0, total)
+	message = append(message, SafetyIdentifierSubkeyInfo...)
+	var length [safetyIdentifierLengthPrefix]byte
+	binary.BigEndian.PutUint32(length[:], uint32(len(canonicalOrigin)))
+	message = append(message, length[:]...)
+	message = append(message, canonicalOrigin...)
+	var user [safetyIdentifierUserIDBytes]byte
+	binary.BigEndian.PutUint64(user[:], uint64(userID))
+	message = append(message, user[:]...)
+	clear(user[:])
 	return message
 }
 
@@ -97,11 +114,9 @@ func (g *safetyIdentifierGenerator) close() error {
 	return nil
 }
 
-// SafetyIdentifierFactory is the exported handle for rails outside this
-// package (the charity routing exit) that must mint the same per-user safety
-// identifier from the same derived subkey. It wraps the same generator the
-// personal forwarding service uses, so one deployment never emits two
-// different identifiers for the same user.
+// SafetyIdentifierFactory owns the one shared generator injected into
+// SecureRunner. Both personal and charity attempts therefore derive from the
+// same deployment subkey after their final target has been revalidated.
 type SafetyIdentifierFactory struct {
 	inner *safetyIdentifierGenerator
 }
@@ -116,12 +131,12 @@ func NewSafetyIdentifierFactory(key []byte) (*SafetyIdentifierFactory, error) {
 	return &SafetyIdentifierFactory{inner: inner}, nil
 }
 
-// Generate mints one stable per-user identifier.
-func (f *SafetyIdentifierFactory) Generate(userID int64) (string, error) {
+// Generate mints one stable per-user, canonical-origin-scoped identifier.
+func (f *SafetyIdentifierFactory) Generate(userID int64, canonicalOrigin string) (string, error) {
 	if f == nil || f.inner == nil {
 		return "", errSafetyIdentifierClosed
 	}
-	return f.inner.generate(userID)
+	return f.inner.generate(userID, canonicalOrigin)
 }
 
 // Close clears the retained subkey. Idempotent.
@@ -130,6 +145,14 @@ func (f *SafetyIdentifierFactory) Close() error {
 		return nil
 	}
 	return f.inner.close()
+}
+
+func validSafetyIdentifierOrigin(origin string) bool {
+	if origin == "" || !utf8.ValidString(origin) {
+		return false
+	}
+	target, canonical, err := egress.CanonicalEndpointTarget(origin)
+	return err == nil && target == origin && canonical == origin
 }
 
 // String prevents routine formatting from exposing the retained derived key.

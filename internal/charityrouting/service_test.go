@@ -7,13 +7,16 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
+	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
 	"github.com/waiting-here/NonbiriAPI/internal/forward"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -60,16 +63,134 @@ func (f *fakeRunner) callCount() int {
 	return f.calls
 }
 
-func testSafetyFactory(t *testing.T) *forward.SafetyIdentifierFactory {
-	t.Helper()
-	key := bytes.Repeat([]byte{0x5c}, 32)
-	f, err := forward.NewSafetyIdentifierFactory(key)
+type recordingAdapter struct {
+	mu          sync.Mutex
+	identifiers []string
+}
+
+func (*recordingAdapter) ConnectorType() endpoint.ConnectorType {
+	return endpoint.ConnectorOpenAICompatible
+}
+
+func (a *recordingAdapter) Attempt(_ context.Context, writer http.ResponseWriter, _ openai.Target, _ *openai.ChatRequest, safetyIdentifier string) openai.AttemptResult {
+	a.mu.Lock()
+	a.identifiers = append(a.identifiers, safetyIdentifier)
+	a.mu.Unlock()
+	_, _ = writer.Write([]byte("ok"))
+	return openai.AttemptResult{Success: true, Committed: true, Usage: openai.Usage{Present: true}}
+}
+
+type recordingCodec struct {
+	vault *secret.Vault
+	opens atomic.Int32
+}
+
+func (c *recordingCodec) OpenForContext(ciphertext string, credentialContext secret.EndpointKeyContext) ([]byte, error) {
+	plaintext, err := c.vault.OpenForContext(ciphertext, credentialContext)
+	if err == nil {
+		c.opens.Add(1)
+	}
+	return plaintext, err
+}
+
+func TestSharedSecureRunnerUsesConsumerSafetyAndDonorCredentialOwner(t *testing.T) {
+	master := bytes.Repeat([]byte{0x72}, secret.MasterKeyBytes)
+	vault, err := secret.New(master)
+	clear(master)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = vault.Close() })
+	dbPath := filepath.Join(t.TempDir(), "shared-runner.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	seedRunner := &fakeRunner{responses: []fakeResponse{{body: []byte("seed")}}}
+	_, consumerID, _ := seedServiceFixture(t, store, seedRunner, 1, true, 10_000)
+	ctx := context.Background()
+	personalEndpoint, err := store.CreateEndpoint(ctx, consumerID, "openai-compatible", "https://charity.example.com", "", true, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	personalKey, err := store.CreateEndpointKey(ctx, consumerID, personalEndpoint.ID, []byte("personal-secret"), "", "", "", true, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ReplaceFetchedModels(ctx, consumerID, personalEndpoint.ID, personalKey.ID, []db.FetchedModel{{
+		EndpointKeyID: personalKey.ID, UpstreamModelID: "up/personal", Provider: "personal", Status: "ok",
+	}}, 100); err != nil {
+		t.Fatal(err)
+	}
+	model, err := store.CreateModel(ctx, consumerID, "consumer", "personal", "ordered", false, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateBinding(ctx, consumerID, model.ID, personalKey.ID, "up/personal", 0, 100); err != nil {
+		t.Fatal(err)
+	}
+
+	adapter := &recordingAdapter{}
+	codec := &recordingCodec{vault: vault}
+	key := bytes.Repeat([]byte{0x31}, secret.SubkeyBytes)
+	factory, err := forward.NewSafetyIdentifierFactory(key)
 	clear(key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = f.Close() })
-	return f
+	t.Cleanup(func() { _ = factory.Close() })
+	runner, err := forward.NewSecureRunner(forward.SecureRunnerConfig{
+		Repository: store, CharityTargets: store, Secrets: codec,
+		Registry: endpoint.NewRegistry(), Adapters: []forward.Adapter{adapter}, SafetyIdentifiers: factory,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	personal, err := forward.NewService(forward.ServiceConfig{Repository: store, Runner: runner, Backoff: forward.BackoffConfig{Base: -1, Max: -1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = personal.Close() })
+	personalResult, personalErr := personal.Forward(ctx, httptest.NewRecorder(), consumerID, &openai.ChatRequest{Model: "consumer/personal"})
+	if personalErr != nil || !personalResult.Success {
+		t.Fatalf("personal result=%+v err=%v", personalResult, personalErr)
+	}
+
+	charity, err := NewService(ServiceConfig{Store: store, Runner: runner, Now: func() time.Time { return time.Unix(1000, 0) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = charity.Close() })
+	route, routeErr := store.ResolveCharityRoute(ctx, "[公益]donor/charity", 1000, db.MaxCharityRouteCandidates)
+	if routeErr != nil || len(route.Candidates) == 0 {
+		t.Fatalf("charity route err=%v candidates=%d", routeErr, len(route.Candidates))
+	}
+	if _, targetErr := store.GetCharityForwardTarget(ctx, route.Candidates[0].BindingID, "[公益]other/model", 1000); !errors.Is(targetErr, db.ErrNotFound) {
+		t.Fatalf("mismatched charity model target err=%v, want ErrNotFound", targetErr)
+	}
+	target, targetErr := store.GetCharityForwardTarget(ctx, route.Candidates[0].BindingID, route.Model.FullName, 1000)
+	if targetErr != nil {
+		t.Fatalf("charity target err=%v candidate=%+v", targetErr, route.Candidates[0])
+	}
+	if target.BindingID <= 0 || target.ForwardTarget.BindingID != target.BindingID || target.EndpointID <= 0 || target.EndpointKeyID <= 0 || target.DonorUserID <= 0 {
+		t.Fatalf("incomplete charity target projection=%+v", target)
+	}
+	charityResult, charityErr := charity.Forward(ctx, httptest.NewRecorder(), consumerID, &openai.ChatRequest{Model: "[公益]donor/charity"})
+	if charityErr != nil || !charityResult.Success {
+		t.Fatalf("charity result=%+v err=%v", charityResult, charityErr)
+	}
+	adapter.mu.Lock()
+	identifiers := append([]string(nil), adapter.identifiers...)
+	adapter.mu.Unlock()
+	if len(identifiers) != 2 || identifiers[0] != identifiers[1] || !strings.HasPrefix(identifiers[0], "nbu_v3_") {
+		t.Fatalf("personal/charity identifiers=%q", identifiers)
+	}
+	if got := codec.opens.Load(); got != 2 {
+		t.Fatalf("credential decryptions=%d want 2 (including donor-scoped charity credential)", got)
+	}
 }
 
 func openCharityTestStore(t *testing.T) *db.Store {
@@ -183,7 +304,7 @@ func seedServiceFixture(t *testing.T, store *db.Store, runner *fakeRunner, nKeys
 	}
 	setCredits(t, store, consumer.ID, consumerCredits)
 	svc, err := NewService(ServiceConfig{
-		Store: store, Runner: runner, SafetyIdentifiers: testSafetyFactory(t),
+		Store: store, Runner: runner,
 		Now: func() time.Time { return time.Unix(1000, 0) },
 	})
 	if err != nil {
