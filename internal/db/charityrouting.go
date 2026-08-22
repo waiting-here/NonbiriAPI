@@ -22,6 +22,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/waiting-here/NonbiriAPI/internal/credits"
 )
 
 // CharityCandidate is one routable donated (binding, key) pair. The limit
@@ -264,4 +265,147 @@ SELECT b.id, b.donation_key_id, d.user_id, e.connector_type,
 	target.BaseURL = baseURL.String
 	target.encryptedSecret = ciphertext.String
 	return target, nil
+}
+
+// UserCharityModel is the user-station price/availability projection of one
+// enabled charity model (frozen §6.3): original and currently discounted user
+// prices, the independent donor-reward prices, the discount window, the
+// last-100 protocol-success ring buffer, and server-resolved availability.
+// It never carries a donated-key id or base URL: consumers cannot learn
+// donated resources from the price table.
+type UserCharityModel struct {
+	ID          int64
+	Provider    string
+	Model       string
+	FullName    string
+	PricingMode string
+
+	RequestUserPrice      int64
+	RequestDonorReward    int64
+	UncachedUserPrice     int64
+	CacheWriteUserPrice   int64
+	CacheReadUserPrice    int64
+	OutputUserPrice       int64
+	UncachedDonorReward   int64
+	CacheWriteDonorReward int64
+	CacheReadDonorReward  int64
+	OutputDonorReward     int64
+
+	DiscountPercent int
+	DiscountEnabled bool
+	DiscountStartAt *int64
+	DiscountEndAt   *int64
+
+	SuccessSamples int
+	SuccessCount   int
+
+	Available bool
+
+	// Current* are the effective user prices after the discount that is valid
+	// at read time (equal to the originals when no discount applies). They are
+	// display projections only; routing and billing always recompute
+	// server-side at reservation time.
+	CurrentRequestUserPrice    int64
+	CurrentUncachedUserPrice   int64
+	CurrentCacheWriteUserPrice int64
+	CurrentCacheReadUserPrice  int64
+	CurrentOutputUserPrice     int64
+}
+
+const userCharityModelSelectSQL = `
+SELECT cm.id, cm.provider, cm.model, cm.full_name, cm.pricing_mode,
+       cm.request_user_price, cm.request_donor_reward,
+       cm.uncached_user_price, cm.cache_write_user_price, cm.cache_read_user_price, cm.output_user_price,
+       cm.uncached_donor_reward, cm.cache_write_donor_reward, cm.cache_read_donor_reward, cm.output_donor_reward,
+       cm.discount_percent, cm.discount_enabled, cm.discount_start_at, cm.discount_end_at,
+       COALESCE(st.sample_count, 0), COALESCE(st.success_count, 0),
+       EXISTS (
+         SELECT 1 ` + charityCandidatePredicate + `
+           AND b.charity_model_id = cm.id
+       )
+FROM charity_models cm
+LEFT JOIN charity_model_stats st ON st.model_id = cm.id
+WHERE cm.enabled = 1`
+
+// ListUserCharityModels returns the enabled charity models with their price
+// and availability projections while the authoritative site switch is on; a
+// disabled site yields an empty list, never an error (frozen §6.3). Bounded,
+// fail closed on limit violations.
+func (s *Store) ListUserCharityModels(ctx context.Context, now int64, limit int) ([]UserCharityModel, error) {
+	if limit <= 0 {
+		return nil, ErrForwardProjectionLimit
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list user charity models: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	enabled, err := readCharityEnabledTx(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	if !enabled {
+		return []UserCharityModel{}, nil
+	}
+	rows, err := tx.QueryContext(ctx, userCharityModelSelectSQL+` ORDER BY cm.id LIMIT ?`, now, now, limit+1)
+	if err != nil {
+		return nil, fmt.Errorf("list user charity models: query: %w", err)
+	}
+	out := make([]UserCharityModel, 0, min(limit, 32))
+	for rows.Next() {
+		if len(out) == limit {
+			rows.Close()
+			return nil, ErrForwardProjectionLimit
+		}
+		var (
+			m              UserCharityModel
+			startAt, endAt sql.NullInt64
+		)
+		if err := rows.Scan(&m.ID, &m.Provider, &m.Model, &m.FullName, &m.PricingMode,
+			&m.RequestUserPrice, &m.RequestDonorReward,
+			&m.UncachedUserPrice, &m.CacheWriteUserPrice, &m.CacheReadUserPrice, &m.OutputUserPrice,
+			&m.UncachedDonorReward, &m.CacheWriteDonorReward, &m.CacheReadDonorReward, &m.OutputDonorReward,
+			&m.DiscountPercent, &m.DiscountEnabled, &startAt, &endAt,
+			&m.SuccessSamples, &m.SuccessCount,
+			&m.Available); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("list user charity models: scan: %w", err)
+		}
+		if startAt.Valid {
+			v := startAt.Int64
+			m.DiscountStartAt = &v
+		}
+		if endAt.Valid {
+			v := endAt.Int64
+			m.DiscountEndAt = &v
+		}
+		discount := (CharityModel{
+			DiscountEnabled: m.DiscountEnabled,
+			DiscountStartAt: m.DiscountStartAt,
+			DiscountEndAt:   m.DiscountEndAt,
+			DiscountPercent: m.DiscountPercent,
+		}).EffectiveDiscountPercent(now)
+		current := func(price int64) int64 {
+			value, cerr := credits.ApplyDiscountPercent(price, discount)
+			if cerr != nil {
+				return price // fail closed to the undiscounted display value
+			}
+			return value
+		}
+		m.CurrentRequestUserPrice = current(m.RequestUserPrice)
+		m.CurrentUncachedUserPrice = current(m.UncachedUserPrice)
+		m.CurrentCacheWriteUserPrice = current(m.CacheWriteUserPrice)
+		m.CurrentCacheReadUserPrice = current(m.CacheReadUserPrice)
+		m.CurrentOutputUserPrice = current(m.OutputUserPrice)
+		out = append(out, m)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, fmt.Errorf("list user charity models: iterate: %w", err)
+	}
+	rows.Close()
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("list user charity models: commit: %w", err)
+	}
+	return out, nil
 }

@@ -13,6 +13,7 @@ import { AccountPage } from './pages/AccountPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { TermsPage } from './pages/TermsPage';
 import { StewardPage } from './pages/StewardPage';
+import { CharityPage } from './pages/CharityPage';
 
 export const router = createBrowserRouter([
   {
@@ -23,6 +24,7 @@ export const router = createBrowserRouter([
       { index: true, element: <HomePage /> },
       { path: 'endpoints', element: <EndpointsPage /> },
       { path: 'models', element: <ModelsPage /> },
+      { path: 'charity', element: <CharityPage /> },
       { path: 'keys', element: <KeysPage /> },
       { path: 'logs', element: <LogsPage /> },
       { path: 'issues', element: <IssuesPage /> },

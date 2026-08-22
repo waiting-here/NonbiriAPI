@@ -37,6 +37,8 @@ export interface UserSummary {
   manual_level?: number;
   /** Nullable ban deadline as unix seconds; absent while there is none. */
   banned_until?: number;
+  /** Nullable charity-only suspension deadline as unix seconds. */
+  charity_suspended_until?: number;
   created_at: string;
 }
 
@@ -237,6 +239,9 @@ export const userKeys = {
   logsRoot: ['user', 'logs'] as const,
   logOptions: ['user', 'log-options'] as const,
   checkin: ['user', 'checkin'] as const,
+  charityModels: ['user', 'charity-models'] as const,
+  donations: ['user', 'donations'] as const,
+  donation: (id: string) => ['user', 'donations', id] as const,
 };
 
 function recordValue(record: UnknownRecord, key: string): unknown {
@@ -267,6 +272,7 @@ function normalizeUser(value: unknown): UserSummary {
   const rpmLimit = recordValue(record, 'rpm_limit');
   const manualLevel = optionalNumberValue(recordValue(record, 'manual_level'));
   const bannedUntil = optionalNumberValue(recordValue(record, 'banned_until'));
+  const charitySuspendedUntil = optionalNumberValue(recordValue(record, 'charity_suspended_until'));
   return {
     id: idValue(recordValue(record, 'id')),
     username: text(recordValue(record, 'username'), 128, '—'),
@@ -298,6 +304,9 @@ function normalizeUser(value: unknown): UserSummary {
       ? { manual_level: Math.trunc(manualLevel) }
       : {}),
     ...(bannedUntil !== undefined && bannedUntil >= 0 ? { banned_until: Math.trunc(bannedUntil) } : {}),
+    ...(charitySuspendedUntil !== undefined && charitySuspendedUntil >= 0
+      ? { charity_suspended_until: Math.trunc(charitySuspendedUntil) }
+      : {}),
     created_at: dateValue(recordValue(record, 'created_at')),
   };
 }
@@ -894,6 +903,255 @@ export function useCheckinStatus(enabled = true) {
     queryFn: async () => normalizeCheckinStatus(await apiFetch<unknown>('/api/checkin')),
     enabled,
     staleTime: 5_000,
+  });
+}
+
+export interface CharityPrices {
+  request_user_price_milli: string;
+  request_donor_reward_milli: string;
+  uncached_user_price_milli: string;
+  cache_write_user_price_milli: string;
+  cache_read_user_price_milli: string;
+  output_user_price_milli: string;
+  uncached_donor_reward_milli: string;
+  cache_write_donor_reward_milli: string;
+  cache_read_donor_reward_milli: string;
+  output_donor_reward_milli: string;
+  /** Optional server-projected prices for the currently active discount. */
+  current_request_user_price_milli?: string;
+  current_uncached_user_price_milli?: string;
+  current_cache_write_user_price_milli?: string;
+  current_cache_read_user_price_milli?: string;
+  current_output_user_price_milli?: string;
+}
+
+export interface CharityModel {
+  id: string;
+  provider: string;
+  model: string;
+  full_name: string;
+  enabled: boolean;
+  pricing_mode: 'per_request' | 'per_token';
+  prices: CharityPrices;
+  discount: { percent: number; enabled: boolean; start_at?: number; end_at?: number };
+  success_samples: number;
+  success_count: number;
+  /** Server projection: availability never comes from a client-side route choice. */
+  available: boolean;
+  availability_reason: string;
+}
+
+export interface DonationKey {
+  id: string;
+  endpoint_key_id?: string;
+  display?: string;
+  max_concurrency: number;
+  rpm_limit: number;
+  credits_usage_cap_milli: string;
+  credits_used_milli: string;
+  credits_reserved_milli: string;
+  enabled: boolean;
+}
+
+export interface DonationReview {
+  id: string;
+  reviewer_role: string;
+  action: string;
+  note: string;
+  created_at: number;
+}
+
+export interface Donation {
+  id: string;
+  endpoint_id?: string;
+  endpoint_base_url: string;
+  status: 'pending' | 'approved' | 'rejected' | 'deleted' | 'expired' | string;
+  enabled: boolean;
+  description: string;
+  review_note: string;
+  expires_at?: number;
+  reviewed_at?: number;
+  created_at: number;
+  updated_at: number;
+  keys: DonationKey[];
+  reviews: DonationReview[];
+}
+
+function amountString(value: unknown): string {
+  return typeof value === 'string' && value.length <= 32 ? value : '0';
+}
+
+function optionalUnix(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
+function safeFragment(head: unknown, tail: unknown): string | undefined {
+  const h = typeof head === 'string' && head.length <= 8 ? head : '';
+  const t = typeof tail === 'string' && tail.length <= 8 ? tail : '';
+  return h || t ? `${h}${h && t ? '…' : ''}${t}` : undefined;
+}
+
+function normalizeCharityModel(value: unknown): CharityModel {
+  const record = asRecord(value) ?? {};
+  const rawPrices = asRecord(recordValue(record, 'prices')) ?? {};
+  const rawDiscount = asRecord(recordValue(record, 'discount')) ?? {};
+  const pricingMode = recordValue(record, 'pricing_mode') === 'per_token' ? 'per_token' : 'per_request';
+  const price = (key: string) => amountString(recordValue(rawPrices, key));
+  const current = (key: string) => {
+    const value = recordValue(rawPrices, key);
+    return typeof value === 'string' && value.length <= 32 ? value : undefined;
+  };
+  const samples = Math.max(0, integerValue(recordValue(record, 'success_samples')));
+  const success = Math.max(0, Math.min(samples, integerValue(recordValue(record, 'success_count'))));
+  return {
+    id: idValue(recordValue(record, 'id')),
+    provider: text(recordValue(record, 'provider'), 128, '—'),
+    model: text(recordValue(record, 'model'), 256, '—'),
+    full_name: text(recordValue(record, 'full_name'), 512, '—'),
+    enabled: booleanValue(recordValue(record, 'enabled')),
+    pricing_mode: pricingMode,
+    prices: {
+      request_user_price_milli: price('request_user_price_milli'),
+      request_donor_reward_milli: price('request_donor_reward_milli'),
+      uncached_user_price_milli: price('uncached_user_price_milli'),
+      cache_write_user_price_milli: price('cache_write_user_price_milli'),
+      cache_read_user_price_milli: price('cache_read_user_price_milli'),
+      output_user_price_milli: price('output_user_price_milli'),
+      uncached_donor_reward_milli: price('uncached_donor_reward_milli'),
+      cache_write_donor_reward_milli: price('cache_write_donor_reward_milli'),
+      cache_read_donor_reward_milli: price('cache_read_donor_reward_milli'),
+      output_donor_reward_milli: price('output_donor_reward_milli'),
+      ...(current('current_request_user_price_milli') ? { current_request_user_price_milli: current('current_request_user_price_milli') } : {}),
+      ...(current('current_uncached_user_price_milli') ? { current_uncached_user_price_milli: current('current_uncached_user_price_milli') } : {}),
+      ...(current('current_cache_write_user_price_milli') ? { current_cache_write_user_price_milli: current('current_cache_write_user_price_milli') } : {}),
+      ...(current('current_cache_read_user_price_milli') ? { current_cache_read_user_price_milli: current('current_cache_read_user_price_milli') } : {}),
+      ...(current('current_output_user_price_milli') ? { current_output_user_price_milli: current('current_output_user_price_milli') } : {}),
+    },
+    discount: {
+      percent: Math.max(0, Math.min(100, integerValue(recordValue(rawDiscount, 'percent')))),
+      enabled: booleanValue(recordValue(rawDiscount, 'enabled')),
+      ...(optionalUnix(recordValue(rawDiscount, 'start_at')) ? { start_at: optionalUnix(recordValue(rawDiscount, 'start_at')) } : {}),
+      ...(optionalUnix(recordValue(rawDiscount, 'end_at')) ? { end_at: optionalUnix(recordValue(rawDiscount, 'end_at')) } : {}),
+    },
+    success_samples: samples,
+    success_count: success,
+    available: recordValue(record, 'available') !== false,
+    availability_reason: text(recordValue(record, 'availability_reason'), 256),
+  };
+}
+
+function normalizeDonationKey(value: unknown): DonationKey {
+  const record = asRecord(value) ?? {};
+  return {
+    id: idValue(recordValue(record, 'id')),
+    ...(recordValue(record, 'endpoint_key_id') !== null && recordValue(record, 'endpoint_key_id') !== undefined
+      ? { endpoint_key_id: idValue(recordValue(record, 'endpoint_key_id')) }
+      : {}),
+    ...(safeFragment(recordValue(record, 'display_head'), recordValue(record, 'display_tail'))
+      ? { display: safeFragment(recordValue(record, 'display_head'), recordValue(record, 'display_tail')) }
+      : {}),
+    max_concurrency: Math.max(0, integerValue(recordValue(record, 'max_concurrency'))),
+    rpm_limit: Math.max(0, integerValue(recordValue(record, 'rpm_limit'))),
+    credits_usage_cap_milli: amountString(recordValue(record, 'credits_usage_cap_milli')),
+    credits_used_milli: amountString(recordValue(record, 'credits_used_milli')),
+    credits_reserved_milli: amountString(recordValue(record, 'credits_reserved_milli')),
+    enabled: booleanValue(recordValue(record, 'enabled'), true),
+  };
+}
+
+function normalizeDonation(value: unknown, detailed = false): Donation {
+  const record = asRecord(value) ?? {};
+  const status = text(recordValue(record, 'status'), 32, 'pending') as Donation['status'];
+  const rawKeys = asArray(recordValue(record, 'keys'));
+  const rawReviews = asArray(recordValue(record, 'reviews'));
+  return {
+    id: idValue(recordValue(record, 'id')),
+    ...(recordValue(record, 'endpoint_id') !== null && recordValue(record, 'endpoint_id') !== undefined
+      ? { endpoint_id: idValue(recordValue(record, 'endpoint_id')) }
+      : {}),
+    endpoint_base_url: text(recordValue(record, 'endpoint_base_url'), 2048, '—'),
+    status,
+    enabled: booleanValue(recordValue(record, 'enabled')),
+    description: text(recordValue(record, 'description'), 4096),
+    review_note: text(recordValue(record, 'review_note'), 4096),
+    ...(optionalUnix(recordValue(record, 'expires_at')) ? { expires_at: optionalUnix(recordValue(record, 'expires_at')) } : {}),
+    ...(optionalUnix(recordValue(record, 'reviewed_at')) ? { reviewed_at: optionalUnix(recordValue(record, 'reviewed_at')) } : {}),
+    created_at: unixSecondsValue(recordValue(record, 'created_at')),
+    updated_at: unixSecondsValue(recordValue(record, 'updated_at')),
+    keys: detailed ? rawKeys.map(normalizeDonationKey) : [],
+    reviews: detailed ? rawReviews.map((review) => {
+      const item = asRecord(review) ?? {};
+      return {
+        id: idValue(recordValue(item, 'id')),
+        reviewer_role: text(recordValue(item, 'reviewer_role'), 32),
+        action: text(recordValue(item, 'action'), 32),
+        note: text(recordValue(item, 'note'), 4096),
+        created_at: unixSecondsValue(recordValue(item, 'created_at')),
+      };
+    }) : [],
+  };
+}
+
+export function useCharityModels(enabled = true) {
+  return useQuery({
+    queryKey: userKeys.charityModels,
+    queryFn: async () => listPayload(await apiFetch<unknown>('/api/charity/models')).map((value) => normalizeCharityModel(value)),
+    enabled,
+    staleTime: 15_000,
+  });
+}
+
+export function useDonations(enabled = true) {
+  return useQuery({
+    queryKey: userKeys.donations,
+    queryFn: async () => listPayload(await apiFetch<unknown>('/api/donations')).map((value) => normalizeDonation(value)),
+    enabled,
+  });
+}
+
+export function useDonation(id: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: id ? userKeys.donation(id) : [...userKeys.donations, 'none'],
+    queryFn: async () => {
+      if (!id) throw new ApiError('invalid_request', 'A donation id is required.', 400);
+      return normalizeDonation(await apiFetch<unknown>(`/api/donations/${encodeURIComponent(id)}`), true);
+    },
+    enabled: enabled && Boolean(id),
+  });
+}
+
+export interface DonationPayload {
+  description: string;
+  expires_at?: number | null;
+  existing_endpoint?: { endpoint_id: number; key_ids: number[]; keys?: Array<{ endpoint_key_id: number; max_concurrency?: number; rpm_limit?: number }> };
+  new_endpoint?: { connector_type?: string; base_url: string; note?: string; keys: Array<{ secret: string; note?: string; max_concurrency?: number; rpm_limit?: number }> };
+}
+
+export function useCreateDonation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: DonationPayload) => apiFetch<unknown>('/api/donations', { method: 'POST', json: payload }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: userKeys.donations }); },
+  });
+}
+
+export function useUpdateDonation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...payload }: { id: string } & Partial<DonationPayload>) =>
+      apiFetch<unknown>(`/api/donations/${encodeURIComponent(id)}`, { method: 'PATCH', json: payload }),
+    onSuccess: (_value, variables) => {
+      void queryClient.invalidateQueries({ queryKey: userKeys.donations });
+      void queryClient.invalidateQueries({ queryKey: userKeys.donation(variables.id) });
+    },
+  });
+}
+
+export function useDeleteDonation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiFetch<void>(`/api/donations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: userKeys.donations }); },
   });
 }
 
