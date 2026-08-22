@@ -361,6 +361,13 @@ func (s *Store) QueryStewardRequestLogs(ctx context.Context, query AdminLogQuery
 
 	var clauses []string
 	var args []any
+	// Endpoint and upstream filters are based on fields that are blanked in
+	// the steward projection for charity rows. Exclude those rows before
+	// applying either filter so a donor's dispatch snapshot cannot be used as
+	// an existence oracle.
+	if query.EndpointBaseURL != "" || query.UpstreamModel != "" {
+		clauses = append(clauses, "rl.route_kind = 'personal'")
+	}
 	if query.UserID > 0 {
 		clauses = append(clauses, "rl.user_id = ?")
 		args = append(args, query.UserID)
