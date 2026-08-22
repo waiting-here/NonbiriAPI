@@ -404,8 +404,8 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	// Charity donation rail (user submissions, admin/steward reviews) and the
 	// charity model management rail share one service layer per surface; each
 	// mounting frame resolves its own identity.
-	donationSvc := donation.NewService(donation.ServiceDeps{Store: store, URLs: stack, Connectors: registry})
 	charitySvc := charity.NewService(store)
+	donationSvc := donation.NewService(donation.ServiceDeps{Store: store, URLs: stack, Connectors: registry, Limiter: charityService})
 	adminReviewIdentity := func(r *http.Request) (donation.ReviewerIdentity, error) {
 		admin, ok := auth.AdminFromContext(r.Context())
 		if !ok || admin == nil || admin.ID <= 0 {

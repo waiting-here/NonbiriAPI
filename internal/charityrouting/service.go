@@ -209,6 +209,15 @@ func (s *Service) ForgetDonationKeys(keyIDs ...int64) {
 	s.limits.ForgetDonationKeys(keyIDs...)
 }
 
+// RestoreDonationKeys re-opens successfully re-enabled keys without
+// discarding their existing admission state.
+func (s *Service) RestoreDonationKeys(keyIDs ...int64) {
+	if s == nil {
+		return
+	}
+	s.limits.RestoreDonationKeys(keyIDs...)
+}
+
 // Close cancels every tracked context (shutdown hygiene).
 func (s *Service) Close() error {
 	if s == nil {
