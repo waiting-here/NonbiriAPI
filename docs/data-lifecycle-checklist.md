@@ -1,6 +1,6 @@
 # Data Lifecycle Checklist (export / delete / retention / privacy)
 
-> Status: **active** — current table describes the shipped alpha.1 schema. Future rows must be added in the same change that introduces them; planning text alone is not current coverage.
+> Status: **active** — current table describes the alpha.2 development schema. Future rows must be added in the same change that introduces them; planning text alone is not current coverage.
 >
 > Every new user-associated table or column MUST be checked against this list in the same
 > task that introduces it. "User-associated" means any row whose lifecycle is bound to a
