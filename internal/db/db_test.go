@@ -70,6 +70,14 @@ var expectedTables = []string{
 	"admin_alerts",
 	"user_activity_daily",
 	"site_activity_daily",
+	"donations",
+	"donation_keys",
+	"donation_reviews",
+	"donation_key_claims",
+	"charity_models",
+	"charity_model_bindings",
+	"charity_model_stats",
+	"charity_model_outcomes",
 	"site_config",
 }
 

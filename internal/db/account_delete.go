@@ -109,6 +109,29 @@ func (s *Store) DeleteUserAccount(ctx context.Context, userID int64) error {
 		return fmt.Errorf("delete account: clean orphan alerts: %w", err)
 	}
 
+	// 1b. Remove the donation physical-key claims BEFORE the cascade: the
+	//    claims table RESTRICTs endpoint_key deletion, so a surviving claim
+	//    would abort the cascade and leave a half-alive account. Claims can
+	//    only reference the donor's own keys (a donation never references
+	//    another user's endpoint), so both statements below cover the entire
+	//    claim surface of this account. After this step nothing keeps the
+	//    account's secrets routable; the donations/keys/reviews rows then
+	//    cascade away with the user row.
+	if _, err := tx.ExecContext(ctx, `
+DELETE FROM donation_key_claims WHERE endpoint_key_id IN (
+	SELECT ek.id FROM endpoint_keys ek
+	JOIN endpoints e ON ek.endpoint_id = e.id
+	WHERE e.user_id = ?)`, userID); err != nil {
+		return fmt.Errorf("delete account: remove own key claims: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+DELETE FROM donation_key_claims WHERE donation_key_id IN (
+	SELECT dk.id FROM donation_keys dk
+	JOIN donations d ON dk.donation_id = d.id
+	WHERE d.user_id = ?)`, userID); err != nil {
+		return fmt.Errorf("delete account: remove donation claims: %w", err)
+	}
+
 	// 2. Capture the site-local days this user contributed activity to, so the
 	//    site rollup can be recomputed after the cascade. Retention keeps at
 	//    most 400 days per user; the LIMIT is a defensive bound, not the

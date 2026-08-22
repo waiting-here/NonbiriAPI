@@ -395,6 +395,162 @@ CREATE TABLE IF NOT EXISTS checkins (
 	UNIQUE(user_id, day)
 );
 
+-- ===== donations ===========================================================
+-- One donation = one owned endpoint plus one or more keys offered for charity
+-- routing. The review decision (approve/reject) covers the WHOLE donation;
+-- per-key limits live on donation_keys. status is a closed enum enforced by
+-- CHECK and re-validated server-side; deleted is the soft-delete terminal
+-- state that keeps the bounded audit history. endpoint_id uses SET NULL so a
+-- terminal record keeps only its safe base-URL snapshot after the underlying
+-- resource is gone; the snapshot never contains note or secret material.
+CREATE TABLE IF NOT EXISTS donations (
+	id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+	user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	endpoint_id         INTEGER REFERENCES endpoints(id) ON DELETE SET NULL,
+	endpoint_base_url   TEXT NOT NULL,                       -- bounded canonical base-URL snapshot at submission time
+	status              TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','deleted')),
+	enabled             INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),
+	description         TEXT NOT NULL,                       -- required donor statement (bounded, control-free)
+	review_note         TEXT NOT NULL DEFAULT '',            -- bounded reviewer note addressed to the donor
+	reviewed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+	reviewed_by_role    TEXT NOT NULL DEFAULT '' CHECK(reviewed_by_role IN ('','admin','level5')),
+	expires_at          INTEGER,                             -- nullable unix seconds; NULL = never expires
+	reviewed_at         INTEGER,
+	created_at          INTEGER NOT NULL,
+	updated_at          INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_donations_user ON donations(user_id);
+CREATE INDEX IF NOT EXISTS idx_donations_status ON donations(status);
+
+-- ===== donation_keys ========================================================
+-- Per-key charity attributes of one donation. The three limits are per-key by
+-- design (frozen §L): limits are properties of the CHARITY USE of a key, not
+-- of the key itself, so a donor's own requests are never throttled by them.
+-- cap/used/reserved are milli-credit economic values; 0 cap = unlimited.
+-- display_head/display_tail are persisted safe fragments so listings never
+-- decrypt; they never reconstruct a secret. UNIQUE(donation_id,
+-- endpoint_key_id) makes a duplicate selection of the same physical key inside
+-- one donation impossible. endpoint_key_id uses SET NULL so terminal history
+-- survives the underlying key's deletion without keeping any secret material.
+CREATE TABLE IF NOT EXISTS donation_keys (
+	id                INTEGER PRIMARY KEY AUTOINCREMENT,
+	donation_id       INTEGER NOT NULL REFERENCES donations(id) ON DELETE CASCADE,
+	endpoint_key_id   INTEGER REFERENCES endpoint_keys(id) ON DELETE SET NULL,
+	display_head      TEXT NOT NULL DEFAULT '',
+	display_tail      TEXT NOT NULL DEFAULT '',
+	max_concurrency   INTEGER NOT NULL DEFAULT 0 CHECK(max_concurrency >= 0),   -- 0 = unlimited
+	rpm_limit         INTEGER NOT NULL DEFAULT 0 CHECK(rpm_limit >= 0),          -- 0 = unlimited
+	credits_usage_cap INTEGER NOT NULL DEFAULT 0 CHECK(credits_usage_cap >= 0), -- milli-credits; 0 = unlimited
+	credits_used      INTEGER NOT NULL DEFAULT 0 CHECK(credits_used >= 0),
+	credits_reserved  INTEGER NOT NULL DEFAULT 0 CHECK(credits_reserved >= 0),
+	enabled           INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+	created_at        INTEGER NOT NULL,
+	updated_at        INTEGER NOT NULL,
+	UNIQUE(donation_id, endpoint_key_id)
+);
+CREATE INDEX IF NOT EXISTS idx_donation_keys_donation ON donation_keys(donation_id);
+
+-- ===== donation_reviews =====================================================
+-- Append-only review audit. Rows are never hard-deleted while the donation
+-- exists; only the account-lifecycle cascade removes them. reviewer_role ''
+-- marks a system-driven transition (the lazy expiry disable).
+CREATE TABLE IF NOT EXISTS donation_reviews (
+	id               INTEGER PRIMARY KEY AUTOINCREMENT,
+	donation_id      INTEGER NOT NULL REFERENCES donations(id) ON DELETE CASCADE,
+	reviewer_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+	reviewer_role    TEXT NOT NULL DEFAULT '' CHECK(reviewer_role IN ('','admin','level5')),
+	action           TEXT NOT NULL CHECK(action IN ('approve','reject','enable','disable','update','delete')),
+	note             TEXT NOT NULL DEFAULT '',
+	created_at       INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_donation_reviews_donation ON donation_reviews(donation_id, id);
+
+-- ===== donation_key_claims ==================================================
+-- The active physical-key claim: at most ONE donation_key row may hold a given
+-- physical endpoint_key while its donation is pending or approved+enabled.
+-- The PRIMARY KEY on endpoint_key_id IS the atomic claim: acquisition is a
+-- constrained INSERT decided by SQLite, never a read-then-write. RESTRICT (not
+-- CASCADE) makes an inconsistent physical-key deletion fail loudly; the
+-- normal in-use guard refuses the delete earlier, and the special account-
+-- deletion transaction removes claims before the cascade.
+CREATE TABLE IF NOT EXISTS donation_key_claims (
+	endpoint_key_id INTEGER PRIMARY KEY REFERENCES endpoint_keys(id) ON DELETE RESTRICT,
+	donation_key_id INTEGER NOT NULL UNIQUE REFERENCES donation_keys(id) ON DELETE CASCADE,
+	claimed_at      INTEGER NOT NULL
+);
+
+-- ===== charity_models =======================================================
+-- A charity model exposed through donated capacity. full_name carries the
+-- fixed '[公益]' prefix and is UNIQUE: the charity namespace can never collide
+-- with a personal model name. pricing_mode selects exactly one price table;
+-- the non-current table's fields must stay 0 (CHECKs keep them non-negative;
+-- the service enforces zeroing) so no field ever has two meanings.
+-- discount_percent 100 = original price, 0 = free; the interval is [start,end)
+-- and only applies while discount_enabled=1.
+CREATE TABLE IF NOT EXISTS charity_models (
+	id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+	provider               TEXT NOT NULL,
+	model                  TEXT NOT NULL,
+	full_name              TEXT NOT NULL UNIQUE,
+	enabled                INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),
+	pricing_mode           TEXT NOT NULL CHECK(pricing_mode IN ('per_request','per_token')),
+	request_user_price     INTEGER NOT NULL DEFAULT 0 CHECK(request_user_price >= 0),
+	request_donor_reward   INTEGER NOT NULL DEFAULT 0 CHECK(request_donor_reward >= 0),
+	uncached_user_price    INTEGER NOT NULL DEFAULT 0 CHECK(uncached_user_price >= 0),     -- milli-credits per million tokens
+	cache_write_user_price INTEGER NOT NULL DEFAULT 0 CHECK(cache_write_user_price >= 0),
+	cache_read_user_price  INTEGER NOT NULL DEFAULT 0 CHECK(cache_read_user_price >= 0),
+	output_user_price      INTEGER NOT NULL DEFAULT 0 CHECK(output_user_price >= 0),
+	uncached_donor_reward    INTEGER NOT NULL DEFAULT 0 CHECK(uncached_donor_reward >= 0),
+	cache_write_donor_reward INTEGER NOT NULL DEFAULT 0 CHECK(cache_write_donor_reward >= 0),
+	cache_read_donor_reward  INTEGER NOT NULL DEFAULT 0 CHECK(cache_read_donor_reward >= 0),
+	output_donor_reward      INTEGER NOT NULL DEFAULT 0 CHECK(output_donor_reward >= 0),
+	discount_percent  INTEGER NOT NULL DEFAULT 100 CHECK(discount_percent BETWEEN 0 AND 100),
+	discount_start_at INTEGER,
+	discount_end_at   INTEGER,
+	discount_enabled  INTEGER NOT NULL DEFAULT 0 CHECK(discount_enabled IN (0,1)),
+	created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+	created_at        INTEGER NOT NULL,
+	updated_at        INTEGER NOT NULL,
+	CHECK(full_name = '[公益]' || provider || '/' || model)
+);
+
+-- ===== charity_model_bindings ===============================================
+-- Binds a charity model to a donated (donation_key, upstream model) pair.
+-- Candidate validity (approved+enabled donation, enabled key, live claim,
+-- live endpoint/key, fetched upstream id, not expired) is re-verified in SQL
+-- on every write and every future routing read; the FK cascades keep stale
+-- rows from surviving resource deletion.
+CREATE TABLE IF NOT EXISTS charity_model_bindings (
+	id                INTEGER PRIMARY KEY AUTOINCREMENT,
+	charity_model_id  INTEGER NOT NULL REFERENCES charity_models(id) ON DELETE CASCADE,
+	donation_key_id   INTEGER NOT NULL REFERENCES donation_keys(id) ON DELETE CASCADE,
+	upstream_model_id TEXT NOT NULL,
+	ord               INTEGER NOT NULL DEFAULT 0,
+	created_at        INTEGER NOT NULL,
+	UNIQUE(charity_model_id, donation_key_id, upstream_model_id)
+);
+CREATE INDEX IF NOT EXISTS idx_charity_bindings_model ON charity_model_bindings(charity_model_id, ord);
+
+-- ===== charity_model_stats / charity_model_outcomes =========================
+-- Last-100-outcome ring buffer per charity model (frozen §J.5): O(1) writes
+-- and O(1) success-rate reads, never an aggregation over request_logs.
+-- outcomes holds one row per slot (success bit only); stats carries the
+-- rolling counters. Both cascade with their model.
+CREATE TABLE IF NOT EXISTS charity_model_stats (
+	model_id      INTEGER PRIMARY KEY REFERENCES charity_models(id) ON DELETE CASCADE,
+	next_slot     INTEGER NOT NULL DEFAULT 0 CHECK(next_slot BETWEEN 0 AND 99),
+	sample_count  INTEGER NOT NULL DEFAULT 0 CHECK(sample_count BETWEEN 0 AND 100),
+	success_count INTEGER NOT NULL DEFAULT 0 CHECK(success_count BETWEEN 0 AND 100)
+);
+
+CREATE TABLE IF NOT EXISTS charity_model_outcomes (
+	model_id   INTEGER NOT NULL REFERENCES charity_models(id) ON DELETE CASCADE,
+	slot       INTEGER NOT NULL CHECK(slot BETWEEN 0 AND 99),
+	success    INTEGER NOT NULL CHECK(success IN (0,1)),
+	created_at INTEGER NOT NULL,
+	PRIMARY KEY (model_id, slot)
+);
+
 -- ===== site_config ==========================================================
 -- Runtime key/value configuration surfaced via the administrator station.
 CREATE TABLE IF NOT EXISTS site_config (

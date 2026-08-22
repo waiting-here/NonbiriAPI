@@ -70,7 +70,18 @@ const (
 	KeyCheckinAwardMinMilli = "checkin_award_min_milli"
 	KeyCheckinAwardMaxMilli = "checkin_award_max_milli"
 	KeyCreditsCapMilli      = "credits_cap_milli"
-	alertPrefsPrefix        = "alert_prefs_"
+	// Charity / donation switches (implementation contract §4.1). Both default
+	// to off: the charity system and donation intake stay closed until the
+	// administrator opens them. They have no runtime singleton — every
+	// business transaction reads the authoritative site_config snapshot.
+	KeyCharityEnabled        = "charity_enabled"
+	KeyDonationAcceptEnabled = "donation_accept_enabled"
+	// KeyCharityTokenReserveMilli is OPTIONAL like the timezone offset: unset
+	// (JSON null) means "no reserve price configured", which keeps every
+	// per-token charity model disabled (fail closed). It must never be
+	// mistaken for an explicit 0.
+	KeyCharityTokenReserveMilli = "charity_token_reserve_milli"
+	alertPrefsPrefix            = "alert_prefs_"
 )
 
 // Value bounds. RPM caps share the limiter's bounded event-store ceiling
@@ -117,6 +128,12 @@ const (
 	// projects the stored value when it is a member and the documented default
 	// otherwise; PATCH accepts exactly the member strings.
 	kindEnum
+	// kindOptionalAmount is a nullable canonical non-negative decimal
+	// milli-credit string (the economy wire form) with no documented default:
+	// GET projects JSON null while unset or corrupt, and PATCH accepts only a
+	// canonical positive string, so an explicit zero can never blur into the
+	// unset state (and vice versa).
+	kindOptionalAmount
 )
 
 type keySpec struct {
@@ -165,9 +182,12 @@ var knownSiteConfig = map[string]keySpec{
 	KeyCheckinMode: {kind: kindEnum,
 		allowed: []string{db.CheckinModeEnabled, db.CheckinModeLevelGated, db.CheckinModeDisabled},
 		defStr:  db.CheckinModeDisabled},
-	KeyCheckinAwardMinMilli: {kind: kindAmount, defAmount: db.DefaultCheckinAwardMinMilli},
-	KeyCheckinAwardMaxMilli: {kind: kindAmount, defAmount: db.DefaultCheckinAwardMaxMilli},
-	KeyCreditsCapMilli:      {kind: kindAmount, defAmount: db.DefaultCreditsCapMilli},
+	KeyCheckinAwardMinMilli:     {kind: kindAmount, defAmount: db.DefaultCheckinAwardMinMilli},
+	KeyCheckinAwardMaxMilli:     {kind: kindAmount, defAmount: db.DefaultCheckinAwardMaxMilli},
+	KeyCreditsCapMilli:          {kind: kindAmount, defAmount: db.DefaultCreditsCapMilli},
+	KeyCharityEnabled:           {kind: kindBool, def: 0},
+	KeyDonationAcceptEnabled:    {kind: kindBool, def: 0},
+	KeyCharityTokenReserveMilli: {kind: kindOptionalAmount},
 }
 
 // knownSiteConfigKey reports whether key is in the authoritative set
@@ -313,6 +333,15 @@ func typedSiteConfigValue(key, stored string) any {
 				}
 			}
 			return spec.defStr
+
+		case kindOptionalAmount:
+			// Unset or a corrupt row projects as null: the admin station must
+			// see "not configured" (which keeps every per-token charity model
+			// disabled), never a fabricated default or an implicit zero.
+			if v, perr := credits.ParseAmount(stored); perr == nil && v > 0 {
+				return credits.FormatAmount(v)
+			}
+			return nil
 		case kindMultilineText:
 			if validMultilineText(stored, textMaxFor(key)) {
 				return stored
@@ -425,6 +454,21 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 				}
 			}
 			return "", invalid
+		case kindOptionalAmount:
+			{
+				var value string
+				if err := json.Unmarshal(raw, &value); err != nil {
+					return "", invalid
+				}
+				// Canonical positive decimal string only: null is rejected (the
+				// unset state is expressed by never writing the key), and zero is
+				// rejected so it can never masquerade as a configured reserve.
+				n, perr := credits.ParseAmount(value)
+				if perr != nil || n <= 0 {
+					return "", invalid
+				}
+				return credits.FormatAmount(n), httperr.Error{}
+			}
 		case kindMultilineText:
 			var value string
 			if err := json.Unmarshal(raw, &value); err != nil || !validMultilineText(value, textMaxFor(key)) {

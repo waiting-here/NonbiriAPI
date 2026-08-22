@@ -11,6 +11,38 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 )
 
+// refuseActiveDonationRefsTx fails with ErrResourceInActiveDonation when any
+// physical endpoint key produced by the given key-id query is referenced by a
+// donation_keys row whose donation is pending or approved+enabled — i.e. a
+// donation that currently holds (or is about to hold) claims on it. It must
+// run inside the same transaction as the guarded deletion; the single SQLite
+// writer serializes the pair, so no read-then-delete race exists.
+func refuseActiveDonationRefsTx(ctx context.Context, tx *sql.Tx, keyIDQuery string, args ...any) error {
+	query := `
+SELECT COUNT(*) FROM donation_keys dk
+JOIN donations d ON dk.donation_id = d.id
+WHERE dk.endpoint_key_id IN (` + keyIDQuery + `)
+  AND (d.status='pending' OR (d.status='approved' AND d.enabled=1))`
+	var n int
+	if err := tx.QueryRowContext(ctx, query, args...).Scan(&n); err != nil {
+		return fmt.Errorf("active-donation guard: %w", err)
+	}
+	if n > 0 {
+		return ErrResourceInActiveDonation
+	}
+	return nil
+}
+
+// classifyResourceRefusal maps the claims table's RESTRICT constraint (the
+// backstop behind the in-use guard) to the stable sentinel; every other
+// constraint failure stays wrapped for diagnostics.
+func classifyResourceRefusal(err error) error {
+	if isConstraintError(err) {
+		return ErrResourceInActiveDonation
+	}
+	return fmt.Errorf("delete endpoint resource: %w", err)
+}
+
 // Endpoint is a user's configured upstream endpoint. It is the trust root for
 // model fetching and forwarding. The struct mirrors the endpoints row minus
 // nothing sensitive: base_url is a canonicalized public URL the user supplied.
@@ -281,10 +313,30 @@ func (s *Store) UpdateEndpoint(ctx context.Context, userID, id int64, baseURL *s
 // foreign keys remove its endpoint_keys and (through them) their
 // fetched_models and model_bindings, so routing candidates are invalidated
 // immediately. A missing or cross-user id yields ErrNotFound.
+//
+// The deletion is refused with ErrResourceInActiveDonation when any key of
+// this endpoint is referenced by a pending or approved+enabled donation: the
+// guard and the delete share one transaction, and the claims table's RESTRICT
+// foreign key backstops any hypothetical interleaving, so an in-use physical
+// key can never vanish under an active donation.
 func (s *Store) DeleteEndpoint(ctx context.Context, userID, id int64) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM endpoints WHERE id=? AND user_id=?`, id, userID)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("delete endpoint: %w", err)
+		return fmt.Errorf("delete endpoint: begin: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	if err := refuseActiveDonationRefsTx(ctx, tx,
+		`SELECT id FROM endpoint_keys WHERE endpoint_id=?`, id); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM endpoints WHERE id=? AND user_id=?`, id, userID)
+	if err != nil {
+		return classifyResourceRefusal(err)
 	}
 	affected, err := res.RowsAffected()
 	if err != nil {
@@ -293,6 +345,10 @@ func (s *Store) DeleteEndpoint(ctx context.Context, userID, id int64) error {
 	if affected == 0 {
 		return ErrNotFound
 	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("delete endpoint: commit: %w", err)
+	}
+	committed = true
 	return nil
 }
 

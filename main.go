@@ -21,10 +21,12 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/applog"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
+	"github.com/waiting-here/NonbiriAPI/internal/charity"
 	"github.com/waiting-here/NonbiriAPI/internal/checkin"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/donation"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
 	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
@@ -354,10 +356,73 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	// still answers the prefix with the stable 403/404 envelopes.
 	stewardAPI := steward.New(steward.Deps{UserAuth: userAuth, Store: store})
 	checkinAPI := checkin.New(checkin.Deps{UserAuth: userAuth, Store: store})
+
+	// Charity donation rail (user submissions, admin/steward reviews) and the
+	// charity model management rail share one service layer per surface; each
+	// mounting frame resolves its own identity.
+	donationSvc := donation.NewService(donation.ServiceDeps{Store: store, URLs: stack, Connectors: registry})
+	charitySvc := charity.NewService(store)
+	adminReviewIdentity := func(r *http.Request) (donation.ReviewerIdentity, error) {
+		admin, ok := auth.AdminFromContext(r.Context())
+		if !ok || admin == nil || admin.ID <= 0 {
+			return donation.ReviewerIdentity{}, errors.New("admin session required")
+		}
+		return donation.ReviewerIdentity{UserID: admin.ID, Role: db.ReviewRoleAdmin}, nil
+	}
+	adminManagerIdentity := func(r *http.Request) (int64, error) {
+		admin, ok := auth.AdminFromContext(r.Context())
+		if !ok || admin == nil || admin.ID <= 0 {
+			return 0, errors.New("admin session required")
+		}
+		return admin.ID, nil
+	}
+	adminDonationReview := donation.NewReviewHandler("/admin/api", donationSvc, adminReviewIdentity)
+	adminCharity := charity.NewHandler("/admin/api", charitySvc, adminManagerIdentity)
+
+	// Steward mounts go through the level-5 frame so every request re-resolves
+	// the effective level live; the subs receive only the opaque principal.
+	stewardReview := donation.NewReviewHandler("/api/steward", donationSvc, nil)
+	stewardCharity := charity.NewHandler("/api/steward", charitySvc, nil)
+	registerSteward := func(method, suffix string, sub func(w http.ResponseWriter, r *http.Request, p steward.Principal)) {
+		stewardAPI.Handle(method, "/api/steward"+suffix, sub)
+	}
+	registerSteward("GET", "/donations", func(w http.ResponseWriter, r *http.Request, p steward.Principal) {
+		stewardReview.ListSub(w, r, donation.ReviewerIdentity{UserID: p.UserID, Role: p.Role})
+	})
+	registerSteward("GET", "/donations/{id}", func(w http.ResponseWriter, r *http.Request, p steward.Principal) {
+		stewardReview.GetSub(w, r, donation.ReviewerIdentity{UserID: p.UserID, Role: p.Role})
+	})
+	registerSteward("PATCH", "/donations/{id}", func(w http.ResponseWriter, r *http.Request, p steward.Principal) {
+		stewardReview.ReviewSub(w, r, donation.ReviewerIdentity{UserID: p.UserID, Role: p.Role})
+	})
+	registerSteward("DELETE", "/donations/{id}", func(w http.ResponseWriter, r *http.Request, p steward.Principal) {
+		stewardReview.DeleteSub(w, r, donation.ReviewerIdentity{UserID: p.UserID, Role: p.Role})
+	})
+	stewardCharityMounts := []struct {
+		method, suffix string
+		sub            func(http.ResponseWriter, *http.Request, int64)
+	}{
+		{"GET", "/charity-models", stewardCharity.ListSub},
+		{"POST", "/charity-models", stewardCharity.CreateSub},
+		{"GET", "/charity-models/{id}", stewardCharity.GetSub},
+		{"PATCH", "/charity-models/{id}", stewardCharity.UpdateSub},
+		{"DELETE", "/charity-models/{id}", stewardCharity.DeleteSub},
+		{"GET", "/charity-models/{id}/bindings", stewardCharity.ListBindingsSub},
+		{"POST", "/charity-models/{id}/bindings", stewardCharity.CreateBindingSub},
+		{"PATCH", "/charity-models/{id}/bindings/{bindingId}", stewardCharity.UpdateBindingSub},
+		{"DELETE", "/charity-models/{id}/bindings/{bindingId}", stewardCharity.DeleteBindingSub},
+	}
+	for _, m := range stewardCharityMounts {
+		method, suffix, sub := m.method, m.suffix, m.sub
+		stewardAPI.Handle(method, "/api/steward"+suffix, func(w http.ResponseWriter, r *http.Request, p steward.Principal) {
+			sub(w, r, p.UserID)
+		})
+	}
 	api := buildUserAPI(userAuth, adminAuth, endpointService, modelFetcher, modelService,
 		logapi.NewHandler(logapi.HandlerDeps{Store: store}),
 		issues.NewHandler(issues.HandlerDeps{Store: store}),
 		checkinAPI.Handler(),
+		httpmw.API(donation.NewHandler(donationSvc, sessionIdentity)),
 		exportHandler, lifecycleService, forwardService, flowMiddleware, store, stewardAPI.Handler())
 	// The maintenance gate sits after the host/station edge (which only lets
 	// /api/* and /v1/* reach the user station) and before any auth or business
@@ -365,7 +430,8 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	// startup, so a toggle takes effect immediately for already-issued
 	// sessions and caller keys; the admin station is never routed through it.
 	gatedAPI := maintenance.GateMiddleware(maintenanceGate, api)
-	appHandler := buildAdminAndRootAPI(cfg, userAuth, adminAuth, gatedAPI, adminControls, alertapi.NewHandler(alertapi.HandlerDeps{Store: store}), logapi.NewHandler(logapi.HandlerDeps{Store: store}), lifecycleService, store, forwardService, flowMiddleware)
+	appHandler := buildAdminAndRootAPI(cfg, userAuth, adminAuth, gatedAPI, adminControls, alertapi.NewHandler(alertapi.HandlerDeps{Store: store}), logapi.NewHandler(logapi.HandlerDeps{Store: store}), lifecycleService, store, forwardService, flowMiddleware,
+		adminDonationReview.Handler(), adminCharity.Handler())
 
 	maintenanceCtx, stopMaintenance := context.WithCancel(context.Background())
 	app = &application{handler: appHandler, stop: stopMaintenance, close: cleanup}
@@ -473,7 +539,17 @@ func servePublicConfig(store *db.Store, w http.ResponseWriter, r *http.Request) 
 	httperr.WriteJSON(w, http.StatusOK, out)
 }
 
-func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointService *endpoint.Service, fetcher *fetch.Fetcher, modelService *model.Service, logs http.Handler, issueHandler http.Handler, checkinHandler http.Handler, exportHandler http.Handler, lifecycleService *lifecycle.Service, forwardService *forward.Service, flowMiddleware *flowcontrol.Middleware, store *db.Store, stewardHandler http.Handler) http.Handler {
+// sessionIdentity is the shared user-session resolver for rails mounted with
+// their own middleware but a plain identity function.
+func sessionIdentity(r *http.Request) (int64, error) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok || user == nil || !user.IsActive() {
+		return 0, errors.New("user session required")
+	}
+	return user.ID, nil
+}
+
+func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointService *endpoint.Service, fetcher *fetch.Fetcher, modelService *model.Service, logs http.Handler, issueHandler http.Handler, checkinHandler http.Handler, donationsHandler http.Handler, exportHandler http.Handler, lifecycleService *lifecycle.Service, forwardService *forward.Service, flowMiddleware *flowcontrol.Middleware, store *db.Store, stewardHandler http.Handler) http.Handler {
 	userAuthHandler := userAuth.Handler()
 	identity := func(r *http.Request) (int64, error) {
 		user, ok := auth.UserFromContext(r.Context())
@@ -509,6 +585,9 @@ func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointSe
 			// Daily check-in (user station only; the shared user-session
 			// middleware enforces the station and the session).
 			userCheckin.ServeHTTP(w, r)
+		case path == "/api/donations" || strings.HasPrefix(path, "/api/donations/"):
+			// Charity donation self-service (user station only).
+			donationsHandler.ServeHTTP(w, r)
 		case strings.HasPrefix(path, "/api/steward/"):
 			// Level-5 co-management prefix (user station only; the frame
 			// itself re-checks the station, the session, and the live level).
@@ -535,8 +614,10 @@ func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointSe
 	})
 }
 
-func buildAdminAndRootAPI(cfg *config.Config, userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, userAPI http.Handler, adminControls http.Handler, alerts http.Handler, logs http.Handler, lifecycleService *lifecycle.Service, store *db.Store, _ *forward.Service, _ *flowcontrol.Middleware) http.Handler {
+func buildAdminAndRootAPI(cfg *config.Config, userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, userAPI http.Handler, adminControls http.Handler, alerts http.Handler, logs http.Handler, lifecycleService *lifecycle.Service, store *db.Store, _ *forward.Service, _ *flowcontrol.Middleware, adminDonations http.Handler, adminCharityModels http.Handler) http.Handler {
 	adminLogs := adminAuth.Middleware(logs)
+	adminDonationsWrapped := adminAuth.Middleware(httpmw.API(adminDonations))
+	adminCharityWrapped := adminAuth.Middleware(httpmw.API(adminCharityModels))
 	adminControlsHandler := adminAuth.Middleware(adminControls)
 	adminAlerts := adminAuth.Middleware(alerts)
 	adminElevate := adminAuth.Middleware(httpmw.API(http.HandlerFunc(lifecycleService.ElevateAdminHandler)))
@@ -562,6 +643,10 @@ func buildAdminAndRootAPI(cfg *config.Config, userAuth *auth.UserAuth, adminAuth
 			adminControlsHandler.ServeHTTP(w, r)
 		case r.URL.Path == "/admin/api/logs" || strings.HasPrefix(r.URL.Path, "/admin/api/logs/") || r.URL.Path == "/admin/api/usage" || strings.HasPrefix(r.URL.Path, "/admin/api/overview/"):
 			adminLogs.ServeHTTP(w, r)
+		case strings.HasPrefix(r.URL.Path, "/admin/api/donations"):
+			adminDonationsWrapped.ServeHTTP(w, r)
+		case strings.HasPrefix(r.URL.Path, "/admin/api/charity-models"):
+			adminCharityWrapped.ServeHTTP(w, r)
 		case r.URL.Path == "/admin/api/alerts" || strings.HasPrefix(r.URL.Path, "/admin/api/alerts/"):
 			adminAlerts.ServeHTTP(w, r)
 		default:

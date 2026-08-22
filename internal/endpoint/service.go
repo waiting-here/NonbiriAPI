@@ -412,6 +412,22 @@ func mapRepoError(err error) error {
 // Empty is invalid (an endpoint key with no secret is meaningless); over-limit
 // is payload_too_large.
 func validateSecret(plaintext []byte) error {
+	if err := ValidateSecret(plaintext); err != nil {
+		return err
+	}
+	// This path keeps its historical payload_too_large distinction for
+	// over-limit secrets (the exported policy collapses it into one sentinel).
+	if len(plaintext) > MaxSecretBytes {
+		return fmt.Errorf("%w: secret too long", ErrPayloadTooLarge)
+	}
+	return nil
+}
+
+// ValidateSecret is the shared plaintext policy for every upstream key entry
+// point, including a nested donation submission that creates fresh keys: the
+// same length, UTF-8 and control-character rules apply no matter which route
+// carried the secret. It never returns any part of the input.
+func ValidateSecret(plaintext []byte) error {
 	if len(plaintext) == 0 {
 		return fmt.Errorf("%w: secret is required", ErrInvalidRequest)
 	}
@@ -473,6 +489,14 @@ func validateBoundedText(value string, maxRunes int) error {
 		return fmt.Errorf("length %d exceeds %d runes", count, maxRunes)
 	}
 	return nil
+}
+
+// DisplayFragments returns the persisted display fragments of an upstream
+// secret using exactly the same suppression rules as endpoint creation. It is
+// shared with the donation rail so a nested submission stores fragments that
+// are byte-identical to a direct key add for the same secret.
+func DisplayFragments(secret []byte) (head, tail string) {
+	return displayFragments(secret)
 }
 
 // displayFragments returns the first and last DisplayFragLen runes of the
