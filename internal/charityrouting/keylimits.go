@@ -183,6 +183,22 @@ func (l *keyLimiter) ForgetDonationKeys(keyIDs ...int64) {
 	}
 }
 
+// RestoreDonationKeys re-opens keys whose database mutation successfully
+// made them eligible again. It deliberately does not replace the keyState:
+// in-flight slots and the RPM window survive a disable/enable cycle.
+func (l *keyLimiter) RestoreDonationKeys(keyIDs ...int64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, id := range keyIDs {
+		if id <= 0 {
+			continue
+		}
+		if st := l.entries[id]; st != nil {
+			st.closed = false
+		}
+	}
+}
+
 // maybeSweepLocked runs a sweep at most once per keyLimiterSweepInterval. It
 // initializes lastSweep lazily so a process that starts under a zero clock
 // (tests) does not sweep on its very first admit.

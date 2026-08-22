@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
@@ -45,7 +46,16 @@ type Service struct {
 	store      *db.Store
 	urls       BaseURLValidator
 	connectors ConnectorValidator
+	limiter    LimiterLifecycle
 	now        func() int64
+	mutationMu sync.Mutex
+}
+
+// LimiterLifecycle is implemented by the charity routing service. It is kept
+// as a tiny interface so donation persistence remains independently testable.
+type LimiterLifecycle interface {
+	ForgetDonationKeys(...int64)
+	RestoreDonationKeys(...int64)
 }
 
 // BaseURLValidator canonicalizes a user-supplied base URL through the egress
@@ -65,6 +75,7 @@ type ServiceDeps struct {
 	Store      *db.Store
 	URLs       BaseURLValidator
 	Connectors ConnectorValidator
+	Limiter    LimiterLifecycle
 	Now        func() int64
 }
 
@@ -73,7 +84,36 @@ func NewService(deps ServiceDeps) *Service {
 	if deps.Now == nil {
 		deps.Now = func() int64 { return time.Now().Unix() }
 	}
-	return &Service{store: deps.Store, urls: deps.URLs, connectors: deps.Connectors, now: deps.Now}
+	return &Service{store: deps.Store, urls: deps.URLs, connectors: deps.Connectors, limiter: deps.Limiter, now: deps.Now}
+}
+
+// syncLimiterAfterCommit best-effort reconciles process-local admission state
+// from the authoritative post-commit projection. A projection read failure
+// leaves the current process state unchanged; routing remains fail-closed via
+// the database's authoritative eligibility checks.
+func (s *Service) syncLimiterAfterCommit(ctx context.Context, donationID int64) {
+	if s == nil || s.limiter == nil {
+		return
+	}
+	states, err := s.store.ListDonationKeyLimiterStates(context.WithoutCancel(ctx), donationID, s.now())
+	if err != nil {
+		return
+	}
+	forgetIDs := make([]int64, 0, len(states))
+	restoreIDs := make([]int64, 0, len(states))
+	for _, state := range states {
+		if state.Active && state.Enabled {
+			restoreIDs = append(restoreIDs, state.ID)
+		} else {
+			forgetIDs = append(forgetIDs, state.ID)
+		}
+	}
+	if len(forgetIDs) > 0 {
+		s.limiter.ForgetDonationKeys(forgetIDs...)
+	}
+	if len(restoreIDs) > 0 {
+		s.limiter.RestoreDonationKeys(restoreIDs...)
+	}
 }
 
 // Sentinel errors mapped to stable envelopes at the handler boundary. None of
@@ -138,6 +178,8 @@ func (s *Service) DonationAcceptOpen(ctx context.Context) (bool, error) {
 // validated and sealed inside the repository's single transaction; a failure —
 // including a duplicate physical key claim — rolls back the entire submission.
 func (s *Service) Create(ctx context.Context, spec CreateSpec) (db.Donation, error) {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 	defer func() {
 		if spec.New != nil {
 			for i := range spec.New.Keys {
@@ -220,6 +262,7 @@ func (s *Service) Create(ctx context.Context, spec CreateSpec) (db.Donation, err
 	if err != nil {
 		return db.Donation{}, mapRepoError(err)
 	}
+	s.syncLimiterAfterCommit(ctx, d.ID)
 	return d, nil
 }
 
@@ -236,6 +279,8 @@ func (s *Service) Get(ctx context.Context, userID, donationID int64) (db.Donatio
 // Update edits a pending donation: description, expiry and/or the selected key
 // set (same endpoint). Reviewer-side reuse passes role/actor explicitly.
 func (s *Service) UpdatePending(ctx context.Context, userID, donationID int64, description *string, expiresAt **int64, keyIDs *[]int64, limits []db.KeyLimitSpec) (db.Donation, error) {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 	d, err := s.store.UpdateOwnPendingDonation(ctx, db.UpdateDonationKeysInput{
 		UserID: userID, DonationID: donationID, Now: s.now(),
 		Description: description, ExpiresAt: expiresAt, KeyIDs: keyIDs, Limits: limits,
@@ -248,14 +293,19 @@ func (s *Service) UpdatePending(ctx context.Context, userID, donationID int64, d
 
 // Delete soft-deletes an own donation.
 func (s *Service) Delete(ctx context.Context, userID, donationID int64) error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 	if err := s.store.DeleteOwnDonation(ctx, userID, donationID, s.now()); err != nil {
 		return mapRepoError(err)
 	}
+	s.syncLimiterAfterCommit(ctx, donationID)
 	return nil
 }
 
 // Review applies one reviewer decision (administrator or level-5 steward).
 func (s *Service) Review(ctx context.Context, dec db.ReviewDecision) (db.Donation, error) {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 	if dec.Now == 0 {
 		dec.Now = s.now()
 	}
@@ -263,14 +313,18 @@ func (s *Service) Review(ctx context.Context, dec db.ReviewDecision) (db.Donatio
 	if err != nil {
 		return db.Donation{}, mapRepoError(err)
 	}
+	s.syncLimiterAfterCommit(ctx, d.ID)
 	return d, nil
 }
 
 // DeleteAsReviewer soft-deletes any donation on behalf of a reviewer.
 func (s *Service) DeleteAsReviewer(ctx context.Context, donationID int64, role string, reviewerUserID int64) error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
 	if err := s.store.DeleteDonationByReviewer(ctx, donationID, role, reviewerUserID, "", s.now()); err != nil {
 		return mapRepoError(err)
 	}
+	s.syncLimiterAfterCommit(ctx, donationID)
 	return nil
 }
 

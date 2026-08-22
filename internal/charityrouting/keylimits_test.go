@@ -141,6 +141,30 @@ func TestKeyLimiterForgetClosesButPreservesInFlight(t *testing.T) {
 	l.ForgetDonationKeys(999)
 }
 
+func TestKeyLimiterRestoreReopensWithoutResettingWindow(t *testing.T) {
+	l := newKeyLimiter()
+	now := time.Unix(0, 0)
+	if !l.tryAdmit(1, 2, 2, now) {
+		t.Fatal("initial admit failed")
+	}
+	l.ForgetDonationKeys(1)
+	l.RestoreDonationKeys(1)
+	if !l.tryAdmit(1, 2, 2, now) {
+		t.Fatal("restored key did not admit")
+	}
+	if l.entries[1].concurrency != 2 {
+		t.Fatalf("concurrency = %d, want 2; restore must preserve in-flight slot", l.entries[1].concurrency)
+	}
+	if got := len(l.entries[1].window); got != 2 {
+		t.Fatalf("window len = %d, want 2; restore must not reset RPM history", got)
+	}
+	if l.tryAdmit(1, 2, 2, now) {
+		t.Fatal("restored key bypassed preserved RPM window")
+	}
+	l.release(1, now)
+	l.release(1, now)
+}
+
 func TestKeyLimiterRPMAdmitsAndRejects(t *testing.T) {
 	l := newKeyLimiter()
 	now := time.Unix(0, 0)

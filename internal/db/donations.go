@@ -947,6 +947,47 @@ WHERE d.user_id = ? ORDER BY dk.id`, userID)
 	return out, nil
 }
 
+// DonationKeyLimiterState is the post-commit eligibility projection used by
+// the in-process charity admission layer. It contains no credential data.
+type DonationKeyLimiterState struct {
+	ID      int64
+	Enabled bool
+	Active  bool
+}
+
+// ListDonationKeyLimiterStates returns the authoritative route-eligibility
+// projection for one donation, including approval, enabled, and unexpired
+// conditions. Callers use it only after a successful mutation, so a failed
+// transaction cannot alter limiter state.
+func (s *Store) ListDonationKeyLimiterStates(ctx context.Context, donationID, now int64) ([]DonationKeyLimiterState, error) {
+	if donationID <= 0 || now <= 0 {
+		return nil, ErrNotFound
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT dk.id, dk.enabled, (d.status='approved' AND d.enabled=1 AND (d.expires_at IS NULL OR d.expires_at > ?))
+FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id
+WHERE dk.donation_id=? ORDER BY dk.id`, now, donationID)
+	if err != nil {
+		return nil, fmt.Errorf("list donation key limiter states: %w", err)
+	}
+	defer rows.Close()
+	states := make([]DonationKeyLimiterState, 0, 8)
+	for rows.Next() {
+		var state DonationKeyLimiterState
+		var enabled, active int
+		if err := rows.Scan(&state.ID, &enabled, &active); err != nil {
+			return nil, fmt.Errorf("scan donation key limiter state: %w", err)
+		}
+		state.Enabled = enabled != 0
+		state.Active = active != 0
+		states = append(states, state)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate donation key limiter states: %w", err)
+	}
+	return states, nil
+}
+
 func listDonationReviewsTx(ctx context.Context, tx *sql.Tx, donationID int64) ([]DonationReview, error) {
 	rows, err := tx.QueryContext(ctx, `
 SELECT id, donation_id, reviewer_user_id, reviewer_role, action, note, created_at
