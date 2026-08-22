@@ -4,7 +4,7 @@
 
 NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible gateway. It lets each user manage their own upstream endpoints and credentials, discover upstream models, define user-owned platform model names, and call those models through a single `CallerKey`.
 
-> **Release status:** `v1.0.0-alpha.1`. This release is suitable for controlled self-hosted trials. Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
+> **Release status:** `v1.0.0-alpha.1` remains the latest published release. This branch is the local, unpublished `v1.0.0-alpha.2` release candidate; it has not been tagged, published, or deployed. Both are intended only for controlled self-hosted trials. Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
 >
 > Source repository: [github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
@@ -16,9 +16,11 @@ NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible gateway. 
 - SSRF, DNS-rebinding, redirect, proxy, response-size, timeout, cancellation, concurrency, and streaming safeguards.
 - Encrypted-at-rest upstream secrets; plaintext credentials are not returned in lists, logs, alerts, or account exports.
 - Request metadata, usage accounting, retention cleanup, account export/deletion, issues, alerts, and runtime limits.
+- Credits, check-in, donation-backed charity routing, and a live-authorized level-5 steward view whose site-wide logs hide donated resources.
+- Server-generated upstream safety pseudonyms scoped to one user and one canonical upstream origin; see the [API contract](docs/api-contract.md#21-post-v1chatcompletions) for their rotation and privacy boundary.
 - React user/admin stations embedded into a single Go binary.
 
-The alpha intentionally supports only the `openai-compatible` connector and the two OpenAI-compatible exit routes listed above. Other OpenAI API families and other connector types are deferred.
+The alpha.2 candidate still supports only the `openai-compatible` connector and the two OpenAI-compatible exit routes listed above. Other OpenAI API families and other connector types are deferred.
 
 ## Architecture
 
@@ -40,6 +42,7 @@ Node.js is not needed to run the finished binary.
 
 ```sh
 npm --prefix web ci
+npm --prefix web test
 npm --prefix web run typecheck
 npm --prefix web run lint
 npm --prefix web run build
@@ -79,9 +82,9 @@ The intended first deployment model is a manually updated systemd service. See:
 - [Example environment file](admin.env.example)
 - [Example systemd unit](deploy/nonbiriapi.service.example)
 
-The update procedure is deliberately conservative: stop the service, back up the database and sidecars, build and verify a release binary, install it atomically, restart, and verify both configured hosts. The alpha has no versioned migration framework; keep a tested backup before every update.
+The update procedure is deliberately conservative: stop the service, back up the database and sidecars, build and verify a release binary, install it atomically, restart, and verify both configured hosts. The alpha has no general versioned migration framework; alpha.2 includes only the documented one-purpose credential migration. Keep a tested backup before every update.
 
-Alpha.1 is source-first: a prebuilt binary is not required for the release. Operators may compile the source on the target platform or use their own build pipeline. A published binary, if added later, is a convenience artifact rather than the compatibility boundary.
+The current alpha release strategy is source-first: a prebuilt binary is not required. Operators may compile the source on the target platform or use their own build pipeline. A published binary, if added later, is a convenience artifact rather than the compatibility boundary.
 
 ## GitHub automation
 

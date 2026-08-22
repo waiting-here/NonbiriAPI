@@ -1,10 +1,10 @@
-# NonbiriAPI HTTP API Contract (v1.0.0-alpha.1 + unreleased amendments)
+# NonbiriAPI HTTP API Contract (v1.0.0-alpha.2 release candidate)
 
-- Status: **v1.0.0-alpha.1 release contract with explicitly marked unreleased amendments (security hardening and alpha.2 product work)**
-- Scope: v1.0.0-alpha.1 surface only. `/v1/chat/completions` and `/v1/models` are the only
-  OpenAI-compatible exit endpoints in alpha.1; embeddings / images / audio / files /
+- Status: **local, unpublished `v1.0.0-alpha.2` release candidate**. The latest published tag remains `v1.0.0-alpha.1`; this document is not a claim that alpha.2 has been tagged, published, or deployed.
+- Scope: v1.0.0-alpha.2 candidate surface. `/v1/chat/completions` and `/v1/models` remain the only
+  OpenAI-compatible exit endpoints; embeddings / images / audio / files /
   moderation / batch are deferred past the alpha.
-- Authority: this document describes the surface shipped by tag `v1.0.0-alpha.1`, aligned to the frozen requirements, accepted credential/egress/data-lifecycle decisions, and the emitted stable-code set of `internal/httperr`. Text explicitly labeled **Unreleased security amendment** describes this development branch and is not a claim about the published tag. Documentation errata may correct an omitted or misstated shipped field without changing runtime behavior; other changes to endpoint paths, JSON fields, stable codes, auth behavior, cache policy, or diagnostic limits require a subsequent release contract and changelog entry.
+- Authority: this document describes the intended alpha.2 candidate surface, aligned to the frozen requirements, accepted credential/egress/data-lifecycle decisions, and the emitted stable-code set of `internal/httperr`. Candidate text is not part of the published alpha.1 contract until an alpha.2 tag is created. Documentation errata may correct an omitted or misstated field without changing runtime behavior; other changes to endpoint paths, JSON fields, stable codes, auth behavior, cache policy, or diagnostic limits require a subsequent release contract and changelog entry.
 
 ## 1. Conventions
 
@@ -89,7 +89,7 @@ Every error response is a single JSON object:
   forge a different attribution than its code. An explicit caller-set `source` can confirm but
   never override the code-derived value: an upstream code is always `upstream` and a platform
   code is always `platform`; any explicit value that disagrees (or is invalid) is dropped in
-  favor of the code-derived default. *(Unreleased security amendment: the `source` field and
+  favor of the code-derived default. *(Alpha.2 candidate change: the `source` field and
   its locked-to-code derivation are not part of the published `v1.0.0-alpha.1` contract.)*
 - `message` is bounded to 1000 runes and stripped of all C0 control characters and DEL; it
   carries a short human-safe summary and **never** raw upstream identifiers or text.
@@ -147,7 +147,7 @@ Codes below are the emitted set; HTTP status is derived from the code. Route tab
 | `already_checked_in` | 409 | the user already checked in on the current site-local day (今日已签到); the day was consumed by the earlier successful check-in, not by this attempt; `source` is `platform` |
 | `checkin_cap_reached` | 403 | the user's credit balance has reached the configured check-in threshold (`credits_cap_milli`) at an effective level below the bypass (≥3); the refusal does NOT consume the day; the message contains 悠哉积分已达签到上限; `source` is `platform` |
 
-*(Unreleased amendment: the `service_unavailable` maintenance-gate meaning and the
+*(Alpha.2 candidate change: the `service_unavailable` maintenance-gate meaning and the
 `insufficient_credits` / `feature_disabled` / `charity_suspended` business triggers are not
 part of the published `v1.0.0-alpha.1` contract.)*
 
@@ -168,7 +168,7 @@ Request body uses the OpenAI Chat Completions shape. Ordinary call parameters ar
 | `stream` | no | `true` selects SSE; omitted/`false` selects the single JSON response |
 | other fields | no | preserved, except caller `safety_identifier` is overwritten and streaming requests authoritatively merge `stream_options.include_usage=true` while retaining other `stream_options` members |
 
-Server-side behavior (shipped contract):
+Server-side behavior (alpha.2 candidate):
 
 1. Resolve `model` to one of the caller's platform models → its binding set. Cross-user
    resources never enter the candidate set.
@@ -186,23 +186,31 @@ Server-side behavior (shipped contract):
    candidate set never multiplies the single-attempt timeout into a longer logical request.
 4. Inject the OpenAI `safety_identifier` field for upstream per-user risk attribution.
 
-**Unreleased security amendment:** the development branch sends only the versioned form
-`nbu_v2_` followed by the 52-character RFC 4648 base32 (without padding) encoding of an
-HMAC-SHA-256 digest. The process derives a dedicated 32-byte key from the Vault with purpose
-`nonbiriapi:safety-identifier:v2`; the HMAC message is that fixed purpose followed by the
-calling user's positive int64 id as exactly eight big-endian bytes. The resulting 59-character
-pseudonym is stable for the same deployment key and user, differs across users or deployment
-keys, and contains neither the raw id nor a publicly verifiable unkeyed digest. A caller-supplied
-`safety_identifier` is overwritten, and no legacy identifier is also sent.
+**Alpha.2 candidate security behavior:** the service sends only `nbu_v3_` followed by the
+52-character RFC 4648 base32 (without padding) encoding of an HMAC-SHA-256 digest. The process
+derives one dedicated 32-byte key from the Vault with purpose
+`nonbiriapi:safety-identifier:v3`. The HMAC message is the exact UTF-8 bytes of that purpose,
+then the canonical-origin byte length as an unsigned four-byte big-endian integer, the origin
+bytes, and the positive consumer user id as exactly eight big-endian bytes.
+
+The canonical origin comes from the final, revalidated dispatch target through
+`egress.CanonicalEndpointTarget`: exactly `scheme://canonical-host:effective-port`, with no
+path. A path-only change therefore preserves the pseudonym; a scheme, host, effective-port,
+deployment master-key, or consumer change produces a different value. Personal and charity
+attempts by the same consumer use the same pseudonym only when they reach the same origin;
+the charity donor identity remains relevant to credential ownership but never to this value.
+The 59-character result contains neither the raw id nor a publicly verifiable unkeyed digest.
+A caller-supplied `safety_identifier` is always overwritten. Invalid/non-canonical origin or
+missing/closed factory state fails closed before credential decryption or dialing, and no v2 or
+enumerable v1 identifier is sent as a fallback.
 
 The derived key exists only in process memory: it is not persisted, logged, returned by the
-platform API, or sent upstream. Missing or invalid key injection fails application wiring; once
-the forwarding service begins shutdown it admits no new operations, waits for in-flight
-operations, then best-effort clears its retained key copy. This rollout intentionally rotates
-all identifiers emitted by the published alpha.1 implementation once. Upstream risk history
-keyed only by the previous value will not automatically carry over, because there is no dual-send
-or legacy fallback. After that cutover, retaining the same deployment master key preserves
-identifier continuity; a deployment using a different master key produces a different pseudonym.
+platform API, or sent upstream. One shared factory serves both routing rails; shutdown stops
+their new/in-flight work before best-effort clearing the retained key copy. The v3 rollout
+intentionally rotates both the published alpha.1 value and the development-only v2 value once.
+Upstream risk history keyed only by either previous value will not automatically carry over.
+After that cutover, retaining the same deployment master key preserves continuity only inside
+the same consumer + canonical-origin scope.
 
 Response — non-stream (`stream` false/omitted): standard OpenAI Chat Completions response,
 including `usage` (`prompt_tokens`, `completion_tokens`, `total_tokens`) when the upstream
@@ -370,7 +378,7 @@ per-user endpoint limit and clear it (NULL restores the global default).
 authoritative connector registry; unknown types are rejected with
 `invalid_request` and never silently fall back to another protocol. The
 connector type is immutable after creation (a `PATCH` carrying `connector_type`
-is rejected). In v1.0.0-alpha.1 the registry supports only `openai-compatible`;
+is rejected). In the alpha.2 candidate the registry still supports only `openai-compatible`;
 later versions extend the registry in one place.
 
 `model_fetch_failed` / `model_fetch_failed_at` are the endpoint's bounded fetch
@@ -378,7 +386,7 @@ flag: set (with a unix-seconds timestamp) whenever an upstream model fetch for
 any of its keys failed, cleared by the next successful fetch. The flag is
 state only — never a diagnostic or any upstream content.
 
-**Unreleased security amendment:** Endpoint updates enforce the credential/origin boundary in the same database
+**Alpha.2 candidate security change:** Endpoint updates enforce the credential/origin boundary in the same database
 transaction as the update and key-existence check. An endpoint with any key
 (enabled or disabled) cannot move to another canonical origin; delete all keys,
 change the origin, then add new keys. A path change within the same origin is
@@ -538,7 +546,10 @@ full-site log co-management route:
   log/activity, not donor resources. The steward therefore sees the consumer's `user_id`,
   `route_kind`, `endpoint_base_url`/`upstream_model_id` (for personal rows), `status_code`,
   token buckets and bounded `error_diag` — never a user-chosen platform model name, a note,
-  a Discord identity, or any donated resource. No bulk CSV/JSON export is exposed here.
+  a Discord identity, or any donated resource. Exact-match `endpoint_base_url` and
+  `upstream_model` filters are evaluated against this already de-privatized projection, so
+  guessing a donor URL or upstream model cannot reveal that a charity row exists. No bulk
+  CSV/JSON export is exposed here.
 - **Current state**: the donation review surface (`/api/steward/donations…`, §4.6) is mounted;
   charity model management is available under the same prefix (`/api/steward/charity-models…`, §4.6);
   full-site logs are available at `/api/steward/logs`. Sub-handlers receive only an opaque
@@ -579,7 +590,7 @@ Behavior (frozen §I, implementation contract §2.4/§6.3):
 
 ### 3.12 Charity donations — `/api/donations` (user station)
 
-*(Unreleased alpha.2 amendment: frozen §J/§L, implementation contract §2.6/§6.3.)*
+*(Alpha.2 candidate change: frozen §J/§L, implementation contract §2.6/§6.3.)*
 
 One donation = one owned endpoint plus at least one key. The review decision (approve/reject)
 covers the WHOLE donation; the per-key concurrency/RPM/cap limits are attributes of the
@@ -675,7 +686,7 @@ Ban durations: presets are expressed as seconds (`3600` / `86400` / `604800` / `
 
 Log paging is 1-based offset paging; `page_size` defaults to 20 and clamps to `[1,100]`. `from`/`to` are non-negative Unix seconds and `status` is `[100,599]`. Unknown, repeated, overlong, or malformed parameters are `invalid_request`. Filter semantics are frozen as exact equality: `user_id`, `endpoint_base_url` (against the stored dispatch snapshot), `upstream_model`, and `error_code` (an unknown code simply matches nothing). The administrator projection shows which actual endpoint base URL and upstream model served a request — never the user-chosen platform model name or any endpoint/key note. There is no user-station export.
 
-Level-5 stewards reach a separate full-site log list at `GET /api/steward/logs` on the user station (§3.10): the same metadata-only row shape and the same bounded filter/paging parameters, with `endpoint_base_url`, `upstream_model_id`, and `endpoint_key_id` blanked on `route_kind='charity'` rows so no donated resource is identifiable; there is no steward export.
+Level-5 stewards reach a separate full-site log list at `GET /api/steward/logs` on the user station (§3.10): the same metadata-only row shape and the same bounded filter/paging parameters, with `endpoint_base_url`, `upstream_model_id`, and `endpoint_key_id` blanked on `route_kind='charity'` rows so no donated resource is identifiable. The `endpoint_base_url` and `upstream_model` exact-match predicates are applied to that visible projection, not to hidden donor columns; a guessed donor value therefore cannot select or count a charity row. There is no steward export.
 
 The CSV/JSON exports are not paginated: a selection exceeding the finite row bound, or a rendered payload exceeding the byte bound, fails closed with `payload_too_large` — output is never silently truncated. Every CSV cell is sanitized before rendering: a leading `=`, `+`, `-`, `@`, TAB, CR, LF, BOM, or Unicode whitespace character gets a single-quote prefix so spreadsheet applications never interpret it as a formula.
 
@@ -764,7 +775,7 @@ resolving an alert with `false` reopens it and clears `resolved_at`.
 
 ### 4.6 Donation review & charity model management (admin + steward)
 
-*(Unreleased alpha.2 amendment: frozen §J.4/J.5, implementation contract §6.4.)*
+*(Alpha.2 candidate change: frozen §J.4/J.5, implementation contract §6.4.)*
 
 Administrators reach these routes under `/admin/api/…` with an admin session; level-5 stewards
 reach the SAME operations under `/api/steward/…` on the user station (§3.10, live-resolved
@@ -834,8 +845,8 @@ Behavior:
 
 ## 6. Server-side maintenance gate
 
-*(Unreleased security amendment: this section is not part of the published
-`v1.0.0-alpha.1` contract; it describes the current development branch.)*
+*(Alpha.2 candidate security change: this section is not part of the published
+`v1.0.0-alpha.1` contract until an alpha.2 tag is created.)*
 
 `maintenance_mode` is a server-side authoritative admission gate, not a front-end-only notice.
 It is an atomically live-applied process-wide boolean: a toggle through the admin site-config

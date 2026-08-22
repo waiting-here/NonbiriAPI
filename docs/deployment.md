@@ -1,6 +1,6 @@
 # VPS deployment with systemd
 
-This guide describes the supported single-instance operating model introduced for `v1.0.0-alpha.1` and used by the current `v1.0.0-alpha.2` development branch: one compiled binary, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS. See [configuration.md](configuration.md) for the full environment and runtime-settings reference.
+This guide describes the supported single-instance operating model introduced for `v1.0.0-alpha.1` and used by the local, unpublished `v1.0.0-alpha.2` release candidate: one compiled binary, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS. The latest published tag remains alpha.1 until the candidate is explicitly released. See [configuration.md](configuration.md) for the full environment and runtime-settings reference.
 
 The commands are examples. Replace paths, hostnames, users, and package-manager commands for the target VPS. Do not copy real secrets into a Git checkout.
 
@@ -188,7 +188,7 @@ Use separate `server` blocks/certificates for user and administrator hosts so th
 
 If the binary fails to start, stop it, restore the previous symlink, and start the previous release. Do not delete the database or rotate the master key during rollback.
 
-The unreleased credential-envelope upgrade is a one-way in-place migration. On
+The alpha.2 credential-envelope upgrade is a one-way in-place migration. On
 startup, the new binary upgrades endpoint credentials transactionally before it
 starts any HTTP listener or background worker. Any invalid credential aborts
 the complete credential batch and startup; it never leaves a partially upgraded
@@ -216,7 +216,7 @@ Alpha.2 is a pre-1.0 development release with breaking schema changes. Always ke
 
 ## Alpha limitations
 
-- The schema is bootstrapped idempotently. There is no general versioned migration framework; the unreleased credential-envelope upgrade uses one dedicated, idempotent startup migrator.
+- The schema is bootstrapped idempotently. There is no general versioned migration framework; the alpha.2 credential-envelope upgrade uses one dedicated, idempotent startup migrator.
 - SMTP settings are reserved and do not send alert email in the alpha releases.
 - Real Discord OAuth and upstream success flows must be tested with disposable staging credentials before public operation.
 - Choose a maintenance window for every update and keep a known-good binary, environment backup, and database backup together.
