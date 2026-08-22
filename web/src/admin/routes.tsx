@@ -8,6 +8,7 @@ import { LogsPage } from './pages/LogsPage';
 import { EndpointsPage } from './pages/EndpointsPage';
 import { AlertsPage } from './pages/AlertsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { CharityPage } from './pages/CharityPage';
 
 export const router = createBrowserRouter([
   {
@@ -21,6 +22,7 @@ export const router = createBrowserRouter([
       { path: 'endpoints', element: <EndpointsPage /> },
       { path: 'alerts', element: <AlertsPage /> },
       { path: 'settings', element: <SettingsPage /> },
+      { path: 'charity', element: <CharityPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },
