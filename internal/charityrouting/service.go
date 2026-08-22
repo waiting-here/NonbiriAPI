@@ -69,6 +69,7 @@ type Repository interface {
 	CreateCharityReservation(ctx context.Context, in db.ReserveCharityInput) (db.CharityReservation, db.CharityPricingSnapshot, error)
 	SwapCharityReservationKey(ctx context.Context, reservationID int64, newKey db.CharityCandidate, newKeyReserve int64, now int64) error
 	DispatchCharityReservation(ctx context.Context, reservationID, now int64) (bool, error)
+	UndispatchCharityReservation(ctx context.Context, reservationID, now int64) (bool, error)
 	CommitCharityReservation(ctx context.Context, reservationID int64, plan db.CommitPlan, now int64) (db.CharityReservation, error)
 	ReleaseCharityReservation(ctx context.Context, reservationID, now int64) (bool, error)
 	GetCharityReservationByAttempt(ctx context.Context, attemptID string) (db.CharityReservation, error)
@@ -192,6 +193,20 @@ func (s *Service) CancelUserContexts(userID int64) {
 	for _, cancel := range cancels {
 		cancel()
 	}
+}
+
+// ForgetDonationKeys closes the given donation keys in the per-key admission
+// limiter so no further charity call can take a slot against them, while
+// preserving the slot accounting of any in-flight call (release still
+// decrements and reclaims the entry when it goes idle). It is the lifecycle
+// hook for donation disable / delete / donor account deletion; the
+// time-aware sweep reclaims a closed-but-not-yet-idle entry once its last slot
+// releases and its RPM window expires. Forgetting unknown keys is a no-op.
+func (s *Service) ForgetDonationKeys(keyIDs ...int64) {
+	if s == nil {
+		return
+	}
+	s.limits.ForgetDonationKeys(keyIDs...)
 }
 
 // Close cancels every tracked context (shutdown hygiene).
@@ -346,7 +361,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 		// doomed candidate early.
 		probeReserve := provisionalKeyReserve(route.Model)
 		if !s.limits.capHeadroom(candidate.CreditsUsed, candidate.CreditsReserved, candidate.CreditsUsageCap, probeReserve) {
-			s.limits.release(candidate.DonationKeyID)
+			s.limits.release(candidate.DonationKeyID, s.now())
 			lastResult = admissionExhaustedResult()
 			continue
 		}
@@ -365,7 +380,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 				Now:           nowUnix,
 			})
 			if cerr != nil {
-				s.limits.release(candidate.DonationKeyID)
+				s.limits.release(candidate.DonationKeyID, s.now())
 				switch {
 				case errors.Is(cerr, db.ErrInsufficientCredits):
 					return openai.AttemptResult{}, cerr
@@ -390,7 +405,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 			newKeyReserve := snapshotKeyReserve(snapshot)
 			serr := s.store.SwapCharityReservationKey(acctCtx, reservationID, candidate, newKeyReserve, nowUnix)
 			if serr != nil {
-				s.limits.release(candidate.DonationKeyID)
+				s.limits.release(candidate.DonationKeyID, s.now())
 				switch {
 				case errors.Is(serr, db.ErrDonationKeyCapReached), errors.Is(serr, db.ErrNotFound):
 					lastResult = admissionExhaustedResult()
@@ -408,10 +423,18 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 		// synchronously inside the FIRST body byte, before delegating, so a
 		// crash after this point always finds a dispatched row that recovery
 		// converges conservatively — never a released one after bytes flowed.
-		dw := newDispatchWriter(writer, func() bool {
-			applied, derr := s.store.DispatchCharityReservation(acctCtx, reservationID, s.now().Unix())
-			return derr == nil && applied
-		})
+		resID := reservationID
+		dw := newDispatchWriter(writer,
+			func() bool {
+				applied, derr := s.store.DispatchCharityReservation(acctCtx, resID, s.now().Unix())
+				return derr == nil && applied
+			},
+			func() {
+				if _, derr := s.store.UndispatchCharityReservation(acctCtx, resID, s.now().Unix()); derr != nil &&
+					!errors.Is(derr, db.ErrNotFound) && callCtx.Err() == nil {
+					s.logger.Error("charity undispatch failed", "reservation", resID, "error", derr)
+				}
+			})
 		started := s.now()
 		result := s.runner.RunCharity(callCtx, dw, forward.CharityAttemptInput{
 			BindingID:        candidate.BindingID,
@@ -450,7 +473,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 				s.logger.Error("charity outcome record failed", "model", route.Model.ID, "error", rerr)
 			}
 			s.recordLog(acctCtx, userID, request.Model, attemptID, reservationID, candidate, result, plan, started, finished)
-			s.limits.release(candidate.DonationKeyID)
+			s.limits.release(candidate.DonationKeyID, s.now())
 			return result, nil
 		}
 
@@ -459,7 +482,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 		// iteration swaps the key reserve atomically. A poisoned dispatch
 		// writer (the CAS lost to a concurrent terminal move) is also a
 		// pre-dispatch failure: no byte reached the client.
-		s.limits.release(candidate.DonationKeyID)
+		s.limits.release(candidate.DonationKeyID, s.now())
 		lastResult = result
 	}
 

@@ -704,6 +704,36 @@ WHERE id=? AND state='reserved'`, now, now, reservationID)
 	return affected == 1, nil
 }
 
+// UndispatchCharityReservation performs the dispatched→reserved CAS used ONLY
+// by the dispatch writer's provable zero-byte compensation (frozen §5.3 /
+// clarification §C1.5): when the first non-empty body Write delegates and the
+// underlying writer returns ZERO bytes, the "first body byte successfully
+// submitted" boundary was never crossed, so the service must be able to take
+// the row back to `reserved` and release / retry it. applied is false when the
+// row already left `dispatched` (a concurrent terminal move — recovery or
+// account-delete convergence — won); the caller then treats the attempt as a
+// pre-dispatch failure whose release is an idempotent no-op (the terminal
+// winner has already settled the row conservatively). This transition never
+// releases the user reserve and never touches the donation-key cap; both stay
+// exactly as the dispatch left them, so a successful revert is a pure state
+// unwind that the normal reserved→released or reserved→swap paths complete.
+func (s *Store) UndispatchCharityReservation(ctx context.Context, reservationID, now int64) (bool, error) {
+	if reservationID <= 0 || now <= 0 {
+		return false, fmt.Errorf("%w: undispatch identity", ErrInvalidValue)
+	}
+	res, err := s.db.ExecContext(ctx, `
+UPDATE charity_reservations SET state='reserved', dispatched_at=NULL, updated_at=?
+WHERE id=? AND state='dispatched'`, now, reservationID)
+	if err != nil {
+		return false, fmt.Errorf("undispatch charity reservation: %w", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("undispatch charity reservation rows: %w", err)
+	}
+	return affected == 1, nil
+}
+
 // CommitPlan carries the settlement values computed by the service layer from
 // the connector's usage report and the PERSISTED snapshot (never current
 // configuration). All amounts are non-negative milli-credits.

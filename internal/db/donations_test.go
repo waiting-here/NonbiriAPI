@@ -656,3 +656,68 @@ func TestDonationPendingEditReplacesKeysAndClaims(t *testing.T) {
 		t.Fatalf("edit after approval = %v, want ErrConflict", err)
 	}
 }
+
+// TestListDonationKeyIDsByDonor covers the lifecycle lookup used to forget the
+// per-key admission limiter when a donor account is deleted: it returns the
+// ids of every donation key owned by the donor across all their donations,
+// reads no secret, and fails closed for an unknown user.
+func TestListDonationKeyIDsByDonor(t *testing.T) {
+	st := newDonationTestStore(t)
+	ctx := context.Background()
+	uid := newDonationUser(t, st, "donor-lister")
+	other := newDonationUser(t, st, "other-donor")
+	ep1 := newDonationEndpoint(t, st, uid, "https://a.example.com")
+	ep2 := newDonationEndpoint(t, st, uid, "https://b.example.com")
+	epO := newDonationEndpoint(t, st, other, "https://c.example.com")
+	ka := newDonationKey(t, st, uid, ep1.ID, "sk-a")
+	kb := newDonationKey(t, st, uid, ep1.ID, "sk-b")
+	kc := newDonationKey(t, st, uid, ep2.ID, "sk-c")
+	ko := newDonationKey(t, st, other, epO.ID, "sk-o")
+	d1, err := st.CreateDonation(ctx, existingInput(uid, ep1.ID, []int64{ka.ID, kb.ID}, 100))
+	if err != nil {
+		t.Fatalf("CreateDonation 1: %v", err)
+	}
+	d2, err := st.CreateDonation(ctx, existingInput(uid, ep2.ID, []int64{kc.ID}, 110))
+	if err != nil {
+		t.Fatalf("CreateDonation 2: %v", err)
+	}
+	if _, err := st.CreateDonation(ctx, existingInput(other, epO.ID, []int64{ko.ID}, 120)); err != nil {
+		t.Fatalf("CreateDonation other: %v", err)
+	}
+
+	// The donation_key ids are minted by CreateDonation, distinct from the
+	// endpoint_key ids; collect them via the owner listing.
+	want := make(map[int64]bool)
+	for _, did := range []int64{d1.ID, d2.ID} {
+		ks, lerr := st.ListOwnDonationKeys(ctx, uid, did)
+		if lerr != nil {
+			t.Fatalf("ListOwnDonationKeys %d: %v", did, lerr)
+		}
+		for _, k := range ks {
+			want[k.ID] = true
+		}
+	}
+
+	ids, err := st.ListDonationKeyIDsByDonor(ctx, uid)
+	if err != nil {
+		t.Fatalf("ListDonationKeyIDsByDonor: %v", err)
+	}
+	if len(ids) != len(want) {
+		t.Fatalf("ids = %v, want %d ids", ids, len(want))
+	}
+	for _, id := range ids {
+		if !want[id] {
+			t.Fatalf("unexpected/foreign donation key id %d in %v", id, ids)
+		}
+	}
+	// Ordered ascending by id.
+	for i := 1; i < len(ids); i++ {
+		if ids[i-1] >= ids[i] {
+			t.Fatalf("ids not ascending: %v", ids)
+		}
+	}
+	// Unknown donor fails closed.
+	if _, err := st.ListDonationKeyIDsByDonor(ctx, 0); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("ListDonationKeyIDsByDonor(0) = %v, want ErrNotFound", err)
+	}
+}

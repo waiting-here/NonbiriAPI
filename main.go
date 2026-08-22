@@ -367,6 +367,9 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		Store: store, Elevation: sharedElevation, AdminVerifier: adminAuth,
 		PreDeleteUser: func(userID int64) {
 			charityService.CancelUserContexts(userID)
+			if keyIDs, err := store.ListDonationKeyIDsByDonor(context.Background(), userID); err == nil && len(keyIDs) > 0 {
+				charityService.ForgetDonationKeys(keyIDs...)
+			}
 			antiAbuseService.ForgetUser(userID)
 		},
 	})

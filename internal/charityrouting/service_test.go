@@ -45,8 +45,11 @@ func (f *fakeRunner) RunCharity(ctx context.Context, writer http.ResponseWriter,
 		return openai.AttemptResult{Failure: openai.FailureCanceled, Diagnostic: "request canceled"}
 	}
 	if len(resp.body) > 0 {
-		_, _ = writer.Write(resp.body)
-		resp.result.Committed = true // bytes crossed the dispatch boundary
+		// Mirror the real adapter: the commit boundary is the number of body
+		// bytes actually delegated to the client (n > 0). A zero-byte sink
+		// failure stays pre-commit, exactly like the OpenAI connector.
+		n, _ := writer.Write(resp.body)
+		resp.result.Committed = n > 0
 	}
 	return resp.result
 }
@@ -516,5 +519,160 @@ func TestServiceCancelUserContextsCancelsInFlight(t *testing.T) {
 	store.DB().QueryRow(`SELECT state FROM charity_reservations LIMIT 1`).Scan(&state)
 	if state != "released" {
 		t.Fatalf("state = %q, want released after cancel", state)
+	}
+}
+
+// zeroByteResponseWriter simulates a client sink that delivers ZERO body bytes
+// on the first non-empty write (an HTTP/2 stream reset, an early client
+// disconnect, or a write-deadline/pressure failure) and then errors on every
+// further write. It is the SEC-A2-01 regression vector: the dispatch CAS runs
+// before the delegate, so without compensation the row would be stuck
+// `dispatched` while the adapter reports a pre-commit failure.
+var errZeroByteSink = errors.New("test: zero-byte sink failure")
+
+type zeroByteResponseWriter struct {
+	hdr http.Header
+}
+
+func (w *zeroByteResponseWriter) Header() http.Header {
+	if w.hdr == nil {
+		w.hdr = http.Header{}
+	}
+	return w.hdr
+}
+
+func (w *zeroByteResponseWriter) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	return 0, errZeroByteSink
+}
+
+func (w *zeroByteResponseWriter) WriteHeader(int) {}
+
+// TestServiceForwardZeroByteSinkReleasesNotCharges: the first real body write
+// delivers zero bytes (sink failure). The frozen dispatch boundary ("first
+// body byte successfully submitted") was NOT crossed, so the reservation must
+// be released: the user is refunded, the donation-key cap is freed, and no
+// donor reward or unknown-usage commit is recorded. This is the core
+// SEC-A2-01 regression — previously the row stayed `dispatched` and recovery
+// later committed it as unknown-usage, charging the user for nothing.
+func TestServiceForwardZeroByteSinkReleasesNotCharges(t *testing.T) {
+	store := openCharityTestStore(t)
+	runner := &fakeRunner{responses: []fakeResponse{{
+		body:   []byte("data: {\"hello\"}\n\n"),
+		result: openai.AttemptResult{Success: true, Usage: openai.Usage{OutputTokens: 10, Present: true}},
+	}}}
+	svc, consumerID, keyIDs := seedServiceFixture(t, store, runner, 1, true, 10_000)
+
+	rec := &zeroByteResponseWriter{}
+	req := &openai.ChatRequest{Model: "[公益]donor/charity"}
+	result, err := svc.Forward(context.Background(), rec, consumerID, req)
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	if result.Committed {
+		t.Fatalf("result.Committed = true, want false (zero body bytes delivered)")
+	}
+	// The reservation was compensated back to `reserved` and then released.
+	var state string
+	store.DB().QueryRow(`SELECT state FROM charity_reservations LIMIT 1`).Scan(&state)
+	if state != "released" {
+		t.Fatalf("state = %q, want released (zero-byte sink must not charge)", state)
+	}
+	var credits int64
+	store.DB().QueryRow(`SELECT credits FROM users WHERE id=?`, consumerID).Scan(&credits)
+	if credits != 10_000 {
+		t.Fatalf("consumer credits = %d, want refunded to 10_000", credits)
+	}
+	var reserved int64
+	store.DB().QueryRow(`SELECT credits_reserved FROM donation_keys WHERE id=?`, keyIDs[0]).Scan(&reserved)
+	if reserved != 0 {
+		t.Fatalf("key credits_reserved = %d, want 0 (cap freed)", reserved)
+	}
+	var n int64
+	store.DB().QueryRow(`SELECT COUNT(*) FROM charity_reservations WHERE state='committed'`).Scan(&n)
+	if n != 0 {
+		t.Fatalf("committed rows = %d, want 0", n)
+	}
+}
+
+// TestServiceForwardZeroByteThenRetrySwapsAndReleases: a zero-byte sink
+// failure on the first donated key is compensated back to `reserved`, so the
+// swap to the next candidate succeeds (previously the stuck `dispatched` row
+// made the swap fail with an internal illegal-transition error). The same
+// broken client sink fails the second candidate too, so the reservation is
+// ultimately released and the user refunded. The regression value is that
+// the retry loop runs both candidates (runner called twice) and ends in a
+// clean release instead of an internal error.
+func TestServiceForwardZeroByteThenRetrySwapsAndReleases(t *testing.T) {
+	store := openCharityTestStore(t)
+	runner := &fakeRunner{responses: []fakeResponse{
+		{body: []byte("data: partial"), result: openai.AttemptResult{Success: true, Usage: openai.Usage{Present: true, OutputTokens: 1}}}, // key1: zero-byte sink failure
+		{body: []byte("ok"), result: openai.AttemptResult{Success: true, Usage: openai.Usage{Present: true, OutputTokens: 1}}},            // key2: zero-byte sink failure (same broken client)
+	}}
+	svc, consumerID, _ := seedServiceFixture(t, store, runner, 2, true, 10_000)
+
+	rec := &zeroByteResponseWriter{}
+	req := &openai.ChatRequest{Model: "[公益]donor/charity"}
+	result, err := svc.Forward(context.Background(), rec, consumerID, req)
+	if err != nil {
+		t.Fatalf("Forward: %v, want nil (compensation must not surface an internal error)", err)
+	}
+	if result.Committed {
+		t.Fatalf("result.Committed = true, want false (no bytes reached the broken client)")
+	}
+	if runner.callCount() != 2 {
+		t.Fatalf("runner calls = %d, want 2 (zero-byte compensated, swap succeeded, retried)", runner.callCount())
+	}
+	var n int64
+	store.DB().QueryRow(`SELECT COUNT(*) FROM charity_reservations`).Scan(&n)
+	if n != 1 {
+		t.Fatalf("reservations = %d, want 1", n)
+	}
+	var state string
+	store.DB().QueryRow(`SELECT state FROM charity_reservations`).Scan(&state)
+	if state != "released" {
+		t.Fatalf("state = %q, want released (all candidates failed, refund)", state)
+	}
+	var credits int64
+	store.DB().QueryRow(`SELECT credits FROM users WHERE id=?`, consumerID).Scan(&credits)
+	if credits != 10_000 {
+		t.Fatalf("consumer credits = %d, want refunded to 10_000", credits)
+	}
+}
+
+// TestServiceForwardShortWriteStaysDispatched: a partial write (n > 0 but n <
+// len) DOES cross the frozen dispatch boundary — bytes reached the client —
+// so the row stays `dispatched` and is NOT compensated. The service settles it
+// under the commit formula (unknown usage when the connector reports no valid
+// usage), never releasing after the client already received data.
+func TestServiceForwardShortWriteStaysDispatched(t *testing.T) {
+	store := openCharityTestStore(t)
+	runner := &fakeRunner{responses: []fakeResponse{{
+		body:   []byte("data: partial"),
+		result: openai.AttemptResult{Failure: openai.FailureUpstream, Diagnostic: "bad eof"},
+	}}}
+	svc, consumerID, _ := seedServiceFixture(t, store, runner, 1, true, 10_000)
+
+	rec := httptest.NewRecorder() // delivers all bytes (n = len)
+	req := &openai.ChatRequest{Model: "[公益]donor/charity"}
+	result, err := svc.Forward(context.Background(), rec, consumerID, req)
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	if !result.Committed {
+		t.Fatalf("result.Committed = false, want true (bytes were delivered)")
+	}
+	var state string
+	var unknown int
+	store.DB().QueryRow(`SELECT state, usage_unknown FROM charity_reservations`).Scan(&state, &unknown)
+	if state != "committed" || unknown != 1 {
+		t.Fatalf("state=%q unknown=%d, want committed/unknown (short write settles, never releases)", state, unknown)
+	}
+	var credits int64
+	store.DB().QueryRow(`SELECT credits FROM users WHERE id=?`, consumerID).Scan(&credits)
+	if credits != 10_000-500 {
+		t.Fatalf("consumer credits = %d, want %d (charged the discounted reserve)", credits, 10_000-500)
 	}
 }

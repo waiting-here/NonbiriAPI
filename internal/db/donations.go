@@ -915,6 +915,38 @@ func (s *Store) ListOwnDonationKeys(ctx context.Context, userID, donationID int6
 	return keys, nil
 }
 
+// ListDonationKeyIDsByDonor returns the ids of every donation key owned by
+// userID (through donations.user_id), regardless of approval state. It is the
+// lifecycle lookup used to forget the per-key admission limiter when a donor
+// account is deleted, so the limiter can reclaim the donor's key state
+// immediately instead of waiting for the time-aware sweep. It reads only ids
+// and never decrypts a key secret.
+func (s *Store) ListDonationKeyIDsByDonor(ctx context.Context, userID int64) ([]int64, error) {
+	if userID <= 0 {
+		return nil, ErrNotFound
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT dk.id FROM donation_keys dk
+JOIN donations d ON dk.donation_id = d.id
+WHERE d.user_id = ? ORDER BY dk.id`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list donation key ids by donor: %w", err)
+	}
+	defer rows.Close()
+	out := make([]int64, 0, 8)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan donation key id: %w", err)
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate donation key ids: %w", err)
+	}
+	return out, nil
+}
+
 func listDonationReviewsTx(ctx context.Context, tx *sql.Tx, donationID int64) ([]DonationReview, error) {
 	rows, err := tx.QueryContext(ctx, `
 SELECT id, donation_id, reviewer_user_id, reviewer_role, action, note, created_at
