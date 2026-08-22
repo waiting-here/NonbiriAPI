@@ -598,6 +598,7 @@ func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointSe
 	userCheckin := checkinHandler
 	userExport := userAuth.Middleware(exportHandler)
 	userDelete := userAuth.Middleware(httpmw.API(http.HandlerFunc(lifecycleService.DeleteOwnAccountHandler)))
+	userCharityModels := userAuth.Middleware(httpmw.API(charity.NewUserModelsHandler(charity.UserModelsDeps{Store: store})))
 	forwardHandler := auth.CallerKeyMiddleware(store, flowMiddleware.Wrap(forward.NewHandler(forward.HandlerDeps{Service: forwardService, Charity: charityService, Identity: forward.CallerIdentity})))
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -615,6 +616,10 @@ func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointSe
 			// Daily check-in (user station only; the shared user-session
 			// middleware enforces the station and the session).
 			userCheckin.ServeHTTP(w, r)
+		case path == "/api/charity/models":
+			// Charity price table (user station only; the shared user-session
+			// middleware enforces the station and the session).
+			userCharityModels.ServeHTTP(w, r)
 		case path == "/api/donations" || strings.HasPrefix(path, "/api/donations/"):
 			// Charity donation self-service (user station only).
 			donationsHandler.ServeHTTP(w, r)

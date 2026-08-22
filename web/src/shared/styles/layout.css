@@ -287,6 +287,178 @@
   border-color: color-mix(in srgb, var(--nb-color-warning) 60%, var(--nb-color-border));
 }
 
+.charity-model-card,
+.donation-card {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.charity-model-summary {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.charity-availability {
+  margin: 0;
+  color: var(--nb-color-text-muted);
+}
+
+.charity-rate {
+  position: relative;
+  display: grid;
+  width: 5.2rem;
+  min-height: 5.2rem;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.charity-rate svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.charity-rate circle {
+  fill: none;
+  stroke-width: 5;
+}
+
+.charity-rate-track {
+  stroke: var(--nb-color-border);
+}
+
+.charity-rate-value {
+  stroke: var(--nb-color-success);
+  stroke-linecap: round;
+  transition: stroke-dashoffset var(--nb-transition);
+}
+
+.charity-rate strong,
+.charity-rate span {
+  position: relative;
+  z-index: 1;
+}
+
+.charity-rate span {
+  margin-top: 2.25rem;
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.charity-price-wrap {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.charity-discount {
+  display: flex;
+  gap: 0.7rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin: 0;
+  color: var(--nb-color-danger);
+}
+
+.charity-discount span {
+  color: var(--nb-color-text-muted);
+  font-size: 0.86rem;
+}
+
+.table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.charity-price-table {
+  width: 100%;
+  min-width: 30rem;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.charity-price-table th,
+.charity-price-table td {
+  padding: 0.55rem 0.7rem;
+  border-bottom: 1px solid var(--nb-color-border);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.charity-price-table th:first-child,
+.charity-price-table td:first-child {
+  text-align: left;
+}
+
+.charity-price-table thead th {
+  color: var(--nb-color-text-muted);
+  font-size: 0.78rem;
+}
+
+.charity-original {
+  color: var(--nb-color-text-muted);
+}
+
+.charity-amount {
+  font-variant-numeric: tabular-nums;
+}
+
+.charity-price-note {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.segmented-control {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.segmented-control button {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--nb-color-border-strong);
+  border-radius: var(--nb-radius-sm);
+  background: var(--nb-color-surface-raised);
+  color: var(--nb-color-text-muted);
+  font-weight: 650;
+}
+
+.segmented-control button.is-selected {
+  border-color: var(--nb-color-accent);
+  background: var(--nb-color-accent-soft);
+  color: var(--nb-color-accent);
+}
+
+.key-picker,
+.donation-key-draft {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.8rem;
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-sm);
+}
+
+.key-picker legend,
+.donation-key-draft legend {
+  padding-inline: 0.35rem;
+  color: var(--nb-color-text);
+  font-weight: 700;
+}
+
+.donation-key-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.review-history {
+  border-top: 1px solid var(--nb-color-border);
+  padding-top: 0.7rem;
+}
+
 .item-meta,
 .muted,
 .page-muted {
