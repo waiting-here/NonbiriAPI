@@ -539,7 +539,7 @@ full-site log co-management route:
   `route_kind`, `endpoint_base_url`/`upstream_model_id` (for personal rows), `status_code`,
   token buckets and bounded `error_diag` — never a user-chosen platform model name, a note,
   a Discord identity, or any donated resource. No bulk CSV/JSON export is exposed here.
-- **Current state**: the donation review surface (`/api/steward/donations…`, §3.12) is mounted;
+- **Current state**: the donation review surface (`/api/steward/donations…`, §4.6) is mounted;
   charity model management is available under the same prefix (`/api/steward/charity-models…`, §4.6);
   full-site logs are available at `/api/steward/logs`. Sub-handlers receive only an opaque
   steward identity (user id + role); they never see another user's rows by construction of
@@ -674,6 +674,8 @@ Ban durations: presets are expressed as seconds (`3600` / `86400` / `604800` / `
 | `GET` | `/admin/api/overview/endpoints` | admin session | optional single-valued `page`, `page_size`, `filter` | `200 {data:[…], has_more}`; each row groups one stored canonical base_url: `{base_url, user_count, endpoint_count, key_count, users:[{user_id, endpoint_count, key_count, enabled_count}]}` | `invalid_request`, `unauthorized`, `forbidden`, `payload_too_large`, `internal` |
 
 Log paging is 1-based offset paging; `page_size` defaults to 20 and clamps to `[1,100]`. `from`/`to` are non-negative Unix seconds and `status` is `[100,599]`. Unknown, repeated, overlong, or malformed parameters are `invalid_request`. Filter semantics are frozen as exact equality: `user_id`, `endpoint_base_url` (against the stored dispatch snapshot), `upstream_model`, and `error_code` (an unknown code simply matches nothing). The administrator projection shows which actual endpoint base URL and upstream model served a request — never the user-chosen platform model name or any endpoint/key note. There is no user-station export.
+
+Level-5 stewards reach a separate full-site log list at `GET /api/steward/logs` on the user station (§3.10): the same metadata-only row shape and the same bounded filter/paging parameters, with `endpoint_base_url`, `upstream_model_id`, and `endpoint_key_id` blanked on `route_kind='charity'` rows so no donated resource is identifiable; there is no steward export.
 
 The CSV/JSON exports are not paginated: a selection exceeding the finite row bound, or a rendered payload exceeding the byte bound, fails closed with `payload_too_large` — output is never silently truncated. Every CSV cell is sanitized before rendering: a leading `=`, `+`, `-`, `@`, TAB, CR, LF, BOM, or Unicode whitespace character gets a single-quote prefix so spreadsheet applications never interpret it as a formula.
 

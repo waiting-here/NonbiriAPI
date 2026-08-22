@@ -394,9 +394,10 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		Runtime: runtimeApplier,
 	})
 	// The level-5 co-management frame: user-station session middleware plus a
-	// per-request live level>=5 gate. No business route is registered yet
-	// (later rails attach through steward.Handler.Handle); the frame itself
-	// still answers the prefix with the stable 403/404 envelopes.
+	// per-request live level>=5 gate. Business routes (donation reviews,
+	// charity model management, full-site logs) attach below through
+	// steward.Handler.Handle; an unregistered sub-path still answers with the
+	// stable 403/404 envelopes behind the gate.
 	stewardAPI := steward.New(steward.Deps{UserAuth: userAuth, Store: store})
 	checkinAPI := checkin.New(checkin.Deps{UserAuth: userAuth, Store: store})
 

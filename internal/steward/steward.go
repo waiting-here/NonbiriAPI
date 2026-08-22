@@ -15,10 +15,11 @@
 //   - sub-handlers receive only an opaque steward identity (user id + role),
 //     never a *db.User or any session material;
 //   - this package provides the mountable middleware/mux frame only. It
-//     registers NO business route itself: later rails (steward logs, donation
-//     reviews) attach through Handle, and an unregistered sub-path answers
-//     with the stable not_found envelope — but only AFTER the level-5 gate,
-//     so an under-privileged caller learns nothing beyond forbidden.
+//     registers NO business route itself: business rails (donation reviews,
+//     charity model management, full-site logs) attach through Handle at the
+//     integration rail, and an unregistered sub-path answers with the stable
+//     not_found envelope — but only AFTER the level-5 gate, so an
+//     under-privileged caller learns nothing beyond forbidden.
 package steward
 
 import (
