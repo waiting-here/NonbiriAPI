@@ -43,6 +43,7 @@ const (
 	CodeInsufficientCredits = "insufficient_credits"
 	CodeFeatureDisabled     = "feature_disabled"
 	CodeCharitySuspended    = "charity_suspended"
+	CodeContentTooShort     = "content_too_short"
 	// Check-in codes (additive alpha.2 wire contract): a second check-in on
 	// the same site-local day is a conflict, and the check-in credits-cap
 	// threshold is a platform admission refusal.
@@ -115,7 +116,7 @@ func (e Error) WithResourceLimit(resource string, limit int) Error {
 // avoid leaking structure about unhandled cases.
 func statusOf(code string) int {
 	switch code {
-	case CodeInvalidRequest:
+	case CodeInvalidRequest, CodeContentTooShort:
 		return http.StatusBadRequest
 	case CodeUnauthorized:
 		return http.StatusUnauthorized

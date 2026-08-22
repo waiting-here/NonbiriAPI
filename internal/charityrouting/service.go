@@ -86,6 +86,10 @@ type ServiceConfig struct {
 	Logger            *slog.Logger
 	Now               func() time.Time
 	ForwardTimeout    time.Duration
+	// PreflightHook runs after request decoding but before route reservation or
+	// any upstream dispatch. It is optional so the charity rail remains usable
+	// in focused tests and in deployments without the anti-abuse policy.
+	PreflightHook func(context.Context, int64, *openai.ChatRequest) error
 }
 
 // Service orchestrates one logical charity call end-to-end. Exactly one user
@@ -97,6 +101,7 @@ type Service struct {
 	logger            *slog.Logger
 	now               func() time.Time
 	timeout           time.Duration
+	preflight         func(context.Context, int64, *openai.ChatRequest) error
 	limits            *keyLimiter
 
 	mu      sync.Mutex
@@ -133,6 +138,7 @@ func NewService(config ServiceConfig) (*Service, error) {
 		logger:            config.Logger,
 		now:               config.Now,
 		timeout:           config.ForwardTimeout,
+		preflight:         config.PreflightHook,
 		limits:            newKeyLimiter(),
 		active:            make(map[int64]map[uint64]context.CancelFunc),
 	}, nil
@@ -210,6 +216,18 @@ func (s *Service) Close() error {
 	return nil
 }
 
+// Preflight is the narrow policy hook invoked by the charity forward rail
+// after decoding and route resolution, but before Forward creates a reservation.
+func (s *Service) Preflight(ctx context.Context, userID int64, request *openai.ChatRequest) error {
+	if s == nil || ctx == nil || userID <= 0 || request == nil {
+		return ErrInternal
+	}
+	if s.preflight == nil {
+		return nil
+	}
+	return s.preflight(ctx, userID, request)
+}
+
 // ListCallerModels returns the [公益]-namespace /v1/models projection. The
 // authoritative charity_enabled switch is read inside the store projection, so
 // a disabled site returns an empty list (never an error) and the shared
@@ -283,6 +301,15 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 	}
 	if len(route.Candidates) == 0 {
 		return openai.AttemptResult{}, ErrUnboundModel
+	}
+	// The anti-abuse hook runs only after the [公益] model and at least one
+	// candidate have resolved, but before any user/key reservation or upstream
+	// dispatch. Unknown models and empty candidate chains therefore never
+	// create a charity violation.
+	if s.preflight != nil {
+		if err := s.preflight(callCtx, userID, request); err != nil {
+			return openai.AttemptResult{}, err
+		}
 	}
 
 	attemptID, err := newAttemptID()

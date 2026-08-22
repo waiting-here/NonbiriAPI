@@ -81,6 +81,12 @@ type Config struct {
 	// UserLimits resolves a user's self-tuned cap; nil means the
 	// administrator default applies to every user.
 	UserLimits UserLimitResolver
+	// OnDenied is called only after an atomic admission denial has been
+	// classified. It is deliberately advisory: the callback must never make
+	// the forwarding path proceed without a metered admission. In particular,
+	// callers must only attribute RPMUserLimit to the user; global, capacity,
+	// and other shared-resource denials are not user violations.
+	OnDenied func(context.Context, int64, ratelimit.RPMReason)
 }
 
 // Controller is the shared, process-wide RPM admission boundary. One instance
@@ -88,6 +94,7 @@ type Config struct {
 type Controller struct {
 	limiter    *ratelimit.RPM
 	userLimits UserLimitResolver
+	onDenied   func(context.Context, int64, ratelimit.RPMReason)
 }
 
 // New constructs one shared Controller.
@@ -118,7 +125,7 @@ func newWithClock(config Config, clock ratelimit.Clock) (*Controller, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Controller{limiter: limiter, userLimits: config.UserLimits}, nil
+	return &Controller{limiter: limiter, userLimits: config.UserLimits, onDenied: config.OnDenied}, nil
 }
 
 func nilClock(clock ratelimit.Clock) bool {
@@ -169,12 +176,14 @@ func (c *Controller) Admit(ctx context.Context, userID int64) (*Reservation, tim
 		case errors.Is(err, ratelimit.ErrClosed):
 			return nil, 0, ErrClosed
 		case errors.Is(err, ratelimit.ErrCapacity):
+			c.notifyDenied(ctx, userID, decision.Reason)
 			return nil, boundedRetryAfter(decision.RetryAfter), ErrRateLimited
 		default:
 			return nil, 0, err
 		}
 	}
 	if reservation == nil || !decision.Allowed {
+		c.notifyDenied(ctx, userID, decision.Reason)
 		return nil, boundedRetryAfter(decision.RetryAfter), ErrRateLimited
 	}
 	return &Reservation{inner: reservation}, 0, nil
@@ -185,6 +194,13 @@ func (c *Controller) Admit(ctx context.Context, userID int64) (*Reservation, tim
 // (zero, negative, or above the ceiling) falls back to the ceiling rather
 // than being trusted; a value can never raise a user's budget above the
 // administrator's cap.
+func (c *Controller) notifyDenied(ctx context.Context, userID int64, reason ratelimit.RPMReason) {
+	if c == nil || c.onDenied == nil || reason == ratelimit.RPMAllowed {
+		return
+	}
+	c.onDenied(ctx, userID, reason)
+}
+
 func (c *Controller) clampUserLimit(userLimit int) int {
 	ceiling := c.limiter.Limits().PerUserLimit
 	if userLimit < 1 || userLimit > ceiling {

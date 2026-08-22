@@ -3,8 +3,10 @@ package forward
 import (
 	"context"
 	"errors"
+	"fmt"
 	"mime"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
@@ -46,12 +48,30 @@ type CharityRail interface {
 // material and are defined here (not in the charity routing package) so the
 // handler can match them without an import cycle.
 var (
-	ErrCharityModelNotFound = errors.New("charity: model not found")
-	ErrCharityUnboundModel  = errors.New("charity: model has no usable candidate")
-	ErrCharityDisabled      = errors.New("charity: charity routing is disabled")
-	ErrCharitySuspended     = errors.New("charity: caller charity eligibility is suspended")
-	ErrCharityKeysExhausted = errors.New("charity: all donation keys exhausted")
+	ErrCharityModelNotFound   = errors.New("charity: model not found")
+	ErrCharityUnboundModel    = errors.New("charity: model has no usable candidate")
+	ErrCharityDisabled        = errors.New("charity: charity routing is disabled")
+	ErrCharitySuspended       = errors.New("charity: caller charity eligibility is suspended")
+	ErrCharityKeysExhausted   = errors.New("charity: all donation keys exhausted")
+	ErrCharityContentTooShort = errors.New("charity: content is too short")
+	ErrAntiAbuseUnavailable   = errors.New("charity: anti-abuse policy unavailable")
 )
+
+// ContentTooShortError carries only bounded numeric policy context. It
+// unwraps to ErrCharityContentTooShort so the handler can keep one stable wire
+// code while still reporting actual and configured rune counts.
+type ContentTooShortError struct {
+	Actual  int
+	Minimum int
+}
+
+func (e *ContentTooShortError) Error() string {
+	if e == nil {
+		return ErrCharityContentTooShort.Error()
+	}
+	return fmt.Sprintf("charity content has %d characters; minimum is %d", e.Actual, e.Minimum)
+}
+func (e *ContentTooShortError) Unwrap() error { return ErrCharityContentTooShort }
 
 // HandlerDeps are the mountable exit handler's collaborators. The integration
 // layer wraps this handler in auth.CallerKeyMiddleware before registration.
@@ -220,6 +240,8 @@ func (h *Handler) charityChat(writer http.ResponseWriter, request *http.Request,
 			return
 		}
 		switch {
+		case errors.Is(err, ErrCharityContentTooShort), errors.Is(err, ErrAntiAbuseUnavailable), errors.Is(err, openai.ErrInvalidRequest):
+			h.writeCharityPreflightError(writer, err)
 		case errors.Is(err, ErrCharityModelNotFound):
 			writeError(writer, httperr.CodeNotFound, "model not found", "")
 		case errors.Is(err, ErrCharityUnboundModel):
@@ -243,6 +265,28 @@ func (h *Handler) charityChat(writer http.ResponseWriter, request *http.Request,
 	switch result.Failure {
 	case openai.FailureUpstream:
 		writeError(writer, httperr.CodeUpstream, "upstream request failed", result.Diagnostic)
+	default:
+		writeError(writer, httperr.CodeInternal, "internal error", "")
+	}
+}
+
+func (h *Handler) writeCharityPreflightError(writer http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrCharityContentTooShort):
+		message := "charity content is too short"
+		var tooShort *ContentTooShortError
+		if errors.As(err, &tooShort) && tooShort != nil && tooShort.Actual >= 0 && tooShort.Minimum >= 0 {
+			message = "charity content is too short: " + strconv.Itoa(tooShort.Actual) + " < " + strconv.Itoa(tooShort.Minimum)
+		}
+		writeError(writer, httperr.CodeContentTooShort, message, "")
+	case errors.Is(err, ErrCharitySuspended):
+		writeError(writer, httperr.CodeCharitySuspended, "charity eligibility is suspended", "")
+	case errors.Is(err, ErrCharityDisabled):
+		writeError(writer, httperr.CodeFeatureDisabled, "charity is disabled", "")
+	case errors.Is(err, openai.ErrInvalidRequest):
+		writeError(writer, httperr.CodeInvalidRequest, "invalid request", "")
+	case errors.Is(err, ErrAntiAbuseUnavailable):
+		writeError(writer, httperr.CodeServiceUnavailable, "service unavailable", "")
 	default:
 		writeError(writer, httperr.CodeInternal, "internal error", "")
 	}
