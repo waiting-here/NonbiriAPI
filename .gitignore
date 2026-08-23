@@ -130,6 +130,12 @@ dist/
 .vite/
 *.tsbuildinfo
 
+# Browser-test output. The committed configuration disables trace, screenshot,
+# and video capture; these paths cover Playwright's bounded runner metadata.
+web/test-results/
+web/playwright-report/
+web/blob-report/
+
 # TypeScript / tsc caches
 *.tsbuildinfo
 
