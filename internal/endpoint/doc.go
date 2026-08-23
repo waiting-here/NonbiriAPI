@@ -11,10 +11,11 @@
 //     ValidateBaseURL. This package never re-parses or simplifies URLs.
 //   - Connector: an authoritative Registry rejects unknown connector types
 //     with no silent protocol fallback (alpha: openai-compatible only).
-//   - Secret: upstream keys are sealed with internal/secret.Codec before they
-//     reach the repository; plaintext never enters SQL, logs, errors,
-//     responses, or cache. Listings expose only persisted head/tail display
-//     fragments, never the ciphertext, never the plaintext.
+//   - Secret: the repository allocates the key id and seals the upstream key
+//     with its authenticated user/endpoint/key/origin context in one database
+//     transaction. Plaintext never enters SQL, logs, errors, responses, or
+//     cache. Listings expose only persisted head/tail display fragments, never
+//     the ciphertext or plaintext.
 //   - Cap: endpoint creation does an atomic count-then-insert inside one
 //     transaction against min(global default, per-user override).
 //   - Cascade/invalidation: deleting an endpoint or key relies on the schema's

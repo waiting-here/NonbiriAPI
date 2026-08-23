@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
@@ -233,6 +234,30 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	if err != nil {
 		return nil, err
 	}
+	activityDaily, err := s.store.ListExportActivityDaily(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
+	creditLedger, err := s.store.ListExportCreditLedger(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
+	checkins, err := s.store.ListExportCheckins(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
+	donations, err := s.store.ListExportDonations(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
+	charityReservations, err := s.store.ListExportCharityReservations(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
+	donorRewards, err := s.store.ListExportDonorRewards(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
 
 	keysByEndpoint := make(map[int64][]exportKey, len(keys))
 	for _, key := range keys {
@@ -250,20 +275,27 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	}
 
 	packageValue := exportPackage{
-		SchemaVersion: 1,
+		SchemaVersion: 2,
 		ExportedAt:    time.Now().UTC(),
 		User: exportUser{
 			ID: user.ID, DiscordID: user.DiscordID, Username: user.Username, Avatar: user.Avatar,
-			Lang: user.Lang, EndpointLimit: user.EndpointLimit, RPMLimit: user.RPMLimit,
+			Lang: user.Lang, Credits: credits.FormatAmount(user.Credits),
+			DonationCredit: credits.FormatAmount(user.DonationCredit),
+			ManualLevel:    user.Level, AutoLevel: user.AutoLevel,
+			EndpointLimit: user.EndpointLimit, RPMLimit: user.RPMLimit,
 			CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt,
 		},
 		Endpoints: make([]exportEndpoint, 0, len(endpoints)),
 		Models:    make([]exportModel, 0, len(models)),
 		Usage: exportUsage{
-			TotalRequests:             usage.TotalRequests,
-			TotalPromptTokens:         usage.TotalPromptTokens,
-			TotalCompletionTokens:     usage.TotalCompletionTokens,
-			TotalUnknownUsageRequests: usage.TotalUnknownUsageRequests,
+			TotalRequests:              usage.TotalRequests,
+			TotalUncachedInputTokens:   usage.TotalUncachedInputTokens,
+			TotalCacheWriteInputTokens: usage.TotalCacheWriteInputTokens,
+			TotalCacheReadInputTokens:  usage.TotalCacheReadInputTokens,
+			TotalOutputTokens:          usage.TotalOutputTokens,
+			TotalPromptTokens:          usage.TotalPromptTokens,
+			TotalCompletionTokens:      usage.TotalCompletionTokens,
+			TotalUnknownUsageRequests:  usage.TotalUnknownUsageRequests,
 		},
 		LogSummary: exportLogSummary{
 			TotalLogs:        logSummary.TotalLogs,
@@ -272,6 +304,30 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 			UsageUnknownLogs: logSummary.UsageUnknownLogs,
 			AvgDurationMs:    logSummary.AvgDurationMs,
 		},
+		ActivityDaily:       make([]db.ActivityDailyExportRow, 0, len(activityDaily)),
+		CreditLedger:        make([]db.CreditLedgerExportRow, 0, len(creditLedger)),
+		Checkins:            make([]db.CheckinExportRow, 0, len(checkins)),
+		Donations:           make([]db.DonationExportRow, 0, len(donations)),
+		CharityReservations: make([]db.CharityReservationExportRow, 0, len(charityReservations)),
+		DonorRewards:        make([]db.DonorRewardExportRow, 0, len(donorRewards)),
+	}
+	for _, day := range activityDaily {
+		packageValue.ActivityDaily = append(packageValue.ActivityDaily, day)
+	}
+	for _, entry := range creditLedger {
+		packageValue.CreditLedger = append(packageValue.CreditLedger, entry)
+	}
+	for _, row := range checkins {
+		packageValue.Checkins = append(packageValue.Checkins, row)
+	}
+	for _, row := range donations {
+		packageValue.Donations = append(packageValue.Donations, row)
+	}
+	for _, row := range charityReservations {
+		packageValue.CharityReservations = append(packageValue.CharityReservations, row)
+	}
+	for _, row := range donorRewards {
+		packageValue.DonorRewards = append(packageValue.DonorRewards, row)
 	}
 	for _, ep := range endpoints {
 		packageValue.Endpoints = append(packageValue.Endpoints, exportEndpoint{
@@ -319,14 +375,47 @@ type exportPackage struct {
 	CallerKey     *exportCallerKey `json:"caller_key,omitempty"`
 	Usage         exportUsage      `json:"usage"`
 	LogSummary    exportLogSummary `json:"log_summary"`
+	// CreditLedger is the user's own append-only credit history (schema v2):
+	// kind, deltas, resulting balances and a bounded reason. Economic values
+	// are canonical decimal strings; the actor is an opaque nullable id.
+	CreditLedger []db.CreditLedgerExportRow `json:"credit_ledger"`
+	// ActivityDaily is the user's own per-day activity summary (schema v2):
+	// counters and site-local day keys only — no model names and no request
+	// content. The site-wide rollup table is never part of a personal export.
+	ActivityDaily []db.ActivityDailyExportRow `json:"activity_daily"`
+	// Checkins is the user's own check-in history (schema v2): the site-local
+	// calendar date and the granted award per day — no streak and no location
+	// data exists anywhere in the table.
+	Checkins []db.CheckinExportRow `json:"checkins"`
+	// Donations is the donor's own charity submissions (schema v2): safe
+	// metadata, per-key display fragments and limits as decimal strings, and
+	// the append-only review history. No secret, ciphertext, or key-note field
+	// exists on these rows by construction.
+	Donations []db.DonationExportRow `json:"donations"`
+	// CharityReservations is the consumer's own bounded reservation summary;
+	// it deliberately excludes donated-resource identifiers and URLs.
+	CharityReservations []db.CharityReservationExportRow `json:"charity_reservations"`
+	// DonorRewards is the donor's own reward summary; it never includes
+	// consumer identity or request data.
+	DonorRewards []db.DonorRewardExportRow `json:"donor_rewards"`
 }
 
 type exportUser struct {
-	ID            int64     `json:"id"`
-	DiscordID     string    `json:"discord_id"`
-	Username      string    `json:"username"`
-	Avatar        string    `json:"avatar"`
-	Lang          string    `json:"lang"`
+	ID        int64  `json:"id"`
+	DiscordID string `json:"discord_id"`
+	Username  string `json:"username"`
+	Avatar    string `json:"avatar"`
+	Lang      string `json:"lang"`
+	// Economic balances as canonical decimal strings: the signed consumption
+	// balance and the cumulative donor-reward balance.
+	Credits        string `json:"credits"`
+	DonationCredit string `json:"donation_credit"`
+	// Level state (small integer state values, not economic amounts):
+	// manual_level is the nullable manual override (null = automatic);
+	// auto_level is the persisted automatic high-water mark (1..4). No
+	// violation-window or threshold-configuration data is exported.
+	ManualLevel   *int      `json:"manual_level"`
+	AutoLevel     int       `json:"auto_level"`
 	EndpointLimit *int      `json:"endpoint_limit"`
 	RPMLimit      *int      `json:"rpm_limit"`
 	CreatedAt     time.Time `json:"created_at"`
@@ -385,7 +474,16 @@ type exportCallerKey struct {
 }
 
 type exportUsage struct {
-	TotalRequests             int64 `json:"total_requests"`
+	TotalRequests              int64 `json:"total_requests"`
+	TotalUncachedInputTokens   int64 `json:"total_uncached_input_tokens"`
+	TotalCacheWriteInputTokens int64 `json:"total_cache_write_input_tokens"`
+	TotalCacheReadInputTokens  int64 `json:"total_cache_read_input_tokens"`
+	TotalOutputTokens          int64 `json:"total_output_tokens"`
+	// Compatibility mirrors: total_prompt_tokens is the sum of the three
+	// input buckets, total_completion_tokens the output bucket. Rows recorded
+	// before cache-aware collection carry no cache split (their legacy totals
+	// were backfilled into the uncached/output buckets) and are never valid
+	// for retroactive billing of cache-differentiated pricing.
 	TotalPromptTokens         int64 `json:"total_prompt_tokens"`
 	TotalCompletionTokens     int64 `json:"total_completion_tokens"`
 	TotalUnknownUsageRequests int64 `json:"total_unknown_usage_requests"`

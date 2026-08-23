@@ -16,9 +16,11 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
 	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
@@ -28,6 +30,17 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
+
+// mustLocalBackend wraps the shared stack in the single production Backend so
+// adapter tests exercise the same delegation path as production wiring.
+func mustLocalBackend(t *testing.T, stack *egress.Stack) *backend.LocalBackend {
+	t.Helper()
+	local, err := backend.NewLocal(stack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return local
+}
 
 type fixedResolver struct{}
 
@@ -47,6 +60,13 @@ func (c *countingCodec) Seal(plaintext []byte) (string, error) { return c.vault.
 func (c *countingCodec) Open(ciphertext string) ([]byte, error) {
 	c.opens.Add(1)
 	return c.vault.Open(ciphertext)
+}
+func (c *countingCodec) SealForContext(plaintext []byte, credentialContext secret.EndpointKeyContext) (string, error) {
+	return c.vault.SealForContext(plaintext, credentialContext)
+}
+func (c *countingCodec) OpenForContext(ciphertext string, credentialContext secret.EndpointKeyContext) ([]byte, error) {
+	c.opens.Add(1)
+	return c.vault.OpenForContext(ciphertext, credentialContext)
 }
 
 type integrationFixture struct {
@@ -91,7 +111,9 @@ func newIntegrationFixture(t *testing.T, rpmConfig ratelimit.RPMConfig) *integra
 		t.Fatal(err)
 	}
 	codec := &countingCodec{vault: vault}
-	store, err := db.Open(filepath.Join(t.TempDir(), "flowcontrol.db"), codec)
+	dbPath := filepath.Join(t.TempDir(), "flowcontrol.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, codec)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatal(err)
@@ -116,20 +138,33 @@ func newIntegrationFixture(t *testing.T, rpmConfig ratelimit.RPMConfig) *integra
 		t.Fatal(err)
 	}
 	registry := endpoint.NewRegistry()
-	adapter, err := openai.NewAdapter(openai.AdapterConfig{Stack: stack})
+	adapter, err := openai.NewAdapter(openai.AdapterConfig{Backend: mustLocalBackend(t, stack)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	safetyIdentifierKey, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	safetyIdentifierFactory, err := forward.NewSafetyIdentifierFactory(safetyIdentifierKey)
+	clear(safetyIdentifierKey)
 	if err != nil {
 		t.Fatal(err)
 	}
 	runner, err := forward.NewSecureRunner(forward.SecureRunnerConfig{
-		Repository: store,
-		Secrets:    codec,
-		Registry:   registry,
-		Adapters:   []forward.Adapter{adapter},
+		Repository:        store,
+		Secrets:           codec,
+		Registry:          registry,
+		Adapters:          []forward.Adapter{adapter},
+		SafetyIdentifiers: safetyIdentifierFactory,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := forward.NewService(forward.ServiceConfig{Repository: store, Runner: runner})
+	service, err := forward.NewService(forward.ServiceConfig{
+		Repository: store,
+		Runner:     runner,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,6 +179,8 @@ func newIntegrationFixture(t *testing.T, rpmConfig ratelimit.RPMConfig) *integra
 	}
 	wrapped := auth.CallerKeyMiddleware(store, middleware.Wrap(exit))
 	t.Cleanup(func() {
+		_ = service.Close()
+		_ = safetyIdentifierFactory.Close()
 		controller.Close()
 		stack.CloseIdleConnections()
 		_ = store.Close()
@@ -182,11 +219,7 @@ func (f *integrationFixture) addRoute(t *testing.T, userID int64) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ciphertext, err := f.codec.Seal([]byte("sk-flowcontrol-upstream"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	keyRow, err := f.store.CreateEndpointKey(context.Background(), userID, endpointRow.ID, ciphertext, "head", "tail", "", true, time.Now().Unix())
+	keyRow, err := f.store.CreateEndpointKey(context.Background(), userID, endpointRow.ID, []byte("sk-flowcontrol-upstream"), "head", "tail", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}

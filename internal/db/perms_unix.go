@@ -1,0 +1,99 @@
+//go:build unix
+
+package db
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"syscall"
+)
+
+// secureDBParentDir verifies the database parent directory is owned by the
+// current effective user and grants no group or other access. The directory is
+// resolved through os.Stat (following a final symlink), so an operator may
+// relocate the database directory to another volume via a symlink as long as
+// the resolved target is owner-only. A pre-existing directory that is group-
+// or other-accessible, or owned by another account, fails closed: the database
+// contains encrypted upstream credentials and private account metadata, and
+// startup must not rely on the operator remembering a restrictive umask.
+func secureDBParentDir(dir string) error {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return fmt.Errorf("inspect database directory: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("database directory path is not a directory")
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		return fmt.Errorf("database directory must grant no group or other access")
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return fmt.Errorf("verify database directory ownership: unsupported stat type")
+	}
+	if stat.Uid != uint32(syscall.Geteuid()) {
+		return fmt.Errorf("database directory must be owned by the current user")
+	}
+	return nil
+}
+
+// secureDBFiles chmods the database file and its WAL/SHM sidecars to 0600 and
+// fstat-verifies each is owned by the current effective user with exactly that
+// mode. Each file is opened with O_NOFOLLOW so a symlink substituted at the
+// configured pathname is refused rather than followed: chmod never lands on an
+// unrelated target. Files that do not yet exist (for example a -wal that
+// SQLite has not created) are skipped; the integration test covers the modes
+// once they are actually produced. Any failure fails closed.
+func secureDBFiles(path string) error {
+	files := []struct {
+		path string
+		role string
+	}{
+		{path: path, role: "database file"},
+		{path: path + "-wal", role: "wal file"},
+		{path: path + "-shm", role: "shm file"},
+	}
+	for _, f := range files {
+		if err := secureOneDBFile(f.path, f.role); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func secureOneDBFile(path, role string) error {
+	if _, err := os.Lstat(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("inspect %s: %w", role, err)
+	}
+	// O_NOFOLLOW refuses a final-component symlink, so the descriptor is bound
+	// to the regular file at the configured pathname and a later fchmod cannot
+	// touch a substituted target.
+	fd, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return fmt.Errorf("open %s for permission check: %w", role, err)
+	}
+	defer func() { _ = fd.Close() }()
+
+	if err := syscall.Fchmod(int(fd.Fd()), 0o600); err != nil {
+		return fmt.Errorf("set %s to owner-only permissions: %w", role, err)
+	}
+	info, err := fd.Stat()
+	if err != nil {
+		return fmt.Errorf("verify %s permissions: %w", role, err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		return fmt.Errorf("%s permissions are not owner-only after chmod", role)
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return fmt.Errorf("verify %s ownership: unsupported stat type", role)
+	}
+	if stat.Uid != uint32(syscall.Geteuid()) {
+		return fmt.Errorf("%s must be owned by the current user", role)
+	}
+	return nil
+}

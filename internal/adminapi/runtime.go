@@ -9,6 +9,7 @@ package adminapi
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
@@ -19,7 +20,12 @@ import (
 // runtime singleton. Implementations must validate before mutating: a failed
 // ApplySiteConfig leaves runtime state unchanged, so the caller can fail
 // closed without a DB write. RevertSiteConfig restores runtime state for a
-// key to an earlier value after a persistence failure; it is best-effort.
+// key to an earlier value after a persistence failure. When the prior database
+// row was missing (the read returns the empty string), it restores the frozen
+// canonical default for the key instead, so a first-ever write whose
+// persistence fails cannot leave the runtime singleton in the just-applied
+// state while the database is still empty. It is best-effort: a revert against
+// an unwired singleton still fails closed.
 type RuntimeApplier interface {
 	ApplySiteConfig(ctx context.Context, key, value string) error
 	RevertSiteConfig(ctx context.Context, key, value string) error
@@ -46,18 +52,28 @@ type OAuthStartThrottleApplier interface {
 	Reconfigure(ratelimit.IPThrottleConfig) error
 }
 
+// MaintenanceGate is the maintenance admission singleton subset used by the
+// applier. It is the process-wide atomic gate maintained by internal/maintenance;
+// a live toggle takes effect for the next request without a restart or a
+// per-request DB read.
+type MaintenanceGate interface {
+	Set(bool)
+}
+
 // NewRuntimeApplier wires the shared process-wide singletons. A nil singleton
 // fails closed on the matching key. oauth may be nil when the integration rail
 // runs without the OAuth start admission throttle (DB-only persistence; values
-// take effect on the next restart).
-func NewRuntimeApplier(rpm RPMApplier, gate ConcurrencyApplier, oauth OAuthStartThrottleApplier) RuntimeApplier {
-	return &runtimeApplier{rpm: rpm, gate: gate, oauth: oauth}
+// take effect on the next restart). maintenance may be nil when the rail runs
+// without the server-side maintenance gate (DB-only persistence).
+func NewRuntimeApplier(rpm RPMApplier, gate ConcurrencyApplier, oauth OAuthStartThrottleApplier, maintenance MaintenanceGate) RuntimeApplier {
+	return &runtimeApplier{rpm: rpm, gate: gate, oauth: oauth, maintenance: maintenance}
 }
 
 type runtimeApplier struct {
-	rpm   RPMApplier
-	gate  ConcurrencyApplier
-	oauth OAuthStartThrottleApplier
+	rpm         RPMApplier
+	gate        ConcurrencyApplier
+	oauth       OAuthStartThrottleApplier
+	maintenance MaintenanceGate
 }
 
 func (a *runtimeApplier) ApplySiteConfig(_ context.Context, key, value string) error {
@@ -110,6 +126,16 @@ func (a *runtimeApplier) ApplySiteConfig(_ context.Context, key, value string) e
 			current.Penalty = time.Duration(n) * time.Second
 		}
 		return a.oauth.Reconfigure(current)
+	case KeyMaintenanceMode:
+		if a.maintenance == nil {
+			return errors.New("runtime applier: maintenance gate is not wired")
+		}
+		enabled, err := parseCanonicalBool(value)
+		if err != nil {
+			return err
+		}
+		a.maintenance.Set(enabled)
+		return nil
 	default:
 		// No runtime singleton backs this key (text keys, registration gate,
 		// alert preferences).
@@ -117,6 +143,33 @@ func (a *runtimeApplier) ApplySiteConfig(_ context.Context, key, value string) e
 	}
 }
 
-func (a *runtimeApplier) RevertSiteConfig(ctx context.Context, key, value string) error {
-	return a.ApplySiteConfig(ctx, key, value)
+func (a *runtimeApplier) RevertSiteConfig(ctx context.Context, key, previous string) error {
+	// A missing prior row (Get returns "") cannot be replayed: the canonical
+	// parsers reject the empty string, so without this fallback a persist
+	// failure after a first-ever write would fail the revert and leave the
+	// runtime singleton in the just-applied state while the database is still
+	// empty (DB/runtime drift). Restore the frozen canonical default for the
+	// key instead, matching the read path's behavior for a missing row.
+	if previous == "" {
+		previous = canonicalDefaultStored(key)
+	}
+	return a.ApplySiteConfig(ctx, key, previous)
+}
+
+// canonicalDefaultStored returns the canonical stored-string form of the
+// frozen default for a site_config key, used by RevertSiteConfig when the
+// prior database row was missing. Only int and bool keys can back a runtime
+// singleton; for every other key the result is "" and RevertSiteConfig is a
+// no-op anyway (ApplySiteConfig returns nil for keys without a singleton).
+func canonicalDefaultStored(key string) string {
+	spec, ok := knownSiteConfig[key]
+	if !ok {
+		return ""
+	}
+	switch spec.kind {
+	case kindInt, kindBool:
+		return strconv.Itoa(spec.def)
+	default:
+		return ""
+	}
 }

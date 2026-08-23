@@ -8,6 +8,10 @@ package forward_test
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base32"
+	"encoding/binary"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -21,9 +25,11 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
 	"github.com/waiting-here/NonbiriAPI/internal/forward"
@@ -31,6 +37,17 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
+
+// mustLocalBackend wraps the shared stack in the single production Backend so
+// adapter tests exercise the same delegation path as production wiring.
+func mustLocalBackend(t *testing.T, stack *egress.Stack) *backend.LocalBackend {
+	t.Helper()
+	local, err := backend.NewLocal(stack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return local
+}
 
 type auditFixture struct {
 	store    *db.Store
@@ -53,6 +70,30 @@ func auditChunk(content string) string {
 
 const auditUsageChunk = `{"id":"c","object":"chat.completion.chunk","created":1,"model":"up/model","choices":[],"usage":{"prompt_tokens":3,"completion_tokens":7,"total_tokens":10}}`
 
+func auditSafetyIdentifier(t *testing.T, vault *secret.Vault, userID int64, rawTarget string) string {
+	t.Helper()
+	key, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(key)
+	_, origin, err := egress.CanonicalEndpointTarget(rawTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	message := make([]byte, len(forward.SafetyIdentifierSubkeyInfo)+4+len(origin)+8)
+	copy(message, forward.SafetyIdentifierSubkeyInfo)
+	binary.BigEndian.PutUint32(message[len(forward.SafetyIdentifierSubkeyInfo):], uint32(len(origin)))
+	copy(message[len(forward.SafetyIdentifierSubkeyInfo)+4:], origin)
+	binary.BigEndian.PutUint64(message[len(forward.SafetyIdentifierSubkeyInfo)+4+len(origin):], uint64(userID))
+	mac := hmac.New(sha256.New, key)
+	_, _ = mac.Write(message)
+	clear(message)
+	digest := mac.Sum(nil)
+	defer clear(digest)
+	return "nbu_v3_" + base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(digest)
+}
+
 func newAuditFixture(t *testing.T, upstreamURLs []string, hooks forward.Hooks) *auditFixture {
 	return newAuditFixtureWithTimeout(t, upstreamURLs, hooks, 10*time.Second)
 }
@@ -65,7 +106,9 @@ func newAuditFixtureWithTimeout(t *testing.T, upstreamURLs []string, hooks forwa
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := db.Open(filepath.Join(t.TempDir(), "audit-forward.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "audit-forward.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatal(err)
@@ -87,19 +130,31 @@ func newAuditFixtureWithTimeout(t *testing.T, upstreamURLs []string, hooks forwa
 		t.Fatal(err)
 	}
 	registry := endpoint.NewRegistry()
-	adapter, err := openai.NewAdapter(openai.AdapterConfig{Stack: stack})
+	adapter, err := openai.NewAdapter(openai.AdapterConfig{Backend: mustLocalBackend(t, stack)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	safetyIdentifierKey, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	safetyIdentifierFactory, err := forward.NewSafetyIdentifierFactory(safetyIdentifierKey)
+	clear(safetyIdentifierKey)
 	if err != nil {
 		t.Fatal(err)
 	}
 	runner, err := forward.NewSecureRunner(forward.SecureRunnerConfig{
 		Repository: store, Secrets: vault, Registry: registry, Adapters: []forward.Adapter{adapter},
+		SafetyIdentifiers: safetyIdentifierFactory,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	service, err := forward.NewService(forward.ServiceConfig{
-		Repository: store, Runner: runner, Hooks: hooks,
-		Backoff: forward.BackoffConfig{Base: 5 * time.Millisecond, Max: 10 * time.Millisecond},
+		Repository: store,
+		Runner:     runner,
+		Hooks:      hooks,
+		Backoff:    forward.BackoffConfig{Base: 5 * time.Millisecond, Max: 10 * time.Millisecond},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -108,6 +163,8 @@ func newAuditFixtureWithTimeout(t *testing.T, upstreamURLs []string, hooks forwa
 	handler := auth.CallerKeyMiddleware(store, exit)
 	fixture := &auditFixture{store: store, vault: vault, stack: stack, handler: handler, service: service, hooks: hooks, registry: registry}
 	t.Cleanup(func() {
+		_ = service.Close()
+		_ = safetyIdentifierFactory.Close()
 		stack.CloseIdleConnections()
 		_ = store.Close()
 		_ = vault.Close()
@@ -154,11 +211,7 @@ func (f *auditFixture) addBinding(t *testing.T, userID, modelID int64, baseURL, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	ciphertext, err := f.vault.Seal([]byte(upstreamSecret))
-	if err != nil {
-		t.Fatal(err)
-	}
-	ek, err := f.store.CreateEndpointKey(context.Background(), userID, ep.ID, ciphertext, "head", "tail", "", true, time.Now().Unix())
+	ek, err := f.store.CreateEndpointKey(context.Background(), userID, ep.ID, []byte(upstreamSecret), "head", "tail", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,9 +265,14 @@ func TestAuditForwardStreamExplicitDoneAndUsage(t *testing.T) {
 	defer upstream.Close()
 	var usageMu sync.Mutex
 	var usageRecords []forward.UsageRecord
+	var attemptRecords []forward.AttemptRecord
 	hook := forward.Hooks{Usage: func(record forward.UsageRecord) {
 		usageMu.Lock()
 		usageRecords = append(usageRecords, record)
+		usageMu.Unlock()
+	}, Attempt: func(record forward.AttemptRecord) {
+		usageMu.Lock()
+		attemptRecords = append(attemptRecords, record)
 		usageMu.Unlock()
 	}}
 	fixture := newAuditFixture(t, []string{upstream.URL}, hook)
@@ -237,8 +295,16 @@ func TestAuditForwardStreamExplicitDoneAndUsage(t *testing.T) {
 	}
 	usageMu.Lock()
 	defer usageMu.Unlock()
-	if len(usageRecords) != 1 || !usageRecords[0].Usage.Present || usageRecords[0].Usage.TotalTokens != 10 || usageRecords[0].UsageUnknown {
+	if len(usageRecords) != 1 || !usageRecords[0].Usage.Present || usageRecords[0].Usage.UncachedInputTokens != 3 || usageRecords[0].Usage.OutputTokens != 7 || usageRecords[0].UsageUnknown {
 		t.Fatalf("usage records=%+v", usageRecords)
+	}
+	// The frozen log contract's dispatch-time canonical base-URL snapshot must
+	// reach both the attempt and the committed usage record.
+	if len(attemptRecords) != 1 || attemptRecords[0].EndpointBaseURL != upstream.URL {
+		t.Fatalf("attempt records=%+v", attemptRecords)
+	}
+	if usageRecords[0].EndpointBaseURL != upstream.URL {
+		t.Fatalf("usage endpoint_base_url = %q, want %q", usageRecords[0].EndpointBaseURL, upstream.URL)
 	}
 }
 
@@ -305,11 +371,22 @@ func TestAuditForwardPreCommitUpstreamErrorNoRetryByDefault(t *testing.T) {
 func TestAuditForwardSilentRetryFailoverOrdered(t *testing.T) {
 	// Two bindings: the first 500s before commit; with silent_retry on, the
 	// ordered selector advances to the second binding which succeeds.
-	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	safetyIDs := make(chan string, 2)
+	readSafety := func(r *http.Request) string {
+		body, _ := io.ReadAll(r.Body)
+		var payload struct {
+			Safety string `json:"safety_identifier"`
+		}
+		_ = json.Unmarshal(body, &payload)
+		return payload.Safety
+	}
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		safetyIDs <- readSafety(r)
 		http.Error(w, "boom", http.StatusInternalServerError)
 	}))
 	defer bad.Close()
-	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		safetyIDs <- readSafety(r)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"id":"ok","object":"chat.completion","created":1,"model":"up/model","choices":[{"index":0,"message":{"role":"assistant","content":"recovered"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`)
 	}))
@@ -327,6 +404,42 @@ func TestAuditForwardSilentRetryFailoverOrdered(t *testing.T) {
 	}
 	if failovers.Load() != 1 {
 		t.Fatalf("failovers=%d want 1", failovers.Load())
+	}
+	firstSafety, secondSafety := <-safetyIDs, <-safetyIDs
+	if firstSafety == "" || secondSafety == "" || firstSafety == secondSafety ||
+		!strings.HasPrefix(firstSafety, "nbu_v3_") || !strings.HasPrefix(secondSafety, "nbu_v3_") {
+		t.Fatalf("different-origin failover identifiers=%q,%q", firstSafety, secondSafety)
+	}
+}
+
+func TestAuditForwardFailoverSameOriginDifferentPathsKeepsSafetyIdentifier(t *testing.T) {
+	safetyIDs := make(chan string, 2)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var payload struct {
+			Safety string `json:"safety_identifier"`
+		}
+		_ = json.Unmarshal(body, &payload)
+		safetyIDs <- payload.Safety
+		if strings.HasPrefix(r.URL.Path, "/first/") {
+			http.Error(w, "boom", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"id":"ok","object":"chat.completion","created":1,"model":"up/model","choices":[{"index":0,"message":{"role":"assistant","content":"recovered"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`)
+	}))
+	defer upstream.Close()
+	fixture := newAuditFixture(t, []string{upstream.URL}, forward.Hooks{})
+	user := fixture.addUser(t)
+	modelID := fixture.addRoute(t, user.id, upstream.URL+"/first", "up/model", "sk-secret-audit", 0, true)
+	fixture.addBinding(t, user.id, modelID, upstream.URL+"/second", "up/model", "sk-secret-audit-2", 1)
+	rec := fixture.call(t, user, "/v1/chat/completions", `{"model":"provider/model","messages":[]}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%q", rec.Code, rec.Body.String())
+	}
+	firstSafety, secondSafety := <-safetyIDs, <-safetyIDs
+	if firstSafety == "" || firstSafety != secondSafety || !strings.HasPrefix(firstSafety, "nbu_v3_") {
+		t.Fatalf("same-origin path failover identifiers=%q,%q", firstSafety, secondSafety)
 	}
 }
 
@@ -354,11 +467,14 @@ func TestAuditForwardSafetyIdentifierInjected(t *testing.T) {
 	if !ok || safety == "" {
 		t.Fatalf("safety_identifier missing: %v", payload)
 	}
-	if want := forward.SafetyIdentifier(user.id); safety != want {
+	if want := auditSafetyIdentifier(t, fixture.vault, user.id, upstream.URL); safety != want {
 		t.Fatalf("safety_identifier=%q want=%q", safety, want)
 	}
-	if strings.Contains(safety, strconv.FormatInt(user.id, 10)) {
-		t.Fatalf("safety_identifier embeds the raw user id: %q", safety)
+	if len(safety) != 59 || !strings.HasPrefix(safety, "nbu_v3_") || strings.ContainsRune(safety, '=') {
+		t.Fatalf("safety_identifier has non-canonical v3 format: %q", safety)
+	}
+	if safety == strconv.FormatInt(user.id, 10) {
+		t.Fatalf("safety_identifier is the raw user id: %q", safety)
 	}
 }
 

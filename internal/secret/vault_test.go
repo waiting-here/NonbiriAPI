@@ -47,11 +47,11 @@ func TestSealOpenRoundTripUsesFreshNonce(t *testing.T) {
 		t.Fatal("ciphertext envelope contains the plaintext sample")
 	}
 
-	firstNonce, _, ok := parseEnvelope(first)
+	firstNonce, _, ok := parseEnvelope(first, legacyEnvelopePrefix)
 	if !ok {
 		t.Fatal("first envelope did not parse")
 	}
-	secondNonce, _, ok := parseEnvelope(second)
+	secondNonce, _, ok := parseEnvelope(second, legacyEnvelopePrefix)
 	if !ok {
 		t.Fatal("second envelope did not parse")
 	}
@@ -75,7 +75,7 @@ func TestOpenRejectsEveryTamperedNonceCiphertextAndTagByte(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Seal returned an error: %v", err)
 	}
-	nonce, sealed, ok := parseEnvelope(envelope)
+	nonce, sealed, ok := parseEnvelope(envelope, legacyEnvelopePrefix)
 	if !ok {
 		t.Fatal("fresh envelope did not parse")
 	}
@@ -111,7 +111,7 @@ func TestOpenStrictlyRejectsMalformedEnvelopes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Seal returned an error: %v", err)
 	}
-	nonce, sealed, ok := parseEnvelope(envelope)
+	nonce, sealed, ok := parseEnvelope(envelope, legacyEnvelopePrefix)
 	if !ok {
 		t.Fatal("fresh envelope did not parse")
 	}

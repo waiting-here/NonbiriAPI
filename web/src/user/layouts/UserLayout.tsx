@@ -19,10 +19,17 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/', end: true, key: 'home' },
   { to: '/endpoints', key: 'endpoints' },
   { to: '/models', key: 'models' },
+  { to: '/charity', key: 'charity' },
   { to: '/keys', key: 'keys' },
+  { to: '/logs', key: 'logs' },
   { to: '/issues', key: 'issues' },
   { to: '/account', key: 'account' },
 ];
+
+// The co-management entry appears only while the session reports effective
+// level 5. It is display polish only: the steward routes stay server-side
+// authorized and the page itself is a placeholder with no capability.
+const STEWARD_NAV_ITEM: NavItem = { to: '/steward', key: 'steward' };
 
 export function UserLayout() {
   const { t } = useTranslation();
@@ -83,6 +90,8 @@ export function UserLayout() {
 
   const signedIn = Boolean(session.data?.user);
   const profile = session.data?.user;
+  const showStewardEntry = profile?.effective_level === 5;
+  const navItems = showStewardEntry ? [...NAV_ITEMS, STEWARD_NAV_ITEM] : NAV_ITEMS;
   // Server nickname / avatar win over the global Discord profile; either may
   // be absent, in which case the global value (or nothing) is shown.
   const displayName = profile ? profile.guild_nick || profile.username : '';
@@ -139,7 +148,7 @@ export function UserLayout() {
           aria-label={t('user.shell.navLabel')}
         >
           <ul>
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <li key={item.key}>
                 <NavLink to={item.to} end={item.end} onClick={() => setMenuOpen(false)}>
                   {t(`user.${item.key}.nav`)}

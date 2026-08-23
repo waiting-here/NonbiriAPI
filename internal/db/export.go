@@ -12,6 +12,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/credits"
 )
 
 // ErrExportLimit reports that an export collection exceeded the finite bound.
@@ -125,6 +127,65 @@ LIMIT ?`, userID, limit+1)
 	return scanExportBindings(rows, limit)
 }
 
+// ActivityDailyExportRow is one site-local day of the user's own activity
+// summary for the export package. Metadata only: counters and day keys, no
+// model names, no request content.
+type ActivityDailyExportRow struct {
+	Day                   int64 `json:"day"`
+	ProductActive         bool  `json:"product_active"`
+	APIRequests           int64 `json:"api_requests"`
+	UncachedInputTokens   int64 `json:"uncached_input_tokens"`
+	CacheWriteInputTokens int64 `json:"cache_write_input_tokens"`
+	CacheReadInputTokens  int64 `json:"cache_read_input_tokens"`
+	OutputTokens          int64 `json:"output_tokens"`
+	Checkins              int64 `json:"checkins"`
+	ConsoleWrites         int64 `json:"console_writes"`
+	GameActive            bool  `json:"game_active"`
+	GameRounds            int64 `json:"game_rounds"`
+}
+
+// ListExportActivityDaily returns up to limit daily activity summary rows
+// owned by userID, newest day first. Retention bounds the table to 400 days,
+// so the collection is naturally finite; crossing the explicit limit still
+// fails closed like every other export projection.
+func (s *Store) ListExportActivityDaily(ctx context.Context, userID int64, limit int) ([]ActivityDailyExportRow, error) {
+	if userID <= 0 {
+		return nil, ErrNotFound
+	}
+	if limit <= 0 || limit > ExportCollectionLimit {
+		return nil, ErrExportLimit
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT day, product_active, api_requests,
+       uncached_input_tokens, cache_write_input_tokens, cache_read_input_tokens, output_tokens,
+       checkins, console_writes, game_active, game_rounds
+FROM user_activity_daily WHERE user_id=? ORDER BY day DESC LIMIT ?`, userID, limit+1)
+	if err != nil {
+		return nil, fmt.Errorf("export activity daily: %w", err)
+	}
+	defer rows.Close()
+	out := make([]ActivityDailyExportRow, 0, min(limit, 64))
+	for rows.Next() {
+		var row ActivityDailyExportRow
+		var productActive, gameActive int
+		if err := rows.Scan(&row.Day, &productActive, &row.APIRequests,
+			&row.UncachedInputTokens, &row.CacheWriteInputTokens, &row.CacheReadInputTokens, &row.OutputTokens,
+			&row.Checkins, &row.ConsoleWrites, &gameActive, &row.GameRounds); err != nil {
+			return nil, fmt.Errorf("export activity daily: %w", err)
+		}
+		row.ProductActive = productActive == 1
+		row.GameActive = gameActive == 1
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("export activity daily: %w", err)
+	}
+	if len(out) > limit {
+		return nil, ErrExportLimit
+	}
+	return out, nil
+}
+
 // ExportLogSummaryForUser aggregates the user's request-log metadata into one
 // bounded summary row. A user with no logs yields an all-zero summary, never
 // an error; a missing user yields ErrNotFound.
@@ -231,6 +292,130 @@ func scanExportBindings(rows *sql.Rows, limit int) ([]ModelBinding, error) {
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate export bindings: %w", err)
+	}
+	return out, nil
+}
+
+// DonationKeyExportRow is one donated key of the self-service export package:
+// persisted display fragments and charity-use limits only — never secret or
+// ciphertext material.
+type DonationKeyExportRow struct {
+	ID                   int64  `json:"id"`
+	EndpointKeyID        *int64 `json:"endpoint_key_id"`
+	DisplayHead          string `json:"display_head"`
+	DisplayTail          string `json:"display_tail"`
+	MaxConcurrency       int64  `json:"max_concurrency"`
+	RPMLimit             int64  `json:"rpm_limit"`
+	CreditsUsageCapMilli string `json:"credits_usage_cap_milli"`
+	CreditsUsedMilli     string `json:"credits_used_milli"`
+	Enabled              bool   `json:"enabled"`
+	CreatedAt            int64  `json:"created_at"`
+}
+
+// DonationReviewExportRow is one audit entry of the donor's own submission.
+type DonationReviewExportRow struct {
+	ID             int64  `json:"id"`
+	ReviewerUserID *int64 `json:"reviewer_user_id"`
+	ReviewerRole   string `json:"reviewer_role"`
+	Action         string `json:"action"`
+	Note           string `json:"note"`
+	CreatedAt      int64  `json:"created_at"`
+}
+
+// DonationExportRow is one donation of the self-service export package: safe
+// metadata (status, base-URL snapshot, description, expiry) plus keys and
+// review history. No note/secret/ciphertext field exists anywhere on these
+// rows by construction.
+type DonationExportRow struct {
+	ID              int64                     `json:"id"`
+	EndpointID      *int64                    `json:"endpoint_id"`
+	EndpointBaseURL string                    `json:"endpoint_base_url"`
+	Status          string                    `json:"status"`
+	Enabled         bool                      `json:"enabled"`
+	Description     string                    `json:"description"`
+	ReviewNote      string                    `json:"review_note"`
+	ExpiresAt       *int64                    `json:"expires_at"`
+	CreatedAt       int64                     `json:"created_at"`
+	Keys            []DonationKeyExportRow    `json:"keys"`
+	Reviews         []DonationReviewExportRow `json:"reviews"`
+}
+
+// ListExportDonations returns up to limit donations owned by userID in id
+// order for the self-service export (bounded, fail closed).
+func (s *Store) ListExportDonations(ctx context.Context, userID int64, limit int) ([]DonationExportRow, error) {
+	if userID <= 0 {
+		return nil, ErrNotFound
+	}
+	if limit <= 0 || limit > ExportCollectionLimit {
+		return nil, ErrExportLimit
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, endpoint_id, endpoint_base_url, status, enabled, description,
+       review_note, expires_at, created_at
+FROM donations WHERE user_id=? ORDER BY id LIMIT ?`, userID, limit+1)
+	if err != nil {
+		return nil, fmt.Errorf("export donations: %w", err)
+	}
+	defer rows.Close()
+	out := make([]DonationExportRow, 0, min(limit, 16))
+	for rows.Next() {
+		var (
+			r                     DonationExportRow
+			endpointID, expiresAt sql.NullInt64
+			enabledInt            int
+		)
+		if err := rows.Scan(&r.ID, &endpointID, &r.EndpointBaseURL, &r.Status, &enabledInt,
+			&r.Description, &r.ReviewNote, &expiresAt, &r.CreatedAt); err != nil {
+			return nil, fmt.Errorf("export donations: scan: %w", err)
+		}
+		r.Enabled = enabledInt == 1
+		r.EndpointID = nullInt64Ptr(endpointID)
+		r.ExpiresAt = nullInt64Ptr(expiresAt)
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("export donations: iterate: %w", err)
+	}
+	if len(out) > limit {
+		return nil, ErrExportLimit
+	}
+	for i := range out {
+		keys, err := listDonationKeysTx(ctx, s.db, out[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		out[i].Keys = make([]DonationKeyExportRow, 0, len(keys))
+		for _, k := range keys {
+			out[i].Keys = append(out[i].Keys, DonationKeyExportRow{
+				ID: k.ID, EndpointKeyID: k.EndpointKeyID,
+				DisplayHead: k.DisplayHead, DisplayTail: k.DisplayTail,
+				MaxConcurrency: k.MaxConcurrency, RPMLimit: k.RPMLimit,
+				CreditsUsageCapMilli: credits.FormatAmount(k.CreditsUsageCap),
+				CreditsUsedMilli:     credits.FormatAmount(k.CreditsUsed),
+				Enabled:              k.Enabled, CreatedAt: k.CreatedAt,
+			})
+		}
+		reviews, err := s.db.QueryContext(ctx, `
+SELECT id, reviewer_user_id, reviewer_role, action, note, created_at
+FROM donation_reviews WHERE donation_id=? ORDER BY id`, out[i].ID)
+		if err != nil {
+			return nil, fmt.Errorf("export donation reviews: %w", err)
+		}
+		for reviews.Next() {
+			var rv DonationReviewExportRow
+			var reviewer sql.NullInt64
+			if err := reviews.Scan(&rv.ID, &reviewer, &rv.ReviewerRole, &rv.Action, &rv.Note, &rv.CreatedAt); err != nil {
+				reviews.Close()
+				return nil, fmt.Errorf("export donation reviews: scan: %w", err)
+			}
+			rv.ReviewerUserID = nullInt64Ptr(reviewer)
+			out[i].Reviews = append(out[i].Reviews, rv)
+		}
+		if err := reviews.Err(); err != nil {
+			reviews.Close()
+			return nil, fmt.Errorf("export donation reviews: iterate: %w", err)
+		}
+		reviews.Close()
 	}
 	return out, nil
 }

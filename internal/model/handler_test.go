@@ -229,6 +229,26 @@ func TestHandlerModelConflictAndValidationCodes(t *testing.T) {
 	assertErr(t, rec, http.StatusRequestEntityTooLarge, httperr.CodePayloadTooLarge)
 }
 
+// TestHandlerCharityPrefixReadableRejection verifies that the reserved
+// charity-prefix rejection surfaces as invalid_request with a readable
+// message quoting the reserved prefix, on both create and update.
+func TestHandlerCharityPrefixReadableRejection(t *testing.T) {
+	h, _, _ := newTestHandler(t)
+
+	rec := doRequest(t, h, http.MethodPost, "/api/models", `{"provider":"[公益]donor","model":"m"}`)
+	assertErr(t, rec, http.StatusBadRequest, httperr.CodeInvalidRequest)
+	if env := decodeErrEnvelope(t, rec.Body.Bytes()); !strings.Contains(env.Error.Message, "[公益]") {
+		t.Fatalf("create rejection message = %q, want it to quote the reserved prefix", env.Error.Message)
+	}
+
+	doRequest(t, h, http.MethodPost, "/api/models", `{"provider":"p","model":"m"}`)
+	rec = doRequest(t, h, http.MethodPatch, "/api/models/1", `{"provider":"[公益]donor"}`)
+	assertErr(t, rec, http.StatusBadRequest, httperr.CodeInvalidRequest)
+	if env := decodeErrEnvelope(t, rec.Body.Bytes()); !strings.Contains(env.Error.Message, "[公益]") {
+		t.Fatalf("update rejection message = %q, want it to quote the reserved prefix", env.Error.Message)
+	}
+}
+
 func TestHandlerModelCrossUserNotFound(t *testing.T) {
 	h, ts, _ := newTestHandler(t)
 	other := ts.seedUser(t, "u2")

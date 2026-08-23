@@ -122,6 +122,65 @@ func (r *ChatRequest) Clear() {
 	r.fields = nil
 }
 
+// CharityTextRuneCount counts only caller-provided message text for the
+// charity pre-dispatch guard. The accepted range is deliberately narrow and
+// deterministic: messages[].content when it is a string, plus text parts in
+// messages[].content arrays where {"type":"text","text":"..."}. Roles,
+// names, tool calls, image URLs, and all other fields do not count. Counting
+// is Unicode-rune based, not token based, and never calls a tokenizer.
+func (r *ChatRequest) CharityTextRuneCount() (int, error) {
+	if r == nil {
+		return 0, ErrInvalidRequest
+	}
+	var raw json.RawMessage
+	for _, field := range r.fields {
+		if field.name == "messages" {
+			raw = field.value
+			break
+		}
+	}
+	if len(raw) == 0 {
+		return 0, nil
+	}
+	var messages []json.RawMessage
+	if err := json.Unmarshal(raw, &messages); err != nil {
+		return 0, ErrInvalidRequest
+	}
+	count := 0
+	for _, messageRaw := range messages {
+		var message map[string]json.RawMessage
+		if err := json.Unmarshal(messageRaw, &message); err != nil {
+			return 0, ErrInvalidRequest
+		}
+		content, ok := message["content"]
+		if !ok {
+			continue
+		}
+		var text string
+		if err := json.Unmarshal(content, &text); err == nil {
+			count += utf8.RuneCountInString(text)
+			continue
+		}
+		var parts []json.RawMessage
+		if err := json.Unmarshal(content, &parts); err != nil {
+			continue
+		}
+		for _, partRaw := range parts {
+			var part struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			}
+			if err := json.Unmarshal(partRaw, &part); err != nil {
+				return 0, ErrInvalidRequest
+			}
+			if part.Type == "text" {
+				count += utf8.RuneCountInString(part.Text)
+			}
+		}
+	}
+	return count, nil
+}
+
 // marshalUpstream replaces the caller's platform model and any forged
 // safety_identifier while retaining every other field. It writes a fresh JSON
 // object instead of mutating caller bytes in place, so duplicate-key ambiguity

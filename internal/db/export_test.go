@@ -23,7 +23,7 @@ func TestExportProjectionsOwnershipIsolation(t *testing.T) {
 	alice := seedTestUser(t, st, "alice", nil)
 	bob := seedTestUser(t, st, "bob", nil)
 	aEP := mustCreateTestEndpoint(t, st, alice, "https://alice.example/v1/")
-	key, err := st.CreateEndpointKey(ctx, alice, aEP.ID, "nbsec:v1:aes-256-gcm:test", "h", "t", "note", true, 1)
+	key, err := st.CreateEndpointKey(ctx, alice, aEP.ID, []byte("sk-export-ownership"), "h", "t", "note", true, 1)
 	if err != nil {
 		t.Fatalf("create key: %v", err)
 	}
@@ -75,11 +75,7 @@ func TestExportEndpointKeysNeverProjectCiphertext(t *testing.T) {
 	user := seedTestUser(t, st, "secret-user", nil)
 	ep := mustCreateTestEndpoint(t, st, user, "https://upstream.example/v1/")
 	plaintext := "sk-very-secret-upstream-material"
-	ciphertext, err := st.secrets.Seal([]byte(plaintext))
-	if err != nil {
-		t.Fatalf("seal: %v", err)
-	}
-	if _, err := st.CreateEndpointKey(ctx, user, ep.ID, ciphertext, "head", "tail", "note", true, 1); err != nil {
+	if _, err := st.CreateEndpointKey(ctx, user, ep.ID, []byte(plaintext), "head", "tail", "note", true, 1); err != nil {
 		t.Fatalf("create key: %v", err)
 	}
 
@@ -88,9 +84,10 @@ func TestExportEndpointKeysNeverProjectCiphertext(t *testing.T) {
 	if err := st.DB().QueryRow(`SELECT encrypted_secret FROM endpoint_keys`).Scan(&stored); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stored, "nbsec:v1:aes-256-gcm:") || strings.Contains(stored, plaintext) {
+	if !strings.Contains(stored, "nbsec:v2:aes-256-gcm:") || strings.Contains(stored, plaintext) {
 		t.Fatalf("stored envelope sanity check failed: %q", stored)
 	}
+	ciphertext := stored
 
 	keys, err := st.ListExportEndpointKeys(ctx, user, ExportCollectionLimit)
 	if err != nil {
@@ -155,9 +152,8 @@ func TestExportLogSummaryAggregates(t *testing.T) {
 		input.DurationMs = durationMs
 		input.UsageUnknown = unknown
 		if unknown {
-			input.PromptTokens = 0
-			input.CompletionTokens = 0
-			input.TotalTokens = 0
+			input.UncachedInputTokens = 0
+			input.OutputTokens = 0
 		}
 		input.StartedAt = now.Add(offset)
 		input.CompletedAt = now.Add(offset).Add(time.Second)

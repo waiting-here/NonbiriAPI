@@ -18,17 +18,10 @@
       "usageTitle": "Site usage",
       "usersTitle": "Recent user records",
       "endpointsTitle": "Endpoint overview",
-      "modelsTitle": "Model overview",
       "requests": "Requests",
-      "promptTokens": "Prompt tokens",
-      "completionTokens": "Completion tokens",
       "unknownUsage": "Unknown-usage requests",
-      "users": "Users",
-      "endpoints": "Endpoints",
-      "models": "Models",
       "viewUsers": "Open users",
-      "viewEndpoints": "Open endpoints",
-      "viewModels": "Open models"
+      "viewEndpoints": "Open endpoints"
     },
     "users": {
       "nav": "Users",
@@ -52,7 +45,7 @@
       "unban": "Unban",
       "delete": "Delete",
       "banTitle": "Ban this user?",
-      "banBody": "The server will invalidate this user's caller key and sessions immediately. Add a bounded reason if useful.",
+      "banSummary": "Ban type: {{duration}}. The server invalidates this user's sessions and caller keys immediately.",
       "banReason": "Reason",
       "banReasonPlaceholder": "Optional reason",
       "banConfirm": "Ban user",
@@ -76,7 +69,61 @@
       "deletePasswordRequired": "Enter the administrator password to continue.",
       "empty": "No users returned",
       "emptyBody": "The administrator API returned no user records.",
-      "avatar": "Avatar"
+      "avatar": "Avatar",
+      "manage": "Manage",
+      "manageHide": "Collapse",
+      "manageLimitsTitle": "Count limits",
+      "level": "Level",
+      "levelManualTag": "manual",
+      "levelAutoTag": "auto",
+      "balances": "Credits",
+      "creditsBalance": "Nonbiri credits",
+      "donationBalance": "Donor reward",
+      "exactMilli": "exact value: {{value}} milli-credits",
+      "economyTitle": "Credit adjustment",
+      "economyCreditsDelta": "Nonbiri credits delta (credits)",
+      "economyDonationDelta": "Donor reward delta (credits)",
+      "economyReason": "Reason (required)",
+      "economyReasonPlaceholder": "A bounded reason for this adjustment",
+      "economyHint": "Deltas are added to the current balance, not target balances. The unit is credits (up to three fraction digits; 1 credit = 1000 milli-credits); the exact milli-credit amount is applied. Either field may be blank; a blank field is not adjusted.",
+      "economyMissingDelta": "Enter at least one delta.",
+      "economyInvalidDelta": "A delta must be a decimal number (integer or up to three fraction digits, minus sign allowed), e.g. -1.5 or 2.5.",
+      "economyReasonRequired": "A reason is required.",
+      "economyRetryHint": "Resubmitting exactly the same values reuses the same operation id; the server will not apply it twice.",
+      "economyDone": "Applied: Nonbiri credits {{credits}}, donor reward {{donation}}.",
+      "economySubmit": "Apply adjustment",
+      "economyClear": "Clear",
+      "levelSectionTitle": "Level",
+      "levelAutoHighwater": "Automatic high-water",
+      "levelManualCurrent": "Current manual override",
+      "levelManualNone": "None (automatic)",
+      "levelControl": "Set level",
+      "levelAutoOption": "Automatic (currently Lv{{level}})",
+      "levelManualOption": "Manual Lv{{level}}",
+      "levelHint": "A manual override takes precedence over the automatic level; choosing \"Automatic\" clears the override.",
+      "levelSaved": "Level updated on the server.",
+      "levelApply": "Apply level",
+      "banSectionTitle": "Ban",
+      "banState": "Current state",
+      "banUntil": "{{time}} ({{remaining}} remaining)",
+      "banUntilShort": "until {{time}}",
+      "banRemaining": "{{days}}d {{hours}}h",
+      "banExpiring": "expiring",
+      "banPermanent": "Permanent ban",
+      "notBanned": "Not banned",
+      "banDuration": "Ban duration",
+      "banPresetLabel": "{{days}} days",
+      "banCustom": "Custom duration",
+      "banCustomValue": "Value",
+      "banCustomUnit": "Unit",
+      "banUnit": {
+        "minutes": "minutes",
+        "hours": "hours",
+        "days": "days"
+      },
+      "banCustomLabel": "{{value}} {{unit}}",
+      "banInvalidDuration": "Enter a valid ban duration (a positive whole number within the server limit).",
+      "banHint": "The duration starts now; the server stores the resulting absolute deadline."
     },
     "logs": {
       "nav": "Logs & usage",
@@ -84,54 +131,29 @@
       "description": "Metadata-only request logs and aggregate usage. Request and response content is not shown here.",
       "usageTitle": "Aggregate usage",
       "logsTitle": "Request logs",
-      "id": "Log ID",
-      "user": "User",
-      "model": "Model",
-      "statusCode": "Status",
-      "duration": "Duration",
-      "usage": "Usage",
-      "diagnostic": "Diagnostic",
-      "started": "Started",
-      "promptTokens": "Prompt",
-      "completionTokens": "Completion",
-      "totalTokens": "Total",
-      "unknownUsage": "Unknown usage",
+      "exportCsv": "Export CSV",
+      "exportJson": "Export JSON",
       "noLogs": "No log records",
-      "noLogsBody": "The administrator API returned no logs for this page."
+      "noLogsBody": "No logs match the current filters."
     },
     "endpoints": {
       "nav": "Endpoints",
       "title": "Endpoint overview",
-      "description": "Global endpoint metadata only. Plaintext upstream secrets are never returned to this station.",
+      "description": "Global endpoint metadata grouped by stored base URL. Plaintext upstream secrets and user-private notes are never returned to this station.",
       "listTitle": "Configured endpoints",
-      "owner": "Owner",
       "baseUrl": "Base URL",
-      "connector": "Connector",
+      "users": "Users",
+      "endpointCount": "Endpoints",
       "keys": "Keys",
-      "status": "Status",
-      "created": "Created",
-      "updated": "Updated",
+      "enabledCount": "Enabled endpoints",
+      "expand": "User entries",
+      "showUsers": "Show users",
+      "hideUsers": "Hide users",
+      "usersFor": "Users sharing {{url}}",
       "empty": "No endpoint records",
       "emptyBody": "The administrator API returned no endpoint overview records.",
-      "searchPlaceholder": "Search by base URL, note, or user ID",
-      "searchAria": "Search endpoints"
-    },
-    "models": {
-      "nav": "Models",
-      "title": "Model overview",
-      "description": "Global platform model metadata and binding counts, without upstream credentials.",
-      "listTitle": "Platform models",
-      "owner": "Owner",
-      "fullName": "Full name",
-      "strategy": "Strategy",
-      "bindings": "Bindings",
-      "created": "Created",
-      "ordered": "Ordered",
-      "random": "Random",
-      "empty": "No model records",
-      "emptyBody": "The administrator API returned no model overview records.",
-      "searchPlaceholder": "Search by provider, model, full name, or user ID",
-      "searchAria": "Search models"
+      "searchPlaceholder": "Filter by base URL substring",
+      "searchAria": "Filter endpoints by base URL"
     },
     "alerts": {
       "nav": "Alerts",
@@ -168,31 +190,142 @@
       "textValue": "Text setting",
       "invalidNumber": "Enter a valid number.",
       "saved": "Configuration updated on the server.",
+      "economy": {
+        "title": "Economy & levels",
+        "description": "Timezone, check-in and level thresholds. Validation and decisions run server-side on transactional snapshots; the browser caches none of these values.",
+        "timezoneTitle": "Site timezone",
+        "timezoneDescription": "The fixed timezone offset (minutes) used by check-in and daily activity rollups.",
+        "timezoneNotSet": "The site timezone must be configured first",
+        "timezoneNotSetBody": "Until it is set, check-in and daily activity collection stay disabled; regular users only see the same feature-unavailable notice.",
+        "timezoneFreezeWarning": "Note: once any check-in or daily activity data exists, the timezone is permanently frozen and later changes are refused by the server.",
+        "timezoneCurrent": "Current: {{value}}",
+        "timezoneInput": "Offset in minutes",
+        "timezoneInvalid": "Must be an integer between -720 and +840 and a multiple of 30.",
+        "checkinModeTitle": "Check-in switch",
+        "checkinModeDescription": "Three-way switch: open to all / level-gated (Lv3 and above) / off.",
+        "checkinMode": {
+          "enabled": "Open to all",
+          "level_gated": "Level-gated (Lv3 and above)",
+          "disabled": "Off"
+        },
+        "awardMinTitle": "Check-in award minimum (credits)",
+        "awardMinHint": "Default 40,000; cross-validated with the maximum — the minimum may not exceed it.",
+        "awardMaxTitle": "Check-in award maximum (credits)",
+        "awardMaxHint": "Default 60,000; cross-validated with the minimum.",
+        "capTitle": "Check-in threshold (credits)",
+        "capHint": "Default 250,000; 0 means no threshold. Once reached new check-ins are refused (effective level ≥ 3 bypasses); an admitted award is never truncated.",
+        "thresholdTitle": "Lv{{level}} automatic promotion threshold (credits)",
+        "thresholdHint": "Lazily evaluated against the cumulative donor reward balance; 0 disables that level's automatic promotion. Enabled thresholds must be strictly increasing or the server rejects the whole write.",
+        "amountInvalid": "Enter a valid credit amount (at most three decimal places)."
+      },
       "configKeys": {
-        "site_name": { "title": "Site name", "description": "Name shown on the user site pages and browser tab." },
-        "site_logo_url": { "title": "Site logo URL", "description": "Logo image URL shown in the site navigation (https preferred); blank shows the default mark." },
-        "default_locale": { "title": "Default locale", "description": "Interface language for first-time visitors; zh or en." },
-        "legal_privacy_override_zh": { "title": "Privacy policy override (Chinese)", "description": "Overrides the built-in privacy policy in Chinese; blank falls back to the template. Supports ## headings, - lists, > notes and paragraphs; newlines preserved." },
-        "legal_privacy_override_en": { "title": "Privacy policy override (English)", "description": "Overrides the built-in privacy policy in English; blank falls back to the template." },
-        "legal_terms_override_zh": { "title": "Terms of service override (Chinese)", "description": "Overrides the built-in terms of service in Chinese; blank falls back to the template." },
-        "legal_terms_override_en": { "title": "Terms of service override (English)", "description": "Overrides the built-in terms of service in English; blank falls back to the template." },
-        "legal_authoritative_locale": { "title": "Authoritative locale", "description": "Declares which language version prevails on conflict; zh or en; blank hides the notice." },
-        "default_endpoint_limit": { "title": "Default endpoint limit", "description": "Maximum number of endpoints each user can create." },
-        "default_endpoint_key_limit": { "title": "Default endpoint key limit", "description": "Maximum upstream keys each endpoint can hold." },
-        "default_model_limit": { "title": "Default model limit", "description": "Maximum platform models each user can create." },
-        "default_binding_limit": { "title": "Default binding limit", "description": "Maximum upstream bindings each platform model can configure." },
-        "default_rpm_per_user": { "title": "Default RPM per user", "description": "Maximum calls per minute each user can make." },
-        "global_rpm": { "title": "Global RPM", "description": "Total calls per minute across all users." },
-        "default_per_endpoint_concurrency": { "title": "Default per-endpoint concurrency", "description": "Maximum concurrent outbound requests per endpoint." },
-        "egress_global_concurrency": { "title": "Egress global concurrency", "description": "Maximum concurrent outbound requests shared across all endpoints." },
-        "discord_guild_id": { "title": "Discord guild ID", "description": "Discord server ID required for signup gating; blank disables gating." },
-        "discord_role_id": { "title": "Discord role ID", "description": "Discord server role ID required for signup; blank skips role check." },
-        "oauth_start_rate_limit": { "title": "OAuth start rate limit", "description": "Maximum Discord authorizations an IP can start within the window." },
-        "oauth_start_rate_window_seconds": { "title": "OAuth start rate window", "description": "Rate-limit window length in seconds for OAuth start." },
-        "oauth_start_rate_penalty_seconds": { "title": "OAuth start rate penalty", "description": "Seconds an IP is temporarily blocked after exceeding the OAuth start limit." },
-        "maintenance_mode": { "title": "Maintenance mode", "description": "When on, every user-station page shows a maintenance notice and no site features are usable; the admin station is unaffected. Once the level system lands, only users below the required level will see the notice." },
-        "registration_open": { "title": "Registration open", "description": "When off, new Discord sign-ups are rejected and redirected to a registration-closed notice; existing accounts still sign in." }
+        "site_name": {
+          "title": "Site name",
+          "description": "Name shown on the user site pages and browser tab."
+        },
+        "site_logo_url": {
+          "title": "Site logo URL",
+          "description": "Logo image URL shown in the site navigation (https preferred); blank shows the default mark."
+        },
+        "default_locale": {
+          "title": "Default locale",
+          "description": "Interface language for first-time visitors; zh or en."
+        },
+        "legal_privacy_override_zh": {
+          "title": "Privacy policy override (Chinese)",
+          "description": "Overrides the built-in privacy policy in Chinese; blank falls back to the template. Supports ## headings, - lists, > notes and paragraphs; newlines preserved."
+        },
+        "legal_privacy_override_en": {
+          "title": "Privacy policy override (English)",
+          "description": "Overrides the built-in privacy policy in English; blank falls back to the template."
+        },
+        "legal_terms_override_zh": {
+          "title": "Terms of service override (Chinese)",
+          "description": "Overrides the built-in terms of service in Chinese; blank falls back to the template."
+        },
+        "legal_terms_override_en": {
+          "title": "Terms of service override (English)",
+          "description": "Overrides the built-in terms of service in English; blank falls back to the template."
+        },
+        "legal_authoritative_locale": {
+          "title": "Authoritative locale",
+          "description": "Declares which language version prevails on conflict; zh or en; blank hides the notice."
+        },
+        "default_endpoint_limit": {
+          "title": "Default endpoint limit",
+          "description": "Maximum number of endpoints each user can create."
+        },
+        "default_endpoint_key_limit": {
+          "title": "Default endpoint key limit",
+          "description": "Maximum upstream keys each endpoint can hold."
+        },
+        "default_model_limit": {
+          "title": "Default model limit",
+          "description": "Maximum platform models each user can create."
+        },
+        "default_binding_limit": {
+          "title": "Default binding limit",
+          "description": "Maximum upstream bindings each platform model can configure."
+        },
+        "default_rpm_per_user": {
+          "title": "Default RPM per user",
+          "description": "Maximum calls per minute each user can make."
+        },
+        "global_rpm": {
+          "title": "Global RPM",
+          "description": "Total calls per minute across all users."
+        },
+        "default_per_endpoint_concurrency": {
+          "title": "Default per-endpoint concurrency",
+          "description": "Maximum concurrent outbound requests per endpoint."
+        },
+        "egress_global_concurrency": {
+          "title": "Egress global concurrency",
+          "description": "Maximum concurrent outbound requests shared across all endpoints."
+        },
+        "discord_guild_id": {
+          "title": "Discord guild ID",
+          "description": "Discord server ID required for signup; if this or the role ID is blank, new registration is paused."
+        },
+        "discord_role_id": {
+          "title": "Discord role ID",
+          "description": "Discord server role required for signup; if this or the guild ID is blank, new registration is paused."
+        },
+        "oauth_start_rate_limit": {
+          "title": "OAuth start rate limit",
+          "description": "Maximum Discord authorizations an IP can start within the window."
+        },
+        "oauth_start_rate_window_seconds": {
+          "title": "OAuth start rate window",
+          "description": "Rate-limit window length in seconds for OAuth start."
+        },
+        "oauth_start_rate_penalty_seconds": {
+          "title": "OAuth start rate penalty",
+          "description": "Seconds an IP is temporarily blocked after exceeding the OAuth start limit."
+        },
+        "maintenance_mode": {
+          "title": "Maintenance mode",
+          "description": "When on, the user web application is replaced by a maintenance notice; the admin web application is unaffected. This is a UI notice, not a server-side shutdown of /v1 or authenticated API routes."
+        },
+        "registration_open": {
+          "title": "Registration open",
+          "description": "When off, new Discord sign-ups are rejected and redirected to a registration-closed notice; existing accounts still sign in."
+        }
       }
+    },
+    "charity": {
+      "nav": "Charity",
+      "eyebrow": "Charity operations",
+      "title": "Charity and donation management",
+      "description": "Review donations, manage charity models and bindings, and configure charity safety controls. Every mutation is refetched from the server.",
+      "working": "Working…", "cancel": "Cancel", "save": "Save", "edit": "Edit", "delete": "Delete", "provider": "Provider", "model": "Model", "pricingMode": "Pricing mode", "perRequest": "Per request", "perToken": "Per token", "enabled": "Enabled", "disabled": "Disabled", "prices": "Prices and donor rewards (milli-credits)", "amountHint": "Canonical non-negative milli-credit strings are sent to the server; no floating-point conversion is used.",
+      "request_user_price_milli": "Request user price", "request_donor_reward_milli": "Request donor reward", "uncached_user_price_milli": "Uncached input user price", "cache_write_user_price_milli": "Cache-write input user price", "cache_read_user_price_milli": "Cache-read input user price", "output_user_price_milli": "Output user price", "uncached_donor_reward_milli": "Uncached input donor reward", "cache_write_donor_reward_milli": "Cache-write input donor reward", "cache_read_donor_reward_milli": "Cache-read input donor reward", "output_donor_reward_milli": "Output donor reward",
+      "discount": "Limited-time discount", "discountPercent": "Discount percentage (0–100; 100 = original)", "discountEnabled": "Discount enabled", "discountStart": "Start (optional)", "discountEnd": "End (optional)", "discountHint": "The interval is [start, end). Leaving both empty makes the enabled discount immediate with no end.", "providerInvalid": "Provider and model are required; the [公益] prefix is reserved for charity models.", "discountInvalid": "Discount percentage must be an integer from 0 through 100.", "amountInvalid": "Every price must be a canonical non-negative integer string.", "discountIntervalInvalid": "Discount dates must be valid and end after start.", "newModel": "Add charity model", "editModel": "Edit charity model", "modelsTitle": "Charity models and bindings", "noModels": "No charity models", "noModelsBody": "Create a charity model only after its donation resources are ready.", "successRate": "{{rate}}% success over {{count}} recent calls",
+      "bindings": "Bindings", "donationKey": "Donation key", "donationKeyId": "Donation key ID", "keyFragmentUnavailable": "Key fragment unavailable", "upstreamModel": "Upstream model ID", "order": "Order", "actions": "Actions", "addBinding": "Add binding", "bindingInvalid": "Enter a numeric donation key ID, upstream model ID and order.", "noBindings": "No bindings", "deleteBindingConfirm": "Delete this charity binding?",
+      "donationsTitle": "Donation review queue", "statusFilter": "Donation status", "allStatuses": "All statuses", "noDonations": "No donations", "noDonationsBody": "No donation records match this status.", "donationNumber": "Donation #{{id}}", "expires": "Expiry", "expiryHint": "Leave blank for no expiry.", "submitter": "Submitter ID", "expiresAt": "Expires {{value}}", "loadingDetails": "Refreshing key limits and review history…", "reviewNote": "Review note", "approve": "Approve donation", "reject": "Reject donation", "enable": "Enable donation", "disable": "Disable donation", "saveKeyLimits": "Save key limits", "reviewHistory": "Review history", "deleteDonationTitle": "Soft-delete this donation?", "deleteDonationBody": "This releases active claims and stops future charity routing while retaining review history.", "deleteModelTitle": "Delete this charity model?", "deleteModelBody": "This removes the model only when the server permits it; active bindings may cause a conflict.", "pagination": "Donation pages", "previous": "Previous", "next": "Next", "keyHidden": "Key fragment unavailable", "maxConcurrency": "Max concurrency (0 = unlimited)", "rpmLimit": "Requests per minute (0 = unlimited)", "usageCap": "Usage cap (milli-credits; 0 = unlimited)", "usageUsed": "Used: {{value}} milli-credits",
+      "status": { "pending": "Pending", "approved": "Approved", "rejected": "Rejected", "deleted": "Deleted", "expired": "Expired" }, "priceRequest": "Each request", "priceUncached": "Uncached input", "priceCacheWrite": "Cache write", "priceCacheRead": "Cache read", "priceOutput": "Output", "settingsTitle": "Charity site controls", "settingsDescription": "These settings are live and affect routing or admission. The token reserve is nullable: null means not configured and token pricing fails closed.", "charityEnabled": "Charity system", "donationAcceptEnabled": "Accept new donations", "tokenReserve": "Global token reserve (milli-credits)", "tokenReserveNull": "Not configured (null) is distinct from an explicit zero and cannot enable token pricing.", "notConfigured": "Not configured (null)", "on": "On", "off": "Off", "dangerConfirmTitle": "Confirm live charity setting", "dangerConfirmBody": "This changes live charity admission or routing. Confirm only if the operational change is intended.", "confirm": "Confirm",
+      "antiAbuse": { "charity_min_chars": "Minimum charity input characters", "charity_violation_deduct_milli": "Violation deduction (milli-credits)", "charity_violation_ban_seconds": "Immediate ban duration (seconds)", "charity_violation_window_seconds": "Violation window (seconds)", "charity_violation_ban_threshold": "Window ban threshold", "charity_violation_window_ban_seconds": "Window ban duration (seconds)", "charity_suspend_window_seconds": "Suspension window (seconds)", "charity_suspend_threshold": "Suspension threshold", "charity_suspend_duration_seconds": "Suspension duration (seconds)", "rpm_ban_threshold": "RPM ban threshold", "rpm_ban_window_seconds": "RPM ban window (seconds)", "rpm_ban_duration_seconds": "RPM ban duration (seconds)" }
     }
-  }
+  },
+  "user": { "charity": { "priceCaption": "Charity model prices and donor rewards", "priceType": "Item", "userPrice": "User charge", "donorReward": "Donor reward", "originalPrice": "Original price", "currentPrice": "Current user price", "discountFree": "Limited-time free", "discountPercent": "Limited-time {{percent}}% off", "discountRemaining": "{{time}} remaining", "requestUnit": "Per request; final settlement is server-side.", "tokenUnit": "Per million tokens; four buckets are settled server-side." } }
 }

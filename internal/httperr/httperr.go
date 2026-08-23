@@ -37,6 +37,27 @@ const (
 	CodeUpstream              = "upstream"
 	CodeServiceUnavailable    = "service_unavailable"
 	CodeResourceLimitExceeded = "resource_limit_exceeded"
+	// Economy / feature-gate codes are reserved now (403) so later phases can
+	// emit a stable machine identifier without renumbering the wire contract.
+	// No business trigger is wired in this task.
+	CodeInsufficientCredits = "insufficient_credits"
+	CodeFeatureDisabled     = "feature_disabled"
+	CodeCharitySuspended    = "charity_suspended"
+	CodeContentTooShort     = "content_too_short"
+	// Check-in codes (additive alpha.2 wire contract): a second check-in on
+	// the same site-local day is a conflict, and the check-in credits-cap
+	// threshold is a platform admission refusal.
+	CodeAlreadyCheckedIn  = "already_checked_in"
+	CodeCheckinCapReached = "checkin_cap_reached"
+)
+
+// Source is the stable origin attribution every error carries. It tells the
+// caller whether a failure is the platform's own decision (admission,
+// authorization, maintenance, accounting, feature gate) or a propagated
+// upstream failure, so a client never has to infer it from a message prefix.
+const (
+	SourcePlatform = "platform"
+	SourceUpstream = "upstream"
 )
 
 const (
@@ -48,6 +69,7 @@ const (
 // Error is the inner "error" object of the envelope.
 type Error struct {
 	Code      string `json:"code"`
+	Source    string `json:"source"`
 	Message   string `json:"message"`
 	Diag      string `json:"diag,omitempty"`
 	RequestID string `json:"request_id,omitempty"`
@@ -94,15 +116,16 @@ func (e Error) WithResourceLimit(resource string, limit int) Error {
 // avoid leaking structure about unhandled cases.
 func statusOf(code string) int {
 	switch code {
-	case CodeInvalidRequest:
+	case CodeInvalidRequest, CodeContentTooShort:
 		return http.StatusBadRequest
 	case CodeUnauthorized:
 		return http.StatusUnauthorized
-	case CodeForbidden:
+	case CodeForbidden, CodeElevationRequired, CodeInsufficientCredits, CodeFeatureDisabled,
+		CodeCharitySuspended, CodeCheckinCapReached:
 		return http.StatusForbidden
 	case CodeNotFound:
 		return http.StatusNotFound
-	case CodeConflict:
+	case CodeConflict, CodeAlreadyCheckedIn:
 		return http.StatusConflict
 	case CodeMethodNotAllowed:
 		return http.StatusMethodNotAllowed
@@ -110,8 +133,6 @@ func statusOf(code string) int {
 		return http.StatusTooManyRequests
 	case CodePayloadTooLarge:
 		return http.StatusRequestEntityTooLarge
-	case CodeElevationRequired:
-		return http.StatusForbidden
 	case CodeUpstream:
 		return http.StatusBadGateway
 	case CodeUnboundModel, CodeServiceUnavailable:
@@ -123,8 +144,42 @@ func statusOf(code string) int {
 	}
 }
 
-// WriteError writes the uniform error envelope with the code's HTTP status and
-// Cache-Control: no-store.
+// deriveSource returns the stable source attribution for an error, locked to
+// the code. CodeUpstream is the only upstream-origin code, so it is always
+// upstream; every other code — including the unknown-code fallback — is always
+// platform. An explicit caller-supplied source is honored only when it matches
+// that code-derived value, so an upstream code can never be relabeled platform
+// and a platform code can never be relabeled upstream. Any other explicit
+// value (including an empty string from a hand-constructed Error, an invalid
+// string, or wrong casing) is dropped in favor of the code-derived default.
+// This runs at the wire sink so a caller that builds an Error directly can
+// neither omit source nor forge a different attribution than its code.
+func deriveSource(code, source string) string {
+	derived := SourcePlatform
+	if code == CodeUpstream {
+		derived = SourceUpstream
+	}
+	if source == derived {
+		return source
+	}
+	return derived
+}
+
+// WithSource sets an explicit source attribution. It is honored at the wire
+// sink only when it matches the value derived from the code (upstream for
+// CodeUpstream, platform for every other code), so it can confirm but never
+// override the code-derived attribution: an explicit value that disagrees
+// with the code is dropped in favor of the derived default. Most callers omit
+// it; the sink derives source from the code for every error.
+func (e Error) WithSource(source string) Error {
+	e.Source = source
+	return e
+}
+
+// WriteError writes the uniform error envelope with the code's HTTP status,
+// a stable source attribution, and Cache-Control: no-store. Source is
+// derived/validated here — the single wire sink — so a hand-constructed Error
+// can neither omit source nor forge a different attribution than its code.
 func WriteError(w http.ResponseWriter, e Error) {
 	// Error is exported for inspection and tests, so callers can construct one
 	// without New/WithDiag. Re-apply every wire-boundary sanitizer here; a
@@ -139,6 +194,7 @@ func WriteError(w http.ResponseWriter, e Error) {
 		e.Code = CodeInternal
 		status = http.StatusInternalServerError
 	}
+	e.Source = deriveSource(e.Code, e.Source)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
@@ -153,6 +209,45 @@ func WriteJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+// sseErrorPayload is the compact {error:{code,source,message}} shape shared by
+// the JSON envelope and an SSE error frame emitted after the commit boundary.
+// It deliberately omits diag/request_id/limit/resource: an in-stream frame has
+// no HTTP headers to carry them and the contract pins it to those three fields.
+type sseErrorPayload struct {
+	Error sseErrorBody `json:"error"`
+}
+
+type sseErrorBody struct {
+	Code    string `json:"code"`
+	Source  string `json:"source"`
+	Message string `json:"message"`
+}
+
+// SSEErrorFrame returns a complete "data: <json>\n\n" SSE frame carrying the
+// same stable {error:{code,source,message}} shape as the JSON envelope, for an
+// error emitted after the response commit boundary where a fresh HTTP envelope
+// can no longer be written. Source is derived/validated exactly as in
+// WriteError, so an already-started stream cannot forge a different source
+// attribution or rely on a message prefix. The message is sanitized at this
+// sink; code is coerced to internal when empty. The returned frame is safe to
+// write verbatim onto a text/event-stream response.
+func SSEErrorFrame(e Error) []byte {
+	if e.Code == "" {
+		e.Code = CodeInternal
+	}
+	payload := sseErrorPayload{Error: sseErrorBody{
+		Code:    e.Code,
+		Source:  deriveSource(e.Code, e.Source),
+		Message: sanitizeMessage(e.Message),
+	}}
+	encoded, _ := json.Marshal(payload)
+	frame := make([]byte, 0, len(encoded)+8)
+	frame = append(frame, "data: "...)
+	frame = append(frame, encoded...)
+	frame = append(frame, '\n', '\n')
+	return frame
 }
 
 // sanitizeMessage bounds to msgBound runes and strips all control characters.

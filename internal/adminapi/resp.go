@@ -5,7 +5,12 @@ package adminapi
 // plaintext, session material, upstream secret, ciphertext, or request
 // content: the projection is built from the repository's safe user row only.
 
-import "github.com/waiting-here/NonbiriAPI/internal/db"
+import (
+	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/credits"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+)
 
 // userResp is one bounded admin user row: identity, ban metadata, per-user
 // limits, and the server-authoritative usage totals. endpoint_limit /
@@ -17,6 +22,9 @@ type userResp struct {
 	DiscordID                 string `json:"discord_id"`
 	IsBanned                  bool   `json:"is_banned"`
 	BannedReason              string `json:"banned_reason"`
+	BannedUntil               *int64 `json:"banned_until"`
+	AutoBanned                bool   `json:"auto_banned"`
+	CharitySuspendedUntil     *int64 `json:"charity_suspended_until"`
 	EndpointLimit             *int   `json:"endpoint_limit"`
 	RPMLimit                  *int   `json:"rpm_limit"`
 	Lang                      string `json:"lang"`
@@ -24,7 +32,29 @@ type userResp struct {
 	TotalPromptTokens         int64  `json:"total_prompt_tokens"`
 	TotalCompletionTokens     int64  `json:"total_completion_tokens"`
 	TotalUnknownUsageRequests int64  `json:"total_unknown_usage_requests"`
-	CreatedAt                 int64  `json:"created_at"`
+	// Economic balances are canonical decimal strings (never JSON numbers):
+	// credits_balance is the signed consumption balance, the
+	// donation_credit_balance name keeps a delta adjustment response from
+	// being confused with the resulting balance.
+	CreditsBalance        string `json:"credits_balance"`
+	DonationCreditBalance string `json:"donation_credit_balance"`
+	// Level state: level is the nullable manual override (null = automatic);
+	// auto_level is the persisted automatic high-water mark (1..4). The
+	// effective level is NOT projected here — it is resolved authoritatively
+	// per use by the level resolver, and list reads must not trigger lazy
+	// promotions. The administrator row is never projected through this shape.
+	Level     *int  `json:"level"`
+	AutoLevel int   `json:"auto_level"`
+	CreatedAt int64 `json:"created_at"`
+}
+
+// unixSecondsPtr projects a nullable deadline as a JSON number pointer.
+func unixSecondsPtr(t *time.Time) *int64 {
+	if t == nil {
+		return nil
+	}
+	v := t.Unix()
+	return &v
 }
 
 // userListResp is one page of users plus the explicit has_more flag, so the
@@ -45,6 +75,9 @@ func userResponse(u *db.User) userResp {
 		DiscordID:                 u.DiscordID,
 		IsBanned:                  u.IsBanned,
 		BannedReason:              u.BannedReason,
+		BannedUntil:               unixSecondsPtr(u.BannedUntil),
+		AutoBanned:                u.AutoBanned,
+		CharitySuspendedUntil:     unixSecondsPtr(u.CharitySuspendedUntil),
 		EndpointLimit:             u.EndpointLimit,
 		RPMLimit:                  u.RPMLimit,
 		Lang:                      u.Lang,
@@ -52,6 +85,10 @@ func userResponse(u *db.User) userResp {
 		TotalPromptTokens:         u.TotalPromptTokens,
 		TotalCompletionTokens:     u.TotalCompletionTokens,
 		TotalUnknownUsageRequests: u.TotalUnknownUsageRequests,
+		CreditsBalance:            credits.FormatAmount(u.Credits),
+		DonationCreditBalance:     credits.FormatAmount(u.DonationCredit),
+		Level:                     u.Level,
+		AutoLevel:                 u.AutoLevel,
 		CreatedAt:                 u.CreatedAt.Unix(),
 	}
 }

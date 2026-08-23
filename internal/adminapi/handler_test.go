@@ -10,14 +10,19 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -65,7 +70,9 @@ func newEnv(t *testing.T) *env {
 		t.Fatalf("secret.New: %v", err)
 	}
 	t.Cleanup(func() { _ = vault.Close() })
-	store, err := db.Open(filepath.Join(t.TempDir(), "adminapi.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "adminapi.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
 	if err != nil {
 		t.Fatalf("db.Open: %v", err)
 	}
@@ -719,22 +726,22 @@ func TestSiteConfigPatchTypedAndRuntimeApply(t *testing.T) {
 		key  string
 		body any
 	}{
-		{"global_rpm", map[string]any{"value": "1200"}},   // string for an int key
-		{"global_rpm", map[string]any{"value": 0}},        // below minimum
-		{"global_rpm", map[string]any{"value": 4097}},     // above the limiter ceiling
-		{"global_rpm", map[string]any{"value": 1.5}},      // non-integral
-		{"global_rpm", map[string]any{"value": nil}},      // null rejected
-		{"site_name", map[string]any{"value": 42}},        // number for a text key
-		{"site_name", map[string]any{"value": ""}},        // non-empty required
-		{"site_name", map[string]any{"value": "a\nb"}},    // control character
-		{"default_locale", map[string]any{"value": "fr"}}, // locale whitelist
-		{"default_locale", map[string]any{"value": "zh"}}, // valid (checked below)
-		{"legal_authoritative_locale", map[string]any{"value": "fr"}},  // optional locale whitelist
-		{"legal_authoritative_locale", map[string]any{"value": ""}},   // valid empty (checked below)
-		{"legal_authoritative_locale", map[string]any{"value": "zh"}}, // valid (checked below)
-		{"legal_terms_override_zh", map[string]any{"value": 42}},                // number for a multiline key
+		{"global_rpm", map[string]any{"value": "1200"}},                      // string for an int key
+		{"global_rpm", map[string]any{"value": 0}},                           // below minimum
+		{"global_rpm", map[string]any{"value": 4097}},                        // above the limiter ceiling
+		{"global_rpm", map[string]any{"value": 1.5}},                         // non-integral
+		{"global_rpm", map[string]any{"value": nil}},                         // null rejected
+		{"site_name", map[string]any{"value": 42}},                           // number for a text key
+		{"site_name", map[string]any{"value": ""}},                           // non-empty required
+		{"site_name", map[string]any{"value": "a\nb"}},                       // control character
+		{"default_locale", map[string]any{"value": "fr"}},                    // locale whitelist
+		{"default_locale", map[string]any{"value": "zh"}},                    // valid (checked below)
+		{"legal_authoritative_locale", map[string]any{"value": "fr"}},        // optional locale whitelist
+		{"legal_authoritative_locale", map[string]any{"value": ""}},          // valid empty (checked below)
+		{"legal_authoritative_locale", map[string]any{"value": "zh"}},        // valid (checked below)
+		{"legal_terms_override_zh", map[string]any{"value": 42}},             // number for a multiline key
 		{"legal_terms_override_zh", map[string]any{"value": "bad\x00value"}}, // disallowed control char
-		{"legal_terms_override_zh", map[string]any{"value": "valid\nline"}},   // valid multiline (checked below)
+		{"legal_terms_override_zh", map[string]any{"value": "valid\nline"}},  // valid multiline (checked below)
 		{"default_endpoint_limit", map[string]any{"value": -1}},
 		{"default_endpoint_key_limit", map[string]any{"value": 0}}, // below min=1
 		{"default_model_limit", map[string]any{"value": 0}},        // below min=1
@@ -908,6 +915,15 @@ func TestSiteConfigPatchPersistFailureRevertsRuntime(t *testing.T) {
 	}
 }
 
+// recordingGate records the maintenance-gate Set calls and can fail neither;
+// it stands in for internal/maintenance.Gate so the applier test does not couple
+// to that package.
+type recordingGate struct {
+	enabled bool
+}
+
+func (g *recordingGate) Set(enabled bool) { g.enabled = enabled }
+
 // TestRuntimeApplierRealSingletons drives the real flowcontrol controller and
 // the real egress gate through the applier, proving the apply path accepts
 // every registry-valid value and fails closed on an unwired singleton.
@@ -923,7 +939,7 @@ func TestRuntimeApplierRealSingletons(t *testing.T) {
 	}
 	defer stack.CloseIdleConnections()
 
-	applier := NewRuntimeApplier(controller, stack, nil)
+	applier := NewRuntimeApplier(controller, stack, nil, nil)
 	if err := applier.ApplySiteConfig(context.Background(), "global_rpm", "900"); err != nil {
 		t.Fatalf("apply global_rpm: %v", err)
 	}
@@ -971,14 +987,14 @@ func TestRuntimeApplierRealSingletons(t *testing.T) {
 		t.Fatalf("global limit after failed apply = %d, want 500", limits.GlobalLimit)
 	}
 	// An unwired singleton fails closed on its own keys only.
-	brokenRPM := NewRuntimeApplier(nil, stack, nil)
+	brokenRPM := NewRuntimeApplier(nil, stack, nil, nil)
 	if err := brokenRPM.ApplySiteConfig(context.Background(), "global_rpm", "600"); err == nil {
 		t.Fatalf("apply with nil rpm controller: want error")
 	}
 	if err := brokenRPM.ApplySiteConfig(context.Background(), "egress_global_concurrency", "32"); err != nil {
 		t.Fatalf("apply with wired egress gate: %v", err)
 	}
-	brokenGate := NewRuntimeApplier(controller, nil, nil)
+	brokenGate := NewRuntimeApplier(controller, nil, nil, nil)
 	if err := brokenGate.ApplySiteConfig(context.Background(), "egress_global_concurrency", "32"); err == nil {
 		t.Fatalf("apply with nil egress gate: want error")
 	}
@@ -987,11 +1003,460 @@ func TestRuntimeApplierRealSingletons(t *testing.T) {
 	}
 }
 
+// TestRuntimeApplierMaintenanceGateLiveApplies covers the maintenance_mode
+// live-apply branch: the canonical "1"/"0" flips the wired gate, a non-canonical
+// value fails closed with no state change, a nil gate fails closed on its key
+// only, and revert restores the previous state.
+func TestRuntimeApplierMaintenanceGateLiveApplies(t *testing.T) {
+	controller, err := flowcontrol.New(flowcontrol.Config{RPM: ratelimit.DefaultRPMConfig()})
+	if err != nil {
+		t.Fatalf("flowcontrol.New: %v", err)
+	}
+	defer controller.Close()
+	stack, err := egress.NewStack(egress.StackOptions{})
+	if err != nil {
+		t.Fatalf("egress.NewStack: %v", err)
+	}
+	defer stack.CloseIdleConnections()
+
+	gate := &recordingGate{}
+	applier := NewRuntimeApplier(controller, stack, nil, gate)
+	if gate.enabled {
+		t.Fatalf("gate starts enabled")
+	}
+	if err := applier.ApplySiteConfig(context.Background(), KeyMaintenanceMode, "1"); err != nil {
+		t.Fatalf("apply maintenance_mode=1: %v", err)
+	}
+	if !gate.enabled {
+		t.Fatalf("gate not enabled after apply 1")
+	}
+	if err := applier.ApplySiteConfig(context.Background(), KeyMaintenanceMode, "0"); err != nil {
+		t.Fatalf("apply maintenance_mode=0: %v", err)
+	}
+	if gate.enabled {
+		t.Fatalf("gate still enabled after apply 0")
+	}
+	// Revert with the previous value restores it.
+	if err := applier.RevertSiteConfig(context.Background(), KeyMaintenanceMode, "1"); err != nil {
+		t.Fatalf("revert maintenance_mode=1: %v", err)
+	}
+	if !gate.enabled {
+		t.Fatalf("gate not enabled after revert to 1")
+	}
+	// A non-canonical value fails closed and leaves the gate unchanged.
+	for _, bad := range []string{"true", "false", "yes", "", "2"} {
+		if err := applier.ApplySiteConfig(context.Background(), KeyMaintenanceMode, bad); err == nil {
+			t.Fatalf("apply maintenance_mode=%q: want error", bad)
+		}
+	}
+	if !gate.enabled {
+		t.Fatalf("gate changed after failed apply")
+	}
+	// A nil gate fails closed on maintenance_mode only (other keys still work).
+	noGate := NewRuntimeApplier(controller, stack, nil, nil)
+	if err := noGate.ApplySiteConfig(context.Background(), KeyMaintenanceMode, "1"); err == nil {
+		t.Fatalf("apply with nil gate: want error")
+	}
+	if err := noGate.ApplySiteConfig(context.Background(), "global_rpm", "600"); err != nil {
+		t.Fatalf("apply global_rpm with nil gate: %v", err)
+	}
+}
+
+// TestMaintenanceGatePersistFailureRevertsRuntime covers the DB/runtime
+// consistency step for maintenance_mode specifically: a successful runtime apply
+// (gate flips on) followed by a persistence failure must revert the runtime gate
+// back to its previous value, so the database and the live gate cannot drift.
+func TestMaintenanceGatePersistFailureRevertsRuntime(t *testing.T) {
+	controller, err := flowcontrol.New(flowcontrol.Config{RPM: ratelimit.DefaultRPMConfig()})
+	if err != nil {
+		t.Fatalf("flowcontrol.New: %v", err)
+	}
+	defer controller.Close()
+	stack, err := egress.NewStack(egress.StackOptions{})
+	if err != nil {
+		t.Fatalf("egress.NewStack: %v", err)
+	}
+	defer stack.CloseIdleConnections()
+	gate := &recordingGate{}
+	applier := NewRuntimeApplier(controller, stack, nil, gate)
+
+	// Seed the gate off, then apply "1" with a persist that fails: the runtime
+	// gate must revert to the previous (off) value, not stay on.
+	if err := applier.ApplySiteConfig(context.Background(), KeyMaintenanceMode, "0"); err != nil {
+		t.Fatalf("seed apply 0: %v", err)
+	}
+	if gate.enabled {
+		t.Fatalf("gate not off after seed")
+	}
+	persistErr := fmt.Errorf("disk full")
+	err = applyThenPersist(context.Background(), applier, KeyMaintenanceMode, "1", "0", func() error {
+		return persistErr
+	})
+	if err == nil || !errors.Is(err, persistErr) {
+		t.Fatalf("applyThenPersist err = %v, want the persist error", err)
+	}
+	if gate.enabled {
+		t.Fatalf("gate stayed on after a persist failure; runtime did not revert to the previous off value")
+	}
+
+	// A failed runtime apply leaves the gate untouched (no persist call, no
+	// revert), matching the global fail-closed contract.
+	gate.enabled = true
+	brokenApply := &runtimeApplier{maintenance: gate}
+	// Force the maintenance branch to fail by feeding a non-canonical value.
+	if err := applyThenPersist(context.Background(), brokenApply, KeyMaintenanceMode, "yes", "1", func() error {
+		t.Fatalf("persist must not run after a failed apply")
+		return nil
+	}); err == nil {
+		t.Fatalf("applyThenPersist with a non-canonical maintenance value: want error")
+	}
+	if !gate.enabled {
+		t.Fatalf("gate changed after a failed apply")
+	}
+}
+
+// TestRuntimeApplierRevertMissingRowUsesCanonicalDefault covers the missing-row
+// revert path: when the prior database row is absent the handler reads an
+// empty previous, so a persist failure after a first-ever write must revert
+// the runtime singleton to the frozen canonical default for the key — not fail
+// on the empty string and leave the singleton in the just-applied state. This
+// holds for every runtime key (bool and int), matching each key's frozen
+// default rather than only patching the bool case.
+func TestRuntimeApplierRevertMissingRowUsesCanonicalDefault(t *testing.T) {
+	persistErr := errors.New("disk full")
+
+	// maintenance_mode (bool): frozen canonical default is false ("0").
+	gate := &recordingGate{}
+	maintApplier := NewRuntimeApplier(nil, nil, nil, gate)
+	if err := applyThenPersist(context.Background(), maintApplier, KeyMaintenanceMode, "1", "", func() error {
+		return persistErr
+	}); err == nil || !errors.Is(err, persistErr) {
+		t.Fatalf("maintenance missing-row err = %v, want the persist error", err)
+	}
+	if gate.enabled {
+		t.Fatalf("maintenance gate stayed on after a missing-row persist failure; want revert to canonical default false")
+	}
+
+	// global_rpm (int): frozen canonical default is DefaultRPMGlobalLimit. The
+	// controller starts at that default; applying a new value then failing the
+	// persist must revert to the same default, not the empty string.
+	controller, err := flowcontrol.New(flowcontrol.Config{RPM: ratelimit.DefaultRPMConfig()})
+	if err != nil {
+		t.Fatalf("flowcontrol.New: %v", err)
+	}
+	defer controller.Close()
+	if limits := controller.Limits(); limits.GlobalLimit != ratelimit.DefaultRPMGlobalLimit {
+		t.Fatalf("controller default = %d, want %d", limits.GlobalLimit, ratelimit.DefaultRPMGlobalLimit)
+	}
+	rpmApplier := NewRuntimeApplier(controller, nil, nil, nil)
+	if err := applyThenPersist(context.Background(), rpmApplier, KeyGlobalRPM, "1200", "", func() error {
+		return persistErr
+	}); err == nil || !errors.Is(err, persistErr) {
+		t.Fatalf("rpm missing-row err = %v, want the persist error", err)
+	}
+	if limits := controller.Limits(); limits.GlobalLimit != ratelimit.DefaultRPMGlobalLimit {
+		t.Fatalf("global limit after missing-row revert = %d, want canonical default %d", limits.GlobalLimit, ratelimit.DefaultRPMGlobalLimit)
+	}
+}
+
+// TestParseCanonicalBoolByteExact covers that parseCanonicalBool accepts only
+// the exact bytes "1"/"0". Surrounding whitespace (which an earlier TrimSpace
+// would have silently accepted) is rejected, so a corrupted or hand-edited row
+// can never flip the runtime singleton through a whitespace-padded value.
+func TestParseCanonicalBoolByteExact(t *testing.T) {
+	for _, ok := range []string{"0", "1"} {
+		v, err := parseCanonicalBool(ok)
+		if err != nil {
+			t.Fatalf("parseCanonicalBool(%q) err = %v", ok, err)
+		}
+		if v != (ok == "1") {
+			t.Fatalf("parseCanonicalBool(%q) = %v", ok, v)
+		}
+	}
+	for _, bad := range []string{"", " ", " 1", "1 ", " 0 ", "\t1", "1\n", "true", "false", "TRUE", "yes", "2", "01"} {
+		if _, err := parseCanonicalBool(bad); err == nil {
+			t.Fatalf("parseCanonicalBool(%q) = nil, want error", bad)
+		}
+	}
+}
+
+// TestSiteConfigPatchConcurrentUpdatesKeepDBAndRuntimeConsistent verifies the
+// per-handler serialization of the site-config read→apply→persist→revert step.
+// Concurrent PATCHes to the same runtime key cannot interleave, so once they
+// all settle the persisted database value and the live runtime singleton agree
+// (no drift), regardless of which value won. This is stronger than asserting
+// each response is merely a valid status code: it proves apply and persist
+// orders cannot diverge under concurrency.
+//
+// The applier drives the real atomic maintenance.Gate (race-free under
+// concurrent Set) and yields the scheduler right after the live apply. The
+// yield widens the apply→persist window so concurrent patches exercise real
+// scheduler interleaving under the race detector; the per-handler lock keeps
+// each patch's read→apply→persist→revert step atomic, so once all patches
+// settle the persisted database value and the live gate agree (no drift). The
+// deterministic serialization test below pins one patch inside its apply to
+// prove the per-handler lock is what prevents drift.
+func TestSiteConfigPatchConcurrentUpdatesKeepDBAndRuntimeConsistent(t *testing.T) {
+	e := newEnv(t)
+	gate := maintenance.New()
+	applier := &yieldingGateApplier{gate: gate}
+	// Mount ONCE so every concurrent request shares the same Handler (and its
+	// site-config serialization mutex); mounting per request would hand each
+	// request a fresh Handler/mutex and defeat the test.
+	h := e.mount(t, applier)
+	cookie := e.adminCookie(t)
+
+	bodyOn, _ := json.Marshal(map[string]any{"value": true})
+	bodyOff, _ := json.Marshal(map[string]any{"value": false})
+	patch := func(body []byte) {
+		req := withCookie(stationRequest(http.MethodPatch, "/admin/api/site-config/"+KeyMaintenanceMode, host.StationAdmin, body), cookie)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("patch status=%d body=%s", rec.Code, rec.Body.String())
+		}
+	}
+	// Seed a known starting state (row present, gate off) so the first revert
+	// path is well-defined, then hammer concurrent toggles.
+	patch(bodyOff)
+
+	const goroutines, iters = 12, 12
+	var wg sync.WaitGroup
+	for g := 0; g < goroutines; g++ {
+		wg.Add(1)
+		go func(g int) {
+			defer wg.Done()
+			for i := 0; i < iters; i++ {
+				if (g+i)%2 == 0 {
+					patch(bodyOn)
+				} else {
+					patch(bodyOff)
+				}
+			}
+		}(g)
+	}
+	wg.Wait()
+
+	// After all concurrent updates settle, the persisted value and the live
+	// gate must agree: the last serialized PATCH determined both, so they can
+	// never drift apart regardless of which value won.
+	dbVal, err := e.store.GetSiteConfigValue(KeyMaintenanceMode)
+	if err != nil {
+		t.Fatalf("get maintenance_mode: %v", err)
+	}
+	if dbVal != "0" && dbVal != "1" {
+		t.Fatalf("persisted value not canonical: %q", dbVal)
+	}
+	if want := dbVal == "1"; gate.Enabled() != want {
+		t.Fatalf("DB/runtime drift: db=%q gate=%v", dbVal, gate.Enabled())
+	}
+}
+
+// yieldingGateApplier is a RuntimeApplier that drives the real atomic
+// maintenance.Gate and yields the scheduler immediately after the live apply.
+// It is a test double for the concurrency test: the yield widens the
+// apply→persist window so concurrent patches interleave without the handler's
+// serialization. It reuses the package's canonical parsers and the missing-row
+// canonical-default fallback so its apply/revert match the real applier's
+// semantics for maintenance_mode.
+type yieldingGateApplier struct {
+	gate *maintenance.Gate
+}
+
+func (a *yieldingGateApplier) ApplySiteConfig(_ context.Context, key, value string) error {
+	if key != KeyMaintenanceMode {
+		return nil
+	}
+	enabled, err := parseCanonicalBool(value)
+	if err != nil {
+		return err
+	}
+	a.gate.Set(enabled)
+	runtime.Gosched()
+	return nil
+}
+
+func (a *yieldingGateApplier) RevertSiteConfig(ctx context.Context, key, previous string) error {
+	if previous == "" {
+		previous = canonicalDefaultStored(key)
+	}
+	return a.ApplySiteConfig(ctx, key, previous)
+}
+
+// blockingGateApplier drives the real atomic maintenance.Gate and lets a test
+// pin one patch inside its live apply (after the gate is flipped, before
+// applyThenPersist reaches the persist step) so a second concurrent patch is
+// forced to either wait on the handler's per-key lock (serialized) or read the
+// stale pre-first-patch row and interleave its own apply/persist (drift). It
+// reuses the package's canonical parsers and the missing-row canonical-default
+// fallback so its apply/revert match the real applier's semantics for
+// maintenance_mode. The coordination channels are consumed once by the next
+// Apply call; a second Apply sees no channels and returns immediately.
+type blockingGateApplier struct {
+	gate *maintenance.Gate
+
+	mu           sync.Mutex
+	applyStarted chan struct{}
+	releaseApply chan struct{}
+	blockNext    bool
+}
+
+func (a *blockingGateApplier) configure(started, release chan struct{}) {
+	a.mu.Lock()
+	a.applyStarted = started
+	a.releaseApply = release
+	a.blockNext = true
+	a.mu.Unlock()
+}
+
+func (a *blockingGateApplier) ApplySiteConfig(_ context.Context, key, value string) error {
+	if key != KeyMaintenanceMode {
+		return nil
+	}
+	enabled, err := parseCanonicalBool(value)
+	if err != nil {
+		return err
+	}
+	a.gate.Set(enabled)
+	a.mu.Lock()
+	started := a.applyStarted
+	release := a.releaseApply
+	block := a.blockNext
+	a.blockNext = false
+	a.applyStarted = nil
+	a.releaseApply = nil
+	a.mu.Unlock()
+	if block && started != nil {
+		close(started)
+		if release != nil {
+			<-release
+		}
+	}
+	return nil
+}
+
+func (a *blockingGateApplier) RevertSiteConfig(ctx context.Context, key, previous string) error {
+	if previous == "" {
+		previous = canonicalDefaultStored(key)
+	}
+	return a.ApplySiteConfig(ctx, key, previous)
+}
+
+// TestSiteConfigPatchSerializesConcurrentUpdatesDeterministically proves the
+// per-handler lock serializes concurrent patches to the same runtime key so
+// the read→apply→persist→revert step cannot interleave. A blocking applier pins
+// the first patch (on) inside its live apply — the gate is already flipped on
+// but the persist step has not run, so the database still holds the seeded
+// value. A second concurrent patch (off) must wait for the first to fully
+// settle (apply + persist) before it can read the prior value; with the
+// per-handler lock it cannot read the stale seeded row and interleave its own
+// apply/persist, so the two never drift the database and the live gate apart.
+//
+// The assertion that the second patch has not completed while the first is
+// pinned is the serialization proof: without the per-key lock the second
+// patch would read the stale row, apply off, and persist off while the first
+// is still pinned, then the first would persist on, leaving the database at
+// "1" and the gate off (drift) — and the second would have completed during
+// the pin, tripping this assertion. With the lock the second waits, the final
+// state is the last serialized patch (off), and database and gate agree.
+func TestSiteConfigPatchSerializesConcurrentUpdatesDeterministically(t *testing.T) {
+	e := newEnv(t)
+	gate := maintenance.New()
+	blocker := &blockingGateApplier{gate: gate}
+	// Mount ONCE so both patches share the same Handler (and its site-config
+	// serialization mutex); mounting per request would hand each request a
+	// fresh Handler/mutex and defeat the test.
+	h := e.mount(t, blocker)
+	cookie := e.adminCookie(t)
+
+	// Seed a known row so the prior value is non-empty and deterministic.
+	if err := e.store.SetSiteConfigValue(KeyMaintenanceMode, "0"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	patch := func(value any) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(map[string]any{"value": value})
+		req := withCookie(stationRequest(http.MethodPatch, "/admin/api/site-config/"+KeyMaintenanceMode, host.StationAdmin, body), cookie)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+
+	// Pin the first patch (on) inside its live apply: the gate is flipped on,
+	// then the applier blocks before applyThenPersist reaches the persist step.
+	// While it is pinned the database still holds the seeded "0".
+	started := make(chan struct{})
+	release := make(chan struct{})
+	blocker.configure(started, release)
+
+	g1Err := make(chan error, 1)
+	go func() {
+		rec := patch(true)
+		if rec.Code != http.StatusOK {
+			g1Err <- fmt.Errorf("first patch status=%d body=%s", rec.Code, rec.Body.String())
+			return
+		}
+		g1Err <- nil
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first patch did not pin inside its live apply")
+	}
+
+	// Launch the second patch (off). With the per-handler lock it blocks at the
+	// mutex while the first patch is pinned; without the lock it would proceed,
+	// read the stale seeded row, and complete during the pin.
+	g2Err := make(chan error, 1)
+	go func() {
+		rec := patch(false)
+		if rec.Code != http.StatusOK {
+			g2Err <- fmt.Errorf("second patch status=%d body=%s", rec.Code, rec.Body.String())
+			return
+		}
+		g2Err <- nil
+	}()
+
+	select {
+	case err := <-g2Err:
+		t.Fatalf("second patch completed while the first was still pinned (lock did not serialize): %v", err)
+	case <-time.After(50 * time.Millisecond):
+		// The second patch is blocked behind the first patch's lock, as expected.
+	}
+
+	// Release the first patch: it persists on and unlocks; the second patch then
+	// reads the now-persisted "1", applies off, and persists off.
+	close(release)
+	if err := <-g1Err; err != nil {
+		t.Fatalf("first patch: %v", err)
+	}
+	if err := <-g2Err; err != nil {
+		t.Fatalf("second patch: %v", err)
+	}
+
+	// After both serialized patches settle, the persisted value and the live
+	// gate agree: the second (last) patch set both to off. Without the lock the
+	// second patch would have read the stale "0" during the pin, applied off,
+	// and persisted off, then the first would persist on, leaving the database
+	// at "1" and the gate off (drift).
+	dbVal, err := e.store.GetSiteConfigValue(KeyMaintenanceMode)
+	if err != nil {
+		t.Fatalf("get maintenance_mode: %v", err)
+	}
+	if dbVal != "0" {
+		t.Fatalf("persisted value = %q, want 0 (last serialized patch was off)", dbVal)
+	}
+	if gate.Enabled() {
+		t.Fatalf("DB/runtime drift: db=%q gate=true, want gate=false", dbVal)
+	}
+}
+
 // TestSiteConfigBoolTogglePatch covers the maintenance_mode / registration_open
 // toggles: a JSON bool is accepted and stored as the canonical "1"/"0"; the
 // typed read path echoes a bool; non-bool values (string, number, null) are
-// rejected. The toggles are not runtime keys, so a recording applier stays
-// untouched.
+// rejected. maintenance_mode is now a runtime key (applied to the maintenance
+// gate), so the recording applier records its apply; registration_open is not.
 func TestSiteConfigBoolTogglePatch(t *testing.T) {
 	e := newEnv(t)
 	applier := &recordingApplier{}
@@ -1002,6 +1467,12 @@ func TestSiteConfigBoolTogglePatch(t *testing.T) {
 	if patched.Key != "maintenance_mode" || patched.Value != true {
 		t.Fatalf("maintenance_mode patch = %+v", patched)
 	}
+	// maintenance_mode is a runtime key: the recording applier observed the
+	// live-apply of the canonical stored value ("1").
+	if len(applier.applied) != 1 || applier.applied[0] != "maintenance_mode=1" {
+		t.Fatalf("maintenance_mode runtime apply = %v", applier.applied)
+	}
+	applier.applied = nil
 
 	rec = adminPatch(t, e, applier, "/admin/api/site-config/registration_open", map[string]any{"value": false})
 	decodeJSON(t, rec, &patched)

@@ -19,26 +19,50 @@ var (
 )
 
 const (
-	maxDiscordIDBytes   = 128
-	maxUsernameBytes    = 256
-	maxAvatarBytes      = 1024
-	maxBanReasonBytes   = 1024
-	maxAvatarURLBytes   = 2048
+	maxDiscordIDBytes = 128
+	maxUsernameBytes  = 256
+	maxAvatarBytes    = 1024
+	maxBanReasonBytes = 1024
+	maxAvatarURLBytes = 2048
 )
 
 // User is the server-authoritative identity used by later authorization and
 // resource repositories. The administrator row is environment-owned and has
 // no Discord identity; it is never treated as a normal tenant user.
 type User struct {
-	ID                        int64
-	DiscordID                 string
-	Username                  string
-	Avatar                    string
-	GuildNick                 string
-	GuildAvatarURL            string
-	IsAdmin                   bool
-	IsBanned                  bool
-	BannedReason              string
+	ID             int64
+	DiscordID      string
+	Username       string
+	Avatar         string
+	GuildNick      string
+	GuildAvatarURL string
+	IsAdmin        bool
+	IsBanned       bool
+	BannedReason   string
+	// BannedUntil is nil for a permanent ban and while the user is not
+	// banned. A non-nil deadline at or before the current instant is lifted
+	// lazily by an atomic conditional UPDATE on read.
+	BannedUntil *time.Time
+	// AutoBanned records whether the most recent effective ban was produced
+	// by an automatic rule; every manual ban clears it.
+	AutoBanned bool
+	// CharitySuspendedUntil suspends charity-feature eligibility only. A due
+	// deadline is cleared lazily on read exactly like BannedUntil.
+	CharitySuspendedUntil *time.Time
+	// Credits is the signed consumption balance in milli-credits. It may be
+	// negative (settled over-reservation, administrator-configured penalty);
+	// every change commits together with its credit_ledger row.
+	Credits int64
+	// DonationCredit is the cumulative donor-reward balance in milli-credits.
+	// The application layer keeps it non-negative.
+	DonationCredit int64
+	// Level is the nullable manual level override (1..5; nil = automatic).
+	// It never applies to the administrator row (administrators are excluded
+	// from the level system). See levels.go for the authoritative resolver.
+	Level *int
+	// AutoLevel is the persistent automatic-level high-water mark (1..4). It
+	// is only ever raised (lazy CAS promotion); there is no downgrade path.
+	AutoLevel                 int
 	EndpointLimit             *int
 	RPMLimit                  *int
 	TotalRequests             int64
@@ -48,6 +72,26 @@ type User struct {
 	Lang                      string
 	CreatedAt                 time.Time
 	UpdatedAt                 time.Time
+}
+
+// BanEffectiveAt reports whether a ban is still in force at instant now:
+// permanent bans always are, deadline bans only until the deadline passes
+// (deadline <= now counts as expired). This pure projection never mutates
+// storage; the lazy lift happens through the repository read paths.
+func (u *User) BanEffectiveAt(now time.Time) bool {
+	if u == nil || !u.IsBanned {
+		return false
+	}
+	return u.BannedUntil == nil || u.BannedUntil.After(now)
+}
+
+// CharitySuspensionEffectiveAt reports whether the charity-eligibility
+// suspension is still in force at instant now.
+func (u *User) CharitySuspensionEffectiveAt(now time.Time) bool {
+	if u == nil {
+		return false
+	}
+	return u.CharitySuspendedUntil != nil && u.CharitySuspendedUntil.After(now)
 }
 
 // IsActive reports whether this identity can authenticate as a normal user.
@@ -112,12 +156,19 @@ const userSelectColumns = `
 	u.is_admin,
 	u.is_banned,
 	u.banned_reason,
+	u.banned_until,
+	u.auto_banned,
+	u.charity_suspended_until,
 	u.endpoint_limit,
 	u.rpm_limit,
 	u.total_requests,
 	u.total_prompt_tokens,
 	u.total_completion_tokens,
 	u.total_unknown_usage_requests,
+	u.credits,
+	u.donation_credit,
+	u.level,
+	u.auto_level,
 	u.lang,
 	u.created_at,
 	u.updated_at`
@@ -127,7 +178,9 @@ const userSelectColumns = `
 func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	var u User
 	var isAdmin, isBanned int
-	var endpointLimit, rpmLimit sql.NullInt64
+	var bannedUntil, charitySuspendedUntil sql.NullInt64
+	var autoBanned int
+	var endpointLimit, rpmLimit, level sql.NullInt64
 	var createdAt, updatedAt int64
 	if err := row.Scan(
 		&u.ID,
@@ -139,12 +192,19 @@ func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 		&isAdmin,
 		&isBanned,
 		&u.BannedReason,
+		&bannedUntil,
+		&autoBanned,
+		&charitySuspendedUntil,
 		&endpointLimit,
 		&rpmLimit,
 		&u.TotalRequests,
 		&u.TotalPromptTokens,
 		&u.TotalCompletionTokens,
 		&u.TotalUnknownUsageRequests,
+		&u.Credits,
+		&u.DonationCredit,
+		&level,
+		&u.AutoLevel,
 		&u.Lang,
 		&createdAt,
 		&updatedAt,
@@ -153,6 +213,9 @@ func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	}
 	u.IsAdmin = isAdmin != 0
 	u.IsBanned = isBanned != 0
+	u.AutoBanned = autoBanned != 0
+	u.BannedUntil = nullUnixTime(bannedUntil)
+	u.CharitySuspendedUntil = nullUnixTime(charitySuspendedUntil)
 	if endpointLimit.Valid {
 		value := int(endpointLimit.Int64)
 		u.EndpointLimit = &value
@@ -161,12 +224,27 @@ func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 		value := int(rpmLimit.Int64)
 		u.RPMLimit = &value
 	}
+	if level.Valid {
+		value := int(level.Int64)
+		u.Level = &value
+	}
 	u.CreatedAt = time.Unix(createdAt, 0).UTC()
 	u.UpdatedAt = time.Unix(updatedAt, 0).UTC()
 	return &u, nil
 }
 
-// GetUserByID returns a user or (nil, nil) when the id is unknown.
+// nullUnixTime converts a nullable unix-seconds column into a *time.Time.
+func nullUnixTime(value sql.NullInt64) *time.Time {
+	if !value.Valid {
+		return nil
+	}
+	t := time.Unix(value.Int64, 0).UTC()
+	return &t
+}
+
+// GetUserByID returns a user or (nil, nil) when the id is unknown. A due
+// temporal ban or charity suspension is lifted lazily by an atomic
+// conditional UPDATE before the row is returned.
 func (s *Store) GetUserByID(id int64) (*User, error) {
 	if id <= 0 {
 		return nil, ErrNotFound
@@ -175,7 +253,11 @@ func (s *Store) GetUserByID(id int64) (*User, error) {
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
-	return u, err
+	if err != nil {
+		return nil, err
+	}
+	s.reconcileUserTemporalState(u, time.Now())
+	return u, nil
 }
 
 // GetUserRPMLimit returns the user's self-tuned per-minute RPM cap and
@@ -213,7 +295,11 @@ func (s *Store) GetUserByDiscordID(discordID string) (*User, error) {
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
-	return u, err
+	if err != nil {
+		return nil, err
+	}
+	s.reconcileUserTemporalState(u, time.Now())
+	return u, nil
 }
 
 // CreateDiscordUser inserts a normal user. For an idempotent OAuth callback,
@@ -365,11 +451,36 @@ func (s *Store) UpdateUserProfile(userID int64, username, avatar, guildNick, gui
 	return nil
 }
 
+// UserBan describes one ban decision. DurationSeconds == 0 means permanent;
+// a positive value sets a lazy expiry deadline (banned_until). Auto records
+// whether the ban was produced by an automatic rule; every manual ban clears
+// the stored flag.
+type UserBan struct {
+	Reason          string
+	DurationSeconds int64
+	Auto            bool
+}
+
+// MaxBanDurationSeconds bounds a custom temporary ban to ten years, so an
+// administrative typo can never create an effectively unbounded deadline.
+const MaxBanDurationSeconds = int64(10 * 366 * 24 * 3600)
+
 // BanUser atomically marks a normal user banned and removes all existing
 // sessions and caller-key material. Authentication also checks is_banned at
 // request time, so a lookup cannot revive a banned identity.
 func (s *Store) BanUser(userID int64, reason string) error {
-	if userID <= 0 || validateBanReason(reason) != nil {
+	return s.BanUserWithOptions(userID, UserBan{Reason: reason})
+}
+
+// BanUserWithOptions is the full-form ban: a permanent or deadline ban with
+// the auto/manual provenance flag. The ban, session deletion, and caller-key
+// deletion commit in one transaction, so request-time auth and platform-exit
+// auth are invalidated atomically.
+func (s *Store) BanUserWithOptions(userID int64, ban UserBan) error {
+	if userID <= 0 || validateBanReason(ban.Reason) != nil {
+		return ErrConflict
+	}
+	if ban.DurationSeconds < 0 || ban.DurationSeconds > MaxBanDurationSeconds {
 		return ErrConflict
 	}
 	tx, err := s.db.Begin()
@@ -386,7 +497,12 @@ func (s *Store) BanUser(userID int64, reason string) error {
 		return ErrAdminProtected
 	}
 	now := time.Now().Unix()
-	if _, err := tx.Exec(`UPDATE users SET is_banned=1, banned_reason=?, updated_at=? WHERE id=? AND is_admin=0`, reason, now, userID); err != nil {
+	var until any
+	if ban.DurationSeconds > 0 {
+		until = now + ban.DurationSeconds
+	}
+	if _, err := tx.Exec(`UPDATE users SET is_banned=1, banned_reason=?, banned_until=?, auto_banned=?, updated_at=? WHERE id=? AND is_admin=0`,
+		ban.Reason, until, boolInt(ban.Auto), now, userID); err != nil {
 		return fmt.Errorf("ban user: %w", err)
 	}
 	if _, err := tx.Exec(`DELETE FROM sessions WHERE user_id=?`, userID); err != nil {
@@ -401,13 +517,14 @@ func (s *Store) BanUser(userID int64, reason string) error {
 	return nil
 }
 
-// UnbanUser clears the normal-user ban. A caller key is not recreated: the
-// user must explicitly generate a new one after a ban.
+// UnbanUser clears the normal-user ban, including any pending expiry
+// deadline. A caller key is not recreated: the user must explicitly generate
+// a new one after a ban.
 func (s *Store) UnbanUser(userID int64) error {
 	if userID <= 0 {
 		return ErrNotFound
 	}
-	result, err := s.db.Exec(`UPDATE users SET is_banned=0, banned_reason='', updated_at=? WHERE id=? AND is_admin=0`, time.Now().Unix(), userID)
+	result, err := s.db.Exec(`UPDATE users SET is_banned=0, banned_reason='', banned_until=NULL, updated_at=? WHERE id=? AND is_admin=0`, time.Now().Unix(), userID)
 	if err != nil {
 		return fmt.Errorf("unban user: %w", err)
 	}

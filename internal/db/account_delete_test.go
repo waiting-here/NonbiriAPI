@@ -40,7 +40,7 @@ func seedFullyPopulatedUser(t *testing.T, st *Store, discordID string) int64 {
 		AttemptID: "att-" + discordID, UserID: uid, Model: "prov/m",
 		EndpointKeyID: kid, UpstreamModelID: "upstream-1",
 		StatusCode: 200, DurationMs: 5, StartedAt: time.Unix(testNow, 0), CompletedAt: time.Unix(testNow+1, 0),
-		PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15,
+		UncachedInputTokens: 10, OutputTokens: 5,
 	}); err != nil {
 		t.Fatalf("record request: %v", err)
 	}
@@ -64,6 +64,13 @@ func seedFullyPopulatedUser(t *testing.T, st *Store, discordID string) int64 {
 	}); err != nil {
 		t.Fatalf("record site-wide alert: %v", err)
 	}
+	// Credit ledger rows (admin adjustment) must cascade with the account.
+	if _, err := st.ApplyAdminCreditAdjustment(ctx, AdminCreditAdjustment{
+		TargetUserID: uid, ActorUserID: uid, OperationID: "seed-ledger-" + discordID,
+		Reason: "seed", CreditsSet: true, CreditsDelta: 1234,
+	}); err != nil {
+		t.Fatalf("seed credit adjustment: %v", err)
+	}
 	return uid
 }
 
@@ -82,7 +89,8 @@ func assertUserGone(t *testing.T, st *Store, uid int64) {
 		t.Fatalf("users rows=%d, want 0 (resurrection)", got)
 	}
 	for _, table := range []string{"sessions", "caller_keys", "endpoints", "endpoint_keys",
-		"fetched_models", "model_bindings", "models", "request_logs", "user_issues"} {
+		"fetched_models", "model_bindings", "models", "request_logs", "user_issues", "user_activity_daily",
+		"credit_ledger", "checkins"} {
 		// user_issues/request_logs/sessions/caller_keys/endpoints/models key on user_id;
 		// endpoint_keys/fetched_models/model_bindings are reached via cascade and have no
 		// user_id column, so count them globally after a user delete (they must be empty
@@ -342,7 +350,7 @@ func TestDeleteVsLateCallbacksLinearized(t *testing.T) {
 						AttemptID: fmt.Sprintf("race-att-%d-%d", seed, j), UserID: uid,
 						Model: "prov/m", StatusCode: 200, DurationMs: 1,
 						StartedAt: time.Unix(testNow, 0), CompletedAt: time.Unix(testNow+1, 0),
-						PromptTokens: 1, CompletionTokens: 1, TotalTokens: 2,
+						UncachedInputTokens: 1, OutputTokens: 1,
 					})
 					if err != nil {
 						t.Errorf("late request: %v", err)
@@ -400,7 +408,7 @@ func TestRepeatedDeleteAndCallbackShuffle(t *testing.T) {
 					AttemptID: fmt.Sprintf("s-att-%d", role), UserID: uid,
 					Model: "prov/m", StatusCode: 200, DurationMs: 1,
 					StartedAt: time.Unix(testNow, 0), CompletedAt: time.Unix(testNow+1, 0),
-					PromptTokens: 1, CompletionTokens: 1, TotalTokens: 2,
+					UncachedInputTokens: 1, OutputTokens: 1,
 				})
 			}(i)
 		}

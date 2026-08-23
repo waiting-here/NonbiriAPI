@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -32,7 +33,9 @@ func newLifecycleFixture(t *testing.T) (*lifecycle.Service, *db.Store, *elevatio
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := db.Open(filepath.Join(t.TempDir(), "audit-lifecycle.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "audit-lifecycle.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatal(err)
@@ -284,14 +287,14 @@ func TestAuditRetentionAndUsageAggregation(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		if err := store.RecordRequest(context.Background(), db.RequestLogInput{
 			AttemptID: "a-fresh-" + strconv.Itoa(i), UserID: user.ID, StatusCode: 200, StartedAt: fresh, CompletedAt: fresh.Add(time.Second),
-			PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15,
+			UncachedInputTokens: 10, OutputTokens: 5,
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if err := store.RecordRequest(context.Background(), db.RequestLogInput{
 		AttemptID: "a-old", UserID: user.ID, StatusCode: 200, StartedAt: old, CompletedAt: old.Add(time.Second),
-		PromptTokens: 100, CompletionTokens: 50, TotalTokens: 150,
+		UncachedInputTokens: 100, OutputTokens: 50,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -343,7 +346,9 @@ func TestAuditExportContainsNoPlaintextSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := db.Open(filepath.Join(t.TempDir(), "audit-export.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "audit-export.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatal(err)
@@ -359,15 +364,11 @@ func TestAuditExportContainsNoPlaintextSecrets(t *testing.T) {
 	if _, err := store.SetCallerKey(user.ID); err != nil {
 		t.Fatal(err)
 	}
-	ciphertext, err := vault.Seal([]byte("sk-plaintext-must-never-export"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	ep, err := store.CreateEndpoint(context.Background(), user.ID, "openai-compatible", "https://upstream.example:443/v1", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.CreateEndpointKey(context.Background(), user.ID, ep.ID, ciphertext, "head", "tail", "note", true, time.Now().Unix()); err != nil {
+	if _, err := store.CreateEndpointKey(context.Background(), user.ID, ep.ID, []byte("sk-plaintext-must-never-export"), "head", "tail", "note", true, time.Now().Unix()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.CreateModel(context.Background(), user.ID, "p", "m", "ordered", false, time.Now().Unix()); err != nil {
@@ -381,7 +382,7 @@ func TestAuditExportContainsNoPlaintextSecrets(t *testing.T) {
 	text := string(payload)
 	for _, needle := range []string{
 		"sk-plaintext-must-never-export",
-		"nbsec:v1:aes-256-gcm",
+		"nbsec:v2:aes-256-gcm",
 	} {
 		if strings.Contains(text, needle) {
 			t.Fatalf("export leaks %q", needle)

@@ -51,6 +51,11 @@ type Config struct {
 	Elevation     *elevation.Manager
 	AdminVerifier AdminPasswordVerifier
 	Throttle      auth.LoginThrottle
+	// PreDeleteUser is invoked synchronously BEFORE the account-deletion
+	// transaction opens. It lets an in-flight routing rail (the charity exit)
+	// cancel the user's active upstream contexts so a late callback linearizes
+	// against the delete instead of racing it. It must not block on the DB.
+	PreDeleteUser func(userID int64)
 }
 
 // Service is the mountable account-lifecycle service. It owns only an
@@ -62,6 +67,7 @@ type Service struct {
 	adminVerifier AdminPasswordVerifier
 	throttle      auth.LoginThrottle
 	ownedThrottle *ratelimit.LoginThrottle
+	preDeleteUser func(userID int64)
 }
 
 // NewService validates the configuration and returns a mountable service.
@@ -80,6 +86,7 @@ func NewService(cfg Config) (*Service, error) {
 		elevation:     cfg.Elevation,
 		adminVerifier: cfg.AdminVerifier,
 		throttle:      cfg.Throttle,
+		preDeleteUser: cfg.PreDeleteUser,
 	}
 	if svc.throttle == nil {
 		throttle, err := ratelimit.NewLoginThrottle(ratelimit.DefaultLoginThrottleConfig())
@@ -168,6 +175,9 @@ func (s *Service) DeleteOwnAccountBound(ctx context.Context, user *db.User, elev
 	if consumeErr != nil {
 		return ErrElevationRequired
 	}
+	if s.preDeleteUser != nil {
+		s.preDeleteUser(user.ID)
+	}
 	if err := s.store.DeleteUserAccount(ctx, user.ID); err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			return ErrAccountGone
@@ -211,6 +221,9 @@ func (s *Service) DeleteUserAsAdminBound(ctx context.Context, admin *db.User, ta
 	}
 	if consumeErr != nil {
 		return ErrElevationRequired
+	}
+	if s.preDeleteUser != nil {
+		s.preDeleteUser(targetUserID)
 	}
 	return s.store.DeleteUserAccount(ctx, targetUserID)
 }

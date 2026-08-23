@@ -28,7 +28,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -53,8 +52,9 @@ const (
 	MaxDurationMs = int64(1) << 30
 	// maxLogStatus bounds the stored client-facing status code.
 	maxLogStatus = 599
-	// MaxLogPageLimit bounds one request-log page.
-	MaxLogPageLimit = 200
+	// MaxLogPageLimit bounds one request-log page (frozen contract: default
+	// page size 20, clamp [1,100], shared by the user and admin log screens).
+	MaxLogPageLimit = 100
 	// MaxCleanupBatch bounds one retention-cleanup delete batch.
 	MaxCleanupBatch = 1000
 	// MaxUsageByUserLimit bounds the per-user usage aggregation page.
@@ -72,26 +72,48 @@ const (
 // programming error and fails closed instead of persisting it.
 var stableErrorCodes = map[string]bool{"": true, "upstream": true, "internal": true}
 
-// RequestLogInput is the metadata-only input of one accounted request. No
-// request/response content, credential, base URL, header, or ciphertext may
-// ever be passed here; the repository applies diagnostic.Bound to ErrorDiag
-// as the final sink policy.
+// RequestLogInput is the metadata-only input of one accounted request. Token
+// values use the neutral mutually exclusive four-bucket form (all non-negative);
+// the legacy prompt/completion/total mirror columns are derived here, never
+// accepted separately, so there is exactly one source of truth. No
+// request/response content, credential, header, or ciphertext may ever be
+// passed here. EndpointBaseURL carries the frozen log contract's bounded
+// dispatch-time canonical base-URL snapshot (owner-visible endpoint metadata,
+// never credential material); the repository applies diagnostic.Bound to
+// ErrorDiag and EndpointBaseURL as the final sink policy.
 type RequestLogInput struct {
-	AttemptID        string
-	UserID           int64
-	Model            string // platform model full_name ("" when unknown)
-	EndpointKeyID    int64  // 0 when no key was selected or it was deleted
-	UpstreamModelID  string
-	StatusCode       int
-	DurationMs       int64
-	StartedAt        time.Time
-	CompletedAt      time.Time
-	PromptTokens     int64
-	CompletionTokens int64
-	TotalTokens      int64
-	UsageUnknown     bool
-	ErrorCode        string
-	ErrorDiag        string
+	AttemptID             string
+	UserID                int64
+	Model                 string // platform model full_name ("" when unknown)
+	EndpointKeyID         int64  // 0 when no key was selected or it was deleted
+	UpstreamModelID       string
+	EndpointBaseURL       string
+	StatusCode            int
+	DurationMs            int64
+	StartedAt             time.Time
+	CompletedAt           time.Time
+	UncachedInputTokens   int64
+	CacheWriteInputTokens int64
+	CacheReadInputTokens  int64
+	OutputTokens          int64
+	UsageUnknown          bool
+	ErrorCode             string
+	ErrorDiag             string
+	// RouteKind distinguishes the two routing namespaces ('personal'|'charity')
+	// and defaults to 'personal' for every pre-charity writer. Charity business
+	// values (reservation correlation and the three charge columns) are written
+	// by the charity routing rail; personal rows keep the zero defaults.
+	RouteKind            string
+	CharityReservationID int64 // 0 = none; deliberately NO FK (30d vs 400d retention)
+	OriginalChargeMilli  int64 // charity pre-discount price, milli-credits; >= 0
+	UserChargeMilli      int64 // charity discounted payment, milli-credits; >= 0
+	DonorRewardMilli     int64 // charity donor reward accrued, milli-credits; >= 0
+	// Activity, when non-nil, records this committed request as one
+	// successful product-activity event (user + site daily aggregation) in
+	// the same transaction as the log row and accumulators. While the site
+	// timezone offset is unset it is silently skipped: no day key is ever
+	// generated under an implicit default.
+	Activity *ActivityDelta
 }
 
 func (i RequestLogInput) validate() error {
@@ -122,16 +144,27 @@ func (i RequestLogInput) validate() error {
 	if i.CompletedAt.Before(i.StartedAt) {
 		return fmt.Errorf("usage: completed at precedes started at")
 	}
-	for _, tokens := range []int64{i.PromptTokens, i.CompletionTokens, i.TotalTokens} {
+	for _, tokens := range []int64{i.UncachedInputTokens, i.CacheWriteInputTokens, i.CacheReadInputTokens, i.OutputTokens} {
 		if tokens < 0 || tokens > MaxTokenDelta {
 			return fmt.Errorf("usage: token value is out of range")
 		}
 	}
-	if i.UsageUnknown && (i.PromptTokens != 0 || i.CompletionTokens != 0 || i.TotalTokens != 0) {
+	if i.UsageUnknown && (i.UncachedInputTokens != 0 || i.CacheWriteInputTokens != 0 || i.CacheReadInputTokens != 0 || i.OutputTokens != 0) {
 		return fmt.Errorf("usage: unknown usage cannot carry token values")
 	}
 	if len(i.ErrorCode) > maxLogErrorCodeLen || !stableErrorCodes[i.ErrorCode] {
 		return fmt.Errorf("usage: error code is not stable")
+	}
+	if i.RouteKind != "" && i.RouteKind != "personal" && i.RouteKind != "charity" {
+		return fmt.Errorf("usage: route kind is not stable")
+	}
+	if i.OriginalChargeMilli < 0 || i.UserChargeMilli < 0 || i.DonorRewardMilli < 0 {
+		return fmt.Errorf("usage: charity charge is negative")
+	}
+	if i.Activity != nil {
+		if err := i.Activity.validate(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -171,6 +204,9 @@ func validOptionalStoredText(value string, maxRunes int) bool {
 // (see the package comment). Any validation, constraint, or overflow failure
 // rolls the whole transaction back: no partial state is ever committed.
 func (s *Store) RecordRequest(ctx context.Context, input RequestLogInput) error {
+	if input.RouteKind == "" {
+		input.RouteKind = "personal" // pre-charity writers keep the neutral default
+	}
 	if err := input.validate(); err != nil {
 		return err
 	}
@@ -189,6 +225,25 @@ func (s *Store) RecordRequest(ctx context.Context, input RequestLogInput) error 
 	completedUnix := input.CompletedAt.Unix()
 	unknown := boolToInt(input.UsageUnknown)
 	diag := diagnostic.Bound(input.ErrorDiag)
+	baseURL := diagnostic.Bound(input.EndpointBaseURL)
+
+	// Derive the legacy compatibility mirrors from the four buckets. The
+	// per-request bounds above (each bucket <= MaxTokenDelta) mean these sums
+	// cannot overflow int64, but the checked adds keep the invariant explicit
+	// and fail closed rather than ever persisting a wrapped value.
+	promptMirror, ok := addNonNegative(input.UncachedInputTokens, input.CacheWriteInputTokens)
+	if !ok {
+		return fmt.Errorf("usage: input token mirror overflows")
+	}
+	promptMirror, ok = addNonNegative(promptMirror, input.CacheReadInputTokens)
+	if !ok {
+		return fmt.Errorf("usage: input token mirror overflows")
+	}
+	completionMirror := input.OutputTokens
+	totalMirror, ok := addNonNegative(promptMirror, completionMirror)
+	if !ok {
+		return fmt.Errorf("usage: total token mirror overflows")
+	}
 
 	// INSERT ... SELECT FROM users atomically no-ops when the account has
 	// already been deleted (late-callback linearization, same pattern as
@@ -199,7 +254,9 @@ func (s *Store) RecordRequest(ctx context.Context, input RequestLogInput) error 
 INSERT INTO request_logs
 	(attempt_id, user_id, model, endpoint_key_id, upstream_model_id, status_code, duration_ms,
 	 started_at, completed_at, prompt_tokens, completion_tokens, total_tokens,
-	 usage_unknown, error_code, error_diag)
+	 uncached_input_tokens, cache_write_input_tokens, cache_read_input_tokens, output_tokens,
+	 usage_unknown, error_code, error_diag, endpoint_base_url,
+	 route_kind, charity_reservation_id, original_charge, user_charge, donor_reward)
 SELECT
        ?,
        ?,
@@ -219,13 +276,27 @@ SELECT
        ?,
        ?,
        ?,
+       ?,
+       ?,
+       ?,
+       ?,
+       ?,
+       ?,
+       ?,
+       ?,
+       ?,
+       ?,
        ?
 FROM users WHERE id = ?`,
 		input.AttemptID, input.UserID, input.Model,
 		input.EndpointKeyID, input.UserID, input.EndpointKeyID,
 		input.UpstreamModelID, input.StatusCode, input.DurationMs,
-		startedUnix, completedUnix, input.PromptTokens, input.CompletionTokens, input.TotalTokens,
-		unknown, input.ErrorCode, diag, input.UserID)
+		startedUnix, completedUnix, promptMirror, completionMirror, totalMirror,
+		input.UncachedInputTokens, input.CacheWriteInputTokens, input.CacheReadInputTokens, input.OutputTokens,
+		unknown, input.ErrorCode, diag, baseURL,
+		input.RouteKind, nullInt64ForZero(input.CharityReservationID),
+		input.OriginalChargeMilli, input.UserChargeMilli, input.DonorRewardMilli,
+		input.UserID)
 	if err != nil {
 		if isConstraintError(err) {
 			// A duplicate attempt correlation id means the same accounted
@@ -252,24 +323,39 @@ FROM users WHERE id = ?`,
 
 	// The user exists (the insert above succeeded); the accumulator update
 	// must match exactly one row. The bounded predicate makes an overflow
-	// match zero rows and fail the transaction closed.
+	// match zero rows and fail the transaction closed. The four-bucket
+	// accumulators are authoritative; the legacy prompt/completion columns
+	// remain compatible mirrors (prompt = sum of the three input buckets).
 	res2, err := tx.ExecContext(ctx, `
 UPDATE users SET
-	total_requests              = total_requests + 1,
-	total_prompt_tokens         = total_prompt_tokens + ?,
-	total_completion_tokens     = total_completion_tokens + ?,
-	total_unknown_usage_requests= total_unknown_usage_requests + ?,
-	updated_at                  = ?
+	total_requests                 = total_requests + 1,
+	total_uncached_input_tokens    = total_uncached_input_tokens + ?,
+	total_cache_write_input_tokens = total_cache_write_input_tokens + ?,
+	total_cache_read_input_tokens  = total_cache_read_input_tokens + ?,
+	total_output_tokens            = total_output_tokens + ?,
+	total_prompt_tokens            = total_prompt_tokens + ?,
+	total_completion_tokens        = total_completion_tokens + ?,
+	total_unknown_usage_requests   = total_unknown_usage_requests + ?,
+	updated_at                     = ?
 WHERE id = ?
-  AND total_requests           <= ?
-  AND total_prompt_tokens      <= ?
-  AND total_completion_tokens  <= ?
-  AND total_unknown_usage_requests <= ?`,
-		input.PromptTokens, input.CompletionTokens, unknown, completedUnix,
+  AND total_requests                    <= ?
+  AND total_uncached_input_tokens       <= ?
+  AND total_cache_write_input_tokens    <= ?
+  AND total_cache_read_input_tokens     <= ?
+  AND total_output_tokens               <= ?
+  AND total_prompt_tokens               <= ?
+  AND total_completion_tokens           <= ?
+  AND total_unknown_usage_requests      <= ?`,
+		input.UncachedInputTokens, input.CacheWriteInputTokens, input.CacheReadInputTokens, input.OutputTokens,
+		promptMirror, completionMirror, unknown, completedUnix,
 		input.UserID,
 		accumulatorCeiling-1,
-		accumulatorCeiling-input.PromptTokens,
-		accumulatorCeiling-input.CompletionTokens,
+		accumulatorCeiling-input.UncachedInputTokens,
+		accumulatorCeiling-input.CacheWriteInputTokens,
+		accumulatorCeiling-input.CacheReadInputTokens,
+		accumulatorCeiling-input.OutputTokens,
+		accumulatorCeiling-promptMirror,
+		accumulatorCeiling-completionMirror,
 		accumulatorCeiling-int64(unknown))
 	if err != nil {
 		return fmt.Errorf("accumulate user usage: %w", err)
@@ -280,6 +366,21 @@ WHERE id = ?
 	}
 	if updated != 1 {
 		return fmt.Errorf("user usage accumulator overflow; accounting failed closed")
+	}
+	if input.Activity != nil {
+		// Same-transaction product-activity recording for the committed
+		// request. The day key resolves from the authoritative offset inside
+		// this transaction; an unset offset means activity is disabled and the
+		// skip must not fail the accounting. The user row exists here (the log
+		// insert above selected FROM users), so the write cannot be suppressed.
+		dayKey, terr := siteDayKeyAtTx(tx, completedUnix)
+		if errors.Is(terr, ErrTimezoneUnavailable) {
+			// Activity disabled: keep the request accounting, skip the rollup.
+		} else if terr != nil {
+			return fmt.Errorf("resolve activity day key: %w", terr)
+		} else if _, aerr := recordActivityTx(ctx, tx, input.UserID, dayKey, *input.Activity, completedUnix); aerr != nil {
+			return fmt.Errorf("record request activity: %w", aerr)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit request record: %w", err)
@@ -293,6 +394,24 @@ func boolToInt(value bool) int {
 		return 1
 	}
 	return 0
+}
+
+// nullInt64ForZero maps a zero correlation id to SQL NULL.
+func nullInt64ForZero(v int64) any {
+	if v > 0 {
+		return v
+	}
+	return nil
+}
+
+// addNonNegative adds two values already validated non-negative and reports
+// whether the sum fits in int64.
+func addNonNegative(a, b int64) (int64, bool) {
+	sum := a + b
+	if sum < a || sum < b {
+		return 0, false
+	}
+	return sum, true
 }
 
 // ===== retention cleanup ====================================================
@@ -364,61 +483,18 @@ func (s *Store) DeleteRequestLogsBefore(ctx context.Context, beforeUnix int64, l
 	return affected, nil
 }
 
-// RequestLog is the stable metadata-only log projection backing the admin
-// request-log screen. It contains no request/response content, credential,
-// base URL, or header material.
-type RequestLog struct {
-	ID               int64
-	UserID           int64
-	Model            string
-	EndpointKeyID    int64 // 0 when no key was selected or it was deleted later
-	UpstreamModelID  string
-	StatusCode       int
-	DurationMs       int64
-	StartedAt        time.Time
-	CompletedAt      time.Time
-	PromptTokens     int64
-	CompletionTokens int64
-	TotalTokens      int64
-	UsageUnknown     bool
-	ErrorCode        string
-	ErrorDiag        string
-}
-
-const requestLogSelectColumns = `
-	id, user_id, model, endpoint_key_id, upstream_model_id, status_code, duration_ms,
-	started_at, completed_at, prompt_tokens, completion_tokens, total_tokens,
-	usage_unknown, error_code, error_diag`
-
-func scanRequestLog(scanner interface{ Scan(...any) error }) (RequestLog, error) {
-	var log RequestLog
-	var endpointKeyID sql.NullInt64
-	var usageUnknown int
-	var startedAt, completedAt int64
-	if err := scanner.Scan(
-		&log.ID, &log.UserID, &log.Model, &endpointKeyID, &log.UpstreamModelID,
-		&log.StatusCode, &log.DurationMs, &startedAt, &completedAt,
-		&log.PromptTokens, &log.CompletionTokens, &log.TotalTokens,
-		&usageUnknown, &log.ErrorCode, &log.ErrorDiag,
-	); err != nil {
-		return RequestLog{}, err
-	}
-	if endpointKeyID.Valid {
-		log.EndpointKeyID = endpointKeyID.Int64
-	}
-	log.UsageUnknown = usageUnknown != 0
-	log.StartedAt = time.Unix(startedAt, 0).UTC()
-	log.CompletedAt = time.Unix(completedAt, 0).UTC()
-	return log, nil
-}
-
 // UsageTotals is the server-authoritative per-user usage projection backing
-// GET /api/me/usage and the admin usage screens. Metadata only.
+// GET /api/me/usage and the admin usage screens. Metadata only. The four-bucket
+// totals are authoritative; total_prompt/completion remain compatible mirrors.
 type UsageTotals struct {
-	TotalRequests             int64
-	TotalPromptTokens         int64
-	TotalCompletionTokens     int64
-	TotalUnknownUsageRequests int64
+	TotalRequests              int64
+	TotalUncachedInputTokens   int64
+	TotalCacheWriteInputTokens int64
+	TotalCacheReadInputTokens  int64
+	TotalOutputTokens          int64
+	TotalPromptTokens          int64
+	TotalCompletionTokens      int64
+	TotalUnknownUsageRequests  int64
 }
 
 // GetUserUsage returns the accumulator totals for userID, or ErrNotFound.
@@ -430,9 +506,15 @@ func (s *Store) GetUserUsage(ctx context.Context, userID int64) (UsageTotals, er
 	}
 	var totals UsageTotals
 	err := s.db.QueryRowContext(ctx, `
-SELECT total_requests, total_prompt_tokens, total_completion_tokens, total_unknown_usage_requests
+SELECT total_requests,
+       total_uncached_input_tokens, total_cache_write_input_tokens,
+       total_cache_read_input_tokens, total_output_tokens,
+       total_prompt_tokens, total_completion_tokens, total_unknown_usage_requests
 FROM users WHERE id = ?`, userID).
-		Scan(&totals.TotalRequests, &totals.TotalPromptTokens, &totals.TotalCompletionTokens, &totals.TotalUnknownUsageRequests)
+		Scan(&totals.TotalRequests,
+			&totals.TotalUncachedInputTokens, &totals.TotalCacheWriteInputTokens,
+			&totals.TotalCacheReadInputTokens, &totals.TotalOutputTokens,
+			&totals.TotalPromptTokens, &totals.TotalCompletionTokens, &totals.TotalUnknownUsageRequests)
 	if errors.Is(err, sql.ErrNoRows) {
 		return UsageTotals{}, ErrNotFound
 	}
@@ -440,113 +522,6 @@ FROM users WHERE id = ?`, userID).
 		return UsageTotals{}, fmt.Errorf("read user usage: %w", err)
 	}
 	return totals, nil
-}
-
-// LogQuery is the bounded, parameterized admin request-log filter. Every
-// filter is optional. Results are ordered id DESC and offset-paginated with
-// Page/PageSize (LIMIT page_size+1 OFFSET (page-1)*page_size), so a client
-// never infers pagination from a raw page size.
-type LogQuery struct {
-	UserID   int64  // > 0 restricts to one user
-	Model    string // exact platform full_name; "" = no filter
-	Status   int    // 0 = no filter; otherwise a 100..599 status code
-	FromUnix int64  // started_at >= FromUnix; 0 = unbounded
-	ToUnix   int64  // started_at < ToUnix; 0 = unbounded
-	Page     int    // 1-based; values below 1 are treated as 1
-	PageSize int    // clamped to 1..MaxLogPageLimit; 0 selects the default
-}
-
-func (q LogQuery) validate() error {
-	if q.UserID < 0 {
-		return fmt.Errorf("log query: user id is invalid")
-	}
-	if !validOptionalStoredText(q.Model, maxLogModelRunes) {
-		return fmt.Errorf("log query: model is invalid")
-	}
-	if q.Status != 0 && (q.Status < 100 || q.Status > maxLogStatus) {
-		return fmt.Errorf("log query: status is out of range")
-	}
-	if q.FromUnix < 0 || q.ToUnix < 0 || (q.FromUnix > 0 && q.ToUnix > 0 && q.FromUnix > q.ToUnix) {
-		return fmt.Errorf("log query: time range is invalid")
-	}
-	return nil
-}
-
-// QueryRequestLogs returns at most one page of metadata-only log rows
-// matching the filter, newest first. The result is bounded by the clamped
-// PageSize; no request/response content is ever projected. The second return
-// value reports whether another page follows, so a client never infers
-// pagination from a raw page size.
-func (s *Store) QueryRequestLogs(ctx context.Context, query LogQuery) ([]RequestLog, bool, error) {
-	if err := query.validate(); err != nil {
-		return nil, false, err
-	}
-	page := query.Page
-	if page < 1 {
-		page = 1
-	}
-	pageSize := query.PageSize
-	if pageSize < 1 {
-		pageSize = 20
-	}
-	if pageSize > MaxLogPageLimit {
-		pageSize = MaxLogPageLimit
-	}
-
-	var clauses []string
-	var args []any
-	if query.UserID > 0 {
-		clauses = append(clauses, "user_id = ?")
-		args = append(args, query.UserID)
-	}
-	if query.Model != "" {
-		clauses = append(clauses, "model = ?")
-		args = append(args, query.Model)
-	}
-	if query.Status != 0 {
-		clauses = append(clauses, "status_code = ?")
-		args = append(args, query.Status)
-	}
-	if query.FromUnix > 0 {
-		clauses = append(clauses, "started_at >= ?")
-		args = append(args, query.FromUnix)
-	}
-	if query.ToUnix > 0 {
-		clauses = append(clauses, "started_at < ?")
-		args = append(args, query.ToUnix)
-	}
-
-	sqlText := `SELECT ` + requestLogSelectColumns + ` FROM request_logs`
-	if len(clauses) > 0 {
-		// #nosec G202 -- clauses is assembled exclusively from the fixed predicates
-		// above and every filter value is passed separately in args.
-		sqlText += ` WHERE ` + strings.Join(clauses, " AND ")
-	}
-	sqlText += ` ORDER BY id DESC LIMIT ? OFFSET ?`
-	args = append(args, pageSize+1, (page-1)*pageSize)
-
-	rows, err := s.db.QueryContext(ctx, sqlText, args...)
-	if err != nil {
-		return nil, false, fmt.Errorf("query request logs: %w", err)
-	}
-	defer rows.Close()
-
-	logs := make([]RequestLog, 0, min(pageSize, 32))
-	for rows.Next() {
-		log, err := scanRequestLog(rows)
-		if err != nil {
-			return nil, false, fmt.Errorf("scan request log: %w", err)
-		}
-		logs = append(logs, log)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, false, fmt.Errorf("iterate request logs: %w", err)
-	}
-	hasMore := len(logs) > pageSize
-	if hasMore {
-		logs = logs[:pageSize]
-	}
-	return logs, hasMore, nil
 }
 
 // AggregateUsage returns site-wide accumulator totals across all normal
@@ -557,11 +532,18 @@ func (s *Store) AggregateUsage(ctx context.Context) (UsageTotals, error) {
 	var totals UsageTotals
 	err := s.db.QueryRowContext(ctx, `
 SELECT COALESCE(SUM(total_requests), 0),
+       COALESCE(SUM(total_uncached_input_tokens), 0),
+       COALESCE(SUM(total_cache_write_input_tokens), 0),
+       COALESCE(SUM(total_cache_read_input_tokens), 0),
+       COALESCE(SUM(total_output_tokens), 0),
        COALESCE(SUM(total_prompt_tokens), 0),
        COALESCE(SUM(total_completion_tokens), 0),
        COALESCE(SUM(total_unknown_usage_requests), 0)
 FROM users WHERE is_admin = 0`).
-		Scan(&totals.TotalRequests, &totals.TotalPromptTokens, &totals.TotalCompletionTokens, &totals.TotalUnknownUsageRequests)
+		Scan(&totals.TotalRequests,
+			&totals.TotalUncachedInputTokens, &totals.TotalCacheWriteInputTokens,
+			&totals.TotalCacheReadInputTokens, &totals.TotalOutputTokens,
+			&totals.TotalPromptTokens, &totals.TotalCompletionTokens, &totals.TotalUnknownUsageRequests)
 	if err != nil {
 		return UsageTotals{}, fmt.Errorf("aggregate usage: %w", err)
 	}
@@ -585,7 +567,10 @@ func (s *Store) AggregateUsageByUser(ctx context.Context, limit int) ([]UserUsag
 		limit = MaxUsageByUserLimit
 	}
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, total_requests, total_prompt_tokens, total_completion_tokens, total_unknown_usage_requests
+SELECT id, total_requests,
+       total_uncached_input_tokens, total_cache_write_input_tokens,
+       total_cache_read_input_tokens, total_output_tokens,
+       total_prompt_tokens, total_completion_tokens, total_unknown_usage_requests
 FROM users WHERE is_admin = 0
 ORDER BY total_requests DESC, id ASC
 LIMIT ?`, limit)
@@ -600,9 +585,9 @@ LIMIT ?`, limit)
 		if err := rows.Scan(
 			&row.UserID,
 			&row.TotalRequests,
-			&row.TotalPromptTokens,
-			&row.TotalCompletionTokens,
-			&row.TotalUnknownUsageRequests,
+			&row.TotalUncachedInputTokens, &row.TotalCacheWriteInputTokens,
+			&row.TotalCacheReadInputTokens, &row.TotalOutputTokens,
+			&row.TotalPromptTokens, &row.TotalCompletionTokens, &row.TotalUnknownUsageRequests,
 		); err != nil {
 			return nil, fmt.Errorf("scan usage by user: %w", err)
 		}

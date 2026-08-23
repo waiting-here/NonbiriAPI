@@ -1,6 +1,6 @@
 {
   "name": "nonbiriapi-web",
-  "version": "1.0.0-alpha.1",
+  "version": "1.0.0-alpha.2",
   "private": true,
   "type": "module",
   "description": "NonbiriAPI web frontend: admin and user stations",
@@ -19,6 +19,7 @@
     "preview": "npm run preview:admin",
     "preview:admin": "vite preview --mode admin",
     "preview:user": "vite preview --mode user",
+    "test": "node --test src/shared/utils/formatNumber.test.js src/admin/utils/economyInput.test.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

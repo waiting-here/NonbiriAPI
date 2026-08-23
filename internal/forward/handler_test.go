@@ -18,15 +18,28 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
+
+// mustLocalBackend wraps the shared stack in the single production Backend so
+// adapter tests exercise the same delegation path as production wiring.
+func mustLocalBackend(t *testing.T, stack *egress.Stack) *backend.LocalBackend {
+	t.Helper()
+	local, err := backend.NewLocal(stack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return local
+}
 
 type forwardResolver struct{}
 
@@ -46,6 +59,13 @@ func (c *countingCodec) Seal(plaintext []byte) (string, error) { return c.vault.
 func (c *countingCodec) Open(ciphertext string) ([]byte, error) {
 	c.opens.Add(1)
 	return c.vault.Open(ciphertext)
+}
+func (c *countingCodec) SealForContext(plaintext []byte, credentialContext secret.EndpointKeyContext) (string, error) {
+	return c.vault.SealForContext(plaintext, credentialContext)
+}
+func (c *countingCodec) OpenForContext(ciphertext string, credentialContext secret.EndpointKeyContext) ([]byte, error) {
+	c.opens.Add(1)
+	return c.vault.OpenForContext(ciphertext, credentialContext)
 }
 
 type forwardFixture struct {
@@ -92,7 +112,9 @@ func newForwardFixtureCfg(t *testing.T, allowed []string, hooks Hooks, selector 
 		t.Fatal(err)
 	}
 	codec := &countingCodec{vault: vault}
-	store, err := db.Open(filepath.Join(t.TempDir(), "forward.db"), codec)
+	dbPath := filepath.Join(t.TempDir(), "forward.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, codec)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatal(err)
@@ -123,15 +145,22 @@ func newForwardFixtureCfg(t *testing.T, allowed []string, hooks Hooks, selector 
 		t.Fatal(err)
 	}
 	registry := endpoint.NewRegistry()
-	adapter, err := openai.NewAdapter(openai.AdapterConfig{Stack: stack})
+	adapter, err := openai.NewAdapter(openai.AdapterConfig{Backend: mustLocalBackend(t, stack)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	safetyIdentifierKey := derivedSafetyIdentifierKey(t, vault)
+	safetyIdentifierFactory, err := NewSafetyIdentifierFactory(safetyIdentifierKey)
+	clear(safetyIdentifierKey)
 	if err != nil {
 		t.Fatal(err)
 	}
 	runner, err := NewSecureRunner(SecureRunnerConfig{
-		Repository: store,
-		Secrets:    codec,
-		Registry:   registry,
-		Adapters:   []Adapter{adapter},
+		Repository:        store,
+		Secrets:           codec,
+		Registry:          registry,
+		Adapters:          []Adapter{adapter},
+		SafetyIdentifiers: safetyIdentifierFactory,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -150,6 +179,8 @@ func newForwardFixtureCfg(t *testing.T, allowed []string, hooks Hooks, selector 
 	wrapped := auth.CallerKeyMiddleware(store, exit)
 	fixture := &forwardFixture{store: store, codec: codec, stack: stack, registry: registry, handler: wrapped, service: service}
 	t.Cleanup(func() {
+		_ = service.Close()
+		_ = safetyIdentifierFactory.Close()
 		stack.CloseIdleConnections()
 		_ = store.Close()
 		_ = vault.Close()
@@ -180,11 +211,11 @@ func (f *forwardFixture) addRoute(t *testing.T, userID int64, baseURL, provider,
 	if err != nil {
 		t.Fatal(err)
 	}
-	ciphertext, err := f.codec.Seal([]byte(upstreamSecret))
+	keyRow, err := f.store.CreateEndpointKey(context.Background(), userID, endpointRow.ID, []byte(upstreamSecret), "head", "tail", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}
-	keyRow, err := f.store.CreateEndpointKey(context.Background(), userID, endpointRow.ID, ciphertext, "head", "tail", "", true, time.Now().Unix())
+	ciphertext, err := f.store.GetEndpointKeyCiphertext(context.Background(), userID, endpointRow.ID, keyRow.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -366,12 +397,18 @@ func TestForwardRequestSafetyHooksAndSecretSinks(t *testing.T) {
 		var safety, model string
 		_ = json.Unmarshal(root["safety_identifier"], &safety)
 		_ = json.Unmarshal(root["model"], &model)
-		if safety != SafetyIdentifier(userID) || safety == "forged" || strings.Contains(safety, strconv.FormatInt(userID, 10)) || model != "upstream/model" || !bytes.Contains(root["unknown"], []byte("true")) {
-			t.Fatalf("authority user=%d safety=%q model=%q body=%s", userID, safety, model, body)
+		wantSafety := expectedSafetyIdentifier(t, fixture.codec.vault, userID, upstream.URL)
+		if safety != wantSafety || safety == "forged" || safety == strconv.FormatInt(userID, 10) || model != "upstream/model" || !bytes.Contains(root["unknown"], []byte("true")) {
+			t.Fatalf("authority user=%d safety=%q want=%q model=%q body=%s", userID, safety, wantSafety, model, body)
+		}
+		assertSafetyIdentifierFormat(t, safety)
+		if bytes.Count(body, []byte(`"safety_identifier"`)) != 1 || strings.Contains(safety, "nbu_v1_") {
+			t.Fatalf("non-canonical safety identifier emission user=%d body=%s", userID, body)
 		}
 	}
-	aliceSafety := SafetyIdentifier(alice.id)
-	if aliceSafety == SafetyIdentifier(bob.id) || aliceSafety != SafetyIdentifier(alice.id) {
+	aliceSafety := expectedSafetyIdentifier(t, fixture.codec.vault, alice.id, upstream.URL)
+	bobSafety := expectedSafetyIdentifier(t, fixture.codec.vault, bob.id, upstream.URL)
+	if aliceSafety == bobSafety || aliceSafety != expectedSafetyIdentifier(t, fixture.codec.vault, alice.id, upstream.URL) {
 		t.Fatal("safety identifiers are not stable and user-distinct")
 	}
 
@@ -463,8 +500,7 @@ func TestSingleAttemptDoesNotSilentlyRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cipher, _ := fixture.codec.Seal([]byte("sk-second"))
-	secondKey, err := fixture.store.CreateEndpointKey(context.Background(), user.id, secondEndpoint.ID, cipher, "", "", "", true, 2)
+	secondKey, err := fixture.store.CreateEndpointKey(context.Background(), user.id, secondEndpoint.ID, []byte("sk-second"), "", "", "", true, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -502,7 +538,7 @@ func TestForwardSSRFAndUnknownConnectorFailClosedWithoutSensitiveDiagnostics(t *
 		t.Fatal(err)
 	}
 	blocked := performCaller(fixture.handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, body))
-	if blocked.Code != http.StatusBadGateway || responseCode(t, blocked) != httperr.CodeUpstream {
+	if blocked.Code != http.StatusInternalServerError || responseCode(t, blocked) != httperr.CodeInternal {
 		t.Fatalf("blocked status=%d body=%s", blocked.Code, blocked.Body.String())
 	}
 	for _, forbidden := range []string{"169.254.169.254", "latest/meta-data", "sk-blocked-secret", route.cipher} {
@@ -515,7 +551,7 @@ func TestForwardSSRFAndUnknownConnectorFailClosedWithoutSensitiveDiagnostics(t *
 		t.Fatal(err)
 	}
 	self := performCaller(fixture.handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, body))
-	if self.Code != http.StatusBadGateway || responseCode(t, self) != httperr.CodeUpstream || strings.Contains(self.Body.String(), "gateway.example") {
+	if self.Code != http.StatusInternalServerError || responseCode(t, self) != httperr.CodeInternal || strings.Contains(self.Body.String(), "gateway.example") {
 		t.Fatalf("self-origin status=%d body=%s", self.Code, self.Body.String())
 	}
 
@@ -537,6 +573,83 @@ func TestForwardSSRFAndUnknownConnectorFailClosedWithoutSensitiveDiagnostics(t *
 	corrupt := performCaller(fixture.handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, body))
 	if corrupt.Code != http.StatusInternalServerError || responseCode(t, corrupt) != httperr.CodeInternal || strings.Contains(corrupt.Body.String(), corruptCiphertext) {
 		t.Fatalf("corrupt credential status=%d body=%s", corrupt.Code, corrupt.Body.String())
+	}
+}
+
+func TestForwardContextExchangeAndLegacyEnvelopeNeverDial(t *testing.T) {
+	for _, attack := range []string{"user", "endpoint", "key", "origin", "legacy", "future", "oversized", "oversized-origin"} {
+		attack := attack
+		t.Run(attack, func(t *testing.T) {
+			var hits atomic.Int32
+			upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+				hits.Add(1)
+				writer.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(writer, forwardCompletion("must-not-be-reached"))
+			}))
+			defer upstream.Close()
+			fixture := newForwardFixture(t, []string{upstream.URL}, Hooks{}, nil, nil)
+			user := fixture.addUser(t, "context-"+attack)
+			route := fixture.addRoute(t, user.id, upstream.URL, "p", "m", "upstream/model", "context-secret-marker", 0)
+			endpointRow, err := fixture.store.GetEndpoint(context.Background(), user.id, route.endpoint)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, origin, err := egress.CanonicalEndpointTarget(endpointRow.BaseURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			wrongUser, wrongEndpoint, wrongKey, wrongOrigin := user.id, route.endpoint, route.keyID, origin
+			switch attack {
+			case "user":
+				wrongUser++
+			case "endpoint":
+				wrongEndpoint++
+			case "key":
+				wrongKey++
+			case "origin":
+				wrongOrigin = "https://forward-context-exchange.example:443"
+			}
+			var ciphertext string
+			switch attack {
+			case "legacy":
+				ciphertext, err = fixture.codec.Seal([]byte("legacy-forward-fallback-marker"))
+			case "future":
+				ciphertext = strings.Replace(route.cipher, ":v2:", ":v7:", 1)
+			case "oversized":
+				ciphertext = strings.Repeat("A", 129<<10)
+			case "oversized-origin":
+				ciphertext = route.cipher
+				if _, updateErr := fixture.store.DB().Exec(`UPDATE endpoints SET base_url=? WHERE id=?`, strings.Repeat("a", 4097), route.endpoint); updateErr != nil {
+					t.Fatal(updateErr)
+				}
+			default:
+				credentialContext, contextErr := secret.NewEndpointKeyContext(wrongUser, wrongEndpoint, wrongKey, wrongOrigin)
+				if contextErr != nil {
+					t.Fatal(contextErr)
+				}
+				ciphertext, err = fixture.codec.SealForContext([]byte("context-exchange-secret-marker"), credentialContext)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := fixture.store.DB().Exec(`UPDATE endpoint_keys SET encrypted_secret=? WHERE id=?`, ciphertext, route.keyID); err != nil {
+				t.Fatal(err)
+			}
+
+			response := performCaller(fixture.handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, `{"model":"p/m","messages":[]}`))
+			if response.Code != http.StatusInternalServerError || responseCode(t, response) != httperr.CodeInternal {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+			if got := hits.Load(); got != 0 {
+				t.Fatalf("wrong context dialed upstream %d times", got)
+			}
+			for _, marker := range []string{ciphertext, origin, wrongOrigin, "context-exchange", "legacy-forward", "credential unavailable"} {
+				if strings.Contains(response.Body.String(), marker) {
+					t.Fatal("credential failure exposed protected detail")
+				}
+			}
+		})
 	}
 }
 
@@ -671,10 +784,106 @@ func TestSecureRunnerConstructionAndTargetInvalidation(t *testing.T) {
 	if _, err := NewSecureRunner(SecureRunnerConfig{}); err == nil {
 		t.Fatal("empty runner config accepted")
 	}
-	if SafetyIdentifier(10) == SafetyIdentifier(11) || strings.Contains(SafetyIdentifier(10), "10") {
-		t.Fatal("safety identifier isolation failed")
-	}
 	if !errors.Is(ErrModelNotFound, ErrModelNotFound) {
 		t.Fatal("sentinel sanity")
+	}
+}
+
+// fakeCharityRail is the test double for the [公益] routing exit. It records
+// whether Forward was invoked and what model name it received.
+type fakeCharityRail struct {
+	models    []db.CallerModel
+	forwardOK bool
+	recvModel string
+	recvUser  int64
+}
+
+func (f *fakeCharityRail) ListCallerModels(ctx context.Context) ([]db.CallerModel, error) {
+	return f.models, nil
+}
+
+func (f *fakeCharityRail) Forward(ctx context.Context, writer http.ResponseWriter, userID int64, request *openai.ChatRequest) (openai.AttemptResult, error) {
+	f.recvUser = userID
+	f.recvModel = request.Model
+	if f.forwardOK {
+		_, _ = writer.Write([]byte(`{"id":"x","object":"chat.completion","created":1,"model":"up","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`))
+		return openai.AttemptResult{Success: true, Committed: true, Usage: openai.Usage{OutputTokens: 1, Present: true}}, nil
+	}
+	return openai.AttemptResult{Failure: openai.FailureUpstream, Diagnostic: "charity unavailable"}, nil
+}
+
+// TestHandlerCharityPrefixRoutingAndModelMerge verifies namespace isolation:
+// /v1/models merges personal and [公益] projections; /v1/chat/completions
+// dispatches by the [公益] prefix to the charity rail and never to the
+// personal service; a [公益] model with no charity rail wired is 404.
+func TestHandlerCharityPrefixRoutingAndModelMerge(t *testing.T) {
+	fixture := newForwardFixture(t, []string{"https://upstream.example"}, Hooks{}, nil, nil)
+	user := fixture.addUser(t, "charity-routing")
+	fixture.addRoute(t, user.id, "https://upstream.example", "personal", "mine", "up/mine", "secret-mine", 0)
+
+	// Build a fresh handler that wires a fake charity rail alongside the
+	// fixture's real personal service.
+	rail := &fakeCharityRail{
+		forwardOK: true,
+		models:    []db.CallerModel{{FullName: "[公益]donor/charity", Provider: "donor", CreatedAt: 1}},
+	}
+	exit := NewHandler(HandlerDeps{Service: fixture.service, Charity: rail, Identity: CallerIdentity})
+	handler := auth.CallerKeyMiddleware(fixture.store, exit)
+
+	// /v1/models lists both personal and charity models.
+	resp := performCaller(handler, callerRequest(http.MethodGet, "/v1/models", user.key, ""))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("models status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	var list ModelList
+	if err := json.Unmarshal(resp.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode models: %v", err)
+	}
+	havePersonal, haveCharity := false, false
+	for _, m := range list.Data {
+		if m.ID == "personal/mine" {
+			havePersonal = true
+		}
+		if m.ID == "[公益]donor/charity" {
+			haveCharity = true
+		}
+	}
+	if !havePersonal || !haveCharity {
+		t.Fatalf("models = %+v, want both personal/mine and [公益]donor/charity", list.Data)
+	}
+
+	// A [公益] chat request routes to the charity rail, not the personal service.
+	body := `{"model":"[公益]donor/charity","messages":[{"role":"user","content":"hi"}]}`
+	resp = performCaller(handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, body))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("charity chat status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	if rail.recvUser != user.id {
+		t.Fatalf("charity rail received user=%d, want %d", rail.recvUser, user.id)
+	}
+	if rail.recvModel != "[公益]donor/charity" {
+		t.Fatalf("charity rail received model=%q", rail.recvModel)
+	}
+
+	// A personal chat request never reaches the charity rail.
+	rail.recvModel = ""
+	personalBody := `{"model":"personal/mine","messages":[{"role":"user","content":"hi"}]}`
+	performCaller(handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, personalBody))
+	if rail.recvModel != "" {
+		t.Fatalf("personal request reached charity rail: %q", rail.recvModel)
+	}
+}
+
+// TestHandlerCharityPrefixWithoutRailIs404 verifies that a personal-only
+// deployment (no charity rail wired) refuses [公益] models with 404.
+func TestHandlerCharityPrefixWithoutRailIs404(t *testing.T) {
+	fixture := newForwardFixture(t, []string{"https://upstream.example"}, Hooks{}, nil, nil)
+	user := fixture.addUser(t, "charity-only")
+	exit := NewHandler(HandlerDeps{Service: fixture.service, Charity: nil, Identity: CallerIdentity})
+	handler := auth.CallerKeyMiddleware(fixture.store, exit)
+	body := `{"model":"[公益]donor/charity","messages":[{"role":"user","content":"hi"}]}`
+	resp := performCaller(handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, body))
+	if resp.Code != http.StatusNotFound || responseCode(t, resp) != httperr.CodeNotFound {
+		t.Fatalf("no-rail charity status=%d body=%s, want 404/not_found", resp.Code, resp.Body.String())
 	}
 }

@@ -3,12 +3,15 @@
 //
 //	GET    /admin/api/users                  list (bounded page + filters)
 //	GET    /admin/api/users/{id}             detail with usage metadata
-//	PATCH  /admin/api/users/{id}             endpoint_limit / rpm_limit / lang
+//	PATCH  /admin/api/users/{id}             endpoint_limit / rpm_limit / lang;
+//	                                        or idempotent credits/donation_credit
+//	                                        delta adjustments (never both modes)
 //	POST   /admin/api/users/{id}/ban         ban (same-transaction session and
 //	                                        caller-key invalidation)
 //	POST   /admin/api/users/{id}/unban       unban
 //	GET    /admin/api/site-config            known keys -> typed values
 //	PATCH  /admin/api/site-config/{key}      update one known value
+//	GET    /admin/api/activity               daily site activity rollups (k-anonymity suppressed)
 //
 // Authorization is admin-session-only by construction: every route checks the
 // admin station and the admin principal itself, so a user session, caller
@@ -31,8 +34,11 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
@@ -51,11 +57,16 @@ type HandlerDeps struct {
 }
 
 // Handler is the mountable admin-controls route tree, wrapped in the shared
-// no-store API boundary. A nil store fails every route closed.
+// no-store API boundary. A nil store fails every route closed. The
+// siteConfigMu serializes the site-config PATCH read→runtime apply→persist→
+// revert step per handler so concurrent patches to the same key cannot
+// interleave their apply and persist orders and leave the database and the
+// runtime singleton drifted apart.
 type Handler struct {
-	store   *db.Store
-	runtime RuntimeApplier
-	mux     *http.ServeMux
+	store        *db.Store
+	runtime      RuntimeApplier
+	mux          *http.ServeMux
+	siteConfigMu sync.Mutex
 }
 
 // NewHandler builds the route tree. It is meant to be wrapped by the admin
@@ -70,6 +81,7 @@ func NewHandler(deps HandlerDeps) http.Handler {
 	h.mux.HandleFunc("POST /admin/api/users/{id}/unban", h.unbanUser)
 	h.mux.HandleFunc("GET /admin/api/site-config", h.getSiteConfig)
 	h.mux.HandleFunc("PATCH /admin/api/site-config/{key}", h.patchSiteConfig)
+	h.mux.HandleFunc("GET /admin/api/activity", h.getActivity)
 	return httpmw.API(h.mux)
 }
 
@@ -152,16 +164,29 @@ func (h *Handler) getUser(w http.ResponseWriter, r *http.Request) {
 	httperr.WriteJSON(w, http.StatusOK, userResponse(user))
 }
 
-// patchUser handles PATCH /admin/api/users/{id}: endpoint_limit / rpm_limit
-// (nullable; NULL restores the global default) and lang. rpm_limit is
-// rejected above the current global per-user cap; the administrator raises
-// that cap via default_rpm_per_user first.
+// patchUser handles PATCH /admin/api/users/{id}. Two disjoint modes:
+//
+//  1. profile mode: endpoint_limit / rpm_limit (nullable; NULL restores the
+//     global default), lang, and level (nullable; NULL resets the manual
+//     override so the automatic high-water mark applies again; an integer
+//     1..5 is a manual override, level 5 included). rpm_limit is rejected
+//     above the current global per-user cap; the administrator raises that
+//     cap via default_rpm_per_user first. Setting level on the administrator
+//     row is forbidden (administrators are excluded from the level system).
+//  2. economy mode: credits / donation_credit are canonical decimal-string
+//     INCREMENTS (deltas, never target balances). Either delta requires
+//     operation_id (idempotency key, client namespace) and a bounded reason;
+//     the two modes must never mix in one request. A retried operation id
+//     returns the FIRST application's result; responses carry
+//     credits_balance / donation_credit_balance so a delta can never be
+//     confused with the resulting balance.
 func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeErr(w, httperr.New(httperr.CodeServiceUnavailable, "service unavailable"))
 		return
 	}
-	if _, ok := h.requireAdmin(w, r); !ok {
+	admin, ok := h.requireAdmin(w, r)
+	if !ok {
 		return
 	}
 	id, ok := pathUserID(w, r)
@@ -169,14 +194,32 @@ func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		EndpointLimit json.RawMessage `json:"endpoint_limit"`
-		RPMLimit      json.RawMessage `json:"rpm_limit"`
-		Lang          *string         `json:"lang"`
+		EndpointLimit  json.RawMessage `json:"endpoint_limit"`
+		RPMLimit       json.RawMessage `json:"rpm_limit"`
+		Lang           *string         `json:"lang"`
+		Level          json.RawMessage `json:"level"`
+		Credits        *string         `json:"credits"`
+		DonationCredit *string         `json:"donation_credit"`
+		OperationID    *string         `json:"operation_id"`
+		Reason         *string         `json:"reason"`
 	}
 	if !decodeJSONBody(w, r, &body) {
 		return
 	}
-	if body.EndpointLimit == nil && body.RPMLimit == nil && body.Lang == nil {
+	economyMode := body.Credits != nil || body.DonationCredit != nil ||
+		body.OperationID != nil || body.Reason != nil
+	profileMode := body.EndpointLimit != nil || body.RPMLimit != nil || body.Lang != nil ||
+		body.Level != nil
+	if economyMode && profileMode {
+		writeErr(w, httperr.New(httperr.CodeInvalidRequest,
+			"credit adjustments cannot be mixed with other fields"))
+		return
+	}
+	if economyMode {
+		h.patchUserCreditDelta(w, r, admin, id, &body)
+		return
+	}
+	if !profileMode {
 		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "no fields to update"))
 		return
 	}
@@ -188,6 +231,20 @@ func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {
 		}
 		patch.EndpointLimitSet = true
 		patch.EndpointLimit = value
+	}
+	if present, value, ok := nullableInt(body.Level); present {
+		// level is tri-state like the limit fields: absent = unchanged,
+		// explicit null = reset to automatic, integer = manual override.
+		if !ok {
+			writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid level"))
+			return
+		}
+		if value != nil && (*value < db.MinLevel || *value > db.MaxLevel) {
+			writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid level"))
+			return
+		}
+		patch.LevelSet = true
+		patch.Level = value
 	}
 	if present, value, ok := nullableInt(body.RPMLimit); present {
 		if !ok {
@@ -228,6 +285,73 @@ func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {
 	httperr.WriteJSON(w, http.StatusOK, userResponse(updated))
 }
 
+// patchUserCreditDelta applies the economy mode of PATCH
+// /admin/api/users/{id}: at least one decimal-string delta plus the required
+// operation_id and reason, applied as one idempotent ledger operation.
+func (h *Handler) patchUserCreditDelta(w http.ResponseWriter, r *http.Request, admin *db.User, id int64, body *struct {
+	EndpointLimit  json.RawMessage `json:"endpoint_limit"`
+	RPMLimit       json.RawMessage `json:"rpm_limit"`
+	Lang           *string         `json:"lang"`
+	Level          json.RawMessage `json:"level"`
+	Credits        *string         `json:"credits"`
+	DonationCredit *string         `json:"donation_credit"`
+	OperationID    *string         `json:"operation_id"`
+	Reason         *string         `json:"reason"`
+}) {
+	invalid := func() {
+		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid credit adjustment"))
+	}
+	if body.OperationID == nil || body.Reason == nil || (body.Credits == nil && body.DonationCredit == nil) {
+		// operation_id and reason are mandatory for every delta; bare metadata
+		// fields without any delta are also invalid.
+		invalid()
+		return
+	}
+	operationID := strings.TrimSpace(*body.OperationID)
+	adj := db.AdminCreditAdjustment{
+		TargetUserID: id,
+		ActorUserID:  admin.ID,
+		OperationID:  operationID,
+		Reason:       strings.TrimSpace(*body.Reason),
+	}
+	if body.Credits != nil {
+		delta, err := credits.ParseAmount(*body.Credits)
+		if err != nil {
+			invalid()
+			return
+		}
+		adj.CreditsSet = true
+		adj.CreditsDelta = delta
+	}
+	if body.DonationCredit != nil {
+		delta, err := credits.ParseAmount(*body.DonationCredit)
+		if err != nil {
+			invalid()
+			return
+		}
+		adj.DonationSet = true
+		adj.DonationDelta = delta
+	}
+	result, err := h.store.ApplyAdminCreditAdjustment(r.Context(), adj)
+	if err != nil {
+		writeLimitErr(w, err)
+		return
+	}
+	updated, err := h.store.GetUserByID(id)
+	if err != nil || updated == nil || updated.IsAdmin {
+		writeErr(w, httperr.New(httperr.CodeNotFound, "user not found"))
+		return
+	}
+	// Respond with the balances as of THIS operation's application (the first
+	// one when the operation id is a replay), not the live balance: a retry
+	// that arrives after further unrelated adjustments must still return the
+	// first application's result, exactly as the ledger recorded it.
+	resp := userResponse(updated)
+	resp.CreditsBalance = credits.FormatAmount(result.CreditsAfter)
+	resp.DonationCreditBalance = credits.FormatAmount(result.DonationCreditAfter)
+	httperr.WriteJSON(w, http.StatusOK, resp)
+}
+
 // currentRPMLimitCap resolves the global per-user RPM ceiling: the
 // default_rpm_per_user site_config value, or the ratelimit default when
 // unset. This is the same ceiling the flow-control controller clamps user
@@ -247,9 +371,12 @@ func (h *Handler) currentRPMLimitCap(ctx context.Context) (int, error) {
 	return ratelimit.DefaultRPMPerUserLimit, nil
 }
 
-// banUser handles POST /admin/api/users/{id}/ban. The repository performs the
-// ban, session deletion, and caller-key deletion in one transaction, so
-// request-time auth and platform-exit auth are invalidated atomically.
+// banUser handles POST /admin/api/users/{id}/ban. The body carries an
+// optional bounded reason and an optional duration_seconds: absent or null
+// means permanent, a positive integer sets a lazy expiry deadline. The
+// repository performs the ban, session deletion, and caller-key deletion in
+// one transaction, so request-time auth and platform-exit auth are
+// invalidated atomically. A manual ban always clears the auto_banned flag.
 func (h *Handler) banUser(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeErr(w, httperr.New(httperr.CodeServiceUnavailable, "service unavailable"))
@@ -263,12 +390,22 @@ func (h *Handler) banUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Reason string `json:"reason"`
+		Reason          string          `json:"reason"`
+		DurationSeconds json.RawMessage `json:"duration_seconds"`
 	}
 	if !decodeOptionalJSONBody(w, r, &body) {
 		return
 	}
-	if err := h.store.BanUser(id, body.Reason); err != nil {
+	ban := db.UserBan{Reason: body.Reason}
+	if body.DurationSeconds != nil && string(body.DurationSeconds) != "null" {
+		var duration int64
+		if err := json.Unmarshal(body.DurationSeconds, &duration); err != nil || duration < 1 || duration > db.MaxBanDurationSeconds {
+			writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid ban duration"))
+			return
+		}
+		ban.DurationSeconds = duration
+	}
+	if err := h.store.BanUserWithOptions(id, ban); err != nil {
 		writeLimitErr(w, err)
 		return
 	}
@@ -335,17 +472,20 @@ func (h *Handler) getSiteConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 // patchSiteConfig handles PATCH /admin/api/site-config/{key}. The value is
-// validated against the key's typed spec, applied to the runtime singletons
-// through the optional applier (fail closed: a failed apply leaves runtime
-// and DB untouched), then persisted. A persistence failure after a
-// successful apply reverts the runtime singleton to its previous value so DB
+// validated against the key's typed spec, then the read→runtime apply→persist→
+// revert step runs under the handler's site-config lock so concurrent patches to
+// the same key cannot interleave. The runtime singleton is applied first (fail
+// closed: a failed apply leaves runtime and DB untouched), then the value is
+// persisted; a persistence failure reverts the runtime singleton to its previous
+// value (or the frozen canonical default when the prior row was missing) so DB
 // and runtime cannot drift.
 func (h *Handler) patchSiteConfig(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeErr(w, httperr.New(httperr.CodeServiceUnavailable, "service unavailable"))
 		return
 	}
-	if _, ok := h.requireAdmin(w, r); !ok {
+	admin, ok := h.requireAdmin(w, r)
+	if !ok {
 		return
 	}
 	key := r.PathValue("key")
@@ -368,13 +508,101 @@ func (h *Handler) patchSiteConfig(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, derr)
 		return
 	}
+	// The timezone offset has its own atomic immutability guard in the
+	// repository (freeze check and upsert share one write transaction) and no
+	// runtime singleton: every consumer reads the authoritative value per
+	// business transaction. It therefore bypasses the generic apply/persist
+	// path below. It is also deliberately exempt from the console-write
+	// activity hook: recording activity would create temporal data and
+	// instantly freeze the very offset being configured for the first time.
+	if key == KeySiteTimezoneOffsetMinutes {
+		n, perr := strconv.Atoi(value)
+		if perr != nil {
+			writeErr(w, httperr.New(httperr.CodeInternal, "configuration update failed"))
+			return
+		}
+		if err := h.store.SetSiteTimezoneOffsetMinutes(n); err != nil {
+			if errors.Is(err, db.ErrConflict) {
+				writeErr(w, httperr.New(httperr.CodeConflict, "site timezone can no longer be changed"))
+				return
+			}
+			slog.Error("site config update failed", "key", key, "err", err)
+			writeErr(w, httperr.New(httperr.CodeInternal, "configuration update failed"))
+			return
+		}
+		httperr.WriteJSON(w, http.StatusOK, siteConfigPatchResp{Key: key, Value: n})
+		return
+	}
+	// The three level promotion thresholds have their own atomic repository
+	// path: the enabled-chain cross-validation and the write share one
+	// transaction (never a separate read-then-write). Like the timezone
+	// offset they have no runtime singleton — every level resolution reads
+	// the authoritative site_config snapshot — so they bypass the generic
+	// apply/persist step below. The write still records the administrator's
+	// console write as product activity inside that same transaction, exactly
+	// like the generic site-config path.
+	if key == KeyLevelThreshold2Milli || key == KeyLevelThreshold3Milli || key == KeyLevelThreshold4Milli {
+		n, perr := strconv.ParseInt(value, 10, 64)
+		if perr != nil {
+			writeErr(w, httperr.New(httperr.CodeInternal, "configuration update failed"))
+			return
+		}
+		if err := h.store.SetLevelThresholdMilli(r.Context(), key, n, admin.ID, time.Now()); err != nil {
+			if errors.Is(err, db.ErrConflict) {
+				writeErr(w, httperr.New(httperr.CodeConflict,
+					"enabled level thresholds must be strictly increasing"))
+				return
+			}
+			slog.Error("site config update failed", "key", key, "err", err)
+			writeErr(w, httperr.New(httperr.CodeInternal, "configuration update failed"))
+			return
+		}
+		httperr.WriteJSON(w, http.StatusOK, siteConfigPatchResp{Key: key, Value: value})
+		return
+	}
+	// The check-in award bounds are a cross-validated PAIR: like the level
+	// thresholds they have no runtime singleton (every business transaction
+	// reads the authoritative site_config snapshot), but PATCHing either bound
+	// must validate min<=max against the other key's current value in ONE
+	// transaction — never a separate read-then-write. The repository path also
+	// records the administrator's console write as product activity inside
+	// that same transaction, exactly like the threshold and generic paths.
+	if key == KeyCheckinAwardMinMilli || key == KeyCheckinAwardMaxMilli {
+		n, perr := strconv.ParseInt(value, 10, 64)
+		if perr != nil {
+			writeErr(w, httperr.New(httperr.CodeInternal, "configuration update failed"))
+			return
+		}
+		if err := h.store.SetCheckinAwardBoundMilli(r.Context(), key, n, admin.ID, time.Now()); err != nil {
+			if errors.Is(err, db.ErrConflict) {
+				writeErr(w, httperr.New(httperr.CodeConflict,
+					"check-in award minimum must not exceed the maximum"))
+				return
+			}
+			slog.Error("site config update failed", "key", key, "err", err)
+			writeErr(w, httperr.New(httperr.CodeInternal, "configuration update failed"))
+			return
+		}
+		httperr.WriteJSON(w, http.StatusOK, siteConfigPatchResp{Key: key, Value: value})
+		return
+	}
+	// Serialize the read→apply→persist→revert step per handler so concurrent
+	// patches to the same key cannot interleave: without this lock one patch's
+	// runtime apply could land between another's apply and persist (or a revert
+	// could use a stale previous), leaving the persisted value and the live
+	// runtime singleton disagreed.
+	h.siteConfigMu.Lock()
+	defer h.siteConfigMu.Unlock()
 	previous, err := h.store.GetSiteConfigValue(key)
 	if err != nil {
 		writeRepoErr(w, err)
 		return
 	}
 	if err := applyThenPersist(r.Context(), h.runtime, key, value, previous, func() error {
-		return h.store.SetSiteConfigValue(key, value)
+		// One transaction persists the value and records the administrator's
+		// console write as product activity; while the site timezone offset is
+		// unset the activity half is skipped inside that same transaction.
+		return h.store.SetSiteConfigValueWithActivity(r.Context(), key, value, admin.ID, time.Now())
 	}); err != nil {
 		slog.Error("site config update failed", "key", key, "err", err)
 		writeErr(w, httperr.New(httperr.CodeInternal, "configuration update failed"))
@@ -496,6 +724,13 @@ func writeLimitErr(w http.ResponseWriter, err error) {
 		writeErr(w, httperr.New(httperr.CodeNotFound, "user not found"))
 	case errors.Is(err, db.ErrAdminProtected):
 		writeErr(w, httperr.New(httperr.CodeForbidden, "administrator identity is protected"))
+	case errors.Is(err, db.ErrInsufficientCredits):
+		writeErr(w, httperr.New(httperr.CodeInsufficientCredits, "悠哉积分不足"))
+	case errors.Is(err, db.ErrDonationCreditNegative):
+		// The refusal depends on the server-side balance, not on the request
+		// shape alone, so it is a conflict rather than a validation failure.
+		writeErr(w, httperr.New(httperr.CodeConflict,
+			"adjustment would make donation credit negative"))
 	case errors.Is(err, db.ErrConflict):
 		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
 	default:

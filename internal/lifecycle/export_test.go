@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
@@ -50,7 +52,9 @@ func lifecycleTestStore(t *testing.T) *db.Store {
 	if err != nil {
 		t.Fatalf("secret.New: %v", err)
 	}
-	st, err := db.Open(filepath.Join(t.TempDir(), "lifecycle.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "lifecycle.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	st, err := db.Open(dbPath, vault)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatalf("db.Open: %v", err)
@@ -98,7 +102,7 @@ func seedExportFixture(t *testing.T, st *db.Store) *db.User {
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, err := st.CreateEndpointKey(ctx, user.ID, ep.ID, "nbsec:v1:aes-256-gcm:aaaa", "head", "tail", "my key", true, 100)
+	key, err := st.CreateEndpointKey(ctx, user.ID, ep.ID, []byte("sk-lifecycle-export"), "head", "tail", "my key", true, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,8 +202,93 @@ func TestExportRateLimitedPerUser(t *testing.T) {
 func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	st := lifecycleTestStore(t)
 	user := seedExportFixture(t, st)
-	handler := newExportHandler(t, st, user, &fakeElevation{allowCount: 1}, nil)
+	// This test resolves the CURRENT row (not the seed-time snapshot) so the
+	// level state set below is projected exactly as a live session would see
+	// it.
+	handler := NewHandler(HandlerDeps{
+		Store: st,
+		Resolve: func(*http.Request) (*db.User, error) {
+			return st.GetUserByID(user.ID)
+		},
+		Elevation: &fakeElevation{allowCount: 1},
+	})
 
+	// The usage summary carries the four-bucket totals alongside the legacy
+	// mirrors; record one known request so the projection is exercised. The
+	// timezone offset is configured first so the same request also lands in
+	// the user's own daily activity summary (schema v2 section).
+	if err := st.SetSiteTimezoneOffsetMinutes(330); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.RecordRequest(context.Background(), db.RequestLogInput{
+		AttemptID: "export-usage-attempt", UserID: user.ID, Model: "provider/model",
+		StatusCode: 200, StartedAt: time.Unix(1700000000, 0).UTC(), CompletedAt: time.Unix(1700000001, 0).UTC(),
+		UncachedInputTokens: 2, CacheWriteInputTokens: 3, CacheReadInputTokens: 5, OutputTokens: 7,
+		Activity: &db.ActivityDelta{APIRequests: 1, UncachedInputTokens: 2, CacheWriteInputTokens: 3, CacheReadInputTokens: 5, OutputTokens: 7},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Credit balances and ledger entries are part of the export (schema v2):
+	// one adjustment gives the projection known string values.
+	if _, err := st.ApplyAdminCreditAdjustment(context.Background(), db.AdminCreditAdjustment{
+		TargetUserID: user.ID, ActorUserID: user.ID, OperationID: "export-ledger-1",
+		Reason: "export fixture", CreditsSet: true, CreditsDelta: 12345, DonationSet: true, DonationDelta: 678,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Level state exports as small integers: a manual override set just for
+	// this assertion and the untouched automatic high-water mark. The handler
+	// above resolves the current row, so no fixture refresh is needed.
+	manualLevel := 2
+	if _, err := st.SetUserManualLevel(user.ID, &manualLevel); err != nil {
+		t.Fatalf("set manual level: %v", err)
+	}
+	// One check-in with a deterministic award gives the checkins section
+	// (schema v2) a known row: site-local date + award string only.
+	if err := st.SetSiteConfigValueWithActivity(context.Background(), db.CheckinModeKey,
+		db.CheckinModeEnabled, user.ID, time.Unix(1700000000, 0).UTC()); err != nil {
+		t.Fatal(err)
+	}
+	for key, value := range map[string]int64{
+		db.CheckinAwardMinMilliKey: 1000,
+		db.CheckinAwardMaxMilliKey: 1000,
+	} {
+		if _, err := st.DB().Exec(`INSERT INTO site_config (key, value, updated_at) VALUES (?, ?, 0)
+			ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, strconv.FormatInt(value, 10)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := st.Checkin(context.Background(), user.ID, time.Unix(1700000000, 0).UTC()); err != nil {
+		t.Fatalf("checkin: %v", err)
+	}
+	// Seed both sides of the charity export boundary: one reservation consumed
+	// by this user and one reservation against this user's donated resource.
+	donor, err := st.CreateDiscordUser("discord-export-donor", "donor", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []struct {
+		attempt string
+		owner   int64
+		donor   int64
+		model   string
+		reward  int64
+	}{
+		{attempt: "export-charity-consumer", owner: user.ID, donor: donor.ID, model: "[公益]/consumer", reward: 0},
+		{attempt: "export-charity-donor", owner: donor.ID, donor: user.ID, model: "[公益]/donor", reward: 250},
+	} {
+		if _, err := st.DB().Exec(`INSERT INTO charity_reservations
+			(user_id, donor_user_id, attempt_id, model_snapshot, state, pricing_mode,
+			discount_percent, user_reserved, key_reserved, original_charge, user_charge,
+			donor_reward, usage_uncached_input_tokens, usage_cache_write_input_tokens,
+			usage_cache_read_input_tokens, usage_output_tokens, usage_unknown,
+			created_at, finalized_at, updated_at)
+			VALUES (?, ?, ?, ?, 'committed', 'per_request', 100, 1000, 1200,
+				1200, 1000, ?, 2, 3, 5, 7, 0, 1700000000, 1700000001, 1700000001)`,
+			row.owner, row.donor, row.attempt, row.model, row.reward); err != nil {
+			t.Fatalf("seed charity reservation %s: %v", row.attempt, err)
+		}
+	}
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, exportRequest("cap-token"))
 	if rec.Code != http.StatusOK {
@@ -218,10 +307,20 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	var pkg struct {
 		SchemaVersion int `json:"schema_version"`
 		User          struct {
-			ID       int64  `json:"id"`
-			Discord  string `json:"discord_id"`
-			Username string `json:"username"`
+			ID          int64  `json:"id"`
+			Discord     string `json:"discord_id"`
+			Username    string `json:"username"`
+			ManualLevel *int   `json:"manual_level"`
+			AutoLevel   int    `json:"auto_level"`
 		} `json:"user"`
+		CreditLedger []struct {
+			ID                  int64  `json:"id"`
+			Kind                string `json:"kind"`
+			CreditsDelta        string `json:"credits_delta"`
+			DonationCreditDelta string `json:"donation_credit_delta"`
+			CreditsAfter        string `json:"credits_after"`
+			Reason              string `json:"reason"`
+		} `json:"credit_ledger"`
 		Endpoints []struct {
 			ID      int64  `json:"id"`
 			BaseURL string `json:"base_url"`
@@ -244,17 +343,52 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 			Display string `json:"display"`
 		} `json:"caller_key"`
 		Usage struct {
-			TotalRequests int64 `json:"total_requests"`
+			TotalRequests              int64 `json:"total_requests"`
+			TotalUncachedInputTokens   int64 `json:"total_uncached_input_tokens"`
+			TotalCacheWriteInputTokens int64 `json:"total_cache_write_input_tokens"`
+			TotalCacheReadInputTokens  int64 `json:"total_cache_read_input_tokens"`
+			TotalOutputTokens          int64 `json:"total_output_tokens"`
+			TotalPromptTokens          int64 `json:"total_prompt_tokens"`
+			TotalCompletionTokens      int64 `json:"total_completion_tokens"`
 		} `json:"usage"`
 		LogSummary struct {
 			TotalLogs int64 `json:"total_logs"`
 		} `json:"log_summary"`
+		ActivityDaily []struct {
+			Day                   int64 `json:"day"`
+			ProductActive         bool  `json:"product_active"`
+			APIRequests           int64 `json:"api_requests"`
+			UncachedInputTokens   int64 `json:"uncached_input_tokens"`
+			CacheWriteInputTokens int64 `json:"cache_write_input_tokens"`
+			CacheReadInputTokens  int64 `json:"cache_read_input_tokens"`
+			OutputTokens          int64 `json:"output_tokens"`
+			Checkins              int64 `json:"checkins"`
+			ConsoleWrites         int64 `json:"console_writes"`
+		} `json:"activity_daily"`
+		Checkins []struct {
+			Day        string `json:"day"`
+			AwardMilli string `json:"award_milli"`
+		} `json:"checkins"`
+		CharityReservations []struct {
+			Model               string `json:"model"`
+			State               string `json:"state"`
+			UserReservedMilli   string `json:"user_reserved_milli"`
+			OriginalChargeMilli string `json:"original_charge_milli"`
+			UncachedInputTokens int64  `json:"uncached_input_tokens"`
+		} `json:"charity_reservations"`
+		DonorRewards []struct {
+			Model            string `json:"model"`
+			DonorRewardMilli string `json:"donor_reward_milli"`
+		} `json:"donor_rewards"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &pkg); err != nil {
 		t.Fatalf("decode package: %v body=%s", err, rec.Body.String())
 	}
-	if pkg.SchemaVersion != 1 || pkg.User.ID != user.ID || pkg.User.Discord != "discord-export" || pkg.User.Username != "alice" {
+	if pkg.SchemaVersion != 2 || pkg.User.ID != user.ID || pkg.User.Discord != "discord-export" || pkg.User.Username != "alice" {
 		t.Fatalf("package header=%+v", pkg)
+	}
+	if pkg.User.ManualLevel == nil || *pkg.User.ManualLevel != 2 || pkg.User.AutoLevel != 1 {
+		t.Fatalf("level export = (%+v, %d), want (2, 1)", pkg.User.ManualLevel, pkg.User.AutoLevel)
 	}
 	if len(pkg.Endpoints) != 1 || pkg.Endpoints[0].BaseURL != "https://upstream.example/v1/" || len(pkg.Endpoints[0].Keys) != 1 || pkg.Endpoints[0].Keys[0].DisplayHead != "head" {
 		t.Fatalf("endpoints=%+v", pkg.Endpoints)
@@ -265,8 +399,64 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	if !strings.HasPrefix(pkg.CallerKey.Display, "nbk_") {
 		t.Fatalf("caller key display=%q", pkg.CallerKey.Display)
 	}
-	if pkg.Usage.TotalRequests != 0 || pkg.LogSummary.TotalLogs != 0 {
+	if pkg.Usage.TotalRequests != 1 || pkg.LogSummary.TotalLogs != 1 {
 		t.Fatalf("usage=%+v logs=%+v", pkg.Usage, pkg.LogSummary)
+	}
+	// Credit ledger section: exactly the seeded entries (the adjustment and
+	// the deterministic check-in award) with canonical string values and the
+	// bounded reason; nothing else ever enters this section.
+	if len(pkg.CreditLedger) != 2 {
+		t.Fatalf("credit_ledger rows=%d, want 2", len(pkg.CreditLedger))
+	}
+	kinds := map[string]bool{}
+	for _, entry := range pkg.CreditLedger {
+		kinds[entry.Kind] = true
+	}
+	if !kinds["admin_adjustment"] || !kinds["checkin_award"] {
+		t.Fatalf("credit_ledger kinds=%v", kinds)
+	}
+	entry := pkg.CreditLedger[0]
+	if entry.Kind != "admin_adjustment" || entry.CreditsDelta != "12345" ||
+		entry.DonationCreditDelta != "678" || entry.CreditsAfter != "12345" || entry.Reason != "export fixture" {
+		t.Fatalf("credit_ledger entry=%+v", entry)
+	}
+	if pkg.Usage.TotalUncachedInputTokens != 2 || pkg.Usage.TotalCacheWriteInputTokens != 3 ||
+		pkg.Usage.TotalCacheReadInputTokens != 5 || pkg.Usage.TotalOutputTokens != 7 ||
+		pkg.Usage.TotalPromptTokens != 10 || pkg.Usage.TotalCompletionTokens != 7 {
+		t.Fatalf("usage buckets=%+v", pkg.Usage)
+	}
+	// The user's own daily activity summary is exported (schema v2); the
+	// site-wide rollup table is never part of a personal export.
+	if len(pkg.ActivityDaily) != 1 {
+		t.Fatalf("activity_daily=%+v", pkg.ActivityDaily)
+	}
+	day := pkg.ActivityDaily[0]
+	if day.ProductActive != true || day.APIRequests != 1 || day.UncachedInputTokens != 2 ||
+		day.CacheWriteInputTokens != 3 || day.CacheReadInputTokens != 5 || day.OutputTokens != 7 ||
+		day.ConsoleWrites != 1 || day.Checkins != 1 {
+		t.Fatalf("activity_daily row=%+v", day)
+	}
+	// The check-in history section (schema v2): the site-local calendar date
+	// under the configured +330 offset and the award as a canonical decimal
+	// string — no streak, no location, nothing else.
+	if len(pkg.Checkins) != 1 {
+		t.Fatalf("checkins=%+v", pkg.Checkins)
+	}
+	wantDate := time.Unix(db.SiteDayKey(1700000000, 330)+330*60, 0).UTC().Format("2006-01-02")
+	if pkg.Checkins[0].Day != wantDate || pkg.Checkins[0].AwardMilli != "1000" {
+		t.Fatalf("checkins row=%+v, want (%q, \"1000\")", pkg.Checkins[0], wantDate)
+	}
+	if len(pkg.CharityReservations) != 1 {
+		t.Fatalf("charity_reservations=%+v", pkg.CharityReservations)
+	}
+	reservation := pkg.CharityReservations[0]
+	if reservation.Model != "[公益]/consumer" || reservation.State != "committed" ||
+		reservation.UserReservedMilli != "1000" || reservation.OriginalChargeMilli != "1200" ||
+		reservation.UncachedInputTokens != 2 {
+		t.Fatalf("charity reservation row=%+v", reservation)
+	}
+	if len(pkg.DonorRewards) != 1 || pkg.DonorRewards[0].Model != "[公益]/donor" || pkg.DonorRewards[0].DonorRewardMilli != "250" {
+		t.Fatalf("donor_rewards=%+v", pkg.DonorRewards)
 	}
 
 	// Whitelist enforcement: no secret material anywhere in the package.

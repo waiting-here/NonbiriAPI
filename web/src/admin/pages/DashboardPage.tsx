@@ -7,17 +7,17 @@ import {
   LoadingState,
   PageHeader,
 } from '@shared/components/States';
-import { useAdminEndpoints, useAdminModels, useAdminUsage } from '../data';
+import { CompactNumber } from '@shared/components/CompactNumber';
+import { formatCompact, formatCount, type FormattedNumber } from '@shared/utils/formatNumber';
+import { useAdminEndpointOverview, useAdminUsage } from '../data';
 
-function number(value: number): string {
-  return value.toLocaleString();
-}
-
-function UsageMetric({ label, value }: { label: string; value: number }) {
+function UsageMetric({ label, value }: { label: string; value: FormattedNumber }) {
   return (
     <div className="metric-card">
       <p>{label}</p>
-      <strong className="metric-value">{number(value)}</strong>
+      <strong className="metric-value">
+        <CompactNumber value={value} />
+      </strong>
     </div>
   );
 }
@@ -45,7 +45,9 @@ function OverviewCard({
     <Card>
       <div className="card-title-row">
         <h2>{title}</h2>
-        {count !== undefined ? <strong className="metric-inline">{number(count)}</strong> : null}
+        {count !== undefined ? (
+          <strong className="metric-inline">{formatCount(count).display}</strong>
+        ) : null}
       </div>
       {loading ? <LoadingState /> : error ? <ErrorState error={error} /> : count === 0 ? <EmptyState title={emptyTitle} body={emptyBody} /> : null}
       <div className="form-actions">
@@ -60,8 +62,7 @@ function OverviewCard({
 export function DashboardPage() {
   const { t } = useTranslation();
   const usage = useAdminUsage();
-  const endpoints = useAdminEndpoints();
-  const models = useAdminModels();
+  const endpoints = useAdminEndpointOverview(1, 1);
 
   return (
     <div className="page">
@@ -81,15 +82,15 @@ export function DashboardPage() {
           <ErrorState error={usage.error} onRetry={() => void usage.refetch()} />
         ) : (
           <div className="metric-grid">
-            <UsageMetric label={t('admin.dashboard.requests')} value={usage.data.total_requests} />
-            <UsageMetric label={t('admin.dashboard.promptTokens')} value={usage.data.total_prompt_tokens} />
+            <UsageMetric label={t('admin.dashboard.requests')} value={formatCount(usage.data.total_requests)} />
+            <UsageMetric label={t('common.tokens.input')} value={formatCompact(usage.data.total_prompt_tokens)} />
             <UsageMetric
-              label={t('admin.dashboard.completionTokens')}
-              value={usage.data.total_completion_tokens}
+              label={t('common.tokens.output')}
+              value={formatCompact(usage.data.total_completion_tokens)}
             />
             <UsageMetric
               label={t('admin.dashboard.unknownUsage')}
-              value={usage.data.total_unknown_usage_requests}
+              value={formatCount(usage.data.total_unknown_usage_requests)}
             />
           </div>
         )}
@@ -98,23 +99,13 @@ export function DashboardPage() {
       <div className="split-grid">
         <OverviewCard
           title={t('admin.dashboard.endpointsTitle')}
-          count={endpoints.data?.length}
+          count={undefined}
           loading={endpoints.isPending}
           error={endpoints.error}
           emptyTitle={t('admin.endpoints.empty')}
           emptyBody={t('admin.endpoints.emptyBody')}
           link="/endpoints"
           linkLabel={t('admin.dashboard.viewEndpoints')}
-        />
-        <OverviewCard
-          title={t('admin.dashboard.modelsTitle')}
-          count={models.data?.length}
-          loading={models.isPending}
-          error={models.error}
-          emptyTitle={t('admin.models.empty')}
-          emptyBody={t('admin.models.emptyBody')}
-          link="/models"
-          linkLabel={t('admin.dashboard.viewModels')}
         />
       </div>
     </div>

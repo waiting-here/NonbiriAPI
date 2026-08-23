@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -89,7 +90,9 @@ func authTestStore(t *testing.T) *db.Store {
 	if err != nil {
 		t.Fatalf("secret.New: %v", err)
 	}
-	st, err := db.Open(filepath.Join(t.TempDir(), "auth.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "auth.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	st, err := db.Open(dbPath, vault)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatalf("db.Open: %v", err)
@@ -224,7 +227,7 @@ func TestUserOAuthStoresAndRefreshesGuildSnapshot(t *testing.T) {
 	// Registration: the guild member carries a server nickname and a server
 	// avatar hash; both should be stored as a snapshot on the new user.
 	provider := &fakeDiscordProvider{login: DiscordLogin{
-		Identity:    DiscordIdentity{ID: "discord-guild", Username: "global-name", Avatar: "global-avatar"},
+		Identity: DiscordIdentity{ID: "discord-guild", Username: "global-name", Avatar: "global-avatar"},
 		GuildMember: func(_ context.Context, guildID string) (GuildMember, error) {
 			if guildID == "guild-1" {
 				return GuildMember{Roles: []string{"role-1"}, Nick: "server-name", Avatar: "guild-avatar-hash"}, nil
@@ -257,7 +260,7 @@ func TestUserOAuthStoresAndRefreshesGuildSnapshot(t *testing.T) {
 	// Login (existing user): a fresh OAuth start refreshes the snapshot with
 	// the member's current nickname and avatar.
 	provider.login = DiscordLogin{
-		Identity:    DiscordIdentity{ID: "discord-guild", Username: "global-name", Avatar: "global-avatar"},
+		Identity: DiscordIdentity{ID: "discord-guild", Username: "global-name", Avatar: "global-avatar"},
 		GuildMember: func(_ context.Context, guildID string) (GuildMember, error) {
 			if guildID == "guild-1" {
 				return GuildMember{Roles: []string{"role-1"}, Nick: "updated-name", Avatar: "updated-hash"}, nil

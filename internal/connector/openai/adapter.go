@@ -12,8 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
 
 const (
@@ -91,21 +93,28 @@ func (Target) LogValue() slog.Value {
 
 // AttemptResult contains only bounded metadata safe for forwarding hooks.
 // Diagnostic is locally generated and never includes raw upstream text.
+// EndpointBaseURL carries the canonical base URL actually dialed so the
+// frozen log contract's dispatch-time snapshot can be persisted; it is the
+// owner-visible value already stored plaintext in the endpoint row, never a
+// credential, secret material, or request/response content.
 type AttemptResult struct {
-	Success        bool
-	Committed      bool
-	SinkFailed     bool
-	Failure        FailureKind
-	Diagnostic     string
-	UpstreamStatus int
-	ClientStatus   int
-	Usage          Usage
+	Success         bool
+	Committed       bool
+	SinkFailed      bool
+	Failure         FailureKind
+	Diagnostic      string
+	UpstreamStatus  int
+	ClientStatus    int
+	EndpointBaseURL string
+	Usage           Usage
 }
 
 // AdapterConfig sets finite protocol bounds. A zero value selects the default;
 // configured values may tighten but never widen the shared egress body limit.
 type AdapterConfig struct {
-	Stack *egress.Stack
+	// Backend is the shared outbound execution boundary. Production wiring
+	// passes the single LocalBackend over the process-wide egress Stack.
+	Backend backend.Backend
 
 	MaxJSONResponseBytes int64
 	MaxStreamBytes       int64
@@ -117,7 +126,7 @@ type AdapterConfig struct {
 // Adapter translates one OpenAI-compatible chat request/response attempt. It
 // never owns routing, retries, persistence, or caller authentication.
 type Adapter struct {
-	stack                *egress.Stack
+	backend              backend.Backend
 	maxJSONResponseBytes int64
 	maxStreamBytes       int64
 	maxSSELineBytes      int
@@ -126,8 +135,8 @@ type Adapter struct {
 }
 
 func NewAdapter(config AdapterConfig) (*Adapter, error) {
-	if config.Stack == nil {
-		return nil, errors.New("openai connector: egress stack is required")
+	if backend.IsNil(config.Backend) {
+		return nil, errors.New("openai connector: egress backend is required")
 	}
 	if config.MaxJSONResponseBytes < 0 || config.MaxStreamBytes < 0 || config.MaxSSELineBytes < 0 || config.MaxSSEEventBytes < 0 || config.StreamWriteTimeout < 0 {
 		return nil, errors.New("openai connector: limits must not be negative")
@@ -147,7 +156,7 @@ func NewAdapter(config AdapterConfig) (*Adapter, error) {
 	if config.StreamWriteTimeout == 0 {
 		config.StreamWriteTimeout = DefaultStreamWriteTimeout
 	}
-	sharedMax := config.Stack.MaxResponseBytes()
+	sharedMax := config.Backend.MaxResponseBytes()
 	if config.MaxJSONResponseBytes > sharedMax {
 		config.MaxJSONResponseBytes = sharedMax
 	}
@@ -164,7 +173,7 @@ func NewAdapter(config AdapterConfig) (*Adapter, error) {
 		config.MaxSSEEventBytes = int(config.MaxStreamBytes)
 	}
 	return &Adapter{
-		stack:                config.Stack,
+		backend:              config.Backend,
 		maxJSONResponseBytes: config.MaxJSONResponseBytes,
 		maxStreamBytes:       config.MaxStreamBytes,
 		maxSSELineBytes:      config.MaxSSELineBytes,
@@ -186,7 +195,7 @@ func (*Adapter) ConnectorType() endpoint.ConnectorType {
 func (a *Adapter) Attempt(ctx context.Context, writer http.ResponseWriter, target Target, request *ChatRequest, safetyIdentifier string) AttemptResult {
 	result := AttemptResult{Failure: FailureInternal, Diagnostic: "forwarding attempt unavailable"}
 	defer target.credential.clear()
-	if a == nil || a.stack == nil || ctx == nil || writer == nil || request == nil {
+	if a == nil || a.backend == nil || ctx == nil || writer == nil || request == nil {
 		return result
 	}
 	if request.Stream {
@@ -196,7 +205,7 @@ func (a *Adapter) Attempt(ctx context.Context, writer http.ResponseWriter, targe
 		}
 	}
 
-	client, err := a.stack.NewClient(target.baseURL)
+	client, err := a.backend.Open(target.baseURL)
 	if err != nil {
 		return upstreamFailure("upstream endpoint was refused", 0)
 	}
@@ -326,6 +335,13 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 	committed := false
 	seenChunk := false
 	usage := Usage{}
+	// usageCaptured records that a valid usage chunk was seen; usagePoisoned
+	// records that the upstream contradicted itself (a malformed usage object
+	// or two different usage values). Once poisoned, the whole request's
+	// usage stays unknown: no token value is ever fabricated from
+	// contradictory data, and a later valid-looking chunk cannot resurrect it.
+	usageCaptured := false
+	usagePoisoned := false
 
 	for {
 		event, ok, nextErr := nextSSEEvent(streamCtx, events, errs)
@@ -367,7 +383,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 		if len(event.Data) == 0 || len(event.Data) > a.maxSSEEventBytes || !validProtocolBytes([]byte(event.Data)) {
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream chunk exceeded protocol bounds")
 		}
-		compact, chunkUsage, err := validateChunk([]byte(event.Data))
+		compact, chunkUsage, chunkUsageMalformed, err := validateChunk([]byte(event.Data))
 		if err != nil {
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream chunk was invalid")
 		}
@@ -388,8 +404,21 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 			return sinkFailureWithCommit(committed, usage)
 		}
 		seenChunk = true
-		if chunkUsage.Present {
-			usage = chunkUsage
+		switch {
+		case chunkUsageMalformed:
+			usagePoisoned = true
+			usage = Usage{}
+		case chunkUsage.Present && !usagePoisoned:
+			if usageCaptured {
+				if chunkUsage != usage {
+					// Contradictory repeated usage: degrade to unknown.
+					usagePoisoned = true
+					usage = Usage{}
+				}
+			} else {
+				usage = chunkUsage
+				usageCaptured = true
+			}
 		}
 	}
 }
@@ -400,7 +429,13 @@ func (a *Adapter) streamProtocolFailure(writer http.ResponseWriter, controller *
 		result.Usage = usage
 		return result
 	}
-	frame := []byte(`data: {"error":{"code":"upstream","message":"upstream stream failed","type":"upstream_error"}}` + "\n\n")
+	// Once any byte is committed, the response status and headers are already
+	// written, so the failure can only be emitted as an in-stream SSE error
+	// frame — never a second HTTP envelope. The frame uses the same stable
+	// {error:{code,source,message}} shape as the JSON envelope, with source
+	// derived at the shared wire sink (upstream for an upstream stream
+	// failure), so a client never has to infer attribution from a prefix.
+	frame := httperr.SSEErrorFrame(httperr.New(httperr.CodeUpstream, "upstream stream failed"))
 	_, err := a.writeStreamFrame(writer, controller, frame)
 	if err != nil {
 		return sinkFailureWithCommit(true, usage)

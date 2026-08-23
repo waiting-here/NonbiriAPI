@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
@@ -171,22 +172,52 @@ func AdminFromContext(ctx context.Context) (*db.User, bool) {
 
 // UserResponse is the bounded public user shape used by /api/session and
 // /api/me. No Discord access token, session token, or caller key is included.
+// banned_until / charity_suspended_until are nullable unix seconds; an
+// authenticated caller is never actively banned (a ban deletes its sessions),
+// but a charity-eligibility suspension can be in force while the account
+// itself remains usable.
+//
+// Additive level/economy projection (implementation contract §6.2): credits
+// and donation_credit are canonical decimal milli-credit strings;
+// effective_level is the server-authoritative resolved level for THIS request
+// (read paths may lazily persist an auto-level promotion); manual_level is
+// the nullable manual override (null = automatic). Level is display/state
+// data only — capability decisions are made server-side per use.
 type UserResponse struct {
-	ID             int64     `json:"id"`
-	Username       string    `json:"username"`
-	Avatar         string    `json:"avatar"`
-	AvatarURL      string    `json:"avatar_url"`
-	GuildNick      string    `json:"guild_nick"`
-	GuildAvatarURL string    `json:"guild_avatar_url"`
-	Lang           string    `json:"lang"`
-	IsBanned       bool      `json:"is_banned"`
-	BlockedReason  string    `json:"blocked_reason,omitempty"`
-	EndpointLimit  *int      `json:"endpoint_limit"`
-	RPMLimit       *int      `json:"rpm_limit"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID                    int64     `json:"id"`
+	Username              string    `json:"username"`
+	Avatar                string    `json:"avatar"`
+	AvatarURL             string    `json:"avatar_url"`
+	GuildNick             string    `json:"guild_nick"`
+	GuildAvatarURL        string    `json:"guild_avatar_url"`
+	Lang                  string    `json:"lang"`
+	IsBanned              bool      `json:"is_banned"`
+	BlockedReason         string    `json:"blocked_reason,omitempty"`
+	BannedUntil           *int64    `json:"banned_until"`
+	CharitySuspendedUntil *int64    `json:"charity_suspended_until"`
+	EndpointLimit         *int      `json:"endpoint_limit"`
+	RPMLimit              *int      `json:"rpm_limit"`
+	Credits               string    `json:"credits"`
+	DonationCredit        string    `json:"donation_credit"`
+	EffectiveLevel        int       `json:"effective_level"`
+	ManualLevel           *int      `json:"manual_level"`
+	CreatedAt             time.Time `json:"created_at"`
 }
 
-func publicUser(user *db.User) UserResponse {
+// unixSecondsPtr projects a nullable deadline as a JSON number pointer.
+func unixSecondsPtr(t *time.Time) *int64 {
+	if t == nil {
+		return nil
+	}
+	v := t.Unix()
+	return &v
+}
+
+// publicUser projects the user row with the effective level resolved for this
+// request by the authoritative resolver. effectiveLevel must come from
+// db.Store.ResolveEffectiveLevel (it may have lazily persisted a promotion);
+// callers never recompute a level from thresholds themselves.
+func publicUser(user *db.User, effectiveLevel int) UserResponse {
 	if user == nil {
 		return UserResponse{}
 	}
@@ -195,7 +226,13 @@ func publicUser(user *db.User) UserResponse {
 		AvatarURL: discordAvatarURL(user.DiscordID, user.Avatar),
 		GuildNick: user.GuildNick, GuildAvatarURL: user.GuildAvatarURL,
 		IsBanned: user.IsBanned, BlockedReason: user.BannedReason,
-		EndpointLimit: user.EndpointLimit, RPMLimit: user.RPMLimit, CreatedAt: user.CreatedAt,
+		BannedUntil:           unixSecondsPtr(user.BannedUntil),
+		CharitySuspendedUntil: unixSecondsPtr(user.CharitySuspendedUntil),
+		EndpointLimit:         user.EndpointLimit, RPMLimit: user.RPMLimit, CreatedAt: user.CreatedAt,
+		Credits:        credits.FormatAmount(user.Credits),
+		DonationCredit: credits.FormatAmount(user.DonationCredit),
+		EffectiveLevel: effectiveLevel,
+		ManualLevel:    user.Level,
 	}
 }
 

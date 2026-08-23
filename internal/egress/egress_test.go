@@ -156,6 +156,39 @@ func TestEgressPolicyBaseURLValidation(t *testing.T) {
 	}
 }
 
+func TestCanonicalEndpointTargetUsesEffectiveOriginAndPreservesPath(t *testing.T) {
+	implicitTarget, implicitOrigin, err := CanonicalEndpointTarget("HTTPS://EXAMPLE.COM./api//v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	explicitTarget, explicitOrigin, err := CanonicalEndpointTarget("https://example.com:443/api/v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if implicitTarget != "https://example.com:443/api/v1" || explicitTarget != implicitTarget {
+		t.Fatalf("equivalent targets = %q / %q", implicitTarget, explicitTarget)
+	}
+	if implicitOrigin != "https://example.com:443" || explicitOrigin != implicitOrigin {
+		t.Fatalf("equivalent origins = %q / %q", implicitOrigin, explicitOrigin)
+	}
+
+	pathTarget, pathOrigin, err := CanonicalEndpointTarget("https://example.com/api/v2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pathTarget == implicitTarget || pathOrigin != implicitOrigin {
+		t.Fatalf("path comparison target=%q origin=%q", pathTarget, pathOrigin)
+	}
+
+	_, httpOrigin, err := CanonicalEndpointTarget("http://example.com/api/v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if httpOrigin == implicitOrigin {
+		t.Fatalf("scheme change retained origin %q", httpOrigin)
+	}
+}
+
 func TestEgressPolicyExactOriginOnly(t *testing.T) {
 	for _, entry := range []string{
 		"10.0.0.0/8",

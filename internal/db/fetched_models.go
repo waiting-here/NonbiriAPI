@@ -42,37 +42,47 @@ type FetchState struct {
 // the manual-refresh handler use before any upstream work.
 func (s *Store) GetEndpointKeyFetchState(ctx context.Context, userID, endpointID, keyID int64) (FetchState, error) {
 	var st FetchState
+	var baseURL sql.NullString
 	var endpointEnabled, keyEnabled int
 	row := s.db.QueryRowContext(ctx, `
-SELECT e.connector_type, e.base_url, e.enabled, ek.enabled
+SELECT e.connector_type,
+       CASE WHEN length(CAST(e.base_url AS BLOB)) BETWEEN 1 AND ? THEN e.base_url END,
+       e.enabled, ek.enabled
 FROM endpoint_keys ek
 JOIN endpoints e ON ek.endpoint_id = e.id
-WHERE ek.id=? AND ek.endpoint_id=? AND e.user_id=?`, keyID, endpointID, userID)
-	err := row.Scan(&st.ConnectorType, &st.BaseURL, &endpointEnabled, &keyEnabled)
+WHERE ek.id=? AND ek.endpoint_id=? AND e.user_id=?`, maxStoredEndpointBaseURLBytes, keyID, endpointID, userID)
+	err := row.Scan(&st.ConnectorType, &baseURL, &endpointEnabled, &keyEnabled)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return FetchState{}, ErrNotFound
 		}
 		return FetchState{}, fmt.Errorf("read endpoint key fetch state: %w", err)
 	}
+	if !baseURL.Valid {
+		return FetchState{}, ErrEndpointCredentialUnavailable
+	}
+	st.BaseURL = baseURL.String
 	st.EndpointEnabled = endpointEnabled != 0
 	st.KeyEnabled = keyEnabled != 0
 	return st, nil
 }
 
 // GetEndpointKeyCiphertext returns the sealed AES envelope of keyID on
-// endpointID owned by userID. It is the only path that reads encrypted_secret
-// (forwarding and fetching); every other endpoint-key query selects metadata
-// and display fragments only. The caller owns the returned envelope and must
+// endpointID owned by userID. It is the dedicated fetch path that reads
+// encrypted_secret; forwarding reads it only in its final target projection,
+// and every metadata query selects display fragments only. The caller owns the
+// returned envelope and must
 // never place it in metadata, responses, logs, or issue messages; the fetch
 // rail clears the decrypted plaintext promptly.
 func (s *Store) GetEndpointKeyCiphertext(ctx context.Context, userID, endpointID, keyID int64) (string, error) {
-	var ciphertext string
+	var ciphertext sql.NullString
 	row := s.db.QueryRowContext(ctx, `
-SELECT ek.encrypted_secret
+SELECT CASE
+  WHEN length(CAST(ek.encrypted_secret AS BLOB)) BETWEEN 1 AND ? THEN ek.encrypted_secret
+END
 FROM endpoint_keys ek
 JOIN endpoints e ON ek.endpoint_id = e.id
-WHERE ek.id=? AND ek.endpoint_id=? AND e.user_id=?`, keyID, endpointID, userID)
+WHERE ek.id=? AND ek.endpoint_id=? AND e.user_id=?`, maxEndpointCredentialEnvelopeBytes, keyID, endpointID, userID)
 	err := row.Scan(&ciphertext)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -80,7 +90,10 @@ WHERE ek.id=? AND ek.endpoint_id=? AND e.user_id=?`, keyID, endpointID, userID)
 		}
 		return "", fmt.Errorf("read endpoint key ciphertext: %w", err)
 	}
-	return ciphertext, nil
+	if !ciphertext.Valid {
+		return "", ErrEndpointCredentialUnavailable
+	}
+	return ciphertext.String, nil
 }
 
 // ListFetchedModels returns the cached upstream models for keyID on

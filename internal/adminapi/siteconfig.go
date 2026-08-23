@@ -17,6 +17,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/antiabuse"
+	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
@@ -48,7 +50,53 @@ const (
 	KeyOAuthStartRatePenaltySecs = "oauth_start_rate_penalty_seconds"
 	KeyMaintenanceMode           = "maintenance_mode"
 	KeyRegistrationOpen          = "registration_open"
-	alertPrefsPrefix             = "alert_prefs_"
+	// KeySiteTimezoneOffsetMinutes is nullable: unset (JSON null) means the
+	// site timezone has never been configured and must never be mistaken for
+	// an explicit UTC (0). It is frozen once any checkin/activity data exists.
+	KeySiteTimezoneOffsetMinutes = "site_timezone_offset_minutes"
+	// Level promotion thresholds (implementation contract §4.1): canonical
+	// non-negative decimal milli-credit strings; "0" (the default, also shown
+	// while unset) disables that level's automatic promotion. The enabled
+	// chain must be strictly increasing in level order; the cross-validation
+	// and the write share one repository transaction.
+	KeyLevelThreshold2Milli = "level_threshold_2_milli"
+	KeyLevelThreshold3Milli = "level_threshold_3_milli"
+	KeyLevelThreshold4Milli = "level_threshold_4_milli"
+	// Check-in switch and economy thresholds (implementation contract §4.1).
+	// checkin_mode is the frozen three-way switch: enabled / level_gated
+	// (only effective level >= 3 may check in) / disabled (the default). The
+	// two award bounds are a cross-validated pair: PATCHing either validates
+	// min <= max against the other key's current value in ONE transaction.
+	KeyCheckinMode          = "checkin_mode"
+	KeyCheckinAwardMinMilli = "checkin_award_min_milli"
+	KeyCheckinAwardMaxMilli = "checkin_award_max_milli"
+	KeyCreditsCapMilli      = "credits_cap_milli"
+	// Charity / donation switches (implementation contract §4.1). Both default
+	// to off: the charity system and donation intake stay closed until the
+	// administrator opens them. They have no runtime singleton — every
+	// business transaction reads the authoritative site_config snapshot.
+	KeyCharityEnabled        = "charity_enabled"
+	KeyDonationAcceptEnabled = "donation_accept_enabled"
+	// KeyCharityTokenReserveMilli is OPTIONAL like the timezone offset: unset
+	// (JSON null) means "no reserve price configured", which keeps every
+	// per-token charity model disabled (fail closed). It must never be
+	// mistaken for an explicit 0.
+	KeyCharityTokenReserveMilli = "charity_token_reserve_milli"
+	// Anti-abuse policy keys are process-independent values; the policy rail
+	// reads them authoritatively for each relevant event.
+	KeyRPMBanThreshold                  = antiabuse.KeyRPMBanThreshold
+	KeyRPMBanWindowSeconds              = antiabuse.KeyRPMBanWindowSeconds
+	KeyRPMBanDurationSeconds            = antiabuse.KeyRPMBanDurationSeconds
+	KeyCharityMinChars                  = antiabuse.KeyCharityMinChars
+	KeyCharityViolationDeductMilli      = antiabuse.KeyCharityViolationDeductMilli
+	KeyCharityViolationBanSeconds       = antiabuse.KeyCharityViolationBanSeconds
+	KeyCharityViolationWindowSeconds    = antiabuse.KeyCharityViolationWindowSeconds
+	KeyCharityViolationBanThreshold     = antiabuse.KeyCharityViolationBanThreshold
+	KeyCharityViolationWindowBanSeconds = antiabuse.KeyCharityViolationWindowBanSeconds
+	KeyCharitySuspendWindowSeconds      = antiabuse.KeyCharitySuspendWindowSeconds
+	KeyCharitySuspendThreshold          = antiabuse.KeyCharitySuspendThreshold
+	KeyCharitySuspendDurationSeconds    = antiabuse.KeyCharitySuspendDurationSeconds
+	alertPrefsPrefix                    = "alert_prefs_"
 )
 
 // Value bounds. RPM caps share the limiter's bounded event-store ceiling
@@ -71,6 +119,9 @@ const (
 	maxOAuthStartRateLimit       = 1000
 	maxOAuthStartRateWindowSecs  = 3600
 	maxOAuthStartRatePenaltySecs = 3600
+	maxAntiAbuseSeconds          = int(db.MaxBanDurationSeconds)
+	maxAntiAbuseThreshold        = 4096
+	maxCharityMinChars           = antiabuse.MaxCharityContentRuneCount
 )
 
 type valueKind int
@@ -82,6 +133,25 @@ const (
 	kindInt
 	kindBool          // a toggle stored as the canonical "1"/"0"
 	kindMultilineText // text that preserves newlines/tabs (legal overrides)
+	// kindTimezoneOffset is a nullable int with its own validation (multiple
+	// of 30 in [-720,+840]) and an atomic immutability guard; GET returns
+	// JSON null while unset.
+	kindTimezoneOffset
+	// kindAmount is a canonical non-negative decimal milli-credit string (the
+	// economy wire form). GET projects a JSON string (the key's documented
+	// default while unset or when a stored row is corrupt); PATCH accepts only
+	// the canonical form.
+	kindAmount
+	// kindEnum is a closed string enumeration (see keySpec.allowed). GET
+	// projects the stored value when it is a member and the documented default
+	// otherwise; PATCH accepts exactly the member strings.
+	kindEnum
+	// kindOptionalAmount is a nullable canonical non-negative decimal
+	// milli-credit string (the economy wire form) with no documented default:
+	// GET projects JSON null while unset or corrupt, and PATCH accepts only a
+	// canonical positive string, so an explicit zero can never blur into the
+	// unset state (and vice versa).
+	kindOptionalAmount
 )
 
 type keySpec struct {
@@ -89,6 +159,13 @@ type keySpec struct {
 	min, max   int
 	def        int  // int keys: effective default when unset
 	allowEmpty bool // text keys: "" is a valid value (blank pauses the gate)
+	// defAmount is the amount keys' documented default in milli-credits,
+	// projected while unset or when a stored row is corrupt.
+	defAmount int64
+	// allowed is the closed member set of a kindEnum key; defStr is its
+	// documented default (projected while unset or corrupt).
+	allowed []string
+	defStr  string
 }
 
 // knownSiteConfig maps every exact known key to its typed spec.
@@ -116,6 +193,31 @@ var knownSiteConfig = map[string]keySpec{
 	KeyOAuthStartRatePenaltySecs: {kind: kindInt, min: 0, max: maxOAuthStartRatePenaltySecs, def: ratelimit.DefaultOAuthStartRatePenaltySeconds},
 	KeyMaintenanceMode:           {kind: kindBool, def: 0},
 	KeyRegistrationOpen:          {kind: kindBool, def: 1},
+	KeySiteTimezoneOffsetMinutes: {kind: kindTimezoneOffset},
+	KeyLevelThreshold2Milli:      {kind: kindAmount},
+	KeyLevelThreshold3Milli:      {kind: kindAmount},
+	KeyLevelThreshold4Milli:      {kind: kindAmount},
+	KeyCheckinMode: {kind: kindEnum,
+		allowed: []string{db.CheckinModeEnabled, db.CheckinModeLevelGated, db.CheckinModeDisabled},
+		defStr:  db.CheckinModeDisabled},
+	KeyCheckinAwardMinMilli:             {kind: kindAmount, defAmount: db.DefaultCheckinAwardMinMilli},
+	KeyCheckinAwardMaxMilli:             {kind: kindAmount, defAmount: db.DefaultCheckinAwardMaxMilli},
+	KeyCreditsCapMilli:                  {kind: kindAmount, defAmount: db.DefaultCreditsCapMilli},
+	KeyCharityEnabled:                   {kind: kindBool, def: 0},
+	KeyDonationAcceptEnabled:            {kind: kindBool, def: 0},
+	KeyCharityTokenReserveMilli:         {kind: kindOptionalAmount},
+	KeyRPMBanThreshold:                  {kind: kindInt, min: 0, max: maxAntiAbuseThreshold, def: antiabuse.DefaultRPMBanThreshold},
+	KeyRPMBanWindowSeconds:              {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultViolationWindow.Seconds())},
+	KeyRPMBanDurationSeconds:            {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultViolationWindow.Seconds())},
+	KeyCharityMinChars:                  {kind: kindInt, min: 0, max: maxCharityMinChars, def: antiabuse.DefaultCharityMinChars},
+	KeyCharityViolationDeductMilli:      {kind: kindAmount, defAmount: 0},
+	KeyCharityViolationBanSeconds:       {kind: kindInt, min: 0, max: maxAntiAbuseSeconds, def: 0},
+	KeyCharityViolationWindowSeconds:    {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultViolationWindow.Seconds())},
+	KeyCharityViolationBanThreshold:     {kind: kindInt, min: 0, max: maxAntiAbuseThreshold, def: 0},
+	KeyCharityViolationWindowBanSeconds: {kind: kindInt, min: 0, max: maxAntiAbuseSeconds, def: 0},
+	KeyCharitySuspendWindowSeconds:      {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultSuspendWindow.Seconds())},
+	KeyCharitySuspendThreshold:          {kind: kindInt, min: 0, max: maxAntiAbuseThreshold, def: 0},
+	KeyCharitySuspendDurationSeconds:    {kind: kindInt, min: 0, max: maxAntiAbuseSeconds, def: 0},
 }
 
 // knownSiteConfigKey reports whether key is in the authoritative set
@@ -188,6 +290,23 @@ func parseCanonicalInt(raw string) (int, error) {
 	return n, nil
 }
 
+// parseCanonicalBool accepts exactly the canonical stored form of a toggle:
+// the bytes "1" (enabled) or "0" (disabled). Any other value — including
+// "true"/"false", surrounding whitespace, or an empty string — is an error, so
+// a corrupted or non-canonical row can never silently flip the runtime
+// singleton in an unexpected direction. Unlike parseCanonicalInt it does not
+// trim surrounding whitespace: the stored form is byte-exact.
+func parseCanonicalBool(raw string) (bool, error) {
+	switch raw {
+	case "1":
+		return true, nil
+	case "0":
+		return false, nil
+	default:
+		return false, errors.New("configuration value is not a canonical boolean")
+	}
+}
+
 // typedSiteConfigValue converts a stored site_config string into the wire
 // value for a known key. Int keys fall back to the documented default when
 // unset or when a stored value is not a canonical integer in range, so a
@@ -219,6 +338,40 @@ func typedSiteConfigValue(key, stored string) any {
 				return stored
 			}
 			return ""
+		case kindTimezoneOffset:
+			// Unset or a manually corrupted row projects as null: the admin
+			// station must see "not configured", never a fabricated default.
+			if n, err := parseCanonicalInt(stored); err == nil && db.ValidSiteTimezoneOffset(n) {
+				return n
+			}
+			return nil
+		case kindAmount:
+			// Unset or a corrupt row projects as the key's documented default
+			// (level thresholds read "0" = that promotion is disabled; the
+			// check-in keys read their frozen defaults). A stored negative
+			// value can never pass the write path.
+			if v, err := credits.ParseAmount(stored); err == nil && v >= 0 {
+				return credits.FormatAmount(v)
+			}
+			return credits.FormatAmount(spec.defAmount)
+		case kindEnum:
+			// Unset or a non-member row projects as the documented default:
+			// fail closed, never an implicit enabled state.
+			for _, allowed := range spec.allowed {
+				if stored == allowed {
+					return stored
+				}
+			}
+			return spec.defStr
+
+		case kindOptionalAmount:
+			// Unset or a corrupt row projects as null: the admin station must
+			// see "not configured" (which keeps every per-token charity model
+			// disabled), never a fabricated default or an implicit zero.
+			if v, perr := credits.ParseAmount(stored); perr == nil && v > 0 {
+				return credits.FormatAmount(v)
+			}
+			return nil
 		case kindMultilineText:
 			if validMultilineText(stored, textMaxFor(key)) {
 				return stored
@@ -244,8 +397,9 @@ func typedSiteConfigValue(key, stored string) any {
 // spec and returns the canonical stored string. A non-JSON type, an
 // out-of-range or non-integral number, or an out-of-bounds text is
 // invalid_request. JSON null is always rejected: clearing an int cap is
-// expressed through the per-user/user-level NULL semantics, and clearing a
-// text value is expressed as "".
+// expressed through the per-user/user-level NULL semantics, clearing a text
+// value is expressed as "", and the timezone offset cannot be cleared at all
+// once configured.
 func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.Error) {
 	invalid := httperr.New(httperr.CodeInvalidRequest, "invalid configuration value")
 	if spec, ok := knownSiteConfig[key]; ok {
@@ -290,6 +444,64 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 				return "", invalid
 			}
 			return value, httperr.Error{}
+		case kindTimezoneOffset:
+			dec := json.NewDecoder(bytes.NewReader(raw))
+			dec.UseNumber()
+			var decoded any
+			if err := dec.Decode(&decoded); err != nil {
+				return "", invalid
+			}
+			num, ok := decoded.(json.Number)
+			if !ok {
+				return "", invalid
+			}
+			// Parse directly to the platform's int width before validating. A
+			// ParseInt(64) followed by int(n) could wrap a large, otherwise
+			// canonical JSON integer into a valid offset on a 32-bit build.
+			n, err := strconv.Atoi(num.String())
+			if err != nil || strconv.Itoa(n) != num.String() || !db.ValidSiteTimezoneOffset(n) {
+				return "", invalid
+			}
+			return strconv.Itoa(n), httperr.Error{}
+		case kindAmount:
+			var value string
+			if err := json.Unmarshal(raw, &value); err != nil {
+				return "", invalid
+			}
+			// Canonical non-negative decimal string only: no exponent, "+",
+			// leading zeros, whitespace or "-0" (credits.ParseAmount), and
+			// no negative amount.
+			n, err := credits.ParseAmount(value)
+			if err != nil || n < 0 {
+				return "", invalid
+			}
+			return credits.FormatAmount(n), httperr.Error{}
+		case kindEnum:
+			var value string
+			if err := json.Unmarshal(raw, &value); err != nil {
+				return "", invalid
+			}
+			for _, allowed := range spec.allowed {
+				if value == allowed {
+					return value, httperr.Error{}
+				}
+			}
+			return "", invalid
+		case kindOptionalAmount:
+			{
+				var value string
+				if err := json.Unmarshal(raw, &value); err != nil {
+					return "", invalid
+				}
+				// Canonical positive decimal string only: null is rejected (the
+				// unset state is expressed by never writing the key), and zero is
+				// rejected so it can never masquerade as a configured reserve.
+				n, perr := credits.ParseAmount(value)
+				if perr != nil || n <= 0 {
+					return "", invalid
+				}
+				return credits.FormatAmount(n), httperr.Error{}
+			}
 		case kindMultilineText:
 			var value string
 			if err := json.Unmarshal(raw, &value); err != nil || !validMultilineText(value, textMaxFor(key)) {

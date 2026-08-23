@@ -15,8 +15,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -43,6 +45,7 @@ type fetchFixture struct {
 	store    *db.Store
 	vault    *secret.Vault
 	stack    *egress.Stack
+	backend  *backend.LocalBackend
 	fetcher  *Fetcher
 	upstream *httptest.Server
 
@@ -94,6 +97,7 @@ func newFetchFixture(t *testing.T, mutate func(*FetcherConfig, *egress.StackOpti
 	f.vault = vault
 
 	path := filepath.Join(t.TempDir(), "fetch.db")
+	dbtest.EnsureOwnerOnlyParent(t, path)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatalf("db open: %v", err)
@@ -131,7 +135,11 @@ func newFetchFixture(t *testing.T, mutate func(*FetcherConfig, *egress.StackOpti
 		t.Fatalf("self origins: %v", err)
 	}
 	f.stack = stack
-	cfg.Stack = stack
+	f.backend, err = backend.NewLocal(stack)
+	if err != nil {
+		t.Fatalf("local backend: %v", err)
+	}
+	cfg.Backend = f.backend
 
 	fetcher, err := NewFetcher(cfg)
 	if err != nil {
@@ -182,15 +190,23 @@ func (f *fetchFixture) seedComboForUser(t *testing.T, uid int64, baseURL string)
 	if err != nil {
 		t.Fatalf("create endpoint: %v", err)
 	}
-	ciphertext, err := f.vault.Seal([]byte("sk-upstream-secret-0123456789"))
-	if err != nil {
-		t.Fatalf("seal: %v", err)
-	}
-	k, err := f.store.CreateEndpointKey(context.Background(), uid, ep.ID, ciphertext, "sk-up", "6789", "note", true, 1)
+	k, err := f.store.CreateEndpointKey(context.Background(), uid, ep.ID, []byte("sk-upstream-secret-0123456789"), "sk-up", "6789", "note", true, 1)
 	if err != nil {
 		t.Fatalf("create key: %v", err)
 	}
 	return uid, ep.ID, k.ID
+}
+
+// seedCombos creates n distinct (endpoint, key) combos for one user on the
+// upstream URL, returning the (userID, endpointID, keyID) triples.
+func (f *fetchFixture) seedCombos(t *testing.T, uid int64, n int) [][3]int64 {
+	t.Helper()
+	out := make([][3]int64, n)
+	for i := 0; i < n; i++ {
+		u, ep, k := f.seedComboForUser(t, uid, f.upstream.URL)
+		out[i] = [3]int64{u, ep, k}
+	}
+	return out
 }
 
 func (f *fetchFixture) seedUser(t *testing.T, discordID string) int64 {
@@ -465,7 +481,7 @@ func TestFetchDisabledKeyIsNoOp(t *testing.T) {
 		t.Fatalf("seed cache: %v", err)
 	}
 	// Disable the endpoint itself.
-	if _, err := f.store.UpdateEndpoint(context.Background(), uid, epID, nil, nil, boolPtr(false), 2); err != nil {
+	if _, _, err := f.store.UpdateEndpoint(context.Background(), uid, epID, nil, nil, boolPtr(false), 2); err != nil {
 		t.Fatalf("disable endpoint: %v", err)
 	}
 
@@ -544,8 +560,85 @@ func TestFetchTamperedEnvelopeFailsClosed(t *testing.T) {
 	if strings.Contains(msg, "nbsec") || strings.Contains(msg, "AAAA") {
 		t.Errorf("issue leaks envelope material: %q", msg)
 	}
-	if !strings.Contains(msg, "decrypt") {
-		t.Errorf("issue = %q, want decrypt summary", msg)
+	if msg != "model fetch failed: credential unavailable" {
+		t.Errorf("issue = %q, want opaque credential summary", msg)
+	}
+}
+
+func TestFetchContextExchangeAndLegacyEnvelopeNeverDial(t *testing.T) {
+	for _, attack := range []string{"user", "endpoint", "key", "origin", "legacy", "future", "oversized", "oversized-origin"} {
+		attack := attack
+		t.Run(attack, func(t *testing.T) {
+			f := newFetchFixture(t, nil)
+			f.setHandler(modelsHandler("must-not-be-reached"))
+			uid, endpointID, keyID := f.seedCombo(t, f.upstream.URL)
+			state, err := f.store.GetEndpointKeyFetchState(context.Background(), uid, endpointID, keyID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, origin, err := egress.CanonicalEndpointTarget(state.BaseURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			wrongUser, wrongEndpoint, wrongKey, wrongOrigin := uid, endpointID, keyID, origin
+			switch attack {
+			case "user":
+				wrongUser++
+			case "endpoint":
+				wrongEndpoint++
+			case "key":
+				wrongKey++
+			case "origin":
+				wrongOrigin = "https://context-exchange.example:443"
+			}
+			var ciphertext string
+			switch attack {
+			case "legacy":
+				ciphertext, err = f.vault.Seal([]byte("legacy-runtime-fallback-marker"))
+			case "future":
+				ciphertext, err = f.store.GetEndpointKeyCiphertext(context.Background(), uid, endpointID, keyID)
+				ciphertext = strings.Replace(ciphertext, ":v2:", ":v8:", 1)
+			case "oversized":
+				ciphertext = strings.Repeat("A", 129<<10)
+			case "oversized-origin":
+				ciphertext, err = f.store.GetEndpointKeyCiphertext(context.Background(), uid, endpointID, keyID)
+				if _, updateErr := f.store.DB().Exec(`UPDATE endpoints SET base_url=? WHERE id=?`, strings.Repeat("a", 4097), endpointID); updateErr != nil {
+					t.Fatal(updateErr)
+				}
+			default:
+				credentialContext, contextErr := secret.NewEndpointKeyContext(wrongUser, wrongEndpoint, wrongKey, wrongOrigin)
+				if contextErr != nil {
+					t.Fatal(contextErr)
+				}
+				ciphertext, err = f.vault.SealForContext([]byte("context-exchange-secret-marker"), credentialContext)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := f.store.DB().Exec(`UPDATE endpoint_keys SET encrypted_secret=? WHERE id=?`, ciphertext, keyID); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := f.fetcher.fetchOne(context.Background(), uid, endpointID, keyID); err != nil {
+				t.Fatalf("fetchOne: %v", err)
+			}
+			if hits := f.hits.Load(); hits != 0 {
+				t.Fatalf("wrong context dialed upstream %d times", hits)
+			}
+			if auth := f.lastAuth.Load(); auth != nil {
+				t.Fatal("wrong context constructed an authorization header")
+			}
+			message := f.issueMessage(t, uid)
+			if message != "model fetch failed: credential unavailable" {
+				t.Fatalf("issue=%q, want opaque credential failure", message)
+			}
+			for _, marker := range []string{ciphertext, origin, wrongOrigin, "context-exchange", "legacy-runtime"} {
+				if strings.Contains(message, marker) {
+					t.Fatal("credential failure exposed protected context")
+				}
+			}
+		})
 	}
 }
 
@@ -725,16 +818,20 @@ func TestFetchHookAfterCloseErrors(t *testing.T) {
 // collaborators.
 func TestFetcherValidation(t *testing.T) {
 	f := newFetchFixture(t, nil)
-	if _, err := NewFetcher(FetcherConfig{Store: nil, Stack: f.stack, Secrets: f.vault, Registry: endpoint.NewRegistry()}); err == nil {
+	if _, err := NewFetcher(FetcherConfig{Store: nil, Backend: f.backend, Secrets: f.vault, Registry: endpoint.NewRegistry()}); err == nil {
 		t.Errorf("nil store accepted")
 	}
-	if _, err := NewFetcher(FetcherConfig{Store: f.store, Stack: nil, Secrets: f.vault, Registry: endpoint.NewRegistry()}); err == nil {
-		t.Errorf("nil stack accepted")
+	if _, err := NewFetcher(FetcherConfig{Store: f.store, Backend: nil, Secrets: f.vault, Registry: endpoint.NewRegistry()}); err == nil {
+		t.Errorf("nil backend accepted")
 	}
-	if _, err := NewFetcher(FetcherConfig{Store: f.store, Stack: f.stack, Secrets: nil, Registry: endpoint.NewRegistry()}); err == nil {
+	var typedNilBackend *backend.LocalBackend
+	if _, err := NewFetcher(FetcherConfig{Store: f.store, Backend: typedNilBackend, Secrets: f.vault, Registry: endpoint.NewRegistry()}); err == nil {
+		t.Errorf("typed-nil backend accepted")
+	}
+	if _, err := NewFetcher(FetcherConfig{Store: f.store, Backend: f.backend, Secrets: nil, Registry: endpoint.NewRegistry()}); err == nil {
 		t.Errorf("nil secrets accepted")
 	}
-	if _, err := NewFetcher(FetcherConfig{Store: f.store, Stack: f.stack, Secrets: f.vault, Registry: nil}); err == nil {
+	if _, err := NewFetcher(FetcherConfig{Store: f.store, Backend: f.backend, Secrets: f.vault, Registry: nil}); err == nil {
 		t.Errorf("nil registry accepted")
 	}
 }
@@ -793,5 +890,86 @@ func TestJoinModelsURLContract(t *testing.T) {
 		if got := joinModelsURL(c.base); got != c.want {
 			t.Errorf("joinModelsURL(%q) = %q, want %q", c.base, got, c.want)
 		}
+	}
+}
+
+// TestFetcherSharedAdmissionAutoAndManual asserts that automatic and manual
+// refreshes share one per-user admission budget: a burst of automatic fetches
+// exhausts the per-user RPM, after which both an extra automatic fetch and a
+// manual refresh are denied for that user, while a different user (its own
+// budget) is still admitted. The pool per-user cap is raised so only the shared
+// RPM binds.
+func TestFetcherSharedAdmissionAutoAndManual(t *testing.T) {
+	f := newFetchFixture(t, func(cfg *FetcherConfig, opts *egress.StackOptions) {
+		cfg.Workers = 4
+		cfg.QueueSize = 32
+		cfg.PerUserCap = 32 // isolate the shared RPM bound from the pool cap
+		opts.Concurrency = egress.ConcurrencyLimits{Global: 100, PerEndpoint: 100}
+	})
+	f.setHandler(f.blockHandler) // keep admitted jobs running so slots stay taken
+
+	alice := f.seedUser(t, "alice")
+	aCombos := f.seedCombos(t, alice, 11)
+	ctx := context.Background()
+
+	// 10 automatic fetches consume the full per-user admission budget.
+	for i := 0; i < 10; i++ {
+		c := aCombos[i]
+		if err := f.fetcher.FetchModels(ctx, c[0], c[1], c[2]); err != nil {
+			t.Fatalf("auto fetch[%d]: %v", i, err)
+		}
+	}
+	// Budget exhausted: the 11th automatic fetch is rate-limited.
+	c11 := aCombos[10]
+	if err := f.fetcher.FetchModels(ctx, c11[0], c11[1], c11[2]); !errors.Is(err, ErrRefreshRateLimited) {
+		t.Errorf("11th auto fetch: err=%v, want ErrRefreshRateLimited (shared budget exhausted)", err)
+	}
+	// Manual refresh shares the same budget: it is also denied for alice.
+	c0 := aCombos[0]
+	if err := f.fetcher.RefreshManual(ctx, c0[0], c0[1], c0[2]); !errors.Is(err, ErrRefreshRateLimited) {
+		t.Errorf("manual refresh after exhaustion: err=%v, want ErrRefreshRateLimited", err)
+	}
+	// A different user has its own budget: its first fetch is admitted.
+	bob := f.seedUser(t, "bob")
+	bCombos := f.seedCombos(t, bob, 1)
+	bc := bCombos[0]
+	if err := f.fetcher.FetchModels(ctx, bc[0], bc[1], bc[2]); err != nil {
+		t.Errorf("bob fetch: err=%v, want nil (independent per-user budget)", err)
+	}
+}
+
+// TestFetcherPerUserPoolCap asserts the pool's per-user pending+running cap is
+// honored through the Fetcher: with the RPM raised so it does not bind, one
+// user's distinct fetches are capped and the overflow is busy, while another
+// user is unaffected.
+func TestFetcherPerUserPoolCap(t *testing.T) {
+	f := newFetchFixture(t, func(cfg *FetcherConfig, opts *egress.StackOptions) {
+		cfg.Workers = 4
+		cfg.QueueSize = 32
+		cfg.PerUserCap = 4
+		cfg.RefreshPerUserPerMinute = 100 // isolate the pool per-user cap from the RPM
+		opts.Concurrency = egress.ConcurrencyLimits{Global: 100, PerEndpoint: 100}
+	})
+	f.setHandler(f.blockHandler)
+
+	alice := f.seedUser(t, "alice")
+	aCombos := f.seedCombos(t, alice, 5)
+	ctx := context.Background()
+	for i := 0; i < 4; i++ {
+		c := aCombos[i]
+		if err := f.fetcher.FetchModels(ctx, c[0], c[1], c[2]); err != nil {
+			t.Fatalf("auto fetch[%d]: %v", i, err)
+		}
+	}
+	c5 := aCombos[4]
+	if err := f.fetcher.FetchModels(ctx, c5[0], c5[1], c5[2]); !errors.Is(err, ErrPoolBusy) {
+		t.Errorf("5th auto fetch: err=%v, want ErrPoolBusy (per-user pool cap)", err)
+	}
+	// alice's cap does not block bob.
+	bob := f.seedUser(t, "bob")
+	bCombos := f.seedCombos(t, bob, 1)
+	bc := bCombos[0]
+	if err := f.fetcher.FetchModels(ctx, bc[0], bc[1], bc[2]); err != nil {
+		t.Errorf("bob fetch: err=%v, want nil (independent per-user cap)", err)
 	}
 }

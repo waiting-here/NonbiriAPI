@@ -14,6 +14,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 	"github.com/waiting-here/NonbiriAPI/internal/usage"
 )
@@ -109,7 +110,9 @@ func TestApplicationWiringProtectsAllEntryPoints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := db.Open(filepath.Join(t.TempDir(), "integration.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "integration.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatal(err)
@@ -216,7 +219,9 @@ func TestMaintenanceSweepPurgesExpiredSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := db.Open(filepath.Join(t.TempDir(), "maintenance.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "maintenance.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatal(err)
@@ -247,7 +252,7 @@ func TestMaintenanceSweepPurgesExpiredSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runMaintenanceSweep(context.Background(), store, usageService)
+	runMaintenanceSweep(context.Background(), store, usageService, nil)
 	var count int
 	if err := store.DB().QueryRow(`SELECT COUNT(*) FROM sessions`).Scan(&count); err != nil {
 		t.Fatal(err)

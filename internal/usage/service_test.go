@@ -22,9 +22,11 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
 	"github.com/waiting-here/NonbiriAPI/internal/forward"
@@ -32,6 +34,17 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 	"github.com/waiting-here/NonbiriAPI/internal/usage"
 )
+
+// mustLocalBackend wraps the shared stack in the single production Backend so
+// adapter tests exercise the same delegation path as production wiring.
+func mustLocalBackend(t *testing.T, stack *egress.Stack) *backend.LocalBackend {
+	t.Helper()
+	local, err := backend.NewLocal(stack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return local
+}
 
 type usageResolver struct{}
 
@@ -58,7 +71,9 @@ func newUsageFixture(t *testing.T, allowed []string, mutateConfig func(*usage.Co
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := db.Open(filepath.Join(t.TempDir(), "usage.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "usage.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatal(err)
@@ -89,15 +104,25 @@ func newUsageFixture(t *testing.T, allowed []string, mutateConfig func(*usage.Co
 		t.Fatal(err)
 	}
 	registry := endpoint.NewRegistry()
-	adapter, err := openai.NewAdapter(openai.AdapterConfig{Stack: stack})
+	adapter, err := openai.NewAdapter(openai.AdapterConfig{Backend: mustLocalBackend(t, stack)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	safetyIdentifierKey, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	safetyIdentifierFactory, err := forward.NewSafetyIdentifierFactory(safetyIdentifierKey)
+	clear(safetyIdentifierKey)
 	if err != nil {
 		t.Fatal(err)
 	}
 	runner, err := forward.NewSecureRunner(forward.SecureRunnerConfig{
-		Repository: store,
-		Secrets:    vault,
-		Registry:   registry,
-		Adapters:   []forward.Adapter{adapter},
+		Repository:        store,
+		Secrets:           vault,
+		Registry:          registry,
+		Adapters:          []forward.Adapter{adapter},
+		SafetyIdentifiers: safetyIdentifierFactory,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -125,6 +150,8 @@ func newUsageFixture(t *testing.T, allowed []string, mutateConfig func(*usage.Co
 	wrapped := auth.CallerKeyMiddleware(store, exit)
 	fixture := &usageFixture{store: store, vault: vault, stack: stack, handler: wrapped, service: usageService}
 	t.Cleanup(func() {
+		_ = service.Close()
+		_ = safetyIdentifierFactory.Close()
 		stack.CloseIdleConnections()
 		_ = store.Close()
 		_ = vault.Close()
@@ -161,11 +188,7 @@ func (f *usageFixture) addRoute(t *testing.T, userID int64, baseURL, provider, m
 	if err != nil {
 		t.Fatal(err)
 	}
-	ciphertext, err := f.vault.Seal([]byte(upstreamSecret))
-	if err != nil {
-		t.Fatal(err)
-	}
-	keyRow, err := f.store.CreateEndpointKey(ctx, userID, endpointRow.ID, ciphertext, "head", "tail", "", true, time.Now().Unix())
+	keyRow, err := f.store.CreateEndpointKey(ctx, userID, endpointRow.ID, []byte(upstreamSecret), "head", "tail", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,17 +318,21 @@ func TestUsageNonStreamValidUsage(t *testing.T) {
 	}
 	assertUserTotals(t, fixture.store, user.id, 1, 2, 3, 0)
 
-	logs, _, err := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{PageSize: 10})
+	logs, _, err := fixture.store.QueryUserRequestLogs(context.Background(), user.id, db.UserLogQuery{PageSize: 10})
 	if err != nil || len(logs) != 1 {
 		t.Fatalf("logs = %+v err=%v", logs, err)
 	}
 	log := logs[0]
 	if log.Model != "p/m" || log.EndpointKeyID == 0 || log.UpstreamModelID != "upstream/model" ||
+		log.EndpointBaseURL != upstream.URL ||
 		log.StatusCode != 200 || log.PromptTokens != 2 || log.CompletionTokens != 3 || log.TotalTokens != 5 ||
 		log.UsageUnknown || log.ErrorCode != "" || log.StartedAt.IsZero() || log.CompletedAt.Before(log.StartedAt) {
 		t.Fatalf("log row = %+v", log)
 	}
-	assertLogsLeakFree(t, fixture.store, upstreamSecret, promptMarker, upstream.URL)
+	// The dispatch-time canonical base-URL snapshot is owner-visible metadata
+	// per the frozen log contract; only secrets and request content must stay
+	// out of the persisted rows.
+	assertLogsLeakFree(t, fixture.store, upstreamSecret, promptMarker)
 }
 
 func TestUsageNonStreamWithoutUsageCountsUnknown(t *testing.T) {
@@ -324,7 +351,7 @@ func TestUsageNonStreamWithoutUsageCountsUnknown(t *testing.T) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 	assertUserTotals(t, fixture.store, user.id, 1, 0, 0, 1)
-	logs, _, _ := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{PageSize: 10})
+	logs, _, _ := fixture.store.QueryUserRequestLogs(context.Background(), user.id, db.UserLogQuery{PageSize: 10})
 	if len(logs) != 1 || !logs[0].UsageUnknown || logs[0].TotalTokens != 0 || logs[0].StatusCode != 200 {
 		t.Fatalf("logs = %+v", logs)
 	}
@@ -369,7 +396,7 @@ func TestUsageStreamDoneUsage(t *testing.T) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 	assertUserTotals(t, fixture.store, user.id, 1, 4, 6, 0)
-	logs, _, _ := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{PageSize: 10})
+	logs, _, _ := fixture.store.QueryUserRequestLogs(context.Background(), user.id, db.UserLogQuery{PageSize: 10})
 	if len(logs) != 1 || logs[0].UsageUnknown || logs[0].TotalTokens != 10 || logs[0].StatusCode != 200 {
 		t.Fatalf("logs = %+v", logs)
 	}
@@ -390,12 +417,12 @@ func TestUsageStreamAbnormalEOFAfterCommit(t *testing.T) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 	assertUserTotals(t, fixture.store, user.id, 1, 0, 0, 1)
-	logs, _, _ := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{PageSize: 10})
+	logs, _, _ := fixture.store.QueryUserRequestLogs(context.Background(), user.id, db.UserLogQuery{PageSize: 10})
 	if len(logs) != 1 || !logs[0].UsageUnknown || logs[0].TotalTokens != 0 ||
-		logs[0].StatusCode != 200 || logs[0].ErrorCode != "upstream" {
+		logs[0].StatusCode != 200 || logs[0].ErrorCode != "upstream" || logs[0].EndpointBaseURL != upstream.URL {
 		t.Fatalf("logs = %+v", logs)
 	}
-	assertLogsLeakFree(t, fixture.store, "sk-stream-trunc", upstream.URL)
+	assertLogsLeakFree(t, fixture.store, "sk-stream-trunc")
 }
 
 func TestUsageStreamCanceledAfterCommit(t *testing.T) {
@@ -452,7 +479,7 @@ func TestUsageStreamCanceledAfterCommit(t *testing.T) {
 		t.Fatalf("canceled stream wrote a terminal frame: %q", recorder.String())
 	}
 	assertUserTotals(t, fixture.store, user.id, 1, 0, 0, 1)
-	logs, _, _ := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{PageSize: 10})
+	logs, _, _ := fixture.store.QueryUserRequestLogs(context.Background(), user.id, db.UserLogQuery{PageSize: 10})
 	if len(logs) != 1 || !logs[0].UsageUnknown || logs[0].TotalTokens != 0 || logs[0].StatusCode != 200 {
 		t.Fatalf("logs = %+v", logs)
 	}
@@ -520,7 +547,7 @@ func TestUsageDuplicateHookDeliveryIsAtMostOnce(t *testing.T) {
 	usageRecord := forward.UsageRecord{
 		AttemptID: "attempt-duplicate", UserID: userID, FullName: "p/m", EndpointKeyID: 7,
 		UpstreamModelID: "upstream/model",
-		Usage:           openai.Usage{PromptTokens: 2, CompletionTokens: 3, TotalTokens: 5, Present: true},
+		Usage:           openai.Usage{UncachedInputTokens: 2, OutputTokens: 3, Present: true},
 	}
 	service.HandleAttempt(attempt)
 	// The same committed usage hook delivered twice must not double-accumulate.
@@ -528,7 +555,7 @@ func TestUsageDuplicateHookDeliveryIsAtMostOnce(t *testing.T) {
 	service.HandleUsage(usageRecord)
 
 	assertUserTotals(t, store, userID, 1, 2, 3, 0)
-	logs, _, _ := store.QueryRequestLogs(context.Background(), db.LogQuery{PageSize: 10})
+	logs, _, _ := store.QueryUserRequestLogs(context.Background(), userID, db.UserLogQuery{PageSize: 10})
 	if len(logs) != 1 {
 		t.Fatalf("duplicate hook delivery persisted %d rows", len(logs))
 	}
@@ -548,7 +575,7 @@ func TestUsageOrphanUsageRecordFallsBackToZeroMetadata(t *testing.T) {
 		Usage: openai.Usage{Present: false},
 	})
 	assertUserTotals(t, store, userID, 1, 0, 0, 1)
-	logs, _, _ := store.QueryRequestLogs(context.Background(), db.LogQuery{PageSize: 10})
+	logs, _, _ := store.QueryUserRequestLogs(context.Background(), userID, db.UserLogQuery{PageSize: 10})
 	if len(logs) != 1 || logs[0].StatusCode != 0 || logs[0].DurationMs != 0 ||
 		!logs[0].UsageUnknown || logs[0].Model != "" {
 		t.Fatalf("orphan fallback log = %+v", logs)
@@ -630,11 +657,11 @@ func TestUsageConcurrentRequestsNoLostAccounting(t *testing.T) {
 		t.Fatalf("upstream hits = %d, want %d", got, workers)
 	}
 	assertUserTotals(t, fixture.store, user.id, workers, 2*workers, 3*workers, 0)
-	logs, _, _ := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{PageSize: 10_000})
+	logs, _, _ := fixture.store.QueryUserRequestLogs(context.Background(), user.id, db.UserLogQuery{PageSize: 100})
 	if len(logs) != workers {
 		t.Fatalf("log rows = %d, want %d", len(logs), workers)
 	}
-	assertLogsLeakFree(t, fixture.store, "sk-concurrent", upstream.URL)
+	assertLogsLeakFree(t, fixture.store, "sk-concurrent")
 }
 
 func TestUsageFailoverCommittedAttemptCountedOnce(t *testing.T) {
@@ -669,11 +696,11 @@ func TestUsageFailoverCommittedAttemptCountedOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keyFirst, err := fixture.store.CreateEndpointKey(ctx, user.id, endpointFirst.ID, mustSeal(t, fixture.vault, firstSecret), "", "", "", true, time.Now().Unix())
+	keyFirst, err := fixture.store.CreateEndpointKey(ctx, user.id, endpointFirst.ID, []byte(firstSecret), "", "", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}
-	keySecond, err := fixture.store.CreateEndpointKey(ctx, user.id, endpointSecond.ID, mustSeal(t, fixture.vault, secondSecret), "", "", "", true, time.Now().Unix())
+	keySecond, err := fixture.store.CreateEndpointKey(ctx, user.id, endpointSecond.ID, []byte(secondSecret), "", "", "", true, time.Now().Unix())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -706,13 +733,19 @@ func TestUsageFailoverCommittedAttemptCountedOnce(t *testing.T) {
 	// Exactly one accounted request, with the second (committed) attempt's
 	// metadata: the pre-commit failure is not counted.
 	assertUserTotals(t, fixture.store, user.id, 1, 2, 3, 0)
-	logs, _, _ := fixture.store.QueryRequestLogs(context.Background(), db.LogQuery{PageSize: 10})
+	logs, _, _ := fixture.store.QueryUserRequestLogs(context.Background(), user.id, db.UserLogQuery{PageSize: 10})
 	if len(logs) != 1 || logs[0].ErrorCode != "" || logs[0].UsageUnknown || logs[0].TotalTokens != 5 {
 		t.Fatalf("logs = %+v", logs)
 	}
 	var keyID int64
-	if err := fixture.store.DB().QueryRow(`SELECT endpoint_key_id FROM request_logs LIMIT 1`).Scan(&keyID); err != nil {
+	var committedBaseURL string
+	if err := fixture.store.DB().QueryRow(`SELECT endpoint_key_id, endpoint_base_url FROM request_logs LIMIT 1`).Scan(&keyID, &committedBaseURL); err != nil {
 		t.Fatalf("read key id: %v", err)
+	}
+	// The snapshot must reference the attempt that actually committed (the
+	// second binding), not the failed pre-commit candidate.
+	if committedBaseURL != second.URL {
+		t.Fatalf("endpoint_base_url = %q, want committed %q", committedBaseURL, second.URL)
 	}
 	var secondKey int64
 	if err := fixture.store.DB().QueryRow(`SELECT ek.id FROM endpoint_keys ek JOIN endpoints e ON e.id=ek.endpoint_id WHERE e.base_url=?`, second.URL).Scan(&secondKey); err != nil {
@@ -721,16 +754,7 @@ func TestUsageFailoverCommittedAttemptCountedOnce(t *testing.T) {
 	if keyID != secondKey {
 		t.Fatalf("log row references the wrong attempt's key: %d want %d", keyID, secondKey)
 	}
-	assertLogsLeakFree(t, fixture.store, firstSecret, secondSecret, first.URL, second.URL)
-}
-
-func mustSeal(t *testing.T, vault *secret.Vault, plaintext string) string {
-	t.Helper()
-	ciphertext, err := vault.Seal([]byte(plaintext))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return ciphertext
+	assertLogsLeakFree(t, fixture.store, firstSecret, secondSecret)
 }
 
 // --- raw store helpers (no egress stack needed) ---
@@ -743,7 +767,9 @@ func openRawUsageStore(t *testing.T) *db.Store {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := db.Open(filepath.Join(t.TempDir(), "raw-usage.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "raw-usage.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatal(err)
@@ -768,4 +794,128 @@ func seedRawUser(t *testing.T, store *db.Store) int64 {
 		t.Fatal(err)
 	}
 	return id
+}
+
+func TestUsageRecordsDailyActivity(t *testing.T) {
+	store := openRawUsageStore(t)
+	// An explicit offset must be configured before any day key is generated.
+	if err := store.SetSiteTimezoneOffsetMinutes(330); err != nil {
+		t.Fatal(err)
+	}
+	userID := seedRawUser(t, store)
+
+	service, err := usage.NewService(usage.Config{Store: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := time.Unix(1700000000, 0).UTC()
+	attempt := forward.AttemptRecord{
+		AttemptID: "activity-attempt", UserID: userID, FullName: "p/m",
+		StartedAt: started, Duration: 10 * time.Millisecond, ClientStatus: 200,
+		Success: true,
+	}
+	usageRecord := forward.UsageRecord{
+		AttemptID: "activity-attempt", UserID: userID, FullName: "p/m",
+		Usage: openai.Usage{UncachedInputTokens: 2, CacheReadInputTokens: 4, OutputTokens: 3, Present: true},
+	}
+	service.HandleAttempt(attempt)
+	// A duplicate delivery of the same committed hook must not double-count
+	// the daily activity rollup either.
+	service.HandleUsage(usageRecord)
+	service.HandleUsage(usageRecord)
+
+	var requests, uncached, cacheRead, output int64
+	if err := store.DB().QueryRow(`SELECT api_requests, uncached_input_tokens,
+		cache_read_input_tokens, output_tokens FROM user_activity_daily WHERE user_id=?`, userID).
+		Scan(&requests, &uncached, &cacheRead, &output); err != nil {
+		t.Fatalf("read user activity: %v", err)
+	}
+	if requests != 1 || uncached != 2 || cacheRead != 4 || output != 3 {
+		t.Fatalf("user activity = (%d,%d,%d,%d), want (1,2,4,3)", requests, uncached, cacheRead, output)
+	}
+	var siteRequests, distinct int64
+	if err := store.DB().QueryRow(`SELECT api_requests, distinct_product_users FROM site_activity_daily`).
+		Scan(&siteRequests, &distinct); err != nil {
+		t.Fatalf("read site activity: %v", err)
+	}
+	if siteRequests != 1 || distinct != 1 {
+		t.Fatalf("site activity = (%d,%d), want (1,1)", siteRequests, distinct)
+	}
+}
+
+// A committed-but-failed request (protocol failure after commit, e.g. an
+// upstream error mid-stream) is accounted as a request but is never successful
+// API activity per the frozen contract; neither is an orphan usage record with
+// no attempt metadata (unknown success).
+func TestUsageFailedRequestNotActivity(t *testing.T) {
+	store := openRawUsageStore(t)
+	if err := store.SetSiteTimezoneOffsetMinutes(330); err != nil {
+		t.Fatal(err)
+	}
+	userID := seedRawUser(t, store)
+
+	service, err := usage.NewService(usage.Config{Store: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := time.Unix(1700000000, 0).UTC()
+	service.HandleAttempt(forward.AttemptRecord{
+		AttemptID: "failed-attempt", UserID: userID, FullName: "p/m",
+		StartedAt: started, Duration: 10 * time.Millisecond, ClientStatus: 502,
+		StableErrorCode: "upstream", Success: false,
+	})
+	service.HandleUsage(forward.UsageRecord{
+		AttemptID: "failed-attempt", UserID: userID, FullName: "p/m",
+		Usage: openai.Usage{UncachedInputTokens: 5, OutputTokens: 5, Present: true},
+	})
+	// Orphan usage record: success unknown, must not fabricate activity.
+	service.HandleUsage(forward.UsageRecord{
+		AttemptID: "orphan-attempt", UserID: userID, FullName: "p/m",
+		Usage: openai.Usage{UncachedInputTokens: 7, OutputTokens: 7, Present: true},
+	})
+
+	assertUserTotals(t, store, userID, 2, 12, 12, 0)
+	rows, err := store.DB().Query(`SELECT COUNT(*) FROM user_activity_daily`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var n int
+		if err := rows.Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Fatalf("failed/orphan requests recorded daily activity rows: %d", n)
+		}
+	}
+}
+
+func TestUsageActivitySkippedWithoutTimezone(t *testing.T) {
+	store := openRawUsageStore(t)
+	userID := seedRawUser(t, store)
+
+	service, err := usage.NewService(usage.Config{Store: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.HandleUsage(forward.UsageRecord{
+		AttemptID: "no-tz-attempt", UserID: userID,
+		Usage: openai.Usage{UncachedInputTokens: 1, OutputTokens: 1, Present: true},
+	})
+	assertUserTotals(t, store, userID, 1, 1, 1, 0)
+	rows, err := store.DB().Query(`SELECT COUNT(*) FROM user_activity_daily`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var n int
+		if err := rows.Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Fatalf("activity rows written without a configured timezone: %d", n)
+		}
+	}
 }

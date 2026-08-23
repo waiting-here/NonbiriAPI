@@ -29,98 +29,326 @@ const (
 	maxRawQueryBytes = 8192
 )
 
-// parseLogQuery builds a bounded db.LogQuery from strict single-value query
-// parameters. Unknown parameters, repeated parameters, unparseable or
-// out-of-range values, and over-long inputs are rejected with
-// invalid_request. page defaults to 1 and must be >= 1; page_size defaults
-// to 20 and clamps into [1, db.MaxLogPageLimit].
-func parseLogQuery(r *http.Request) (db.LogQuery, httperr.Error) {
+// parseUserLogsQuery builds a bounded db.UserLogQuery for GET /api/logs from
+// strict single-value query parameters. The user station never accepts a
+// user_id parameter: ownership comes exclusively from the session principal.
+// Unknown parameters, repeated parameters, unparseable or out-of-range values,
+// and over-long inputs are rejected with invalid_request. page defaults to 1
+// and must be >= 1; page_size defaults to 20 and clamps into
+// [1, db.MaxLogPageLimit] (frozen contract: maximum 100).
+func parseUserLogsQuery(r *http.Request) (db.UserLogQuery, httperr.Error) {
 	invalid := httperr.New(httperr.CodeInvalidRequest, "invalid query parameter")
 	if r == nil || r.URL == nil || len(r.URL.RawQuery) > maxRawQueryBytes ||
-		!onlyParams(r, "user_id", "model", "status", "from", "to", "page", "page_size") {
-		return db.LogQuery{}, invalid
+		!onlyParams(r, "model", "error_code", "status", "from", "to", "page", "page_size") {
+		return db.UserLogQuery{}, invalid
 	}
-	q := db.LogQuery{Page: 1, PageSize: defaultLogPageSize}
+	q := db.UserLogQuery{Page: 1, PageSize: defaultLogPageSize}
 
-	if v, present, ok := singleValue(r, "user_id"); present {
-		if !ok {
-			return db.LogQuery{}, invalid
-		}
-		id, err := strconv.ParseInt(v, 10, 64)
-		if err != nil || id <= 0 {
-			return db.LogQuery{}, invalid
-		}
-		q.UserID = id
-	}
 	if v, present, ok := singleValue(r, "model"); present {
-		if !ok || !validModelFilter(v) {
-			return db.LogQuery{}, invalid
+		if !ok || !validStoredTextFilter(v) {
+			return db.UserLogQuery{}, invalid
 		}
 		q.Model = v
 	}
+	if v, present, ok := singleValue(r, "error_code"); present {
+		if !ok || !validStoredTextFilter(v) {
+			return db.UserLogQuery{}, invalid
+		}
+		q.ErrorCode = v
+	}
 	if v, present, ok := singleValue(r, "status"); present {
 		if !ok {
-			return db.LogQuery{}, invalid
+			return db.UserLogQuery{}, invalid
 		}
 		status, err := strconv.Atoi(v)
 		if err != nil || status < 100 || status > 599 {
-			return db.LogQuery{}, invalid
+			return db.UserLogQuery{}, invalid
 		}
 		q.Status = status
 	}
 	if v, present, ok := singleValue(r, "from"); present {
 		if !ok {
-			return db.LogQuery{}, invalid
+			return db.UserLogQuery{}, invalid
 		}
 		from, err := strconv.ParseInt(v, 10, 64)
 		if err != nil || from < 0 {
-			return db.LogQuery{}, invalid
+			return db.UserLogQuery{}, invalid
 		}
 		q.FromUnix = from
 	}
 	if v, present, ok := singleValue(r, "to"); present {
 		if !ok {
-			return db.LogQuery{}, invalid
+			return db.UserLogQuery{}, invalid
 		}
 		to, err := strconv.ParseInt(v, 10, 64)
 		if err != nil || to < 0 {
-			return db.LogQuery{}, invalid
+			return db.UserLogQuery{}, invalid
 		}
 		q.ToUnix = to
 	}
 	if q.FromUnix > 0 && q.ToUnix > 0 && q.FromUnix > q.ToUnix {
-		return db.LogQuery{}, invalid
+		return db.UserLogQuery{}, invalid
 	}
+	page, pageSize, derr := parseLogPaging(r)
+	if derr.Code != "" {
+		return db.UserLogQuery{}, derr
+	}
+	q.Page, q.PageSize = page, pageSize
+
+	// Every value above is pre-validated against the repository's own rules
+	// (stored-text bounds, status 100..599, non-negative non-inverted time
+	// range, 1-based page and clamped page size), so QueryUserRequestLogs can
+	// never see an invalid filter. The repository re-validates defensively; a
+	// failure there maps to internal error without echoing anything.
+	return q, httperr.Error{}
+}
+
+// parseAdminLogsQuery builds a bounded db.AdminLogQuery for GET /admin/api/logs
+// from strict single-value query parameters. The frozen administrator filter
+// set is user_id / endpoint_base_url / upstream_model / error_code / status /
+// from / to plus paging — deliberately not the user-chosen platform model name.
+// Filter semantics are frozen as exact equality (see db.AdminLogQuery); unknown,
+// repeated, malformed, or over-long values are invalid_request.
+func parseAdminLogsQuery(r *http.Request) (db.AdminLogQuery, httperr.Error) {
+	invalid := httperr.New(httperr.CodeInvalidRequest, "invalid query parameter")
+	if r == nil || r.URL == nil || len(r.URL.RawQuery) > maxRawQueryBytes ||
+		!onlyParams(r, "user_id", "endpoint_base_url", "upstream_model", "error_code", "status", "from", "to", "page", "page_size") {
+		return db.AdminLogQuery{}, invalid
+	}
+	q := db.AdminLogQuery{Page: 1, PageSize: defaultLogPageSize}
+
+	if v, present, ok := singleValue(r, "user_id"); present {
+		if !ok {
+			return db.AdminLogQuery{}, invalid
+		}
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || id <= 0 {
+			return db.AdminLogQuery{}, invalid
+		}
+		q.UserID = id
+	}
+	if v, present, ok := singleValue(r, "endpoint_base_url"); present {
+		if !ok || !validStoredTextFilter(v) {
+			return db.AdminLogQuery{}, invalid
+		}
+		q.EndpointBaseURL = v
+	}
+	if v, present, ok := singleValue(r, "upstream_model"); present {
+		if !ok || !validStoredTextFilter(v) {
+			return db.AdminLogQuery{}, invalid
+		}
+		q.UpstreamModel = v
+	}
+	if v, present, ok := singleValue(r, "error_code"); present {
+		if !ok || !validStoredTextFilter(v) {
+			return db.AdminLogQuery{}, invalid
+		}
+		q.ErrorCode = v
+	}
+	if v, present, ok := singleValue(r, "status"); present {
+		if !ok {
+			return db.AdminLogQuery{}, invalid
+		}
+		status, err := strconv.Atoi(v)
+		if err != nil || status < 100 || status > 599 {
+			return db.AdminLogQuery{}, invalid
+		}
+		q.Status = status
+	}
+	if v, present, ok := singleValue(r, "from"); present {
+		if !ok {
+			return db.AdminLogQuery{}, invalid
+		}
+		from, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || from < 0 {
+			return db.AdminLogQuery{}, invalid
+		}
+		q.FromUnix = from
+	}
+	if v, present, ok := singleValue(r, "to"); present {
+		if !ok {
+			return db.AdminLogQuery{}, invalid
+		}
+		to, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || to < 0 {
+			return db.AdminLogQuery{}, invalid
+		}
+		q.ToUnix = to
+	}
+	if q.FromUnix > 0 && q.ToUnix > 0 && q.FromUnix > q.ToUnix {
+		return db.AdminLogQuery{}, invalid
+	}
+	page, pageSize, derr := parseLogPaging(r)
+	if derr.Code != "" {
+		return db.AdminLogQuery{}, derr
+	}
+	q.Page, q.PageSize = page, pageSize
+	return q, httperr.Error{}
+}
+
+// parseLogExportQuery builds the filter for the unpaginated admin export
+// endpoints. It accepts exactly the same frozen filters as the list endpoint
+// but rejects page/page_size: an export is a complete bounded selection, so a
+// paging parameter can only be a client bug or an attempt to bound-shift.
+func parseLogExportQuery(r *http.Request) (db.AdminLogQuery, httperr.Error) {
+	invalid := httperr.New(httperr.CodeInvalidRequest, "invalid query parameter")
+	if r == nil || r.URL == nil || len(r.URL.RawQuery) > maxRawQueryBytes ||
+		!onlyParams(r, "user_id", "endpoint_base_url", "upstream_model", "error_code", "status", "from", "to") {
+		return db.AdminLogQuery{}, invalid
+	}
+	q := db.AdminLogQuery{}
+
+	if v, present, ok := singleValue(r, "user_id"); present {
+		if !ok {
+			return db.AdminLogQuery{}, invalid
+		}
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || id <= 0 {
+			return db.AdminLogQuery{}, invalid
+		}
+		q.UserID = id
+	}
+	if v, present, ok := singleValue(r, "endpoint_base_url"); present {
+		if !ok || !validStoredTextFilter(v) {
+			return db.AdminLogQuery{}, invalid
+		}
+		q.EndpointBaseURL = v
+	}
+	if v, present, ok := singleValue(r, "upstream_model"); present {
+		if !ok || !validStoredTextFilter(v) {
+			return db.AdminLogQuery{}, invalid
+		}
+		q.UpstreamModel = v
+	}
+	if v, present, ok := singleValue(r, "error_code"); present {
+		if !ok || !validStoredTextFilter(v) {
+			return db.AdminLogQuery{}, invalid
+		}
+		q.ErrorCode = v
+	}
+	if v, present, ok := singleValue(r, "status"); present {
+		if !ok {
+			return db.AdminLogQuery{}, invalid
+		}
+		status, err := strconv.Atoi(v)
+		if err != nil || status < 100 || status > 599 {
+			return db.AdminLogQuery{}, invalid
+		}
+		q.Status = status
+	}
+	if v, present, ok := singleValue(r, "from"); present {
+		if !ok {
+			return db.AdminLogQuery{}, invalid
+		}
+		from, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || from < 0 {
+			return db.AdminLogQuery{}, invalid
+		}
+		q.FromUnix = from
+	}
+	if v, present, ok := singleValue(r, "to"); present {
+		if !ok {
+			return db.AdminLogQuery{}, invalid
+		}
+		to, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || to < 0 {
+			return db.AdminLogQuery{}, invalid
+		}
+		q.ToUnix = to
+	}
+	if q.FromUnix > 0 && q.ToUnix > 0 && q.FromUnix > q.ToUnix {
+		return db.AdminLogQuery{}, invalid
+	}
+	return q, httperr.Error{}
+}
+
+// parseLogPaging reads strict single-value page/page_size. page defaults to 1
+// and must be >= 1; page_size defaults to 20 and clamps into
+// [1, db.MaxLogPageLimit] (frozen contract: maximum 100).
+func parseLogPaging(r *http.Request) (page, pageSize int, derr httperr.Error) {
+	invalid := httperr.New(httperr.CodeInvalidRequest, "invalid query parameter")
+	page, pageSize = 1, defaultLogPageSize
 	if v, present, ok := singleValue(r, "page"); present {
 		if !ok {
-			return db.LogQuery{}, invalid
+			return 0, 0, invalid
 		}
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 {
-			return db.LogQuery{}, invalid
+			return 0, 0, invalid
+		}
+		page = n
+	}
+	if v, present, ok := singleValue(r, "page_size"); present {
+		if !ok {
+			return 0, 0, invalid
+		}
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			return 0, 0, invalid
+		}
+		if n > db.MaxLogPageLimit {
+			n = db.MaxLogPageLimit
+		}
+		pageSize = n
+	}
+	return page, pageSize, httperr.Error{}
+}
+
+// parseLogOptionsQuery validates GET /api/logs/options: the candidate list is
+// derived entirely from the session principal's own logs, so no filter or
+// paging parameter is accepted — any query string at all is invalid_request.
+func parseLogOptionsQuery(r *http.Request) httperr.Error {
+	invalid := httperr.New(httperr.CodeInvalidRequest, "invalid query parameter")
+	if r == nil || r.URL == nil || len(r.URL.RawQuery) > maxRawQueryBytes || len(r.URL.Query()) != 0 {
+		return invalid
+	}
+	return httperr.Error{}
+}
+
+// parseEndpointOverviewQuery builds a bounded db.EndpointOverviewQuery from
+// strict single-value query parameters for /admin/api/overview/endpoints.
+// Unknown parameters, repeated parameters, unparseable or out-of-range
+// values, and over-long inputs are rejected with invalid_request. page
+// defaults to 1 and must be >= 1; page_size defaults to 20 and clamps into
+// [1, db.MaxOverviewPageLimit]; filter is an optional literal substring
+// matched against the stored canonical base_url.
+func parseEndpointOverviewQuery(r *http.Request) (db.EndpointOverviewQuery, httperr.Error) {
+	invalid := httperr.New(httperr.CodeInvalidRequest, "invalid query parameter")
+	if r == nil || r.URL == nil || len(r.URL.RawQuery) > maxRawQueryBytes ||
+		!onlyParams(r, "page", "page_size", "filter") {
+		return db.EndpointOverviewQuery{}, invalid
+	}
+	q := db.EndpointOverviewQuery{Page: 1, PageSize: defaultLogPageSize}
+
+	if v, present, ok := singleValue(r, "page"); present {
+		if !ok {
+			return db.EndpointOverviewQuery{}, invalid
+		}
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			return db.EndpointOverviewQuery{}, invalid
 		}
 		q.Page = n
 	}
 	if v, present, ok := singleValue(r, "page_size"); present {
 		if !ok {
-			return db.LogQuery{}, invalid
+			return db.EndpointOverviewQuery{}, invalid
 		}
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 {
-			return db.LogQuery{}, invalid
+			return db.EndpointOverviewQuery{}, invalid
 		}
-		if n > db.MaxLogPageLimit {
-			n = db.MaxLogPageLimit
+		if n > db.MaxOverviewPageLimit {
+			n = db.MaxOverviewPageLimit
 		}
 		q.PageSize = n
 	}
-
-	// Every value above is pre-validated against the repository's own rules
-	// (user id > 0, model stored-text bounds, status 100..599, non-negative
-	// non-inverted time range, 1-based page and clamped page size), so
-	// QueryRequestLogs can never see an invalid filter. The repository
-	// re-validates defensively; a failure there maps to internal error without
-	// echoing anything.
+	if v, present, ok := singleValue(r, "filter"); present {
+		if !ok || !validStoredTextFilter(v) {
+			return db.EndpointOverviewQuery{}, invalid
+		}
+		q.Filter = v
+	}
 	return q, httperr.Error{}
 }
 
@@ -161,15 +389,6 @@ func parseUsageQuery(r *http.Request) (groupBy string, limit int, derr httperr.E
 	return groupBy, limit, httperr.Error{}
 }
 
-// rejectUnknownParams rejects any query parameter for routes that take none.
-func rejectUnknownParams(r *http.Request) httperr.Error {
-	if r == nil || r.URL == nil || len(r.URL.RawQuery) > maxRawQueryBytes ||
-		!onlyParams(r) {
-		return httperr.New(httperr.CodeInvalidRequest, "invalid query parameter")
-	}
-	return httperr.Error{}
-}
-
 // onlyParams reports whether every query key is one of the allowed names.
 func onlyParams(r *http.Request, allowed ...string) bool {
 	values := r.URL.Query()
@@ -202,11 +421,12 @@ func singleValue(r *http.Request, name string) (value string, present, ok bool) 
 	return values[0], true, true
 }
 
-// validModelFilter mirrors the repository's stored-text rules for the
-// platform model filter: valid UTF-8, at most maxModelFilterRunes runes, no
-// C0 controls or DEL, and no leading/trailing whitespace. An empty value is
-// rejected here: a client that wants no model filter omits the parameter.
-func validModelFilter(s string) bool {
+// validStoredTextFilter mirrors the repository's stored-text rules for a
+// free-text filter (platform model name, upstream model, error code, endpoint
+// base URL): valid UTF-8, at most maxModelFilterRunes runes, no C0 controls or
+// DEL, and no leading/trailing whitespace. An empty value is rejected here: a
+// client that wants no filter omits the parameter.
+func validStoredTextFilter(s string) bool {
 	if s == "" || !utf8.ValidString(s) || utf8.RuneCountInString(s) > maxModelFilterRunes {
 		return false
 	}

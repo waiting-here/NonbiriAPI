@@ -13,6 +13,16 @@ ExecStart=/opt/nonbiriapi/current/nonbiriapi
 Restart=on-failure
 RestartSec=5s
 UMask=0077
+# The application verifies on startup that the database directory is owned by
+# the service account and grants no group or other access (0700), and tightens
+# the database file and its -wal/-shm sidecars to 0600. With the default relative
+# database path the database directory is this unit's WorkingDirectory, so it
+# must be 0700 and owned by the service account; a symlink or non-regular file
+# at the database path or its -wal/-shm sidecars is rejected before the
+# database is opened. It refuses to start when it cannot guarantee owner-only
+# access, so a non-standard launch no longer depends on the operator remembering
+# umask. UMask=0077 is kept as a defense-in-depth layer; create the database
+# directory with mode 0700.
 
 # The process only needs to write its database directory and read its
 # environment/key files. Review these restrictions on the target distribution.

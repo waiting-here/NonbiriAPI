@@ -4,11 +4,9 @@ These settings live in GitHub and cannot be applied by `git push` or stored comp
 
 ## Private vulnerability reporting
 
-1. Open **Settings → Code security and analysis**.
-2. Under **Private vulnerability reporting**, click **Enable**.
-3. Keep repository notifications enabled for `@waiting-here`.
+Private vulnerability reporting is enabled. Periodically verify it under **Settings → Code security and analysis**, test that the repository's private advisory form is reachable, and keep owner/security notifications enabled.
 
-`SECURITY.md` remains useful for deployment guidance, but GitHub's private reporting form is the preferred vulnerability channel once enabled.
+`SECURITY.md` remains useful for deployment guidance; GitHub's private reporting form is the preferred vulnerability channel.
 
 ## Protect `master`
 
@@ -18,7 +16,11 @@ Use **Settings → Branches** (or a repository ruleset) and create a rule for `m
 - require the `Go checks` and `Web checks` status checks;
 - block force pushes and branch deletion;
 - require conversation resolution;
-- do not permit bypassing the rule unless an emergency recovery path is intentionally retained.
+- do not permit bypassing the rule for routine or emergency changes.
+
+Direct updates to `master` are disabled: all changes, including emergency fixes, must arrive through a pull request from another branch. Keep local `master` aligned with `origin/master`; do not locally merge a feature branch into `master` and then try to push it.
+
+For a multi-part version, maintainers may use a milestone integration branch (for example, `dev/v1.0.0-alpha.2`), merge locally reviewed short-lived branches into it, and open one final pull request from that integration branch to `master`. The integration branch must remain buildable after each merge; local per-change review and gates are still required because the final pull request is not a substitute for incremental review.
 
 For a single-maintainer repository, requiring an approving review can make the owner unable to merge their own pull requests. Start with required status checks and no approval count, or add a trusted second maintainer before requiring one approval.
 
@@ -27,7 +29,7 @@ For a single-maintainer repository, requiring an approving review can make the o
 - Keep **Allow auto-merge** disabled until the checks and review process are familiar.
 - Enable Dependabot version updates using the committed `.github/dependabot.yml`.
 - Enable secret scanning and push protection if the repository plan provides them.
-- Set the default branch to `master` and publish alpha.1 as a pre-release.
+- Keep the default branch as `master`; publish alpha releases, including `v1.0.0-alpha.2`, as pre-releases.
 - Keep Actions permissions at the workflow default of read-only contents; do not add deployment secrets to the CI workflow.
 
 ## Release and access hygiene
@@ -35,3 +37,4 @@ For a single-maintainer repository, requiring an approving review can make the o
 - Do not put VPS credentials, OAuth secrets, master keys, database files or private trial URLs in repository settings, issues or workflow logs.
 - Add release and signing permissions only when a separate release workflow is introduced.
 - Review `CODEOWNERS` whenever maintainers change.
+- Discussions are currently disabled; do not direct users there unless the feature and moderation/support policy are deliberately enabled.

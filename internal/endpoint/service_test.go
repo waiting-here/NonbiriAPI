@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -42,6 +43,7 @@ func newTestService(t *testing.T) *testService {
 	}
 	t.Cleanup(func() { _ = vault.Close() })
 	path := filepath.Join(t.TempDir(), "endpoint.db")
+	dbtest.EnsureOwnerOnlyParent(t, path)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatalf("open test store: %v", err)
@@ -55,12 +57,24 @@ func newTestService(t *testing.T) *testService {
 	svc := NewService(ServiceDeps{
 		Repo:       store,
 		URLs:       policy,
-		Secrets:    vault,
 		Connectors: NewRegistry(),
 		Hook:       hook,
 		Now:        func() int64 { return 1 },
 	})
 	return &testService{svc: svc, store: store, vault: vault, policy: policy, hook: hook, path: path}
+}
+
+func serviceCredentialContext(t *testing.T, userID int64, ep db.Endpoint, keyID int64) secret.EndpointKeyContext {
+	t.Helper()
+	_, origin, err := egress.CanonicalEndpointTarget(ep.BaseURL)
+	if err != nil {
+		t.Fatalf("canonical endpoint target: %v", err)
+	}
+	credentialContext, err := secret.NewEndpointKeyContext(userID, ep.ID, keyID, origin)
+	if err != nil {
+		t.Fatalf("credential context: %v", err)
+	}
+	return credentialContext
 }
 
 // seedUser inserts a users row and returns its id. A non-nil endpointLimit
@@ -150,6 +164,12 @@ func (h *recordingHook) last() hookCall {
 		return hookCall{}
 	}
 	return h.calls[len(h.calls)-1]
+}
+
+func (h *recordingHook) snapshot() []hookCall {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]hookCall(nil), h.calls...)
 }
 
 func mustCreateEndpoint(t *testing.T, ts *testService, userID int64, baseURL string) db.Endpoint {
@@ -556,29 +576,137 @@ func TestUpdateEndpointRecanonicalizesBaseURL(t *testing.T) {
 	}
 }
 
-func TestUpdateEndpointTriggersFetchPerEnabledKey(t *testing.T) {
+func TestUpdateEndpointFetchTriggersUseActualChangeMask(t *testing.T) {
 	ts := newTestService(t)
 	uid := ts.seedUser(t, nil)
 	ep := mustCreateEndpoint(t, ts, uid, "https://example.com/v1/")
-	enabled := mustCreateKey(t, ts, uid, ep.ID, "sk-enabled-AAAAAAAA", true)
-	mustCreateKey(t, ts, uid, ep.ID, "sk-disabled-BBBBBBBB", false)
+	firstEnabled := mustCreateKey(t, ts, uid, ep.ID, "sk-enabled-AAAAAAAA", true)
+	secondEnabled := mustCreateKey(t, ts, uid, ep.ID, "sk-enabled-BBBBBBBB", true)
+	mustCreateKey(t, ts, uid, ep.ID, "sk-disabled-CCCCCCCC", false)
 
-	if got := ts.hook.count(); got != 1 {
-		t.Fatalf("after key adds, hook calls = %d, want 1 (enabled only)", got)
+	if got := ts.hook.count(); got != 2 {
+		t.Fatalf("after key adds, hook calls = %d, want 2", got)
 	}
-	if ts.hook.last().keyID != enabled.ID {
-		t.Errorf("first hook call keyID = %d, want enabled key %d", ts.hook.last().keyID, enabled.ID)
+	if ts.hook.last().keyID != secondEnabled.ID {
+		t.Errorf("last key-add hook keyID = %d, want %d", ts.hook.last().keyID, secondEnabled.ID)
 	}
 
 	if _, err := ts.svc.UpdateEndpoint(context.Background(), uid, ep.ID, nil, strPtr("edited note"), nil, nil); err != nil {
-		t.Fatalf("update endpoint: %v", err)
+		t.Fatalf("note update: %v", err)
 	}
 	if got := ts.hook.count(); got != 2 {
-		t.Fatalf("after endpoint edit, hook calls = %d, want 2 (one per enabled key)", got)
+		t.Fatalf("note-only update triggered fetch: calls=%d", got)
 	}
-	last := ts.hook.last()
-	if last.endpointID != ep.ID || last.keyID != enabled.ID {
-		t.Errorf("post-edit hook call = %+v, want endpoint %d key %d", last, ep.ID, enabled.ID)
+
+	if _, err := ts.svc.UpdateEndpoint(context.Background(), uid, ep.ID, strPtr("https://example.com/v2/"), nil, nil, nil); err != nil {
+		t.Fatalf("same-origin path update: %v", err)
+	}
+	if got := ts.hook.count(); got != 4 {
+		t.Fatalf("path update hook calls = %d, want 4", got)
+	}
+	pathCalls := ts.hook.snapshot()[2:4]
+	if pathCalls[0].endpointID != ep.ID || pathCalls[0].keyID != firstEnabled.ID ||
+		pathCalls[1].endpointID != ep.ID || pathCalls[1].keyID != secondEnabled.ID {
+		t.Errorf("path-update hook calls = %+v", pathCalls)
+	}
+
+	if _, err := ts.svc.UpdateEndpoint(context.Background(), uid, ep.ID,
+		strPtr("https://example.com:443/v2/"), nil, nil, nil); err != nil {
+		t.Fatalf("equivalent target display update: %v", err)
+	}
+	if got := ts.hook.count(); got != 4 {
+		t.Fatalf("equivalent target display update triggered fetch: calls=%d", got)
+	}
+
+	if _, err := ts.svc.UpdateEndpoint(context.Background(), uid, ep.ID, nil, nil, boolPtr(false), nil); err != nil {
+		t.Fatalf("disable endpoint: %v", err)
+	}
+	if got := ts.hook.count(); got != 4 {
+		t.Fatalf("enabled-to-disabled update triggered fetch: calls=%d", got)
+	}
+	if _, err := ts.svc.UpdateEndpoint(context.Background(), uid, ep.ID, nil, nil, boolPtr(true), nil); err != nil {
+		t.Fatalf("enable endpoint: %v", err)
+	}
+	if got := ts.hook.count(); got != 6 {
+		t.Fatalf("disabled-to-enabled hook calls = %d, want 6", got)
+	}
+	enableCalls := ts.hook.snapshot()[4:6]
+	if enableCalls[0].keyID != firstEnabled.ID || enableCalls[1].keyID != secondEnabled.ID {
+		t.Errorf("disabled-to-enabled hook calls = %+v", enableCalls)
+	}
+}
+
+func TestUpdateEndpointRejectsEmptyAndWhollyUnchangedPatch(t *testing.T) {
+	ts := newTestService(t)
+	uid := ts.seedUser(t, nil)
+	ep := mustCreateEndpoint(t, ts, uid, "https://example.com/v1/")
+	mustCreateKey(t, ts, uid, ep.ID, "sk-noop-CCCCCCCC", true)
+	baselineCalls := ts.hook.count()
+
+	cases := []struct {
+		name    string
+		baseURL *string
+		note    *string
+		enabled *bool
+	}{
+		{name: "empty"},
+		{name: "same canonical URL", baseURL: strPtr("HTTPS://EXAMPLE.COM./v1/")},
+		{name: "same note", note: strPtr("")},
+		{name: "same enabled", enabled: boolPtr(true)},
+		{name: "all same", baseURL: strPtr("https://example.com/v1/"), note: strPtr(""), enabled: boolPtr(true)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := ts.svc.UpdateEndpoint(context.Background(), uid, ep.ID, tc.baseURL, tc.note, tc.enabled, nil); !errors.Is(err, ErrInvalidRequest) {
+				t.Fatalf("error = %v, want ErrInvalidRequest", err)
+			}
+		})
+	}
+	if got := ts.hook.count(); got != baselineCalls {
+		t.Fatalf("unchanged patches triggered %d new fetches", got-baselineCalls)
+	}
+	got, err := ts.store.GetEndpoint(context.Background(), uid, ep.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.BaseURL != ep.BaseURL || got.Note != ep.Note || got.Enabled != ep.Enabled || got.UpdatedAt != ep.UpdatedAt {
+		t.Fatalf("unchanged patches mutated endpoint: %+v", got)
+	}
+}
+
+func TestUpdateEndpointOriginBoundary(t *testing.T) {
+	ts := newTestService(t)
+	uid := ts.seedUser(t, nil)
+
+	withKey := mustCreateEndpoint(t, ts, uid, "https://old.example/v1/")
+	mustCreateKey(t, ts, uid, withKey.ID, "sk-origin-DDDDDDDD", false)
+	baselineCalls := ts.hook.count()
+	if _, err := ts.svc.UpdateEndpoint(context.Background(), uid, withKey.ID,
+		strPtr("https://attacker.example/v1/"), strPtr("must not persist"), nil, nil); !errors.Is(err, db.ErrEndpointOriginConflict) {
+		t.Fatalf("cross-origin update error = %v, want conflict", err)
+	}
+	unchanged, err := ts.store.GetEndpoint(context.Background(), uid, withKey.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged.BaseURL != withKey.BaseURL || unchanged.Note != withKey.Note {
+		t.Fatalf("conflicting update partially persisted: %+v", unchanged)
+	}
+	if ts.hook.count() != baselineCalls {
+		t.Fatal("conflicting update triggered a fetch")
+	}
+
+	withoutKey := mustCreateEndpoint(t, ts, uid, "https://old.example/v1/")
+	moved, err := ts.svc.UpdateEndpoint(context.Background(), uid, withoutKey.ID,
+		strPtr("https://new.example/v1/"), nil, nil, nil)
+	if err != nil {
+		t.Fatalf("zero-key origin update: %v", err)
+	}
+	if moved.BaseURL != "https://new.example/v1/" {
+		t.Fatalf("moved base_url = %q", moved.BaseURL)
+	}
+	if ts.hook.count() != baselineCalls {
+		t.Fatal("zero-key origin update triggered a fetch")
 	}
 }
 
@@ -650,10 +778,10 @@ func TestCreateEndpointKeySealsAndStoresDisplayFragments(t *testing.T) {
 	if err := ts.store.DB().QueryRow(`SELECT encrypted_secret FROM endpoint_keys WHERE id=?`, k.ID).Scan(&stored); err != nil {
 		t.Fatalf("read encrypted_secret: %v", err)
 	}
-	if stored == string(plaintext) || strings.Contains(stored, string(plaintext)) {
-		t.Fatal("encrypted_secret contains plaintext")
+	if !strings.HasPrefix(stored, "nbsec:v2:aes-256-gcm:") || stored == string(plaintext) || strings.Contains(stored, string(plaintext)) {
+		t.Fatal("encrypted_secret is not a contextual envelope or contains plaintext")
 	}
-	opened, err := ts.vault.Open(stored)
+	opened, err := ts.vault.OpenForContext(stored, serviceCredentialContext(t, uid, ep, k.ID))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -924,14 +1052,15 @@ func TestSecretEnvelopeWrongKeyAndTamperFail(t *testing.T) {
 		t.Fatalf("create other vault: %v", err)
 	}
 	defer otherVault.Close()
-	if _, err := otherVault.Open(ciphertext); err == nil {
-		t.Fatal("Open with a wrong master key unexpectedly succeeded")
+	credentialContext := serviceCredentialContext(t, uid, ep, k.ID)
+	if _, err := otherVault.OpenForContext(ciphertext, credentialContext); err == nil {
+		t.Fatal("OpenForContext with a wrong master key unexpectedly succeeded")
 	}
 
 	// A single-byte tamper of the ciphertext portion must fail authentication.
 	tampered := toggleLastBase64(ciphertext)
-	if _, err := ts.vault.Open(tampered); err == nil {
-		t.Fatal("Open accepted a tampered ciphertext")
+	if _, err := ts.vault.OpenForContext(tampered, credentialContext); err == nil {
+		t.Fatal("OpenForContext accepted a tampered ciphertext")
 	}
 }
 
@@ -960,6 +1089,31 @@ func TestHookFailureDoesNotRollbackCommittedKey(t *testing.T) {
 	}
 }
 
+func TestHookFailureDoesNotRollbackCommittedEndpointUpdate(t *testing.T) {
+	ts := newTestService(t)
+	uid := ts.seedUser(t, nil)
+	ep := mustCreateEndpoint(t, ts, uid, "https://example.com/v1/")
+	mustCreateKey(t, ts, uid, ep.ID, "sk-update-hookfail-KKKKKKKK", true)
+	baselineCalls := ts.hook.count()
+	ts.hook.err = errors.New("fetch queue busy")
+
+	updated, err := ts.svc.UpdateEndpoint(context.Background(), uid, ep.ID,
+		strPtr("https://example.com/v2/"), nil, nil, nil)
+	if err != nil {
+		t.Fatalf("UpdateEndpoint returned %v after committed update", err)
+	}
+	if updated.BaseURL != "https://example.com/v2/" || ts.hook.count() != baselineCalls+1 {
+		t.Fatalf("updated=%+v hook_calls=%d", updated, ts.hook.count())
+	}
+	persisted, err := ts.store.GetEndpoint(context.Background(), uid, ep.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted.BaseURL != updated.BaseURL {
+		t.Fatalf("hook failure rolled back endpoint: %+v", persisted)
+	}
+}
+
 // --- pure unit tests --------------------------------------------------------
 
 func TestDisplayFragmentsEdgeCases(t *testing.T) {
@@ -976,6 +1130,7 @@ func TestDisplayFragmentsEdgeCases(t *testing.T) {
 		{"abcdefgh", "abcd", ""},
 		{"abcdefghi", "abcd", "fghi"}, // 9: head+tail, 1 hidden
 		{"abcdefghij", "abcd", "ghij"},
+		{"日本語abcdef終", "日本語a", "def終"},
 		{"_sk-abcdefghijklmnopqrstuvwxyz0123456789_", "_sk-", "789_"},
 	}
 	for _, tc := range cases {

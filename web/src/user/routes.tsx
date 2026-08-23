@@ -1,31 +1,27 @@
 import { createBrowserRouter } from 'react-router';
 import { NotFoundPage } from '@shared/components/NotFoundPage';
-import { NoticePage } from '@shared/components/States';
+import { LoadingState, NoticePage } from '@shared/components/States';
 import { RouteErrorPage } from '@shared/components/RouteErrorPage';
 import { UserLayout } from './layouts/UserLayout';
-import { HomePage } from './pages/HomePage';
-import { EndpointsPage } from './pages/EndpointsPage';
-import { ModelsPage } from './pages/ModelsPage';
-import { KeysPage } from './pages/KeysPage';
-import { IssuesPage } from './pages/IssuesPage';
-import { AccountPage } from './pages/AccountPage';
-import { PrivacyPage } from './pages/PrivacyPage';
-import { TermsPage } from './pages/TermsPage';
 
 export const router = createBrowserRouter([
   {
     path: '/',
     element: <UserLayout />,
+    hydrateFallbackElement: <LoadingState />,
     errorElement: <RouteErrorPage />,
     children: [
-      { index: true, element: <HomePage /> },
-      { path: 'endpoints', element: <EndpointsPage /> },
-      { path: 'models', element: <ModelsPage /> },
-      { path: 'keys', element: <KeysPage /> },
-      { path: 'issues', element: <IssuesPage /> },
-      { path: 'account', element: <AccountPage /> },
-      { path: 'privacy', element: <PrivacyPage /> },
-      { path: 'terms', element: <TermsPage /> },
+      { index: true, lazy: async () => ({ Component: (await import('./pages/HomePage')).HomePage }) },
+      { path: 'endpoints', lazy: async () => ({ Component: (await import('./pages/EndpointsPage')).EndpointsPage }) },
+      { path: 'models', lazy: async () => ({ Component: (await import('./pages/ModelsPage')).ModelsPage }) },
+      { path: 'charity', lazy: async () => ({ Component: (await import('./pages/CharityPage')).CharityPage }) },
+      { path: 'keys', lazy: async () => ({ Component: (await import('./pages/KeysPage')).KeysPage }) },
+      { path: 'logs', lazy: async () => ({ Component: (await import('./pages/LogsPage')).LogsPage }) },
+      { path: 'issues', lazy: async () => ({ Component: (await import('./pages/IssuesPage')).IssuesPage }) },
+      { path: 'account', lazy: async () => ({ Component: (await import('./pages/AccountPage')).AccountPage }) },
+      { path: 'steward', lazy: async () => ({ Component: (await import('./pages/StewardPage')).StewardPage }) },
+      { path: 'privacy', lazy: async () => ({ Component: (await import('./pages/PrivacyPage')).PrivacyPage }) },
+      { path: 'terms', lazy: async () => ({ Component: (await import('./pages/TermsPage')).TermsPage }) },
       { path: 'maintenance', element: <NoticePage titleKey="common.maintenanceTitle" bodyKey="common.maintenanceBody" /> },
       { path: 'registration-closed', element: <NoticePage titleKey="common.registrationClosedTitle" bodyKey="common.registrationClosedBody" /> },
       { path: '*', element: <NotFoundPage /> },

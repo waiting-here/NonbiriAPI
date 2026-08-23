@@ -18,17 +18,10 @@
       "usageTitle": "站点用量",
       "usersTitle": "用户记录",
       "endpointsTitle": "端点概览",
-      "modelsTitle": "模型概览",
       "requests": "请求数",
-      "promptTokens": "提示词 token",
-      "completionTokens": "补全 token",
       "unknownUsage": "用量未知的请求",
-      "users": "用户",
-      "endpoints": "端点",
-      "models": "模型",
       "viewUsers": "打开用户",
-      "viewEndpoints": "打开端点",
-      "viewModels": "打开模型"
+      "viewEndpoints": "打开端点"
     },
     "users": {
       "nav": "用户",
@@ -52,7 +45,7 @@
       "unban": "解封",
       "delete": "删除",
       "banTitle": "封禁这个用户？",
-      "banBody": "服务端会立即使该用户的调用密钥和会话失效。如有需要可填写有界原因。",
+      "banSummary": "封禁方式：{{duration}}。服务端会立即使该用户的会话与调用密钥失效。",
       "banReason": "原因",
       "banReasonPlaceholder": "可选原因",
       "banConfirm": "封禁用户",
@@ -76,7 +69,61 @@
       "deletePasswordRequired": "请输入管理员密码后继续。",
       "empty": "没有返回用户",
       "emptyBody": "管理员 API 没有返回用户记录。",
-      "avatar": "头像"
+      "avatar": "头像",
+      "manage": "管理",
+      "manageHide": "收起",
+      "manageLimitsTitle": "数量限制",
+      "level": "等级",
+      "levelManualTag": "手动",
+      "levelAutoTag": "自动",
+      "balances": "积分",
+      "creditsBalance": "悠哉积分",
+      "donationBalance": "捐赠回馈",
+      "exactMilli": "精确值：{{value}} 毫积分",
+      "economyTitle": "积分调整",
+      "economyCreditsDelta": "悠哉积分增量（积分）",
+      "economyDonationDelta": "捐赠回馈增量（积分）",
+      "economyReason": "原因（必填）",
+      "economyReasonPlaceholder": "填写本次调整的有界原因",
+      "economyHint": "增量是对当前余额的加减，不是目标余额；单位为积分（最多三位小数，1 积分 = 1000 毫积分），提交时按精确毫积分入账。两项可只填其一，留空表示不调整该项。",
+      "economyMissingDelta": "至少填写一个增量。",
+      "economyInvalidDelta": "增量必须是十进制数（整数或最多三位小数，允许负号），例如 -1.5 或 2.5。",
+      "economyReasonRequired": "原因必填。",
+      "economyRetryHint": "重新提交完全相同的数值会复用同一操作号，服务端不会重复入账。",
+      "economyDone": "已入账：悠哉积分 {{credits}}，捐赠回馈 {{donation}}。",
+      "economySubmit": "提交调整",
+      "economyClear": "清空",
+      "levelSectionTitle": "等级",
+      "levelAutoHighwater": "自动高水位",
+      "levelManualCurrent": "当前手动设定",
+      "levelManualNone": "无（跟随自动）",
+      "levelControl": "设定等级",
+      "levelAutoOption": "自动（当前 Lv{{level}}）",
+      "levelManualOption": "手动 Lv{{level}}",
+      "levelHint": "手动设定优先于自动等级；选择“自动”会清除手动设定。",
+      "levelSaved": "等级已在服务端更新。",
+      "levelApply": "应用等级",
+      "banSectionTitle": "封禁",
+      "banState": "当前状态",
+      "banUntil": "{{time}}（剩余 {{remaining}}）",
+      "banUntilShort": "至 {{time}}",
+      "banRemaining": "{{days}} 天 {{hours}} 小时",
+      "banExpiring": "即将到期",
+      "banPermanent": "永久封禁",
+      "notBanned": "未封禁",
+      "banDuration": "封禁时长",
+      "banPresetLabel": "{{days}} 天",
+      "banCustom": "自定义时长",
+      "banCustomValue": "数值",
+      "banCustomUnit": "单位",
+      "banUnit": {
+        "minutes": "分钟",
+        "hours": "小时",
+        "days": "天"
+      },
+      "banCustomLabel": "{{value}} {{unit}}",
+      "banInvalidDuration": "请输入有效的封禁时长（正整数，且不超过服务端上限）。",
+      "banHint": "时长从现在起算；服务端会保存到期的绝对时间。"
     },
     "logs": {
       "nav": "日志与用量",
@@ -84,54 +131,29 @@
       "description": "仅查看请求元数据和汇总用量，不显示请求与响应内容。",
       "usageTitle": "汇总用量",
       "logsTitle": "请求日志",
-      "id": "日志 ID",
-      "user": "用户",
-      "model": "模型",
-      "statusCode": "状态",
-      "duration": "耗时",
-      "usage": "用量",
-      "diagnostic": "诊断",
-      "started": "开始时间",
-      "promptTokens": "提示词",
-      "completionTokens": "补全",
-      "totalTokens": "总计",
-      "unknownUsage": "用量未知",
+      "exportCsv": "导出 CSV",
+      "exportJson": "导出 JSON",
       "noLogs": "没有日志记录",
-      "noLogsBody": "管理员 API 没有返回这一页的日志。"
+      "noLogsBody": "当前筛选条件下没有返回日志记录。"
     },
     "endpoints": {
       "nav": "端点",
       "title": "端点概览",
-      "description": "这里只显示全局端点元数据。本管理站永远不会收到明文上游密钥。",
+      "description": "按已存储的基础 URL 分组显示全局端点元数据。本管理站永远不会收到明文上游密钥或用户私有备注。",
       "listTitle": "已配置端点",
-      "owner": "所有者",
       "baseUrl": "基础 URL",
-      "connector": "连接器",
+      "users": "用户数",
+      "endpointCount": "端点数",
       "keys": "密钥数",
-      "status": "状态",
-      "created": "创建时间",
-      "updated": "更新时间",
+      "enabledCount": "启用端点数",
+      "expand": "用户条目",
+      "showUsers": "展开用户",
+      "hideUsers": "收起用户",
+      "usersFor": "共用 {{url}} 的用户",
       "empty": "没有端点记录",
       "emptyBody": "管理员 API 没有返回端点概览记录。",
-      "searchPlaceholder": "按基础 URL、备注或用户 ID 搜索",
-      "searchAria": "搜索端点"
-    },
-    "models": {
-      "nav": "模型",
-      "title": "模型概览",
-      "description": "显示全局平台模型元数据和绑定数，不包含上游凭据。",
-      "listTitle": "平台模型",
-      "owner": "所有者",
-      "fullName": "完整名称",
-      "strategy": "策略",
-      "bindings": "绑定数",
-      "created": "创建时间",
-      "ordered": "按顺序",
-      "random": "随机",
-      "empty": "没有模型记录",
-      "emptyBody": "管理员 API 没有返回模型概览记录。",
-      "searchPlaceholder": "按提供方、模型名、完整名称或用户 ID 搜索",
-      "searchAria": "搜索模型"
+      "searchPlaceholder": "按基础 URL 子串筛选",
+      "searchAria": "按基础 URL 筛选端点"
     },
     "alerts": {
       "nav": "告警",
@@ -168,31 +190,142 @@
       "textValue": "文本参数",
       "invalidNumber": "请输入有效数字。",
       "saved": "配置已在服务端更新。",
+      "economy": {
+        "title": "经济与等级",
+        "description": "时区、签到与等级门槛。所有校验与判断都在服务端按事务快照执行，浏览器不缓存这些值。",
+        "timezoneTitle": "站点时区",
+        "timezoneDescription": "签到与按日活跃统计依赖的固定时区偏移（分钟）。",
+        "timezoneNotSet": "需先配置站点时区",
+        "timezoneNotSetBody": "未配置时区前，签到与按日活跃统计保持停用；普通用户只会看到统一的功能未启用提示。",
+        "timezoneFreezeWarning": "注意：一旦产生任何签到或按日活跃数据，时区将永久锁定，之后的修改会被服务端拒绝。",
+        "timezoneCurrent": "当前：{{value}}",
+        "timezoneInput": "偏移分钟数",
+        "timezoneInvalid": "必须是 -720 到 +840 之间且为 30 的倍数的整数。",
+        "checkinModeTitle": "签到开关",
+        "checkinModeDescription": "三态开关：全员开放 / 等级门槛（Lv3 及以上）/ 关闭。",
+        "checkinMode": {
+          "enabled": "全员开放",
+          "level_gated": "等级门槛（Lv3 及以上）",
+          "disabled": "关闭"
+        },
+        "awardMinTitle": "签到奖励下限（积分）",
+        "awardMinHint": "默认 40,000；与上限成对校验，下限不得大于上限。",
+        "awardMaxTitle": "签到奖励上限（积分）",
+        "awardMaxHint": "默认 60,000；与下限成对校验。",
+        "capTitle": "签到门槛（积分）",
+        "capHint": "默认 250,000；0 表示无门槛。达到门槛后拒绝新签到（有效等级 ≥ 3 豁免），不会截断已发放的奖励。",
+        "thresholdTitle": "Lv{{level}} 自动升级门槛（积分）",
+        "thresholdHint": "按累计捐赠回馈积分惰性计算；0 表示停用该级自动升级；启用的门槛必须严格递增，违反时服务端整体拒绝。",
+        "amountInvalid": "请输入有效的积分数值（最多三位小数）。"
+      },
       "configKeys": {
-        "site_name": { "title": "站点名称", "description": "显示在用户站页面和浏览器标签页的站点名。" },
-        "site_logo_url": { "title": "站点 Logo 地址", "description": "显示在站点导航的 Logo 图片 URL（https 优先）；留空则显示默认标志。" },
-        "default_locale": { "title": "默认语言", "description": "新用户首次访问时的界面语言，取值 zh 或 en。" },
-        "legal_privacy_override_zh": { "title": "隐私政策覆盖（中文）", "description": "覆盖默认隐私政策的中文文本；留空则使用内置模板。支持 ## 标题、- 列表、> 注记和段落，换行保留。" },
-        "legal_privacy_override_en": { "title": "隐私政策覆盖（English）", "description": "覆盖默认隐私政策的英文文本；留空则使用内置模板。" },
-        "legal_terms_override_zh": { "title": "服务条款覆盖（中文）", "description": "覆盖默认服务条款的中文文本；留空则使用内置模板。" },
-        "legal_terms_override_en": { "title": "服务条款覆盖（English）", "description": "覆盖默认服务条款的英文文本；留空则使用内置模板。" },
-        "legal_authoritative_locale": { "title": "权威语言", "description": "声明不同语言版本冲突时以哪种为准，取值 zh 或 en；留空则不显示权威声明。" },
-        "default_endpoint_limit": { "title": "默认端点上限", "description": "每位用户可创建的端点数量上限。" },
-        "default_endpoint_key_limit": { "title": "默认端点密钥上限", "description": "每个端点可持有的上游密钥数量上限。" },
-        "default_model_limit": { "title": "默认模型上限", "description": "每位用户可创建的平台模型数量上限。" },
-        "default_binding_limit": { "title": "默认绑定上限", "description": "每个平台模型可配置的上游绑定数量上限。" },
-        "default_rpm_per_user": { "title": "默认每分钟请求上限", "description": "每位用户每分钟可发起的调用请求数上限。" },
-        "global_rpm": { "title": "全局每分钟请求上限", "description": "全站所有用户每分钟调用请求数总和上限。" },
-        "default_per_endpoint_concurrency": { "title": "默认每端点并发", "description": "单个端点的最大并发出站请求数。" },
-        "egress_global_concurrency": { "title": "出站全局并发", "description": "全站所有端点共享的最大并发出站请求数。" },
-        "discord_guild_id": { "title": "Discord 服务器 ID", "description": "注册门禁所需的 Discord 服务器 ID；留空则停用门禁。" },
-        "discord_role_id": { "title": "Discord 身份组 ID", "description": "注册所需的服务器身份组 ID；留空则不校验身份组。" },
-        "oauth_start_rate_limit": { "title": "OAuth 启动限频次数", "description": "每个 IP 在窗口内可发起 Discord 授权的次数上限。" },
-        "oauth_start_rate_window_seconds": { "title": "OAuth 启动限频窗口", "description": "OAuth 启动限频的统计窗口秒数。" },
-        "oauth_start_rate_penalty_seconds": { "title": "OAuth 启动限频惩罚", "description": "超过限频后该 IP 被临时拒绝授权的秒数。" },
-        "maintenance_mode": { "title": "维护模式", "description": "开启后，用户站所有页面都会显示维护提示，新访问者与已登录用户均无法使用站点功能；管理员站不受影响。未来等级系统上线后，将仅对未达等级的用户显示维护提示。" },
-        "registration_open": { "title": "开放注册", "description": "关闭后，新用户通过 Discord 注册会被拒绝并跳转到注册关闭提示页；已有账号仍可正常登录。" }
+        "site_name": {
+          "title": "站点名称",
+          "description": "显示在用户站页面和浏览器标签页的站点名。"
+        },
+        "site_logo_url": {
+          "title": "站点 Logo 地址",
+          "description": "显示在站点导航的 Logo 图片 URL（https 优先）；留空则显示默认标志。"
+        },
+        "default_locale": {
+          "title": "默认语言",
+          "description": "新用户首次访问时的界面语言，取值 zh 或 en。"
+        },
+        "legal_privacy_override_zh": {
+          "title": "隐私政策覆盖（中文）",
+          "description": "覆盖默认隐私政策的中文文本；留空则使用内置模板。支持 ## 标题、- 列表、> 注记和段落，换行保留。"
+        },
+        "legal_privacy_override_en": {
+          "title": "隐私政策覆盖（English）",
+          "description": "覆盖默认隐私政策的英文文本；留空则使用内置模板。"
+        },
+        "legal_terms_override_zh": {
+          "title": "服务条款覆盖（中文）",
+          "description": "覆盖默认服务条款的中文文本；留空则使用内置模板。"
+        },
+        "legal_terms_override_en": {
+          "title": "服务条款覆盖（English）",
+          "description": "覆盖默认服务条款的英文文本；留空则使用内置模板。"
+        },
+        "legal_authoritative_locale": {
+          "title": "权威语言",
+          "description": "声明不同语言版本冲突时以哪种为准，取值 zh 或 en；留空则不显示权威声明。"
+        },
+        "default_endpoint_limit": {
+          "title": "默认端点上限",
+          "description": "每位用户可创建的端点数量上限。"
+        },
+        "default_endpoint_key_limit": {
+          "title": "默认端点密钥上限",
+          "description": "每个端点可持有的上游密钥数量上限。"
+        },
+        "default_model_limit": {
+          "title": "默认模型上限",
+          "description": "每位用户可创建的平台模型数量上限。"
+        },
+        "default_binding_limit": {
+          "title": "默认绑定上限",
+          "description": "每个平台模型可配置的上游绑定数量上限。"
+        },
+        "default_rpm_per_user": {
+          "title": "默认每分钟请求上限",
+          "description": "每位用户每分钟可发起的调用请求数上限。"
+        },
+        "global_rpm": {
+          "title": "全局每分钟请求上限",
+          "description": "全站所有用户每分钟调用请求数总和上限。"
+        },
+        "default_per_endpoint_concurrency": {
+          "title": "默认每端点并发",
+          "description": "单个端点的最大并发出站请求数。"
+        },
+        "egress_global_concurrency": {
+          "title": "出站全局并发",
+          "description": "全站所有端点共享的最大并发出站请求数。"
+        },
+        "discord_guild_id": {
+          "title": "Discord 服务器 ID",
+          "description": "注册所需的服务器 ID；本项或身份组 ID 任一留空都会暂停新注册。"
+        },
+        "discord_role_id": {
+          "title": "Discord 身份组 ID",
+          "description": "注册所需的服务器身份组；本项或服务器 ID 任一留空都会暂停新注册。"
+        },
+        "oauth_start_rate_limit": {
+          "title": "OAuth 启动限频次数",
+          "description": "每个 IP 在窗口内可发起 Discord 授权的次数上限。"
+        },
+        "oauth_start_rate_window_seconds": {
+          "title": "OAuth 启动限频窗口",
+          "description": "OAuth 启动限频的统计窗口秒数。"
+        },
+        "oauth_start_rate_penalty_seconds": {
+          "title": "OAuth 启动限频惩罚",
+          "description": "超过限频后该 IP 被临时拒绝授权的秒数。"
+        },
+        "maintenance_mode": {
+          "title": "维护模式",
+          "description": "开启后，用户 Web 应用会被维护提示替代，管理员 Web 应用不受影响。这只是界面提示，不会在服务端关闭 /v1 或已鉴权 API。"
+        },
+        "registration_open": {
+          "title": "开放注册",
+          "description": "关闭后，新用户通过 Discord 注册会被拒绝并跳转到注册关闭提示页；已有账号仍可正常登录。"
+        }
       }
+    },
+    "charity": {
+      "nav": "公益",
+      "eyebrow": "公益运营",
+      "title": "公益与捐赠管理",
+      "description": "审核捐赠、管理公益模型与绑定，并配置公益安全参数。每次变更都会从服务端重取真实状态。",
+      "working": "处理中…", "cancel": "取消", "save": "保存", "edit": "编辑", "delete": "删除", "provider": "提供方", "model": "模型", "pricingMode": "计价模式", "perRequest": "按次", "perToken": "按 token", "enabled": "已启用", "disabled": "已停用", "prices": "价格与捐赠者回馈（毫积分）", "amountHint": "服务端接收规范的非负毫积分整数字符串，不经过浮点转换。",
+      "request_user_price_milli": "每次用户价格", "request_donor_reward_milli": "每次捐赠者回馈", "uncached_user_price_milli": "普通输入用户价格", "cache_write_user_price_milli": "缓存写入用户价格", "cache_read_user_price_milli": "缓存读取用户价格", "output_user_price_milli": "输出用户价格", "uncached_donor_reward_milli": "普通输入捐赠者回馈", "cache_write_donor_reward_milli": "缓存写入捐赠者回馈", "cache_read_donor_reward_milli": "缓存读取捐赠者回馈", "output_donor_reward_milli": "输出捐赠者回馈",
+      "discount": "限时折扣", "discountPercent": "折扣百分比（0–100；100=原价）", "discountEnabled": "启用折扣", "discountStart": "开始时间（可选）", "discountEnd": "结束时间（可选）", "discountHint": "时间区间为 [start,end)。留空表示启用后立即生效且无结束时间。", "providerInvalid": "必须填写提供方和模型；[公益] 前缀保留给公益模型。", "discountInvalid": "折扣百分比必须是 0 到 100 的整数。", "amountInvalid": "所有价格必须是规范的非负整数字符串。", "discountIntervalInvalid": "折扣时间必须有效，结束时间须晚于开始时间。", "newModel": "新增公益模型", "editModel": "编辑公益模型", "modelsTitle": "公益模型与绑定", "noModels": "暂无公益模型", "noModelsBody": "请在捐赠资源准备好后创建公益模型。", "successRate": "最近 {{count}} 次成功率 {{rate}}%",
+      "bindings": "绑定", "donationKey": "捐赠密钥", "donationKeyId": "捐赠密钥 ID", "keyFragmentUnavailable": "密钥片段不可用", "upstreamModel": "上游模型 ID", "order": "顺序", "actions": "操作", "addBinding": "添加绑定", "bindingInvalid": "请输入数字捐赠密钥 ID、上游模型 ID 和顺序。", "noBindings": "暂无绑定", "deleteBindingConfirm": "删除这条公益绑定？",
+      "donationsTitle": "捐赠审核队列", "statusFilter": "捐赠状态", "allStatuses": "全部状态", "noDonations": "暂无捐赠", "noDonationsBody": "没有符合此状态的捐赠记录。", "donationNumber": "捐赠 #{{id}}", "expires": "过期时间", "expiryHint": "留空表示永不过期。", "submitter": "提交者 ID", "expiresAt": "过期时间：{{value}}", "loadingDetails": "正在刷新密钥限制与审核历史…", "reviewNote": "审核说明", "approve": "通过捐赠", "reject": "驳回捐赠", "enable": "启用捐赠", "disable": "停用捐赠", "saveKeyLimits": "保存密钥限制", "reviewHistory": "审核历史", "deleteDonationTitle": "软删除这条捐赠？", "deleteDonationBody": "这会释放有效 claim、停止后续公益路由，但保留审核历史。", "deleteModelTitle": "删除这个公益模型？", "deleteModelBody": "仅当服务端允许时才会删除；仍有有效绑定时可能冲突。", "pagination": "捐赠分页", "previous": "上一页", "next": "下一页", "keyHidden": "密钥片段不可用", "maxConcurrency": "最大并发（0=不限）", "rpmLimit": "每分钟请求数（0=不限）", "usageCap": "用量上限（毫积分；0=不限）", "usageUsed": "已用：{{value}} 毫积分",
+      "status": { "pending": "待审核", "approved": "已通过", "rejected": "已驳回", "deleted": "已删除", "expired": "已过期" }, "priceRequest": "每次请求", "priceUncached": "普通输入", "priceCacheWrite": "缓存写入", "priceCacheRead": "缓存读取", "priceOutput": "输出", "settingsTitle": "公益站点控制", "settingsDescription": "这些设置实时影响路由或接收。token 预留额可为 null：未配置时按 token 计价 fail closed。", "charityEnabled": "公益系统", "donationAcceptEnabled": "接受新捐赠", "tokenReserve": "全局 token 预留额（毫积分）", "tokenReserveNull": "未配置（null）与显式 0 不同，不能启用按 token 计价。", "notConfigured": "未配置（null）", "on": "开", "off": "关", "dangerConfirmTitle": "确认实时公益设置", "dangerConfirmBody": "这会改变实时公益接收或路由。只有确认运营意图明确时才继续。", "confirm": "确认",
+      "antiAbuse": { "charity_min_chars": "公益输入最少字符数", "charity_violation_deduct_milli": "违规扣分（毫积分）", "charity_violation_ban_seconds": "立即封禁时长（秒）", "charity_violation_window_seconds": "违规时间窗口（秒）", "charity_violation_ban_threshold": "窗口封禁阈值", "charity_violation_window_ban_seconds": "窗口封禁时长（秒）", "charity_suspend_window_seconds": "暂停窗口（秒）", "charity_suspend_threshold": "暂停阈值", "charity_suspend_duration_seconds": "暂停时长（秒）", "rpm_ban_threshold": "RPM 封禁阈值", "rpm_ban_window_seconds": "RPM 封禁窗口（秒）", "rpm_ban_duration_seconds": "RPM 封禁时长（秒）" }
     }
-  }
+  },
+  "user": { "charity": { "priceCaption": "公益模型价格与捐赠者回馈", "priceType": "项目", "userPrice": "用户实付", "donorReward": "捐赠者回馈", "originalPrice": "原价", "currentPrice": "当前用户价", "discountFree": "限时免费", "discountPercent": "限时 {{percent}}% 折", "discountRemaining": "剩余 {{time}}", "requestUnit": "每次请求；实际结算由服务端完成。", "tokenUnit": "每百万 token；四档由服务端结算。" } }
 }

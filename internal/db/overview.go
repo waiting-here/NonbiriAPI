@@ -1,119 +1,180 @@
 package db
 
-// Admin overview projections: read-only metadata listings across all normal
-// users for the administrator station. Neither projection ever selects,
-// decrypts, or projects a secret or ciphertext column
-// (endpoint_keys.encrypted_secret, caller_keys.key_hash); callers must gate
-// both behind the admin-session boundary.
+// Admin endpoint overview projection: a read-only, server-paginated grouping
+// of every user's endpoints by their stored canonical base_url. The stored
+// base_url is already canonicalized by the egress invariant at write time;
+// this projection groups on that stored value verbatim and never re-widens
+// or re-normalizes it. The projection never selects, decrypts, or projects a
+// note, secret, ciphertext, or identity column (endpoint_keys.encrypted_secret,
+// endpoint_keys.note, users.username, users.discord_id); callers must gate it
+// behind the admin-session boundary.
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // ErrOverviewLimit reports that an admin overview crossed the finite result
 // bound; the repository never returns a partial global projection.
 var ErrOverviewLimit = errors.New("admin overview exceeds its limit")
 
-const MaxOverviewRows = 10000
+const (
+	// MaxOverviewRows bounds the expandable per-user entries carried by one
+	// overview page. Group rows are already bounded by the page size; this
+	// bound fails closed if one page would embed an unbounded expansion.
+	MaxOverviewRows = 10000
+	// defaultOverviewPageSize is the page size used when page_size is absent.
+	defaultOverviewPageSize = 20
+	// MaxOverviewPageLimit bounds one endpoint-overview page. Page sizes are
+	// clamped into [1, MaxOverviewPageLimit] at the handler and re-clamped
+	// here defensively.
+	MaxOverviewPageLimit = 100
+)
 
-// EndpointOverview is one endpoint's admin-station overview projection: its
-// metadata across all users plus the live key count. The struct has no
-// secret-bearing field by construction.
-type EndpointOverview struct {
-	ID            int64
+// EndpointOverviewQuery is the bounded, parameterized endpoint-overview
+// filter. Filter is an optional literal substring matched against the stored
+// canonical base_url.
+type EndpointOverviewQuery struct {
+	Page     int    // 1-based; values below 1 are treated as 1
+	PageSize int    // clamped to 1..MaxOverviewPageLimit; 0 selects the default
+	Filter   string // optional substring filter on base_url; "" = no filter
+}
+
+// EndpointOverviewUserEntry is one user's expandable entry inside a grouped
+// overview row: frozen metadata only — no username, Discord identifier,
+// endpoint/key note, or any secret-bearing field by construction.
+type EndpointOverviewUserEntry struct {
 	UserID        int64
-	ConnectorType string
-	BaseURL       string
-	Note          string
-	Enabled       bool
+	EndpointCount int
 	KeyCount      int
-	CreatedAt     int64
-	UpdatedAt     int64
+	EnabledCount  int
 }
 
-// ListEndpointsOverview returns every endpoint across all users with its live
-// key count, ordered by id. The LEFT JOIN keeps zero-key endpoints visible
-// with count 0; GROUP BY e.id is safe because id is the primary key (SQLite's
-// bare-column rule). Read-only metadata projection.
-func (s *Store) ListEndpointsOverview(ctx context.Context) ([]EndpointOverview, error) {
-	rows, err := s.db.QueryContext(ctx, `
-SELECT e.id, e.user_id, e.connector_type, e.base_url, e.note, e.enabled, e.created_at, e.updated_at, COUNT(k.id)
+// EndpointOverviewGroup is one canonical base_url's admin-station overview
+// projection: how many users share it, how many endpoint entries and live
+// keys sit behind it, plus the per-user expandable breakdown. The struct has
+// no secret- or note-bearing field by construction.
+type EndpointOverviewGroup struct {
+	BaseURL       string
+	UserCount     int
+	EndpointCount int
+	KeyCount      int
+	Users         []EndpointOverviewUserEntry
+}
+
+// ListEndpointOverviewGroups returns one stable-ordered page of endpoints
+// grouped by their stored canonical base_url, with the per-user expandable
+// entries for exactly the groups on this page embedded. Ordering is
+// base_url ascending, then user_id ascending within a group, so offset
+// pagination never drifts between pages. The second return value reports
+// whether another page follows, so a client never infers pagination from a
+// raw page size. Grouping and both count levels are computed in two batched
+// statements — never one query per group.
+func (s *Store) ListEndpointOverviewGroups(ctx context.Context, query EndpointOverviewQuery) ([]EndpointOverviewGroup, bool, error) {
+	page := query.Page
+	if page < 1 {
+		page = 1
+	}
+	pageSize := query.PageSize
+	if pageSize < 1 {
+		pageSize = defaultOverviewPageSize
+	}
+	if pageSize > MaxOverviewPageLimit {
+		pageSize = MaxOverviewPageLimit
+	}
+
+	// keyCounts pre-aggregates live keys per endpoint once, so neither the
+	// group pass nor the expandable-entry pass needs a correlated subquery
+	// per row. The LEFT JOIN keeps zero-key endpoints visible with count 0.
+	keyCounts := `SELECT endpoint_id, COUNT(*) AS key_count FROM endpoint_keys GROUP BY endpoint_id`
+
+	groupSQL := `SELECT e.base_url, COUNT(DISTINCT e.user_id), COUNT(*), COALESCE(SUM(k.key_count), 0)
 FROM endpoints e
-LEFT JOIN endpoint_keys k ON k.endpoint_id = e.id
-GROUP BY e.id
-ORDER BY e.id
-LIMIT ?`, MaxOverviewRows+1)
+LEFT JOIN (` + keyCounts + `) k ON k.endpoint_id = e.id`
+	var args []any
+	if query.Filter != "" {
+		// Literal substring match: likePattern escapes the LIKE metacharacters
+		// so user input can never widen the match into a wildcard.
+		groupSQL += ` WHERE e.base_url LIKE ? ESCAPE '\'`
+		args = append(args, likePattern(query.Filter))
+	}
+	groupSQL += ` GROUP BY e.base_url ORDER BY e.base_url ASC LIMIT ? OFFSET ?`
+	args = append(args, pageSize+1, (page-1)*pageSize)
+
+	rows, err := s.db.QueryContext(ctx, groupSQL, args...)
 	if err != nil {
-		return nil, fmt.Errorf("list endpoints overview: %w", err)
+		return nil, false, fmt.Errorf("list endpoint overview groups: %w", err)
 	}
 	defer rows.Close()
 
-	out := make([]EndpointOverview, 0, 32)
+	groups := make([]EndpointOverviewGroup, 0, min(pageSize, 32))
 	for rows.Next() {
-		if len(out) == MaxOverviewRows {
-			return nil, ErrOverviewLimit
+		var g EndpointOverviewGroup
+		if err := rows.Scan(&g.BaseURL, &g.UserCount, &g.EndpointCount, &g.KeyCount); err != nil {
+			return nil, false, fmt.Errorf("scan endpoint overview group: %w", err)
 		}
-		var ep EndpointOverview
-		var enabled int
-		if err := rows.Scan(&ep.ID, &ep.UserID, &ep.ConnectorType, &ep.BaseURL, &ep.Note, &enabled, &ep.CreatedAt, &ep.UpdatedAt, &ep.KeyCount); err != nil {
-			return nil, fmt.Errorf("scan endpoint overview: %w", err)
-		}
-		ep.Enabled = enabled != 0
-		out = append(out, ep)
+		groups = append(groups, g)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate endpoints overview: %w", err)
+		return nil, false, fmt.Errorf("iterate endpoint overview groups: %w", err)
 	}
-	return out, nil
-}
+	hasMore := len(groups) > pageSize
+	if hasMore {
+		groups = groups[:pageSize]
+	}
+	if len(groups) == 0 {
+		return groups, hasMore, nil
+	}
 
-// ModelOverview is one platform model's admin-station overview projection:
-// its metadata across all users plus the live binding count.
-type ModelOverview struct {
-	ID            int64
-	UserID        int64
-	Provider      string
-	Model         string
-	FullName      string
-	RouteStrategy string
-	SilentRetry   bool
-	BindingCount  int
-	CreatedAt     int64
-}
+	// One batched statement expands the per-user entries for exactly the
+	// base_urls on this page; the total is bounded by the sum of the page's
+	// user counts and fails closed beyond MaxOverviewRows.
+	placeholders := strings.Repeat("?,", len(groups))
+	placeholders = placeholders[:len(placeholders)-1]
+	entryArgs := make([]any, 0, len(groups)+1)
+	entrySQL := `SELECT e.base_url, e.user_id, COUNT(*), COALESCE(SUM(k.key_count), 0), COALESCE(SUM(e.enabled), 0)
+FROM endpoints e
+LEFT JOIN (` + keyCounts + `) k ON k.endpoint_id = e.id
+WHERE e.base_url IN (` + placeholders + `)
+GROUP BY e.base_url, e.user_id
+ORDER BY e.base_url ASC, e.user_id ASC`
+	for _, g := range groups {
+		entryArgs = append(entryArgs, g.BaseURL)
+	}
 
-// ListModelsOverview returns every platform model across all users with its
-// live binding count, ordered by id. The LEFT JOIN keeps zero-binding drafts
-// visible with count 0. Read-only metadata projection.
-func (s *Store) ListModelsOverview(ctx context.Context) ([]ModelOverview, error) {
-	rows, err := s.db.QueryContext(ctx, `
-SELECT m.id, m.user_id, m.provider, m.model, m.full_name, m.route_strategy, m.silent_retry, m.created_at, COUNT(b.id)
-FROM models m
-LEFT JOIN model_bindings b ON b.model_id = m.id
-GROUP BY m.id
-ORDER BY m.id
-LIMIT ?`, MaxOverviewRows+1)
+	entryRows, err := s.db.QueryContext(ctx, entrySQL, entryArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("list models overview: %w", err)
+		return nil, false, fmt.Errorf("list endpoint overview entries: %w", err)
 	}
-	defer rows.Close()
+	defer entryRows.Close()
 
-	out := make([]ModelOverview, 0, 32)
-	for rows.Next() {
-		if len(out) == MaxOverviewRows {
-			return nil, ErrOverviewLimit
-		}
-		var m ModelOverview
-		var silentRetry int
-		if err := rows.Scan(&m.ID, &m.UserID, &m.Provider, &m.Model, &m.FullName, &m.RouteStrategy, &silentRetry, &m.CreatedAt, &m.BindingCount); err != nil {
-			return nil, fmt.Errorf("scan model overview: %w", err)
-		}
-		m.SilentRetry = silentRetry != 0
-		out = append(out, m)
+	byURL := make(map[string]int, len(groups))
+	for i := range groups {
+		byURL[groups[i].BaseURL] = i
+		groups[i].Users = make([]EndpointOverviewUserEntry, 0, min(groups[i].UserCount, 16))
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate models overview: %w", err)
+	total := 0
+	for entryRows.Next() {
+		total++
+		if total > MaxOverviewRows {
+			return nil, false, ErrOverviewLimit
+		}
+		var baseURL string
+		var entry EndpointOverviewUserEntry
+		if err := entryRows.Scan(&baseURL, &entry.UserID, &entry.EndpointCount, &entry.KeyCount, &entry.EnabledCount); err != nil {
+			return nil, false, fmt.Errorf("scan endpoint overview entry: %w", err)
+		}
+		idx, ok := byURL[baseURL]
+		if !ok {
+			// Cannot happen: the IN clause only names this page's base_urls.
+			return nil, false, fmt.Errorf("endpoint overview entry for unlisted base_url")
+		}
+		groups[idx].Users = append(groups[idx].Users, entry)
 	}
-	return out, nil
+	if err := entryRows.Err(); err != nil {
+		return nil, false, fmt.Errorf("iterate endpoint overview entries: %w", err)
+	}
+	return groups, hasMore, nil
 }

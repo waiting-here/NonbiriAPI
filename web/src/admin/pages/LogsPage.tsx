@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatDateTime } from '@shared/utils/datetime';
 import { useTranslation } from 'react-i18next';
 import {
@@ -8,79 +8,203 @@ import {
   LoadingState,
   PageHeader,
   Pagination,
-  ReadOnlyValue,
 } from '@shared/components/States';
-import { type AdminLogFilter, useAdminLogs, useAdminUsage } from '../data';
+import {
+  LogDetailDrawer,
+  LogFilters,
+  LogTable,
+  TokenBuckets,
+  useLogUrlState,
+  type LogColumn,
+  type LogDetailField,
+  type LogFilterField,
+} from '@shared/components/log';
+import { CompactNumber } from '@shared/components/CompactNumber';
+import { formatCompact, formatCount } from '@shared/utils/formatNumber';
+import {
+  adminLogExportPath,
+  useAdminLogs,
+  useAdminUsage,
+  type AdminLogFilter,
+  type AdminRequestLog,
+} from '../data';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+const DEFAULT_PAGE_SIZE = 20;
 
-/** Convert a datetime-local field value to unix seconds; empty means unset. */
-function datetimeLocalToUnix(value: string): number | undefined {
-  if (!value.trim()) return undefined;
-  const millis = Date.parse(value);
-  if (!Number.isFinite(millis)) return undefined;
-  return Math.max(0, Math.floor(millis / 1000));
-}
+// Frozen administrator filter set, mirrored in the URL query string.
+const TEXT_PARAMS = ['user_id', 'endpoint_base_url', 'upstream_model', 'error_code', 'status'] as const;
 
-function number(value: number): string {
-  return value.toLocaleString();
-}
-
-function usageText(value: number | undefined): string {
-  return value === undefined ? '—' : number(value);
+function buildApiFilter(filters: Record<string, string>): AdminLogFilter {
+  const next: AdminLogFilter = {};
+  const userId = filters.user_id?.trim();
+  if (userId && /^\d+$/.test(userId)) next.userId = userId;
+  const baseURL = filters.endpoint_base_url?.trim();
+  if (baseURL) next.endpointBaseURL = baseURL.slice(0, 512);
+  const upstream = filters.upstream_model?.trim();
+  if (upstream) next.upstreamModel = upstream.slice(0, 512);
+  const errorCode = filters.error_code?.trim();
+  if (errorCode) next.errorCode = errorCode.slice(0, 512);
+  // The server status filter is one exact 100..599 code, not a band.
+  const status = filters.status?.trim();
+  if (status && /^\d{3}$/.test(status)) {
+    const code = Number(status);
+    if (code >= 100 && code <= 599) next.status = status;
+  }
+  return next;
 }
 
 export function LogsPage() {
   const { t } = useTranslation();
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[1]);
-  // Draft inputs feed appliedFilter only via Apply; a changed filter always
-  // restarts offset paging at page 1 rather than mixing pages across filters.
-  const [draftUserId, setDraftUserId] = useState('');
-  const [draftModel, setDraftModel] = useState('');
-  const [draftStatus, setDraftStatus] = useState('');
-  const [draftFrom, setDraftFrom] = useState('');
-  const [draftTo, setDraftTo] = useState('');
-  const [appliedFilter, setAppliedFilter] = useState<AdminLogFilter>({});
+  const { state, patch } = useLogUrlState(TEXT_PARAMS, DEFAULT_PAGE_SIZE);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
   const usage = useAdminUsage();
-  const logs = useAdminLogs(page, appliedFilter, pageSize);
+  const filter = useMemo(
+    () => ({
+      ...buildApiFilter(state.filters),
+      fromUnix: state.fromUnix,
+      toUnix: state.toUnix,
+    }),
+    [state.filters, state.fromUnix, state.toUnix],
+  );
+  const logs = useAdminLogs(state.page, filter, state.pageSize);
 
-  const applyFilter = () => {
-    const next: AdminLogFilter = {};
-    const userId = draftUserId.trim();
-    if (userId && /^\d+$/.test(userId)) next.userId = userId;
-    const model = draftModel.trim();
-    if (model) next.model = model.slice(0, 160);
-    // The server status filter is one exact 100..599 code, so the field is a
-    // numeric input, not a band; a band would silently drop other codes in
-    // the same range.
-    const status = draftStatus.trim();
-    if (status && /^\d{3}$/.test(status)) {
-      const code = Number(status);
-      if (code >= 100 && code <= 599) next.status = status;
-    }
-    const fromUnix = datetimeLocalToUnix(draftFrom);
-    const toUnix = datetimeLocalToUnix(draftTo);
-    if (fromUnix !== undefined) next.fromUnix = fromUnix;
-    if (toUnix !== undefined) next.toUnix = toUnix;
-    setAppliedFilter(next);
-    setPage(1);
-  };
-
-  const resetFilter = () => {
-    setDraftUserId('');
-    setDraftModel('');
-    setDraftStatus('');
-    setDraftFrom('');
-    setDraftTo('');
-    setAppliedFilter({});
-    setPage(1);
+  const applyFilters = (next: {
+    filters: Record<string, string>;
+    fromUnix?: number;
+    toUnix?: number;
+  }) => {
+    // A changed filter always restarts paging at page 1.
+    patch({ ...next, page: 1 });
   };
 
   const changePageSize = (size: number) => {
-    setPageSize(size);
-    setPage(1);
+    patch({ pageSize: size, page: 1 });
   };
+
+  const fields: LogFilterField[] = [
+    {
+      name: 'user_id',
+      label: t('common.userId'),
+      ariaLabel: t('common.filterUserIdAria'),
+      inputType: 'number',
+      maxLength: 19,
+    },
+    {
+      name: 'endpoint_base_url',
+      label: t('logs.endpointBaseUrl'),
+      ariaLabel: t('logs.endpointBaseUrlAria'),
+      maxLength: 512,
+    },
+    {
+      name: 'upstream_model',
+      label: t('logs.upstreamModel'),
+      ariaLabel: t('logs.upstreamModelAria'),
+      maxLength: 256,
+    },
+    {
+      name: 'error_code',
+      label: t('logs.errorCode'),
+      ariaLabel: t('logs.errorCodeAria'),
+      maxLength: 96,
+    },
+    {
+      name: 'status',
+      label: t('common.status'),
+      ariaLabel: t('common.filterStatusAria'),
+      inputType: 'number',
+      maxLength: 3,
+    },
+  ];
+
+  const columns: LogColumn<AdminRequestLog>[] = [
+    {
+      key: 'started_at',
+      header: t('logs.time'),
+      render: (row) => <span title={formatDateTime(row.completed_at)}>{formatDateTime(row.started_at)}</span>,
+    },
+    { key: 'user_id', header: t('common.userId'), render: (row) => <span className="mono">{row.user_id}</span> },
+    { key: 'route_kind', header: t('logs.routeKind'), render: (row) => row.route_kind },
+    {
+      key: 'endpoint_base_url',
+      header: t('logs.endpointBaseUrl'),
+      render: (row) => <span className="mono read-only-value">{row.endpoint_base_url}</span>,
+    },
+    {
+      key: 'upstream_model_id',
+      header: t('logs.upstreamModel'),
+      render: (row) => <span className="mono">{row.upstream_model_id}</span>,
+    },
+    {
+      key: 'status_code',
+      header: t('logs.statusCode'),
+      render: (row) => (row.status_code > 0 ? row.status_code : '—'),
+    },
+    {
+      key: 'duration_ms',
+      header: t('logs.duration'),
+      render: (row) => `${formatCount(row.duration_ms).display} ms`,
+    },
+    { key: 'tokens', header: t('logs.tokens'), render: (row) => <TokenBuckets row={row} /> },
+    {
+      key: 'error',
+      header: t('logs.error'),
+      render: (row) =>
+        row.error_code || row.error_source ? (
+          <>
+            <span className="mono">{row.error_code || '—'}</span>
+            <br />
+            <span className="table-note">{t(`logs.errorSource${row.error_source === 'upstream' ? 'Upstream' : 'Platform'}`)}</span>
+          </>
+        ) : (
+          '—'
+        ),
+    },
+  ];
+
+  const selected = selectedId ? logs.data?.items.find((row) => row.id === selectedId) : undefined;
+
+  const detailFields = (row: AdminRequestLog): LogDetailField[] => [
+    { label: t('logs.logId'), value: <span className="mono">{row.id}</span> },
+    { label: t('common.userId'), value: <span className="mono">{row.user_id}</span> },
+    { label: t('logs.routeKind'), value: row.route_kind },
+    {
+      label: t('logs.endpointBaseUrl'),
+      value: <span className="mono read-only-value">{row.endpoint_base_url}</span>,
+    },
+    { label: t('logs.upstreamModel'), value: <span className="mono">{row.upstream_model_id}</span> },
+    { label: t('logs.endpointKeyId'), value: <span className="mono">{row.endpoint_key_id}</span> },
+    { label: t('logs.statusCode'), value: row.status_code > 0 ? row.status_code : '—' },
+    { label: t('logs.duration'), value: `${formatCount(row.duration_ms).display} ms` },
+    { label: t('logs.startedAt'), value: formatDateTime(row.started_at) },
+    { label: t('logs.completedAt'), value: formatDateTime(row.completed_at) },
+    {
+      label: t('logs.bucketUncachedInput'),
+      value: <CompactNumber value={formatCount(row.uncached_input_tokens)} />,
+    },
+    {
+      label: t('logs.bucketCacheWrite'),
+      value: <CompactNumber value={formatCount(row.cache_write_input_tokens)} />,
+    },
+    {
+      label: t('logs.bucketCacheRead'),
+      value: <CompactNumber value={formatCount(row.cache_read_input_tokens)} />,
+    },
+    { label: t('logs.bucketOutput'), value: <CompactNumber value={formatCount(row.output_tokens)} /> },
+    {
+      label: t('logs.usageUnknown'),
+      value: row.usage_unknown ? t('common.yes') : t('common.no'),
+    },
+    { label: t('logs.errorCode'), value: row.error_code || '—' },
+    {
+      label: t('logs.errorSource'),
+      value: row.error_source
+        ? t(`logs.errorSource${row.error_source === 'upstream' ? 'Upstream' : 'Platform'}`)
+        : '—',
+    },
+    { label: t('logs.attemptId'), value: <span className="mono">{row.attempt_id || '—'}</span> },
+  ];
 
   return (
     <div className="page">
@@ -101,19 +225,25 @@ export function LogsPage() {
           <div className="metric-grid">
             <div className="metric-card">
               <p>{t('admin.dashboard.requests')}</p>
-              <strong className="metric-value">{number(usage.data.total_requests)}</strong>
+              <strong className="metric-value">{formatCount(usage.data.total_requests).display}</strong>
             </div>
             <div className="metric-card">
-              <p>{t('admin.dashboard.promptTokens')}</p>
-              <strong className="metric-value">{number(usage.data.total_prompt_tokens)}</strong>
+              <p>{t('common.tokens.input')}</p>
+              <strong className="metric-value">
+                <CompactNumber value={formatCompact(usage.data.total_prompt_tokens)} />
+              </strong>
             </div>
             <div className="metric-card">
-              <p>{t('admin.dashboard.completionTokens')}</p>
-              <strong className="metric-value">{number(usage.data.total_completion_tokens)}</strong>
+              <p>{t('common.tokens.output')}</p>
+              <strong className="metric-value">
+                <CompactNumber value={formatCompact(usage.data.total_completion_tokens)} />
+              </strong>
             </div>
             <div className="metric-card">
               <p>{t('admin.dashboard.unknownUsage')}</p>
-              <strong className="metric-value">{number(usage.data.total_unknown_usage_requests)}</strong>
+              <strong className="metric-value">
+                {formatCount(usage.data.total_unknown_usage_requests).display}
+              </strong>
             </div>
           </div>
         )}
@@ -121,147 +251,87 @@ export function LogsPage() {
       <Card>
         <div className="card-title-row">
           <h2>{t('admin.logs.logsTitle')}</h2>
-          <span className="muted">{t('common.page', { page })}</span>
-        </div>
-        <form
-          className="filter-bar"
-          onSubmit={(event) => {
-            event.preventDefault();
-            applyFilter();
-          }}
-        >
-          <label>
-            <span>{t('common.userId')}</span>
-            <input
-              type="number"
-              min="1"
-              step="1"
-              inputMode="numeric"
-              value={draftUserId}
-              onChange={(event) => setDraftUserId(event.target.value)}
-              aria-label={t('common.filterUserIdAria')}
-            />
-          </label>
-          <label>
-            <span>{t('common.model')}</span>
-            <input
-              type="text"
-              value={draftModel}
-              maxLength={160}
-              onChange={(event) => setDraftModel(event.target.value)}
-              aria-label={t('common.filterModelAria')}
-            />
-          </label>
-          <label>
-            <span>{t('common.status')}</span>
-            <input
-              type="number"
-              min="100"
-              max="599"
-              step="1"
-              value={draftStatus}
-              onChange={(event) => setDraftStatus(event.target.value)}
-              aria-label={t('common.filterStatusAria')}
-            />
-          </label>
-          <label>
-            <span>{t('common.from')}</span>
-            <input
-              type="datetime-local"
-              value={draftFrom}
-              onChange={(event) => setDraftFrom(event.target.value)}
-              aria-label={t('common.filterFromAria')}
-            />
-          </label>
-          <label>
-            <span>{t('common.to')}</span>
-            <input
-              type="datetime-local"
-              value={draftTo}
-              onChange={(event) => setDraftTo(event.target.value)}
-              aria-label={t('common.filterToAria')}
-            />
-          </label>
-          <div className="filter-actions">
-            <button type="submit" className="btn btn-quiet">
-              {t('common.applyFilter')}
-            </button>
-            <button type="button" className="btn btn-link" onClick={resetFilter}>
-              {t('common.resetFilter')}
-            </button>
+          <div className="card-actions">
+            <a
+              className="btn btn-secondary"
+              href={adminLogExportPath(filter, 'csv')}
+              download
+              aria-label={t('admin.logs.exportCsv')}
+            >
+              {t('admin.logs.exportCsv')}
+            </a>
+            <a
+              className="btn btn-secondary"
+              href={adminLogExportPath(filter, 'json')}
+              download
+              aria-label={t('admin.logs.exportJson')}
+            >
+              {t('admin.logs.exportJson')}
+            </a>
           </div>
-        </form>
-        {logs.isPending ? <LoadingState /> : logs.error ? <ErrorState error={logs.error} onRetry={() => void logs.refetch()} /> : logs.data.items.length === 0 ? (
+        </div>
+        <LogFilters fields={fields} state={state} onApply={applyFilters} />
+        {logs.isPending ? (
+          <LoadingState />
+        ) : logs.error ? (
+          <ErrorState error={logs.error} onRetry={() => void logs.refetch()} />
+        ) : logs.data.items.length === 0 ? (
           <EmptyState title={t('admin.logs.noLogs')} body={t('admin.logs.noLogsBody')} />
         ) : (
           <>
-            <div className="table-wrap">
-              <table>
-                <caption>{t('admin.logs.logsTitle')}</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">{t('admin.logs.id')}</th>
-                    <th scope="col">{t('admin.logs.user')}</th>
-                    <th scope="col">{t('admin.logs.model')}</th>
-                    <th scope="col">{t('admin.logs.statusCode')}</th>
-                    <th scope="col">{t('admin.logs.duration')}</th>
-                    <th scope="col">{t('admin.logs.usage')}</th>
-                    <th scope="col">{t('admin.logs.diagnostic')}</th>
-                    <th scope="col">{t('admin.logs.started')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {logs.data.items.map((log) => (
-                    <tr key={log.id}>
-                      <td><ReadOnlyValue value={log.id} /></td>
-                      <td><ReadOnlyValue value={log.user_id} /></td>
-                      <td>
-                        <span className="mono">{log.model}</span>
-                        <span className="table-note">{log.upstream_model_id}</span>
-                      </td>
-                      <td>{log.status_code || '—'}</td>
-                      <td>{log.duration_ms} ms</td>
-                      <td>
-                        {log.usage_unknown ? (
-                          <span className="status-badge is-inactive">{t('admin.logs.unknownUsage')}</span>
-                        ) : (
-                          <span className="table-note">
-                            {t('admin.logs.promptTokens')}: {usageText(log.prompt_tokens)}
-                            <br />
-                            {t('admin.logs.completionTokens')}: {usageText(log.completion_tokens)}
-                            <br />
-                            {t('admin.logs.totalTokens')}: {usageText(log.total_tokens)}
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        {log.error_code || log.error_diag ? (
-                          <details className="diagnostic">
-                            <summary>{log.error_code || t('common.showDetails')}</summary>
-                            {log.error_diag ? <p>{log.error_diag}</p> : null}
-                          </details>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td><ReadOnlyValue value={formatDateTime(log.started_at)} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <LogTable
+              caption={t('admin.logs.logsTitle')}
+              columns={columns}
+              rows={logs.data.items}
+              rowKey={(row) => row.id}
+              actions={(row) => (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setSelectedId(row.id)}
+                  aria-haspopup="dialog"
+                >
+                  {t('logs.details')}
+                </button>
+              )}
+            />
             <Pagination
-              page={page}
+              page={state.page}
               hasNext={logs.data.hasNext}
-              onChange={setPage}
-              pageSize={pageSize}
+              onChange={(page) => patch({ page })}
+              pageSize={state.pageSize}
               pageSizeOptions={PAGE_SIZE_OPTIONS}
               onPageSizeChange={changePageSize}
-              onJumpToPage={setPage}
+              onJumpToPage={(page) => patch({ page })}
             />
           </>
         )}
       </Card>
+      <LogDetailDrawer
+        open={Boolean(selected)}
+        onClose={() => setSelectedId(null)}
+        title={selected ? `${t('logs.drawerTitle')} #${selected.id}` : ''}
+        fields={selected ? detailFields(selected) : []}
+        diagnostics={
+          selected
+            ? {
+                label: t('logs.diag'),
+                text: [
+                  `id=${selected.id}`,
+                  `user_id=${selected.user_id}`,
+                  `route_kind=${selected.route_kind}`,
+                  `status_code=${selected.status_code}`,
+                  `error_code=${selected.error_code}`,
+                  `error_source=${selected.error_source}`,
+                  `attempt_id=${selected.attempt_id}`,
+                  selected.error_diag,
+                ]
+                  .filter(Boolean)
+                  .join('\n'),
+              }
+            : undefined
+        }
+      />
     </div>
   );
 }

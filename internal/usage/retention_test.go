@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 	"github.com/waiting-here/NonbiriAPI/internal/usage"
 )
@@ -32,7 +33,9 @@ func newRetentionStore(t *testing.T) *db.Store {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = vault.Close() })
-	store, err := db.Open(filepath.Join(t.TempDir(), "retention.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "retention.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,13 +232,13 @@ func TestCleanupPreservesUserAccumulators(t *testing.T) {
 	old := now.Add(-60 * 24 * time.Hour)
 	for i := 0; i < 2; i++ {
 		input := db.RequestLogInput{
-			AttemptID:    fmt.Sprintf("acc-%d", i),
-			UserID:       userID,
-			Model:        "opaque/provider/model",
-			StatusCode:   200,
-			StartedAt:    old,
-			CompletedAt:  old,
-			PromptTokens: 5,
+			AttemptID:           fmt.Sprintf("acc-%d", i),
+			UserID:              userID,
+			Model:               "opaque/provider/model",
+			StatusCode:          200,
+			StartedAt:           old,
+			CompletedAt:         old,
+			UncachedInputTokens: 5,
 		}
 		if err := store.RecordRequest(context.Background(), input); err != nil {
 			t.Fatalf("RecordRequest: %v", err)
@@ -408,13 +411,13 @@ func TestCleanupConcurrentWithRecordRequest(t *testing.T) {
 			defer wg.Done()
 			for i := 0; i < perWriter; i++ {
 				input := db.RequestLogInput{
-					AttemptID:    fmt.Sprintf("conc-%d-%d", w, i),
-					UserID:       userID,
-					Model:        "opaque/provider/model",
-					StatusCode:   200,
-					StartedAt:    old,
-					CompletedAt:  old,
-					PromptTokens: 1,
+					AttemptID:           fmt.Sprintf("conc-%d-%d", w, i),
+					UserID:              userID,
+					Model:               "opaque/provider/model",
+					StatusCode:          200,
+					StartedAt:           old,
+					CompletedAt:         old,
+					UncachedInputTokens: 1,
 				}
 				if err := store.RecordRequest(context.Background(), input); err != nil {
 					failures.Add(1)
@@ -474,7 +477,9 @@ func TestCleanupAfterStoreCloseFailsStable(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer vault.Close()
-	store, err := db.Open(filepath.Join(t.TempDir(), "closed.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "closed.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
 	if err != nil {
 		t.Fatal(err)
 	}

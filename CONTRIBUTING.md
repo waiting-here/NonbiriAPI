@@ -12,9 +12,9 @@ Thank you for contributing. NonbiriAPI is released under the GNU AGPL v3.0. By s
 
 ## Development environment
 
-- Go 1.26 or newer in the supported 1.26 series.
+- Go 1.26.x.
 - Node.js 22.22 or newer and npm 12 for the frontend.
-- Git Bash or another POSIX-compatible shell is recommended for the repository scripts.
+- Bash is required for the repository scripts (`set -euo pipefail` is used). On Windows, use Git Bash.
 
 The frontend dependencies are not part of the Go module. Run npm commands from the repository root with `--prefix web` or from `web/`.
 
@@ -49,6 +49,8 @@ Every new user-associated field must have an export, deletion, retention, and pr
 
 ## Commit and pull request guidance
 
+`master` is protected and PR-only; never commit or push directly to it, including for emergency fixes. Maintainers may designate a version integration branch, merge reviewed short-lived work branches into it locally, and open one final GitHub pull request to `master` after the complete version passes its gates. Contributors should confirm the intended base branch before starting work.
+
 Use a concise public commit subject such as:
 
 ```text
@@ -56,4 +58,4 @@ feat: add endpoint health summary
 fix: reject invalid caller key input
 ```
 
-Pull requests should explain the behavior change, security/data impact, migration or rollback implications, tests run, and any operator documentation changes. Keep generated frontend notices and manifests in sync with the build when frontend dependencies change.
+Pull requests should explain the behavior change, security/data impact, migration or rollback implications, tests run, and any operator documentation changes. When frontend dependencies change, regenerate and review the tracked `web/THIRD_PARTY_NOTICES.md`; build/hash manifests under ignored `web/dist*` are local release-verification artifacts and are not committed.

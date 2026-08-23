@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -30,7 +31,9 @@ func newTestService(t *testing.T) *testService {
 		t.Fatalf("create test vault: %v", err)
 	}
 	t.Cleanup(func() { _ = vault.Close() })
-	store, err := db.Open(filepath.Join(t.TempDir(), "model.db"), vault)
+	dbPath := filepath.Join(t.TempDir(), "model.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
 	if err != nil {
 		t.Fatalf("open test store: %v", err)
 	}
@@ -135,6 +138,54 @@ func TestServiceCreateModelValidationMatrix(t *testing.T) {
 		if _, err := ts.svc.CreateModel(ctx, uid, tc.provider, tc.model, nil, nil); err != nil {
 			t.Errorf("%s: unexpected error %v", tc.name, err)
 		}
+	}
+}
+
+// TestServiceCharityPrefixReserved verifies the frozen §K rule: a provider
+// starting with the reserved charity prefix is refused at create and update
+// time, while near-miss forms and the model half stay allowed.
+func TestServiceCharityPrefixReserved(t *testing.T) {
+	ts := newTestService(t)
+	uid := ts.seedUser(t, "u1")
+	ctx := context.Background()
+
+	m, err := ts.svc.CreateModel(ctx, uid, "openai", "gpt-4o", nil, nil)
+	if err != nil {
+		t.Fatalf("seed model: %v", err)
+	}
+
+	rejected := []string{"[公益]donor", "[公益]x/y"}
+	for _, provider := range rejected {
+		if _, err := ts.svc.CreateModel(ctx, uid, provider, "m", nil, nil); !errors.Is(err, ErrCharityPrefixReserved) {
+			t.Errorf("create provider %q: err = %v, want ErrCharityPrefixReserved", provider, err)
+		} else if !errors.Is(err, ErrInvalidRequest) {
+			t.Errorf("create provider %q: err = %v, must wrap ErrInvalidRequest", provider, err)
+		}
+		newProvider := provider
+		if _, err := ts.svc.UpdateModel(ctx, uid, m.ID, &newProvider, nil, nil, nil); !errors.Is(err, ErrCharityPrefixReserved) {
+			t.Errorf("update provider %q: err = %v, want ErrCharityPrefixReserved", provider, err)
+		}
+	}
+
+	// Near misses and non-provider halves are not affected.
+	allowed := []struct{ name, provider, model string }{
+		{"prefix inside provider", "x[公益]y", "m"},
+		{"prefix in model half", "openai", "[公益]m"},
+		{"partial bracket", "[公益", "m"},
+	}
+	for _, tc := range allowed {
+		if _, err := ts.svc.CreateModel(ctx, uid, tc.provider, tc.model, nil, nil); err != nil {
+			t.Errorf("%s: unexpected error %v", tc.name, err)
+		}
+	}
+
+	// The stored model is unchanged after the refused updates.
+	got, err := ts.svc.GetModel(ctx, uid, m.ID)
+	if err != nil {
+		t.Fatalf("get model: %v", err)
+	}
+	if got.Provider != "openai" || got.Model != "gpt-4o" {
+		t.Fatalf("refused update mutated row: provider=%q model=%q", got.Provider, got.Model)
 	}
 }
 

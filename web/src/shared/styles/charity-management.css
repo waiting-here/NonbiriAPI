@@ -1,0 +1,21 @@
+.charity-management .charity-editor { margin: 1rem 0; }
+.charity-management fieldset { border: 1px solid var(--nb-color-border); border-radius: 0.75rem; padding: 1rem; margin: 1rem 0; }
+.charity-management legend { padding: 0 0.4rem; font-weight: 700; }
+.charity-management .charity-model-card,
+.charity-management .donation-review-card { gap: 0.8rem; }
+.charity-management .charity-bindings { margin-top: 0.8rem; border-top: 1px solid var(--nb-color-border); padding-top: 0.8rem; }
+.charity-management .charity-bindings summary { cursor: pointer; font-weight: 700; }
+.charity-management .compact-table { width: 100%; border-collapse: collapse; min-width: 36rem; }
+.charity-management .compact-table th,
+.charity-management .compact-table td { padding: 0.55rem; border-bottom: 1px solid var(--nb-color-border); text-align: left; vertical-align: middle; }
+.charity-management .binding-form { align-items: end; margin-top: 1rem; }
+.charity-management .donation-description { white-space: pre-wrap; overflow-wrap: anywhere; }
+.charity-management .donation-review-key { margin: 0.75rem 0; }
+.charity-management .charity-settings .config-row { align-items: center; }
+.charity-management .charity-settings .config-control { min-width: min(28rem, 100%); }
+.charity-management .charity-settings input { max-width: 20rem; }
+@media (max-width: 700px) {
+  .charity-management .compact-table { min-width: 30rem; }
+  .charity-management .form-actions { align-items: stretch; flex-direction: column; }
+  .charity-management .form-actions .btn { width: 100%; }
+}

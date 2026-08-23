@@ -2,9 +2,9 @@
 
 [简体中文](README.zh-CN.md)
 
-NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible gateway. It lets each user manage their own upstream endpoints and credentials, discover upstream models, define platform model aliases, and call those aliases through a single `CallerKey`.
+NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible gateway. It lets each user manage their own upstream endpoints and credentials, discover upstream models, define user-owned platform model names, and call those models through a single `CallerKey`.
 
-> **Release status:** `v1.0.0-alpha.1`. This release is suitable for controlled self-hosted trials. Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
+> **Current release:** `v1.0.0-alpha.2`. This alpha is intended only for controlled self-hosted trials. Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
 >
 > Source repository: [github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
@@ -12,13 +12,15 @@ NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible gateway. 
 
 - OpenAI-compatible `/v1/models` and `/v1/chat/completions` endpoints.
 - Discord OAuth user sign-in and a separate administrator station.
-- Per-user endpoints, encrypted upstream credentials, model discovery, aliases, bindings, ordered/random routing, and opt-in pre-commit retry.
+- Per-user endpoints, encrypted upstream credentials, model discovery, platform model names, bindings, ordered/random routing, and opt-in pre-commit retry.
 - SSRF, DNS-rebinding, redirect, proxy, response-size, timeout, cancellation, concurrency, and streaming safeguards.
 - Encrypted-at-rest upstream secrets; plaintext credentials are not returned in lists, logs, alerts, or account exports.
 - Request metadata, usage accounting, retention cleanup, account export/deletion, issues, alerts, and runtime limits.
+- Credits, check-in, donation-backed charity routing, and a live-authorized level-5 steward view whose site-wide logs hide donated resources.
+- Server-generated upstream safety pseudonyms scoped to one user and one canonical upstream origin; see the [API contract](docs/api-contract.md#21-post-v1chatcompletions) for their rotation and privacy boundary.
 - React user/admin stations embedded into a single Go binary.
 
-The alpha intentionally supports only the `openai-compatible` connector and the two OpenAI-compatible exit routes listed above. Other OpenAI API families and other connector types are deferred.
+`v1.0.0-alpha.2` supports only the `openai-compatible` connector and the two OpenAI-compatible exit routes listed above. Other OpenAI API families and other connector types are deferred.
 
 ## Architecture
 
@@ -27,37 +29,39 @@ One binary serves two host-isolated stations:
 - **User station:** user self-service APIs, `/v1/*`, and the user web application.
 - **Admin station:** administrator APIs and the administrator web application.
 
-Configure both origins explicitly. Do not expose the admin host on the same public hostname as the user station.
+Configure a user origin and a distinct administrator host. `NONBIRI_ADMIN_HOST` may be omitted when the derived `admin.<user-host>` name is correct; never expose both stations on the same hostname.
 
-## Quick start from source
+## Build from source
 
 Build-time requirements:
 
-- Go 1.26 or newer in the supported 1.26 series.
+- Go 1.26.x.
 - Node.js 22.22 or newer and npm 12 for the web build.
 
 Node.js is not needed to run the finished binary.
 
 ```sh
-cp admin.env.example admin.env
-chmod 600 admin.env
-
-# Create a key outside the repository and make it readable only by the service user.
-openssl rand -hex 32 > master.key
-chmod 600 master.key
-# Set NONBIRI_MASTER_KEY_FILE in admin.env to the absolute path of master.key.
-
 npm --prefix web ci
+npm --prefix web test
+npm --prefix web run typecheck
+npm --prefix web run lint
 npm --prefix web run build
-CGO_ENABLED=0 go build -tags dist -o nonbiriapi .
+scripts/check-go.sh
+CGO_ENABLED=0 go build -tags dist -trimpath -o nonbiriapi .
+```
 
+The untagged Go build embeds development placeholder pages. A usable binary must be built after `npm --prefix web run build` with `-tags dist`.
+
+Before running it, copy `admin.env.example` to a **private path outside the checkout**, replace every `CHANGE_ME` value, and change the production-shaped `/etc` and `/var` paths for your environment. Generate the master key at the absolute path configured by `NONBIRI_MASTER_KEY_FILE`; do not create it in the repository. Then load that file and start the binary:
+
+```sh
 set -a
-. ./admin.env
+. /absolute/private/path/admin.env
 set +a
 ./nonbiriapi
 ```
 
-The untagged Go build embeds a development placeholder UI. A usable release binary must be built after `npm run build` with `-tags dist`.
+For the ordered key, permission, Discord, DNS, and reverse-proxy setup, follow [First-run configuration preparation](docs/first-run-setup.md).
 
 ## Configuration
 
@@ -66,7 +70,7 @@ The untagged Go build embeds a development placeholder UI. A usable release bina
 - `NONBIRI_MASTER_KEY_FILE` or `NONBIRI_MASTER_KEY` (exactly one; a 32-byte key).
 - `NONBIRI_ADMIN_USERNAME` and `NONBIRI_ADMIN_PASSWORD`.
 - `NONBIRI_DISCORD_CLIENT_ID` and `NONBIRI_DISCORD_CLIENT_SECRET`.
-- `NONBIRI_SITE_BASE_URL` and the separate `NONBIRI_ADMIN_HOST`.
+- `NONBIRI_SITE_BASE_URL`; optionally `NONBIRI_ADMIN_HOST` when the derived `admin.<user-host>` value is not suitable.
 
 Keep `admin.env`, the master-key file, and the database outside the Git working tree. Never commit real credentials or a real database.
 
@@ -78,9 +82,9 @@ The intended first deployment model is a manually updated systemd service. See:
 - [Example environment file](admin.env.example)
 - [Example systemd unit](deploy/nonbiriapi.service.example)
 
-The update procedure is deliberately conservative: stop the service, back up the database and sidecars, build and verify a release binary, install it atomically, restart, and verify both configured hosts. The alpha has no versioned migration framework; keep a tested backup before every update.
+The update procedure is deliberately conservative: stop the service, back up the database and sidecars, build and verify a release binary, install it atomically, restart, and verify both configured hosts. The alpha has no general versioned migration framework; alpha.2 includes only the documented one-purpose credential migration. Keep a tested backup before every update.
 
-Alpha.1 is source-first: a prebuilt binary is not required for the release. Operators may compile the source on the target platform or use their own build pipeline. A published binary, if added later, is a convenience artifact rather than the compatibility boundary.
+The current alpha release strategy is source-first: a prebuilt binary is not required. Operators may compile the source on the target platform or use their own build pipeline. A published binary, if added later, is a convenience artifact rather than the compatibility boundary.
 
 ## GitHub automation
 

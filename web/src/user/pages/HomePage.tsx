@@ -1,12 +1,37 @@
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { formatDateTime } from '@shared/utils/datetime';
 import { useTranslation } from 'react-i18next';
 import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
-import { isNotFoundError, isUnauthorized } from '@shared/query/http';
-import { useUserMe, useUserSession, useUserUsage } from '../data';
+import { isApiError, isNotFoundError, isUnauthorized } from '@shared/query/http';
+import { CompactNumber } from '@shared/components/CompactNumber';
+import {
+  formatCompact,
+  formatCreditsFromMilli,
+  formatCount,
+  type FormattedNumber,
+} from '@shared/utils/formatNumber';
+import {
+  useCheckin,
+  useCheckinStatus,
+  useUserMe,
+  useUserSession,
+  useUserUsage,
+  type CheckinResult,
+  type UserSummary,
+} from '../data';
 
-function number(value: number): string {
-  return value.toLocaleString();
+// Renders a balance with its exact milli-credit figure available on hover and
+// keyboard focus (and to assistive tech), so a rounded display value never
+// hides the precise amount. The display form is never a Number() conversion.
+function ExactMilliValue({ formatted, label }: { formatted: FormattedNumber; label: string }) {
+  const { t } = useTranslation();
+  const exact = t('user.home.exactMilli', { value: formatted.exact });
+  return (
+    <span className="compact-number" tabIndex={0} title={exact} aria-label={`${label} · ${exact}`}>
+      {formatted.display}
+    </span>
+  );
 }
 
 function SignedOutHome() {
@@ -45,6 +70,162 @@ function SignedOutHome() {
   );
 }
 
+// Server-projected economy state: both balances and the resolved level are
+// rendered exactly as the session reports them. The page computes nothing —
+// no eligibility, no thresholds, no post-delta balances.
+function EconomyCard({ user }: { user: UserSummary }) {
+  const { t } = useTranslation();
+  const credits = formatCreditsFromMilli(user.credits);
+  const donation = formatCreditsFromMilli(user.donation_credit);
+  const isManual = user.manual_level !== undefined;
+  return (
+    <Card>
+      <div className="card-title-row">
+        <h2>{t('user.home.economyTitle')}</h2>
+      </div>
+      <div className="metric-grid">
+        <div className="metric-card">
+          <p>{t('user.home.creditsBalance')}</p>
+          <strong className="metric-value">
+            <ExactMilliValue formatted={credits} label={t('user.home.creditsBalance')} />
+          </strong>
+        </div>
+        <div className="metric-card">
+          <p>{t('user.home.donationCredit')}</p>
+          <strong className="metric-value">
+            <ExactMilliValue formatted={donation} label={t('user.home.donationCredit')} />
+          </strong>
+        </div>
+        <div className="metric-card">
+          <p>{t('user.home.level')}</p>
+          <strong className="metric-value">
+            {t('user.home.levelValue', { level: user.effective_level })}
+            {isManual ? <span className="muted">{t('user.home.levelManualSuffix')}</span> : null}
+          </strong>
+        </div>
+      </div>
+      <p className="muted item-note">{t('user.home.levelHint')}</p>
+    </Card>
+  );
+}
+
+interface CheckinNotice {
+  text: string;
+  kind: 'status' | 'error';
+}
+
+// The daily check-in card. Availability, today's status, the award range and
+// the threshold all come from GET /api/checkin; the award is drawn and applied
+// server-side, and every refusal message is shown verbatim.
+function CheckinCard({ signedIn }: { signedIn: boolean }) {
+  const { t } = useTranslation();
+  const status = useCheckinStatus(signedIn);
+  const checkin = useCheckin();
+  const [result, setResult] = useState<CheckinResult | null>(null);
+  const [notice, setNotice] = useState<CheckinNotice | null>(null);
+
+  const submit = () => {
+    setNotice(null);
+    checkin.mutate(undefined, {
+      onSuccess: (data) => setResult(data),
+      onError: (error) => {
+        if (isApiError(error) && error.code === 'already_checked_in') {
+          // The day was already consumed: the status query refetch settles the
+          // card into the checked-in state.
+          setResult(null);
+          setNotice({ text: error.message, kind: 'status' });
+          return;
+        }
+        // feature_disabled / checkin_cap_reached / transport failures render
+        // as text; the server message is already bounded and cleaned.
+        setNotice({
+          text: isApiError(error) ? error.message : t('common.errorBody'),
+          kind: 'error',
+        });
+      },
+    });
+  };
+
+  let body: ReactNode;
+  if (status.isPending) {
+    body = <LoadingState />;
+  } else if (status.error) {
+    body = <ErrorState error={status.error} onRetry={() => void status.refetch()} />;
+  } else if (!status.data.enabled) {
+    // Neutral, speculation-free state: the server never reveals why.
+    body = <p className="inline-notice">{t('user.checkin.unavailable')}</p>;
+  } else {
+    const min = formatCreditsFromMilli(status.data.award_min_milli);
+    const max = formatCreditsFromMilli(status.data.award_max_milli);
+    const cap = formatCreditsFromMilli(status.data.credits_cap_milli);
+    const noThreshold = status.data.credits_cap_milli === '0';
+    body = (
+      <>
+        <dl className="detail-grid">
+          <div className="detail-row">
+            <dt>{t('user.checkin.today')}</dt>
+            <dd>
+              {status.data.checked_in_today ? (
+                <StatusBadge active label={t('user.checkin.checkedIn')} />
+              ) : (
+                <StatusBadge active={false} label={t('user.checkin.notCheckedIn')} />
+              )}
+            </dd>
+          </div>
+          <div className="detail-row">
+            <dt>{t('user.checkin.awardRange')}</dt>
+            <dd>
+              {min.display} – {max.display}
+            </dd>
+          </div>
+          <div className="detail-row">
+            <dt>{t('user.checkin.threshold')}</dt>
+            <dd>{noThreshold ? t('user.checkin.thresholdNone') : cap.display}</dd>
+          </div>
+        </dl>
+        <p className="muted item-note">{t('user.checkin.thresholdHint')}</p>
+        {!status.data.checked_in_today ? (
+          <div className="form-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={submit}
+              disabled={checkin.isPending}
+            >
+              {checkin.isPending ? t('common.working') : t('user.checkin.submit')}
+            </button>
+          </div>
+        ) : null}
+        {result ? (
+          <p className="inline-success" role="status">
+            {t('user.checkin.done', {
+              award: formatCreditsFromMilli(result.award_milli).display,
+              credits: formatCreditsFromMilli(result.credits).display,
+            })}
+          </p>
+        ) : null}
+        {notice ? (
+          <p
+            className={notice.kind === 'error' ? 'field-error' : 'inline-notice'}
+            role={notice.kind === 'error' ? 'alert' : 'status'}
+          >
+            {notice.text}
+          </p>
+        ) : null}
+      </>
+    );
+  }
+
+  return (
+    <Card>
+      <div className="card-title-row">
+        <h2>{t('user.checkin.title')}</h2>
+      </div>
+      {body}
+    </Card>
+  );
+}
+
 function HomeContent() {
   const { t } = useTranslation();
   const session = useUserSession();
@@ -79,22 +260,38 @@ function HomeContent() {
           <div className="metric-grid">
             <div className="metric-card">
               <p>{t('user.home.requests')}</p>
-              <strong className="metric-value">{number(usage.data.total_requests)}</strong>
+              <strong className="metric-value">{formatCount(usage.data.total_requests).display}</strong>
             </div>
             <div className="metric-card">
-              <p>{t('user.home.promptTokens')}</p>
-              <strong className="metric-value">{number(usage.data.total_prompt_tokens)}</strong>
+              <p>{t('common.tokens.input')}</p>
+              <strong className="metric-value">
+                <CompactNumber value={formatCompact(usage.data.total_prompt_tokens)} />
+              </strong>
             </div>
             <div className="metric-card">
-              <p>{t('user.home.completionTokens')}</p>
-              <strong className="metric-value">{number(usage.data.total_completion_tokens)}</strong>
+              <p>{t('common.tokens.output')}</p>
+              <strong className="metric-value">
+                <CompactNumber value={formatCompact(usage.data.total_completion_tokens)} />
+              </strong>
             </div>
             <div className="metric-card">
               <p>{t('user.home.unknownUsage')}</p>
-              <strong className="metric-value">{number(usage.data.total_unknown_usage_requests)}</strong>
+              <strong className="metric-value">
+                {formatCount(usage.data.total_unknown_usage_requests).display}
+              </strong>
             </div>
           </div>
         )}
+      </section>
+
+      <section aria-labelledby="user-economy-title">
+        <h2 id="user-economy-title" className="section-title">
+          {t('user.home.economySectionTitle')}
+        </h2>
+        <div className="split-grid">
+          <EconomyCard user={user} />
+          <CheckinCard signedIn />
+        </div>
       </section>
 
       <div className="split-grid">

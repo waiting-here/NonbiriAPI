@@ -1,20 +1,34 @@
 // Package logapi serves the request-log, usage, and overview API surface of
 // both stations:
 //
+//   - GET /api/logs                      (user session only; own rows)
+//   - GET /api/logs/options              (user session only; bounded model candidates)
 //   - GET /api/me/usage                  (user session only)
 //   - GET /admin/api/logs                (admin session only)
+//   - GET /admin/api/logs/export.csv     (admin session only; unpaginated export)
+//   - GET /admin/api/logs/export.json    (admin session only; unpaginated export)
 //   - GET /admin/api/usage               (admin session only)
 //   - GET /admin/api/overview/endpoints  (admin session only)
-//   - GET /admin/api/overview/models     (admin session only)
 //
 // Authorization is session-only by construction: a user-session principal can
-// read exactly its own usage; an admin-session principal the global metadata
-// projections. Caller keys, header-carried identities, and front-end
-// permissions never authorize a route here. Every query is parameterized and
-// pre-validated, page sizes are clamped, and responses are metadata only —
-// no request/response content, upstream secret, ciphertext, or unbounded raw
-// diagnostic is ever projected. Success and error responses carry no-store
-// through the shared httpmw.API / httperr boundary.
+// read exactly its own usage and log rows (ownership is part of the SQL); an
+// admin-session principal the global metadata projections. Caller keys,
+// header-carried identities, and front-end permissions never authorize a route
+// here. Every query is parameterized and pre-validated, page sizes are clamped
+// to [1,100], and responses are metadata only — no request/response content,
+// upstream secret, ciphertext, or unbounded raw diagnostic is ever projected.
+// Success and error responses carry no-store through the shared httpmw.API /
+// httperr boundary.
+//
+// Level-5 steward mount point (frozen prefix /api/steward/, logs subpath
+// StewardLogsPath): the authorization frame lives in internal/steward (a
+// user-station boundary, user-session middleware and a per-request live
+// effective-level >= 5 gate). The steward logs route is registered through
+// steward.Handler.Handle in main.go and serves db.QueryStewardRequestLogs —
+// the administrator log shape with the donor's endpoint key id, base URL and
+// upstream model id blanked on charity rows, so a level-5 steward sees the
+// minimal de-privacy full-site projection and never a donated resource. No
+// steward capability is reachable through the plain user-session routes.
 package logapi
 
 import (
@@ -33,6 +47,16 @@ type HandlerDeps struct {
 	Store *db.Store
 }
 
+// Steward route mount points for the level-5 co-management rail. The
+// authorization frame lives in internal/steward (per-request live level >= 5
+// gate). The steward logs route is registered through steward.Handler.Handle
+// on the user station (see main.go) and serves the steward de-privacy
+// projection (db.QueryStewardRequestLogs), which blanks donor resources on
+// charity rows and never carries a user-chosen platform model name or note.
+const (
+	StewardLogsPath = "/api/steward/logs"
+)
+
 // Handler is the mountable log/usage/overview route tree. It is safe to mount
 // on either station: each route family enforces its own station and principal
 // kind, so a single handler can be wrapped by both session middlewares at the
@@ -48,11 +72,14 @@ type Handler struct {
 // safe until the integration rail wires the repository.
 func NewHandler(deps HandlerDeps) http.Handler {
 	h := &Handler{store: deps.Store, mux: http.NewServeMux()}
+	h.mux.HandleFunc("GET /api/logs", h.userLogs)
+	h.mux.HandleFunc("GET /api/logs/options", h.userLogOptions)
 	h.mux.HandleFunc("GET /api/me/usage", h.userUsage)
 	h.mux.HandleFunc("GET /admin/api/logs", h.adminLogs)
+	h.mux.HandleFunc("GET /admin/api/logs/export.csv", h.adminExportCSV)
+	h.mux.HandleFunc("GET /admin/api/logs/export.json", h.adminExportJSON)
 	h.mux.HandleFunc("GET /admin/api/usage", h.adminUsage)
 	h.mux.HandleFunc("GET /admin/api/overview/endpoints", h.adminOverviewEndpoints)
-	h.mux.HandleFunc("GET /admin/api/overview/models", h.adminOverviewModels)
 	return httpmw.API(h.mux)
 }
 
@@ -120,22 +147,73 @@ func (h *Handler) userUsage(w http.ResponseWriter, r *http.Request) {
 	httperr.WriteJSON(w, http.StatusOK, usageTotalsResponse(totals))
 }
 
+// userLogs handles GET /api/logs: one bounded page of the authenticated
+// user's own metadata-only request-log rows, newest first. Ownership is part
+// of the SQL query (user_id = session principal), never a post-filter.
+func (h *Handler) userLogs(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeErr(w, httperr.New(httperr.CodeServiceUnavailable, "log service unavailable"))
+		return
+	}
+	user, ok := h.requireUserSession(w, r)
+	if !ok {
+		return
+	}
+	query, derr := parseUserLogsQuery(r)
+	if derr.Code != "" {
+		writeErr(w, derr)
+		return
+	}
+	logs, hasMore, err := h.store.QueryUserRequestLogs(r.Context(), user.ID, query)
+	if err != nil {
+		writeRepoErr(w, err)
+		return
+	}
+	httperr.WriteJSON(w, http.StatusOK, userListResponse(logs, hasMore))
+}
+
+// userLogOptions handles GET /api/logs/options: the bounded candidate list of
+// platform model names drawn from the caller's own retained logs (see
+// db.ListUserLogModelOptions for the frozen semantics). No filter parameter is
+// accepted; the list is small by construction.
+func (h *Handler) userLogOptions(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeErr(w, httperr.New(httperr.CodeServiceUnavailable, "log service unavailable"))
+		return
+	}
+	user, ok := h.requireUserSession(w, r)
+	if !ok {
+		return
+	}
+	if derr := parseLogOptionsQuery(r); derr.Code != "" {
+		writeErr(w, derr)
+		return
+	}
+	models, err := h.store.ListUserLogModelOptions(r.Context(), user.ID)
+	if err != nil {
+		writeRepoErr(w, err)
+		return
+	}
+	httperr.WriteJSON(w, http.StatusOK, logOptionsResp{Models: models})
+}
+
 // adminLogs handles GET /admin/api/logs: a bounded, offset-paginated page of
-// metadata-only request-log rows across all users, newest first.
+// metadata-only request-log rows across all users, newest first. The
+// projection never selects the user-chosen platform model name or any note.
 func (h *Handler) adminLogs(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
-		writeErr(w, httperr.New(httperr.CodeServiceUnavailable, "usage service unavailable"))
+		writeErr(w, httperr.New(httperr.CodeServiceUnavailable, "log service unavailable"))
 		return
 	}
 	if _, ok := h.requireAdminSession(w, r); !ok {
 		return
 	}
-	query, derr := parseLogQuery(r)
+	query, derr := parseAdminLogsQuery(r)
 	if derr.Code != "" {
 		writeErr(w, derr)
 		return
 	}
-	logs, hasMore, err := h.store.QueryRequestLogs(r.Context(), query)
+	logs, hasMore, err := h.store.QueryAdminRequestLogs(r.Context(), query)
 	if err != nil {
 		writeRepoErr(w, err)
 		return
@@ -177,9 +255,11 @@ func (h *Handler) adminUsage(w http.ResponseWriter, r *http.Request) {
 	httperr.WriteJSON(w, http.StatusOK, usageTotalsResponse(totals))
 }
 
-// adminOverviewEndpoints handles GET /admin/api/overview/endpoints: endpoint
-// metadata across all users plus live key counts. The projection never
-// selects or decrypts a key secret.
+// adminOverviewEndpoints handles GET /admin/api/overview/endpoints: endpoints
+// grouped by their stored canonical base_url with user/endpoint/key counts
+// and the per-user expandable entries, server-paginated with stable ordering.
+// The projection never selects or decrypts a key secret and never projects a
+// note, username, or Discord identifier.
 func (h *Handler) adminOverviewEndpoints(w http.ResponseWriter, r *http.Request) {
 	if h.store == nil {
 		writeErr(w, httperr.New(httperr.CodeServiceUnavailable, "usage service unavailable"))
@@ -188,38 +268,17 @@ func (h *Handler) adminOverviewEndpoints(w http.ResponseWriter, r *http.Request)
 	if _, ok := h.requireAdminSession(w, r); !ok {
 		return
 	}
-	if derr := rejectUnknownParams(r); derr.Code != "" {
+	query, derr := parseEndpointOverviewQuery(r)
+	if derr.Code != "" {
 		writeErr(w, derr)
 		return
 	}
-	eps, err := h.store.ListEndpointsOverview(r.Context())
+	groups, hasMore, err := h.store.ListEndpointOverviewGroups(r.Context(), query)
 	if err != nil {
 		writeRepoErr(w, err)
 		return
 	}
-	httperr.WriteJSON(w, http.StatusOK, endpointOverviewResponse(eps))
-}
-
-// adminOverviewModels handles GET /admin/api/overview/models: platform model
-// metadata across all users plus live binding counts.
-func (h *Handler) adminOverviewModels(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeErr(w, httperr.New(httperr.CodeServiceUnavailable, "usage service unavailable"))
-		return
-	}
-	if _, ok := h.requireAdminSession(w, r); !ok {
-		return
-	}
-	if derr := rejectUnknownParams(r); derr.Code != "" {
-		writeErr(w, derr)
-		return
-	}
-	models, err := h.store.ListModelsOverview(r.Context())
-	if err != nil {
-		writeRepoErr(w, err)
-		return
-	}
-	httperr.WriteJSON(w, http.StatusOK, modelOverviewResponse(models))
+	httperr.WriteJSON(w, http.StatusOK, endpointOverviewResponse(groups, hasMore))
 }
 
 // writeRepoErr maps repository failures to the stable envelope. These
