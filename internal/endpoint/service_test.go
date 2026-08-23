@@ -425,7 +425,6 @@ func TestEndpointCapMinOfGlobalAndUser(t *testing.T) {
 		{"user override below global", "5", intPtr(2), 2, 5, 2, 3},
 		{"global below user override", "5", intPtr(10), 5, 7, 5, 2},
 		{"user zero blocks endpoints", "5", intPtr(0), 0, 3, 0, 3},
-		{"negative user override ignored", "2", intPtr(-1), 2, 4, 2, 2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -21,10 +21,10 @@ type Store struct {
 	secrets secret.Codec
 }
 
-// Open opens (creating if necessary) the SQLite database at path, applies
-// pragmas, and bootstraps the schema idempotently. A non-nil secret Codec is
-// mandatory so no production Store can persist endpoint credentials without
-// an authenticated-encryption boundary.
+// Open classifies path as either completely fresh or current generation one.
+// Existing databases are validated from a private read-only snapshot before
+// SQLite is allowed to open the source path. No migration or repair is ever
+// attempted.
 func Open(path string, secrets secret.Codec) (*Store, error) {
 	if nilSecretCodec(secrets) {
 		return nil, fmt.Errorf("open database: secret codec is required")
@@ -32,93 +32,18 @@ func Open(path string, secrets secret.Codec) (*Store, error) {
 	if err := prepareDBDirectory(path); err != nil {
 		return nil, err
 	}
-	if err := validateDBPathShape(path); err != nil {
-		return nil, err
-	}
-	// Pre-check existing WAL/SHM sidecars before sql.Open/PRAGMA so SQLite
-	// cannot follow a malicious symlink or non-regular sidecar before
-	// secureDBFiles tightens permissions.
-	if err := validateDBSidecarPaths(path); err != nil {
-		return nil, err
-	}
-
-	d, err := sql.Open("sqlite", path)
-	if err != nil {
-		return nil, fmt.Errorf("open sqlite: %w", err)
-	}
-	// A single connection avoids per-request "database is locked" surprises.
-	// SQLite's write model is serial regardless; concurrency is gained over
-	// many goroutines sharing this one handle in WAL mode.
-	d.SetMaxOpenConns(1)
-
-	// foreign_keys=ON makes ON DELETE CASCADE genuine; without it the
-	// cascade invariants (endpoint -> endpoint_keys -> fetched_models /
-	// bindings, user -> everything) silently no-op. busy_timeout absorbs
-	// brief writer contention. WAL improves crash recovery and reads.
-	if _, err := d.Exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;`); err != nil {
-		_ = d.Close()
-		return nil, fmt.Errorf("apply pragmas: %w", err)
-	}
-
-	if _, err := d.Exec(schema); err != nil {
-		_ = d.Close()
-		return nil, fmt.Errorf("apply schema: %w", err)
-	}
-	if err := ensureUsersGuildColumns(d); err != nil {
-		_ = d.Close()
-		return nil, fmt.Errorf("migrate users guild columns: %w", err)
-	}
-	if err := ensureUsersTemporalBanColumns(d); err != nil {
-		_ = d.Close()
-		return nil, fmt.Errorf("migrate users temporal ban columns: %w", err)
-	}
-	if err := ensureUsageBucketColumns(d); err != nil {
-		_ = d.Close()
-		return nil, fmt.Errorf("migrate usage bucket columns: %w", err)
-	}
-	if err := ensureUsersEconomyColumns(d); err != nil {
-		_ = d.Close()
-		return nil, fmt.Errorf("migrate user economy columns: %w", err)
-	}
-	if err := ensureUsersLevelColumns(d); err != nil {
-		_ = d.Close()
-		return nil, fmt.Errorf("migrate user level columns: %w", err)
-	}
-
-	// Enforce owner-only permissions on the database file and its WAL/SHM
-	// sidecars after SQLite has created them. On Unix this chmod+fstat-verifies
-	// each file and fails closed when owner-only access cannot be guaranteed,
-	// so startup no longer depends on the process umask. On Windows this is a
-	// no-op; ACLs remain the operator's responsibility (see deployment docs).
-	if err := secureDBFiles(path); err != nil {
-		_ = d.Close()
-		return nil, err
-	}
-
-	return &Store{db: d, secrets: secrets}, nil
+	return openGenerationOne(path, secrets)
 }
 
-// prepareDBDirectory creates the database parent directory owner-only when the
-// path names a distinct directory, then verifies the actual parent directory
-// is owned by the current effective user and grants no group or other access.
-// The parent is resolved to an absolute path first, so the check covers the
-// current directory for a relative path and root for a root-level path, per the
-// implementation contract §8.5; the check is not skipped for either. A
-// permissive parent fails closed rather than relying on the process umask. A
-// new directory is created 0700, which no umask can widen with group or other
-// bits (0700 only carries owner bits).
+// prepareDBDirectory creates a distinct missing parent owner-only and then
+// applies the existing canonical owner/mode gate to the resolved parent.
 func prepareDBDirectory(path string) error {
 	dir := filepath.Dir(path)
-	// Only create a distinct directory; the current directory (a relative
-	// path's parent) and root already exist and must not be created here.
 	if dir != "." && dir != "" && dir != string(filepath.Separator) {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return fmt.Errorf("create database directory: %w", err)
 		}
 	}
-	// Resolve the actual parent to an absolute path so the ownership/mode
-	// check covers the current directory for a relative path and root for a
-	// root-level path, rather than skipping either as the old behavior did.
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
 		return fmt.Errorf("resolve database directory: %w", err)
@@ -126,11 +51,6 @@ func prepareDBDirectory(path string) error {
 	return secureDBParentDir(absDir)
 }
 
-// requireRegularDBPath rejects an existing path that is a symlink or a
-// non-regular file; a path that does not yet exist is allowed. A symlink is
-// refused rather than followed, so neither SQLite nor a later chmod can land
-// on an unrelated target (the contract forbids following a symlink to chmod
-// its target).
 func requireRegularDBPath(path, role string) error {
 	info, err := os.Lstat(path)
 	if err != nil {
@@ -139,258 +59,11 @@ func requireRegularDBPath(path, role string) error {
 		}
 		return fmt.Errorf("inspect %s: %w", role, err)
 	}
-	mode := info.Mode()
-	if mode&os.ModeSymlink != 0 {
+	if info.Mode()&os.ModeSymlink != 0 {
 		return fmt.Errorf("%s must not be a symlink", role)
 	}
-	if !mode.IsRegular() {
+	if !info.Mode().IsRegular() {
 		return fmt.Errorf("%s must be a regular file", role)
-	}
-	return nil
-}
-
-// validateDBPathShape rejects a configured database path that already exists
-// as a symlink or non-regular file. A symlink at the database path is refused
-// rather than followed, so a later chmod can never land on an unrelated target
-// (the contract forbids following a symlink to chmod its target). A path that
-// does not yet exist is allowed; SQLite creates it.
-func validateDBPathShape(path string) error {
-	return requireRegularDBPath(path, "database file")
-}
-
-// validateDBSidecarPaths rejects an existing WAL/SHM sidecar that is a symlink
-// or non-regular file. This pre-check runs before sql.Open/PRAGMA so SQLite
-// cannot follow a malicious sidecar before secureDBFiles tightens permissions.
-// Sidecars that do not yet exist are allowed; SQLite creates them, and
-// secureDBFiles chmod+fstat-verifies them afterwards (on Unix).
-func validateDBSidecarPaths(path string) error {
-	if err := requireRegularDBPath(path+"-wal", "wal file"); err != nil {
-		return err
-	}
-	return requireRegularDBPath(path+"-shm", "shm file")
-}
-
-// ensureUsersGuildColumns adds guild_nick and guild_avatar_url to a users
-// table created before they existed. CREATE TABLE IF NOT EXISTS does not
-// alter an existing table, so an alpha database on an earlier schema is
-// migrated in place. The PRAGMA check makes it idempotent.
-func ensureUsersGuildColumns(d *sql.DB) error {
-	rows, err := d.Query(`PRAGMA table_info(users)`)
-	if err != nil {
-		return err
-	}
-	hasGuildNick := false
-	hasGuildAvatarURL := false
-	for rows.Next() {
-		var cid int
-		var name, ctype string
-		var notnull, pk int
-		var dflt sql.NullString
-		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
-			rows.Close()
-			return err
-		}
-		switch name {
-		case "guild_nick":
-			hasGuildNick = true
-		case "guild_avatar_url":
-			hasGuildAvatarURL = true
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	if !hasGuildNick {
-		if _, err := d.Exec(`ALTER TABLE users ADD COLUMN guild_nick TEXT NOT NULL DEFAULT ''`); err != nil {
-			return err
-		}
-	}
-	if !hasGuildAvatarURL {
-		if _, err := d.Exec(`ALTER TABLE users ADD COLUMN guild_avatar_url TEXT NOT NULL DEFAULT ''`); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// ensureUsersTemporalBanColumns adds the temporal ban/suspension columns to a
-// users table created before they existed. CREATE TABLE IF NOT EXISTS does not
-// alter an existing table, so an earlier database is migrated in place. The
-// PRAGMA check makes it idempotent. Existing rows receive the neutral defaults:
-// no deadline (permanent semantics never apply while is_banned=0), auto_banned=0.
-// ensureUsageBucketColumns adds the neutral four-bucket token columns to the
-// users and request_logs tables created before they existed, then backfills
-// historical rows. CREATE TABLE IF NOT EXISTS does not alter an existing
-// table, so an earlier database is migrated in place; the PRAGMA check makes
-// it idempotent.
-//
-// Backfill rule (run once per row by construction): a historical row predates
-// cache-aware collection and carries no cache split, so its legacy prompt
-// total is provisionally recorded as uncached input and its legacy completion
-// total as output, with both cache buckets left at zero. This projection is
-// deliberately conservative and is NEVER valid for retroactive billing of
-// cache-differentiated pricing. The predicate (all four buckets still zero)
-// cannot double-apply: after backfill any row with recorded usage has a
-// non-zero bucket, and an all-zero row is only ever rewritten with zeros.
-func ensureUsageBucketColumns(d *sql.DB) error {
-	userSpecs := []columnSpec{
-		{"total_uncached_input_tokens", `ALTER TABLE users ADD COLUMN total_uncached_input_tokens INTEGER NOT NULL DEFAULT 0`},
-		{"total_cache_write_input_tokens", `ALTER TABLE users ADD COLUMN total_cache_write_input_tokens INTEGER NOT NULL DEFAULT 0`},
-		{"total_cache_read_input_tokens", `ALTER TABLE users ADD COLUMN total_cache_read_input_tokens INTEGER NOT NULL DEFAULT 0`},
-		{"total_output_tokens", `ALTER TABLE users ADD COLUMN total_output_tokens INTEGER NOT NULL DEFAULT 0`},
-	}
-	if err := ensureColumns(d, "users", userSpecs); err != nil {
-		return err
-	}
-	logSpecs := []columnSpec{
-		{"route_kind", `ALTER TABLE request_logs ADD COLUMN route_kind TEXT NOT NULL DEFAULT 'personal'`},
-		{"endpoint_base_url", `ALTER TABLE request_logs ADD COLUMN endpoint_base_url TEXT NOT NULL DEFAULT ''`},
-		{"uncached_input_tokens", `ALTER TABLE request_logs ADD COLUMN uncached_input_tokens INTEGER NOT NULL DEFAULT 0`},
-		{"cache_write_input_tokens", `ALTER TABLE request_logs ADD COLUMN cache_write_input_tokens INTEGER NOT NULL DEFAULT 0`},
-		{"cache_read_input_tokens", `ALTER TABLE request_logs ADD COLUMN cache_read_input_tokens INTEGER NOT NULL DEFAULT 0`},
-		{"output_tokens", `ALTER TABLE request_logs ADD COLUMN output_tokens INTEGER NOT NULL DEFAULT 0`},
-		{"error_source", `ALTER TABLE request_logs ADD COLUMN error_source TEXT NOT NULL DEFAULT 'platform'`},
-		{"charity_reservation_id", `ALTER TABLE request_logs ADD COLUMN charity_reservation_id INTEGER`},
-		{"original_charge", `ALTER TABLE request_logs ADD COLUMN original_charge INTEGER NOT NULL DEFAULT 0`},
-		{"user_charge", `ALTER TABLE request_logs ADD COLUMN user_charge INTEGER NOT NULL DEFAULT 0`},
-		{"donor_reward", `ALTER TABLE request_logs ADD COLUMN donor_reward INTEGER NOT NULL DEFAULT 0`},
-	}
-	if err := ensureColumns(d, "request_logs", logSpecs); err != nil {
-		return err
-	}
-	// Historical users rows: legacy prompt/completion totals become the
-	// uncached/output buckets; cache buckets stay zero (no historical split).
-	if _, err := d.Exec(`
-UPDATE users SET
-	total_uncached_input_tokens = total_prompt_tokens,
-	total_output_tokens         = total_completion_tokens
-WHERE total_uncached_input_tokens = 0
-  AND total_cache_write_input_tokens = 0
-  AND total_cache_read_input_tokens  = 0
-  AND total_output_tokens            = 0`); err != nil {
-		return fmt.Errorf("backfill users usage buckets: %w", err)
-	}
-	// Historical request_logs rows: same conservative projection.
-	if _, err := d.Exec(`
-UPDATE request_logs SET
-	uncached_input_tokens = prompt_tokens,
-	output_tokens         = completion_tokens
-WHERE uncached_input_tokens    = 0
-  AND cache_write_input_tokens = 0
-  AND cache_read_input_tokens  = 0
-  AND output_tokens            = 0`); err != nil {
-		return fmt.Errorf("backfill request_logs usage buckets: %w", err)
-	}
-	return nil
-}
-
-// columnSpec names one column and the ALTER TABLE statement that adds it.
-type columnSpec struct {
-	name string
-	sql  string
-}
-
-// ensureUsersEconomyColumns adds the signed consumption balance and the
-// cumulative donor-reward balance to a users table created before they
-// existed. CREATE TABLE IF NOT EXISTS does not alter an existing table, so an
-// earlier database is migrated in place; the PRAGMA check makes it idempotent.
-// Existing rows receive 0 for both balances. credits deliberately carries no
-// non-negative CHECK (the frozen contract allows a negative balance after an
-// over-reservation settles or an administrator-configured penalty lands);
-// donation_credit's non-negativity is enforced at the application layer.
-func ensureUsersEconomyColumns(d *sql.DB) error {
-	specs := []columnSpec{
-		{"credits", `ALTER TABLE users ADD COLUMN credits INTEGER NOT NULL DEFAULT 0`},
-		{"donation_credit", `ALTER TABLE users ADD COLUMN donation_credit INTEGER NOT NULL DEFAULT 0`},
-	}
-	return ensureColumns(d, "users", specs)
-}
-
-// ensureUsersLevelColumns adds the manual level override and the automatic
-// level high-water mark to a users table created before they existed. CREATE
-// TABLE IF NOT EXISTS does not alter an existing table, so an earlier database
-// is migrated in place; the PRAGMA check makes it idempotent. Existing rows
-// receive the neutral defaults: level NULL (automatic) and auto_level 1, so
-// nobody gains or loses a capability through the migration itself.
-func ensureUsersLevelColumns(d *sql.DB) error {
-	specs := []columnSpec{
-		{"level", `ALTER TABLE users ADD COLUMN level INTEGER`},
-		{"auto_level", `ALTER TABLE users ADD COLUMN auto_level INTEGER NOT NULL DEFAULT 1`},
-	}
-	return ensureColumns(d, "users", specs)
-}
-
-// ensureColumns adds each missing column of table according to specs, using
-// PRAGMA table_info for idempotence.
-func ensureColumns(d *sql.DB, table string, specs []columnSpec) error {
-	rows, err := d.Query(fmt.Sprintf(`PRAGMA table_info(%s)`, table)) // #nosec G201 -- table is a compile-time constant at every call site
-	if err != nil {
-		return err
-	}
-	present := make(map[string]bool)
-	for rows.Next() {
-		var cid int
-		var name, ctype string
-		var notnull, pk int
-		var dflt sql.NullString
-		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
-			rows.Close()
-			return err
-		}
-		present[name] = true
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return err
-	}
-	rows.Close()
-	for _, spec := range specs {
-		if present[spec.name] {
-			continue
-		}
-		if _, err := d.Exec(spec.sql); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func ensureUsersTemporalBanColumns(d *sql.DB) error {
-	specs := []struct {
-		name string
-		sql  string
-	}{
-		{"banned_until", `ALTER TABLE users ADD COLUMN banned_until INTEGER`},
-		{"auto_banned", `ALTER TABLE users ADD COLUMN auto_banned INTEGER NOT NULL DEFAULT 0`},
-		{"charity_suspended_until", `ALTER TABLE users ADD COLUMN charity_suspended_until INTEGER`},
-	}
-	rows, err := d.Query(`PRAGMA table_info(users)`)
-	if err != nil {
-		return err
-	}
-	present := make(map[string]bool)
-	for rows.Next() {
-		var cid int
-		var name, ctype string
-		var notnull, pk int
-		var dflt sql.NullString
-		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
-			rows.Close()
-			return err
-		}
-		present[name] = true
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	rows.Close()
-	for _, spec := range specs {
-		if present[spec.name] {
-			continue
-		}
-		if _, err := d.Exec(spec.sql); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -408,9 +81,9 @@ func nilSecretCodec(codec secret.Codec) bool {
 	}
 }
 
-// DB returns the underlying handle for use by later rails' typed repositories.
+// DB returns the underlying handle for typed repositories.
 func (s *Store) DB() *sql.DB { return s.db }
 
-// Close closes the database handle. The caller remains responsible for
-// closing the injected secret Vault after database users have stopped.
+// Close closes the database handle. The injected secret codec remains owned
+// by the caller.
 func (s *Store) Close() error { return s.db.Close() }

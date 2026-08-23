@@ -18,8 +18,7 @@ BEGIN
 END;`
 
 func TestCreateEndpointKeyCommitFailureLeavesNoPlaceholder(t *testing.T) {
-	vault := migrationVault(t)
-	store := openMigrationStore(t, filepath.Join(t.TempDir(), "create-commit.db"), vault)
+	store := openTestStore(t, filepath.Join(t.TempDir(), "create-commit.db"))
 	defer store.Close()
 	userID := seedTestUser(t, store, "create-commit-owner", nil)
 	endpoint := mustCreateTestEndpoint(t, store, userID, "https://create-commit.example/v1")
@@ -45,35 +44,5 @@ func TestCreateEndpointKeyCommitFailureLeavesNoPlaceholder(t *testing.T) {
 	}
 	if keys != 0 || guards != 0 {
 		t.Fatalf("failed commit left keys=%d deferred_rows=%d", keys, guards)
-	}
-}
-
-func TestEndpointCredentialMigrationCommitFailureRollsBackBatch(t *testing.T) {
-	vault := migrationVault(t)
-	store := openMigrationStore(t, filepath.Join(t.TempDir(), "migration-commit.db"), vault)
-	defer store.Close()
-	userID := seedTestUser(t, store, "migration-commit-owner", nil)
-	endpoint := mustCreateTestEndpoint(t, store, userID, "https://migration-commit.example/v1")
-	firstID, firstBefore := insertLegacyEndpointKey(t, store, vault, endpoint.ID, "migration-commit-first")
-	secondID, secondBefore := insertLegacyEndpointKey(t, store, vault, endpoint.ID, "migration-commit-second")
-	if _, err := store.DB().Exec(deferredCredentialFailureSchema); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := store.MigrateEndpointKeyEnvelopes(context.Background()); err != ErrEndpointCredentialMigration {
-		t.Fatalf("migration commit error=%v", err)
-	}
-	if got := storedEndpointCiphertext(t, store, firstID); got != firstBefore {
-		t.Fatal("commit failure left first row migrated")
-	}
-	if got := storedEndpointCiphertext(t, store, secondID); got != secondBefore {
-		t.Fatal("commit failure left second row migrated")
-	}
-	var guards int
-	if err := store.DB().QueryRow(`SELECT COUNT(*) FROM deferred_credential_guard`).Scan(&guards); err != nil {
-		t.Fatal(err)
-	}
-	if guards != 0 {
-		t.Fatalf("commit failure left %d deferred rows", guards)
 	}
 }

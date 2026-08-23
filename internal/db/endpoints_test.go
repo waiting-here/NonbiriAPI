@@ -177,14 +177,9 @@ func TestEndpointCapReadsMinOfGlobalAndUser(t *testing.T) {
 		t.Errorf("zero override cap = %d, want 0", cap)
 	}
 
-	// Negative override is treated as unset (global default).
-	uid5 := seedTestUser(t, st, "u5", intPtrDB(-1))
-	cap, err = st.EndpointCap(context.Background(), uid5)
-	if err != nil {
-		t.Fatalf("cap user5: %v", err)
-	}
-	if cap != 4 {
-		t.Errorf("negative override cap = %d, want 4 (global, negative ignored)", cap)
+	// Generation one refuses a negative explicit override at the DB boundary.
+	if _, err := st.DB().Exec(`INSERT INTO users (discord_id, username, endpoint_limit, created_at, updated_at) VALUES ('u5','u5',-1,1,1)`); err == nil {
+		t.Fatal("negative endpoint override passed the schema CHECK")
 	}
 }
 
