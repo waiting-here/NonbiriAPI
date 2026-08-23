@@ -30,5 +30,33 @@ export default tseslint.config(
       globals: globals.node,
     },
   },
+  {
+    files: ['playwright.config.ts', 'vitest.config.ts', 'test/e2e/**/*.ts'],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+    },
+  },
+  {
+    files: ['test/e2e/**/*.spec.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@playwright/test',
+              message:
+                'Import test and expect from ./test so the context network boundary is automatic.',
+            },
+            {
+              name: 'playwright/test',
+              message:
+                'Import test and expect from ./test so the context network boundary is automatic.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   prettier,
 );

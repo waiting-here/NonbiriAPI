@@ -41,12 +41,16 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 22.22.0
+          node-version: 22.22.2
           cache: npm
           cache-dependency-path: web/package-lock.json
+      - name: Pin npm
+        run: |
+          npm install --global npm@12.0.1
+          test "$(npm --version)" = "12.0.1"
       - name: Install dependencies
         run: npm ci
-      - name: Economy tests
+      - name: Unit tests
         run: npm test
       - name: Typecheck
         run: npm run typecheck
@@ -54,3 +58,11 @@ jobs:
         run: npm run lint
       - name: Build both stations
         run: npm run build
+      - name: Verify generated notices
+        run: git diff --exit-code -- THIRD_PARTY_NOTICES.md
+      - name: Install Chromium
+        run: npm exec -- playwright install --with-deps chromium
+      - name: Browser smoke
+        env:
+          PLAYWRIGHT_HTML_OPEN: never
+        run: npm run test:e2e
