@@ -26,7 +26,6 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	"github.com/waiting-here/NonbiriAPI/internal/checkin"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
-	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
@@ -281,10 +280,6 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		Repo: store, URLs: stack, Connectors: registry, Hook: modelFetcher,
 	})
 	modelService := model.NewService(store)
-	openAIAdapter, err := openai.NewAdapter(openai.AdapterConfig{Backend: localBackend})
-	if err != nil {
-		return nil, fmt.Errorf("openai adapter: %w", err)
-	}
 	safetyIdentifierKey, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
 	if err != nil {
 		return nil, fmt.Errorf("safety identifier subkey: %w", err)
@@ -302,7 +297,7 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		CharityTargets:    store,
 		Secrets:           vault,
 		Registry:          registry,
-		Adapters:          []forward.Adapter{openAIAdapter},
+		Backend:           localBackend,
 		SafetyIdentifiers: safetyIdentifierFactory,
 	})
 	if err != nil {

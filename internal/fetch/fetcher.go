@@ -1,19 +1,17 @@
 package fetch
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"reflect"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
@@ -38,9 +36,6 @@ const (
 	// maxIssueDiagBytes bounds the upstream-derived fragment that may appear
 	// in a user issue message after the shared diagnostic boundary.
 	maxIssueDiagBytes = 512
-	// maxErrorBodyDiagBytes bounds how much of an upstream error response
-	// body is read for a diagnostic.
-	maxErrorBodyDiagBytes = 4 << 10
 )
 
 // FetcherConfig wires a Fetcher. Store, Backend, Secrets, and Registry are
@@ -258,13 +253,27 @@ func (f *Fetcher) fetchOne(ctx context.Context, userID, endpointID, keyID int64)
 		return nil // disabled combos never fetch, never flag, never issue.
 	}
 
-	// The connector registry is the single authority: only registry-confirmed
-	// OpenAI-compatible endpoints are fetched. This is defensive (unknown
-	// types are rejected at endpoint creation), but a registry regression must
-	// not silently fetch under a different protocol.
-	if f.registry == nil || !f.registry.Supported(endpoint.ConnectorOpenAICompatible) ||
-		state.ConnectorType != string(endpoint.ConnectorOpenAICompatible) {
+	// The connector registry is the single authority for both type admission
+	// and discovery capability. Unknown persisted types fail closed; a known
+	// type with no discoverer is a stable unsupported state, not a failed
+	// OpenAI fallback.
+	if f.registry == nil {
 		f.recordFailure(ctx, userID, endpointID, keyID, "connector type is not supported for model fetch")
+		return nil
+	}
+	connectorType, err := f.registry.MustValidate(endpoint.ConnectorType(state.ConnectorType))
+	if err != nil {
+		f.recordFailure(ctx, userID, endpointID, keyID, "connector type is not supported for model fetch")
+		return nil
+	}
+	descriptor, ok := f.registry.Descriptor(connectorType)
+	if !ok {
+		f.recordFailure(ctx, userID, endpointID, keyID, "connector type is not supported for model fetch")
+		return nil
+	}
+	// A nil discoverer is a stable unsupported capability, not an upstream
+	// failure. Do not clear a previously valid cache or flag the endpoint.
+	if descriptor.Discoverer == nil {
 		return nil
 	}
 
@@ -301,23 +310,28 @@ func (f *Fetcher) fetchOne(ctx context.Context, userID, endpointID, keyID int64)
 	}
 	defer clear(plaintext)
 
-	models, diag := f.fetchUpstream(ctx, state.BaseURL, plaintext)
+	discovery := descriptor.Discoverer.Discover(ctx, connectorcontract.DiscoveryInput{
+		Backend:    f.backend,
+		Target:     connectorcontract.NewTarget(connectorType, state.BaseURL, ""),
+		Credential: connectorcontract.NewShortLivedSecret(plaintext, nil),
+	})
 	// The bearer material is no longer needed once the egress call returns;
 	// clear the slice before parsing diagnostics or writing the cache. The
 	// defer remains as a panic/error-path backstop.
 	clear(plaintext)
-	if diag != "" {
+	discovery.Diagnostic = diagnostic.BoundTo(discovery.Diagnostic, maxIssueDiagBytes)
+	if discovery.Diagnostic != "" {
 		// A cancelled fetch (pool shutdown / parent cancellation) is not an
 		// upstream failure: it must not flag the endpoint or spam the issue
 		// center with "context canceled" noise.
 		if ctx.Err() == nil {
-			f.recordFailure(ctx, userID, endpointID, keyID, diag)
+			f.recordFailure(ctx, userID, endpointID, keyID, discovery.Diagnostic)
 		}
 		return nil
 	}
 
-	rows := make([]db.FetchedModel, 0, len(models))
-	for _, m := range models {
+	rows := make([]db.FetchedModel, 0, len(discovery.Models))
+	for _, m := range discovery.Models {
 		rows = append(rows, db.FetchedModel{
 			EndpointKeyID:   keyID,
 			UpstreamModelID: m.ID,
@@ -332,85 +346,6 @@ func (f *Fetcher) fetchOne(ctx context.Context, userID, endpointID, keyID int64)
 		return fmt.Errorf("replace fetched models: %w", err)
 	}
 	return nil
-}
-
-// fetchUpstream dials the upstream through the shared egress Stack, enforces
-// the protocol, and parses the model list. On any failure it returns a
-// non-empty bounded diagnostic (never the URL, key, or full body); on success
-// it returns the validated models and an empty diagnostic.
-func (f *Fetcher) fetchUpstream(ctx context.Context, baseURL string, keyPlaintext []byte) ([]Model, string) {
-	client, err := f.backend.Open(baseURL)
-	if err != nil {
-		return nil, boundedDiag("egress client unavailable", err.Error())
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, joinModelsURL(baseURL), nil)
-	if err != nil {
-		return nil, boundedDiag("upstream request could not be built", err.Error())
-	}
-	req.Header.Set("Authorization", "Bearer "+string(keyPlaintext))
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, boundedDiag("upstream request failed", err.Error())
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode < http.StatusOK || resp.StatusCode > 299 {
-		bodyDiag := readErrorBodyDiag(resp.Body)
-		// Upstream error bodies are the sanctioned place for bounded upstream
-		// text, but never for the credential: some upstreams echo the
-		// Authorization value back in error bodies, so a fragment containing
-		// the key bytes is withheld entirely.
-		if bytes.Contains([]byte(bodyDiag), keyPlaintext) {
-			bodyDiag = ""
-		}
-		return nil, boundedDiag(fmt.Sprintf("upstream returned status %d", resp.StatusCode), bodyDiag)
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxModelsBodyBytes+1))
-	if err != nil {
-		return nil, boundedDiag("upstream response could not be read", err.Error())
-	}
-	if len(body) > MaxModelsBodyBytes {
-		return nil, boundedDiag(errTruncatedBody.Error(), "")
-	}
-	models, err := parseModels(body)
-	if err != nil {
-		return nil, boundedDiag("invalid upstream models response", err.Error())
-	}
-	return models, ""
-}
-
-// readErrorBodyDiag reads at most maxErrorBodyDiagBytes of an upstream error
-// body so a diagnostic fragment can be surfaced; the fragment is bounded and
-// sanitized by the caller.
-func readErrorBodyDiag(r io.Reader) string {
-	chunk, err := io.ReadAll(io.LimitReader(r, maxErrorBodyDiagBytes))
-	if err != nil {
-		return ""
-	}
-	return string(chunk)
-}
-
-// boundedDiag folds stable and upstream-derived text through the shared
-// diagnostic boundary (maxIssueDiagBytes) so the result is valid UTF-8,
-// single-line, and bounded. Empty input yields an empty string.
-func boundedDiag(parts ...string) string {
-	joined := ""
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-		if joined == "" {
-			joined = p
-		} else {
-			joined += " " + p
-		}
-	}
-	return diagnostic.BoundTo(joined, maxIssueDiagBytes)
 }
 
 // recordFailure writes the failure atomically: combo cache cleared, endpoint
@@ -434,7 +369,7 @@ func (f *Fetcher) recordFailure(ctx context.Context, userID, endpointID, keyID i
 // ending in /v1 never becomes /v1/v1/models. Callers must supply the version
 // segment as part of the endpoint base URL.
 func joinModelsURL(baseURL string) string {
-	return strings.TrimSuffix(baseURL, "/") + "/models"
+	return openai.ModelsURL(baseURL)
 }
 
 // nilCodec mirrors the db package's nil-interface check so a typed-nil

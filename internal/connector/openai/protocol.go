@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"unicode/utf8"
+
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
 
 const (
@@ -37,13 +39,7 @@ var (
 // sub-items are non-negative and their checked sum never exceeds the prompt
 // total. Present distinguishes an omitted or null usage object (and a
 // malformed one, which degrades to unknown) from a real all-zero usage object.
-type Usage struct {
-	UncachedInputTokens   int64
-	CacheWriteInputTokens int64
-	CacheReadInputTokens  int64
-	OutputTokens          int64
-	Present               bool
-}
+type Usage = connectorcontract.Usage
 
 func validateCompletion(body []byte) (Usage, error) {
 	fields, err := decodeJSONObject(body, maxProtocolFields)

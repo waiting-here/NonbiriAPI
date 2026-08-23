@@ -414,8 +414,10 @@ func TestAuditForwardSilentRetryFailoverOrdered(t *testing.T) {
 
 func TestAuditForwardFailoverSameOriginDifferentPathsKeepsSafetyIdentifier(t *testing.T) {
 	safetyIDs := make(chan string, 2)
+	requestBodies := make(chan string, 2)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		requestBodies <- string(body)
 		var payload struct {
 			Safety string `json:"safety_identifier"`
 		}
@@ -440,6 +442,10 @@ func TestAuditForwardFailoverSameOriginDifferentPathsKeepsSafetyIdentifier(t *te
 	firstSafety, secondSafety := <-safetyIDs, <-safetyIDs
 	if firstSafety == "" || firstSafety != secondSafety || !strings.HasPrefix(firstSafety, "nbu_v3_") {
 		t.Fatalf("same-origin path failover identifiers=%q,%q", firstSafety, secondSafety)
+	}
+	firstBody, secondBody := <-requestBodies, <-requestBodies
+	if firstBody != secondBody {
+		t.Fatalf("attempt request snapshot drifted across failover:\nfirst=%s\nsecond=%s", firstBody, secondBody)
 	}
 }
 

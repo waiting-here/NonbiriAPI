@@ -8,6 +8,39 @@ import (
 	"testing"
 )
 
+func TestChatRequestCloneForAttemptIsIndependent(t *testing.T) {
+	original, err := DecodeChatRequest(strings.NewReader(`{"model":"public/model","messages":[{"role":"user","content":"hello"}],"stream":true}`), MaxRequestBodyBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer original.Clear()
+	first := original.CloneForAttempt()
+	second := original.CloneForAttempt()
+	if first == nil || second == nil {
+		t.Fatal("attempt clone was nil")
+	}
+	firstBody, err := first.marshalUpstream("upstream/model", "safety_identifier_value")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(firstBody)
+	first.Clear()
+	secondBody, err := second.marshalUpstream("upstream/model", "safety_identifier_value")
+	if err != nil {
+		t.Fatalf("second clone changed after first clear: %v", err)
+	}
+	defer clear(secondBody)
+	originalBody, err := original.marshalUpstream("upstream/model", "safety_identifier_value")
+	if err != nil {
+		t.Fatalf("original changed after clone clear: %v", err)
+	}
+	defer clear(originalBody)
+	if !bytes.Equal(firstBody, secondBody) || !bytes.Equal(firstBody, originalBody) {
+		t.Fatalf("attempt snapshots drifted:\nfirst=%s\nsecond=%s\noriginal=%s", firstBody, secondBody, originalBody)
+	}
+	second.Clear()
+}
+
 func TestDecodeChatRequestPassesUnknownAndOverridesAuthorityFields(t *testing.T) {
 	request, err := DecodeChatRequest(strings.NewReader(`{
 		"model":"platform/provider/model",

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
@@ -40,7 +41,7 @@ func CallerIdentity(request *http.Request) (int64, error) {
 // charity rail and a charity model can never enter the personal one.
 type CharityRail interface {
 	ListCallerModels(ctx context.Context) ([]db.CallerModel, error)
-	Forward(ctx context.Context, writer http.ResponseWriter, userID int64, request *openai.ChatRequest) (openai.AttemptResult, error)
+	Forward(ctx context.Context, writer http.ResponseWriter, userID int64, request *openai.ChatRequest) (connectorcontract.AttemptResult, error)
 }
 
 // Charity control-flow sentinels returned by CharityRail.Forward and mapped by
@@ -218,11 +219,11 @@ func (h *Handler) chatCompletions(writer http.ResponseWriter, request *http.Requ
 		}
 		return
 	}
-	if result.Success || result.Committed || result.SinkFailed || result.Failure == openai.FailureCanceled || request.Context().Err() != nil {
+	if result.Success || result.Committed || result.SinkFailed || result.Failure == connectorcontract.FailureCanceled || request.Context().Err() != nil {
 		return
 	}
 	switch result.Failure {
-	case openai.FailureUpstream:
+	case connectorcontract.FailureUpstream:
 		writeError(writer, httperr.CodeUpstream, "upstream request failed", result.Diagnostic)
 	default:
 		writeError(writer, httperr.CodeInternal, "internal error", "")
@@ -259,11 +260,11 @@ func (h *Handler) charityChat(writer http.ResponseWriter, request *http.Request,
 		}
 		return
 	}
-	if result.Success || result.Committed || result.SinkFailed || result.Failure == openai.FailureCanceled || request.Context().Err() != nil {
+	if result.Success || result.Committed || result.SinkFailed || result.Failure == connectorcontract.FailureCanceled || request.Context().Err() != nil {
 		return
 	}
 	switch result.Failure {
-	case openai.FailureUpstream:
+	case connectorcontract.FailureUpstream:
 		writeError(writer, httperr.CodeUpstream, "upstream request failed", result.Diagnostic)
 	default:
 		writeError(writer, httperr.CodeInternal, "internal error", "")

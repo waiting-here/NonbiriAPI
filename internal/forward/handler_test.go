@@ -145,10 +145,7 @@ func newForwardFixtureCfg(t *testing.T, allowed []string, hooks Hooks, selector 
 		t.Fatal(err)
 	}
 	registry := endpoint.NewRegistry()
-	adapter, err := openai.NewAdapter(openai.AdapterConfig{Backend: mustLocalBackend(t, stack)})
-	if err != nil {
-		t.Fatal(err)
-	}
+	localBackend := mustLocalBackend(t, stack)
 	safetyIdentifierKey := derivedSafetyIdentifierKey(t, vault)
 	safetyIdentifierFactory, err := NewSafetyIdentifierFactory(safetyIdentifierKey)
 	clear(safetyIdentifierKey)
@@ -159,7 +156,7 @@ func newForwardFixtureCfg(t *testing.T, allowed []string, hooks Hooks, selector 
 		Repository:        store,
 		Secrets:           codec,
 		Registry:          registry,
-		Adapters:          []Adapter{adapter},
+		Backend:           localBackend,
 		SafetyIdentifiers: safetyIdentifierFactory,
 	})
 	if err != nil {
