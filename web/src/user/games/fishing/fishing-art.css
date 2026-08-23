@@ -1,0 +1,265 @@
+.fishing-art {
+  --fishing-art-outline: var(--nb-color-text);
+  --fishing-art-water: var(--nb-color-accent);
+  --fishing-art-body: var(--nb-color-surface-alt);
+  --fishing-art-fin: var(--nb-color-border-strong);
+  --fishing-art-pattern: var(--nb-color-text-muted);
+  --fishing-art-object: var(--nb-color-text-muted);
+  --fishing-art-treasure: var(--nb-color-warning);
+  display: inline-grid;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  justify-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  color: var(--nb-color-text);
+}
+
+.fishing-art__canvas {
+  display: block;
+  inline-size: min(100%, 10rem);
+  block-size: auto;
+  aspect-ratio: 5 / 3;
+  overflow: visible;
+}
+
+.fishing-art__canvas path,
+.fishing-art__canvas circle,
+.fishing-art__canvas ellipse,
+.fishing-art__canvas rect {
+  vector-effect: non-scaling-stroke;
+}
+
+.fishing-art__waterline {
+  fill: none;
+  stroke: var(--fishing-art-water);
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0.42;
+}
+
+.fishing-art__body,
+.fishing-art__tail {
+  fill: var(--fishing-art-body);
+  stroke: var(--fishing-art-outline);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+
+.fishing-art__body--eel {
+  stroke-width: 3;
+}
+
+.fishing-art__mouth,
+.fishing-art__adipose,
+.fishing-art__fin,
+.fishing-art__barbels {
+  fill: var(--fishing-art-fin);
+  stroke: var(--fishing-art-outline);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fishing-art__fin--soft {
+  opacity: 0.72;
+}
+
+.fishing-art__fin--spined {
+  stroke-width: 2.4;
+}
+
+.fishing-art__eye {
+  fill: var(--fishing-art-outline);
+  stroke: var(--fishing-art-outline);
+}
+
+.fishing-art__eye-glint {
+  fill: var(--nb-color-surface);
+}
+
+.fishing-art__pattern {
+  fill: none;
+  stroke: var(--fishing-art-pattern);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.92;
+}
+
+.fishing-art__pattern--fill,
+.fishing-art__pattern--band,
+.fishing-art__pattern--belly,
+.fishing-art__pattern--saddle {
+  fill: var(--fishing-art-pattern);
+  stroke-width: 1.5;
+  opacity: 0.64;
+}
+
+.fishing-art__object {
+  fill: var(--nb-color-surface-alt);
+  stroke: var(--fishing-art-object);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fishing-art__object--seaweed,
+.fishing-art__object--branch,
+.fishing-art__object--glasses {
+  fill: none;
+}
+
+.fishing-art__object--tire circle:first-child {
+  fill: var(--nb-color-surface-alt);
+}
+
+.fishing-art__object--tire circle:nth-child(2) {
+  fill: var(--nb-color-surface);
+}
+
+.fishing-art__object--fry {
+  fill: var(--nb-color-surface-alt);
+}
+
+.fishing-art__object--treasure {
+  fill: var(--nb-color-warning-soft);
+  stroke: var(--fishing-art-treasure);
+}
+
+.fishing-art__object--unknown {
+  fill: var(--nb-color-surface-alt);
+  stroke: var(--nb-color-border-strong);
+}
+
+.fishing-art__label {
+  max-inline-size: 100%;
+  color: var(--nb-color-text);
+  font-size: 0.875rem;
+  font-weight: 650;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.fishing-art--pearl {
+  --fishing-art-body: #edf5f6;
+  --fishing-art-fin: #a8c3ca;
+  --fishing-art-pattern: #4e7480;
+}
+
+.fishing-art--sand {
+  --fishing-art-body: #d8c39f;
+  --fishing-art-fin: #b08c5d;
+  --fishing-art-pattern: #6f4f31;
+}
+
+.fishing-art--amber {
+  --fishing-art-body: #e8a84d;
+  --fishing-art-fin: #c87b2f;
+  --fishing-art-pattern: #75401d;
+}
+
+.fishing-art--ice {
+  --fishing-art-body: #b8dce7;
+  --fishing-art-fin: #77adbd;
+  --fishing-art-pattern: #356d80;
+}
+
+.fishing-art--umber {
+  --fishing-art-body: #9a7355;
+  --fishing-art-fin: #74513a;
+  --fishing-art-pattern: #432e24;
+}
+
+.fishing-art--bronze {
+  --fishing-art-body: #b98a51;
+  --fishing-art-fin: #936237;
+  --fishing-art-pattern: #56391f;
+}
+
+.fishing-art--slate {
+  --fishing-art-body: #8093a5;
+  --fishing-art-fin: #5d7286;
+  --fishing-art-pattern: #33475a;
+}
+
+.fishing-art--gold {
+  --fishing-art-body: #e3bc46;
+  --fishing-art-fin: #bd8c24;
+  --fishing-art-pattern: #715019;
+}
+
+.fishing-art--jade {
+  --fishing-art-body: #7eb59e;
+  --fishing-art-fin: #508b73;
+  --fishing-art-pattern: #285c49;
+}
+
+.fishing-art--olive {
+  --fishing-art-body: #98a56b;
+  --fishing-art-fin: #727f49;
+  --fishing-art-pattern: #454f2b;
+}
+
+.fishing-art--moss {
+  --fishing-art-body: #6f8a62;
+  --fishing-art-fin: #526c47;
+  --fishing-art-pattern: #30442c;
+}
+
+.fishing-art--coral {
+  --fishing-art-body: #d98778;
+  --fishing-art-fin: #b85d56;
+  --fishing-art-pattern: #743b3a;
+}
+
+.fishing-art--ink {
+  --fishing-art-body: #4d5966;
+  --fishing-art-fin: #303a46;
+  --fishing-art-pattern: #d8e0eb;
+}
+
+[data-theme='dark'] .fishing-art--pearl {
+  --fishing-art-body: #b8cbd1;
+  --fishing-art-fin: #7798a3;
+  --fishing-art-pattern: #315865;
+}
+
+[data-theme='dark'] .fishing-art--ice {
+  --fishing-art-body: #75aabd;
+  --fishing-art-fin: #4f8193;
+  --fishing-art-pattern: #d0eaf1;
+}
+
+[data-theme='dark'] .fishing-art--ink {
+  --fishing-art-body: #657589;
+  --fishing-art-fin: #46566b;
+  --fishing-art-pattern: #edf2fb;
+}
+
+@media (forced-colors: active) {
+  .fishing-art {
+    --fishing-art-outline: CanvasText;
+    --fishing-art-water: LinkText;
+    --fishing-art-body: Canvas;
+    --fishing-art-fin: CanvasText;
+    --fishing-art-pattern: CanvasText;
+    --fishing-art-object: CanvasText;
+    --fishing-art-treasure: CanvasText;
+  }
+
+  .fishing-art__canvas,
+  .fishing-art__label {
+    forced-color-adjust: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fishing-art,
+  .fishing-art__canvas,
+  .fishing-art__canvas * {
+    animation: none;
+    transition: none;
+  }
+}
