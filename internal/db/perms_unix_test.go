@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"testing"
 
@@ -63,9 +62,8 @@ func TestOpenSecuresDBFilesUnderWideUmask(t *testing.T) {
 	}
 }
 
-// TestOpenReSecuresOnReopen verifies that closing and reopening the database
-// leaves the database file and sidecars owner-only, exercising the close and
-// reopen path called out by the contract.
+// TestOpenReSecuresOnReopen verifies that a valid owner-only current database
+// remains owner-only across close and reopen.
 func TestOpenReSecuresOnReopen(t *testing.T) {
 	path := filepath.Join(privateDBDir(t), "reopen.db")
 	st := openTestStore(t, path)
@@ -86,10 +84,9 @@ func TestOpenReSecuresOnReopen(t *testing.T) {
 	requireFileMode(t, path+"-shm", 0o600)
 }
 
-// TestOpenTightensPreExistingWorldReadableDB creates a database file with
-// world-readable permissions and verifies Open tightens it to 0600 rather than
-// accepting a permissive pre-existing file.
-func TestOpenTightensPreExistingWorldReadableDB(t *testing.T) {
+// TestOpenRejectsPreExistingWorldReadableDB verifies current validation never
+// chmods a rejected source as a side effect.
+func TestOpenRejectsPreExistingWorldReadableDB(t *testing.T) {
 	path := filepath.Join(privateDBDir(t), "world.db")
 	if err := os.WriteFile(path, nil, 0o644); err != nil {
 		t.Fatalf("write empty db: %v", err)
@@ -97,15 +94,15 @@ func TestOpenTightensPreExistingWorldReadableDB(t *testing.T) {
 	if err := os.Chmod(path, 0o644); err != nil {
 		t.Fatalf("chmod db: %v", err)
 	}
-	st := openTestStore(t, path)
-	defer st.Close()
-	requireFileMode(t, path, 0o600)
+	before := captureDatabaseEvidence(t, path)
+	_, err := Open(path, newTestVault(t))
+	requireStartupKind(t, err, StartupUnsafePath)
+	assertDatabaseEvidenceUnchanged(t, path, before)
 }
 
-// TestOpenTightensResidualSidecars simulates a crash that left world-readable
-// WAL/SHM sidecars next to the database, and verifies Open tightens the
-// database and any sidecars that exist to 0600 on the next start.
-func TestOpenTightensResidualSidecars(t *testing.T) {
+// TestOpenRejectsPermissiveResidualSidecars verifies an unsafe existing triple
+// is rejected without chmod, creation, or removal.
+func TestOpenRejectsPermissiveResidualSidecars(t *testing.T) {
 	path := filepath.Join(privateDBDir(t), "residual.db")
 	for _, name := range []string{path, path + "-wal", path + "-shm"} {
 		if err := os.WriteFile(name, nil, 0o644); err != nil {
@@ -115,22 +112,10 @@ func TestOpenTightensResidualSidecars(t *testing.T) {
 			t.Fatalf("chmod %s: %v", name, err)
 		}
 	}
-	st := openTestStore(t, path)
-	if _, err := st.DB().Exec(`INSERT INTO users (discord_id, username, created_at, updated_at) VALUES ('u', 'u', 1, 1)`); err != nil {
-		t.Fatalf("insert: %v", err)
-	}
-	if err := st.Close(); err != nil {
-		t.Fatalf("close: %v", err)
-	}
-
-	st2 := openTestStore(t, path)
-	defer st2.Close()
-	if _, err := st2.DB().Exec(`INSERT INTO users (discord_id, username, created_at, updated_at) VALUES ('u2', 'u2', 2, 2)`); err != nil {
-		t.Fatalf("insert on reopen: %v", err)
-	}
-	requireFileMode(t, path, 0o600)
-	requireFileMode(t, path+"-wal", 0o600)
-	requireFileMode(t, path+"-shm", 0o600)
+	before := captureDatabaseEvidence(t, path)
+	_, err := Open(path, newTestVault(t))
+	requireStartupKind(t, err, StartupUnsafePath)
+	assertDatabaseEvidenceUnchanged(t, path, before)
 }
 
 // TestOpenRejectsGroupAccessibleParentDir verifies Open fails closed when the
@@ -174,11 +159,7 @@ func TestOpenRejectsSymlinkDBPath(t *testing.T) {
 	if err == nil {
 		t.Fatal("Open accepted a symlink database path")
 	}
-	// The 0700 parent lets the failure be provably from the path-shape guard
-	// ("database file must not be a symlink"), not the strict parent check.
-	if !strings.Contains(err.Error(), "database file must not be a symlink") {
-		t.Fatalf("Open failed for the wrong reason (want symlink path rejection, got %q)", err.Error())
-	}
+	requireStartupKind(t, err, StartupUnsafePath)
 }
 
 // assertSidecarSymlinkRejected is shared by the WAL and SHM symlink sidecar
@@ -208,12 +189,7 @@ func assertSidecarSymlinkRejected(t *testing.T, sidecarSuffix string) {
 	if openErr == nil {
 		t.Fatalf("Open accepted a symlink %s sidecar", sidecarSuffix)
 	}
-	// The 0700 parent lets the failure be provably from the sidecar pre-check
-	// ("wal file"/"shm file" ... must not be a symlink), run before sql.Open,
-	// not from the strict parent check ("database directory").
-	if !strings.Contains(openErr.Error(), sidecarSuffix[1:]+" file") {
-		t.Fatalf("Open failed for the wrong reason (want %s sidecar rejection, got %q)", sidecarSuffix[1:], openErr.Error())
-	}
+	requireStartupKind(t, openErr, StartupUnsafePath)
 	// The controlled target must be untouched: content and mtime identical.
 	after, err := os.ReadFile(target)
 	if err != nil {
@@ -270,11 +246,7 @@ func TestOpenRejectsNonRegularWALSidecar(t *testing.T) {
 	if err == nil {
 		t.Fatal("Open accepted a directory as the -wal sidecar")
 	}
-	// The 0700 parent lets the failure be provably from the sidecar pre-check
-	// ("wal file must be a regular file"), not the strict parent check.
-	if !strings.Contains(err.Error(), "wal file") {
-		t.Fatalf("Open failed for the wrong reason (want wal sidecar rejection, got %q)", err.Error())
-	}
+	requireStartupKind(t, err, StartupUnsafePath)
 	info, err := os.Lstat(walDir)
 	if err != nil {
 		t.Fatalf("lstat sidecar after Open: %v", err)

@@ -54,6 +54,9 @@ func auditApp(t *testing.T) (*application, *db.Store, *secret.Vault) {
 		_ = vault.Close()
 		t.Fatal(err)
 	}
+	if err := store.SetSiteConfigValue("maintenance_mode", "0"); err != nil {
+		t.Fatal(err)
+	}
 	app, err := buildApplication(auditConfig(), store, vault)
 	if err != nil {
 		_ = store.Close()
