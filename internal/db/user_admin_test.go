@@ -296,9 +296,9 @@ func TestUpdateUserLimitsTriStateAndProtection(t *testing.T) {
 
 func TestRegistrationOpenDefaultAndToggle(t *testing.T) {
 	st := adminStore(t)
-	// Unset defaults to open.
-	if open, err := st.RegistrationOpen(); err != nil || !open {
-		t.Fatalf("default RegistrationOpen = %v, %v, want true", open, err)
+	// Fresh generation one is explicitly seeded closed.
+	if open, err := st.RegistrationOpen(); err != nil || open {
+		t.Fatalf("default RegistrationOpen = %v, %v, want false", open, err)
 	}
 	// An explicit "0" closes registration; any other stored value keeps it
 	// open so a corrupt or stray row cannot lock existing users out.

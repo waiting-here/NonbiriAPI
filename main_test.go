@@ -117,6 +117,9 @@ func TestApplicationWiringProtectsAllEntryPoints(t *testing.T) {
 		_ = vault.Close()
 		t.Fatal(err)
 	}
+	if err := store.SetSiteConfigValue("maintenance_mode", "0"); err != nil {
+		t.Fatal(err)
+	}
 	defer func() {
 		_ = store.Close()
 		_ = vault.Close()

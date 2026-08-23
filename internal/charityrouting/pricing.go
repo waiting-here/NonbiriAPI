@@ -1,7 +1,7 @@
 package charityrouting
 
 import (
-	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
@@ -20,7 +20,7 @@ import (
 // success ("完整合法 usage（成功或异常结束）"); a missing or malformed usage
 // object commits under unknown semantics: the user keeps paying the discounted
 // reserve, the key consumes the undiscounted reserve, reward 0.
-func computeCommitPlan(snapshot db.CharityPricingSnapshot, userReserve, keyReserve int64, result openai.AttemptResult) (db.CommitPlan, error) {
+func computeCommitPlan(snapshot db.CharityPricingSnapshot, userReserve, keyReserve int64, result connectorcontract.AttemptResult) (db.CommitPlan, error) {
 	if !result.Usage.Present {
 		return db.CommitPlan{
 			OriginalCharge: keyReserve,

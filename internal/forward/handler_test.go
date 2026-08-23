@@ -145,10 +145,7 @@ func newForwardFixtureCfg(t *testing.T, allowed []string, hooks Hooks, selector 
 		t.Fatal(err)
 	}
 	registry := endpoint.NewRegistry()
-	adapter, err := openai.NewAdapter(openai.AdapterConfig{Backend: mustLocalBackend(t, stack)})
-	if err != nil {
-		t.Fatal(err)
-	}
+	localBackend := mustLocalBackend(t, stack)
 	safetyIdentifierKey := derivedSafetyIdentifierKey(t, vault)
 	safetyIdentifierFactory, err := NewSafetyIdentifierFactory(safetyIdentifierKey)
 	clear(safetyIdentifierKey)
@@ -159,7 +156,7 @@ func newForwardFixtureCfg(t *testing.T, allowed []string, hooks Hooks, selector 
 		Repository:        store,
 		Secrets:           codec,
 		Registry:          registry,
-		Adapters:          []Adapter{adapter},
+		Backend:           localBackend,
 		SafetyIdentifiers: safetyIdentifierFactory,
 	})
 	if err != nil {
@@ -555,7 +552,13 @@ func TestForwardSSRFAndUnknownConnectorFailClosedWithoutSensitiveDiagnostics(t *
 		t.Fatalf("self-origin status=%d body=%s", self.Code, self.Body.String())
 	}
 
+	if _, err := fixture.store.DB().Exec(`PRAGMA ignore_check_constraints=ON`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := fixture.store.DB().Exec(`UPDATE endpoints SET base_url=?, connector_type='unknown-protocol' WHERE id=?`, upstream.URL, route.endpoint); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.store.DB().Exec(`PRAGMA ignore_check_constraints=OFF`); err != nil {
 		t.Fatal(err)
 	}
 	unknown := performCaller(fixture.handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, body))

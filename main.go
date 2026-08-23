@@ -26,7 +26,6 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	"github.com/waiting-here/NonbiriAPI/internal/checkin"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
-	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
@@ -50,11 +49,17 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+// run owns every startup resource so database-gate failures return through
+// deferred cleanup before main converts the status to a non-zero process exit.
+func run() int {
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "startup configuration error:")
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
+		return 2
 	}
 
 	logger := applog.New(os.Stdout, applog.ParseLevel(cfg.LogLevel))
@@ -63,7 +68,7 @@ func main() {
 	secretVault := cfg.TakeSecretVault()
 	if secretVault == nil {
 		slog.Error("secret vault initialization failed")
-		os.Exit(1)
+		return 1
 	}
 	defer func() { _ = secretVault.Close() }()
 
@@ -82,21 +87,15 @@ func main() {
 	store, err := db.Open(cfg.DBPath, secretVault)
 	if err != nil {
 		slog.Error("database open failed", "err", err)
-		return
+		return 1
 	}
 	defer func() { _ = store.Close() }()
-	if err := store.MigrateEndpointKeyEnvelopes(context.Background()); err != nil {
-		slog.Error("database credential migration failed")
-		_ = store.Close()
-		_ = secretVault.Close()
-		os.Exit(1)
-	}
 	slog.Info("database ready", "path", cfg.DBPath)
 
 	app, err := buildApplication(cfg, store, secretVault)
 	if err != nil {
 		slog.Error("application wiring failed", "err", err)
-		return
+		return 1
 	}
 	defer func() { _ = app.Close() }()
 
@@ -128,6 +127,7 @@ func main() {
 		slog.Error("http shutdown error", "err", err)
 	}
 	slog.Info("shutdown complete")
+	return 0
 }
 
 // healthz is unauthenticated but still runs behind the validated host edge.
@@ -281,10 +281,6 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		Repo: store, URLs: stack, Connectors: registry, Hook: modelFetcher,
 	})
 	modelService := model.NewService(store)
-	openAIAdapter, err := openai.NewAdapter(openai.AdapterConfig{Backend: localBackend})
-	if err != nil {
-		return nil, fmt.Errorf("openai adapter: %w", err)
-	}
 	safetyIdentifierKey, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
 	if err != nil {
 		return nil, fmt.Errorf("safety identifier subkey: %w", err)
@@ -302,7 +298,7 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		CharityTargets:    store,
 		Secrets:           vault,
 		Registry:          registry,
-		Adapters:          []forward.Adapter{openAIAdapter},
+		Backend:           localBackend,
 		SafetyIdentifiers: safetyIdentifierFactory,
 	})
 	if err != nil {

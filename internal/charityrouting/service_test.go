@@ -73,15 +73,17 @@ func (f *fakeRunner) callCount() int {
 type recordingAdapter struct {
 	mu          sync.Mutex
 	identifiers []string
+	requests    []*openai.ChatRequest
 }
 
 func (*recordingAdapter) ConnectorType() endpoint.ConnectorType {
 	return endpoint.ConnectorOpenAICompatible
 }
 
-func (a *recordingAdapter) Attempt(_ context.Context, writer http.ResponseWriter, _ openai.Target, _ *openai.ChatRequest, safetyIdentifier string) openai.AttemptResult {
+func (a *recordingAdapter) Attempt(_ context.Context, writer http.ResponseWriter, _ openai.Target, request *openai.ChatRequest, safetyIdentifier string) openai.AttemptResult {
 	a.mu.Lock()
 	a.identifiers = append(a.identifiers, safetyIdentifier)
+	a.requests = append(a.requests, request)
 	a.mu.Unlock()
 	_, _ = writer.Write([]byte("ok"))
 	return openai.AttemptResult{Success: true, Committed: true, Usage: openai.Usage{Present: true}}
@@ -161,7 +163,8 @@ func TestSharedSecureRunnerUsesConsumerSafetyAndDonorCredentialOwner(t *testing.
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = personal.Close() })
-	personalResult, personalErr := personal.Forward(ctx, httptest.NewRecorder(), consumerID, &openai.ChatRequest{Model: "consumer/personal"})
+	personalRequest := &openai.ChatRequest{Model: "consumer/personal"}
+	personalResult, personalErr := personal.Forward(ctx, httptest.NewRecorder(), consumerID, personalRequest)
 	if personalErr != nil || !personalResult.Success {
 		t.Fatalf("personal result=%+v err=%v", personalResult, personalErr)
 	}
@@ -185,13 +188,21 @@ func TestSharedSecureRunnerUsesConsumerSafetyAndDonorCredentialOwner(t *testing.
 	if target.BindingID <= 0 || target.ForwardTarget.BindingID != target.BindingID || target.EndpointID <= 0 || target.EndpointKeyID <= 0 || target.DonorUserID <= 0 {
 		t.Fatalf("incomplete charity target projection=%+v", target)
 	}
-	charityResult, charityErr := charity.Forward(ctx, httptest.NewRecorder(), consumerID, &openai.ChatRequest{Model: "[公益]donor/charity"})
+	charityRequest := &openai.ChatRequest{Model: "[公益]donor/charity"}
+	charityResult, charityErr := charity.Forward(ctx, httptest.NewRecorder(), consumerID, charityRequest)
 	if charityErr != nil || !charityResult.Success {
 		t.Fatalf("charity result=%+v err=%v", charityResult, charityErr)
 	}
 	adapter.mu.Lock()
 	identifiers := append([]string(nil), adapter.identifiers...)
+	requests := append([]*openai.ChatRequest(nil), adapter.requests...)
 	adapter.mu.Unlock()
+	if len(requests) != 2 {
+		t.Fatalf("attempt request clone count = %d, want 2", len(requests))
+	}
+	if requests[0] == personalRequest || requests[1] == charityRequest || requests[0] == requests[1] {
+		t.Fatalf("attempt request clones were not independent: got=%p,%p original=%p,%p", requests[0], requests[1], personalRequest, charityRequest)
+	}
 	if len(identifiers) != 2 || identifiers[0] != identifiers[1] || !strings.HasPrefix(identifiers[0], "nbu_v3_") {
 		t.Fatalf("personal/charity identifiers=%q", identifiers)
 	}

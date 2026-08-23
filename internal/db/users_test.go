@@ -29,13 +29,11 @@ func TestGetUserRPMLimit(t *testing.T) {
 		t.Fatalf("stored cap = limit=%d has=%v err=%v", limit, has, err)
 	}
 
-	// A stored zero is still "set"; the flow-control layer clamps it.
+	// Generation one rejects zero rather than assigning it a hidden meaning.
 	if _, err := store.DB().Exec(`UPDATE users SET rpm_limit=? WHERE id=?`, 0, user.ID); err != nil {
-		t.Fatal(err)
-	}
-	limit, has, err = store.GetUserRPMLimit(user.ID)
-	if err != nil || !has || limit != 0 {
-		t.Fatalf("zero cap = limit=%d has=%v err=%v", limit, has, err)
+		// Expected constraint failure.
+	} else {
+		t.Fatal("zero RPM override passed the schema CHECK")
 	}
 
 	// Missing user: not found, not an error.

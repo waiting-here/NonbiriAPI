@@ -19,6 +19,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
@@ -131,7 +132,7 @@ type UsageRecord struct {
 	EndpointKeyID   int64
 	UpstreamModelID string
 	Stream          bool
-	Usage           openai.Usage
+	Usage           connectorcontract.Usage
 	UsageUnknown    bool
 	// EndpointBaseURL is the bounded dispatch-time canonical base-URL
 	// snapshot required by the frozen log contract; owner-visible endpoint
@@ -317,14 +318,14 @@ func (s *Service) ListModels(ctx context.Context, userID int64) (ModelList, erro
 // when no valid usage was captured). Before every attempt the runner
 // re-validates ownership, so a binding deleted/disabled/cache-cleared between
 // selection and dispatch fails closed without dialing.
-func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userID int64, request *openai.ChatRequest) (openai.AttemptResult, error) {
+func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userID int64, request *openai.ChatRequest) (connectorcontract.AttemptResult, error) {
 	if s == nil || ctx == nil || writer == nil || userID <= 0 || request == nil {
-		return openai.AttemptResult{}, ErrInternal
+		return connectorcontract.AttemptResult{}, ErrInternal
 	}
 	s.lifecycle.RLock()
 	defer s.lifecycle.RUnlock()
 	if s.closed || s.repository == nil || s.runner == nil {
-		return openai.AttemptResult{}, ErrInternal
+		return connectorcontract.AttemptResult{}, ErrInternal
 	}
 	parentCtx := ctx
 	ctx, cancel := context.WithTimeout(parentCtx, s.timeout)
@@ -336,20 +337,20 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 		}
 		switch {
 		case errors.Is(err, db.ErrNotFound):
-			return openai.AttemptResult{}, ErrModelNotFound
+			return connectorcontract.AttemptResult{}, ErrModelNotFound
 		default:
-			return openai.AttemptResult{}, ErrInternal
+			return connectorcontract.AttemptResult{}, ErrInternal
 		}
 	}
 	if route.UserID != userID || route.FullName != request.Model || route.ModelID <= 0 || (route.RouteStrategy != "ordered" && route.RouteStrategy != "random") {
-		return openai.AttemptResult{}, ErrInternal
+		return connectorcontract.AttemptResult{}, ErrInternal
 	}
 	if len(route.Candidates) == 0 {
-		return openai.AttemptResult{}, ErrUnboundModel
+		return connectorcontract.AttemptResult{}, ErrUnboundModel
 	}
 	for _, candidate := range route.Candidates {
 		if candidate.BindingID <= 0 || candidate.ModelID != route.ModelID || candidate.EndpointID <= 0 || candidate.EndpointKeyID <= 0 || candidate.Ord < 0 || candidate.Ord > maxRouteOrd || !validStoredText(candidate.UpstreamModelID, 512) {
-			return openai.AttemptResult{}, ErrInternal
+			return connectorcontract.AttemptResult{}, ErrInternal
 		}
 	}
 
@@ -372,15 +373,15 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 			return endedContextResult(parentCtx, ctx), nil
 		}
 		if errors.Is(err, ErrUnboundModel) {
-			return openai.AttemptResult{}, ErrUnboundModel
+			return connectorcontract.AttemptResult{}, ErrUnboundModel
 		}
-		return openai.AttemptResult{}, ErrSelector
+		return connectorcontract.AttemptResult{}, ErrSelector
 	}
 	if len(order) == 0 {
-		return openai.AttemptResult{}, ErrUnboundModel
+		return connectorcontract.AttemptResult{}, ErrUnboundModel
 	}
 	if len(order) > MaxRouteAttempts {
-		return openai.AttemptResult{}, ErrSelector
+		return connectorcontract.AttemptResult{}, ErrSelector
 	}
 	candidates := make(map[int64]db.ForwardCandidate, len(route.Candidates))
 	for _, candidate := range route.Candidates {
@@ -389,20 +390,20 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 	seenOrder := make(map[int64]struct{}, len(order))
 	for _, bindingID := range order {
 		if _, duplicate := seenOrder[bindingID]; duplicate {
-			return openai.AttemptResult{}, ErrSelector
+			return connectorcontract.AttemptResult{}, ErrSelector
 		}
 		if _, ok := candidates[bindingID]; !ok {
-			return openai.AttemptResult{}, ErrSelector
+			return connectorcontract.AttemptResult{}, ErrSelector
 		}
 		seenOrder[bindingID] = struct{}{}
 	}
 
 	attemptID, err := newAttemptID()
 	if err != nil {
-		return openai.AttemptResult{}, ErrInternal
+		return connectorcontract.AttemptResult{}, ErrInternal
 	}
 
-	var lastResult openai.AttemptResult
+	var lastResult connectorcontract.AttemptResult
 	for index, bindingID := range order {
 		if ctx.Err() != nil {
 			return endedContextResult(parentCtx, ctx), nil
@@ -410,10 +411,12 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 		candidate := candidates[bindingID]
 		started := s.now().UTC()
 		result := s.runner.Run(ctx, writer, AttemptInput{
-			UserID:    userID,
-			FullName:  route.FullName,
-			BindingID: candidate.BindingID,
-			Request:   request,
+			UserID:       userID,
+			FullName:     route.FullName,
+			BindingID:    candidate.BindingID,
+			Request:      request,
+			TraceID:      attemptID,
+			AttemptIndex: index,
 		})
 		if ctx.Err() != nil && !result.Success && !result.Committed {
 			result = endedContextResult(parentCtx, ctx)
@@ -520,8 +523,8 @@ func strategySelector(strategy string) Selector {
 // canceledAttemptResult is the final result returned when the caller context
 // is canceled before an attempt or during backoff. No further attempt is made
 // and no body byte is committed.
-func canceledAttemptResult() openai.AttemptResult {
-	return openai.AttemptResult{Failure: openai.FailureCanceled, Diagnostic: "request canceled"}
+func canceledAttemptResult() connectorcontract.AttemptResult {
+	return connectorcontract.AttemptResult{Failure: connectorcontract.FailureCanceled, Diagnostic: "request canceled"}
 }
 
 // endedContextResult distinguishes caller cancellation from the service-owned
@@ -529,10 +532,10 @@ func canceledAttemptResult() openai.AttemptResult {
 // so the handler emits 502 instead of returning an empty response. After
 // commit, callers retain the runner's committed result and no fresh envelope
 // is attempted.
-func endedContextResult(parent, bounded context.Context) openai.AttemptResult {
+func endedContextResult(parent, bounded context.Context) connectorcontract.AttemptResult {
 	if parent != nil && parent.Err() == nil && bounded != nil && errors.Is(bounded.Err(), context.DeadlineExceeded) {
-		return openai.AttemptResult{
-			Failure:      openai.FailureUpstream,
+		return connectorcontract.AttemptResult{
+			Failure:      connectorcontract.FailureUpstream,
 			ClientStatus: http.StatusBadGateway,
 			Diagnostic:   "forward request timed out",
 		}
@@ -540,14 +543,14 @@ func endedContextResult(parent, bounded context.Context) openai.AttemptResult {
 	return canceledAttemptResult()
 }
 
-func classifyAttemptResult(result openai.AttemptResult) (string, int) {
+func classifyAttemptResult(result connectorcontract.AttemptResult) (string, int) {
 	if result.Success {
 		return "", http.StatusOK
 	}
 	switch result.Failure {
-	case openai.FailureUpstream:
+	case connectorcontract.FailureUpstream:
 		return "upstream", http.StatusBadGateway
-	case openai.FailureCanceled, openai.FailureSink:
+	case connectorcontract.FailureCanceled, connectorcontract.FailureSink:
 		return "", 499
 	default:
 		return "internal", http.StatusInternalServerError

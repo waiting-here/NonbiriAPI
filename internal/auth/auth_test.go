@@ -97,6 +97,9 @@ func authTestStore(t *testing.T) *db.Store {
 		_ = vault.Close()
 		t.Fatalf("db.Open: %v", err)
 	}
+	if err := st.SetSiteConfigValue("registration_open", "1"); err != nil {
+		t.Fatalf("open registration for auth fixture: %v", err)
+	}
 	t.Cleanup(func() {
 		_ = st.Close()
 		_ = vault.Close()
