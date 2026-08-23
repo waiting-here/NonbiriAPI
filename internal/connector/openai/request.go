@@ -122,6 +122,27 @@ func (r *ChatRequest) Clear() {
 	r.fields = nil
 }
 
+// CloneForAttempt returns an independent protocol snapshot for one physical
+// attempt. Silent retry and charity key rotation must never share mutable raw
+// field storage: an adapter may clear its clone without changing the caller's
+// validated request or a later attempt. The clone retains no shared byte
+// slices with r.
+func (r *ChatRequest) CloneForAttempt() *ChatRequest {
+	if r == nil {
+		return nil
+	}
+	clone := &ChatRequest{
+		fields: make([]jsonField, len(r.fields)),
+		Model:  r.Model,
+		Stream: r.Stream,
+	}
+	for index, field := range r.fields {
+		clone.fields[index].name = field.name
+		clone.fields[index].value = append(json.RawMessage(nil), field.value...)
+	}
+	return clone
+}
+
 // CharityTextRuneCount counts only caller-provided message text for the
 // charity pre-dispatch guard. The accepted range is deliberately narrow and
 // deterministic: messages[].content when it is a string, plus text parts in
