@@ -421,6 +421,12 @@ type SiteActivityQuery struct {
 	PageSize int
 }
 
+// siteActivityInitialCapacity is deliberately independent of request input.
+// QuerySiteActivity clamps every page to at most MaxLogPageLimit rows; a small
+// fixed initial allocation avoids over-allocation while keeping the memory
+// bound locally and statically evident.
+const siteActivityInitialCapacity = 32
+
 // QuerySiteActivity returns at most one page of site-day rollups, newest
 // first, plus whether another page follows. It never projects per-user data:
 // there is no user dimension on any activity read path.
@@ -448,7 +454,7 @@ LIMIT ? OFFSET ?`, pageSize+1, (page-1)*pageSize)
 	}
 	defer rows.Close()
 
-	days := make([]SiteActivityDay, 0, min(pageSize, 32))
+	days := make([]SiteActivityDay, 0, siteActivityInitialCapacity)
 	for rows.Next() {
 		var day SiteActivityDay
 		var productActive, gameActive int

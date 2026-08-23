@@ -129,13 +129,14 @@ func TestSiteTimezonePatchValidation(t *testing.T) {
 	e := newEnv(t)
 
 	for _, raw := range []string{
-		`{"value":45}`,   // not a 30-minute multiple
-		`{"value":-721}`, // below range
-		`{"value":841}`,  // above range
-		`{"value":30.5}`, // non-integral
-		`{"value":"30"}`, // string
-		`{"value":true}`, // boolean
-		`{"value":null}`, // clearing is never allowed
+		`{"value":45}`,         // not a 30-minute multiple
+		`{"value":-721}`,       // below range
+		`{"value":841}`,        // above range
+		`{"value":30.5}`,       // non-integral
+		`{"value":"30"}`,       // string
+		`{"value":true}`,       // boolean
+		`{"value":null}`,       // clearing is never allowed
+		`{"value":4294967296}`, // must not wrap to UTC on 32-bit builds
 		`{"value":9007199254740993}`,
 	} {
 		req := stationRequest(http.MethodPatch, "/admin/api/site-config/site_timezone_offset_minutes", host.StationAdmin, []byte(raw))

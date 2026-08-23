@@ -455,11 +455,14 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 			if !ok {
 				return "", invalid
 			}
-			n, err := num.Int64()
-			if err != nil || strconv.FormatInt(n, 10) != num.String() || !db.ValidSiteTimezoneOffset(int(n)) {
+			// Parse directly to the platform's int width before validating. A
+			// ParseInt(64) followed by int(n) could wrap a large, otherwise
+			// canonical JSON integer into a valid offset on a 32-bit build.
+			n, err := strconv.Atoi(num.String())
+			if err != nil || strconv.Itoa(n) != num.String() || !db.ValidSiteTimezoneOffset(n) {
 				return "", invalid
 			}
-			return num.String(), httperr.Error{}
+			return strconv.Itoa(n), httperr.Error{}
 		case kindAmount:
 			var value string
 			if err := json.Unmarshal(raw, &value); err != nil {

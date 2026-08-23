@@ -516,12 +516,12 @@ func (h *Handler) patchSiteConfig(w http.ResponseWriter, r *http.Request) {
 	// activity hook: recording activity would create temporal data and
 	// instantly freeze the very offset being configured for the first time.
 	if key == KeySiteTimezoneOffsetMinutes {
-		n, perr := strconv.ParseInt(value, 10, 64)
+		n, perr := strconv.Atoi(value)
 		if perr != nil {
 			writeErr(w, httperr.New(httperr.CodeInternal, "configuration update failed"))
 			return
 		}
-		if err := h.store.SetSiteTimezoneOffsetMinutes(int(n)); err != nil {
+		if err := h.store.SetSiteTimezoneOffsetMinutes(n); err != nil {
 			if errors.Is(err, db.ErrConflict) {
 				writeErr(w, httperr.New(httperr.CodeConflict, "site timezone can no longer be changed"))
 				return
@@ -530,7 +530,7 @@ func (h *Handler) patchSiteConfig(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, httperr.New(httperr.CodeInternal, "configuration update failed"))
 			return
 		}
-		httperr.WriteJSON(w, http.StatusOK, siteConfigPatchResp{Key: key, Value: int(n)})
+		httperr.WriteJSON(w, http.StatusOK, siteConfigPatchResp{Key: key, Value: n})
 		return
 	}
 	// The three level promotion thresholds have their own atomic repository

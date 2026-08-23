@@ -87,7 +87,18 @@ func readConfig(reader ConfigReader) Config {
 	if reader == nil {
 		return cfg
 	}
-	readInt := func(key string, fallback int64, min, max int64) int64 {
+	readInt := func(key string, fallback, min, max int) int {
+		raw, err := reader.GetSiteConfigValue(key)
+		if err != nil || raw == "" {
+			return fallback
+		}
+		n, err := strconv.Atoi(raw)
+		if err != nil || strconv.Itoa(n) != raw || n < min || n > max {
+			return fallback
+		}
+		return n
+	}
+	readInt64 := func(key string, fallback int64, min, max int64) int64 {
 		raw, err := reader.GetSiteConfigValue(key)
 		if err != nil || raw == "" {
 			return fallback
@@ -110,17 +121,17 @@ func readConfig(reader ConfigReader) Config {
 		return n
 	}
 	maxSeconds := int64(MaxWindowDuration)
-	cfg.RPMBanThreshold = int(readInt(KeyRPMBanThreshold, int64(cfg.RPMBanThreshold), 0, MaxViolationThreshold))
-	cfg.RPMBanWindowSeconds = readInt(KeyRPMBanWindowSeconds, cfg.RPMBanWindowSeconds, 1, maxSeconds)
-	cfg.RPMBanDurationSeconds = readInt(KeyRPMBanDurationSeconds, cfg.RPMBanDurationSeconds, 1, maxSeconds)
-	cfg.CharityMinChars = int(readInt(KeyCharityMinChars, int64(cfg.CharityMinChars), 0, MaxCharityContentRuneCount))
+	cfg.RPMBanThreshold = readInt(KeyRPMBanThreshold, cfg.RPMBanThreshold, 0, MaxViolationThreshold)
+	cfg.RPMBanWindowSeconds = readInt64(KeyRPMBanWindowSeconds, cfg.RPMBanWindowSeconds, 1, maxSeconds)
+	cfg.RPMBanDurationSeconds = readInt64(KeyRPMBanDurationSeconds, cfg.RPMBanDurationSeconds, 1, maxSeconds)
+	cfg.CharityMinChars = readInt(KeyCharityMinChars, cfg.CharityMinChars, 0, MaxCharityContentRuneCount)
 	cfg.CharityViolationDeductMilli = readAmount(KeyCharityViolationDeductMilli, 0)
-	cfg.CharityViolationBanSeconds = readInt(KeyCharityViolationBanSeconds, 0, 0, maxSeconds)
-	cfg.CharityViolationWindowSeconds = readInt(KeyCharityViolationWindowSeconds, cfg.CharityViolationWindowSeconds, 1, maxSeconds)
-	cfg.CharityViolationBanThreshold = int(readInt(KeyCharityViolationBanThreshold, 0, 0, MaxViolationThreshold))
-	cfg.CharityViolationWindowBanSeconds = readInt(KeyCharityViolationWindowBanSeconds, 0, 0, maxSeconds)
-	cfg.CharitySuspendWindowSeconds = readInt(KeyCharitySuspendWindowSeconds, cfg.CharitySuspendWindowSeconds, 1, maxSeconds)
-	cfg.CharitySuspendThreshold = int(readInt(KeyCharitySuspendThreshold, 0, 0, MaxViolationThreshold))
-	cfg.CharitySuspendDurationSeconds = readInt(KeyCharitySuspendDurationSeconds, 0, 0, maxSeconds)
+	cfg.CharityViolationBanSeconds = readInt64(KeyCharityViolationBanSeconds, 0, 0, maxSeconds)
+	cfg.CharityViolationWindowSeconds = readInt64(KeyCharityViolationWindowSeconds, cfg.CharityViolationWindowSeconds, 1, maxSeconds)
+	cfg.CharityViolationBanThreshold = readInt(KeyCharityViolationBanThreshold, 0, 0, MaxViolationThreshold)
+	cfg.CharityViolationWindowBanSeconds = readInt64(KeyCharityViolationWindowBanSeconds, 0, 0, maxSeconds)
+	cfg.CharitySuspendWindowSeconds = readInt64(KeyCharitySuspendWindowSeconds, cfg.CharitySuspendWindowSeconds, 1, maxSeconds)
+	cfg.CharitySuspendThreshold = readInt(KeyCharitySuspendThreshold, 0, 0, MaxViolationThreshold)
+	cfg.CharitySuspendDurationSeconds = readInt64(KeyCharitySuspendDurationSeconds, 0, 0, maxSeconds)
 	return cfg
 }

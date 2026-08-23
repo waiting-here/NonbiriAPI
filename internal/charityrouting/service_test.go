@@ -32,9 +32,10 @@ type fakeRunner struct {
 }
 
 type fakeResponse struct {
-	body     []byte // body bytes written before returning (triggers dispatch CAS)
-	result   openai.AttemptResult
-	blockCtx bool // block until ctx is canceled (cancellation test)
+	body       []byte // body bytes written before returning (triggers dispatch CAS)
+	result     openai.AttemptResult
+	blockCtx   bool            // block until ctx is canceled (cancellation test)
+	runEntered chan<- struct{} // optional deterministic signal after the runner is entered
 }
 
 func (f *fakeRunner) RunCharity(ctx context.Context, writer http.ResponseWriter, _ forward.CharityAttemptInput) openai.AttemptResult {
@@ -43,6 +44,12 @@ func (f *fakeRunner) RunCharity(ctx context.Context, writer http.ResponseWriter,
 	resp := f.responses[idx]
 	f.calls++
 	f.mu.Unlock()
+	if resp.runEntered != nil {
+		select {
+		case resp.runEntered <- struct{}{}:
+		default:
+		}
+	}
 	if resp.blockCtx {
 		<-ctx.Done()
 		return openai.AttemptResult{Failure: openai.FailureCanceled, Diagnostic: "request canceled"}
@@ -528,23 +535,74 @@ func TestServiceForwardCommittedFailureBadEOFSettles(t *testing.T) {
 
 func TestServiceForwardClientCancelBeforeDispatch(t *testing.T) {
 	store := openCharityTestStore(t)
+	runEntered := make(chan struct{}, 1)
+	runner := &fakeRunner{responses: []fakeResponse{{blockCtx: true, runEntered: runEntered}}}
+	svc, consumerID, _ := seedServiceFixture(t, store, runner, 1, true, 10_000)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	rec := httptest.NewRecorder()
+	req := &openai.ChatRequest{Model: "[公益]donor/charity"}
+	type outcome struct {
+		result openai.AttemptResult
+		err    error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		result, err := svc.Forward(ctx, rec, consumerID, req)
+		done <- outcome{result: result, err: err}
+	}()
+	select {
+	case <-runEntered:
+		// Entering the runner proves the reservation transaction committed, while
+		// blockCtx guarantees no response byte crossed the dispatch boundary.
+	case <-time.After(2 * time.Second):
+		t.Fatal("runner was not entered")
+	}
+	cancel()
+	var got outcome
+	select {
+	case got = <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Forward did not return after cancellation")
+	}
+	if got.err != nil {
+		t.Fatalf("Forward error = %v, want canceled result", got.err)
+	}
+	if got.result.Failure != openai.FailureCanceled || got.result.Committed {
+		t.Fatalf("result = %+v, want uncommitted canceled failure", got.result)
+	}
+	var state string
+	if err := store.DB().QueryRow(`SELECT state FROM charity_reservations`).Scan(&state); err != nil {
+		t.Fatalf("read reservation state: %v", err)
+	}
+	if state != "released" {
+		t.Fatalf("state = %q, want released (client cancel before dispatch)", state)
+	}
+}
+
+func TestServiceForwardClientCancelBeforeReservation(t *testing.T) {
+	store := openCharityTestStore(t)
 	runner := &fakeRunner{responses: []fakeResponse{{blockCtx: true}}}
 	svc, consumerID, _ := seedServiceFixture(t, store, runner, 1, true, 10_000)
 	ctx, cancel := context.WithCancel(context.Background())
-	rec := httptest.NewRecorder()
-	req := &openai.ChatRequest{Model: "[公益]donor/charity"}
-	go func() {
-		time.Sleep(20 * time.Millisecond)
-		cancel()
-	}()
-	_, err := svc.Forward(ctx, rec, consumerID, req)
+	cancel()
+
+	result, err := svc.Forward(ctx, httptest.NewRecorder(), consumerID, &openai.ChatRequest{Model: "[公益]donor/charity"})
 	if err != nil {
-		// A canceled pre-dispatch returns a result (not an error sentinel).
+		t.Fatalf("Forward error = %v, want canceled result", err)
 	}
-	var state string
-	store.DB().QueryRow(`SELECT state FROM charity_reservations`).Scan(&state)
-	if state != "released" {
-		t.Fatalf("state = %q, want released (client cancel before dispatch)", state)
+	if result.Failure != openai.FailureCanceled || result.Committed {
+		t.Fatalf("result = %+v, want uncommitted canceled failure", result)
+	}
+	if runner.callCount() != 0 {
+		t.Fatalf("runner calls = %d, want 0", runner.callCount())
+	}
+	var reservations int
+	if err := store.DB().QueryRow(`SELECT COUNT(*) FROM charity_reservations`).Scan(&reservations); err != nil {
+		t.Fatalf("count reservations: %v", err)
+	}
+	if reservations != 0 {
+		t.Fatalf("reservations = %d, want 0", reservations)
 	}
 }
 
