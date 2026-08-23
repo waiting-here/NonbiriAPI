@@ -2,7 +2,7 @@
 
 NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 网关。用户可以管理自己持有的上游端点和凭据，拉取上游模型，创建用户自己的平台模型名称，并通过一个 `CallerKey` 调用这些模型。
 
-> **发布状态：** 最新公开版本仍为 `v1.0.0-alpha.1`。当前分支是本地、尚未发布的 `v1.0.0-alpha.2` 发布候选，尚未 tag、发布或部署；两者都只适合受控的自托管试运行。正式开放给用户前，请先阅读部署、备份、隐私和安全文档。
+> **当前版本：** `v1.0.0-alpha.2`。此 alpha 仅适合受控的自托管试运行。正式开放给用户前，请先阅读部署、备份、隐私和安全文档。
 >
 > 源码仓库：[github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
@@ -18,7 +18,7 @@ NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 网关。
 - 服务端生成的上游安全伪名只在“同一用户 + 同一规范化上游 origin”范围内稳定；轮换与隐私边界见 [API 契约](docs/api-contract.md#21-post-v1chatcompletions)。
 - React 用户/管理员站点嵌入一个 Go 单二进制。
 
-alpha.2 候选仍只支持 `openai-compatible` 连接器和上述两个 OpenAI-compatible 出站接口。其他 OpenAI API 家族和连接器类型留待后续版本。
+`v1.0.0-alpha.2` 仅支持 `openai-compatible` 连接器和上述两个 OpenAI-compatible 出站接口。其他 OpenAI API 家族和连接器类型留待后续版本。
 
 ## 站点结构
 

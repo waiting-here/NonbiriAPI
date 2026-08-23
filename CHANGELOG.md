@@ -2,9 +2,11 @@
 
 All notable changes to NonbiriAPI are documented here.
 
-The project is currently in alpha. The latest published compatibility promise remains the documented `v1.0.0-alpha.1` release contract. The entries below are the local, unpublished `v1.0.0-alpha.2` release candidate; they are not a claim that a tag, GitHub release, or deployment exists.
+The project is currently in alpha. The current documented release and compatibility promise is `v1.0.0-alpha.2`.
 
 ## [Unreleased]
+
+## [1.0.0-alpha.2] - 2026-08-22
 
 ### Added
 
@@ -16,7 +18,7 @@ The project is currently in alpha. The latest published compatibility promise re
 - Request-log screens for both stations sharing one accessible UX (configurable columns, filters with quick time ranges, pagination persisted in the URL, and a detail drawer with focus trap, text-only diagnostics, and bounded copy). The user station lists its own models and current resource notes; the administrator station lists user ids, endpoint base URLs, and upstream models without any user-chosen naming.
 - Request logs now persist the dispatch-time canonical base URL of the endpoint that actually served each committed request (owner-visible metadata; overlong or malformed values are sanitized at the persistence boundary instead of failing accounting).
 - Administrator log CSV/JSON export endpoints whose cells are sanitized against spreadsheet formula injection and whose row/byte bounds fail closed instead of truncating.
-- Account exports now carry four-bucket usage totals and the owner's daily activity summary (export schema v2).
+- Account exports now carry four-bucket usage totals, the owner's credit ledger, daily activity summary, and check-in history (export schema v2).
 - Per-user economy balances: a signed consumption balance and a cumulative donor-reward balance on the account row, plus an append-only credit ledger whose audit row commits in the same transaction as every balance change. Administrator credit adjustments take canonical decimal-string deltas with a mandatory operation id and reason; retrying an operation id returns the first application's result instead of applying twice, and system and client operation namespaces are mutually isolated.
 - Donation-driven user levels: a persisted automatic-level high-water mark that is raised lazily by a conditional update when the donor-reward balance reaches an administrator-configured threshold (and is never downgraded, including after threshold raises or negative corrections), a nullable manual level override (1..5; resetting it restores the automatic mark), threshold site-config keys cross-validated as a strictly increasing chain inside the same transaction as the write, and balance/level projections on `/api/session` and `/api/me`.
 - A level-5 co-management prefix `/api/steward/` on the user station that re-resolves the live effective level on every request (a demotion or manual reset revokes an existing session on its next request), refuses the administrator station and administrator sessions in both directions, and now mounts the separated charity-management routes.
@@ -100,4 +102,5 @@ The project is currently in alpha. The latest published compatibility promise re
 - Purge expired sessions at startup and during the existing six-hour maintenance sweep.
 - Create missing database directories owner-only and align the systemd/key-file guidance with the runtime's strict permission checks.
 
+[1.0.0-alpha.2]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.2
 [1.0.0-alpha.1]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.1

@@ -4,7 +4,7 @@
 
 NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible gateway. It lets each user manage their own upstream endpoints and credentials, discover upstream models, define user-owned platform model names, and call those models through a single `CallerKey`.
 
-> **Release status:** `v1.0.0-alpha.1` remains the latest published release. This branch is the local, unpublished `v1.0.0-alpha.2` release candidate; it has not been tagged, published, or deployed. Both are intended only for controlled self-hosted trials. Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
+> **Current release:** `v1.0.0-alpha.2`. This alpha is intended only for controlled self-hosted trials. Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
 >
 > Source repository: [github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
@@ -20,7 +20,7 @@ NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible gateway. 
 - Server-generated upstream safety pseudonyms scoped to one user and one canonical upstream origin; see the [API contract](docs/api-contract.md#21-post-v1chatcompletions) for their rotation and privacy boundary.
 - React user/admin stations embedded into a single Go binary.
 
-The alpha.2 candidate still supports only the `openai-compatible` connector and the two OpenAI-compatible exit routes listed above. Other OpenAI API families and other connector types are deferred.
+`v1.0.0-alpha.2` supports only the `openai-compatible` connector and the two OpenAI-compatible exit routes listed above. Other OpenAI API families and other connector types are deferred.
 
 ## Architecture
 

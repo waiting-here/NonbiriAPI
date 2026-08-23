@@ -29,7 +29,7 @@ For a single-maintainer repository, requiring an approving review can make the o
 - Keep **Allow auto-merge** disabled until the checks and review process are familiar.
 - Enable Dependabot version updates using the committed `.github/dependabot.yml`.
 - Enable secret scanning and push protection if the repository plan provides them.
-- Keep the default branch as `master`; `v1.0.0-alpha.1` is already published as a pre-release. Mark future alpha releases as pre-releases as well.
+- Keep the default branch as `master`; publish alpha releases, including `v1.0.0-alpha.2`, as pre-releases.
 - Keep Actions permissions at the workflow default of read-only contents; do not add deployment secrets to the CI workflow.
 
 ## Release and access hygiene

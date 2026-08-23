@@ -30,7 +30,7 @@ The database directory and file hold encrypted upstream credentials and private 
 
 ## Runtime administrator settings
 
-The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values shown below describe the local, unpublished alpha.2 release candidate; alpha.2-only keys are unavailable to an unupgraded alpha.1 deployment.
+The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values shown below describe `v1.0.0-alpha.2`; alpha.2-only keys are unavailable to an unupgraded alpha.1 deployment.
 
 | Key | Type / range | Default and effect |
 | --- | --- | --- |
@@ -53,7 +53,7 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | `oauth_start_rate_limit` | integer `[0,1000]` | 10 starts per client IP; `0` disables the in-process layer |
 | `oauth_start_rate_window_seconds` | integer `[1,3600]` | 60-second window |
 | `oauth_start_rate_penalty_seconds` | integer `[0,3600]` | 60-second penalty; `0` disables the penalty duration |
-| `maintenance_mode` | boolean | `false`; **changed from alpha.1 in the alpha.2 candidate**: now a server-side authoritative admission gate — while on, every user-station `/api/*` and `/v1/*` request is refused with a stable `503 service_unavailable` envelope (`source: platform`, `no-store`) except a strict allowlist (`/healthz`, the public config endpoints, and `/api/auth/logout`); already-issued user sessions and caller keys are affected immediately; the admin station is never gated; atomically live-applied and loaded from the database at startup. Route matrix in `docs/api-contract.md` §6 |
+| `maintenance_mode` | boolean | `false`; **changed in alpha.2**: now a server-side authoritative admission gate — while on, every user-station `/api/*` and `/v1/*` request is refused with a stable `503 service_unavailable` envelope (`source: platform`, `no-store`) except a strict allowlist (`/healthz`, the public config endpoints, and `/api/auth/logout`); already-issued user sessions and caller keys are affected immediately; the admin station is never gated; atomically live-applied and loaded from the database at startup. Route matrix in `docs/api-contract.md` §6 |
 | `charity_enabled` | boolean | `false`; charity system master switch — while off, no new charity routing happens and the price table is hidden; in-flight reservations still settle |
 | `donation_accept_enabled` | boolean | `false`; gates new donation submissions only; review/routing of existing donations is unaffected |
 | `charity_token_reserve_milli` | nullable canonical positive decimal milli-credit string | **null (default) = not configured** — distinct from an explicit value; while unset, per-token charity models cannot be enabled or routed (fail closed); PATCH rejects `null` and non-positive values |

@@ -1,10 +1,10 @@
-# NonbiriAPI HTTP API Contract (v1.0.0-alpha.2 release candidate)
+# NonbiriAPI HTTP API Contract (`v1.0.0-alpha.2`)
 
-- Status: **local, unpublished `v1.0.0-alpha.2` release candidate**. The latest published tag remains `v1.0.0-alpha.1`; this document is not a claim that alpha.2 has been tagged, published, or deployed.
-- Scope: v1.0.0-alpha.2 candidate surface. `/v1/chat/completions` and `/v1/models` remain the only
+- Status: **release contract for `v1.0.0-alpha.2`**.
+- Scope: `v1.0.0-alpha.2` surface. `/v1/chat/completions` and `/v1/models` remain the only
   OpenAI-compatible exit endpoints; embeddings / images / audio / files /
   moderation / batch are deferred past the alpha.
-- Authority: this document describes the intended alpha.2 candidate surface, aligned to the frozen requirements, accepted credential/egress/data-lifecycle decisions, and the emitted stable-code set of `internal/httperr`. Candidate text is not part of the published alpha.1 contract until an alpha.2 tag is created. Documentation errata may correct an omitted or misstated field without changing runtime behavior; other changes to endpoint paths, JSON fields, stable codes, auth behavior, cache policy, or diagnostic limits require a subsequent release contract and changelog entry.
+- Authority: this document defines the `v1.0.0-alpha.2` wire contract and is aligned with the implementation, contract tests, accepted security and data-lifecycle decisions, and the emitted stable-code set of `internal/httperr`. Documentation errata may correct an omitted or misstated field without changing runtime behavior; other changes to endpoint paths, JSON fields, stable codes, auth behavior, cache policy, or diagnostic limits require a subsequent release contract and changelog entry.
 
 ## 1. Conventions
 
@@ -89,8 +89,7 @@ Every error response is a single JSON object:
   forge a different attribution than its code. An explicit caller-set `source` can confirm but
   never override the code-derived value: an upstream code is always `upstream` and a platform
   code is always `platform`; any explicit value that disagrees (or is invalid) is dropped in
-  favor of the code-derived default. *(Alpha.2 candidate change: the `source` field and
-  its locked-to-code derivation are not part of the published `v1.0.0-alpha.1` contract.)*
+  favor of the code-derived default. *(Introduced in `v1.0.0-alpha.2`.)*
 - `message` is bounded to 1000 runes and stripped of all C0 control characters and DEL; it
   carries a short human-safe summary and **never** raw upstream identifiers or text.
 - `diag` is bounded to 4096 bytes (the untrusted-upstream diagnostic resource limit) by
@@ -102,8 +101,8 @@ Every error response is a single JSON object:
   `diag` as text, never as HTML or formula-interpreted content.
 - `limit` and `resource` are optional fields carried only by
   `resource_limit_exceeded` (§1.6): `limit` is the effective integer cap in effect
-  at the refusal and `resource` is the stable resource name (`endpoint_key`, `model`,
-  `endpoint`, `endpoint_key`, `model`, `binding`). They are omitted by every other code.
+  at the refusal and `resource` is the stable resource name (`endpoint`, `endpoint_key`,
+  `model`, `binding`). They are omitted by every other code.
 
 ### 1.5 Layered diagnostic recording
 
@@ -147,9 +146,9 @@ Codes below are the emitted set; HTTP status is derived from the code. Route tab
 | `already_checked_in` | 409 | the user already checked in on the current site-local day (今日已签到); the day was consumed by the earlier successful check-in, not by this attempt; `source` is `platform` |
 | `checkin_cap_reached` | 403 | the user's credit balance has reached the configured check-in threshold (`credits_cap_milli`) at an effective level below the bypass (≥3); the refusal does NOT consume the day; the message contains 悠哉积分已达签到上限; `source` is `platform` |
 
-*(Alpha.2 candidate change: the `service_unavailable` maintenance-gate meaning and the
-`insufficient_credits` / `feature_disabled` / `charity_suspended` business triggers are not
-part of the published `v1.0.0-alpha.1` contract.)*
+*The maintenance-gate meaning of `service_unavailable` and the
+`insufficient_credits` / `feature_disabled` / `charity_suspended` business triggers were
+introduced in `v1.0.0-alpha.2`.*
 
 ## 2. Platform exit — `/v1/*` (CallerKey Bearer)
 
@@ -168,7 +167,7 @@ Request body uses the OpenAI Chat Completions shape. Ordinary call parameters ar
 | `stream` | no | `true` selects SSE; omitted/`false` selects the single JSON response |
 | other fields | no | preserved, except caller `safety_identifier` is overwritten and streaming requests authoritatively merge `stream_options.include_usage=true` while retaining other `stream_options` members |
 
-Server-side behavior (alpha.2 candidate):
+Server-side behavior (`v1.0.0-alpha.2`):
 
 1. Resolve `model` to one of the caller's platform models → its binding set. Cross-user
    resources never enter the candidate set.
@@ -186,7 +185,7 @@ Server-side behavior (alpha.2 candidate):
    candidate set never multiplies the single-attempt timeout into a longer logical request.
 4. Inject the OpenAI `safety_identifier` field for upstream per-user risk attribution.
 
-**Alpha.2 candidate security behavior:** the service sends only `nbu_v3_` followed by the
+**`v1.0.0-alpha.2` security behavior:** the service sends only `nbu_v3_` followed by the
 52-character RFC 4648 base32 (without padding) encoding of an HMAC-SHA-256 digest. The process
 derives one dedicated 32-byte key from the Vault with purpose
 `nonbiriapi:safety-identifier:v3`. The HMAC message is the exact UTF-8 bytes of that purpose,
@@ -378,7 +377,7 @@ per-user endpoint limit and clear it (NULL restores the global default).
 authoritative connector registry; unknown types are rejected with
 `invalid_request` and never silently fall back to another protocol. The
 connector type is immutable after creation (a `PATCH` carrying `connector_type`
-is rejected). In the alpha.2 candidate the registry still supports only `openai-compatible`;
+is rejected). In `v1.0.0-alpha.2` the registry supports only `openai-compatible`;
 later versions extend the registry in one place.
 
 `model_fetch_failed` / `model_fetch_failed_at` are the endpoint's bounded fetch
@@ -386,7 +385,7 @@ flag: set (with a unix-seconds timestamp) whenever an upstream model fetch for
 any of its keys failed, cleared by the next successful fetch. The flag is
 state only — never a diagnostic or any upstream content.
 
-**Alpha.2 candidate security change:** Endpoint updates enforce the credential/origin boundary in the same database
+**`v1.0.0-alpha.2` security behavior:** Endpoint updates enforce the credential/origin boundary in the same database
 transaction as the update and key-existence check. An endpoint with any key
 (enabled or disabled) cannot move to another canonical origin; delete all keys,
 change the origin, then add new keys. A path change within the same origin is
@@ -483,11 +482,15 @@ Both endpoints require `X-Elevated-Token` from §3.2.
 
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
-| `POST` | `/api/account/export` | user session + elevated | — | `200` direct `application/json` attachment containing the bounded whitelist package (user info, endpoint/key metadata, models/bindings, caller-key display metadata, usage totals, log summary), without plaintext/ciphertext upstream secrets | `elevated_required`, `unauthorized`, `rate_limited`, `payload_too_large`, `internal` |
-| `POST` | `/api/account/delete` | user session + elevated | `{confirm:"DELETE"}` | `204`; deletes the account and all linked data (endpoints, keys, models, bindings, request logs, caller key, alerts/callbacks); late callbacks against a deleted account are atomically suppressed server-side so the insert no-ops; the current session is invalidated | `elevated_required`, `unauthorized`, `conflict`, `internal` |
+| `POST` | `/api/account/export` | user session + elevated | — | `200` direct `application/json` attachment containing the bounded whitelist package: user and level/economy state; endpoint/key metadata; models/bindings; caller-key display metadata; usage totals and log summary; credit ledger; daily activity; check-ins; the owner's donation submissions; consumer-side charity reservation summaries; and donor-reward summaries. Plaintext/ciphertext upstream secrets and cross-party identities are excluded | `elevated_required`, `unauthorized`, `rate_limited`, `payload_too_large`, `internal` |
+| `POST` | `/api/account/delete` | user session + elevated | `{confirm:"DELETE"}` | `204`; deletes the account and all linked data, including endpoints, keys, models, bindings, request logs, caller key, issues/alerts, ledger/activity/check-in rows, donations, charity claims/reservations, and donor rewards; late callbacks against a deleted account are atomically suppressed server-side so the insert no-ops; the current session is invalidated | `elevated_required`, `unauthorized`, `conflict`, `internal` |
 
-The export package excludes upstream secret material by policy; it carries enough metadata to
-be usable as a portable account snapshot. The package uses `schema_version: 2` and an explicit server-side field whitelist; future database columns do not enter it automatically.
+The export package excludes upstream secret material and cross-party identities by policy; it
+carries enough metadata to be usable as a portable account snapshot. The package uses
+`schema_version: 2` and an explicit server-side field whitelist; future database columns do
+not enter it automatically. Donation rows contain safe submission/review metadata only;
+consumer reservation summaries omit donated-resource identifiers, while donor-reward
+summaries omit consumer identity.
 The user section carries the economy balances as canonical decimal strings (`credits`,
 `donation_credit`) and the level state as small integers (`manual_level` nullable — `null`
 means automatic — and `auto_level`, the persisted automatic high-water mark); no
@@ -522,7 +525,7 @@ violation-window or threshold-configuration data is exported.
 
 ### 3.10 Level-5 steward prefix — `/api/steward/*`
 
-The frozen co-management prefix for effective level ≥ 5 users, served on the **user station**
+The `v1.0.0-alpha.2` co-management prefix for effective level ≥ 5 users, served on the **user station**
 with the ordinary user session cookie. This contract lands the authorization frame and the
 full-site log co-management route:
 
@@ -539,7 +542,7 @@ full-site log co-management route:
   route — so the frame never reveals which steward routes exist. A level-5 caller hitting an
   unregistered sub-path gets the ordinary `404 not_found` envelope.
 - **Full-site logs**: `GET /api/steward/logs` serves the level-5 full-site request-log
-  projection (frozen §G, clarification §1.8). It reuses the administrator log shape and the
+  projection. It reuses the administrator log shape and the
   bounded `page`/`page_size` + filter parameters, but applies the steward de-privacy
   projection: on `route_kind='charity'` rows the donor's `endpoint_key_id`, `endpoint_base_url`
   and `upstream_model_id` are blanked, because a level-5 steward co-manages site-wide
@@ -561,9 +564,9 @@ full-site log co-management route:
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
 | `GET` | `/api/checkin` | user session | — (any query parameter is `invalid_request`) | while unavailable: `200 {"enabled":false}` and NOTHING else (no reason, no day, no range — timezone-unset is indistinguishable from every other disabled cause); while available: `200 {"enabled":true,"checked_in_today":bool,"credits":string,"award_min_milli":string,"award_max_milli":string,"credits_cap_milli":string}` — all amounts canonical decimal milli-credit strings (`credits` may carry `-`). The status read performs no writes and never triggers the lazy level promotion | `invalid_request`, `unauthorized`, `internal` |
-| `POST` | `/api/checkin` | user session | — (any body or query parameter is `invalid_request`; the client never supplies the award or the day) | `200 {"award_milli":string,"credits":string}` — the drawn award and the new post-award balance, both canonical decimal strings | `invalid_request`, `unauthorized`, `forbidden`, `not_found`, `conflict`, `internal` |
+| `POST` | `/api/checkin` | user session | — (any body or query parameter is `invalid_request`; the client never supplies the award or the day) | `200 {"award_milli":string,"credits":string}` — the drawn award and the new post-award balance, both canonical decimal strings | `invalid_request`, `unauthorized`, `feature_disabled`, `already_checked_in`, `checkin_cap_reached`, `forbidden`, `not_found`, `internal` |
 
-Behavior (frozen §I, implementation contract §2.4/§6.3):
+Behavior:
 
 - **One per day, by constraint**: the site-local day key is computed from the explicitly
   configured fixed offset; one check-in per user per day is enforced by the database
@@ -590,7 +593,7 @@ Behavior (frozen §I, implementation contract §2.4/§6.3):
 
 ### 3.12 Charity donations — `/api/donations` (user station)
 
-*(Alpha.2 candidate change: frozen §J/§L, implementation contract §2.6/§6.3.)*
+*(Introduced in `v1.0.0-alpha.2`.)*
 
 One donation = one owned endpoint plus at least one key. The review decision (approve/reject)
 covers the WHOLE donation; the per-key concurrency/RPM/cap limits are attributes of the
@@ -601,7 +604,7 @@ no response ever contains secret material or key notes.
 |---|---|---|---|---|---|
 | `GET` | `/api/donations` | user session | strict single-valued `page` (from 1) / `page_size` (`[1,100]`, default 20); any other parameter is `invalid_request` | `200 {data:[donation], total, has_more}` (keys/reviews omitted) | `invalid_request`, `unauthorized`, `internal` |
 | `GET` | `/api/charity/models` | user session | — (any query parameter is `invalid_request`) | `200 {data:[…]}` while the site-wide charity switch is on: every enabled `[公益]…` model with `{id, provider, model, full_name, enabled, pricing_mode, prices:{ten original milli-credit strings plus five current_* effective user-price strings under the discount valid at read time}, discount:{percent, enabled, start_at?, end_at?}, success_samples, success_count (last-100 protocol-success ring buffer), available, availability_reason (`ok`/`no_candidate`)}`; a disabled switch returns an empty list; the projection never carries a donated-key id or base URL. Display only: routing and billing are always recomputed server-side at reservation time | `unauthorized`, `internal` |
-| `POST` | `/api/donations` | user session | `{description (required, ≤1024 runes), expires_at? (positive unix seconds or null = never), existing_endpoint:{endpoint_id, key_ids[], keys?:[{endpoint_key_id, max_concurrency?, rpm_limit?}]}}` OR `new_endpoint:{connector_type?, base_url, note?, enabled?, keys:[{secret, note?, max_concurrency?, rpm_limit?}]}` — exactly one form | `201` donation with keys | `invalid_request`, `unauthorized`, `forbidden` (`feature_disabled` while `donation_accept_enabled` is off), `not_found`, `conflict` (a selected physical key is already claimed by another active donation), `payload_too_large` (secret too long / body cap), `resource_limit_exceeded` (endpoint/key caps) , `internal` |
+| `POST` | `/api/donations` | user session | `{description (required, ≤1024 runes), expires_at? (positive unix seconds or null = never), existing_endpoint:{endpoint_id, key_ids[], keys?:[{endpoint_key_id, max_concurrency?, rpm_limit?}]}}` OR `new_endpoint:{connector_type?, base_url, note?, enabled?, keys:[{secret, note?, max_concurrency?, rpm_limit?}]}` — exactly one form | `201` donation with keys | `invalid_request`, `unauthorized`, `feature_disabled` (while `donation_accept_enabled` is off), `not_found`, `conflict` (a selected physical key is already claimed by another active donation), `payload_too_large` (secret too long / body cap), `resource_limit_exceeded` (endpoint/key caps), `internal` |
 | `GET` | `/api/donations/{id}` | user session | — | `200` donation + `keys[]` + `reviews[]` (append-only audit of the caller's own submission) | `invalid_request`, `unauthorized`, `not_found`, `internal` |
 | `PATCH` | `/api/donations/{id}` | user session | pending-only owner edit: `{description?, expires_at? (null clears), keys?:{key_ids[], limits?[]}}`; empty body is `invalid_request` | `200` updated donation | `invalid_request`, `unauthorized`, `conflict` (already reviewed/deleted, or a replacement key is claimed elsewhere), `not_found`, `internal` |
 | `DELETE` | `/api/donations/{id}` | user session | — (any query parameter is `invalid_request`) | `204` soft delete: claims released, status `deleted`, audit entry appended | `invalid_request`, `unauthorized`, `conflict` (already deleted), `not_found`, `internal` |
@@ -610,7 +613,7 @@ Behavior:
 
 - **Intake gate**: POST alone requires `donation_accept_enabled`; a closed switch returns
   `feature_disabled` (403) and never blocks review, listing, editing, or deletion of existing
-  donations (frozen §J.4.5).
+  donations.
 - **Nested creation is one transaction**: the `new_endpoint` form creates the personal endpoint,
   seals every fresh secret contextually, inserts the donation keys and acquires all claims in a
   single transaction; ANY failure — including a claim conflict — rolls back the whole submission,
@@ -723,7 +726,7 @@ Known `site_config` keys (the authoritative key set is enforced by the handler):
 - `checkin_mode` — the check-in three-way switch (§3.11), exactly `enabled` / `level_gated` / `disabled`; the default is `disabled`. An unknown stored value reads as `disabled` (fail closed, never an implicit enabled state)
 - `checkin_award_min_milli`, `checkin_award_max_milli` — the daily check-in award range bounds (§3.11), as canonical non-negative decimal milli-credit strings; defaults `"40000000"` / `"60000000"` (4–6 USD equivalent). The pair is cross-validated: PATCHing either bound validates `min <= max` against the other key's current value in ONE transaction, so a rejected pair is `conflict` and nothing is written. Both write paths record the administrator console write as product activity in that same transaction
 - `credits_cap_milli` — the check-in admission threshold (§3.11) as a canonical non-negative decimal milli-credit string; default `"250000000"` (25 USD equivalent). `0` = no threshold. It gates check-in admission only (effective level ≥ 3 bypasses) and never truncates an awarded amount
-- `charity_enabled` — boolean, default `false`; the charity system master switch (frozen §J.4.5). While off, no new charity routing happens and the price table is hidden; in-flight reservations still settle
+- `charity_enabled` — boolean, default `false`; the charity system master switch. While off, no new charity routing happens and the price table is hidden; in-flight reservations still settle
 - `donation_accept_enabled` — boolean, default `false`; gates NEW donation submissions only (§3.12); review/routing of existing donations is unaffected
 - `charity_token_reserve_milli` — nullable canonical positive decimal milli-credit string; **JSON `null` (the default) means "not configured"** and keeps every per-token charity model disabled (fail closed) — it can never be mistaken for an explicit `0`, and PATCH rejects both `null` and non-positive values
 - `rpm_ban_threshold`, `rpm_ban_window_seconds`, `rpm_ban_duration_seconds` — integer RPM-violation window settings; defaults `5`, `86400`, `86400`; threshold `0` disables automatic RPM bans
@@ -775,7 +778,7 @@ resolving an alert with `false` reopens it and clears `resolved_at`.
 
 ### 4.6 Donation review & charity model management (admin + steward)
 
-*(Alpha.2 candidate change: frozen §J.4/J.5, implementation contract §6.4.)*
+*(Introduced in `v1.0.0-alpha.2`.)*
 
 Administrators reach these routes under `/admin/api/…` with an admin session; level-5 stewards
 reach the SAME operations under `/api/steward/…` on the user station (§3.10, live-resolved
@@ -797,7 +800,7 @@ Behavior:
 
 - **Whole-donation decisions**: approve requires status `pending` and defaults the donation to
   enabled; reject requires `pending`; enable/disable require `approved`. Reviewers may adjust the
-  frozen fields at any decision — expiry, per-key limits, per-key `credits_usage_cap_milli`
+  review-controlled fields at any decision — expiry, per-key limits, per-key `credits_usage_cap_milli`
   (string wire), and per-key enabled flag; disabling a key releases its claim in the same
   transaction, enabling re-acquires it (`conflict` when another active donation holds it).
 - **Review history is never hard-deleted**: DELETE is soft; only account-lifecycle cascade
@@ -845,8 +848,7 @@ Behavior:
 
 ## 6. Server-side maintenance gate
 
-*(Alpha.2 candidate security change: this section is not part of the published
-`v1.0.0-alpha.1` contract until an alpha.2 tag is created.)*
+*(Introduced in `v1.0.0-alpha.2`.)*
 
 `maintenance_mode` is a server-side authoritative admission gate, not a front-end-only notice.
 It is an atomically live-applied process-wide boolean: a toggle through the admin site-config

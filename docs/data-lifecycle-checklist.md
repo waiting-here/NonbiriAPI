@@ -1,6 +1,6 @@
 # Data Lifecycle Checklist (export / delete / retention / privacy)
 
-> Status: **active** — current table describes the local, unpublished alpha.2 release-candidate schema. Future rows must be added in the same change that introduces them; planning text alone is not current coverage.
+> Status: **active** — current table describes the `v1.0.0-alpha.2` schema. Future rows must be added in the same change that introduces them; planning text alone is not current coverage.
 >
 > Every new user-associated table or column MUST be checked against this list in the same
 > task that introduces it. "User-associated" means any row whose lifecycle is bound to a
@@ -32,7 +32,7 @@ be closed before the task is accepted.
    only behind `internal/diagnostic.Bound`; secrets never enter logs, errors, CSV, HTML, or
    export.
 
-## Current coverage (alpha.2 Phase E lifecycle audit)
+## Current coverage (`v1.0.0-alpha.2`)
 
 | Table / column | User link | Export | Delete | Retention | Privacy |
 |---|---|---|---|---|---|
