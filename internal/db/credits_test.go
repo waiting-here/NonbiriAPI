@@ -70,7 +70,7 @@ func TestFreshUsersGetZeroEconomyColumns(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("seed adjustment: %v", err)
 	}
-	// Reopening the same database must be idempotent: no re-migration error,
+	// Reopening the same current database must be idempotent: no startup error,
 	// no reset of stored balances.
 	if err := st.Close(); err != nil {
 		t.Fatal(err)

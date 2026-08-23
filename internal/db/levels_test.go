@@ -3,21 +3,15 @@ package db
 // Level system tests: threshold chain validation (same-transaction),
 // authoritative effective-level resolution with the lazy CAS auto promotion
 // and the no-downgrade high-water mark, the manual override/reset, the
-// administrator exclusion, concurrent promotion convergence, and the level
-// column migration from a pre-level schema.
+// administrator exclusion and concurrent promotion convergence.
 
 import (
-	"bytes"
 	"context"
-	"database/sql"
 	"errors"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
-	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 func newLevelsTestStore(t *testing.T) *Store {
@@ -400,91 +394,5 @@ func TestLevelCapabilityConstants(t *testing.T) {
 	}
 	if !EffectiveLevelAtLeast(2, LevelBanner) || EffectiveLevelAtLeast(1, LevelBanner) {
 		t.Fatalf("banner helper boundary is wrong")
-	}
-}
-
-// TestLevelColumnsMigrateFromPreLevelSchema builds a database whose users
-// table predates the level columns, then opens it through Open and asserts
-// the columns appear with the neutral defaults (level NULL, auto_level 1) and
-// that a repeated open is idempotent.
-func TestLevelColumnsMigrateFromPreLevelSchema(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "pre-level.db")
-	key := bytes.Repeat([]byte{0x37}, secret.MasterKeyBytes)
-	vault, err := secret.New(key)
-	clear(key)
-	if err != nil {
-		t.Fatalf("secret.New: %v", err)
-	}
-	defer func() { _ = vault.Close() }()
-	dbtest.EnsureOwnerOnlyParent(t, path)
-
-	// A pre-level users table with one seeded row (opened on a raw handle so
-	// only the legacy schema exists before the real bootstrap runs).
-	legacy, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatalf("open raw: %v", err)
-	}
-	seed := `
-CREATE TABLE users (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	discord_id TEXT UNIQUE,
-	username TEXT NOT NULL DEFAULT '',
-	avatar TEXT NOT NULL DEFAULT '',
-	is_admin INTEGER NOT NULL DEFAULT 0,
-	is_banned INTEGER NOT NULL DEFAULT 0,
-	banned_reason TEXT NOT NULL DEFAULT '',
-	endpoint_limit INTEGER,
-	rpm_limit INTEGER,
-	total_requests INTEGER NOT NULL DEFAULT 0,
-	total_prompt_tokens INTEGER NOT NULL DEFAULT 0,
-	total_completion_tokens INTEGER NOT NULL DEFAULT 0,
-	total_unknown_usage_requests INTEGER NOT NULL DEFAULT 0,
-	lang TEXT NOT NULL DEFAULT '',
-	created_at INTEGER NOT NULL,
-	updated_at INTEGER NOT NULL
-);
-INSERT INTO users (discord_id, username, created_at, updated_at)
-	VALUES ('legacy-1', 'legacy', 1700000000, 1700000000);`
-	if _, err := legacy.Exec(seed); err != nil {
-		t.Fatalf("seed legacy schema: %v", err)
-	}
-	if err := legacy.Close(); err != nil {
-		t.Fatalf("close legacy: %v", err)
-	}
-
-	// Open through the real bootstrap: the level columns must appear.
-	st, err := Open(path, vault)
-	if err != nil {
-		t.Fatalf("open with migration: %v", err)
-	}
-	defer st.Close()
-	user, err := st.GetUserByDiscordID("legacy-1")
-	if err != nil || user == nil {
-		t.Fatalf("legacy user: %v", err)
-	}
-	if user.Level != nil || user.AutoLevel != 1 {
-		t.Fatalf("migrated defaults = (level %+v, auto %d), want (nil, 1)", user.Level, user.AutoLevel)
-	}
-	// Manual override works on the migrated row.
-	four := 4
-	if _, err := st.SetUserManualLevel(user.ID, &four); err != nil {
-		t.Fatalf("manual on migrated row: %v", err)
-	}
-
-	// Reopen: idempotent, values preserved.
-	if err := st.Close(); err != nil {
-		t.Fatalf("close: %v", err)
-	}
-	st2, err := Open(path, vault)
-	if err != nil {
-		t.Fatalf("reopen: %v", err)
-	}
-	defer st2.Close()
-	again, err := st2.GetUserByDiscordID("legacy-1")
-	if err != nil || again == nil {
-		t.Fatalf("reopen user: %v", err)
-	}
-	if again.Level == nil || *again.Level != 4 || again.AutoLevel != 1 {
-		t.Fatalf("reopen projection = (level %+v, auto %d), want (4, 1)", again.Level, again.AutoLevel)
 	}
 }

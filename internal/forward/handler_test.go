@@ -552,7 +552,13 @@ func TestForwardSSRFAndUnknownConnectorFailClosedWithoutSensitiveDiagnostics(t *
 		t.Fatalf("self-origin status=%d body=%s", self.Code, self.Body.String())
 	}
 
+	if _, err := fixture.store.DB().Exec(`PRAGMA ignore_check_constraints=ON`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := fixture.store.DB().Exec(`UPDATE endpoints SET base_url=?, connector_type='unknown-protocol' WHERE id=?`, upstream.URL, route.endpoint); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.store.DB().Exec(`PRAGMA ignore_check_constraints=OFF`); err != nil {
 		t.Fatal(err)
 	}
 	unknown := performCaller(fixture.handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, body))

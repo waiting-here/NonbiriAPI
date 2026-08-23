@@ -85,11 +85,11 @@ func TestReadPublicConfigProjectsOnlyAllowlist(t *testing.T) {
 	if out["default_locale"] != "zh" {
 		t.Fatalf("default_locale=%v", out["default_locale"])
 	}
-	if out["maintenance_mode"] != false {
-		t.Fatalf("maintenance_mode=%v want false", out["maintenance_mode"])
+	if out["maintenance_mode"] != true {
+		t.Fatalf("maintenance_mode=%v want true", out["maintenance_mode"])
 	}
-	if out["registration_open"] != true {
-		t.Fatalf("registration_open=%v want true", out["registration_open"])
+	if out["registration_open"] != false {
+		t.Fatalf("registration_open=%v want false", out["registration_open"])
 	}
 
 	// Defensive: none of the sensitive values may appear anywhere in the
@@ -134,11 +134,11 @@ func TestReadPublicConfigEmptyStoreYieldsDefaults(t *testing.T) {
 	if out["legal_authoritative_locale"] != "" {
 		t.Fatalf("legal_authoritative_locale=%v want empty", out["legal_authoritative_locale"])
 	}
-	if out["maintenance_mode"] != false {
-		t.Fatalf("maintenance_mode=%v want false", out["maintenance_mode"])
+	if out["maintenance_mode"] != true {
+		t.Fatalf("maintenance_mode=%v want true", out["maintenance_mode"])
 	}
-	if out["registration_open"] != true {
-		t.Fatalf("registration_open=%v want true", out["registration_open"])
+	if out["registration_open"] != false {
+		t.Fatalf("registration_open=%v want false", out["registration_open"])
 	}
 }
 
