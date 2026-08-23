@@ -964,11 +964,15 @@ func TestFetchUsesDescriptorDiscovererAsOnlyProtocolPath(t *testing.T) {
 }
 
 func TestFetchUnsupportedDiscovererDoesNotWriteFailureOrClearCache(t *testing.T) {
-	const unsupportedType connectorcontract.Type = "no-discovery"
-	registry := testFetchRegistry(t, unsupportedType, nil)
+	// Anthropic is a generation-1 persisted connector type, but this custom
+	// descriptor intentionally advertises no model-discovery capability. This
+	// exercises the nil-discoverer behavior without weakening the schema's
+	// closed-world connector CHECK or bypassing the repository.
+	const noDiscoveryType = connectorcontract.TypeAnthropicCompatible
+	registry := testFetchRegistry(t, noDiscoveryType, nil)
 	f := newFetchFixture(t, func(cfg *FetcherConfig, _ *egress.StackOptions) { cfg.Registry = registry })
 	uid := f.seedUser(t, "unsupported-discovery")
-	endpointRow, err := f.store.CreateEndpoint(context.Background(), uid, string(unsupportedType), f.upstream.URL, "", true, 1)
+	endpointRow, err := f.store.CreateEndpoint(context.Background(), uid, string(noDiscoveryType), f.upstream.URL, "", true, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
