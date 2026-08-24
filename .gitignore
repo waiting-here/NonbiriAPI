@@ -153,9 +153,9 @@ yarn-error.log*
 
 # ===== Debug artifacts =====
 
-debug.json
-debug_dumps/
-debug/
+/debug.json
+/debug_dumps/
+/debug/
 
 # ===== Local test configs =====
 

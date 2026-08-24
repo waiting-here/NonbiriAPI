@@ -274,6 +274,76 @@ type charityModelLister interface {
 	ListCallerCharityModels(ctx context.Context, now int64, limit int) ([]db.CallerModel, error)
 }
 
+// logicalCharityModelResolver is the deliberately narrow dry-run seam. The
+// concrete store implements it with a single charity-model row query; test
+// repositories may implement it without exposing any candidate method.
+type logicalCharityModelResolver interface {
+	ResolveLogicalCharityRoute(context.Context, string) (db.LogicalCharityRoute, error)
+}
+
+// logicalCharityEligibility is the read-only counterpart to the reservation
+// transaction's feature/user gates. It must not invoke PreflightHook (which may
+// record policy activity) or any reservation/candidate path.
+type logicalCharityEligibility interface {
+	ValidateLogicalCharityCaller(context.Context, int64, int64) error
+}
+
+// ValidateLogicalDryRun resolves only the [公益] model identity and its
+// model-level flatten policy. It does not sweep donations, select/count
+// candidates, reserve credits, decrypt keys, resolve DNS, or call a runner.
+// The returned forward projection is intentionally compatible with the
+// personal logical dry-run seam so callers can combine both validators.
+func (s *Service) ValidateLogicalDryRun(ctx context.Context, userID int64, request *openai.ChatRequest) (forward.DryRunRoute, error) {
+	if s == nil || ctx == nil || userID <= 0 || request == nil || !strings.HasPrefix(request.Model, db.CharityPrefix) {
+		return forward.DryRunRoute{}, ErrModelNotFound
+	}
+	resolver, ok := s.store.(logicalCharityModelResolver)
+	if !ok {
+		return forward.DryRunRoute{}, ErrInternal
+	}
+	route, err := resolver.ResolveLogicalCharityRoute(ctx, request.Model)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			return forward.DryRunRoute{}, ErrModelNotFound
+		}
+		return forward.DryRunRoute{}, ErrInternal
+	}
+	if route.ModelID <= 0 || route.FullName != request.Model {
+		return forward.DryRunRoute{}, ErrInternal
+	}
+	eligibility, ok := s.store.(logicalCharityEligibility)
+	if !ok {
+		return forward.DryRunRoute{}, ErrInternal
+	}
+	if err := eligibility.ValidateLogicalCharityCaller(ctx, userID, s.now().Unix()); err != nil {
+		switch {
+		case errors.Is(err, db.ErrCharityDisabled):
+			return forward.DryRunRoute{}, ErrCharityDisabled
+		case errors.Is(err, db.ErrCharitySuspended):
+			return forward.DryRunRoute{}, ErrCharitySuspended
+		case errors.Is(err, db.ErrNotFound), errors.Is(err, db.ErrAdminProtected):
+			return forward.DryRunRoute{}, ErrModelNotFound
+		default:
+			return forward.DryRunRoute{}, ErrInternal
+		}
+	}
+	// Validate the same model-level flatten policy as the personal logical
+	// seam, but on an immutable private clone. This may inspect/transform only
+	// caller JSON; it must not enter capability filtering, candidate selection,
+	// donation reservation, secret access, DNS, or egress.
+	if route.FlattenToolCall {
+		clone, reverseErr := request.ReverseFlatten()
+		if reverseErr != nil || clone == nil {
+			return forward.DryRunRoute{}, ErrInternal
+		}
+		clone.Clear()
+	}
+	return forward.DryRunRoute{
+		ModelID: route.ModelID, FullName: route.FullName,
+		RouteStrategy: "ordered", FlattenToolCall: route.FlattenToolCall,
+	}, nil
+}
+
 // Forward orchestrates one logical charity call end-to-end over the frozen
 // reservation state machine (implementation contract §5). The consumer is
 // debited exactly once per invocation; retries across donated keys swap ONLY
@@ -470,6 +540,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 			ConsumerUserID:        userID,
 			Request:               attemptRequest,
 			TraceID:               attemptID,
+			ObserverTraceID:       forward.ObserverTraceID(callCtx),
 			AttemptIndex:          i,
 			FlattenToolCalls:      route.Model.FlattenToolCalls,
 			PolicyCache:           policyCache,

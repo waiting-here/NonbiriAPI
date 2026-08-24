@@ -173,7 +173,7 @@ func (h *Handler) chatCompletions(writer http.ResponseWriter, request *http.Requ
 		writeError(writer, httperr.CodeInternal, "internal error", "")
 		return
 	}
-	if !validRequestContentType(request) || request.Header.Get("Content-Encoding") != "" {
+	if !ValidateChatIngress(request) {
 		writeError(writer, httperr.CodeInvalidRequest, "invalid request", "")
 		return
 	}
@@ -232,6 +232,14 @@ func (h *Handler) chatCompletions(writer http.ResponseWriter, request *http.Requ
 	default:
 		writeError(writer, httperr.CodeInternal, "internal error", "")
 	}
+}
+
+// ValidateChatIngress is the shared pre-body ingress gate for the OpenAI
+// caller route. Debug dry mode calls this exact seam before reading or
+// simulating a request so content-type/content-encoding behavior cannot drift
+// from ordinary forwarding.
+func ValidateChatIngress(request *http.Request) bool {
+	return validRequestContentType(request) && request.Header.Get("Content-Encoding") == ""
 }
 
 // charityChat dispatches one [公益] request through the charity rail and maps

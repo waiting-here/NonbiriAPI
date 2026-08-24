@@ -44,9 +44,12 @@ type AttemptInput struct {
 	ExpectedConnectorType connectorcontract.Type
 	Request               *openai.ChatRequest
 	TraceID               string
-	AttemptIndex          int
-	FlattenToolCalls      bool
-	PolicyCache           map[int64]bool
+	// ObserverTraceID correlates one caller-owned Debug trace with connector
+	// SafeObserver events without replacing the accounting AttemptID.
+	ObserverTraceID  string
+	AttemptIndex     int
+	FlattenToolCalls bool
+	PolicyCache      map[int64]bool
 }
 
 const maxForwardCiphertextBytes = 128 << 10
@@ -62,13 +65,17 @@ type AttemptRunner interface {
 // connector registry, and protocol adapters. CharityTargets is the optional
 // charity-path projection; when absent, RunCharity fails closed.
 type SecureRunnerConfig struct {
-	Repository                TargetRepository
-	CharityTargets            CharityTargetRepository
-	Secrets                   secret.ContextOpener
-	Registry                  *endpoint.Registry
-	Adapters                  []Adapter
-	Backend                   backend.Backend
-	Observer                  *connector.SafeObserver
+	Repository     TargetRepository
+	CharityTargets CharityTargetRepository
+	Secrets        secret.ContextOpener
+	Registry       *endpoint.Registry
+	Adapters       []Adapter
+	Backend        backend.Backend
+	Observer       *connector.SafeObserver
+	// ObserverResolver may supply a request-scoped observer. When nil, the
+	// legacy fixed Observer is used unchanged; a non-nil resolver lets the
+	// Debug Hub bind observations to the current user/session trace.
+	ObserverResolver          func(context.Context) *connector.SafeObserver
 	SafetyIdentifiers         *SafetyIdentifierFactory
 	AnthropicDefaultMaxTokens connectorcontract.AnthropicDefaultMaxTokensProvider
 }
@@ -83,6 +90,7 @@ type SecureRunner struct {
 	registry          *endpoint.Registry
 	connectors        map[connectorcontract.Type]connector.Connector
 	observer          *connector.SafeObserver
+	observerResolver  func(context.Context) *connector.SafeObserver
 	safetyIdentifiers *SafetyIdentifierFactory
 }
 
@@ -135,6 +143,7 @@ func NewSecureRunner(config SecureRunnerConfig) (*SecureRunner, error) {
 		registry:          config.Registry,
 		connectors:        connectors,
 		observer:          config.Observer,
+		observerResolver:  config.ObserverResolver,
 		safetyIdentifiers: config.SafetyIdentifiers,
 	}, nil
 }
@@ -168,13 +177,17 @@ func (r *SecureRunner) Run(ctx context.Context, writer http.ResponseWriter, inpu
 			input.PolicyCache[target.EndpointKeyID] = target.ForceStoreFalse
 		}
 	}
+	observerTraceID := input.ObserverTraceID
+	if observerTraceID == "" {
+		observerTraceID = input.TraceID
+	}
 	return r.dispatch(ctx, writer, dispatchInput{
 		ownerUserID:      input.UserID,
 		preDecrypted:     target,
 		expectedType:     expectedConnectorType,
 		request:          input.Request,
 		consumerUserID:   input.UserID,
-		traceID:          input.TraceID,
+		traceID:          observerTraceID,
 		attemptIndex:     input.AttemptIndex,
 		flattenToolCalls: input.FlattenToolCalls,
 	})
@@ -192,6 +205,7 @@ type CharityAttemptInput struct {
 	ConsumerUserID        int64 // consumer identity used only for safety_identifier
 	Request               *openai.ChatRequest
 	TraceID               string
+	ObserverTraceID       string
 	AttemptIndex          int
 	FlattenToolCalls      bool
 	PolicyCache           map[int64]bool
@@ -229,13 +243,17 @@ func (r *SecureRunner) RunCharity(ctx context.Context, writer http.ResponseWrite
 			input.PolicyCache[target.EndpointKeyID] = target.ForceStoreFalse
 		}
 	}
+	observerTraceID := input.ObserverTraceID
+	if observerTraceID == "" {
+		observerTraceID = input.TraceID
+	}
 	return r.dispatch(ctx, writer, dispatchInput{
 		ownerUserID:      target.DonorUserID,
 		preDecrypted:     target.ForwardTarget,
 		expectedType:     expectedConnectorType,
 		request:          input.Request,
 		consumerUserID:   input.ConsumerUserID,
-		traceID:          input.TraceID,
+		traceID:          observerTraceID,
 		attemptIndex:     input.AttemptIndex,
 		flattenToolCalls: input.FlattenToolCalls,
 	})
@@ -322,16 +340,34 @@ func (r *SecureRunner) dispatch(ctx context.Context, writer http.ResponseWriter,
 		Ingress:      attemptRequest,
 		Policy:       connectorcontract.AttemptPolicy{SafetyIdentifier: safetyIdentifier, ForceStoreFalse: target.ForceStoreFalse, FlattenToolCalls: in.flattenToolCalls},
 		Sink:         writer,
-		Observer:     r.observer,
+		Observer:     r.observerForContext(ctx),
 		TraceID:      in.traceID,
 		AttemptIndex: in.attemptIndex,
 	})
+	if state := ProtocolStateFromContext(ctx); state != nil {
+		state.Mark(result)
+	}
 	// The frozen log contract requires the dispatch-time canonical base-URL
 	// snapshot on every committed request. The base URL is the owner-visible
 	// endpoint value, never credential material; it travels as bounded
 	// metadata alongside the other attempt fields.
 	result.EndpointBaseURL = target.BaseURL
 	return result
+}
+
+func (r *SecureRunner) observerForContext(ctx context.Context) *connector.SafeObserver {
+	if r == nil {
+		return nil
+	}
+	if observer := ObserverFromContext(ctx); observer != nil {
+		return observer
+	}
+	if r.observerResolver != nil {
+		if observer := r.observerResolver(ctx); observer != nil {
+			return observer
+		}
+	}
+	return r.observer
 }
 
 func internalAttemptFailure(diagnostic string) connectorcontract.AttemptResult {
