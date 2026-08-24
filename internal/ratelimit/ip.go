@@ -335,9 +335,11 @@ func (t *IPThrottle) Config() IPThrottleConfig {
 // discarding them). The bounded-store parameters stay at their construction
 // values; only the operator-tunable rate parameters are changed.
 //
-// As with NewIPThrottle, Limit == 0 disables admission accounting (every
-// Allow returns IPDisabled), a zero Window falls back to DefaultIPWindow, and
-// a zero Penalty falls back to DefaultIPPenalty. A Limit larger than the
+// Limit == 0 disables admission accounting (every Allow returns IPDisabled),
+// and a zero Window falls back to DefaultIPWindow. Unlike constructor
+// normalization, Reconfigure preserves an explicit zero Penalty to disable
+// only the continuing penalty interval (the first over-limit attempt is still
+// denied). A Limit larger than the
 // construction-time MaxHitsPerKey is rejected so a live update can never
 // exceed the bounded per-key hit store.
 func (t *IPThrottle) Reconfigure(config IPThrottleConfig) error {
@@ -353,10 +355,7 @@ func (t *IPThrottle) Reconfigure(config IPThrottleConfig) error {
 	if err := validateDuration(config.Window, false); err != nil {
 		return err
 	}
-	if config.Penalty == 0 {
-		config.Penalty = DefaultIPPenalty
-	}
-	if err := validateDuration(config.Penalty, false); err != nil {
+	if err := validateDuration(config.Penalty, true); err != nil {
 		return err
 	}
 	now := t.clock.Now()

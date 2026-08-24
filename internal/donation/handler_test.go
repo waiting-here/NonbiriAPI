@@ -12,9 +12,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -374,5 +376,84 @@ func TestReviewSurfaceIdentityMatrix(t *testing.T) {
 	f.rev.ServeHTTP(recDel, reqDel)
 	if recDel.Code != http.StatusNoContent {
 		t.Fatalf("steward delete = %d %s", recDel.Code, recDel.Body.String())
+	}
+}
+
+func TestReviewListQueryAllowlistForAdminAndLevel5(t *testing.T) {
+	f := newDonationFixture(t)
+	doList := func(role, query string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/admin/api/donations"+query, nil)
+		req.Header.Set("X-Test-Role", role)
+		rec := httptest.NewRecorder()
+		f.rev.ServeHTTP(rec, req)
+		return rec
+	}
+
+	accepted := []string{
+		"", // missing status is the one canonical all-status representation
+		"?status=pending", "?status=approved", "?status=rejected", "?status=deleted",
+		"?page=2&page_size=1", "?page=3&page_size=100&status=pending",
+	}
+	for _, role := range []string{"admin", "level5"} {
+		for _, query := range accepted {
+			rec := doList(role, query)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("role=%s query=%q status=%d body=%s", role, query, rec.Code, rec.Body.String())
+			}
+		}
+	}
+
+	rejected := []string{
+		"?status=", "?status=all", "?status=unknown",
+		"?status=pending&status=approved", "?page=1&page=2", "?page_size=1&page_size=2",
+		"?status=pending;ignored=1",
+		"?unknown=1", "?page=0", "?page=01", "?page=-1", "?page_size=0", "?page_size=101",
+	}
+	for _, role := range []string{"admin", "level5"} {
+		for _, query := range rejected {
+			rec := doList(role, query)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("role=%s rejected query=%q status=%d body=%s", role, query, rec.Code, rec.Body.String())
+			}
+			var body map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body["error"] == nil {
+				t.Fatalf("role=%s query=%q missing error envelope: %s", role, query, rec.Body.String())
+			}
+		}
+	}
+}
+
+func TestReviewListRejectsOverflowBeforeServiceForAdminAndLevel5(t *testing.T) {
+	query := "?page=" + strconv.Itoa(math.MaxInt) + "&page_size=2"
+	for _, tc := range []struct {
+		name   string
+		prefix string
+		role   string
+	}{
+		{name: "admin", prefix: "/admin/api", role: db.ReviewRoleAdmin},
+		{name: "level5", prefix: "/api/steward", role: db.ReviewRoleLevel5},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resolved := 0
+			h := NewReviewHandler(tc.prefix, nil, func(*http.Request) (ReviewerIdentity, error) {
+				resolved++
+				return ReviewerIdentity{UserID: 1, Role: tc.role}, nil
+			})
+			req := httptest.NewRequest(http.MethodGet, tc.prefix+"/donations"+query, nil)
+			rec := httptest.NewRecorder()
+			h.Handler().ServeHTTP(rec, req)
+			if resolved != 1 {
+				t.Fatalf("identity resolutions=%d, want one live resolution", resolved)
+			}
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("overflow query status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			var body map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body["error"] == nil {
+				t.Fatalf("overflow query missing error envelope: %s", rec.Body.String())
+			}
+			// svc is deliberately nil: reaching Service/ListForReview (and thus
+			// the database) would panic this test instead of returning 400.
+		})
 	}
 }

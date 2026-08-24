@@ -37,7 +37,6 @@
       "level": "Current level",
       "levelValue": "Lv{{level}}",
       "levelManualSuffix": " (set by admin)",
-      "levelHint": "The level is resolved by the server; a manual override takes precedence over the automatic level. This page computes nothing.",
       "exactMilli": "exact value: {{value}} milli-credits"
     },
     "checkin": {
@@ -498,12 +497,8 @@
       "priceOutput": "Output",
       "donationDescription": "Donation description",
       "banned": "Your account is banned; the server will refuse charity calls.",
-      "callStatusTitle": "Call status guide",
-      "insufficientCreditsLabel": "Insufficient balance",
-      "insufficientCredits": "The server rejects a call when its charge cannot be reserved; this page never predicts or posts accounting changes.",
-      "suspendedLabel": "Charity eligibility suspended",
-      "serviceUnavailableLabel": "Resource unavailable",
-      "serviceUnavailable": "No candidate, key limits or maintenance can make a resource unavailable; the server returns the authoritative reason."
+      "upstreamPrivacyTitle": "Third-party upstream privacy:",
+      "upstreamPrivacyWarning": "Charity requests are sent to independent upstream providers. The third-party upstream and its account logs may see the full request content; its storage and privacy practices are outside this site's control. Do not include secrets or sensitive personal information."
     }
   }
 }

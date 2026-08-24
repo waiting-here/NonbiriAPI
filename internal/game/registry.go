@@ -105,13 +105,13 @@ func CompileConfig(raw map[string]string) (ConfigSnapshot, error) {
 
 	var err error
 	if value, ok := raw[FishingStandardRTPKey]; ok {
-		config.StandardRTPPercent, err = parseCanonicalInt(value, 0, 100)
+		config.StandardRTPPercent, err = parseCanonicalInt(value, fishing.MinimumRTPPercent, fishing.MaximumRTPPercent)
 		if err != nil {
 			return ConfigSnapshot{}, fmt.Errorf("%w: standard rtp", ErrInvalidConfig)
 		}
 	}
 	if value, ok := raw[FishingPremiumRTPKey]; ok {
-		config.PremiumRTPPercent, err = parseCanonicalInt(value, 0, 100)
+		config.PremiumRTPPercent, err = parseCanonicalInt(value, fishing.MinimumRTPPercent, fishing.MaximumRTPPercent)
 		if err != nil {
 			return ConfigSnapshot{}, fmt.Errorf("%w: premium rtp", ErrInvalidConfig)
 		}
@@ -125,7 +125,7 @@ func CompileConfig(raw map[string]string) (ConfigSnapshot, error) {
 		{key: FishingTreasureShellMultiplierKey, species: "shell"},
 	} {
 		if value, ok := raw[candidate.key]; ok {
-			multiplier, parseErr := parseCanonicalInt(value, 1, 1000)
+			multiplier, parseErr := parseCanonicalInt(value, fishing.MinimumTreasureMultiplier, fishing.MaximumTreasureMultiplier)
 			if parseErr != nil {
 				return ConfigSnapshot{}, fmt.Errorf("%w: treasure multiplier", ErrInvalidConfig)
 			}

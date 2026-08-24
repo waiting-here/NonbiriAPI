@@ -25,6 +25,7 @@
 package adminapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -44,7 +45,10 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 )
 
-const maxAdminBodyBytes = 16 * 1024
+const (
+	maxAdminBodyBytes      = 16 * 1024
+	maxLegalAdminBodyBytes = 6*maxLegalOverrideBytes + 256
+)
 
 // HandlerDeps wires the repository and the optional runtime applier. A nil
 // Runtime keeps the routes working with DB-only persistence (values take
@@ -80,6 +84,7 @@ func NewHandler(deps HandlerDeps) http.Handler {
 	h.mux.HandleFunc("POST /admin/api/users/{id}/ban", h.banUser)
 	h.mux.HandleFunc("POST /admin/api/users/{id}/unban", h.unbanUser)
 	h.mux.HandleFunc("GET /admin/api/site-config", h.getSiteConfig)
+	h.mux.HandleFunc("GET /admin/api/site-config/catalog", h.getSiteConfigCatalog)
 	h.mux.HandleFunc("PATCH /admin/api/site-config/{key}", h.patchSiteConfig)
 	h.mux.HandleFunc("GET /admin/api/activity", h.getActivity)
 	return httpmw.API(h.mux)
@@ -496,6 +501,37 @@ func (h *Handler) getSiteConfig(w http.ResponseWriter, r *http.Request) {
 	httperr.WriteJSON(w, http.StatusOK, out)
 }
 
+// getSiteConfigCatalog returns the bilingual, typed semantic descriptor for
+// every exact known key and every currently persisted alert preference. The
+// response is sorted by key and contains no stored values.
+func (h *Handler) getSiteConfigCatalog(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeErr(w, httperr.New(httperr.CodeServiceUnavailable, "service unavailable"))
+		return
+	}
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	if derr := rejectUnknownParams(r); derr.Code != "" {
+		writeErr(w, derr)
+		return
+	}
+	values, err := h.store.GetAllSiteConfigValues()
+	if err != nil {
+		writeRepoErr(w, err)
+		return
+	}
+	entries, err := buildSiteConfigCatalog(values)
+	if err != nil {
+		slog.Error("site config catalog unavailable", "err", err)
+		writeErr(w, httperr.New(httperr.CodeInternal, "configuration catalog unavailable"))
+		return
+	}
+	httperr.WriteJSON(w, http.StatusOK, struct {
+		Data []siteConfigCatalogEntry `json:"data"`
+	}{Data: entries})
+}
+
 // patchSiteConfig handles PATCH /admin/api/site-config/{key}. The value is
 // validated against the key's typed spec, then the read→runtime apply→persist→
 // revert step runs under the handler's site-config lock so concurrent patches to
@@ -518,14 +554,36 @@ func (h *Handler) patchSiteConfig(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, httperr.New(httperr.CodeNotFound, "configuration key not found"))
 		return
 	}
+	if isGameConfigKey(key) {
+		writeErr(w, httperr.New(httperr.CodeConflict, "game settings must be updated together"))
+		return
+	}
 	var body struct {
 		Value json.RawMessage `json:"value"`
 	}
-	if !decodeJSONBody(w, r, &body) {
+	decoded := false
+	if isLegalOverrideKey(key) {
+		decoded = decodeLegalJSONBody(w, r, &body)
+	} else {
+		decoded = decodeJSONBody(w, r, &body)
+	}
+	if !decoded {
 		return
 	}
-	if body.Value == nil || string(body.Value) == "null" {
+	isNull := body.Value != nil && bytes.Equal(bytes.TrimSpace(body.Value), []byte("null"))
+	if body.Value == nil || (isNull && key != KeyAnthropicDefaultMaxTokens) {
 		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid configuration value"))
+		return
+	}
+	if isNull {
+		h.siteConfigMu.Lock()
+		defer h.siteConfigMu.Unlock()
+		if err := h.store.DeleteSiteConfigValueWithActivity(r.Context(), key, admin.ID, time.Now()); err != nil {
+			slog.Error("site config reset failed", "key", key, "err", err)
+			writeErr(w, httperr.New(httperr.CodeInternal, "configuration update failed"))
+			return
+		}
+		httperr.WriteJSON(w, http.StatusOK, siteConfigPatchResp{Key: key, Value: nil})
 		return
 	}
 	value, derr := validateSiteConfigValue(key, body.Value)

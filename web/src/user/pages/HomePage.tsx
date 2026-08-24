@@ -104,7 +104,6 @@ function EconomyCard({ user }: { user: UserSummary }) {
           </strong>
         </div>
       </div>
-      <p className="muted item-note">{t('user.home.levelHint')}</p>
     </Card>
   );
 }

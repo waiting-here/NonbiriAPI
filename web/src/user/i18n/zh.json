@@ -37,7 +37,6 @@
       "level": "当前等级",
       "levelValue": "Lv{{level}}",
       "levelManualSuffix": "（管理员设定）",
-      "levelHint": "等级由服务端解析；手动设定优先于自动等级，本页不做任何计算。",
       "exactMilli": "精确值：{{value}} 毫积分"
     },
     "checkin": {
@@ -498,12 +497,8 @@
       "priceOutput": "输出",
       "donationDescription": "捐赠说明",
       "banned": "账号已封禁，公益调用会由服务端拒绝。",
-      "callStatusTitle": "调用状态说明",
-      "insufficientCreditsLabel": "余额不足",
-      "insufficientCredits": "实付金额不足时服务端会拒绝本次调用；页面不会自行判断或扣账。",
-      "suspendedLabel": "公益资格暂停",
-      "serviceUnavailableLabel": "资源暂不可用",
-      "serviceUnavailable": "无候选、密钥限流或维护期间，服务端会返回可读的拒绝原因。"
+      "upstreamPrivacyTitle": "第三方上游隐私提示：",
+      "upstreamPrivacyWarning": "公益请求会发送给独立的第三方上游提供商；第三方上游及其账户日志可能看到完整请求内容，其存储与隐私做法不受本站控制。请勿在请求中包含密钥或敏感个人信息。"
     }
   }
 }

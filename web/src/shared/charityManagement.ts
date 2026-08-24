@@ -34,6 +34,7 @@ export interface ManagementCharityModel {
   model: string;
   full_name: string;
   enabled: boolean;
+  flatten_tool_calls: boolean;
   pricing_mode: CharityPricingMode;
   prices: ManagementPriceSet;
   discount: { percent: number; enabled: boolean; start_at?: number; end_at?: number };
@@ -51,6 +52,7 @@ export interface ManagementDonationKey {
   credits_used_milli: string;
   credits_reserved_milli: string;
   enabled: boolean;
+  force_store_false: boolean;
 }
 
 export interface ManagementReview {
@@ -118,8 +120,33 @@ function recordValue(record: UnknownRecord, key: string): unknown {
   return record[key];
 }
 
-function amount(value: unknown): string {
-  return typeof value === 'string' && value.length <= 32 ? value : '0';
+function invalidResponse(field: string): never {
+  throw new ApiError('invalid_response', `The server returned an invalid ${field}.`, 200);
+}
+
+function amount(value: unknown, field = 'amount'): string {
+  if (typeof value !== 'string' || !/^(0|[1-9]\d*)$/.test(value) || value.length > 19) {
+    return invalidResponse(field);
+  }
+  try {
+    if (BigInt(value) > 9_223_372_036_854_775_807n) return invalidResponse(field);
+  } catch {
+    return invalidResponse(field);
+  }
+  return value;
+}
+
+function boundedInteger(value: unknown, minimum: number, maximum: number, field: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < minimum || (value as number) > maximum) {
+    return invalidResponse(field);
+  }
+  return value as number;
+}
+
+function additivePolicyBoolean(value: unknown, field: string): boolean {
+  if (value === undefined) return false;
+  if (typeof value !== 'boolean') return invalidResponse(field);
+  return value;
 }
 
 function optionalUnix(value: unknown): number | undefined {
@@ -144,7 +171,7 @@ function listPayload(value: unknown): { items: unknown[]; hasMore: boolean; tota
   };
 }
 
-function normalizeModel(value: unknown): ManagementCharityModel {
+export function normalizeManagementCharityModel(value: unknown): ManagementCharityModel {
   const record = asRecord(value) ?? {};
   const rawPrices = asRecord(recordValue(record, 'prices')) ?? {};
   const rawDiscount = asRecord(recordValue(record, 'discount')) ?? {};
@@ -157,6 +184,9 @@ function normalizeModel(value: unknown): ManagementCharityModel {
     model: text(recordValue(record, 'model'), 256, '—'),
     full_name: text(recordValue(record, 'full_name'), 512, '—'),
     enabled: booleanValue(recordValue(record, 'enabled')),
+    flatten_tool_calls: additivePolicyBoolean(
+      recordValue(record, 'flatten_tool_calls'), 'charity tool-call policy',
+    ),
     pricing_mode: recordValue(record, 'pricing_mode') === 'per_token' ? 'per_token' : 'per_request',
     prices: {
       request_user_price_milli: price('request_user_price_milli'),
@@ -181,23 +211,26 @@ function normalizeModel(value: unknown): ManagementCharityModel {
   };
 }
 
-function normalizeKey(value: unknown): ManagementDonationKey {
+export function normalizeManagementDonationKey(value: unknown): ManagementDonationKey {
   const record = asRecord(value) ?? {};
   const endpointKey = recordValue(record, 'endpoint_key_id');
   return {
     id: idValue(recordValue(record, 'id')),
     ...(endpointKey !== null && endpointKey !== undefined ? { endpoint_key_id: idValue(endpointKey) } : {}),
     ...(fragment(record) ? { display: fragment(record) } : {}),
-    max_concurrency: Math.max(0, integerValue(recordValue(record, 'max_concurrency'))),
-    rpm_limit: Math.max(0, integerValue(recordValue(record, 'rpm_limit'))),
+    max_concurrency: boundedInteger(recordValue(record, 'max_concurrency'), 0, 100_000, 'donation key concurrency'),
+    rpm_limit: boundedInteger(recordValue(record, 'rpm_limit'), 0, 4_096, 'donation key RPM'),
     credits_usage_cap_milli: amount(recordValue(record, 'credits_usage_cap_milli')),
     credits_used_milli: amount(recordValue(record, 'credits_used_milli')),
     credits_reserved_milli: amount(recordValue(record, 'credits_reserved_milli')),
     enabled: booleanValue(recordValue(record, 'enabled'), true),
+    force_store_false: additivePolicyBoolean(
+      recordValue(record, 'force_store_false'), 'donation-key store policy',
+    ),
   };
 }
 
-function normalizeDonation(value: unknown, detailed: boolean): ManagementDonation {
+export function normalizeManagementDonation(value: unknown, detailed: boolean): ManagementDonation {
   const record = asRecord(value) ?? {};
   const rawKeys = asArray(recordValue(record, 'keys'));
   const rawReviews = asArray(recordValue(record, 'reviews'));
@@ -214,7 +247,7 @@ function normalizeDonation(value: unknown, detailed: boolean): ManagementDonatio
     ...(optionalUnix(recordValue(record, 'reviewed_at')) !== undefined ? { reviewed_at: optionalUnix(recordValue(record, 'reviewed_at')) } : {}),
     created_at: Math.max(0, integerValue(recordValue(record, 'created_at'))),
     updated_at: Math.max(0, integerValue(recordValue(record, 'updated_at'))),
-    keys: detailed ? rawKeys.map(normalizeKey) : [],
+    keys: detailed ? rawKeys.map(normalizeManagementDonationKey) : [],
     reviews: detailed
       ? rawReviews.map((raw) => {
           const item = asRecord(raw) ?? {};
@@ -251,7 +284,7 @@ export function useManagementDonations(frame: CharityManagementFrame, page: numb
       const params = new URLSearchParams({ page: String(page), page_size: '20' });
       if (status) params.set('status', status);
       const result = listPayload(await apiFetch<unknown>(path(frame, `/donations?${params}`)));
-      return { items: result.items.map((item) => normalizeDonation(item, false)), hasMore: result.hasMore, total: result.total };
+      return { items: result.items.map((item) => normalizeManagementDonation(item, false)), hasMore: result.hasMore, total: result.total };
     },
   });
 }
@@ -261,7 +294,7 @@ export function useManagementDonation(frame: CharityManagementFrame, id: string 
     queryKey: id ? charityManagementKeys.donation(frame, id) : [...charityManagementKeys.root(frame), 'donation', 'none'],
     queryFn: async () => {
       if (!id) throw new ApiError('invalid_request', 'A donation id is required.', 400);
-      return normalizeDonation(await apiFetch<unknown>(path(frame, `/donations/${encodeURIComponent(id)}`)), true);
+      return normalizeManagementDonation(await apiFetch<unknown>(path(frame, `/donations/${encodeURIComponent(id)}`)), true);
     },
     enabled: Boolean(id),
   });
@@ -272,7 +305,7 @@ export function useManagementModels(frame: CharityManagementFrame) {
     queryKey: charityManagementKeys.models(frame),
     queryFn: async () => {
       const result = listPayload(await apiFetch<unknown>(path(frame, '/charity-models?page=1&page_size=100')));
-      return result.items.map(normalizeModel);
+      return result.items.map(normalizeManagementCharityModel);
     },
   });
 }
@@ -315,6 +348,7 @@ export interface CharityModelPayload {
   model: string;
   pricing_mode: CharityPricingMode;
   enabled?: boolean;
+  flatten_tool_calls?: boolean;
   prices: ManagementPriceSet;
   discount: { percent: number; enabled: boolean; start_at: number | null; end_at: number | null };
 }

@@ -2,7 +2,10 @@ package donation
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
+	"net/url"
+	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -107,23 +110,9 @@ func (h *ReviewHandler) serveDelete(w http.ResponseWriter, r *http.Request) {
 
 // list handles GET {prefix}/donations?page=&page_size=&status=.
 func (h *ReviewHandler) listFor(w http.ResponseWriter, r *http.Request, _ ReviewerIdentity) {
-	page, pageSize, ok := parsePageParams(w, r)
+	page, pageSize, status, ok := parseReviewListParams(w, r)
 	if !ok {
 		return
-	}
-	var status string
-	q := r.URL.Query()
-	if raw := q["status"]; len(raw) > 1 {
-		writeInvalid(w)
-		return
-	} else if len(raw) == 1 {
-		switch raw[0] {
-		case db.DonationPending, db.DonationApproved, db.DonationRejected, db.DonationDeleted:
-			status = raw[0]
-		default:
-			writeInvalid(w)
-			return
-		}
 	}
 	donations, total, err := h.svc.ListForReview(r.Context(), status, pageSize, (page-1)*pageSize)
 	if err != nil {
@@ -135,6 +124,78 @@ func (h *ReviewHandler) listFor(w http.ResponseWriter, r *http.Request, _ Review
 		Total:   total,
 		HasMore: page*pageSize < total,
 	})
+}
+
+// parseReviewListParams parses the review route's complete allowlist in one
+// pass. Missing status means all statuses; an empty value or the literal
+// "all" is deliberately rejected so the wire has one unambiguous all-state.
+func parseReviewListParams(w http.ResponseWriter, r *http.Request) (page, pageSize int, status string, ok bool) {
+	if r == nil || r.URL == nil || len(r.URL.RawQuery) > 8192 {
+		writeInvalid(w)
+		return 0, 0, "", false
+	}
+	q, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		writeInvalid(w)
+		return 0, 0, "", false
+	}
+	for key := range q {
+		switch key {
+		case "page", "page_size", "status":
+		default:
+			writeInvalid(w)
+			return 0, 0, "", false
+		}
+	}
+	page, pageSize = 1, 20
+	parsePositive := func(name string, maximum int) (int, bool) {
+		raw, present := q[name]
+		if !present {
+			return 0, true
+		}
+		if len(raw) != 1 || raw[0] == "" {
+			return 0, false
+		}
+		n, err := strconv.Atoi(raw[0])
+		if err != nil || n < 1 || (maximum > 0 && n > maximum) || raw[0] != strconv.Itoa(n) {
+			return 0, false
+		}
+		return n, true
+	}
+	if parsed, valid := parsePositive("page", 0); !valid {
+		writeInvalid(w)
+		return 0, 0, "", false
+	} else if parsed != 0 {
+		page = parsed
+	}
+	if parsed, valid := parsePositive("page_size", 100); !valid {
+		writeInvalid(w)
+		return 0, 0, "", false
+	} else if parsed != 0 {
+		pageSize = parsed
+	}
+	// Both the repository offset, (page-1)*pageSize, and the response's
+	// has-more boundary, page*pageSize, are calculated below. Prove the larger
+	// product fits first so neither expression can wrap to a small positive or
+	// negative value on this platform.
+	if page > math.MaxInt/pageSize {
+		writeInvalid(w)
+		return 0, 0, "", false
+	}
+	if raw, present := q["status"]; present {
+		if len(raw) != 1 {
+			writeInvalid(w)
+			return 0, 0, "", false
+		}
+		switch raw[0] {
+		case db.DonationPending, db.DonationApproved, db.DonationRejected, db.DonationDeleted:
+			status = raw[0]
+		default:
+			writeInvalid(w)
+			return 0, 0, "", false
+		}
+	}
+	return page, pageSize, status, true
 }
 
 // get handles GET {prefix}/donations/{id}: full detail for reviewers.

@@ -29,22 +29,31 @@ var errInvalidAdminJSON = errors.New("adminapi: invalid JSON object")
 // replace invalid UTF-8 or apply its last-value-wins behavior to duplicate
 // decoded keys. Unknown target fields remain rejected by the second pass.
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
-	return decodeAdminJSONBody(w, r, dst, false)
+	return decodeAdminJSONBody(w, r, dst, false, maxAdminBodyBytes)
 }
 
 // decodeOptionalJSONBody differs only in permitting a wholly empty or
 // whitespace-only body. Once a non-whitespace byte is present, the same strict
 // single-object rules apply.
 func decodeOptionalJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
-	return decodeAdminJSONBody(w, r, dst, true)
+	return decodeAdminJSONBody(w, r, dst, true, maxAdminBodyBytes)
 }
 
-func decodeAdminJSONBody(w http.ResponseWriter, r *http.Request, dst any, optional bool) bool {
+// decodeLegalJSONBody retains the same strict structural checks as every
+// other administrator mutation but permits the bounded JSON escaping
+// overhead of one 65,536-byte legal document. The decoded value is still
+// validated against the much smaller per-field limit by the site-config
+// validator; this larger transport cap is not available to any other route.
+func decodeLegalJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	return decodeAdminJSONBody(w, r, dst, false, maxLegalAdminBodyBytes)
+}
+
+func decodeAdminJSONBody(w http.ResponseWriter, r *http.Request, dst any, optional bool, maxBodyBytes int64) bool {
 	if r == nil || r.Body == nil {
 		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
 		return false
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxAdminBodyBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 	raw, err := readAdminJSONBody(r.Body)
 	if err != nil {
 		writeDecodeErr(w, err)

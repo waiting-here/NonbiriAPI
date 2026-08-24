@@ -64,7 +64,7 @@ func TestSetSiteTimezoneValidation(t *testing.T) {
 	st := openTestStore(t, filepath.Join(t.TempDir(), "tz-valid.db"))
 	defer st.Close()
 
-	for _, invalid := range []int{15, 45, -45, 721, -721, 841, 100000, -100000} {
+	for _, invalid := range []int{15, 45, -45, 345, 721, -721, 841, 100000, -100000} {
 		if err := st.SetSiteTimezoneOffsetMinutes(invalid); !errors.Is(err, ErrConflict) {
 			t.Fatalf("invalid offset %d = %v, want ErrConflict", invalid, err)
 		}

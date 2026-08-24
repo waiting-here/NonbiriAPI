@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
@@ -8,423 +8,348 @@ import {
   LoadingState,
   PageHeader,
 } from '@shared/components/States';
-import { apiFetch } from '@shared/query/http';
-import { adminKeys, type SiteConfigValue, useSiteConfig } from '../data';
+import { ApiError, apiFetch } from '@shared/query/http';
+import { asRecord } from '@shared/query/normalize';
 import {
-  displayCreditsToMilliString,
-  milliStringToDisplayInput,
-} from '../utils/economyInput';
+  adminKeys,
+  normalizeSiteConfig,
+  type LocalizedCatalogText,
+  type SiteConfigCatalogEntry,
+  type SiteConfigValue,
+  useSiteConfig,
+  useSiteConfigCatalog,
+} from '../data';
+import { exactCreditDisplay, humanReadableSeconds } from '../utils/catalogDisplay';
 
-// The economy & level keys get dedicated typed editors; the generic key list
-// keeps every other known key.
-const ECONOMY_KEYS = [
-  'site_timezone_offset_minutes',
-  'checkin_mode',
-  'checkin_award_min_milli',
-  'checkin_award_max_milli',
-  'credits_cap_milli',
-  'level_threshold_2_milli',
-  'level_threshold_3_milli',
-  'level_threshold_4_milli',
-] as const;
+const LEGAL_KEYS = new Set([
+  'legal_privacy_override_zh',
+  'legal_privacy_override_en',
+  'legal_terms_override_zh',
+  'legal_terms_override_en',
+]);
 
-const ECONOMY_KEY_SET = new Set<string>(ECONOMY_KEYS);
+function utf8Bytes(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
+}
 
-const CHECKIN_MODES = ['enabled', 'level_gated', 'disabled'] as const;
+function localText(value: LocalizedCatalogText, language: string): string {
+  return language.startsWith('zh') ? value.zh : value.en;
+}
 
-// Bounded offset display: UTC+08:00 / UTC-05:30.
+function valueLabel(value: SiteConfigValue, notConfigured: string): string {
+  if (value === null) return notConfigured;
+  if (value === '') return '""';
+  return String(value);
+}
+
+type LegalLineEndingStyle = 'crlf' | 'lf' | 'cr' | 'mixed' | 'none';
+
+function legalLineEndingStyle(value: string): LegalLineEndingStyle {
+  const withoutCRLF = value.replace(/\r\n/g, '');
+  const hasCRLF = value.includes('\r\n');
+  const hasCR = withoutCRLF.includes('\r');
+  const hasLF = withoutCRLF.includes('\n');
+  const kinds = Number(hasCRLF) + Number(hasCR) + Number(hasLF);
+  if (kinds > 1) return 'mixed';
+  if (hasCRLF) return 'crlf';
+  if (hasCR) return 'cr';
+  if (hasLF) return 'lf';
+  return 'none';
+}
+
+function restoreLegalLineEndings(value: string, style: LegalLineEndingStyle): string {
+  if (style === 'crlf') return value.replace(/\r\n|\r|\n/g, '\r\n');
+  if (style === 'cr') return value.replace(/\r\n|\n/g, '\r');
+  return value;
+}
+
 function formatOffset(minutes: number): string {
   const sign = minutes < 0 ? '-' : '+';
-  const abs = Math.abs(minutes);
-  const hours = String(Math.floor(abs / 60)).padStart(2, '0');
-  const mins = String(abs % 60).padStart(2, '0');
-  return `UTC${sign}${hours}:${mins}`;
+  const absolute = Math.abs(minutes);
+  return `UTC${sign}${String(Math.floor(absolute / 60)).padStart(2, '0')}:${String(absolute % 60).padStart(2, '0')}`;
 }
 
-// Shared PATCH helper for one typed editor: shows the server message verbatim
-// (including readable conflict refusals) and refetches the config on success.
-function useConfigPatch() {
-  const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [saved, setSaved] = useState(false);
-  const patch = async (key: string, value: unknown): Promise<void> => {
-    setError('');
-    setSaved(false);
-    setBusy(true);
+function parseCatalogValue(
+  entry: SiteConfigCatalogEntry,
+  draft: string,
+): SiteConfigValue | undefined {
+  if (entry.value_type === 'boolean') return draft === 'true';
+  if (entry.value_type === 'integer' || entry.value_type === 'optional_integer') {
+    if (draft === '' && entry.null_writable === true) return null;
+    if (!/^(0|-?[1-9]\d*)$/.test(draft)) return undefined;
+    const parsed = Number(draft);
+    if (!Number.isSafeInteger(parsed)) return undefined;
+    if (typeof entry.minimum === 'number' && parsed < entry.minimum) return undefined;
+    if (typeof entry.maximum === 'number' && parsed > entry.maximum) return undefined;
+    if (typeof entry.step === 'number' && parsed % entry.step !== 0) return undefined;
+    return parsed;
+  }
+  if (entry.value_type === 'amount' || entry.value_type === 'optional_amount') {
+    if (!/^(0|[1-9]\d*)$/.test(draft)) return undefined;
     try {
-      await apiFetch<unknown>(`/admin/api/site-config/${encodeURIComponent(key)}`, {
-        method: 'PATCH',
-        json: { value },
-      });
-      await queryClient.invalidateQueries({ queryKey: adminKeys.siteConfig });
-      setSaved(true);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : t('common.errorBody'));
-    } finally {
-      setBusy(false);
+      const parsed = BigInt(draft);
+      if (typeof entry.minimum === 'string' && parsed < BigInt(entry.minimum)) return undefined;
+      if (typeof entry.maximum === 'string' && parsed > BigInt(entry.maximum)) return undefined;
+    } catch {
+      return undefined;
     }
-  };
-  return { busy, error, saved, patch };
+    return draft;
+  }
+  if (entry.value_type === 'locale' || entry.value_type === 'optional_locale' || entry.value_type === 'enum') {
+    if (!entry.allowed_values || !entry.allowed_values.includes(draft)) return undefined;
+  }
+  if (LEGAL_KEYS.has(entry.key) && utf8Bytes(draft) > 65_536) return undefined;
+  if (typeof entry.maximum === 'number' && utf8Bytes(draft) > entry.maximum) return undefined;
+  return draft;
 }
 
-function EditorFeedback({ error, saved }: { error: string; saved: boolean }) {
-  const { t } = useTranslation();
-  return (
-    <>
-      {error ? <p className="field-error" role="alert">{error}</p> : null}
-      {saved ? <p className="inline-success" role="status">{t('admin.settings.saved')}</p> : null}
-    </>
-  );
+function catalogValueLabel(
+  entry: SiteConfigCatalogEntry,
+  value: SiteConfigValue,
+  notConfigured: string,
+  language: string,
+): string {
+  const raw = valueLabel(value, notConfigured);
+  if (value !== null && entry.unit.en === 'seconds' && typeof value === 'number') {
+    return `${raw} (${humanReadableSeconds(value, language)})`;
+  }
+  if (value !== null && entry.unit.en === 'milli-credits' && typeof value === 'string') {
+    const display = exactCreditDisplay(value);
+    if (display === null) return raw;
+    const displayUnit = language.startsWith('zh') ? '积分' : 'credits';
+    return `${raw} ${localText(entry.unit, language)} (${display} ${displayUnit})`;
+  }
+  return raw;
 }
 
-// Nullable site timezone: JSON null means "never configured" and is distinct
-// from an explicit UTC (0). Once any day-keyed data exists the value is
-// permanently frozen server-side and every further write is a conflict.
-function TimezoneEditor({ value }: { value: number | null }) {
+function CatalogFacts({ entry, language }: { entry: SiteConfigCatalogEntry; language: string }) {
   const { t } = useTranslation();
-  const [input, setInput] = useState(value === null ? '' : String(value));
-  const [validationError, setValidationError] = useState('');
-  const { busy, error, saved, patch } = useConfigPatch();
-
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setValidationError('');
-    const trimmed = input.trim();
-    const parsed = Number(trimmed);
-    if (
-      !/^-?\d+$/.test(trimmed) ||
-      !Number.isSafeInteger(parsed) ||
-      parsed < -720 ||
-      parsed > 840 ||
-      parsed % 30 !== 0
-    ) {
-      setValidationError(t('admin.settings.economy.timezoneInvalid'));
-      return;
-    }
-    await patch('site_timezone_offset_minutes', parsed);
-  };
-
+  const range = entry.minimum !== null || entry.maximum !== null
+    ? `${entry.minimum === null ? '—' : catalogValueLabel(entry, entry.minimum, t('admin.settings.notConfigured'), language)} … ${entry.maximum === null ? '—' : catalogValueLabel(entry, entry.maximum, t('admin.settings.notConfigured'), language)}${entry.step !== undefined && entry.step !== null ? ` · ${t('admin.settings.catalogStep')} ${catalogValueLabel(entry, entry.step, t('admin.settings.notConfigured'), language)}` : ''}`
+    : '—';
   return (
-    <form className="config-row" onSubmit={submit} noValidate>
-      <div className="config-key-info">
-        <strong>{t('admin.settings.economy.timezoneTitle')}</strong>
-        <span className="table-note">{t('admin.settings.economy.timezoneDescription')}</span>
-        <span className="mono table-note">site_timezone_offset_minutes</span>
-      </div>
-      <div className="config-control">
-        {value === null ? (
-          <>
-            <p className="field-error" role="alert">
-              {t('admin.settings.economy.timezoneNotSet')}
-            </p>
-            <p className="inline-notice">
-              {t('admin.settings.economy.timezoneNotSetBody')}
-            </p>
-          </>
-        ) : (
-          <span className="table-note">
-            {t('admin.settings.economy.timezoneCurrent', { value: formatOffset(value) })}
-          </span>
-        )}
-        <p className="inline-notice">{t('admin.settings.economy.timezoneFreezeWarning')}</p>
-        <label>
-          <span>{t('admin.settings.economy.timezoneInput')}</span>
-          <input
-            type="number"
-            step="30"
-            min="-720"
-            max="840"
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            placeholder="480"
-            aria-label={t('admin.settings.economy.timezoneInput')}
-          />
-        </label>
-        {validationError ? <p className="field-error" role="alert">{validationError}</p> : null}
-        <EditorFeedback error={error} saved={saved} />
-        <button type="submit" className="btn btn-secondary" disabled={busy}>
-          {busy ? t('common.working') : t('admin.settings.save')}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function CheckinModeEditor({ value }: { value: string }) {
-  const { t } = useTranslation();
-  const initial = (CHECKIN_MODES as readonly string[]).includes(value) ? value : 'disabled';
-  const [selection, setSelection] = useState<string>(initial);
-  const { busy, error, saved, patch } = useConfigPatch();
-
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    await patch('checkin_mode', selection);
-  };
-
-  return (
-    <form className="config-row" onSubmit={submit} noValidate>
-      <div className="config-key-info">
-        <strong>{t('admin.settings.economy.checkinModeTitle')}</strong>
-        <span className="table-note">{t('admin.settings.economy.checkinModeDescription')}</span>
-        <span className="mono table-note">checkin_mode</span>
-      </div>
-      <div className="config-control">
-        <select
-          value={selection}
-          onChange={(event) => setSelection(event.target.value)}
-          aria-label={t('admin.settings.economy.checkinModeTitle')}
-        >
-          {CHECKIN_MODES.map((mode) => (
-            <option key={mode} value={mode}>
-              {t(`admin.settings.economy.checkinMode.${mode}`)}
-            </option>
+    <div className="table-note">
+      <span>
+        {t('admin.settings.catalogDefault')}: {catalogValueLabel(entry, entry.raw_default, t('admin.settings.notConfigured'), language)}
+        {' · '}{t('admin.settings.catalogEffective')}: {catalogValueLabel(entry, entry.effective_fallback, t('admin.settings.notConfigured'), language)}
+        {' · '}{t('admin.settings.catalogRange')}: {range}
+        {' · '}{localText(entry.unit, language)}
+      </span>
+      <details>
+        <summary>{t('admin.settings.catalogSemantics')}</summary>
+        <ul className="plain-list">
+          {entry.zero_semantics ? <li>{localText(entry.zero_semantics, language)}</li> : null}
+          <li>{localText(entry.null_semantics, language)}</li>
+          {entry.empty_semantics ? <li>{localText(entry.empty_semantics, language)}</li> : null}
+          {entry.independent_gates.map((gate, index) => (
+            <li key={`${entry.key}-gate-${index}`}>
+              {t('admin.settings.catalogIndependentGate')}: {localText(gate, language)}
+            </li>
           ))}
-        </select>
-        <EditorFeedback error={error} saved={saved} />
-        <button type="submit" className="btn btn-secondary" disabled={busy}>
-          {busy ? t('common.working') : t('admin.settings.save')}
-        </button>
-      </div>
-    </form>
+        </ul>
+      </details>
+    </div>
   );
 }
 
-// A display-credits amount editor: the input is in whole (fractional to three
-// digits) display credits and is converted to the canonical milli string via
-// the BigInt helpers — never through Number().
-function AmountEditor({
-  name,
-  value,
-  title,
-  hint,
-}: {
-  name: string;
-  value: string;
-  title: string;
-  hint: string;
+function TimezoneContext({ draft, entry, language }: {
+  draft: string;
+  entry: SiteConfigCatalogEntry;
+  language: string;
 }) {
   const { t } = useTranslation();
-  const [input, setInput] = useState(milliStringToDisplayInput(value));
-  const [validationError, setValidationError] = useState('');
-  const { busy, error, saved, patch } = useConfigPatch();
-
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setValidationError('');
-    const milli = displayCreditsToMilliString(input);
-    if (milli === null) {
-      setValidationError(t('admin.settings.economy.amountInvalid'));
-      return;
-    }
-    await patch(name, milli);
-  };
-
+  const parsed = parseCatalogValue(entry, draft);
+  const preview = typeof parsed === 'number' ? formatOffset(parsed) : t('admin.settings.timezonePreviewInvalid');
   return (
-    <form className="config-row" onSubmit={submit} noValidate>
-      <div className="config-key-info">
-        <strong>{title}</strong>
-        <span className="table-note">{hint}</span>
-        <span className="mono table-note">{name}</span>
-      </div>
-      <div className="config-control">
-        <input
-          type="text"
-          inputMode="decimal"
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          aria-label={title}
-        />
-        {validationError ? <p className="field-error" role="alert">{validationError}</p> : null}
-        <EditorFeedback error={error} saved={saved} />
-        <button type="submit" className="btn btn-secondary" disabled={busy}>
-          {busy ? t('common.working') : t('admin.settings.save')}
-        </button>
-      </div>
-    </form>
+    <div className="inline-notice">
+      <strong>{t('admin.settings.timezoneSignedMinutes')}</strong>
+      <p>{t('admin.settings.timezoneExamples')}</p>
+      <p>{t('admin.settings.timezonePreview', { value: preview })}</p>
+      <p>{localText(entry.null_semantics, language)} {entry.zero_semantics ? localText(entry.zero_semantics, language) : ''}</p>
+      <p><strong>{t('admin.settings.timezoneImmutable')}</strong></p>
+    </div>
   );
 }
 
-function EconomySection({ config }: { config: Record<string, SiteConfigValue> }) {
-  const { t } = useTranslation();
-  const timezone = config['site_timezone_offset_minutes'];
-  const checkinMode = config['checkin_mode'];
-  const read = (key: string): string => (typeof config[key] === 'string' ? String(config[key]) : '0');
-  return (
-    <Card>
-      <div className="card-title-row">
-        <h2>{t('admin.settings.economy.title')}</h2>
-      </div>
-      <p className="inline-notice">{t('admin.settings.economy.description')}</p>
-      <div className="config-list">
-        <TimezoneEditor value={typeof timezone === 'number' ? timezone : null} />
-        <CheckinModeEditor value={typeof checkinMode === 'string' ? checkinMode : 'disabled'} />
-        <AmountEditor
-          name="checkin_award_min_milli"
-          value={read('checkin_award_min_milli')}
-          title={t('admin.settings.economy.awardMinTitle')}
-          hint={t('admin.settings.economy.awardMinHint')}
-        />
-        <AmountEditor
-          name="checkin_award_max_milli"
-          value={read('checkin_award_max_milli')}
-          title={t('admin.settings.economy.awardMaxTitle')}
-          hint={t('admin.settings.economy.awardMaxHint')}
-        />
-        <AmountEditor
-          name="credits_cap_milli"
-          value={read('credits_cap_milli')}
-          title={t('admin.settings.economy.capTitle')}
-          hint={t('admin.settings.economy.capHint')}
-        />
-        {[2, 3, 4].map((level) => (
-          <AmountEditor
-            key={`level_threshold_${level}_milli`}
-            name={`level_threshold_${level}_milli`}
-            value={read(`level_threshold_${level}_milli`)}
-            title={t('admin.settings.economy.thresholdTitle', { level })}
-            hint={t('admin.settings.economy.thresholdHint')}
-          />
-        ))}
-      </div>
-    </Card>
-  );
-}
-
-function ConfigEditor({ name, initialValue }: { name: string; initialValue: SiteConfigValue }) {
-  const { t } = useTranslation();
+function ConfigEditor({ entry, initialValue }: {
+  entry: SiteConfigCatalogEntry;
+  initialValue: SiteConfigValue;
+}) {
+  const { t, i18n } = useTranslation();
+  const language = i18n.resolvedLanguage ?? i18n.language;
   const queryClient = useQueryClient();
-  const [value, setValue] = useState(initialValue === null ? '' : String(initialValue));
+  const isLegal = LEGAL_KEYS.has(entry.key);
+  const [draft, setDraft] = useState(initialValue === null ? '' : String(initialValue));
+  const [lineEndingStyle, setLineEndingStyle] = useState<LegalLineEndingStyle>(
+    legalLineEndingStyle(initialValue === null ? '' : String(initialValue)),
+  );
+  const [legalDraftTouched, setLegalDraftTouched] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const typeLabel =
-    typeof initialValue === 'boolean'
-      ? t('admin.settings.booleanValue')
-      : typeof initialValue === 'number'
-        ? t('admin.settings.numberValue')
-        : t('admin.settings.textValue');
-  const title = t(`admin.settings.configKeys.${name}.title`, { defaultValue: name });
-  const description = t(`admin.settings.configKeys.${name}.description`, { defaultValue: '' });
+  const changeDraft = (value: string) => {
+    setDraft(value);
+    if (isLegal) setLegalDraftTouched(true);
+    setError('');
+    setSaved(false);
+  };
+
+  useEffect(() => {
+    // A successful write and a 409 both refetch the authoritative snapshot.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDraft(initialValue === null ? '' : String(initialValue));
+    setLineEndingStyle(legalLineEndingStyle(initialValue === null ? '' : String(initialValue)));
+    setLegalDraftTouched(false);
+  }, [initialValue]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError('');
     setSaved(false);
-    let nextValue: SiteConfigValue;
-    if (typeof initialValue === 'boolean') {
-      nextValue = value === 'true';
-    } else if (typeof initialValue === 'number') {
-      if (!value.trim() || !Number.isFinite(Number(value))) {
-        setError(t('admin.settings.invalidNumber'));
-        return;
-      }
-      nextValue = Number(value);
-    } else if (initialValue === null) {
-      nextValue = value.trim() ? value.trim() : null;
-    } else {
-      nextValue = value;
+    const submissionDraft = isLegal && legalDraftTouched
+      ? restoreLegalLineEndings(draft, lineEndingStyle)
+      : draft;
+    const nextValue = parseCatalogValue(entry, submissionDraft);
+    if (nextValue === undefined) {
+      setError(t('admin.settings.catalogInvalid'));
+      return;
     }
-
     setBusy(true);
     try {
-      await apiFetch<unknown>(`/admin/api/site-config/${encodeURIComponent(name)}`, {
+      const payload = await apiFetch<unknown>(entry.write_endpoint, {
         method: 'PATCH',
         json: { value: nextValue },
       });
+      const response = asRecord(payload);
+      if (!response || response.key !== entry.key || !Object.hasOwn(response, 'value')) {
+        throw new ApiError('invalid_response', t('common.errorBody'), 200);
+      }
+      const normalized = normalizeSiteConfig({ [entry.key]: response.value }, [entry]);
+      setDraft(normalized[entry.key] === null ? '' : String(normalized[entry.key]));
+      setLineEndingStyle(legalLineEndingStyle(normalized[entry.key] === null ? '' : String(normalized[entry.key])));
+      setLegalDraftTouched(false);
       await queryClient.invalidateQueries({ queryKey: adminKeys.siteConfig });
       setSaved(true);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : t('common.errorBody'));
+      if (requestError instanceof ApiError && requestError.status === 409) {
+        await queryClient.refetchQueries({ queryKey: adminKeys.siteConfig });
+        const refreshed = queryClient.getQueryState(adminKeys.siteConfig)?.status === 'success';
+        setError(entry.key === 'site_timezone_offset_minutes'
+          ? refreshed ? t('admin.settings.timezoneConflict') : t('admin.settings.timezoneRefreshFailed')
+          : requestError.message);
+      } else {
+        setError(requestError instanceof Error ? requestError.message : t('common.errorBody'));
+      }
     } finally {
       setBusy(false);
     }
   };
 
+  const allowedValues = entry.allowed_values ?? [];
+  const isChoice = allowedValues.length > 0;
+  const input = entry.value_type === 'boolean' ? (
+    <select value={draft} onChange={(event) => changeDraft(event.target.value)} aria-label={localText(entry.title, language)}>
+      <option value="true">{t('common.yes')}</option>
+      <option value="false">{t('common.no')}</option>
+    </select>
+  ) : isChoice ? (
+    <select value={draft} onChange={(event) => changeDraft(event.target.value)} aria-label={localText(entry.title, language)}>
+      {allowedValues.map((value) => <option key={value || 'empty'} value={value}>{value || '""'}</option>)}
+    </select>
+  ) : isLegal ? (
+    <>
+      <textarea
+        value={draft}
+        onChange={(event) => changeDraft(event.target.value)}
+        aria-label={localText(entry.title, language)}
+        rows={12}
+        spellCheck={false}
+      />
+      <small className="muted">{t('admin.settings.legalBytes', {
+        count: utf8Bytes(legalDraftTouched ? restoreLegalLineEndings(draft, lineEndingStyle) : draft),
+        max: 65_536,
+      })}</small>
+    </>
+  ) : (
+    <input
+      type="text"
+      inputMode={entry.value_type.includes('amount') ||
+        (entry.value_type.includes('integer') &&
+          (typeof entry.minimum !== 'number' || entry.minimum >= 0)) ? 'numeric' : undefined}
+      value={draft}
+      onChange={(event) => changeDraft(event.target.value)}
+      aria-label={localText(entry.title, language)}
+      step={entry.step === undefined || entry.step === null ? undefined : String(entry.step)}
+      min={entry.minimum === null ? undefined : String(entry.minimum)}
+      max={entry.maximum === null ? undefined : String(entry.maximum)}
+      placeholder={entry.nullable ? t('admin.settings.notConfigured') : undefined}
+    />
+  );
+
   return (
     <form className="config-row" onSubmit={submit} noValidate>
       <div className="config-key-info">
-        <strong>{title}</strong>
-        {description ? <span className="table-note">{description}</span> : null}
-        <span className="mono table-note">{name} · {typeLabel}</span>
+        <strong>{localText(entry.title, language)}</strong>
+        <span className="table-note">{localText(entry.description, language)}</span>
+        <span className="mono table-note">{entry.key} · {entry.value_type}</span>
+        <CatalogFacts entry={entry} language={language} />
       </div>
       <div className="config-control">
-        {typeof initialValue === 'boolean' ? (
-          <select value={value} onChange={(event) => setValue(event.target.value)} aria-label={name}>
-            <option value="true">{t('common.yes')}</option>
-            <option value="false">{t('common.no')}</option>
-          </select>
-        ) : name.startsWith('legal_privacy_override') || name.startsWith('legal_terms_override') ? (
-          <textarea
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-            aria-label={name}
-            maxLength={65536}
-            rows={14}
-            spellCheck={false}
-          />
-        ) : (
-          <input
-            type={typeof initialValue === 'number' ? 'number' : 'text'}
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-            aria-label={name}
-            maxLength={512}
-          />
-        )}
+        {entry.key === 'site_timezone_offset_minutes'
+          ? <TimezoneContext draft={draft} entry={entry} language={language} />
+          : null}
+        {input}
+        {entry.unit.en === 'seconds' && typeof parseCatalogValue(entry, draft) === 'number' ? (
+          <small className="muted">{t('admin.settings.catalogDurationPreview', {
+            value: humanReadableSeconds(parseCatalogValue(entry, draft) as number, language),
+          })}</small>
+        ) : null}
+        {entry.unit.en === 'milli-credits' && typeof parseCatalogValue(entry, draft) === 'string' &&
+          exactCreditDisplay(parseCatalogValue(entry, draft) as string) !== null ? (
+            <small className="muted">{t('admin.settings.catalogMilliPreview', {
+              raw: parseCatalogValue(entry, draft) as string,
+              credits: exactCreditDisplay(parseCatalogValue(entry, draft) as string),
+            })}</small>
+          ) : null}
+        {error ? <p className="field-error" role="alert">{error}</p> : null}
+        {saved ? <p className="inline-success" role="status">{t('admin.settings.saved')}</p> : null}
         <button type="submit" className="btn btn-secondary" disabled={busy}>
-          {busy ? t('common.working') : t('admin.settings.save')}
+          {busy ? t('common.working') : entry.null_writable === true && draft === ''
+            ? t('admin.settings.restoreFallback') : t('admin.settings.save')}
         </button>
       </div>
-      {error ? <p className="field-error" role="alert">{error}</p> : null}
-      {saved ? <p className="inline-success" role="status">{t('admin.settings.saved')}</p> : null}
     </form>
   );
 }
 
 export function SettingsPage() {
   const { t } = useTranslation();
-  const config = useSiteConfig();
+  const catalog = useSiteConfigCatalog();
+  const config = useSiteConfig(catalog.data, catalog.isSuccess);
+  const error = config.error ?? catalog.error;
+  const pending = config.isPending || catalog.isPending;
+  const entries = (catalog.data ?? []).filter((entry) => entry.write_endpoint !== '/admin/api/games/config');
 
   return (
     <div className="page">
-      <PageHeader
-        eyebrow={t('app.name')}
-        title={t('admin.settings.title')}
-        description={t('admin.settings.description')}
-      />
-      {config.isPending ? (
-        <Card>
-          <LoadingState />
-        </Card>
-      ) : config.error ? (
-        <Card>
-          <ErrorState error={config.error} onRetry={() => void config.refetch()} />
-        </Card>
-      ) : Object.keys(config.data).length === 0 ? (
-        <Card>
-          <EmptyState title={t('admin.settings.empty')} body={t('admin.settings.emptyBody')} />
-        </Card>
+      <PageHeader eyebrow={t('app.name')} title={t('admin.settings.title')} description={t('admin.settings.description')} />
+      {error ? (
+        <Card><ErrorState error={error} onRetry={() => { void config.refetch(); void catalog.refetch(); }} /></Card>
+      ) : pending ? (
+        <Card><LoadingState /></Card>
+      ) : entries.length === 0 ? (
+        <Card><EmptyState title={t('admin.settings.empty')} body={t('admin.settings.emptyBody')} /></Card>
       ) : (
-        <>
-          <EconomySection config={config.data} />
-          <Card>
-            <div className="card-title-row">
-              <h2>{t('admin.settings.listTitle')}</h2>
-            </div>
-            <p className="inline-notice">{t('admin.settings.sensitiveHint')}</p>
-            <div className="config-list">
-              {Object.entries(config.data)
-                .filter(([name]) => !ECONOMY_KEY_SET.has(name))
-                .sort(([left], [right]) => left.localeCompare(right))
-                .map(([name, value]) => (
-                  <ConfigEditor key={name} name={name} initialValue={value} />
-                ))}
-            </div>
-          </Card>
-        </>
+        <Card>
+          <div className="card-title-row"><h2>{t('admin.settings.listTitle')}</h2></div>
+          <p className="inline-notice">{t('admin.settings.sensitiveHint')}</p>
+          <div className="config-list">
+            {entries.map((entry) => (
+              <ConfigEditor key={entry.key} entry={entry} initialValue={config.data?.[entry.key] ?? entry.raw_default} />
+            ))}
+          </div>
+        </Card>
       )}
     </div>
   );
