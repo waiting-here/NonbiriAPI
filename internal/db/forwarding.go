@@ -27,12 +27,13 @@ type CallerModel struct {
 // currently usable candidate set. FullName is an opaque routing key and is
 // never split or interpreted.
 type ForwardRoute struct {
-	ModelID       int64
-	UserID        int64
-	FullName      string
-	RouteStrategy string
-	SilentRetry   bool
-	Candidates    []ForwardCandidate
+	ModelID          int64
+	UserID           int64
+	FullName         string
+	RouteStrategy    string
+	SilentRetry      bool
+	FlattenToolCalls bool
+	Candidates       []ForwardCandidate
 }
 
 // ForwardCandidate is non-sensitive selector metadata. The candidate query
@@ -59,6 +60,7 @@ type ForwardTarget struct {
 	ConnectorType   string
 	BaseURL         string
 	UpstreamModelID string
+	ForceStoreFalse bool
 	encryptedSecret string
 }
 
@@ -153,12 +155,12 @@ func (s *Store) ResolveForwardRoute(ctx context.Context, userID int64, fullName 
 	}()
 
 	var route ForwardRoute
-	var silentRetry int
+	var silentRetry, flattenInt int
 	err = tx.QueryRowContext(ctx, `
-SELECT id, user_id, full_name, route_strategy, silent_retry
+SELECT id, user_id, full_name, route_strategy, silent_retry, flatten_tool_calls
 FROM models
 WHERE user_id=? AND full_name=?`, userID, fullName).
-		Scan(&route.ModelID, &route.UserID, &route.FullName, &route.RouteStrategy, &silentRetry)
+		Scan(&route.ModelID, &route.UserID, &route.FullName, &route.RouteStrategy, &silentRetry, &flattenInt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ForwardRoute{}, ErrNotFound
@@ -166,6 +168,24 @@ WHERE user_id=? AND full_name=?`, userID, fullName).
 		return ForwardRoute{}, fmt.Errorf("resolve caller model: %w", err)
 	}
 	route.SilentRetry = silentRetry != 0
+	route.FlattenToolCalls = flattenInt != 0
+	if route.FlattenToolCalls {
+		// The write paths enforce an all-OpenAI invariant. Keep a defensive
+		// read-side check so a damaged database cannot be "repaired" by
+		// silently filtering an Anthropic binding into a successful route.
+		var incompatible int
+		if err := tx.QueryRowContext(ctx, `
+SELECT COUNT(*)
+FROM model_bindings b
+JOIN endpoint_keys ek ON ek.id=b.endpoint_key_id
+JOIN endpoints e ON e.id=ek.endpoint_id
+WHERE b.model_id=? AND e.connector_type <> 'openai-compatible'`, route.ModelID).Scan(&incompatible); err != nil {
+			return ForwardRoute{}, fmt.Errorf("validate forward flatten policy: %w", err)
+		}
+		if incompatible != 0 {
+			return ForwardRoute{}, ErrConflict
+		}
+	}
 
 	rows, err := tx.QueryContext(ctx, `
 SELECT b.id, b.model_id, e.id, ek.id, e.connector_type, b.upstream_model_id, b.ord
@@ -239,8 +259,10 @@ func (s *Store) GetForwardTarget(ctx context.Context, userID int64, fullName str
 	}
 	var target ForwardTarget
 	var baseURL, ciphertext sql.NullString
+	var forceStoreFalse int
 	err := s.db.QueryRowContext(ctx, `
 SELECT b.id, e.id, ek.id, e.connector_type,
+       ek.force_store_false,
        CASE WHEN length(CAST(e.base_url AS BLOB)) BETWEEN 1 AND ? THEN e.base_url END,
        b.upstream_model_id,
        CASE WHEN length(CAST(ek.encrypted_secret AS BLOB)) BETWEEN 1 AND ? THEN ek.encrypted_secret END
@@ -267,6 +289,7 @@ WHERE b.id=?`, maxStoredEndpointBaseURLBytes, maxEndpointCredentialEnvelopeBytes
 			&target.EndpointID,
 			&target.EndpointKeyID,
 			&target.ConnectorType,
+			&forceStoreFalse,
 			&baseURL,
 			&target.UpstreamModelID,
 			&ciphertext,
@@ -281,6 +304,7 @@ WHERE b.id=?`, maxStoredEndpointBaseURLBytes, maxEndpointCredentialEnvelopeBytes
 		return ForwardTarget{}, ErrEndpointCredentialUnavailable
 	}
 	target.BaseURL = baseURL.String
+	target.ForceStoreFalse = forceStoreFalse != 0
 	target.encryptedSecret = ciphertext.String
 	return target, nil
 }

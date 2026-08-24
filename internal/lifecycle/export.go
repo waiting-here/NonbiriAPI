@@ -279,7 +279,7 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	for _, key := range keys {
 		keysByEndpoint[key.EndpointID] = append(keysByEndpoint[key.EndpointID], exportKey{
 			ID: key.ID, DisplayHead: key.DisplayHead, DisplayTail: key.DisplayTail,
-			Note: key.Note, Enabled: key.Enabled, CreatedAt: key.CreatedAt, UpdatedAt: key.UpdatedAt,
+			Note: key.Note, Enabled: key.Enabled, ForceStoreFalse: key.ForceStoreFalse, CreatedAt: key.CreatedAt, UpdatedAt: key.UpdatedAt,
 		})
 	}
 	bindingsByModel := make(map[int64][]exportBinding, len(bindings))
@@ -361,7 +361,7 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	for _, m := range models {
 		packageValue.Models = append(packageValue.Models, exportModel{
 			ID: m.ID, Provider: m.Provider, Model: m.Model, FullName: m.FullName,
-			RouteStrategy: m.RouteStrategy, SilentRetry: m.SilentRetry,
+			RouteStrategy: m.RouteStrategy, SilentRetry: m.SilentRetry, FlattenToolCalls: m.FlattenToolCalls,
 			CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt, Bindings: bindingsByModel[m.ID],
 		})
 	}
@@ -464,25 +464,27 @@ type exportEndpoint struct {
 }
 
 type exportKey struct {
-	ID          int64  `json:"id"`
-	DisplayHead string `json:"display_head"`
-	DisplayTail string `json:"display_tail"`
-	Note        string `json:"note"`
-	Enabled     bool   `json:"enabled"`
-	CreatedAt   int64  `json:"created_at"`
-	UpdatedAt   int64  `json:"updated_at"`
+	ID              int64  `json:"id"`
+	DisplayHead     string `json:"display_head"`
+	DisplayTail     string `json:"display_tail"`
+	Note            string `json:"note"`
+	Enabled         bool   `json:"enabled"`
+	ForceStoreFalse bool   `json:"force_store_false"`
+	CreatedAt       int64  `json:"created_at"`
+	UpdatedAt       int64  `json:"updated_at"`
 }
 
 type exportModel struct {
-	ID            int64           `json:"id"`
-	Provider      string          `json:"provider"`
-	Model         string          `json:"model"`
-	FullName      string          `json:"full_name"`
-	RouteStrategy string          `json:"route_strategy"`
-	SilentRetry   bool            `json:"silent_retry"`
-	CreatedAt     int64           `json:"created_at"`
-	UpdatedAt     int64           `json:"updated_at"`
-	Bindings      []exportBinding `json:"bindings"`
+	ID               int64           `json:"id"`
+	Provider         string          `json:"provider"`
+	Model            string          `json:"model"`
+	FullName         string          `json:"full_name"`
+	RouteStrategy    string          `json:"route_strategy"`
+	SilentRetry      bool            `json:"silent_retry"`
+	FlattenToolCalls bool            `json:"flatten_tool_calls"`
+	CreatedAt        int64           `json:"created_at"`
+	UpdatedAt        int64           `json:"updated_at"`
+	Bindings         []exportBinding `json:"bindings"`
 }
 
 type exportBinding struct {

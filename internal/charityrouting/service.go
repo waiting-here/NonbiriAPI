@@ -323,7 +323,15 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 	if len(route.Candidates) == 0 {
 		return connectorcontract.AttemptResult{}, ErrUnboundModel
 	}
-	capable, allOpenAI, err := filterCharityCandidates(s.registry, request, route.Candidates)
+	attemptRequest := request
+	if route.Model.FlattenToolCalls {
+		attemptRequest, err = request.ReverseFlatten()
+		if err != nil || attemptRequest == nil {
+			return connectorcontract.AttemptResult{}, ErrInternal
+		}
+		defer attemptRequest.Clear()
+	}
+	capable, allOpenAI, err := filterCharityCandidates(s.registry, attemptRequest, route.Candidates, route.Model.FlattenToolCalls)
 	if err != nil {
 		return connectorcontract.AttemptResult{}, ErrInternal
 	}
@@ -339,7 +347,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 	// dispatch. Unknown models and empty candidate chains therefore never
 	// create a charity violation.
 	if s.preflight != nil {
-		if err := s.preflight(callCtx, userID, request); err != nil {
+		if err := s.preflight(callCtx, userID, attemptRequest); err != nil {
 			return connectorcontract.AttemptResult{}, err
 		}
 	}
@@ -357,6 +365,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 		lastResult    connectorcontract.AttemptResult
 		admittedAny   bool
 	)
+	policyCache := make(map[int64]bool)
 	for i := range route.Candidates {
 		candidate := route.Candidates[i]
 		if callCtx.Err() != nil {
@@ -389,7 +398,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 		if reservationID == 0 {
 			res, snap, cerr := s.store.CreateCharityReservation(acctCtx, db.ReserveCharityInput{
 				UserID:        userID,
-				FullName:      request.Model,
+				FullName:      attemptRequest.Model,
 				BindingID:     candidate.BindingID,
 				DonationKeyID: candidate.DonationKeyID,
 				AttemptID:     attemptID,
@@ -459,9 +468,11 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 			ExpectedConnectorType: connectorcontract.Type(candidate.ConnectorType),
 			Now:                   nowUnix,
 			ConsumerUserID:        userID,
-			Request:               request,
+			Request:               attemptRequest,
 			TraceID:               attemptID,
 			AttemptIndex:          i,
+			FlattenToolCalls:      route.Model.FlattenToolCalls,
+			PolicyCache:           policyCache,
 		})
 		if callCtx.Err() != nil && !result.Committed {
 			result = endedContextResult(parentCtx, callCtx)
@@ -530,7 +541,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 	return connectorcontract.AttemptResult{}, ErrKeysExhausted
 }
 
-func filterCharityCandidates(registry *connector.Registry, request *openai.ChatRequest, candidates []db.CharityCandidate) ([]db.CharityCandidate, bool, error) {
+func filterCharityCandidates(registry *connector.Registry, request *openai.ChatRequest, candidates []db.CharityCandidate, flattenToolCalls bool) ([]db.CharityCandidate, bool, error) {
 	if registry == nil || request == nil {
 		return nil, false, ErrInternal
 	}
@@ -543,6 +554,11 @@ func filterCharityCandidates(registry *connector.Registry, request *openai.ChatR
 			return nil, false, err
 		}
 		allOpenAI = allOpenAI && connectorType == connectorcontract.TypeOpenAICompatible
+		if flattenToolCalls && connectorType != connectorcontract.TypeOpenAICompatible {
+			// Flatten is an all-OpenAI persisted-state invariant. A mixed
+			// projection is corruption, not a candidate to filter away.
+			return nil, allOpenAI, forward.ErrInternal
+		}
 		supported, evaluated := capabilityByType[connectorType]
 		if !evaluated {
 			supported = registry.SupportsRequest(connectorType, request)

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
 // MaxBodyBytes bounds request bodies for the model routes. A body larger than
@@ -127,7 +129,14 @@ func (h *Handler) createModel(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, derr)
 		return
 	}
-	m, err := h.svc.CreateModel(r.Context(), uid, req.Provider, req.Model, req.RouteStrategy, req.SilentRetry)
+	var m db.Model
+	var err error
+	if req.FlattenToolCalls.Present {
+		value := req.FlattenToolCalls.Value
+		m, err = h.svc.CreateModelWithPolicy(r.Context(), uid, req.Provider, req.Model, req.RouteStrategy, req.SilentRetry, &value)
+	} else {
+		m, err = h.svc.CreateModel(r.Context(), uid, req.Provider, req.Model, req.RouteStrategy, req.SilentRetry)
+	}
 	if err != nil {
 		writeServiceErr(w, err)
 		return
@@ -168,7 +177,14 @@ func (h *Handler) updateModel(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, derr)
 		return
 	}
-	m, err := h.svc.UpdateModel(r.Context(), uid, id, req.Provider, req.Model, req.RouteStrategy, req.SilentRetry)
+	var m db.Model
+	var err error
+	if req.FlattenToolCalls.Present {
+		value := req.FlattenToolCalls.Value
+		m, err = h.svc.UpdateModelWithPolicy(r.Context(), uid, id, req.Provider, req.Model, req.RouteStrategy, req.SilentRetry, &value)
+	} else {
+		m, err = h.svc.UpdateModel(r.Context(), uid, id, req.Provider, req.Model, req.RouteStrategy, req.SilentRetry)
+	}
 	if err != nil {
 		writeServiceErr(w, err)
 		return
@@ -313,17 +329,19 @@ func (h *Handler) deleteBinding(w http.ResponseWriter, r *http.Request) {
 // --- request / response DTOs -----------------------------------------------
 
 type createModelRequest struct {
-	Provider      string  `json:"provider"`
-	Model         string  `json:"model"`
-	RouteStrategy *string `json:"route_strategy,omitempty"`
-	SilentRetry   *bool   `json:"silent_retry,omitempty"`
+	Provider         string             `json:"provider"`
+	Model            string             `json:"model"`
+	RouteStrategy    *string            `json:"route_strategy,omitempty"`
+	SilentRetry      *bool              `json:"silent_retry,omitempty"`
+	FlattenToolCalls strictOptionalBool `json:"flatten_tool_calls,omitempty"`
 }
 
 type updateModelRequest struct {
-	Provider      *string `json:"provider,omitempty"`
-	Model         *string `json:"model,omitempty"`
-	RouteStrategy *string `json:"route_strategy,omitempty"`
-	SilentRetry   *bool   `json:"silent_retry,omitempty"`
+	Provider         *string            `json:"provider,omitempty"`
+	Model            *string            `json:"model,omitempty"`
+	RouteStrategy    *string            `json:"route_strategy,omitempty"`
+	SilentRetry      *bool              `json:"silent_retry,omitempty"`
+	FlattenToolCalls strictOptionalBool `json:"flatten_tool_calls,omitempty"`
 }
 
 type createBindingRequest struct {
@@ -342,15 +360,16 @@ type updateBindingRequest struct {
 }
 
 type modelResp struct {
-	ID            int64  `json:"id"`
-	Provider      string `json:"provider"`
-	Model         string `json:"model"`
-	FullName      string `json:"full_name"`
-	RouteStrategy string `json:"route_strategy"`
-	SilentRetry   bool   `json:"silent_retry"`
-	BindingCount  int    `json:"binding_count"`
-	CreatedAt     int64  `json:"created_at"`
-	UpdatedAt     int64  `json:"updated_at"`
+	ID               int64  `json:"id"`
+	Provider         string `json:"provider"`
+	Model            string `json:"model"`
+	FullName         string `json:"full_name"`
+	RouteStrategy    string `json:"route_strategy"`
+	SilentRetry      bool   `json:"silent_retry"`
+	FlattenToolCalls bool   `json:"flatten_tool_calls"`
+	BindingCount     int    `json:"binding_count"`
+	CreatedAt        int64  `json:"created_at"`
+	UpdatedAt        int64  `json:"updated_at"`
 }
 
 type bindingResp struct {
@@ -368,10 +387,30 @@ type bindingResp struct {
 func modelResponse(m db.Model) modelResp {
 	return modelResp{
 		ID: m.ID, Provider: m.Provider, Model: m.Model, FullName: m.FullName,
-		RouteStrategy: m.RouteStrategy, SilentRetry: m.SilentRetry,
+		RouteStrategy: m.RouteStrategy, SilentRetry: m.SilentRetry, FlattenToolCalls: m.FlattenToolCalls,
 		BindingCount: m.BindingCount,
 		CreatedAt:    m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
+}
+
+// strictOptionalBool distinguishes an omitted policy field from a JSON null
+// while accepting only the JSON boolean literals. Policy fields deliberately
+// reject numbers, strings, and null rather than coercing them.
+type strictOptionalBool struct {
+	Value   bool
+	Present bool
+}
+
+func (b *strictOptionalBool) UnmarshalJSON(data []byte) error {
+	switch string(bytes.TrimSpace(data)) {
+	case "true":
+		b.Value, b.Present = true, true
+	case "false":
+		b.Value, b.Present = false, true
+	default:
+		return errors.New("policy field must be a JSON boolean")
+	}
+	return nil
 }
 
 func modelListResponse(models []db.Model) []modelResp {
@@ -408,7 +447,15 @@ func decodeModelRequest(r *http.Request, dst any) httperr.Error {
 		return httperr.New(httperr.CodeInvalidRequest, "request body is required")
 	}
 	r.Body = http.MaxBytesReader(nil, r.Body, MaxBodyBytes)
-	dec := json.NewDecoder(r.Body)
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		return decodeErrToHTTP(err)
+	}
+	defer clear(data)
+	if err := strictjson.ValidateObject(data); err != nil {
+		return httperr.New(httperr.CodeInvalidRequest, "malformed request body")
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
 		return decodeErrToHTTP(err)

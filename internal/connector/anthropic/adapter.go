@@ -159,6 +159,17 @@ func (*Adapter) ConnectorType() connectorcontract.Type {
 }
 
 func (a *Adapter) Attempt(ctx context.Context, writer http.ResponseWriter, target Target, request *openai.ChatRequest, safetyIdentifier string) connectorcontract.AttemptResult {
+	return a.attempt(ctx, writer, target, request, safetyIdentifier)
+}
+
+// AttemptWithPolicy is additive for the connector registry. Anthropic never
+// receives OpenAI-only store or flatten semantics; only the safety identifier
+// is forwarded to its existing translator.
+func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWriter, target Target, request *openai.ChatRequest, policy connectorcontract.AttemptPolicy) connectorcontract.AttemptResult {
+	return a.attempt(ctx, writer, target, request, policy.SafetyIdentifier)
+}
+
+func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, target Target, request *openai.ChatRequest, safetyIdentifier string) connectorcontract.AttemptResult {
 	result := connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "forwarding attempt unavailable"}
 	defer target.credential.clear()
 	if a == nil || backend.IsNil(a.backend) || ctx == nil || writer == nil || request == nil {

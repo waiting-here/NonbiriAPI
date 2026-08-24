@@ -127,6 +127,24 @@ func resolveCharityRouteTx(ctx context.Context, tx *sql.Tx, fullName string, now
 		return CharityRoute{}, ErrNotFound
 	}
 	route.Model = model
+	if model.FlattenToolCalls {
+		// Flatten is an OpenAI-only model policy. If the persisted state is
+		// damaged despite the write-path invariant, fail closed instead of
+		// filtering the incompatible binding and routing the remainder.
+		var incompatible int
+		if err := tx.QueryRowContext(ctx, `
+SELECT COUNT(*)
+FROM charity_model_bindings b
+JOIN donation_keys dk ON dk.id=b.donation_key_id
+JOIN endpoint_keys ek ON ek.id=dk.endpoint_key_id
+JOIN endpoints e ON e.id=ek.endpoint_id
+WHERE b.charity_model_id=? AND e.connector_type <> 'openai-compatible'`, model.ID).Scan(&incompatible); err != nil {
+			return CharityRoute{}, fmt.Errorf("validate charity flatten policy: %w", err)
+		}
+		if incompatible != 0 {
+			return CharityRoute{}, ErrConflict
+		}
+	}
 	rows, err := tx.QueryContext(ctx, charityCandidateSelectSQL+` ORDER BY b.ord, b.id LIMIT ?`,
 		fullName, now, limit+1)
 	if err != nil {
@@ -241,12 +259,13 @@ func (s *Store) GetCharityForwardTarget(ctx context.Context, bindingID int64, fu
 		return CharityForwardTarget{}, ErrNotFound
 	}
 	var (
-		target     CharityForwardTarget
-		baseURL    sql.NullString
-		ciphertext sql.NullString
+		target          CharityForwardTarget
+		baseURL         sql.NullString
+		ciphertext      sql.NullString
+		forceStoreFalse int
 	)
 	err := s.db.QueryRowContext(ctx, `
-SELECT b.id, b.donation_key_id, d.user_id, e.id, ek.id, e.connector_type,
+SELECT b.id, b.donation_key_id, d.user_id, e.id, ek.id, e.connector_type, ek.force_store_false,
        CASE WHEN length(CAST(e.base_url AS BLOB)) BETWEEN 1 AND ? THEN e.base_url END,
        b.upstream_model_id,
        CASE WHEN length(CAST(ek.encrypted_secret AS BLOB)) BETWEEN 1 AND ? THEN ek.encrypted_secret END
@@ -255,6 +274,7 @@ SELECT b.id, b.donation_key_id, d.user_id, e.id, ek.id, e.connector_type,
 		maxStoredEndpointBaseURLBytes, maxEndpointCredentialEnvelopeBytes, fullName, now, bindingID).
 		Scan(&target.BindingID, &target.DonationKeyID, &target.DonorUserID,
 			&target.EndpointID, &target.EndpointKeyID, &target.ConnectorType,
+			&forceStoreFalse,
 			&baseURL, &target.UpstreamModelID, &ciphertext)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -266,6 +286,7 @@ SELECT b.id, b.donation_key_id, d.user_id, e.id, ek.id, e.connector_type,
 		return CharityForwardTarget{}, ErrEndpointCredentialUnavailable
 	}
 	target.BaseURL = baseURL.String
+	target.ForceStoreFalse = forceStoreFalse != 0
 	target.ForwardTarget.BindingID = target.BindingID
 	target.encryptedSecret = ciphertext.String
 	return target, nil
@@ -278,11 +299,12 @@ SELECT b.id, b.donation_key_id, d.user_id, e.id, ek.id, e.connector_type,
 // It never carries a donated-key id or base URL: consumers cannot learn
 // donated resources from the price table.
 type UserCharityModel struct {
-	ID          int64
-	Provider    string
-	Model       string
-	FullName    string
-	PricingMode string
+	ID               int64
+	Provider         string
+	Model            string
+	FullName         string
+	PricingMode      string
+	FlattenToolCalls bool
 
 	RequestUserPrice      int64
 	RequestDonorReward    int64
@@ -317,7 +339,7 @@ type UserCharityModel struct {
 }
 
 const userCharityModelSelectSQL = `
-SELECT cm.id, cm.provider, cm.model, cm.full_name, cm.pricing_mode,
+	SELECT cm.id, cm.provider, cm.model, cm.full_name, cm.pricing_mode, cm.flatten_tool_calls,
        cm.request_user_price, cm.request_donor_reward,
        cm.uncached_user_price, cm.cache_write_user_price, cm.cache_read_user_price, cm.output_user_price,
        cm.uncached_donor_reward, cm.cache_write_donor_reward, cm.cache_read_donor_reward, cm.output_donor_reward,
@@ -365,7 +387,7 @@ func (s *Store) ListUserCharityModels(ctx context.Context, now int64, limit int)
 			m              UserCharityModel
 			startAt, endAt sql.NullInt64
 		)
-		if err := rows.Scan(&m.ID, &m.Provider, &m.Model, &m.FullName, &m.PricingMode,
+		if err := rows.Scan(&m.ID, &m.Provider, &m.Model, &m.FullName, &m.PricingMode, &m.FlattenToolCalls,
 			&m.RequestUserPrice, &m.RequestDonorReward,
 			&m.UncachedUserPrice, &m.CacheWriteUserPrice, &m.CacheReadUserPrice, &m.OutputUserPrice,
 			&m.UncachedDonorReward, &m.CacheWriteDonorReward, &m.CacheReadDonorReward, &m.OutputDonorReward,

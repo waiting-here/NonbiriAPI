@@ -51,12 +51,25 @@ type OpenAIDriver interface {
 	Attempt(context.Context, http.ResponseWriter, openai.Target, *openai.ChatRequest, string) openai.AttemptResult
 }
 
+// OpenAIPolicyDriver is an additive seam for strategy-aware adapters. Legacy
+// test drivers may continue implementing OpenAIDriver and receive only the
+// safety identifier; production adapters implement this optional interface.
+type OpenAIPolicyDriver interface {
+	AttemptWithPolicy(context.Context, http.ResponseWriter, openai.Target, *openai.ChatRequest, connectorcontract.AttemptPolicy) openai.AttemptResult
+}
+
 // AnthropicDriver is the protocol-specific seam used by the registry wrapper.
 // It remains intentionally parallel to OpenAIDriver instead of widening either
 // adapter into a universal provider request.
 type AnthropicDriver interface {
 	ConnectorType() connectorcontract.Type
 	Attempt(context.Context, http.ResponseWriter, anthropic.Target, *openai.ChatRequest, string) connectorcontract.AttemptResult
+}
+
+// AnthropicPolicyDriver is deliberately optional and policy-blind: store and
+// flatten strategies are OpenAI-only, so the adapter ignores both fields.
+type AnthropicPolicyDriver interface {
+	AttemptWithPolicy(context.Context, http.ResponseWriter, anthropic.Target, *openai.ChatRequest, connectorcontract.AttemptPolicy) connectorcontract.AttemptResult
 }
 
 type Dependencies struct {
@@ -271,6 +284,16 @@ func (c *openAIConnector) Attempt(ctx context.Context, input AttemptInput) conne
 		}
 		return result
 	}
+	// The two experimental policies are opt-in and must never silently fall
+	// back to the legacy driver seam. A legacy driver is compatible only when
+	// both policy bits are disabled; reject before taking the credential so a
+	// direct connector call cannot accidentally apply or ignore a policy.
+	if input.Policy.ForceStoreFalse || input.Policy.FlattenToolCalls {
+		if _, ok := c.driver.(OpenAIPolicyDriver); !ok {
+			input.Credential.Clear()
+			return connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "connector policy unsupported"}
+		}
+	}
 	plaintext, ciphertext, ok := input.Credential.Take()
 	if !ok {
 		input.Credential.Clear()
@@ -282,11 +305,16 @@ func (c *openAIConnector) Attempt(ctx context.Context, input AttemptInput) conne
 		Kind: ObservationAttemptStarted, Connector: c.Type(),
 		TraceID: input.TraceID, AttemptIndex: input.AttemptIndex,
 	})
-	result = c.driver.Attempt(ctx, input.Sink, openai.NewTarget(
+	target := openai.NewTarget(
 		input.Target.BaseURL(),
 		input.Target.UpstreamModel(),
 		openai.NewCredential(plaintext, ciphertext),
-	), input.Ingress, input.Policy.SafetyIdentifier)
+	)
+	if driver, ok := c.driver.(OpenAIPolicyDriver); ok {
+		result = driver.AttemptWithPolicy(ctx, input.Sink, target, input.Ingress, input.Policy)
+	} else {
+		result = c.driver.Attempt(ctx, input.Sink, target, input.Ingress, input.Policy.SafetyIdentifier)
+	}
 	input.Observer.TryObserve(Observation{
 		Kind: ObservationAttemptFinished, Connector: c.Type(), Success: result.Success,
 		Committed: result.Committed, Failure: result.Failure, Usage: result.Usage,
@@ -330,6 +358,13 @@ func (c *anthropicConnector) Attempt(ctx context.Context, input AttemptInput) co
 		}
 		return result
 	}
+	// Store/flatten are OpenAI-only. Do not pass an enabled bit to an
+	// Anthropic driver (including an optional policy-aware implementation),
+	// and reject before taking the short-lived credential.
+	if input.Policy.ForceStoreFalse || input.Policy.FlattenToolCalls {
+		input.Credential.Clear()
+		return connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "connector policy incompatible"}
+	}
 	plaintext, ciphertext, ok := input.Credential.Take()
 	if !ok {
 		input.Credential.Clear()
@@ -338,7 +373,12 @@ func (c *anthropicConnector) Attempt(ctx context.Context, input AttemptInput) co
 	defer clear(plaintext)
 	defer clear(ciphertext)
 	input.Observer.TryObserve(Observation{Kind: ObservationAttemptStarted, Connector: c.Type(), TraceID: input.TraceID, AttemptIndex: input.AttemptIndex})
-	result = c.driver.Attempt(ctx, input.Sink, anthropic.NewTarget(input.Target.BaseURL(), input.Target.UpstreamModel(), anthropic.NewCredential(plaintext, ciphertext)), input.Ingress, input.Policy.SafetyIdentifier)
+	target := anthropic.NewTarget(input.Target.BaseURL(), input.Target.UpstreamModel(), anthropic.NewCredential(plaintext, ciphertext))
+	if driver, ok := c.driver.(AnthropicPolicyDriver); ok {
+		result = driver.AttemptWithPolicy(ctx, input.Sink, target, input.Ingress, input.Policy)
+	} else {
+		result = c.driver.Attempt(ctx, input.Sink, target, input.Ingress, input.Policy.SafetyIdentifier)
+	}
 	input.Observer.TryObserve(Observation{Kind: ObservationAttemptFinished, Connector: c.Type(), Success: result.Success, Committed: result.Committed, Failure: result.Failure, Usage: result.Usage, Diagnostic: result.Diagnostic, TraceID: input.TraceID, AttemptIndex: input.AttemptIndex})
 	return result
 }

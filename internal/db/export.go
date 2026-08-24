@@ -73,7 +73,7 @@ func (s *Store) ListExportEndpointKeys(ctx context.Context, userID int64, limit 
 		return nil, ErrExportLimit
 	}
 	rows, err := s.db.QueryContext(ctx, `
-SELECT ek.id, ek.endpoint_id, ek.display_head, ek.display_tail, ek.note, ek.enabled, ek.created_at, ek.updated_at
+SELECT ek.id, ek.endpoint_id, ek.display_head, ek.display_tail, ek.note, ek.enabled, ek.force_store_false, ek.created_at, ek.updated_at
 FROM endpoint_keys ek
 JOIN endpoints e ON ek.endpoint_id = e.id
 WHERE e.user_id=?
@@ -242,11 +242,12 @@ func scanExportEndpointKeys(rows *sql.Rows, limit int) ([]EndpointKey, error) {
 			return nil, ErrExportLimit
 		}
 		var k EndpointKey
-		var enabledInt int
-		if err := rows.Scan(&k.ID, &k.EndpointID, &k.DisplayHead, &k.DisplayTail, &k.Note, &enabledInt, &k.CreatedAt, &k.UpdatedAt); err != nil {
+		var enabledInt, forceStoreFalseInt int
+		if err := rows.Scan(&k.ID, &k.EndpointID, &k.DisplayHead, &k.DisplayTail, &k.Note, &enabledInt, &forceStoreFalseInt, &k.CreatedAt, &k.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan export endpoint key: %w", err)
 		}
 		k.Enabled = enabledInt != 0
+		k.ForceStoreFalse = forceStoreFalseInt != 0
 		out = append(out, k)
 	}
 	if err := rows.Err(); err != nil {
@@ -263,12 +264,13 @@ func scanExportModels(rows *sql.Rows, limit int) ([]Model, error) {
 		}
 		var m Model
 		var count int
-		var silentRetry int
+		var silentRetry, flattenInt int
 		if err := rows.Scan(&m.ID, &m.UserID, &m.Provider, &m.Model, &m.FullName, &m.RouteStrategy,
-			&silentRetry, &m.CreatedAt, &m.UpdatedAt, &count); err != nil {
+			&silentRetry, &flattenInt, &m.CreatedAt, &m.UpdatedAt, &count); err != nil {
 			return nil, fmt.Errorf("scan export model: %w", err)
 		}
 		m.SilentRetry = silentRetry != 0
+		m.FlattenToolCalls = flattenInt != 0
 		m.BindingCount = count
 		out = append(out, m)
 	}
