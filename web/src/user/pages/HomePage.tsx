@@ -4,6 +4,7 @@ import { formatDateTime } from '@shared/utils/datetime';
 import { useTranslation } from 'react-i18next';
 import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
 import { isApiError, isNotFoundError, isUnauthorized } from '@shared/query/http';
+import { isStationSessionChanged } from '@shared/charityManagement';
 import { CompactNumber } from '@shared/components/CompactNumber';
 import {
   formatCompact,
@@ -128,6 +129,7 @@ function CheckinCard({ signedIn }: { signedIn: boolean }) {
     checkin.mutate(undefined, {
       onSuccess: (data) => setResult(data),
       onError: (error) => {
+        if (isStationSessionChanged(error)) return;
         if (isApiError(error) && error.code === 'already_checked_in') {
           // The day was already consumed: the status query refetch settles the
           // card into the checked-in state.
@@ -228,7 +230,7 @@ function CheckinCard({ signedIn }: { signedIn: boolean }) {
 function HomeContent() {
   const { t } = useTranslation();
   const session = useUserSession();
-  const signedIn = Boolean(session.data?.user);
+  const signedIn = !session.error && Boolean(session.data?.user);
   const me = useUserMe(signedIn);
   const usage = useUserUsage(signedIn);
   const user = session.data?.user;

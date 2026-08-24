@@ -11,6 +11,7 @@ import {
   PageHeader,
 } from '@shared/components/States';
 import { apiFetch } from '@shared/query/http';
+import { isStationSessionChanged, stationSessionWrite } from '@shared/charityManagement';
 import { asRecord, hasControlCharacters } from '@shared/query/normalize';
 import { useUserMe, useUserSession, useUserUsage, useUpdateUserProfile, userKeys } from '../data';
 import { UserPageGate } from '../components/UserPageGate';
@@ -203,7 +204,9 @@ function AccountContent() {
     setElevationError(null);
     setElevationBusy(true);
     try {
-      const payload = await apiFetch<unknown>('/api/auth/elevate', { method: 'POST' });
+      const payload = await stationSessionWrite(queryClient, 'steward', () =>
+        apiFetch<unknown>('/api/auth/elevate', { method: 'POST' }),
+      );
       const record = asRecord(payload);
       const location = record?.authorization_url;
       if (
@@ -220,7 +223,7 @@ function AccountContent() {
       writePendingElevation(intent);
       window.location.assign(authorizationUrl.toString());
     } catch (error) {
-      setElevationError(error);
+      if (!isStationSessionChanged(error)) setElevationError(error);
     } finally {
       setElevationBusy(false);
     }
@@ -235,15 +238,17 @@ function AccountContent() {
     }
     setExportBusy(true);
     try {
-      const payload = await apiFetch<unknown>('/api/account/export', {
-        method: 'POST',
-        headers,
-      });
+      const payload = await stationSessionWrite(queryClient, 'steward', () =>
+        apiFetch<unknown>('/api/account/export', {
+          method: 'POST',
+          headers,
+        }),
+      );
       if (payload === undefined) throw new Error(t('common.invalidResponse'));
       downloadExport(payload);
       setExportOpen(false);
     } catch (error) {
-      setExportError(error);
+      if (!isStationSessionChanged(error)) setExportError(error);
     } finally {
       setExportBusy(false);
     }
@@ -262,17 +267,19 @@ function AccountContent() {
     }
     setDeleteBusy(true);
     try {
-      await apiFetch<void>('/api/account/delete', {
-        method: 'POST',
-        headers,
-        json: { confirm: 'DELETE' },
-      });
+      await stationSessionWrite(queryClient, 'steward', () =>
+        apiFetch<void>('/api/account/delete', {
+          method: 'POST',
+          headers,
+          json: { confirm: 'DELETE' },
+        }),
+      );
       queryClient.removeQueries({ queryKey: userKeys.all });
       setDeleteOpen(false);
       setDeleteWord('');
       navigate('/');
     } catch (error) {
-      setDeleteError(error);
+      if (!isStationSessionChanged(error)) setDeleteError(error);
     } finally {
       setDeleteBusy(false);
     }

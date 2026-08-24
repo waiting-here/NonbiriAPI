@@ -1,5 +1,13 @@
+import { CancelledError } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ApiError, apiFetch } from '@shared/query/http';
+import { ApiError, apiFetch, isNotFoundError } from '@shared/query/http';
+import {
+  beginManagementSessionRequest,
+  failManagementSessionRequest,
+  isStationSessionChanged,
+  noteManagementSessionSuccess,
+  stationSessionWrite,
+} from '@shared/charityManagement';
 import {
   asArray,
   asRecord,
@@ -11,6 +19,7 @@ import {
   isListPayload,
   listResult,
   optionalText,
+  opaqueID,
   text,
   type UnknownRecord,
 } from '@shared/query/normalize';
@@ -98,7 +107,7 @@ export interface EndpointKey {
   note: string;
   enabled: boolean;
   /** Experimental physical-key policy; writable only by the key owner. */
-  force_store_false: boolean;
+  force_store_false: StorePolicy;
   created_at: string;
   updated_at: string;
 }
@@ -318,15 +327,106 @@ function strictInteger(value: unknown, minimum: number, maximum: number, field: 
   return value as number;
 }
 
-// Additive experimental policy fields may be absent while the preceding backend
-// wave is integrated, but once present they are strict JSON booleans.
-function additivePolicyBoolean(value: unknown, field: string): boolean {
-  if (value === undefined) return false;
+function requiredRecord(value: unknown, field: string): UnknownRecord {
+  const record = asRecord(value);
+  if (!record) throw new ApiError('invalid_response', `The server returned an invalid ${field}.`, 200);
+  return record;
+}
+
+/** Required text fields may be empty (notes are valid empty strings), but the
+ * wire value itself must be a bounded, control-free string. Display-only
+ * fragments use the separate displayText helper below when cleaning is part
+ * of their rendering contract. */
+function requiredText(value: unknown, max: number, field: string, allowEmpty = false): string {
+  if (typeof value !== 'string'
+    || hasControlCharacters(value)
+    || Array.from(value).length > max
+    || (!allowEmpty && !value.trim())) {
+    throw new ApiError('invalid_response', `The server returned an invalid ${field}.`, 200);
+  }
+  return value;
+}
+
+function optionalTextStrict(value: unknown, max: number, field: string): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  return requiredText(value, max, field, true);
+}
+
+/** Display-only fragments may be safely cleaned and bounded before rendering. */
+function displayText(value: unknown, max: number, field: string): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'string') {
+    throw new ApiError('invalid_response', `The server returned an invalid ${field}.`, 200);
+  }
+  return text(value, max) || undefined;
+}
+
+function requiredTimestamp(value: unknown, field: string): string {
+  // Alpha.2 wire timestamps are Unix seconds, never ISO strings.  Keeping
+  // this boundary numeric prevents an invalid string from becoming a blank
+  // datetime-local value that a later edit could accidentally clear.
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) {
+    const date = new Date(value * 1000);
+    if (!Number.isNaN(date.getTime())) return date.toISOString();
+  }
+  throw new ApiError('invalid_response', `The server returned an invalid ${field}.`, 200);
+}
+
+function optionalTimestamp(value: unknown, field: string): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
+    throw new ApiError('invalid_response', `The server returned an invalid ${field}.`, 200);
+  }
+  return value;
+}
+
+function requiredCount(value: unknown, field: string, maximum = Number.MAX_SAFE_INTEGER): number {
+  return strictInteger(value, 0, maximum, field);
+}
+
+function requiredUnixSeconds(value: unknown, field: string): number {
+  return strictInteger(value, 1, Number.MAX_SAFE_INTEGER, field);
+}
+
+// Resource policy fields are strict JSON booleans. Connector-specific store
+// projections use the explicit not_applicable sentinel when the server omits
+// the OpenAI-only field for an Anthropic key.
+function requiredID(value: unknown, field = 'id'): string {
+  const id = opaqueID(value);
+  if (!id) throw new ApiError('invalid_response', `The server returned an invalid ${field}.`, 200);
+  return id;
+}
+
+function optionalID(value: unknown, field = 'id'): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  return requiredID(value, field);
+}
+
+function donationStatus(value: unknown): Donation['status'] {
+  if (value === 'pending' || value === 'approved' || value === 'rejected' || value === 'deleted') {
+    return value;
+  }
+  throw new ApiError('invalid_response', 'The server returned an invalid donation status.', 200);
+}
+
+function connectorType(value: unknown): Endpoint['connector_type'] {
+  if (value === 'openai-compatible' || value === 'anthropic-compatible') return value;
+  throw new ApiError('invalid_response', 'The server returned an invalid connector type.', 200);
+}
+
+function routeStrategy(value: unknown): PlatformModel['route_strategy'] {
+  if (value === 'ordered' || value === 'random') return value;
+  throw new ApiError('invalid_response', 'The server returned an invalid route strategy.', 200);
+}
+
+function requiredBoolean(value: unknown, field: string): boolean {
   if (typeof value !== 'boolean') {
     throw new ApiError('invalid_response', `The server returned an invalid ${field}.`, 200);
   }
   return value;
 }
+
+export type StorePolicy = boolean | 'not_applicable';
 
 function optionalStrictInteger(
   value: unknown,
@@ -434,29 +534,67 @@ function normalizeUsage(value: unknown): UsageSummary {
 }
 
 function listPayload(value: unknown): unknown[] {
-  if (!isListPayload(value)) {
+  if (Array.isArray(value)) return value.slice(0, 1000);
+  const record = requiredRecord(value, 'list');
+  if (!Array.isArray(record.data)
+    || typeof record.has_more !== 'boolean'
+    || !Number.isSafeInteger(record.total)
+    || (record.total as number) < 0) {
     throw new ApiError('invalid_response', 'The server returned an invalid list.', 200);
   }
-  return listResult(value, 1000).items;
+  return record.data.slice(0, 1000);
 }
 
-function normalizeEndpoint(value: unknown): Endpoint {
-  const record = asRecord(value) ?? {};
+function donationListPayload(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value.slice(0, 1000);
+  const record = requiredRecord(value, 'donation list');
+  if (!Array.isArray(record.data)
+    || typeof record.has_more !== 'boolean'
+    || !Number.isSafeInteger(record.total)
+    || (record.total as number) < 0) {
+    throw new ApiError('invalid_response', 'The server returned an invalid donation list.', 200);
+  }
+  return record.data.slice(0, 1000);
+}
+
+/**
+ * GET /api/charity/models has its own non-paginated wire: the backend emits
+ * exactly an object containing the enabled projection under `data`.  Do not
+ * route this endpoint through the general list decoder, since accepting a
+ * bare array (or inventing pagination metadata) would hide a proxy/backend
+ * contract mismatch.
+ */
+function charityModelsPayload(value: unknown): unknown[] {
+  const record = requiredRecord(value, 'charity model list');
+  if (!Array.isArray(record.data) || Object.keys(record).some((key) => key !== 'data')) {
+    throw new ApiError('invalid_response', 'The server returned an invalid charity model list.', 200);
+  }
+  return record.data.slice(0, 1000);
+}
+
+export function normalizeEndpoint(value: unknown): Endpoint {
+  const record = requiredRecord(value, 'endpoint');
+  const failedAt = recordValue(record, 'model_fetch_failed_at');
+  const modelFetchFailed = requiredBoolean(recordValue(record, 'model_fetch_failed'), 'model fetch status');
+  if (typeof failedAt !== 'number' || !Number.isSafeInteger(failedAt) || failedAt < 0
+    || (modelFetchFailed ? failedAt <= 0 : failedAt !== 0)) {
+    throw new ApiError('invalid_response', 'The server returned an invalid model fetch failure timestamp.', 200);
+  }
   return {
-    id: idValue(recordValue(record, 'id')),
-    connector_type: text(recordValue(record, 'connector_type'), 96, 'openai-compatible'),
-    base_url: text(recordValue(record, 'base_url'), 2048, '—'),
-    note: text(recordValue(record, 'note'), 512),
-    enabled: booleanValue(recordValue(record, 'enabled'), true),
-    model_fetch_failed: booleanValue(recordValue(record, 'model_fetch_failed')),
-    model_fetch_failed_at: dateValue(recordValue(record, 'model_fetch_failed_at')),
-    created_at: dateValue(recordValue(record, 'created_at')),
-    updated_at: dateValue(recordValue(record, 'updated_at')),
+    id: requiredID(recordValue(record, 'id'), 'endpoint id'),
+    connector_type: connectorType(recordValue(record, 'connector_type')),
+    base_url: requiredText(recordValue(record, 'base_url'), 2048, 'endpoint base URL'),
+    note: requiredText(recordValue(record, 'note'), 512, 'endpoint note', true),
+    enabled: requiredBoolean(recordValue(record, 'enabled'), 'endpoint enabled'),
+    model_fetch_failed: modelFetchFailed,
+    model_fetch_failed_at: modelFetchFailed ? requiredTimestamp(failedAt, 'model fetch failure timestamp') : '',
+    created_at: requiredTimestamp(recordValue(record, 'created_at'), 'endpoint created timestamp'),
+    updated_at: requiredTimestamp(recordValue(record, 'updated_at'), 'endpoint updated timestamp'),
   };
 }
 
 function safeDisplayFragment(value: unknown, max = 64): string | undefined {
-  const candidate = optionalText(value, max);
+  const candidate = displayText(value, max, 'key display');
   return candidate && (candidate.includes('…') || candidate.includes('...')) ? candidate : undefined;
 }
 
@@ -473,69 +611,86 @@ function formatFragment(head: string | undefined, tail: string | undefined): str
 function fragmentFromRecord(record: UnknownRecord): string | undefined {
   const directDisplay = safeDisplayFragment(recordValue(record, 'display'));
   if (directDisplay) return directDisplay;
-  const head = optionalText(recordValue(record, 'display_head'), 4) ?? optionalText(recordValue(record, 'secret_head'), 4);
-  const tail = optionalText(recordValue(record, 'display_tail'), 4) ?? optionalText(recordValue(record, 'secret_tail'), 4);
+  const head = displayText(recordValue(record, 'display_head'), 8, 'key display head')
+    ?? displayText(recordValue(record, 'secret_head'), 8, 'key display head');
+  const tail = displayText(recordValue(record, 'display_tail'), 8, 'key display tail')
+    ?? displayText(recordValue(record, 'secret_tail'), 8, 'key display tail');
   return formatFragment(head, tail);
 }
 
-export function normalizeEndpointKey(value: unknown): EndpointKey {
-  const record = asRecord(value) ?? {};
+export function normalizeEndpointKey(value: unknown, connectorTypeValue: string): EndpointKey {
+  const record = requiredRecord(value, 'endpoint key');
   const fragment = fragmentFromRecord(record);
+  const connector = connectorType(connectorTypeValue);
+  const hasStorePolicy = Object.prototype.hasOwnProperty.call(record, 'force_store_false');
+  const rawStorePolicy = recordValue(record, 'force_store_false');
+  let storePolicyValue: StorePolicy;
+  if (connector === 'openai-compatible') {
+    if (!hasStorePolicy || typeof rawStorePolicy !== 'boolean') {
+      throw new ApiError('invalid_response', 'The server returned an invalid store policy.', 200);
+    }
+    storePolicyValue = rawStorePolicy;
+  } else {
+    if (hasStorePolicy) {
+      throw new ApiError('invalid_response', 'The server returned an unexpected store policy.', 200);
+    }
+    storePolicyValue = 'not_applicable';
+  }
   return {
-    id: idValue(recordValue(record, 'id')),
+    id: requiredID(recordValue(record, 'id'), 'endpoint key id'),
     ...(fragment ? { display: fragment } : {}),
-    note: text(recordValue(record, 'note'), 512),
-    enabled: booleanValue(recordValue(record, 'enabled'), true),
-    force_store_false: additivePolicyBoolean(
-      recordValue(record, 'force_store_false'), 'store policy',
-    ),
-    created_at: dateValue(recordValue(record, 'created_at')),
-    updated_at: dateValue(recordValue(record, 'updated_at')),
+    note: requiredText(recordValue(record, 'note'), 512, 'endpoint key note', true),
+    enabled: requiredBoolean(recordValue(record, 'enabled'), 'endpoint key enabled'),
+    force_store_false: storePolicyValue,
+    created_at: requiredTimestamp(recordValue(record, 'created_at'), 'endpoint key created timestamp'),
+    updated_at: requiredTimestamp(recordValue(record, 'updated_at'), 'endpoint key updated timestamp'),
   };
 }
 
-function normalizeUpstreamModel(value: unknown): UpstreamModel {
-  const record = asRecord(value) ?? {};
+export function normalizeUpstreamModel(value: unknown): UpstreamModel {
+  const record = requiredRecord(value, 'upstream model');
+  const status = recordValue(record, 'status');
+  if (status !== 'ok') {
+    throw new ApiError('invalid_response', 'The server returned an invalid upstream model status.', 200);
+  }
   return {
-    upstream_model_id: text(recordValue(record, 'upstream_model_id'), 256, '—'),
-    provider: text(recordValue(record, 'provider'), 128, '—'),
-    fetched_at: dateValue(recordValue(record, 'fetched_at')),
-    status: text(recordValue(record, 'status'), 64, 'unknown'),
+    upstream_model_id: requiredText(recordValue(record, 'upstream_model_id'), 512, 'upstream model id'),
+    provider: requiredText(recordValue(record, 'provider'), 128, 'upstream model provider'),
+    fetched_at: requiredTimestamp(recordValue(record, 'fetched_at'), 'upstream model fetched timestamp'),
+    status,
   };
 }
 
 export function normalizePlatformModel(value: unknown): PlatformModel {
-  const record = asRecord(value) ?? {};
+  const record = requiredRecord(value, 'model');
   return {
-    id: idValue(recordValue(record, 'id')),
-    provider: text(recordValue(record, 'provider'), 64, '—'),
-    model: text(recordValue(record, 'model'), 64, '—'),
-    full_name: text(recordValue(record, 'full_name'), 160, '—'),
-    route_strategy: recordValue(record, 'route_strategy') === 'random' ? 'random' : 'ordered',
-    silent_retry: booleanValue(recordValue(record, 'silent_retry')),
-    flatten_tool_calls: additivePolicyBoolean(
-      recordValue(record, 'flatten_tool_calls'), 'tool-call policy',
-    ),
-    binding_count: Math.max(0, integerValue(recordValue(record, 'binding_count'))),
-    created_at: dateValue(recordValue(record, 'created_at')),
-    updated_at: dateValue(recordValue(record, 'updated_at')),
+    id: requiredID(recordValue(record, 'id'), 'model id'),
+    provider: requiredText(recordValue(record, 'provider'), 64, 'model provider'),
+    model: requiredText(recordValue(record, 'model'), 64, 'model name'),
+    full_name: requiredText(recordValue(record, 'full_name'), 160, 'model full name'),
+    route_strategy: routeStrategy(recordValue(record, 'route_strategy')),
+    silent_retry: requiredBoolean(recordValue(record, 'silent_retry'), 'silent-retry policy'),
+    flatten_tool_calls: requiredBoolean(recordValue(record, 'flatten_tool_calls'), 'tool-call policy'),
+    binding_count: requiredCount(recordValue(record, 'binding_count'), 'binding count'),
+    created_at: requiredTimestamp(recordValue(record, 'created_at'), 'model created timestamp'),
+    updated_at: requiredTimestamp(recordValue(record, 'updated_at'), 'model updated timestamp'),
   };
 }
 
-function normalizeBinding(value: unknown): ModelBinding {
-  const record = asRecord(value) ?? {};
-  const keyHead = optionalText(recordValue(record, 'endpoint_key_display_head'), 4);
-  const keyTail = optionalText(recordValue(record, 'endpoint_key_display_tail'), 4);
+export function normalizeBinding(value: unknown): ModelBinding {
+  const record = requiredRecord(value, 'model binding');
+  const keyHead = optionalTextStrict(recordValue(record, 'endpoint_key_display_head'), 8, 'endpoint key display head');
+  const keyTail = optionalTextStrict(recordValue(record, 'endpoint_key_display_tail'), 8, 'endpoint key display tail');
   const keyDisplay = formatFragment(keyHead, keyTail);
   return {
-    id: idValue(recordValue(record, 'id')),
-    endpoint_key_id: idValue(recordValue(record, 'endpoint_key_id')),
-    upstream_model_id: text(recordValue(record, 'upstream_model_id'), 256, '—'),
-    endpoint_base_url: text(recordValue(record, 'endpoint_base_url'), 2048, '—'),
+    id: requiredID(recordValue(record, 'id'), 'binding id'),
+    endpoint_key_id: requiredID(recordValue(record, 'endpoint_key_id'), 'endpoint key id'),
+    upstream_model_id: requiredText(recordValue(record, 'upstream_model_id'), 256, 'upstream model id'),
+    endpoint_base_url: requiredText(recordValue(record, 'endpoint_base_url'), 2048, 'endpoint base URL'),
     ...(keyDisplay ? { endpoint_key_display: keyDisplay } : {}),
-    endpoint_key_note: text(recordValue(record, 'endpoint_key_note'), 512),
-    endpoint_note: text(recordValue(record, 'endpoint_note'), 512),
-    ord: Math.max(0, integerValue(recordValue(record, 'ord'))),
+    endpoint_key_note: optionalTextStrict(recordValue(record, 'endpoint_key_note'), 512, 'endpoint key note') ?? '',
+    endpoint_note: optionalTextStrict(recordValue(record, 'endpoint_note'), 512, 'endpoint note') ?? '',
+    ord: strictInteger(recordValue(record, 'ord'), 0, 1_000_000, 'binding order'),
   };
 }
 
@@ -705,12 +860,28 @@ export function normalizeSecret(value: unknown): CallerKeySecret {
   return { secret };
 }
 
-export function useUserSession() {
+export function useUserSession(enabled = true) {
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: userKeys.session,
-    queryFn: async () => normalizeSession(await apiFetch<unknown>('/api/session')),
+    queryFn: async () => {
+      const generation = beginManagementSessionRequest(queryClient, 'steward');
+      try {
+        const value = normalizeSession(await apiFetch<unknown>('/api/session'));
+        if (!noteManagementSessionSuccess(queryClient, 'steward', value, generation)) {
+          // An older response must not replace the current session projection
+          // after a logout/login or same-level account switch.
+          throw new CancelledError();
+        }
+        return value;
+      } catch (error) {
+        failManagementSessionRequest(queryClient, 'steward', generation);
+        throw error;
+      }
+    },
     staleTime: 15_000,
     retry: false,
+    enabled,
   });
 }
 
@@ -734,7 +905,9 @@ export function useUpdateUserProfile() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (values: { lang?: 'zh' | 'en' }) =>
-      apiFetch<unknown>('/api/me', { method: 'PATCH', json: values }),
+      stationSessionWrite(queryClient, 'steward', () =>
+        apiFetch<unknown>('/api/me', { method: 'PATCH', json: values }),
+      ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: userKeys.me });
     },
@@ -757,16 +930,25 @@ export function useEndpoints(enabled = true) {
   });
 }
 
-export function useEndpointKeys(endpointId: string | undefined, enabled = true) {
+export function useEndpointKeys(
+  endpointId: string | undefined,
+  enabled = true,
+  connectorTypeValue: string | undefined,
+) {
   return useQuery({
-    queryKey: endpointId ? userKeys.endpointKeys(endpointId) : ['user', 'endpoint-keys', 'none'],
+    queryKey: endpointId
+      ? [...userKeys.endpointKeys(endpointId), connectorTypeValue ?? 'connector-unresolved']
+      : ['user', 'endpoint-keys', 'none'],
     queryFn: async () => {
-      if (!endpointId) return [];
+      if (!endpointId || !connectorTypeValue) {
+        throw new ApiError('invalid_response', 'The endpoint connector type is unavailable.', 200);
+      }
+      const endpointID = requiredID(endpointId, 'endpoint id');
       return listPayload(
-        await apiFetch<unknown>(`/api/endpoints/${encodeURIComponent(endpointId)}/keys`),
-      ).map(normalizeEndpointKey);
+        await apiFetch<unknown>(`/api/endpoints/${encodeURIComponent(endpointID)}/keys`),
+      ).map((value) => normalizeEndpointKey(value, connectorTypeValue));
     },
-    enabled: enabled && Boolean(endpointId),
+    enabled: enabled && Boolean(endpointId && connectorTypeValue),
   });
 }
 
@@ -782,9 +964,11 @@ export function useKeyModels(
         : ['user', 'key-models', 'none', 'none'],
     queryFn: async () => {
       if (!endpointId || !keyId) return [];
+      const endpointID = requiredID(endpointId, 'endpoint id');
+      const keyID = requiredID(keyId, 'endpoint key id');
       return listPayload(
         await apiFetch<unknown>(
-          `/api/endpoints/${encodeURIComponent(endpointId)}/keys/${encodeURIComponent(keyId)}/models`,
+          `/api/endpoints/${encodeURIComponent(endpointID)}/keys/${encodeURIComponent(keyID)}/models`,
         ),
       ).map(normalizeUpstreamModel);
     },
@@ -805,8 +989,9 @@ export function useModelBindings(modelId: string | undefined, enabled = true) {
     queryKey: modelId ? userKeys.bindings(modelId) : ['user', 'bindings', 'none'],
     queryFn: async () => {
       if (!modelId) return [];
+      const modelID = requiredID(modelId, 'model id');
       return normalizeBindingList(
-        await apiFetch<unknown>(`/api/models/${encodeURIComponent(modelId)}/bindings`),
+        await apiFetch<unknown>(`/api/models/${encodeURIComponent(modelID)}/bindings`),
       );
     },
     enabled: enabled && Boolean(modelId),
@@ -819,6 +1004,8 @@ export interface UpdateModelInput {
   model?: string;
   route_strategy?: 'ordered' | 'random';
   silent_retry?: boolean;
+  /** Experimental logical-model policy; the server validates connector support. */
+  flatten_tool_calls?: boolean;
 }
 
 /**
@@ -831,9 +1018,12 @@ export function useUpdateModel() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ modelId, ...patch }: UpdateModelInput) => {
-      const payload = await apiFetch<unknown>(
-        `/api/models/${encodeURIComponent(modelId)}`,
-        { method: 'PATCH', json: patch },
+      const modelID = requiredID(modelId, 'model id');
+      const payload = await stationSessionWrite(queryClient, 'steward', () =>
+        apiFetch<unknown>(
+          `/api/models/${encodeURIComponent(modelID)}`,
+          { method: 'PATCH', json: patch },
+        ),
       );
       if (!asRecord(payload)) {
         throw new ApiError('invalid_response', 'The server returned an invalid model.', 200);
@@ -863,9 +1053,14 @@ export function useUpdateBinding() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ modelId, bindingId, ...patch }: UpdateBindingInput) => {
-      const payload = await apiFetch<unknown>(
-        `/api/models/${encodeURIComponent(modelId)}/bindings/${encodeURIComponent(bindingId)}`,
-        { method: 'PATCH', json: patch },
+      const modelID = requiredID(modelId, 'model id');
+      const bindingID = requiredID(bindingId, 'binding id');
+      if (patch.ord !== undefined) strictInteger(patch.ord, 0, 1_000_000, 'binding order');
+      const payload = await stationSessionWrite(queryClient, 'steward', () =>
+        apiFetch<unknown>(
+          `/api/models/${encodeURIComponent(modelID)}/bindings/${encodeURIComponent(bindingID)}`,
+          { method: 'PATCH', json: patch },
+        ),
       );
       if (!asRecord(payload)) {
         throw new ApiError('invalid_response', 'The server returned an invalid binding.', 200);
@@ -904,13 +1099,14 @@ export function useBindingUpstreamModels(
         (endpoint) => endpoint.enabled && endpoint.base_url === binding.endpoint_base_url,
       );
       for (const endpoint of candidates) {
+        const endpointID = requiredID(endpoint.id, 'endpoint id');
         const keys = listPayload(
-          await apiFetch<unknown>(`/api/endpoints/${encodeURIComponent(endpoint.id)}/keys`),
-        ).map(normalizeEndpointKey);
+          await apiFetch<unknown>(`/api/endpoints/${encodeURIComponent(endpointID)}/keys`),
+        ).map((value) => normalizeEndpointKey(value, endpoint.connector_type));
         if (!keys.some((key) => key.id === binding.endpoint_key_id)) continue;
         return listPayload(
           await apiFetch<unknown>(
-            `/api/endpoints/${encodeURIComponent(endpoint.id)}/keys/${encodeURIComponent(binding.endpoint_key_id)}/models`,
+            `/api/endpoints/${encodeURIComponent(endpointID)}/keys/${encodeURIComponent(binding.endpoint_key_id)}/models`,
           ),
         ).map(normalizeUpstreamModel);
       }
@@ -952,8 +1148,12 @@ export function useUserIssues(page: number, resolved?: boolean, pageSize = 20, e
 export function useResolveUserIssue() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (issueId: string) =>
-      apiFetch<void>(`/api/issues/${encodeURIComponent(issueId)}/resolve`, { method: 'POST' }),
+    mutationFn: (issueId: string) => {
+      const issueID = requiredID(issueId, 'issue id');
+      return stationSessionWrite(queryClient, 'steward', () =>
+        apiFetch<void>(`/api/issues/${encodeURIComponent(issueID)}/resolve`, { method: 'POST' }),
+      );
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: userKeys.issues });
     },
@@ -1083,12 +1283,12 @@ export interface CharityPrices {
   cache_write_donor_reward_milli: string;
   cache_read_donor_reward_milli: string;
   output_donor_reward_milli: string;
-  /** Optional server-projected prices for the currently active discount. */
-  current_request_user_price_milli?: string;
-  current_uncached_user_price_milli?: string;
-  current_cache_write_user_price_milli?: string;
-  current_cache_read_user_price_milli?: string;
-  current_output_user_price_milli?: string;
+  /** Required server-projected prices for the currently active discount. */
+  current_request_user_price_milli: string;
+  current_uncached_user_price_milli: string;
+  current_cache_write_user_price_milli: string;
+  current_cache_read_user_price_milli: string;
+  current_output_user_price_milli: string;
 }
 
 export interface CharityModel {
@@ -1119,7 +1319,7 @@ export interface DonationKey {
   credits_reserved_milli: string;
   enabled: boolean;
   /** Read-only outside the physical key owner's own resource form. */
-  force_store_false: boolean;
+  force_store_false: StorePolicy;
 }
 
 export interface DonationReview {
@@ -1158,37 +1358,47 @@ function amountString(value: unknown, field = 'amount'): string {
   return value;
 }
 
-function optionalUnix(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+function optionalUnix(value: unknown, field: string): number | undefined {
+  return optionalTimestamp(value, field);
 }
 
 function safeFragment(head: unknown, tail: unknown): string | undefined {
-  const h = typeof head === 'string' && head.length <= 8 ? head : '';
-  const t = typeof tail === 'string' && tail.length <= 8 ? tail : '';
+  const h = displayText(head, 8, 'donation key display head') ?? '';
+  const t = displayText(tail, 8, 'donation key display tail') ?? '';
   return h || t ? `${h}${h && t ? '…' : ''}${t}` : undefined;
 }
 
 export function normalizeCharityModel(value: unknown): CharityModel {
-  const record = asRecord(value) ?? {};
-  const rawPrices = asRecord(recordValue(record, 'prices')) ?? {};
-  const rawDiscount = asRecord(recordValue(record, 'discount')) ?? {};
-  const pricingMode = recordValue(record, 'pricing_mode') === 'per_token' ? 'per_token' : 'per_request';
+  const record = requiredRecord(value, 'charity model');
+  const rawPrices = requiredRecord(recordValue(record, 'prices'), 'charity model prices');
+  const rawDiscount = requiredRecord(recordValue(record, 'discount'), 'charity model discount');
+  const pricingMode = recordValue(record, 'pricing_mode');
+  if (pricingMode !== 'per_token' && pricingMode !== 'per_request') {
+    throw new ApiError('invalid_response', 'The server returned an invalid charity pricing mode.', 200);
+  }
   const price = (key: string) => amountString(recordValue(rawPrices, key));
-  const current = (key: string) => {
-    const value = recordValue(rawPrices, key);
-    return typeof value === 'string' && value.length <= 32 ? value : undefined;
-  };
-  const samples = Math.max(0, integerValue(recordValue(record, 'success_samples')));
-  const success = Math.max(0, Math.min(samples, integerValue(recordValue(record, 'success_count'))));
+  const current = (key: string) => amountString(recordValue(rawPrices, key), `charity model ${key}`);
+  const samples = requiredCount(recordValue(record, 'success_samples'), 'charity model success sample count');
+  const success = requiredCount(recordValue(record, 'success_count'), 'charity model success count');
+  if (success > samples) {
+    throw new ApiError('invalid_response', 'The server returned an invalid charity model success count.', 200);
+  }
+  const start = optionalUnix(recordValue(rawDiscount, 'start_at'), 'charity discount start timestamp');
+  const end = optionalUnix(recordValue(rawDiscount, 'end_at'), 'charity discount end timestamp');
+  const available = requiredBoolean(recordValue(record, 'available'), 'charity model availability');
+  const availabilityReason = recordValue(record, 'availability_reason');
+  if (typeof availabilityReason !== 'string'
+    || (available && availabilityReason !== 'ok')
+    || (!available && availabilityReason !== 'no_candidate')) {
+    throw new ApiError('invalid_response', 'The server returned an invalid charity model availability reason.', 200);
+  }
   return {
-    id: idValue(recordValue(record, 'id')),
-    provider: text(recordValue(record, 'provider'), 128, '—'),
-    model: text(recordValue(record, 'model'), 256, '—'),
-    full_name: text(recordValue(record, 'full_name'), 512, '—'),
-    enabled: booleanValue(recordValue(record, 'enabled')),
-    flatten_tool_calls: additivePolicyBoolean(
-      recordValue(record, 'flatten_tool_calls'), 'charity tool-call policy',
-    ),
+    id: requiredID(recordValue(record, 'id'), 'charity model id'),
+    provider: requiredText(recordValue(record, 'provider'), 128, 'charity model provider'),
+    model: requiredText(recordValue(record, 'model'), 256, 'charity model name'),
+    full_name: requiredText(recordValue(record, 'full_name'), 512, 'charity model full name'),
+    enabled: requiredBoolean(recordValue(record, 'enabled'), 'charity model enabled'),
+    flatten_tool_calls: requiredBoolean(recordValue(record, 'flatten_tool_calls'), 'charity tool-call policy'),
     pricing_mode: pricingMode,
     prices: {
       request_user_price_milli: price('request_user_price_milli'),
@@ -1201,75 +1411,99 @@ export function normalizeCharityModel(value: unknown): CharityModel {
       cache_write_donor_reward_milli: price('cache_write_donor_reward_milli'),
       cache_read_donor_reward_milli: price('cache_read_donor_reward_milli'),
       output_donor_reward_milli: price('output_donor_reward_milli'),
-      ...(current('current_request_user_price_milli') ? { current_request_user_price_milli: current('current_request_user_price_milli') } : {}),
-      ...(current('current_uncached_user_price_milli') ? { current_uncached_user_price_milli: current('current_uncached_user_price_milli') } : {}),
-      ...(current('current_cache_write_user_price_milli') ? { current_cache_write_user_price_milli: current('current_cache_write_user_price_milli') } : {}),
-      ...(current('current_cache_read_user_price_milli') ? { current_cache_read_user_price_milli: current('current_cache_read_user_price_milli') } : {}),
-      ...(current('current_output_user_price_milli') ? { current_output_user_price_milli: current('current_output_user_price_milli') } : {}),
+      current_request_user_price_milli: current('current_request_user_price_milli'),
+      current_uncached_user_price_milli: current('current_uncached_user_price_milli'),
+      current_cache_write_user_price_milli: current('current_cache_write_user_price_milli'),
+      current_cache_read_user_price_milli: current('current_cache_read_user_price_milli'),
+      current_output_user_price_milli: current('current_output_user_price_milli'),
     },
     discount: {
-      percent: Math.max(0, Math.min(100, integerValue(recordValue(rawDiscount, 'percent')))),
-      enabled: booleanValue(recordValue(rawDiscount, 'enabled')),
-      ...(optionalUnix(recordValue(rawDiscount, 'start_at')) ? { start_at: optionalUnix(recordValue(rawDiscount, 'start_at')) } : {}),
-      ...(optionalUnix(recordValue(rawDiscount, 'end_at')) ? { end_at: optionalUnix(recordValue(rawDiscount, 'end_at')) } : {}),
+      percent: strictInteger(recordValue(rawDiscount, 'percent'), 0, 100, 'charity discount percent'),
+      enabled: requiredBoolean(recordValue(rawDiscount, 'enabled'), 'charity discount enabled'),
+      ...(start !== undefined ? { start_at: start } : {}),
+      ...(end !== undefined ? { end_at: end } : {}),
     },
     success_samples: samples,
     success_count: success,
-    available: recordValue(record, 'available') !== false,
-    availability_reason: text(recordValue(record, 'availability_reason'), 256),
+    available,
+    availability_reason: availabilityReason,
   };
 }
 
-export function normalizeDonationKey(value: unknown): DonationKey {
-  const record = asRecord(value) ?? {};
+/**
+ * Donation detail responses intentionally omit the connector-specific store
+ * field for Anthropic keys.  The owner page must supply the connector from
+ * its own endpoint projection before interpreting that omission; accepting a
+ * missing context here would turn a malformed OpenAI response into the
+ * Anthropic sentinel.
+ */
+export function normalizeDonationKey(value: unknown, connectorTypeValue: string): DonationKey {
+  const record = requiredRecord(value, 'donation key');
+  const endpointKeyID = optionalID(recordValue(record, 'endpoint_key_id'), 'endpoint key id');
+  const display = safeFragment(recordValue(record, 'display_head'), recordValue(record, 'display_tail'));
+  const connector = connectorType(connectorTypeValue);
+  const hasStorePolicy = Object.prototype.hasOwnProperty.call(record, 'force_store_false');
+  const rawStorePolicy = recordValue(record, 'force_store_false');
+  let storePolicyValue: StorePolicy;
+  if (connector === 'openai-compatible') {
+    if (!hasStorePolicy || typeof rawStorePolicy !== 'boolean') {
+      throw new ApiError('invalid_response', 'The server returned an invalid donation-key store policy.', 200);
+    }
+    storePolicyValue = rawStorePolicy;
+  } else {
+    if (hasStorePolicy) {
+      throw new ApiError('invalid_response', 'The server returned an unexpected donation-key store policy.', 200);
+    }
+    storePolicyValue = 'not_applicable';
+  }
   return {
-    id: idValue(recordValue(record, 'id')),
-    ...(recordValue(record, 'endpoint_key_id') !== null && recordValue(record, 'endpoint_key_id') !== undefined
-      ? { endpoint_key_id: idValue(recordValue(record, 'endpoint_key_id')) }
-      : {}),
-    ...(safeFragment(recordValue(record, 'display_head'), recordValue(record, 'display_tail'))
-      ? { display: safeFragment(recordValue(record, 'display_head'), recordValue(record, 'display_tail')) }
-      : {}),
+    id: requiredID(recordValue(record, 'id'), 'donation key id'),
+    ...(endpointKeyID ? { endpoint_key_id: endpointKeyID } : {}),
+    ...(display ? { display } : {}),
     max_concurrency: strictInteger(recordValue(record, 'max_concurrency'), 0, 100_000, 'donation key concurrency'),
     rpm_limit: strictInteger(recordValue(record, 'rpm_limit'), 0, 4_096, 'donation key RPM'),
     credits_usage_cap_milli: amountString(recordValue(record, 'credits_usage_cap_milli')),
     credits_used_milli: amountString(recordValue(record, 'credits_used_milli')),
     credits_reserved_milli: amountString(recordValue(record, 'credits_reserved_milli')),
-    enabled: booleanValue(recordValue(record, 'enabled'), true),
-    force_store_false: additivePolicyBoolean(
-      recordValue(record, 'force_store_false'), 'donation-key store policy',
-    ),
+    enabled: requiredBoolean(recordValue(record, 'enabled'), 'donation key enabled'),
+    force_store_false: storePolicyValue,
   };
 }
 
-function normalizeDonation(value: unknown, detailed = false): Donation {
-  const record = asRecord(value) ?? {};
-  const status = text(recordValue(record, 'status'), 32, 'pending') as Donation['status'];
-  const rawKeys = asArray(recordValue(record, 'keys'));
-  const rawReviews = asArray(recordValue(record, 'reviews'));
+export function normalizeDonation(value: unknown, detailed = false, connectorTypeValue?: string): Donation {
+  const record = requiredRecord(value, 'donation');
+  const status = donationStatus(recordValue(record, 'status'));
+  const rawKeys = detailed ? recordValue(record, 'keys') : undefined;
+  const rawReviews = detailed ? recordValue(record, 'reviews') : undefined;
+  const endpointID = optionalID(recordValue(record, 'endpoint_id'), 'endpoint id');
+  const expiresAt = optionalUnix(recordValue(record, 'expires_at'), 'donation expiry timestamp');
+  const reviewedAt = optionalUnix(recordValue(record, 'reviewed_at'), 'donation review timestamp');
+  if (detailed && !Array.isArray(rawKeys)) throw new ApiError('invalid_response', 'The server returned an invalid donation keys list.', 200);
+  if (detailed && rawReviews !== undefined && !Array.isArray(rawReviews)) throw new ApiError('invalid_response', 'The server returned an invalid donation review list.', 200);
+  if (detailed && (rawKeys as unknown[]).length > 0 && !connectorTypeValue) {
+    throw new ApiError('invalid_response', 'The donation key connector type is unavailable.', 200);
+  }
   return {
-    id: idValue(recordValue(record, 'id')),
-    ...(recordValue(record, 'endpoint_id') !== null && recordValue(record, 'endpoint_id') !== undefined
-      ? { endpoint_id: idValue(recordValue(record, 'endpoint_id')) }
-      : {}),
-    endpoint_base_url: text(recordValue(record, 'endpoint_base_url'), 2048, '—'),
+    id: requiredID(recordValue(record, 'id'), 'donation id'),
+    ...(endpointID ? { endpoint_id: endpointID } : {}),
+    endpoint_base_url: requiredText(recordValue(record, 'endpoint_base_url'), 2048, 'donation endpoint base URL'),
     status,
-    enabled: booleanValue(recordValue(record, 'enabled')),
-    description: text(recordValue(record, 'description'), 4096),
-    review_note: text(recordValue(record, 'review_note'), 4096),
-    ...(optionalUnix(recordValue(record, 'expires_at')) ? { expires_at: optionalUnix(recordValue(record, 'expires_at')) } : {}),
-    ...(optionalUnix(recordValue(record, 'reviewed_at')) ? { reviewed_at: optionalUnix(recordValue(record, 'reviewed_at')) } : {}),
-    created_at: unixSecondsValue(recordValue(record, 'created_at')),
-    updated_at: unixSecondsValue(recordValue(record, 'updated_at')),
-    keys: detailed ? rawKeys.map(normalizeDonationKey) : [],
-    reviews: detailed ? rawReviews.map((review) => {
-      const item = asRecord(review) ?? {};
+    enabled: requiredBoolean(recordValue(record, 'enabled'), 'donation enabled'),
+    description: requiredText(recordValue(record, 'description'), 4096, 'donation description', true),
+    review_note: requiredText(recordValue(record, 'review_note'), 4096, 'donation review note', true),
+    ...(expiresAt !== undefined ? { expires_at: expiresAt } : {}),
+    ...(reviewedAt !== undefined ? { reviewed_at: reviewedAt } : {}),
+    created_at: requiredUnixSeconds(recordValue(record, 'created_at'), 'donation created timestamp'),
+    updated_at: requiredUnixSeconds(recordValue(record, 'updated_at'), 'donation updated timestamp'),
+    keys: detailed ? (rawKeys as unknown[]).map((key) => normalizeDonationKey(key, connectorTypeValue!)) : [],
+    reviews: detailed && Array.isArray(rawReviews) ? rawReviews.map((review) => {
+      const item = requiredRecord(review, 'donation review');
       return {
-        id: idValue(recordValue(item, 'id')),
-        reviewer_role: text(recordValue(item, 'reviewer_role'), 32),
-        action: text(recordValue(item, 'action'), 32),
-        note: text(recordValue(item, 'note'), 4096),
-        created_at: unixSecondsValue(recordValue(item, 'created_at')),
+        id: requiredID(recordValue(item, 'id'), 'review id'),
+        reviewer_role: requiredText(recordValue(item, 'reviewer_role'), 32, 'reviewer role'),
+        action: requiredText(recordValue(item, 'action'), 32, 'review action'),
+        note: requiredText(recordValue(item, 'note'), 4096, 'review note', true),
+        created_at: requiredUnixSeconds(recordValue(item, 'created_at'), 'review created timestamp'),
       };
     }) : [],
   };
@@ -1278,7 +1512,7 @@ function normalizeDonation(value: unknown, detailed = false): Donation {
 export function useCharityModels(enabled = true) {
   return useQuery({
     queryKey: userKeys.charityModels,
-    queryFn: async () => listPayload(await apiFetch<unknown>('/api/charity/models')).map((value) => normalizeCharityModel(value)),
+    queryFn: async () => charityModelsPayload(await apiFetch<unknown>('/api/charity/models')).map((value) => normalizeCharityModel(value)),
     enabled,
     staleTime: 15_000,
   });
@@ -1287,54 +1521,77 @@ export function useCharityModels(enabled = true) {
 export function useDonations(enabled = true) {
   return useQuery({
     queryKey: userKeys.donations,
-    queryFn: async () => listPayload(await apiFetch<unknown>('/api/donations')).map((value) => normalizeDonation(value)),
+    queryFn: async () => donationListPayload(await apiFetch<unknown>('/api/donations')).map((value) => normalizeDonation(value)),
     enabled,
   });
 }
 
-export function useDonation(id: string | undefined, enabled = true) {
+export function useDonation(id: string | undefined, enabled = true, connectorTypeValue?: string) {
   return useQuery({
-    queryKey: id ? userKeys.donation(id) : [...userKeys.donations, 'none'],
+    queryKey: id
+      ? [...userKeys.donation(id), connectorTypeValue ?? 'connector-unresolved']
+      : [...userKeys.donations, 'none'],
     queryFn: async () => {
       if (!id) throw new ApiError('invalid_request', 'A donation id is required.', 400);
-      return normalizeDonation(await apiFetch<unknown>(`/api/donations/${encodeURIComponent(id)}`), true);
+      const donationID = requiredID(id, 'donation id');
+      return normalizeDonation(
+        await apiFetch<unknown>(`/api/donations/${encodeURIComponent(donationID)}`),
+        true,
+        connectorTypeValue,
+      );
     },
     enabled: enabled && Boolean(id),
   });
 }
 
+export interface DonationKeyLimitInput {
+  endpoint_key_id: number;
+  max_concurrency?: number;
+  rpm_limit?: number;
+}
+
 export interface DonationPayload {
   description: string;
   expires_at?: number | null;
-  existing_endpoint?: { endpoint_id: number; key_ids: number[]; keys?: Array<{ endpoint_key_id: number; max_concurrency?: number; rpm_limit?: number }> };
-  new_endpoint?: { connector_type?: string; base_url: string; note?: string; keys: Array<{ secret: string; note?: string; max_concurrency?: number; rpm_limit?: number }> };
-}
-
-export function useCreateDonation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (payload: DonationPayload) => apiFetch<unknown>('/api/donations', { method: 'POST', json: payload }),
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: userKeys.donations }); },
-  });
-}
-
-export function useUpdateDonation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, ...payload }: { id: string } & Partial<DonationPayload>) =>
-      apiFetch<unknown>(`/api/donations/${encodeURIComponent(id)}`, { method: 'PATCH', json: payload }),
-    onSuccess: (_value, variables) => {
-      void queryClient.invalidateQueries({ queryKey: userKeys.donations });
-      void queryClient.invalidateQueries({ queryKey: userKeys.donation(variables.id) });
-    },
-  });
+  /** Existing endpoint create wire: physical endpoint-key ids in both fields. */
+  existing_endpoint?: { endpoint_id: number; key_ids: number[]; keys: DonationKeyLimitInput[] };
+  /** Pending owner edit wire: physical endpoint-key ids, never donation-key ids. */
+  keys?: { key_ids: number[]; limits: DonationKeyLimitInput[] };
+  new_endpoint?: {
+    connector_type?: string;
+    base_url: string;
+    note?: string;
+    keys: Array<{
+      secret: string;
+      note?: string;
+      max_concurrency?: number;
+      rpm_limit?: number;
+      /** OpenAI-compatible only; omitted for every other connector. */
+      force_store_false?: boolean;
+    }>;
+  };
 }
 
 export function useDeleteDonation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiFetch<void>(`/api/donations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: userKeys.donations }); },
+    mutationFn: async (id: string) => {
+      const donationID = requiredID(id, 'donation id');
+      try {
+        await stationSessionWrite(queryClient, 'steward', () =>
+          apiFetch<void>(`/api/donations/${encodeURIComponent(donationID)}`, { method: 'DELETE' }),
+        );
+      } catch (error) {
+        // A missing donation is the authoritative result of a repeated delete.
+        // Session-boundary errors must still stay silent and never become a
+        // success for the newly authenticated subject.
+        if (!isNotFoundError(error) || isStationSessionChanged(error)) throw error;
+      }
+    },
+    onSuccess: (_value, id) => {
+      queryClient.removeQueries({ queryKey: userKeys.donation(id), exact: false });
+      void queryClient.invalidateQueries({ queryKey: userKeys.donations });
+    },
   });
 }
 
@@ -1348,7 +1605,9 @@ export function useCheckin() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      const record = asRecord(await apiFetch<unknown>('/api/checkin', { method: 'POST' }));
+      const record = asRecord(await stationSessionWrite(queryClient, 'steward', () =>
+        apiFetch<unknown>('/api/checkin', { method: 'POST' }),
+      ));
       const award = record ? amountValue(recordValue(record, 'award_milli')) : '';
       const credits = record ? amountValue(recordValue(record, 'credits')) : '';
       if (!award || !credits) {

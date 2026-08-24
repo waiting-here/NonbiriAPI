@@ -1,5 +1,11 @@
+import { CancelledError } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiFetch } from '@shared/query/http';
+import {
+  beginManagementSessionRequest,
+  failManagementSessionRequest,
+  noteManagementSessionSuccess,
+} from '@shared/charityManagement';
 import {
   asArray,
   asRecord,
@@ -667,12 +673,28 @@ export function normalizeSiteConfigCatalog(payload: unknown): SiteConfigCatalogE
   });
 }
 
-export function useAdminSession() {
+export function useAdminSession(enabled = true) {
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: adminKeys.session,
-    queryFn: async () => normalizeSession(await apiFetch<unknown>('/admin/api/session')),
+    queryFn: async () => {
+      const generation = beginManagementSessionRequest(queryClient, 'admin');
+      try {
+        const value = normalizeSession(await apiFetch<unknown>('/admin/api/session'));
+        if (!noteManagementSessionSuccess(queryClient, 'admin', value, generation)) {
+          // An older response must not replace the current session projection
+          // after a logout/login or same-level administrator switch.
+          throw new CancelledError();
+        }
+        return value;
+      } catch (error) {
+        failManagementSessionRequest(queryClient, 'admin', generation);
+        throw error;
+      }
+    },
     staleTime: 15_000,
     retry: false,
+    enabled,
   });
 }
 
