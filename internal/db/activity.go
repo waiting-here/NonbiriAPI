@@ -59,7 +59,8 @@ const (
 // fields must be non-negative and bounded; a delta with no contribution is
 // rejected. A successful check-in contributes Checkins=1 through the
 // in-transaction helper in the same transaction as its business write (see
-// checkins.go); game contributions stay reserved for a future rail.
+// checkins.go). A game start contributes GameRounds=1; game_active is derived
+// from that positive delta and remains a daily boolean.
 type ActivityDelta struct {
 	APIRequests           int64
 	UncachedInputTokens   int64
@@ -68,10 +69,11 @@ type ActivityDelta struct {
 	OutputTokens          int64
 	Checkins              int64
 	ConsoleWrites         int64
+	GameRounds            int64
 }
 
 func (d ActivityDelta) validate() error {
-	for _, count := range []int64{d.APIRequests, d.Checkins, d.ConsoleWrites} {
+	for _, count := range []int64{d.APIRequests, d.Checkins, d.ConsoleWrites, d.GameRounds} {
 		if count < 0 || count > activityMaxCountDelta {
 			return fmt.Errorf("activity: counter delta is out of range")
 		}
@@ -81,7 +83,7 @@ func (d ActivityDelta) validate() error {
 			return fmt.Errorf("activity: token delta is out of range")
 		}
 	}
-	if d.APIRequests == 0 && d.Checkins == 0 && d.ConsoleWrites == 0 &&
+	if d.APIRequests == 0 && d.Checkins == 0 && d.ConsoleWrites == 0 && d.GameRounds == 0 &&
 		d.UncachedInputTokens == 0 && d.CacheWriteInputTokens == 0 &&
 		d.CacheReadInputTokens == 0 && d.OutputTokens == 0 {
 		return fmt.Errorf("activity: empty delta")
@@ -90,7 +92,7 @@ func (d ActivityDelta) validate() error {
 }
 
 func (d ActivityDelta) active() bool {
-	return d.APIRequests > 0 || d.Checkins > 0 || d.ConsoleWrites > 0
+	return d.APIRequests > 0 || d.Checkins > 0 || d.ConsoleWrites > 0 || d.GameRounds > 0
 }
 
 // RecordActivity applies one activity delta for userID at instant at in its
@@ -142,6 +144,10 @@ func (s *Store) RecordActivity(ctx context.Context, userID int64, at time.Time, 
 // exists (late-write linearization); in that case the site rollup is not
 // touched either, so no orphan contribution can be created.
 func recordActivityTx(ctx context.Context, tx *sql.Tx, userID, dayKey int64, delta ActivityDelta, nowUnix int64) (bool, error) {
+	gameActive := 0
+	if delta.GameRounds > 0 {
+		gameActive = 1
+	}
 	// Whether this is the first temporal row ever decides whether the write
 	// must durably freeze the site timezone offset (see freezeTimezoneTx). The
 	// probe runs before this transaction's own insert; the index-backed EXISTS
@@ -175,7 +181,7 @@ INSERT INTO user_activity_daily
 	(day, user_id, product_active, api_requests,
 	 uncached_input_tokens, cache_write_input_tokens, cache_read_input_tokens, output_tokens,
 	 checkins, console_writes, game_active, game_rounds, updated_at)
-SELECT ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?
+SELECT ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 WHERE EXISTS (SELECT 1 FROM users WHERE id = ?)
 ON CONFLICT(day, user_id) DO UPDATE SET
 	product_active            = 1,
@@ -186,10 +192,14 @@ ON CONFLICT(day, user_id) DO UPDATE SET
 	output_tokens             = output_tokens + excluded.output_tokens,
 	checkins                  = checkins + excluded.checkins,
 	console_writes            = console_writes + excluded.console_writes,
-	updated_at                = excluded.updated_at`,
+	game_active               = MAX(game_active, excluded.game_active),
+	game_rounds               = game_rounds + excluded.game_rounds,
+	updated_at                = excluded.updated_at
+WHERE game_rounds <= ?`,
 		dayKey, userID, delta.APIRequests,
 		delta.UncachedInputTokens, delta.CacheWriteInputTokens, delta.CacheReadInputTokens, delta.OutputTokens,
-		delta.Checkins, delta.ConsoleWrites, nowUnix, userID)
+		delta.Checkins, delta.ConsoleWrites, gameActive, delta.GameRounds, nowUnix, userID,
+		math.MaxInt64-delta.GameRounds)
 	if err != nil {
 		return false, fmt.Errorf("upsert user activity: %w", err)
 	}
@@ -198,6 +208,13 @@ ON CONFLICT(day, user_id) DO UPDATE SET
 		return false, fmt.Errorf("upsert user activity rows affected: %w", err)
 	}
 	if affected == 0 {
+		var exists int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE id=?`, userID).Scan(&exists); err != nil {
+			return false, fmt.Errorf("check activity owner: %w", err)
+		}
+		if exists != 0 {
+			return false, fmt.Errorf("user activity aggregate overflow; write failed closed")
+		}
 		// The user was deleted before this transaction: suppressed late write.
 		return false, nil
 	}
@@ -211,7 +228,7 @@ INSERT INTO site_activity_daily
 	(day, product_active, api_requests,
 	 uncached_input_tokens, cache_write_input_tokens, cache_read_input_tokens, output_tokens,
 	 checkins, console_writes, game_active, game_rounds, distinct_product_users, updated_at)
-VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
+VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(day) DO UPDATE SET
 	product_active            = 1,
 	api_requests              = api_requests + excluded.api_requests,
@@ -221,6 +238,8 @@ ON CONFLICT(day) DO UPDATE SET
 	output_tokens             = output_tokens + excluded.output_tokens,
 	checkins                  = checkins + excluded.checkins,
 	console_writes            = console_writes + excluded.console_writes,
+	game_active               = MAX(game_active, excluded.game_active),
+	game_rounds               = game_rounds + excluded.game_rounds,
 	distinct_product_users    = distinct_product_users + excluded.distinct_product_users,
 	updated_at                = excluded.updated_at
 WHERE api_requests                 <= ?
@@ -230,10 +249,11 @@ WHERE api_requests                 <= ?
   AND output_tokens                <= ?
   AND checkins                     <= ?
   AND console_writes               <= ?
+  AND game_rounds                  <= ?
   AND distinct_product_users       <= ?`,
 		dayKey, delta.APIRequests,
 		delta.UncachedInputTokens, delta.CacheWriteInputTokens, delta.CacheReadInputTokens, delta.OutputTokens,
-		delta.Checkins, delta.ConsoleWrites, distinctInc, nowUnix,
+		delta.Checkins, delta.ConsoleWrites, gameActive, delta.GameRounds, distinctInc, nowUnix,
 		math.MaxInt64-delta.APIRequests-1,
 		math.MaxInt64-delta.UncachedInputTokens,
 		math.MaxInt64-delta.CacheWriteInputTokens,
@@ -241,6 +261,7 @@ WHERE api_requests                 <= ?
 		math.MaxInt64-delta.OutputTokens,
 		math.MaxInt64-delta.Checkins,
 		math.MaxInt64-delta.ConsoleWrites,
+		math.MaxInt64-delta.GameRounds,
 		math.MaxInt64-distinctInc)
 	if err != nil {
 		return true, fmt.Errorf("upsert site activity: %w", err)
