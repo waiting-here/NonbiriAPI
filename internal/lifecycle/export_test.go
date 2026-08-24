@@ -102,11 +102,11 @@ func seedExportFixture(t *testing.T, st *db.Store) *db.User {
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, err := st.CreateEndpointKey(ctx, user.ID, ep.ID, []byte("sk-lifecycle-export"), "head", "tail", "my key", true, 100)
+	key, err := st.CreateEndpointKeyWithPolicy(ctx, user.ID, ep.ID, []byte("sk-lifecycle-export"), "head", "tail", "my key", true, true, 100, "owner")
 	if err != nil {
 		t.Fatal(err)
 	}
-	model, err := st.CreateModel(ctx, user.ID, "provider", "model", "ordered", false, 100)
+	model, err := st.CreateModelWithPolicy(ctx, user.ID, "provider", "model", "ordered", false, true, 100, "owner")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -330,14 +330,16 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 			BaseURL string `json:"base_url"`
 			Note    string `json:"note"`
 			Keys    []struct {
-				ID          int64  `json:"id"`
-				DisplayHead string `json:"display_head"`
-				DisplayTail string `json:"display_tail"`
+				ID              int64  `json:"id"`
+				DisplayHead     string `json:"display_head"`
+				DisplayTail     string `json:"display_tail"`
+				ForceStoreFalse bool   `json:"force_store_false"`
 			} `json:"keys"`
 		} `json:"endpoints"`
 		Models []struct {
-			FullName string `json:"full_name"`
-			Bindings []struct {
+			FullName         string `json:"full_name"`
+			FlattenToolCalls bool   `json:"flatten_tool_calls"`
+			Bindings         []struct {
 				EndpointKeyID   int64  `json:"endpoint_key_id"`
 				UpstreamModelID string `json:"upstream_model_id"`
 				Ord             int64  `json:"ord"`
@@ -398,10 +400,10 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 		pkg.User.ConcurrencyLimit != nil || pkg.User.EffectiveConcurrencyLimit != db.DefaultUserConcurrencyLimit {
 		t.Fatalf("limit export = %+v", pkg.User)
 	}
-	if len(pkg.Endpoints) != 1 || pkg.Endpoints[0].BaseURL != "https://upstream.example/v1/" || len(pkg.Endpoints[0].Keys) != 1 || pkg.Endpoints[0].Keys[0].DisplayHead != "head" {
+	if len(pkg.Endpoints) != 1 || pkg.Endpoints[0].BaseURL != "https://upstream.example/v1/" || len(pkg.Endpoints[0].Keys) != 1 || pkg.Endpoints[0].Keys[0].DisplayHead != "head" || !pkg.Endpoints[0].Keys[0].ForceStoreFalse {
 		t.Fatalf("endpoints=%+v", pkg.Endpoints)
 	}
-	if len(pkg.Models) != 1 || pkg.Models[0].FullName != "provider/model" || len(pkg.Models[0].Bindings) != 1 || pkg.Models[0].Bindings[0].UpstreamModelID != "upstream-model" {
+	if len(pkg.Models) != 1 || pkg.Models[0].FullName != "provider/model" || !pkg.Models[0].FlattenToolCalls || len(pkg.Models[0].Bindings) != 1 || pkg.Models[0].Bindings[0].UpstreamModelID != "upstream-model" {
 		t.Fatalf("models=%+v", pkg.Models)
 	}
 	if !strings.HasPrefix(pkg.CallerKey.Display, "nbk_") {

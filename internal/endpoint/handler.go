@@ -1,6 +1,7 @@
 package endpoint
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
 // MaxBodyBytes bounds request bodies for the endpoint routes. A body larger
@@ -16,6 +18,11 @@ import (
 // cryptographic work. It is comfortably above any legitimate endpoint/key
 // payload (note <= 256 runes, secret <= 4096 bytes).
 const MaxBodyBytes = 1 << 20
+
+const (
+	maxEndpointJSONDepth  = strictjson.MaxDepth
+	maxEndpointJSONFields = strictjson.MaxFields
+)
 
 // IdentityResolver extracts the authenticated user id from a request. The
 // production resolver is wired by the identity rail (H) from its session
@@ -193,12 +200,17 @@ func (h *Handler) listKeys(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	ep, err := h.svc.GetEndpoint(r.Context(), uid, endpointID)
+	if err != nil {
+		writeServiceErr(w, err)
+		return
+	}
 	keys, err := h.svc.ListEndpointKeys(r.Context(), uid, endpointID)
 	if err != nil {
 		writeServiceErr(w, err)
 		return
 	}
-	httperr.WriteJSON(w, http.StatusOK, keyListResponse(keys))
+	httperr.WriteJSON(w, http.StatusOK, keyListResponseForConnector(keys, ep.ConnectorType))
 }
 
 func (h *Handler) createKey(w http.ResponseWriter, r *http.Request) {
@@ -211,6 +223,11 @@ func (h *Handler) createKey(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	ep, err := h.svc.GetEndpoint(r.Context(), uid, endpointID)
+	if err != nil {
+		writeServiceErr(w, err)
+		return
+	}
 	var req createKeyRequest
 	if derr := decodeEndpointRequest(r, &req); derr.Code != "" {
 		writeErr(w, derr)
@@ -221,12 +238,18 @@ func (h *Handler) createKey(w http.ResponseWriter, r *http.Request) {
 	plaintext := []byte(req.Secret)
 	req.Secret = ""
 	defer clear(plaintext)
-	key, err := h.svc.CreateEndpointKey(r.Context(), uid, endpointID, plaintext, req.Note, req.Enabled)
+	var key db.EndpointKey
+	if req.ForceStoreFalse.Present {
+		value := req.ForceStoreFalse.Value
+		key, err = h.svc.CreateEndpointKeyWithPolicy(r.Context(), uid, endpointID, plaintext, req.Note, req.Enabled, &value)
+	} else {
+		key, err = h.svc.CreateEndpointKey(r.Context(), uid, endpointID, plaintext, req.Note, req.Enabled)
+	}
 	if err != nil {
 		writeServiceErr(w, err)
 		return
 	}
-	httperr.WriteJSON(w, http.StatusCreated, keyResponse(key))
+	httperr.WriteJSON(w, http.StatusCreated, keyResponseForConnector(key, ep.ConnectorType))
 }
 
 func (h *Handler) updateKey(w http.ResponseWriter, r *http.Request) {
@@ -243,17 +266,35 @@ func (h *Handler) updateKey(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	ep, err := h.svc.GetEndpoint(r.Context(), uid, endpointID)
+	if err != nil {
+		writeServiceErr(w, err)
+		return
+	}
 	var req updateKeyRequest
 	if derr := decodeEndpointRequest(r, &req); derr.Code != "" {
 		writeErr(w, derr)
 		return
 	}
-	key, err := h.svc.UpdateEndpointKey(r.Context(), uid, endpointID, keyID, req.Note, req.Enabled)
+	if req.Note == nil && req.Enabled == nil && !req.ForceStoreFalse.Present {
+		// PATCH is a partial update, but an empty object is never a useful
+		// operation.  Reject it before the repository can turn it into a
+		// successful no-op response.
+		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "patch must contain a field"))
+		return
+	}
+	var key db.EndpointKey
+	if req.ForceStoreFalse.Present {
+		value := req.ForceStoreFalse.Value
+		key, err = h.svc.UpdateEndpointKeyWithPolicy(r.Context(), uid, endpointID, keyID, req.Note, req.Enabled, &value)
+	} else {
+		key, err = h.svc.UpdateEndpointKey(r.Context(), uid, endpointID, keyID, req.Note, req.Enabled)
+	}
 	if err != nil {
 		writeServiceErr(w, err)
 		return
 	}
-	httperr.WriteJSON(w, http.StatusOK, keyResponse(key))
+	httperr.WriteJSON(w, http.StatusOK, keyResponseForConnector(key, ep.ConnectorType))
 }
 
 func (h *Handler) deleteKey(w http.ResponseWriter, r *http.Request) {
@@ -298,14 +339,16 @@ type updateEndpointRequest struct {
 }
 
 type createKeyRequest struct {
-	Secret  string  `json:"secret"`
-	Note    *string `json:"note,omitempty"`
-	Enabled *bool   `json:"enabled,omitempty"`
+	Secret          string             `json:"secret"`
+	Note            *string            `json:"note,omitempty"`
+	Enabled         *bool              `json:"enabled,omitempty"`
+	ForceStoreFalse strictOptionalBool `json:"force_store_false,omitempty"`
 }
 
 type updateKeyRequest struct {
-	Note    *string `json:"note,omitempty"`
-	Enabled *bool   `json:"enabled,omitempty"`
+	Note            *string            `json:"note,omitempty"`
+	Enabled         *bool              `json:"enabled,omitempty"`
+	ForceStoreFalse strictOptionalBool `json:"force_store_false,omitempty"`
 }
 
 type endpointResp struct {
@@ -321,13 +364,14 @@ type endpointResp struct {
 }
 
 type endpointKeyResp struct {
-	ID          int64  `json:"id"`
-	DisplayHead string `json:"display_head"`
-	DisplayTail string `json:"display_tail"`
-	Note        string `json:"note"`
-	Enabled     bool   `json:"enabled"`
-	CreatedAt   int64  `json:"created_at"`
-	UpdatedAt   int64  `json:"updated_at"`
+	ID              int64  `json:"id"`
+	DisplayHead     string `json:"display_head"`
+	DisplayTail     string `json:"display_tail"`
+	Note            string `json:"note"`
+	Enabled         bool   `json:"enabled"`
+	ForceStoreFalse *bool  `json:"force_store_false,omitempty"`
+	CreatedAt       int64  `json:"created_at"`
+	UpdatedAt       int64  `json:"updated_at"`
 }
 
 func endpointResponse(ep db.Endpoint) endpointResp {
@@ -353,23 +397,57 @@ func endpointListResponse(eps []db.Endpoint) []endpointResp {
 }
 
 func keyResponse(k db.EndpointKey) endpointKeyResp {
+	return keyResponseForConnector(k, string(ConnectorOpenAICompatible))
+}
+
+func keyResponseForConnector(k db.EndpointKey, connectorType string) endpointKeyResp {
+	var forceStoreFalse *bool
+	if connectorType == string(ConnectorOpenAICompatible) {
+		value := k.ForceStoreFalse
+		forceStoreFalse = &value
+	}
 	return endpointKeyResp{
-		ID:          k.ID,
-		DisplayHead: k.DisplayHead,
-		DisplayTail: k.DisplayTail,
-		Note:        k.Note,
-		Enabled:     k.Enabled,
-		CreatedAt:   k.CreatedAt,
-		UpdatedAt:   k.UpdatedAt,
+		ID:              k.ID,
+		DisplayHead:     k.DisplayHead,
+		DisplayTail:     k.DisplayTail,
+		Note:            k.Note,
+		Enabled:         k.Enabled,
+		ForceStoreFalse: forceStoreFalse,
+		CreatedAt:       k.CreatedAt,
+		UpdatedAt:       k.UpdatedAt,
 	}
 }
 
 func keyListResponse(keys []db.EndpointKey) []endpointKeyResp {
+	return keyListResponseForConnector(keys, string(ConnectorOpenAICompatible))
+}
+
+func keyListResponseForConnector(keys []db.EndpointKey, connectorType string) []endpointKeyResp {
 	out := make([]endpointKeyResp, 0, len(keys))
 	for _, k := range keys {
-		out = append(out, keyResponse(k))
+		out = append(out, keyResponseForConnector(k, connectorType))
 	}
 	return out
+}
+
+// strictOptionalBool distinguishes an omitted policy field from a JSON null
+// while accepting only the JSON boolean literals. The strategy wire contract
+// deliberately rejects numbers, strings, and null rather than coercing them.
+type strictOptionalBool struct {
+	Value   bool
+	Present bool
+}
+
+func (b *strictOptionalBool) UnmarshalJSON(data []byte) error {
+	switch string(bytes.TrimSpace(data)) {
+	case "true":
+		b.Value, b.Present = true, true
+	case "false":
+		b.Value, b.Present = false, true
+	default:
+		return errors.New("policy field must be a JSON boolean")
+	}
+	return nil
 }
 
 // --- helpers ---------------------------------------------------------------
@@ -381,8 +459,20 @@ func decodeEndpointRequest(r *http.Request, dst any) httperr.Error {
 	if r == nil || r.Body == nil {
 		return httperr.New(httperr.CodeInvalidRequest, "request body is required")
 	}
-	r.Body = http.MaxBytesReader(nil, r.Body, MaxBodyBytes)
-	dec := json.NewDecoder(r.Body)
+	data, err := io.ReadAll(io.LimitReader(r.Body, MaxBodyBytes+1))
+	if err != nil {
+		clear(data)
+		return httperr.New(httperr.CodeInvalidRequest, "malformed request body")
+	}
+	if int64(len(data)) > MaxBodyBytes {
+		clear(data)
+		return httperr.New(httperr.CodePayloadTooLarge, "request body too large")
+	}
+	defer clear(data)
+	if err := rejectDuplicateJSONFields(data); err != nil {
+		return httperr.New(httperr.CodeInvalidRequest, "malformed request body")
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
 		return decodeErrToHTTP(err)
@@ -397,6 +487,15 @@ func decodeEndpointRequest(r *http.Request, dst any) httperr.Error {
 		return decodeErrToHTTP(err)
 	}
 	return httperr.Error{}
+}
+
+// rejectDuplicateJSONFields walks the JSON syntax before decoding into a Go
+// struct. encoding/json otherwise silently keeps the last duplicate member,
+// which would make policy PATCH semantics depend on wire ordering. The walk is
+// deliberately syntax-only; DisallowUnknownFields below remains authoritative
+// for the destination shape.
+func rejectDuplicateJSONFields(data []byte) error {
+	return strictjson.ValidateObject(data)
 }
 
 // decodeErrToHTTP maps JSON / body-limit errors to the stable envelope.
@@ -436,6 +535,8 @@ func writeServiceErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, db.ErrNotFound):
 		writeErr(w, httperr.New(httperr.CodeNotFound, "not found"))
+	case errors.Is(err, db.ErrConflict):
+		writeErr(w, httperr.New(httperr.CodeConflict, "conflict"))
 	case errors.Is(err, ErrConnectorImmutable):
 		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "connector type cannot be changed"))
 	case errors.Is(err, db.ErrEndpointOriginConflict):

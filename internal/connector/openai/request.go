@@ -374,6 +374,10 @@ func (r *ChatRequest) CharityTextRuneCount() (int, error) {
 // object instead of mutating caller bytes in place, so duplicate-key ambiguity
 // cannot be reintroduced.
 func (r *ChatRequest) marshalUpstream(upstreamModel, safetyIdentifier string) ([]byte, error) {
+	return r.marshalUpstreamWithPolicy(upstreamModel, safetyIdentifier, connectorcontract.AttemptPolicy{})
+}
+
+func (r *ChatRequest) marshalUpstreamWithPolicy(upstreamModel, safetyIdentifier string, policy connectorcontract.AttemptPolicy) ([]byte, error) {
 	if r == nil || !validOpaqueText(upstreamModel, MaxUpstreamModelRunes, true) || !validSafetyIdentifier(safetyIdentifier) {
 		return nil, ErrInvalidRequest
 	}
@@ -385,6 +389,16 @@ func (r *ChatRequest) marshalUpstream(upstreamModel, safetyIdentifier string) ([
 	out.WriteByte('{')
 	wrote := 0
 	safetySeen := false
+	storeSeen := false
+	storeFieldPresent := false
+	if policy.ForceStoreFalse {
+		for _, field := range r.fields {
+			if field.name == "store" {
+				storeFieldPresent = true
+				break
+			}
+		}
+	}
 	for _, field := range r.fields {
 		if wrote != 0 {
 			out.WriteByte(',')
@@ -397,6 +411,13 @@ func (r *ChatRequest) marshalUpstream(upstreamModel, safetyIdentifier string) ([
 		case "safety_identifier":
 			out.Write(safetyJSON)
 			safetySeen = true
+		case "store":
+			if policy.ForceStoreFalse {
+				out.WriteString("false")
+				storeSeen = true
+			} else {
+				out.Write(field.value)
+			}
 		case "stream_options":
 			if r.Stream {
 				if merged, ok := withUsageEnabled(field.value); ok {
@@ -412,6 +433,11 @@ func (r *ChatRequest) marshalUpstream(upstreamModel, safetyIdentifier string) ([
 			out.Write(field.value)
 		}
 		wrote++
+		if policy.ForceStoreFalse && field.name == "model" && !storeFieldPresent {
+			out.WriteString(`,"store":false`)
+			wrote++
+			storeSeen = true
+		}
 		if int64(out.Len()) > maxForwardBodyBytes {
 			clear(out.Bytes())
 			return nil, ErrPayloadTooLarge
@@ -424,6 +450,15 @@ func (r *ChatRequest) marshalUpstream(upstreamModel, safetyIdentifier string) ([
 		out.WriteString(`"safety_identifier":`)
 		out.Write(safetyJSON)
 		wrote++
+	}
+	// A valid ChatRequest always has model, so force_store_false inserts store
+	// in the model-adjacent branch above. This guard is defensive for a future
+	// internal request constructor that might omit model.
+	if policy.ForceStoreFalse && !storeSeen {
+		if wrote != 0 {
+			out.WriteByte(',')
+		}
+		out.WriteString(`"store":false`)
 	}
 	if r.Stream && !hasField(r.fields, "stream_options") {
 		if wrote != 0 {

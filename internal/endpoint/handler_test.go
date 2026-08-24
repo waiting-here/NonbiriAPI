@@ -437,6 +437,104 @@ func TestHandlerRejectsBadKeyRequestBodies(t *testing.T) {
 	}
 }
 
+func TestHandlerKeyPolicyWireMatrixAndConnectorProjection(t *testing.T) {
+	h, _ := newTestHandler(t)
+	rec := doRequest(t, h, http.MethodPost, "/api/endpoints", `{"base_url":"https://openai.example/v1/"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("openai endpoint = %d: %s", rec.Code, rec.Body.String())
+	}
+	epID := jsonNumber(decodeMap(t, rec.Body.Bytes())["id"])
+	base := "/api/endpoints/" + itoa(epID) + "/keys"
+
+	rec = doRequest(t, h, http.MethodPost, base, `{"secret":"sk-policy-12345678","force_store_false":true}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("policy create = %d: %s", rec.Code, rec.Body.String())
+	}
+	key := decodeMap(t, rec.Body.Bytes())
+	if key["force_store_false"] != true {
+		t.Fatalf("policy create projection = %v", key)
+	}
+	keyID := jsonNumber(key["id"])
+
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{"empty patch", `{}`},
+		{"null", `{"force_store_false":null}`},
+		{"number", `{"force_store_false":0}`},
+		{"string", `{"force_store_false":"true"}`},
+		{"unknown", `{"force_store_false":false,"unexpected":true}`},
+		{"duplicate", `{"force_store_false":false,"force_store_false":true}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := doRequest(t, h, http.MethodPatch, base+"/"+itoa(keyID), tc.body)
+			assertErr(t, rec, http.StatusBadRequest, httperr.CodeInvalidRequest)
+		})
+	}
+
+	rec = doRequest(t, h, http.MethodPatch, base+"/"+itoa(keyID), `{"force_store_false":false}`)
+	if rec.Code != http.StatusOK || decodeMap(t, rec.Body.Bytes())["force_store_false"] != false {
+		t.Fatalf("explicit false patch = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doRequest(t, h, http.MethodPost, "/api/endpoints", `{"base_url":"https://anthropic.example/v1/","connector_type":"anthropic-compatible"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("anthropic endpoint = %d: %s", rec.Code, rec.Body.String())
+	}
+	anthropicID := jsonNumber(decodeMap(t, rec.Body.Bytes())["id"])
+	anthropicBase := "/api/endpoints/" + itoa(anthropicID) + "/keys"
+	rec = doRequest(t, h, http.MethodPost, anthropicBase, `{"secret":"sk-anthropic-12345678","force_store_false":true}`)
+	assertErr(t, rec, http.StatusBadRequest, httperr.CodeInvalidRequest)
+	rec = doRequest(t, h, http.MethodPost, anthropicBase, `{"secret":"sk-anthropic-12345678","force_store_false":false}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("anthropic false create = %d: %s", rec.Code, rec.Body.String())
+	}
+	if _, present := decodeMap(t, rec.Body.Bytes())["force_store_false"]; present {
+		t.Fatalf("anthropic key policy must be omitted from create projection: %s", rec.Body.String())
+	}
+	rec = doRequest(t, h, http.MethodGet, anthropicBase, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("anthropic key list = %d: %s", rec.Code, rec.Body.String())
+	}
+	var anthropicKeys []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &anthropicKeys); err != nil || len(anthropicKeys) != 1 {
+		t.Fatalf("anthropic key list decode: err=%v body=%s", err, rec.Body.String())
+	}
+	if _, present := anthropicKeys[0]["force_store_false"]; present {
+		t.Fatalf("anthropic key policy must be omitted from list projection: %s", rec.Body.String())
+	}
+	anthropicKeyID := jsonNumber(anthropicKeys[0]["id"])
+	rec = doRequest(t, h, http.MethodPatch, anthropicBase+"/"+itoa(anthropicKeyID), `{"force_store_false":false}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("anthropic false patch = %d: %s", rec.Code, rec.Body.String())
+	}
+	if _, present := decodeMap(t, rec.Body.Bytes())["force_store_false"]; present {
+		t.Fatalf("anthropic key policy must be omitted from patch projection: %s", rec.Body.String())
+	}
+}
+
+func TestEndpointJSONScannerHasDepthAndFieldBounds(t *testing.T) {
+	deep := `{"x":` + strings.Repeat("[", maxEndpointJSONDepth+1) + "0" + strings.Repeat("]", maxEndpointJSONDepth+1) + "}"
+	if err := rejectDuplicateJSONFields([]byte(deep)); err == nil {
+		t.Fatal("deep JSON was accepted")
+	}
+	var fields strings.Builder
+	fields.WriteByte('{')
+	for i := 0; i <= maxEndpointJSONFields; i++ {
+		if i != 0 {
+			fields.WriteByte(',')
+		}
+		fields.WriteString(`"f`)
+		fields.WriteString(strconv.Itoa(i))
+		fields.WriteString(`":0`)
+	}
+	fields.WriteByte('}')
+	if err := rejectDuplicateJSONFields([]byte(fields.String())); err == nil {
+		t.Fatal("field-flood JSON was accepted")
+	}
+}
+
 func TestHandlerCrossUserKeyAndEndpointNotFound(t *testing.T) {
 	// Alice owns an endpoint; Bob cannot read its keys or add a key.
 	ts := newTestService(t)

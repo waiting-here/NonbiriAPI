@@ -64,10 +64,11 @@ type CharityModel struct {
 	CacheReadDonorReward  int64
 	OutputDonorReward     int64
 
-	DiscountPercent int
-	DiscountStartAt *int64
-	DiscountEndAt   *int64
-	DiscountEnabled bool
+	DiscountPercent  int
+	DiscountStartAt  *int64
+	DiscountEndAt    *int64
+	DiscountEnabled  bool
+	FlattenToolCalls bool
 
 	CreatedByUserID *int64
 	CreatedAt       int64
@@ -79,6 +80,8 @@ type CharityModelBinding struct {
 	ID                 int64
 	CharityModelID     int64
 	DonationKeyID      int64
+	ConnectorType      string
+	ForceStoreFalse    bool
 	UpstreamModelID    string
 	Ord                int64
 	CreatedAt          int64
@@ -93,25 +96,26 @@ SELECT id, provider, model, full_name, enabled, pricing_mode,
        request_user_price, request_donor_reward,
        uncached_user_price, cache_write_user_price, cache_read_user_price, output_user_price,
        uncached_donor_reward, cache_write_donor_reward, cache_read_donor_reward, output_donor_reward,
-       discount_percent, discount_start_at, discount_end_at, discount_enabled,
+       discount_percent, discount_start_at, discount_end_at, discount_enabled, flatten_tool_calls,
        created_by_user_id, created_at, updated_at
 FROM charity_models`
 
 func scanCharityModelRow(row *sql.Row) (CharityModel, error) {
 	var m CharityModel
-	var enabledInt, discountEnabledInt int
+	var enabledInt, discountEnabledInt, flattenInt int
 	var discountStart, discountEnd, createdBy sql.NullInt64
 	err := row.Scan(&m.ID, &m.Provider, &m.Model, &m.FullName, &enabledInt, &m.PricingMode,
 		&m.RequestUserPrice, &m.RequestDonorReward,
 		&m.UncachedUserPrice, &m.CacheWriteUserPrice, &m.CacheReadUserPrice, &m.OutputUserPrice,
 		&m.UncachedDonorReward, &m.CacheWriteDonorReward, &m.CacheReadDonorReward, &m.OutputDonorReward,
-		&m.DiscountPercent, &discountStart, &discountEnd, &discountEnabledInt,
+		&m.DiscountPercent, &discountStart, &discountEnd, &discountEnabledInt, &flattenInt,
 		&createdBy, &m.CreatedAt, &m.UpdatedAt)
 	if err != nil {
 		return CharityModel{}, err
 	}
 	m.Enabled = enabledInt == 1
 	m.DiscountEnabled = discountEnabledInt == 1
+	m.FlattenToolCalls = flattenInt == 1
 	m.DiscountStartAt = nullInt64Ptr(discountStart)
 	m.DiscountEndAt = nullInt64Ptr(discountEnd)
 	m.CreatedByUserID = nullInt64Ptr(createdBy)
@@ -122,20 +126,21 @@ func scanCharityModelRows(rows *sql.Rows) ([]CharityModel, error) {
 	out := make([]CharityModel, 0, 16)
 	for rows.Next() {
 		var (
-			m                                     CharityModel
-			enabledInt, discountEnabledInt        int
-			discountStart, discountEnd, createdBy sql.NullInt64
+			m                                          CharityModel
+			enabledInt, discountEnabledInt, flattenInt int
+			discountStart, discountEnd, createdBy      sql.NullInt64
 		)
 		if err := rows.Scan(&m.ID, &m.Provider, &m.Model, &m.FullName, &enabledInt, &m.PricingMode,
 			&m.RequestUserPrice, &m.RequestDonorReward,
 			&m.UncachedUserPrice, &m.CacheWriteUserPrice, &m.CacheReadUserPrice, &m.OutputUserPrice,
 			&m.UncachedDonorReward, &m.CacheWriteDonorReward, &m.CacheReadDonorReward, &m.OutputDonorReward,
-			&m.DiscountPercent, &discountStart, &discountEnd, &discountEnabledInt,
+			&m.DiscountPercent, &discountStart, &discountEnd, &discountEnabledInt, &flattenInt,
 			&createdBy, &m.CreatedAt, &m.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan charity model: %w", err)
 		}
 		m.Enabled = enabledInt == 1
 		m.DiscountEnabled = discountEnabledInt == 1
+		m.FlattenToolCalls = flattenInt == 1
 		m.DiscountStartAt = nullInt64Ptr(discountStart)
 		m.DiscountEndAt = nullInt64Ptr(discountEnd)
 		m.CreatedByUserID = nullInt64Ptr(createdBy)
@@ -196,6 +201,16 @@ func validateCharityModel(m *CharityModel) error {
 // TRANSACTION (fail closed). now is caller-supplied; actorUserID may be 0
 // (recorded as NULL).
 func (s *Store) CreateCharityModel(ctx context.Context, m CharityModel, actorUserID, now int64) (CharityModel, error) {
+	return s.createCharityModel(ctx, m, actorUserID, "admin", now)
+}
+
+// CreateCharityModelWithPolicy is the role-aware charity model creation
+// primitive used by the admin and live level-5 management rails.
+func (s *Store) CreateCharityModelWithPolicy(ctx context.Context, m CharityModel, actorUserID int64, actorRole string, now int64) (CharityModel, error) {
+	return s.createCharityModel(ctx, m, actorUserID, actorRole, now)
+}
+
+func (s *Store) createCharityModel(ctx context.Context, m CharityModel, actorUserID int64, actorRole string, now int64) (CharityModel, error) {
 	if now <= 0 {
 		return CharityModel{}, errors.New("timestamp is required")
 	}
@@ -227,13 +242,13 @@ INSERT INTO charity_models
 	 uncached_user_price, cache_write_user_price, cache_read_user_price, output_user_price,
 	 uncached_donor_reward, cache_write_donor_reward, cache_read_donor_reward, output_donor_reward,
 	 discount_percent, discount_start_at, discount_end_at, discount_enabled,
-	 created_by_user_id, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	 flatten_tool_calls, created_by_user_id, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		m.Provider, m.Model, fullName, boolInt(m.Enabled), m.PricingMode,
 		m.RequestUserPrice, m.RequestDonorReward,
 		m.UncachedUserPrice, m.CacheWriteUserPrice, m.CacheReadUserPrice, m.OutputUserPrice,
 		m.UncachedDonorReward, m.CacheWriteDonorReward, m.CacheReadDonorReward, m.OutputDonorReward,
-		m.DiscountPercent, m.DiscountStartAt, m.DiscountEndAt, boolInt(m.DiscountEnabled),
+		m.DiscountPercent, m.DiscountStartAt, m.DiscountEndAt, boolInt(m.DiscountEnabled), boolInt(m.FlattenToolCalls),
 		nullableUserID(actorUserID), now, now)
 	if err != nil {
 		if isConstraintError(err) {
@@ -248,6 +263,11 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	if err != nil {
 		return CharityModel{}, fmt.Errorf("create charity model: id: %w", err)
 	}
+	if m.FlattenToolCalls {
+		if err := appendPolicyAuditTx(ctx, tx, actorUserID, actorRole, "charity_model", id, "flatten_tool_calls", 0, 1, now); err != nil {
+			return CharityModel{}, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return CharityModel{}, fmt.Errorf("create charity model: commit: %w", err)
 	}
@@ -259,6 +279,15 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 // model. A nil field leaves it unchanged. The enable transition re-checks the
 // token-reserve precondition in the same transaction as the write.
 func (s *Store) UpdateCharityModel(ctx context.Context, id int64, upd CharityModelUpdate, now int64) (CharityModel, error) {
+	return s.updateCharityModel(ctx, id, upd, 0, "admin", now)
+}
+
+// UpdateCharityModelWithPolicy is the role-aware charity policy update.
+func (s *Store) UpdateCharityModelWithPolicy(ctx context.Context, id int64, upd CharityModelUpdate, actorUserID int64, actorRole string, now int64) (CharityModel, error) {
+	return s.updateCharityModel(ctx, id, upd, actorUserID, actorRole, now)
+}
+
+func (s *Store) updateCharityModel(ctx context.Context, id int64, upd CharityModelUpdate, actorUserID int64, actorRole string, now int64) (CharityModel, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return CharityModel{}, fmt.Errorf("update charity model: begin: %w", err)
@@ -288,6 +317,9 @@ func (s *Store) UpdateCharityModel(ctx context.Context, id int64, upd CharityMod
 	}
 	if upd.Enabled != nil {
 		next.Enabled = *upd.Enabled
+	}
+	if upd.FlattenToolCalls != nil {
+		next.FlattenToolCalls = *upd.FlattenToolCalls
 	}
 	if upd.PricingMode != nil {
 		if !validPricingMode(*upd.PricingMode) {
@@ -337,6 +369,22 @@ func (s *Store) UpdateCharityModel(ctx context.Context, id int64, upd CharityMod
 			return CharityModel{}, err
 		}
 	}
+	// Revalidate on every explicit true write, including a no-op true PATCH, so
+	// damaged mixed-connector state cannot be acknowledged as valid.
+	if upd.FlattenToolCalls != nil && next.FlattenToolCalls {
+		var n int
+		if err := tx.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM charity_model_bindings b
+JOIN donation_keys dk ON dk.id=b.donation_key_id
+JOIN endpoint_keys ek ON ek.id=dk.endpoint_key_id
+JOIN endpoints e ON e.id=ek.endpoint_id
+WHERE b.charity_model_id=? AND e.connector_type <> 'openai-compatible'`, id).Scan(&n); err != nil {
+			return CharityModel{}, fmt.Errorf("validate charity flatten bindings: %w", err)
+		}
+		if n != 0 {
+			return CharityModel{}, ErrConflict
+		}
+	}
 
 	sets := make([]string, 0, 20)
 	args := make([]any, 0, 24)
@@ -351,6 +399,9 @@ func (s *Store) UpdateCharityModel(ctx context.Context, id int64, upd CharityMod
 	}
 	if next.Enabled != current.Enabled {
 		set("enabled", boolInt(next.Enabled))
+	}
+	if next.FlattenToolCalls != current.FlattenToolCalls {
+		set("flatten_tool_calls", boolInt(next.FlattenToolCalls))
 	}
 	if next.PricingMode != current.PricingMode {
 		set("pricing_mode", next.PricingMode)
@@ -440,6 +491,18 @@ func (s *Store) UpdateCharityModel(ctx context.Context, id int64, upd CharityMod
 	if err != nil || affected == 0 {
 		return CharityModel{}, ErrNotFound
 	}
+	if next.FlattenToolCalls != current.FlattenToolCalls {
+		var oldValue, newValue int64
+		if current.FlattenToolCalls {
+			oldValue = 1
+		}
+		if next.FlattenToolCalls {
+			newValue = 1
+		}
+		if err := appendPolicyAuditTx(ctx, tx, actorUserID, actorRole, "charity_model", id, "flatten_tool_calls", oldValue, newValue, now); err != nil {
+			return CharityModel{}, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return CharityModel{}, fmt.Errorf("update charity model: commit: %w", err)
 	}
@@ -451,11 +514,12 @@ func (s *Store) UpdateCharityModel(ctx context.Context, id int64, upd CharityMod
 // present. Clear* flags express explicit null clears of the nullable interval
 // bounds (JSON null cannot be smuggled through a *int64).
 type CharityModelUpdate struct {
-	Provider    *string
-	Model       *string
-	Enabled     *bool
-	PricingMode *string
-	Prices      *CharityModelPrices
+	Provider         *string
+	Model            *string
+	Enabled          *bool
+	FlattenToolCalls *bool
+	PricingMode      *string
+	Prices           *CharityModelPrices
 
 	DiscountPercent    *int
 	DiscountEnabled    *bool
@@ -585,7 +649,8 @@ func (m CharityModel) EffectiveDiscountPercent(now int64) int {
 
 const charityBindingSelectSQL = `
 SELECT b.id, b.charity_model_id, b.donation_key_id, b.upstream_model_id, b.ord, b.created_at,
-       e.base_url, dk.display_head, dk.display_tail, dk.enabled
+	   e.base_url, dk.display_head, dk.display_tail, dk.enabled, e.connector_type,
+	   COALESCE(ek.force_store_false, 0)
 FROM charity_model_bindings b
 JOIN charity_models cm ON b.charity_model_id = cm.id
 JOIN donation_keys dk ON dk.id = b.donation_key_id
@@ -595,13 +660,14 @@ WHERE b.charity_model_id=?`
 
 func scanCharityBindingRow(row *sql.Row) (CharityModelBinding, error) {
 	var b CharityModelBinding
-	var keyEnabled int
+	var keyEnabled, forceInt int
 	err := row.Scan(&b.ID, &b.CharityModelID, &b.DonationKeyID, &b.UpstreamModelID, &b.Ord, &b.CreatedAt,
-		&b.EndpointBaseURL, &b.KeyDisplayHead, &b.KeyDisplayTail, &keyEnabled)
+		&b.EndpointBaseURL, &b.KeyDisplayHead, &b.KeyDisplayTail, &keyEnabled, &b.ConnectorType, &forceInt)
 	if err != nil {
 		return CharityModelBinding{}, err
 	}
 	b.DonationKeyEnabled = keyEnabled == 1
+	b.ForceStoreFalse = forceInt == 1
 	return b, nil
 }
 
@@ -616,12 +682,13 @@ func (s *Store) ListCharityBindings(ctx context.Context, modelID int64) ([]Chari
 	out := make([]CharityModelBinding, 0, 8)
 	for rows.Next() {
 		var b CharityModelBinding
-		var keyEnabled int
+		var keyEnabled, forceInt int
 		if err := rows.Scan(&b.ID, &b.CharityModelID, &b.DonationKeyID, &b.UpstreamModelID, &b.Ord, &b.CreatedAt,
-			&b.EndpointBaseURL, &b.KeyDisplayHead, &b.KeyDisplayTail, &keyEnabled); err != nil {
+			&b.EndpointBaseURL, &b.KeyDisplayHead, &b.KeyDisplayTail, &keyEnabled, &b.ConnectorType, &forceInt); err != nil {
 			return nil, fmt.Errorf("scan charity binding: %w", err)
 		}
 		b.DonationKeyEnabled = keyEnabled == 1
+		b.ForceStoreFalse = forceInt == 1
 		out = append(out, b)
 	}
 	if err := rows.Err(); err != nil {
@@ -647,6 +714,21 @@ func (s *Store) CreateCharityBinding(ctx context.Context, modelID, donationKeyID
 			_ = tx.Rollback()
 		}
 	}()
+	var flattenInt int
+	var connector string
+	policyErr := tx.QueryRowContext(ctx, `
+SELECT cm.flatten_tool_calls, e.connector_type
+FROM charity_models cm
+JOIN donation_keys dk ON dk.id=?
+JOIN endpoint_keys ek ON ek.id=dk.endpoint_key_id
+JOIN endpoints e ON e.id=ek.endpoint_id
+WHERE cm.id=?`, donationKeyID, modelID).Scan(&flattenInt, &connector)
+	if policyErr == nil && flattenInt != 0 && connector != "openai-compatible" {
+		return CharityModelBinding{}, ErrConflict
+	}
+	if policyErr != nil && !errors.Is(policyErr, sql.ErrNoRows) {
+		return CharityModelBinding{}, fmt.Errorf("read charity model policy: %w", policyErr)
+	}
 	res, err := tx.ExecContext(ctx, `
 INSERT INTO charity_model_bindings (charity_model_id, donation_key_id, upstream_model_id, ord, created_at)
 SELECT cm.id, dk.id, ?, ?, ?
@@ -681,14 +763,16 @@ WHERE cm.id = ? AND cm.enabled=1`,
 	if err != nil {
 		return CharityModelBinding{}, fmt.Errorf("create charity binding: id: %w", err)
 	}
+	created, err := scanCharityBindingRow(
+		tx.QueryRowContext(ctx, charityBindingSelectSQL+` AND b.id=?`, modelID, id))
+	if err != nil {
+		return CharityModelBinding{}, fmt.Errorf("create charity binding: reread: %w", err)
+	}
 	if err := tx.Commit(); err != nil {
 		return CharityModelBinding{}, fmt.Errorf("create charity binding: commit: %w", err)
 	}
 	committed = true
-	return CharityModelBinding{
-		ID: id, CharityModelID: modelID, DonationKeyID: donationKeyID,
-		UpstreamModelID: upstreamModelID, Ord: ord, CreatedAt: now,
-	}, nil
+	return created, nil
 }
 
 // UpdateCharityBinding updates ord and/or upstream_model_id of one binding.
@@ -713,6 +797,22 @@ func (s *Store) UpdateCharityBinding(ctx context.Context, modelID, bindingID int
 	}
 	if err != nil {
 		return CharityModelBinding{}, fmt.Errorf("update charity binding: read: %w", err)
+	}
+	var flattenInt int
+	var connector string
+	policyErr := tx.QueryRowContext(ctx, `
+SELECT cm.flatten_tool_calls, e.connector_type
+FROM charity_models cm
+JOIN charity_model_bindings b ON b.charity_model_id=cm.id AND b.id=?
+JOIN donation_keys dk ON dk.id=b.donation_key_id
+JOIN endpoint_keys ek ON ek.id=dk.endpoint_key_id
+JOIN endpoints e ON e.id=ek.endpoint_id
+WHERE cm.id=?`, bindingID, modelID).Scan(&flattenInt, &connector)
+	if policyErr == nil && flattenInt != 0 && connector != "openai-compatible" {
+		return CharityModelBinding{}, ErrConflict
+	}
+	if policyErr != nil && !errors.Is(policyErr, sql.ErrNoRows) {
+		return CharityModelBinding{}, fmt.Errorf("read charity model policy for update: %w", policyErr)
 	}
 	newOrd := current.Ord
 	if ord != nil {
