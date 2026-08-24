@@ -46,6 +46,14 @@ type routeOverrideRepository struct {
 	route db.CharityRoute
 }
 
+type logicalDryRepository struct {
+	Repository
+	route            db.LogicalCharityRoute
+	eligibilityErr   error
+	logicalCalls     atomic.Int32
+	eligibilityCalls atomic.Int32
+}
+
 type charityConnectorMutationTargetRepository struct {
 	*db.Store
 	changedBindingID int64
@@ -63,6 +71,16 @@ func (r charityConnectorMutationTargetRepository) GetCharityForwardTarget(ctx co
 
 func (r routeOverrideRepository) ResolveCharityRoute(context.Context, string, int64, int) (db.CharityRoute, error) {
 	return r.route, nil
+}
+
+func (r *logicalDryRepository) ResolveLogicalCharityRoute(context.Context, string) (db.LogicalCharityRoute, error) {
+	r.logicalCalls.Add(1)
+	return r.route, nil
+}
+
+func (r *logicalDryRepository) ValidateLogicalCharityCaller(context.Context, int64, int64) error {
+	r.eligibilityCalls.Add(1)
+	return r.eligibilityErr
 }
 
 // fakeRunner is the programmable single-attempt charity dispatch boundary.
@@ -112,6 +130,48 @@ func (f *fakeRunner) callCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.calls
+}
+
+func TestValidateLogicalDryRunChecksCharityEligibilityWithoutPhysicalRail(t *testing.T) {
+	request := &openai.ChatRequest{Model: "[公益]logical/model"}
+	for _, test := range []struct {
+		name string
+		err  error
+		want error
+	}{
+		{name: "disabled", err: db.ErrCharityDisabled, want: ErrCharityDisabled},
+		{name: "suspended", err: db.ErrCharitySuspended, want: ErrCharitySuspended},
+		{name: "missing", err: db.ErrNotFound, want: ErrModelNotFound},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repository := &logicalDryRepository{
+				route: db.LogicalCharityRoute{ModelID: 9, FullName: request.Model}, eligibilityErr: test.err,
+			}
+			service, err := NewService(ServiceConfig{Store: repository, Runner: &fakeRunner{responses: []fakeResponse{{}}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = service.ValidateLogicalDryRun(context.Background(), 12, request)
+			if !errors.Is(err, test.want) {
+				t.Fatalf("ValidateLogicalDryRun err=%v want=%v", err, test.want)
+			}
+			if repository.logicalCalls.Load() != 1 || repository.eligibilityCalls.Load() != 1 {
+				t.Fatalf("logical calls=%d eligibility calls=%d", repository.logicalCalls.Load(), repository.eligibilityCalls.Load())
+			}
+		})
+	}
+	repository := &logicalDryRepository{route: db.LogicalCharityRoute{ModelID: 10, FullName: request.Model}}
+	service, err := NewService(ServiceConfig{Store: repository, Runner: &fakeRunner{responses: []fakeResponse{{}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	route, err := service.ValidateLogicalDryRun(context.Background(), 12, request)
+	if err != nil || route.ModelID != 10 || route.FullName != request.Model {
+		t.Fatalf("successful logical route=%+v err=%v", route, err)
+	}
+	if repository.logicalCalls.Load() != 1 || repository.eligibilityCalls.Load() != 1 {
+		t.Fatalf("successful logical calls=%d eligibility calls=%d", repository.logicalCalls.Load(), repository.eligibilityCalls.Load())
+	}
 }
 
 type recordingAdapter struct {
