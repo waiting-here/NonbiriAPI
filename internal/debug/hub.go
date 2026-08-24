@@ -441,6 +441,32 @@ func (h *Hub) ForgetUserReason(userID int64, reason SessionEndReason) {
 	}
 }
 
+// ForgetBindingReason closes only the Debug session created by one exact
+// browser login. It is used by logout so a stale tab cannot terminate a newer
+// Debug session that the same user opened from another browser session.
+func (h *Hub) ForgetBindingReason(userID int64, binding string, reason SessionEndReason) bool {
+	if h == nil || userID <= 0 || binding == "" {
+		return false
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.closed {
+		return false
+	}
+	changed := false
+	if session := h.sessions[userID]; session != nil && !session.closed && session.binding == binding {
+		h.closeSessionLocked(userID, session, reason)
+		changed = true
+	}
+	for key, item := range h.confirmations {
+		if item.userID == userID && item.binding == binding {
+			delete(h.confirmations, key)
+			changed = true
+		}
+	}
+	return changed
+}
+
 func (h *Hub) metadataLocked(session *hubSession) SessionMetadata {
 	if session == nil {
 		return SessionMetadata{}

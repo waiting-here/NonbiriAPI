@@ -193,6 +193,85 @@ func TestAuditAppHostStationIsolationRealHTTP(t *testing.T) {
 	}
 }
 
+func TestAuditAppGameAndDebugRoutesUseProductionIdentityBoundaries(t *testing.T) {
+	app, store, _ := auditApp(t)
+	user, err := store.CreateUser("discord-integrated-routes", "integrated-routes", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateModel(context.Background(), user.ID, "personal", "dry", "ordered", false, 1); err != nil {
+		t.Fatal(err)
+	}
+	callerKey, err := store.SetCallerKey(user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstSession, _, err := store.CreateUserSession(user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondSession, _, err := store.CreateUserSession(user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	userRequest := func(method, path, session, body string) *httptest.ResponseRecorder {
+		req := auditRequest(method, auditUserHost, path, body)
+		if session != "" {
+			req.AddCookie(&http.Cookie{Name: "nb_user_session", Value: session, Path: "/api"})
+		}
+		return auditDo(t, app, req)
+	}
+	if rec := userRequest(http.MethodPost, "/api/debug/session", firstSession, ""); rec.Code != http.StatusCreated {
+		t.Fatalf("first debug start status=%d body=%q", rec.Code, rec.Body.String())
+	}
+	if rec := userRequest(http.MethodPost, "/api/debug/session", secondSession, ""); rec.Code != http.StatusCreated {
+		t.Fatalf("replacement debug start status=%d body=%q", rec.Code, rec.Body.String())
+	}
+	// Logging out the older browser session must not terminate the newer
+	// process-local Debug session for the same account.
+	if rec := userRequest(http.MethodPost, "/api/auth/logout", firstSession, ""); rec.Code != http.StatusNoContent {
+		t.Fatalf("old-session logout status=%d body=%q", rec.Code, rec.Body.String())
+	}
+	active := userRequest(http.MethodGet, "/api/debug/session", secondSession, "")
+	if active.Code != http.StatusOK || !strings.Contains(active.Body.String(), `"mode":"dry"`) || !strings.Contains(active.Body.String(), `"id":"dbg_`) {
+		t.Fatalf("replacement debug session status=%d body=%q", active.Code, active.Body.String())
+	}
+	games := userRequest(http.MethodGet, "/api/games", secondSession, "")
+	if games.Code != http.StatusOK || !strings.Contains(games.Body.String(), `"id":"fishing"`) || !strings.Contains(games.Body.String(), `"master_enabled":false`) {
+		t.Fatalf("games status=%d body=%q", games.Code, games.Body.String())
+	}
+	chat := auditRequest(http.MethodPost, auditUserHost, "/v1/chat/completions", `{"model":"personal/dry","messages":[]}`)
+	chat.Header.Set("Authorization", "Bearer "+callerKey)
+	chat.Header.Set("Content-Type", "application/json")
+	dry := auditDo(t, app, chat)
+	if dry.Code != http.StatusOK || dry.Header().Get("X-Nonbiri-Debug-Mode") != "dry-run" {
+		t.Fatalf("debug dry call status=%d mode=%q body=%q", dry.Code, dry.Header().Get("X-Nonbiri-Debug-Mode"), dry.Body.String())
+	}
+	var requestLogs int
+	if err := store.DB().QueryRow(`SELECT COUNT(*) FROM request_logs WHERE user_id=?`, user.ID).Scan(&requestLogs); err != nil || requestLogs != 0 {
+		t.Fatalf("dry call persisted request log rows=%d err=%v", requestLogs, err)
+	}
+	if rec := userRequest(http.MethodPost, "/api/auth/logout", secondSession, ""); rec.Code != http.StatusNoContent {
+		t.Fatalf("current-session logout status=%d body=%q", rec.Code, rec.Body.String())
+	}
+	if rec := userRequest(http.MethodGet, "/api/debug/session", secondSession, ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("logged-out debug control status=%d body=%q", rec.Code, rec.Body.String())
+	}
+
+	login := auditRequest(http.MethodPost, auditAdminHost, "/admin/api/login", `{"username":"root","password":"correct-horse-battery"}`)
+	loginResponse := auditDo(t, app, login)
+	adminSession := auditSetCookie(loginResponse.Result().Cookies(), "nb_admin_session")
+	if loginResponse.Code != http.StatusOK || adminSession == "" {
+		t.Fatalf("admin login status=%d body=%q", loginResponse.Code, loginResponse.Body.String())
+	}
+	adminGames := auditRequest(http.MethodGet, auditAdminHost, "/admin/api/games/config", "")
+	adminGames.AddCookie(&http.Cookie{Name: "nb_admin_session", Value: adminSession, Path: "/admin"})
+	adminGamesResponse := auditDo(t, app, adminGames)
+	if adminGamesResponse.Code != http.StatusOK || !strings.Contains(adminGamesResponse.Body.String(), `"master_enabled":false`) {
+		t.Fatalf("admin games status=%d body=%q", adminGamesResponse.Code, adminGamesResponse.Body.String())
+	}
+}
+
 func TestAuditAppCallerKeyBanRegenerateDelete(t *testing.T) {
 	app, store, _ := auditApp(t)
 	user, err := store.CreateUser("discord-audit-1", "audit-user", "")

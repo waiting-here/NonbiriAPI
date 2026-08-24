@@ -290,6 +290,9 @@
       "charityPrefixRejected": "Rejected: the \"[公益]\" prefix is reserved for charity models. Choose a different provider name.",
       "nameConflict": "This platform model name already exists. Choose a different provider or model name."
     },
+    "games": {
+      "nav": "Games"
+    },
     "keys": {
       "nav": "Caller key",
       "title": "Platform caller key",
@@ -311,6 +314,9 @@
       "copyKey": "Copy key",
       "copyDone": "Copied; close this notice when finished",
       "copyWarning": "Clipboard access is an explicit action and is not saved by this page."
+    },
+    "debug": {
+      "nav": "Debug"
     },
     "issues": {
       "nav": "Issues",
@@ -535,6 +541,149 @@
       "banned": "Your account is banned; the server will refuse charity calls.",
       "upstreamPrivacyTitle": "Third-party upstream privacy:",
       "upstreamPrivacyWarning": "Charity requests are sent to independent upstream providers. The third-party upstream and its account logs may see the full request content; its storage and privacy practices are outside this site's control. Do not include secrets or sensitive personal information."
+    }
+  },
+  "games": {
+    "fishing": {
+      "eyebrow": "Games · Fishing",
+      "title": "Pond fishing",
+      "description": "Choose bait, cast a line, and let the server reveal your catch.",
+      "loading": "Loading fishing…",
+      "balance": "Available credits",
+      "balanceHint": "All game costs and payouts are decided by the server.",
+      "balanceRetry": "Retry balance check",
+      "balanceRetrying": "Checking balance…",
+      "balanceUnknown": "Balance unavailable until the server confirms it",
+      "balanceUnknownAlert": "The current balance could not be confirmed. No new round can start.",
+      "balanceUnknownHint": "Casting is disabled until the server confirms the current balance.",
+      "disabledTitle": "Fishing is not open",
+      "disabledBody": "The administrator has not enabled this game yet. Your balance is unchanged.",
+      "baitsTitle": "Choose bait",
+      "baitsHint": "The server validates the price and balance before each cast.",
+      "baitsLabel": "Fishing bait",
+      "ticket": "One ticket",
+      "creditsUnit": "credits",
+      "cast": "Cast line",
+      "castWorking": "Casting…",
+      "baits": {
+        "worm": "Worm",
+        "lure": "Lure",
+        "premium": "Premium lure"
+      },
+      "errors": {
+        "unavailable": "Unavailable right now",
+        "insufficient": "Not enough available credits",
+        "pending": "Finish the pending round first",
+        "resultPending": "View the current result before casting",
+        "disabled": "Fishing is currently closed",
+        "rateLimited": "Too many casts; try again later"
+      },
+      "phase": {
+        "idle": "Choose bait to cast a line.",
+        "casting": "Casting the line…",
+        "waiting": "Waiting for a bite…",
+        "reeling": "Reeling in…",
+        "settling": "Confirming the server result…",
+        "result": "Catch ready to review.",
+        "error": "The server has not confirmed this round. Retry settlement when ready.",
+        "startError": "No paid round was created. Choose bait to try again."
+      },
+      "stage": {
+        "title": "Pond",
+        "pending": "Round pending",
+        "autoSettle": "The server will safely recover this paid round if the page closes.",
+        "retry": "Retry settlement",
+        "retryWorking": "Retrying…"
+      },
+      "result": {
+        "fishTitle": "Catch confirmed",
+        "treasureTitle": "Treasure found",
+        "junkTitle": "A quiet catch",
+        "recovered": "Recovered from the server",
+        "serverConfirmed": "Server confirmed",
+        "fishDescription": "{{name}} · {{tier}} tier",
+        "treasureDescription": "{{name}}",
+        "junkDescription": "{{name}} · no payout",
+        "size": "Size",
+        "meter": "Meter catch",
+        "won": "Won",
+        "balance": "Available credits",
+        "ack": "Mark as viewed",
+        "ackWorking": "Confirming…",
+        "more": "Another result is ready after this one."
+      },
+      "profile": {
+        "title": "Leaderboard profile",
+        "hint": "Anonymous by default. This preference applies to all games.",
+        "public": "Show my profile",
+        "publicWarning": "Your current username, avatar, and L4 badge may appear together on public rows.",
+        "privateWarning": "Your username, avatar, and L4 badge stay hidden from leaderboard rows.",
+        "reconciling": "Privacy status is being rechecked with the server…",
+        "uncertain": "Privacy status could not be confirmed. Your identity is hidden until you retry.",
+        "retry": "Retry privacy check",
+        "makePrivate": "Hide my profile now"
+      },
+      "leaderboard": {
+        "avatarFallback": "Avatar unavailable",
+        "avatarAlt": "Avatar for {{name}}",
+        "anonymous": "Anonymous angler",
+        "level4Hint": "Level 4 visual badge",
+        "level4": "L4",
+        "totalScore": "Total payout",
+        "me": "You",
+        "singleTitle": "Best catch",
+        "totalTitle": "Recent total catch",
+        "singleDescription": "Your longest fish stays on this board.",
+        "totalDescription": "Committed payouts from the last 30 days.",
+        "mine": "mine",
+        "loading": "Loading leaderboard…",
+        "empty": "No settled catches yet.",
+        "rank": "Rank",
+        "angler": "Angler",
+        "catch": "Catch",
+        "kind": "Score",
+        "size": "Size",
+        "payout": "Payout",
+        "you": "You",
+        "yourRank": "Your rank: #{{rank}}"
+      },
+      "items": {
+        "whitebait": "Whitebait",
+        "gudgeon": "Gudgeon",
+        "horse_mouth": "Horse-mouth fish",
+        "smelt": "Smelt",
+        "loach": "Loach",
+        "crucian": "Crucian carp",
+        "tilapia": "Tilapia",
+        "yellow_catfish": "Yellow catfish",
+        "ayu": "Ayu",
+        "stream_carp": "Stream carp",
+        "common_carp": "Common carp",
+        "snakehead": "Snakehead",
+        "catfish": "Catfish",
+        "mandarin_fish": "Mandarin fish",
+        "rainbow_trout": "Rainbow trout",
+        "grass_carp": "Grass carp",
+        "silver_carp": "Silver carp",
+        "bighead_carp": "Bighead carp",
+        "black_carp": "Black carp",
+        "japanese_eel": "Japanese eel",
+        "yellowcheek": "Yellowcheek",
+        "taimen": "Taimen",
+        "koi": "Koi",
+        "boot": "Old boot",
+        "seaweed": "Seaweed",
+        "plastic_bag": "Plastic bag",
+        "branch": "Branch",
+        "old_tire": "Old tire",
+        "glasses": "Glasses",
+        "phone_case": "Phone case",
+        "fry": "Small fry",
+        "bottle": "Treasure bottle",
+        "clover": "Lucky clover",
+        "shell": "Treasure shell",
+        "unknown": "Unknown catch"
+      }
     }
   }
 }

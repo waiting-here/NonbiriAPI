@@ -214,6 +214,7 @@
       "timezoneRefreshFailed": "The timezone is already locked, but the authoritative value could not be refreshed. Reload before editing again."
     },
     "games": {
+      "nav": "Games",
       "title": "Game configuration",
       "description": "Edit the server-authoritative Fishing controls. The page sends only touched fields and accepts the full server response as truth.",
       "masterEnabled": "Games master switch",

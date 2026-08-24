@@ -2,6 +2,7 @@ package db
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -62,6 +63,99 @@ func TestIdentitySessionsAreHashedAndRoleIsolated(t *testing.T) {
 	}
 	if got, err := st.GetAdminSessionUser(adminToken); err != nil || got == nil || got.ID != admin.ID {
 		t.Fatalf("explicit admin session helper = %#v, %v", got, err)
+	}
+}
+
+func TestUserSessionBindingValidationIsReadOnlyAndUserScoped(t *testing.T) {
+	st := openTestStore(t, filepath.Join(t.TempDir(), "binding.db"))
+	defer st.Close()
+	user := identityTestUser(t, st, "discord-binding")
+	other := identityTestUser(t, st, "discord-binding-other")
+	token, _, err := st.CreateUserSession(user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := SessionHash(token)
+	var lastSeen int64
+	if err := st.DB().QueryRow(`SELECT last_seen_at FROM sessions WHERE token_hash=?`, binding).Scan(&lastSeen); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := st.ValidateUserSessionBinding(context.Background(), user.ID, binding); err != nil || !ok {
+		t.Fatalf("valid binding = %v, %v", ok, err)
+	}
+	var lastSeenAfter int64
+	if err := st.DB().QueryRow(`SELECT last_seen_at FROM sessions WHERE token_hash=?`, binding).Scan(&lastSeenAfter); err != nil {
+		t.Fatal(err)
+	}
+	if lastSeenAfter != lastSeen {
+		t.Fatalf("binding validation renewed session: before=%d after=%d", lastSeen, lastSeenAfter)
+	}
+	if ok, err := st.ValidateUserSessionBinding(context.Background(), other.ID, binding); err != nil || ok {
+		t.Fatalf("cross-user binding = %v, %v", ok, err)
+	}
+	if ok, err := st.ValidateUserSessionBinding(context.Background(), user.ID, strings.ToUpper(binding)); err != nil || ok {
+		t.Fatalf("noncanonical binding = %v, %v", ok, err)
+	}
+
+	now := time.Now().Unix()
+	if _, err := st.DB().Exec(`UPDATE users SET is_banned=1, banned_until=? WHERE id=?`, now-1, user.ID); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := st.ValidateUserSessionBinding(context.Background(), user.ID, binding); err != nil || !ok {
+		t.Fatalf("due temporary ban binding = %v, %v", ok, err)
+	}
+	var stillBanned int
+	if err := st.DB().QueryRow(`SELECT is_banned FROM users WHERE id=?`, user.ID).Scan(&stillBanned); err != nil || stillBanned != 1 {
+		t.Fatalf("read-only validation lifted ban: value=%d err=%v", stillBanned, err)
+	}
+	if _, err := st.DB().Exec(`UPDATE users SET banned_until=NULL WHERE id=?`, user.ID); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := st.ValidateUserSessionBinding(context.Background(), user.ID, binding); err != nil || ok {
+		t.Fatalf("permanent-ban binding = %v, %v", ok, err)
+	}
+	if _, err := st.DB().Exec(`UPDATE users SET is_banned=0, banned_until=NULL WHERE id=?`, user.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB().Exec(`UPDATE sessions SET expires_at=? WHERE token_hash=?`, now-1, binding); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := st.ValidateUserSessionBinding(context.Background(), user.ID, binding); err != nil || ok {
+		t.Fatalf("expired binding = %v, %v", ok, err)
+	}
+	var rows int
+	if err := st.DB().QueryRow(`SELECT COUNT(*) FROM sessions WHERE token_hash=?`, binding).Scan(&rows); err != nil || rows != 1 {
+		t.Fatalf("read-only validation deleted row: rows=%d err=%v", rows, err)
+	}
+}
+
+func TestCallerKeyBindingValidationIsExactReadOnlyAndUserScoped(t *testing.T) {
+	st := openTestStore(t, filepath.Join(t.TempDir(), "caller-binding.db"))
+	defer st.Close()
+	user := identityTestUser(t, st, "discord-caller-binding")
+	other := identityTestUser(t, st, "discord-caller-binding-other")
+	first, err := st.RegenerateCallerKey(user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := st.ValidateCallerKeyBinding(context.Background(), user.ID, first.Secret); err != nil || !ok {
+		t.Fatalf("valid caller binding = %v, %v", ok, err)
+	}
+	if ok, err := st.ValidateCallerKeyBinding(context.Background(), other.ID, first.Secret); err != nil || ok {
+		t.Fatalf("cross-user caller binding = %v, %v", ok, err)
+	}
+	if ok, err := st.ValidateCallerKeyBinding(context.Background(), user.ID, first.Secret+"x"); err != nil || ok {
+		t.Fatalf("malformed caller binding = %v, %v", ok, err)
+	}
+	second, err := st.RegenerateCallerKey(user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := st.ValidateCallerKeyBinding(context.Background(), user.ID, first.Secret); err != nil || ok {
+		t.Fatalf("rotated caller binding = %v, %v", ok, err)
+	}
+	if ok, err := st.ValidateCallerKeyBinding(context.Background(), user.ID, second.Secret); err != nil || !ok {
+		t.Fatalf("replacement caller binding = %v, %v", ok, err)
 	}
 }
 

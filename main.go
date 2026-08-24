@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -26,7 +27,10 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	"github.com/waiting-here/NonbiriAPI/internal/checkin"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/anthropic"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
@@ -34,10 +38,13 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/fetch"
 	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
 	"github.com/waiting-here/NonbiriAPI/internal/forward"
+	gameruntime "github.com/waiting-here/NonbiriAPI/internal/game/runtime"
+	"github.com/waiting-here/NonbiriAPI/internal/gameapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 	"github.com/waiting-here/NonbiriAPI/internal/issues"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
+	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 	"github.com/waiting-here/NonbiriAPI/internal/logapi"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/model"
@@ -175,6 +182,85 @@ type application struct {
 	once    sync.Once
 }
 
+type anthropicDefaultMaxTokensProvider struct {
+	store *db.Store
+}
+
+func (p anthropicDefaultMaxTokensProvider) RawAnthropicDefaultMaxTokens(ctx context.Context) (*int64, error) {
+	if p.store == nil || ctx == nil {
+		return nil, errors.New("anthropic max-tokens configuration is unavailable")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	raw, err := p.store.GetSiteConfigValueContext(ctx, adminapi.KeyAnthropicDefaultMaxTokens)
+	if err != nil {
+		return nil, err
+	}
+	if raw == "" {
+		return nil, nil
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || value < 1 || value > anthropic.MaxMaxTokens {
+		return nil, errors.New("anthropic max-tokens configuration is invalid")
+	}
+	return &value, nil
+}
+
+type userDeletionBoundary func(userID int64) (commit func() bool, abort func() bool, err error)
+
+func combineUserDeletionBoundaries(afterCommit func(int64), boundaries ...userDeletionBoundary) userDeletionBoundary {
+	return func(userID int64) (func() bool, func() bool, error) {
+		commits := make([]func() bool, 0, len(boundaries))
+		aborts := make([]func() bool, 0, len(boundaries))
+		for _, begin := range boundaries {
+			if begin == nil {
+				continue
+			}
+			commit, abort, err := begin(userID)
+			if err != nil || commit == nil || abort == nil {
+				if abort != nil {
+					abort()
+				}
+				for index := len(aborts) - 1; index >= 0; index-- {
+					aborts[index]()
+				}
+				if err == nil {
+					err = errors.New("user deletion boundary is invalid")
+				}
+				return nil, nil, err
+			}
+			commits = append(commits, commit)
+			aborts = append(aborts, abort)
+		}
+		var terminal sync.Once
+		commit := func() bool {
+			won := false
+			terminal.Do(func() {
+				for _, finish := range commits {
+					finish()
+				}
+				if afterCommit != nil {
+					afterCommit(userID)
+				}
+				won = true
+			})
+			return won
+		}
+		abort := func() bool {
+			won := false
+			terminal.Do(func() {
+				for index := len(aborts) - 1; index >= 0; index-- {
+					aborts[index]()
+				}
+				won = true
+			})
+			return won
+		}
+		return commit, abort, nil
+	}
+}
+
 func (a *application) Close() error {
 	if a == nil {
 		return nil
@@ -224,15 +310,48 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 
 	registry := endpoint.NewRegistry()
 	var flowController *flowcontrol.Controller
-	beginUserRetirement := func(userID int64) (func() bool, func() bool, error) {
-		if flowController == nil {
+	var debugHub *debug.Hub
+	userGate, err := lifecyclegate.New(lifecyclegate.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("user lifecycle gate: %w", err)
+	}
+	cleanup = append(cleanup, userGate.Close)
+	beginUserRetirementContext := func(ctx context.Context, userID int64) (func() bool, func() bool, error) {
+		if flowController == nil || userGate == nil {
 			return nil, nil, flowcontrol.ErrClosed
 		}
-		retirement, err := flowController.BeginUserRetirement(userID)
+		gateRetirement, err := userGate.BeginUserRetirementContext(ctx, userID)
 		if err != nil {
 			return nil, nil, err
 		}
-		return retirement.Commit, retirement.Abort, nil
+		flowRetirement, err := flowController.BeginUserRetirement(userID)
+		if err != nil {
+			gateRetirement.Abort()
+			return nil, nil, err
+		}
+		var terminal sync.Once
+		commit := func() bool {
+			won := false
+			terminal.Do(func() {
+				gateRetirement.Commit()
+				flowRetirement.Commit()
+				won = true
+			})
+			return won
+		}
+		abort := func() bool {
+			won := false
+			terminal.Do(func() {
+				flowRetirement.Abort()
+				gateRetirement.Abort()
+				won = true
+			})
+			return won
+		}
+		return commit, abort, nil
+	}
+	beginUserRetirement := func(userID int64) (func() bool, func() bool, error) {
+		return beginUserRetirementContext(context.Background(), userID)
 	}
 	sharedElevation, err := elevation.NewManager()
 	if err != nil {
@@ -260,6 +379,17 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		Store: store, Provider: provider, ClientID: cfg.DiscordClientID,
 		SiteBaseURL: cfg.SiteBaseURL, Elevation: sharedElevation,
 		OAuthStartThrottle: oauthStartThrottle,
+		OnLogout: func(userID int64, sessionBinding string) {
+			if debugHub != nil {
+				debugHub.ForgetBindingReason(userID, sessionBinding, debug.EndLogout)
+			}
+		},
+		UserRequestGate: func(ctx context.Context, userID int64, binding string) (context.Context, func(), error) {
+			return userGate.Admit(ctx, userID, binding, store.ValidateUserSessionBinding)
+		},
+		UserRequestGateExempt: func(r *http.Request) bool {
+			return r != nil && r.URL != nil && r.URL.Path == "/api/account/delete"
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("user auth: %w", err)
@@ -304,12 +434,13 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	// stops the services first and clears the subkey last.
 	cleanup = append(cleanup, safetyIdentifierFactory.Close)
 	secureRunner, err := forward.NewSecureRunner(forward.SecureRunnerConfig{
-		Repository:        store,
-		CharityTargets:    store,
-		Secrets:           vault,
-		Registry:          registry,
-		Backend:           localBackend,
-		SafetyIdentifiers: safetyIdentifierFactory,
+		Repository:                store,
+		CharityTargets:            store,
+		Secrets:                   vault,
+		Registry:                  registry,
+		Backend:                   localBackend,
+		SafetyIdentifiers:         safetyIdentifierFactory,
+		AnthropicDefaultMaxTokens: anthropicDefaultMaxTokensProvider{store: store},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("secure runner: %w", err)
@@ -329,6 +460,12 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	cleanup = append(cleanup, forwardService.Close)
 	antiAbuseService, err := antiabuse.NewService(antiabuse.ServiceConfig{
 		Store: store, BeginUserRetirement: beginUserRetirement,
+		BeginUserRetirementContext: beginUserRetirementContext,
+		BeforeUserBan: func(userID int64) {
+			if debugHub != nil {
+				debugHub.ForgetUserReason(userID, debug.EndBanned)
+			}
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("anti-abuse service: %w", err)
@@ -371,12 +508,79 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		return nil, fmt.Errorf("flow middleware: %w", err)
 	}
 
+	gameSettlement, err := db.NewGameSettlementService(db.GameSettlementServiceConfig{Store: store})
+	if err != nil {
+		return nil, fmt.Errorf("game settlement service: %w", err)
+	}
+	cleanup = append(cleanup, gameSettlement.Close)
+	gameWorker, err := gameruntime.NewRecoveryWorker(gameruntime.RecoveryWorkerConfig{
+		Settlement: gameSettlement,
+		Store:      store,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("game recovery worker: %w", err)
+	}
+	if _, err := gameWorker.RecoverDue(context.Background()); err != nil {
+		return nil, fmt.Errorf("game startup recovery: %w", err)
+	}
+
+	personalDryRun := func(ctx context.Context, userID int64, request *openai.ChatRequest) (debug.DryRunResult, error) {
+		route, err := forwardService.ValidateDryRun(ctx, userID, request)
+		if err != nil {
+			return debug.DryRunResult{Personal: true}, err
+		}
+		return debug.DryRunResult{
+			Model: route.FullName, Personal: true, FlattenApplied: route.FlattenToolCall,
+			Effective: map[string]any{"route_strategy": route.RouteStrategy},
+		}, nil
+	}
+	charityDryRun := func(ctx context.Context, userID int64, request *openai.ChatRequest) (debug.DryRunResult, error) {
+		route, err := charityService.ValidateLogicalDryRun(ctx, userID, request)
+		if err != nil {
+			return debug.DryRunResult{Charity: true}, err
+		}
+		return debug.DryRunResult{
+			Model: route.FullName, Charity: true, FlattenApplied: route.FlattenToolCall,
+			Effective: map[string]any{"route_strategy": route.RouteStrategy},
+		}, nil
+	}
+	debugHub, err = debug.NewHub(debug.Config{
+		DryRunValidator:         personalDryRun,
+		CharityDryRunValidator:  charityDryRun,
+		SessionBindingValidator: store.ValidateUserSessionBinding,
+		MapDryRunError: func(err error) (string, string) {
+			switch {
+			case errors.Is(err, forward.ErrModelNotFound), errors.Is(err, charityrouting.ErrModelNotFound):
+				return httperr.CodeNotFound, "model not found"
+			case errors.Is(err, charityrouting.ErrCharityDisabled):
+				return httperr.CodeFeatureDisabled, "charity is disabled"
+			case errors.Is(err, charityrouting.ErrCharitySuspended):
+				return httperr.CodeCharitySuspended, "charity eligibility is suspended"
+			case errors.Is(err, openai.ErrInvalidRequest):
+				return httperr.CodeInvalidRequest, "invalid request"
+			default:
+				return httperr.CodeInternal, "request could not be validated"
+			}
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("debug hub: %w", err)
+	}
+	cleanup = append(cleanup, debugHub.Close)
+
 	lifecycleService, err := lifecycle.NewService(lifecycle.Config{
 		Store: store, Elevation: sharedElevation, AdminVerifier: adminAuth,
-		BeginUserRetirement: beginUserRetirement,
-		BeginUserDeletion:   antiAbuseService.BeginUserDeletion,
+		BeginUserRetirement:        beginUserRetirement,
+		BeginUserRetirementContext: beginUserRetirementContext,
+		BeginUserDeletion:          combineUserDeletionBoundaries(nil, antiAbuseService.BeginUserDeletion, gameSettlement.BeginUserDeletion),
+		BeforeDeleteUser: func(userID int64) {
+			if debugHub != nil {
+				debugHub.ForgetUserReason(userID, debug.EndDeleted)
+			}
+		},
 		PreDeleteUser: func(userID int64) {
 			charityService.CancelUserContexts(userID)
+			gameWorker.ForgetUser(userID)
 			if keyIDs, err := store.ListDonationKeyIDsByDonor(context.Background(), userID); err == nil && len(keyIDs) > 0 {
 				charityService.ForgetDonationKeys(keyIDs...)
 			}
@@ -399,9 +603,15 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	})
 
 	adminControls := adminapi.NewHandler(adminapi.HandlerDeps{
-		Store:               store,
-		Runtime:             runtimeApplier,
-		BeginUserRetirement: beginUserRetirement,
+		Store:                      store,
+		Runtime:                    runtimeApplier,
+		BeginUserRetirement:        beginUserRetirement,
+		BeginUserRetirementContext: beginUserRetirementContext,
+		BeforeUserBan: func(userID int64) {
+			if debugHub != nil {
+				debugHub.ForgetUserReason(userID, debug.EndBanned)
+			}
+		},
 	})
 	// The level-5 co-management frame: user-station session middleware plus a
 	// per-request live level>=5 gate. Business routes (donation reviews,
@@ -475,12 +685,18 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 			sub(w, r, p.UserID)
 		})
 	}
+	gameAPI := gameapi.NewHandler(gameapi.HandlerDeps{Store: store, Settlement: gameSettlement})
+	debugAPI := debug.NewControlHandler(debugHub, debug.HandlerConfig{})
 	api := buildUserAPI(userAuth, adminAuth, endpointService, modelFetcher, modelService,
 		logapi.NewHandler(logapi.HandlerDeps{Store: store}),
 		issues.NewHandler(issues.HandlerDeps{Store: store}),
 		checkinAPI.Handler(),
 		userAuth.Middleware(httpmw.API(donation.NewHandler(donationSvc, sessionIdentity))),
-		exportHandler, lifecycleService, forwardService, charityService, flowMiddleware, store, stewardAPI.Handler())
+		exportHandler, lifecycleService, forwardService, charityService, flowMiddleware, store,
+		stewardAPI.Handler(), gameAPI, debugAPI, debugHub,
+		func(ctx context.Context, userID int64, binding string) (context.Context, func(), error) {
+			return userGate.Admit(ctx, userID, binding, store.ValidateCallerKeyBinding)
+		})
 	// The maintenance gate sits after the host/station edge (which only lets
 	// /api/* and /v1/* reach the user station) and before any auth or business
 	// handler. It is live-applied from site_config and loaded from the DB at
@@ -488,37 +704,54 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	// sessions and caller keys; the admin station is never routed through it.
 	gatedAPI := maintenance.GateMiddleware(maintenanceGate, api)
 	appHandler := buildAdminAndRootAPI(cfg, userAuth, adminAuth, gatedAPI, adminControls, alertapi.NewHandler(alertapi.HandlerDeps{Store: store}), logapi.NewHandler(logapi.HandlerDeps{Store: store}), lifecycleService, store, forwardService, flowMiddleware,
-		adminDonationReview.Handler(), adminCharity.Handler())
+		adminDonationReview.Handler(), adminCharity.Handler(), gameAPI)
 
 	maintenanceCtx, stopMaintenance := context.WithCancel(context.Background())
 	app = &application{handler: appHandler, stop: stopMaintenance, close: cleanup}
 	app.wg.Add(1)
 	go func() {
 		defer app.wg.Done()
+		if workerErr := gameWorker.RunTicker(maintenanceCtx); workerErr != nil && maintenanceCtx.Err() == nil {
+			slog.Error("game recovery worker stopped", "err", workerErr)
+		}
+	}()
+	app.wg.Add(1)
+	go func() {
+		defer app.wg.Done()
 		ticker := time.NewTicker(6 * time.Hour)
 		defer ticker.Stop()
-		runMaintenanceSweep(maintenanceCtx, store, usageService, charityService, antiAbuseService)
+		runMaintenanceSweep(maintenanceCtx, store, usageService, charityService, gameWorker, antiAbuseService)
 		for {
 			select {
 			case <-maintenanceCtx.Done():
 				return
 			case <-ticker.C:
-				runMaintenanceSweep(maintenanceCtx, store, usageService, charityService, antiAbuseService)
+				runMaintenanceSweep(maintenanceCtx, store, usageService, charityService, gameWorker, antiAbuseService)
 			}
 		}
 	}()
 	return app, nil
 }
 
-func runMaintenanceSweep(ctx context.Context, store *db.Store, usageService *usage.Service, charityService *charityrouting.Service, antiAbuseServices ...*antiabuse.Service) {
+func runMaintenanceSweep(ctx context.Context, store *db.Store, usageService *usage.Service, charityService *charityrouting.Service, gameWorker *gameruntime.RecoveryWorker, antiAbuseServices ...*antiabuse.Service) {
 	if ctx == nil || ctx.Err() != nil {
 		return
 	}
+	now := time.Now().UTC()
 	// Recovery runs FIRST (frozen §5.4): converge stalled charity reservations
 	// before any retention sweep so a crashed in-flight call is settled
 	// before its log row could be aged out.
 	if charityService != nil && ctx.Err() == nil {
 		charityService.RecoverAll(ctx, false)
+	}
+	if gameWorker != nil && ctx.Err() == nil {
+		if _, recoveryErr := gameWorker.RecoverDue(ctx); recoveryErr != nil && ctx.Err() == nil {
+			slog.Error("game recovery failed", "err", recoveryErr)
+		} else if _, early, cleanupErr := gameWorker.SweepRetention(ctx, now); cleanupErr != nil && ctx.Err() == nil {
+			slog.Error("game retention failed", "err", cleanupErr)
+		} else if early && ctx.Err() == nil {
+			slog.Info("game retention stopped early; resuming next sweep")
+		}
 	}
 	for _, service := range antiAbuseServices {
 		if service != nil && ctx.Err() == nil {
@@ -544,7 +777,7 @@ func runMaintenanceSweep(ctx context.Context, store *db.Store, usageService *usa
 		// Activity retention: day keys older than the frozen 400-day window are
 		// removed in bounded batches. An unset site timezone skips the sweep —
 		// no activity row can exist without a configured offset.
-		cutoff, cutoffErr := store.ActivityRetentionCutoffDay(time.Now().Unix())
+		cutoff, cutoffErr := store.ActivityRetentionCutoffDay(now.Unix())
 		switch {
 		case errors.Is(cutoffErr, db.ErrTimezoneUnavailable):
 			// Activity disabled: nothing to sweep.
@@ -562,7 +795,7 @@ func runMaintenanceSweep(ctx context.Context, store *db.Store, usageService *usa
 		// Terminal charity reservations share the frozen 400-day retention
 		// window. Recovery above must run first so in-flight rows are settled;
 		// the cleanup itself never removes in-flight reservations.
-		cutoff := time.Now().Unix() - 400*24*60*60
+		cutoff := now.Unix() - 400*24*60*60
 		if _, early, cleanupErr := store.CleanupTerminalCharityReservations(ctx, cutoff); cleanupErr != nil && ctx.Err() == nil {
 			slog.Error("charity reservation retention failed", "err", cleanupErr)
 		} else if early && ctx.Err() == nil {
@@ -628,8 +861,22 @@ func sessionIdentity(r *http.Request) (int64, error) {
 	return user.ID, nil
 }
 
-func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointService *endpoint.Service, fetcher *fetch.Fetcher, modelService *model.Service, logs http.Handler, issueHandler http.Handler, checkinHandler http.Handler, donationsHandler http.Handler, exportHandler http.Handler, lifecycleService *lifecycle.Service, forwardService *forward.Service, charityService *charityrouting.Service, flowMiddleware *flowcontrol.Middleware, store *db.Store, stewardHandler http.Handler) http.Handler {
+func isProtectedUserAuthMethod(path, method string) bool {
+	switch path {
+	case "/api/auth/elevate", "/api/auth/logout", "/api/caller-key/regenerate":
+		return method == http.MethodPost
+	case "/api/session", "/api/caller-key":
+		return method == http.MethodGet
+	case "/api/me":
+		return method == http.MethodGet || method == http.MethodPatch
+	default:
+		return false
+	}
+}
+
+func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointService *endpoint.Service, fetcher *fetch.Fetcher, modelService *model.Service, logs http.Handler, issueHandler http.Handler, checkinHandler http.Handler, donationsHandler http.Handler, exportHandler http.Handler, lifecycleService *lifecycle.Service, forwardService *forward.Service, charityService *charityrouting.Service, flowMiddleware *flowcontrol.Middleware, store *db.Store, stewardHandler http.Handler, gamesHandler http.Handler, debugHandler http.Handler, debugHub *debug.Hub, callerGate auth.UserRequestGate) http.Handler {
 	userAuthHandler := userAuth.Handler()
+	userAuthProtected := userAuth.Middleware(userAuthHandler)
 	identity := func(r *http.Request) (int64, error) {
 		user, ok := auth.UserFromContext(r.Context())
 		if !ok || user == nil || !user.IsActive() {
@@ -648,15 +895,27 @@ func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointSe
 	userExport := userAuth.Middleware(exportHandler)
 	userDelete := userAuth.Middleware(httpmw.API(http.HandlerFunc(lifecycleService.DeleteOwnAccountHandler)))
 	userCharityModels := userAuth.Middleware(httpmw.API(charity.NewUserModelsHandler(charity.UserModelsDeps{Store: store})))
-	forwardHandler := auth.CallerKeyMiddleware(store, flowMiddleware.Wrap(forward.NewHandler(forward.HandlerDeps{Service: forwardService, Charity: charityService, Identity: forward.CallerIdentity})))
+	userGames := userAuth.Middleware(gamesHandler)
+	userDebug := userAuth.Middleware(httpmw.API(debugHandler))
+	var callerExit http.Handler = forward.NewHandler(forward.HandlerDeps{Service: forwardService, Charity: charityService, Identity: forward.CallerIdentity})
+	if debugHub != nil {
+		callerExit = debugHub.WrapCaller(callerExit)
+	}
+	forwardHandler := auth.CallerKeyMiddlewareWithGate(store, flowMiddleware.Wrap(callerExit), callerGate)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		switch {
 		case path == "/api/config":
 			servePublicConfig(store, w, r)
-		case path == "/api/auth/discord/start" || path == "/api/auth/discord/callback" || path == "/api/auth/elevate" || path == "/api/session" || path == "/api/me" || path == "/api/auth/logout" || path == "/api/caller-key" || path == "/api/caller-key/regenerate":
+		case path == "/api/auth/discord/start" || path == "/api/auth/discord/callback":
 			userAuthHandler.ServeHTTP(w, r)
+		case path == "/api/auth/elevate" || path == "/api/session" || path == "/api/me" || path == "/api/auth/logout" || path == "/api/caller-key" || path == "/api/caller-key/regenerate":
+			if isProtectedUserAuthMethod(path, r.Method) {
+				userAuthProtected.ServeHTTP(w, r)
+			} else {
+				userAuthHandler.ServeHTTP(w, r)
+			}
 		case path == "/api/me/usage" || path == "/api/logs" || path == "/api/logs/options":
 			userLogs.ServeHTTP(w, r)
 		case path == "/api/issues" || strings.HasPrefix(path, "/api/issues/"):
@@ -672,6 +931,10 @@ func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointSe
 		case path == "/api/donations" || strings.HasPrefix(path, "/api/donations/"):
 			// Charity donation self-service (user station only).
 			donationsHandler.ServeHTTP(w, r)
+		case path == "/api/games" || strings.HasPrefix(path, "/api/games/"):
+			userGames.ServeHTTP(w, r)
+		case path == "/api/debug/session" || strings.HasPrefix(path, "/api/debug/session/") || path == "/api/debug/events":
+			userDebug.ServeHTTP(w, r)
 		case strings.HasPrefix(path, "/api/steward/"):
 			// Level-5 co-management prefix (user station only; the frame
 			// itself re-checks the station, the session, and the live level).
@@ -698,10 +961,11 @@ func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointSe
 	})
 }
 
-func buildAdminAndRootAPI(cfg *config.Config, userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, userAPI http.Handler, adminControls http.Handler, alerts http.Handler, logs http.Handler, lifecycleService *lifecycle.Service, store *db.Store, _ *forward.Service, _ *flowcontrol.Middleware, adminDonations http.Handler, adminCharityModels http.Handler) http.Handler {
+func buildAdminAndRootAPI(cfg *config.Config, userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, userAPI http.Handler, adminControls http.Handler, alerts http.Handler, logs http.Handler, lifecycleService *lifecycle.Service, store *db.Store, _ *forward.Service, _ *flowcontrol.Middleware, adminDonations http.Handler, adminCharityModels http.Handler, adminGames http.Handler) http.Handler {
 	adminLogs := adminAuth.Middleware(logs)
 	adminDonationsWrapped := adminAuth.Middleware(httpmw.API(adminDonations))
 	adminCharityWrapped := adminAuth.Middleware(httpmw.API(adminCharityModels))
+	adminGamesWrapped := adminAuth.Middleware(adminGames)
 	adminControlsHandler := adminAuth.Middleware(adminControls)
 	adminAlerts := adminAuth.Middleware(alerts)
 	adminElevate := adminAuth.Middleware(httpmw.API(http.HandlerFunc(lifecycleService.ElevateAdminHandler)))
@@ -731,6 +995,8 @@ func buildAdminAndRootAPI(cfg *config.Config, userAuth *auth.UserAuth, adminAuth
 			adminDonationsWrapped.ServeHTTP(w, r)
 		case strings.HasPrefix(r.URL.Path, "/admin/api/charity-models"):
 			adminCharityWrapped.ServeHTTP(w, r)
+		case r.URL.Path == "/admin/api/games/config":
+			adminGamesWrapped.ServeHTTP(w, r)
 		case r.URL.Path == "/admin/api/alerts" || strings.HasPrefix(r.URL.Path, "/admin/api/alerts/"):
 			adminAlerts.ServeHTTP(w, r)
 		default:

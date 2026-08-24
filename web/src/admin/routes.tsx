@@ -17,6 +17,7 @@ export const router = createBrowserRouter([
       { path: 'endpoints', lazy: async () => ({ Component: (await import('./pages/EndpointsPage')).EndpointsPage }) },
       { path: 'alerts', lazy: async () => ({ Component: (await import('./pages/AlertsPage')).AlertsPage }) },
       { path: 'settings', lazy: async () => ({ Component: (await import('./pages/SettingsPage')).SettingsPage }) },
+      { path: 'games', lazy: async () => ({ Component: (await import('./pages/GamesPage')).GamesPage }) },
       { path: 'charity', lazy: async () => ({ Component: (await import('./pages/CharityPage')).CharityPage }) },
       { path: '*', element: <NotFoundPage /> },
     ],

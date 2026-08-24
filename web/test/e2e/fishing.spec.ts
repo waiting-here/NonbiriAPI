@@ -73,6 +73,7 @@ function jsonResponse(body: unknown, status = 200) {
 
 async function installFishingRoutes(page: import('@playwright/test').Page, fixture: {
   state: FishingFixtureState;
+  credits: string;
   profilePublic: boolean;
   starts: number;
   settles: number;
@@ -85,7 +86,7 @@ async function installFishingRoutes(page: import('@playwright/test').Page, fixtu
       return;
     }
     if (requestURL.pathname === '/api/games' && route.request().method() === 'GET') {
-      await route.fulfill(jsonResponse({ ...CONFIG, credits: fixture.state.pending_round ? '2500000' : CONFIG.credits, game_profile_public: fixture.profilePublic }));
+      await route.fulfill(jsonResponse({ ...CONFIG, credits: fixture.credits, game_profile_public: fixture.profilePublic }));
       return;
     }
     if (requestURL.pathname === '/api/games/fishing/state' && route.request().method() === 'GET') {
@@ -120,6 +121,7 @@ async function installFishingRoutes(page: import('@playwright/test').Page, fixtu
     }
     if (requestURL.pathname === '/api/games/fishing/rounds' && route.request().method() === 'POST') {
       fixture.starts += 1;
+      fixture.credits = (BigInt(fixture.credits) - 2_500_000n).toString();
       fixture.state = {
         pending_round: { round_id: RESULT.round_id, bait: 'worm', price: '2500000', created_at: 1, auto_settle_at: 2 },
         unrevealed_result: null,
@@ -141,6 +143,7 @@ async function installFishingRoutes(page: import('@playwright/test').Page, fixtu
     }
     if (requestURL.pathname.endsWith('/settle') && route.request().method() === 'POST') {
       fixture.settles += 1;
+      fixture.credits = RESULT.credits;
       fixture.state = { pending_round: null, unrevealed_result: RESULT, has_more_unrevealed: false };
       await route.fulfill(jsonResponse({ ...RESULT, idempotent_replay: false }));
       return;
@@ -256,12 +259,14 @@ test('Fishing pending survives reload, settles from the server, ACKs, and permit
   await installUserShell(page);
   const fixture: {
     state: FishingFixtureState;
+    credits: string;
     profilePublic: boolean;
     starts: number;
     settles: number;
     acks: number;
   } = {
     state: { pending_round: null, unrevealed_result: null, has_more_unrevealed: false } satisfies FishingFixtureState,
+    credits: CONFIG.credits,
     profilePublic: false,
     starts: 0,
     settles: 0,
@@ -302,12 +307,14 @@ test('Fishing renders every frozen outcome with non-zero local artwork on the re
   await installUserShell(page);
   const fixture: {
     state: FishingFixtureState;
+    credits: string;
     profilePublic: boolean;
     starts: number;
     settles: number;
     acks: number;
   } = {
     state: { pending_round: null, unrevealed_result: null, has_more_unrevealed: false } satisfies FishingFixtureState,
+    credits: CONFIG.credits,
     profilePublic: false,
     starts: 0,
     settles: 0,
@@ -336,6 +343,7 @@ test('Fishing recovery is identical across a second page, and public identity is
   await installURLPersistenceObserver(context, FISHING_PERSISTENCE_MARKERS);
   const fixture = {
     state: { pending_round: null, unrevealed_result: RESULT, has_more_unrevealed: false } satisfies FishingFixtureState,
+    credits: RESULT.credits,
     profilePublic: false,
     starts: 0,
     settles: 0,
@@ -397,6 +405,7 @@ test('Fishing remains keyboard usable at 390px, 200% zoom, both themes, and zh w
   await installUserShell(page);
   const fixture = {
     state: { pending_round: null, unrevealed_result: null, has_more_unrevealed: false } satisfies FishingFixtureState,
+    credits: CONFIG.credits,
     profilePublic: false,
     starts: 0,
     settles: 0,
