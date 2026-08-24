@@ -1,4 +1,5 @@
 import { cleanText } from './normalize';
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
 
 /**
  * The single HTTP boundary used by both stations.
@@ -157,6 +158,53 @@ export function isForbidden(error: unknown): boolean {
 
 export function isNotFoundError(error: unknown): boolean {
   return isApiError(error) && (error.status === 404 || error.code === 'not_found');
+}
+
+/**
+ * Re-read the exact query families affected by a mutation.  A mutation can
+ * commit before its response is lost or malformed, so callers must never
+ * restore a local snapshot as a rollback.  The returned error is the first
+ * failed authority read; callers keep the original mutation error when one
+ * exists and surface this error when the write itself appeared successful.
+ */
+export async function refetchAuthoritativeQueries(
+  client: QueryClient,
+  specs: readonly {
+    queryKey: QueryKey;
+    exact?: boolean;
+    ignoreError?: (error: unknown) => boolean;
+    /** Remove a stale projection when the ignored error is authoritative. */
+    removeOnIgnoredError?: boolean;
+  }[],
+): Promise<unknown | undefined> {
+  let firstError: unknown;
+  for (const spec of specs) {
+    const exact = spec.exact ?? true;
+    const matches = client.getQueryCache()
+      .findAll({ queryKey: spec.queryKey, exact })
+      .map((query) => query.queryKey);
+    const keys = matches.length > 0 ? matches : [spec.queryKey];
+    for (const queryKey of keys) {
+      try {
+        await client.refetchQueries({ queryKey, exact: true, type: 'all' });
+      } catch (error) {
+        if (spec.ignoreError?.(error)) {
+          if (spec.removeOnIgnoredError) client.removeQueries({ queryKey, exact: true });
+        } else {
+          firstError ??= error;
+        }
+      }
+      const state = client.getQueryState(queryKey);
+      if (state?.error) {
+        if (spec.ignoreError?.(state.error)) {
+          if (spec.removeOnIgnoredError) client.removeQueries({ queryKey, exact: true });
+        } else {
+          firstError ??= state.error;
+        }
+      }
+    }
+  }
+  return firstError;
 }
 
 export async function apiFetch<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {

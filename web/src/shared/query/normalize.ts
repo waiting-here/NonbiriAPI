@@ -66,6 +66,22 @@ export function hasControlCharacters(value: string): boolean {
   return false;
 }
 
+/**
+ * Keep resource identifiers opaque once they enter client state. JSON numbers
+ * from the legacy alpha.2 wire are stringified only after a safe-integer
+ * check; string identifiers are bounded and control-free but are never
+ * trimmed, parsed, or otherwise interpreted here.
+ */
+export function opaqueID(value: unknown, max = 128): string | undefined {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value > 0 ? String(value) : undefined;
+  }
+  if (typeof value !== 'string' || value.length === 0 || value.length > max || hasControlCharacters(value)) {
+    return undefined;
+  }
+  return value;
+}
+
 export function text(value: unknown, max = 256, fallback = ''): string {
   if (typeof value !== 'string') return fallback;
   const cleaned = cleanText(value);
@@ -106,6 +122,38 @@ export function idValue(value: unknown): string {
     return String(value);
   }
   return text(value, 128, '—');
+}
+
+/**
+ * Validate a string at one of the frozen alpha.2 numeric JSON wire boundaries.
+ * This helper is deliberately not used by domain/state ID decoders: opaque
+ * string IDs must not be interpreted as numbers until the final serializer.
+ */
+export function positiveDecimalID(value: unknown): string | undefined {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value > 0 ? String(value) : undefined;
+  }
+  if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value)) return undefined;
+  if (value.length > 16) return undefined;
+  try {
+    const parsed = BigInt(value);
+    return parsed > 0n && parsed <= BigInt(Number.MAX_SAFE_INTEGER) ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Encode a previously validated opaque resource id only at a legacy numeric
+ * JSON boundary.  Callers must keep ids as canonical strings everywhere else
+ * (state, cache keys, URLs and comparisons); this helper is intentionally
+ * narrow so a permissive Number() conversion cannot leak into those paths.
+ */
+export function positiveDecimalIDNumber(value: unknown): number | undefined {
+  const canonical = positiveDecimalID(value);
+  if (!canonical) return undefined;
+  const numeric = Number(canonical);
+  return Number.isSafeInteger(numeric) && numeric > 0 ? numeric : undefined;
 }
 
 export function errorText(value: unknown, max = 4096): string {

@@ -11,16 +11,23 @@ import {
   StatusBadge,
 } from '@shared/components/States';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
-import { apiFetch } from '@shared/query/http';
+import { apiFetch, isForbidden, isNotFoundError, isUnauthorized, refetchAuthoritativeQueries } from '@shared/query/http';
+import { isStationSessionChanged, stationSessionWrite } from '@shared/charityManagement';
 import {
   type Endpoint,
   type EndpointKey,
+  normalizeEndpoint,
+  normalizeEndpointKey,
   useEndpointKeys,
   useEndpoints,
   useKeyModels,
   userKeys,
 } from '../data';
 import { UserPageGate } from '../components/UserPageGate';
+
+function stationClosed(error: unknown): boolean {
+  return isStationSessionChanged(error) || isUnauthorized(error) || isForbidden(error);
+}
 
 interface EndpointFormProps {
   initial?: Endpoint;
@@ -30,6 +37,7 @@ interface EndpointFormProps {
 
 function EndpointForm({ initial, onCancel, onSaved }: EndpointFormProps) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const urlHintId = useId();
   const urlErrorId = useId();
   const [baseUrl, setBaseUrl] = useState(initial?.base_url === '—' ? '' : initial?.base_url ?? '');
@@ -62,20 +70,43 @@ function EndpointForm({ initial, onCancel, onSaved }: EndpointFormProps) {
     }
 
     setBusy(true);
+    let requestError: unknown = null;
     try {
       const path = initial
         ? `/api/endpoints/${encodeURIComponent(initial.id)}`
         : '/api/endpoints';
-      await apiFetch<unknown>(path, {
-        method: initial ? 'PATCH' : 'POST',
-        json: { base_url: value, note: note.trim() || undefined, enabled },
+      await stationSessionWrite(queryClient, 'steward', async () => {
+        const response = await apiFetch<unknown>(path, {
+          method: initial ? 'PATCH' : 'POST',
+          json: { base_url: value, note: note.trim() || undefined, enabled },
+        });
+        normalizeEndpoint(response);
       });
-      onSaved();
     } catch (error) {
-      setRequestError(error);
-    } finally {
-      setBusy(false);
+      requestError = error;
     }
+    if (stationClosed(requestError)) {
+      setBusy(false);
+      return;
+    }
+    let refreshError: unknown = null;
+      try {
+        await queryClient.refetchQueries({ queryKey: userKeys.endpoints, exact: true, type: 'active' });
+      } catch (error) {
+        refreshError = error;
+      }
+      refreshError ??= queryClient.getQueryState(userKeys.endpoints)?.error ?? null;
+      if (requestError) {
+        // A lost create/update response is not proof that the server rejected
+        // the write. Keep the error visible and leave the form open so the
+        // refreshed list can be checked before retrying.
+        setRequestError(requestError);
+      } else if (refreshError) {
+        setRequestError(refreshError);
+      } else {
+        onSaved();
+      }
+    setBusy(false);
   };
 
   return (
@@ -147,13 +178,17 @@ function EndpointForm({ initial, onCancel, onSaved }: EndpointFormProps) {
   );
 }
 
-function AddKeyForm({ endpointId, onCancel, onSaved }: { endpointId: string; onCancel: () => void; onSaved: () => void }) {
+function AddKeyForm({ endpointId, connectorType, onCancel, onSaved }: { endpointId: string; connectorType: string; onCancel: () => void; onSaved: () => void }) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const secretHintId = useId();
   const [secret, setSecret] = useState('');
   const [keyNote, setKeyNote] = useState('');
+  const [enabled, setEnabled] = useState(true);
+  const [forceStoreFalse, setForceStoreFalse] = useState(false);
   const [requestError, setRequestError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  const openAI = connectorType === 'openai-compatible';
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -165,20 +200,50 @@ function AddKeyForm({ endpointId, onCancel, onSaved }: { endpointId: string; onC
       return;
     }
     setBusy(true);
+    let requestError: unknown = null;
     try {
-      await apiFetch<unknown>(`/api/endpoints/${encodeURIComponent(endpointId)}/keys`, {
-        method: 'POST',
-        json: { secret: submittedSecret, note: keyNote.trim() || undefined, enabled: true },
+      await stationSessionWrite(queryClient, 'steward', async () => {
+        const response = await apiFetch<unknown>(`/api/endpoints/${encodeURIComponent(endpointId)}/keys`, {
+          method: 'POST',
+          json: {
+            secret: submittedSecret,
+            note: keyNote.trim() || undefined,
+            enabled,
+            ...(openAI ? { force_store_false: forceStoreFalse } : {}),
+          },
+        });
+        normalizeEndpointKey(response, connectorType);
       });
-      setKeyNote('');
-      onSaved();
     } catch (error) {
-      setRequestError(error);
-    } finally {
-      // The submitted secret is not kept in form state or a query/mutation cache.
-      setSecret('');
-      setBusy(false);
+      requestError = error;
     }
+    // The submitted secret is not kept in form state or a query/mutation cache.
+    setSecret('');
+    if (stationClosed(requestError)) {
+      setBusy(false);
+      return;
+    }
+    let refreshError: unknown = null;
+      const keyQueryKey = [...userKeys.endpointKeys(endpointId), connectorType] as const;
+      try {
+        await queryClient.refetchQueries({ queryKey: keyQueryKey, exact: true, type: 'active' });
+      } catch (error) {
+        refreshError = error;
+      }
+      refreshError ??= queryClient.getQueryState(keyQueryKey)?.error ?? null;
+      if (requestError) {
+        // Do not retry a create automatically: the server may have committed
+        // the key even though its response was lost.
+        setRequestError(requestError);
+      } else if (refreshError) {
+        setRequestError(refreshError);
+      } else {
+        setKeyNote('');
+        setEnabled(true);
+        setForceStoreFalse(false);
+        onSaved();
+      }
+    setBusy(false);
   };
 
   return (
@@ -209,6 +274,20 @@ function AddKeyForm({ endpointId, onCancel, onSaved }: { endpointId: string; onC
           maxLength={512}
         />
       </label>
+      <label className="check-field">
+        <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
+        <span>{t('user.endpoints.enabled')}</span>
+      </label>
+      {openAI ? (
+        <fieldset className="policy-fieldset">
+          <legend>{t('user.endpoints.storePolicy')}</legend>
+          <label className="checkbox-label">
+            <input type="checkbox" checked={forceStoreFalse} onChange={(event) => setForceStoreFalse(event.target.checked)} />
+            <span>{t('user.endpoints.storeExperimental')}</span>
+          </label>
+          <p className="risk-note">{t('user.endpoints.storePolicyRisk')}</p>
+        </fieldset>
+      ) : null}
       {requestError ? <ErrorState error={requestError} /> : null}
       <div className="form-actions">
         <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={busy}>
@@ -222,13 +301,18 @@ function AddKeyForm({ endpointId, onCancel, onSaved }: { endpointId: string; onC
   );
 }
 
-function EndpointKeyCard({ endpointId, keyData }: { endpointId: string; keyData: EndpointKey }) {
+function EndpointKeyCard({ endpointId, connectorType, keyData }: { endpointId: string; connectorType: string; keyData: EndpointKey }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [requestError, setRequestError] = useState<unknown>(null);
-  const [busyAction, setBusyAction] = useState<'toggle' | 'refresh' | 'delete' | null>(null);
+  const [busyAction, setBusyAction] = useState<'toggle' | 'refresh' | 'delete' | 'save' | null>(null);
+  const [keyNote, setKeyNote] = useState(keyData.note);
+  const [keyEnabled, setKeyEnabled] = useState(keyData.enabled);
+  const [forceStoreFalse, setForceStoreFalse] = useState(keyData.force_store_false === true);
+  const openAI = connectorType === 'openai-compatible';
   const models = useKeyModels(endpointId, keyData.id, open);
 
   const invalidateKey = () => {
@@ -238,34 +322,127 @@ function EndpointKeyCard({ endpointId, keyData }: { endpointId: string; keyData:
     void queryClient.invalidateQueries({ queryKey: userKeys.bindingsRoot });
   };
 
+  // A failed PATCH is not proof that the server did not commit the policy:
+  // the response may have been lost after the write. Always refetch the
+  // endpoint-key projection before deciding what the editor should show.
+  const refreshAuthoritativeKey = async (): Promise<unknown | null> => {
+    const keyQueryKey = [...userKeys.endpointKeys(endpointId), connectorType] as const;
+    let refreshError = await refetchAuthoritativeQueries(queryClient, [{
+      queryKey: keyQueryKey,
+      exact: true,
+      ignoreError: isNotFoundError,
+      removeOnIgnoredError: true,
+    }]);
+    const queries = queryClient.getQueryCache().findAll({ queryKey: keyQueryKey, exact: true });
+    const failedQuery = queries.find((query) => query.state.error);
+    refreshError ??= failedQuery?.state.error ?? null;
+    const authoritative = queries
+      .filter((query) => !query.state.error && Array.isArray(query.state.data))
+      .flatMap((query) => query.state.data as EndpointKey[])
+      .find((key) => key.id === keyData.id);
+    if (authoritative) {
+      setKeyNote(authoritative.note);
+      setKeyEnabled(authoritative.enabled);
+      setForceStoreFalse(authoritative.force_store_false === true);
+    }
+    return refreshError;
+  };
+
   const toggle = async () => {
     setRequestError(null);
     setBusyAction('toggle');
+    let requestError: unknown = null;
     try {
-      await apiFetch<unknown>(
-        `/api/endpoints/${encodeURIComponent(endpointId)}/keys/${encodeURIComponent(keyData.id)}`,
-        { method: 'PATCH', json: { enabled: !keyData.enabled } },
-      );
-      invalidateKey();
+      await stationSessionWrite(queryClient, 'steward', async () => {
+        const response = await apiFetch<unknown>(
+          `/api/endpoints/${encodeURIComponent(endpointId)}/keys/${encodeURIComponent(keyData.id)}`,
+          { method: 'PATCH', json: { enabled: !keyData.enabled } },
+        );
+        normalizeEndpointKey(response, connectorType);
+      });
     } catch (error) {
-      setRequestError(error);
-    } finally {
-      setBusyAction(null);
+      requestError = error;
     }
+    if (stationClosed(requestError)) {
+      setBusyAction(null);
+      return;
+    }
+    const refreshError = await refetchAuthoritativeQueries(queryClient, [
+        {
+          queryKey: userKeys.endpointKeys(endpointId), exact: false,
+          ignoreError: isNotFoundError, removeOnIgnoredError: true,
+        },
+      ]);
+      if (requestError) setRequestError(requestError);
+      else if (refreshError) setRequestError(refreshError);
+      else invalidateKey();
+    setBusyAction(null);
+  };
+
+  const beginEdit = () => {
+    setKeyNote(keyData.note);
+    setKeyEnabled(keyData.enabled);
+    setForceStoreFalse(keyData.force_store_false === true);
+    setRequestError(null);
+    setEditOpen(true);
+  };
+
+  const saveMetadata = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setRequestError(null);
+    setBusyAction('save');
+    let requestError: unknown = null;
+    try {
+      await stationSessionWrite(queryClient, 'steward', async () => {
+        const response = await apiFetch<unknown>(
+          `/api/endpoints/${encodeURIComponent(endpointId)}/keys/${encodeURIComponent(keyData.id)}`,
+          {
+            method: 'PATCH',
+            json: {
+              note: keyNote.trim(),
+              enabled: keyEnabled,
+              ...(openAI ? { force_store_false: forceStoreFalse } : {}),
+            },
+          },
+        );
+        normalizeEndpointKey(response, connectorType);
+      });
+    } catch (error) {
+      requestError = error;
+    }
+    if (stationClosed(requestError)) {
+      setBusyAction(null);
+      return;
+    }
+    const refreshError = await refreshAuthoritativeKey();
+      // Keep the original request error visible. In particular, a 409 does
+      // not establish that the policy was not committed; the refetched row is
+      // the only authority for the checkbox state.
+      if (requestError && !isNotFoundError(requestError)) {
+        setRequestError(requestError);
+      } else if (refreshError) {
+        setRequestError(refreshError);
+      } else {
+        setEditOpen(false);
+        invalidateKey();
+      }
+    setBusyAction(null);
   };
 
   const refresh = async () => {
     setRequestError(null);
     setBusyAction('refresh');
     try {
-      await apiFetch<unknown>(
-        `/api/endpoints/${encodeURIComponent(endpointId)}/keys/${encodeURIComponent(keyData.id)}/models/refresh`,
-        { method: 'POST' },
+      await stationSessionWrite(queryClient, 'steward', () =>
+        apiFetch<unknown>(
+          `/api/endpoints/${encodeURIComponent(endpointId)}/keys/${encodeURIComponent(keyData.id)}/models/refresh`,
+          { method: 'POST' },
+        ),
       );
       await queryClient.invalidateQueries({ queryKey: userKeys.keyModels(endpointId, keyData.id) });
       await queryClient.invalidateQueries({ queryKey: userKeys.endpoints });
     } catch (error) {
-      setRequestError(error);
+      if (!stationClosed(error)) setRequestError(error);
     } finally {
       setBusyAction(null);
     }
@@ -274,18 +451,48 @@ function EndpointKeyCard({ endpointId, keyData }: { endpointId: string; keyData:
   const remove = async () => {
     setRequestError(null);
     setBusyAction('delete');
+    let requestError: unknown = null;
     try {
-      await apiFetch<void>(
-        `/api/endpoints/${encodeURIComponent(endpointId)}/keys/${encodeURIComponent(keyData.id)}`,
-        { method: 'DELETE' },
+      await stationSessionWrite(queryClient, 'steward', () =>
+        apiFetch<void>(
+          `/api/endpoints/${encodeURIComponent(endpointId)}/keys/${encodeURIComponent(keyData.id)}`,
+          { method: 'DELETE' },
+        ),
       );
-      setDeleteOpen(false);
-      invalidateKey();
     } catch (error) {
-      setRequestError(error);
-    } finally {
-      setBusyAction(null);
+      requestError = error;
     }
+    if (stationClosed(requestError)) {
+      setBusyAction(null);
+      return;
+    }
+    const refreshError = await refetchAuthoritativeQueries(queryClient, [
+        {
+          queryKey: userKeys.endpointKeys(endpointId), exact: false,
+          ignoreError: isNotFoundError, removeOnIgnoredError: true,
+        },
+        {
+          queryKey: userKeys.keyModels(endpointId, keyData.id), exact: false,
+          ignoreError: isNotFoundError, removeOnIgnoredError: true,
+        },
+      ]);
+      if (isNotFoundError(requestError)) {
+        // DELETE 404 is an authoritative already-deleted result. Evict the
+        // key and every projection that can retain its models or bindings.
+        queryClient.removeQueries({ queryKey: userKeys.endpointKeys(endpointId), exact: false });
+        queryClient.removeQueries({ queryKey: userKeys.keyModels(endpointId, keyData.id), exact: false });
+        queryClient.removeQueries({ queryKey: userKeys.models, exact: true });
+        queryClient.removeQueries({ queryKey: userKeys.bindingsRoot, exact: false });
+        queryClient.removeQueries({ queryKey: userKeys.donations, exact: false });
+        setDeleteOpen(false);
+      } else if (requestError) setRequestError(requestError);
+      else if (refreshError) setRequestError(refreshError);
+      else {
+        setDeleteOpen(false);
+        queryClient.removeQueries({ queryKey: userKeys.keyModels(endpointId, keyData.id), exact: false });
+        invalidateKey();
+      }
+    setBusyAction(null);
   };
 
   return (
@@ -299,6 +506,10 @@ function EndpointKeyCard({ endpointId, keyData }: { endpointId: string; keyData:
         </div>
         <div className="badge-list">
           <StatusBadge active={keyData.enabled} />
+          {openAI && keyData.force_store_false === true ? <span className="tag risk-tag">{t('user.endpoints.storeEnabled')}</span> : null}
+          <button type="button" className="btn btn-secondary" onClick={beginEdit} disabled={busyAction !== null}>
+            {t('user.endpoints.editKey')}
+          </button>
           <button type="button" className="btn btn-secondary" onClick={() => setOpen((value) => !value)}>
             {open ? t('user.endpoints.hideModels') : t('user.endpoints.showModels')}
           </button>
@@ -314,6 +525,34 @@ function EndpointKeyCard({ endpointId, keyData }: { endpointId: string; keyData:
         </div>
       </div>
       {requestError ? <ErrorState error={requestError} /> : null}
+      {editOpen ? (
+        <form className="nested-panel key-metadata-form" onSubmit={saveMetadata}>
+          <div className="form-grid">
+            <label>
+              <span>{t('user.endpoints.keyNote')}</span>
+              <input value={keyNote} maxLength={512} onChange={(event) => setKeyNote(event.target.value)} />
+            </label>
+            <label className="check-field">
+              <input type="checkbox" checked={keyEnabled} onChange={(event) => setKeyEnabled(event.target.checked)} />
+              <span>{t('user.endpoints.enabled')}</span>
+            </label>
+          </div>
+          {openAI ? (
+            <fieldset className="policy-fieldset">
+              <legend>{t('user.endpoints.storePolicy')}</legend>
+              <label className="checkbox-label">
+                <input type="checkbox" checked={forceStoreFalse} onChange={(event) => setForceStoreFalse(event.target.checked)} />
+                <span>{t('user.endpoints.storeExperimental')}</span>
+              </label>
+              <p className="risk-note">{t('user.endpoints.storePolicyRisk')}</p>
+            </fieldset>
+          ) : null}
+          <div className="form-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setEditOpen(false)} disabled={busyAction === 'save'}>{t('common.cancel')}</button>
+            <button type="submit" className="btn btn-primary" disabled={busyAction !== null}>{busyAction === 'save' ? t('common.working') : t('user.endpoints.saveKeyMetadata')}</button>
+          </div>
+        </form>
+      ) : null}
       {open ? (
         <div className="nested-panel">
           {models.isPending ? (
@@ -359,25 +598,57 @@ function EndpointCard({ endpoint, onEdit, onDeleted }: { endpoint: Endpoint; onE
   // Fetch the key list up front so its count is visible in the collapsed
   // card header (the per-endpoint key list is server-capped, so the fan-out
   // is bounded; the same cached query backs the expanded panel below).
-  const keys = useEndpointKeys(endpoint.id);
+  const keys = useEndpointKeys(endpoint.id, true, endpoint.connector_type);
 
   const remove = async () => {
     setRequestError(null);
     setDeleting(true);
+    let requestError: unknown = null;
     try {
-      await apiFetch<void>(`/api/endpoints/${encodeURIComponent(endpoint.id)}`, { method: 'DELETE' });
+      await stationSessionWrite(queryClient, 'steward', () =>
+        apiFetch<void>(`/api/endpoints/${encodeURIComponent(endpoint.id)}`, { method: 'DELETE' }),
+      );
+    } catch (error) {
+      // A lost/invalid response does not prove that deletion failed.  Keep the
+      // original error and reconcile every projection from the server before
+      // deciding whether the card can be removed.
+      requestError = error;
+    }
+    if (stationClosed(requestError)) {
+      setDeleting(false);
+      return;
+    }
+    let refreshError: unknown = null;
+    try {
+      refreshError = await refetchAuthoritativeQueries(queryClient, [
+        { queryKey: userKeys.endpoints, exact: true, ignoreError: isNotFoundError, removeOnIgnoredError: true },
+        { queryKey: userKeys.endpointKeys(endpoint.id), exact: false, ignoreError: isNotFoundError, removeOnIgnoredError: true },
+        { queryKey: userKeys.keyModelsRoot, exact: false, ignoreError: isNotFoundError, removeOnIgnoredError: true },
+        { queryKey: userKeys.models, exact: true, ignoreError: isNotFoundError, removeOnIgnoredError: true },
+        { queryKey: userKeys.bindingsRoot, exact: false, ignoreError: isNotFoundError, removeOnIgnoredError: true },
+      ]);
+    } catch (error) {
+      refreshError = error;
+    }
+    if (isNotFoundError(requestError)) {
+      queryClient.removeQueries({ queryKey: userKeys.endpointKeys(endpoint.id), exact: false });
+      queryClient.removeQueries({ queryKey: userKeys.keyModelsRoot, exact: false });
+      queryClient.removeQueries({ queryKey: userKeys.models });
+      queryClient.removeQueries({ queryKey: userKeys.bindingsRoot });
+      queryClient.removeQueries({ queryKey: userKeys.donations });
+    }
+    if (requestError && !isNotFoundError(requestError)) setRequestError(requestError);
+    else if (refreshError) setRequestError(refreshError);
+    else {
       queryClient.removeQueries({ queryKey: userKeys.endpointKeys(endpoint.id) });
       queryClient.removeQueries({ queryKey: userKeys.keyModelsRoot });
-      await queryClient.invalidateQueries({ queryKey: userKeys.endpoints });
-      await queryClient.invalidateQueries({ queryKey: userKeys.models });
-      await queryClient.invalidateQueries({ queryKey: userKeys.bindingsRoot });
+      queryClient.removeQueries({ queryKey: userKeys.models });
+      queryClient.removeQueries({ queryKey: userKeys.bindingsRoot });
+      queryClient.removeQueries({ queryKey: userKeys.donations });
       setDeleteOpen(false);
       onDeleted();
-    } catch (error) {
-      setRequestError(error);
-    } finally {
-      setDeleting(false);
     }
+    setDeleting(false);
   };
 
   return (
@@ -427,6 +698,7 @@ function EndpointCard({ endpoint, onEdit, onDeleted }: { endpoint: Endpoint; onE
           {addKeyOpen ? (
             <AddKeyForm
               endpointId={endpoint.id}
+              connectorType={endpoint.connector_type}
               onCancel={() => setAddKeyOpen(false)}
               onSaved={() => {
                 setAddKeyOpen(false);
@@ -443,7 +715,7 @@ function EndpointCard({ endpoint, onEdit, onDeleted }: { endpoint: Endpoint; onE
           ) : (
             <div className="item-list">
               {keys.data.map((key) => (
-                <EndpointKeyCard key={key.id} endpointId={endpoint.id} keyData={key} />
+                <EndpointKeyCard key={key.id} endpointId={endpoint.id} connectorType={endpoint.connector_type} keyData={key} />
               ))}
             </div>
           )}

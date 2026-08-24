@@ -8,7 +8,7 @@ import { CompactNumber } from '@shared/components/CompactNumber';
 import { formatCount } from '@shared/utils/formatNumber';
 import { formatDateTime } from '@shared/utils/datetime';
 import { ApiError } from '@shared/query/http';
-import { charityManagementKeys } from '@shared/charityManagement';
+import { charityManagementKeys, managementCapabilityLoss, useManagementCapability } from '@shared/charityManagement';
 import { useStewardLogs, useUserSession, userKeys, type StewardLogFilter, type StewardRequestLog } from '../data';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
@@ -34,13 +34,26 @@ export function StewardPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const session = useUserSession();
+  // Keep the management capability latch mounted while the page transitions
+  // from L5 to a lower effective level.  The charity panel is conditionally
+  // unmounted during that render, so it cannot be the sole observer that
+  // evicts the sensitive management cache and starts the authoritative
+  // session refresh.
+  const managementCapability = useManagementCapability('steward');
   const [section, setSection] = useState<'logs' | 'charity'>('logs');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [revokedSession, setRevokedSession] = useState<string | null>(null);
+  // Store the session-cache version observed when a management request was
+  // rejected.  A later authoritative session success (even for the same
+  // user/effective level) is the only event that clears this gate; comparing
+  // only `id:level` would permanently lock a same-user re-login.
+  const [revokedSessionAt, setRevokedSessionAt] = useState<number | null>(null);
   const { state, patch } = useLogUrlState(TEXT_PARAMS, DEFAULT_PAGE_SIZE);
   const filter = useMemo(() => ({ ...buildFilter(state.filters), fromUnix: state.fromUnix, toUnix: state.toUnix }), [state.filters, state.fromUnix, state.toUnix]);
-  const sessionKey = session.data ? `${session.data.user.id}:${session.data.user.effective_level}` : '';
-  const logs = useStewardLogs(state.page, filter, state.pageSize, section === 'logs' && session.data?.user.effective_level === 5 && revokedSession !== sessionKey);
+  const logs = useStewardLogs(state.page, filter, state.pageSize, section === 'logs'
+    && !session.error
+    && managementCapability.data !== true
+    && session.data?.user.effective_level === 5
+    && (revokedSessionAt === null || session.dataUpdatedAt > revokedSessionAt));
 
   const clearSensitive = useCallback((refreshSession = false) => {
     queryClient.removeQueries({ queryKey: userKeys.stewardLogsRoot });
@@ -51,27 +64,34 @@ export function StewardPage() {
   }, [queryClient]);
 
   useEffect(() => {
-    if (session.data?.user.effective_level !== 5) {
+    if (session.error || session.data?.user.effective_level !== 5) {
       setSelectedId(null); // eslint-disable-line react-hooks/set-state-in-effect
-      setRevokedSession(null);
+      setRevokedSessionAt(null);
       clearSensitive();
-    } else if (revokedSession && revokedSession !== sessionKey) {
-      setRevokedSession(null);
+    } else if (revokedSessionAt !== null && session.dataUpdatedAt > revokedSessionAt) {
+      // The shared capability hook performs an uncached session refresh after
+      // a 401/403.  Only that newer query version may reopen this surface.
+      setRevokedSessionAt(null);
     }
-  }, [clearSensitive, revokedSession, session.data?.user.effective_level, sessionKey]);
+  }, [clearSensitive, revokedSessionAt, session.data?.user.effective_level, session.dataUpdatedAt, session.error]);
 
   useEffect(() => {
     if (logs.error instanceof ApiError && (logs.error.status === 401 || logs.error.status === 403)) {
       setSelectedId(null); // eslint-disable-line react-hooks/set-state-in-effect
-      setRevokedSession(sessionKey);
-      clearSensitive(true);
+      setRevokedSessionAt(session.dataUpdatedAt);
+      // Logs are a management read too.  Close the shared fail-closed latch
+      // and refresh the authoritative session directly; an invalidation alone
+      // can be skipped while the page is transitioning to its access-denied
+      // branch.
+      managementCapabilityLoss(queryClient, 'steward');
     }
-  }, [clearSensitive, logs.error, sessionKey]);
+  }, [logs.error, queryClient, session.dataUpdatedAt]);
 
   if (session.isPending) return <LoadingState />;
   const authError = logs.error instanceof ApiError && (logs.error.status === 401 || logs.error.status === 403);
-  const revoked = authError || (session.data?.user.effective_level === 5 && revokedSession === sessionKey);
-  if (session.data?.user.effective_level !== 5 || revoked) {
+  const revoked = managementCapability.data === true || authError || (session.data?.user.effective_level === 5
+    && revokedSessionAt !== null && session.dataUpdatedAt <= revokedSessionAt);
+  if (session.error || session.data?.user.effective_level !== 5 || revoked) {
     return <div className="page"><PageHeader eyebrow={t('app.name')} title={t('user.steward.title')} description={t('user.steward.description')} /><Card><p className="field-error" role="alert">{t('user.steward.accessDenied')}</p></Card></div>;
   }
 

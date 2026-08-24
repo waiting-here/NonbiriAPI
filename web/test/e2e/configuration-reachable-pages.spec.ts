@@ -97,7 +97,8 @@ test('reachable user home keeps level state but removes the implementation hint'
 
 test('reachable user charity shows the neutral upstream warning without the status-guide card', async ({ context, page }) => {
   const guard = await prepare(context, page, 'user', 'user', 'zh', 'light');
-  await mockJson(page, { origin: USER_ORIGIN, method: 'GET', path: '/api/charity/models', body: [] });
+  // The live backend uses the non-paginated `{data}` charity-model envelope.
+  await mockJson(page, { origin: USER_ORIGIN, method: 'GET', path: '/api/charity/models', body: { data: [] } });
   await mockJson(page, { origin: USER_ORIGIN, method: 'GET', path: '/api/donations', body: [] });
   await mockJson(page, { origin: USER_ORIGIN, method: 'GET', path: '/api/endpoints', body: [] });
 
@@ -106,6 +107,27 @@ test('reachable user charity shows the neutral upstream warning without the stat
   await expect(page.getByRole('note')).toContainText('第三方上游及其账户日志可能看到完整请求内容');
   await expect(page.getByText('调用状态说明')).toHaveCount(0);
   await expect(page.getByText('暂无可用公益模型')).toBeVisible();
+  await assertResponsiveAndClean(page, guard);
+});
+
+test('reachable user endpoint keys expose the owner-only upstream prompt storage policy controls', async ({ context, page }) => {
+  const guard = await prepare(context, page, 'user', 'user', 'en', 'dark');
+  await mockJson(page, { origin: USER_ORIGIN, method: 'GET', path: '/api/endpoints', body: [{
+    id: 1, connector_type: 'openai-compatible', base_url: 'https://upstream.test/v1', note: 'primary',
+    enabled: true, model_fetch_failed: false, model_fetch_failed_at: 0, created_at: 1, updated_at: 2,
+  }] });
+  await mockJson(page, { origin: USER_ORIGIN, method: 'GET', path: '/api/endpoints/1/keys', body: [{
+    id: 2, display_head: 'sk-a', display_tail: 'tail', note: 'key note', enabled: true,
+    force_store_false: true, created_at: 1, updated_at: 2,
+  }] });
+
+  await page.goto(`${USER_ORIGIN}/endpoints`);
+  await expect(page.getByRole('heading', { name: 'Endpoint management' })).toBeVisible();
+  await page.getByRole('button', { name: 'Endpoint keys' }).click();
+  await expect(page.getByText('Experimental: require upstream not to store prompts')).toBeVisible();
+  await page.getByRole('button', { name: 'Edit key metadata' }).click();
+  await expect(page.getByRole('checkbox', { name: 'Require upstream not to store prompts (Experimental)' })).toBeChecked();
+  await expect(page.getByText(/upstream may ignore this.*does not support the store parameter may reject/i)).toBeVisible();
   await assertResponsiveAndClean(page, guard);
 });
 
@@ -229,7 +251,21 @@ test('reachable admin charity opens the corrected pending review query without i
   await mockJson(page, {
     origin: ADMIN_ORIGIN, method: 'GET',
     path: '/admin/api/donations?page=1&page_size=20&status=pending',
-    body: { data: [], has_more: false, total: 0 },
+    body: { data: [{
+      id: 9, user_id: 1, endpoint_base_url: 'https://upstream.test/v1', status: 'pending', enabled: false,
+      description: 'Fixture donation', review_note: '', created_at: 1, updated_at: 2,
+    }], has_more: false, total: 1 },
+  });
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN, method: 'GET', path: '/admin/api/donations/9', body: {
+      id: 9, user_id: 1, endpoint_base_url: 'https://upstream.test/v1', status: 'pending', enabled: false,
+      description: 'Fixture donation', review_note: '', created_at: 1, updated_at: 2,
+      keys: [{
+        id: 6, endpoint_key_id: 2, display_head: 'sk-a', display_tail: 'tail', max_concurrency: 2,
+        rpm_limit: 30, credits_usage_cap_milli: '1000', credits_used_milli: '10',
+        credits_reserved_milli: '0', enabled: true, force_store_false: true,
+      }], reviews: [],
+    },
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN, method: 'GET',
@@ -241,7 +277,66 @@ test('reachable admin charity opens the corrected pending review query without i
 
   await page.goto(`${ADMIN_ORIGIN}/charity`);
   await expect(page.getByRole('heading', { name: '公益与捐赠管理' })).toBeVisible();
+  await expect(page.getByText(/上游提示词存储策略（只读）.*要求上游不存储提示词（实验性）/)).toBeVisible();
   await expect(page.getByText(/invalid_request/i)).toHaveCount(0);
+  await assertResponsiveAndClean(page, guard);
+});
+
+test('reachable admin charity edits flatten policy with keyboard input at 390px', async ({ context, page }) => {
+  const guard = await prepare(context, page, 'admin', 'admin', 'en', 'dark');
+  const charityModel = {
+    id: 7, provider: 'provider', model: 'charity-model', full_name: 'provider/charity-model',
+    enabled: true, flatten_tool_calls: false, pricing_mode: 'per_request',
+    prices: {
+      request_user_price_milli: '0', request_donor_reward_milli: '0',
+      uncached_user_price_milli: '0', cache_write_user_price_milli: '0',
+      cache_read_user_price_milli: '0', output_user_price_milli: '0',
+      uncached_donor_reward_milli: '0', cache_write_donor_reward_milli: '0',
+      cache_read_donor_reward_milli: '0', output_donor_reward_milli: '0',
+    },
+    discount: { percent: 100, enabled: false, start_at: null, end_at: null },
+    success_samples: 0, success_count: 0,
+  };
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN, method: 'GET',
+    path: '/admin/api/donations?page=1&page_size=20&status=pending',
+    body: { data: [], has_more: false, total: 0 },
+  });
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN, method: 'GET',
+    path: '/admin/api/charity-models?page=1&page_size=100',
+    body: { data: [charityModel], has_more: false, total: 1 },
+  });
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN, method: 'GET',
+    path: '/admin/api/charity-models/7/bindings',
+    body: { data: [] },
+  });
+  await mockJson(page, { origin: ADMIN_ORIGIN, method: 'GET', path: '/admin/api/site-config', body: {
+    charity_enabled: true, donation_accept_enabled: true, charity_token_reserve_milli: null,
+  } });
+  let patchBody: Record<string, unknown> | undefined;
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (request.method() === 'PATCH' && url.pathname === '/admin/api/charity-models/7') {
+      patchBody = request.postDataJSON() as Record<string, unknown>;
+    }
+  });
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN, method: 'PATCH', path: '/admin/api/charity-models/7',
+    body: { ...charityModel, flatten_tool_calls: true },
+  });
+
+  await page.goto(`${ADMIN_ORIGIN}/charity`);
+  await expect(page.getByText('provider/charity-model')).toBeVisible();
+  await page.getByRole('button', { name: 'Edit' }).click();
+  const editor = page.locator('form.charity-editor');
+  const flatten = editor.getByRole('checkbox', { name: 'Experimental: flatten tool calls' });
+  await flatten.focus();
+  await page.keyboard.press('Space');
+  await expect(flatten).toBeChecked();
+  await editor.getByRole('button', { name: 'Save' }).click();
+  await expect.poll(() => patchBody).toMatchObject({ flatten_tool_calls: true });
   await assertResponsiveAndClean(page, guard);
 });
 
@@ -254,7 +349,21 @@ test('reachable level-5 steward page keeps its bounded log projection usable', a
   await mockJson(page, {
     origin: USER_ORIGIN, method: 'GET',
     path: '/api/steward/donations?page=1&page_size=20&status=pending',
-    body: { data: [], has_more: false, total: 0 },
+    body: { data: [{
+      id: 9, user_id: 1, endpoint_base_url: 'https://upstream.test/v1', status: 'pending', enabled: false,
+      description: 'Fixture donation', review_note: '', created_at: 1, updated_at: 2,
+    }], has_more: false, total: 1 },
+  });
+  await mockJson(page, {
+    origin: USER_ORIGIN, method: 'GET', path: '/api/steward/donations/9', body: {
+      id: 9, user_id: 1, endpoint_base_url: 'https://upstream.test/v1', status: 'pending', enabled: false,
+      description: 'Fixture donation', review_note: '', created_at: 1, updated_at: 2,
+      keys: [{
+        id: 6, endpoint_key_id: 2, display_head: 'sk-a', display_tail: 'tail', max_concurrency: 2,
+        rpm_limit: 30, credits_usage_cap_milli: '1000', credits_used_milli: '10',
+        credits_reserved_milli: '0', enabled: true, force_store_false: true,
+      }], reviews: [],
+    },
   });
   await mockJson(page, {
     origin: USER_ORIGIN, method: 'GET', path: '/api/steward/charity-models?page=1&page_size=100',
@@ -266,7 +375,7 @@ test('reachable level-5 steward page keeps its bounded log projection usable', a
   await expect(page.getByText('No request logs')).toBeVisible();
   await page.getByRole('tab', { name: 'Charity management' }).click();
   await expect(page.getByRole('heading', { name: 'Donation review queue' })).toBeVisible();
-  await expect(page.getByText('No donations')).toBeVisible();
+  await expect(page.getByText(/Upstream prompt storage policy \(read-only\).*Require upstream not to store prompts \(Experimental\)/)).toBeVisible();
   await expect(page.getByText(/invalid_request/i)).toHaveCount(0);
   await assertResponsiveAndClean(page, guard);
 });
