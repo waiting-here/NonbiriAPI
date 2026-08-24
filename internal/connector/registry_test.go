@@ -2,9 +2,11 @@ package connector
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 )
 
 type registryTestConnector struct {
@@ -131,11 +133,51 @@ func TestRegistryNormalizesTypedNilDiscovererToUnsupported(t *testing.T) {
 
 func TestDefaultRegistryDescriptorDrivesExecutionAndDiscovery(t *testing.T) {
 	registry := NewDefaultRegistry()
-	descriptor, ok := registry.Descriptor(connectorcontract.TypeOpenAICompatible)
-	if !ok || descriptor.New == nil || descriptor.Discoverer == nil || !descriptor.Capabilities.Has(connectorcontract.CapabilityModelDiscovery) {
-		t.Fatalf("default descriptor incomplete: %+v ok=%v", descriptor, ok)
+	types := registry.Types()
+	if len(types) != 2 || types[0] != connectorcontract.TypeAnthropicCompatible || types[1] != connectorcontract.TypeOpenAICompatible {
+		t.Fatalf("default registry types=%v", types)
+	}
+	for _, connectorType := range types {
+		descriptor, ok := registry.Descriptor(connectorType)
+		if !ok || descriptor.New == nil || descriptor.Discoverer == nil || descriptor.Supports == nil || !descriptor.Capabilities.Has(connectorcontract.CapabilityModelDiscovery) {
+			t.Fatalf("default descriptor %q incomplete: %+v ok=%v", connectorType, descriptor, ok)
+		}
 	}
 	if connector, err := registry.NewConnector(connectorcontract.TypeOpenAICompatible, Dependencies{}); err == nil || connector != nil {
 		t.Fatalf("connector constructed without shared backend/driver: %v %v", connector, err)
+	}
+}
+
+func TestDefaultRegistryFiltersByProtocolFidelity(t *testing.T) {
+	registry := NewDefaultRegistry()
+	tests := []struct {
+		name      string
+		body      string
+		openAI    bool
+		anthropic bool
+	}{
+		{name: "common text", body: `{"model":"p/m","messages":[{"role":"user","content":"hi"}]}`, openAI: true, anthropic: true},
+		{name: "stream null", body: `{"model":"p/m","messages":[{"role":"user","content":"hi"}],"stream":null}`, anthropic: true},
+		{name: "unknown OpenAI field", body: `{"model":"p/m","messages":[{"role":"user","content":"hi"}],"n":1}`, openAI: true},
+		{name: "Anthropic image subset", body: `{"model":"p/m","messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"https://images.example/a.png"}}]}]}`, openAI: true, anthropic: true},
+		{name: "unsupported image detail", body: `{"model":"p/m","messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"https://images.example/a.png","detail":"low"}}]}]}`, openAI: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request, err := openai.DecodeChatRequest(strings.NewReader(test.body), openai.MaxRequestBodyBytes)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer request.Clear()
+			if got := registry.SupportsRequest(connectorcontract.TypeOpenAICompatible, request); got != test.openAI {
+				t.Fatalf("OpenAI support=%v want=%v", got, test.openAI)
+			}
+			if got := registry.SupportsRequest(connectorcontract.TypeAnthropicCompatible, request); got != test.anthropic {
+				t.Fatalf("Anthropic support=%v want=%v", got, test.anthropic)
+			}
+			if registry.SupportsRequest("unknown", request) {
+				t.Fatal("unknown connector supported request")
+			}
+		})
 	}
 }

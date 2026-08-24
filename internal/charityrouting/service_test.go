@@ -13,6 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/backend"
+	"github.com/waiting-here/NonbiriAPI/internal/connector"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
@@ -20,6 +23,47 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/forward"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
+
+type unavailableBackend struct{}
+
+func (unavailableBackend) Open(string) (backend.EndpointClient, error) {
+	return nil, errors.New("test backend unavailable")
+}
+
+func (unavailableBackend) MaxResponseBytes() int64 { return 32 << 20 }
+
+type countingUnavailableBackend struct{ opens atomic.Int32 }
+
+func (b *countingUnavailableBackend) Open(string) (backend.EndpointClient, error) {
+	b.opens.Add(1)
+	return nil, errors.New("test backend unavailable")
+}
+
+func (*countingUnavailableBackend) MaxResponseBytes() int64 { return 32 << 20 }
+
+type routeOverrideRepository struct {
+	Repository
+	route db.CharityRoute
+}
+
+type charityConnectorMutationTargetRepository struct {
+	*db.Store
+	changedBindingID int64
+}
+
+func (r charityConnectorMutationTargetRepository) GetCharityForwardTarget(ctx context.Context, bindingID int64, fullName string, now int64) (db.CharityForwardTarget, error) {
+	target, err := r.Store.GetCharityForwardTarget(ctx, bindingID, fullName, now)
+	if err == nil && bindingID == r.changedBindingID {
+		// Simulate the authoritative endpoint connector changing after the route
+		// capability snapshot but before the final dispatch projection returns.
+		target.ConnectorType = string(endpoint.ConnectorAnthropicCompatible)
+	}
+	return target, err
+}
+
+func (r routeOverrideRepository) ResolveCharityRoute(context.Context, string, int64, int) (db.CharityRoute, error) {
+	return r.route, nil
+}
 
 // fakeRunner is the programmable single-attempt charity dispatch boundary.
 // Each RunCharity call consumes one preloaded response in order. Writing a
@@ -154,6 +198,7 @@ func TestSharedSecureRunnerUsesConsumerSafetyAndDonorCredentialOwner(t *testing.
 	runner, err := forward.NewSecureRunner(forward.SecureRunnerConfig{
 		Repository: store, CharityTargets: store, Secrets: codec,
 		Registry: endpoint.NewRegistry(), Adapters: []forward.Adapter{adapter}, SafetyIdentifiers: factory,
+		Backend: unavailableBackend{},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -208,6 +253,77 @@ func TestSharedSecureRunnerUsesConsumerSafetyAndDonorCredentialOwner(t *testing.
 	}
 	if got := codec.opens.Load(); got != 2 {
 		t.Fatalf("credential decryptions=%d want 2 (including donor-scoped charity credential)", got)
+	}
+}
+
+func TestCharityConnectorTypeChangeAfterCapabilityFilterRetriesWithoutDecryptOrEgress(t *testing.T) {
+	master := bytes.Repeat([]byte{0x5c}, secret.MasterKeyBytes)
+	vault, err := secret.New(master)
+	clear(master)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = vault.Close() })
+	dbPath := filepath.Join(t.TempDir(), "charity-connector-toctou.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	seedRunner := &fakeRunner{responses: []fakeResponse{{result: openai.AttemptResult{Failure: openai.FailureUpstream}}}}
+	_, consumerID, _ := seedServiceFixture(t, store, seedRunner, 2, true, 10_000)
+	route, err := store.ResolveCharityRoute(context.Background(), "[公益]donor/charity", 1000, db.MaxCharityRouteCandidates)
+	if err != nil || len(route.Candidates) != 2 {
+		t.Fatalf("route=%+v err=%v", route, err)
+	}
+
+	codec := &recordingCodec{vault: vault}
+	adapter := &recordingAdapter{}
+	backendCounter := &countingUnavailableBackend{}
+	key := bytes.Repeat([]byte{0x4d}, secret.SubkeyBytes)
+	factory, err := forward.NewSafetyIdentifierFactory(key)
+	clear(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = factory.Close() })
+	targets := charityConnectorMutationTargetRepository{Store: store, changedBindingID: route.Candidates[0].BindingID}
+	runner, err := forward.NewSecureRunner(forward.SecureRunnerConfig{
+		Repository: store, CharityTargets: targets, Secrets: codec,
+		Registry: endpoint.NewRegistry(), Adapters: []forward.Adapter{adapter},
+		Backend: backendCounter, SafetyIdentifiers: factory,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := NewService(ServiceConfig{
+		Store: store, Runner: runner, Now: func() time.Time { return time.Unix(1000, 0) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = service.Close() })
+	request, err := openai.DecodeChatRequest(strings.NewReader(`{"model":"[公益]donor/charity","messages":[{"role":"user","content":"hi"}]}`), openai.MaxRequestBodyBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer request.Clear()
+	result, err := service.Forward(context.Background(), httptest.NewRecorder(), consumerID, request)
+	if err != nil || !result.Success || !result.Committed {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	if got := codec.opens.Load(); got != 1 {
+		t.Fatalf("Vault opens=%d, want only the unchanged second candidate", got)
+	}
+	if got := backendCounter.opens.Load(); got != 0 {
+		t.Fatalf("Anthropic backend opens=%d, want zero for the changed first candidate", got)
+	}
+	adapter.mu.Lock()
+	adapterCalls := len(adapter.requests)
+	adapter.mu.Unlock()
+	if adapterCalls != 1 {
+		t.Fatalf("OpenAI adapter calls=%d, want only the unchanged second candidate", adapterCalls)
 	}
 }
 
@@ -410,6 +526,106 @@ func TestServiceForwardPreDispatchFailureAllKeys(t *testing.T) {
 	store.DB().QueryRow(`SELECT credits FROM users WHERE id=?`, consumerID).Scan(&credits)
 	if credits != 10_000 {
 		t.Fatalf("consumer credits = %d, want refunded to %d", credits, 10_000)
+	}
+}
+
+func TestCapabilityFilterPrecedesCharityPreflightReservationAndRunner(t *testing.T) {
+	tests := []struct {
+		name          string
+		connectorType string
+		body          string
+		wantError     error
+	}{
+		{
+			name:          "Anthropic unsupported field",
+			connectorType: string(endpoint.ConnectorAnthropicCompatible),
+			body:          `{"model":"[公益]donor/charity","messages":[{"role":"user","content":"hi"}],"n":1}`,
+			wantError:     forward.ErrUnsupportedCapabilities,
+		},
+		{
+			name:          "legacy OpenAI stream null",
+			connectorType: string(endpoint.ConnectorOpenAICompatible),
+			body:          `{"model":"[公益]donor/charity","messages":[{"role":"user","content":"hi"}],"stream":null}`,
+			wantError:     openai.ErrInvalidRequest,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			store := openCharityTestStore(t)
+			runner := &fakeRunner{responses: []fakeResponse{{result: openai.AttemptResult{Success: true}}}}
+			service, consumerID, _ := seedServiceFixture(t, store, runner, 1, true, 10_000)
+			if _, err := store.DB().Exec(`UPDATE endpoints SET connector_type=?`, test.connectorType); err != nil {
+				t.Fatal(err)
+			}
+			var preflightCalls atomic.Int32
+			service.preflight = func(context.Context, int64, *openai.ChatRequest) error {
+				preflightCalls.Add(1)
+				return nil
+			}
+			request, err := openai.DecodeChatRequest(strings.NewReader(test.body), openai.MaxRequestBodyBytes)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer request.Clear()
+			result, gotErr := service.Forward(context.Background(), httptest.NewRecorder(), consumerID, request)
+			if !errors.Is(gotErr, test.wantError) || result != (openai.AttemptResult{}) || preflightCalls.Load() != 0 || runner.callCount() != 0 {
+				t.Fatalf("result=%+v err=%v preflight=%d runner=%d", result, gotErr, preflightCalls.Load(), runner.callCount())
+			}
+			var reservations int
+			if err := store.DB().QueryRow(`SELECT COUNT(*) FROM charity_reservations`).Scan(&reservations); err != nil {
+				t.Fatal(err)
+			}
+			var credits int64
+			if err := store.DB().QueryRow(`SELECT credits FROM users WHERE id=?`, consumerID).Scan(&credits); err != nil {
+				t.Fatal(err)
+			}
+			if reservations != 0 || credits != 10_000 {
+				t.Fatalf("reservations=%d credits=%d", reservations, credits)
+			}
+		})
+	}
+}
+
+func TestCharityCapabilityFilterEvaluatesEachConnectorTypeOnce(t *testing.T) {
+	store := openCharityTestStore(t)
+	runner := &fakeRunner{responses: []fakeResponse{{body: []byte(`{"ok":true}`), result: openai.AttemptResult{Success: true}}}}
+	service, consumerID, _ := seedServiceFixture(t, store, runner, 1, true, 10_000)
+	if _, err := store.DB().Exec(`UPDATE endpoints SET connector_type=?`, string(endpoint.ConnectorAnthropicCompatible)); err != nil {
+		t.Fatal(err)
+	}
+	route, err := store.ResolveCharityRoute(context.Background(), "[公益]donor/charity", 1000, db.MaxCharityRouteCandidates)
+	if err != nil || len(route.Candidates) != 1 {
+		t.Fatalf("route=%+v err=%v", route, err)
+	}
+	original := route.Candidates[0]
+	route.Candidates = make([]db.CharityCandidate, db.MaxCharityRouteCandidates)
+	for index := range route.Candidates {
+		route.Candidates[index] = original
+	}
+	service.store = routeOverrideRepository{Repository: store, route: route}
+
+	var predicateCalls atomic.Int32
+	registry, err := connector.NewRegistry(connector.Descriptor{
+		Type:         connectorcontract.TypeAnthropicCompatible,
+		Capabilities: connectorcontract.CapabilitySet(connectorcontract.CapabilityText),
+		New:          func(connector.Dependencies) connector.Connector { return nil },
+		Supports: func(*openai.ChatRequest) bool {
+			predicateCalls.Add(1)
+			return true
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.registry = registry
+	request, err := openai.DecodeChatRequest(strings.NewReader(`{"model":"[公益]donor/charity","messages":[{"role":"user","content":"hi"}]}`), openai.MaxRequestBodyBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer request.Clear()
+	result, err := service.Forward(context.Background(), httptest.NewRecorder(), consumerID, request)
+	if err != nil || !result.Success || predicateCalls.Load() != 1 || runner.callCount() != 1 {
+		t.Fatalf("result=%+v err=%v predicate=%d runner=%d", result, err, predicateCalls.Load(), runner.callCount())
 	}
 }
 

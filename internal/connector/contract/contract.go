@@ -4,6 +4,7 @@
 package contract
 
 import (
+	"context"
 	"log/slog"
 	"sync"
 
@@ -216,4 +217,12 @@ type DiscoveryInput struct {
 type DiscoveryResult struct {
 	Models     []DiscoveredModel
 	Diagnostic string
+}
+
+// AnthropicDefaultMaxTokensProvider exposes the nullable raw site override to
+// the Anthropic connector without coupling protocol code to site-config
+// persistence. A nil value means "not configured" and resolves to the
+// built-in 65536 fallback. Implementations must never return request data.
+type AnthropicDefaultMaxTokensProvider interface {
+	RawAnthropicDefaultMaxTokens(context.Context) (*int64, error)
 }

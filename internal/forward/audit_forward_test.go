@@ -130,7 +130,8 @@ func newAuditFixtureWithTimeout(t *testing.T, upstreamURLs []string, hooks forwa
 		t.Fatal(err)
 	}
 	registry := endpoint.NewRegistry()
-	adapter, err := openai.NewAdapter(openai.AdapterConfig{Backend: mustLocalBackend(t, stack)})
+	localBackend := mustLocalBackend(t, stack)
+	adapter, err := openai.NewAdapter(openai.AdapterConfig{Backend: localBackend})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +145,7 @@ func newAuditFixtureWithTimeout(t *testing.T, upstreamURLs []string, hooks forwa
 		t.Fatal(err)
 	}
 	runner, err := forward.NewSecureRunner(forward.SecureRunnerConfig{
-		Repository: store, Secrets: vault, Registry: registry, Adapters: []forward.Adapter{adapter},
+		Repository: store, Secrets: vault, Registry: registry, Adapters: []forward.Adapter{adapter}, Backend: localBackend,
 		SafetyIdentifiers: safetyIdentifierFactory,
 	})
 	if err != nil {

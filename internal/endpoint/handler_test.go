@@ -296,8 +296,16 @@ func TestHandlerRejectsUnsafeBaseURL(t *testing.T) {
 
 func TestHandlerRejectsUnknownConnector(t *testing.T) {
 	h, _ := newTestHandler(t)
-	rec := doRequest(t, h, http.MethodPost, "/api/endpoints", `{"base_url":"https://example.com/v1/","connector_type":"anthropic-compatible"}`)
+	rec := doRequest(t, h, http.MethodPost, "/api/endpoints", `{"base_url":"https://example.com/v1/","connector_type":"dify-app"}`)
 	assertErr(t, rec, http.StatusBadRequest, httperr.CodeInvalidRequest)
+}
+
+func TestHandlerAcceptsAnthropicConnector(t *testing.T) {
+	h, _ := newTestHandler(t)
+	rec := doRequest(t, h, http.MethodPost, "/api/endpoints", `{"base_url":"https://example.com/v1/","connector_type":"anthropic-compatible"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
 }
 
 func TestHandlerRejectsBadEndpointRequestBodies(t *testing.T) {

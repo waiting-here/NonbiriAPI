@@ -141,6 +141,21 @@ func NewAdapter(config AdapterConfig) (*Adapter, error) {
 	if config.StreamWriteTimeout == 0 {
 		config.StreamWriteTimeout = DefaultStreamWriteTimeout
 	}
+	if config.MaxJSONResponseBytes > DefaultMaxJSONResponseBytes {
+		config.MaxJSONResponseBytes = DefaultMaxJSONResponseBytes
+	}
+	if config.MaxStreamBytes > DefaultMaxStreamBytes {
+		config.MaxStreamBytes = DefaultMaxStreamBytes
+	}
+	if config.MaxSSELineBytes > DefaultMaxSSELineBytes {
+		config.MaxSSELineBytes = DefaultMaxSSELineBytes
+	}
+	if config.MaxSSEEventBytes > DefaultMaxSSEEventBytes {
+		config.MaxSSEEventBytes = DefaultMaxSSEEventBytes
+	}
+	if config.StreamWriteTimeout > DefaultStreamWriteTimeout {
+		config.StreamWriteTimeout = DefaultStreamWriteTimeout
+	}
 	sharedMax := config.Backend.MaxResponseBytes()
 	if config.MaxJSONResponseBytes > sharedMax {
 		config.MaxJSONResponseBytes = sharedMax
@@ -440,6 +455,8 @@ func (a *Adapter) writeStreamFrame(writer http.ResponseWriter, controller *http.
 	if a.streamWriteTimeout > 0 {
 		if err := controller.SetWriteDeadline(time.Now().Add(a.streamWriteTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
 			return false, err
+		} else if err == nil {
+			defer func() { _ = controller.SetWriteDeadline(time.Time{}) }()
 		}
 	}
 	n, err := writer.Write(frame)

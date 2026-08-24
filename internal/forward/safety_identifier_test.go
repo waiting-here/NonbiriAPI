@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/backend"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
@@ -265,6 +267,13 @@ func (c *dispatchSafetyCodec) OpenForContext(string, secret.EndpointKeyContext) 
 
 type dispatchSafetyAdapter struct{ calls atomic.Int32 }
 
+type unavailableSafetyBackend struct{}
+
+func (unavailableSafetyBackend) Open(string) (backend.EndpointClient, error) {
+	return nil, errors.New("unavailable")
+}
+func (unavailableSafetyBackend) MaxResponseBytes() int64 { return 1 << 20 }
+
 func (*dispatchSafetyAdapter) ConnectorType() endpoint.ConnectorType {
 	return endpoint.ConnectorOpenAICompatible
 }
@@ -283,7 +292,7 @@ func TestSecureRunnerMissingOrClosedFactoryFailsBeforeDecryptOrDial(t *testing.T
 			ConnectorType: string(endpoint.ConnectorOpenAICompatible), BaseURL: testSafetyOrigin,
 			UpstreamModelID: "up/model",
 		}},
-		Secrets: codec, Registry: endpoint.NewRegistry(), Adapters: []Adapter{adapter},
+		Secrets: codec, Registry: endpoint.NewRegistry(), Adapters: []Adapter{adapter}, Backend: unavailableSafetyBackend{},
 	}
 	if runner, err := NewSecureRunner(config); err == nil || runner != nil {
 		t.Fatalf("missing factory runner=%v err=%v", runner, err)
@@ -303,7 +312,8 @@ func TestSecureRunnerMissingOrClosedFactoryFailsBeforeDecryptOrDial(t *testing.T
 		t.Fatal(err)
 	}
 	result := runner.Run(context.Background(), httptest.NewRecorder(), AttemptInput{
-		UserID: 7, FullName: "p/m", BindingID: 1, Request: &openai.ChatRequest{Model: "p/m"},
+		UserID: 7, FullName: "p/m", BindingID: 1, ExpectedConnectorType: connectorcontract.TypeOpenAICompatible,
+		Request: &openai.ChatRequest{Model: "p/m"},
 	})
 	if result.Failure != openai.FailureInternal || codec.opens.Load() != 0 || adapter.calls.Load() != 0 {
 		t.Fatalf("closed factory result=%+v decryptions=%d adapter_calls=%d", result, codec.opens.Load(), adapter.calls.Load())
@@ -505,7 +515,8 @@ func TestForwardServiceCloseWaitsForInflightAndThenFailsClosed(t *testing.T) {
 	repository := &safetyIdentifierRepository{route: db.ForwardRoute{
 		ModelID: 1, UserID: userID, FullName: "p/m", RouteStrategy: "ordered",
 		Candidates: []db.ForwardCandidate{{
-			BindingID: 1, ModelID: 1, EndpointID: 1, EndpointKeyID: 1, UpstreamModelID: "upstream/model",
+			BindingID: 1, ModelID: 1, EndpointID: 1, EndpointKeyID: 1,
+			ConnectorType: string(endpoint.ConnectorOpenAICompatible), UpstreamModelID: "upstream/model",
 		}},
 	}}
 	entered := make(chan AttemptInput, 1)

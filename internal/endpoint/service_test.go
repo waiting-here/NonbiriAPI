@@ -229,6 +229,18 @@ func TestCreateEndpointAcceptsExplicitOpenAICompatible(t *testing.T) {
 	}
 }
 
+func TestCreateEndpointAcceptsExplicitAnthropicCompatible(t *testing.T) {
+	ts := newTestService(t)
+	uid := ts.seedUser(t, nil)
+	ep, err := ts.svc.CreateEndpoint(context.Background(), uid, "anthropic-compatible", "https://example.com/v1/", nil, nil)
+	if err != nil {
+		t.Fatalf("create endpoint: %v", err)
+	}
+	if ep.ConnectorType != "anthropic-compatible" {
+		t.Fatalf("connector = %q", ep.ConnectorType)
+	}
+}
+
 func TestCreateEndpointRejectsUnknownConnectorAndPersistsNothing(t *testing.T) {
 	ts := newTestService(t)
 	uid := ts.seedUser(t, nil)
@@ -236,7 +248,7 @@ func TestCreateEndpointRejectsUnknownConnectorAndPersistsNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("count before: %v", err)
 	}
-	for _, ct := range []string{"anthropic-compatible", "dify-app", "openai", "OpenAI-Compatible"} {
+	for _, ct := range []string{"dify-app", "openai", "OpenAI-Compatible"} {
 		if _, err := ts.svc.CreateEndpoint(context.Background(), uid, ct, "https://example.com/v1/", nil, nil); err == nil {
 			t.Errorf("CreateEndpoint with connector %q unexpectedly succeeded", ct)
 		}

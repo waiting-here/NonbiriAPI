@@ -43,6 +43,7 @@ type ForwardCandidate struct {
 	ModelID         int64
 	EndpointID      int64
 	EndpointKeyID   int64
+	ConnectorType   string
 	UpstreamModelID string
 	Ord             int64
 }
@@ -167,7 +168,7 @@ WHERE user_id=? AND full_name=?`, userID, fullName).
 	route.SilentRetry = silentRetry != 0
 
 	rows, err := tx.QueryContext(ctx, `
-SELECT b.id, b.model_id, e.id, ek.id, b.upstream_model_id, b.ord
+SELECT b.id, b.model_id, e.id, ek.id, e.connector_type, b.upstream_model_id, b.ord
 FROM model_bindings b
 JOIN models m
   ON m.id=b.model_id
@@ -203,6 +204,7 @@ LIMIT ?`, route.ModelID, userID, fullName, userID, limit+1)
 			&candidate.ModelID,
 			&candidate.EndpointID,
 			&candidate.EndpointKeyID,
+			&candidate.ConnectorType,
 			&candidate.UpstreamModelID,
 			&candidate.Ord,
 		); err != nil {

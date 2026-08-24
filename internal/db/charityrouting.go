@@ -34,6 +34,7 @@ type CharityCandidate struct {
 	DonationKeyID   int64
 	EndpointID      int64
 	EndpointKeyID   int64
+	ConnectorType   string
 	UpstreamModelID string
 	Ord             int64
 	DonorUserID     int64
@@ -82,7 +83,7 @@ JOIN fetched_models fm
 `
 
 const charityCandidateSelectSQL = `
-SELECT b.id, dk.id, e.id, ek.id, b.upstream_model_id, b.ord, d.user_id, e.base_url,
+SELECT b.id, dk.id, e.id, ek.id, e.connector_type, b.upstream_model_id, b.ord, d.user_id, e.base_url,
        dk.max_concurrency, dk.rpm_limit, dk.credits_usage_cap, dk.credits_used, dk.credits_reserved` +
 	charityCandidatePredicate
 
@@ -94,7 +95,7 @@ func scanCharityCandidates(rows *sql.Rows, limit int) ([]CharityCandidate, error
 			return nil, ErrForwardProjectionLimit
 		}
 		var c CharityCandidate
-		if err := rows.Scan(&c.BindingID, &c.DonationKeyID, &c.EndpointID, &c.EndpointKeyID,
+		if err := rows.Scan(&c.BindingID, &c.DonationKeyID, &c.EndpointID, &c.EndpointKeyID, &c.ConnectorType,
 			&c.UpstreamModelID, &c.Ord, &c.DonorUserID, &c.BaseURL,
 			&c.MaxConcurrency, &c.RPMLimit, &c.CreditsUsageCap, &c.CreditsUsed, &c.CreditsReserved); err != nil {
 			return nil, fmt.Errorf("scan charity candidate: %w", err)

@@ -10,7 +10,8 @@
 //   - base_url: the only canonicalization boundary is internal/egress's
 //     ValidateBaseURL. This package never re-parses or simplifies URLs.
 //   - Connector: an authoritative Registry rejects unknown connector types
-//     with no silent protocol fallback (alpha: openai-compatible only).
+//     with no silent protocol fallback; the binary compiles OpenAI-compatible and
+//     Anthropic-compatible descriptors into that one closed-world catalog.
 //   - Secret: the repository allocates the key id and seals the upstream key
 //     with its authenticated user/endpoint/key/origin context in one database
 //     transaction. Plaintext never enters SQL, logs, errors, responses, or

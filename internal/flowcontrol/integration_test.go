@@ -208,6 +208,7 @@ func newIntegrationFixture(t *testing.T, rpmConfig ratelimit.RPMConfig) *integra
 		Secrets:           codec,
 		Registry:          registry,
 		Adapters:          []forward.Adapter{adapter},
+		Backend:           mustLocalBackend(t, stack),
 		SafetyIdentifiers: safetyIdentifierFactory,
 	})
 	if err != nil {
