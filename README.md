@@ -2,25 +2,28 @@
 
 [简体中文](README.zh-CN.md)
 
-NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible gateway. It lets each user manage their own upstream endpoints and credentials, discover upstream models, define user-owned platform model names, and call those models through a single `CallerKey`.
+NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible ingress gateway. It lets each user manage their own upstream endpoints and credentials, discover upstream models, define user-owned platform model names, and call those models through a single `CallerKey`.
 
-> **Current release:** `v1.0.0-alpha.2`. This alpha is intended only for controlled self-hosted trials. Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
+> **Latest published release:** `v1.0.0-alpha.2`. The current development target is the unreleased `v1.0.0-alpha.3`; this branch and its documentation are not a release or an upgrade authorization. Alpha builds are intended only for controlled self-hosted trials. Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
 >
 > Source repository: [github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
 ## Highlights
 
-- OpenAI-compatible `/v1/models` and `/v1/chat/completions` endpoints.
+- OpenAI-compatible `/v1/models` and `/v1/chat/completions` ingress, with OpenAI-compatible and Anthropic-compatible upstream connectors.
 - Discord OAuth user sign-in and a separate administrator station.
-- Per-user endpoints, encrypted upstream credentials, model discovery, platform model names, bindings, ordered/random routing, and opt-in pre-commit retry.
+- Per-user endpoints, encrypted upstream credentials, model discovery, platform model names, bindings, ordered/random routing, opt-in pre-commit retry, and independent per-user in-flight concurrency limits.
 - SSRF, DNS-rebinding, redirect, proxy, response-size, timeout, cancellation, concurrency, and streaming safeguards.
 - Encrypted-at-rest upstream secrets; plaintext credentials are not returned in lists, logs, alerts, or account exports.
 - Request metadata, usage accounting, retention cleanup, account export/deletion, issues, alerts, and runtime limits.
 - Credits, check-in, donation-backed charity routing, and a live-authorized level-5 steward view whose site-wide logs hide donated resources.
+- Experimental OpenAI-only per-key `store:false` enforcement and per-model tool-call flattening, both disabled by default and explicitly risk-labelled.
+- A memory-only Debug Hub that starts in dry-run mode and requires a fresh challenge plus confirmation before observing a real upstream call.
+- A server-authoritative game framework whose first game is Pond Fishing, with idempotent accounting, recovery, privacy-aware leaderboards, and local SVG/CSS artwork.
 - Server-generated upstream safety pseudonyms scoped to one user and one canonical upstream origin; see the [API contract](docs/api-contract.md#21-post-v1chatcompletions) for their rotation and privacy boundary.
 - React user/admin stations embedded into a single Go binary.
 
-`v1.0.0-alpha.2` supports only the `openai-compatible` connector and the two OpenAI-compatible exit routes listed above. Other OpenAI API families and other connector types are deferred.
+The unreleased alpha.3 contract still exposes only the two OpenAI-compatible ingress routes listed above. An `anthropic-compatible` endpoint is translated behind that ingress; NonbiriAPI does not expose an Anthropic-native public endpoint. Other OpenAI API families and connector types remain deferred. See the [API contract](docs/api-contract.md) for the strict Anthropic subset and token-limit rules.
 
 ## Architecture
 
@@ -82,7 +85,7 @@ The intended first deployment model is a manually updated systemd service. See:
 - [Example environment file](admin.env.example)
 - [Example systemd unit](deploy/nonbiriapi.service.example)
 
-The update procedure is deliberately conservative: stop the service, back up the database and sidecars, build and verify a release binary, install it atomically, restart, and verify both configured hosts. The alpha has no general versioned migration framework; alpha.2 includes only the documented one-purpose credential migration. Keep a tested backup before every update.
+Alpha.3 deliberately uses a fresh-only database generation. It does not migrate an alpha.1/alpha.2 database in place and refuses an old, empty, unknown, malformed, or unexpected database without writing to it. A normal binary-only downgrade is also unsafe. Stop the service, preserve a verified complete snapshot (database/sidecars, release, configuration, master key and unit), and follow the [deployment guide](docs/deployment.md). Starting alpha.3 from an existing deployment requires an explicit fresh cutover; the new database starts with maintenance on and registration and games off.
 
 The current alpha release strategy is source-first: a prebuilt binary is not required. Operators may compile the source on the target platform or use their own build pipeline. A published binary, if added later, is a convenience artifact rather than the compatibility boundary.
 
@@ -127,6 +130,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow and require
 ## Data and legal pages
 
 The application includes English and Chinese privacy and terms pages. Operators must review and customize them for the actual operator identity, contact channel, jurisdiction, deployment, and data-processing practices before accepting real users.
+
+Requests can be sent to account-selected OpenAI-compatible or Anthropic-compatible providers, including donor-provided charity resources. Those independent providers may process or retain content under their own policies; the experimental `store:false` option is a best-effort request and cannot guarantee zero retention. NonbiriAPI itself keeps ordinary request/response content out of persistent logs; Debug capture is redacted, bounded, and memory-only. Spendable `credits` form one balance shared by check-in/donor/game rewards and supported consumption, while `donation_credit` remains a cumulative donor-reward statistic that ordinary spending never reduces.
 
 See [docs/data-lifecycle-checklist.md](docs/data-lifecycle-checklist.md) for the data export, deletion, retention, and privacy invariants.
 

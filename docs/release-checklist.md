@@ -6,7 +6,7 @@ Use this checklist for every release candidate. It is not evidence that an item 
 
 - [ ] Freeze the release requirements and API/behavior compatibility statement.
 - [ ] Update version references in the changelog, package metadata, README, API contract, and deployment examples.
-- [ ] Document connector/API limitations, database migration requirements, downgrade limits, and rollback procedure.
+- [ ] Document connector/API limitations, the fresh-only database identity and zero-write rejection matrix, downgrade limits, all four deployment-helper entry classes, and complete-snapshot rollback procedure.
 - [ ] Confirm every public behavior in the release notes is implemented and tested; do not describe planned features as shipped.
 - [ ] Review dependencies, generated notices, license obligations, and source-availability requirements.
 
@@ -16,6 +16,9 @@ Use this checklist for every release candidate. It is not evidence that an item 
 - [ ] Verify account export never includes plaintext/ciphertext secrets, OAuth tokens, caller-key plaintext, or request/response content.
 - [ ] Verify account deletion and late callbacks remain atomically linearized.
 - [ ] Update the embedded Chinese/English privacy and terms templates for shipped data processing and permissions.
+- [ ] Confirm both languages cover OpenAI-compatible, Anthropic-compatible, and donor-provided third-party processing; the non-guarantee of `store:false`; tool-call flattening risk; Debug dry/live memory-only capture; server-authoritative game randomness/accounting; the single spendable credit balance versus cumulative donor reward; anonymous/public leaderboard identity and Discord CDN avatar behavior; export schema v3; and fresh destructive cutover/snapshot retention.
+- [ ] Round-trip all four legal overrides with multiline Chinese/English, tabs, LF/CRLF, multibyte text, and a near-65,536-byte value through save → GET → refresh → re-save. Verify anonymous legal pages at 390 px, keyboard-only, and screen-reader semantics.
+- [ ] Obtain the instance owner's explicit approval of the effective production text, then verify the four values and authoritative locale after applying them to the fresh database; a technical consistency review is not legal approval.
 - [ ] Require each operator to review effective date, identity/contact, jurisdiction, subprocessors, backups, and instance-specific legal overrides before onboarding users.
 
 ## Clean build and automated checks
@@ -43,17 +46,23 @@ CGO_ENABLED=0 go build -tags dist -trimpath -o nonbiriapi .
 - [ ] Independently review authentication, ownership, station isolation, egress, secret handling, response bounds, stream termination/cancellation, rate/concurrency limits, and no-store behavior.
 - [ ] Run focused race/shuffle/attack regressions for changed security, accounting, deletion, or callback paths.
 - [ ] Exercise non-streaming, streaming, cancellation, abnormal EOF, malformed usage, retry boundaries, and client disconnects against a disposable upstream.
+- [ ] Exercise OpenAI and Anthropic Connector fixtures, capability rejection, cumulative streaming usage and terminal events; verify `max_tokens`/`max_completion_tokens` absent/null/equal/conflicting behavior and the nullable 65,536 Anthropic fallback.
+- [ ] Verify user-concurrency-before-RPM ordering and every release path under race; a concurrency denial must create no RPM hit, candidate selection, credential access, charity reservation, or penalty.
+- [ ] Verify experimental-policy ownership and disabled byte-equivalence, bounded flatten/reverse-flatten streaming equivalence, Debug dry zero-egress and live observer transparency, Fishing idempotency/recovery/retention/privacy, and export schema v3/deletion lifecycle.
 - [ ] Verify real Discord OAuth with disposable credentials and the intended registration gate.
 - [ ] Verify the complete TLS/reverse-proxy/real-IP path, both host boundaries, SSE buffering/timeouts, and unauthenticated admission limits.
 - [ ] Check that logs, errors, alerts, CSV/JSON exports, HTML/text rendering, and generated artifacts contain no secrets or private deployment data.
 
-## Migration, backup, and staging
+## Fresh database, backup, and staging
 
-- [ ] Stop writes and take a protected SQLite backup including applicable WAL/SHM sidecars, or use a tested SQLite backup API.
-- [ ] Restore the backup in an isolated path with the same master key and verify it before migration.
-- [ ] Test forward migration, restart recovery, retention cleanup, and the documented rollback/downgrade path on staging data.
-- [ ] Test graceful shutdown, restart, previous-binary rollback, account export/deletion, and any new scheduled maintenance.
+- [ ] Stop writes and take a protected complete snapshot: database and applicable WAL/SHM sidecars, exact release, environment/configuration, master key, unit, manifest, and checksums.
+- [ ] Restore that snapshot in an isolated path with the same master key and verify its release/schema/config/key/unit match before relying on it.
+- [ ] Test the fresh/current/legacy/empty/corrupt/unknown-generation/sidecar matrix and prove every rejected source is byte-, identity-, size-, and mtime-unchanged with no new source-side WAL/SHM.
+- [ ] Test the default interactive deployment, `--restore-snapshot`, `--destructive-fresh-deploy`, and `snapshot inventory|import|delete` flows, including TTY-only confirmations, cancellation, incompatible/missing snapshot refusal, and failure restoration. Do not perform the rehearsal against production.
+- [ ] Test restart recovery, game settlement/retention cleanup, complete-snapshot rollback/downgrade, and the documented absence of any binary-only downgrade path.
+- [ ] Test graceful shutdown, same-generation restart with a compatible previous release, complete-snapshot version rollback, account export/deletion, and any new scheduled maintenance; never substitute a binary-only downgrade.
 - [ ] Run a staging soak with representative concurrency and verify resource/memory/connection cleanup.
+- [ ] Record which vulnerability, dependency, license, credential, SBOM, provenance, and signing checks actually ran and which remain explicitly deferred; do not mark a deferred gate as passed.
 
 ## Repository and publication
 
@@ -61,6 +70,6 @@ CGO_ENABLED=0 go build -tags dist -trimpath -o nonbiriapi .
 - [ ] If a version integration branch was used, review the complete merge-base-to-head diff and commit history, then open its single final pull request to the protected default branch.
 - [ ] Confirm required `Go checks` and `Web checks` pass on the exact release commit and branch protection remains active.
 - [ ] Confirm private vulnerability reporting is reachable and no deployment secrets are present in Actions/release settings.
-- [ ] Prepare release notes with upgrade, backup, migration, rollback, known limitations, and checksums/artifacts as applicable.
+- [ ] Prepare release notes with fresh cutover/upgrade, backup, compatibility or migration limits, complete-snapshot rollback, known limitations, and checksums/artifacts as applicable.
 - [ ] Create an annotated immutable tag only after owner authorization and green CI; never move a published tag silently.
 - [ ] Mark alpha/beta releases as pre-releases, verify the public release page, and perform post-publication smoke/download checks.
