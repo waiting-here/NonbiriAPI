@@ -25,6 +25,11 @@ import (
 
 type adapterResolver struct{}
 
+type oversizedLimitBackend struct{}
+
+func (oversizedLimitBackend) Open(string) (backend.EndpointClient, error) { return nil, nil }
+func (oversizedLimitBackend) MaxResponseBytes() int64                     { return 1 << 40 }
+
 func (adapterResolver) LookupNetIP(ctx context.Context, _ string, _ string) ([]netip.Addr, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -77,6 +82,35 @@ func TestChatCompletionsURLContract(t *testing.T) {
 		if got := chatCompletionsURL(c.base); got != c.want {
 			t.Errorf("chatCompletionsURL(%q) = %q, want %q", c.base, got, c.want)
 		}
+	}
+}
+
+func TestAdapterConfigClampsSharedProtocolHardCaps(t *testing.T) {
+	adapter, err := NewAdapter(AdapterConfig{
+		Backend:              oversizedLimitBackend{},
+		MaxJSONResponseBytes: DefaultMaxJSONResponseBytes + 1,
+		MaxStreamBytes:       DefaultMaxStreamBytes + 1,
+		MaxSSELineBytes:      DefaultMaxSSELineBytes + 1,
+		MaxSSEEventBytes:     DefaultMaxSSEEventBytes + 1,
+		StreamWriteTimeout:   DefaultStreamWriteTimeout + time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if adapter.maxJSONResponseBytes != DefaultMaxJSONResponseBytes || adapter.maxStreamBytes != DefaultMaxStreamBytes ||
+		adapter.maxSSELineBytes != DefaultMaxSSELineBytes || adapter.maxSSEEventBytes != DefaultMaxSSEEventBytes ||
+		adapter.streamWriteTimeout != DefaultStreamWriteTimeout {
+		t.Fatalf("adapter limits=%+v", adapter)
+	}
+	lower, err := NewAdapter(AdapterConfig{
+		Backend: oversizedLimitBackend{}, MaxJSONResponseBytes: 1024, MaxStreamBytes: 2048,
+		MaxSSELineBytes: 512, MaxSSEEventBytes: 768, StreamWriteTimeout: time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lower.maxJSONResponseBytes != 1024 || lower.maxStreamBytes != 2048 || lower.maxSSELineBytes != 512 || lower.maxSSEEventBytes != 768 || lower.streamWriteTimeout != time.Second {
+		t.Fatalf("lower limits changed: %+v", lower)
 	}
 }
 
@@ -500,6 +534,59 @@ type deadlineWriter struct {
 	header   http.Header
 	mu       sync.Mutex
 	deadline time.Time
+}
+
+type deadlineRecordingWriter struct {
+	header    http.Header
+	deadlines []time.Time
+	current   time.Time
+	writes    int
+	flushes   int
+}
+
+func (w *deadlineRecordingWriter) Header() http.Header { return w.header }
+func (w *deadlineRecordingWriter) WriteHeader(int)     {}
+func (w *deadlineRecordingWriter) SetWriteDeadline(deadline time.Time) error {
+	w.deadlines = append(w.deadlines, deadline)
+	w.current = deadline
+	return nil
+}
+func (w *deadlineRecordingWriter) Write(value []byte) (int, error) {
+	if w.current.IsZero() {
+		return 0, errors.New("missing write deadline")
+	}
+	w.writes++
+	return len(value), nil
+}
+func (w *deadlineRecordingWriter) FlushError() error {
+	if w.current.IsZero() {
+		return errors.New("missing flush deadline")
+	}
+	w.flushes++
+	return nil
+}
+
+func TestStreamWriteDeadlineIsResetAfterEveryFrame(t *testing.T) {
+	writer := &deadlineRecordingWriter{header: make(http.Header)}
+	adapter := &Adapter{streamWriteTimeout: DefaultStreamWriteTimeout}
+	controller := http.NewResponseController(writer)
+	for _, frame := range [][]byte{[]byte("data: {\"n\":1}\n\n"), []byte("data: [DONE]\n\n")} {
+		wrote, err := adapter.writeStreamFrame(writer, controller, frame)
+		if err != nil || !wrote || !writer.current.IsZero() {
+			t.Fatalf("wrote=%v err=%v current=%v", wrote, err, writer.current)
+		}
+	}
+	if writer.writes != 2 || writer.flushes != 2 || len(writer.deadlines) != 4 {
+		t.Fatalf("writes=%d flushes=%d deadlines=%v", writer.writes, writer.flushes, writer.deadlines)
+	}
+	for index, deadline := range writer.deadlines {
+		if index%2 == 0 && deadline.IsZero() {
+			t.Fatalf("deadline %d was not installed: %v", index, writer.deadlines)
+		}
+		if index%2 == 1 && !deadline.IsZero() {
+			t.Fatalf("deadline %d was not cleared: %v", index, writer.deadlines)
+		}
+	}
 }
 
 func (w *deadlineWriter) Header() http.Header { return w.header }

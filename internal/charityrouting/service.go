@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
@@ -91,6 +92,7 @@ type ServiceConfig struct {
 	// any upstream dispatch. It is optional so the charity rail remains usable
 	// in focused tests and in deployments without the anti-abuse policy.
 	PreflightHook func(context.Context, int64, *openai.ChatRequest) error
+	Registry      *connector.Registry
 }
 
 // Service orchestrates one logical charity call end-to-end. Exactly one user
@@ -103,6 +105,7 @@ type Service struct {
 	timeout   time.Duration
 	preflight func(context.Context, int64, *openai.ChatRequest) error
 	limits    *keyLimiter
+	registry  *connector.Registry
 
 	mu      sync.Mutex
 	nextCtx uint64
@@ -128,6 +131,9 @@ func NewService(config ServiceConfig) (*Service, error) {
 	if config.Logger == nil {
 		config.Logger = slog.Default()
 	}
+	if config.Registry == nil {
+		config.Registry = connector.NewDefaultRegistry()
+	}
 	return &Service{
 		store:     config.Store,
 		runner:    config.Runner,
@@ -136,6 +142,7 @@ func NewService(config ServiceConfig) (*Service, error) {
 		timeout:   config.ForwardTimeout,
 		preflight: config.PreflightHook,
 		limits:    newKeyLimiter(),
+		registry:  config.Registry,
 		active:    make(map[int64]map[uint64]context.CancelFunc),
 	}, nil
 }
@@ -316,6 +323,17 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 	if len(route.Candidates) == 0 {
 		return connectorcontract.AttemptResult{}, ErrUnboundModel
 	}
+	capable, allOpenAI, err := filterCharityCandidates(s.registry, request, route.Candidates)
+	if err != nil {
+		return connectorcontract.AttemptResult{}, ErrInternal
+	}
+	if len(capable) == 0 {
+		if allOpenAI {
+			return connectorcontract.AttemptResult{}, openai.ErrInvalidRequest
+		}
+		return connectorcontract.AttemptResult{}, forward.ErrUnsupportedCapabilities
+	}
+	route.Candidates = capable
 	// The anti-abuse hook runs only after the [公益] model and at least one
 	// candidate have resolved, but before any user/key reservation or upstream
 	// dispatch. Unknown models and empty candidate chains therefore never
@@ -436,13 +454,14 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 			})
 		started := s.now()
 		result := s.runner.RunCharity(callCtx, dw, forward.CharityAttemptInput{
-			BindingID:      candidate.BindingID,
-			FullName:       route.Model.FullName,
-			Now:            nowUnix,
-			ConsumerUserID: userID,
-			Request:        request,
-			TraceID:        attemptID,
-			AttemptIndex:   i,
+			BindingID:             candidate.BindingID,
+			FullName:              route.Model.FullName,
+			ExpectedConnectorType: connectorcontract.Type(candidate.ConnectorType),
+			Now:                   nowUnix,
+			ConsumerUserID:        userID,
+			Request:               request,
+			TraceID:               attemptID,
+			AttemptIndex:          i,
 		})
 		if callCtx.Err() != nil && !result.Committed {
 			result = endedContextResult(parentCtx, callCtx)
@@ -509,6 +528,31 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 	// No candidate was ever admitted: every donated key refused on its
 	// per-key limits. The frozen exit is 429 rate_limited.
 	return connectorcontract.AttemptResult{}, ErrKeysExhausted
+}
+
+func filterCharityCandidates(registry *connector.Registry, request *openai.ChatRequest, candidates []db.CharityCandidate) ([]db.CharityCandidate, bool, error) {
+	if registry == nil || request == nil {
+		return nil, false, ErrInternal
+	}
+	capable := make([]db.CharityCandidate, 0, len(candidates))
+	allOpenAI := true
+	capabilityByType := make(map[connectorcontract.Type]bool)
+	for _, candidate := range candidates {
+		connectorType, err := registry.MustValidate(connectorcontract.Type(candidate.ConnectorType))
+		if err != nil {
+			return nil, false, err
+		}
+		allOpenAI = allOpenAI && connectorType == connectorcontract.TypeOpenAICompatible
+		supported, evaluated := capabilityByType[connectorType]
+		if !evaluated {
+			supported = registry.SupportsRequest(connectorType, request)
+			capabilityByType[connectorType] = supported
+		}
+		if supported {
+			capable = append(capable, candidate)
+		}
+	}
+	return capable, allOpenAI, nil
 }
 
 // recordLog persists the charity request-log row with the reservation

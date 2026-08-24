@@ -113,7 +113,6 @@ func TestDecodeChatRequestRejectsAmbiguityAndBounds(t *testing.T) {
 		{"model control", "{\"model\":\"p/m\\u000a\"}"},
 		{"model edge whitespace", `{"model":" p/m"}`},
 		{"stream string", `{"model":"p/m","stream":"true"}`},
-		{"stream null", `{"model":"p/m","stream":null}`},
 		{"duplicate model", `{"model":"p/one","model":"p/two"}`},
 		{"escaped duplicate model", `{"model":"p/one","\u006dodel":"p/two"}`},
 		{"trailing object", `{"model":"p/m"}{}`},
@@ -147,6 +146,20 @@ func TestDecodeChatRequestRejectsAmbiguityAndBounds(t *testing.T) {
 	over := bytes.Repeat([]byte{'x'}, int(MaxRequestBodyBytes)+1)
 	if _, err := DecodeChatRequest(bytes.NewReader(over), MaxRequestBodyBytes); !errors.Is(err, ErrPayloadTooLarge) {
 		t.Fatalf("oversize error=%v", err)
+	}
+}
+
+func TestStreamNullIsProjectedButRejectedByLegacyOpenAICandidate(t *testing.T) {
+	request, err := DecodeChatRequest(strings.NewReader(`{"model":"p/m","messages":[{"role":"user","content":"hi"}],"stream":null}`), MaxRequestBodyBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer request.Clear()
+	if request.Stream {
+		t.Fatal("stream:null must project as non-stream for a compatible connector")
+	}
+	if SupportsOpenAICompatible(request) {
+		t.Fatal("legacy OpenAI candidate accepted stream:null")
 	}
 }
 

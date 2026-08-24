@@ -38,12 +38,13 @@ type Adapter = connector.OpenAIDriver
 
 // AttemptInput is the non-sensitive input handed to a single attempt runner.
 type AttemptInput struct {
-	UserID       int64
-	FullName     string
-	BindingID    int64
-	Request      *openai.ChatRequest
-	TraceID      string
-	AttemptIndex int
+	UserID                int64
+	FullName              string
+	BindingID             int64
+	ExpectedConnectorType connectorcontract.Type
+	Request               *openai.ChatRequest
+	TraceID               string
+	AttemptIndex          int
 }
 
 const maxForwardCiphertextBytes = 128 << 10
@@ -59,14 +60,15 @@ type AttemptRunner interface {
 // connector registry, and protocol adapters. CharityTargets is the optional
 // charity-path projection; when absent, RunCharity fails closed.
 type SecureRunnerConfig struct {
-	Repository        TargetRepository
-	CharityTargets    CharityTargetRepository
-	Secrets           secret.ContextOpener
-	Registry          *endpoint.Registry
-	Adapters          []Adapter
-	Backend           backend.Backend
-	Observer          *connector.SafeObserver
-	SafetyIdentifiers *SafetyIdentifierFactory
+	Repository                TargetRepository
+	CharityTargets            CharityTargetRepository
+	Secrets                   secret.ContextOpener
+	Registry                  *endpoint.Registry
+	Adapters                  []Adapter
+	Backend                   backend.Backend
+	Observer                  *connector.SafeObserver
+	SafetyIdentifiers         *SafetyIdentifierFactory
+	AnthropicDefaultMaxTokens connectorcontract.AnthropicDefaultMaxTokensProvider
 }
 
 // SecureRunner revalidates a selected binding, decrypts its credential for
@@ -111,7 +113,7 @@ func NewSecureRunner(config SecureRunnerConfig) (*SecureRunner, error) {
 	}
 	connectors := make(map[connectorcontract.Type]connector.Connector)
 	for _, connectorType := range config.Registry.Types() {
-		dependencies := connector.Dependencies{Backend: config.Backend}
+		dependencies := connector.Dependencies{Backend: config.Backend, AnthropicDefaultMaxTokens: config.AnthropicDefaultMaxTokens}
 		if connectorType == connectorcontract.TypeOpenAICompatible {
 			dependencies.OpenAI = adapters[connectorType]
 		}
@@ -139,6 +141,10 @@ func (r *SecureRunner) Run(ctx context.Context, writer http.ResponseWriter, inpu
 	if r == nil || r.repository == nil || r.registry == nil || nilCodec(r.secrets) || ctx == nil || writer == nil || input.UserID <= 0 || input.FullName == "" || input.BindingID <= 0 || input.Request == nil {
 		return internalAttemptFailure("forwarding attempt unavailable")
 	}
+	expectedConnectorType, err := r.registry.MustValidate(endpoint.ConnectorType(input.ExpectedConnectorType))
+	if err != nil {
+		return internalAttemptFailure("forwarding connector is not registered")
+	}
 	if ctx.Err() != nil {
 		return connectorcontract.AttemptResult{Failure: connectorcontract.FailureCanceled, Diagnostic: "request canceled"}
 	}
@@ -146,7 +152,7 @@ func (r *SecureRunner) Run(ctx context.Context, writer http.ResponseWriter, inpu
 	target, err := r.repository.GetForwardTarget(ctx, input.UserID, input.FullName, input.BindingID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			return connectorcontract.AttemptResult{Failure: connectorcontract.FailureUpstream, Diagnostic: "selected upstream target is no longer available"}
+			return selectedTargetUnavailableFailure()
 		}
 		if errors.Is(err, db.ErrEndpointCredentialUnavailable) {
 			return internalAttemptFailure("credential unavailable")
@@ -156,6 +162,7 @@ func (r *SecureRunner) Run(ctx context.Context, writer http.ResponseWriter, inpu
 	return r.dispatch(ctx, writer, dispatchInput{
 		ownerUserID:    input.UserID,
 		preDecrypted:   target,
+		expectedType:   expectedConnectorType,
 		request:        input.Request,
 		consumerUserID: input.UserID,
 		traceID:        input.TraceID,
@@ -168,13 +175,14 @@ func (r *SecureRunner) Run(ctx context.Context, writer http.ResponseWriter, inpu
 // it is never used for decryption or ownership. Credential context and
 // ownership checks remain entirely donor-scoped.
 type CharityAttemptInput struct {
-	BindingID      int64
-	FullName       string
-	Now            int64 // authoritative unix time for the expiry predicate
-	ConsumerUserID int64 // consumer identity used only for safety_identifier
-	Request        *openai.ChatRequest
-	TraceID        string
-	AttemptIndex   int
+	BindingID             int64
+	FullName              string
+	ExpectedConnectorType connectorcontract.Type
+	Now                   int64 // authoritative unix time for the expiry predicate
+	ConsumerUserID        int64 // consumer identity used only for safety_identifier
+	Request               *openai.ChatRequest
+	TraceID               string
+	AttemptIndex          int
 }
 
 // RunCharity revalidates one charity binding through the full candidate
@@ -184,6 +192,10 @@ func (r *SecureRunner) RunCharity(ctx context.Context, writer http.ResponseWrite
 	if r == nil || r.charityTargets == nil || r.registry == nil || nilCodec(r.secrets) || ctx == nil || writer == nil || input.BindingID <= 0 || input.Request == nil || input.Now <= 0 {
 		return internalAttemptFailure("forwarding attempt unavailable")
 	}
+	expectedConnectorType, err := r.registry.MustValidate(endpoint.ConnectorType(input.ExpectedConnectorType))
+	if err != nil {
+		return internalAttemptFailure("forwarding connector is not registered")
+	}
 	if ctx.Err() != nil {
 		return connectorcontract.AttemptResult{Failure: connectorcontract.FailureCanceled, Diagnostic: "request canceled"}
 	}
@@ -191,7 +203,7 @@ func (r *SecureRunner) RunCharity(ctx context.Context, writer http.ResponseWrite
 	target, err := r.charityTargets.GetCharityForwardTarget(ctx, input.BindingID, input.FullName, input.Now)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			return connectorcontract.AttemptResult{Failure: connectorcontract.FailureUpstream, Diagnostic: "selected upstream target is no longer available"}
+			return selectedTargetUnavailableFailure()
 		}
 		if errors.Is(err, db.ErrEndpointCredentialUnavailable) {
 			return internalAttemptFailure("credential unavailable")
@@ -201,6 +213,7 @@ func (r *SecureRunner) RunCharity(ctx context.Context, writer http.ResponseWrite
 	return r.dispatch(ctx, writer, dispatchInput{
 		ownerUserID:    target.DonorUserID,
 		preDecrypted:   target.ForwardTarget,
+		expectedType:   expectedConnectorType,
 		request:        input.Request,
 		consumerUserID: input.ConsumerUserID,
 		traceID:        input.TraceID,
@@ -214,6 +227,7 @@ type dispatchInput struct {
 	ownerUserID    int64
 	consumerUserID int64
 	preDecrypted   db.ForwardTarget
+	expectedType   connectorcontract.Type
 	request        *openai.ChatRequest
 	traceID        string
 	attemptIndex   int
@@ -221,11 +235,11 @@ type dispatchInput struct {
 
 func (r *SecureRunner) dispatch(ctx context.Context, writer http.ResponseWriter, in dispatchInput) connectorcontract.AttemptResult {
 	target := in.preDecrypted
-	connectorType, err := r.registry.MustValidate(endpoint.ConnectorType(target.ConnectorType))
-	if err != nil {
+	if connectorcontract.Type(target.ConnectorType) != in.expectedType {
 		target.DiscardEncryptedSecret()
-		return internalAttemptFailure("forwarding connector is not registered")
+		return selectedTargetUnavailableFailure()
 	}
+	connectorType := in.expectedType
 	protocolConnector := r.connectors[connectorType]
 	if protocolConnector == nil {
 		target.DiscardEncryptedSecret()
@@ -270,8 +284,6 @@ func (r *SecureRunner) dispatch(ctx context.Context, writer http.ResponseWriter,
 	defer clear(ciphertextBytes)
 	attemptRequest := in.request.CloneForAttempt()
 	if attemptRequest == nil {
-		clear(plaintext)
-		clear(ciphertextBytes)
 		return internalAttemptFailure("forwarding request snapshot failed")
 	}
 	defer attemptRequest.Clear()
@@ -291,15 +303,15 @@ func (r *SecureRunner) dispatch(ctx context.Context, writer http.ResponseWriter,
 	// endpoint value, never credential material; it travels as bounded
 	// metadata alongside the other attempt fields.
 	result.EndpointBaseURL = target.BaseURL
-	// Adapter clears both slices before dialing; these clears are a backstop
-	// for a rejected adapter call and make the ownership transfer explicit.
-	clear(plaintext)
-	clear(ciphertextBytes)
 	return result
 }
 
 func internalAttemptFailure(diagnostic string) connectorcontract.AttemptResult {
 	return connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: diagnostic}
+}
+
+func selectedTargetUnavailableFailure() connectorcontract.AttemptResult {
+	return connectorcontract.AttemptResult{Failure: connectorcontract.FailureUpstream, Diagnostic: "selected upstream target is no longer available"}
 }
 
 func nilAdapter(adapter Adapter) bool {

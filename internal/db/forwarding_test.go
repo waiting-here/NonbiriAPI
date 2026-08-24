@@ -100,7 +100,7 @@ VALUES (?, 'bad-status-model', '', 1, 'failed')`, badStatusKey); err != nil {
 		t.Fatalf("candidate limit error=%v", err)
 	}
 	for _, candidate := range route.Candidates {
-		if candidate.EndpointID != validEndpoint || candidate.EndpointKeyID != validKey {
+		if candidate.EndpointID != validEndpoint || candidate.EndpointKeyID != validKey || candidate.ConnectorType != "openai-compatible" {
 			t.Fatalf("unusable or cross-owner candidate escaped SQL filter: %+v", candidate)
 		}
 	}

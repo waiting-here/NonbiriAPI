@@ -214,6 +214,10 @@ func (h *Handler) chatCompletions(writer http.ResponseWriter, request *http.Requ
 			writeError(writer, httperr.CodeNotFound, "model not found", "")
 		case errors.Is(err, ErrUnboundModel):
 			writeError(writer, httperr.CodeUnboundModel, "model has no usable binding", "")
+		case errors.Is(err, openai.ErrInvalidRequest):
+			writeError(writer, httperr.CodeInvalidRequest, "invalid request", "")
+		case errors.Is(err, ErrUnsupportedCapabilities):
+			writeError(writer, httperr.CodeInvalidRequest, "model does not support this request field combination", "")
 		default:
 			writeError(writer, httperr.CodeInternal, "internal error", "")
 		}
@@ -243,6 +247,8 @@ func (h *Handler) charityChat(writer http.ResponseWriter, request *http.Request,
 		switch {
 		case errors.Is(err, ErrCharityContentTooShort), errors.Is(err, ErrAntiAbuseUnavailable), errors.Is(err, openai.ErrInvalidRequest):
 			h.writeCharityPreflightError(writer, err)
+		case errors.Is(err, ErrUnsupportedCapabilities):
+			writeError(writer, httperr.CodeInvalidRequest, "model does not support this request field combination", "")
 		case errors.Is(err, ErrCharityModelNotFound):
 			writeError(writer, httperr.CodeNotFound, "model not found", "")
 		case errors.Is(err, ErrCharityUnboundModel):

@@ -295,7 +295,7 @@ func TestEndpointOriginChangeCannotExfiltrateStoredCredential(t *testing.T) {
 	}
 	runner, err := forward.NewSecureRunner(forward.SecureRunnerConfig{
 		Repository: store, Secrets: vault, Registry: registry, Adapters: []forward.Adapter{adapter},
-		SafetyIdentifiers: safetyIdentifierFactory,
+		Backend: mustLocalBackend(t, stack), SafetyIdentifiers: safetyIdentifierFactory,
 	})
 	if err != nil {
 		t.Fatal(err)

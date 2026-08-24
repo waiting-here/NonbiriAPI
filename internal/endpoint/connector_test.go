@@ -2,26 +2,30 @@ package endpoint
 
 import "testing"
 
-// TestRegistryAcceptsOnlyOpenAICompatible asserts the alpha registry supports
-// exactly openai-compatible and rejects every other type with no silent
-// fallback to a different protocol.
-func TestRegistryAcceptsOnlyOpenAICompatible(t *testing.T) {
+// TestRegistryAcceptsFirstPartyConnectors asserts the registry supports
+// exactly its two compiled connector types and never falls back for unknowns.
+func TestRegistryAcceptsFirstPartyConnectors(t *testing.T) {
 	r := NewRegistry()
 
 	// Ordinary surrounding spaces are normalized, but control characters are
 	// rejected before normalization so they cannot disappear at a boundary.
-	for _, raw := range []string{
-		"openai-compatible",
-		" openai-compatible",
-		"openai-compatible ",
+	for _, test := range []struct {
+		raw  string
+		want ConnectorType
+	}{
+		{"openai-compatible", ConnectorOpenAICompatible},
+		{" openai-compatible", ConnectorOpenAICompatible},
+		{"openai-compatible ", ConnectorOpenAICompatible},
+		{"anthropic-compatible", ConnectorAnthropicCompatible},
+		{" anthropic-compatible ", ConnectorAnthropicCompatible},
 	} {
-		got, err := r.MustValidate(ConnectorType(raw))
+		got, err := r.MustValidate(ConnectorType(test.raw))
 		if err != nil {
-			t.Errorf("MustValidate(%q) rejected a registered type: %v", raw, err)
+			t.Errorf("MustValidate(%q) rejected a registered type: %v", test.raw, err)
 			continue
 		}
-		if got != ConnectorOpenAICompatible {
-			t.Errorf("MustValidate(%q) = %q, want %q", raw, got, ConnectorOpenAICompatible)
+		if got != test.want {
+			t.Errorf("MustValidate(%q) = %q, want %q", test.raw, got, test.want)
 		}
 	}
 
@@ -29,7 +33,6 @@ func TestRegistryAcceptsOnlyOpenAICompatible(t *testing.T) {
 	// unknown: connector types are exact ASCII identifiers, not case-folded, so
 	// "OpenAI-Compatible" is not silently treated as openai-compatible.
 	for _, raw := range []string{
-		"anthropic-compatible",
 		"dify-app",
 		"openai",
 		"OPENAI-COMPATIBLE",

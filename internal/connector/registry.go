@@ -12,6 +12,7 @@ import (
 	"sort"
 
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/anthropic"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 )
@@ -50,9 +51,19 @@ type OpenAIDriver interface {
 	Attempt(context.Context, http.ResponseWriter, openai.Target, *openai.ChatRequest, string) openai.AttemptResult
 }
 
+// AnthropicDriver is the protocol-specific seam used by the registry wrapper.
+// It remains intentionally parallel to OpenAIDriver instead of widening either
+// adapter into a universal provider request.
+type AnthropicDriver interface {
+	ConnectorType() connectorcontract.Type
+	Attempt(context.Context, http.ResponseWriter, anthropic.Target, *openai.ChatRequest, string) connectorcontract.AttemptResult
+}
+
 type Dependencies struct {
-	Backend backend.Backend
-	OpenAI  OpenAIDriver
+	Backend                   backend.Backend
+	OpenAI                    OpenAIDriver
+	Anthropic                 AnthropicDriver
+	AnthropicDefaultMaxTokens connectorcontract.AnthropicDefaultMaxTokensProvider
 }
 
 type Constructor func(Dependencies) Connector
@@ -62,6 +73,7 @@ type Descriptor struct {
 	Capabilities connectorcontract.CapabilitySet
 	New          Constructor
 	Discoverer   ModelDiscoverer
+	Supports     func(*openai.ChatRequest) bool
 }
 
 type Registry struct {
@@ -100,11 +112,25 @@ func NewRegistry(descriptors ...Descriptor) (*Registry, error) {
 }
 
 func NewDefaultRegistry() *Registry {
-	registry, err := NewRegistry(openAIDescriptor())
+	registry, err := NewRegistry(openAIDescriptor(), anthropicDescriptor())
 	if err != nil {
 		panic(err)
 	}
 	return registry
+}
+
+// SupportsRequest applies the immutable ingress capability projection and the
+// descriptor's optional protocol-specific fidelity predicate. It performs no
+// target lookup, decryption, reservation, or network I/O.
+func (r *Registry) SupportsRequest(t connectorcontract.Type, request *openai.ChatRequest) bool {
+	if request == nil {
+		return false
+	}
+	descriptor, ok := r.Descriptor(t)
+	if !ok || !descriptor.Capabilities.HasAll(request.Requirements().Capabilities()) {
+		return false
+	}
+	return descriptor.Supports == nil || descriptor.Supports(request)
 }
 
 func (r *Registry) Supported(t connectorcontract.Type) bool {
@@ -184,6 +210,30 @@ func openAIDescriptor() Descriptor {
 			return &openAIConnector{driver: driver}
 		},
 		Discoverer: openai.ModelDiscoverer{},
+		Supports:   openai.SupportsOpenAICompatible,
+	}
+}
+
+func anthropicDescriptor() Descriptor {
+	return Descriptor{
+		Type:         connectorcontract.TypeAnthropicCompatible,
+		Capabilities: anthropicCapabilities(),
+		New: func(dependencies Dependencies) Connector {
+			driver := dependencies.Anthropic
+			if !nilAnthropicDriver(driver) && driver.ConnectorType() != connectorcontract.TypeAnthropicCompatible {
+				return nil
+			}
+			if nilAnthropicDriver(driver) {
+				adapter, err := anthropic.NewAdapter(anthropic.AdapterConfig{Backend: dependencies.Backend, MaxTokens: dependencies.AnthropicDefaultMaxTokens})
+				if err != nil {
+					return nil
+				}
+				driver = adapter
+			}
+			return &anthropicConnector{driver: driver}
+		},
+		Discoverer: anthropic.ModelDiscoverer{},
+		Supports:   anthropic.SupportsRequest,
 	}
 }
 
@@ -245,6 +295,54 @@ func (c *openAIConnector) Attempt(ctx context.Context, input AttemptInput) conne
 	return result
 }
 
+type anthropicConnector struct {
+	driver AnthropicDriver
+}
+
+func (*anthropicConnector) Type() connectorcontract.Type {
+	return connectorcontract.TypeAnthropicCompatible
+}
+
+func (*anthropicConnector) Capabilities() connectorcontract.CapabilitySet {
+	return anthropicCapabilities()
+}
+
+func anthropicCapabilities() connectorcontract.CapabilitySet {
+	return connectorcontract.CapabilitySet(
+		connectorcontract.CapabilityText |
+			connectorcontract.CapabilitySystem |
+			connectorcontract.CapabilityDeveloper |
+			connectorcontract.CapabilityImages |
+			connectorcontract.CapabilityTools |
+			connectorcontract.CapabilityToolChoice |
+			connectorcontract.CapabilityParallelTools |
+			connectorcontract.CapabilityStream |
+			connectorcontract.CapabilitySampling |
+			connectorcontract.CapabilityModelDiscovery,
+	)
+}
+
+func (c *anthropicConnector) Attempt(ctx context.Context, input AttemptInput) connectorcontract.AttemptResult {
+	result := connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "forwarding attempt unavailable"}
+	if c == nil || nilAnthropicDriver(c.driver) || ctx == nil || input.Sink == nil || input.Ingress == nil || input.Credential == nil || input.Target.Type() != c.Type() {
+		if input.Credential != nil {
+			input.Credential.Clear()
+		}
+		return result
+	}
+	plaintext, ciphertext, ok := input.Credential.Take()
+	if !ok {
+		input.Credential.Clear()
+		return result
+	}
+	defer clear(plaintext)
+	defer clear(ciphertext)
+	input.Observer.TryObserve(Observation{Kind: ObservationAttemptStarted, Connector: c.Type(), TraceID: input.TraceID, AttemptIndex: input.AttemptIndex})
+	result = c.driver.Attempt(ctx, input.Sink, anthropic.NewTarget(input.Target.BaseURL(), input.Target.UpstreamModel(), anthropic.NewCredential(plaintext, ciphertext)), input.Ingress, input.Policy.SafetyIdentifier)
+	input.Observer.TryObserve(Observation{Kind: ObservationAttemptFinished, Connector: c.Type(), Success: result.Success, Committed: result.Committed, Failure: result.Failure, Usage: result.Usage, Diagnostic: result.Diagnostic, TraceID: input.TraceID, AttemptIndex: input.AttemptIndex})
+	return result
+}
+
 func normalizeType(t connectorcontract.Type) connectorcontract.Type {
 	return connectorcontract.Type(trimASCIISpace(string(t)))
 }
@@ -272,9 +370,10 @@ func trimASCIISpace(value string) string {
 	return value[start:end]
 }
 
-func nilConnector(value Connector) bool        { return nilInterface(value) }
-func nilDiscoverer(value ModelDiscoverer) bool { return nilInterface(value) }
-func nilOpenAIDriver(value OpenAIDriver) bool  { return nilInterface(value) }
+func nilConnector(value Connector) bool             { return nilInterface(value) }
+func nilDiscoverer(value ModelDiscoverer) bool      { return nilInterface(value) }
+func nilOpenAIDriver(value OpenAIDriver) bool       { return nilInterface(value) }
+func nilAnthropicDriver(value AnthropicDriver) bool { return nilInterface(value) }
 
 func nilInterface(value any) bool {
 	if value == nil {

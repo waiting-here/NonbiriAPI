@@ -19,6 +19,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -37,10 +38,11 @@ const (
 )
 
 var (
-	ErrModelNotFound = errors.New("forward: model not found")
-	ErrUnboundModel  = errors.New("forward: model has no usable binding")
-	ErrInternal      = errors.New("forward: internal failure")
-	ErrSelector      = errors.New("forward: selector failed")
+	ErrModelNotFound           = errors.New("forward: model not found")
+	ErrUnboundModel            = errors.New("forward: model has no usable binding")
+	ErrInternal                = errors.New("forward: internal failure")
+	ErrSelector                = errors.New("forward: selector failed")
+	ErrUnsupportedCapabilities = errors.New("forward: model does not support request capabilities")
 )
 
 // RouteRepository returns only caller-owned model and candidate projections.
@@ -190,6 +192,7 @@ type ServiceConfig struct {
 	Backoff        BackoffConfig
 	ForwardTimeout time.Duration
 	Now            func() time.Time
+	Registry       *connector.Registry
 }
 
 // String keeps routine formatting of service configuration bounded.
@@ -215,6 +218,7 @@ type Service struct {
 	backoff    BackoffConfig
 	timeout    time.Duration
 	now        func() time.Time
+	registry   *connector.Registry
 }
 
 func NewService(config ServiceConfig) (*Service, error) {
@@ -233,6 +237,9 @@ func NewService(config ServiceConfig) (*Service, error) {
 	if config.Now == nil {
 		config.Now = time.Now
 	}
+	if config.Registry == nil {
+		config.Registry = connector.NewDefaultRegistry()
+	}
 	backoff := config.Backoff
 	if backoff.Base == 0 && backoff.Max == 0 {
 		backoff = BackoffConfig{Base: DefaultBackoffBase, Max: DefaultBackoffMax}
@@ -245,6 +252,7 @@ func NewService(config ServiceConfig) (*Service, error) {
 		backoff:    backoff,
 		timeout:    config.ForwardTimeout,
 		now:        config.Now,
+		registry:   config.Registry,
 	}, nil
 }
 
@@ -348,10 +356,32 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 	if len(route.Candidates) == 0 {
 		return connectorcontract.AttemptResult{}, ErrUnboundModel
 	}
+	capable := make([]db.ForwardCandidate, 0, len(route.Candidates))
+	allOpenAI := true
+	capabilityByType := make(map[connectorcontract.Type]bool)
 	for _, candidate := range route.Candidates {
 		if candidate.BindingID <= 0 || candidate.ModelID != route.ModelID || candidate.EndpointID <= 0 || candidate.EndpointKeyID <= 0 || candidate.Ord < 0 || candidate.Ord > maxRouteOrd || !validStoredText(candidate.UpstreamModelID, 512) {
 			return connectorcontract.AttemptResult{}, ErrInternal
 		}
+		connectorType, err := s.registry.MustValidate(connectorcontract.Type(candidate.ConnectorType))
+		if err != nil {
+			return connectorcontract.AttemptResult{}, ErrInternal
+		}
+		allOpenAI = allOpenAI && connectorType == connectorcontract.TypeOpenAICompatible
+		supported, evaluated := capabilityByType[connectorType]
+		if !evaluated {
+			supported = s.registry.SupportsRequest(connectorType, request)
+			capabilityByType[connectorType] = supported
+		}
+		if supported {
+			capable = append(capable, candidate)
+		}
+	}
+	if len(capable) == 0 {
+		if allOpenAI {
+			return connectorcontract.AttemptResult{}, openai.ErrInvalidRequest
+		}
+		return connectorcontract.AttemptResult{}, ErrUnsupportedCapabilities
 	}
 
 	selection := Selection{
@@ -360,7 +390,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 		FullName:      route.FullName,
 		RouteStrategy: route.RouteStrategy,
 		SilentRetry:   route.SilentRetry,
-		Candidates:    append([]db.ForwardCandidate(nil), route.Candidates...),
+		Candidates:    append([]db.ForwardCandidate(nil), capable...),
 	}
 	selector := s.selector
 	if selector == nil {
@@ -383,8 +413,8 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 	if len(order) > MaxRouteAttempts {
 		return connectorcontract.AttemptResult{}, ErrSelector
 	}
-	candidates := make(map[int64]db.ForwardCandidate, len(route.Candidates))
-	for _, candidate := range route.Candidates {
+	candidates := make(map[int64]db.ForwardCandidate, len(capable))
+	for _, candidate := range capable {
 		candidates[candidate.BindingID] = candidate
 	}
 	seenOrder := make(map[int64]struct{}, len(order))
@@ -411,12 +441,13 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 		candidate := candidates[bindingID]
 		started := s.now().UTC()
 		result := s.runner.Run(ctx, writer, AttemptInput{
-			UserID:       userID,
-			FullName:     route.FullName,
-			BindingID:    candidate.BindingID,
-			Request:      request,
-			TraceID:      attemptID,
-			AttemptIndex: index,
+			UserID:                userID,
+			FullName:              route.FullName,
+			BindingID:             candidate.BindingID,
+			ExpectedConnectorType: connectorcontract.Type(candidate.ConnectorType),
+			Request:               request,
+			TraceID:               attemptID,
+			AttemptIndex:          index,
 		})
 		if ctx.Err() != nil && !result.Success && !result.Committed {
 			result = endedContextResult(parentCtx, ctx)

@@ -11,6 +11,7 @@ import (
 type ConnectorType = connectorcontract.Type
 
 const ConnectorOpenAICompatible = connectorcontract.TypeOpenAICompatible
+const ConnectorAnthropicCompatible = connectorcontract.TypeAnthropicCompatible
 
 type Registry = connector.Registry
 
