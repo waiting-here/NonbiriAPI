@@ -35,7 +35,18 @@ type Observation struct {
 	Committed    bool
 	Failure      connectorcontract.FailureKind
 	Usage        connectorcontract.Usage
-	Diagnostic   string
+	// Safe policy-state booleans only. No endpoint/key/origin/credential or
+	// caller-provided value crosses this body-free observation boundary.
+	StoreForcedFalse        bool
+	FlattenApplied          bool
+	SafetyIdentifierApplied bool
+	CallerStorePresent      bool
+	// CallerStoreValue is a non-secret OpenAI policy bit. It is separated
+	// from CallerStorePresent so an omitted field is not confused with an
+	// explicit false; the observer only receives it after strict bool decode.
+	CallerStoreValueKnown bool
+	CallerStoreValue      bool
+	Diagnostic            string
 }
 
 // ObserverHandler consumes already-redacted observations off the request
@@ -50,6 +61,9 @@ type SafeObserver struct {
 	done      chan struct{}
 	handler   ObserverHandler
 	gate      sync.RWMutex
+	hookMu    sync.Mutex
+	closeHook func()
+	hookOnce  sync.Once
 	closed    atomic.Bool
 	dropped   atomic.Uint64
 	closeOnce sync.Once
@@ -113,6 +127,43 @@ func (o *SafeObserver) Dropped() uint64 {
 	return o.dropped.Load()
 }
 
+// SetCloseHook installs one lifecycle callback which runs after Close has
+// drained the worker. It is used by bounded sidecars whose admission budget
+// must follow the actual queue lifetime across session replacement. A hook is
+// deliberately not part of the observation callback, so it cannot run on the
+// request/connector path.
+func (o *SafeObserver) SetCloseHook(hook func()) {
+	if o == nil || hook == nil {
+		return
+	}
+	o.hookMu.Lock()
+	if o.closed.Load() {
+		o.hookMu.Unlock()
+		go func() {
+			<-o.done
+			hook()
+		}()
+		return
+	}
+	o.closeHook = hook
+	o.hookMu.Unlock()
+}
+
+func (o *SafeObserver) runCloseHook() {
+	if o == nil {
+		return
+	}
+	o.hookOnce.Do(func() {
+		o.hookMu.Lock()
+		hook := o.closeHook
+		o.closeHook = nil
+		o.hookMu.Unlock()
+		if hook != nil {
+			hook()
+		}
+	})
+}
+
 // Close rejects future events and drains every event that TryObserve already
 // accepted. The gate makes send-versus-close linearizable: Close cannot close
 // the queue while a sender holds a read lease, and once it takes the write
@@ -128,6 +179,7 @@ func (o *SafeObserver) Close() error {
 		close(o.queue)
 		o.gate.Unlock()
 		<-o.done
+		o.runCloseHook()
 	})
 	return nil
 }

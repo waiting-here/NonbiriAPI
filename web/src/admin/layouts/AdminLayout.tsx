@@ -5,9 +5,10 @@ import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '@shared/components/LanguageSwitcher';
 import { usePublicConfig } from '@shared/query/publicConfig';
 import { ErrorState, LoadingState } from '@shared/components/States';
-import { apiFetch, isNotFoundError, isUnauthorized } from '@shared/query/http';
+import { apiFetch, isApiError, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { ThemeToggle } from '@shared/theme/ThemeToggle';
-import { adminKeys, useAdminSession } from '../data';
+import { useAdminSession } from '../data';
+import { clearManagementSession } from '@shared/charityManagement';
 
 interface NavItem {
   to: string;
@@ -25,7 +26,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/charity', key: 'charity' },
 ];
 
-function AdminLogin({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
+function AdminLogin({ onSignedIn, notice }: { onSignedIn: () => Promise<void>; notice?: unknown }) {
   const { t } = useTranslation();
   const config = usePublicConfig(true, '/admin/api/config');
   const siteName = config.data?.siteName || t('app.name');
@@ -103,6 +104,9 @@ function AdminLogin({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
               />
             </label>
             {validationError ? <p className="field-error" role="alert">{validationError}</p> : null}
+            {notice ? (
+              isApiError(notice) ? <p className="field-error" role="alert">{notice.message}</p> : <ErrorState error={notice} />
+            ) : null}
             {error ? <ErrorState error={error} /> : null}
             <button type="submit" className="btn btn-primary" disabled={busy}>
               {busy ? t('common.working') : t('admin.shell.login')}
@@ -117,7 +121,8 @@ function AdminLogin({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
 export function AdminLayout() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const session = useAdminSession();
+  const [logoutRequested, setLogoutRequested] = useState(false);
+  const session = useAdminSession(!logoutRequested);
   const config = usePublicConfig(true, '/admin/api/config');
   const siteName = config.data?.siteName || t('app.name');
   const siteLogoURL = config.data?.siteLogoURL;
@@ -141,11 +146,24 @@ export function AdminLayout() {
     link.href = siteLogoURL || defaultIcon;
   }, [siteLogoURL, defaultIcon]);
 
+  if (logoutRequested) {
+    if (logoutBusy) return <LoadingState />;
+    return (
+      <AdminLogin
+        notice={logoutError}
+        onSignedIn={async () => {
+          const result = await session.refetch();
+          if (result.error) throw result.error;
+          setLogoutRequested(false);
+        }}
+      />
+    );
+  }
   if (session.isPending) return <LoadingState />;
   if (session.error && !isUnauthorized(session.error) && !isNotFoundError(session.error)) {
     return <ErrorState error={session.error} onRetry={() => void session.refetch()} />;
   }
-  if (!session.data) {
+  if (session.error || !session.data) {
     return (
       <AdminLogin
         onSignedIn={async () => {
@@ -158,13 +176,19 @@ export function AdminLayout() {
 
   const logout = async () => {
     setLogoutError(null);
+    // Close the station at user intent, before the network request. A failed
+    // logout must not retain the old admin's projections or shell.
+    clearManagementSession(queryClient, 'admin');
+    setLogoutRequested(true);
+    setMenuOpen(false);
     setLogoutBusy(true);
     try {
       await apiFetch<void>('/admin/api/logout', { method: 'POST' });
-      queryClient.removeQueries({ queryKey: adminKeys.all });
+      clearManagementSession(queryClient, 'admin');
       await session.refetch();
       setMenuOpen(false);
     } catch (error) {
+      clearManagementSession(queryClient, 'admin');
       setLogoutError(error);
     } finally {
       setLogoutBusy(false);
@@ -231,7 +255,8 @@ export function AdminLayout() {
         </aside>
         <main id="main" className="admin-content" tabIndex={-1}>
           {logoutError ? <ErrorState error={logoutError} /> : null}
-          <Outlet />
+          {/* Keep route-local mutation and form state scoped to one admin. */}
+          <Outlet key={session.data.admin.username} />
         </main>
       </div>
     </>

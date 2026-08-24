@@ -45,10 +45,74 @@ var (
 	ErrUnsupportedCapabilities = errors.New("forward: model does not support request capabilities")
 )
 
+type observerTraceContextKey struct{}
+type observerContextKey struct{}
+
+// WithObserverTraceID carries an opaque, server-generated logical trace id to
+// the connector observer without changing the independent accounting
+// AttemptID. Invalid or unbounded values are ignored by ObserverTraceID.
+func WithObserverTraceID(ctx context.Context, traceID string) context.Context {
+	if ctx == nil || !validObserverTraceID(traceID) {
+		return ctx
+	}
+	return context.WithValue(ctx, observerTraceContextKey{}, traceID)
+}
+
+func ObserverTraceID(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	traceID, _ := ctx.Value(observerTraceContextKey{}).(string)
+	if !validObserverTraceID(traceID) {
+		return ""
+	}
+	return traceID
+}
+
+func validObserverTraceID(value string) bool {
+	if value == "" || len(value) > 128 {
+		return false
+	}
+	for index := 0; index < len(value); index++ {
+		char := value[index]
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') || char == '_' || char == '-' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+// WithObserver carries a request-scoped connector SafeObserver through the
+// existing runner context. It is an internal integration seam; callers cannot
+// set it through HTTP input.
+func WithObserver(ctx context.Context, observer *connector.SafeObserver) context.Context {
+	if ctx == nil || observer == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, observerContextKey{}, observer)
+}
+
+func ObserverFromContext(ctx context.Context) *connector.SafeObserver {
+	if ctx == nil {
+		return nil
+	}
+	observer, _ := ctx.Value(observerContextKey{}).(*connector.SafeObserver)
+	return observer
+}
+
 // RouteRepository returns only caller-owned model and candidate projections.
 type RouteRepository interface {
 	ListCallerModels(context.Context, int64, int) ([]db.CallerModel, error)
 	ResolveForwardRoute(context.Context, int64, string, int) (db.ForwardRoute, error)
+}
+
+// LogicalRouteRepository is the narrow dry-run seam.  It must query only the
+// owner-scoped logical model row; implementations must not materialize
+// physical bindings/candidates or touch endpoint/key/cache state.
+type LogicalRouteRepository interface {
+	ResolveLogicalForwardRoute(context.Context, int64, string) (db.LogicalForwardRoute, error)
 }
 
 // Selection is the complete, finite caller-owned candidate set. A selector
@@ -221,6 +285,17 @@ type Service struct {
 	registry   *connector.Registry
 }
 
+// DryRunRoute is the logical-only projection returned by ValidateDryRun.  It
+// deliberately contains no candidate, endpoint, binding, origin, or secret
+// material.  Debug callers may use it to render model-level policy while the
+// physical routing rail remains completely untouched.
+type DryRunRoute struct {
+	ModelID         int64
+	FullName        string
+	RouteStrategy   string
+	FlattenToolCall bool
+}
+
 func NewService(config ServiceConfig) (*Service, error) {
 	if config.Repository == nil {
 		return nil, errors.New("forward: route repository is required")
@@ -308,6 +383,51 @@ func (s *Service) ListModels(ctx context.Context, userID int64) (ModelList, erro
 		})
 	}
 	return response, nil
+}
+
+// ValidateDryRun performs the request stages that are safe and required
+// before physical candidate selection: caller-owned logical model lookup,
+// route shape validation, and model-level flatten validation.  It never calls
+// a selector, capability filter, runner, connector, secret vault, egress
+// client, accounting hook, or activity/usage writer.  The caller may therefore
+// use it immediately before emitting the fixed in-memory dry response.
+func (s *Service) ValidateDryRun(ctx context.Context, userID int64, request *openai.ChatRequest) (DryRunRoute, error) {
+	if s == nil || ctx == nil || userID <= 0 || request == nil {
+		return DryRunRoute{}, ErrInternal
+	}
+	s.lifecycle.RLock()
+	defer s.lifecycle.RUnlock()
+	if s.closed || s.repository == nil {
+		return DryRunRoute{}, ErrInternal
+	}
+	logicalRepository, ok := s.repository.(LogicalRouteRepository)
+	if !ok {
+		return DryRunRoute{}, ErrInternal
+	}
+	route, err := logicalRepository.ResolveLogicalForwardRoute(ctx, userID, request.Model)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			return DryRunRoute{}, ErrModelNotFound
+		}
+		return DryRunRoute{}, ErrInternal
+	}
+	if route.UserID != userID || route.FullName != request.Model || route.ModelID <= 0 ||
+		(route.RouteStrategy != "ordered" && route.RouteStrategy != "random") {
+		return DryRunRoute{}, ErrInternal
+	}
+	if route.FlattenToolCall {
+		// ReverseFlatten is the same model-level transformation used by the
+		// actual route.  It works on a private clone and performs no I/O.
+		flattened, flattenErr := request.ReverseFlatten()
+		if flattenErr != nil || flattened == nil {
+			return DryRunRoute{}, ErrInternal
+		}
+		flattened.Clear()
+	}
+	return DryRunRoute{
+		ModelID: route.ModelID, FullName: route.FullName, RouteStrategy: route.RouteStrategy,
+		FlattenToolCall: route.FlattenToolCall,
+	}, nil
 }
 
 // Forward resolves one opaque full name, asks the selector for the candidate
@@ -447,6 +567,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 	if err != nil {
 		return connectorcontract.AttemptResult{}, ErrInternal
 	}
+	observerTraceID := ObserverTraceID(ctx)
 	policyCache := make(map[int64]bool)
 
 	var lastResult connectorcontract.AttemptResult
@@ -463,6 +584,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 			ExpectedConnectorType: connectorcontract.Type(candidate.ConnectorType),
 			Request:               attemptRequest,
 			TraceID:               attemptID,
+			ObserverTraceID:       observerTraceID,
 			AttemptIndex:          index,
 			FlattenToolCalls:      route.FlattenToolCalls,
 			PolicyCache:           policyCache,

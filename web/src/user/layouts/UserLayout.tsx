@@ -4,10 +4,11 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '@shared/components/LanguageSwitcher';
 import { ErrorState, NoticePage } from '@shared/components/States';
-import { apiFetch, isNotFoundError, isUnauthorized } from '@shared/query/http';
+import { apiFetch, isApiError, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { ThemeToggle } from '@shared/theme/ThemeToggle';
 import { usePublicConfig } from '@shared/query/publicConfig';
-import { userKeys, useUserSession } from '../data';
+import { useUserSession } from '../data';
+import { clearManagementSession } from '@shared/charityManagement';
 
 interface NavItem {
   to: string;
@@ -35,16 +36,23 @@ export function UserLayout() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const session = useUserSession();
+  const [logoutRequested, setLogoutRequested] = useState(false);
+  const session = useUserSession(!logoutRequested);
   const config = usePublicConfig();
   const siteName = config.data?.siteName || t('app.name');
   const siteLogoURL = config.data?.siteLogoURL;
   const [menuOpen, setMenuOpen] = useState(false);
+  // Logout is a local station boundary. Keep the shell closed even if the
+  // server response is delayed or the request fails, so stale session data
+  // cannot briefly re-open the old account.
   const logout = useMutation({
     mutationFn: () => apiFetch<void>('/api/auth/logout', { method: 'POST' }),
+    onMutate: () => {
+      setLogoutRequested(true);
+      clearManagementSession(queryClient, 'steward');
+      setMenuOpen(false);
+    },
     onSuccess: () => {
-      // Remove every account-owned query immediately after session logout.
-      queryClient.removeQueries({ queryKey: userKeys.all });
       setMenuOpen(false);
       navigate('/');
     },
@@ -88,15 +96,16 @@ export function UserLayout() {
     if (hasElevated) navigate('/account', { replace: true });
   }, [location.pathname, navigate]);
 
-  const signedIn = Boolean(session.data?.user);
-  const profile = session.data?.user;
+  const signedIn = !logoutRequested && !session.error && Boolean(session.data?.user);
+  const profile = signedIn ? session.data?.user : undefined;
   const showStewardEntry = profile?.effective_level === 5;
   const navItems = showStewardEntry ? [...NAV_ITEMS, STEWARD_NAV_ITEM] : NAV_ITEMS;
   // Server nickname / avatar win over the global Discord profile; either may
   // be absent, in which case the global value (or nothing) is shown.
   const displayName = profile ? profile.guild_nick || profile.username : '';
   const profileAvatar = profile ? profile.guild_avatar_url || profile.avatar_url || '' : '';
-  const showSignIn = !signedIn && (isUnauthorized(session.error) || isNotFoundError(session.error));
+  const showSignIn = !logout.isPending
+    && (logoutRequested || (!signedIn && (isUnauthorized(session.error) || isNotFoundError(session.error))));
 
   // Maintenance mode replaces the whole user station with a notice page so no
   // site feature is reachable; the admin station (a separate host) is
@@ -184,9 +193,19 @@ export function UserLayout() {
           ) : null}
         </div>
       </header>
-      {logout.error ? <div className="shell-error"><ErrorState error={logout.error} /></div> : null}
+      {logout.error ? (
+        <div className="shell-error">
+          {isApiError(logout.error) ? (
+            <p className="field-error" role="alert">{logout.error.message}</p>
+          ) : (
+            <ErrorState error={logout.error} />
+          )}
+        </div>
+      ) : null}
       <main id="main" className="user-main" tabIndex={-1}>
-        <Outlet />
+        {/* A same-tab account switch must remount every route-local form,
+            mutation observer, and transient secret/result state. */}
+        <Outlet key={profile?.id ?? 'signed-out'} />
       </main>
       <footer className="site-footer">
         <span>{t('common.copyright', { year: new Date().getFullYear() })}</span>
