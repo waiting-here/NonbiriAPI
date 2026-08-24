@@ -1,6 +1,6 @@
 {
   "name": "nonbiriapi-web",
-  "version": "1.0.0-alpha.2",
+  "version": "1.0.0-alpha.3",
   "private": true,
   "type": "module",
   "description": "NonbiriAPI web frontend: admin and user stations",

@@ -2,9 +2,31 @@
 
 All notable changes to NonbiriAPI are documented here.
 
-The project is currently in alpha. The current documented release and compatibility promise is `v1.0.0-alpha.2`.
+The project is currently in alpha. The latest published release is `v1.0.0-alpha.2`; the entries under Unreleased describe the locally implemented `v1.0.0-alpha.3` development target and are not a release promise until the release gates pass.
 
 ## [Unreleased]
+
+### Added
+
+- An `anthropic-compatible` upstream connector behind the existing OpenAI-compatible Chat Completions ingress, including strict text, image, tool, sampling, streaming, stop-reason, model-discovery, and four-bucket usage translation. Calls that omit both token-limit fields use the nullable administrator default, whose built-in fallback is 65,536 and is not a cap.
+- A typed site-configuration catalog and raw/effective projections for endpoint, RPM, and per-user in-flight concurrency limits. The built-in concurrency fallback is 5; explicit values may be above or below defaults while remaining inside their independent hard ranges.
+- Two disabled-by-default OpenAI-only experimental policies: an owner-controlled physical-key option that overwrites or inserts `store:false`, and a logical-model option that converts structured tool calls to a bounded text format and restores only complete, real tool-call/result pairs.
+- A memory-only user Debug Hub. Every session starts in dry-run mode, live observation requires a one-time 60-second challenge plus confirmation, and captured request/response projections are bounded, redacted, never persisted, and detached from the real caller's flow control.
+- A modular server-authoritative game framework and Pond Fishing. Starts are idempotent, entry and settlement accounting are transactional, abandoned paid rounds settle automatically, results require an explicit acknowledgement, and privacy-aware single-catch and 30-day payout leaderboards can show a user's current nickname, static Discord CDN avatar, and level-4 badge only when that user opts in.
+- Frontend Vitest/React Testing Library and Playwright foundations, route-level game/debug data modules, local SVG/CSS fishing artwork, and expanded responsive, keyboard, reduced-motion, bilingual, theme, and browser acceptance coverage.
+
+### Changed
+
+- The database is now a fresh-only generation identified by SQLite `application_id=0x4E425249` and `user_version=1`. Existing or malformed files and unexpected sidecars are validated without modifying the source and refused before a writable open; fresh databases seed maintenance on, registration off, and games off.
+- Public admission now acquires one per-user in-flight permit before RPM reservation and request parsing. A concurrency denial creates no RPM hit or automatic penalty, and one logical request retains one permit across silent retries.
+- Account export schema is version 3 and includes the new limit, policy, guild-profile, game, and settlement-correlation fields while continuing to exclude credentials, ciphertext, request/response content, Debug Hub captures, and cross-party identities.
+- Account ban and deletion now close or invalidate in-flight user work across the forwarding, debug, and game boundaries before lifecycle mutation; game settlement, retention, deletion, and late-write paths are integrated into the central maintenance/lifecycle flow.
+
+### Security and privacy
+
+- `store:false` is explicitly a best-effort upstream request, not a guarantee of zero retention: an upstream may ignore it or reject the field. Tool-call flattening can break normal structured tool workflows and is intended only for a specific compatibility need.
+- Debug dry runs perform no candidate selection, credential access, DNS/egress, charity reservation, usage accounting, or persistent request/activity logging. Live observation exposes only caller-visible, sanitized projections and never headers, credentials, internal resource identifiers, base URLs, safety pseudonyms, or raw upstream diagnostics.
+- Game costs and payouts use the same spendable credit balance as check-in and donor rewards. Game events never change the cumulative donor-reward statistic; anonymous leaderboard rows omit every identity field.
 
 ## [1.0.0-alpha.2] - 2026-08-22
 
