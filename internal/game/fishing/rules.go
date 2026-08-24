@@ -51,6 +51,14 @@ var baitOrder = [...]Bait{BaitWorm, BaitLure, BaitPremium}
 var fishTierOrder = [...]Tier{TierSmall, TierRegular, TierBig, TierGiant, TierLegend}
 var treasureOrder = [...]string{"bottle", "clover", "shell"}
 
+const (
+	MinimumBaitPriceMilli     int64 = 1
+	MinimumRTPPercent               = 0
+	MaximumRTPPercent               = 100
+	MinimumTreasureMultiplier       = 1
+	MaximumTreasureMultiplier       = 1000
+)
+
 // Species is a server-authoritative fish entry and its inclusive centimetre
 // interval.
 type Species struct {
@@ -454,9 +462,9 @@ func compileWithDefinitions(config Config, defs definitions) (*Ruleset, error) {
 }
 
 func validateConfig(config Config) (map[Bait]int64, error) {
-	if config.StandardRTPPercent < 0 || config.StandardRTPPercent > 100 ||
-		config.PremiumRTPPercent < 0 || config.PremiumRTPPercent > 100 {
-		return nil, fmt.Errorf("%w: RTP percent outside 0..100", ErrInvalidConfig)
+	if config.StandardRTPPercent < MinimumRTPPercent || config.StandardRTPPercent > MaximumRTPPercent ||
+		config.PremiumRTPPercent < MinimumRTPPercent || config.PremiumRTPPercent > MaximumRTPPercent {
+		return nil, fmt.Errorf("%w: RTP percent outside %d..%d", ErrInvalidConfig, MinimumRTPPercent, MaximumRTPPercent)
 	}
 	if len(config.BaitPricesMilli) != len(baitOrder) {
 		return nil, fmt.Errorf("%w: bait prices must contain exactly three entries", ErrInvalidConfig)
@@ -468,7 +476,7 @@ func validateConfig(config Config) (map[Bait]int64, error) {
 			return nil, fmt.Errorf("%w: missing %s price", ErrInvalidConfig, bait)
 		}
 		price, err := credits.ParseAmount(raw)
-		if err != nil || price <= 0 {
+		if err != nil || price < MinimumBaitPriceMilli {
 			return nil, fmt.Errorf("%w: %s price must be a positive canonical int64", ErrInvalidConfig, bait)
 		}
 		prices[bait] = price
@@ -479,8 +487,8 @@ func validateConfig(config Config) (map[Bait]int64, error) {
 	}
 	for _, key := range treasureOrder {
 		multiplier, ok := config.TreasureMultipliers[key]
-		if !ok || multiplier < 1 || multiplier > 1000 {
-			return nil, fmt.Errorf("%w: %s multiplier must be in 1..1000", ErrInvalidConfig, key)
+		if !ok || multiplier < MinimumTreasureMultiplier || multiplier > MaximumTreasureMultiplier {
+			return nil, fmt.Errorf("%w: %s multiplier must be in %d..%d", ErrInvalidConfig, key, MinimumTreasureMultiplier, MaximumTreasureMultiplier)
 		}
 	}
 	return prices, nil

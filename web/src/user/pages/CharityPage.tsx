@@ -272,10 +272,10 @@ function CharityContent() {
       {charitySuspended ? <p className="field-error" role="alert">{t('user.charity.suspended')}</p> : null}
       {negative ? <p className="inline-notice" role="status">{t('user.charity.negativeFree')}</p> : null}
       {session.data?.user.is_banned ? <p className="field-error" role="alert">{t('user.charity.banned')}</p> : null}
-      <Card className="charity-status-guide">
-        <h2>{t('user.charity.callStatusTitle')}</h2>
-        <ul className="plain-list"><li><strong>{t('user.charity.insufficientCreditsLabel')}:</strong> {t('user.charity.insufficientCredits')}</li><li><strong>{t('user.charity.suspendedLabel')}:</strong> {t('user.charity.suspended')}</li><li><strong>{t('user.charity.serviceUnavailableLabel')}:</strong> {t('user.charity.serviceUnavailable')}</li></ul>
-      </Card>
+      <p className="inline-notice secret-panel" role="note">
+        <strong>{t('user.charity.upstreamPrivacyTitle')}</strong>{' '}
+        {t('user.charity.upstreamPrivacyWarning')}
+      </p>
       <section aria-labelledby="charity-models-title"><div className="card-title-row"><h2 id="charity-models-title">{t('user.charity.pricesTitle')}</h2></div>{models.isPending ? <LoadingState /> : models.error ? <ErrorState error={models.error} onRetry={() => void models.refetch()} /> : noCandidates ? <EmptyState title={t('user.charity.noModels')} body={t('user.charity.noModelsBody')} /> : <div className="item-list">{models.data.map((model) => <CharityModelCard key={model.id} model={model} />)}</div>}</section>
       <section aria-labelledby="donations-title"><div className="card-title-row"><h2 id="donations-title">{t('user.charity.donationsTitle')}</h2></div>{donations.isPending ? <LoadingState /> : donations.error ? <ErrorState error={donations.error} onRetry={() => void donations.refetch()} /> : activeDonations.length === 0 ? <EmptyState title={t('user.charity.noDonations')} body={t('user.charity.noDonationsBody')} /> : <div className="item-list">{activeDonations.map((donation) => <DonationCard key={donation.id} donation={donation} onEdit={() => setEditing(donation)} />)}</div>}</section>
       {canSubmit ? <DonationForm key={editing?.id ?? 'new'} initial={editing} onSaved={() => setEditing(undefined)} /> : null}

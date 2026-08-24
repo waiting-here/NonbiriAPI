@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -220,6 +221,13 @@ func adminPatch(t *testing.T, e *env, runtime RuntimeApplier, path string, body 
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
+	rec := do(t, e.mount(t, runtime), withCookie(stationRequest(http.MethodPatch, path, host.StationAdmin, raw), e.adminCookie(t)))
+	assertNoStore(t, rec)
+	return rec
+}
+
+func adminPatchRaw(t *testing.T, e *env, runtime RuntimeApplier, path string, raw []byte) *httptest.ResponseRecorder {
+	t.Helper()
 	rec := do(t, e.mount(t, runtime), withCookie(stationRequest(http.MethodPatch, path, host.StationAdmin, raw), e.adminCookie(t)))
 	assertNoStore(t, rec)
 	return rec
@@ -1087,58 +1095,193 @@ func TestSiteConfigPatchTypedAndRuntimeApply(t *testing.T) {
 	}
 }
 
-// TestSiteConfigLegalOverrideAcceptsLargeDocument guards the multiline legal
-// override keys. textMaxFor must return the per-key max (maxLegalOverrideBytes,
-// 64 KiB) for kindMultilineText keys, not the generic maxSiteNameBytes fallback
-// (256). A real privacy policy is several KiB; before the fix any value over
-// 256 bytes was rejected as "invalid configuration value".
-func TestSiteConfigLegalOverrideAcceptsLargeDocument(t *testing.T) {
+// TestSiteConfigLegalOverrideRoundTripsAtByteLimit pins the legal-only body
+// decoder: all four documents preserve whitespace and mixed newline styles,
+// while the decoded UTF-8 value is bounded independently at exactly 64 KiB.
+func TestSiteConfigLegalOverrideRoundTripsAtByteLimit(t *testing.T) {
 	e := newEnv(t)
 	applier := &recordingApplier{}
-
-	// A representative multi-paragraph document, well over both the 256-byte
-	// generic text bound (the old textMaxFor bug) and the 4096-byte identity
-	// cap (the old GetSiteConfigValue bug), but under the admin body limit.
-	doc := strings.Repeat("## Section\n\nA paragraph of privacy text.\n", 120) // ~7.7 KiB
-	if len(doc) <= 4096 {
-		t.Fatalf("test document too short: %d bytes", len(doc))
+	prefix := "  标题\r\n\tparagraph\ntrailing spaces  \r\n"
+	doc := prefix + strings.Repeat("x", maxLegalOverrideBytes-len(prefix))
+	if len(doc) != maxLegalOverrideBytes {
+		t.Fatalf("test document bytes=%d, want %d", len(doc), maxLegalOverrideBytes)
 	}
-	for _, k := range []string{
-		"legal_privacy_override_zh", "legal_privacy_override_en",
-		"legal_terms_override_zh", "legal_terms_override_en",
-	} {
-		rec := adminPatch(t, e, applier, "/admin/api/site-config/"+k, map[string]any{"value": doc})
+	keys := []string{
+		KeyLegalPrivacyOverrideZh, KeyLegalPrivacyOverrideEn,
+		KeyLegalTermsOverrideZh, KeyLegalTermsOverrideEn,
+	}
+	for _, key := range keys {
+		rec := adminPatch(t, e, applier, "/admin/api/site-config/"+key, map[string]any{"value": doc})
 		if rec.Code != http.StatusOK {
-			t.Fatalf("PATCH %s (len=%d): status=%d body=%s", k, len(doc), rec.Code, rec.Body.String())
+			t.Fatalf("PATCH %s (len=%d): status=%d body=%s", key, len(doc), rec.Code, rec.Body.String())
 		}
 	}
-
-	// Re-saving an existing multiline override must succeed too: the read-back
-	// of the previous value is what triggered the 500 before the
-	// GetSiteConfigValue fix (it rejected newlines via validateIdentityText).
-	rec := adminPatch(t, e, applier, "/admin/api/site-config/legal_privacy_override_zh", map[string]any{"value": "## Replacement\n\nShorter doc.\n"})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("re-PATCH over existing multiline: status=%d body=%s", rec.Code, rec.Body.String())
-	}
-
-	// Values over the 16 KiB admin body limit are rejected by the HTTP layer
-	// (413), independent of the 64 KiB config ceiling; the storage-layer
-	// ceiling is covered by the db tests directly.
-	overBody := strings.Repeat("x", 17*1024)
-	rec = adminPatch(t, e, applier, "/admin/api/site-config/legal_privacy_override_zh", map[string]any{"value": overBody})
-	assertErr(t, rec, http.StatusRequestEntityTooLarge, "payload_too_large")
-
-	// The persisted value round-trips through the admin read path unchanged.
-	rec = adminGet(t, e, "/admin/api/site-config")
+	rec := adminGet(t, e, "/admin/api/site-config")
 	var out map[string]any
 	decodeJSON(t, rec, &out)
-	for _, k := range []string{"legal_privacy_override_en", "legal_terms_override_zh", "legal_terms_override_en"} {
-		if out[k] != doc {
-			t.Fatalf("%s round-trip = %v, want len=%d", k, out[k], len(doc))
+	for _, key := range keys {
+		if out[key] != doc {
+			t.Fatalf("%s did not round-trip byte-exactly", key)
 		}
 	}
-	if out["legal_privacy_override_zh"] != "## Replacement\n\nShorter doc.\n" {
-		t.Fatalf("legal_privacy_override_zh round-trip = %v", out["legal_privacy_override_zh"])
+	// A refresh followed by a second save must not normalize CRLF, tabs,
+	// leading spaces, or trailing spaces.
+	rec = adminPatch(t, e, applier, "/admin/api/site-config/"+KeyLegalPrivacyOverrideZh, map[string]any{"value": out[KeyLegalPrivacyOverrideZh]})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("second save status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	stored, err := e.store.GetSiteConfigValue(KeyLegalPrivacyOverrideZh)
+	if err != nil || stored != doc {
+		t.Fatalf("second save stored bytes changed: len=%d err=%v", len(stored), err)
+	}
+}
+
+func TestSiteConfigLegalOverrideRejectsInvalidWithoutMutation(t *testing.T) {
+	e := newEnv(t)
+	const key = KeyLegalPrivacyOverrideZh
+	seed := "seed\r\n\ttext  "
+	if rec := adminPatch(t, e, nil, "/admin/api/site-config/"+key, map[string]any{"value": seed}); rec.Code != http.StatusOK {
+		t.Fatalf("seed status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	assertUnchanged := func(t *testing.T) {
+		t.Helper()
+		stored, err := e.store.GetSiteConfigValue(key)
+		if err != nil || stored != seed {
+			t.Fatalf("rejected mutation changed stored value=(len %d, %v)", len(stored), err)
+		}
+	}
+
+	overDecoded, err := json.Marshal(map[string]any{"value": strings.Repeat("界", maxLegalOverrideBytes/3) + "xx"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(strings.Repeat("界", maxLegalOverrideBytes/3) + "xx"); got != maxLegalOverrideBytes+1 {
+		t.Fatalf("over-limit fixture bytes=%d", got)
+	}
+	rec := adminPatchRaw(t, e, nil, "/admin/api/site-config/"+key, overDecoded)
+	assertErr(t, rec, http.StatusBadRequest, "invalid_request")
+	assertUnchanged(t)
+
+	for name, raw := range map[string][]byte{
+		"wrong type":      []byte(`{"value":{"text":"no"}}`),
+		"control byte":    []byte(`{"value":"ok\u0001no"}`),
+		"duplicate field": []byte(`{"value":"first","\u0076alue":"second"}`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec := adminPatchRaw(t, e, nil, "/admin/api/site-config/"+key, raw)
+			assertErr(t, rec, http.StatusBadRequest, "invalid_request")
+			assertUnchanged(t)
+		})
+	}
+
+	// The legal transport cap is independently bounded above the decoded text
+	// ceiling. An oversized escaped transport fails at the HTTP layer.
+	overTransport := []byte(`{"value":"` + strings.Repeat(`\u0061`, maxLegalOverrideBytes+50) + `"}`)
+	if len(overTransport) <= maxLegalAdminBodyBytes {
+		t.Fatalf("transport fixture bytes=%d, want >%d", len(overTransport), maxLegalAdminBodyBytes)
+	}
+	rec = adminPatchRaw(t, e, nil, "/admin/api/site-config/"+key, overTransport)
+	assertErr(t, rec, http.StatusRequestEntityTooLarge, "payload_too_large")
+	assertUnchanged(t)
+
+	// No other administrator mutation inherits the legal transport allowance.
+	nonLegal := []byte(`{"value":"` + strings.Repeat("x", 17*1024) + `"}`)
+	rec = adminPatchRaw(t, e, nil, "/admin/api/site-config/"+KeySiteName, nonLegal)
+	assertErr(t, rec, http.StatusRequestEntityTooLarge, "payload_too_large")
+}
+
+func TestAnthropicDefaultMaxTokensRawEffectiveAndReset(t *testing.T) {
+	e := newEnv(t)
+	read := func(t *testing.T) map[string]any {
+		t.Helper()
+		rec := adminGet(t, e, "/admin/api/site-config")
+		var out map[string]any
+		decodeJSON(t, rec, &out)
+		return out
+	}
+	if got := read(t)[KeyAnthropicDefaultMaxTokens]; got != nil {
+		t.Fatalf("initial raw anthropic value=%v, want null", got)
+	}
+
+	for _, value := range []int{1, 65535, 65537, maxTokenLimit} {
+		rec := adminPatch(t, e, nil, "/admin/api/site-config/"+KeyAnthropicDefaultMaxTokens, map[string]any{"value": value})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("PATCH value=%d status=%d body=%s", value, rec.Code, rec.Body.String())
+		}
+		if got := read(t)[KeyAnthropicDefaultMaxTokens]; got != float64(value) {
+			t.Fatalf("raw anthropic value=%v, want %d", got, value)
+		}
+	}
+	storedBefore, err := e.store.GetSiteConfigValue(KeyAnthropicDefaultMaxTokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, raw := range map[string][]byte{
+		"zero":     []byte(`{"value":0}`),
+		"float":    []byte(`{"value":1.0}`),
+		"exponent": []byte(`{"value":1e3}`),
+		"string":   []byte(`{"value":"70000"}`),
+		"overflow": []byte(`{"value":2147483648}`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec := adminPatchRaw(t, e, nil, "/admin/api/site-config/"+KeyAnthropicDefaultMaxTokens, raw)
+			assertErr(t, rec, http.StatusBadRequest, "invalid_request")
+			stored, err := e.store.GetSiteConfigValue(KeyAnthropicDefaultMaxTokens)
+			if err != nil || stored != storedBefore {
+				t.Fatalf("invalid value changed stored=(%q, %v), want %q", stored, err, storedBefore)
+			}
+		})
+	}
+
+	rec := adminPatchRaw(t, e, nil, "/admin/api/site-config/"+KeyAnthropicDefaultMaxTokens, []byte(`{"value":null}`))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("null reset status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := read(t)[KeyAnthropicDefaultMaxTokens]; got != nil {
+		t.Fatalf("raw anthropic after reset=%v, want null", got)
+	}
+	stored, err := e.store.GetSiteConfigValue(KeyAnthropicDefaultMaxTokens)
+	if err != nil || stored != "" {
+		t.Fatalf("stored anthropic after reset=(%q, %v), want missing", stored, err)
+	}
+
+	entries, err := buildSiteConfigCatalog(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.Key == KeyAnthropicDefaultMaxTokens {
+			if entry.RawDefault != nil || entry.EffectiveFallback != 65536 {
+				t.Fatalf("catalog raw/effective=%v/%v", entry.RawDefault, entry.EffectiveFallback)
+			}
+			return
+		}
+	}
+	t.Fatal("anthropic catalog entry missing")
+}
+
+func TestGameConfigKeysRejectGenericPatchWithoutWrites(t *testing.T) {
+	e := newEnv(t)
+	keysAndValues := map[string]any{
+		KeyGamesEnabled: true, KeyGameFishingEnabled: true,
+		KeyGameFishingBaitWormPrice: "2500000", KeyGameFishingBaitLurePrice: "5000000", KeyGameFishingBaitPremiumPrice: "7500000",
+		KeyGameFishingRTP: 90, KeyGameFishingRTPPremium: 88,
+		KeyGameFishingTreasureBottle: 2, KeyGameFishingTreasureClover: 3, KeyGameFishingTreasureShell: 5,
+	}
+	before, err := e.store.GetAllSiteConfigValues()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, value := range keysAndValues {
+		rec := adminPatch(t, e, nil, "/admin/api/site-config/"+key, map[string]any{"value": value})
+		assertErr(t, rec, http.StatusConflict, "conflict")
+	}
+	after, err := e.store.GetAllSiteConfigValues()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(after, before) {
+		t.Fatalf("generic game patches changed site config\nbefore=%v\nafter=%v", before, after)
 	}
 }
 

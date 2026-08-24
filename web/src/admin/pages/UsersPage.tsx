@@ -116,9 +116,16 @@ function UserLimits({ user }: { user: AdminUser }) {
     user.endpoint_limit === undefined ? '' : String(user.endpoint_limit),
   );
   const [rpmLimit, setRpmLimit] = useState(user.rpm_limit === undefined ? '' : String(user.rpm_limit));
+  const [concurrencyLimit, setConcurrencyLimit] = useState(
+    user.concurrency_limit === undefined ? '' : String(user.concurrency_limit),
+  );
   const [validationError, setValidationError] = useState('');
   const mutation = useMutation({
-    mutationFn: (values: { endpoint_limit: number | null; rpm_limit: number | null }) =>
+    mutationFn: (values: {
+      endpoint_limit: number | null;
+      rpm_limit: number | null;
+      concurrency_limit: number | null;
+    }) =>
       apiFetch<AdminUser>(`/admin/api/users/${encodeURIComponent(user.id)}`, {
         method: 'PATCH',
         json: values,
@@ -128,23 +135,30 @@ function UserLimits({ user }: { user: AdminUser }) {
     },
   });
 
-  const parseLimit = (value: string): number | null | undefined => {
-    if (!value.trim()) return null;
-    if (!/^\d+$/.test(value.trim())) return undefined;
-    const parsed = Number(value.trim());
-    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
+  const parseLimit = (value: string, minimum: number, maximum: number): number | null | undefined => {
+    if (value === '') return null;
+    if (!/^(0|[1-9]\d*)$/.test(value)) return undefined;
+    const parsed = Number(value);
+    return Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum
+      ? parsed
+      : undefined;
   };
 
   const save = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setValidationError('');
-    const endpoint = parseLimit(endpointLimit);
-    const rpm = parseLimit(rpmLimit);
-    if (endpoint === undefined || rpm === undefined) {
+    const endpoint = parseLimit(endpointLimit, 0, 10_000);
+    const rpm = parseLimit(rpmLimit, 1, 4_096);
+    const concurrency = parseLimit(concurrencyLimit, 1, 100_000);
+    if (endpoint === undefined || rpm === undefined || concurrency === undefined) {
       setValidationError(t('admin.users.limitInvalid'));
       return;
     }
-    mutation.mutate({ endpoint_limit: endpoint, rpm_limit: rpm });
+    mutation.mutate({
+      endpoint_limit: endpoint,
+      rpm_limit: rpm,
+      concurrency_limit: concurrency,
+    });
   };
 
   return (
@@ -155,22 +169,54 @@ function UserLimits({ user }: { user: AdminUser }) {
           <input
             type="number"
             min="0"
+            max="10000"
             step="1"
             value={endpointLimit}
             onChange={(event) => setEndpointLimit(event.target.value)}
             aria-label={`${t('admin.users.endpointLimit')} · ${user.username}`}
           />
+          <small className="muted">
+            {t('admin.users.limitRawEffective', {
+              raw: user.endpoint_limit ?? t('admin.users.limitInherited'),
+              effective: user.effective_endpoint_limit,
+            })}
+          </small>
         </label>
         <label>
           <span>{t('admin.users.rpmLimit')}</span>
           <input
             type="number"
-            min="0"
+            min="1"
+            max="4096"
             step="1"
             value={rpmLimit}
             onChange={(event) => setRpmLimit(event.target.value)}
             aria-label={`${t('admin.users.rpmLimit')} · ${user.username}`}
           />
+          <small className="muted">
+            {t('admin.users.limitRawEffective', {
+              raw: user.rpm_limit ?? t('admin.users.limitInherited'),
+              effective: user.effective_rpm_limit,
+            })}
+          </small>
+        </label>
+        <label>
+          <span>{t('admin.users.concurrencyLimit')}</span>
+          <input
+            type="number"
+            min="1"
+            max="100000"
+            step="1"
+            value={concurrencyLimit}
+            onChange={(event) => setConcurrencyLimit(event.target.value)}
+            aria-label={`${t('admin.users.concurrencyLimit')} · ${user.username}`}
+          />
+          <small className="muted">
+            {t('admin.users.limitRawEffective', {
+              raw: user.concurrency_limit ?? t('admin.users.limitInherited'),
+              effective: user.effective_concurrency_limit,
+            })}
+          </small>
         </label>
       </div>
       <small className="muted">{t('admin.users.limitHint')}</small>
@@ -187,6 +233,7 @@ function UserLimits({ user }: { user: AdminUser }) {
           onClick={() => {
             setEndpointLimit('');
             setRpmLimit('');
+            setConcurrencyLimit('');
           }}
         >
           {t('admin.users.restoreDefault')}

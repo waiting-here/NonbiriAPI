@@ -26,7 +26,11 @@ export interface UserSummary {
   is_banned: boolean;
   blocked_reason?: string;
   endpoint_limit?: number;
+  effective_endpoint_limit: number;
   rpm_limit?: number;
+  effective_rpm_limit: number;
+  concurrency_limit?: number;
+  effective_concurrency_limit: number;
   /** Canonical decimal milli-credit string; the signed consumption balance. */
   credits: string;
   /** Canonical decimal milli-credit string; the non-negative donor reward. */
@@ -93,6 +97,8 @@ export interface EndpointKey {
   display?: string;
   note: string;
   enabled: boolean;
+  /** Experimental physical-key policy; writable only by the key owner. */
+  force_store_false: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -111,6 +117,8 @@ export interface PlatformModel {
   full_name: string;
   route_strategy: 'ordered' | 'random';
   silent_retry: boolean;
+  /** Experimental logical-model policy. */
+  flatten_tool_calls: boolean;
   binding_count: number;
   created_at: string;
   updated_at: string;
@@ -303,19 +311,52 @@ function optionalNumberValue(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function strictInteger(value: unknown, minimum: number, maximum: number, field: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < minimum || (value as number) > maximum) {
+    throw new ApiError('invalid_response', `The server returned an invalid ${field}.`, 200);
+  }
+  return value as number;
+}
+
+// Additive experimental policy fields may be absent while the preceding backend
+// wave is integrated, but once present they are strict JSON booleans.
+function additivePolicyBoolean(value: unknown, field: string): boolean {
+  if (value === undefined) return false;
+  if (typeof value !== 'boolean') {
+    throw new ApiError('invalid_response', `The server returned an invalid ${field}.`, 200);
+  }
+  return value;
+}
+
+function optionalStrictInteger(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+  field: string,
+): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  return strictInteger(value, minimum, maximum, field);
+}
+
 function levelValue(value: unknown, fallback: number): number {
   const parsed = optionalNumberValue(value);
   return parsed !== undefined && parsed >= 1 && parsed <= 5 ? Math.trunc(parsed) : fallback;
 }
 
-function normalizeUser(value: unknown): UserSummary {
+export function normalizeUserSummary(value: unknown): UserSummary {
   const record = asRecord(value) ?? {};
   const lang = recordValue(record, 'lang') === 'zh' ? 'zh' : 'en';
   const endpointLimit = recordValue(record, 'endpoint_limit');
   const rpmLimit = recordValue(record, 'rpm_limit');
+  const concurrencyLimit = recordValue(record, 'concurrency_limit');
   const manualLevel = optionalNumberValue(recordValue(record, 'manual_level'));
   const bannedUntil = optionalNumberValue(recordValue(record, 'banned_until'));
   const charitySuspendedUntil = optionalNumberValue(recordValue(record, 'charity_suspended_until'));
+  const explicitEndpointLimit = optionalStrictInteger(endpointLimit, 0, 10_000, 'endpoint limit');
+  const explicitRPMLimit = optionalStrictInteger(rpmLimit, 1, 4_096, 'RPM limit');
+  const explicitConcurrencyLimit = optionalStrictInteger(
+    concurrencyLimit, 1, 100_000, 'concurrency limit',
+  );
   return {
     id: idValue(recordValue(record, 'id')),
     username: text(recordValue(record, 'username'), 128, '—'),
@@ -334,12 +375,24 @@ function normalizeUser(value: unknown): UserSummary {
     ...(optionalText(recordValue(record, 'blocked_reason'), 512)
       ? { blocked_reason: optionalText(recordValue(record, 'blocked_reason'), 512) }
       : {}),
-    ...(typeof endpointLimit === 'number' && Number.isFinite(endpointLimit)
-      ? { endpoint_limit: Math.max(0, Math.trunc(endpointLimit)) }
+    ...(explicitEndpointLimit !== undefined
+      ? { endpoint_limit: explicitEndpointLimit }
       : {}),
-    ...(typeof rpmLimit === 'number' && Number.isFinite(rpmLimit)
-      ? { rpm_limit: Math.max(0, Math.trunc(rpmLimit)) }
+    effective_endpoint_limit: strictInteger(
+      recordValue(record, 'effective_endpoint_limit'), 0, 10_000, 'effective endpoint limit',
+    ),
+    ...(explicitRPMLimit !== undefined
+      ? { rpm_limit: explicitRPMLimit }
       : {}),
+    effective_rpm_limit: strictInteger(
+      recordValue(record, 'effective_rpm_limit'), 1, 4_096, 'effective RPM limit',
+    ),
+    ...(explicitConcurrencyLimit !== undefined
+      ? { concurrency_limit: explicitConcurrencyLimit }
+      : {}),
+    effective_concurrency_limit: strictInteger(
+      recordValue(record, 'effective_concurrency_limit'), 1, 100_000, 'effective concurrency limit',
+    ),
     credits: amountValue(recordValue(record, 'credits')),
     donation_credit: amountValue(recordValue(record, 'donation_credit')),
     effective_level: levelValue(recordValue(record, 'effective_level'), 1),
@@ -359,7 +412,7 @@ function normalizeSession(value: unknown): UserSessionResponse {
   if (!record || !asRecord(record.user)) {
     throw new ApiError('invalid_response', 'The server returned an invalid session.', 200);
   }
-  return { user: normalizeUser(record.user) };
+  return { user: normalizeUserSummary(record.user) };
 }
 
 function normalizeUsage(value: unknown): UsageSummary {
@@ -425,7 +478,7 @@ function fragmentFromRecord(record: UnknownRecord): string | undefined {
   return formatFragment(head, tail);
 }
 
-function normalizeEndpointKey(value: unknown): EndpointKey {
+export function normalizeEndpointKey(value: unknown): EndpointKey {
   const record = asRecord(value) ?? {};
   const fragment = fragmentFromRecord(record);
   return {
@@ -433,6 +486,9 @@ function normalizeEndpointKey(value: unknown): EndpointKey {
     ...(fragment ? { display: fragment } : {}),
     note: text(recordValue(record, 'note'), 512),
     enabled: booleanValue(recordValue(record, 'enabled'), true),
+    force_store_false: additivePolicyBoolean(
+      recordValue(record, 'force_store_false'), 'store policy',
+    ),
     created_at: dateValue(recordValue(record, 'created_at')),
     updated_at: dateValue(recordValue(record, 'updated_at')),
   };
@@ -448,7 +504,7 @@ function normalizeUpstreamModel(value: unknown): UpstreamModel {
   };
 }
 
-function normalizePlatformModel(value: unknown): PlatformModel {
+export function normalizePlatformModel(value: unknown): PlatformModel {
   const record = asRecord(value) ?? {};
   return {
     id: idValue(recordValue(record, 'id')),
@@ -457,6 +513,9 @@ function normalizePlatformModel(value: unknown): PlatformModel {
     full_name: text(recordValue(record, 'full_name'), 160, '—'),
     route_strategy: recordValue(record, 'route_strategy') === 'random' ? 'random' : 'ordered',
     silent_retry: booleanValue(recordValue(record, 'silent_retry')),
+    flatten_tool_calls: additivePolicyBoolean(
+      recordValue(record, 'flatten_tool_calls'), 'tool-call policy',
+    ),
     binding_count: Math.max(0, integerValue(recordValue(record, 'binding_count'))),
     created_at: dateValue(recordValue(record, 'created_at')),
     updated_at: dateValue(recordValue(record, 'updated_at')),
@@ -660,7 +719,7 @@ export function useUserMe(enabled = true) {
     queryKey: userKeys.me,
     queryFn: async () => {
       const payload = asRecord(await apiFetch<unknown>('/api/me'));
-      return normalizeUser(payload?.user ?? payload);
+      return normalizeUserSummary(payload?.user ?? payload);
     },
     enabled,
   });
@@ -1038,6 +1097,7 @@ export interface CharityModel {
   model: string;
   full_name: string;
   enabled: boolean;
+  flatten_tool_calls: boolean;
   pricing_mode: 'per_request' | 'per_token';
   prices: CharityPrices;
   discount: { percent: number; enabled: boolean; start_at?: number; end_at?: number };
@@ -1058,6 +1118,8 @@ export interface DonationKey {
   credits_used_milli: string;
   credits_reserved_milli: string;
   enabled: boolean;
+  /** Read-only outside the physical key owner's own resource form. */
+  force_store_false: boolean;
 }
 
 export interface DonationReview {
@@ -1084,8 +1146,16 @@ export interface Donation {
   reviews: DonationReview[];
 }
 
-function amountString(value: unknown): string {
-  return typeof value === 'string' && value.length <= 32 ? value : '0';
+function amountString(value: unknown, field = 'amount'): string {
+  if (typeof value !== 'string' || !/^(0|[1-9]\d*)$/.test(value) || value.length > 19) {
+    throw new ApiError('invalid_response', `The server returned an invalid ${field}.`, 200);
+  }
+  try {
+    if (BigInt(value) > 9_223_372_036_854_775_807n) throw new Error('overflow');
+  } catch {
+    throw new ApiError('invalid_response', `The server returned an invalid ${field}.`, 200);
+  }
+  return value;
 }
 
 function optionalUnix(value: unknown): number | undefined {
@@ -1098,7 +1168,7 @@ function safeFragment(head: unknown, tail: unknown): string | undefined {
   return h || t ? `${h}${h && t ? '…' : ''}${t}` : undefined;
 }
 
-function normalizeCharityModel(value: unknown): CharityModel {
+export function normalizeCharityModel(value: unknown): CharityModel {
   const record = asRecord(value) ?? {};
   const rawPrices = asRecord(recordValue(record, 'prices')) ?? {};
   const rawDiscount = asRecord(recordValue(record, 'discount')) ?? {};
@@ -1116,6 +1186,9 @@ function normalizeCharityModel(value: unknown): CharityModel {
     model: text(recordValue(record, 'model'), 256, '—'),
     full_name: text(recordValue(record, 'full_name'), 512, '—'),
     enabled: booleanValue(recordValue(record, 'enabled')),
+    flatten_tool_calls: additivePolicyBoolean(
+      recordValue(record, 'flatten_tool_calls'), 'charity tool-call policy',
+    ),
     pricing_mode: pricingMode,
     prices: {
       request_user_price_milli: price('request_user_price_milli'),
@@ -1147,7 +1220,7 @@ function normalizeCharityModel(value: unknown): CharityModel {
   };
 }
 
-function normalizeDonationKey(value: unknown): DonationKey {
+export function normalizeDonationKey(value: unknown): DonationKey {
   const record = asRecord(value) ?? {};
   return {
     id: idValue(recordValue(record, 'id')),
@@ -1157,12 +1230,15 @@ function normalizeDonationKey(value: unknown): DonationKey {
     ...(safeFragment(recordValue(record, 'display_head'), recordValue(record, 'display_tail'))
       ? { display: safeFragment(recordValue(record, 'display_head'), recordValue(record, 'display_tail')) }
       : {}),
-    max_concurrency: Math.max(0, integerValue(recordValue(record, 'max_concurrency'))),
-    rpm_limit: Math.max(0, integerValue(recordValue(record, 'rpm_limit'))),
+    max_concurrency: strictInteger(recordValue(record, 'max_concurrency'), 0, 100_000, 'donation key concurrency'),
+    rpm_limit: strictInteger(recordValue(record, 'rpm_limit'), 0, 4_096, 'donation key RPM'),
     credits_usage_cap_milli: amountString(recordValue(record, 'credits_usage_cap_milli')),
     credits_used_milli: amountString(recordValue(record, 'credits_used_milli')),
     credits_reserved_milli: amountString(recordValue(record, 'credits_reserved_milli')),
     enabled: booleanValue(recordValue(record, 'enabled'), true),
+    force_store_false: additivePolicyBoolean(
+      recordValue(record, 'force_store_false'), 'donation-key store policy',
+    ),
   };
 }
 
