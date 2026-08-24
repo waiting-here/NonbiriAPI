@@ -307,11 +307,15 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	var pkg struct {
 		SchemaVersion int `json:"schema_version"`
 		User          struct {
-			ID          int64  `json:"id"`
-			Discord     string `json:"discord_id"`
-			Username    string `json:"username"`
-			ManualLevel *int   `json:"manual_level"`
-			AutoLevel   int    `json:"auto_level"`
+			ID                        int64  `json:"id"`
+			Discord                   string `json:"discord_id"`
+			Username                  string `json:"username"`
+			ManualLevel               *int   `json:"manual_level"`
+			AutoLevel                 int    `json:"auto_level"`
+			EffectiveEndpointLimit    int    `json:"effective_endpoint_limit"`
+			EffectiveRPMLimit         int    `json:"effective_rpm_limit"`
+			ConcurrencyLimit          *int   `json:"concurrency_limit"`
+			EffectiveConcurrencyLimit int    `json:"effective_concurrency_limit"`
 		} `json:"user"`
 		CreditLedger []struct {
 			ID                  int64  `json:"id"`
@@ -384,11 +388,15 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &pkg); err != nil {
 		t.Fatalf("decode package: %v body=%s", err, rec.Body.String())
 	}
-	if pkg.SchemaVersion != 2 || pkg.User.ID != user.ID || pkg.User.Discord != "discord-export" || pkg.User.Username != "alice" {
+	if pkg.SchemaVersion != 3 || pkg.User.ID != user.ID || pkg.User.Discord != "discord-export" || pkg.User.Username != "alice" {
 		t.Fatalf("package header=%+v", pkg)
 	}
 	if pkg.User.ManualLevel == nil || *pkg.User.ManualLevel != 2 || pkg.User.AutoLevel != 1 {
 		t.Fatalf("level export = (%+v, %d), want (2, 1)", pkg.User.ManualLevel, pkg.User.AutoLevel)
+	}
+	if pkg.User.EffectiveEndpointLimit != db.DefaultEndpointLimit || pkg.User.EffectiveRPMLimit != ratelimit.DefaultRPMPerUserLimit ||
+		pkg.User.ConcurrencyLimit != nil || pkg.User.EffectiveConcurrencyLimit != db.DefaultUserConcurrencyLimit {
+		t.Fatalf("limit export = %+v", pkg.User)
 	}
 	if len(pkg.Endpoints) != 1 || pkg.Endpoints[0].BaseURL != "https://upstream.example/v1/" || len(pkg.Endpoints[0].Keys) != 1 || pkg.Endpoints[0].Keys[0].DisplayHead != "head" {
 		t.Fatalf("endpoints=%+v", pkg.Endpoints)
@@ -647,6 +655,87 @@ func TestBuildExportEmptyAccount(t *testing.T) {
 	}
 	if pkg.Endpoints == nil || pkg.Models == nil || pkg.CallerKey != nil {
 		t.Fatalf("empty package shape: %s", payload)
+	}
+}
+
+func TestBuildExportRefreshesCurrentRawAndEffectiveUserLimits(t *testing.T) {
+	st := lifecycleTestStore(t)
+	// Keep the create-time row as a deliberately stale session principal.
+	stale, err := st.CreateDiscordUser("discord-export-limits", "limits", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stale.EndpointLimit != nil || stale.RPMLimit != nil || stale.ConcurrencyLimit != nil {
+		t.Fatalf("fresh row unexpectedly has explicit limits: %+v", stale)
+	}
+	if err := st.SetSiteConfigValue("default_endpoint_limit", "4"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetSiteConfigValue("default_rpm_per_user", "40"); err != nil {
+		t.Fatal(err)
+	}
+	endpoint, rpm, concurrency := 10_000, 41, 9
+	if _, err := st.UpdateUserLimits(stale.ID, db.UserLimitPatch{
+		EndpointLimitSet: true, EndpointLimit: &endpoint,
+		RPMLimitSet: true, RPMLimit: &rpm,
+		ConcurrencyLimitSet: true, ConcurrencyLimit: &concurrency,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	type exportedLimits struct {
+		SchemaVersion int `json:"schema_version"`
+		User          struct {
+			EndpointLimit             *int `json:"endpoint_limit"`
+			EffectiveEndpointLimit    int  `json:"effective_endpoint_limit"`
+			RPMLimit                  *int `json:"rpm_limit"`
+			EffectiveRPMLimit         int  `json:"effective_rpm_limit"`
+			ConcurrencyLimit          *int `json:"concurrency_limit"`
+			EffectiveConcurrencyLimit int  `json:"effective_concurrency_limit"`
+		} `json:"user"`
+	}
+	decode := func() exportedLimits {
+		t.Helper()
+		payload, err := NewExportService(st).BuildExport(context.Background(), stale)
+		if err != nil {
+			t.Fatalf("BuildExport: %v", err)
+		}
+		var out exportedLimits
+		if err := json.Unmarshal(payload, &out); err != nil {
+			t.Fatalf("decode export: %v", err)
+		}
+		return out
+	}
+
+	out := decode()
+	if out.SchemaVersion != 3 || out.User.EndpointLimit == nil || *out.User.EndpointLimit != endpoint ||
+		out.User.EffectiveEndpointLimit != endpoint || out.User.RPMLimit == nil || *out.User.RPMLimit != rpm ||
+		out.User.EffectiveRPMLimit != rpm || out.User.ConcurrencyLimit == nil || *out.User.ConcurrencyLimit != concurrency ||
+		out.User.EffectiveConcurrencyLimit != concurrency {
+		t.Fatalf("explicit current limits from stale principal: %+v", out)
+	}
+
+	// Clearing the current row restores nullable wire values. A later default
+	// edit is projected at export generation time; the stale principal cannot
+	// pin either the old explicit values or old defaults.
+	if _, err := st.UpdateUserLimits(stale.ID, db.UserLimitPatch{
+		EndpointLimitSet: true, EndpointLimit: nil,
+		RPMLimitSet: true, RPMLimit: nil,
+		ConcurrencyLimitSet: true, ConcurrencyLimit: nil,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetSiteConfigValue("default_endpoint_limit", "6"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetSiteConfigValue("default_rpm_per_user", "70"); err != nil {
+		t.Fatal(err)
+	}
+	out = decode()
+	if out.User.EndpointLimit != nil || out.User.EffectiveEndpointLimit != 6 ||
+		out.User.RPMLimit != nil || out.User.EffectiveRPMLimit != 70 ||
+		out.User.ConcurrencyLimit != nil || out.User.EffectiveConcurrencyLimit != db.DefaultUserConcurrencyLimit {
+		t.Fatalf("current nullable/default limits from stale principal: %+v", out)
 	}
 }
 

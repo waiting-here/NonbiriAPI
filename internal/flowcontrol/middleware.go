@@ -81,6 +81,14 @@ func (m *Middleware) serveHTTP(writer http.ResponseWriter, request *http.Request
 			writeRateLimited(writer, retryAfter)
 			return
 		}
+		if errors.Is(err, ErrConcurrencyLimited) {
+			writeConcurrencyLimited(writer)
+			return
+		}
+		if errors.Is(err, ErrInvalidUser) {
+			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+			return
+		}
 		writeUnavailable(writer, request)
 		return
 	}
@@ -104,6 +112,14 @@ func (m *Middleware) serveHTTP(writer http.ResponseWriter, request *http.Request
 	next.ServeHTTP(tracker, request)
 }
 
+// writeConcurrencyLimited deliberately omits Retry-After: unlike a fixed RPM
+// window, the server cannot safely predict when another in-flight request
+// will terminate.
+func writeConcurrencyLimited(writer http.ResponseWriter) {
+	writer.Header().Del("Retry-After")
+	httperr.WriteError(writer, httperr.New(httperr.CodeRateLimited, "rate limit exceeded"))
+}
+
 // meteredRequest scopes RPM accounting to the chat-completion exit. The path
 // mirrors the forward handler's mux registration exactly; anything else
 // (model listing, health, admin/user stations) never touches this limiter.
@@ -116,7 +132,11 @@ func meteredRequest(request *http.Request) bool {
 // Retry-After header. It reveals no user counts, keys, IPs, or internal
 // state: the body is the standard envelope with message only.
 func writeRateLimited(writer http.ResponseWriter, retryAfter time.Duration) {
-	writer.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds(retryAfter)))
+	if retryAfter > 0 {
+		writer.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds(retryAfter)))
+	} else {
+		writer.Header().Del("Retry-After")
+	}
 	httperr.WriteError(writer, httperr.New(httperr.CodeRateLimited, "rate limit exceeded"))
 }
 

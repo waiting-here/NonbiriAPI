@@ -101,7 +101,8 @@ type queryRowContexter interface {
 }
 
 // CreateEndpoint inserts a new endpoint for userID after an atomic cap check.
-// The cap is min(global default, per-user override); when the current endpoint
+// The cap is the per-user override when non-NULL, otherwise the site default;
+// when the current endpoint
 // count has already reached it, a *CapError wrapping ErrEndpointCap is returned
 // and no row is written. connectorType and baseURL must already be validated
 // and canonicalized by the caller (the service layer uses the connector
@@ -352,8 +353,8 @@ func (s *Store) DeleteEndpoint(ctx context.Context, userID, id int64) error {
 	return nil
 }
 
-// EndpointCap returns the effective endpoint-count cap for userID:
-// min(global default, per-user override), where the global default is the
+// EndpointCap returns the effective endpoint-count cap for userID: a non-NULL
+// per-user override applies directly, otherwise the global default is the
 // default_endpoint_limit site_config value or DefaultEndpointLimit when unset.
 // It is exported for handlers that surface the cap to the user and for tests.
 func (s *Store) EndpointCap(ctx context.Context, userID int64) (int, error) {
@@ -375,8 +376,25 @@ func (s *Store) CountEndpoints(ctx context.Context, userID int64) (int, error) {
 // inside CreateEndpoint's transaction reads a consistent snapshot with the
 // count that follows it.
 func endpointCapLocked(ctx context.Context, q queryRowContexter, userID int64) (int, error) {
+	var userLimit sql.NullInt64
+	err := q.QueryRowContext(ctx, `SELECT endpoint_limit FROM users WHERE id=?`, userID).Scan(&userLimit)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, ErrNotFound
+		}
+		return 0, fmt.Errorf("read user endpoint limit: %w", err)
+	}
+	// A non-NULL override is self-contained: the site default is neither a cap
+	// nor a prerequisite, so even a missing/corrupt default cannot block it.
+	if userLimit.Valid {
+		if userLimit.Int64 < 0 || userLimit.Int64 > MaxUserEndpointLimit {
+			return 0, ErrInvalidSiteConfig
+		}
+		return int(userLimit.Int64), nil
+	}
+
 	var globalStr sql.NullString
-	err := q.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key=?`, siteConfigKeyDefaultEndpointLimit).Scan(&globalStr)
+	err = q.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key=?`, siteConfigKeyDefaultEndpointLimit).Scan(&globalStr)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return 0, fmt.Errorf("read default endpoint limit: %w", err)
 	}
@@ -387,26 +405,10 @@ func endpointCapLocked(ctx context.Context, q queryRowContexter, userID int64) (
 			return 0, ErrInvalidSiteConfig
 		}
 		n, perr := strconv.Atoi(trimmed)
-		if perr != nil || n < 0 {
+		if perr != nil || strconv.Itoa(n) != trimmed || trimmed != globalStr.String || n < 0 || n > MaxUserEndpointLimit {
 			return 0, ErrInvalidSiteConfig
 		}
 		global = n
-	}
-
-	var userLimit sql.NullInt64
-	err = q.QueryRowContext(ctx, `SELECT endpoint_limit FROM users WHERE id=?`, userID).Scan(&userLimit)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return 0, ErrNotFound
-		}
-		return 0, fmt.Errorf("read user endpoint limit: %w", err)
-	}
-	if !userLimit.Valid || userLimit.Int64 < 0 {
-		return global, nil
-	}
-	user := int(userLimit.Int64)
-	if user < global {
-		return user, nil
 	}
 	return global, nil
 }

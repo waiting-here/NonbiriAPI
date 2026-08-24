@@ -488,14 +488,19 @@ func (a *UserAuth) Session(w http.ResponseWriter, r *http.Request) {
 		writeStableError(w, httperr.CodeInternal, "profile unavailable")
 		return
 	}
-	httperr.WriteJSON(w, http.StatusOK, userEnvelope{User: publicUser(user, effectiveLevel)})
+	defaults, err := a.store.GetUserLimitDefaults(r.Context())
+	if err != nil {
+		writeStableError(w, httperr.CodeInternal, "profile unavailable")
+		return
+	}
+	httperr.WriteJSON(w, http.StatusOK, userEnvelope{User: publicUser(user, effectiveLevel, defaults)})
 }
 
 // Me is the contract-compatible alias for the user profile probe.
 func (a *UserAuth) Me(w http.ResponseWriter, r *http.Request) { a.Session(w, r) }
 
 // PatchMe handles PATCH /api/me: a session-only self-service profile
-// update limited to lang. endpoint_limit, rpm_limit, admin/ban state,
+// update limited to lang. endpoint_limit, rpm_limit, concurrency_limit, admin/ban state,
 // usage, and the body user id are never accepted (unknown fields are
 // rejected by the strict decoder). The response is the same no-store user
 // envelope as GET /api/me. Per-user RPM limits are administrator-set only;
@@ -549,7 +554,12 @@ func (a *UserAuth) PatchMe(w http.ResponseWriter, r *http.Request) {
 		writeStableError(w, httperr.CodeInternal, "profile update unavailable")
 		return
 	}
-	httperr.WriteJSON(w, http.StatusOK, userEnvelope{User: publicUser(updated, effectiveLevel)})
+	defaults, err := a.store.GetUserLimitDefaults(r.Context())
+	if err != nil {
+		writeStableError(w, httperr.CodeInternal, "profile update unavailable")
+		return
+	}
+	httperr.WriteJSON(w, http.StatusOK, userEnvelope{User: publicUser(updated, effectiveLevel, defaults)})
 }
 
 // Logout handles POST /api/auth/logout and atomically removes the presented

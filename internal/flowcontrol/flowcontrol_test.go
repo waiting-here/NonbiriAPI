@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
 
@@ -50,13 +51,23 @@ func newTestController(t *testing.T, config ratelimit.RPMConfig, resolver UserLi
 	return controller
 }
 
-func admit(t *testing.T, controller *Controller, userID int64) *Reservation {
+func reserve(t *testing.T, controller *Controller, userID int64) *Reservation {
 	t.Helper()
 	reservation, retryAfter, err := controller.Admit(context.Background(), userID)
 	if err != nil || reservation == nil || retryAfter != 0 {
 		t.Fatalf("admit user=%d: reservation=%v retryAfter=%v err=%v", userID, reservation, retryAfter, err)
 	}
 	return reservation
+}
+
+// admit consumes an RPM event while releasing the per-user in-flight permit.
+// Tests that need an active in-flight request use reserve directly.
+func admit(t *testing.T, controller *Controller, userID int64) {
+	t.Helper()
+	reservation := reserve(t, controller, userID)
+	if !reservation.Commit() {
+		t.Fatalf("commit admitted user=%d", userID)
+	}
 }
 
 func deny(t *testing.T, controller *Controller, userID int64) (time.Duration, error) {
@@ -73,8 +84,10 @@ func TestAdmitGlobalAndPerUserDenyWithRetryAfter(t *testing.T) {
 	controller := newTestController(t, testRPMConfig(), nil, clock)
 
 	// Per-user window: two admits fill user 1 against PerUserLimit=2.
-	if reservation := admit(t, controller, 1); !reservation.Active() {
+	if reservation := reserve(t, controller, 1); !reservation.Active() {
 		t.Fatal("reservation should be active")
+	} else if !reservation.Commit() {
+		t.Fatal("reservation commit")
 	}
 	admit(t, controller, 1)
 	retryAfter, err := deny(t, controller, 1)
@@ -104,57 +117,59 @@ func TestAdmitUserIsolation(t *testing.T) {
 	deny(t, controller, 3)
 }
 
-func TestAdmitPerUserClampFromServer(t *testing.T) {
-	clock := newFakeClock()
-	config := testRPMConfig() // PerUserLimit ceiling = 2
+func TestAdmitExplicitRPMIsIndependentFromDefault(t *testing.T) {
+	config := testRPMConfig() // PerUserLimit default = 2; MaxEvents = 8.
+	config.GlobalLimit = 8
 
-	t.Run("over-ceiling value clamped", func(t *testing.T) {
-		controller := newTestController(t, config, func(_ context.Context, _ int64) (int, bool, error) {
-			return 100, true, nil
-		}, clock)
-		admit(t, controller, 1)
-		admit(t, controller, 1)
-		deny(t, controller, 1) // clamped to 2, not 100
+	t.Run("above default is honored", func(t *testing.T) {
+		controller := newTestController(t, config, func(_ context.Context, _ int64) (UserLimits, error) {
+			return UserLimits{RPMLimit: 5, RPMLimitSet: true, ConcurrencyLimit: 5}, nil
+		}, newFakeClock())
+		for range 5 {
+			admit(t, controller, 1)
+		}
+		deny(t, controller, 1)
 	})
 
-	t.Run("invalid values fall back to ceiling", func(t *testing.T) {
-		for _, invalid := range []int{0, -7} {
-			controller := newTestController(t, config, func(_ context.Context, _ int64) (int, bool, error) {
-				return invalid, true, nil
+	t.Run("invalid explicit values fail closed", func(t *testing.T) {
+		for _, invalid := range []int{0, -7, db.MaxUserRPMLimit + 1} {
+			controller := newTestController(t, config, func(_ context.Context, _ int64) (UserLimits, error) {
+				return UserLimits{RPMLimit: invalid, RPMLimitSet: true, ConcurrencyLimit: 5}, nil
 			}, newFakeClock())
-			admit(t, controller, 1)
-			admit(t, controller, 1)
-			deny(t, controller, 1)
+			reservation, _, err := controller.Admit(context.Background(), 1)
+			if reservation != nil || !errors.Is(err, ErrInvalidUser) {
+				t.Fatalf("invalid=%d reservation=%v err=%v", invalid, reservation, err)
+			}
 		}
 	})
 
-	t.Run("no resolver means default ceiling", func(t *testing.T) {
+	t.Run("no resolver means current default", func(t *testing.T) {
 		controller := newTestController(t, config, nil, newFakeClock())
 		admit(t, controller, 1)
 		admit(t, controller, 1)
 		deny(t, controller, 1)
 	})
 
-	t.Run("no custom cap means default ceiling", func(t *testing.T) {
-		controller := newTestController(t, config, func(_ context.Context, _ int64) (int, bool, error) {
-			return 0, false, nil
+	t.Run("no explicit value means current default", func(t *testing.T) {
+		controller := newTestController(t, config, func(_ context.Context, _ int64) (UserLimits, error) {
+			return UserLimits{ConcurrencyLimit: 5}, nil
 		}, newFakeClock())
 		admit(t, controller, 1)
 		admit(t, controller, 1)
 		deny(t, controller, 1)
 	})
 
-	t.Run("within-ceiling value honored", func(t *testing.T) {
-		controller := newTestController(t, config, func(_ context.Context, _ int64) (int, bool, error) {
-			return 1, true, nil
+	t.Run("below-default value honored", func(t *testing.T) {
+		controller := newTestController(t, config, func(_ context.Context, _ int64) (UserLimits, error) {
+			return UserLimits{RPMLimit: 1, RPMLimitSet: true, ConcurrencyLimit: 5}, nil
 		}, newFakeClock())
 		admit(t, controller, 1)
-		deny(t, controller, 1) // custom cap 1, not ceiling 2
+		deny(t, controller, 1) // explicit cap 1, not default 2
 	})
 
 	t.Run("resolver failure fails closed", func(t *testing.T) {
-		controller := newTestController(t, config, func(_ context.Context, _ int64) (int, bool, error) {
-			return 0, false, errors.New("db down")
+		controller := newTestController(t, config, func(_ context.Context, _ int64) (UserLimits, error) {
+			return UserLimits{}, errors.New("db down")
 		}, newFakeClock())
 		reservation, _, err := controller.Admit(context.Background(), 1)
 		if reservation != nil || err == nil || errors.Is(err, ErrRateLimited) {
@@ -167,7 +182,7 @@ func TestReservationLifecycleCommitConsumesReleaseRefunds(t *testing.T) {
 	clock := newFakeClock()
 	controller := newTestController(t, testRPMConfig(), nil, clock)
 
-	reservation := admit(t, controller, 1)
+	reservation := reserve(t, controller, 1)
 	if !reservation.Commit() || reservation.Commit() || reservation.Release() {
 		t.Fatal("commit must win exactly once and be terminal")
 	}
@@ -181,7 +196,7 @@ func TestReservationLifecycleCommitConsumesReleaseRefunds(t *testing.T) {
 	clock.Advance(10 * time.Second)
 
 	// Release refunds: user 1 can admit PerUserLimit times again.
-	released := admit(t, controller, 1)
+	released := reserve(t, controller, 1)
 	if !released.Release() || released.Release() || released.Commit() {
 		t.Fatal("release must win exactly once and be terminal")
 	}
@@ -226,8 +241,8 @@ func TestAdmitInvalidUsersAndClosedController(t *testing.T) {
 
 func TestCloseForceReleasesInFlightReservations(t *testing.T) {
 	controller := newTestController(t, testRPMConfig(), nil, nil)
-	reservationA := admit(t, controller, 1)
-	reservationB := admit(t, controller, 2)
+	reservationA := reserve(t, controller, 1)
+	reservationB := reserve(t, controller, 2)
 	if !reservationA.Active() || !reservationB.Active() {
 		t.Fatal("reservations should be active before close")
 	}
@@ -283,14 +298,14 @@ func TestBoundedUserKeysFailClosed(t *testing.T) {
 	config.MaxEvents = 256
 	controller := newTestController(t, config, nil, nil)
 
-	first := admit(t, controller, 1)
+	first := reserve(t, controller, 1)
 	for userID := int64(2); userID <= 4; userID++ {
 		admit(t, controller, userID)
 	}
 	// Fifth distinct identity is refused even though the windows have room:
 	// the bounded store fails closed instead of evicting a live identity.
 	retryAfter, err := deny(t, controller, 5)
-	if err == nil || retryAfter <= 0 || retryAfter > MaxRetryAfter {
+	if err == nil || retryAfter != 0 {
 		t.Fatalf("capacity denial retry-after=%v", retryAfter)
 	}
 	// The live identity was not evicted.

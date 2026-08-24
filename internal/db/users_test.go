@@ -20,7 +20,7 @@ func TestGetUserRPMLimit(t *testing.T) {
 		t.Fatalf("NULL cap = limit=%d has=%v err=%v", limit, has, err)
 	}
 
-	// Stored cap is returned as a server-side hint.
+	// Stored cap is returned as the authoritative explicit user override.
 	if _, err := store.DB().Exec(`UPDATE users SET rpm_limit=? WHERE id=?`, 25, user.ID); err != nil {
 		t.Fatal(err)
 	}

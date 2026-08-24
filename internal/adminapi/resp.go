@@ -13,8 +13,8 @@ import (
 )
 
 // userResp is one bounded admin user row: identity, ban metadata, per-user
-// limits, and the server-authoritative usage totals. endpoint_limit /
-// rpm_limit are null when the stored value is NULL (global default applies).
+// limits, their effective projections, and server-authoritative usage totals.
+// Nullable values preserve whether the administrator set an override.
 type userResp struct {
 	ID                        int64  `json:"id"`
 	Username                  string `json:"username"`
@@ -26,7 +26,11 @@ type userResp struct {
 	AutoBanned                bool   `json:"auto_banned"`
 	CharitySuspendedUntil     *int64 `json:"charity_suspended_until"`
 	EndpointLimit             *int   `json:"endpoint_limit"`
+	EffectiveEndpointLimit    int    `json:"effective_endpoint_limit"`
 	RPMLimit                  *int   `json:"rpm_limit"`
+	EffectiveRPMLimit         int    `json:"effective_rpm_limit"`
+	ConcurrencyLimit          *int   `json:"concurrency_limit"`
+	EffectiveConcurrencyLimit int    `json:"effective_concurrency_limit"`
 	Lang                      string `json:"lang"`
 	TotalRequests             int64  `json:"total_requests"`
 	TotalPromptTokens         int64  `json:"total_prompt_tokens"`
@@ -64,10 +68,11 @@ type userListResp struct {
 	HasMore bool       `json:"has_more"`
 }
 
-func userResponse(u *db.User) userResp {
+func userResponse(u *db.User, defaults db.UserLimitDefaults) userResp {
 	if u == nil {
 		return userResp{}
 	}
+	limits := db.ProjectUserLimits(u, defaults)
 	return userResp{
 		ID:                        u.ID,
 		Username:                  u.Username,
@@ -78,8 +83,12 @@ func userResponse(u *db.User) userResp {
 		BannedUntil:               unixSecondsPtr(u.BannedUntil),
 		AutoBanned:                u.AutoBanned,
 		CharitySuspendedUntil:     unixSecondsPtr(u.CharitySuspendedUntil),
-		EndpointLimit:             u.EndpointLimit,
-		RPMLimit:                  u.RPMLimit,
+		EndpointLimit:             limits.EndpointLimit,
+		EffectiveEndpointLimit:    limits.EffectiveEndpointLimit,
+		RPMLimit:                  limits.RPMLimit,
+		EffectiveRPMLimit:         limits.EffectiveRPMLimit,
+		ConcurrencyLimit:          limits.ConcurrencyLimit,
+		EffectiveConcurrencyLimit: limits.EffectiveConcurrencyLimit,
 		Lang:                      u.Lang,
 		TotalRequests:             u.TotalRequests,
 		TotalPromptTokens:         u.TotalPromptTokens,
@@ -93,10 +102,10 @@ func userResponse(u *db.User) userResp {
 	}
 }
 
-func userListResponse(users []db.User, hasMore bool) userListResp {
+func userListResponse(users []db.User, hasMore bool, defaults db.UserLimitDefaults) userListResp {
 	out := userListResp{Data: make([]userResp, 0, len(users)), HasMore: hasMore}
 	for i := range users {
-		out.Data = append(out.Data, userResponse(&users[i]))
+		out.Data = append(out.Data, userResponse(&users[i], defaults))
 	}
 	return out
 }

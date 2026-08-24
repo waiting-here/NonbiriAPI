@@ -3,7 +3,7 @@
 //
 //	GET    /admin/api/users                  list (bounded page + filters)
 //	GET    /admin/api/users/{id}             detail with usage metadata
-//	PATCH  /admin/api/users/{id}             endpoint_limit / rpm_limit / lang;
+//	PATCH  /admin/api/users/{id}             endpoint/rpm/concurrency limits / lang;
 //	                                        or idempotent credits/donation_credit
 //	                                        delta adjustments (never both modes)
 //	POST   /admin/api/users/{id}/ban         ban (same-transaction session and
@@ -29,7 +29,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -43,7 +42,6 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
-	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
 
 const maxAdminBodyBytes = 16 * 1024
@@ -52,8 +50,9 @@ const maxAdminBodyBytes = 16 * 1024
 // Runtime keeps the routes working with DB-only persistence (values take
 // effect on restart); the integration rail injects the shared singletons.
 type HandlerDeps struct {
-	Store   *db.Store
-	Runtime RuntimeApplier
+	Store               *db.Store
+	Runtime             RuntimeApplier
+	BeginUserRetirement func(userID int64) (commit func() bool, abort func() bool, err error)
 }
 
 // Handler is the mountable admin-controls route tree, wrapped in the shared
@@ -65,6 +64,7 @@ type HandlerDeps struct {
 type Handler struct {
 	store        *db.Store
 	runtime      RuntimeApplier
+	beginRetire  func(userID int64) (commit func() bool, abort func() bool, err error)
 	mux          *http.ServeMux
 	siteConfigMu sync.Mutex
 }
@@ -73,7 +73,7 @@ type Handler struct {
 // session middleware at the integration rail; the routes re-check station and
 // principal as defense in depth.
 func NewHandler(deps HandlerDeps) http.Handler {
-	h := &Handler{store: deps.Store, runtime: deps.Runtime, mux: http.NewServeMux()}
+	h := &Handler{store: deps.Store, runtime: deps.Runtime, beginRetire: deps.BeginUserRetirement, mux: http.NewServeMux()}
 	h.mux.HandleFunc("GET /admin/api/users", h.listUsers)
 	h.mux.HandleFunc("GET /admin/api/users/{id}", h.getUser)
 	h.mux.HandleFunc("PATCH /admin/api/users/{id}", h.patchUser)
@@ -135,7 +135,12 @@ func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
 		writeRepoErr(w, err)
 		return
 	}
-	httperr.WriteJSON(w, http.StatusOK, userListResponse(users, hasMore))
+	defaults, err := h.store.GetUserLimitDefaults(r.Context())
+	if err != nil {
+		writeRepoErr(w, err)
+		return
+	}
+	httperr.WriteJSON(w, http.StatusOK, userListResponse(users, hasMore, defaults))
 }
 
 // getUser handles GET /admin/api/users/{id}. The administrator row is not a
@@ -161,18 +166,24 @@ func (h *Handler) getUser(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, httperr.New(httperr.CodeNotFound, "user not found"))
 		return
 	}
-	httperr.WriteJSON(w, http.StatusOK, userResponse(user))
+	defaults, err := h.store.GetUserLimitDefaults(r.Context())
+	if err != nil {
+		writeRepoErr(w, err)
+		return
+	}
+	httperr.WriteJSON(w, http.StatusOK, userResponse(user, defaults))
 }
 
 // patchUser handles PATCH /admin/api/users/{id}. Two disjoint modes:
 //
-//  1. profile mode: endpoint_limit / rpm_limit (nullable; NULL restores the
-//     global default), lang, and level (nullable; NULL resets the manual
-//     override so the automatic high-water mark applies again; an integer
-//     1..5 is a manual override, level 5 included). rpm_limit is rejected
-//     above the current global per-user cap; the administrator raises that
-//     cap via default_rpm_per_user first. Setting level on the administrator
-//     row is forbidden (administrators are excluded from the level system).
+//  1. profile mode: endpoint_limit / rpm_limit / concurrency_limit (nullable;
+//     NULL restores the endpoint/RPM site fallback or the built-in concurrency
+//     default 5), lang, and level (nullable; NULL resets the manual override so
+//     the automatic high-water mark applies again; an integer 1..5 is a manual
+//     override, level 5 included). Explicit endpoint/RPM/concurrency values
+//     replace their defaults and are bounded only by their independent hard
+//     ranges. Setting level on the administrator row is forbidden
+//     (administrators are excluded from the level system).
 //  2. economy mode: credits / donation_credit are canonical decimal-string
 //     INCREMENTS (deltas, never target balances). Either delta requires
 //     operation_id (idempotency key, client namespace) and a bounded reason;
@@ -194,21 +205,22 @@ func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		EndpointLimit  json.RawMessage `json:"endpoint_limit"`
-		RPMLimit       json.RawMessage `json:"rpm_limit"`
-		Lang           *string         `json:"lang"`
-		Level          json.RawMessage `json:"level"`
-		Credits        *string         `json:"credits"`
-		DonationCredit *string         `json:"donation_credit"`
-		OperationID    *string         `json:"operation_id"`
-		Reason         *string         `json:"reason"`
+		EndpointLimit    json.RawMessage `json:"endpoint_limit"`
+		RPMLimit         json.RawMessage `json:"rpm_limit"`
+		ConcurrencyLimit json.RawMessage `json:"concurrency_limit"`
+		Lang             *string         `json:"lang"`
+		Level            json.RawMessage `json:"level"`
+		Credits          *string         `json:"credits"`
+		DonationCredit   *string         `json:"donation_credit"`
+		OperationID      *string         `json:"operation_id"`
+		Reason           *string         `json:"reason"`
 	}
 	if !decodeJSONBody(w, r, &body) {
 		return
 	}
 	economyMode := body.Credits != nil || body.DonationCredit != nil ||
 		body.OperationID != nil || body.Reason != nil
-	profileMode := body.EndpointLimit != nil || body.RPMLimit != nil || body.Lang != nil ||
+	profileMode := body.EndpointLimit != nil || body.RPMLimit != nil || body.ConcurrencyLimit != nil || body.Lang != nil ||
 		body.Level != nil
 	if economyMode && profileMode {
 		writeErr(w, httperr.New(httperr.CodeInvalidRequest,
@@ -251,23 +263,20 @@ func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid rpm limit"))
 			return
 		}
-		if value != nil {
-			if *value < 1 {
-				writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid rpm limit"))
-				return
-			}
-			cap, err := h.currentRPMLimitCap(r.Context())
-			if err != nil {
-				writeRepoErr(w, err)
-				return
-			}
-			if *value > cap {
-				writeErr(w, httperr.New(httperr.CodeInvalidRequest, "rpm limit exceeds the global cap"))
-				return
-			}
+		if value != nil && (*value < 1 || *value > db.MaxUserRPMLimit) {
+			writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid rpm limit"))
+			return
 		}
 		patch.RPMLimitSet = true
 		patch.RPMLimit = value
+	}
+	if present, value, ok := nullableInt(body.ConcurrencyLimit); present {
+		if !ok || (value != nil && (*value < 1 || *value > db.MaxUserConcurrencyLimit)) {
+			writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid concurrency limit"))
+			return
+		}
+		patch.ConcurrencyLimitSet = true
+		patch.ConcurrencyLimit = value
 	}
 	if body.Lang != nil {
 		if *body.Lang != "zh" && *body.Lang != "en" {
@@ -282,21 +291,27 @@ func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {
 		writeLimitErr(w, err)
 		return
 	}
-	httperr.WriteJSON(w, http.StatusOK, userResponse(updated))
+	defaults, err := h.store.GetUserLimitDefaults(r.Context())
+	if err != nil {
+		writeRepoErr(w, err)
+		return
+	}
+	httperr.WriteJSON(w, http.StatusOK, userResponse(updated, defaults))
 }
 
 // patchUserCreditDelta applies the economy mode of PATCH
 // /admin/api/users/{id}: at least one decimal-string delta plus the required
 // operation_id and reason, applied as one idempotent ledger operation.
 func (h *Handler) patchUserCreditDelta(w http.ResponseWriter, r *http.Request, admin *db.User, id int64, body *struct {
-	EndpointLimit  json.RawMessage `json:"endpoint_limit"`
-	RPMLimit       json.RawMessage `json:"rpm_limit"`
-	Lang           *string         `json:"lang"`
-	Level          json.RawMessage `json:"level"`
-	Credits        *string         `json:"credits"`
-	DonationCredit *string         `json:"donation_credit"`
-	OperationID    *string         `json:"operation_id"`
-	Reason         *string         `json:"reason"`
+	EndpointLimit    json.RawMessage `json:"endpoint_limit"`
+	RPMLimit         json.RawMessage `json:"rpm_limit"`
+	ConcurrencyLimit json.RawMessage `json:"concurrency_limit"`
+	Lang             *string         `json:"lang"`
+	Level            json.RawMessage `json:"level"`
+	Credits          *string         `json:"credits"`
+	DonationCredit   *string         `json:"donation_credit"`
+	OperationID      *string         `json:"operation_id"`
+	Reason           *string         `json:"reason"`
 }) {
 	invalid := func() {
 		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid credit adjustment"))
@@ -346,29 +361,15 @@ func (h *Handler) patchUserCreditDelta(w http.ResponseWriter, r *http.Request, a
 	// one when the operation id is a replay), not the live balance: a retry
 	// that arrives after further unrelated adjustments must still return the
 	// first application's result, exactly as the ledger recorded it.
-	resp := userResponse(updated)
+	defaults, err := h.store.GetUserLimitDefaults(r.Context())
+	if err != nil {
+		writeRepoErr(w, err)
+		return
+	}
+	resp := userResponse(updated, defaults)
 	resp.CreditsBalance = credits.FormatAmount(result.CreditsAfter)
 	resp.DonationCreditBalance = credits.FormatAmount(result.DonationCreditAfter)
 	httperr.WriteJSON(w, http.StatusOK, resp)
-}
-
-// currentRPMLimitCap resolves the global per-user RPM ceiling: the
-// default_rpm_per_user site_config value, or the ratelimit default when
-// unset. This is the same ceiling the flow-control controller clamps user
-// limits to at admission (the integration rail keeps the runtime controller
-// in sync through the runtime applier).
-func (h *Handler) currentRPMLimitCap(ctx context.Context) (int, error) {
-	if h.store != nil {
-		if raw, err := h.store.GetSiteConfigValue("default_rpm_per_user"); err == nil {
-			raw = strings.TrimSpace(raw)
-			if raw != "" {
-				if n, perr := strconv.Atoi(raw); perr == nil && n >= 1 {
-					return n, nil
-				}
-			}
-		}
-	}
-	return ratelimit.DefaultRPMPerUserLimit, nil
 }
 
 // banUser handles POST /admin/api/users/{id}/ban. The body carries an
@@ -405,11 +406,35 @@ func (h *Handler) banUser(w http.ResponseWriter, r *http.Request) {
 		}
 		ban.DurationSeconds = duration
 	}
+	commit, abort, err := h.beginUserRetirement(id)
+	if err != nil {
+		writeErr(w, httperr.New(httperr.CodeServiceUnavailable, "service unavailable"))
+		return
+	}
+	defer abort()
 	if err := h.store.BanUserWithOptions(id, ban); err != nil {
 		writeLimitErr(w, err)
 		return
 	}
+	commit()
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) beginUserRetirement(userID int64) (func() bool, func() bool, error) {
+	if h.beginRetire == nil {
+		return func() bool { return true }, func() bool { return false }, nil
+	}
+	commit, abort, err := h.beginRetire(userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if commit == nil || abort == nil {
+		if abort != nil {
+			abort()
+		}
+		return nil, nil, errors.New("adminapi: invalid user retirement boundary")
+	}
+	return commit, abort, nil
 }
 
 // unbanUser handles POST /admin/api/users/{id}/unban. No body is accepted; a
@@ -653,67 +678,6 @@ func nullableInt(raw json.RawMessage) (present bool, value *int, ok bool) {
 		return true, nil, false
 	}
 	return true, &n, true
-}
-
-// decodeJSONBody is the local bounded-JSON helper: it rejects unknown fields,
-// trailing tokens, and oversized bodies, mirroring the shared helpers so this
-// package does not depend on auth/lifecycle internals.
-func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
-	if r == nil || r.Body == nil {
-		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
-		return false
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxAdminBodyBytes)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(dst); err != nil {
-		writeDecodeErr(w, err)
-		return false
-	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		writeDecodeErr(w, err)
-		return false
-	}
-	return true
-}
-
-// decodeOptionalJSONBody is decodeJSONBody with an empty body permitted (used
-// by ban, whose reason is optional).
-func decodeOptionalJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
-	if r == nil || r.Body == nil {
-		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
-		return false
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxAdminBodyBytes)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(dst); err != nil {
-		if errors.Is(err, io.EOF) {
-			return true // empty body: all fields keep their zero values
-		}
-		writeDecodeErr(w, err)
-		return false
-	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		writeDecodeErr(w, err)
-		return false
-	}
-	return true
-}
-
-func writeDecodeErr(w http.ResponseWriter, err error) {
-	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-		writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
-		return
-	}
-	var maxErr *http.MaxBytesError
-	if errors.As(err, &maxErr) {
-		writeErr(w, httperr.New(httperr.CodePayloadTooLarge, "request body too large"))
-		return
-	}
-	writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
 }
 
 // writeLimitErr maps user-management repository failures to the stable

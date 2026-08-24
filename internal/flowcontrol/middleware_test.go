@@ -3,6 +3,7 @@ package flowcontrol
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -126,6 +127,94 @@ func TestMiddlewareRateLimitedResponseIsStableAndBounded(t *testing.T) {
 	}
 }
 
+type countingBody struct {
+	reads atomic.Int64
+}
+
+func (b *countingBody) Read([]byte) (int, error) {
+	b.reads.Add(1)
+	return 0, io.EOF
+}
+
+func (b *countingBody) Close() error { return nil }
+
+func TestMiddlewareConcurrencyDenialHasZeroDownstreamAndRPMSideEffects(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	finished := make(chan struct{})
+	var downstream atomicCount
+	next := http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		downstream.Add(1)
+		if downstream.Load() == 1 {
+			close(started)
+			<-release
+		}
+		writer.WriteHeader(http.StatusNoContent)
+	})
+	middleware, controller := newTestMiddleware(t, generousRPMConfig(), fixedUserLimits(1), nil)
+	handler := middleware.Wrap(next)
+
+	go func() {
+		defer close(finished)
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "https://gateway.example/v1/chat/completions", nil))
+	}()
+	<-started
+	decisionBefore, err := controller.limiter.Check("7")
+	if err != nil || decisionBefore.GlobalCount != 1 || decisionBefore.UserCount != 1 {
+		t.Fatalf("first reservation snapshot=%#v err=%v", decisionBefore, err)
+	}
+
+	body := &countingBody{}
+	request := httptest.NewRequest(http.MethodPost, "https://gateway.example/v1/chat/completions", body)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusTooManyRequests || recorder.Header().Get("Retry-After") != "" {
+		t.Fatalf("status=%d retry=%q body=%s", recorder.Code, recorder.Header().Get("Retry-After"), recorder.Body.String())
+	}
+	if downstream.Load() != 1 || body.reads.Load() != 0 {
+		t.Fatalf("denial downstream=%d body_reads=%d", downstream.Load(), body.reads.Load())
+	}
+	decisionAfter, err := controller.limiter.Check("7")
+	if err != nil || decisionAfter.GlobalCount != decisionBefore.GlobalCount || decisionAfter.UserCount != decisionBefore.UserCount {
+		t.Fatalf("concurrency denial touched RPM: before=%#v after=%#v err=%v", decisionBefore, decisionAfter, err)
+	}
+
+	close(release)
+	<-finished
+	if recorder := call(handler, http.MethodPost, "/v1/chat/completions"); recorder.Code != http.StatusNoContent {
+		t.Fatalf("admission after release status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestMiddlewareRPMCapacityOmitsRetryAfter(t *testing.T) {
+	config := generousRPMConfig()
+	config.MaxUserKeys = 1
+	controller := newTestController(t, config, fixedUserLimits(5), nil)
+	middleware, err := NewMiddleware(controller, func(request *http.Request) (int64, error) {
+		return strconv.ParseInt(request.Header.Get("X-Test-User"), 10, 64)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := middleware.Wrap(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write([]byte("ok"))
+	}))
+	request := httptest.NewRequest(http.MethodPost, "https://gateway.example/v1/chat/completions", nil)
+	request.Header.Set("X-Test-User", "1")
+	first := httptest.NewRecorder()
+	handler.ServeHTTP(first, request)
+	if first.Code != http.StatusOK {
+		t.Fatalf("first status=%d body=%s", first.Code, first.Body.String())
+	}
+	request = httptest.NewRequest(http.MethodPost, "https://gateway.example/v1/chat/completions", nil)
+	request.Header.Set("X-Test-User", "2")
+	second := httptest.NewRecorder()
+	handler.ServeHTTP(second, request)
+	if second.Code != http.StatusTooManyRequests || second.Header().Get("Retry-After") != "" {
+		t.Fatalf("capacity status=%d retry=%q body=%s", second.Code, second.Header().Get("Retry-After"), second.Body.String())
+	}
+}
+
 func TestMiddlewareCommitOnBodyBytesReleaseWithout(t *testing.T) {
 	middleware, controller := newTestMiddleware(t, testRPMConfig(), nil, nil)
 
@@ -176,6 +265,76 @@ func TestMiddlewareClientCancelReleasesBeforeAnyByte(t *testing.T) {
 	handler.ServeHTTP(recorder, request)
 	if decision, err := controller.limiter.Check("7"); err != nil || decision.GlobalCount != 0 {
 		t.Fatalf("cancel before bytes must release: %#v %v", decision, err)
+	}
+}
+
+func TestMiddlewareHoldsPermitAfterFirstFlushedByteUntilTerminal(t *testing.T) {
+	for _, terminal := range []string{"handler return", "client cancel"} {
+		t.Run(terminal, func(t *testing.T) {
+			started := make(chan struct{})
+			releaseHandler := make(chan struct{})
+			firstDone := make(chan struct{})
+			var downstream atomicCount
+			next := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				callNumber := downstream.Load() + 1
+				downstream.Add(1)
+				_, _ = writer.Write([]byte("data: first\n\n"))
+				writer.(http.Flusher).Flush()
+				if callNumber != 1 {
+					return
+				}
+				close(started)
+				if terminal == "client cancel" {
+					<-request.Context().Done()
+					return
+				}
+				<-releaseHandler
+			})
+			middleware, controller := newTestMiddleware(t, generousRPMConfig(), fixedUserLimits(1), nil)
+			handler := middleware.Wrap(next)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			request := httptest.NewRequest(http.MethodPost, "https://gateway.example/v1/chat/completions", nil).WithContext(ctx)
+			go func() {
+				handler.ServeHTTP(httptest.NewRecorder(), request)
+				close(firstDone)
+			}()
+			select {
+			case <-started:
+			case <-time.After(2 * time.Second):
+				t.Fatal("first flushed frame was not observed")
+			}
+
+			// A flushed response frame commits RPM accounting, but the single
+			// concurrency permit remains occupied until the logical handler exits.
+			second := call(handler, http.MethodPost, "/v1/chat/completions")
+			if second.Code != http.StatusTooManyRequests || second.Header().Get("Retry-After") != "" || downstream.Load() != 1 {
+				t.Fatalf("parallel status=%d retry=%q downstream=%d body=%s", second.Code,
+					second.Header().Get("Retry-After"), downstream.Load(), second.Body.String())
+			}
+			if terminal == "client cancel" {
+				cancel()
+			} else {
+				close(releaseHandler)
+			}
+			select {
+			case <-firstDone:
+			case <-time.After(2 * time.Second):
+				t.Fatal("first logical request did not terminate")
+			}
+
+			third := call(handler, http.MethodPost, "/v1/chat/completions")
+			if third.Code != http.StatusOK || downstream.Load() != 2 {
+				t.Fatalf("post-terminal status=%d downstream=%d body=%s", third.Code, downstream.Load(), third.Body.String())
+			}
+			controller.userConcurrency.mu.Lock()
+			activeUsers := len(controller.userConcurrency.users)
+			controller.userConcurrency.mu.Unlock()
+			if activeUsers != 0 {
+				t.Fatalf("terminal path leaked %d active concurrency users", activeUsers)
+			}
+		})
 	}
 }
 

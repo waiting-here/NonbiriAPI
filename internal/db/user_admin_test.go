@@ -238,18 +238,20 @@ func TestUpdateUserLimitsTriStateAndProtection(t *testing.T) {
 		t.Fatalf("CreateUser: %v", err)
 	}
 
-	// Set both limits and lang.
-	el, rl := 10, 5
+	// Set all limits and lang.
+	el, rl, cl := 10, 5, 7
 	updated, err := st.UpdateUserLimits(u.ID, UserLimitPatch{
 		EndpointLimitSet: true, EndpointLimit: &el,
 		RPMLimitSet: true, RPMLimit: &rl,
+		ConcurrencyLimitSet: true, ConcurrencyLimit: &cl,
 		LangSet: true, Lang: "en",
 	})
 	if err != nil {
 		t.Fatalf("UpdateUserLimits: %v", err)
 	}
 	if updated.EndpointLimit == nil || *updated.EndpointLimit != 10 ||
-		updated.RPMLimit == nil || *updated.RPMLimit != 5 || updated.Lang != "en" {
+		updated.RPMLimit == nil || *updated.RPMLimit != 5 ||
+		updated.ConcurrencyLimit == nil || *updated.ConcurrencyLimit != 7 || updated.Lang != "en" {
 		t.Fatalf("updated user = %+v", updated)
 	}
 
@@ -257,11 +259,12 @@ func TestUpdateUserLimitsTriStateAndProtection(t *testing.T) {
 	updated, err = st.UpdateUserLimits(u.ID, UserLimitPatch{
 		EndpointLimitSet: true, EndpointLimit: nil,
 		RPMLimitSet: true, RPMLimit: nil,
+		ConcurrencyLimitSet: true, ConcurrencyLimit: nil,
 	})
 	if err != nil {
 		t.Fatalf("UpdateUserLimits null: %v", err)
 	}
-	if updated.EndpointLimit != nil || updated.RPMLimit != nil {
+	if updated.EndpointLimit != nil || updated.RPMLimit != nil || updated.ConcurrencyLimit != nil {
 		t.Fatalf("limits not cleared: %+v", updated)
 	}
 	if updated.Lang != "en" {
@@ -276,6 +279,13 @@ func TestUpdateUserLimitsTriStateAndProtection(t *testing.T) {
 	zero := 0
 	if _, err := st.UpdateUserLimits(u.ID, UserLimitPatch{RPMLimitSet: true, RPMLimit: &zero}); err != ErrConflict {
 		t.Fatalf("zero rpm limit: err=%v, want ErrConflict", err)
+	}
+	if _, err := st.UpdateUserLimits(u.ID, UserLimitPatch{ConcurrencyLimitSet: true, ConcurrencyLimit: &zero}); err != ErrConflict {
+		t.Fatalf("zero concurrency limit: err=%v, want ErrConflict", err)
+	}
+	tooHigh := MaxUserConcurrencyLimit + 1
+	if _, err := st.UpdateUserLimits(u.ID, UserLimitPatch{ConcurrencyLimitSet: true, ConcurrencyLimit: &tooHigh}); err != ErrConflict {
+		t.Fatalf("high concurrency limit: err=%v, want ErrConflict", err)
 	}
 	if _, err := st.UpdateUserLimits(u.ID, UserLimitPatch{LangSet: true, Lang: "fr"}); err != ErrConflict {
 		t.Fatalf("invalid lang: err=%v, want ErrConflict", err)
