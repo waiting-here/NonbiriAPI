@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -500,7 +501,8 @@ func (a *UserAuth) Session(w http.ResponseWriter, r *http.Request) {
 func (a *UserAuth) Me(w http.ResponseWriter, r *http.Request) { a.Session(w, r) }
 
 // PatchMe handles PATCH /api/me: a session-only self-service profile
-// update limited to lang. endpoint_limit, rpm_limit, concurrency_limit, admin/ban state,
+// update limited to lang and the account-wide game leaderboard privacy
+// preference. endpoint_limit, rpm_limit, concurrency_limit, admin/ban state,
 // usage, and the body user id are never accepted (unknown fields are
 // rejected by the strict decoder). The response is the same no-store user
 // envelope as GET /api/me. Per-user RPM limits are administrator-set only;
@@ -519,23 +521,42 @@ func (a *UserAuth) PatchMe(w http.ResponseWriter, r *http.Request) {
 		writeStableError(w, httperr.CodeUnauthorized, "authentication required")
 		return
 	}
-	var body struct {
-		Lang *string `json:"lang"`
-	}
-	if !decodeJSONBody(w, r, &body) {
+	var body map[string]json.RawMessage
+	if !decodeStrictJSONBody(w, r, &body) {
 		return
 	}
-	if body.Lang == nil {
+	if len(body) == 0 {
 		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
 		return
 	}
 	patch := db.UserLimitPatch{}
-	if *body.Lang != "zh" && *body.Lang != "en" {
-		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
-		return
+	for key, raw := range body {
+		switch key {
+		case "lang":
+			if strings.TrimSpace(string(raw)) == "null" {
+				writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+				return
+			}
+			var lang string
+			if err := json.Unmarshal(raw, &lang); err != nil || (lang != "zh" && lang != "en") {
+				writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+				return
+			}
+			patch.LangSet = true
+			patch.Lang = lang
+		case "game_profile_public":
+			trimmed := strings.TrimSpace(string(raw))
+			if trimmed == "null" || (trimmed != "true" && trimmed != "false") {
+				writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+				return
+			}
+			patch.GameProfilePublicSet = true
+			patch.GameProfilePublic = trimmed == "true"
+		default:
+			writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+			return
+		}
 	}
-	patch.LangSet = true
-	patch.Lang = *body.Lang
 	updated, err := a.store.UpdateUserLimits(user.ID, patch)
 	if err != nil {
 		switch {

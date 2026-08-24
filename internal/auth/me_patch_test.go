@@ -1,8 +1,8 @@
 package auth
 
 // PATCH /api/me tests: the session-only self-service profile update. Only
-// lang is accepted; endpoint_limit / rpm_limit / concurrency_limit / ban state / usage / body
-// user id are never accepted. Per-user RPM limits are admin-set only.
+// lang and game_profile_public are accepted; endpoint_limit / rpm_limit /
+// concurrency_limit / ban state / usage / body user id are never accepted.
 
 import (
 	"bytes"
@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -81,6 +82,58 @@ func TestPatchMeLang(t *testing.T) {
 	}
 	if envelope.User.Lang != "zh" {
 		t.Fatalf("lang=zh user = %+v", envelope.User)
+	}
+}
+
+func TestPatchMeGameProfilePrivacyIsAuthoritativeAndStrict(t *testing.T) {
+	st, service := meStoreWithCap(t, 40)
+	user, err := st.GetUserByDiscordID("discord-1")
+	if err != nil || user == nil {
+		t.Fatalf("user: %v", err)
+	}
+
+	for _, raw := range []string{
+		`{"game_profile_public":true,"game_profile_public":false}`,
+		`{"game_profile_public":null}`,
+		`{"game_profile_public":1}`,
+	} {
+		token, _, err := st.CreateUserSession(user.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := stationRequest(http.MethodPatch, "https://example.com/api/me", host.StationUser, bytes.NewReader([]byte(raw)))
+		r.AddCookie(&http.Cookie{Name: UserSessionCookieName, Value: token})
+		rec := httptest.NewRecorder()
+		service.PatchMe(rec, r)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("raw=%s status=%d body=%s", raw, rec.Code, rec.Body.String())
+		}
+	}
+
+	// The preference may be updated together with lang and is reflected by
+	// both the response projection and the authoritative database row.
+	token, _, err := st.CreateUserSession(user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := stationRequest(http.MethodPatch, "https://example.com/api/me", host.StationUser,
+		bytes.NewReader([]byte(`{"lang":"en","game_profile_public":true}`)))
+	r.AddCookie(&http.Cookie{Name: UserSessionCookieName, Value: token})
+	rec := httptest.NewRecorder()
+	service.PatchMe(rec, r)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("privacy patch status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var envelope userEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if !envelope.User.GameProfilePublic || envelope.User.Lang != "en" {
+		t.Fatalf("privacy response=%+v", envelope.User)
+	}
+	stored, err := st.GetUserByID(user.ID)
+	if err != nil || stored == nil || !stored.GameProfilePublic {
+		t.Fatalf("stored privacy=%v err=%v", stored, err)
 	}
 }
 
@@ -157,6 +210,56 @@ func TestPatchMeRejectsForbiddenFieldsAndMalformedBodies(t *testing.T) {
 	service.PatchMe(rec, r)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("admin cookie status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestStrictProfileJSONBoundsDepthAndFields(t *testing.T) {
+	deep := strings.Repeat("[", maxStrictJSONDepth+1) + "0" + strings.Repeat("]", maxStrictJSONDepth+1)
+	if err := scanStrictJSON(strings.NewReader(deep)); err == nil {
+		t.Fatal("strict profile decoder accepted over-deep value")
+	}
+	var fields strings.Builder
+	fields.WriteString("{")
+	for i := 0; i <= maxStrictJSONFields; i++ {
+		if i > 0 {
+			fields.WriteByte(',')
+		}
+		fmt.Fprintf(&fields, "\"x%d\":0", i)
+	}
+	fields.WriteString("}")
+	if err := scanStrictJSON(strings.NewReader(fields.String())); err == nil {
+		t.Fatal("strict profile decoder accepted over-budget fields")
+	}
+}
+
+func TestPatchMeRejectsStrictBoundsAtHTTPBoundary(t *testing.T) {
+	st, service := meStoreWithCap(t, 60)
+	user, err := st.GetUserByDiscordID("discord-1")
+	if err != nil || user == nil {
+		t.Fatalf("user: %v", err)
+	}
+	deep := strings.Repeat("[", maxStrictJSONDepth+1) + "0" + strings.Repeat("]", maxStrictJSONDepth+1)
+	var fields strings.Builder
+	fields.WriteString("{")
+	for i := 0; i <= maxStrictJSONFields; i++ {
+		if i > 0 {
+			fields.WriteByte(',')
+		}
+		fmt.Fprintf(&fields, "\"x%d\":0", i)
+	}
+	fields.WriteString("}")
+	for _, raw := range []string{deep, fields.String()} {
+		token, _, err := st.CreateUserSession(user.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := stationRequest(http.MethodPatch, "https://example.com/api/me", host.StationUser, strings.NewReader(raw))
+		r.AddCookie(&http.Cookie{Name: UserSessionCookieName, Value: token})
+		rec := httptest.NewRecorder()
+		service.PatchMe(rec, r)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("raw length=%d status=%d body=%s", len(raw), rec.Code, rec.Body.String())
+		}
 	}
 }
 

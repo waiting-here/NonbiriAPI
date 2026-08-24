@@ -319,6 +319,7 @@ func (s *sessionUserScan) scan(row interface{ Scan(...any) error }) error {
 	var bannedUntil, charitySuspendedUntil sql.NullInt64
 	var autoBanned int
 	var endpointLimit, rpmLimit, concurrencyLimit, level sql.NullInt64
+	var gameProfilePublic int
 	var createdAt, updatedAt int64
 	if err := row.Scan(
 		&u.ID,
@@ -336,6 +337,7 @@ func (s *sessionUserScan) scan(row interface{ Scan(...any) error }) error {
 		&endpointLimit,
 		&rpmLimit,
 		&concurrencyLimit,
+		&gameProfilePublic,
 		&u.TotalRequests,
 		&u.TotalPromptTokens,
 		&u.TotalCompletionTokens,
@@ -354,6 +356,7 @@ func (s *sessionUserScan) scan(row interface{ Scan(...any) error }) error {
 	}
 	u.IsAdmin = isAdmin != 0
 	u.IsBanned = isBanned != 0
+	u.GameProfilePublic = gameProfilePublic != 0
 	u.AutoBanned = autoBanned != 0
 	u.BannedUntil = nullUnixTime(bannedUntil)
 	u.CharitySuspendedUntil = nullUnixTime(charitySuspendedUntil)
