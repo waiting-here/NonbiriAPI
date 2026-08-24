@@ -2,12 +2,38 @@ package connector
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connector/anthropic"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 )
+
+type legacyOpenAIPolicyDriver struct{ calls atomic.Int32 }
+
+func (*legacyOpenAIPolicyDriver) ConnectorType() connectorcontract.Type {
+	return connectorcontract.TypeOpenAICompatible
+}
+
+func (d *legacyOpenAIPolicyDriver) Attempt(context.Context, http.ResponseWriter, openai.Target, *openai.ChatRequest, string) connectorcontract.AttemptResult {
+	d.calls.Add(1)
+	return connectorcontract.AttemptResult{Success: true}
+}
+
+type legacyAnthropicPolicyDriver struct{ calls atomic.Int32 }
+
+func (*legacyAnthropicPolicyDriver) ConnectorType() connectorcontract.Type {
+	return connectorcontract.TypeAnthropicCompatible
+}
+
+func (d *legacyAnthropicPolicyDriver) Attempt(context.Context, http.ResponseWriter, anthropic.Target, *openai.ChatRequest, string) connectorcontract.AttemptResult {
+	d.calls.Add(1)
+	return connectorcontract.AttemptResult{Success: true}
+}
 
 type registryTestConnector struct {
 	connectorType connectorcontract.Type
@@ -179,5 +205,64 @@ func TestDefaultRegistryFiltersByProtocolFidelity(t *testing.T) {
 				t.Fatal("unknown connector supported request")
 			}
 		})
+	}
+}
+
+func TestLegacyOpenAIDriverCannotSilentlyIgnoreExperimentalPolicies(t *testing.T) {
+	driver := &legacyOpenAIPolicyDriver{}
+	protocol := &openAIConnector{driver: driver}
+	for _, policy := range []connectorcontract.AttemptPolicy{
+		{ForceStoreFalse: true},
+		{FlattenToolCalls: true},
+	} {
+		credential := connectorcontract.NewShortLivedSecret([]byte("secret"), []byte("cipher"))
+		result := protocol.Attempt(context.Background(), AttemptInput{
+			Target:     connectorcontract.NewTarget(connectorcontract.TypeOpenAICompatible, "https://upstream.example", "up/model"),
+			Credential: credential,
+			Ingress:    &openai.ChatRequest{Model: "p/m"},
+			Policy:     policy,
+			Sink:       httptest.NewRecorder(),
+		})
+		if result.Failure != connectorcontract.FailureInternal || result.Diagnostic != "connector policy unsupported" || driver.calls.Load() != 0 {
+			t.Fatalf("policy=%+v result=%+v driver_calls=%d", policy, result, driver.calls.Load())
+		}
+		if _, _, ok := credential.Take(); ok {
+			t.Fatalf("policy=%+v credential remained takeable after fail-closed rejection", policy)
+		}
+	}
+
+	result := protocol.Attempt(context.Background(), AttemptInput{
+		Target:     connectorcontract.NewTarget(connectorcontract.TypeOpenAICompatible, "https://upstream.example", "up/model"),
+		Credential: connectorcontract.NewShortLivedSecret([]byte("secret"), []byte("cipher")),
+		Ingress:    &openai.ChatRequest{Model: "p/m"},
+		Policy:     connectorcontract.AttemptPolicy{},
+		Sink:       httptest.NewRecorder(),
+	})
+	if !result.Success || driver.calls.Load() != 1 {
+		t.Fatalf("legacy zero-policy fallback result=%+v driver_calls=%d", result, driver.calls.Load())
+	}
+}
+
+func TestAnthropicConnectorRejectsOpenAIOnlyPoliciesBeforeCredentialTake(t *testing.T) {
+	driver := &legacyAnthropicPolicyDriver{}
+	protocol := &anthropicConnector{driver: driver}
+	for _, policy := range []connectorcontract.AttemptPolicy{
+		{ForceStoreFalse: true},
+		{FlattenToolCalls: true},
+	} {
+		credential := connectorcontract.NewShortLivedSecret([]byte("secret"), []byte("cipher"))
+		result := protocol.Attempt(context.Background(), AttemptInput{
+			Target:     connectorcontract.NewTarget(connectorcontract.TypeAnthropicCompatible, "https://upstream.example", "up/model"),
+			Credential: credential,
+			Ingress:    &openai.ChatRequest{Model: "p/m"},
+			Policy:     policy,
+			Sink:       httptest.NewRecorder(),
+		})
+		if result.Failure != connectorcontract.FailureInternal || result.Diagnostic != "connector policy incompatible" || driver.calls.Load() != 0 {
+			t.Fatalf("policy=%+v result=%+v driver_calls=%d", policy, result, driver.calls.Load())
+		}
+		if _, _, ok := credential.Take(); ok {
+			t.Fatalf("policy=%+v credential remained takeable after rejection", policy)
+		}
 	}
 }

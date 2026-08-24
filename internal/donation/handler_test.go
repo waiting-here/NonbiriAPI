@@ -293,6 +293,89 @@ func TestDonationKeyLimitBoundsOnWire(t *testing.T) {
 	}
 }
 
+// TestDonationNestedStorePolicyWire keeps the owner-only physical-key policy
+// available on nested creation while rejecting non-boolean policy values.
+func TestDonationNestedStorePolicyWire(t *testing.T) {
+	f := newDonationFixture(t)
+	uid := f.userID(t, "nested-policy-wire")
+	enableDonationAccept(t, f)
+
+	rec, body := f.do(t, f.user, "POST", "/api/donations", itoa(uid), map[string]any{
+		"description": "policy wire",
+		"new_endpoint": map[string]any{
+			"base_url": "https://api.example.com",
+			"keys":     []map[string]any{{"secret": "sk-wire-policy", "force_store_false": true}},
+		},
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("nested policy create = %d %v", rec.Code, body)
+	}
+	id, ok := body["id"].(float64)
+	if !ok || id <= 0 {
+		t.Fatalf("nested policy id = %v", body["id"])
+	}
+	rec, body = f.do(t, f.user, "GET", "/api/donations/"+itoa(int64(id)), itoa(uid), nil)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"force_store_false":true`) {
+		t.Fatalf("nested policy projection = %d %s", rec.Code, rec.Body.String())
+	}
+
+	rec, _ = f.do(t, f.user, "POST", "/api/donations", itoa(uid), map[string]any{
+		"description": "null policy",
+		"new_endpoint": map[string]any{
+			"base_url": "https://api.example.com",
+			"keys":     []map[string]any{{"secret": "sk-null-policy", "force_store_false": nil}},
+		},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("null nested policy = %d, want 400", rec.Code)
+	}
+
+	// encoding/json normally keeps the last duplicate member. The policy wire
+	// rejects that ambiguity at every nesting depth and leaves no partial row.
+	var before int
+	if err := f.st.DB().QueryRow(`SELECT COUNT(*) FROM donations`).Scan(&before); err != nil {
+		t.Fatalf("count donations before duplicate: %v", err)
+	}
+	raw := `{"description":"duplicate policy","new_endpoint":{"base_url":"https://api.example.com","keys":[{"secret":"sk-duplicate-policy","force_store_false":false,"force_store_false":true}]}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/donations", strings.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Test-User", itoa(uid))
+	recorder := httptest.NewRecorder()
+	f.user.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("duplicate nested policy = %d, want 400", recorder.Code)
+	}
+	var after int
+	if err := f.st.DB().QueryRow(`SELECT COUNT(*) FROM donations`).Scan(&after); err != nil {
+		t.Fatalf("count donations after duplicate: %v", err)
+	}
+	if after != before {
+		t.Fatalf("duplicate nested policy wrote donations: before=%d after=%d", before, after)
+	}
+
+	// Anthropic accepts an explicit false for compatibility but every derived
+	// donation projection omits the OpenAI-only field.
+	rec, body = f.do(t, f.user, "POST", "/api/donations", itoa(uid), map[string]any{
+		"description": "anthropic policy off",
+		"new_endpoint": map[string]any{
+			"connector_type": "anthropic-compatible",
+			"base_url":       "https://anthropic.example.com/v1",
+			"keys":           []map[string]any{{"secret": "sk-anthropic-policy", "force_store_false": false}},
+		},
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("Anthropic false policy create = %d %v", rec.Code, body)
+	}
+	if strings.Contains(rec.Body.String(), `"force_store_false"`) {
+		t.Fatalf("Anthropic donation create exposed OpenAI-only policy: %s", rec.Body.String())
+	}
+	anthropicDonationID := int64(body["id"].(float64))
+	rec, _ = f.do(t, f.user, "GET", "/api/donations/"+itoa(anthropicDonationID), itoa(uid), nil)
+	if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), `"force_store_false"`) {
+		t.Fatalf("Anthropic donation detail = %d %s", rec.Code, rec.Body.String())
+	}
+}
+
 // TestReviewSurfaceIdentityMatrix pins the reviewer authorization: both admin
 // and level5 roles reach the shared service; an unauthenticated caller is
 // refused; the repository independently refuses a forged role so a miswired

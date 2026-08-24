@@ -71,6 +71,11 @@ type Repository interface {
 	DeleteEndpointKey(ctx context.Context, userID, endpointID, keyID int64) error
 }
 
+type policyRepository interface {
+	CreateEndpointKeyWithPolicy(context.Context, int64, int64, []byte, string, string, string, bool, bool, int64, string) (db.EndpointKey, error)
+	UpdateEndpointKeyWithPolicy(context.Context, int64, int64, int64, *string, *bool, *bool, int64, string) (db.EndpointKey, error)
+}
+
 // ServiceDeps are the collaborators a Service needs. All are injected so the
 // identity rail wires its session resolver, main wires the egress policy and
 // secret vault, and tests wire fakes.
@@ -234,6 +239,15 @@ func (s *Service) DeleteEndpoint(ctx context.Context, userID, id int64) error {
 // persisted head/tail display fragments are stored. After a committed add the
 // fetch hook is invoked for this key when it is enabled.
 func (s *Service) CreateEndpointKey(ctx context.Context, userID, endpointID int64, secretPlaintext []byte, note *string, enabled *bool) (db.EndpointKey, error) {
+	return s.createEndpointKey(ctx, userID, endpointID, secretPlaintext, note, enabled, nil)
+}
+
+// CreateEndpointKeyWithPolicy is the additive strategy-aware key path.
+func (s *Service) CreateEndpointKeyWithPolicy(ctx context.Context, userID, endpointID int64, secretPlaintext []byte, note *string, enabled, forceStoreFalse *bool) (db.EndpointKey, error) {
+	return s.createEndpointKey(ctx, userID, endpointID, secretPlaintext, note, enabled, forceStoreFalse)
+}
+
+func (s *Service) createEndpointKey(ctx context.Context, userID, endpointID int64, secretPlaintext []byte, note *string, enabled, forceStoreFalse *bool) (db.EndpointKey, error) {
 	defer clear(secretPlaintext)
 	if s == nil || s.repo == nil {
 		return db.EndpointKey{}, ErrInvalidRequest
@@ -256,7 +270,16 @@ func (s *Service) CreateEndpointKey(ctx context.Context, userID, endpointID int6
 	}
 	now := s.now()
 
-	key, err := s.repo.CreateEndpointKey(ctx, userID, endpointID, secretPlaintext, head, tail, noteStr, enabledVal, now)
+	var key db.EndpointKey
+	if forceStoreFalse != nil {
+		policyRepo, ok := s.repo.(policyRepository)
+		if !ok {
+			return db.EndpointKey{}, ErrInvalidRequest
+		}
+		key, err = policyRepo.CreateEndpointKeyWithPolicy(ctx, userID, endpointID, secretPlaintext, head, tail, noteStr, enabledVal, *forceStoreFalse, now, "owner")
+	} else {
+		key, err = s.repo.CreateEndpointKey(ctx, userID, endpointID, secretPlaintext, head, tail, noteStr, enabledVal, now)
+	}
 	if err != nil {
 		return db.EndpointKey{}, mapRepoError(err)
 	}
@@ -290,6 +313,15 @@ func (s *Service) ListEndpointKeys(ctx context.Context, userID, endpointID int64
 // endpoint's path. Disabling a key is immediate; routing-time filtering of
 // disabled keys is the binding/forwarding rail's job.
 func (s *Service) UpdateEndpointKey(ctx context.Context, userID, endpointID, keyID int64, note *string, enabled *bool) (db.EndpointKey, error) {
+	return s.updateEndpointKey(ctx, userID, endpointID, keyID, note, enabled, nil)
+}
+
+// UpdateEndpointKeyWithPolicy is the additive strategy-aware key path.
+func (s *Service) UpdateEndpointKeyWithPolicy(ctx context.Context, userID, endpointID, keyID int64, note *string, enabled, forceStoreFalse *bool) (db.EndpointKey, error) {
+	return s.updateEndpointKey(ctx, userID, endpointID, keyID, note, enabled, forceStoreFalse)
+}
+
+func (s *Service) updateEndpointKey(ctx context.Context, userID, endpointID, keyID int64, note *string, enabled, forceStoreFalse *bool) (db.EndpointKey, error) {
 	if s == nil || s.repo == nil || userID <= 0 || endpointID <= 0 || keyID <= 0 {
 		return db.EndpointKey{}, db.ErrNotFound
 	}
@@ -302,7 +334,17 @@ func (s *Service) UpdateEndpointKey(ctx context.Context, userID, endpointID, key
 		notePtr = &noteStr
 	}
 	now := s.now()
-	key, err := s.repo.UpdateEndpointKey(ctx, userID, endpointID, keyID, notePtr, enabled, now)
+	var key db.EndpointKey
+	var err error
+	if forceStoreFalse != nil {
+		policyRepo, ok := s.repo.(policyRepository)
+		if !ok {
+			return db.EndpointKey{}, ErrInvalidRequest
+		}
+		key, err = policyRepo.UpdateEndpointKeyWithPolicy(ctx, userID, endpointID, keyID, notePtr, enabled, forceStoreFalse, now, "owner")
+	} else {
+		key, err = s.repo.UpdateEndpointKey(ctx, userID, endpointID, keyID, notePtr, enabled, now)
+	}
 	if err != nil {
 		return db.EndpointKey{}, mapRepoError(err)
 	}
@@ -399,6 +441,10 @@ func mapRepoError(err error) error {
 	switch {
 	case errors.Is(err, db.ErrNotFound):
 		return db.ErrNotFound
+	case errors.Is(err, db.ErrConflict):
+		return db.ErrConflict
+	case errors.Is(err, db.ErrInvalidValue):
+		return ErrInvalidRequest
 	case errors.Is(err, db.ErrEndpointOriginConflict):
 		return db.ErrEndpointOriginConflict
 	case errors.Is(err, db.ErrInvalidSiteConfig):

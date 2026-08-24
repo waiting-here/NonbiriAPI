@@ -50,6 +50,7 @@ func NewUserModelsHandler(deps UserModelsDeps) http.Handler {
 			Model              string         `json:"model"`
 			FullName           string         `json:"full_name"`
 			Enabled            bool           `json:"enabled"`
+			FlattenToolCalls   bool           `json:"flatten_tool_calls"`
 			PricingMode        string         `json:"pricing_mode"`
 			Prices             map[string]any `json:"prices"`
 			Discount           map[string]any `json:"discount"`
@@ -99,6 +100,7 @@ func NewUserModelsHandler(deps UserModelsDeps) http.Handler {
 				Model:              m.Model,
 				FullName:           m.FullName,
 				Enabled:            true,
+				FlattenToolCalls:   m.FlattenToolCalls,
 				PricingMode:        m.PricingMode,
 				Prices:             prices,
 				Discount:           discount,

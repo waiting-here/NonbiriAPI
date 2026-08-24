@@ -356,6 +356,15 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 	if len(route.Candidates) == 0 {
 		return connectorcontract.AttemptResult{}, ErrUnboundModel
 	}
+	attemptRequest := request
+	if route.FlattenToolCalls {
+		var reverseErr error
+		attemptRequest, reverseErr = request.ReverseFlatten()
+		if reverseErr != nil || attemptRequest == nil {
+			return connectorcontract.AttemptResult{}, ErrInternal
+		}
+		defer attemptRequest.Clear()
+	}
 	capable := make([]db.ForwardCandidate, 0, len(route.Candidates))
 	allOpenAI := true
 	capabilityByType := make(map[connectorcontract.Type]bool)
@@ -368,9 +377,15 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 			return connectorcontract.AttemptResult{}, ErrInternal
 		}
 		allOpenAI = allOpenAI && connectorType == connectorcontract.TypeOpenAICompatible
+		if route.FlattenToolCalls && connectorType != connectorcontract.TypeOpenAICompatible {
+			// Flatten's all-OpenAI binding invariant is a stored-state
+			// invariant, not a capability filter. A mixed candidate projection
+			// means the state is damaged; do not silently route around it.
+			return connectorcontract.AttemptResult{}, ErrInternal
+		}
 		supported, evaluated := capabilityByType[connectorType]
 		if !evaluated {
-			supported = s.registry.SupportsRequest(connectorType, request)
+			supported = s.registry.SupportsRequest(connectorType, attemptRequest)
 			capabilityByType[connectorType] = supported
 		}
 		if supported {
@@ -432,6 +447,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 	if err != nil {
 		return connectorcontract.AttemptResult{}, ErrInternal
 	}
+	policyCache := make(map[int64]bool)
 
 	var lastResult connectorcontract.AttemptResult
 	for index, bindingID := range order {
@@ -445,9 +461,11 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 			FullName:              route.FullName,
 			BindingID:             candidate.BindingID,
 			ExpectedConnectorType: connectorcontract.Type(candidate.ConnectorType),
-			Request:               request,
+			Request:               attemptRequest,
 			TraceID:               attemptID,
 			AttemptIndex:          index,
+			FlattenToolCalls:      route.FlattenToolCalls,
+			PolicyCache:           policyCache,
 		})
 		if ctx.Err() != nil && !result.Success && !result.Committed {
 			result = endedContextResult(parentCtx, ctx)
@@ -472,7 +490,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 				EndpointID:      candidate.EndpointID,
 				EndpointKeyID:   candidate.EndpointKeyID,
 				UpstreamModelID: candidate.UpstreamModelID,
-				Stream:          request.Stream,
+				Stream:          attemptRequest.Stream,
 				StartedAt:       started,
 				Duration:        finished.Sub(started),
 				UpstreamStatus:  result.UpstreamStatus,
@@ -493,7 +511,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 				BindingID:       candidate.BindingID,
 				EndpointKeyID:   candidate.EndpointKeyID,
 				UpstreamModelID: candidate.UpstreamModelID,
-				Stream:          request.Stream,
+				Stream:          attemptRequest.Stream,
 				Usage:           result.Usage,
 				UsageUnknown:    !result.Success && !result.Usage.Present,
 				EndpointBaseURL: result.EndpointBaseURL,

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -122,6 +123,51 @@ func (f *charityFixture) createDonorDonation(t *testing.T) (uid, donationKeyID i
 	if err != nil {
 		t.Fatalf("keys: %v", err)
 	}
+	if len(keys) != 1 || keys[0].EndpointKeyID == nil {
+		t.Fatalf("donation key physical projection = %+v", keys)
+	}
+	force := true
+	if _, err := f.st.UpdateEndpointKeyWithPolicy(context.Background(), user.ID, ep.ID, *keys[0].EndpointKeyID, nil, nil, &force, 25, "owner"); err != nil {
+		t.Fatalf("enable force_store_false: %v", err)
+	}
+	return user.ID, keys[0].ID
+}
+
+func (f *charityFixture) createAnthropicDonorDonation(t *testing.T) (uid, donationKeyID int64) {
+	t.Helper()
+	user, err := f.st.CreateUser("discord-anthropic-donor", "anthropic-donor", "")
+	if err != nil {
+		t.Fatalf("CreateUser(Anthropic donor): %v", err)
+	}
+	ep, err := f.st.CreateEndpoint(context.Background(), user.ID, "anthropic-compatible", "https://anthropic.example.com/v1", "", true, 1)
+	if err != nil {
+		t.Fatalf("CreateEndpoint(Anthropic): %v", err)
+	}
+	k, err := f.st.CreateEndpointKey(context.Background(), user.ID, ep.ID, []byte("sk-charity-anthropic"), "h", "t", "", true, 1)
+	if err != nil {
+		t.Fatalf("CreateEndpointKey(Anthropic): %v", err)
+	}
+	if err := f.st.ReplaceFetchedModels(context.Background(), user.ID, ep.ID, k.ID,
+		[]db.FetchedModel{{UpstreamModelID: "up/m", Provider: "p"}}, 5); err != nil {
+		t.Fatalf("ReplaceFetchedModels(Anthropic): %v", err)
+	}
+	donation, err := f.st.CreateDonation(context.Background(), db.CreateDonationInput{
+		UserID: user.ID, Description: "anthropic donation", Now: 10,
+		Existing: &db.ExistingEndpointKeys{EndpointID: ep.ID, KeyIDs: []int64{k.ID}},
+	})
+	if err != nil {
+		t.Fatalf("CreateDonation(Anthropic): %v", err)
+	}
+	if _, err := f.st.ApplyDonationReview(context.Background(), db.ReviewDecision{
+		DonationID: donation.ID, Role: db.ReviewRoleAdmin, ReviewerID: user.ID,
+		Action: db.ReviewActionApprove, Now: 20,
+	}); err != nil {
+		t.Fatalf("approve Anthropic donation: %v", err)
+	}
+	keys, err := f.st.ListOwnDonationKeys(context.Background(), user.ID, donation.ID)
+	if err != nil || len(keys) != 1 {
+		t.Fatalf("Anthropic donation keys = %+v err=%v", keys, err)
+	}
 	return user.ID, keys[0].ID
 }
 
@@ -224,10 +270,14 @@ func TestCharityHTTPTokenReserveFailClosedAndBindings(t *testing.T) {
 		t.Fatalf("unknown key binding = %d, want 404", rec.Code)
 	}
 
-	rec, _ = f.do(t, "POST", "/admin/api/charity-models/"+itoa64(modelID)+"/bindings",
+	rec, body = f.do(t, "POST", "/admin/api/charity-models/"+itoa64(modelID)+"/bindings",
 		map[string]any{"donation_key_id": dkID, "upstream_model_id": "up/m"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("valid binding = %d %v", rec.Code, body)
+	}
+	if body["force_store_false"] != true || body["endpoint_base_url"] != "https://api.example.com" ||
+		body["key_display_head"] != "h" || body["key_display_tail"] != "t" || body["donation_key_enabled"] != true {
+		t.Fatalf("binding omitted authoritative read-only key projection: %v", body)
 	}
 
 	// The success-rate projection starts empty and updates via the ring buffer.
@@ -243,6 +293,34 @@ func TestCharityHTTPTokenReserveFailClosedAndBindings(t *testing.T) {
 	}
 	if rate["sample_count"] != float64(1) || rate["success_count"] != float64(1) {
 		t.Fatalf("success rate = %v (body=%v)", rate, body)
+	}
+}
+
+func TestCharityBindingOmitsOpenAIOnlyPolicyForAnthropic(t *testing.T) {
+	f := newCharityFixture(t)
+	_, donationKeyID := f.createAnthropicDonorDonation(t)
+	rec, body := f.do(t, "POST", "/admin/api/charity-models", map[string]any{
+		"provider": "donor", "model": "anthropic", "pricing_mode": "per_request", "enabled": true,
+		"prices": map[string]any{"request_user_price": "500"},
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create Anthropic charity model = %d %v", rec.Code, body)
+	}
+	modelID := int64(body["id"].(float64))
+	rec, body = f.do(t, "POST", "/admin/api/charity-models/"+itoa64(modelID)+"/bindings",
+		map[string]any{"donation_key_id": donationKeyID, "upstream_model_id": "up/m"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create Anthropic charity binding = %d %v", rec.Code, body)
+	}
+	if _, present := body["force_store_false"]; present {
+		t.Fatalf("Anthropic charity binding exposed OpenAI-only policy: %v", body)
+	}
+	rec, body = f.do(t, "GET", "/admin/api/charity-models/"+itoa64(modelID)+"/bindings", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list Anthropic charity bindings = %d %v", rec.Code, body)
+	}
+	if strings.Contains(rec.Body.String(), `"force_store_false"`) {
+		t.Fatalf("Anthropic charity binding list exposed OpenAI-only policy: %s", rec.Body.String())
 	}
 }
 

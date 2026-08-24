@@ -124,6 +124,8 @@ func (Target) LogValue() slog.Value {
 // them; the initial projection carries the existing origin-scoped identifier.
 type AttemptPolicy struct {
 	SafetyIdentifier string
+	ForceStoreFalse  bool
+	FlattenToolCalls bool
 }
 
 func (AttemptPolicy) String() string   { return "[redacted attempt policy]" }

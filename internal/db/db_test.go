@@ -67,6 +67,7 @@ var expectedTables = []string{
 	"game_settlements",
 	"models",
 	"model_bindings",
+	"policy_audits",
 	"request_logs",
 	"credit_ledger",
 	"checkins",

@@ -45,6 +45,8 @@ type AttemptInput struct {
 	Request               *openai.ChatRequest
 	TraceID               string
 	AttemptIndex          int
+	FlattenToolCalls      bool
+	PolicyCache           map[int64]bool
 }
 
 const maxForwardCiphertextBytes = 128 << 10
@@ -159,14 +161,22 @@ func (r *SecureRunner) Run(ctx context.Context, writer http.ResponseWriter, inpu
 		}
 		return internalAttemptFailure("forwarding target lookup failed")
 	}
+	if input.PolicyCache != nil {
+		if cached, ok := input.PolicyCache[target.EndpointKeyID]; ok {
+			target.ForceStoreFalse = cached
+		} else {
+			input.PolicyCache[target.EndpointKeyID] = target.ForceStoreFalse
+		}
+	}
 	return r.dispatch(ctx, writer, dispatchInput{
-		ownerUserID:    input.UserID,
-		preDecrypted:   target,
-		expectedType:   expectedConnectorType,
-		request:        input.Request,
-		consumerUserID: input.UserID,
-		traceID:        input.TraceID,
-		attemptIndex:   input.AttemptIndex,
+		ownerUserID:      input.UserID,
+		preDecrypted:     target,
+		expectedType:     expectedConnectorType,
+		request:          input.Request,
+		consumerUserID:   input.UserID,
+		traceID:          input.TraceID,
+		attemptIndex:     input.AttemptIndex,
+		flattenToolCalls: input.FlattenToolCalls,
 	})
 }
 
@@ -183,6 +193,8 @@ type CharityAttemptInput struct {
 	Request               *openai.ChatRequest
 	TraceID               string
 	AttemptIndex          int
+	FlattenToolCalls      bool
+	PolicyCache           map[int64]bool
 }
 
 // RunCharity revalidates one charity binding through the full candidate
@@ -210,27 +222,36 @@ func (r *SecureRunner) RunCharity(ctx context.Context, writer http.ResponseWrite
 		}
 		return internalAttemptFailure("charity target lookup failed")
 	}
+	if input.PolicyCache != nil {
+		if cached, ok := input.PolicyCache[target.EndpointKeyID]; ok {
+			target.ForceStoreFalse = cached
+		} else {
+			input.PolicyCache[target.EndpointKeyID] = target.ForceStoreFalse
+		}
+	}
 	return r.dispatch(ctx, writer, dispatchInput{
-		ownerUserID:    target.DonorUserID,
-		preDecrypted:   target.ForwardTarget,
-		expectedType:   expectedConnectorType,
-		request:        input.Request,
-		consumerUserID: input.ConsumerUserID,
-		traceID:        input.TraceID,
-		attemptIndex:   input.AttemptIndex,
+		ownerUserID:      target.DonorUserID,
+		preDecrypted:     target.ForwardTarget,
+		expectedType:     expectedConnectorType,
+		request:          input.Request,
+		consumerUserID:   input.ConsumerUserID,
+		traceID:          input.TraceID,
+		attemptIndex:     input.AttemptIndex,
+		flattenToolCalls: input.FlattenToolCalls,
 	})
 }
 
 // dispatchInput carries one revalidated projection plus protocol inputs into
 // the shared decrypt-and-dispatch flow.
 type dispatchInput struct {
-	ownerUserID    int64
-	consumerUserID int64
-	preDecrypted   db.ForwardTarget
-	expectedType   connectorcontract.Type
-	request        *openai.ChatRequest
-	traceID        string
-	attemptIndex   int
+	ownerUserID      int64
+	consumerUserID   int64
+	preDecrypted     db.ForwardTarget
+	expectedType     connectorcontract.Type
+	request          *openai.ChatRequest
+	traceID          string
+	attemptIndex     int
+	flattenToolCalls bool
 }
 
 func (r *SecureRunner) dispatch(ctx context.Context, writer http.ResponseWriter, in dispatchInput) connectorcontract.AttemptResult {
@@ -240,6 +261,13 @@ func (r *SecureRunner) dispatch(ctx context.Context, writer http.ResponseWriter,
 		return selectedTargetUnavailableFailure()
 	}
 	connectorType := in.expectedType
+	if connectorType != connectorcontract.TypeOpenAICompatible && (in.flattenToolCalls || target.ForceStoreFalse) {
+		// Both experimental policies are OpenAI-only. This is a defensive
+		// runtime invariant in case a damaged projection reaches the runner;
+		// never decrypt or dial an Anthropic target under either policy.
+		target.DiscardEncryptedSecret()
+		return internalAttemptFailure("forwarding policy is incompatible with connector")
+	}
 	protocolConnector := r.connectors[connectorType]
 	if protocolConnector == nil {
 		target.DiscardEncryptedSecret()
@@ -292,7 +320,7 @@ func (r *SecureRunner) dispatch(ctx context.Context, writer http.ResponseWriter,
 		Target:       connectorcontract.NewTarget(connectorType, target.BaseURL, target.UpstreamModelID),
 		Credential:   connectorcontract.NewShortLivedSecret(plaintext, ciphertextBytes),
 		Ingress:      attemptRequest,
-		Policy:       connectorcontract.AttemptPolicy{SafetyIdentifier: safetyIdentifier},
+		Policy:       connectorcontract.AttemptPolicy{SafetyIdentifier: safetyIdentifier, ForceStoreFalse: target.ForceStoreFalse, FlattenToolCalls: in.flattenToolCalls},
 		Sink:         writer,
 		Observer:     r.observer,
 		TraceID:      in.traceID,

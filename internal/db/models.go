@@ -17,23 +17,24 @@ import (
 // unique (user_id, full_name) index makes field-pair collisions collide).
 // BindingCount is projected by a SQL aggregate, never client-supplied.
 type Model struct {
-	ID            int64
-	UserID        int64
-	Provider      string
-	Model         string
-	FullName      string
-	RouteStrategy string
-	SilentRetry   bool
-	BindingCount  int
-	CreatedAt     int64
-	UpdatedAt     int64
+	ID               int64
+	UserID           int64
+	Provider         string
+	Model            string
+	FullName         string
+	RouteStrategy    string
+	SilentRetry      bool
+	FlattenToolCalls bool
+	BindingCount     int
+	CreatedAt        int64
+	UpdatedAt        int64
 }
 
 // modelListSQL projects models with their live binding counts. The LEFT JOIN
 // keeps zero-binding drafts visible with count 0; GROUP BY m.id is safe
 // because id is the primary key (SQLite's bare-column rule).
 const modelListSQL = `
-SELECT m.id, m.user_id, m.provider, m.model, m.full_name, m.route_strategy, m.silent_retry, m.created_at, m.updated_at, COUNT(b.id)
+SELECT m.id, m.user_id, m.provider, m.model, m.full_name, m.route_strategy, m.silent_retry, m.flatten_tool_calls, m.created_at, m.updated_at, COUNT(b.id)
 FROM models m
 LEFT JOIN model_bindings b ON b.model_id = m.id
 WHERE m.user_id = ?
@@ -41,7 +42,7 @@ GROUP BY m.id
 ORDER BY m.id`
 
 const modelGetSQL = `
-SELECT m.id, m.user_id, m.provider, m.model, m.full_name, m.route_strategy, m.silent_retry, m.created_at, m.updated_at, COUNT(b.id)
+SELECT m.id, m.user_id, m.provider, m.model, m.full_name, m.route_strategy, m.silent_retry, m.flatten_tool_calls, m.created_at, m.updated_at, COUNT(b.id)
 FROM models m
 LEFT JOIN model_bindings b ON b.model_id = m.id
 WHERE m.id = ? AND m.user_id = ?
@@ -67,6 +68,16 @@ const siteConfigKeyDefaultModelLimit = "default_model_limit"
 // including a different provider/model split that yields the same external
 // name — returns ErrConflict and writes nothing. now is caller-supplied.
 func (s *Store) CreateModel(ctx context.Context, userID int64, provider, model, routeStrategy string, silentRetry bool, now int64) (Model, error) {
+	return s.createModel(ctx, userID, provider, model, routeStrategy, silentRetry, false, now, "owner")
+}
+
+// CreateModelWithPolicy is the policy-aware model creation primitive. The
+// legacy CreateModel wrapper keeps older callers source-compatible.
+func (s *Store) CreateModelWithPolicy(ctx context.Context, userID int64, provider, model, routeStrategy string, silentRetry, flattenToolCalls bool, now int64, actorRole string) (Model, error) {
+	return s.createModel(ctx, userID, provider, model, routeStrategy, silentRetry, flattenToolCalls, now, actorRole)
+}
+
+func (s *Store) createModel(ctx context.Context, userID int64, provider, model, routeStrategy string, silentRetry, flattenToolCalls bool, now int64, actorRole string) (Model, error) {
 	fullName := provider + "/" + model
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -95,9 +106,13 @@ func (s *Store) CreateModel(ctx context.Context, userID int64, provider, model, 
 	if silentRetry {
 		retryInt = 1
 	}
+	flatInt := 0
+	if flattenToolCalls {
+		flatInt = 1
+	}
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO models (user_id, provider, model, full_name, route_strategy, silent_retry, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)`,
-		userID, provider, model, fullName, routeStrategy, retryInt, now, now)
+		`INSERT INTO models (user_id, provider, model, full_name, route_strategy, silent_retry, flatten_tool_calls, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)`,
+		userID, provider, model, fullName, routeStrategy, retryInt, flatInt, now, now)
 	if err != nil {
 		if isConstraintError(err) {
 			if derr := classifyConflict(ctx, tx,
@@ -111,6 +126,11 @@ func (s *Store) CreateModel(ctx context.Context, userID int64, provider, model, 
 	if err != nil {
 		return Model{}, fmt.Errorf("model last insert id: %w", err)
 	}
+	if flattenToolCalls {
+		if err := appendPolicyAuditTx(ctx, tx, userID, actorRole, "model", id, "flatten_tool_calls", 0, 1, now); err != nil {
+			return Model{}, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return Model{}, fmt.Errorf("commit create model: %w", err)
 	}
@@ -118,7 +138,8 @@ func (s *Store) CreateModel(ctx context.Context, userID int64, provider, model, 
 	return Model{
 		ID: id, UserID: userID, Provider: provider, Model: model,
 		FullName: fullName, RouteStrategy: routeStrategy, SilentRetry: silentRetry,
-		BindingCount: 0, CreatedAt: now, UpdatedAt: now,
+		FlattenToolCalls: flattenToolCalls,
+		BindingCount:     0, CreatedAt: now, UpdatedAt: now,
 	}, nil
 }
 
@@ -172,6 +193,16 @@ func (s *Store) GetModel(ctx context.Context, userID, id int64) (Model, error) {
 // silentRetry leaves the retry switch unchanged. A missing or cross-user id
 // yields ErrNotFound. now updates updated_at.
 func (s *Store) UpdateModel(ctx context.Context, userID, id int64, provider, model, routeStrategy *string, silentRetry *bool, now int64) (Model, error) {
+	return s.updateModel(ctx, userID, id, provider, model, routeStrategy, silentRetry, nil, now, "owner")
+}
+
+// UpdateModelWithPolicy is the policy-aware model update primitive. A nil
+// flattenToolCalls leaves the current value unchanged.
+func (s *Store) UpdateModelWithPolicy(ctx context.Context, userID, id int64, provider, model, routeStrategy *string, silentRetry, flattenToolCalls *bool, now int64, actorRole string) (Model, error) {
+	return s.updateModel(ctx, userID, id, provider, model, routeStrategy, silentRetry, flattenToolCalls, now, actorRole)
+}
+
+func (s *Store) updateModel(ctx context.Context, userID, id int64, provider, model, routeStrategy *string, silentRetry, flattenToolCalls *bool, now int64, actorRole string) (Model, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Model{}, fmt.Errorf("begin update model: %w", err)
@@ -210,8 +241,29 @@ func (s *Store) UpdateModel(ctx context.Context, userID, id int64, provider, mod
 	if silentRetry != nil {
 		newRetry = *silentRetry
 	}
+	newFlatten := current.FlattenToolCalls
+	if flattenToolCalls != nil {
+		newFlatten = *flattenToolCalls
+	}
+	// Every explicit true write revalidates the complete binding set. This is
+	// intentionally stronger than transition-only validation: a repeated true
+	// PATCH must not bless a damaged mixed-connector state as a successful
+	// no-op.
+	if flattenToolCalls != nil && newFlatten {
+		var n int
+		if err := tx.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM model_bindings b
+JOIN endpoint_keys ek ON ek.id=b.endpoint_key_id
+JOIN endpoints e ON e.id=ek.endpoint_id
+WHERE b.model_id=? AND e.connector_type <> 'openai-compatible'`, id).Scan(&n); err != nil {
+			return Model{}, fmt.Errorf("validate model flatten bindings: %w", err)
+		}
+		if n != 0 {
+			return Model{}, ErrConflict
+		}
+	}
 	newFullName := newProvider + "/" + newModel
-	if newProvider == current.Provider && newModel == current.Model && newStrategy == current.RouteStrategy && newRetry == current.SilentRetry {
+	if newProvider == current.Provider && newModel == current.Model && newStrategy == current.RouteStrategy && newRetry == current.SilentRetry && newFlatten == current.FlattenToolCalls {
 		// No-op update: the ownership check already passed, echo the row.
 		if err := tx.Commit(); err != nil {
 			return Model{}, fmt.Errorf("commit noop model update: %w", err)
@@ -224,9 +276,13 @@ func (s *Store) UpdateModel(ctx context.Context, userID, id int64, provider, mod
 	if newRetry {
 		retryInt = 1
 	}
+	flatInt := 0
+	if newFlatten {
+		flatInt = 1
+	}
 	res, err := tx.ExecContext(ctx,
-		`UPDATE models SET provider=?, model=?, full_name=?, route_strategy=?, silent_retry=?, updated_at=? WHERE id=? AND user_id=?`,
-		newProvider, newModel, newFullName, newStrategy, retryInt, now, id, userID)
+		`UPDATE models SET provider=?, model=?, full_name=?, route_strategy=?, silent_retry=?, flatten_tool_calls=?, updated_at=? WHERE id=? AND user_id=?`,
+		newProvider, newModel, newFullName, newStrategy, retryInt, flatInt, now, id, userID)
 	if err != nil {
 		if isConstraintError(err) {
 			if derr := classifyConflict(ctx, tx,
@@ -242,6 +298,18 @@ func (s *Store) UpdateModel(ctx context.Context, userID, id int64, provider, mod
 	}
 	if affected == 0 {
 		return Model{}, ErrNotFound
+	}
+	if flattenToolCalls != nil && newFlatten != current.FlattenToolCalls {
+		var oldValue, newValue int64
+		if current.FlattenToolCalls {
+			oldValue = 1
+		}
+		if newFlatten {
+			newValue = 1
+		}
+		if err := appendPolicyAuditTx(ctx, tx, userID, actorRole, "model", id, "flatten_tool_calls", oldValue, newValue, now); err != nil {
+			return Model{}, err
+		}
 	}
 
 	updated, err := scanModelRow(tx.QueryRowContext(ctx, modelGetSQL, id, userID))
@@ -301,13 +369,14 @@ func classifyConflict(ctx context.Context, q queryRowContexter, diagSQL string, 
 func scanModelRow(row *sql.Row) (Model, error) {
 	var m Model
 	var count int
-	var silentRetry int
+	var silentRetry, flattenInt int
 	err := row.Scan(&m.ID, &m.UserID, &m.Provider, &m.Model, &m.FullName, &m.RouteStrategy,
-		&silentRetry, &m.CreatedAt, &m.UpdatedAt, &count)
+		&silentRetry, &flattenInt, &m.CreatedAt, &m.UpdatedAt, &count)
 	if err != nil {
 		return Model{}, err
 	}
 	m.SilentRetry = silentRetry != 0
+	m.FlattenToolCalls = flattenInt != 0
 	m.BindingCount = count
 	return m, nil
 }
@@ -317,12 +386,13 @@ func scanModels(rows *sql.Rows) ([]Model, error) {
 	for rows.Next() {
 		var m Model
 		var count int
-		var silentRetry int
+		var silentRetry, flattenInt int
 		if err := rows.Scan(&m.ID, &m.UserID, &m.Provider, &m.Model, &m.FullName, &m.RouteStrategy,
-			&silentRetry, &m.CreatedAt, &m.UpdatedAt, &count); err != nil {
+			&silentRetry, &flattenInt, &m.CreatedAt, &m.UpdatedAt, &count); err != nil {
 			return nil, fmt.Errorf("scan model: %w", err)
 		}
 		m.SilentRetry = silentRetry != 0
+		m.FlattenToolCalls = flattenInt != 0
 		m.BindingCount = count
 		out = append(out, m)
 	}

@@ -123,6 +123,47 @@ CREATE TABLE endpoint_keys (
 );
 CREATE INDEX idx_endpoint_keys_endpoint ON endpoint_keys(endpoint_id);
 
+-- ===== policy_audits ======================================================
+-- Append-only strategy-policy transitions. Resource ids are intentionally
+-- untyped integers (the resource may be deleted); actor ownership is kept
+-- nullable so account deletion preserves the audit row while removing the
+-- actor identity. Writers append rows in the same transaction as the policy
+-- mutation and never persist request content, credentials, or tool payloads.
+CREATE TABLE policy_audits (
+	id              INTEGER PRIMARY KEY AUTOINCREMENT,
+	actor_user_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+	actor_role      TEXT NOT NULL CHECK(actor_role IN ('owner','admin','level5')),
+	resource_type   TEXT NOT NULL CHECK(resource_type IN ('endpoint_key','model','charity_model')),
+	resource_id     INTEGER NOT NULL CHECK(resource_id > 0),
+	policy          TEXT NOT NULL CHECK(policy IN ('force_store_false','flatten_tool_calls')),
+	old_value       INTEGER NOT NULL CHECK(old_value IN (0,1)),
+	new_value       INTEGER NOT NULL CHECK(new_value IN (0,1)),
+	created_at      INTEGER NOT NULL
+);
+CREATE INDEX idx_policy_audits_resource ON policy_audits(resource_type, resource_id, id);
+CREATE INDEX idx_policy_audits_actor ON policy_audits(actor_user_id, id);
+CREATE TRIGGER policy_audits_no_update
+BEFORE UPDATE ON policy_audits
+WHEN NOT (
+	OLD.actor_user_id IS NOT NULL AND NEW.actor_user_id IS NULL
+	AND NOT EXISTS (SELECT 1 FROM users WHERE id = OLD.actor_user_id)
+	AND OLD.actor_role = NEW.actor_role
+	AND OLD.resource_type = NEW.resource_type
+	AND OLD.resource_id = NEW.resource_id
+	AND OLD.policy = NEW.policy
+	AND OLD.old_value = NEW.old_value
+	AND OLD.new_value = NEW.new_value
+	AND OLD.created_at = NEW.created_at
+)
+BEGIN
+	SELECT RAISE(ABORT, 'policy_audits is append-only');
+END;
+CREATE TRIGGER policy_audits_no_delete
+BEFORE DELETE ON policy_audits
+BEGIN
+	SELECT RAISE(ABORT, 'policy_audits is append-only');
+END;
+
 -- ===== fetched_models =======================================================
 -- Upstream model cache keyed by (Endpoint, Key) combo: different keys on the
 -- same endpoint may legitimately return different model lists. Dropping an

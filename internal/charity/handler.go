@@ -29,11 +29,13 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
 const (
@@ -61,13 +63,17 @@ var (
 
 // Create validates and creates one charity model. actorUserID may be 0.
 func (s *Service) Create(ctx context.Context, m db.CharityModel, actorUserID int64) (db.CharityModel, error) {
+	return s.CreateWithRole(ctx, m, actorUserID, "admin")
+}
+
+func (s *Service) CreateWithRole(ctx context.Context, m db.CharityModel, actorUserID int64, actorRole string) (db.CharityModel, error) {
 	if err := validateNames(m.Provider, m.Model); err != nil {
 		return db.CharityModel{}, err
 	}
 	if err := validatePrices(&m); err != nil {
 		return db.CharityModel{}, err
 	}
-	out, err := s.store.CreateCharityModel(ctx, m, actorUserID, s.now())
+	out, err := s.store.CreateCharityModelWithPolicy(ctx, m, actorUserID, actorRole, s.now())
 	if err != nil {
 		return db.CharityModel{}, mapRepoError(err)
 	}
@@ -76,6 +82,10 @@ func (s *Service) Create(ctx context.Context, m db.CharityModel, actorUserID int
 
 // Update applies one partial update.
 func (s *Service) Update(ctx context.Context, id int64, upd db.CharityModelUpdate) (db.CharityModel, error) {
+	return s.UpdateWithRole(ctx, id, upd, 0, "admin")
+}
+
+func (s *Service) UpdateWithRole(ctx context.Context, id int64, upd db.CharityModelUpdate, actorUserID int64, actorRole string) (db.CharityModel, error) {
 	if upd.Provider != nil {
 		if err := validateName(*upd.Provider, maxProviderRunes); err != nil {
 			return db.CharityModel{}, err
@@ -89,7 +99,7 @@ func (s *Service) Update(ctx context.Context, id int64, upd db.CharityModelUpdat
 			return db.CharityModel{}, err
 		}
 	}
-	out, err := s.store.UpdateCharityModel(ctx, id, upd, s.now())
+	out, err := s.store.UpdateCharityModelWithPolicy(ctx, id, upd, actorUserID, actorRole, s.now())
 	if err != nil {
 		return db.CharityModel{}, mapRepoError(err)
 	}
@@ -349,6 +359,13 @@ func (h *Handler) authenticate(w http.ResponseWriter, r *http.Request) (int64, b
 	return id, true
 }
 
+func (h *Handler) actorRole() string {
+	if strings.HasPrefix(h.prefix, "/admin/") || h.prefix == "/admin" {
+		return "admin"
+	}
+	return "level5"
+}
+
 func (h *Handler) listFor(w http.ResponseWriter, r *http.Request, _ int64) {
 	page, pageSize, ok := parsePageParams(w, r)
 	if !ok {
@@ -395,7 +412,10 @@ func (h *Handler) createFor(w http.ResponseWriter, r *http.Request, actor int64)
 	if req.Enabled != nil {
 		m.Enabled = *req.Enabled
 	}
-	out, err := h.svc.Create(r.Context(), m, actor)
+	if req.FlattenToolCalls.Present {
+		m.FlattenToolCalls = req.FlattenToolCalls.Value
+	}
+	out, err := h.svc.CreateWithRole(r.Context(), m, actor, h.actorRole())
 	if err != nil {
 		writeServiceErr(w, err)
 		return
@@ -417,7 +437,7 @@ func (h *Handler) getFor(w http.ResponseWriter, r *http.Request, _ int64) {
 	httperr.WriteJSON(w, http.StatusOK, charityResponse(m, rate))
 }
 
-func (h *Handler) updateFor(w http.ResponseWriter, r *http.Request, _ int64) {
+func (h *Handler) updateFor(w http.ResponseWriter, r *http.Request, actor int64) {
 	id, ok := parsePathID(w, r)
 	if !ok {
 		return
@@ -431,7 +451,7 @@ func (h *Handler) updateFor(w http.ResponseWriter, r *http.Request, _ int64) {
 	if !ok {
 		return
 	}
-	out, err := h.svc.Update(r.Context(), id, upd)
+	out, err := h.svc.UpdateWithRole(r.Context(), id, upd, actor, h.actorRole())
 	if err != nil {
 		writeServiceErr(w, err)
 		return
@@ -575,21 +595,43 @@ type discountFieldsReq struct {
 }
 
 type charityWriteReq struct {
-	Provider    string            `json:"provider"`
-	Model       string            `json:"model"`
-	PricingMode string            `json:"pricing_mode"`
-	Enabled     *bool             `json:"enabled,omitempty"`
-	Prices      priceFieldsReq    `json:"prices"`
-	Discount    discountFieldsReq `json:"discount"`
+	Provider         string             `json:"provider"`
+	Model            string             `json:"model"`
+	PricingMode      string             `json:"pricing_mode"`
+	Enabled          *bool              `json:"enabled,omitempty"`
+	FlattenToolCalls strictOptionalBool `json:"flatten_tool_calls,omitempty"`
+	Prices           priceFieldsReq     `json:"prices"`
+	Discount         discountFieldsReq  `json:"discount"`
 }
 
 type charityPatchReq struct {
-	Provider    *string            `json:"provider,omitempty"`
-	Model       *string            `json:"model,omitempty"`
-	PricingMode *string            `json:"pricing_mode,omitempty"`
-	Enabled     *bool              `json:"enabled,omitempty"`
-	Prices      *priceFieldsReq    `json:"prices,omitempty"`
-	Discount    *discountFieldsReq `json:"discount,omitempty"`
+	Provider         *string            `json:"provider,omitempty"`
+	Model            *string            `json:"model,omitempty"`
+	PricingMode      *string            `json:"pricing_mode,omitempty"`
+	Enabled          *bool              `json:"enabled,omitempty"`
+	FlattenToolCalls strictOptionalBool `json:"flatten_tool_calls,omitempty"`
+	Prices           *priceFieldsReq    `json:"prices,omitempty"`
+	Discount         *discountFieldsReq `json:"discount,omitempty"`
+}
+
+// strictOptionalBool distinguishes an omitted policy field from JSON null
+// while accepting only the JSON boolean literals. Policy fields deliberately
+// reject numbers, strings, and null rather than coercing them.
+type strictOptionalBool struct {
+	Value   bool
+	Present bool
+}
+
+func (b *strictOptionalBool) UnmarshalJSON(data []byte) error {
+	switch string(bytes.TrimSpace(data)) {
+	case "true":
+		b.Value, b.Present = true, true
+	case "false":
+		b.Value, b.Present = false, true
+	default:
+		return errors.New("policy field must be a JSON boolean")
+	}
+	return nil
 }
 
 // parsePrice decodes one canonical decimal milli-credit string field.
@@ -695,6 +737,10 @@ func (r charityPatchReq) toUpdate(w http.ResponseWriter) (db.CharityModelUpdate,
 	upd.Model = r.Model
 	upd.PricingMode = r.PricingMode
 	upd.Enabled = r.Enabled
+	if r.FlattenToolCalls.Present {
+		value := r.FlattenToolCalls.Value
+		upd.FlattenToolCalls = &value
+	}
 	if r.Prices != nil {
 		prices := &db.CharityModelPrices{}
 		if !r.Prices.toUpdate(prices, w) {
@@ -764,19 +810,20 @@ func parseDiscountInterval(d discountFieldsReq, w http.ResponseWriter) (*int64, 
 }
 
 type charityModelResp struct {
-	ID              int64               `json:"id"`
-	Provider        string              `json:"provider"`
-	Model           string              `json:"model"`
-	FullName        string              `json:"full_name"`
-	Enabled         bool                `json:"enabled"`
-	PricingMode     string              `json:"pricing_mode"`
-	Prices          charityPricesResp   `json:"prices"`
-	Discount        charityDiscountResp `json:"discount"`
-	SuccessSamples  int                 `json:"success_samples"`
-	SuccessCount    int                 `json:"success_count"`
-	CreatedByUserID *int64              `json:"created_by_user_id"`
-	CreatedAt       int64               `json:"created_at"`
-	UpdatedAt       int64               `json:"updated_at"`
+	ID               int64               `json:"id"`
+	Provider         string              `json:"provider"`
+	Model            string              `json:"model"`
+	FullName         string              `json:"full_name"`
+	Enabled          bool                `json:"enabled"`
+	FlattenToolCalls bool                `json:"flatten_tool_calls"`
+	PricingMode      string              `json:"pricing_mode"`
+	Prices           charityPricesResp   `json:"prices"`
+	Discount         charityDiscountResp `json:"discount"`
+	SuccessSamples   int                 `json:"success_samples"`
+	SuccessCount     int                 `json:"success_count"`
+	CreatedByUserID  *int64              `json:"created_by_user_id"`
+	CreatedAt        int64               `json:"created_at"`
+	UpdatedAt        int64               `json:"updated_at"`
 }
 
 type charityPricesResp struct {
@@ -803,6 +850,7 @@ type charityBindingResp struct {
 	ID                 int64  `json:"id"`
 	CharityModelID     int64  `json:"charity_model_id"`
 	DonationKeyID      int64  `json:"donation_key_id"`
+	ForceStoreFalse    *bool  `json:"force_store_false,omitempty"`
 	UpstreamModelID    string `json:"upstream_model_id"`
 	Ord                int64  `json:"ord"`
 	CreatedAt          int64  `json:"created_at"`
@@ -821,7 +869,7 @@ type charityListResp struct {
 func charityResponse(m db.CharityModel, rate db.CharitySuccessRate) charityModelResp {
 	return charityModelResp{
 		ID: m.ID, Provider: m.Provider, Model: m.Model, FullName: m.FullName,
-		Enabled: m.Enabled, PricingMode: m.PricingMode,
+		Enabled: m.Enabled, FlattenToolCalls: m.FlattenToolCalls, PricingMode: m.PricingMode,
 		Prices: charityPricesResp{
 			RequestUserPriceMilli:      credits.FormatAmount(m.RequestUserPrice),
 			RequestDonorRewardMilli:    credits.FormatAmount(m.RequestDonorReward),
@@ -846,8 +894,14 @@ func charityResponse(m db.CharityModel, rate db.CharitySuccessRate) charityModel
 }
 
 func bindingResponse(b db.CharityModelBinding) charityBindingResp {
+	var forceStoreFalse *bool
+	if b.ConnectorType == "openai-compatible" {
+		value := b.ForceStoreFalse
+		forceStoreFalse = &value
+	}
 	return charityBindingResp{
 		ID: b.ID, CharityModelID: b.CharityModelID, DonationKeyID: b.DonationKeyID,
+		ForceStoreFalse: forceStoreFalse,
 		UpstreamModelID: b.UpstreamModelID, Ord: b.Ord, CreatedAt: b.CreatedAt,
 		EndpointBaseURL: b.EndpointBaseURL, KeyDisplayHead: b.KeyDisplayHead,
 		KeyDisplayTail: b.KeyDisplayTail, DonationKeyEnabled: b.DonationKeyEnabled,
@@ -922,7 +976,19 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) httperr.Error {
 		return httperr.New(httperr.CodeInvalidRequest, "request body is required")
 	}
 	r.Body = http.MaxBytesReader(nil, r.Body, maxBodyBytes)
-	dec := json.NewDecoder(r.Body)
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			return httperr.New(httperr.CodePayloadTooLarge, "request body too large")
+		}
+		return httperr.New(httperr.CodeInvalidRequest, "malformed request body")
+	}
+	defer clear(data)
+	if err := strictjson.ValidateObject(data); err != nil {
+		return httperr.New(httperr.CodeInvalidRequest, "malformed request body")
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
 		var maxBytesErr *http.MaxBytesError
