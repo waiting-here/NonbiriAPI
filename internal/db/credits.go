@@ -59,8 +59,8 @@ const MaxOperationIDLen = 128
 // (implementation contract §1.3: adjustment reasons at most 1,024 runes).
 const maxAdjustmentReasonRunes = 1024
 
-// CreditLedgerKind enumerates the frozen ledger kinds. The set is closed in
-// alpha.2; the schema CHECK enforces the same membership server-side.
+// CreditLedgerKind enumerates the frozen ledger kinds. The schema CHECK
+// enforces the same closed membership server-side.
 type CreditLedgerKind string
 
 const (
@@ -71,13 +71,17 @@ const (
 	LedgerCharitySettlement CreditLedgerKind = "charity_settlement"
 	LedgerDonorReward       CreditLedgerKind = "donor_reward"
 	LedgerAntiAbusePenalty  CreditLedgerKind = "anti_abuse_penalty"
+	LedgerGameReserve       CreditLedgerKind = "game_reserve"
+	LedgerGameSettlement    CreditLedgerKind = "game_settlement"
+	LedgerGameRelease       CreditLedgerKind = "game_release"
 )
 
 func (k CreditLedgerKind) valid() bool {
 	switch k {
 	case LedgerAdminAdjustment, LedgerCheckinAward, LedgerCharityReserve,
 		LedgerCharityRelease, LedgerCharitySettlement, LedgerDonorReward,
-		LedgerAntiAbusePenalty:
+		LedgerAntiAbusePenalty, LedgerGameReserve, LedgerGameSettlement,
+		LedgerGameRelease:
 		return true
 	default:
 		return false
@@ -87,6 +91,15 @@ func (k CreditLedgerKind) valid() bool {
 // systemKind reports whether entries of this kind are always written by the
 // platform itself and therefore require the reserved system id namespace.
 func (k CreditLedgerKind) systemKind() bool { return k != LedgerAdminAdjustment }
+
+func (k CreditLedgerKind) gameKind() bool {
+	switch k {
+	case LedgerGameReserve, LedgerGameSettlement, LedgerGameRelease:
+		return true
+	default:
+		return false
+	}
+}
 
 // ValidOperationID reports whether s is a syntactically valid operation id:
 // 1..128 bytes of ASCII token characters (letters, digits and -_.:@).
@@ -139,7 +152,8 @@ type CreditOperation struct {
 	OperationID         string
 	CreditsDelta        int64
 	DonationCreditDelta int64
-	ReservationID       int64 // 0 = NULL correlation id
+	ReservationID       int64  // 0 = NULL correlation id
+	GameSettlementID    string // empty = NULL; required exactly for game kinds
 	Reason              string
 	CreatedAt           time.Time
 
@@ -169,6 +183,34 @@ func (o CreditOperation) validate() error {
 	if o.ActorUserID < 0 || o.ReservationID < 0 {
 		return ErrConflict
 	}
+	if o.Kind.gameKind() {
+		if o.ReservationID != 0 || !ValidGameSettlementID(o.GameSettlementID) || o.DonationCreditDelta != 0 {
+			return ErrConflict
+		}
+		action := ""
+		switch o.Kind {
+		case LedgerGameReserve:
+			action = "reserve"
+			if o.CreditsDelta > 0 {
+				return ErrConflict
+			}
+		case LedgerGameSettlement:
+			action = "settle"
+			if o.CreditsDelta < 0 {
+				return ErrConflict
+			}
+		case LedgerGameRelease:
+			action = "release"
+			if o.CreditsDelta < 0 {
+				return ErrConflict
+			}
+		}
+		if o.OperationID != "sys.game."+o.GameSettlementID+"."+action {
+			return ErrConflict
+		}
+	} else if o.GameSettlementID != "" {
+		return ErrConflict
+	}
 	if err := validateLedgerReason(o.Reason); err != nil {
 		return ErrConflict
 	}
@@ -176,6 +218,27 @@ func (o CreditOperation) validate() error {
 		return ErrConflict
 	}
 	return nil
+}
+
+// ValidGameSettlementID reports whether a ledger correlation is a bounded
+// ASCII token. Correlations deliberately outlive their settlement rows and
+// therefore are validated without a foreign key.
+func ValidGameSettlementID(value string) bool {
+	if value == "" || len(value) > 64 {
+		return false
+	}
+	for index := 0; index < len(value); index++ {
+		character := value[index]
+		switch {
+		case character >= '0' && character <= '9':
+		case character >= 'a' && character <= 'z':
+		case character >= 'A' && character <= 'Z':
+		case character == '-' || character == '_' || character == '.' || character == ':' || character == '@':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // validateLedgerReason bounds the reason to the frozen rune limit with no
@@ -238,6 +301,9 @@ func (s *Store) ApplyCreditOperation(ctx context.Context, op CreditOperation) (*
 // checked-arithmetic → guarded-update → ledger-append sequence inside tx.
 // The caller owns the transaction lifecycle (begin/commit/rollback).
 func (s *Store) applyCreditOperationTx(ctx context.Context, tx *sql.Tx, op CreditOperation) (*CreditOperationResult, error) {
+	if err := op.validate(); err != nil {
+		return nil, err
+	}
 	// Idempotent replay check inside the transaction: with the single-writer
 	// handle this read serializes against every other writer, and the UNIQUE
 	// constraint on operation_id backstops any path that could interleave.
@@ -346,21 +412,24 @@ FROM credit_ledger WHERE operation_id=?`, operationID).
 
 // insertCreditLedgerTx appends one audit row for an applied operation.
 func insertCreditLedgerTx(ctx context.Context, tx *sql.Tx, op CreditOperation, creditsAfter, donationAfter int64) error {
-	var actor, reservation any
+	var actor, reservation, gameSettlement any
 	if op.ActorUserID > 0 {
 		actor = op.ActorUserID
 	}
 	if op.ReservationID > 0 {
 		reservation = op.ReservationID
 	}
+	if op.GameSettlementID != "" {
+		gameSettlement = op.GameSettlementID
+	}
 	_, err := tx.ExecContext(ctx, `
 INSERT INTO credit_ledger
 	(operation_id, user_id, actor_user_id, kind, credits_delta, donation_credit_delta,
-	 credits_after, donation_credit_after, reservation_id, reason, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	 credits_after, donation_credit_after, reservation_id, game_settlement_id, reason, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		op.OperationID, op.UserID, actor, string(op.Kind),
 		op.CreditsDelta, op.DonationCreditDelta,
-		creditsAfter, donationAfter, reservation, op.Reason, op.CreatedAt.Unix())
+		creditsAfter, donationAfter, reservation, gameSettlement, op.Reason, op.CreatedAt.Unix())
 	if err != nil {
 		return fmt.Errorf("insert credit ledger: %w", err)
 	}
