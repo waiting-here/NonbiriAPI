@@ -589,7 +589,7 @@ func (s *Store) ListExportCreditLedger(ctx context.Context, userID int64, limit 
 	}
 	rows, err := s.db.QueryContext(ctx, `
 SELECT id, kind, actor_user_id, credits_delta, donation_credit_delta,
-       credits_after, donation_credit_after, reservation_id, reason, created_at
+       credits_after, donation_credit_after, reservation_id, game_settlement_id, reason, created_at
 FROM credit_ledger WHERE user_id=? ORDER BY id LIMIT ?`, userID, limit+1)
 	if err != nil {
 		return nil, fmt.Errorf("export credit ledger: %w", err)
@@ -601,8 +601,9 @@ FROM credit_ledger WHERE user_id=? ORDER BY id LIMIT ?`, userID, limit+1)
 		var row CreditLedgerExportRow
 		var creditsDelta, donationDelta, creditsAfter, donationAfter int64
 		var actor, reservation sql.NullInt64
+		var gameSettlement sql.NullString
 		if err := rows.Scan(&row.ID, &row.Kind, &actor, &creditsDelta, &donationDelta,
-			&creditsAfter, &donationAfter, &reservation, &row.Reason, &row.CreatedAt); err != nil {
+			&creditsAfter, &donationAfter, &reservation, &gameSettlement, &row.Reason, &row.CreatedAt); err != nil {
 			return nil, fmt.Errorf("export credit ledger: %w", err)
 		}
 		row.CreditsDelta = credits.FormatAmount(creditsDelta)
@@ -616,6 +617,10 @@ FROM credit_ledger WHERE user_id=? ORDER BY id LIMIT ?`, userID, limit+1)
 		if reservation.Valid {
 			v := reservation.Int64
 			row.ReservationID = &v
+		}
+		if gameSettlement.Valid {
+			value := gameSettlement.String
+			row.GameSettlementID = &value
 		}
 		out = append(out, row)
 	}
@@ -632,14 +637,15 @@ FROM credit_ledger WHERE user_id=? ORDER BY id LIMIT ?`, userID, limit+1)
 // export package. Economic values are canonical decimal strings; the actor is
 // an opaque nullable id (never a username), per the frozen privacy matrix.
 type CreditLedgerExportRow struct {
-	ID                  int64  `json:"id"`
-	Kind                string `json:"kind"`
-	ActorUserID         *int64 `json:"actor_user_id"`
-	CreditsDelta        string `json:"credits_delta"`
-	DonationCreditDelta string `json:"donation_credit_delta"`
-	CreditsAfter        string `json:"credits_after"`
-	DonationCreditAfter string `json:"donation_credit_after"`
-	ReservationID       *int64 `json:"reservation_id"`
-	Reason              string `json:"reason"`
-	CreatedAt           int64  `json:"created_at"`
+	ID                  int64   `json:"id"`
+	Kind                string  `json:"kind"`
+	ActorUserID         *int64  `json:"actor_user_id"`
+	CreditsDelta        string  `json:"credits_delta"`
+	DonationCreditDelta string  `json:"donation_credit_delta"`
+	CreditsAfter        string  `json:"credits_after"`
+	DonationCreditAfter string  `json:"donation_credit_after"`
+	ReservationID       *int64  `json:"reservation_id"`
+	GameSettlementID    *string `json:"game_settlement_id"`
+	Reason              string  `json:"reason"`
+	CreatedAt           int64   `json:"created_at"`
 }

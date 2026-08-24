@@ -46,7 +46,8 @@ const (
 )
 
 // UserLimitPatch is the tri-state update set for users.endpoint_limit,
-// users.rpm_limit, users.concurrency_limit, users.lang and users.level.
+// users.rpm_limit, users.concurrency_limit, users.lang, users.level and the
+// account-wide game leaderboard privacy preference.
 //
 //   - EndpointLimitSet / RPMLimitSet / ConcurrencyLimitSet / LevelSet report
 //     whether the field was present. A present limit with a nil pointer clears
@@ -55,16 +56,18 @@ const (
 //   - Level, when set, must be nil (reset to automatic) or within
 //     [MinLevel, MaxLevel]; it never touches the auto_level high-water mark.
 type UserLimitPatch struct {
-	EndpointLimitSet    bool
-	EndpointLimit       *int
-	RPMLimitSet         bool
-	RPMLimit            *int
-	ConcurrencyLimitSet bool
-	ConcurrencyLimit    *int
-	LangSet             bool
-	Lang                string
-	LevelSet            bool
-	Level               *int
+	EndpointLimitSet     bool
+	EndpointLimit        *int
+	RPMLimitSet          bool
+	RPMLimit             *int
+	ConcurrencyLimitSet  bool
+	ConcurrencyLimit     *int
+	LangSet              bool
+	Lang                 string
+	LevelSet             bool
+	Level                *int
+	GameProfilePublicSet bool
+	GameProfilePublic    bool
 }
 
 func (p UserLimitPatch) validate() error {
@@ -154,6 +157,14 @@ func (s *Store) UpdateUserLimits(userID int64, patch UserLimitPatch) (*User, err
 			args = append(args, nil)
 		} else {
 			args = append(args, *patch.Level)
+		}
+	}
+	if patch.GameProfilePublicSet {
+		sets = append(sets, "game_profile_public=?")
+		if patch.GameProfilePublic {
+			args = append(args, 1)
+		} else {
+			args = append(args, 0)
 		}
 	}
 	if len(sets) == 0 {

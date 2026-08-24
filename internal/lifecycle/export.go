@@ -274,6 +274,22 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	if err != nil {
 		return nil, err
 	}
+	gameSettlements, err := s.store.ListExportGameSettlements(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
+	gameRounds, err := s.store.ListExportGameRounds(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
+	fishingOutcomes, err := s.store.ListExportFishingOutcomes(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
+	fishingBest, err := s.store.ListExportFishingBest(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
 
 	keysByEndpoint := make(map[int64][]exportKey, len(keys))
 	for _, key := range keys {
@@ -305,6 +321,7 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 			EffectiveRPMLimit:         limitProjection.EffectiveRPMLimit,
 			ConcurrencyLimit:          limitProjection.ConcurrencyLimit,
 			EffectiveConcurrencyLimit: limitProjection.EffectiveConcurrencyLimit,
+			GameProfilePublic:         user.GameProfilePublic,
 			CreatedAt:                 user.CreatedAt, UpdatedAt: user.UpdatedAt,
 		},
 		Endpoints: make([]exportEndpoint, 0, len(endpoints)),
@@ -332,6 +349,10 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 		Donations:           make([]db.DonationExportRow, 0, len(donations)),
 		CharityReservations: make([]db.CharityReservationExportRow, 0, len(charityReservations)),
 		DonorRewards:        make([]db.DonorRewardExportRow, 0, len(donorRewards)),
+		GameSettlements:     make([]db.GameSettlementExportRow, 0, len(gameSettlements)),
+		GameRounds:          make([]db.GameRoundExportRow, 0, len(gameRounds)),
+		FishingOutcomes:     make([]db.FishingOutcomeExportRow, 0, len(fishingOutcomes)),
+		FishingBest:         make([]db.FishingBestExportRow, 0, len(fishingBest)),
 	}
 	for _, day := range activityDaily {
 		packageValue.ActivityDaily = append(packageValue.ActivityDaily, day)
@@ -350,6 +371,18 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	}
 	for _, row := range donorRewards {
 		packageValue.DonorRewards = append(packageValue.DonorRewards, row)
+	}
+	for _, row := range gameSettlements {
+		packageValue.GameSettlements = append(packageValue.GameSettlements, row)
+	}
+	for _, row := range gameRounds {
+		packageValue.GameRounds = append(packageValue.GameRounds, row)
+	}
+	for _, row := range fishingOutcomes {
+		packageValue.FishingOutcomes = append(packageValue.FishingOutcomes, row)
+	}
+	for _, row := range fishingBest {
+		packageValue.FishingBest = append(packageValue.FishingBest, row)
 	}
 	for _, ep := range endpoints {
 		packageValue.Endpoints = append(packageValue.Endpoints, exportEndpoint{
@@ -419,7 +452,11 @@ type exportPackage struct {
 	CharityReservations []db.CharityReservationExportRow `json:"charity_reservations"`
 	// DonorRewards is the donor's own reward summary; it never includes
 	// consumer identity or request data.
-	DonorRewards []db.DonorRewardExportRow `json:"donor_rewards"`
+	DonorRewards    []db.DonorRewardExportRow    `json:"donor_rewards"`
+	GameSettlements []db.GameSettlementExportRow `json:"game_settlements"`
+	GameRounds      []db.GameRoundExportRow      `json:"game_rounds"`
+	FishingOutcomes []db.FishingOutcomeExportRow `json:"game_fishing_outcomes"`
+	FishingBest     []db.FishingBestExportRow    `json:"game_fishing_best"`
 }
 
 type exportUser struct {
@@ -446,6 +483,7 @@ type exportUser struct {
 	EffectiveRPMLimit         int       `json:"effective_rpm_limit"`
 	ConcurrencyLimit          *int      `json:"concurrency_limit"`
 	EffectiveConcurrencyLimit int       `json:"effective_concurrency_limit"`
+	GameProfilePublic         bool      `json:"game_profile_public"`
 	CreatedAt                 time.Time `json:"created_at"`
 	UpdatedAt                 time.Time `json:"updated_at"`
 }

@@ -63,10 +63,14 @@ type User struct {
 	Level *int
 	// AutoLevel is the persistent automatic-level high-water mark (1..4). It
 	// is only ever raised (lazy CAS promotion); there is no downgrade path.
-	AutoLevel                 int
-	EndpointLimit             *int
-	RPMLimit                  *int
-	ConcurrencyLimit          *int
+	AutoLevel        int
+	EndpointLimit    *int
+	RPMLimit         *int
+	ConcurrencyLimit *int
+	// GameProfilePublic controls the account-wide public projection used by
+	// game leaderboards. It defaults to false and is never copied into game
+	// round or best-record rows.
+	GameProfilePublic         bool
 	TotalRequests             int64
 	TotalPromptTokens         int64
 	TotalCompletionTokens     int64
@@ -164,6 +168,7 @@ const userSelectColumns = `
 	u.endpoint_limit,
 	u.rpm_limit,
 	u.concurrency_limit,
+	u.game_profile_public,
 	u.total_requests,
 	u.total_prompt_tokens,
 	u.total_completion_tokens,
@@ -184,6 +189,7 @@ func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	var bannedUntil, charitySuspendedUntil sql.NullInt64
 	var autoBanned int
 	var endpointLimit, rpmLimit, concurrencyLimit, level sql.NullInt64
+	var gameProfilePublic int
 	var createdAt, updatedAt int64
 	if err := row.Scan(
 		&u.ID,
@@ -201,6 +207,7 @@ func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 		&endpointLimit,
 		&rpmLimit,
 		&concurrencyLimit,
+		&gameProfilePublic,
 		&u.TotalRequests,
 		&u.TotalPromptTokens,
 		&u.TotalCompletionTokens,
@@ -217,6 +224,7 @@ func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	}
 	u.IsAdmin = isAdmin != 0
 	u.IsBanned = isBanned != 0
+	u.GameProfilePublic = gameProfilePublic != 0
 	u.AutoBanned = autoBanned != 0
 	u.BannedUntil = nullUnixTime(bannedUntil)
 	u.CharitySuspendedUntil = nullUnixTime(charitySuspendedUntil)

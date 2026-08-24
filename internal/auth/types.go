@@ -201,6 +201,7 @@ type UserResponse struct {
 	EffectiveRPMLimit         int       `json:"effective_rpm_limit"`
 	ConcurrencyLimit          *int      `json:"concurrency_limit"`
 	EffectiveConcurrencyLimit int       `json:"effective_concurrency_limit"`
+	GameProfilePublic         bool      `json:"game_profile_public"`
 	Credits                   string    `json:"credits"`
 	DonationCredit            string    `json:"donation_credit"`
 	EffectiveLevel            int       `json:"effective_level"`
@@ -239,6 +240,7 @@ func publicUser(user *db.User, effectiveLevel int, defaults db.UserLimitDefaults
 		EffectiveRPMLimit:         limits.EffectiveRPMLimit,
 		ConcurrencyLimit:          limits.ConcurrencyLimit,
 		EffectiveConcurrencyLimit: limits.EffectiveConcurrencyLimit,
+		GameProfilePublic:         user.GameProfilePublic,
 		CreatedAt:                 user.CreatedAt,
 		Credits:                   credits.FormatAmount(user.Credits),
 		DonationCredit:            credits.FormatAmount(user.DonationCredit),

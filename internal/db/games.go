@@ -174,6 +174,11 @@ func validIdempotencyKey(value string) bool {
 	return true
 }
 
+// ValidGameIdempotencyKey exposes the exact start-key grammar to the HTTP
+// boundary without duplicating it in another package. The raw token is never
+// persisted; StartFishingRound stores only its digest.
+func ValidGameIdempotencyKey(value string) bool { return validIdempotencyKey(value) }
+
 func fishingStartHashes(input StartFishingInput) ([sha256.Size]byte, [sha256.Size]byte) {
 	keyHash := sha256.Sum256([]byte(input.IdempotencyKey))
 	requestHash := sha256.Sum256([]byte("fishing\x00v1\x00" + string(input.Bait)))
