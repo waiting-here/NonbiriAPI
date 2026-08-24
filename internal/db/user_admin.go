@@ -25,15 +25,18 @@ import (
 const (
 	// MaxUserListPageSize bounds one admin user-list page.
 	MaxUserListPageSize = 100
-	// maxEndpointLimitValue bounds the per-user endpoint cap. Zero is valid
+	// MaxUserEndpointLimit bounds the per-user endpoint cap. Zero is valid
 	// (no new endpoints; existing endpoints are retained).
-	maxEndpointLimitValue = 10000
-	// maxUserRPMLimitValue is the defensive ceiling for a stored per-user RPM
-	// cap. The effective cap is the administrator default (default_rpm_per_user
-	// site_config, bounded by the shared limiter's event-store ceiling); the
-	// flow-control layer clamps any stored value at admission, so an
-	// over-large stored value can never raise a user's budget.
-	maxUserRPMLimitValue = 100000
+	MaxUserEndpointLimit = 10000
+	// MaxUserRPMLimit is the independent hard range for an explicit per-user
+	// RPM override. The site default is only a NULL fallback, never a cap.
+	MaxUserRPMLimit = 4096
+	// DefaultUserConcurrencyLimit is the built-in effective value for a NULL
+	// users.concurrency_limit; there is deliberately no site-config key for it.
+	DefaultUserConcurrencyLimit = 5
+	// MaxUserConcurrencyLimit is the independent hard ceiling for an explicit
+	// in-flight request override.
+	MaxUserConcurrencyLimit = 100000
 	// maxSiteConfigKeyBytes bounds site_config keys.
 	maxSiteConfigKeyBytes = 128
 	// maxSiteConfigValueBytes bounds site_config values. Legal overrides may
@@ -43,33 +46,38 @@ const (
 )
 
 // UserLimitPatch is the tri-state update set for users.endpoint_limit,
-// users.rpm_limit, users.lang and users.level.
+// users.rpm_limit, users.concurrency_limit, users.lang and users.level.
 //
-//   - EndpointLimitSet / RPMLimitSet / LevelSet report whether the field was
-//     present in the request. A present field with a nil pointer clears the
-//     stored value (NULL = restore the global default / automatic level); a
-//     non-nil pointer stores the value.
+//   - EndpointLimitSet / RPMLimitSet / ConcurrencyLimitSet / LevelSet report
+//     whether the field was present. A present limit with a nil pointer clears
+//     it (NULL = its documented fallback); a nil Level restores automatic.
 //   - LangSet selects a lang change ("zh" or "en" only; no NULL semantics).
 //   - Level, when set, must be nil (reset to automatic) or within
 //     [MinLevel, MaxLevel]; it never touches the auto_level high-water mark.
 type UserLimitPatch struct {
-	EndpointLimitSet bool
-	EndpointLimit    *int
-	RPMLimitSet      bool
-	RPMLimit         *int
-	LangSet          bool
-	Lang             string
-	LevelSet         bool
-	Level            *int
+	EndpointLimitSet    bool
+	EndpointLimit       *int
+	RPMLimitSet         bool
+	RPMLimit            *int
+	ConcurrencyLimitSet bool
+	ConcurrencyLimit    *int
+	LangSet             bool
+	Lang                string
+	LevelSet            bool
+	Level               *int
 }
 
 func (p UserLimitPatch) validate() error {
 	if p.EndpointLimitSet && p.EndpointLimit != nil &&
-		(*p.EndpointLimit < 0 || *p.EndpointLimit > maxEndpointLimitValue) {
+		(*p.EndpointLimit < 0 || *p.EndpointLimit > MaxUserEndpointLimit) {
 		return ErrConflict
 	}
 	if p.RPMLimitSet && p.RPMLimit != nil &&
-		(*p.RPMLimit < 1 || *p.RPMLimit > maxUserRPMLimitValue) {
+		(*p.RPMLimit < 1 || *p.RPMLimit > MaxUserRPMLimit) {
+		return ErrConflict
+	}
+	if p.ConcurrencyLimitSet && p.ConcurrencyLimit != nil &&
+		(*p.ConcurrencyLimit < 1 || *p.ConcurrencyLimit > MaxUserConcurrencyLimit) {
 		return ErrConflict
 	}
 	if p.LangSet && p.Lang != "zh" && p.Lang != "en" {
@@ -126,6 +134,14 @@ func (s *Store) UpdateUserLimits(userID int64, patch UserLimitPatch) (*User, err
 			args = append(args, nil)
 		} else {
 			args = append(args, *patch.RPMLimit)
+		}
+	}
+	if patch.ConcurrencyLimitSet {
+		sets = append(sets, "concurrency_limit=?")
+		if patch.ConcurrencyLimit == nil {
+			args = append(args, nil)
+		} else {
+			args = append(args, *patch.ConcurrencyLimit)
 		}
 	}
 	if patch.LangSet {

@@ -224,6 +224,16 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 
 	registry := endpoint.NewRegistry()
 	var flowController *flowcontrol.Controller
+	beginUserRetirement := func(userID int64) (func() bool, func() bool, error) {
+		if flowController == nil {
+			return nil, nil, flowcontrol.ErrClosed
+		}
+		retirement, err := flowController.BeginUserRetirement(userID)
+		if err != nil {
+			return nil, nil, err
+		}
+		return retirement.Commit, retirement.Abort, nil
+	}
 	sharedElevation, err := elevation.NewManager()
 	if err != nil {
 		return nil, fmt.Errorf("elevation manager: %w", err)
@@ -317,7 +327,9 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		return nil, fmt.Errorf("forward service: %w", err)
 	}
 	cleanup = append(cleanup, forwardService.Close)
-	antiAbuseService, err := antiabuse.NewService(antiabuse.ServiceConfig{Store: store})
+	antiAbuseService, err := antiabuse.NewService(antiabuse.ServiceConfig{
+		Store: store, BeginUserRetirement: beginUserRetirement,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("anti-abuse service: %w", err)
 	}
@@ -361,12 +373,13 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 
 	lifecycleService, err := lifecycle.NewService(lifecycle.Config{
 		Store: store, Elevation: sharedElevation, AdminVerifier: adminAuth,
+		BeginUserRetirement: beginUserRetirement,
+		BeginUserDeletion:   antiAbuseService.BeginUserDeletion,
 		PreDeleteUser: func(userID int64) {
 			charityService.CancelUserContexts(userID)
 			if keyIDs, err := store.ListDonationKeyIDsByDonor(context.Background(), userID); err == nil && len(keyIDs) > 0 {
 				charityService.ForgetDonationKeys(keyIDs...)
 			}
-			antiAbuseService.ForgetUser(userID)
 		},
 	})
 	if err != nil {
@@ -386,8 +399,9 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	})
 
 	adminControls := adminapi.NewHandler(adminapi.HandlerDeps{
-		Store:   store,
-		Runtime: runtimeApplier,
+		Store:               store,
+		Runtime:             runtimeApplier,
+		BeginUserRetirement: beginUserRetirement,
 	})
 	// The level-5 co-management frame: user-station session middleware plus a
 	// per-request live level>=5 gate. Business routes (donation reviews,

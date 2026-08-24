@@ -410,7 +410,7 @@ func TestEndpointOwnershipMatrix(t *testing.T) {
 
 // --- endpoint cap -----------------------------------------------------------
 
-func TestEndpointCapMinOfGlobalAndUser(t *testing.T) {
+func TestEndpointCapExplicitOrDefault(t *testing.T) {
 	cases := []struct {
 		name        string
 		global      string // raw site_config value; "" means unset
@@ -423,7 +423,7 @@ func TestEndpointCapMinOfGlobalAndUser(t *testing.T) {
 		{"global default when unset", "", nil, db.DefaultEndpointLimit, 5, 5, 0},
 		{"global overrides default", "3", nil, 3, 5, 3, 2},
 		{"user override below global", "5", intPtr(2), 2, 5, 2, 3},
-		{"global below user override", "5", intPtr(10), 5, 7, 5, 2},
+		{"user override above default", "5", intPtr(10), 10, 7, 7, 0},
 		{"user zero blocks endpoints", "5", intPtr(0), 0, 3, 0, 3},
 	}
 	for _, tc := range cases {

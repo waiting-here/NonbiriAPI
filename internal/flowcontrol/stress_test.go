@@ -78,6 +78,11 @@ func TestStressConcurrentAdmitCommitRelease(t *testing.T) {
 						if retryAfter <= 0 || retryAfter > MaxRetryAfter {
 							t.Errorf("out-of-bounds retry-after %v", retryAfter)
 						}
+					} else if err == ErrConcurrencyLimited {
+						denied.Add(1)
+						if retryAfter != 0 {
+							t.Errorf("concurrency retry-after %v", retryAfter)
+						}
 					} else {
 						t.Errorf("unexpected admit error: %v", err)
 					}

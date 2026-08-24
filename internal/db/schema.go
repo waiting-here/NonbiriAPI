@@ -26,7 +26,7 @@ CREATE TABLE users (
 	auto_banned                  INTEGER NOT NULL DEFAULT 0,        -- whether the most recent effective ban was rule-driven (1) or manual (0); every manual ban clears it
 	charity_suspended_until      INTEGER,                           -- charity-eligibility suspension deadline (unix seconds); lifted lazily on read exactly like banned_until
 	endpoint_limit               INTEGER,                           -- nullable admin per-user endpoint-count cap override; NULL = global default; clearing to NULL restores the default
-	rpm_limit                    INTEGER,                           -- nullable user self-tuned per-minute RPM within the admin cap; NULL = admin global default
+	rpm_limit                    INTEGER,                           -- nullable explicit per-user RPM (1..4096); NULL = current site default
 	concurrency_limit            INTEGER,                           -- nullable explicit in-flight request cap; NULL = built-in 5
 	game_profile_public          INTEGER NOT NULL DEFAULT 0 CHECK(game_profile_public IN (0,1)),
 	total_requests               INTEGER NOT NULL DEFAULT 0,

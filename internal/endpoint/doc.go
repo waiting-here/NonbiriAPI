@@ -17,7 +17,8 @@
 //     cache. Listings expose only persisted head/tail display fragments, never
 //     the ciphertext or plaintext.
 //   - Cap: endpoint creation does an atomic count-then-insert inside one
-//     transaction against min(global default, per-user override).
+//     transaction against the explicit per-user cap when non-NULL, otherwise
+//     the validated site default.
 //   - Cascade/invalidation: deleting an endpoint or key relies on the schema's
 //     ON DELETE CASCADE to drop fetched_models and model_bindings immediately.
 //

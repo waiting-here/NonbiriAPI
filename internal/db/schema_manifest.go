@@ -13,7 +13,7 @@ import (
 // PinnedGenerationOneSchemaHash makes an intentional DDL change explicit.
 // It is updated only with the generation-one manifest tests and release
 // contract review; the manifest itself is always derived from the DDL source.
-const PinnedGenerationOneSchemaHash = "d6270dd757e38f842ac69d049bb9e6429e91746317a50c24899ab066dc09c91b"
+const PinnedGenerationOneSchemaHash = "aa3e8fdaa8678589288227082299d9a2ef4312ef8063089727d0326374d52023"
 
 type queryer interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)

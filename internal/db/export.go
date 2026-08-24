@@ -22,9 +22,9 @@ import (
 var ErrExportLimit = errors.New("export collection exceeds its limit")
 
 // ExportCollectionLimit caps every collection inside one export package. It
-// is generous relative to every product cap (endpoints are capped by
-// DefaultEndpointLimit; models/bindings have no count cap today), while still
-// keeping the assembled package and the response bounded.
+// is generous relative to every product cap (endpoints use the independent
+// explicit endpoint hard range; models/bindings have no count cap today),
+// while still keeping the assembled package and the response bounded.
 const ExportCollectionLimit = 10000
 
 // LogSummaryWindow is the retention-visible window for the export's log

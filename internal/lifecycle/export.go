@@ -205,6 +205,22 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	if s == nil || s.store == nil || user == nil || user.ID <= 0 || !user.IsActive() {
 		return nil, ErrExportTooLarge
 	}
+	// Refresh the row at generation time. A session principal may predate an
+	// administrator limit edit; exports must carry the current nullable values
+	// and the effective defaults used at this exact generation.
+	currentUser, err := s.store.GetUserByID(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	if currentUser == nil || !currentUser.IsActive() {
+		return nil, db.ErrNotFound
+	}
+	user = currentUser
+	defaults, err := s.store.GetUserLimitDefaults(ctx)
+	if err != nil {
+		return nil, err
+	}
+	limitProjection := db.ProjectUserLimits(user, defaults)
 	limit := db.ExportCollectionLimit
 	endpoints, err := s.store.ListExportEndpoints(ctx, user.ID, limit)
 	if err != nil {
@@ -275,15 +291,21 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	}
 
 	packageValue := exportPackage{
-		SchemaVersion: 2,
+		SchemaVersion: 3,
 		ExportedAt:    time.Now().UTC(),
 		User: exportUser{
 			ID: user.ID, DiscordID: user.DiscordID, Username: user.Username, Avatar: user.Avatar,
+			GuildNick: user.GuildNick, GuildAvatarURL: user.GuildAvatarURL,
 			Lang: user.Lang, Credits: credits.FormatAmount(user.Credits),
 			DonationCredit: credits.FormatAmount(user.DonationCredit),
 			ManualLevel:    user.Level, AutoLevel: user.AutoLevel,
-			EndpointLimit: user.EndpointLimit, RPMLimit: user.RPMLimit,
-			CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt,
+			EndpointLimit:             limitProjection.EndpointLimit,
+			EffectiveEndpointLimit:    limitProjection.EffectiveEndpointLimit,
+			RPMLimit:                  limitProjection.RPMLimit,
+			EffectiveRPMLimit:         limitProjection.EffectiveRPMLimit,
+			ConcurrencyLimit:          limitProjection.ConcurrencyLimit,
+			EffectiveConcurrencyLimit: limitProjection.EffectiveConcurrencyLimit,
+			CreatedAt:                 user.CreatedAt, UpdatedAt: user.UpdatedAt,
 		},
 		Endpoints: make([]exportEndpoint, 0, len(endpoints)),
 		Models:    make([]exportModel, 0, len(models)),
@@ -401,11 +423,13 @@ type exportPackage struct {
 }
 
 type exportUser struct {
-	ID        int64  `json:"id"`
-	DiscordID string `json:"discord_id"`
-	Username  string `json:"username"`
-	Avatar    string `json:"avatar"`
-	Lang      string `json:"lang"`
+	ID             int64  `json:"id"`
+	DiscordID      string `json:"discord_id"`
+	Username       string `json:"username"`
+	Avatar         string `json:"avatar"`
+	GuildNick      string `json:"guild_nick"`
+	GuildAvatarURL string `json:"guild_avatar_url"`
+	Lang           string `json:"lang"`
 	// Economic balances as canonical decimal strings: the signed consumption
 	// balance and the cumulative donor-reward balance.
 	Credits        string `json:"credits"`
@@ -414,12 +438,16 @@ type exportUser struct {
 	// manual_level is the nullable manual override (null = automatic);
 	// auto_level is the persisted automatic high-water mark (1..4). No
 	// violation-window or threshold-configuration data is exported.
-	ManualLevel   *int      `json:"manual_level"`
-	AutoLevel     int       `json:"auto_level"`
-	EndpointLimit *int      `json:"endpoint_limit"`
-	RPMLimit      *int      `json:"rpm_limit"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ManualLevel               *int      `json:"manual_level"`
+	AutoLevel                 int       `json:"auto_level"`
+	EndpointLimit             *int      `json:"endpoint_limit"`
+	EffectiveEndpointLimit    int       `json:"effective_endpoint_limit"`
+	RPMLimit                  *int      `json:"rpm_limit"`
+	EffectiveRPMLimit         int       `json:"effective_rpm_limit"`
+	ConcurrencyLimit          *int      `json:"concurrency_limit"`
+	EffectiveConcurrencyLimit int       `json:"effective_concurrency_limit"`
+	CreatedAt                 time.Time `json:"created_at"`
+	UpdatedAt                 time.Time `json:"updated_at"`
 }
 
 type exportEndpoint struct {

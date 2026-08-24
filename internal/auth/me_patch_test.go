@@ -1,7 +1,7 @@
 package auth
 
 // PATCH /api/me tests: the session-only self-service profile update. Only
-// lang is accepted; endpoint_limit / rpm_limit / ban state / usage / body
+// lang is accepted; endpoint_limit / rpm_limit / concurrency_limit / ban state / usage / body
 // user id are never accepted. Per-user RPM limits are admin-set only.
 
 import (
@@ -98,6 +98,8 @@ func TestPatchMeRejectsForbiddenFieldsAndMalformedBodies(t *testing.T) {
 		map[string]any{"rpm_limit": 25},
 		map[string]any{"rpm_limit": nil},
 		map[string]any{"endpoint_limit": 10},
+		map[string]any{"concurrency_limit": 5},
+		map[string]any{"concurrency_limit": nil},
 		map[string]any{"is_banned": true},
 		map[string]any{"admin": true},
 		map[string]any{"usage": 1},

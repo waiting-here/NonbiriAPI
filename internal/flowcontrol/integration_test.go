@@ -11,12 +11,14 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
+	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -70,13 +72,40 @@ func (c *countingCodec) OpenForContext(ciphertext string, credentialContext secr
 }
 
 type integrationFixture struct {
-	store      *db.Store
-	codec      *countingCodec
-	stack      *egress.Stack
-	controller *flowcontrol.Controller
-	handler    http.Handler
-	upstream   *httptest.Server
-	hits       *atomic.Int32
+	store               *db.Store
+	codec               *countingCodec
+	stack               *egress.Stack
+	controller          *flowcontrol.Controller
+	handler             http.Handler
+	upstream            *httptest.Server
+	hits                *atomic.Int32
+	blockUpstream       *atomic.Bool
+	upstreamEntered     chan struct{}
+	upstreamRelease     chan struct{}
+	upstreamReleaseOnce *sync.Once
+	charityCalls        *atomic.Int32
+	deniedCalls         *atomic.Int32
+	upstreamFailures    *atomic.Int32
+}
+
+func (f *integrationFixture) releaseBlockedUpstream() {
+	if f != nil && f.upstreamReleaseOnce != nil {
+		f.upstreamReleaseOnce.Do(func() { close(f.upstreamRelease) })
+	}
+}
+
+type countingCharityRail struct {
+	inner forward.CharityRail
+	calls *atomic.Int32
+}
+
+func (r countingCharityRail) ListCallerModels(ctx context.Context) ([]db.CallerModel, error) {
+	return r.inner.ListCallerModels(ctx)
+}
+
+func (r countingCharityRail) Forward(ctx context.Context, writer http.ResponseWriter, userID int64, request *openai.ChatRequest) (openai.AttemptResult, error) {
+	r.calls.Add(1)
+	return r.inner.Forward(ctx, writer, userID, request)
 }
 
 func upstreamCompletion(content string) string {
@@ -97,8 +126,30 @@ func upstreamCompletion(content string) string {
 func newIntegrationFixture(t *testing.T, rpmConfig ratelimit.RPMConfig) *integrationFixture {
 	t.Helper()
 	var hits atomic.Int32
+	var blockUpstream atomic.Bool
+	var charityCalls atomic.Int32
+	var deniedCalls atomic.Int32
+	var upstreamFailures atomic.Int32
+	upstreamEntered := make(chan struct{}, 1)
+	upstreamRelease := make(chan struct{})
+	upstreamReleaseOnce := &sync.Once{}
 	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		hits.Add(1)
+		for upstreamFailures.Load() > 0 {
+			current := upstreamFailures.Load()
+			if current > 0 && upstreamFailures.CompareAndSwap(current, current-1) {
+				writer.WriteHeader(http.StatusBadGateway)
+				_, _ = writer.Write([]byte(`{"error":"temporary"}`))
+				return
+			}
+		}
+		if blockUpstream.Load() {
+			select {
+			case upstreamEntered <- struct{}{}:
+			default:
+			}
+			<-upstreamRelease
+		}
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(writer, upstreamCompletion("metered completion"))
 	}))
@@ -153,6 +204,7 @@ func newIntegrationFixture(t *testing.T, rpmConfig ratelimit.RPMConfig) *integra
 	}
 	runner, err := forward.NewSecureRunner(forward.SecureRunnerConfig{
 		Repository:        store,
+		CharityTargets:    store,
 		Secrets:           codec,
 		Registry:          registry,
 		Adapters:          []forward.Adapter{adapter},
@@ -168,8 +220,16 @@ func newIntegrationFixture(t *testing.T, rpmConfig ratelimit.RPMConfig) *integra
 	if err != nil {
 		t.Fatal(err)
 	}
-	exit := forward.NewHandler(forward.HandlerDeps{Service: service, Identity: forward.CallerIdentity})
-	controller, err := flowcontrol.New(flowcontrol.Config{RPM: rpmConfig, UserLimits: flowcontrol.DBUserLimitResolver(store)})
+	charityService, err := charityrouting.NewService(charityrouting.ServiceConfig{Store: store, Runner: runner})
+	if err != nil {
+		t.Fatal(err)
+	}
+	charityRail := countingCharityRail{inner: charityService, calls: &charityCalls}
+	exit := forward.NewHandler(forward.HandlerDeps{Service: service, Charity: charityRail, Identity: forward.CallerIdentity})
+	controller, err := flowcontrol.New(flowcontrol.Config{
+		RPM: rpmConfig, UserLimits: flowcontrol.DBUserLimitResolver(store),
+		OnDenied: func(context.Context, int64, ratelimit.RPMReason) { deniedCalls.Add(1) },
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,6 +239,8 @@ func newIntegrationFixture(t *testing.T, rpmConfig ratelimit.RPMConfig) *integra
 	}
 	wrapped := auth.CallerKeyMiddleware(store, middleware.Wrap(exit))
 	t.Cleanup(func() {
+		upstreamReleaseOnce.Do(func() { close(upstreamRelease) })
+		_ = charityService.Close()
 		_ = service.Close()
 		_ = safetyIdentifierFactory.Close()
 		controller.Close()
@@ -186,7 +248,13 @@ func newIntegrationFixture(t *testing.T, rpmConfig ratelimit.RPMConfig) *integra
 		_ = store.Close()
 		_ = vault.Close()
 	})
-	return &integrationFixture{store: store, codec: codec, stack: stack, controller: controller, handler: wrapped, upstream: upstream, hits: &hits}
+	return &integrationFixture{
+		store: store, codec: codec, stack: stack, controller: controller, handler: wrapped,
+		upstream: upstream, hits: &hits, blockUpstream: &blockUpstream,
+		upstreamEntered: upstreamEntered, upstreamRelease: upstreamRelease,
+		upstreamReleaseOnce: upstreamReleaseOnce,
+		charityCalls:        &charityCalls, deniedCalls: &deniedCalls, upstreamFailures: &upstreamFailures,
+	}
 }
 
 func (f *integrationFixture) addUser(t *testing.T, name string) (int64, string) {
@@ -233,6 +301,100 @@ func (f *integrationFixture) addRoute(t *testing.T, userID int64) {
 		t.Fatal(err)
 	}
 	if _, err := f.store.CreateBinding(context.Background(), userID, modelRow.ID, keyRow.ID, "upstream/model", 0, time.Now().Unix()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (f *integrationFixture) addSilentRetryRoute(t *testing.T, userID int64) {
+	t.Helper()
+	ctx := context.Background()
+	canonical, err := f.stack.ValidateBaseURL(f.upstream.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpointRow, err := f.store.CreateEndpoint(ctx, userID, string(endpoint.ConnectorOpenAICompatible), canonical, "", true, time.Now().Unix())
+	if err != nil {
+		t.Fatal(err)
+	}
+	modelRow, err := f.store.CreateModel(ctx, userID, "retry", "model", "ordered", true, time.Now().Unix())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		keyRow, err := f.store.CreateEndpointKey(ctx, userID, endpointRow.ID, []byte("sk-retry-"+strconv.Itoa(i)), "head", "tail", "", true, time.Now().Unix())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := f.store.ReplaceFetchedModels(ctx, userID, endpointRow.ID, keyRow.ID, []db.FetchedModel{{
+			EndpointKeyID: keyRow.ID, UpstreamModelID: "upstream/model", Provider: "retry", Status: "ok",
+		}}, time.Now().Unix()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.store.CreateBinding(ctx, userID, modelRow.ID, keyRow.ID, "upstream/model", int64(i), time.Now().Unix()); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func (f *integrationFixture) addCharityRoute(t *testing.T, consumerID int64) {
+	t.Helper()
+	ctx := context.Background()
+	if err := f.store.SetSiteConfigValue("charity_enabled", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.DB().Exec(`UPDATE users SET credits=10000 WHERE id=?`, consumerID); err != nil {
+		t.Fatal(err)
+	}
+	donor, _, err := f.store.FindOrCreateDiscordUser("flow-charity-donor", "donor", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical, err := f.stack.ValidateBaseURL(f.upstream.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpointRow, err := f.store.CreateEndpoint(ctx, donor.ID, string(endpoint.ConnectorOpenAICompatible), canonical, "", true, 40)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyRow, err := f.store.CreateEndpointKey(ctx, donor.ID, endpointRow.ID, []byte("sk-flow-charity"), "head", "tail", "", true, 41)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.ReplaceFetchedModels(ctx, donor.ID, endpointRow.ID, keyRow.ID, []db.FetchedModel{{
+		EndpointKeyID: keyRow.ID, UpstreamModelID: "upstream/model", Provider: "donor", Status: "ok",
+	}}, 42); err != nil {
+		t.Fatal(err)
+	}
+	donation, err := f.store.CreateDonation(ctx, db.CreateDonationInput{
+		UserID: donor.ID, Description: "flow control charity fixture", Now: 43,
+		Existing: &db.ExistingEndpointKeys{EndpointID: endpointRow.ID, KeyIDs: []int64{keyRow.ID}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.ApplyDonationReview(ctx, db.ReviewDecision{
+		DonationID: donation.ID, Role: db.ReviewRoleAdmin, ReviewerID: donor.ID,
+		Action: db.ReviewActionApprove, Now: 44,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var donationKeyID int64
+	if err := f.store.DB().QueryRow(`SELECT id FROM donation_keys WHERE donation_id=?`, donation.ID).Scan(&donationKeyID); err != nil {
+		t.Fatal(err)
+	}
+	modelRow, err := f.store.CreateCharityModel(ctx, db.CharityModel{
+		Provider: "donor", Model: "charity", Enabled: true, PricingMode: db.CharityPricingPerRequest,
+		RequestUserPrice: 500, RequestDonorReward: 100,
+		UncachedUserPrice: 1_000_000, CacheWriteUserPrice: 1_000_000,
+		CacheReadUserPrice: 1_000_000, OutputUserPrice: 1_000_000,
+		UncachedDonorReward: 200_000, CacheWriteDonorReward: 200_000,
+		CacheReadDonorReward: 200_000, OutputDonorReward: 200_000,
+	}, 0, 45)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.CreateCharityBinding(ctx, modelRow.ID, donationKeyID, "upstream/model", 0, 46); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -318,6 +480,163 @@ func TestDeniedRequestNeverReachesUpstreamOrVault(t *testing.T) {
 	}
 }
 
+type integrationCountingReader struct{ reads atomic.Int64 }
+
+func (r *integrationCountingReader) Read([]byte) (int, error) {
+	r.reads.Add(1)
+	return 0, io.EOF
+}
+
+func TestConcurrencySharedAcrossRotatedCallerKeysPersonalAndCharity(t *testing.T) {
+	config := ratelimit.RPMConfig{
+		Window: time.Minute, GlobalLimit: 100, PerUserLimit: 100,
+		MaxUserKeys: 1024, MaxEvents: 4096, MaxKeyBytes: 64,
+	}
+	fixture := newIntegrationFixture(t, config)
+	userID, oldKey := fixture.addUser(t, "shared-concurrency")
+	fixture.addRoute(t, userID)
+	fixture.addCharityRoute(t, userID)
+	one := 1
+	if _, err := fixture.store.UpdateUserLimits(userID, db.UserLimitPatch{
+		ConcurrencyLimitSet: true, ConcurrencyLimit: &one,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	fixture.blockUpstream.Store(true)
+	firstDone := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		recorder := httptest.NewRecorder()
+		fixture.handler.ServeHTTP(recorder, integrationRequest(http.MethodPost, "/v1/chat/completions", oldKey, chatBody()))
+		firstDone <- recorder
+	}()
+	select {
+	case <-fixture.upstreamEntered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("personal request did not reach blocking upstream")
+	}
+
+	// Rotate while the already-authenticated old-key request is in flight.
+	// The new key resolves to the same user id and therefore must share the
+	// exact active counter rather than opening a second caller-key bucket.
+	rotated, err := fixture.store.SetCallerKey(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reservationsBefore int
+	if err := fixture.store.DB().QueryRow(`SELECT COUNT(*) FROM charity_reservations`).Scan(&reservationsBefore); err != nil {
+		t.Fatal(err)
+	}
+	creditsBefore, err := fixture.store.GetUserByID(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reads := &integrationCountingReader{}
+	request := httptest.NewRequest(http.MethodPost, "https://gateway.example/v1/chat/completions", reads)
+	request = request.WithContext(host.WithStation(request.Context(), host.StationUser))
+	request.Header.Set("Authorization", "Bearer "+rotated)
+	request.Header.Set("Content-Type", "application/json")
+	second := httptest.NewRecorder()
+	fixture.handler.ServeHTTP(second, request)
+	if second.Code != http.StatusTooManyRequests || second.Header().Get("Retry-After") != "" {
+		t.Fatalf("concurrency status=%d retry=%q body=%s", second.Code, second.Header().Get("Retry-After"), second.Body.String())
+	}
+	if reads.reads.Load() != 0 || fixture.charityCalls.Load() != 0 {
+		t.Fatalf("denial parsed body or entered charity rail: reads=%d calls=%d", reads.reads.Load(), fixture.charityCalls.Load())
+	}
+	if fixture.codec.opens.Load() != 1 || fixture.hits.Load() != 1 || fixture.deniedCalls.Load() != 0 {
+		t.Fatalf("denial side effects: decrypt=%d upstream=%d penalties=%d", fixture.codec.opens.Load(), fixture.hits.Load(), fixture.deniedCalls.Load())
+	}
+	var reservationsAfter int
+	if err := fixture.store.DB().QueryRow(`SELECT COUNT(*) FROM charity_reservations`).Scan(&reservationsAfter); err != nil {
+		t.Fatal(err)
+	}
+	creditsAfter, err := fixture.store.GetUserByID(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reservationsAfter != reservationsBefore || creditsAfter.Credits != creditsBefore.Credits {
+		t.Fatalf("charity economy changed: reservations %d->%d credits %d->%d",
+			reservationsBefore, reservationsAfter, creditsBefore.Credits, creditsAfter.Credits)
+	}
+
+	fixture.blockUpstream.Store(false)
+	fixture.releaseBlockedUpstream()
+	select {
+	case first := <-firstDone:
+		if first.Code != http.StatusOK {
+			t.Fatalf("first status=%d body=%s", first.Code, first.Body.String())
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("first request did not finish")
+	}
+	// Once the one shared permit releases, the rotated key can reach the real
+	// charity route and create exactly one economic reservation.
+	charityBody := `{"model":"[公益]donor/charity","messages":[{"role":"user","content":"hello"}]}`
+	third := httptest.NewRecorder()
+	fixture.handler.ServeHTTP(third, integrationRequest(http.MethodPost, "/v1/chat/completions", rotated, charityBody))
+	if third.Code != http.StatusOK || fixture.charityCalls.Load() != 1 {
+		t.Fatalf("charity after release status=%d calls=%d body=%s", third.Code, fixture.charityCalls.Load(), third.Body.String())
+	}
+}
+
+func TestSilentRetryHoldsExactlyOneConcurrencyPermit(t *testing.T) {
+	config := ratelimit.RPMConfig{
+		Window: time.Minute, GlobalLimit: 100, PerUserLimit: 100,
+		MaxUserKeys: 1024, MaxEvents: 4096, MaxKeyBytes: 64,
+	}
+	fixture := newIntegrationFixture(t, config)
+	userID, key := fixture.addUser(t, "silent-retry")
+	fixture.addSilentRetryRoute(t, userID)
+	one := 1
+	if _, err := fixture.store.UpdateUserLimits(userID, db.UserLimitPatch{
+		ConcurrencyLimitSet: true, ConcurrencyLimit: &one,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	fixture.upstreamFailures.Store(1)
+	fixture.blockUpstream.Store(true)
+	body := `{"model":"retry/model","messages":[{"role":"user","content":"hello"}]}`
+	firstDone := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		recorder := httptest.NewRecorder()
+		fixture.handler.ServeHTTP(recorder, integrationRequest(http.MethodPost, "/v1/chat/completions", key, body))
+		firstDone <- recorder
+	}()
+	select {
+	case <-fixture.upstreamEntered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("silent retry did not reach its second attempt")
+	}
+	if fixture.hits.Load() != 2 || fixture.codec.opens.Load() != 2 {
+		t.Fatalf("retry attempts hits=%d decryptions=%d", fixture.hits.Load(), fixture.codec.opens.Load())
+	}
+	second := httptest.NewRecorder()
+	fixture.handler.ServeHTTP(second, integrationRequest(http.MethodPost, "/v1/chat/completions", key, body))
+	if second.Code != http.StatusTooManyRequests || second.Header().Get("Retry-After") != "" {
+		t.Fatalf("parallel request status=%d retry=%q body=%s", second.Code, second.Header().Get("Retry-After"), second.Body.String())
+	}
+	if fixture.hits.Load() != 2 || fixture.codec.opens.Load() != 2 || fixture.deniedCalls.Load() != 0 {
+		t.Fatalf("parallel denial side effects hits=%d decryptions=%d penalties=%d",
+			fixture.hits.Load(), fixture.codec.opens.Load(), fixture.deniedCalls.Load())
+	}
+	fixture.blockUpstream.Store(false)
+	fixture.releaseBlockedUpstream()
+	select {
+	case first := <-firstDone:
+		if first.Code != http.StatusOK {
+			t.Fatalf("retry request status=%d body=%s", first.Code, first.Body.String())
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("retry request did not finish")
+	}
+	third := httptest.NewRecorder()
+	fixture.handler.ServeHTTP(third, integrationRequest(http.MethodPost, "/v1/chat/completions", key, body))
+	if third.Code != http.StatusOK {
+		t.Fatalf("permit did not release: status=%d body=%s", third.Code, third.Body.String())
+	}
+}
+
 // TestModelsNeverMeteredAndUsersIsolated verifies /v1/models does not consume
 // RPM budget and different users have independent per-user windows under one
 // shared global window.
@@ -365,25 +684,25 @@ func TestModelsNeverMeteredAndUsersIsolated(t *testing.T) {
 	}
 }
 
-// TestDBUserLimitClamp verifies users.rpm_limit is honored within the
-// administrator ceiling and clamped above it, through the real handler path.
-func TestDBUserLimitClamp(t *testing.T) {
+// TestDBUserLimitOverride verifies users.rpm_limit is honored below or above
+// the site default without being clamped, through the real handler path.
+func TestDBUserLimitOverride(t *testing.T) {
 	config := ratelimit.RPMConfig{
 		Window:       time.Minute,
 		GlobalLimit:  100,
-		PerUserLimit: 3, // administrator ceiling
+		PerUserLimit: 3, // site default, not a ceiling
 		MaxUserKeys:  1024,
 		MaxEvents:    4096,
 		MaxKeyBytes:  64,
 	}
 	fixture := newIntegrationFixture(t, config)
 	withinID, withinKey := fixture.addUser(t, "clamp-within")
-	overID, overKey := fixture.addUser(t, "clamp-over")
+	overID, overKey := fixture.addUser(t, "override-over")
 	fixture.addRoute(t, withinID)
 	fixture.addRoute(t, overID)
 
-	fixture.setUserRPMLimit(t, withinID, 2) // below ceiling: honored
-	fixture.setUserRPMLimit(t, overID, 999) // above ceiling: clamped to 3
+	fixture.setUserRPMLimit(t, withinID, 2) // below default: honored
+	fixture.setUserRPMLimit(t, overID, 5)   // above default: independently honored
 
 	for i := 0; i < 2; i++ {
 		recorder := httptest.NewRecorder()
@@ -398,7 +717,7 @@ func TestDBUserLimitClamp(t *testing.T) {
 		t.Fatalf("within user over-cap status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 5; i++ {
 		recorder := httptest.NewRecorder()
 		fixture.handler.ServeHTTP(recorder, integrationRequest(http.MethodPost, "/v1/chat/completions", overKey, chatBody()))
 		if recorder.Code != http.StatusOK {
@@ -408,7 +727,7 @@ func TestDBUserLimitClamp(t *testing.T) {
 	recorder = httptest.NewRecorder()
 	fixture.handler.ServeHTTP(recorder, integrationRequest(http.MethodPost, "/v1/chat/completions", overKey, chatBody()))
 	if recorder.Code != http.StatusTooManyRequests {
-		t.Fatalf("over user clamped status=%d body=%s", recorder.Code, recorder.Body.String())
+		t.Fatalf("over user explicit-cap status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 
 	// Bounded Retry-After: never zero, never oversized, and the response
