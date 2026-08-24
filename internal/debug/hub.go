@@ -758,6 +758,23 @@ func (h *Hub) SetMode(userID int64, binding string, mode Mode, confirmationID st
 	}
 	h.touchLocked(session)
 	if mode == ModeLive {
+		// Actual sending is only meaningful while this browser still has an
+		// attached SSE consumer.  Keep this check under the same mutex as
+		// detach: whichever operation wins the lock decides whether the live
+		// transition is accepted, and detaching the last subscriber will
+		// immediately force dry mode. Consume any outstanding confirmation on
+		// this failed attempt so
+		// a challenge cannot be replayed after the browser has disconnected.
+		if len(session.subscribers) == 0 {
+			for key, item := range h.confirmations {
+				if item.userID == userID && item.sessionID == session.id {
+					delete(h.confirmations, key)
+				}
+			}
+			session.hasConfirmation = false
+			clear(session.confirmationDigest[:])
+			return SessionMetadata{}, ErrConfirmation
+		}
 		if h.bindingValidator == nil {
 			// Live mode is fail-closed when the integration has not supplied the
 			// browser-session authority required by the frozen contract.
@@ -2066,7 +2083,7 @@ func (h *Hub) snapshotPayloadLocked(session *hubSession) map[string]any {
 	// snapshot, not the sequence immediately before its first fragment. A
 	// short fixed-point pass accounts for the decimal width of the cursor and
 	// the resulting fragment count; every fragment then carries the same
-	// recovery baseline and D4 can resume strictly after the group.
+	// recovery baseline so consumers can resume strictly after the group.
 	metadata.LastEventID = session.nextSeq + 1
 	payload := map[string]any{"metadata": metadata, "traces": traces}
 	if session.dropped != 0 {
@@ -2131,7 +2148,7 @@ func (h *Hub) eventFitsLocked(session *hubSession, typ EventType, traceID string
 
 // emitFragmentsLocked uses the existing trace_upsert/session_snapshot event
 // types. The payload's explicit fragment object is self-describing and can be
-// consumed without guessing a patch: D4 groups by kind+trace_id+sha256,
+// consumed without guessing a patch: clients group by kind+trace_id+sha256,
 // requires contiguous index/count/total_bytes, decodes base64url JSON bytes,
 // verifies the digest, and applies the assembled complete projection only
 // after all fragments arrive. Trace fragment envelope revisions are strictly
@@ -2472,7 +2489,7 @@ func (h *Hub) closeSessionLocked(userID int64, session *hubSession, reason Sessi
 	// Session-end reasons are part of the closed event vocabulary, not an
 	// arbitrary lifecycle log field.  Hooks may be wired from multiple
 	// packages, so unknown values fail closed to the stable invalid-session
-	// reason instead of reaching the D4 consumer.
+	// reason instead of reaching an event consumer.
 	reason = normalizedSessionEndReason(reason)
 	session.mode = ModeDry
 	for key, item := range h.confirmations {

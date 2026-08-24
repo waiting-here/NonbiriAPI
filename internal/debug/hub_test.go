@@ -32,6 +32,28 @@ func testHub(t *testing.T) *Hub {
 	return hub
 }
 
+func attachTestSubscriber(t *testing.T, hub *Hub, userID int64, binding string) *Subscription {
+	t.Helper()
+	sub, err := hub.Subscribe(userID, binding, 0, false)
+	if err != nil {
+		t.Fatalf("subscribe user=%d binding=%q: %v", userID, binding, err)
+	}
+	// Keep the synthetic browser connection alive without allowing its bounded
+	// event queue to turn a long live-request test into an accidental detach.
+	drained := make(chan struct{})
+	go func() {
+		for envelope := range sub.Events() {
+			envelope.Release()
+		}
+		close(drained)
+	}()
+	t.Cleanup(func() {
+		sub.Close()
+		<-drained
+	})
+	return sub
+}
+
 func TestRedactionPreservesOrderAndNeverRetainsSecrets(t *testing.T) {
 	raw := []byte(`{"model":"p/m","Authorization":"Bearer top-secret","nested":{"CALLER_KEY":"nbk_sensitive","value":false},"zero":0,"empty":[]}`)
 	projection := RedactJSON(raw, MaxRawRequestBytes)
@@ -137,6 +159,7 @@ func TestHubChallengeIsSingleUseAndBoundToGeneration(t *testing.T) {
 	if _, err := hub.SetMode(7, "binding-b", ModeLive, confirmation); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("wrong binding err=%v", err)
 	}
+	attachTestSubscriber(t, hub, 7, "binding-a")
 	metadata, err = hub.SetMode(7, "binding-a", ModeLive, confirmation)
 	if err != nil || metadata.Mode != ModeLive {
 		t.Fatalf("live metadata=%+v err=%v", metadata, err)
@@ -154,6 +177,58 @@ func TestHubChallengeIsSingleUseAndBoundToGeneration(t *testing.T) {
 	}
 	if _, err := hub.SetMode(7, "binding-a", ModeLive, confirmation); !errors.Is(err, ErrConfirmation) {
 		t.Fatalf("old-generation confirmation err=%v", err)
+	}
+}
+
+func TestHubLiveTransitionRequiresCurrentSubscriberAndDetachForcesDry(t *testing.T) {
+	hub := testHub(t)
+	if _, err := hub.Start(701, "live-order"); err != nil {
+		t.Fatal(err)
+	}
+	confirmation, err := hub.IssueChallenge(701, "live-order")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hub.SetMode(701, "live-order", ModeLive, confirmation); !errors.Is(err, ErrConfirmation) {
+		t.Fatalf("live without subscriber err=%v", err)
+	}
+	// A failed no-subscriber attempt consumes the presented challenge; a new
+	// browser confirmation is required after the stream is attached.
+	sub := attachTestSubscriber(t, hub, 701, "live-order")
+	if _, err := hub.SetMode(701, "live-order", ModeLive, confirmation); !errors.Is(err, ErrConfirmation) {
+		t.Fatalf("consumed disconnected challenge err=%v", err)
+	}
+	confirmation, err = hub.IssueChallenge(701, "live-order")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadata, err := hub.SetMode(701, "live-order", ModeLive, confirmation); err != nil || metadata.Mode != ModeLive {
+		t.Fatalf("live with subscriber metadata=%+v err=%v", metadata, err)
+	}
+
+	// The detach and mode operations use the same Hub mutex.  When detach wins,
+	// the live transition is rejected; when live wins, detach immediately
+	// publishes the authoritative dry state.
+	sub.Close()
+	confirmation, err = hub.IssueChallenge(701, "live-order")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hub.SetMode(701, "live-order", ModeLive, confirmation); !errors.Is(err, ErrConfirmation) {
+		t.Fatalf("detach-before-live err=%v", err)
+	}
+	sub = attachTestSubscriber(t, hub, 701, "live-order")
+	confirmation, err = hub.IssueChallenge(701, "live-order")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hub.SetMode(701, "live-order", ModeLive, confirmation); err != nil {
+		t.Fatal(err)
+	}
+	sub.Close()
+	metadata, ok := hub.Metadata(701, "live-order")
+	if !ok || metadata.Mode != ModeDry || metadata.Connected {
+		t.Fatalf("detach-after-live metadata=%+v ok=%v", metadata, ok)
 	}
 }
 
@@ -329,6 +404,7 @@ func TestBoundLoginValidationRevokesLiveAndFailsClosedToDry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	attachTestSubscriber(t, hub, 8, "login-hash")
 	if _, err := hub.SetMode(8, "login-hash", ModeLive, confirmation); err != nil {
 		t.Fatal(err)
 	}
@@ -1252,6 +1328,7 @@ func TestControlHandlerFixedSurfaceAndLiveChallenge(t *testing.T) {
 	if start.Code != http.StatusCreated || start.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("start=%d headers=%v body=%s", start.Code, start.Header(), start.Body.String())
 	}
+	attachTestSubscriber(t, hub, 42, "session-binding")
 	if record := request(http.MethodPut, "/api/debug/session/mode", `{"mode":"live"}`); record.Code != http.StatusBadRequest {
 		t.Fatalf("live without challenge status=%d", record.Code)
 	}
@@ -1315,6 +1392,7 @@ func TestDryWrapperDoesNotCallUnderlyingAndLiveTeePreservesResponse(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
+	attachTestSubscriber(t, hub, 9, "binding")
 	if _, err := hub.SetMode(9, "binding", ModeLive, confirmation); err != nil {
 		t.Fatal(err)
 	}
@@ -1405,6 +1483,7 @@ func TestActiveIngressRejectionPreservesWireAndCreatesDryLiveTrace(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
+	attachTestSubscriber(t, hub, 108, "ingress-binding")
 	if _, err := hub.SetMode(108, "ingress-binding", ModeLive, confirmation); err != nil {
 		t.Fatal(err)
 	}
@@ -1443,6 +1522,7 @@ func TestActualLiveWrapperLargeProjectionUsesMonotonicFragmentRevisions(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
+	attachTestSubscriber(t, hub, 111, "large-live")
 	if _, err := hub.SetMode(111, "large-live", ModeLive, confirmation); err != nil {
 		t.Fatal(err)
 	}
@@ -1574,6 +1654,7 @@ func TestLiveBodyReplayPreservesReadErrorAndClosesOriginal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	attachTestSubscriber(t, hub, 16, "body-binding")
 	if _, err := hub.SetMode(16, "body-binding", ModeLive, confirmation); err != nil {
 		t.Fatal(err)
 	}
@@ -1773,6 +1854,7 @@ func TestRequestCopyLeaseBoundsTemporaryBodyAndFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	attachTestSubscriber(t, hub, 17, "lease")
 	if _, err := hub.SetMode(17, "lease", ModeLive, confirmation); err != nil {
 		t.Fatal(err)
 	}
@@ -1800,6 +1882,7 @@ func TestLiveObserverAdmissionFailureUsesSameTerminalTraceAndNeverCallsNext(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
+	attachTestSubscriber(t, hub, 117, "observer-capacity")
 	if _, err := hub.SetMode(117, "observer-capacity", ModeLive, confirmation); err != nil {
 		t.Fatal(err)
 	}
@@ -1816,7 +1899,7 @@ func TestLiveObserverAdmissionFailureUsesSameTerminalTraceAndNeverCallsNext(t *t
 		request.Header.Set("Content-Type", "application/json")
 		wrapped.ServeHTTP(record, request)
 		if record.Code != http.StatusServiceUnavailable {
-			t.Fatalf("request %d status=%d", index, record.Code)
+			t.Fatalf("request %d status=%d body=%s", index, record.Code, record.Body.String())
 		}
 	}
 	if calls.Load() != 0 {
@@ -1962,6 +2045,7 @@ func TestObserverAdmissionIsBoundedPerSessionAndProcess(t *testing.T) {
 		if challengeErr != nil {
 			t.Fatal(challengeErr)
 		}
+		attachTestSubscriber(t, hub, item.userID, map[int64]string{18: "observer-a", 19: "observer-b"}[item.userID])
 		if _, modeErr := hub.SetMode(item.userID, map[int64]string{18: "observer-a", 19: "observer-b"}[item.userID], ModeLive, confirmation); modeErr != nil {
 			t.Fatal(modeErr)
 		}
@@ -2009,6 +2093,7 @@ func TestObserverLeaseSurvivesSessionReplacementUntilSidecarClose(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	attachTestSubscriber(t, hub, 87, "observer-replace")
 	if _, err := hub.SetMode(87, "observer-replace", ModeLive, confirmation); err != nil {
 		t.Fatal(err)
 	}
@@ -2054,6 +2139,7 @@ func TestObserverLeaseSurvivesSessionReplacementUntilSidecarClose(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	attachTestSubscriber(t, hub, 87, "observer-replace")
 	if _, err := hub.SetMode(87, "observer-replace", ModeLive, confirmation); err != nil {
 		t.Fatal(err)
 	}
