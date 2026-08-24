@@ -16,17 +16,22 @@ import { normalizeAdminGameConfig, type AdminGameConfig } from '../../src/admin/
 import {
   normalizeCharityModel,
   normalizeDonationKey,
+  normalizeDonation,
+  normalizeEndpoint,
   normalizeEndpointKey,
+  normalizeUpstreamModel,
   normalizePlatformModel,
   normalizeUserSummary,
 } from '../../src/user/data';
 import {
   normalizeManagementCharityModel,
+  normalizeManagementDonation,
   normalizeManagementDonationKey,
 } from '../../src/shared/charityManagement';
 import { HomePage } from '../../src/user/pages/HomePage';
 import { CharityPage } from '../../src/user/pages/CharityPage';
 import { installJsonFetchFixtures, renderWithProviders } from './support';
+import { positiveDecimalIDNumber } from '../../src/shared/query/normalize';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -133,7 +138,7 @@ describe('screenshot-facing configuration pages', () => {
   test('U2 replaces the large call-status guide with a persistent neutral upstream warning', async () => {
     installJsonFetchFixtures([
       { method: 'GET', path: '/api/session', body: { user: baseUser } },
-      { method: 'GET', path: '/api/charity/models', body: [] },
+      { method: 'GET', path: '/api/charity/models', body: { data: [] } },
       { method: 'GET', path: '/api/donations', body: [] },
       { method: 'GET', path: '/api/endpoints', body: [] },
     ]);
@@ -555,6 +560,57 @@ function completePrices() {
     cache_read_user_price_milli: '0', output_user_price_milli: '0',
     uncached_donor_reward_milli: '0', cache_write_donor_reward_milli: '0',
     cache_read_donor_reward_milli: '0', output_donor_reward_milli: '0',
+    current_request_user_price_milli: '0', current_uncached_user_price_milli: '0',
+    current_cache_write_user_price_milli: '0', current_cache_read_user_price_milli: '0',
+    current_output_user_price_milli: '0',
+  };
+}
+
+function endpointKeyFixture(id: unknown, forceStoreFalse: unknown = false, connectorType = 'openai-compatible') {
+  const fixture = {
+    id,
+    note: '',
+    enabled: true,
+    force_store_false: forceStoreFalse,
+    created_at: 1,
+    updated_at: 2,
+  };
+  if (connectorType === 'anthropic-compatible') delete (fixture as Record<string, unknown>).force_store_false;
+  return fixture;
+}
+
+function platformModelFixture(id: unknown, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    provider: 'fixture-provider',
+    model: 'fixture-model',
+    full_name: 'Fixture model',
+    route_strategy: 'ordered',
+    silent_retry: false,
+    flatten_tool_calls: false,
+    binding_count: 0,
+    created_at: 1,
+    updated_at: 2,
+    ...overrides,
+  };
+}
+
+function charityModelFixture(id: unknown, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    provider: 'fixture-provider',
+    model: 'fixture-model',
+    full_name: 'Fixture model',
+    enabled: true,
+    flatten_tool_calls: false,
+    pricing_mode: 'per_request',
+    prices: completePrices(),
+    discount: { percent: 100, enabled: false },
+    success_samples: 0,
+    success_count: 0,
+    available: true,
+    availability_reason: 'ok',
+    ...overrides,
   };
 }
 
@@ -582,13 +638,9 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
   });
 
   test('projects policy ownership fields and preserves strict donation limits and amounts', () => {
-    expect(normalizeEndpointKey({ id: 1, force_store_false: true }).force_store_false).toBe(true);
-    expect(normalizePlatformModel({ id: 2, flatten_tool_calls: true }).flatten_tool_calls).toBe(true);
-    const modelFixture = {
-      id: 3, enabled: true, flatten_tool_calls: true, pricing_mode: 'per_request',
-      prices: completePrices(), discount: { percent: 100, enabled: false },
-      success_samples: 0, success_count: 0,
-    };
+    expect(normalizeEndpointKey(endpointKeyFixture(1, true), 'openai-compatible').force_store_false).toBe(true);
+    expect(normalizePlatformModel(platformModelFixture(2, { flatten_tool_calls: true })).flatten_tool_calls).toBe(true);
+    const modelFixture = charityModelFixture(3, { flatten_tool_calls: true });
     expect(normalizeCharityModel(modelFixture).flatten_tool_calls).toBe(true);
     expect(normalizeManagementCharityModel(modelFixture).flatten_tool_calls).toBe(true);
     const keyFixture = {
@@ -596,17 +648,104 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
       credits_usage_cap_milli: '9007199254740993', credits_used_milli: '0',
       credits_reserved_milli: '0', enabled: true, force_store_false: true,
     };
-    expect(normalizeDonationKey(keyFixture)).toMatchObject({
+    expect(normalizeDonationKey(keyFixture, 'openai-compatible')).toMatchObject({
       max_concurrency: 100_000, rpm_limit: 4_096,
       credits_usage_cap_milli: '9007199254740993', force_store_false: true,
     });
     expect(normalizeManagementDonationKey(keyFixture).force_store_false).toBe(true);
-    expect(() => normalizeEndpointKey({ id: 1, force_store_false: 1 })).toThrow(/store policy/i);
-    expect(() => normalizePlatformModel({ id: 2, flatten_tool_calls: 'true' }))
+    expect(() => normalizeEndpointKey(endpointKeyFixture(1, 1), 'openai-compatible')).toThrow(/store policy/i);
+    expect(() => normalizePlatformModel(platformModelFixture(2, { flatten_tool_calls: 'true' })))
       .toThrow(/tool-call policy/i);
-    expect(() => normalizeDonationKey({ ...keyFixture, rpm_limit: 4_097 })).toThrow(/donation key RPM/i);
+    expect(() => normalizeDonationKey({ ...keyFixture, rpm_limit: 4_097 }, 'openai-compatible')).toThrow(/donation key RPM/i);
     expect(() => normalizeManagementDonationKey({
       ...keyFixture, credits_usage_cap_milli: '01',
     })).toThrow(/amount/i);
+  });
+
+  test('preserves Anthropic policy absence while rejecting malformed policy and connector fields', () => {
+    const keyFixture = {
+      id: 4, max_concurrency: 1, rpm_limit: 2,
+      credits_usage_cap_milli: '0', credits_used_milli: '0',
+      credits_reserved_milli: '0', enabled: true,
+    };
+    expect(normalizeDonationKey(keyFixture, 'anthropic-compatible').force_store_false).toBe('not_applicable');
+    expect(normalizeManagementDonationKey(keyFixture).force_store_false).toBe('not_applicable');
+    expect(normalizeDonationKey({ ...keyFixture, force_store_false: false }, 'openai-compatible').force_store_false).toBe(false);
+    expect(normalizeDonationKey({ ...keyFixture, force_store_false: true }, 'openai-compatible').force_store_false).toBe(true);
+    expect(() => normalizeDonationKey({ ...keyFixture, force_store_false: null }, 'openai-compatible')).toThrow(/store policy/i);
+    expect(() => normalizeDonationKey({ ...keyFixture, force_store_false: 'false' }, 'openai-compatible')).toThrow(/store policy/i);
+    expect(() => normalizePlatformModel(platformModelFixture(2, { route_strategy: undefined }))).toThrow(/route strategy/i);
+    expect(() => normalizePlatformModel(platformModelFixture(2, { silent_retry: undefined }))).toThrow(/silent-retry policy/i);
+    expect(() => normalizePlatformModel(platformModelFixture(2, { flatten_tool_calls: undefined }))).toThrow(/tool-call policy/i);
+    expect(() => normalizePlatformModel(platformModelFixture(2, { route_strategy: 'invalid' }))).toThrow(/route strategy/i);
+    expect(() => normalizeCharityModel(charityModelFixture(3, { flatten_tool_calls: undefined }))).toThrow(/tool-call policy/i);
+    expect(() => normalizeManagementCharityModel(charityModelFixture(3, { flatten_tool_calls: undefined }))).toThrow(/tool-call policy/i);
+    expect(() => normalizeEndpoint({ id: 1 })).toThrow(/model fetch status/i);
+    expect(() => normalizeEndpoint({ id: 1, connector_type: 'unknown', model_fetch_failed: false, model_fetch_failed_at: 0 })).toThrow(/connector type/i);
+    expect(() => normalizeEndpointKey({ ...endpointKeyFixture(1), id: undefined }, 'openai-compatible')).toThrow(/endpoint key id/i);
+  });
+
+  test('requires connector-specific policy fields and rejects non-Unix or incomplete projections', () => {
+    expect(() => normalizeEndpointKey({ ...endpointKeyFixture(1), force_store_false: undefined }, 'openai-compatible'))
+      .toThrow(/store policy/i);
+    expect(normalizeEndpointKey(endpointKeyFixture(1, false, 'anthropic-compatible'), 'anthropic-compatible').force_store_false)
+      .toBe('not_applicable');
+    expect(() => normalizeEndpointKey({ ...endpointKeyFixture(1, false, 'anthropic-compatible'), force_store_false: false }, 'anthropic-compatible'))
+      .toThrow(/unexpected store policy/i);
+
+    const validEndpoint = {
+      id: 1, connector_type: 'openai-compatible', base_url: 'https://upstream.test/v1',
+      note: '', enabled: true, model_fetch_failed: false, model_fetch_failed_at: 0,
+      created_at: 1, updated_at: 2,
+    };
+    expect(() => normalizeEndpoint({ ...validEndpoint, created_at: '2026-08-23T00:00:00Z' }))
+      .toThrow(/created timestamp/i);
+    expect(() => normalizeEndpoint({ ...validEndpoint, model_fetch_failed: true, model_fetch_failed_at: 0 }))
+      .toThrow(/failure timestamp/i);
+
+    const missingCurrent = charityModelFixture(3);
+    delete (missingCurrent.prices as Record<string, unknown>).current_output_user_price_milli;
+    expect(() => normalizeCharityModel(missingCurrent)).toThrow(/current_output_user_price_milli/i);
+    expect(() => normalizeCharityModel(charityModelFixture(3, { availability_reason: 'unknown' })))
+      .toThrow(/availability reason/i);
+    expect(() => normalizeCharityModel(charityModelFixture(3, { available: false, availability_reason: 'ok' })))
+      .toThrow(/availability reason/i);
+    expect(() => normalizeUpstreamModel({ upstream_model_id: 'gpt', provider: 'p', fetched_at: 1, status: 'failed' }))
+      .toThrow(/upstream model status/i);
+  });
+
+  test('normalizes omitted reviews to an empty list but rejects invalid or zero timestamps', () => {
+    const donation = {
+      id: 1, endpoint_id: 2, endpoint_base_url: 'https://upstream.test/v1', status: 'pending',
+      enabled: false, description: '', review_note: '', created_at: 1, updated_at: 2, keys: [],
+    };
+    expect(normalizeDonation(donation, true, 'openai-compatible').reviews).toEqual([]);
+    expect(normalizeManagementDonation(donation, true).reviews).toEqual([]);
+    expect(() => normalizeDonation({ ...donation, reviews: {} }, true, 'openai-compatible'))
+      .toThrow(/review list/i);
+    expect(() => normalizeManagementDonation({ ...donation, reviews: {} }, true))
+      .toThrow(/review list/i);
+    expect(() => normalizeDonation({ ...donation, created_at: 0 }, true, 'openai-compatible'))
+      .toThrow(/created timestamp/i);
+    expect(() => normalizeDonation({ ...donation, expires_at: 0 }, true, 'openai-compatible'))
+      .toThrow(/expiry timestamp/i);
+    expect(() => normalizeDonation({ ...donation, reviewed_at: '2026-08-23T00:00:00Z' }, true, 'openai-compatible'))
+      .toThrow(/review timestamp/i);
+  });
+
+  test('keeps resource IDs opaque and validates only legacy numeric payload boundaries', () => {
+    const invalidIDs: unknown[] = ['', '\u0001', 'x'.repeat(129), 0, -1, 2.5, Number.MAX_SAFE_INTEGER + 1];
+    for (const id of invalidIDs) {
+      expect(() => normalizeEndpointKey(endpointKeyFixture(id), 'openai-compatible')).toThrow(/endpoint key id/i);
+      expect(() => normalizePlatformModel(platformModelFixture(id))).toThrow(/model id/i);
+      expect(() => normalizeManagementCharityModel(charityModelFixture(id))).toThrow(/charity model id/i);
+    }
+    expect(normalizeEndpointKey(endpointKeyFixture('model:2'), 'openai-compatible').id).toBe('model:2');
+    expect(normalizePlatformModel(platformModelFixture('model:2')).id).toBe('model:2');
+    expect(positiveDecimalIDNumber('2e3')).toBeUndefined();
+    expect(positiveDecimalIDNumber('01')).toBeUndefined();
+    expect(positiveDecimalIDNumber('2000')).toBe(2000);
+    expect(normalizeEndpointKey(endpointKeyFixture('9007199254740991'), 'openai-compatible').id)
+      .toBe('9007199254740991');
   });
 });

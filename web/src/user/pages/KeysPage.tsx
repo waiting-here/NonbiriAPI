@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { isNotFoundError, apiFetch } from '@shared/query/http';
+import { isStationSessionChanged, stationSessionWrite } from '@shared/charityManagement';
 import { normalizeSecret, useCallerKey, userKeys } from '../data';
 import { UserPageGate } from '../components/UserPageGate';
 
@@ -29,14 +30,16 @@ function CallerKeyContent() {
     setCopied(false);
     setBusy(true);
     try {
-      const response = await apiFetch<unknown>('/api/caller-key/regenerate', { method: 'POST' });
+      const response = await stationSessionWrite(queryClient, 'steward', () =>
+        apiFetch<unknown>('/api/caller-key/regenerate', { method: 'POST' }),
+      );
       const secret = normalizeSecret(response).secret;
       // The plaintext exists only in this component until the user closes it.
       setOneTimeSecret(secret);
       await queryClient.invalidateQueries({ queryKey: userKeys.callerKey });
       setConfirmOpen(false);
     } catch (error) {
-      setRequestError(error);
+      if (!isStationSessionChanged(error)) setRequestError(error);
     } finally {
       setBusy(false);
     }
