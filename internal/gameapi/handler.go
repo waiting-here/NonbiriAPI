@@ -839,11 +839,18 @@ func strictBoardQuery(r *http.Request) (db.FishingLeaderboardBoard, bool) {
 	if r == nil || r.URL == nil {
 		return "", false
 	}
-	values := r.URL.Query()["board"]
-	if len(values) == 0 {
-		return db.FishingLeaderboardSingle, len(r.URL.Query()) == 0
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		return "", false
 	}
-	if len(values) != 1 || len(r.URL.Query()) != 1 {
+	values := query["board"]
+	if len(values) == 0 {
+		if len(query) == 0 {
+			return db.FishingLeaderboardSingle, true
+		}
+		return "", false
+	}
+	if len(values) != 1 || len(query) != 1 {
 		return "", false
 	}
 	switch values[0] {

@@ -76,3 +76,28 @@ func TestLeaderboardAvatarAllowlistAndAnonymousShape(t *testing.T) {
 		t.Fatal("anonymous projection carried identity fields")
 	}
 }
+
+func TestStrictBoardQueryRejectsMalformedAndUnknownParameters(t *testing.T) {
+	tests := []struct {
+		target string
+		board  string
+		valid  bool
+	}{
+		{target: "/leaderboard", board: "single", valid: true},
+		{target: "/leaderboard?board=single", board: "single", valid: true},
+		{target: "/leaderboard?board=total", board: "total", valid: true},
+		{target: "/leaderboard?%zz", valid: false},
+		{target: "/leaderboard?board=%zz", valid: false},
+		{target: "/leaderboard?board=single&board=total", valid: false},
+		{target: "/leaderboard?board=single&extra=1", valid: false},
+		{target: "/leaderboard?extra=1", valid: false},
+		{target: "/leaderboard?board=", valid: false},
+	}
+	for _, test := range tests {
+		r := httptest.NewRequest("GET", test.target, nil)
+		board, valid := strictBoardQuery(r)
+		if valid != test.valid || string(board) != test.board {
+			t.Errorf("strictBoardQuery(%q) = (%q, %v), want (%q, %v)", test.target, board, valid, test.board, test.valid)
+		}
+	}
+}
