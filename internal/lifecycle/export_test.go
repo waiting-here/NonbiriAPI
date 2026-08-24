@@ -18,11 +18,28 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
+	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
+
+type exportFishingSource struct {
+	draw int
+}
+
+func (source *exportFishingSource) Uint64n(upperExclusive uint64) (uint64, error) {
+	// A fishing roll consumes primary/species/size draws. Selecting the first
+	// non-junk interval gives this export fixture a stable personal-best row.
+	if source.draw%3 == 0 {
+		source.draw++
+		return upperExclusive / 5, nil
+	}
+	source.draw++
+	return 0, nil
+}
 
 // fakeElevation simulates the auth rail's consumed-capability boundary.
 type fakeElevation struct {
@@ -261,6 +278,47 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	if _, err := st.Checkin(context.Background(), user.ID, time.Unix(1700000000, 0).UTC()); err != nil {
 		t.Fatalf("checkin: %v", err)
 	}
+	if _, err := st.UpdateUserLimits(user.ID, db.UserLimitPatch{
+		GameProfilePublicSet: true,
+		GameProfilePublic:    true,
+	}); err != nil {
+		t.Fatalf("enable public game profile: %v", err)
+	}
+	if _, err := st.DB().Exec(`UPDATE site_config SET value='1' WHERE key IN (?,?)`,
+		game.GamesEnabledKey, game.FishingEnabledKey); err != nil {
+		t.Fatalf("enable fishing fixture: %v", err)
+	}
+	if _, err := st.DB().Exec(`INSERT INTO site_config(key,value,updated_at) VALUES(?,?,0)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value`, game.FishingWormPriceMilliKey, "100"); err != nil {
+		t.Fatalf("set fishing fixture price: %v", err)
+	}
+	gameClock := time.Unix(1700000100, 0).UTC()
+	gameService, err := db.NewGameSettlementService(db.GameSettlementServiceConfig{
+		Store:         st,
+		Now:           func() time.Time { return gameClock },
+		OutcomeSource: &exportFishingSource{},
+	})
+	if err != nil {
+		t.Fatalf("create fishing fixture service: %v", err)
+	}
+	defer gameService.Close()
+	settledRound, err := gameService.StartFishingRound(context.Background(), db.StartFishingInput{
+		UserID: user.ID, Bait: fishing.BaitWorm, IdempotencyKey: "export-game-settled",
+	})
+	if err != nil {
+		t.Fatalf("start settled fishing fixture: %v", err)
+	}
+	if _, err := gameService.SettleFishingRound(context.Background(), db.SettleFishingInput{
+		UserID: user.ID, RoundID: settledRound.RoundID,
+	}); err != nil {
+		t.Fatalf("settle fishing fixture: %v", err)
+	}
+	gameClock = gameClock.Add(time.Second)
+	if _, err := gameService.StartFishingRound(context.Background(), db.StartFishingInput{
+		UserID: user.ID, Bait: fishing.BaitWorm, IdempotencyKey: "export-game-pending",
+	}); err != nil {
+		t.Fatalf("start pending fishing fixture: %v", err)
+	}
 	// Seed both sides of the charity export boundary: one reservation consumed
 	// by this user and one reservation against this user's donated resource.
 	donor, err := st.CreateDiscordUser("discord-export-donor", "donor", "")
@@ -316,14 +374,16 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 			EffectiveRPMLimit         int    `json:"effective_rpm_limit"`
 			ConcurrencyLimit          *int   `json:"concurrency_limit"`
 			EffectiveConcurrencyLimit int    `json:"effective_concurrency_limit"`
+			GameProfilePublic         bool   `json:"game_profile_public"`
 		} `json:"user"`
 		CreditLedger []struct {
-			ID                  int64  `json:"id"`
-			Kind                string `json:"kind"`
-			CreditsDelta        string `json:"credits_delta"`
-			DonationCreditDelta string `json:"donation_credit_delta"`
-			CreditsAfter        string `json:"credits_after"`
-			Reason              string `json:"reason"`
+			ID                  int64   `json:"id"`
+			Kind                string  `json:"kind"`
+			CreditsDelta        string  `json:"credits_delta"`
+			DonationCreditDelta string  `json:"donation_credit_delta"`
+			CreditsAfter        string  `json:"credits_after"`
+			Reason              string  `json:"reason"`
+			GameSettlementID    *string `json:"game_settlement_id"`
 		} `json:"credit_ledger"`
 		Endpoints []struct {
 			ID      int64  `json:"id"`
@@ -370,6 +430,8 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 			OutputTokens          int64 `json:"output_tokens"`
 			Checkins              int64 `json:"checkins"`
 			ConsoleWrites         int64 `json:"console_writes"`
+			GameActive            bool  `json:"game_active"`
+			GameRounds            int64 `json:"game_rounds"`
 		} `json:"activity_daily"`
 		Checkins []struct {
 			Day        string `json:"day"`
@@ -386,6 +448,23 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 			Model            string `json:"model"`
 			DonorRewardMilli string `json:"donor_reward_milli"`
 		} `json:"donor_rewards"`
+		GameSettlements []struct {
+			ID    string `json:"id"`
+			State string `json:"state"`
+		} `json:"game_settlements"`
+		GameRounds []struct {
+			ID           string `json:"id"`
+			SettlementID string `json:"settlement_id"`
+			SettledAt    *int64 `json:"settled_at"`
+		} `json:"game_rounds"`
+		FishingOutcomes []struct {
+			RoundID    string `json:"round_id"`
+			SpeciesKey string `json:"species_key"`
+		} `json:"game_fishing_outcomes"`
+		FishingBest []struct {
+			RoundID    *string `json:"round_id"`
+			SpeciesKey string  `json:"species_key"`
+		} `json:"game_fishing_best"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &pkg); err != nil {
 		t.Fatalf("decode package: %v body=%s", err, rec.Body.String())
@@ -397,7 +476,8 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 		t.Fatalf("level export = (%+v, %d), want (2, 1)", pkg.User.ManualLevel, pkg.User.AutoLevel)
 	}
 	if pkg.User.EffectiveEndpointLimit != db.DefaultEndpointLimit || pkg.User.EffectiveRPMLimit != ratelimit.DefaultRPMPerUserLimit ||
-		pkg.User.ConcurrencyLimit != nil || pkg.User.EffectiveConcurrencyLimit != db.DefaultUserConcurrencyLimit {
+		pkg.User.ConcurrencyLimit != nil || pkg.User.EffectiveConcurrencyLimit != db.DefaultUserConcurrencyLimit ||
+		!pkg.User.GameProfilePublic {
 		t.Fatalf("limit export = %+v", pkg.User)
 	}
 	if len(pkg.Endpoints) != 1 || pkg.Endpoints[0].BaseURL != "https://upstream.example/v1/" || len(pkg.Endpoints[0].Keys) != 1 || pkg.Endpoints[0].Keys[0].DisplayHead != "head" || !pkg.Endpoints[0].Keys[0].ForceStoreFalse {
@@ -415,15 +495,27 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	// Credit ledger section: exactly the seeded entries (the adjustment and
 	// the deterministic check-in award) with canonical string values and the
 	// bounded reason; nothing else ever enters this section.
-	if len(pkg.CreditLedger) != 2 {
-		t.Fatalf("credit_ledger rows=%d, want 2", len(pkg.CreditLedger))
+	if len(pkg.CreditLedger) != 5 {
+		t.Fatalf("credit_ledger rows=%d, want 5", len(pkg.CreditLedger))
 	}
 	kinds := map[string]bool{}
 	for _, entry := range pkg.CreditLedger {
 		kinds[entry.Kind] = true
 	}
-	if !kinds["admin_adjustment"] || !kinds["checkin_award"] {
+	if !kinds["admin_adjustment"] || !kinds["checkin_award"] || !kinds["game_reserve"] || !kinds["game_settlement"] {
 		t.Fatalf("credit_ledger kinds=%v", kinds)
+	}
+	gameCorrelations := 0
+	for _, entry := range pkg.CreditLedger {
+		if strings.HasPrefix(entry.Kind, "game_") {
+			if entry.GameSettlementID == nil || *entry.GameSettlementID == "" || entry.DonationCreditDelta != "0" {
+				t.Fatalf("game ledger projection=%+v", entry)
+			}
+			gameCorrelations++
+		}
+	}
+	if gameCorrelations != 3 {
+		t.Fatalf("game ledger correlations=%d, want 3", gameCorrelations)
 	}
 	entry := pkg.CreditLedger[0]
 	if entry.Kind != "admin_adjustment" || entry.CreditsDelta != "12345" ||
@@ -443,10 +535,10 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	day := pkg.ActivityDaily[0]
 	if day.ProductActive != true || day.APIRequests != 1 || day.UncachedInputTokens != 2 ||
 		day.CacheWriteInputTokens != 3 || day.CacheReadInputTokens != 5 || day.OutputTokens != 7 ||
-		day.ConsoleWrites != 1 || day.Checkins != 1 {
+		day.ConsoleWrites != 1 || day.Checkins != 1 || !day.GameActive || day.GameRounds != 2 {
 		t.Fatalf("activity_daily row=%+v", day)
 	}
-	// The check-in history section (schema v2): the site-local calendar date
+	// The check-in history section (schema v3): the site-local calendar date
 	// under the configured +330 offset and the award as a canonical decimal
 	// string — no streak, no location, nothing else.
 	if len(pkg.Checkins) != 1 {
@@ -467,6 +559,17 @@ func TestExportPackageShapeWhitelistAndNoSecrets(t *testing.T) {
 	}
 	if len(pkg.DonorRewards) != 1 || pkg.DonorRewards[0].Model != "[公益]/donor" || pkg.DonorRewards[0].DonorRewardMilli != "250" {
 		t.Fatalf("donor_rewards=%+v", pkg.DonorRewards)
+	}
+	if len(pkg.GameSettlements) != 2 || len(pkg.GameRounds) != 2 || len(pkg.FishingOutcomes) != 2 || len(pkg.FishingBest) != 1 {
+		t.Fatalf("game export counts settlements=%d rounds=%d outcomes=%d best=%d",
+			len(pkg.GameSettlements), len(pkg.GameRounds), len(pkg.FishingOutcomes), len(pkg.FishingBest))
+	}
+	states := map[string]bool{}
+	for _, settlement := range pkg.GameSettlements {
+		states[settlement.State] = true
+	}
+	if !states["reserved"] || !states["committed"] || pkg.FishingBest[0].RoundID == nil || pkg.FishingBest[0].SpeciesKey == "" {
+		t.Fatalf("game export state=%v best=%+v", states, pkg.FishingBest)
 	}
 
 	// Whitelist enforcement: no secret material anywhere in the package.

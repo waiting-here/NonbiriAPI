@@ -640,11 +640,21 @@ func (s *Store) DeleteUserSecurityState(userID int64) error {
 // empty value; identity policy fails closed when required gate values are
 // absent.
 func (s *Store) GetSiteConfigValue(key string) (string, error) {
+	return s.GetSiteConfigValueContext(context.Background(), key)
+}
+
+// GetSiteConfigValueContext is the cancellation-aware runtime read used on
+// request paths. A missing key remains an empty value, matching the
+// compatibility helper above.
+func (s *Store) GetSiteConfigValueContext(ctx context.Context, key string) (string, error) {
+	if ctx == nil {
+		return "", ErrNotFound
+	}
 	if err := validateIdentityText(key, 128, false); err != nil {
 		return "", ErrNotFound
 	}
 	var value string
-	err := s.db.QueryRow(`SELECT value FROM site_config WHERE key=?`, key).Scan(&value)
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key=?`, key).Scan(&value)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}

@@ -54,21 +54,25 @@ type Service struct {
 	// drain, preventing a stale request from recreating state after DB delete.
 	// lookups pins missing-window DB existence checks across the period where
 	// mu must be released. Both maps are guarded by mu and bounded by maxUsers.
-	retiring            map[int64]*userDeletion
-	lookups             map[int64]int
-	maxUsers            int
-	maxEvents           int
-	seq                 atomic.Uint64
-	beginUserRetirement func(userID int64) (commit func() bool, abort func() bool, err error)
+	retiring                   map[int64]*userDeletion
+	lookups                    map[int64]int
+	maxUsers                   int
+	maxEvents                  int
+	seq                        atomic.Uint64
+	beginUserRetirement        func(userID int64) (commit func() bool, abort func() bool, err error)
+	beginUserRetirementContext func(context.Context, int64) (commit func() bool, abort func() bool, err error)
+	beforeUserBan              func(userID int64)
 }
 
 type ServiceConfig struct {
-	Store               *db.Store
-	Now                 func() time.Time
-	Logger              *slog.Logger
-	MaxUsers            int
-	MaxEventsPerUser    int
-	BeginUserRetirement func(userID int64) (commit func() bool, abort func() bool, err error)
+	Store                      *db.Store
+	Now                        func() time.Time
+	Logger                     *slog.Logger
+	MaxUsers                   int
+	MaxEventsPerUser           int
+	BeginUserRetirement        func(userID int64) (commit func() bool, abort func() bool, err error)
+	BeginUserRetirementContext func(context.Context, int64) (commit func() bool, abort func() bool, err error)
+	BeforeUserBan              func(userID int64)
 }
 
 type windowEvent struct {
@@ -126,7 +130,9 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 		rpm:        make(map[int64]*userWindow), charity: make(map[int64]*userWindow),
 		retiring: make(map[int64]*userDeletion), lookups: make(map[int64]int),
 		maxUsers: cfg.MaxUsers, maxEvents: cfg.MaxEventsPerUser,
-		beginUserRetirement: cfg.BeginUserRetirement,
+		beginUserRetirement:        cfg.BeginUserRetirement,
+		beginUserRetirementContext: cfg.BeginUserRetirementContext,
+		beforeUserBan:              cfg.BeforeUserBan,
 	}, nil
 }
 
@@ -181,7 +187,7 @@ func (s *Service) RPMDenied(ctx context.Context, userID int64, isAdmin bool, rea
 	if !shouldBan {
 		return
 	}
-	if err := s.banUser(userID, db.UserBan{
+	if err := s.banUser(ctx, userID, db.UserBan{
 		Reason: rpmBanReason, DurationSeconds: cfg.RPMBanDurationSeconds, Auto: true,
 	}); err != nil && !errors.Is(err, db.ErrNotFound) {
 		s.logger.Error("rpm automatic ban failed", "user_id", userID, "error", err)
@@ -303,14 +309,14 @@ func (s *Service) recordViolation(ctx context.Context, userID int64, actual int,
 		}
 	}
 	if cfg.CharityViolationBanSeconds > 0 {
-		if err := s.banUser(userID, db.UserBan{
+		if err := s.banUser(ctx, userID, db.UserBan{
 			Reason: charityBanReason, DurationSeconds: cfg.CharityViolationBanSeconds, Auto: true,
 		}); err != nil && !errors.Is(err, db.ErrNotFound) {
 			return fmt.Errorf("anti-abuse single ban: %w", err)
 		}
 	}
 	if decision.windowBan && cfg.CharityViolationWindowBanSeconds > 0 {
-		if err := s.banUser(userID, db.UserBan{
+		if err := s.banUser(ctx, userID, db.UserBan{
 			Reason: charityBanReason, DurationSeconds: cfg.CharityViolationWindowBanSeconds, Auto: true,
 		}); err != nil && !errors.Is(err, db.ErrNotFound) {
 			return fmt.Errorf("anti-abuse window ban: %w", err)
@@ -328,23 +334,32 @@ func (s *Service) recordViolation(ctx context.Context, userID int64, actual int,
 // banUser holds the shared admission write barrier across the authoritative
 // DB mutation. A failed mutation aborts the barrier; success retires the
 // exact active counter before admitting another live-account resolver.
-func (s *Service) banUser(userID int64, ban db.UserBan) error {
+func (s *Service) banUser(ctx context.Context, userID int64, ban db.UserBan) error {
 	commit := func() bool { return true }
 	abort := func() bool { return false }
-	if s.beginUserRetirement != nil {
+	if s.beginUserRetirementContext != nil {
+		var err error
+		commit, abort, err = s.beginUserRetirementContext(ctx, userID)
+		if err != nil {
+			return err
+		}
+	} else if s.beginUserRetirement != nil {
 		var err error
 		commit, abort, err = s.beginUserRetirement(userID)
 		if err != nil {
 			return err
 		}
-		if commit == nil || abort == nil {
-			if abort != nil {
-				abort()
-			}
-			return errors.New("anti-abuse: invalid user retirement boundary")
+	}
+	if commit == nil || abort == nil {
+		if abort != nil {
+			abort()
 		}
+		return errors.New("anti-abuse: invalid user retirement boundary")
 	}
 	defer abort()
+	if s.beforeUserBan != nil {
+		s.beforeUserBan(userID)
+	}
 	if err := s.store.BanUserWithOptions(userID, ban); err != nil {
 		return err
 	}

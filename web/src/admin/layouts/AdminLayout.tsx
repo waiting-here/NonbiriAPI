@@ -9,22 +9,7 @@ import { apiFetch, isApiError, isNotFoundError, isUnauthorized } from '@shared/q
 import { ThemeToggle } from '@shared/theme/ThemeToggle';
 import { useAdminSession } from '../data';
 import { clearManagementSession } from '@shared/charityManagement';
-
-interface NavItem {
-  to: string;
-  key: string;
-  end?: boolean;
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { to: '/', end: true, key: 'dashboard' },
-  { to: '/users', key: 'users' },
-  { to: '/logs', key: 'logs' },
-  { to: '/endpoints', key: 'endpoints' },
-  { to: '/alerts', key: 'alerts' },
-  { to: '/settings', key: 'settings' },
-  { to: '/charity', key: 'charity' },
-];
+import { NAV_ITEMS } from '../navigation';
 
 function AdminLogin({ onSignedIn, notice }: { onSignedIn: () => Promise<void>; notice?: unknown }) {
   const { t } = useTranslation();

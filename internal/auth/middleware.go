@@ -15,6 +15,13 @@ const maxAuthorizationBytes = 512
 // user station. It never accepts a user/admin session cookie as a platform
 // caller credential and checks ban state in the repository lookup.
 func CallerKeyMiddleware(store *db.Store, next http.Handler) http.Handler {
+	return CallerKeyMiddlewareWithGate(store, next, nil)
+}
+
+// CallerKeyMiddlewareWithGate is the production caller rail. The optional
+// gate repeats the exact bearer-key lookup under a user lifecycle lease and
+// replaces the request context with the lease's cancellation-aware context.
+func CallerKeyMiddlewareWithGate(store *db.Store, next http.Handler, gate UserRequestGate) http.Handler {
 	if next == nil {
 		next = http.NotFoundHandler()
 	}
@@ -36,7 +43,25 @@ func CallerKeyMiddleware(store *db.Store, next http.Handler) http.Handler {
 			writeStableError(w, httperr.CodeUnauthorized, "authentication required")
 			return
 		}
-		request := r.WithContext(withPrincipal(r.Context(), Principal{User: user, Kind: PrincipalCallerKey}))
+		requestContext := r.Context()
+		release := func() {}
+		if gate != nil {
+			var gateErr error
+			requestContext, release, gateErr = gate(requestContext, user.ID, key)
+			if release == nil {
+				release = func() {}
+			}
+			if gateErr != nil || requestContext == nil {
+				release()
+				if r.Context().Err() != nil {
+					return
+				}
+				writeStableError(w, httperr.CodeUnauthorized, "authentication required")
+				return
+			}
+		}
+		defer release()
+		request := r.WithContext(withPrincipal(requestContext, Principal{User: user, Kind: PrincipalCallerKey}))
 		next.ServeHTTP(w, request)
 	})
 }

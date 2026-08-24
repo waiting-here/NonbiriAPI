@@ -380,6 +380,32 @@ func TestUnknownSessionEndReasonFailsClosed(t *testing.T) {
 	envelope.Release()
 }
 
+func TestForgetBindingCannotCloseReplacementBrowserSession(t *testing.T) {
+	hub, err := NewHub(Config{SessionBindingValidator: func(context.Context, int64, string) (bool, error) { return true, nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hub.Close()
+	if _, err := hub.Start(115, "old-browser-binding"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hub.Start(115, "new-browser-binding"); err != nil {
+		t.Fatal(err)
+	}
+	if hub.ForgetBindingReason(115, "old-browser-binding", EndLogout) {
+		t.Fatal("stale browser binding changed the replacement session")
+	}
+	if _, ok := hub.Metadata(115, "new-browser-binding"); !ok {
+		t.Fatal("replacement session disappeared after stale logout")
+	}
+	if !hub.ForgetBindingReason(115, "new-browser-binding", EndLogout) {
+		t.Fatal("current browser binding was not closed")
+	}
+	if _, ok := hub.Metadata(115, "new-browser-binding"); ok {
+		t.Fatal("logged-out browser session remains active")
+	}
+}
+
 func TestBoundLoginValidationRevokesLiveAndFailsClosedToDry(t *testing.T) {
 	var state atomic.Int32
 	state.Store(1)

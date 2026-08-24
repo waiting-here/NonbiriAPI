@@ -9,28 +9,7 @@ import { ThemeToggle } from '@shared/theme/ThemeToggle';
 import { usePublicConfig } from '@shared/query/publicConfig';
 import { useUserSession } from '../data';
 import { clearManagementSession } from '@shared/charityManagement';
-
-interface NavItem {
-  to: string;
-  key: string;
-  end?: boolean;
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { to: '/', end: true, key: 'home' },
-  { to: '/endpoints', key: 'endpoints' },
-  { to: '/models', key: 'models' },
-  { to: '/charity', key: 'charity' },
-  { to: '/keys', key: 'keys' },
-  { to: '/logs', key: 'logs' },
-  { to: '/issues', key: 'issues' },
-  { to: '/account', key: 'account' },
-];
-
-// The co-management entry appears only while the session reports effective
-// level 5. It is display polish only: the steward routes stay server-side
-// authorized and the page itself is a placeholder with no capability.
-const STEWARD_NAV_ITEM: NavItem = { to: '/steward', key: 'steward' };
+import { NAV_ITEMS, STEWARD_NAV_ITEM } from '../navigation';
 
 export function UserLayout() {
   const { t } = useTranslation();

@@ -90,7 +90,7 @@ func assertUserGone(t *testing.T, st *Store, uid int64) {
 	}
 	for _, table := range []string{"sessions", "caller_keys", "endpoints", "endpoint_keys",
 		"fetched_models", "model_bindings", "models", "request_logs", "user_issues", "user_activity_daily",
-		"credit_ledger", "checkins"} {
+		"credit_ledger", "checkins", "game_settlements", "game_rounds", "game_fishing_outcomes", "game_fishing_best"} {
 		// user_issues/request_logs/sessions/caller_keys/endpoints/models key on user_id;
 		// endpoint_keys/fetched_models/model_bindings are reached via cascade and have no
 		// user_id column, so count them globally after a user delete (they must be empty
@@ -98,7 +98,7 @@ func assertUserGone(t *testing.T, st *Store, uid int64) {
 		var n int
 		var err error
 		switch table {
-		case "endpoint_keys", "fetched_models", "model_bindings":
+		case "endpoint_keys", "fetched_models", "model_bindings", "game_fishing_outcomes":
 			n, err = countRowsErr(st, `SELECT COUNT(*) FROM `+table)
 		default:
 			n, err = countRowsErr(st, fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE user_id=?`, table), uid)

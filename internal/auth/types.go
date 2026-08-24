@@ -100,6 +100,11 @@ type RegistrationGate struct {
 
 type RegistrationGateFunc func(context.Context) (RegistrationGate, error)
 
+// UserRequestGate admits an already authenticated browser request under a
+// process-local user lifecycle lease. The returned context is canceled when
+// the account is banned or deleted; the release function is idempotent.
+type UserRequestGate func(context.Context, int64, string) (context.Context, func(), error)
+
 // LoginThrottle is the login-failure hook. It receives the already-derived
 // client IP from httpmw.ClientIP rather than parsing headers.
 type LoginThrottle interface {

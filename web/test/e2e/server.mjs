@@ -12,6 +12,34 @@ const MIME = new Map([
   ['.svg', 'image/svg+xml'],
 ]);
 
+const DEBUG_LIMITS = Object.freeze({
+  max_sessions: 64,
+  hub_bytes: 128,
+  session_bytes: 4,
+  max_traces: 32,
+  max_events: 128,
+  event_bytes: 512,
+  subscriber_queue: 64,
+  max_subscribers: 2,
+  raw_request_bytes: 64,
+  messages_tools_bytes: 128,
+  parameters_bytes: 64,
+  effective_summary_bytes: 64,
+  response_bytes: 256,
+  trace_bytes: 768,
+  first_attach_seconds: 30,
+  reconnect_seconds: 30,
+  idle_seconds: 600,
+  absolute_seconds: 3_600,
+  heartbeat_seconds: 15,
+  write_deadline_seconds: 15,
+  confirmation_seconds: 60,
+});
+const DEBUG_SESSION_ONE = 'dbg_abcdefghijklmnopqrstuv';
+const DEBUG_SESSION_TWO = 'dbg_zyxwvutsrqponmlkjihgfe';
+const DEBUG_TRACE_ID = 'debug-body-marker-abcdefghijkl';
+const debugReconnectCounts = new Map();
+
 function send(response, status, contentType, body) {
   response.writeHead(status, {
     'cache-control': 'no-store',
@@ -19,6 +47,175 @@ function send(response, status, contentType, body) {
     'x-content-type-options': 'nosniff',
   });
   response.end(body);
+}
+
+function debugMetadata(id, generation, mode, lastEventId, connected = true) {
+  return {
+    id,
+    generation,
+    mode,
+    created_at: 1,
+    expires_at: 3_601,
+    idle_expires_at: 601,
+    connected,
+    last_event_id: lastEventId,
+    limits: DEBUG_LIMITS,
+  };
+}
+
+function debugTrace(mode = 'dry') {
+  return {
+    request_id: DEBUG_TRACE_ID,
+    model: 'fixture/model',
+    mode,
+    terminal: 'dry_completed',
+    received_at: 1,
+    route: '/v1/chat/completions',
+    raw_request: DEBUG_TRACE_ID,
+  };
+}
+
+function debugEnvelope({
+  id,
+  generation,
+  seq,
+  type,
+  mode = 'dry',
+  payload,
+  traceId = '',
+  revision = 0,
+}) {
+  return {
+    version: 1,
+    seq,
+    type,
+    session_id: id,
+    trace_id: traceId,
+    revision,
+    at: seq,
+    payload: payload ?? {},
+    ...(type === 'session_snapshot'
+      ? {
+          payload: {
+            metadata: debugMetadata(id, generation, mode, seq),
+            traces: [debugTrace(mode)],
+          },
+        }
+      : {}),
+  };
+}
+
+function debugSSEFrame(id, eventName, body, omitTerminator = false) {
+  const frame = `id: ${id}\nevent: ${eventName}\ndata: ${JSON.stringify(body)}\n`;
+  return omitTerminator ? frame : `${frame}\n`;
+}
+
+function debugSSEHeaders(request) {
+  const origin = typeof request.headers.origin === 'string' ? request.headers.origin : 'null';
+  return {
+    'cache-control': 'no-store, no-cache',
+    'content-type': 'text/event-stream; charset=utf-8',
+    'access-control-allow-origin': origin,
+    'access-control-allow-credentials': 'true',
+    'x-content-type-options': 'nosniff',
+    connection: 'keep-alive',
+  };
+}
+
+function serveDebugEvents(request, response) {
+  const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+  const scenario = url.searchParams.get('case') ?? '';
+  if (!/^[a-z0-9-]{1,64}$/.test(scenario)) {
+    send(response, 400, 'application/json; charset=utf-8', '{"error":"invalid_fixture_case"}');
+    return;
+  }
+
+  response.writeHead(200, debugSSEHeaders(request));
+  const heartbeat = setInterval(() => {
+    if (!response.writableEnded) response.write(': fixture-heartbeat\n\n');
+  }, 500);
+  const closeHeartbeat = () => clearInterval(heartbeat);
+  request.once('close', closeHeartbeat);
+  response.once('close', closeHeartbeat);
+
+  const keepOpen = () => {
+    if (!response.writableEnded) response.write(': fixture-ready\n\n');
+  };
+  const writeSnapshot = (id, generation, seq, mode = 'dry') => {
+    response.write(
+      debugSSEFrame(
+        seq,
+        'session_snapshot',
+        debugEnvelope({ id, generation, seq, type: 'session_snapshot', mode }),
+      ),
+    );
+  };
+
+  if (scenario.startsWith('basic-one-')) {
+    writeSnapshot(DEBUG_SESSION_ONE, 1, 1);
+    keepOpen();
+    return;
+  }
+  if (scenario.startsWith('basic-two-')) {
+    writeSnapshot(DEBUG_SESSION_TWO, 2, 1);
+    keepOpen();
+    return;
+  }
+  if (scenario.startsWith('reconnect-')) {
+    const count = (debugReconnectCounts.get(scenario) ?? 0) + 1;
+    debugReconnectCounts.set(scenario, count);
+    const sequence = count === 1 ? 3 : 4;
+    writeSnapshot(DEBUG_SESSION_ONE, 1, sequence);
+    if (count === 1) {
+      closeHeartbeat();
+      response.end();
+    } else {
+      keepOpen();
+    }
+    return;
+  }
+  if (scenario.startsWith('gap-')) {
+    writeSnapshot(DEBUG_SESSION_ONE, 1, 1);
+    response.write(
+      debugSSEFrame(
+        2,
+        'gap',
+        debugEnvelope({
+          id: DEBUG_SESSION_ONE,
+          generation: 1,
+          seq: 2,
+          type: 'gap',
+          payload: { reason: 'resume_gap', dropped: 2 },
+        }),
+      ),
+    );
+    keepOpen();
+    return;
+  }
+  if (scenario.startsWith('truncated-')) {
+    writeSnapshot(DEBUG_SESSION_ONE, 1, 1);
+    response.write(
+      debugSSEFrame(
+        2,
+        'not_trace',
+        debugEnvelope({
+          id: DEBUG_SESSION_ONE,
+          generation: 1,
+          seq: 2,
+          type: 'trace_upsert',
+          traceId: DEBUG_TRACE_ID,
+          revision: 1,
+          payload: {},
+        }),
+        true,
+      ),
+    );
+    closeHeartbeat();
+    response.end();
+    return;
+  }
+  closeHeartbeat();
+  response.end();
 }
 
 function safeCandidate(root, pathname) {
@@ -146,6 +343,10 @@ function serveFixture(request, response) {
   const url = new URL(request.url ?? '/', 'http://127.0.0.1');
   if (url.pathname === '/health') {
     send(response, 200, 'text/plain; charset=utf-8', request.method === 'HEAD' ? '' : 'ok');
+    return;
+  }
+  if (url.pathname === '/fixture/debug-events') {
+    serveDebugEvents(request, response);
     return;
   }
   if (url.pathname.startsWith('/fixture/api/')) {

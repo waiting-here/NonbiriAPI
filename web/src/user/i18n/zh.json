@@ -290,6 +290,9 @@
       "charityPrefixRejected": "保存被拒绝：「[公益]」前缀保留给公益模型，请改用其他提供方名称。",
       "nameConflict": "平台模型名称与已有模型重复，请换一个提供方或模型名。"
     },
+    "games": {
+      "nav": "游戏"
+    },
     "keys": {
       "nav": "调用密钥",
       "title": "平台调用密钥",
@@ -311,6 +314,9 @@
       "copyKey": "复制密钥",
       "copyDone": "已复制；完成后请关闭此提示",
       "copyWarning": "剪贴板只在你明确点击后使用，页面不会保存密钥。"
+    },
+    "debug": {
+      "nav": "调试"
     },
     "issues": {
       "nav": "问题",
@@ -535,6 +541,149 @@
       "banned": "账号已封禁，公益调用会由服务端拒绝。",
       "upstreamPrivacyTitle": "第三方上游隐私提示：",
       "upstreamPrivacyWarning": "公益请求会发送给独立的第三方上游提供商；第三方上游及其账户日志可能看到完整请求内容，其存储与隐私做法不受本站控制。请勿在请求中包含密钥或敏感个人信息。"
+    }
+  },
+  "games": {
+    "fishing": {
+      "eyebrow": "游戏 · 垂钓",
+      "title": "池塘垂钓",
+      "description": "选择鱼饵、抛下鱼线，等待服务端揭晓收获。",
+      "loading": "正在加载垂钓…",
+      "balance": "可用积分",
+      "balanceHint": "所有游戏费用与派彩均由服务端决定。",
+      "balanceRetry": "重试检查余额",
+      "balanceRetrying": "正在检查余额…",
+      "balanceUnknown": "服务端确认余额前暂不可用",
+      "balanceUnknownAlert": "无法确认当前余额，不能开始新的回合。",
+      "balanceUnknownHint": "服务端确认当前余额前，抛竿操作已禁用。",
+      "disabledTitle": "垂钓尚未开放",
+      "disabledBody": "管理员尚未启用此游戏，你的余额不会改变。",
+      "baitsTitle": "选择鱼饵",
+      "baitsHint": "每次抛竿前都由服务端校验价格和余额。",
+      "baitsLabel": "垂钓鱼饵",
+      "ticket": "一张券",
+      "creditsUnit": "积分",
+      "cast": "抛竿",
+      "castWorking": "正在抛竿…",
+      "baits": {
+        "worm": "蚯蚓",
+        "lure": "拟饵",
+        "premium": "高级拟饵"
+      },
+      "errors": {
+        "unavailable": "当前不可用",
+        "insufficient": "可用积分不足",
+        "pending": "请先完成待处理回合",
+        "resultPending": "请先查看当前结果，再开始抛竿",
+        "disabled": "垂钓当前已关闭",
+        "rateLimited": "抛竿次数过多，请稍后再试"
+      },
+      "phase": {
+        "idle": "选择鱼饵后抛竿。",
+        "casting": "正在抛竿…",
+        "waiting": "正在等待鱼咬钩…",
+        "reeling": "正在收线…",
+        "settling": "正在确认服务端结果…",
+        "result": "收获已准备好查看。",
+        "error": "服务端尚未确认此回合，请在准备好后重试结算。",
+        "startError": "没有创建付费回合，请选择鱼饵后重试。"
+      },
+      "stage": {
+        "title": "池塘",
+        "pending": "回合处理中",
+        "autoSettle": "即使页面关闭，服务端也会安全恢复这个已付费回合。",
+        "retry": "重试结算",
+        "retryWorking": "正在重试…"
+      },
+      "result": {
+        "fishTitle": "收获已确认",
+        "treasureTitle": "发现宝物",
+        "junkTitle": "平静的一竿",
+        "recovered": "已从服务端恢复",
+        "serverConfirmed": "服务端已确认",
+        "fishDescription": "{{name}} · {{tier}}级",
+        "treasureDescription": "{{name}}",
+        "junkDescription": "{{name}} · 无派彩",
+        "size": "尺寸",
+        "meter": "计量收获",
+        "won": "获得",
+        "balance": "可用积分",
+        "ack": "标记为已查看",
+        "ackWorking": "正在确认…",
+        "more": "确认此结果后还有新的结果可查看。"
+      },
+      "profile": {
+        "title": "榜单身份",
+        "hint": "默认匿名；此偏好适用于所有游戏。",
+        "public": "显示我的身份",
+        "publicWarning": "当前用户名、头像和 L4 徽章可能会一起显示在公开榜单行中。",
+        "privateWarning": "你的用户名、头像和 L4 徽章不会显示在榜单行中。",
+        "reconciling": "正在向服务端重新确认隐私状态…",
+        "uncertain": "无法确认隐私状态，重试前将隐藏你的身份。",
+        "retry": "重试隐私检查",
+        "makePrivate": "立即隐藏我的身份"
+      },
+      "leaderboard": {
+        "avatarFallback": "头像不可用",
+        "avatarAlt": "{{name}} 的头像",
+        "anonymous": "匿名垂钓者",
+        "level4Hint": "等级 4 视觉徽章",
+        "level4": "L4",
+        "totalScore": "总派彩",
+        "me": "你",
+        "singleTitle": "最佳收获",
+        "totalTitle": "近期总收获",
+        "singleDescription": "你钓到的最大鱼会留在这个榜单。",
+        "totalDescription": "最近 30 天已提交的派彩。",
+        "mine": "我的记录",
+        "loading": "正在加载榜单…",
+        "empty": "还没有已结算的收获。",
+        "rank": "排名",
+        "angler": "垂钓者",
+        "catch": "收获",
+        "kind": "得分",
+        "size": "尺寸",
+        "payout": "派彩",
+        "you": "你",
+        "yourRank": "你的排名：#{{rank}}"
+      },
+      "items": {
+        "whitebait": "白鱼",
+        "gudgeon": "鳑鲏",
+        "horse_mouth": "马口鱼",
+        "smelt": "银鱼",
+        "loach": "泥鳅",
+        "crucian": "鲫鱼",
+        "tilapia": "罗非鱼",
+        "yellow_catfish": "黄颡鱼",
+        "ayu": "香鱼",
+        "stream_carp": "溪流鲤",
+        "common_carp": "鲤鱼",
+        "snakehead": "黑鱼",
+        "catfish": "鲶鱼",
+        "mandarin_fish": "鳜鱼",
+        "rainbow_trout": "虹鳟",
+        "grass_carp": "草鱼",
+        "silver_carp": "白鲢",
+        "bighead_carp": "鳙鱼",
+        "black_carp": "青鱼",
+        "japanese_eel": "鳗鲡",
+        "yellowcheek": "黄唇鱼",
+        "taimen": "哲罗鲑",
+        "koi": "锦鲤",
+        "boot": "旧靴子",
+        "seaweed": "海草",
+        "plastic_bag": "塑料袋",
+        "branch": "树枝",
+        "old_tire": "旧轮胎",
+        "glasses": "眼镜",
+        "phone_case": "手机壳",
+        "fry": "小鱼",
+        "bottle": "藏宝瓶",
+        "clover": "幸运草",
+        "shell": "珍珠贝",
+        "unknown": "未知收获"
+      }
     }
   }
 }

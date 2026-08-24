@@ -54,9 +54,11 @@ const (
 // Runtime keeps the routes working with DB-only persistence (values take
 // effect on restart); the integration rail injects the shared singletons.
 type HandlerDeps struct {
-	Store               *db.Store
-	Runtime             RuntimeApplier
-	BeginUserRetirement func(userID int64) (commit func() bool, abort func() bool, err error)
+	Store                      *db.Store
+	Runtime                    RuntimeApplier
+	BeginUserRetirement        func(userID int64) (commit func() bool, abort func() bool, err error)
+	BeginUserRetirementContext func(context.Context, int64) (commit func() bool, abort func() bool, err error)
+	BeforeUserBan              func(userID int64)
 }
 
 // Handler is the mountable admin-controls route tree, wrapped in the shared
@@ -66,18 +68,20 @@ type HandlerDeps struct {
 // interleave their apply and persist orders and leave the database and the
 // runtime singleton drifted apart.
 type Handler struct {
-	store        *db.Store
-	runtime      RuntimeApplier
-	beginRetire  func(userID int64) (commit func() bool, abort func() bool, err error)
-	mux          *http.ServeMux
-	siteConfigMu sync.Mutex
+	store              *db.Store
+	runtime            RuntimeApplier
+	beginRetire        func(userID int64) (commit func() bool, abort func() bool, err error)
+	beginRetireContext func(context.Context, int64) (commit func() bool, abort func() bool, err error)
+	beforeUserBan      func(userID int64)
+	mux                *http.ServeMux
+	siteConfigMu       sync.Mutex
 }
 
 // NewHandler builds the route tree. It is meant to be wrapped by the admin
 // session middleware at the integration rail; the routes re-check station and
 // principal as defense in depth.
 func NewHandler(deps HandlerDeps) http.Handler {
-	h := &Handler{store: deps.Store, runtime: deps.Runtime, beginRetire: deps.BeginUserRetirement, mux: http.NewServeMux()}
+	h := &Handler{store: deps.Store, runtime: deps.Runtime, beginRetire: deps.BeginUserRetirement, beginRetireContext: deps.BeginUserRetirementContext, beforeUserBan: deps.BeforeUserBan, mux: http.NewServeMux()}
 	h.mux.HandleFunc("GET /admin/api/users", h.listUsers)
 	h.mux.HandleFunc("GET /admin/api/users/{id}", h.getUser)
 	h.mux.HandleFunc("PATCH /admin/api/users/{id}", h.patchUser)
@@ -411,12 +415,15 @@ func (h *Handler) banUser(w http.ResponseWriter, r *http.Request) {
 		}
 		ban.DurationSeconds = duration
 	}
-	commit, abort, err := h.beginUserRetirement(id)
+	commit, abort, err := h.beginUserRetirementContext(r.Context(), id)
 	if err != nil {
 		writeErr(w, httperr.New(httperr.CodeServiceUnavailable, "service unavailable"))
 		return
 	}
 	defer abort()
+	if h.beforeUserBan != nil {
+		h.beforeUserBan(id)
+	}
 	if err := h.store.BanUserWithOptions(id, ban); err != nil {
 		writeLimitErr(w, err)
 		return
@@ -440,6 +447,23 @@ func (h *Handler) beginUserRetirement(userID int64) (func() bool, func() bool, e
 		return nil, nil, errors.New("adminapi: invalid user retirement boundary")
 	}
 	return commit, abort, nil
+}
+
+func (h *Handler) beginUserRetirementContext(ctx context.Context, userID int64) (func() bool, func() bool, error) {
+	if h.beginRetireContext != nil {
+		commit, abort, err := h.beginRetireContext(ctx, userID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if commit == nil || abort == nil {
+			if abort != nil {
+				abort()
+			}
+			return nil, nil, errors.New("adminapi: invalid user retirement boundary")
+		}
+		return commit, abort, nil
+	}
+	return h.beginUserRetirement(userID)
 }
 
 // unbanUser handles POST /admin/api/users/{id}/unban. No body is accepted; a

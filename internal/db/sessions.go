@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
@@ -393,6 +394,35 @@ func boolInt(value bool) int {
 // idle deadline without crossing the absolute deadline.
 func (s *Store) AuthenticateUserSession(token string) (*User, error) {
 	return s.getSessionUserAt(token, false, time.Now())
+}
+
+// ValidateUserSessionBinding checks that an irreversible session hash still
+// belongs to the same active normal user. It is deliberately read-only: Debug
+// heartbeat and caller checks must not renew a browser login, lift a due ban,
+// or otherwise write to SQLite. A due temporary ban is treated the same way as
+// the authentication predicate, while an active/permanent ban invalidates the
+// binding immediately.
+func (s *Store) ValidateUserSessionBinding(ctx context.Context, userID int64, binding string) (bool, error) {
+	if s == nil || ctx == nil || userID <= 0 || len(binding) != sha256.Size*2 {
+		return false, nil
+	}
+	var decoded [sha256.Size]byte
+	if _, err := hex.Decode(decoded[:], []byte(binding)); err != nil || hex.EncodeToString(decoded[:]) != binding {
+		clear(decoded[:])
+		return false, nil
+	}
+	clear(decoded[:])
+	now := time.Now().Unix()
+	var count int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*)
+		FROM sessions s JOIN users u ON u.id=s.user_id
+		WHERE s.token_hash=? AND s.user_id=? AND u.is_admin=0
+		AND (u.is_banned=0 OR (u.banned_until IS NOT NULL AND u.banned_until<=?))
+		AND s.expires_at>? AND s.absolute_expires_at>?`, binding, userID, now, now, now).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("validate user session binding: %w", err)
+	}
+	return count == 1, nil
 }
 
 // AuthenticateAdminSession resolves only an administrator session. A normal
