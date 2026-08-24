@@ -5,7 +5,9 @@
 package connector
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"reflect"
@@ -301,10 +303,24 @@ func (c *openAIConnector) Attempt(ctx context.Context, input AttemptInput) conne
 	}
 	defer clear(plaintext)
 	defer clear(ciphertext)
-	input.Observer.TryObserve(Observation{
-		Kind: ObservationAttemptStarted, Connector: c.Type(),
-		TraceID: input.TraceID, AttemptIndex: input.AttemptIndex,
-	})
+	var callerStorePresent, callerStoreValueKnown, callerStoreValue bool
+	if input.Observer != nil {
+		storeField, present := input.Ingress.RawField("store")
+		callerStorePresent = present
+		trimmedStore := bytes.TrimSpace(storeField)
+		callerStoreValueKnown = bytes.Equal(trimmedStore, []byte("true")) || bytes.Equal(trimmedStore, []byte("false"))
+		if callerStoreValueKnown {
+			callerStoreValueKnown = json.Unmarshal(trimmedStore, &callerStoreValue) == nil
+		}
+		clear(storeField)
+		input.Observer.TryObserve(Observation{
+			Kind: ObservationAttemptStarted, Connector: c.Type(),
+			TraceID: input.TraceID, AttemptIndex: input.AttemptIndex,
+			StoreForcedFalse: input.Policy.ForceStoreFalse, FlattenApplied: input.Policy.FlattenToolCalls,
+			SafetyIdentifierApplied: input.Policy.SafetyIdentifier != "", CallerStorePresent: callerStorePresent,
+			CallerStoreValueKnown: callerStoreValueKnown, CallerStoreValue: callerStoreValue,
+		})
+	}
 	target := openai.NewTarget(
 		input.Target.BaseURL(),
 		input.Target.UpstreamModel(),
@@ -315,11 +331,16 @@ func (c *openAIConnector) Attempt(ctx context.Context, input AttemptInput) conne
 	} else {
 		result = c.driver.Attempt(ctx, input.Sink, target, input.Ingress, input.Policy.SafetyIdentifier)
 	}
-	input.Observer.TryObserve(Observation{
-		Kind: ObservationAttemptFinished, Connector: c.Type(), Success: result.Success,
-		Committed: result.Committed, Failure: result.Failure, Usage: result.Usage,
-		Diagnostic: result.Diagnostic, TraceID: input.TraceID, AttemptIndex: input.AttemptIndex,
-	})
+	if input.Observer != nil {
+		input.Observer.TryObserve(Observation{
+			Kind: ObservationAttemptFinished, Connector: c.Type(), Success: result.Success,
+			Committed: result.Committed, Failure: result.Failure, Usage: result.Usage,
+			Diagnostic: result.Diagnostic, TraceID: input.TraceID, AttemptIndex: input.AttemptIndex,
+			StoreForcedFalse: input.Policy.ForceStoreFalse, FlattenApplied: input.Policy.FlattenToolCalls,
+			SafetyIdentifierApplied: input.Policy.SafetyIdentifier != "", CallerStorePresent: callerStorePresent,
+			CallerStoreValueKnown: callerStoreValueKnown, CallerStoreValue: callerStoreValue,
+		})
+	}
 	return result
 }
 
@@ -372,14 +393,33 @@ func (c *anthropicConnector) Attempt(ctx context.Context, input AttemptInput) co
 	}
 	defer clear(plaintext)
 	defer clear(ciphertext)
-	input.Observer.TryObserve(Observation{Kind: ObservationAttemptStarted, Connector: c.Type(), TraceID: input.TraceID, AttemptIndex: input.AttemptIndex})
+	var callerStorePresent, callerStoreValueKnown, callerStoreValue bool
+	if input.Observer != nil {
+		storeField, present := input.Ingress.RawField("store")
+		callerStorePresent = present
+		trimmedStore := bytes.TrimSpace(storeField)
+		callerStoreValueKnown = bytes.Equal(trimmedStore, []byte("true")) || bytes.Equal(trimmedStore, []byte("false"))
+		if callerStoreValueKnown {
+			callerStoreValueKnown = json.Unmarshal(trimmedStore, &callerStoreValue) == nil
+		}
+		clear(storeField)
+		input.Observer.TryObserve(Observation{Kind: ObservationAttemptStarted, Connector: c.Type(), TraceID: input.TraceID, AttemptIndex: input.AttemptIndex,
+			StoreForcedFalse: input.Policy.ForceStoreFalse, FlattenApplied: input.Policy.FlattenToolCalls,
+			SafetyIdentifierApplied: input.Policy.SafetyIdentifier != "", CallerStorePresent: callerStorePresent,
+			CallerStoreValueKnown: callerStoreValueKnown, CallerStoreValue: callerStoreValue})
+	}
 	target := anthropic.NewTarget(input.Target.BaseURL(), input.Target.UpstreamModel(), anthropic.NewCredential(plaintext, ciphertext))
 	if driver, ok := c.driver.(AnthropicPolicyDriver); ok {
 		result = driver.AttemptWithPolicy(ctx, input.Sink, target, input.Ingress, input.Policy)
 	} else {
 		result = c.driver.Attempt(ctx, input.Sink, target, input.Ingress, input.Policy.SafetyIdentifier)
 	}
-	input.Observer.TryObserve(Observation{Kind: ObservationAttemptFinished, Connector: c.Type(), Success: result.Success, Committed: result.Committed, Failure: result.Failure, Usage: result.Usage, Diagnostic: result.Diagnostic, TraceID: input.TraceID, AttemptIndex: input.AttemptIndex})
+	if input.Observer != nil {
+		input.Observer.TryObserve(Observation{Kind: ObservationAttemptFinished, Connector: c.Type(), Success: result.Success, Committed: result.Committed, Failure: result.Failure, Usage: result.Usage, Diagnostic: result.Diagnostic, TraceID: input.TraceID, AttemptIndex: input.AttemptIndex,
+			StoreForcedFalse: input.Policy.ForceStoreFalse, FlattenApplied: input.Policy.FlattenToolCalls,
+			SafetyIdentifierApplied: input.Policy.SafetyIdentifier != "", CallerStorePresent: callerStorePresent,
+			CallerStoreValueKnown: callerStoreValueKnown, CallerStoreValue: callerStoreValue})
+	}
 	return result
 }
 

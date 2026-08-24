@@ -36,6 +36,19 @@ type ForwardRoute struct {
 	Candidates       []ForwardCandidate
 }
 
+// LogicalForwardRoute is the dry-run-only model projection.  Unlike
+// ForwardRoute it never joins bindings, endpoint keys, fetched caches, or
+// physical connector metadata.  Keeping this as a separate query seam is
+// essential: a dry request must not materialize a candidate set before it is
+// known that an actual send is authorized.
+type LogicalForwardRoute struct {
+	ModelID         int64
+	UserID          int64
+	FullName        string
+	RouteStrategy   string
+	FlattenToolCall bool
+}
+
 // ForwardCandidate is non-sensitive selector metadata. The candidate query
 // admits a row only while the model, binding, endpoint, key, and fetched-cache
 // row all belong to the same user and remain usable.
@@ -127,6 +140,32 @@ LIMIT ?`, userID, limit+1)
 		return nil, fmt.Errorf("iterate caller models: %w", err)
 	}
 	return models, nil
+}
+
+// ResolveLogicalForwardRoute reads only the owner-scoped logical model row.
+// It is intentionally separate from ResolveForwardRoute so Debug dry-run can
+// validate model identity and model-level policy with zero physical candidate,
+// endpoint, key, Vault, DNS, egress, or charity-reservation work.
+func (s *Store) ResolveLogicalForwardRoute(ctx context.Context, userID int64, fullName string) (LogicalForwardRoute, error) {
+	if s == nil || userID <= 0 || fullName == "" {
+		return LogicalForwardRoute{}, ErrNotFound
+	}
+	var route LogicalForwardRoute
+	var flatten int
+	err := s.db.QueryRowContext(ctx, `
+SELECT id, user_id, full_name, route_strategy, flatten_tool_calls
+FROM models
+WHERE user_id=? AND full_name=?`, userID, fullName).Scan(
+		&route.ModelID, &route.UserID, &route.FullName, &route.RouteStrategy, &flatten,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return LogicalForwardRoute{}, ErrNotFound
+	}
+	if err != nil {
+		return LogicalForwardRoute{}, fmt.Errorf("query logical forward route: %w", err)
+	}
+	route.FlattenToolCall = flatten != 0
+	return route, nil
 }
 
 // ResolveForwardRoute resolves fullName only inside userID's ownership scope

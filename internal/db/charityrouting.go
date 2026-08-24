@@ -54,6 +54,61 @@ type CharityRoute struct {
 	Candidates []CharityCandidate
 }
 
+// LogicalCharityRoute is the dry-run-only charity model projection. It is
+// intentionally limited to the namespace identity and model-level policy;
+// unlike CharityRoute it never joins bindings, donations, keys, endpoints,
+// fetched models, or reservation state.
+type LogicalCharityRoute struct {
+	ModelID         int64
+	FullName        string
+	FlattenToolCall bool
+}
+
+// ValidateLogicalCharityCaller performs the read-only eligibility gates that
+// precede a charity reservation. It deliberately does not run the expiry
+// sweep, clear a due suspension, write an activity/violation row, or touch any
+// donation/key/candidate table. A dry run must report the same feature and
+// caller eligibility outcome as a real call without creating accounting side
+// effects.
+func (s *Store) ValidateLogicalCharityCaller(ctx context.Context, userID, now int64) error {
+	if s == nil || ctx == nil || userID <= 0 || now <= 0 {
+		return ErrNotFound
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("validate logical charity caller: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	enabled, err := readCharityEnabledTx(ctx, tx)
+	if err != nil {
+		return fmt.Errorf("validate logical charity caller: feature: %w", err)
+	}
+	if !enabled {
+		return ErrCharityDisabled
+	}
+	var (
+		isBanned  int
+		isAdmin   int
+		suspended sql.NullInt64
+	)
+	err = tx.QueryRowContext(ctx,
+		`SELECT is_banned, charity_suspended_until, is_admin FROM users WHERE id=?`, userID).
+		Scan(&isBanned, &suspended, &isAdmin)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("validate logical charity caller: user: %w", err)
+	}
+	if isAdmin != 0 || isBanned != 0 {
+		return ErrNotFound
+	}
+	if suspended.Valid && suspended.Int64 > now {
+		return ErrCharitySuspended
+	}
+	return nil
+}
+
 const charityCandidatePredicate = `
 FROM charity_model_bindings b
 JOIN charity_models cm
@@ -180,6 +235,36 @@ func (s *Store) ResolveCharityRoute(ctx context.Context, fullName string, now in
 	if err := tx.Commit(); err != nil {
 		return CharityRoute{}, fmt.Errorf("commit charity route: %w", err)
 	}
+	return route, nil
+}
+
+// ResolveLogicalCharityRoute reads one enabled charity model without
+// materializing or counting a physical candidate. Debug dry validation uses
+// this seam so a request can show model-level policy while guaranteeing zero
+// donation-key, Vault, DNS, reservation, usage, activity, or egress work.
+func (s *Store) ResolveLogicalCharityRoute(ctx context.Context, fullName string) (LogicalCharityRoute, error) {
+	if s == nil || ctx == nil || fullName == "" {
+		return LogicalCharityRoute{}, ErrNotFound
+	}
+	var route LogicalCharityRoute
+	var enabled, flatten int
+	err := s.db.QueryRowContext(ctx, `
+SELECT id, full_name, enabled, flatten_tool_calls
+FROM charity_models
+WHERE full_name=?`, fullName).Scan(&route.ModelID, &route.FullName, &enabled, &flatten)
+	if errors.Is(err, sql.ErrNoRows) {
+		return LogicalCharityRoute{}, ErrNotFound
+	}
+	if err != nil {
+		return LogicalCharityRoute{}, fmt.Errorf("query logical charity route: %w", err)
+	}
+	if enabled == 0 {
+		return LogicalCharityRoute{}, ErrNotFound
+	}
+	if route.ModelID <= 0 || route.FullName != fullName {
+		return LogicalCharityRoute{}, ErrNotFound
+	}
+	route.FlattenToolCall = flatten != 0
 	return route, nil
 }
 
