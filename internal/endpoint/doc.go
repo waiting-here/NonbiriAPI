@@ -10,14 +10,16 @@
 //   - base_url: the only canonicalization boundary is internal/egress's
 //     ValidateBaseURL. This package never re-parses or simplifies URLs.
 //   - Connector: an authoritative Registry rejects unknown connector types
-//     with no silent protocol fallback (alpha: openai-compatible only).
+//     with no silent protocol fallback; the binary compiles OpenAI-compatible and
+//     Anthropic-compatible descriptors into that one closed-world catalog.
 //   - Secret: the repository allocates the key id and seals the upstream key
 //     with its authenticated user/endpoint/key/origin context in one database
 //     transaction. Plaintext never enters SQL, logs, errors, responses, or
 //     cache. Listings expose only persisted head/tail display fragments, never
 //     the ciphertext or plaintext.
 //   - Cap: endpoint creation does an atomic count-then-insert inside one
-//     transaction against min(global default, per-user override).
+//     transaction against the explicit per-user cap when non-NULL, otherwise
+//     the validated site default.
 //   - Cascade/invalidation: deleting an endpoint or key relies on the schema's
 //     ON DELETE CASCADE to drop fetched_models and model_bindings immediately.
 //

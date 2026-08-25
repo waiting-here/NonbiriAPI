@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -24,6 +25,10 @@ const (
 	maxUsernameBytes   = 256
 	maxPasswordBytes   = 4096
 	maxIntentBytes     = 64
+	// Strict JSON is bounded independently of the byte limit so a small,
+	// adversarial value cannot consume unbounded recursion or map entries.
+	maxStrictJSONDepth  = 32
+	maxStrictJSONFields = 256
 )
 
 func writeStableError(w http.ResponseWriter, code, message string) {
@@ -143,6 +148,121 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 		return false
 	}
 	return true
+}
+
+// decodeStrictJSONBody is used by the profile patch boundary where duplicate
+// JSON members must not silently select the last value. It keeps the existing
+// 16 KiB auth form bound and reuses the same stable error sink as the legacy
+// decoder.
+func decodeStrictJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	if r == nil || r.Body == nil {
+		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+		return false
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxFormBodyBytes)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		if isMaxBytesError(err) {
+			writeStableError(w, httperr.CodePayloadTooLarge, "request body too large")
+		} else {
+			writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+		}
+		return false
+	}
+	if len(body) == 0 {
+		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+		return false
+	}
+	if err := scanStrictJSON(bytes.NewReader(body)); err != nil {
+		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+		return false
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(dst); err != nil {
+		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+		return false
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+		return false
+	}
+	return true
+}
+
+func scanStrictJSON(reader io.Reader) error {
+	decoder := json.NewDecoder(reader)
+	state := strictJSONScanState{}
+	if err := scanStrictJSONValue(decoder, &state, 0); err != nil {
+		return err
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		if err == nil {
+			return errors.New("trailing json")
+		}
+		return err
+	}
+	return nil
+}
+
+type strictJSONScanState struct {
+	depth  int
+	fields int
+}
+
+func scanStrictJSONValue(decoder *json.Decoder, state *strictJSONScanState, depth int) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	if delimiter, ok := token.(json.Delim); ok {
+		if depth >= maxStrictJSONDepth {
+			return errors.New("json nesting limit")
+		}
+		switch delimiter {
+		case '{':
+			seen := make(map[string]struct{})
+			for decoder.More() {
+				keyToken, err := decoder.Token()
+				if err != nil {
+					return err
+				}
+				key, ok := keyToken.(string)
+				if !ok {
+					return errors.New("object key required")
+				}
+				if _, exists := seen[key]; exists {
+					return errors.New("duplicate json member")
+				}
+				seen[key] = struct{}{}
+				state.fields++
+				if state.fields > maxStrictJSONFields {
+					return errors.New("json field limit")
+				}
+				if err := scanStrictJSONValue(decoder, state, depth+1); err != nil {
+					return err
+				}
+			}
+			end, err := decoder.Token()
+			if err != nil || end != json.Delim('}') {
+				return errors.New("object terminator required")
+			}
+		case '[':
+			for decoder.More() {
+				if err := scanStrictJSONValue(decoder, state, depth+1); err != nil {
+					return err
+				}
+			}
+			end, err := decoder.Token()
+			if err != nil || end != json.Delim(']') {
+				return errors.New("array terminator required")
+			}
+		default:
+			return errors.New("invalid json delimiter")
+		}
+	}
+	return nil
 }
 
 func isMaxBytesError(err error) bool {

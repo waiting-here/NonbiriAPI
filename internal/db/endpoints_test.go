@@ -35,7 +35,8 @@ func seedTestUser(t *testing.T, st *Store, discordID string, endpointLimit *int)
 func setTestGlobalLimit(t *testing.T, st *Store, raw string) {
 	t.Helper()
 	if _, err := st.DB().Exec(
-		`INSERT INTO site_config (key, value, updated_at) VALUES ('default_endpoint_limit', ?, 1)`, raw); err != nil {
+		`INSERT INTO site_config (key, value, updated_at) VALUES ('default_endpoint_limit', ?, 1)
+		 ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`, raw); err != nil {
 		t.Fatalf("set global limit: %v", err)
 	}
 }
@@ -120,10 +121,10 @@ func TestCreateEndpointSameBaseURLAllowed(t *testing.T) {
 	}
 }
 
-// TestEndpointCapReadsMinOfGlobalAndUser covers the cap computation directly:
-// unset global falls back to DefaultEndpointLimit; the effective cap is the min
-// of the global default and a non-negative per-user override.
-func TestEndpointCapReadsMinOfGlobalAndUser(t *testing.T) {
+// TestEndpointCapUsesExplicitOrDefault covers the nullable override exactly:
+// only NULL uses the site default; every explicit value in the independent
+// hard range applies directly even when lower or higher than that default.
+func TestEndpointCapUsesExplicitOrDefault(t *testing.T) {
 	st := openTestStore(t, filepath.Join(t.TempDir(), "cap.db"))
 	defer st.Close()
 	uid := seedTestUser(t, st, "u", nil)
@@ -146,6 +147,13 @@ func TestEndpointCapReadsMinOfGlobalAndUser(t *testing.T) {
 	if cap != 4 {
 		t.Errorf("global cap = %d, want 4", cap)
 	}
+	// The nullable user row follows later default changes dynamically.
+	setTestGlobalLimit(t, st, "6")
+	cap, err = st.EndpointCap(context.Background(), uid)
+	if err != nil || cap != 6 {
+		t.Fatalf("dynamic default cap = (%d,%v), want 6", cap, err)
+	}
+	setTestGlobalLimit(t, st, "4")
 
 	// Per-user override below global wins.
 	uid2 := seedTestUser(t, st, "u2", intPtrDB(2))
@@ -157,14 +165,14 @@ func TestEndpointCapReadsMinOfGlobalAndUser(t *testing.T) {
 		t.Errorf("user override cap = %d, want 2", cap)
 	}
 
-	// Per-user override above global is clamped to global.
+	// Per-user override above the site default applies directly.
 	uid3 := seedTestUser(t, st, "u3", intPtrDB(10))
 	cap, err = st.EndpointCap(context.Background(), uid3)
 	if err != nil {
 		t.Fatalf("cap user3: %v", err)
 	}
-	if cap != 4 {
-		t.Errorf("user override above global cap = %d, want 4 (global)", cap)
+	if cap != 10 {
+		t.Errorf("user override above default = %d, want 10", cap)
 	}
 
 	// Zero override blocks all endpoints.
@@ -177,14 +185,39 @@ func TestEndpointCapReadsMinOfGlobalAndUser(t *testing.T) {
 		t.Errorf("zero override cap = %d, want 0", cap)
 	}
 
-	// Negative override is treated as unset (global default).
-	uid5 := seedTestUser(t, st, "u5", intPtrDB(-1))
-	cap, err = st.EndpointCap(context.Background(), uid5)
-	if err != nil {
-		t.Fatalf("cap user5: %v", err)
+	// Generation one refuses a negative explicit override at the DB boundary.
+	if _, err := st.DB().Exec(`INSERT INTO users (discord_id, username, endpoint_limit, created_at, updated_at) VALUES ('u5','u5',-1,1,1)`); err == nil {
+		t.Fatal("negative endpoint override passed the schema CHECK")
 	}
-	if cap != 4 {
-		t.Errorf("negative override cap = %d, want 4 (global, negative ignored)", cap)
+}
+
+func TestEndpointExplicitOverrideDoesNotReadDefault(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		raw  *string
+	}{
+		{name: "missing", raw: nil},
+		{name: "zero", raw: strPtrDB("0")},
+		{name: "corrupt", raw: strPtrDB("not-a-number")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st := openTestStore(t, filepath.Join(t.TempDir(), "explicit.db"))
+			defer st.Close()
+			uid := seedTestUser(t, st, "explicit-"+tc.name, intPtrDB(10))
+			if tc.raw != nil {
+				setTestGlobalLimit(t, st, *tc.raw)
+			}
+			cap, err := st.EndpointCap(context.Background(), uid)
+			if err != nil || cap != 10 {
+				t.Fatalf("explicit cap with %s default = %d, %v; want 10, nil", tc.name, cap, err)
+			}
+			for i := 0; i < 10; i++ {
+				mustCreateTestEndpoint(t, st, uid, fmt.Sprintf("https://example.com/%s/%d", tc.name, i))
+			}
+			if _, err := st.CreateEndpoint(context.Background(), uid, "openai-compatible", "https://example.com/overflow", "", true, 1); !errors.Is(err, ErrEndpointCap) {
+				t.Fatalf("eleventh endpoint err=%v, want endpoint cap", err)
+			}
+		})
 	}
 }
 

@@ -99,6 +99,25 @@ WHERE b.model_id=? AND m.user_id=?`, modelID, userID).Scan(&count); err != nil {
 	if count >= cap {
 		return ModelBinding{}, newCapError(ErrBindingCap, ResourceBinding, cap)
 	}
+	var flattenInt int
+	if err := tx.QueryRowContext(ctx, `SELECT flatten_tool_calls FROM models WHERE id=? AND user_id=?`, modelID, userID).Scan(&flattenInt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ModelBinding{}, ErrNotFound
+		}
+		return ModelBinding{}, fmt.Errorf("read model policy: %w", err)
+	}
+	if flattenInt != 0 {
+		var connector string
+		err := tx.QueryRowContext(ctx, `
+SELECT e.connector_type FROM endpoint_keys ek JOIN endpoints e ON e.id=ek.endpoint_id
+WHERE ek.id=? AND e.user_id=?`, endpointKeyID, userID).Scan(&connector)
+		if err == nil && connector != "openai-compatible" {
+			return ModelBinding{}, ErrConflict
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return ModelBinding{}, fmt.Errorf("read binding connector: %w", err)
+		}
+	}
 
 	res, err := tx.ExecContext(ctx, `
 INSERT INTO model_bindings (model_id, endpoint_key_id, upstream_model_id, ord, created_at)
@@ -201,6 +220,25 @@ func (s *Store) UpdateBinding(ctx context.Context, userID, modelID, bindingID in
 	newUpstream := current.UpstreamModelID
 	if upstreamModelID != nil {
 		newUpstream = *upstreamModelID
+	}
+	var flattenInt int
+	if err := tx.QueryRowContext(ctx, `SELECT flatten_tool_calls FROM models WHERE id=? AND user_id=?`, modelID, userID).Scan(&flattenInt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ModelBinding{}, ErrNotFound
+		}
+		return ModelBinding{}, fmt.Errorf("read model policy for update: %w", err)
+	}
+	if flattenInt != 0 {
+		var connector string
+		err := tx.QueryRowContext(ctx, `
+SELECT e.connector_type FROM endpoint_keys ek JOIN endpoints e ON e.id=ek.endpoint_id
+WHERE ek.id=? AND e.user_id=?`, current.EndpointKeyID, userID).Scan(&connector)
+		if err == nil && connector != "openai-compatible" {
+			return ModelBinding{}, ErrConflict
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return ModelBinding{}, fmt.Errorf("read binding connector for update: %w", err)
+		}
 	}
 	if newOrd == current.Ord && newUpstream == current.UpstreamModelID {
 		if err := tx.Commit(); err != nil {

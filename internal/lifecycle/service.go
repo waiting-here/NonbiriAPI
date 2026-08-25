@@ -47,27 +47,45 @@ type AdminPasswordVerifier interface {
 // required; Throttle defaults to a bounded in-memory elevate-attempt limiter
 // when nil (owned by the service).
 type Config struct {
-	Store         *db.Store
-	Elevation     *elevation.Manager
-	AdminVerifier AdminPasswordVerifier
-	Throttle      auth.LoginThrottle
+	Store               *db.Store
+	Elevation           *elevation.Manager
+	AdminVerifier       AdminPasswordVerifier
+	Throttle            auth.LoginThrottle
+	BeginUserRetirement func(userID int64) (commit func() bool, abort func() bool, err error)
+	// BeginUserRetirementContext is the context-aware form used by request
+	// driven deletion paths. It can exclude the current request's lease when
+	// that request is itself applying an automatic retirement.
+	BeginUserRetirementContext func(context.Context, int64) (commit func() bool, abort func() bool, err error)
+	// BeginUserDeletion coordinates process-local state that must survive a
+	// failed DB delete. It begins after the admission write barrier is held;
+	// Commit runs only after DB success, while every failure calls Abort.
+	BeginUserDeletion func(userID int64) (commit func() bool, abort func() bool, err error)
 	// PreDeleteUser is invoked synchronously BEFORE the account-deletion
 	// transaction opens. It lets an in-flight routing rail (the charity exit)
 	// cancel the user's active upstream contexts so a late callback linearizes
 	// against the delete instead of racing it. It must not block on the DB.
 	PreDeleteUser func(userID int64)
+	// BeforeDeleteUser closes deletion-specific process-local state after the
+	// deletion boundary is acquired and immediately before the DB transaction.
+	// It intentionally remains separate from the generic retirement hook so a
+	// delete is never projected as a ban. It is not rolled back on DB failure.
+	BeforeDeleteUser func(userID int64)
 }
 
 // Service is the mountable account-lifecycle service. It owns only an
 // optional default elevate throttle; the caller owns the store, the elevation
 // manager, and the injected verifier/throttle.
 type Service struct {
-	store         *db.Store
-	elevation     *elevation.Manager
-	adminVerifier AdminPasswordVerifier
-	throttle      auth.LoginThrottle
-	ownedThrottle *ratelimit.LoginThrottle
-	preDeleteUser func(userID int64)
+	store                      *db.Store
+	elevation                  *elevation.Manager
+	adminVerifier              AdminPasswordVerifier
+	throttle                   auth.LoginThrottle
+	ownedThrottle              *ratelimit.LoginThrottle
+	preDeleteUser              func(userID int64)
+	beforeDeleteUser           func(userID int64)
+	beginUserRetirement        func(userID int64) (commit func() bool, abort func() bool, err error)
+	beginUserRetirementContext func(context.Context, int64) (commit func() bool, abort func() bool, err error)
+	beginUserDeletion          func(userID int64) (commit func() bool, abort func() bool, err error)
 }
 
 // NewService validates the configuration and returns a mountable service.
@@ -82,11 +100,15 @@ func NewService(cfg Config) (*Service, error) {
 		return nil, errors.New("lifecycle: admin verifier is required")
 	}
 	svc := &Service{
-		store:         cfg.Store,
-		elevation:     cfg.Elevation,
-		adminVerifier: cfg.AdminVerifier,
-		throttle:      cfg.Throttle,
-		preDeleteUser: cfg.PreDeleteUser,
+		store:                      cfg.Store,
+		elevation:                  cfg.Elevation,
+		adminVerifier:              cfg.AdminVerifier,
+		throttle:                   cfg.Throttle,
+		preDeleteUser:              cfg.PreDeleteUser,
+		beforeDeleteUser:           cfg.BeforeDeleteUser,
+		beginUserRetirement:        cfg.BeginUserRetirement,
+		beginUserRetirementContext: cfg.BeginUserRetirementContext,
+		beginUserDeletion:          cfg.BeginUserDeletion,
 	}
 	if svc.throttle == nil {
 		throttle, err := ratelimit.NewLoginThrottle(ratelimit.DefaultLoginThrottleConfig())
@@ -175,6 +197,19 @@ func (s *Service) DeleteOwnAccountBound(ctx context.Context, user *db.User, elev
 	if consumeErr != nil {
 		return ErrElevationRequired
 	}
+	commit, abort, err := s.beginRetirement(ctx, user.ID)
+	if err != nil {
+		return err
+	}
+	defer abort()
+	deleteCommit, deleteAbort, err := s.beginDeletion(user.ID)
+	if err != nil {
+		return err
+	}
+	defer deleteAbort()
+	if s.beforeDeleteUser != nil {
+		s.beforeDeleteUser(user.ID)
+	}
 	if s.preDeleteUser != nil {
 		s.preDeleteUser(user.ID)
 	}
@@ -190,6 +225,8 @@ func (s *Service) DeleteOwnAccountBound(ctx context.Context, user *db.User, elev
 		}
 		return err
 	}
+	deleteCommit()
+	commit()
 	return nil
 }
 
@@ -222,8 +259,73 @@ func (s *Service) DeleteUserAsAdminBound(ctx context.Context, admin *db.User, ta
 	if consumeErr != nil {
 		return ErrElevationRequired
 	}
+	commit, abort, err := s.beginRetirement(ctx, targetUserID)
+	if err != nil {
+		return err
+	}
+	defer abort()
+	deleteCommit, deleteAbort, err := s.beginDeletion(targetUserID)
+	if err != nil {
+		return err
+	}
+	defer deleteAbort()
+	if s.beforeDeleteUser != nil {
+		s.beforeDeleteUser(targetUserID)
+	}
 	if s.preDeleteUser != nil {
 		s.preDeleteUser(targetUserID)
 	}
-	return s.store.DeleteUserAccount(ctx, targetUserID)
+	if err := s.store.DeleteUserAccount(ctx, targetUserID); err != nil {
+		return err
+	}
+	deleteCommit()
+	commit()
+	return nil
+}
+
+func (s *Service) beginRetirement(ctx context.Context, userID int64) (func() bool, func() bool, error) {
+	if s.beginUserRetirementContext != nil {
+		commit, abort, err := s.beginUserRetirementContext(ctx, userID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if commit == nil || abort == nil {
+			if abort != nil {
+				abort()
+			}
+			return nil, nil, errors.New("lifecycle: invalid user retirement boundary")
+		}
+		return commit, abort, nil
+	}
+	if s.beginUserRetirement == nil {
+		return func() bool { return true }, func() bool { return false }, nil
+	}
+	commit, abort, err := s.beginUserRetirement(userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if commit == nil || abort == nil {
+		if abort != nil {
+			abort()
+		}
+		return nil, nil, errors.New("lifecycle: invalid user retirement boundary")
+	}
+	return commit, abort, nil
+}
+
+func (s *Service) beginDeletion(userID int64) (func() bool, func() bool, error) {
+	if s.beginUserDeletion == nil {
+		return func() bool { return true }, func() bool { return false }, nil
+	}
+	commit, abort, err := s.beginUserDeletion(userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if commit == nil || abort == nil {
+		if abort != nil {
+			abort()
+		}
+		return nil, nil, errors.New("lifecycle: invalid user deletion boundary")
+	}
+	return commit, abort, nil
 }

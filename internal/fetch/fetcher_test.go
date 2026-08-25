@@ -17,12 +17,52 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
+	"github.com/waiting-here/NonbiriAPI/internal/connector"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
+
+type registryFetchConnector struct {
+	connectorType connectorcontract.Type
+	capabilities  connectorcontract.CapabilitySet
+}
+
+func (c registryFetchConnector) Type() connectorcontract.Type { return c.connectorType }
+func (c registryFetchConnector) Capabilities() connectorcontract.CapabilitySet {
+	return c.capabilities
+}
+func (registryFetchConnector) Attempt(context.Context, connector.AttemptInput) connectorcontract.AttemptResult {
+	return connectorcontract.AttemptResult{}
+}
+
+type registryFetchDiscoverer struct{ calls *atomic.Int64 }
+
+func (d registryFetchDiscoverer) Discover(context.Context, connectorcontract.DiscoveryInput) connectorcontract.DiscoveryResult {
+	d.calls.Add(1)
+	return connectorcontract.DiscoveryResult{Models: []connectorcontract.DiscoveredModel{{ID: "registry/model", Provider: "registry"}}}
+}
+
+func testFetchRegistry(t *testing.T, connectorType connectorcontract.Type, discoverer connector.ModelDiscoverer) *endpoint.Registry {
+	t.Helper()
+	capabilities := connectorcontract.CapabilitySet(connectorcontract.CapabilityText)
+	if discoverer != nil {
+		capabilities |= connectorcontract.CapabilitySet(connectorcontract.CapabilityModelDiscovery)
+	}
+	registry, err := connector.NewRegistry(connector.Descriptor{
+		Type: connectorType, Capabilities: capabilities, Discoverer: discoverer,
+		New: func(connector.Dependencies) connector.Connector {
+			return registryFetchConnector{connectorType: connectorType, capabilities: capabilities}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return registry
+}
 
 // testResolver answers every hostname with a fixed public address, so
 // AddSelfOrigins can register the fake station names without touching the
@@ -331,6 +371,20 @@ func TestFetchSuccessReplacesCacheAndClearsFlag(t *testing.T) {
 	}
 }
 
+func TestFetchPersistsFrozenUnicodeModelIDMaximum(t *testing.T) {
+	f := newFetchFixture(t, nil)
+	modelID := strings.Repeat("界", MaxModelIDRunes)
+	f.setHandler(modelsHandler(modelID))
+	uid, endpointID, keyID := f.seedCombo(t, f.upstream.URL)
+	if err := f.fetcher.fetchOne(context.Background(), uid, endpointID, keyID); err != nil {
+		t.Fatal("maximum Unicode model id fetch failed")
+	}
+	rows := f.cacheRows(t, uid, endpointID, keyID)
+	if len(rows) != 1 || rows[0].UpstreamModelID != modelID {
+		t.Fatal("maximum Unicode model id did not survive the validated cache write")
+	}
+}
+
 // TestFetchFailureStatusClearsFlagsAndWritesBoundedIssue asserts a 500 with
 // an upstream error body clears the prior cache, sets the flag, and writes a
 // bounded issue that carries neither the key nor the full body.
@@ -363,13 +417,13 @@ func TestFetchFailureStatusClearsFlagsAndWritesBoundedIssue(t *testing.T) {
 	}
 	msg := f.issueMessage(t, uid)
 	if strings.Contains(msg, "sk-upstream-secret") {
-		t.Errorf("issue leaks the key: %q", msg)
+		t.Error("issue leaks credential material")
 	}
 	if strings.Contains(msg, strings.Repeat("x", 2000)) {
 		t.Errorf("issue contains the full upstream body")
 	}
 	if !strings.Contains(msg, "upstream returned status 500") {
-		t.Errorf("issue = %q, want status summary", msg)
+		t.Error("issue does not contain the stable status summary")
 	}
 	if len(msg) > maxIssueDiagBytes+64 {
 		t.Errorf("issue length %d exceeds diag bound", len(msg))
@@ -392,7 +446,60 @@ func TestFetchFailureBodyEchoingKeyIsWithheld(t *testing.T) {
 	}
 	msg := f.issueMessage(t, uid)
 	if strings.Contains(msg, "sk-upstream-secret") {
-		t.Errorf("issue leaks the echoed key: %q", msg)
+		t.Error("issue leaks echoed credential material")
+	}
+}
+
+func TestFetchStatusErrorBodyNeverPersistsSensitiveFragments(t *testing.T) {
+	tests := []string{"credential boundary", "maximum credential", "URL boundary"}
+	for _, name := range tests {
+		t.Run(name, func(t *testing.T) {
+			f := newFetchFixture(t, nil)
+			baseURL := f.upstream.URL
+			secretText := "ordinary-test-credential"
+			body := ""
+			forbidden := ""
+			switch name {
+			case "credential boundary":
+				secretText = "nb-boundary-key-" + strings.Repeat("K", 80)
+				body = strings.Repeat("x", 450) + secretText
+				forbidden = secretText[:24]
+			case "maximum credential":
+				secretText = strings.Repeat("M", endpoint.MaxSecretBytes)
+				body = secretText
+				forbidden = secretText[:64]
+			case "URL boundary":
+				baseURL += "/mount/" + strings.Repeat("u", 80)
+				body = strings.Repeat("x", 450) + baseURL
+				forbidden = baseURL[:32]
+			}
+			f.setHandler(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusBadGateway)
+				_, _ = w.Write([]byte(body))
+			})
+			uid := f.seedUser(t, "status-body-"+strings.ReplaceAll(name, " ", "-"))
+			endpointRow, err := f.store.CreateEndpoint(context.Background(), uid, "openai-compatible", baseURL, "", true, 1)
+			if err != nil {
+				t.Fatal("could not create status-body endpoint fixture")
+			}
+			key, err := f.store.CreateEndpointKey(context.Background(), uid, endpointRow.ID, []byte(secretText), "head", "tail", "", true, 1)
+			if err != nil {
+				t.Fatal("could not create status-body credential fixture")
+			}
+			if err := f.fetcher.fetchOne(context.Background(), uid, endpointRow.ID, key.ID); err != nil {
+				t.Fatal("status-body fetch failed outside the controlled upstream path")
+			}
+			if f.issueCount(t, uid) != 1 {
+				t.Fatal("status-body fetch did not persist exactly one issue")
+			}
+			message := f.issueMessage(t, uid)
+			if message != "model fetch failed: upstream returned status 502" {
+				t.Fatal("persisted issue was not reduced to the stable local status category")
+			}
+			if strings.Contains(message, forbidden) {
+				t.Fatal("persisted issue retained sensitive upstream body material")
+			}
+		})
 	}
 }
 
@@ -417,7 +524,7 @@ func TestFetchRejectsRedirect(t *testing.T) {
 	}
 	msg := f.issueMessage(t, uid)
 	if strings.Contains(msg, f.upstream.URL) {
-		t.Errorf("issue echoes the URL: %q", msg)
+		t.Error("issue echoes the upstream URL")
 	}
 }
 
@@ -558,10 +665,10 @@ func TestFetchTamperedEnvelopeFailsClosed(t *testing.T) {
 	}
 	msg := f.issueMessage(t, uid)
 	if strings.Contains(msg, "nbsec") || strings.Contains(msg, "AAAA") {
-		t.Errorf("issue leaks envelope material: %q", msg)
+		t.Error("issue leaks envelope material")
 	}
 	if msg != "model fetch failed: credential unavailable" {
-		t.Errorf("issue = %q, want opaque credential summary", msg)
+		t.Error("issue does not contain the opaque credential summary")
 	}
 }
 
@@ -631,7 +738,7 @@ func TestFetchContextExchangeAndLegacyEnvelopeNeverDial(t *testing.T) {
 			}
 			message := f.issueMessage(t, uid)
 			if message != "model fetch failed: credential unavailable" {
-				t.Fatalf("issue=%q, want opaque credential failure", message)
+				t.Fatal("issue does not contain the opaque credential failure")
 			}
 			for _, marker := range []string{ciphertext, origin, wrongOrigin, "context-exchange", "legacy-runtime"} {
 				if strings.Contains(message, marker) {
@@ -833,6 +940,64 @@ func TestFetcherValidation(t *testing.T) {
 	}
 	if _, err := NewFetcher(FetcherConfig{Store: f.store, Backend: f.backend, Secrets: f.vault, Registry: nil}); err == nil {
 		t.Errorf("nil registry accepted")
+	}
+}
+
+func TestFetchUsesDescriptorDiscovererAsOnlyProtocolPath(t *testing.T) {
+	var calls atomic.Int64
+	registry := testFetchRegistry(t, connectorcontract.TypeOpenAICompatible, registryFetchDiscoverer{calls: &calls})
+	f := newFetchFixture(t, func(cfg *FetcherConfig, _ *egress.StackOptions) { cfg.Registry = registry })
+	uid, endpointID, keyID := f.seedCombo(t, f.upstream.URL)
+	if err := f.fetcher.fetchOne(context.Background(), uid, endpointID, keyID); err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("descriptor discoverer calls = %d, want 1", calls.Load())
+	}
+	if f.hits.Load() != 0 {
+		t.Fatalf("parallel hard-coded fetch path reached upstream %d times", f.hits.Load())
+	}
+	rows := f.cacheRows(t, uid, endpointID, keyID)
+	if len(rows) != 1 || rows[0].UpstreamModelID != "registry/model" || rows[0].Provider != "registry" {
+		t.Fatalf("descriptor models were not cached: %+v", rows)
+	}
+}
+
+func TestFetchUnsupportedDiscovererDoesNotWriteFailureOrClearCache(t *testing.T) {
+	// Anthropic is a generation-1 persisted connector type, but this custom
+	// descriptor intentionally advertises no model-discovery capability. This
+	// exercises the nil-discoverer behavior without weakening the schema's
+	// closed-world connector CHECK or bypassing the repository.
+	const noDiscoveryType = connectorcontract.TypeAnthropicCompatible
+	registry := testFetchRegistry(t, noDiscoveryType, nil)
+	f := newFetchFixture(t, func(cfg *FetcherConfig, _ *egress.StackOptions) { cfg.Registry = registry })
+	uid := f.seedUser(t, "unsupported-discovery")
+	endpointRow, err := f.store.CreateEndpoint(context.Background(), uid, string(noDiscoveryType), f.upstream.URL, "", true, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := f.store.CreateEndpointKey(context.Background(), uid, endpointRow.ID, []byte("sk-upstream-secret-0123456789"), "sk-up", "6789", "note", true, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.ReplaceFetchedModels(context.Background(), uid, endpointRow.ID, key.ID, []db.FetchedModel{{
+		EndpointKeyID: key.ID, UpstreamModelID: "existing/model", Provider: "existing", Status: "ok",
+	}}, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.fetcher.fetchOne(context.Background(), uid, endpointRow.ID, key.ID); err != nil {
+		t.Fatal(err)
+	}
+	if f.hits.Load() != 0 {
+		t.Fatalf("unsupported discoverer reached upstream %d times", f.hits.Load())
+	}
+	rows := f.cacheRows(t, uid, endpointRow.ID, key.ID)
+	if len(rows) != 1 || rows[0].UpstreamModelID != "existing/model" {
+		t.Fatalf("unsupported discoverer changed cache: %+v", rows)
+	}
+	failed, _ := f.flag(t, uid, endpointRow.ID)
+	if failed {
+		t.Fatal("unsupported discoverer wrote endpoint failure")
 	}
 }
 

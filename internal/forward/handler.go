@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
@@ -40,7 +41,7 @@ func CallerIdentity(request *http.Request) (int64, error) {
 // charity rail and a charity model can never enter the personal one.
 type CharityRail interface {
 	ListCallerModels(ctx context.Context) ([]db.CallerModel, error)
-	Forward(ctx context.Context, writer http.ResponseWriter, userID int64, request *openai.ChatRequest) (openai.AttemptResult, error)
+	Forward(ctx context.Context, writer http.ResponseWriter, userID int64, request *openai.ChatRequest) (connectorcontract.AttemptResult, error)
 }
 
 // Charity control-flow sentinels returned by CharityRail.Forward and mapped by
@@ -172,7 +173,7 @@ func (h *Handler) chatCompletions(writer http.ResponseWriter, request *http.Requ
 		writeError(writer, httperr.CodeInternal, "internal error", "")
 		return
 	}
-	if !validRequestContentType(request) || request.Header.Get("Content-Encoding") != "" {
+	if !ValidateChatIngress(request) {
 		writeError(writer, httperr.CodeInvalidRequest, "invalid request", "")
 		return
 	}
@@ -213,20 +214,32 @@ func (h *Handler) chatCompletions(writer http.ResponseWriter, request *http.Requ
 			writeError(writer, httperr.CodeNotFound, "model not found", "")
 		case errors.Is(err, ErrUnboundModel):
 			writeError(writer, httperr.CodeUnboundModel, "model has no usable binding", "")
+		case errors.Is(err, openai.ErrInvalidRequest):
+			writeError(writer, httperr.CodeInvalidRequest, "invalid request", "")
+		case errors.Is(err, ErrUnsupportedCapabilities):
+			writeError(writer, httperr.CodeInvalidRequest, "model does not support this request field combination", "")
 		default:
 			writeError(writer, httperr.CodeInternal, "internal error", "")
 		}
 		return
 	}
-	if result.Success || result.Committed || result.SinkFailed || result.Failure == openai.FailureCanceled || request.Context().Err() != nil {
+	if result.Success || result.Committed || result.SinkFailed || result.Failure == connectorcontract.FailureCanceled || request.Context().Err() != nil {
 		return
 	}
 	switch result.Failure {
-	case openai.FailureUpstream:
+	case connectorcontract.FailureUpstream:
 		writeError(writer, httperr.CodeUpstream, "upstream request failed", result.Diagnostic)
 	default:
 		writeError(writer, httperr.CodeInternal, "internal error", "")
 	}
+}
+
+// ValidateChatIngress is the shared pre-body ingress gate for the OpenAI
+// caller route. Debug dry mode calls this exact seam before reading or
+// simulating a request so content-type/content-encoding behavior cannot drift
+// from ordinary forwarding.
+func ValidateChatIngress(request *http.Request) bool {
+	return validRequestContentType(request) && request.Header.Get("Content-Encoding") == ""
 }
 
 // charityChat dispatches one [公益] request through the charity rail and maps
@@ -242,6 +255,8 @@ func (h *Handler) charityChat(writer http.ResponseWriter, request *http.Request,
 		switch {
 		case errors.Is(err, ErrCharityContentTooShort), errors.Is(err, ErrAntiAbuseUnavailable), errors.Is(err, openai.ErrInvalidRequest):
 			h.writeCharityPreflightError(writer, err)
+		case errors.Is(err, ErrUnsupportedCapabilities):
+			writeError(writer, httperr.CodeInvalidRequest, "model does not support this request field combination", "")
 		case errors.Is(err, ErrCharityModelNotFound):
 			writeError(writer, httperr.CodeNotFound, "model not found", "")
 		case errors.Is(err, ErrCharityUnboundModel):
@@ -259,11 +274,11 @@ func (h *Handler) charityChat(writer http.ResponseWriter, request *http.Request,
 		}
 		return
 	}
-	if result.Success || result.Committed || result.SinkFailed || result.Failure == openai.FailureCanceled || request.Context().Err() != nil {
+	if result.Success || result.Committed || result.SinkFailed || result.Failure == connectorcontract.FailureCanceled || request.Context().Err() != nil {
 		return
 	}
 	switch result.Failure {
-	case openai.FailureUpstream:
+	case connectorcontract.FailureUpstream:
 		writeError(writer, httperr.CodeUpstream, "upstream request failed", result.Diagnostic)
 	default:
 		writeError(writer, httperr.CodeInternal, "internal error", "")

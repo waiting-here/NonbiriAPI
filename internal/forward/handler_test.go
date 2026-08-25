@@ -73,6 +73,7 @@ type forwardFixture struct {
 	codec    *countingCodec
 	stack    *egress.Stack
 	registry *endpoint.Registry
+	runner   *SecureRunner
 	handler  http.Handler
 	service  *Service
 }
@@ -145,10 +146,7 @@ func newForwardFixtureCfg(t *testing.T, allowed []string, hooks Hooks, selector 
 		t.Fatal(err)
 	}
 	registry := endpoint.NewRegistry()
-	adapter, err := openai.NewAdapter(openai.AdapterConfig{Backend: mustLocalBackend(t, stack)})
-	if err != nil {
-		t.Fatal(err)
-	}
+	localBackend := mustLocalBackend(t, stack)
 	safetyIdentifierKey := derivedSafetyIdentifierKey(t, vault)
 	safetyIdentifierFactory, err := NewSafetyIdentifierFactory(safetyIdentifierKey)
 	clear(safetyIdentifierKey)
@@ -159,7 +157,7 @@ func newForwardFixtureCfg(t *testing.T, allowed []string, hooks Hooks, selector 
 		Repository:        store,
 		Secrets:           codec,
 		Registry:          registry,
-		Adapters:          []Adapter{adapter},
+		Backend:           localBackend,
 		SafetyIdentifiers: safetyIdentifierFactory,
 	})
 	if err != nil {
@@ -177,7 +175,7 @@ func newForwardFixtureCfg(t *testing.T, allowed []string, hooks Hooks, selector 
 	}
 	exit := NewHandler(HandlerDeps{Service: service, Identity: CallerIdentity})
 	wrapped := auth.CallerKeyMiddleware(store, exit)
-	fixture := &forwardFixture{store: store, codec: codec, stack: stack, registry: registry, handler: wrapped, service: service}
+	fixture := &forwardFixture{store: store, codec: codec, stack: stack, registry: registry, runner: runner, handler: wrapped, service: service}
 	t.Cleanup(func() {
 		_ = service.Close()
 		_ = safetyIdentifierFactory.Close()
@@ -555,7 +553,13 @@ func TestForwardSSRFAndUnknownConnectorFailClosedWithoutSensitiveDiagnostics(t *
 		t.Fatalf("self-origin status=%d body=%s", self.Code, self.Body.String())
 	}
 
+	if _, err := fixture.store.DB().Exec(`PRAGMA ignore_check_constraints=ON`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := fixture.store.DB().Exec(`UPDATE endpoints SET base_url=?, connector_type='unknown-protocol' WHERE id=?`, upstream.URL, route.endpoint); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.store.DB().Exec(`PRAGMA ignore_check_constraints=OFF`); err != nil {
 		t.Fatal(err)
 	}
 	unknown := performCaller(fixture.handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, body))
@@ -690,6 +694,21 @@ func TestForwardRequestValidationStableErrorsAndNoDial(t *testing.T) {
 		})
 	}
 
+	// The ingress decoder projects stream:null for connector capability
+	// filtering, but a model whose candidates are all OpenAI-compatible keeps
+	// the pre-connector exact validation wire. This guards both the stable error
+	// text and JSON field order, not merely the machine code.
+	streamNull := performCaller(fixture.handler, callerRequest(
+		http.MethodPost,
+		"/v1/chat/completions",
+		user.key,
+		`{"model":"p/m","messages":[{"role":"user","content":"hi"}],"stream":null}`,
+	))
+	wantStreamNull := []byte("{\"error\":{\"code\":\"invalid_request\",\"source\":\"platform\",\"message\":\"invalid request\"}}\n")
+	if streamNull.Code != http.StatusBadRequest || !bytes.Equal(streamNull.Body.Bytes(), wantStreamNull) {
+		t.Fatalf("stream:null status=%d body=%q want=%q", streamNull.Code, streamNull.Body.Bytes(), wantStreamNull)
+	}
+
 	oversized := `{"model":"p/m","x":"` + strings.Repeat("x", int(openai.MaxRequestBodyBytes)) + `"}`
 	overResponse := performCaller(fixture.handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, oversized))
 	if overResponse.Code != http.StatusRequestEntityTooLarge || responseCode(t, overResponse) != httperr.CodePayloadTooLarge {
@@ -792,10 +811,11 @@ func TestSecureRunnerConstructionAndTargetInvalidation(t *testing.T) {
 // fakeCharityRail is the test double for the [公益] routing exit. It records
 // whether Forward was invoked and what model name it received.
 type fakeCharityRail struct {
-	models    []db.CallerModel
-	forwardOK bool
-	recvModel string
-	recvUser  int64
+	models     []db.CallerModel
+	forwardOK  bool
+	forwardErr error
+	recvModel  string
+	recvUser   int64
 }
 
 func (f *fakeCharityRail) ListCallerModels(ctx context.Context) ([]db.CallerModel, error) {
@@ -805,11 +825,53 @@ func (f *fakeCharityRail) ListCallerModels(ctx context.Context) ([]db.CallerMode
 func (f *fakeCharityRail) Forward(ctx context.Context, writer http.ResponseWriter, userID int64, request *openai.ChatRequest) (openai.AttemptResult, error) {
 	f.recvUser = userID
 	f.recvModel = request.Model
+	if f.forwardErr != nil {
+		return openai.AttemptResult{}, f.forwardErr
+	}
 	if f.forwardOK {
 		_, _ = writer.Write([]byte(`{"id":"x","object":"chat.completion","created":1,"model":"up","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`))
 		return openai.AttemptResult{Success: true, Committed: true, Usage: openai.Usage{OutputTokens: 1, Present: true}}, nil
 	}
 	return openai.AttemptResult{Failure: openai.FailureUpstream, Diagnostic: "charity unavailable"}, nil
+}
+
+func TestCharityOpenAIOnlyStreamNullKeepsLegacyExactWire(t *testing.T) {
+	fixture := newForwardFixture(t, nil, Hooks{}, nil, nil)
+	user := fixture.addUser(t, "charity-stream-null")
+	rail := &fakeCharityRail{forwardErr: openai.ErrInvalidRequest}
+	exit := NewHandler(HandlerDeps{Service: fixture.service, Charity: rail, Identity: CallerIdentity})
+	handler := auth.CallerKeyMiddleware(fixture.store, exit)
+	body := `{"model":"[公益]donor/charity","messages":[{"role":"user","content":"hi"}],"stream":null}`
+	response := performCaller(handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, body))
+	want := []byte("{\"error\":{\"code\":\"invalid_request\",\"source\":\"platform\",\"message\":\"invalid request\"}}\n")
+	if response.Code != http.StatusBadRequest || !bytes.Equal(response.Body.Bytes(), want) {
+		t.Fatalf("status=%d body=%q want=%q", response.Code, response.Body.Bytes(), want)
+	}
+}
+
+func TestCapabilityMismatchStableExactWireAndNoDecrypt(t *testing.T) {
+	fixture := newForwardFixture(t, nil, Hooks{}, nil, nil)
+	user := fixture.addUser(t, "capability-wire")
+	route := fixture.addRoute(t, user.id, "https://upstream.example", "p", "m", "upstream/model", "sk-never-opened", 0)
+	if _, err := fixture.store.DB().Exec(`UPDATE endpoints SET connector_type=? WHERE id=?`, endpoint.ConnectorAnthropicCompatible, route.endpoint); err != nil {
+		t.Fatal(err)
+	}
+	fixture.codec.opens.Store(0)
+	body := `{"model":"p/m","messages":[{"role":"user","content":"hi"}],"n":1}`
+	response := performCaller(fixture.handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, body))
+	want := []byte("{\"error\":{\"code\":\"invalid_request\",\"source\":\"platform\",\"message\":\"model does not support this request field combination\"}}\n")
+	if response.Code != http.StatusBadRequest || !bytes.Equal(response.Body.Bytes(), want) || fixture.codec.opens.Load() != 0 {
+		t.Fatalf("status=%d body=%q opens=%d want=%q", response.Code, response.Body.Bytes(), fixture.codec.opens.Load(), want)
+	}
+
+	rail := &fakeCharityRail{forwardErr: ErrUnsupportedCapabilities}
+	exit := NewHandler(HandlerDeps{Service: fixture.service, Charity: rail, Identity: CallerIdentity})
+	handler := auth.CallerKeyMiddleware(fixture.store, exit)
+	charityBody := `{"model":"[公益]donor/charity","messages":[{"role":"user","content":"hi"}],"n":1}`
+	charityResponse := performCaller(handler, callerRequest(http.MethodPost, "/v1/chat/completions", user.key, charityBody))
+	if charityResponse.Code != http.StatusBadRequest || !bytes.Equal(charityResponse.Body.Bytes(), want) {
+		t.Fatalf("charity status=%d body=%q want=%q", charityResponse.Code, charityResponse.Body.Bytes(), want)
+	}
 }
 
 // TestHandlerCharityPrefixRoutingAndModelMerge verifies namespace isolation:

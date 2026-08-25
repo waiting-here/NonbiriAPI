@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"reflect"
 
+	"github.com/waiting-here/NonbiriAPI/internal/backend"
+	"github.com/waiting-here/NonbiriAPI/internal/connector"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
@@ -31,17 +34,22 @@ type CharityTargetRepository interface {
 
 // Adapter is one protocol implementation admitted by the endpoint registry.
 // Attempt must perform exactly one egress attempt and must not route or retry.
-type Adapter interface {
-	ConnectorType() endpoint.ConnectorType
-	Attempt(context.Context, http.ResponseWriter, openai.Target, *openai.ChatRequest, string) openai.AttemptResult
-}
+type Adapter = connector.OpenAIDriver
 
 // AttemptInput is the non-sensitive input handed to a single attempt runner.
 type AttemptInput struct {
-	UserID    int64
-	FullName  string
-	BindingID int64
-	Request   *openai.ChatRequest
+	UserID                int64
+	FullName              string
+	BindingID             int64
+	ExpectedConnectorType connectorcontract.Type
+	Request               *openai.ChatRequest
+	TraceID               string
+	// ObserverTraceID correlates one caller-owned Debug trace with connector
+	// SafeObserver events without replacing the accounting AttemptID.
+	ObserverTraceID  string
+	AttemptIndex     int
+	FlattenToolCalls bool
+	PolicyCache      map[int64]bool
 }
 
 const maxForwardCiphertextBytes = 128 << 10
@@ -50,19 +58,26 @@ const maxForwardCiphertextBytes = 128 << 10
 // The current service invokes it once. A runner may write response bytes only
 // through the supplied writer and reports the exact commit boundary in its result.
 type AttemptRunner interface {
-	Run(context.Context, http.ResponseWriter, AttemptInput) openai.AttemptResult
+	Run(context.Context, http.ResponseWriter, AttemptInput) connectorcontract.AttemptResult
 }
 
 // SecureRunnerConfig wires the ownership projection, Vault, authoritative
 // connector registry, and protocol adapters. CharityTargets is the optional
 // charity-path projection; when absent, RunCharity fails closed.
 type SecureRunnerConfig struct {
-	Repository        TargetRepository
-	CharityTargets    CharityTargetRepository
-	Secrets           secret.ContextOpener
-	Registry          *endpoint.Registry
-	Adapters          []Adapter
-	SafetyIdentifiers *SafetyIdentifierFactory
+	Repository     TargetRepository
+	CharityTargets CharityTargetRepository
+	Secrets        secret.ContextOpener
+	Registry       *endpoint.Registry
+	Adapters       []Adapter
+	Backend        backend.Backend
+	Observer       *connector.SafeObserver
+	// ObserverResolver may supply a request-scoped observer. When nil, the
+	// legacy fixed Observer is used unchanged; a non-nil resolver lets the
+	// Debug Hub bind observations to the current user/session trace.
+	ObserverResolver          func(context.Context) *connector.SafeObserver
+	SafetyIdentifiers         *SafetyIdentifierFactory
+	AnthropicDefaultMaxTokens connectorcontract.AnthropicDefaultMaxTokensProvider
 }
 
 // SecureRunner revalidates a selected binding, decrypts its credential for
@@ -73,7 +88,9 @@ type SecureRunner struct {
 	charityTargets    CharityTargetRepository
 	secrets           secret.ContextOpener
 	registry          *endpoint.Registry
-	adapters          map[endpoint.ConnectorType]Adapter
+	connectors        map[connectorcontract.Type]connector.Connector
+	observer          *connector.SafeObserver
+	observerResolver  func(context.Context) *connector.SafeObserver
 	safetyIdentifiers *SafetyIdentifierFactory
 }
 
@@ -90,7 +107,7 @@ func NewSecureRunner(config SecureRunnerConfig) (*SecureRunner, error) {
 	if config.SafetyIdentifiers == nil {
 		return nil, errors.New("forward: safety identifier factory is required")
 	}
-	adapters := make(map[endpoint.ConnectorType]Adapter, len(config.Adapters))
+	adapters := make(map[connectorcontract.Type]Adapter, len(config.Adapters))
 	for _, adapter := range config.Adapters {
 		if nilAdapter(adapter) {
 			return nil, errors.New("forward: connector adapter is required")
@@ -104,42 +121,75 @@ func NewSecureRunner(config SecureRunnerConfig) (*SecureRunner, error) {
 		}
 		adapters[connectorType] = adapter
 	}
-	if len(adapters) == 0 {
-		return nil, errors.New("forward: at least one connector adapter is required")
+	connectors := make(map[connectorcontract.Type]connector.Connector)
+	for _, connectorType := range config.Registry.Types() {
+		dependencies := connector.Dependencies{Backend: config.Backend, AnthropicDefaultMaxTokens: config.AnthropicDefaultMaxTokens}
+		if connectorType == connectorcontract.TypeOpenAICompatible {
+			dependencies.OpenAI = adapters[connectorType]
+		}
+		instance, err := config.Registry.NewConnector(connectorType, dependencies)
+		if err != nil {
+			return nil, errors.New("forward: connector could not be constructed")
+		}
+		connectors[connectorType] = instance
+	}
+	if len(connectors) == 0 {
+		return nil, errors.New("forward: at least one connector is required")
 	}
 	return &SecureRunner{
 		repository:        config.Repository,
 		charityTargets:    config.CharityTargets,
 		secrets:           config.Secrets,
 		registry:          config.Registry,
-		adapters:          adapters,
+		connectors:        connectors,
+		observer:          config.Observer,
+		observerResolver:  config.ObserverResolver,
 		safetyIdentifiers: config.SafetyIdentifiers,
 	}, nil
 }
 
-func (r *SecureRunner) Run(ctx context.Context, writer http.ResponseWriter, input AttemptInput) openai.AttemptResult {
+func (r *SecureRunner) Run(ctx context.Context, writer http.ResponseWriter, input AttemptInput) connectorcontract.AttemptResult {
 	if r == nil || r.repository == nil || r.registry == nil || nilCodec(r.secrets) || ctx == nil || writer == nil || input.UserID <= 0 || input.FullName == "" || input.BindingID <= 0 || input.Request == nil {
 		return internalAttemptFailure("forwarding attempt unavailable")
 	}
+	expectedConnectorType, err := r.registry.MustValidate(endpoint.ConnectorType(input.ExpectedConnectorType))
+	if err != nil {
+		return internalAttemptFailure("forwarding connector is not registered")
+	}
 	if ctx.Err() != nil {
-		return openai.AttemptResult{Failure: openai.FailureCanceled, Diagnostic: "request canceled"}
+		return connectorcontract.AttemptResult{Failure: connectorcontract.FailureCanceled, Diagnostic: "request canceled"}
 	}
 
 	target, err := r.repository.GetForwardTarget(ctx, input.UserID, input.FullName, input.BindingID)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			return openai.AttemptResult{Failure: openai.FailureUpstream, Diagnostic: "selected upstream target is no longer available"}
+			return selectedTargetUnavailableFailure()
 		}
 		if errors.Is(err, db.ErrEndpointCredentialUnavailable) {
 			return internalAttemptFailure("credential unavailable")
 		}
 		return internalAttemptFailure("forwarding target lookup failed")
 	}
+	if input.PolicyCache != nil {
+		if cached, ok := input.PolicyCache[target.EndpointKeyID]; ok {
+			target.ForceStoreFalse = cached
+		} else {
+			input.PolicyCache[target.EndpointKeyID] = target.ForceStoreFalse
+		}
+	}
+	observerTraceID := input.ObserverTraceID
+	if observerTraceID == "" {
+		observerTraceID = input.TraceID
+	}
 	return r.dispatch(ctx, writer, dispatchInput{
-		ownerUserID:    input.UserID,
-		preDecrypted:   target,
-		request:        input.Request,
-		consumerUserID: input.UserID,
+		ownerUserID:      input.UserID,
+		preDecrypted:     target,
+		expectedType:     expectedConnectorType,
+		request:          input.Request,
+		consumerUserID:   input.UserID,
+		traceID:          observerTraceID,
+		attemptIndex:     input.AttemptIndex,
+		flattenToolCalls: input.FlattenToolCalls,
 	})
 }
 
@@ -148,60 +198,96 @@ func (r *SecureRunner) Run(ctx context.Context, writer http.ResponseWriter, inpu
 // it is never used for decryption or ownership. Credential context and
 // ownership checks remain entirely donor-scoped.
 type CharityAttemptInput struct {
-	BindingID      int64
-	FullName       string
-	Now            int64 // authoritative unix time for the expiry predicate
-	ConsumerUserID int64 // consumer identity used only for safety_identifier
-	Request        *openai.ChatRequest
+	BindingID             int64
+	FullName              string
+	ExpectedConnectorType connectorcontract.Type
+	Now                   int64 // authoritative unix time for the expiry predicate
+	ConsumerUserID        int64 // consumer identity used only for safety_identifier
+	Request               *openai.ChatRequest
+	TraceID               string
+	ObserverTraceID       string
+	AttemptIndex          int
+	FlattenToolCalls      bool
+	PolicyCache           map[int64]bool
 }
 
 // RunCharity revalidates one charity binding through the full candidate
 // predicate and dispatches exactly one upstream attempt, mirroring Run's
 // secret-handling discipline. It owns no retry policy and no accounting.
-func (r *SecureRunner) RunCharity(ctx context.Context, writer http.ResponseWriter, input CharityAttemptInput) openai.AttemptResult {
+func (r *SecureRunner) RunCharity(ctx context.Context, writer http.ResponseWriter, input CharityAttemptInput) connectorcontract.AttemptResult {
 	if r == nil || r.charityTargets == nil || r.registry == nil || nilCodec(r.secrets) || ctx == nil || writer == nil || input.BindingID <= 0 || input.Request == nil || input.Now <= 0 {
 		return internalAttemptFailure("forwarding attempt unavailable")
 	}
+	expectedConnectorType, err := r.registry.MustValidate(endpoint.ConnectorType(input.ExpectedConnectorType))
+	if err != nil {
+		return internalAttemptFailure("forwarding connector is not registered")
+	}
 	if ctx.Err() != nil {
-		return openai.AttemptResult{Failure: openai.FailureCanceled, Diagnostic: "request canceled"}
+		return connectorcontract.AttemptResult{Failure: connectorcontract.FailureCanceled, Diagnostic: "request canceled"}
 	}
 
 	target, err := r.charityTargets.GetCharityForwardTarget(ctx, input.BindingID, input.FullName, input.Now)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
-			return openai.AttemptResult{Failure: openai.FailureUpstream, Diagnostic: "selected upstream target is no longer available"}
+			return selectedTargetUnavailableFailure()
 		}
 		if errors.Is(err, db.ErrEndpointCredentialUnavailable) {
 			return internalAttemptFailure("credential unavailable")
 		}
 		return internalAttemptFailure("charity target lookup failed")
 	}
+	if input.PolicyCache != nil {
+		if cached, ok := input.PolicyCache[target.EndpointKeyID]; ok {
+			target.ForceStoreFalse = cached
+		} else {
+			input.PolicyCache[target.EndpointKeyID] = target.ForceStoreFalse
+		}
+	}
+	observerTraceID := input.ObserverTraceID
+	if observerTraceID == "" {
+		observerTraceID = input.TraceID
+	}
 	return r.dispatch(ctx, writer, dispatchInput{
-		ownerUserID:    target.DonorUserID,
-		preDecrypted:   target.ForwardTarget,
-		request:        input.Request,
-		consumerUserID: input.ConsumerUserID,
+		ownerUserID:      target.DonorUserID,
+		preDecrypted:     target.ForwardTarget,
+		expectedType:     expectedConnectorType,
+		request:          input.Request,
+		consumerUserID:   input.ConsumerUserID,
+		traceID:          observerTraceID,
+		attemptIndex:     input.AttemptIndex,
+		flattenToolCalls: input.FlattenToolCalls,
 	})
 }
 
 // dispatchInput carries one revalidated projection plus protocol inputs into
 // the shared decrypt-and-dispatch flow.
 type dispatchInput struct {
-	ownerUserID    int64
-	consumerUserID int64
-	preDecrypted   db.ForwardTarget
-	request        *openai.ChatRequest
+	ownerUserID      int64
+	consumerUserID   int64
+	preDecrypted     db.ForwardTarget
+	expectedType     connectorcontract.Type
+	request          *openai.ChatRequest
+	traceID          string
+	attemptIndex     int
+	flattenToolCalls bool
 }
 
-func (r *SecureRunner) dispatch(ctx context.Context, writer http.ResponseWriter, in dispatchInput) openai.AttemptResult {
+func (r *SecureRunner) dispatch(ctx context.Context, writer http.ResponseWriter, in dispatchInput) connectorcontract.AttemptResult {
 	target := in.preDecrypted
-	connectorType, err := r.registry.MustValidate(endpoint.ConnectorType(target.ConnectorType))
-	if err != nil {
+	if connectorcontract.Type(target.ConnectorType) != in.expectedType {
 		target.DiscardEncryptedSecret()
-		return internalAttemptFailure("forwarding connector is not registered")
+		return selectedTargetUnavailableFailure()
 	}
-	adapter := r.adapters[connectorType]
-	if adapter == nil {
+	connectorType := in.expectedType
+	if connectorType != connectorcontract.TypeOpenAICompatible && (in.flattenToolCalls || target.ForceStoreFalse) {
+		// Both experimental policies are OpenAI-only. This is a defensive
+		// runtime invariant in case a damaged projection reaches the runner;
+		// never decrypt or dial an Anthropic target under either policy.
+		target.DiscardEncryptedSecret()
+		return internalAttemptFailure("forwarding policy is incompatible with connector")
+	}
+	protocolConnector := r.connectors[connectorType]
+	if protocolConnector == nil {
 		target.DiscardEncryptedSecret()
 		return internalAttemptFailure("forwarding connector is unavailable")
 	}
@@ -242,26 +328,54 @@ func (r *SecureRunner) dispatch(ctx context.Context, writer http.ResponseWriter,
 	}
 	defer clear(plaintext)
 	defer clear(ciphertextBytes)
+	attemptRequest := in.request.CloneForAttempt()
+	if attemptRequest == nil {
+		return internalAttemptFailure("forwarding request snapshot failed")
+	}
+	defer attemptRequest.Clear()
 
-	result := adapter.Attempt(ctx, writer, openai.NewTarget(
-		target.BaseURL,
-		target.UpstreamModelID,
-		openai.NewCredential(plaintext, ciphertextBytes),
-	), in.request, safetyIdentifier)
+	result := protocolConnector.Attempt(ctx, connector.AttemptInput{
+		Target:       connectorcontract.NewTarget(connectorType, target.BaseURL, target.UpstreamModelID),
+		Credential:   connectorcontract.NewShortLivedSecret(plaintext, ciphertextBytes),
+		Ingress:      attemptRequest,
+		Policy:       connectorcontract.AttemptPolicy{SafetyIdentifier: safetyIdentifier, ForceStoreFalse: target.ForceStoreFalse, FlattenToolCalls: in.flattenToolCalls},
+		Sink:         writer,
+		Observer:     r.observerForContext(ctx),
+		TraceID:      in.traceID,
+		AttemptIndex: in.attemptIndex,
+	})
+	if state := ProtocolStateFromContext(ctx); state != nil {
+		state.Mark(result)
+	}
 	// The frozen log contract requires the dispatch-time canonical base-URL
 	// snapshot on every committed request. The base URL is the owner-visible
 	// endpoint value, never credential material; it travels as bounded
 	// metadata alongside the other attempt fields.
 	result.EndpointBaseURL = target.BaseURL
-	// Adapter clears both slices before dialing; these clears are a backstop
-	// for a rejected adapter call and make the ownership transfer explicit.
-	clear(plaintext)
-	clear(ciphertextBytes)
 	return result
 }
 
-func internalAttemptFailure(diagnostic string) openai.AttemptResult {
-	return openai.AttemptResult{Failure: openai.FailureInternal, Diagnostic: diagnostic}
+func (r *SecureRunner) observerForContext(ctx context.Context) *connector.SafeObserver {
+	if r == nil {
+		return nil
+	}
+	if observer := ObserverFromContext(ctx); observer != nil {
+		return observer
+	}
+	if r.observerResolver != nil {
+		if observer := r.observerResolver(ctx); observer != nil {
+			return observer
+		}
+	}
+	return r.observer
+}
+
+func internalAttemptFailure(diagnostic string) connectorcontract.AttemptResult {
+	return connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: diagnostic}
+}
+
+func selectedTargetUnavailableFailure() connectorcontract.AttemptResult {
+	return connectorcontract.AttemptResult{Failure: connectorcontract.FailureUpstream, Diagnostic: "selected upstream target is no longer available"}
 }
 
 func nilAdapter(adapter Adapter) bool {

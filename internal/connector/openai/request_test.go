@@ -8,6 +8,39 @@ import (
 	"testing"
 )
 
+func TestChatRequestCloneForAttemptIsIndependent(t *testing.T) {
+	original, err := DecodeChatRequest(strings.NewReader(`{"model":"public/model","messages":[{"role":"user","content":"hello"}],"stream":true}`), MaxRequestBodyBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer original.Clear()
+	first := original.CloneForAttempt()
+	second := original.CloneForAttempt()
+	if first == nil || second == nil {
+		t.Fatal("attempt clone was nil")
+	}
+	firstBody, err := first.marshalUpstream("upstream/model", "safety_identifier_value")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(firstBody)
+	first.Clear()
+	secondBody, err := second.marshalUpstream("upstream/model", "safety_identifier_value")
+	if err != nil {
+		t.Fatalf("second clone changed after first clear: %v", err)
+	}
+	defer clear(secondBody)
+	originalBody, err := original.marshalUpstream("upstream/model", "safety_identifier_value")
+	if err != nil {
+		t.Fatalf("original changed after clone clear: %v", err)
+	}
+	defer clear(originalBody)
+	if !bytes.Equal(firstBody, secondBody) || !bytes.Equal(firstBody, originalBody) {
+		t.Fatalf("attempt snapshots drifted:\nfirst=%s\nsecond=%s\noriginal=%s", firstBody, secondBody, originalBody)
+	}
+	second.Clear()
+}
+
 func TestDecodeChatRequestPassesUnknownAndOverridesAuthorityFields(t *testing.T) {
 	request, err := DecodeChatRequest(strings.NewReader(`{
 		"model":"platform/provider/model",
@@ -80,7 +113,6 @@ func TestDecodeChatRequestRejectsAmbiguityAndBounds(t *testing.T) {
 		{"model control", "{\"model\":\"p/m\\u000a\"}"},
 		{"model edge whitespace", `{"model":" p/m"}`},
 		{"stream string", `{"model":"p/m","stream":"true"}`},
-		{"stream null", `{"model":"p/m","stream":null}`},
 		{"duplicate model", `{"model":"p/one","model":"p/two"}`},
 		{"escaped duplicate model", `{"model":"p/one","\u006dodel":"p/two"}`},
 		{"trailing object", `{"model":"p/m"}{}`},
@@ -114,6 +146,20 @@ func TestDecodeChatRequestRejectsAmbiguityAndBounds(t *testing.T) {
 	over := bytes.Repeat([]byte{'x'}, int(MaxRequestBodyBytes)+1)
 	if _, err := DecodeChatRequest(bytes.NewReader(over), MaxRequestBodyBytes); !errors.Is(err, ErrPayloadTooLarge) {
 		t.Fatalf("oversize error=%v", err)
+	}
+}
+
+func TestStreamNullIsProjectedButRejectedByLegacyOpenAICandidate(t *testing.T) {
+	request, err := DecodeChatRequest(strings.NewReader(`{"model":"p/m","messages":[{"role":"user","content":"hi"}],"stream":null}`), MaxRequestBodyBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer request.Clear()
+	if request.Stream {
+		t.Fatal("stream:null must project as non-stream for a compatible connector")
+	}
+	if SupportsOpenAICompatible(request) {
+		t.Fatal("legacy OpenAI candidate accepted stream:null")
 	}
 }
 

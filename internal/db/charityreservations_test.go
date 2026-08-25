@@ -89,6 +89,9 @@ func resolveFirstCandidate(t *testing.T, st *Store, fullName string) CharityCand
 	if len(route.Candidates) == 0 {
 		t.Fatalf("no candidates for %q", fullName)
 	}
+	if route.Candidates[0].ConnectorType != "openai-compatible" {
+		t.Fatalf("candidate connector = %q", route.Candidates[0].ConnectorType)
+	}
 	return route.Candidates[0]
 }
 

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -62,9 +63,14 @@ type User struct {
 	Level *int
 	// AutoLevel is the persistent automatic-level high-water mark (1..4). It
 	// is only ever raised (lazy CAS promotion); there is no downgrade path.
-	AutoLevel                 int
-	EndpointLimit             *int
-	RPMLimit                  *int
+	AutoLevel        int
+	EndpointLimit    *int
+	RPMLimit         *int
+	ConcurrencyLimit *int
+	// GameProfilePublic controls the account-wide public projection used by
+	// game leaderboards. It defaults to false and is never copied into game
+	// round or best-record rows.
+	GameProfilePublic         bool
 	TotalRequests             int64
 	TotalPromptTokens         int64
 	TotalCompletionTokens     int64
@@ -161,6 +167,8 @@ const userSelectColumns = `
 	u.charity_suspended_until,
 	u.endpoint_limit,
 	u.rpm_limit,
+	u.concurrency_limit,
+	u.game_profile_public,
 	u.total_requests,
 	u.total_prompt_tokens,
 	u.total_completion_tokens,
@@ -180,7 +188,8 @@ func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	var isAdmin, isBanned int
 	var bannedUntil, charitySuspendedUntil sql.NullInt64
 	var autoBanned int
-	var endpointLimit, rpmLimit, level sql.NullInt64
+	var endpointLimit, rpmLimit, concurrencyLimit, level sql.NullInt64
+	var gameProfilePublic int
 	var createdAt, updatedAt int64
 	if err := row.Scan(
 		&u.ID,
@@ -197,6 +206,8 @@ func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 		&charitySuspendedUntil,
 		&endpointLimit,
 		&rpmLimit,
+		&concurrencyLimit,
+		&gameProfilePublic,
 		&u.TotalRequests,
 		&u.TotalPromptTokens,
 		&u.TotalCompletionTokens,
@@ -213,6 +224,7 @@ func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	}
 	u.IsAdmin = isAdmin != 0
 	u.IsBanned = isBanned != 0
+	u.GameProfilePublic = gameProfilePublic != 0
 	u.AutoBanned = autoBanned != 0
 	u.BannedUntil = nullUnixTime(bannedUntil)
 	u.CharitySuspendedUntil = nullUnixTime(charitySuspendedUntil)
@@ -223,6 +235,10 @@ func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	if rpmLimit.Valid {
 		value := int(rpmLimit.Int64)
 		u.RPMLimit = &value
+	}
+	if concurrencyLimit.Valid {
+		value := int(concurrencyLimit.Int64)
+		u.ConcurrencyLimit = &value
 	}
 	if level.Valid {
 		value := int(level.Int64)
@@ -260,12 +276,10 @@ func (s *Store) GetUserByID(id int64) (*User, error) {
 	return u, nil
 }
 
-// GetUserRPMLimit returns the user's self-tuned per-minute RPM cap and
-// whether one is stored. A missing user or a NULL cap yields (0, false, nil);
-// callers fall back to the administrator default cap. The stored value is a
-// server-side hint only: the flow-control layer clamps it to the site cap
-// before admission, so an over-large or invalid stored value cannot bypass
-// the per-user ceiling.
+// GetUserRPMLimit returns the user's explicit per-minute RPM cap and whether
+// one is stored. A missing user or a NULL cap yields (0, false, nil); callers
+// fall back to the administrator default. Explicit values are independent of
+// that default and are bounded only by MaxUserRPMLimit.
 func (s *Store) GetUserRPMLimit(userID int64) (int, bool, error) {
 	if userID <= 0 {
 		return 0, false, ErrNotFound
@@ -282,6 +296,56 @@ func (s *Store) GetUserRPMLimit(userID int64) (int, bool, error) {
 		return 0, false, nil
 	}
 	return int(value.Int64), true, nil
+}
+
+// UserAdmissionLimits is the single request-time snapshot consumed by the
+// public chat admission boundary. RPMLimitSet distinguishes an explicit RPM
+// override from the site default; ConcurrencyLimit is always effective (NULL
+// has already become DefaultUserConcurrencyLimit). The query also rechecks
+// that the identity remains a normal, active account immediately before any
+// process-local permit or RPM reservation is acquired.
+type UserAdmissionLimits struct {
+	RPMLimit         int
+	RPMLimitSet      bool
+	ConcurrencyLimit int
+}
+
+// GetUserAdmissionLimits returns one active user's request-time limit
+// snapshot. Missing, administrator, and banned rows are indistinguishable
+// ErrNotFound so a stale caller-key context cannot enter admission after its
+// account has stopped being callable.
+func (s *Store) GetUserAdmissionLimits(ctx context.Context, userID int64) (UserAdmissionLimits, error) {
+	if ctx == nil || userID <= 0 {
+		return UserAdmissionLimits{}, ErrNotFound
+	}
+	var rpm, concurrency sql.NullInt64
+	nowUnix := time.Now().Unix()
+	err := s.db.QueryRowContext(ctx, `
+SELECT rpm_limit, concurrency_limit
+FROM users
+WHERE id=? AND is_admin=0
+  AND (is_banned=0 OR (banned_until IS NOT NULL AND banned_until<=?))`, userID, nowUnix).Scan(&rpm, &concurrency)
+	if errors.Is(err, sql.ErrNoRows) {
+		return UserAdmissionLimits{}, ErrNotFound
+	}
+	if err != nil {
+		return UserAdmissionLimits{}, fmt.Errorf("read user admission limits: %w", err)
+	}
+	out := UserAdmissionLimits{ConcurrencyLimit: DefaultUserConcurrencyLimit}
+	if rpm.Valid {
+		if rpm.Int64 < 1 || rpm.Int64 > MaxUserRPMLimit {
+			return UserAdmissionLimits{}, fmt.Errorf("read user admission limits: invalid rpm limit")
+		}
+		out.RPMLimit = int(rpm.Int64)
+		out.RPMLimitSet = true
+	}
+	if concurrency.Valid {
+		if concurrency.Int64 < 1 || concurrency.Int64 > MaxUserConcurrencyLimit {
+			return UserAdmissionLimits{}, fmt.Errorf("read user admission limits: invalid concurrency limit")
+		}
+		out.ConcurrencyLimit = int(concurrency.Int64)
+	}
+	return out, nil
 }
 
 // GetUserByDiscordID returns a normal Discord user or (nil, nil). The query
@@ -576,11 +640,21 @@ func (s *Store) DeleteUserSecurityState(userID int64) error {
 // empty value; identity policy fails closed when required gate values are
 // absent.
 func (s *Store) GetSiteConfigValue(key string) (string, error) {
+	return s.GetSiteConfigValueContext(context.Background(), key)
+}
+
+// GetSiteConfigValueContext is the cancellation-aware runtime read used on
+// request paths. A missing key remains an empty value, matching the
+// compatibility helper above.
+func (s *Store) GetSiteConfigValueContext(ctx context.Context, key string) (string, error) {
+	if ctx == nil {
+		return "", ErrNotFound
+	}
 	if err := validateIdentityText(key, 128, false); err != nil {
 		return "", ErrNotFound
 	}
 	var value string
-	err := s.db.QueryRow(`SELECT value FROM site_config WHERE key=?`, key).Scan(&value)
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key=?`, key).Scan(&value)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}

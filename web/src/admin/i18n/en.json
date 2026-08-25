@@ -59,12 +59,15 @@
       "elevatedPasswordHint": "Used only for this confirmation; it is sent over the same-origin session request and not stored.",
       "endpointLimit": "Endpoint limit",
       "rpmLimit": "RPM limit",
+      "concurrencyLimit": "In-flight concurrency limit",
+      "limitInherited": "inherited (null)",
+      "limitRawEffective": "Explicit: {{raw}} · effective: {{effective}}",
       "restoreDefault": "Restore default",
       "saveLimits": "Save limits",
       "requests": "requests",
       "unknown": "Unknown",
-      "limitHint": "Leave a limit blank to restore the server default.",
-      "limitInvalid": "Limits must be non-negative whole numbers or blank.",
+      "limitHint": "Leave a limit blank to restore the server default. Unconfigured per-user concurrency uses the built-in default of 5. RPM and concurrency values (including the displayed effective values) still combine with independent global RPM, global egress, endpoint and key gates; effective is not the final minimum across every gate.",
+      "limitInvalid": "Enter canonical whole numbers within each hard range, or leave blank to inherit (endpoint 0–10000; RPM 1–4096; concurrency 1–100000).",
       "saved": "Limits updated on the server.",
       "deletePasswordRequired": "Enter the administrator password to continue.",
       "empty": "No users returned",
@@ -190,139 +193,58 @@
       "textValue": "Text setting",
       "invalidNumber": "Enter a valid number.",
       "saved": "Configuration updated on the server.",
-      "economy": {
-        "title": "Economy & levels",
-        "description": "Timezone, check-in and level thresholds. Validation and decisions run server-side on transactional snapshots; the browser caches none of these values.",
-        "timezoneTitle": "Site timezone",
-        "timezoneDescription": "The fixed timezone offset (minutes) used by check-in and daily activity rollups.",
-        "timezoneNotSet": "The site timezone must be configured first",
-        "timezoneNotSetBody": "Until it is set, check-in and daily activity collection stay disabled; regular users only see the same feature-unavailable notice.",
-        "timezoneFreezeWarning": "Note: once any check-in or daily activity data exists, the timezone is permanently frozen and later changes are refused by the server.",
-        "timezoneCurrent": "Current: {{value}}",
-        "timezoneInput": "Offset in minutes",
-        "timezoneInvalid": "Must be an integer between -720 and +840 and a multiple of 30.",
-        "checkinModeTitle": "Check-in switch",
-        "checkinModeDescription": "Three-way switch: open to all / level-gated (Lv3 and above) / off.",
-        "checkinMode": {
-          "enabled": "Open to all",
-          "level_gated": "Level-gated (Lv3 and above)",
-          "disabled": "Off"
-        },
-        "awardMinTitle": "Check-in award minimum (credits)",
-        "awardMinHint": "Default 40,000; cross-validated with the maximum — the minimum may not exceed it.",
-        "awardMaxTitle": "Check-in award maximum (credits)",
-        "awardMaxHint": "Default 60,000; cross-validated with the minimum.",
-        "capTitle": "Check-in threshold (credits)",
-        "capHint": "Default 250,000; 0 means no threshold. Once reached new check-ins are refused (effective level ≥ 3 bypasses); an admitted award is never truncated.",
-        "thresholdTitle": "Lv{{level}} automatic promotion threshold (credits)",
-        "thresholdHint": "Lazily evaluated against the cumulative donor reward balance; 0 disables that level's automatic promotion. Enabled thresholds must be strictly increasing or the server rejects the whole write.",
-        "amountInvalid": "Enter a valid credit amount (at most three decimal places)."
-      },
-      "configKeys": {
-        "site_name": {
-          "title": "Site name",
-          "description": "Name shown on the user site pages and browser tab."
-        },
-        "site_logo_url": {
-          "title": "Site logo URL",
-          "description": "Logo image URL shown in the site navigation (https preferred); blank shows the default mark."
-        },
-        "default_locale": {
-          "title": "Default locale",
-          "description": "Interface language for first-time visitors; zh or en."
-        },
-        "legal_privacy_override_zh": {
-          "title": "Privacy policy override (Chinese)",
-          "description": "Overrides the built-in privacy policy in Chinese; blank falls back to the template. Supports ## headings, - lists, > notes and paragraphs; newlines preserved."
-        },
-        "legal_privacy_override_en": {
-          "title": "Privacy policy override (English)",
-          "description": "Overrides the built-in privacy policy in English; blank falls back to the template."
-        },
-        "legal_terms_override_zh": {
-          "title": "Terms of service override (Chinese)",
-          "description": "Overrides the built-in terms of service in Chinese; blank falls back to the template."
-        },
-        "legal_terms_override_en": {
-          "title": "Terms of service override (English)",
-          "description": "Overrides the built-in terms of service in English; blank falls back to the template."
-        },
-        "legal_authoritative_locale": {
-          "title": "Authoritative locale",
-          "description": "Declares which language version prevails on conflict; zh or en; blank hides the notice."
-        },
-        "default_endpoint_limit": {
-          "title": "Default endpoint limit",
-          "description": "Maximum number of endpoints each user can create."
-        },
-        "default_endpoint_key_limit": {
-          "title": "Default endpoint key limit",
-          "description": "Maximum upstream keys each endpoint can hold."
-        },
-        "default_model_limit": {
-          "title": "Default model limit",
-          "description": "Maximum platform models each user can create."
-        },
-        "default_binding_limit": {
-          "title": "Default binding limit",
-          "description": "Maximum upstream bindings each platform model can configure."
-        },
-        "default_rpm_per_user": {
-          "title": "Default RPM per user",
-          "description": "Maximum calls per minute each user can make."
-        },
-        "global_rpm": {
-          "title": "Global RPM",
-          "description": "Total calls per minute across all users."
-        },
-        "default_per_endpoint_concurrency": {
-          "title": "Default per-endpoint concurrency",
-          "description": "Maximum concurrent outbound requests per endpoint."
-        },
-        "egress_global_concurrency": {
-          "title": "Egress global concurrency",
-          "description": "Maximum concurrent outbound requests shared across all endpoints."
-        },
-        "discord_guild_id": {
-          "title": "Discord guild ID",
-          "description": "Discord server ID required for signup; if this or the role ID is blank, new registration is paused."
-        },
-        "discord_role_id": {
-          "title": "Discord role ID",
-          "description": "Discord server role required for signup; if this or the guild ID is blank, new registration is paused."
-        },
-        "oauth_start_rate_limit": {
-          "title": "OAuth start rate limit",
-          "description": "Maximum Discord authorizations an IP can start within the window."
-        },
-        "oauth_start_rate_window_seconds": {
-          "title": "OAuth start rate window",
-          "description": "Rate-limit window length in seconds for OAuth start."
-        },
-        "oauth_start_rate_penalty_seconds": {
-          "title": "OAuth start rate penalty",
-          "description": "Seconds an IP is temporarily blocked after exceeding the OAuth start limit."
-        },
-        "maintenance_mode": {
-          "title": "Maintenance mode",
-          "description": "When on, the user web application is replaced by a maintenance notice; the admin web application is unaffected. This is a UI notice, not a server-side shutdown of /v1 or authenticated API routes."
-        },
-        "registration_open": {
-          "title": "Registration open",
-          "description": "When off, new Discord sign-ups are rejected and redirected to a registration-closed notice; existing accounts still sign in."
-        }
-      }
+      "notConfigured": "not configured (null)",
+      "catalogDefault": "Raw default",
+      "catalogEffective": "Effective fallback",
+      "catalogRange": "Hard range",
+      "catalogStep": "step",
+      "catalogSemantics": "Zero, null, empty and independent-gate semantics",
+      "catalogIndependentGate": "Independent gate",
+      "catalogInvalid": "Enter a canonical value within the catalog hard range.",
+      "catalogDurationPreview": "Human-readable duration: {{value}}",
+      "catalogMilliPreview": "Exact milli-credits: {{raw}} · Display credits: {{credits}}",
+      "restoreFallback": "Remove override",
+      "legalBytes": "{{count}} / {{max}} UTF-8 bytes",
+      "timezoneSignedMinutes": "Enter signed minutes from UTC; positive values are east of UTC and negative values are west.",
+      "timezoneExamples": "Examples: 480 = UTC+08:00; -300 = UTC-05:00.",
+      "timezonePreview": "Preview: {{value}}",
+      "timezonePreviewInvalid": "enter a valid whole-minute offset",
+      "timezoneImmutable": "After the first check-in or daily activity record, the server permanently refuses timezone changes.",
+      "timezoneConflict": "The timezone is already locked. The authoritative server value has been restored.",
+      "timezoneRefreshFailed": "The timezone is already locked, but the authoritative value could not be refreshed. Reload before editing again."
+    },
+    "games": {
+      "nav": "Games",
+      "title": "Game configuration",
+      "description": "Edit the server-authoritative Fishing controls. The page sends only touched fields and accepts the full server response as truth.",
+      "masterEnabled": "Games master switch",
+      "fishingEnabled": "Fishing enabled",
+      "prices": "Bait prices (milli-credits)",
+      "priceHint": "Canonical positive integer strings are sent without floating-point conversion.",
+      "worm": "Worm bait",
+      "lure": "Lure bait",
+      "premium": "Premium bait",
+      "rtp": "Return-to-player percentage",
+      "standardRTP": "Standard bait RTP",
+      "premiumRTP": "Premium bait RTP",
+      "multipliers": "Special outcome multipliers",
+      "bottle": "Message bottle",
+      "clover": "Lucky clover",
+      "shell": "Pearl shell",
+      "invalid": "Enter canonical values within the server contract ranges.",
+      "saved": "Game configuration updated from the authoritative server response.",
+      "save": "Save game configuration"
     },
     "charity": {
       "nav": "Charity",
       "eyebrow": "Charity operations",
       "title": "Charity and donation management",
       "description": "Review donations, manage charity models and bindings, and configure charity safety controls. Every mutation is refetched from the server.",
-      "working": "Working…", "cancel": "Cancel", "save": "Save", "edit": "Edit", "delete": "Delete", "provider": "Provider", "model": "Model", "pricingMode": "Pricing mode", "perRequest": "Per request", "perToken": "Per token", "enabled": "Enabled", "disabled": "Disabled", "prices": "Prices and donor rewards (milli-credits)", "amountHint": "Canonical non-negative milli-credit strings are sent to the server; no floating-point conversion is used.",
+      "working": "Working…", "cancel": "Cancel", "save": "Save", "edit": "Edit", "delete": "Delete", "provider": "Provider", "model": "Model", "pricingMode": "Pricing mode", "perRequest": "Per request", "perToken": "Per token", "enabled": "Enabled", "disabled": "Disabled", "flattenToolCalls": "Tool-call response policy", "flattenExperimental": "Experimental: flatten tool calls", "flattenEnabled": "Experimental tool-call flattening", "flattenRisk": "Risk: flattening can break normal tool calls and is only suitable for special compatibility requirements. The server rejects unsupported bindings.", "storeReadOnly": "Upstream prompt storage policy (read-only)", "storeNoStore": "Require upstream not to store prompts (Experimental)", "storeDefault": "default (no upstream prompt-storage request)", "prices": "Prices and donor rewards (milli-credits)", "amountHint": "Canonical non-negative milli-credit strings are sent to the server; no floating-point conversion is used.",
       "request_user_price_milli": "Request user price", "request_donor_reward_milli": "Request donor reward", "uncached_user_price_milli": "Uncached input user price", "cache_write_user_price_milli": "Cache-write input user price", "cache_read_user_price_milli": "Cache-read input user price", "output_user_price_milli": "Output user price", "uncached_donor_reward_milli": "Uncached input donor reward", "cache_write_donor_reward_milli": "Cache-write input donor reward", "cache_read_donor_reward_milli": "Cache-read input donor reward", "output_donor_reward_milli": "Output donor reward",
       "discount": "Limited-time discount", "discountPercent": "Discount percentage (0–100; 100 = original)", "discountEnabled": "Discount enabled", "discountStart": "Start (optional)", "discountEnd": "End (optional)", "discountHint": "The interval is [start, end). Leaving both empty makes the enabled discount immediate with no end.", "providerInvalid": "Provider and model are required; the [公益] prefix is reserved for charity models.", "discountInvalid": "Discount percentage must be an integer from 0 through 100.", "amountInvalid": "Every price must be a canonical non-negative integer string.", "discountIntervalInvalid": "Discount dates must be valid and end after start.", "newModel": "Add charity model", "editModel": "Edit charity model", "modelsTitle": "Charity models and bindings", "noModels": "No charity models", "noModelsBody": "Create a charity model only after its donation resources are ready.", "successRate": "{{rate}}% success over {{count}} recent calls",
       "bindings": "Bindings", "donationKey": "Donation key", "donationKeyId": "Donation key ID", "keyFragmentUnavailable": "Key fragment unavailable", "upstreamModel": "Upstream model ID", "order": "Order", "actions": "Actions", "addBinding": "Add binding", "bindingInvalid": "Enter a numeric donation key ID, upstream model ID and order.", "noBindings": "No bindings", "deleteBindingConfirm": "Delete this charity binding?",
-      "donationsTitle": "Donation review queue", "statusFilter": "Donation status", "allStatuses": "All statuses", "noDonations": "No donations", "noDonationsBody": "No donation records match this status.", "donationNumber": "Donation #{{id}}", "expires": "Expiry", "expiryHint": "Leave blank for no expiry.", "submitter": "Submitter ID", "expiresAt": "Expires {{value}}", "loadingDetails": "Refreshing key limits and review history…", "reviewNote": "Review note", "approve": "Approve donation", "reject": "Reject donation", "enable": "Enable donation", "disable": "Disable donation", "saveKeyLimits": "Save key limits", "reviewHistory": "Review history", "deleteDonationTitle": "Soft-delete this donation?", "deleteDonationBody": "This releases active claims and stops future charity routing while retaining review history.", "deleteModelTitle": "Delete this charity model?", "deleteModelBody": "This removes the model only when the server permits it; active bindings may cause a conflict.", "pagination": "Donation pages", "previous": "Previous", "next": "Next", "keyHidden": "Key fragment unavailable", "maxConcurrency": "Max concurrency (0 = unlimited)", "rpmLimit": "Requests per minute (0 = unlimited)", "usageCap": "Usage cap (milli-credits; 0 = unlimited)", "usageUsed": "Used: {{value}} milli-credits",
+      "donationsTitle": "Donation review queue", "statusFilter": "Donation status", "allStatuses": "All statuses", "noDonations": "No donations", "noDonationsBody": "No donation records match this status.", "donationNumber": "Donation #{{id}}", "expires": "Expiry", "expiryHint": "Leave blank for no expiry.", "submitter": "Submitter ID", "expiresAt": "Expires {{value}}", "loadingDetails": "Refreshing key limits and review history…", "detailUnavailable": "Donation details are not available yet; editing and review actions are disabled until they can be verified.", "reviewNote": "Review note", "approve": "Approve donation", "reject": "Reject donation", "enable": "Enable donation", "disable": "Disable donation", "saveKeyLimits": "Save key limits", "reviewHistory": "Review history", "deleteDonationTitle": "Soft-delete this donation?", "deleteDonationBody": "This releases active claims and stops future charity routing while retaining review history.", "deleteModelTitle": "Delete this charity model?", "deleteModelBody": "This removes the model only when the server permits it; active bindings may cause a conflict.", "pagination": "Donation pages", "previous": "Previous", "next": "Next", "keyHidden": "Key fragment unavailable", "maxConcurrency": "Max concurrency (0 = unlimited)", "rpmLimit": "Requests per minute (0 = unlimited)", "usageCap": "Usage cap (milli-credits; 0 = unlimited)", "usageUsed": "Used: {{value}} milli-credits", "limitsInvalid": "Leave a reviewer limit blank to omit it, or enter a canonical whole number within its range.", "expiryInvalid": "Enter a valid expiry date, or leave it blank to clear the expiry.",
       "status": { "pending": "Pending", "approved": "Approved", "rejected": "Rejected", "deleted": "Deleted", "expired": "Expired" }, "priceRequest": "Each request", "priceUncached": "Uncached input", "priceCacheWrite": "Cache write", "priceCacheRead": "Cache read", "priceOutput": "Output", "settingsTitle": "Charity site controls", "settingsDescription": "These settings are live and affect routing or admission. The token reserve is nullable: null means not configured and token pricing fails closed.", "charityEnabled": "Charity system", "donationAcceptEnabled": "Accept new donations", "tokenReserve": "Global token reserve (milli-credits)", "tokenReserveNull": "Not configured (null) is distinct from an explicit zero and cannot enable token pricing.", "notConfigured": "Not configured (null)", "on": "On", "off": "Off", "dangerConfirmTitle": "Confirm live charity setting", "dangerConfirmBody": "This changes live charity admission or routing. Confirm only if the operational change is intended.", "confirm": "Confirm",
       "antiAbuse": { "charity_min_chars": "Minimum charity input characters", "charity_violation_deduct_milli": "Violation deduction (milli-credits)", "charity_violation_ban_seconds": "Immediate ban duration (seconds)", "charity_violation_window_seconds": "Violation window (seconds)", "charity_violation_ban_threshold": "Window ban threshold", "charity_violation_window_ban_seconds": "Window ban duration (seconds)", "charity_suspend_window_seconds": "Suspension window (seconds)", "charity_suspend_threshold": "Suspension threshold", "charity_suspend_duration_seconds": "Suspension duration (seconds)", "rpm_ban_threshold": "RPM ban threshold", "rpm_ban_window_seconds": "RPM ban window (seconds)", "rpm_ban_duration_seconds": "RPM ban duration (seconds)" }
     }

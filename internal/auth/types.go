@@ -100,6 +100,11 @@ type RegistrationGate struct {
 
 type RegistrationGateFunc func(context.Context) (RegistrationGate, error)
 
+// UserRequestGate admits an already authenticated browser request under a
+// process-local user lifecycle lease. The returned context is canceled when
+// the account is banned or deleted; the release function is idempotent.
+type UserRequestGate func(context.Context, int64, string) (context.Context, func(), error)
+
 // LoginThrottle is the login-failure hook. It receives the already-derived
 // client IP from httpmw.ClientIP rather than parsing headers.
 type LoginThrottle interface {
@@ -184,24 +189,29 @@ func AdminFromContext(ctx context.Context) (*db.User, bool) {
 // the nullable manual override (null = automatic). Level is display/state
 // data only — capability decisions are made server-side per use.
 type UserResponse struct {
-	ID                    int64     `json:"id"`
-	Username              string    `json:"username"`
-	Avatar                string    `json:"avatar"`
-	AvatarURL             string    `json:"avatar_url"`
-	GuildNick             string    `json:"guild_nick"`
-	GuildAvatarURL        string    `json:"guild_avatar_url"`
-	Lang                  string    `json:"lang"`
-	IsBanned              bool      `json:"is_banned"`
-	BlockedReason         string    `json:"blocked_reason,omitempty"`
-	BannedUntil           *int64    `json:"banned_until"`
-	CharitySuspendedUntil *int64    `json:"charity_suspended_until"`
-	EndpointLimit         *int      `json:"endpoint_limit"`
-	RPMLimit              *int      `json:"rpm_limit"`
-	Credits               string    `json:"credits"`
-	DonationCredit        string    `json:"donation_credit"`
-	EffectiveLevel        int       `json:"effective_level"`
-	ManualLevel           *int      `json:"manual_level"`
-	CreatedAt             time.Time `json:"created_at"`
+	ID                        int64     `json:"id"`
+	Username                  string    `json:"username"`
+	Avatar                    string    `json:"avatar"`
+	AvatarURL                 string    `json:"avatar_url"`
+	GuildNick                 string    `json:"guild_nick"`
+	GuildAvatarURL            string    `json:"guild_avatar_url"`
+	Lang                      string    `json:"lang"`
+	IsBanned                  bool      `json:"is_banned"`
+	BlockedReason             string    `json:"blocked_reason,omitempty"`
+	BannedUntil               *int64    `json:"banned_until"`
+	CharitySuspendedUntil     *int64    `json:"charity_suspended_until"`
+	EndpointLimit             *int      `json:"endpoint_limit"`
+	EffectiveEndpointLimit    int       `json:"effective_endpoint_limit"`
+	RPMLimit                  *int      `json:"rpm_limit"`
+	EffectiveRPMLimit         int       `json:"effective_rpm_limit"`
+	ConcurrencyLimit          *int      `json:"concurrency_limit"`
+	EffectiveConcurrencyLimit int       `json:"effective_concurrency_limit"`
+	GameProfilePublic         bool      `json:"game_profile_public"`
+	Credits                   string    `json:"credits"`
+	DonationCredit            string    `json:"donation_credit"`
+	EffectiveLevel            int       `json:"effective_level"`
+	ManualLevel               *int      `json:"manual_level"`
+	CreatedAt                 time.Time `json:"created_at"`
 }
 
 // unixSecondsPtr projects a nullable deadline as a JSON number pointer.
@@ -217,22 +227,30 @@ func unixSecondsPtr(t *time.Time) *int64 {
 // request by the authoritative resolver. effectiveLevel must come from
 // db.Store.ResolveEffectiveLevel (it may have lazily persisted a promotion);
 // callers never recompute a level from thresholds themselves.
-func publicUser(user *db.User, effectiveLevel int) UserResponse {
+func publicUser(user *db.User, effectiveLevel int, defaults db.UserLimitDefaults) UserResponse {
 	if user == nil {
 		return UserResponse{}
 	}
+	limits := db.ProjectUserLimits(user, defaults)
 	return UserResponse{
 		ID: user.ID, Username: user.Username, Avatar: user.Avatar, Lang: user.Lang,
 		AvatarURL: discordAvatarURL(user.DiscordID, user.Avatar),
 		GuildNick: user.GuildNick, GuildAvatarURL: user.GuildAvatarURL,
 		IsBanned: user.IsBanned, BlockedReason: user.BannedReason,
-		BannedUntil:           unixSecondsPtr(user.BannedUntil),
-		CharitySuspendedUntil: unixSecondsPtr(user.CharitySuspendedUntil),
-		EndpointLimit:         user.EndpointLimit, RPMLimit: user.RPMLimit, CreatedAt: user.CreatedAt,
-		Credits:        credits.FormatAmount(user.Credits),
-		DonationCredit: credits.FormatAmount(user.DonationCredit),
-		EffectiveLevel: effectiveLevel,
-		ManualLevel:    user.Level,
+		BannedUntil:               unixSecondsPtr(user.BannedUntil),
+		CharitySuspendedUntil:     unixSecondsPtr(user.CharitySuspendedUntil),
+		EndpointLimit:             limits.EndpointLimit,
+		EffectiveEndpointLimit:    limits.EffectiveEndpointLimit,
+		RPMLimit:                  limits.RPMLimit,
+		EffectiveRPMLimit:         limits.EffectiveRPMLimit,
+		ConcurrencyLimit:          limits.ConcurrencyLimit,
+		EffectiveConcurrencyLimit: limits.EffectiveConcurrencyLimit,
+		GameProfilePublic:         user.GameProfilePublic,
+		CreatedAt:                 user.CreatedAt,
+		Credits:                   credits.FormatAmount(user.Credits),
+		DonationCredit:            credits.FormatAmount(user.DonationCredit),
+		EffectiveLevel:            effectiveLevel,
+		ManualLevel:               user.Level,
 	}
 }
 

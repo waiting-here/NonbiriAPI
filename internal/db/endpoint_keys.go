@@ -18,14 +18,15 @@ import (
 // in the database row and is read only by the forwarding rail through a
 // dedicated accessor, never through this struct.
 type EndpointKey struct {
-	ID          int64
-	EndpointID  int64
-	DisplayHead string
-	DisplayTail string
-	Note        string
-	Enabled     bool
-	CreatedAt   int64
-	UpdatedAt   int64
+	ID              int64
+	EndpointID      int64
+	DisplayHead     string
+	DisplayTail     string
+	Note            string
+	Enabled         bool
+	ForceStoreFalse bool
+	CreatedAt       int64
+	UpdatedAt       int64
 }
 
 // DefaultEndpointKeyLimit is the fallback per-endpoint key-count cap used when
@@ -75,6 +76,17 @@ func siteConfigIntLocked(ctx context.Context, q queryRowContexter, key string, d
 // another connection and every failure rolls it back. The plaintext is never
 // supplied to a SQL operation.
 func (s *Store) CreateEndpointKey(ctx context.Context, userID, endpointID int64, secretPlaintext []byte, displayHead, displayTail, note string, enabled bool, now int64) (EndpointKey, error) {
+	return s.createEndpointKey(ctx, userID, endpointID, secretPlaintext, displayHead, displayTail, note, enabled, false, now, "owner")
+}
+
+// CreateEndpointKeyWithPolicy is the policy-aware variant used by the
+// management rail. The legacy CreateEndpointKey remains as a compatibility
+// wrapper for callers that do not expose strategy policy yet.
+func (s *Store) CreateEndpointKeyWithPolicy(ctx context.Context, userID, endpointID int64, secretPlaintext []byte, displayHead, displayTail, note string, enabled, forceStoreFalse bool, now int64, actorRole string) (EndpointKey, error) {
+	return s.createEndpointKey(ctx, userID, endpointID, secretPlaintext, displayHead, displayTail, note, enabled, forceStoreFalse, now, actorRole)
+}
+
+func (s *Store) createEndpointKey(ctx context.Context, userID, endpointID int64, secretPlaintext []byte, displayHead, displayTail, note string, enabled, forceStoreFalse bool, now int64, actorRole string) (EndpointKey, error) {
 	defer clear(secretPlaintext)
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -87,24 +99,43 @@ func (s *Store) CreateEndpointKey(ctx context.Context, userID, endpointID int64,
 			_ = tx.Rollback()
 		}
 	}()
+	if forceStoreFalse {
+		var connector string
+		err := tx.QueryRowContext(ctx, `SELECT connector_type FROM endpoints WHERE id=? AND user_id=?`, endpointID, userID).Scan(&connector)
+		if errors.Is(err, sql.ErrNoRows) {
+			return EndpointKey{}, ErrNotFound
+		}
+		if err != nil {
+			return EndpointKey{}, fmt.Errorf("read endpoint connector: %w", err)
+		}
+		if connector != "openai-compatible" {
+			return EndpointKey{}, ErrInvalidValue
+		}
+	}
 
-	id, err := s.createEndpointKeyTx(ctx, tx, userID, endpointID, secretPlaintext, displayHead, displayTail, note, enabled, now)
+	id, err := s.createEndpointKeyTx(ctx, tx, userID, endpointID, secretPlaintext, displayHead, displayTail, note, enabled, forceStoreFalse, now)
 	if err != nil {
 		return EndpointKey{}, err
+	}
+	if forceStoreFalse {
+		if err := appendPolicyAuditTx(ctx, tx, userID, actorRole, "endpoint_key", id, "force_store_false", 0, 1, now); err != nil {
+			return EndpointKey{}, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return EndpointKey{}, ErrEndpointCredentialUnavailable
 	}
 	committed = true
 	return EndpointKey{
-		ID:          id,
-		EndpointID:  endpointID,
-		DisplayHead: displayHead,
-		DisplayTail: displayTail,
-		Note:        note,
-		Enabled:     enabled,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:              id,
+		EndpointID:      endpointID,
+		DisplayHead:     displayHead,
+		DisplayTail:     displayTail,
+		Note:            note,
+		Enabled:         enabled,
+		ForceStoreFalse: forceStoreFalse,
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}, nil
 }
 
@@ -117,11 +148,28 @@ func (s *Store) CreateEndpointKey(ctx context.Context, userID, endpointID int64,
 // placeholder is never visible to another connection because the enclosing
 // transaction is the only writer. On return (success or error) the plaintext
 // has been consumed and cleared.
-func (s *Store) createEndpointKeyTx(ctx context.Context, tx *sql.Tx, userID, endpointID int64, secretPlaintext []byte, displayHead, displayTail, note string, enabled bool, now int64) (int64, error) {
+func (s *Store) createEndpointKeyTx(ctx context.Context, tx *sql.Tx, userID, endpointID int64, secretPlaintext []byte, displayHead, displayTail, note string, enabled, forceStoreFalse bool, now int64) (int64, error) {
 	defer clear(secretPlaintext)
+	if forceStoreFalse {
+		var connector string
+		err := tx.QueryRowContext(ctx, `SELECT connector_type FROM endpoints WHERE id=? AND user_id=?`, endpointID, userID).Scan(&connector)
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, ErrNotFound
+		}
+		if err != nil {
+			return 0, fmt.Errorf("read endpoint connector: %w", err)
+		}
+		if connector != "openai-compatible" {
+			return 0, ErrInvalidValue
+		}
+	}
 	enabledInt := 0
 	if enabled {
 		enabledInt = 1
+	}
+	forceInt := 0
+	if forceStoreFalse {
+		forceInt = 1
 	}
 
 	cap, err := siteConfigIntLocked(ctx, tx, siteConfigKeyDefaultEndpointKeyLimit, DefaultEndpointKeyLimit)
@@ -143,11 +191,11 @@ WHERE ek.endpoint_id=? AND e.user_id=?`, endpointID, userID).Scan(&count); err !
 	// empty ciphertext is an uncommitted placeholder used only to obtain the
 	// database-assigned key id required by the authenticated context.
 	res, err := tx.ExecContext(ctx, `
-INSERT INTO endpoint_keys (endpoint_id, encrypted_secret, display_head, display_tail, note, enabled, created_at, updated_at)
-SELECT ?, '', ?, ?, ?, ?, ?, ?
+INSERT INTO endpoint_keys (endpoint_id, encrypted_secret, display_head, display_tail, note, enabled, force_store_false, created_at, updated_at)
+SELECT ?, '', ?, ?, ?, ?, ?, ?, ?
 FROM endpoints
 WHERE id=? AND user_id=?`,
-		endpointID, displayHead, displayTail, note, enabledInt, now, now, endpointID, userID)
+		endpointID, displayHead, displayTail, note, enabledInt, forceInt, now, now, endpointID, userID)
 	if err != nil {
 		return 0, fmt.Errorf("insert endpoint key placeholder: %w", err)
 	}
@@ -230,7 +278,7 @@ WHERE ek.endpoint_id=? AND e.user_id=?`, endpointID, userID).Scan(&count); err !
 // response path.
 func (s *Store) ListEndpointKeys(ctx context.Context, userID, endpointID int64) ([]EndpointKey, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT ek.id, ek.endpoint_id, ek.display_head, ek.display_tail, ek.note, ek.enabled, ek.created_at, ek.updated_at
+SELECT ek.id, ek.endpoint_id, ek.display_head, ek.display_tail, ek.note, ek.enabled, ek.force_store_false, ek.created_at, ek.updated_at
 FROM endpoint_keys ek
 JOIN endpoints e ON ek.endpoint_id = e.id
 WHERE ek.endpoint_id=? AND e.user_id=?
@@ -248,7 +296,7 @@ ORDER BY ek.id`, endpointID, userID)
 // selects encrypted_secret.
 func (s *Store) ListEnabledEndpointKeys(ctx context.Context, userID, endpointID int64) ([]EndpointKey, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT ek.id, ek.endpoint_id, ek.display_head, ek.display_tail, ek.note, ek.enabled, ek.created_at, ek.updated_at
+SELECT ek.id, ek.endpoint_id, ek.display_head, ek.display_tail, ek.note, ek.enabled, ek.force_store_false, ek.created_at, ek.updated_at
 FROM endpoint_keys ek
 JOIN endpoints e ON ek.endpoint_id = e.id
 WHERE ek.endpoint_id=? AND e.user_id=? AND ek.enabled=1
@@ -267,6 +315,16 @@ ORDER BY ek.id`, endpointID, userID)
 // with no read-then-write race. now updates updated_at. The encrypted secret is
 // never mutable through this method (key rotation is delete + add).
 func (s *Store) UpdateEndpointKey(ctx context.Context, userID, endpointID, keyID int64, note *string, enabled *bool, now int64) (EndpointKey, error) {
+	return s.updateEndpointKey(ctx, userID, endpointID, keyID, note, enabled, nil, now, "owner")
+}
+
+// UpdateEndpointKeyWithPolicy is the policy-aware key update used by the
+// management rail. A nil forceStoreFalse leaves the existing policy intact.
+func (s *Store) UpdateEndpointKeyWithPolicy(ctx context.Context, userID, endpointID, keyID int64, note *string, enabled *bool, forceStoreFalse *bool, now int64, actorRole string) (EndpointKey, error) {
+	return s.updateEndpointKey(ctx, userID, endpointID, keyID, note, enabled, forceStoreFalse, now, actorRole)
+}
+
+func (s *Store) updateEndpointKey(ctx context.Context, userID, endpointID, keyID int64, note *string, enabled *bool, forceStoreFalse *bool, now int64, actorRole string) (EndpointKey, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return EndpointKey{}, fmt.Errorf("begin update endpoint key: %w", err)
@@ -277,8 +335,25 @@ func (s *Store) UpdateEndpointKey(ctx context.Context, userID, endpointID, keyID
 			_ = tx.Rollback()
 		}
 	}()
+	var oldForceStoreFalse int
+	if forceStoreFalse != nil {
+		var connector string
+		err := tx.QueryRowContext(ctx, `
+SELECT e.connector_type, ek.force_store_false
+FROM endpoint_keys ek JOIN endpoints e ON e.id=ek.endpoint_id
+WHERE ek.id=? AND ek.endpoint_id=? AND e.user_id=?`, keyID, endpointID, userID).Scan(&connector, &oldForceStoreFalse)
+		if errors.Is(err, sql.ErrNoRows) {
+			return EndpointKey{}, ErrNotFound
+		}
+		if err != nil {
+			return EndpointKey{}, fmt.Errorf("read endpoint connector for update: %w", err)
+		}
+		if *forceStoreFalse && connector != "openai-compatible" {
+			return EndpointKey{}, ErrInvalidValue
+		}
+	}
 
-	sets := make([]string, 0, 3)
+	sets := make([]string, 0, 4)
 	args := make([]any, 0, 5)
 	if note != nil {
 		sets = append(sets, "note=?")
@@ -291,6 +366,14 @@ func (s *Store) UpdateEndpointKey(ctx context.Context, userID, endpointID, keyID
 		}
 		sets = append(sets, "enabled=?")
 		args = append(args, enabledInt)
+	}
+	if forceStoreFalse != nil {
+		forceInt := 0
+		if *forceStoreFalse {
+			forceInt = 1
+		}
+		sets = append(sets, "force_store_false=?")
+		args = append(args, forceInt)
 	}
 	if len(sets) == 0 {
 		row := tx.QueryRowContext(ctx, endpointKeySelectSQL, keyID, endpointID, userID)
@@ -330,6 +413,20 @@ func (s *Store) UpdateEndpointKey(ctx context.Context, userID, endpointID, keyID
 	k, err := scanEndpointKeyRow(row)
 	if err != nil {
 		return EndpointKey{}, fmt.Errorf("read updated endpoint key: %w", err)
+	}
+	if forceStoreFalse != nil {
+		// The old value is read before the update in this same transaction, so
+		// the audit records the actual transition rather than the post-write
+		// value. No-op policy writes intentionally produce no row.
+		newForceStoreFalse := 0
+		if *forceStoreFalse {
+			newForceStoreFalse = 1
+		}
+		if oldForceStoreFalse != newForceStoreFalse {
+			if err := appendPolicyAuditTx(ctx, tx, userID, actorRole, "endpoint_key", keyID, "force_store_false", int64(oldForceStoreFalse), int64(newForceStoreFalse), now); err != nil {
+				return EndpointKey{}, err
+			}
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return EndpointKey{}, fmt.Errorf("commit update endpoint key: %w", err)
@@ -386,19 +483,20 @@ func (s *Store) DeleteEndpointKey(ctx context.Context, userID, endpointID, keyID
 // ek.endpoint_id=? clause makes the path's endpoint id part of the ownership
 // check so a key cannot be addressed through another endpoint's path.
 const endpointKeySelectSQL = `
-SELECT ek.id, ek.endpoint_id, ek.display_head, ek.display_tail, ek.note, ek.enabled, ek.created_at, ek.updated_at
+SELECT ek.id, ek.endpoint_id, ek.display_head, ek.display_tail, ek.note, ek.enabled, ek.force_store_false, ek.created_at, ek.updated_at
 FROM endpoint_keys ek
 JOIN endpoints e ON ek.endpoint_id = e.id
 WHERE ek.id=? AND ek.endpoint_id=? AND e.user_id=?`
 
 func scanEndpointKeyRow(row *sql.Row) (EndpointKey, error) {
 	var k EndpointKey
-	var enabledInt int
-	err := row.Scan(&k.ID, &k.EndpointID, &k.DisplayHead, &k.DisplayTail, &k.Note, &enabledInt, &k.CreatedAt, &k.UpdatedAt)
+	var enabledInt, forceStoreFalseInt int
+	err := row.Scan(&k.ID, &k.EndpointID, &k.DisplayHead, &k.DisplayTail, &k.Note, &enabledInt, &forceStoreFalseInt, &k.CreatedAt, &k.UpdatedAt)
 	if err != nil {
 		return EndpointKey{}, err
 	}
 	k.Enabled = enabledInt != 0
+	k.ForceStoreFalse = forceStoreFalseInt != 0
 	return k, nil
 }
 
@@ -406,11 +504,12 @@ func scanEndpointKeys(rows *sql.Rows) ([]EndpointKey, error) {
 	var out []EndpointKey
 	for rows.Next() {
 		var k EndpointKey
-		var enabledInt int
-		if err := rows.Scan(&k.ID, &k.EndpointID, &k.DisplayHead, &k.DisplayTail, &k.Note, &enabledInt, &k.CreatedAt, &k.UpdatedAt); err != nil {
+		var enabledInt, forceStoreFalseInt int
+		if err := rows.Scan(&k.ID, &k.EndpointID, &k.DisplayHead, &k.DisplayTail, &k.Note, &enabledInt, &forceStoreFalseInt, &k.CreatedAt, &k.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan endpoint key: %w", err)
 		}
 		k.Enabled = enabledInt != 0
+		k.ForceStoreFalse = forceStoreFalseInt != 0
 		out = append(out, k)
 	}
 	if err := rows.Err(); err != nil {

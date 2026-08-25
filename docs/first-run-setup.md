@@ -85,9 +85,10 @@ The environment file contains secrets, including the administrator password and 
 | `NONBIRI_DB_PATH` | no | `/var/lib/nonbiriapi/nonbiriapi.db`. The service account must write the directory. |
 | `NONBIRI_LOG_LEVEL` | no | `info` for production; `debug` only when diagnosing. |
 
-The application creates a missing database directory owner-only. If you launch
-it manually outside systemd, run `umask 077` first so SQLite sidecar files stay
-owner-only.
+The application requires the database directory to be owner-only and creates a
+brand-new database and its sidecars with owner-only permissions. `umask 077`
+remains useful defense in depth for a manual launch, but runtime path, owner,
+mode, file-shape, and sidecar checks are authoritative.
 
 ### Administrator credential
 
@@ -183,7 +184,22 @@ The loader collects the validation problems below and reports them together. Res
 The error message names each offending variable; it never prints secret
 material.
 
-## 6. First-boot smoke test
+## 6. Prepare a fresh alpha.3 database path
+
+Alpha.3 is a fresh-only database generation, not an in-place migration from alpha.1 or alpha.2. Before the first alpha.3 boot, the configured database path and its exact `-wal` and `-shm` sidecar paths must all be absent. An empty file is not a fresh database and is rejected.
+
+On a true fresh start the process creates a generation-1 SQLite database with `application_id=0x4E425249` and `user_version=1`, validates the complete schema, and seeds these safe states:
+
+- maintenance mode on;
+- new registration off;
+- the game master switch off;
+- Pond Fishing off.
+
+If a main file or sidecar already exists, the process first validates file identity, the raw SQLite header, schema, foreign keys, indexes, and contextual credential envelopes through a protected read-only snapshot. An alpha.1/alpha.2 database, an empty or corrupt file, an unknown generation, an unexpected schema object, or an anomalous sidecar is rejected without modifying the source files or creating new source-side sidecars. Do not create a placeholder with `touch`, run hand-written DDL, or point alpha.3 at an alpha.2 production path.
+
+For a cutover, stop the old service and retain a verified complete source snapshot before moving the old database set out of the configured path. The complete snapshot must keep the database/sidecars, matching release, environment/configuration, master key, and systemd unit together. See [deployment.md](deployment.md#alpha3-fresh-only-database-and-version-changes); deleting or replacing an existing database requires a separate explicit destructive operation and is never an ordinary first-boot step.
+
+## 7. First-boot smoke test
 
 After the systemd unit is installed and started (see
 [deployment.md](deployment.md#example-systemd-unit)):
@@ -196,24 +212,38 @@ sudo journalctl -u nonbiriapi.service -n 100 --no-pager
 Then through the reverse proxy, confirm:
 
 1. `GET https://<user-host>/healthz` returns a healthy response.
-2. The user station loads and the Discord sign-in flow reaches the callback.
+2. The user station loads and clearly shows the maintenance state. OAuth start,
+   callback and all other user APIs remain intentionally unavailable while
+   maintenance is on.
 3. The admin station (`https://<admin-host>`) shows the admin login, and the
    configured username/password signs in.
 4. After signing in to the admin station, set the Discord guild and role used by
-   the registration gate (see [configuration.md](configuration.md)) before
+   the registration gate (see [configuration.md](configuration.md)), review and
+   apply the instance-specific legal text, verify all necessary limits and
+   upstream settings, and prepare and restore-test a complete snapshot before
    inviting the first user.
+5. Only after those checks pass, turn maintenance off. Keep games off and keep
+   registration closed unless a controlled registration test or onboarding
+   window is intended.
+6. For a disposable new-user OAuth test, deliberately open registration, confirm
+   that Discord sign-in reaches the callback and creates the expected account,
+   then complete an end-to-end call. Close registration again if onboarding is
+   not yet intended. Enable games only after their configuration and accounting
+   behavior have also been verified. Fresh defaults never opt the site in.
 
 Do not treat a running process alone as a successful deployment. A clean
 journal with both stations reachable and the login boundary enforced is the
 minimum acceptance bar.
 
-## 7. Do not
+## 8. Do not
 
 - Do not regenerate the master key for an existing database.
 - Do not commit `admin.env`, `master.key`, or any real secret to the repository; the environment file itself is secret-bearing.
 - Do not widen `NONBIRI_TRUSTED_PROXY_CIDRS` beyond the reverse proxy.
 - Do not bind the listener to a public interface when a reverse proxy is in
   front.
+- Do not reuse, rename into place, or open an alpha.1/alpha.2 database as an
+  alpha.3 database. Preserve it as a complete protected snapshot instead.
 - Do not weaken the authentication, ownership, egress, secret, stream, or
   no-store boundaries to customize a deployment; customize via source and
   rebuild instead.

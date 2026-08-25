@@ -1,28 +1,20 @@
 package db
 
-// Tests for the temporal ban / charity-suspension foundation: one-shot
-// migration, lazy atomic expiry on read, permanent-ban semantics, clock
+// Tests for the temporal ban / charity-suspension foundation: lazy atomic
+// expiry on read, permanent-ban semantics, clock
 // boundaries, manual re-ban provenance, session/caller-key invalidation, and
 // concurrent readers under the race detector.
 
 import (
 	"bytes"
-	"database/sql"
 	"errors"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
-
-// openRawSQLite opens the SQLite file directly (no schema bootstrap) so tests
-// can construct databases from earlier schema generations.
-func openRawSQLite(path string) (*sql.DB, error) {
-	return sql.Open("sqlite", path)
-}
 
 func testVault(t testing.TB, keyByte byte) *secret.Vault {
 	t.Helper()
@@ -70,7 +62,7 @@ func TestUsersTableHasTemporalBanColumns(t *testing.T) {
 	}
 	for _, col := range []string{"banned_until", "auto_banned", "charity_suspended_until"} {
 		if !present[col] {
-			t.Fatalf("users table missing column %q after migration", col)
+			t.Fatalf("users table missing generation-one column %q", col)
 		}
 	}
 
@@ -83,67 +75,6 @@ func TestUsersTableHasTemporalBanColumns(t *testing.T) {
 	}
 	if autoBanned != 0 || bannedUntil != nil || charityUntil != nil {
 		t.Fatalf("neutral defaults not applied: auto_banned=%d banned_until=%v charity=%v", autoBanned, bannedUntil, charityUntil)
-	}
-}
-
-// TestLegacyUsersTableMigrated opens a database whose users table predates
-// the temporal ban columns and verifies the one-shot migration adds them in
-// place with neutral defaults for existing rows.
-func TestLegacyUsersTableMigrated(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "legacy.db")
-	dbtest.EnsureOwnerOnlyParent(t, path)
-
-	legacy, err := openRawSQLite(path)
-	if err != nil {
-		t.Fatalf("open legacy db: %v", err)
-	}
-	_, err = legacy.Exec(`CREATE TABLE users (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		discord_id TEXT UNIQUE,
-		username TEXT NOT NULL DEFAULT '',
-		avatar TEXT NOT NULL DEFAULT '',
-		is_admin INTEGER NOT NULL DEFAULT 0,
-		is_banned INTEGER NOT NULL DEFAULT 0,
-		banned_reason TEXT NOT NULL DEFAULT '',
-		endpoint_limit INTEGER,
-		rpm_limit INTEGER,
-		total_requests INTEGER NOT NULL DEFAULT 0,
-		total_prompt_tokens INTEGER NOT NULL DEFAULT 0,
-		total_completion_tokens INTEGER NOT NULL DEFAULT 0,
-		total_unknown_usage_requests INTEGER NOT NULL DEFAULT 0,
-		lang TEXT NOT NULL DEFAULT '',
-		created_at INTEGER NOT NULL,
-		updated_at INTEGER NOT NULL
-	)`)
-	if err != nil {
-		t.Fatalf("create legacy users: %v", err)
-	}
-	now := time.Now().Unix()
-	if _, err := legacy.Exec(`INSERT INTO users (discord_id, username, is_banned, banned_reason, created_at, updated_at)
-		VALUES ('legacy-user', 'old', 1, 'historic', ?, ?)`, now, now); err != nil {
-		t.Fatalf("insert legacy row: %v", err)
-	}
-	if err := legacy.Close(); err != nil {
-		t.Fatalf("close legacy db: %v", err)
-	}
-
-	vault := testVault(t, 0x2a)
-	st, err := Open(path, vault)
-	if err != nil {
-		t.Fatalf("Open migrated legacy db: %v", err)
-	}
-	defer st.Close()
-
-	user, err := st.GetUserByDiscordID("legacy-user")
-	if err != nil || user == nil {
-		t.Fatalf("GetUserByDiscordID = (%#v, %v)", user, err)
-	}
-	if !user.IsBanned || user.AutoBanned || user.BannedUntil != nil || user.CharitySuspendedUntil != nil {
-		t.Fatalf("legacy row defaults wrong: %+v", user)
-	}
-	// A permanent-shaped historic ban (is_banned=1, no deadline) stays banned.
-	if got, err := st.GetUserByDiscordID("legacy-user"); err != nil || got == nil || !got.IsBanned {
-		t.Fatalf("permanent-shaped legacy ban was lifted: (%#v, %v)", got, err)
 	}
 }
 

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
@@ -188,6 +189,26 @@ func (s *Store) GetUserByCallerKey(key string) (*User, error) {
 	}
 	s.reconcileUserTemporalState(user, time.Now())
 	return user, nil
+}
+
+// ValidateCallerKeyBinding performs the read-only second credential check
+// used after a request has entered the process-local lifecycle gate. It never
+// reconciles temporal state, renews a session, or mutates the caller-key row.
+func (s *Store) ValidateCallerKeyBinding(ctx context.Context, userID int64, key string) (bool, error) {
+	if s == nil || ctx == nil || userID <= 0 || !validateCallerKey(key) {
+		return false, nil
+	}
+	nowUnix := time.Now().Unix()
+	var count int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*)
+		FROM caller_keys c JOIN users u ON u.id=c.user_id
+		WHERE c.key_hash=? AND c.user_id=? AND u.is_admin=0
+		AND (u.is_banned=0 OR (u.banned_until IS NOT NULL AND u.banned_until<=?))`,
+		hashCallerKey(key), userID, nowUnix).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("validate caller key binding: %w", err)
+	}
+	return count == 1, nil
 }
 
 // CallerKeyExists reports whether a user has a currently stored key row.

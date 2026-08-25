@@ -135,10 +135,11 @@ type ExistingKeySelection struct {
 
 // NewKeyEntry is one freshly entered key of a nested submission.
 type NewKeyEntry struct {
-	Secret         []byte
-	Note           string
-	MaxConcurrency int64
-	RPMLimit       int64
+	Secret          []byte
+	Note            string
+	ForceStoreFalse bool
+	MaxConcurrency  int64
+	RPMLimit        int64
 }
 
 // CreateSpec is the validated service-level payload of one submission.
@@ -250,7 +251,8 @@ func (s *Service) Create(ctx context.Context, spec CreateSpec) (db.Donation, err
 			head, tail := endpoint.DisplayFragments(k.Secret)
 			in.Keys = append(in.Keys, db.NewKeySpec{
 				Secret: k.Secret, Note: k.Note, Enabled: true,
-				DisplayHead: head, DisplayTail: tail,
+				ForceStoreFalse: k.ForceStoreFalse,
+				DisplayHead:     head, DisplayTail: tail,
 				MaxConcurrency: k.MaxConcurrency, RPMLimit: k.RPMLimit,
 			})
 		}

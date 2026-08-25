@@ -10,9 +10,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -94,6 +97,10 @@ func (e *env) seedUser(t *testing.T, discordID string) *db.User {
 }
 
 func (e *env) mount(t *testing.T, runtime RuntimeApplier) http.Handler {
+	return e.mountDeps(t, HandlerDeps{Store: e.store, Runtime: runtime})
+}
+
+func (e *env) mountDeps(t *testing.T, deps HandlerDeps) http.Handler {
 	t.Helper()
 	adminAuth, err := auth.NewAdminAuth(auth.AdminAuthConfig{
 		Store: e.store, Username: "root", Password: "root-pw", SiteBaseURL: "https://example.com",
@@ -102,7 +109,7 @@ func (e *env) mount(t *testing.T, runtime RuntimeApplier) http.Handler {
 		t.Fatalf("NewAdminAuth: %v", err)
 	}
 	t.Cleanup(func() { _ = adminAuth.Close() })
-	return auth.AdminSessionMiddleware(adminAuth, NewHandler(HandlerDeps{Store: e.store, Runtime: runtime}))
+	return auth.AdminSessionMiddleware(adminAuth, NewHandler(deps))
 }
 
 func (e *env) mountUser(t *testing.T, next http.Handler) http.Handler {
@@ -214,6 +221,13 @@ func adminPatch(t *testing.T, e *env, runtime RuntimeApplier, path string, body 
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
+	rec := do(t, e.mount(t, runtime), withCookie(stationRequest(http.MethodPatch, path, host.StationAdmin, raw), e.adminCookie(t)))
+	assertNoStore(t, rec)
+	return rec
+}
+
+func adminPatchRaw(t *testing.T, e *env, runtime RuntimeApplier, path string, raw []byte) *httptest.ResponseRecorder {
+	t.Helper()
 	rec := do(t, e.mount(t, runtime), withCookie(stationRequest(http.MethodPatch, path, host.StationAdmin, raw), e.adminCookie(t)))
 	assertNoStore(t, rec)
 	return rec
@@ -427,10 +441,11 @@ func TestAdminUsersSearchFilter(t *testing.T) {
 func TestAdminUserDetail(t *testing.T) {
 	e := newEnv(t)
 	u := e.seedUser(t, "discord-u1")
-	el, rl := 7, 9
+	el, rl, cl := 7, 9, 11
 	if _, err := e.store.UpdateUserLimits(u.ID, db.UserLimitPatch{
 		EndpointLimitSet: true, EndpointLimit: &el,
 		RPMLimitSet: true, RPMLimit: &rl,
+		ConcurrencyLimitSet: true, ConcurrencyLimit: &cl,
 	}); err != nil {
 		t.Fatalf("UpdateUserLimits: %v", err)
 	}
@@ -438,7 +453,8 @@ func TestAdminUserDetail(t *testing.T) {
 	var row userResp
 	decodeJSON(t, rec, &row)
 	if row.ID != u.ID || row.EndpointLimit == nil || *row.EndpointLimit != 7 ||
-		row.RPMLimit == nil || *row.RPMLimit != 9 || row.DiscordID != "discord-u1" {
+		row.RPMLimit == nil || *row.RPMLimit != 9 || row.ConcurrencyLimit == nil || *row.ConcurrencyLimit != 11 ||
+		row.EffectiveEndpointLimit != 7 || row.EffectiveRPMLimit != 9 || row.EffectiveConcurrencyLimit != 11 || row.DiscordID != "discord-u1" {
 		t.Fatalf("detail row = %+v", row)
 	}
 	if row.TotalRequests != 0 {
@@ -458,10 +474,10 @@ func TestAdminUserPatch(t *testing.T) {
 	e := newEnv(t)
 	u := e.seedUser(t, "discord-u1")
 
-	rec := adminPatch(t, e, nil, fmt.Sprintf("/admin/api/users/%d", u.ID), map[string]any{"endpoint_limit": 12, "rpm_limit": 30, "lang": "en"})
+	rec := adminPatch(t, e, nil, fmt.Sprintf("/admin/api/users/%d", u.ID), map[string]any{"endpoint_limit": 12, "rpm_limit": 30, "concurrency_limit": 7, "lang": "en"})
 	var row userResp
 	decodeJSON(t, rec, &row)
-	if row.EndpointLimit == nil || *row.EndpointLimit != 12 || row.RPMLimit == nil || *row.RPMLimit != 30 || row.Lang != "en" {
+	if row.EndpointLimit == nil || *row.EndpointLimit != 12 || row.RPMLimit == nil || *row.RPMLimit != 30 || row.ConcurrencyLimit == nil || *row.ConcurrencyLimit != 7 || row.Lang != "en" {
 		t.Fatalf("patched row = %+v", row)
 	}
 	if row.Username != "user-discord-u1" {
@@ -469,29 +485,29 @@ func TestAdminUserPatch(t *testing.T) {
 	}
 
 	// NULL restores the global default.
-	rec = adminPatch(t, e, nil, fmt.Sprintf("/admin/api/users/%d", u.ID), map[string]any{"endpoint_limit": nil, "rpm_limit": nil})
+	rec = adminPatch(t, e, nil, fmt.Sprintf("/admin/api/users/%d", u.ID), map[string]any{"endpoint_limit": nil, "rpm_limit": nil, "concurrency_limit": nil})
 	decodeJSON(t, rec, &row)
-	if row.EndpointLimit != nil || row.RPMLimit != nil || row.Lang != "en" {
+	if row.EndpointLimit != nil || row.RPMLimit != nil || row.ConcurrencyLimit != nil || row.EffectiveConcurrencyLimit != db.DefaultUserConcurrencyLimit || row.Lang != "en" {
 		t.Fatalf("null restore row = %+v", row)
 	}
 
-	// rpm_limit above the global cap is rejected (cap = default_rpm_per_user
-	// or the ratelimit default 60).
+	// An explicit RPM override is independent from the site default.
 	if err := e.store.SetSiteConfigValue("default_rpm_per_user", "40"); err != nil {
 		t.Fatalf("SetSiteConfigValue: %v", err)
 	}
 	rec = adminPatch(t, e, nil, fmt.Sprintf("/admin/api/users/%d", u.ID), map[string]any{"rpm_limit": 41})
-	assertErr(t, rec, http.StatusBadRequest, "invalid_request")
-	rec = adminPatch(t, e, nil, fmt.Sprintf("/admin/api/users/%d", u.ID), map[string]any{"rpm_limit": 40})
 	decodeJSON(t, rec, &row)
-	if row.RPMLimit == nil || *row.RPMLimit != 40 {
-		t.Fatalf("cap-accepted row = %+v", row)
+	if row.RPMLimit == nil || *row.RPMLimit != 41 || row.EffectiveRPMLimit != 41 {
+		t.Fatalf("independent override row = %+v", row)
 	}
 
 	// Value/field strictness.
 	for _, body := range []any{
 		map[string]any{"rpm_limit": 0},
 		map[string]any{"rpm_limit": -1},
+		map[string]any{"rpm_limit": 4097},
+		map[string]any{"concurrency_limit": 0},
+		map[string]any{"concurrency_limit": 100001},
 		map[string]any{"endpoint_limit": -1},
 		map[string]any{"endpoint_limit": 10001},
 		map[string]any{"lang": "fr"},
@@ -518,6 +534,195 @@ func TestAdminUserPatch(t *testing.T) {
 	assertErr(t, rec, http.StatusNotFound, "not_found")
 	rec = adminPatch(t, e, nil, fmt.Sprintf("/admin/api/users/%d", e.admin.ID), map[string]any{"lang": "zh"})
 	assertErr(t, rec, http.StatusForbidden, "forbidden")
+}
+
+func TestAdminUserLimitPatchRawNumericStrictnessAndAtomicity(t *testing.T) {
+	e := newEnv(t)
+	user := e.seedUser(t, "numeric-strict")
+	handler := e.mount(t, nil)
+	cookie := e.adminCookie(t)
+	patchRaw := func(raw string) *httptest.ResponseRecorder {
+		req := stationRequest(http.MethodPatch, fmt.Sprintf("/admin/api/users/%d", user.ID), host.StationAdmin, []byte(raw))
+		return do(t, handler, withCookie(req, cookie))
+	}
+	assertUnchanged := func(label string) {
+		t.Helper()
+		current, err := e.store.GetUserByID(user.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if current.EndpointLimit != nil || current.RPMLimit != nil || current.ConcurrencyLimit != nil {
+			t.Fatalf("%s partially wrote limits: endpoint=%v rpm=%v concurrency=%v", label,
+				current.EndpointLimit, current.RPMLimit, current.ConcurrencyLimit)
+		}
+	}
+	invalid := []string{
+		`{"endpoint_limit":10001}`,
+		`{"rpm_limit":4097}`,
+		`{"concurrency_limit":0}`,
+		`{"concurrency_limit":100001}`,
+		`{"concurrency_limit":1.5}`,
+		`{"concurrency_limit":1e2}`,
+		`{"concurrency_limit":"5"}`,
+		`{"concurrency_limit":true}`,
+		`{"concurrency_limit":9223372036854775808}`,
+		`{"rpm_limit":1.5}`,
+		`{"rpm_limit":1e2}`,
+		`{"rpm_limit":"5"}`,
+		`{"rpm_limit":false}`,
+		`{"endpoint_limit":1e2}`,
+	}
+	for _, raw := range invalid {
+		recorder := patchRaw(raw)
+		assertErr(t, recorder, http.StatusBadRequest, "invalid_request")
+		assertUnchanged(raw)
+	}
+
+	// Frozen inclusive hard bounds, including endpoint zero.
+	recorder := patchRaw(`{"endpoint_limit":0,"rpm_limit":4096,"concurrency_limit":100000}`)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("inclusive bounds status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	current, err := e.store.GetUserByID(user.ID)
+	if err != nil || current.EndpointLimit == nil || *current.EndpointLimit != 0 ||
+		current.RPMLimit == nil || *current.RPMLimit != 4096 ||
+		current.ConcurrencyLimit == nil || *current.ConcurrencyLimit != 100000 {
+		t.Fatalf("inclusive bounds user=%+v err=%v", current, err)
+	}
+	recorder = patchRaw(`{"endpoint_limit":10000}`)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("endpoint max status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestAdminStrictJSONRejectsAmbiguityWithoutMutation(t *testing.T) {
+	e := newEnv(t)
+	user := e.seedUser(t, "strict-json")
+	var retirementBegins atomic.Int64
+	beginRetirement := func(int64) (func() bool, func() bool, error) {
+		retirementBegins.Add(1)
+		var done atomic.Bool
+		return func() bool { return done.CompareAndSwap(false, true) },
+			func() bool { return done.CompareAndSwap(false, true) }, nil
+	}
+	applier := &recordingApplier{}
+	handler := e.mountDeps(t, HandlerDeps{
+		Store:               e.store,
+		Runtime:             applier,
+		BeginUserRetirement: beginRetirement,
+	})
+	cookie := e.adminCookie(t)
+	request := func(method, path string, raw []byte) *httptest.ResponseRecorder {
+		req := stationRequest(method, path, host.StationAdmin, raw)
+		return do(t, handler, withCookie(req, cookie))
+	}
+	patchPath := fmt.Sprintf("/admin/api/users/%d", user.ID)
+	banPath := patchPath + "/ban"
+	assertUnchanged := func(label string) {
+		t.Helper()
+		current, err := e.store.GetUserByID(user.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if current.EndpointLimit != nil || current.RPMLimit != nil || current.ConcurrencyLimit != nil ||
+			current.Credits != 0 || current.DonationCredit != 0 || current.IsBanned {
+			t.Fatalf("%s mutated user: %+v", label, current)
+		}
+		var ledgerRows int
+		if err := e.store.DB().QueryRow(`SELECT COUNT(*) FROM credit_ledger WHERE user_id=?`, user.ID).Scan(&ledgerRows); err != nil {
+			t.Fatalf("%s count ledger: %v", label, err)
+		}
+		if ledgerRows != 0 {
+			t.Fatalf("%s wrote %d ledger rows", label, ledgerRows)
+		}
+		if got := retirementBegins.Load(); got != 0 {
+			t.Fatalf("%s began %d retirements", label, got)
+		}
+	}
+
+	invalidPatches := []struct {
+		name string
+		raw  []byte
+	}{
+		{"duplicate limit", []byte(`{"concurrency_limit":5,"concurrency_limit":6}`)},
+		{"escaped-equivalent limit", []byte(`{"endpoint_limit":5,"\u0065ndpoint_limit":6}`)},
+		{"case-variant profile field", []byte(`{"ENDPOINT_LIMIT":7}`)},
+		{"mixed exact and case-variant profile field", []byte(`{"endpoint_limit":7,"ENDPOINT_LIMIT":8}`)},
+		{"case-variant economy field", []byte(`{"CREDITS":"1","operation_id":"case-economy","reason":"r"}`)},
+		{"mixed exact and case-variant economy field", []byte(`{"credits":"1","CREDITS":"-999","operation_id":"mixed-case-economy","reason":"r"}`)},
+		{"escaped case-variant economy field", []byte(`{"credits":"1","\u0043REDITS":"-999","operation_id":"escaped-case-economy","reason":"r"}`)},
+		// encoding/json's last-value-wins behavior could otherwise hide the
+		// economy field and turn this mixed-mode request into a profile write.
+		{"profile economy classification bypass", []byte(`{"endpoint_limit":7,"credits":"1","credits":null}`)},
+		{"invalid UTF-8 economy reason", append([]byte(`{"credits":"1","operation_id":"invalid-utf8","reason":"`), append([]byte{0xff}, []byte(`"}`)...)...)},
+	}
+	for _, tc := range invalidPatches {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := request(http.MethodPatch, patchPath, tc.raw)
+			assertErr(t, recorder, http.StatusBadRequest, "invalid_request")
+			assertUnchanged(tc.name)
+		})
+	}
+
+	for _, tc := range []struct {
+		name       string
+		raw        []byte
+		wantStatus int
+		wantCode   string
+	}{
+		{"duplicate ban field", []byte(`{"reason":"first","reason":"second"}`), http.StatusBadRequest, "invalid_request"},
+		{"escaped-equivalent ban field", []byte(`{"reason":"first","\u0072eason":"second"}`), http.StatusBadRequest, "invalid_request"},
+		{"case-variant ban field", []byte(`{"REASON":"bad"}`), http.StatusBadRequest, "invalid_request"},
+		{"mixed exact and case-variant ban field", []byte(`{"reason":"first","REASON":"second"}`), http.StatusBadRequest, "invalid_request"},
+		{"invalid UTF-8 ban reason", append([]byte(`{"reason":"`), append([]byte{0xff}, []byte(`"}`)...)...), http.StatusBadRequest, "invalid_request"},
+		{"oversized optional body", []byte(`{"reason":"` + strings.Repeat("a", maxAdminBodyBytes) + `"}`), http.StatusRequestEntityTooLarge, "payload_too_large"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := request(http.MethodPost, banPath, tc.raw)
+			assertErr(t, recorder, tc.wantStatus, tc.wantCode)
+			assertUnchanged(tc.name)
+		})
+	}
+
+	if err := e.store.SetSiteConfigValue("default_endpoint_limit", "50"); err != nil {
+		t.Fatalf("seed site config: %v", err)
+	}
+	for _, tc := range []struct {
+		name string
+		raw  []byte
+	}{
+		{"case-variant site-config field", []byte(`{"VALUE":77}`)},
+		{"mixed exact and case-variant site-config field", []byte(`{"value":66,"VALUE":77}`)},
+		{"escaped case-variant site-config field", []byte(`{"value":66,"\u0056ALUE":77}`)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := request(http.MethodPatch, "/admin/api/site-config/default_endpoint_limit", tc.raw)
+			assertErr(t, recorder, http.StatusBadRequest, "invalid_request")
+			value, err := e.store.GetSiteConfigValue("default_endpoint_limit")
+			if err != nil || value != "50" {
+				t.Fatalf("site config mutated: value=%q err=%v", value, err)
+			}
+			if len(applier.applied) != 0 || len(applier.reverted) != 0 {
+				t.Fatalf("runtime side effects: applied=%v reverted=%v", applier.applied, applier.reverted)
+			}
+			if got := retirementBegins.Load(); got != 0 {
+				t.Fatalf("site-config decode began %d retirements", got)
+			}
+		})
+	}
+
+	// The optional decoder treats only an all-whitespace body as absent.
+	recorder := request(http.MethodPost, banPath, []byte(" \r\n\t "))
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("whitespace optional body status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	current, err := e.store.GetUserByID(user.ID)
+	if err != nil || current == nil || !current.IsBanned {
+		t.Fatalf("whitespace optional body did not ban: user=%+v err=%v", current, err)
+	}
+	if got := retirementBegins.Load(); got != 1 {
+		t.Fatalf("valid ban retirement begins=%d, want 1", got)
+	}
 }
 
 // --- ban / unban ------------------------------------------------------------
@@ -600,6 +805,94 @@ func TestAdminBanUnbanInvalidatesSessionsAndCallerKey(t *testing.T) {
 	assertErr(t, rec, http.StatusBadRequest, "invalid_request")
 	rec = adminPost(t, e, fmt.Sprintf("/admin/api/users/%d/ban", u.ID), map[string]any{"reason": "bad\x00reason"})
 	assertErr(t, rec, http.StatusBadRequest, "invalid_request")
+}
+
+func TestAdminBanRetirementCommitAndAbort(t *testing.T) {
+	e := newEnv(t)
+	user := e.seedUser(t, "retirement")
+	var mu sync.Mutex
+	events := make([]string, 0, 4)
+	begin := func(userID int64) (func() bool, func() bool, error) {
+		current, err := e.store.GetUserByID(userID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if current != nil && current.IsBanned {
+			t.Fatal("retirement began after DB ban")
+		}
+		mu.Lock()
+		events = append(events, "begin:"+strconv.FormatInt(userID, 10))
+		mu.Unlock()
+		var done atomic.Bool
+		commit := func() bool {
+			if !done.CompareAndSwap(false, true) {
+				return false
+			}
+			mu.Lock()
+			events = append(events, "commit:"+strconv.FormatInt(userID, 10))
+			mu.Unlock()
+			return true
+		}
+		abort := func() bool {
+			if !done.CompareAndSwap(false, true) {
+				return false
+			}
+			mu.Lock()
+			events = append(events, "abort:"+strconv.FormatInt(userID, 10))
+			mu.Unlock()
+			return true
+		}
+		return commit, abort, nil
+	}
+	handler := e.mountDeps(t, HandlerDeps{Store: e.store, BeginUserRetirement: begin})
+	post := func(path string) *httptest.ResponseRecorder {
+		req := withCookie(stationRequest(http.MethodPost, path, host.StationAdmin, []byte(`{}`)), e.adminCookie(t))
+		return do(t, handler, req)
+	}
+	if rec := post(fmt.Sprintf("/admin/api/users/%d/ban", user.ID)); rec.Code != http.StatusNoContent {
+		t.Fatalf("ban status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if rec := post("/admin/api/users/999999/ban"); rec.Code != http.StatusNotFound {
+		t.Fatalf("missing status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	mu.Lock()
+	want := []string{
+		"begin:" + strconv.FormatInt(user.ID, 10),
+		"commit:" + strconv.FormatInt(user.ID, 10),
+		"begin:999999", "abort:999999",
+	}
+	if strings.Join(events, ",") != strings.Join(want, ",") {
+		mu.Unlock()
+		t.Fatalf("retirement events=%v want=%v", events, want)
+	}
+	mu.Unlock()
+
+	for _, tc := range []struct {
+		name  string
+		begin func(int64) (func() bool, func() bool, error)
+	}{
+		{"begin error", func(int64) (func() bool, func() bool, error) {
+			return nil, nil, errors.New("unavailable")
+		}},
+		{"malformed callback", func(int64) (func() bool, func() bool, error) {
+			return nil, nil, nil
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			target := e.seedUser(t, "retire-"+strings.ReplaceAll(tc.name, " ", "-"))
+			h := e.mountDeps(t, HandlerDeps{Store: e.store, BeginUserRetirement: tc.begin})
+			req := withCookie(stationRequest(http.MethodPost,
+				fmt.Sprintf("/admin/api/users/%d/ban", target.ID), host.StationAdmin, []byte(`{}`)), e.adminCookie(t))
+			recorder := do(t, h, req)
+			if recorder.Code != http.StatusServiceUnavailable {
+				t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+			}
+			current, err := e.store.GetUserByID(target.ID)
+			if err != nil || current == nil || current.IsBanned {
+				t.Fatalf("DB mutated current=%+v err=%v", current, err)
+			}
+		})
+	}
 }
 
 // --- site config ------------------------------------------------------------
@@ -802,58 +1095,193 @@ func TestSiteConfigPatchTypedAndRuntimeApply(t *testing.T) {
 	}
 }
 
-// TestSiteConfigLegalOverrideAcceptsLargeDocument guards the multiline legal
-// override keys. textMaxFor must return the per-key max (maxLegalOverrideBytes,
-// 64 KiB) for kindMultilineText keys, not the generic maxSiteNameBytes fallback
-// (256). A real privacy policy is several KiB; before the fix any value over
-// 256 bytes was rejected as "invalid configuration value".
-func TestSiteConfigLegalOverrideAcceptsLargeDocument(t *testing.T) {
+// TestSiteConfigLegalOverrideRoundTripsAtByteLimit pins the legal-only body
+// decoder: all four documents preserve whitespace and mixed newline styles,
+// while the decoded UTF-8 value is bounded independently at exactly 64 KiB.
+func TestSiteConfigLegalOverrideRoundTripsAtByteLimit(t *testing.T) {
 	e := newEnv(t)
 	applier := &recordingApplier{}
-
-	// A representative multi-paragraph document, well over both the 256-byte
-	// generic text bound (the old textMaxFor bug) and the 4096-byte identity
-	// cap (the old GetSiteConfigValue bug), but under the admin body limit.
-	doc := strings.Repeat("## Section\n\nA paragraph of privacy text.\n", 120) // ~7.7 KiB
-	if len(doc) <= 4096 {
-		t.Fatalf("test document too short: %d bytes", len(doc))
+	prefix := "  标题\r\n\tparagraph\ntrailing spaces  \r\n"
+	doc := prefix + strings.Repeat("x", maxLegalOverrideBytes-len(prefix))
+	if len(doc) != maxLegalOverrideBytes {
+		t.Fatalf("test document bytes=%d, want %d", len(doc), maxLegalOverrideBytes)
 	}
-	for _, k := range []string{
-		"legal_privacy_override_zh", "legal_privacy_override_en",
-		"legal_terms_override_zh", "legal_terms_override_en",
-	} {
-		rec := adminPatch(t, e, applier, "/admin/api/site-config/"+k, map[string]any{"value": doc})
+	keys := []string{
+		KeyLegalPrivacyOverrideZh, KeyLegalPrivacyOverrideEn,
+		KeyLegalTermsOverrideZh, KeyLegalTermsOverrideEn,
+	}
+	for _, key := range keys {
+		rec := adminPatch(t, e, applier, "/admin/api/site-config/"+key, map[string]any{"value": doc})
 		if rec.Code != http.StatusOK {
-			t.Fatalf("PATCH %s (len=%d): status=%d body=%s", k, len(doc), rec.Code, rec.Body.String())
+			t.Fatalf("PATCH %s (len=%d): status=%d body=%s", key, len(doc), rec.Code, rec.Body.String())
 		}
 	}
-
-	// Re-saving an existing multiline override must succeed too: the read-back
-	// of the previous value is what triggered the 500 before the
-	// GetSiteConfigValue fix (it rejected newlines via validateIdentityText).
-	rec := adminPatch(t, e, applier, "/admin/api/site-config/legal_privacy_override_zh", map[string]any{"value": "## Replacement\n\nShorter doc.\n"})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("re-PATCH over existing multiline: status=%d body=%s", rec.Code, rec.Body.String())
-	}
-
-	// Values over the 16 KiB admin body limit are rejected by the HTTP layer
-	// (413), independent of the 64 KiB config ceiling; the storage-layer
-	// ceiling is covered by the db tests directly.
-	overBody := strings.Repeat("x", 17*1024)
-	rec = adminPatch(t, e, applier, "/admin/api/site-config/legal_privacy_override_zh", map[string]any{"value": overBody})
-	assertErr(t, rec, http.StatusRequestEntityTooLarge, "payload_too_large")
-
-	// The persisted value round-trips through the admin read path unchanged.
-	rec = adminGet(t, e, "/admin/api/site-config")
+	rec := adminGet(t, e, "/admin/api/site-config")
 	var out map[string]any
 	decodeJSON(t, rec, &out)
-	for _, k := range []string{"legal_privacy_override_en", "legal_terms_override_zh", "legal_terms_override_en"} {
-		if out[k] != doc {
-			t.Fatalf("%s round-trip = %v, want len=%d", k, out[k], len(doc))
+	for _, key := range keys {
+		if out[key] != doc {
+			t.Fatalf("%s did not round-trip byte-exactly", key)
 		}
 	}
-	if out["legal_privacy_override_zh"] != "## Replacement\n\nShorter doc.\n" {
-		t.Fatalf("legal_privacy_override_zh round-trip = %v", out["legal_privacy_override_zh"])
+	// A refresh followed by a second save must not normalize CRLF, tabs,
+	// leading spaces, or trailing spaces.
+	rec = adminPatch(t, e, applier, "/admin/api/site-config/"+KeyLegalPrivacyOverrideZh, map[string]any{"value": out[KeyLegalPrivacyOverrideZh]})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("second save status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	stored, err := e.store.GetSiteConfigValue(KeyLegalPrivacyOverrideZh)
+	if err != nil || stored != doc {
+		t.Fatalf("second save stored bytes changed: len=%d err=%v", len(stored), err)
+	}
+}
+
+func TestSiteConfigLegalOverrideRejectsInvalidWithoutMutation(t *testing.T) {
+	e := newEnv(t)
+	const key = KeyLegalPrivacyOverrideZh
+	seed := "seed\r\n\ttext  "
+	if rec := adminPatch(t, e, nil, "/admin/api/site-config/"+key, map[string]any{"value": seed}); rec.Code != http.StatusOK {
+		t.Fatalf("seed status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	assertUnchanged := func(t *testing.T) {
+		t.Helper()
+		stored, err := e.store.GetSiteConfigValue(key)
+		if err != nil || stored != seed {
+			t.Fatalf("rejected mutation changed stored value=(len %d, %v)", len(stored), err)
+		}
+	}
+
+	overDecoded, err := json.Marshal(map[string]any{"value": strings.Repeat("界", maxLegalOverrideBytes/3) + "xx"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(strings.Repeat("界", maxLegalOverrideBytes/3) + "xx"); got != maxLegalOverrideBytes+1 {
+		t.Fatalf("over-limit fixture bytes=%d", got)
+	}
+	rec := adminPatchRaw(t, e, nil, "/admin/api/site-config/"+key, overDecoded)
+	assertErr(t, rec, http.StatusBadRequest, "invalid_request")
+	assertUnchanged(t)
+
+	for name, raw := range map[string][]byte{
+		"wrong type":      []byte(`{"value":{"text":"no"}}`),
+		"control byte":    []byte(`{"value":"ok\u0001no"}`),
+		"duplicate field": []byte(`{"value":"first","\u0076alue":"second"}`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec := adminPatchRaw(t, e, nil, "/admin/api/site-config/"+key, raw)
+			assertErr(t, rec, http.StatusBadRequest, "invalid_request")
+			assertUnchanged(t)
+		})
+	}
+
+	// The legal transport cap is independently bounded above the decoded text
+	// ceiling. An oversized escaped transport fails at the HTTP layer.
+	overTransport := []byte(`{"value":"` + strings.Repeat(`\u0061`, maxLegalOverrideBytes+50) + `"}`)
+	if len(overTransport) <= maxLegalAdminBodyBytes {
+		t.Fatalf("transport fixture bytes=%d, want >%d", len(overTransport), maxLegalAdminBodyBytes)
+	}
+	rec = adminPatchRaw(t, e, nil, "/admin/api/site-config/"+key, overTransport)
+	assertErr(t, rec, http.StatusRequestEntityTooLarge, "payload_too_large")
+	assertUnchanged(t)
+
+	// No other administrator mutation inherits the legal transport allowance.
+	nonLegal := []byte(`{"value":"` + strings.Repeat("x", 17*1024) + `"}`)
+	rec = adminPatchRaw(t, e, nil, "/admin/api/site-config/"+KeySiteName, nonLegal)
+	assertErr(t, rec, http.StatusRequestEntityTooLarge, "payload_too_large")
+}
+
+func TestAnthropicDefaultMaxTokensRawEffectiveAndReset(t *testing.T) {
+	e := newEnv(t)
+	read := func(t *testing.T) map[string]any {
+		t.Helper()
+		rec := adminGet(t, e, "/admin/api/site-config")
+		var out map[string]any
+		decodeJSON(t, rec, &out)
+		return out
+	}
+	if got := read(t)[KeyAnthropicDefaultMaxTokens]; got != nil {
+		t.Fatalf("initial raw anthropic value=%v, want null", got)
+	}
+
+	for _, value := range []int{1, 65535, 65537, maxTokenLimit} {
+		rec := adminPatch(t, e, nil, "/admin/api/site-config/"+KeyAnthropicDefaultMaxTokens, map[string]any{"value": value})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("PATCH value=%d status=%d body=%s", value, rec.Code, rec.Body.String())
+		}
+		if got := read(t)[KeyAnthropicDefaultMaxTokens]; got != float64(value) {
+			t.Fatalf("raw anthropic value=%v, want %d", got, value)
+		}
+	}
+	storedBefore, err := e.store.GetSiteConfigValue(KeyAnthropicDefaultMaxTokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, raw := range map[string][]byte{
+		"zero":     []byte(`{"value":0}`),
+		"float":    []byte(`{"value":1.0}`),
+		"exponent": []byte(`{"value":1e3}`),
+		"string":   []byte(`{"value":"70000"}`),
+		"overflow": []byte(`{"value":2147483648}`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec := adminPatchRaw(t, e, nil, "/admin/api/site-config/"+KeyAnthropicDefaultMaxTokens, raw)
+			assertErr(t, rec, http.StatusBadRequest, "invalid_request")
+			stored, err := e.store.GetSiteConfigValue(KeyAnthropicDefaultMaxTokens)
+			if err != nil || stored != storedBefore {
+				t.Fatalf("invalid value changed stored=(%q, %v), want %q", stored, err, storedBefore)
+			}
+		})
+	}
+
+	rec := adminPatchRaw(t, e, nil, "/admin/api/site-config/"+KeyAnthropicDefaultMaxTokens, []byte(`{"value":null}`))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("null reset status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := read(t)[KeyAnthropicDefaultMaxTokens]; got != nil {
+		t.Fatalf("raw anthropic after reset=%v, want null", got)
+	}
+	stored, err := e.store.GetSiteConfigValue(KeyAnthropicDefaultMaxTokens)
+	if err != nil || stored != "" {
+		t.Fatalf("stored anthropic after reset=(%q, %v), want missing", stored, err)
+	}
+
+	entries, err := buildSiteConfigCatalog(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.Key == KeyAnthropicDefaultMaxTokens {
+			if entry.RawDefault != nil || entry.EffectiveFallback != 65536 {
+				t.Fatalf("catalog raw/effective=%v/%v", entry.RawDefault, entry.EffectiveFallback)
+			}
+			return
+		}
+	}
+	t.Fatal("anthropic catalog entry missing")
+}
+
+func TestGameConfigKeysRejectGenericPatchWithoutWrites(t *testing.T) {
+	e := newEnv(t)
+	keysAndValues := map[string]any{
+		KeyGamesEnabled: true, KeyGameFishingEnabled: true,
+		KeyGameFishingBaitWormPrice: "2500000", KeyGameFishingBaitLurePrice: "5000000", KeyGameFishingBaitPremiumPrice: "7500000",
+		KeyGameFishingRTP: 90, KeyGameFishingRTPPremium: 88,
+		KeyGameFishingTreasureBottle: 2, KeyGameFishingTreasureClover: 3, KeyGameFishingTreasureShell: 5,
+	}
+	before, err := e.store.GetAllSiteConfigValues()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, value := range keysAndValues {
+		rec := adminPatch(t, e, nil, "/admin/api/site-config/"+key, map[string]any{"value": value})
+		assertErr(t, rec, http.StatusConflict, "conflict")
+	}
+	after, err := e.store.GetAllSiteConfigValues()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(after, before) {
+		t.Fatalf("generic game patches changed site config\nbefore=%v\nafter=%v", before, after)
 	}
 }
 

@@ -34,6 +34,7 @@ type CharityCandidate struct {
 	DonationKeyID   int64
 	EndpointID      int64
 	EndpointKeyID   int64
+	ConnectorType   string
 	UpstreamModelID string
 	Ord             int64
 	DonorUserID     int64
@@ -51,6 +52,61 @@ type CharityCandidate struct {
 type CharityRoute struct {
 	Model      CharityModel
 	Candidates []CharityCandidate
+}
+
+// LogicalCharityRoute is the dry-run-only charity model projection. It is
+// intentionally limited to the namespace identity and model-level policy;
+// unlike CharityRoute it never joins bindings, donations, keys, endpoints,
+// fetched models, or reservation state.
+type LogicalCharityRoute struct {
+	ModelID         int64
+	FullName        string
+	FlattenToolCall bool
+}
+
+// ValidateLogicalCharityCaller performs the read-only eligibility gates that
+// precede a charity reservation. It deliberately does not run the expiry
+// sweep, clear a due suspension, write an activity/violation row, or touch any
+// donation/key/candidate table. A dry run must report the same feature and
+// caller eligibility outcome as a real call without creating accounting side
+// effects.
+func (s *Store) ValidateLogicalCharityCaller(ctx context.Context, userID, now int64) error {
+	if s == nil || ctx == nil || userID <= 0 || now <= 0 {
+		return ErrNotFound
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("validate logical charity caller: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	enabled, err := readCharityEnabledTx(ctx, tx)
+	if err != nil {
+		return fmt.Errorf("validate logical charity caller: feature: %w", err)
+	}
+	if !enabled {
+		return ErrCharityDisabled
+	}
+	var (
+		isBanned  int
+		isAdmin   int
+		suspended sql.NullInt64
+	)
+	err = tx.QueryRowContext(ctx,
+		`SELECT is_banned, charity_suspended_until, is_admin FROM users WHERE id=?`, userID).
+		Scan(&isBanned, &suspended, &isAdmin)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("validate logical charity caller: user: %w", err)
+	}
+	if isAdmin != 0 || isBanned != 0 {
+		return ErrNotFound
+	}
+	if suspended.Valid && suspended.Int64 > now {
+		return ErrCharitySuspended
+	}
+	return nil
 }
 
 const charityCandidatePredicate = `
@@ -82,7 +138,7 @@ JOIN fetched_models fm
 `
 
 const charityCandidateSelectSQL = `
-SELECT b.id, dk.id, e.id, ek.id, b.upstream_model_id, b.ord, d.user_id, e.base_url,
+SELECT b.id, dk.id, e.id, ek.id, e.connector_type, b.upstream_model_id, b.ord, d.user_id, e.base_url,
        dk.max_concurrency, dk.rpm_limit, dk.credits_usage_cap, dk.credits_used, dk.credits_reserved` +
 	charityCandidatePredicate
 
@@ -94,7 +150,7 @@ func scanCharityCandidates(rows *sql.Rows, limit int) ([]CharityCandidate, error
 			return nil, ErrForwardProjectionLimit
 		}
 		var c CharityCandidate
-		if err := rows.Scan(&c.BindingID, &c.DonationKeyID, &c.EndpointID, &c.EndpointKeyID,
+		if err := rows.Scan(&c.BindingID, &c.DonationKeyID, &c.EndpointID, &c.EndpointKeyID, &c.ConnectorType,
 			&c.UpstreamModelID, &c.Ord, &c.DonorUserID, &c.BaseURL,
 			&c.MaxConcurrency, &c.RPMLimit, &c.CreditsUsageCap, &c.CreditsUsed, &c.CreditsReserved); err != nil {
 			return nil, fmt.Errorf("scan charity candidate: %w", err)
@@ -126,6 +182,24 @@ func resolveCharityRouteTx(ctx context.Context, tx *sql.Tx, fullName string, now
 		return CharityRoute{}, ErrNotFound
 	}
 	route.Model = model
+	if model.FlattenToolCalls {
+		// Flatten is an OpenAI-only model policy. If the persisted state is
+		// damaged despite the write-path invariant, fail closed instead of
+		// filtering the incompatible binding and routing the remainder.
+		var incompatible int
+		if err := tx.QueryRowContext(ctx, `
+SELECT COUNT(*)
+FROM charity_model_bindings b
+JOIN donation_keys dk ON dk.id=b.donation_key_id
+JOIN endpoint_keys ek ON ek.id=dk.endpoint_key_id
+JOIN endpoints e ON e.id=ek.endpoint_id
+WHERE b.charity_model_id=? AND e.connector_type <> 'openai-compatible'`, model.ID).Scan(&incompatible); err != nil {
+			return CharityRoute{}, fmt.Errorf("validate charity flatten policy: %w", err)
+		}
+		if incompatible != 0 {
+			return CharityRoute{}, ErrConflict
+		}
+	}
 	rows, err := tx.QueryContext(ctx, charityCandidateSelectSQL+` ORDER BY b.ord, b.id LIMIT ?`,
 		fullName, now, limit+1)
 	if err != nil {
@@ -161,6 +235,36 @@ func (s *Store) ResolveCharityRoute(ctx context.Context, fullName string, now in
 	if err := tx.Commit(); err != nil {
 		return CharityRoute{}, fmt.Errorf("commit charity route: %w", err)
 	}
+	return route, nil
+}
+
+// ResolveLogicalCharityRoute reads one enabled charity model without
+// materializing or counting a physical candidate. Debug dry validation uses
+// this seam so a request can show model-level policy while guaranteeing zero
+// donation-key, Vault, DNS, reservation, usage, activity, or egress work.
+func (s *Store) ResolveLogicalCharityRoute(ctx context.Context, fullName string) (LogicalCharityRoute, error) {
+	if s == nil || ctx == nil || fullName == "" {
+		return LogicalCharityRoute{}, ErrNotFound
+	}
+	var route LogicalCharityRoute
+	var enabled, flatten int
+	err := s.db.QueryRowContext(ctx, `
+SELECT id, full_name, enabled, flatten_tool_calls
+FROM charity_models
+WHERE full_name=?`, fullName).Scan(&route.ModelID, &route.FullName, &enabled, &flatten)
+	if errors.Is(err, sql.ErrNoRows) {
+		return LogicalCharityRoute{}, ErrNotFound
+	}
+	if err != nil {
+		return LogicalCharityRoute{}, fmt.Errorf("query logical charity route: %w", err)
+	}
+	if enabled == 0 {
+		return LogicalCharityRoute{}, ErrNotFound
+	}
+	if route.ModelID <= 0 || route.FullName != fullName {
+		return LogicalCharityRoute{}, ErrNotFound
+	}
+	route.FlattenToolCall = flatten != 0
 	return route, nil
 }
 
@@ -240,12 +344,13 @@ func (s *Store) GetCharityForwardTarget(ctx context.Context, bindingID int64, fu
 		return CharityForwardTarget{}, ErrNotFound
 	}
 	var (
-		target     CharityForwardTarget
-		baseURL    sql.NullString
-		ciphertext sql.NullString
+		target          CharityForwardTarget
+		baseURL         sql.NullString
+		ciphertext      sql.NullString
+		forceStoreFalse int
 	)
 	err := s.db.QueryRowContext(ctx, `
-SELECT b.id, b.donation_key_id, d.user_id, e.id, ek.id, e.connector_type,
+SELECT b.id, b.donation_key_id, d.user_id, e.id, ek.id, e.connector_type, ek.force_store_false,
        CASE WHEN length(CAST(e.base_url AS BLOB)) BETWEEN 1 AND ? THEN e.base_url END,
        b.upstream_model_id,
        CASE WHEN length(CAST(ek.encrypted_secret AS BLOB)) BETWEEN 1 AND ? THEN ek.encrypted_secret END
@@ -254,6 +359,7 @@ SELECT b.id, b.donation_key_id, d.user_id, e.id, ek.id, e.connector_type,
 		maxStoredEndpointBaseURLBytes, maxEndpointCredentialEnvelopeBytes, fullName, now, bindingID).
 		Scan(&target.BindingID, &target.DonationKeyID, &target.DonorUserID,
 			&target.EndpointID, &target.EndpointKeyID, &target.ConnectorType,
+			&forceStoreFalse,
 			&baseURL, &target.UpstreamModelID, &ciphertext)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -265,6 +371,7 @@ SELECT b.id, b.donation_key_id, d.user_id, e.id, ek.id, e.connector_type,
 		return CharityForwardTarget{}, ErrEndpointCredentialUnavailable
 	}
 	target.BaseURL = baseURL.String
+	target.ForceStoreFalse = forceStoreFalse != 0
 	target.ForwardTarget.BindingID = target.BindingID
 	target.encryptedSecret = ciphertext.String
 	return target, nil
@@ -277,11 +384,12 @@ SELECT b.id, b.donation_key_id, d.user_id, e.id, ek.id, e.connector_type,
 // It never carries a donated-key id or base URL: consumers cannot learn
 // donated resources from the price table.
 type UserCharityModel struct {
-	ID          int64
-	Provider    string
-	Model       string
-	FullName    string
-	PricingMode string
+	ID               int64
+	Provider         string
+	Model            string
+	FullName         string
+	PricingMode      string
+	FlattenToolCalls bool
 
 	RequestUserPrice      int64
 	RequestDonorReward    int64
@@ -316,7 +424,7 @@ type UserCharityModel struct {
 }
 
 const userCharityModelSelectSQL = `
-SELECT cm.id, cm.provider, cm.model, cm.full_name, cm.pricing_mode,
+	SELECT cm.id, cm.provider, cm.model, cm.full_name, cm.pricing_mode, cm.flatten_tool_calls,
        cm.request_user_price, cm.request_donor_reward,
        cm.uncached_user_price, cm.cache_write_user_price, cm.cache_read_user_price, cm.output_user_price,
        cm.uncached_donor_reward, cm.cache_write_donor_reward, cm.cache_read_donor_reward, cm.output_donor_reward,
@@ -364,7 +472,7 @@ func (s *Store) ListUserCharityModels(ctx context.Context, now int64, limit int)
 			m              UserCharityModel
 			startAt, endAt sql.NullInt64
 		)
-		if err := rows.Scan(&m.ID, &m.Provider, &m.Model, &m.FullName, &m.PricingMode,
+		if err := rows.Scan(&m.ID, &m.Provider, &m.Model, &m.FullName, &m.PricingMode, &m.FlattenToolCalls,
 			&m.RequestUserPrice, &m.RequestDonorReward,
 			&m.UncachedUserPrice, &m.CacheWriteUserPrice, &m.CacheReadUserPrice, &m.OutputUserPrice,
 			&m.UncachedDonorReward, &m.CacheWriteDonorReward, &m.CacheReadDonorReward, &m.OutputDonorReward,

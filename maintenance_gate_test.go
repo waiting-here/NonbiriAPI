@@ -48,6 +48,9 @@ func maintenanceApp(t *testing.T) (app *application, store *db.Store, user *db.U
 		_ = vault.Close()
 		t.Fatalf("db.Open: %v", err)
 	}
+	if err := store.SetSiteConfigValue("maintenance_mode", "0"); err != nil {
+		t.Fatalf("disable fresh maintenance seed for route-matrix fixture: %v", err)
+	}
 	app, err = buildApplication(cfg, store, vault)
 	if err != nil {
 		_ = store.Close()

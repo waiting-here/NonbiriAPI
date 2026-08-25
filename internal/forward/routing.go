@@ -8,7 +8,7 @@ import (
 
 	mrand "math/rand/v2"
 
-	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
 
@@ -138,6 +138,6 @@ func (b BackoffConfig) wait(ctx context.Context, attemptIndex int) bool {
 // pre-body failure, including a target that vanished between selection and
 // dispatch). A committed body byte, a sink write failure, a client cancellation,
 // an internal error, or silent_retry off all short-circuit to no retry.
-func isRetryable(result openai.AttemptResult, silentRetry bool) bool {
-	return silentRetry && !result.Committed && result.Failure == openai.FailureUpstream
+func isRetryable(result connectorcontract.AttemptResult, silentRetry bool) bool {
+	return silentRetry && !result.Committed && result.Failure == connectorcontract.FailureUpstream
 }

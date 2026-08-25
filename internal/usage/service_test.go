@@ -122,6 +122,7 @@ func newUsageFixture(t *testing.T, allowed []string, mutateConfig func(*usage.Co
 		Secrets:           vault,
 		Registry:          registry,
 		Adapters:          []forward.Adapter{adapter},
+		Backend:           mustLocalBackend(t, stack),
 		SafetyIdentifiers: safetyIdentifierFactory,
 	})
 	if err != nil {

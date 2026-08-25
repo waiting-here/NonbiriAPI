@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"unicode"
 	"unicode/utf8"
+
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 )
 
 const (
@@ -42,9 +44,74 @@ type jsonField struct {
 // and safety_identifier values are replaced at dispatch time. Values are
 // private so they cannot accidentally enter a metadata hook or formatter.
 type ChatRequest struct {
-	fields []jsonField
-	Model  string
-	Stream bool
+	fields       []jsonField
+	requirements CapabilityRequirements
+	Model        string
+	Stream       bool
+}
+
+// CapabilityRequirements is the immutable, read-only projection used before
+// physical candidate selection. It records every top-level field in caller
+// order and the protocol features observable in messages/content. The raw
+// request remains private and is never rewritten by this projection.
+type CapabilityRequirements struct {
+	capabilities connectorcontract.CapabilitySet
+	topLevel     []string
+}
+
+// Capabilities returns the connector-neutral fidelity requirements.
+func (r CapabilityRequirements) Capabilities() connectorcontract.CapabilitySet {
+	return r.capabilities
+}
+
+// TopLevelFields returns a defensive copy in the caller's original order.
+func (r CapabilityRequirements) TopLevelFields() []string {
+	return append([]string(nil), r.topLevel...)
+}
+
+// Requirements returns an immutable capability snapshot. The returned value
+// owns its top-level field slice and can safely outlive a candidate filter.
+func (r *ChatRequest) Requirements() CapabilityRequirements {
+	if r == nil {
+		return CapabilityRequirements{}
+	}
+	return CapabilityRequirements{
+		capabilities: r.requirements.capabilities,
+		topLevel:     append([]string(nil), r.requirements.topLevel...),
+	}
+}
+
+// RawField returns a defensive copy of one validated top-level JSON value.
+// Protocol adapters use it for explicit translation; callers cannot mutate
+// the ingress snapshot or affect a later silent-retry attempt.
+func (r *ChatRequest) RawField(name string) ([]byte, bool) {
+	if r == nil {
+		return nil, false
+	}
+	for _, field := range r.fields {
+		if field.name == name {
+			return append([]byte(nil), field.value...), true
+		}
+	}
+	return nil, false
+}
+
+// SupportsOpenAICompatible preserves the existing OpenAI ingress boundary.
+// In particular, stream:null remains invalid for an OpenAI physical candidate
+// even though an Anthropic candidate can faithfully interpret null as false.
+// Candidate filtering therefore retains mixed-model capability without
+// changing an OpenAI-only request's stable invalid_request result.
+func SupportsOpenAICompatible(r *ChatRequest) bool {
+	if r == nil {
+		return false
+	}
+	stream, present := r.RawField("stream")
+	if !present {
+		return true
+	}
+	defer clear(stream)
+	trimmed := bytes.TrimSpace(stream)
+	return bytes.Equal(trimmed, []byte("true")) || bytes.Equal(trimmed, []byte("false"))
 }
 
 func (*ChatRequest) String() string   { return "[redacted chat request]" }
@@ -55,7 +122,9 @@ func (*ChatRequest) LogValue() slog.Value {
 
 // DecodeChatRequest reads and validates one bounded JSON object. Unknown
 // fields are accepted, duplicate fields and trailing JSON values are rejected,
-// model is a bounded opaque string, and stream (when present) must be a bool.
+// model is a bounded opaque string, and stream accepts bool or null. The
+// OpenAI-candidate compatibility predicate above retains the legacy bool-only
+// boundary while mixed routing may select a connector that represents null.
 func DecodeChatRequest(body io.Reader, limit int64) (*ChatRequest, error) {
 	if body == nil {
 		return nil, ErrInvalidRequest
@@ -91,6 +160,10 @@ func DecodeChatRequest(body io.Reader, limit int64) (*ChatRequest, error) {
 		case "stream":
 			streamSeen = true
 			trimmed := bytes.TrimSpace(field.value)
+			if bytes.Equal(trimmed, []byte("null")) {
+				request.Stream = false
+				continue
+			}
 			if !bytes.Equal(trimmed, []byte("true")) && !bytes.Equal(trimmed, []byte("false")) {
 				request.Clear()
 				return nil, ErrInvalidRequest
@@ -108,6 +181,7 @@ func DecodeChatRequest(body io.Reader, limit int64) (*ChatRequest, error) {
 	if !streamSeen {
 		request.Stream = false
 	}
+	request.requirements = projectCapabilities(fields, request.Stream)
 	return request, nil
 }
 
@@ -120,6 +194,120 @@ func (r *ChatRequest) Clear() {
 	}
 	clearFields(r.fields)
 	r.fields = nil
+	clear(r.requirements.topLevel)
+	r.requirements = CapabilityRequirements{}
+}
+
+// CloneForAttempt returns an independent protocol snapshot for one physical
+// attempt. Silent retry and charity key rotation must never share mutable raw
+// field storage: an adapter may clear its clone without changing the caller's
+// validated request or a later attempt. The clone retains no shared byte
+// slices with r.
+func (r *ChatRequest) CloneForAttempt() *ChatRequest {
+	if r == nil {
+		return nil
+	}
+	clone := &ChatRequest{
+		fields: make([]jsonField, len(r.fields)),
+		requirements: CapabilityRequirements{
+			capabilities: r.requirements.capabilities,
+			topLevel:     append([]string(nil), r.requirements.topLevel...),
+		},
+		Model:  r.Model,
+		Stream: r.Stream,
+	}
+	for index, field := range r.fields {
+		clone.fields[index].name = field.name
+		clone.fields[index].value = append(json.RawMessage(nil), field.value...)
+	}
+	return clone
+}
+
+func projectCapabilities(fields []jsonField, stream bool) CapabilityRequirements {
+	required := connectorcontract.CapabilitySet(connectorcontract.CapabilityText)
+	projection := CapabilityRequirements{topLevel: make([]string, 0, len(fields))}
+	for _, field := range fields {
+		projection.topLevel = append(projection.topLevel, field.name)
+		switch field.name {
+		case "model", "messages", "safety_identifier", "stream_options":
+		case "stream":
+			if stream {
+				required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityStream)
+			}
+		case "max_tokens", "max_completion_tokens", "temperature", "top_p", "stop":
+			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilitySampling)
+		case "tools":
+			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityTools)
+		case "tool_choice":
+			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityToolChoice)
+		case "parallel_tool_calls":
+			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityParallelTools)
+		default:
+			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityUnknownOpenAIFields)
+		}
+		if field.name == "messages" {
+			required |= projectMessageCapabilities(field.value)
+		}
+	}
+	projection.capabilities = required
+	return projection
+}
+
+func projectMessageCapabilities(raw json.RawMessage) connectorcontract.CapabilitySet {
+	var required connectorcontract.CapabilitySet
+	var messages []json.RawMessage
+	if json.Unmarshal(raw, &messages) != nil {
+		return connectorcontract.CapabilitySet(connectorcontract.CapabilityUnknownOpenAIFields)
+	}
+	for _, messageRaw := range messages {
+		var message map[string]json.RawMessage
+		if json.Unmarshal(messageRaw, &message) != nil {
+			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityUnknownOpenAIFields)
+			continue
+		}
+		var role string
+		if json.Unmarshal(message["role"], &role) != nil {
+			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityUnknownOpenAIFields)
+		}
+		switch role {
+		case "system":
+			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilitySystem)
+		case "developer":
+			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityDeveloper)
+		case "tool":
+			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityTools)
+		case "user", "assistant":
+		default:
+			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityUnknownOpenAIFields)
+		}
+		if _, ok := message["tool_calls"]; ok {
+			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityTools)
+		}
+		content := bytes.TrimSpace(message["content"])
+		if len(content) == 0 || content[0] != '[' {
+			continue
+		}
+		var blocks []map[string]json.RawMessage
+		if json.Unmarshal(content, &blocks) != nil {
+			required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityUnknownOpenAIFields)
+			continue
+		}
+		for _, block := range blocks {
+			var blockType string
+			if json.Unmarshal(block["type"], &blockType) != nil {
+				required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityUnknownOpenAIFields)
+				continue
+			}
+			switch blockType {
+			case "text":
+			case "image_url":
+				required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityImages)
+			default:
+				required |= connectorcontract.CapabilitySet(connectorcontract.CapabilityUnknownOpenAIFields)
+			}
+		}
+	}
+	return required
 }
 
 // CharityTextRuneCount counts only caller-provided message text for the
@@ -186,6 +374,10 @@ func (r *ChatRequest) CharityTextRuneCount() (int, error) {
 // object instead of mutating caller bytes in place, so duplicate-key ambiguity
 // cannot be reintroduced.
 func (r *ChatRequest) marshalUpstream(upstreamModel, safetyIdentifier string) ([]byte, error) {
+	return r.marshalUpstreamWithPolicy(upstreamModel, safetyIdentifier, connectorcontract.AttemptPolicy{})
+}
+
+func (r *ChatRequest) marshalUpstreamWithPolicy(upstreamModel, safetyIdentifier string, policy connectorcontract.AttemptPolicy) ([]byte, error) {
 	if r == nil || !validOpaqueText(upstreamModel, MaxUpstreamModelRunes, true) || !validSafetyIdentifier(safetyIdentifier) {
 		return nil, ErrInvalidRequest
 	}
@@ -197,6 +389,16 @@ func (r *ChatRequest) marshalUpstream(upstreamModel, safetyIdentifier string) ([
 	out.WriteByte('{')
 	wrote := 0
 	safetySeen := false
+	storeSeen := false
+	storeFieldPresent := false
+	if policy.ForceStoreFalse {
+		for _, field := range r.fields {
+			if field.name == "store" {
+				storeFieldPresent = true
+				break
+			}
+		}
+	}
 	for _, field := range r.fields {
 		if wrote != 0 {
 			out.WriteByte(',')
@@ -209,6 +411,13 @@ func (r *ChatRequest) marshalUpstream(upstreamModel, safetyIdentifier string) ([
 		case "safety_identifier":
 			out.Write(safetyJSON)
 			safetySeen = true
+		case "store":
+			if policy.ForceStoreFalse {
+				out.WriteString("false")
+				storeSeen = true
+			} else {
+				out.Write(field.value)
+			}
 		case "stream_options":
 			if r.Stream {
 				if merged, ok := withUsageEnabled(field.value); ok {
@@ -224,6 +433,11 @@ func (r *ChatRequest) marshalUpstream(upstreamModel, safetyIdentifier string) ([
 			out.Write(field.value)
 		}
 		wrote++
+		if policy.ForceStoreFalse && field.name == "model" && !storeFieldPresent {
+			out.WriteString(`,"store":false`)
+			wrote++
+			storeSeen = true
+		}
 		if int64(out.Len()) > maxForwardBodyBytes {
 			clear(out.Bytes())
 			return nil, ErrPayloadTooLarge
@@ -236,6 +450,15 @@ func (r *ChatRequest) marshalUpstream(upstreamModel, safetyIdentifier string) ([
 		out.WriteString(`"safety_identifier":`)
 		out.Write(safetyJSON)
 		wrote++
+	}
+	// A valid ChatRequest always has model, so force_store_false inserts store
+	// in the model-adjacent branch above. This guard is defensive for a future
+	// internal request constructor that might omit model.
+	if policy.ForceStoreFalse && !storeSeen {
+		if wrote != 0 {
+			out.WriteByte(',')
+		}
+		out.WriteString(`"store":false`)
 	}
 	if r.Stream && !hasField(r.fields, "stream_options") {
 		if wrote != 0 {

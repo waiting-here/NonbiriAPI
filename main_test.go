@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -117,6 +118,9 @@ func TestApplicationWiringProtectsAllEntryPoints(t *testing.T) {
 		_ = vault.Close()
 		t.Fatal(err)
 	}
+	if err := store.SetSiteConfigValue("maintenance_mode", "0"); err != nil {
+		t.Fatal(err)
+	}
 	defer func() {
 		_ = store.Close()
 		_ = vault.Close()
@@ -137,8 +141,11 @@ func TestApplicationWiringProtectsAllEntryPoints(t *testing.T) {
 	}{
 		{"user health", "127.0.0.1", "/healthz", `"status":"ok"`},
 		{"user management requires session", "127.0.0.1", "/api/endpoints", `"code":"unauthorized"`},
+		{"games require user session", "127.0.0.1", "/api/games", `"code":"unauthorized"`},
+		{"debug requires user session", "127.0.0.1", "/api/debug/session", `"code":"unauthorized"`},
 		{"caller exit requires bearer", "127.0.0.1", "/v1/models", `"code":"unauthorized"`},
 		{"admin session requires cookie", "127.0.0.2", "/admin/api/session", `"code":"unauthorized"`},
+		{"game configuration requires admin session", "127.0.0.2", "/admin/api/games/config", `"code":"unauthorized"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := testHTTPResponse(t, app.handler, http.MethodGet, tc.host, tc.path)
@@ -212,6 +219,73 @@ func TestApplicationWiringProtectsAllEntryPoints(t *testing.T) {
 	}
 }
 
+func TestCombinedUserDeletionBoundariesCommitOrAbortAsOneUnit(t *testing.T) {
+	events := make([]string, 0, 8)
+	boundary := func(name string) userDeletionBoundary {
+		return func(userID int64) (func() bool, func() bool, error) {
+			events = append(events, name+":begin")
+			return func() bool { events = append(events, name+":commit"); return true },
+				func() bool { events = append(events, name+":abort"); return true }, nil
+		}
+	}
+	begin := combineUserDeletionBoundaries(func(int64) { events = append(events, "after") }, boundary("anti"), boundary("game"))
+	commit, abort, err := begin(42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !commit() || abort() || commit() {
+		t.Fatal("combined boundary did not expose one terminal transition")
+	}
+	if got, want := strings.Join(events, ","), "anti:begin,game:begin,anti:commit,game:commit,after"; got != want {
+		t.Fatalf("events=%q want=%q", got, want)
+	}
+
+	events = events[:0]
+	failing := combineUserDeletionBoundaries(nil, boundary("first"), func(int64) (func() bool, func() bool, error) {
+		return nil, nil, context.Canceled
+	})
+	if _, _, err := failing(42); !errors.Is(err, context.Canceled) {
+		t.Fatalf("begin error=%v", err)
+	}
+	if got, want := strings.Join(events, ","), "first:begin,first:abort"; got != want {
+		t.Fatalf("rollback events=%q want=%q", got, want)
+	}
+}
+
+func TestAnthropicDefaultMaxTokensProviderReadsNullableRuntimeValue(t *testing.T) {
+	key := bytes.Repeat([]byte{0x7a}, secret.MasterKeyBytes)
+	vault, err := secret.New(key)
+	clear(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dbPath := filepath.Join(t.TempDir(), "anthropic-config.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
+	if err != nil {
+		_ = vault.Close()
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close(); _ = vault.Close() }()
+	provider := anthropicDefaultMaxTokensProvider{store: store}
+	if raw, err := provider.RawAnthropicDefaultMaxTokens(context.Background()); err != nil || raw != nil {
+		t.Fatalf("unset value=%v err=%v", raw, err)
+	}
+	if err := store.SetSiteConfigValue("anthropic_default_max_tokens", "90000"); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := provider.RawAnthropicDefaultMaxTokens(context.Background())
+	if err != nil || raw == nil || *raw != 90000 {
+		t.Fatalf("configured value=%v err=%v", raw, err)
+	}
+	if _, err := store.DB().Exec(`UPDATE site_config SET value='0' WHERE key='anthropic_default_max_tokens'`); err != nil {
+		t.Fatal(err)
+	}
+	if raw, err := provider.RawAnthropicDefaultMaxTokens(context.Background()); err == nil || raw != nil {
+		t.Fatalf("invalid value=%v err=%v", raw, err)
+	}
+}
+
 func TestMaintenanceSweepPurgesExpiredSessions(t *testing.T) {
 	key := bytes.Repeat([]byte{0x4c}, secret.MasterKeyBytes)
 	vault, err := secret.New(key)
@@ -252,7 +326,7 @@ func TestMaintenanceSweepPurgesExpiredSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runMaintenanceSweep(context.Background(), store, usageService, nil)
+	runMaintenanceSweep(context.Background(), store, usageService, nil, nil)
 	var count int
 	if err := store.DB().QueryRow(`SELECT COUNT(*) FROM sessions`).Scan(&count); err != nil {
 		t.Fatal(err)

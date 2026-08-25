@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -50,6 +51,17 @@ type UserAuthConfig struct {
 	// both flows and keyed by the trusted-edge ClientIP, and is not owned by
 	// UserAuth (the integration rail closes it alongside the runtime applier).
 	OAuthStartThrottle *ratelimit.IPThrottle
+	// OnLogout is called only after the presented user session has been
+	// authenticated and deleted. The binding is the irreversible session hash,
+	// never the opaque cookie value. The hook must remain process-local and
+	// must not fail or delay the logout response.
+	OnLogout func(userID int64, sessionBinding string)
+	// UserRequestGate repeats the exact session-binding check inside the
+	// process-local lifecycle gate and supplies a cancellation-aware context to
+	// the downstream user API. Account deletion is exempted so its handler can
+	// acquire the write barrier without waiting on its own read lease.
+	UserRequestGate       UserRequestGate
+	UserRequestGateExempt func(*http.Request) bool
 }
 
 // UserAuth exposes handlers, a mountable auth route tree, and middleware for
@@ -68,6 +80,9 @@ type UserAuth struct {
 	registrationClosedPath string
 	registrationGate       RegistrationGateFunc
 	oauthStartThrottle     *ratelimit.IPThrottle
+	onLogout               func(userID int64, sessionBinding string)
+	userRequestGate        UserRequestGate
+	userRequestGateExempt  func(*http.Request) bool
 }
 
 // NewUserAuth validates fixed station configuration and returns a mountable
@@ -146,6 +161,8 @@ func NewUserAuth(config UserAuthConfig) (*UserAuth, error) {
 		ownsState: ownsState, siteBaseURL: base, redirectURI: redirectURI, userRedirectPath: path,
 		registrationClosedPath: registrationClosedPath, registrationGate: gate, elevation: manager,
 		ownsElevation: ownsElevation, oauthStartThrottle: config.OAuthStartThrottle,
+		onLogout:        config.OnLogout,
+		userRequestGate: config.UserRequestGate, userRequestGateExempt: config.UserRequestGateExempt,
 	}, nil
 }
 
@@ -488,14 +505,20 @@ func (a *UserAuth) Session(w http.ResponseWriter, r *http.Request) {
 		writeStableError(w, httperr.CodeInternal, "profile unavailable")
 		return
 	}
-	httperr.WriteJSON(w, http.StatusOK, userEnvelope{User: publicUser(user, effectiveLevel)})
+	defaults, err := a.store.GetUserLimitDefaults(r.Context())
+	if err != nil {
+		writeStableError(w, httperr.CodeInternal, "profile unavailable")
+		return
+	}
+	httperr.WriteJSON(w, http.StatusOK, userEnvelope{User: publicUser(user, effectiveLevel, defaults)})
 }
 
 // Me is the contract-compatible alias for the user profile probe.
 func (a *UserAuth) Me(w http.ResponseWriter, r *http.Request) { a.Session(w, r) }
 
 // PatchMe handles PATCH /api/me: a session-only self-service profile
-// update limited to lang. endpoint_limit, rpm_limit, admin/ban state,
+// update limited to lang and the account-wide game leaderboard privacy
+// preference. endpoint_limit, rpm_limit, concurrency_limit, admin/ban state,
 // usage, and the body user id are never accepted (unknown fields are
 // rejected by the strict decoder). The response is the same no-store user
 // envelope as GET /api/me. Per-user RPM limits are administrator-set only;
@@ -514,23 +537,42 @@ func (a *UserAuth) PatchMe(w http.ResponseWriter, r *http.Request) {
 		writeStableError(w, httperr.CodeUnauthorized, "authentication required")
 		return
 	}
-	var body struct {
-		Lang *string `json:"lang"`
-	}
-	if !decodeJSONBody(w, r, &body) {
+	var body map[string]json.RawMessage
+	if !decodeStrictJSONBody(w, r, &body) {
 		return
 	}
-	if body.Lang == nil {
+	if len(body) == 0 {
 		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
 		return
 	}
 	patch := db.UserLimitPatch{}
-	if *body.Lang != "zh" && *body.Lang != "en" {
-		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
-		return
+	for key, raw := range body {
+		switch key {
+		case "lang":
+			if strings.TrimSpace(string(raw)) == "null" {
+				writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+				return
+			}
+			var lang string
+			if err := json.Unmarshal(raw, &lang); err != nil || (lang != "zh" && lang != "en") {
+				writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+				return
+			}
+			patch.LangSet = true
+			patch.Lang = lang
+		case "game_profile_public":
+			trimmed := strings.TrimSpace(string(raw))
+			if trimmed == "null" || (trimmed != "true" && trimmed != "false") {
+				writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+				return
+			}
+			patch.GameProfilePublicSet = true
+			patch.GameProfilePublic = trimmed == "true"
+		default:
+			writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+			return
+		}
 	}
-	patch.LangSet = true
-	patch.Lang = *body.Lang
 	updated, err := a.store.UpdateUserLimits(user.ID, patch)
 	if err != nil {
 		switch {
@@ -549,7 +591,12 @@ func (a *UserAuth) PatchMe(w http.ResponseWriter, r *http.Request) {
 		writeStableError(w, httperr.CodeInternal, "profile update unavailable")
 		return
 	}
-	httperr.WriteJSON(w, http.StatusOK, userEnvelope{User: publicUser(updated, effectiveLevel)})
+	defaults, err := a.store.GetUserLimitDefaults(r.Context())
+	if err != nil {
+		writeStableError(w, httperr.CodeInternal, "profile update unavailable")
+		return
+	}
+	httperr.WriteJSON(w, http.StatusOK, userEnvelope{User: publicUser(updated, effectiveLevel, defaults)})
 }
 
 // Logout handles POST /api/auth/logout and atomically removes the presented
@@ -575,6 +622,9 @@ func (a *UserAuth) Logout(w http.ResponseWriter, r *http.Request) {
 	if err := a.store.DeleteSession(token); err != nil {
 		writeStableError(w, httperr.CodeInternal, "authentication failed")
 		return
+	}
+	if a.onLogout != nil {
+		a.onLogout(user.ID, db.SessionHash(token))
 	}
 	ClearUserSessionCookie(w, secureCookieForRequest(r, a.siteBaseURL))
 	w.WriteHeader(http.StatusNoContent)
@@ -725,7 +775,25 @@ func (a *UserAuth) Middleware(next http.Handler) http.Handler {
 			writeStableError(w, httperr.CodeUnauthorized, "authentication required")
 			return
 		}
-		request := r.WithContext(withPrincipal(r.Context(), Principal{User: user, Kind: PrincipalUserSession}))
+		requestContext := r.Context()
+		release := func() {}
+		if a.userRequestGate != nil && (a.userRequestGateExempt == nil || !a.userRequestGateExempt(r)) {
+			var err error
+			requestContext, release, err = a.userRequestGate(requestContext, user.ID, db.SessionHash(UserSessionToken(r)))
+			if release == nil {
+				release = func() {}
+			}
+			if err != nil || requestContext == nil {
+				release()
+				if r.Context().Err() != nil {
+					return
+				}
+				writeStableError(w, httperr.CodeUnauthorized, "authentication required")
+				return
+			}
+		}
+		defer release()
+		request := r.WithContext(withPrincipal(requestContext, Principal{User: user, Kind: PrincipalUserSession}))
 		next.ServeHTTP(w, request)
 	})
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -96,6 +97,9 @@ func authTestStore(t *testing.T) *db.Store {
 	if err != nil {
 		_ = vault.Close()
 		t.Fatalf("db.Open: %v", err)
+	}
+	if err := st.SetSiteConfigValue("registration_open", "1"); err != nil {
+		t.Fatalf("open registration for auth fixture: %v", err)
 	}
 	t.Cleanup(func() {
 		_ = st.Close()
@@ -469,6 +473,156 @@ func TestUserAndAdminSessionMiddlewareAreStationAndRoleIsolated(t *testing.T) {
 	}
 }
 
+func TestUserSessionLeaseCancelsARealHandlerOnRetirement(t *testing.T) {
+	st := authTestStore(t)
+	user, err := st.CreateDiscordUser("discord-gated-handler", "gated-handler", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, _, err := st.CreateUserSession(user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate, err := lifecyclegate.New(lifecyclegate.Config{MaxUsers: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gate.Close()
+	service, err := NewUserAuth(UserAuthConfig{
+		Store: st, Provider: &fakeDiscordProvider{}, ClientID: "client-id",
+		SiteBaseURL: "https://example.com",
+		UserRequestGate: func(ctx context.Context, userID int64, binding string) (context.Context, func(), error) {
+			return gate.Admit(ctx, userID, binding, st.ValidateUserSessionBinding)
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.Close()
+
+	entered := make(chan struct{})
+	finished := make(chan struct{})
+	handler := service.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(entered)
+		<-r.Context().Done()
+		if !errors.Is(r.Context().Err(), context.Canceled) {
+			t.Errorf("handler context error=%v, want context.Canceled", r.Context().Err())
+		}
+		close(finished)
+	}))
+	req := stationRequest(http.MethodGet, "https://example.com/api/me", host.StationUser, nil)
+	req.AddCookie(&http.Cookie{Name: UserSessionCookieName, Value: token})
+	rec := httptest.NewRecorder()
+	serveDone := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(rec, req)
+		close(serveDone)
+	}()
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not acquire a user lease")
+	}
+	retirementDone := make(chan error, 1)
+	go func() {
+		retirement, beginErr := gate.BeginUserRetirement(user.ID)
+		if beginErr != nil {
+			retirementDone <- beginErr
+			return
+		}
+		retirement.Commit()
+		retirementDone <- nil
+	}()
+	select {
+	case <-finished:
+	case <-time.After(2 * time.Second):
+		t.Fatal("retirement did not cancel the real handler")
+	}
+	select {
+	case <-serveDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("real handler did not release its user lease")
+	}
+	select {
+	case err := <-retirementDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("retirement did not drain the real handler")
+	}
+}
+
+func TestCallerKeyLeaseCancelsARealRunnerOnRetirement(t *testing.T) {
+	st := authTestStore(t)
+	user, err := st.CreateDiscordUser("discord-gated-caller", "gated-caller", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	generation, err := st.RegenerateCallerKey(user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate, err := lifecyclegate.New(lifecyclegate.Config{MaxUsers: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gate.Close()
+	entered := make(chan struct{})
+	finished := make(chan struct{})
+	runner := CallerKeyMiddlewareWithGate(st, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(entered)
+		<-r.Context().Done()
+		if !errors.Is(r.Context().Err(), context.Canceled) {
+			t.Errorf("runner context error=%v, want context.Canceled", r.Context().Err())
+		}
+		close(finished)
+	}), func(ctx context.Context, userID int64, binding string) (context.Context, func(), error) {
+		return gate.Admit(ctx, userID, binding, st.ValidateCallerKeyBinding)
+	})
+	req := stationRequest(http.MethodPost, "https://example.com/v1/chat/completions", host.StationUser, nil)
+	req.Header.Set("Authorization", "Bearer "+generation.Secret)
+	rec := httptest.NewRecorder()
+	serveDone := make(chan struct{})
+	go func() {
+		runner.ServeHTTP(rec, req)
+		close(serveDone)
+	}()
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runner did not acquire a caller lease")
+	}
+	retirementDone := make(chan error, 1)
+	go func() {
+		retirement, beginErr := gate.BeginUserRetirement(user.ID)
+		if beginErr != nil {
+			retirementDone <- beginErr
+			return
+		}
+		retirement.Commit()
+		retirementDone <- nil
+	}()
+	select {
+	case <-finished:
+	case <-time.After(2 * time.Second):
+		t.Fatal("retirement did not cancel the real runner")
+	}
+	select {
+	case <-serveDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("real runner did not release its caller lease")
+	}
+	select {
+	case err := <-retirementDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("retirement did not drain the real runner")
+	}
+}
+
 func TestAdminEnvironmentCredentialsThrottleAndNoPasswordPersistence(t *testing.T) {
 	st := authTestStore(t)
 	throttle := &recordingThrottle{}
@@ -678,6 +832,45 @@ func TestAuthHandlersUseNoStoreAndStableErrors(t *testing.T) {
 	admin.Handler().ServeHTTP(wrongRec, wrongStation)
 	if wrongRec.Code != http.StatusForbidden || strings.Contains(wrongRec.Body.String(), "password") {
 		t.Fatalf("admin station boundary status=%d body=%q", wrongRec.Code, wrongRec.Body.String())
+	}
+}
+
+func TestUserLogoutInvokesProcessLocalBindingHookAfterSessionDeletion(t *testing.T) {
+	st := authTestStore(t)
+	user, err := st.CreateDiscordUser("discord-logout-hook", "logout-hook", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, _, err := st.CreateUserSession(user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hookUserID int64
+	var hookBinding string
+	service, err := NewUserAuth(UserAuthConfig{
+		Store: st, Provider: &fakeDiscordProvider{}, ClientID: "client-id",
+		SiteBaseURL: "https://example.com",
+		OnLogout: func(userID int64, sessionBinding string) {
+			hookUserID = userID
+			hookBinding = sessionBinding
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.Close()
+	req := stationRequest(http.MethodPost, "https://example.com/api/auth/logout", host.StationUser, nil)
+	req.AddCookie(&http.Cookie{Name: UserSessionCookieName, Value: token})
+	rec := httptest.NewRecorder()
+	service.Logout(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("logout status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if hookUserID != user.ID || hookBinding != db.SessionHash(token) || strings.Contains(hookBinding, token) {
+		t.Fatalf("logout hook user=%d binding shape=%d", hookUserID, len(hookBinding))
+	}
+	if got, err := st.AuthenticateUserSession(token); err != nil || got != nil {
+		t.Fatalf("logged-out session = %#v, %v", got, err)
 	}
 }
 

@@ -71,6 +71,11 @@ type Repository interface {
 	DeleteBinding(ctx context.Context, userID, modelID, bindingID int64) error
 }
 
+type policyRepository interface {
+	CreateModelWithPolicy(context.Context, int64, string, string, string, bool, bool, int64, string) (db.Model, error)
+	UpdateModelWithPolicy(context.Context, int64, int64, *string, *string, *string, *bool, *bool, int64, string) (db.Model, error)
+}
+
 // Service orchestrates platform-model and binding CRUD with the ownership,
 // opaque-name, strategy, and candidate-validation invariants.
 type Service struct {
@@ -91,6 +96,15 @@ func NewService(repo Repository) *Service {
 // service never silently flips it on). The full name provider/model must be
 // unique among the user's models.
 func (s *Service) CreateModel(ctx context.Context, userID int64, provider, model string, routeStrategy *string, silentRetry *bool) (db.Model, error) {
+	return s.createModel(ctx, userID, provider, model, routeStrategy, silentRetry, nil)
+}
+
+// CreateModelWithPolicy is the additive policy-aware model creation path.
+func (s *Service) CreateModelWithPolicy(ctx context.Context, userID int64, provider, model string, routeStrategy *string, silentRetry, flattenToolCalls *bool) (db.Model, error) {
+	return s.createModel(ctx, userID, provider, model, routeStrategy, silentRetry, flattenToolCalls)
+}
+
+func (s *Service) createModel(ctx context.Context, userID int64, provider, model string, routeStrategy *string, silentRetry, flattenToolCalls *bool) (db.Model, error) {
 	if s == nil || s.repo == nil {
 		return db.Model{}, ErrInvalidRequest
 	}
@@ -114,7 +128,20 @@ func (s *Service) CreateModel(ctx context.Context, userID int64, provider, model
 	if err != nil {
 		return db.Model{}, err
 	}
-	m, err := s.repo.CreateModel(ctx, userID, provider, model, strategy, retry, s.now())
+	flatten := false
+	if flattenToolCalls != nil {
+		flatten = *flattenToolCalls
+	}
+	var m db.Model
+	if flattenToolCalls != nil {
+		policyRepo, ok := s.repo.(policyRepository)
+		if !ok {
+			return db.Model{}, ErrInvalidRequest
+		}
+		m, err = policyRepo.CreateModelWithPolicy(ctx, userID, provider, model, strategy, retry, flatten, s.now(), "owner")
+	} else {
+		m, err = s.repo.CreateModel(ctx, userID, provider, model, strategy, retry, s.now())
+	}
 	if err != nil {
 		return db.Model{}, mapRepoError(err)
 	}
@@ -151,6 +178,15 @@ func (s *Service) GetModel(ctx context.Context, userID, id int64) (db.Model, err
 // ordered or random when provided. silentRetry must be a bool when provided; a
 // nil leaves it unchanged.
 func (s *Service) UpdateModel(ctx context.Context, userID, id int64, provider, model, routeStrategy *string, silentRetry *bool) (db.Model, error) {
+	return s.updateModel(ctx, userID, id, provider, model, routeStrategy, silentRetry, nil)
+}
+
+// UpdateModelWithPolicy is the additive policy-aware model update path.
+func (s *Service) UpdateModelWithPolicy(ctx context.Context, userID, id int64, provider, model, routeStrategy *string, silentRetry, flattenToolCalls *bool) (db.Model, error) {
+	return s.updateModel(ctx, userID, id, provider, model, routeStrategy, silentRetry, flattenToolCalls)
+}
+
+func (s *Service) updateModel(ctx context.Context, userID, id int64, provider, model, routeStrategy *string, silentRetry, flattenToolCalls *bool) (db.Model, error) {
 	if s == nil || s.repo == nil || userID <= 0 || id <= 0 {
 		return db.Model{}, db.ErrNotFound
 	}
@@ -183,7 +219,17 @@ func (s *Service) UpdateModel(ctx context.Context, userID, id int64, provider, m
 		}
 		retry = &resolved
 	}
-	m, err := s.repo.UpdateModel(ctx, userID, id, provider, model, strategy, retry, s.now())
+	var m db.Model
+	var err error
+	if flattenToolCalls != nil {
+		policyRepo, ok := s.repo.(policyRepository)
+		if !ok {
+			return db.Model{}, ErrInvalidRequest
+		}
+		m, err = policyRepo.UpdateModelWithPolicy(ctx, userID, id, provider, model, strategy, retry, flattenToolCalls, s.now(), "owner")
+	} else {
+		m, err = s.repo.UpdateModel(ctx, userID, id, provider, model, strategy, retry, s.now())
+	}
 	if err != nil {
 		return db.Model{}, mapRepoError(err)
 	}

@@ -4,8 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { CharityPriceTable, type CharityPriceRow } from './CharityPriceTable';
 import { Card, EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from './States';
 import { ConfirmDialog } from './ConfirmDialog';
-import { isForbidden } from '@shared/query/http';
+import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { formatCreditsFromMilli } from '@shared/utils/formatNumber';
+import { positiveDecimalIDNumber } from '@shared/query/normalize';
 import {
   charityManagementKeys,
   type CharityManagementFrame,
@@ -21,6 +22,7 @@ import {
   useDeleteManagedDonation,
   useDeleteManagedModel,
   useManagementBindings,
+  useManagementCapability,
   useManagementDonation,
   useManagementDonations,
   useManagementModels,
@@ -56,6 +58,39 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : 'Request failed.';
 }
 
+type DonationKeyDraft = Omit<ManagementDonationKey, 'max_concurrency' | 'rpm_limit' | 'credits_usage_cap_milli'> & {
+  max_concurrency: string;
+  rpm_limit: string;
+  credits_usage_cap_milli: string;
+};
+
+function donationKeyDraft(key: ManagementDonationKey): DonationKeyDraft {
+  return {
+    ...key,
+    max_concurrency: String(key.max_concurrency),
+    rpm_limit: String(key.rpm_limit),
+    credits_usage_cap_milli: key.credits_usage_cap_milli,
+  };
+}
+
+/** Blank means omit the reviewer field; an explicit zero remains unlimited. */
+function optionalReviewerLimit(value: string, maximum: number): number | undefined | null {
+  if (value.trim() === '') return undefined;
+  if (!/^(0|[1-9]\d*)$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 && parsed <= maximum ? parsed : null;
+}
+
+function optionalReviewerAmount(value: string): string | undefined | null {
+  if (value.trim() === '') return undefined;
+  if (!/^(0|[1-9]\d*)$/.test(value) || value.length > 19) return null;
+  try {
+    return BigInt(value) <= 9_223_372_036_854_775_807n ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 function unixDate(value: number | undefined): string {
   if (!value) return '';
   const date = new Date(value * 1000);
@@ -63,10 +98,22 @@ function unixDate(value: number | undefined): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function dateUnix(value: string): number | null {
+const INVALID_DATE = Symbol('invalid-date');
+type DateDraft = number | null | typeof INVALID_DATE;
+
+function dateUnix(value: string): DateDraft {
   if (!value) return null;
-  const ms = Date.parse(value);
-  return Number.isFinite(ms) && ms > 0 ? Math.floor(ms / 1000) : null;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return INVALID_DATE;
+  const [datePart, timePart] = value.split('T');
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hour, minute] = timePart.split(':').map(Number);
+  const parsed = new Date(year, month - 1, day, hour, minute, 0, 0);
+  if (!Number.isFinite(parsed.getTime()) || parsed.getTime() <= 0
+    || parsed.getFullYear() !== year || parsed.getMonth() !== month - 1
+    || parsed.getDate() !== day || parsed.getHours() !== hour || parsed.getMinutes() !== minute) {
+    return INVALID_DATE;
+  }
+  return Math.floor(parsed.getTime() / 1000);
 }
 
 function rowsForModel(model: ManagementCharityModel, tr: (key: string) => string): CharityPriceRow[] {
@@ -84,24 +131,28 @@ function rowsForModel(model: ManagementCharityModel, tr: (key: string) => string
 
 function ModelEditor({ frame, initial, onClose }: { frame: CharityManagementFrame; initial?: ManagementCharityModel; onClose: () => void }) {
   const tr = useText(frame);
+  const client = useQueryClient();
   const create = useCreateManagedModel(frame);
   const update = useUpdateManagedModel(frame);
   const [provider, setProvider] = useState(initial?.provider ?? '');
   const [model, setModel] = useState(initial?.model ?? '');
   const [mode, setMode] = useState(initial?.pricing_mode ?? 'per_request');
   const [enabled, setEnabled] = useState(initial?.enabled ?? true);
+  const [flattenToolCalls, setFlattenToolCalls] = useState(initial?.flatten_tool_calls ?? false);
   const [prices, setPrices] = useState<ManagementPriceSet>(initial?.prices ?? ZERO_PRICES);
   const [percent, setPercent] = useState(String(initial?.discount.percent ?? 100));
   const [discountEnabled, setDiscountEnabled] = useState(initial?.discount.enabled ?? false);
   const [start, setStart] = useState(unixDate(initial?.discount.start_at));
   const [end, setEnd] = useState(unixDate(initial?.discount.end_at));
   const [validation, setValidation] = useState('');
+  const [authorityError, setAuthorityError] = useState<unknown>(null);
   const mutation = initial ? update : create;
   const visibleKeys = mode === 'per_request' ? PRICE_KEYS.slice(0, 2) : TOKEN_PRICE_KEYS;
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setValidation('');
+    setAuthorityError(null);
     const trimmedProvider = provider.trim();
     const trimmedModel = model.trim();
     const percentNumber = Number(percent);
@@ -122,7 +173,8 @@ function ModelEditor({ frame, initial, onClose }: { frame: CharityManagementFram
     }
     const startAt = dateUnix(start);
     const endAt = dateUnix(end);
-    if (start && startAt === null || end && endAt === null || startAt !== null && endAt !== null && endAt <= startAt) {
+    if (start && startAt === INVALID_DATE || end && endAt === INVALID_DATE
+      || typeof startAt === 'number' && typeof endAt === 'number' && endAt <= startAt) {
       setValidation(tr('discountIntervalInvalid'));
       return;
     }
@@ -131,15 +183,43 @@ function ModelEditor({ frame, initial, onClose }: { frame: CharityManagementFram
       model: trimmedModel,
       pricing_mode: mode,
       enabled,
+      flatten_tool_calls: flattenToolCalls,
       prices: nextPrices,
-      discount: { percent: percentNumber, enabled: discountEnabled, start_at: startAt, end_at: endAt },
+      discount: {
+        percent: percentNumber,
+        enabled: discountEnabled,
+        start_at: startAt === INVALID_DATE ? null : startAt,
+        end_at: endAt === INVALID_DATE ? null : endAt,
+      },
     };
+    let requestError: unknown = null;
     try {
       if (initial) await update.mutateAsync({ id: initial.id, ...payload });
       else await create.mutateAsync(payload);
-      onClose();
-    } catch {
-      // The server's bounded conflict/validation message is rendered below.
+    } catch (error) {
+      requestError = error;
+    } finally {
+      let refreshError: unknown = null;
+      try {
+        await client.refetchQueries({ queryKey: charityManagementKeys.models(frame), type: 'active' });
+      } catch (error) {
+        refreshError = error;
+      }
+      refreshError ??= client.getQueryState(charityManagementKeys.models(frame))?.error ?? null;
+      const authoritative = initial
+        ? client.getQueryData<ManagementCharityModel[]>(charityManagementKeys.models(frame))?.find((item) => item.id === initial.id)
+        : undefined;
+      if (authoritative) setFlattenToolCalls(authoritative.flatten_tool_calls);
+      if (requestError) {
+        // A lost response or explicit conflict does not tell us whether the
+        // policy write committed. Keep the mutation error visible and use the
+        // refetched model, when available, as the checkbox authority.
+        if (refreshError) setAuthorityError(refreshError);
+      } else if (refreshError) {
+        setAuthorityError(refreshError);
+      } else {
+        onClose();
+      }
     }
   };
 
@@ -151,6 +231,7 @@ function ModelEditor({ frame, initial, onClose }: { frame: CharityManagementFram
         <label><span>{tr('model')}</span><input value={model} onChange={(event) => setModel(event.target.value)} maxLength={256} required /></label>
         <label><span>{tr('pricingMode')}</span><select value={mode} onChange={(event) => setMode(event.target.value as 'per_request' | 'per_token')}><option value="per_request">{tr('perRequest')}</option><option value="per_token">{tr('perToken')}</option></select></label>
         <label className="checkbox-label"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /><span>{tr('enabled')}</span></label>
+        <fieldset className="policy-fieldset full-width"><legend>{tr('flattenToolCalls')}</legend><label className="checkbox-label"><input type="checkbox" checked={flattenToolCalls} onChange={(event) => setFlattenToolCalls(event.target.checked)} /><span>{tr('flattenExperimental')}</span></label><p className="risk-note">{tr('flattenRisk')}</p></fieldset>
       </div>
       <fieldset><legend>{tr('prices')}</legend><div className="form-grid">
         {visibleKeys.map((key) => <label key={key}><span>{tr(key)}</span><input value={prices[key]} inputMode="numeric" onChange={(event) => setPrices((current) => ({ ...current, [key]: event.target.value }))} aria-label={tr(key)} /></label>)}
@@ -163,6 +244,7 @@ function ModelEditor({ frame, initial, onClose }: { frame: CharityManagementFram
       </div><p className="muted">{tr('discountHint')}</p></fieldset>
       {validation ? <p className="field-error" role="alert">{validation}</p> : null}
       {mutation.error ? <p className="field-error" role="alert">{errorText(mutation.error)}</p> : null}
+      {authorityError ? <ErrorState error={authorityError} /> : null}
       <div className="form-actions"><button className="btn btn-primary" type="submit" disabled={mutation.isPending}>{mutation.isPending ? tr('working') : tr('save')}</button></div>
     </form>
   );
@@ -178,6 +260,7 @@ function Bindings({ frame, model }: { frame: CharityManagementFrame; model: Mana
   const create = useCreateManagedBinding(frame);
   const update = useUpdateManagedBinding(frame);
   const remove = useDeleteManagedBinding(frame);
+  const bindingsReady = !bindings.isPending && !bindings.error && Array.isArray(bindings.data);
   const [donationKeyID, setDonationKeyID] = useState('');
   const [upstream, setUpstream] = useState('');
   const [ord, setOrd] = useState('0');
@@ -186,14 +269,17 @@ function Bindings({ frame, model }: { frame: CharityManagementFrame; model: Mana
 
   const add = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setError('');
-    if (!/^\d+$/.test(donationKeyID) || !upstream.trim() || !/^\d+$/.test(ord)) { setError(tr('bindingInvalid')); return; }
-    try { await create.mutateAsync({ modelId: model.id, donation_key_id: donationKeyID, upstream_model_id: upstream.trim(), ord: Number(ord) }); setDonationKeyID(''); setUpstream(''); setOrd('0'); } catch (requestError) { setError(errorText(requestError)); }
+    if (!bindingsReady) { setError(tr('detailUnavailable')); return; }
+    const donationKeyNumericID = positiveDecimalIDNumber(donationKeyID) ?? null;
+    const parsedOrd = /^(0|[1-9]\d*)$/.test(ord) ? Number(ord) : NaN;
+    if (donationKeyNumericID === null || !upstream.trim() || !Number.isSafeInteger(parsedOrd) || parsedOrd < 0 || parsedOrd > 1_000_000) { setError(tr('bindingInvalid')); return; }
+    try { await create.mutateAsync({ modelId: model.id, donation_key_id: donationKeyID, upstream_model_id: upstream.trim(), ord: parsedOrd }); setDonationKeyID(''); setUpstream(''); setOrd('0'); } catch (requestError) { setError(errorText(requestError)); }
   };
   return <details className="charity-bindings"><summary>{tr('bindings')}</summary>
     {bindings.isPending ? <LoadingState /> : bindings.error ? <ErrorState error={bindings.error} /> : bindings.data?.length ? <div className="table-scroll"><table className="compact-table"><thead><tr><th>{tr('donationKey')}</th><th>{tr('upstreamModel')}</th><th>{tr('order')}</th><th>{tr('actions')}</th></tr></thead><tbody>{bindings.data.map((binding) => <tr key={binding.id}>
-      <td><span className="mono">{binding.key_display ?? tr('keyFragmentUnavailable')}</span><small className="muted"> · {binding.donation_key_id}</small></td><td>{editing === binding.id ? <input defaultValue={binding.upstream_model_id} aria-label={tr('upstreamModel')} onBlur={async (event) => { try { await update.mutateAsync({ modelId: model.id, bindingId: binding.id, upstream_model_id: event.target.value }); setEditing(null); } catch (requestError) { setError(errorText(requestError)); } }} /> : binding.upstream_model_id}</td><td>{binding.ord}</td><td><button type="button" className="btn btn-secondary" onClick={() => setEditing(binding.id)}>{tr('edit')}</button> <button type="button" className="btn btn-danger" onClick={() => { if (window.confirm(tr('deleteBindingConfirm'))) void remove.mutateAsync({ modelId: model.id, bindingId: binding.id }); }}>{tr('delete')}</button></td>
+      <td><span className="mono">{binding.key_display ?? tr('keyFragmentUnavailable')}</span><small className="muted"> · {binding.donation_key_id}</small></td><td>{editing === binding.id ? <input defaultValue={binding.upstream_model_id} aria-label={tr('upstreamModel')} disabled={!bindingsReady || update.isPending} onBlur={async (event) => { try { await update.mutateAsync({ modelId: model.id, bindingId: binding.id, upstream_model_id: event.target.value }); setEditing(null); } catch (requestError) { setError(errorText(requestError)); } }} /> : binding.upstream_model_id}</td><td>{binding.ord}</td><td><button type="button" className="btn btn-secondary" onClick={() => setEditing(binding.id)} disabled={!bindingsReady || update.isPending || remove.isPending}>{tr('edit')}</button> <button type="button" className="btn btn-danger" onClick={() => { if (window.confirm(tr('deleteBindingConfirm'))) void remove.mutateAsync({ modelId: model.id, bindingId: binding.id }); }} disabled={!bindingsReady || update.isPending || remove.isPending}>{tr('delete')}</button></td>
     </tr>)}</tbody></table></div> : <p className="muted">{tr('noBindings')}</p>}
-    <form className="form-grid binding-form" onSubmit={add}><label><span>{tr('donationKeyId')}</span><input value={donationKeyID} inputMode="numeric" onChange={(event) => setDonationKeyID(event.target.value)} /></label><label><span>{tr('upstreamModel')}</span><input value={upstream} onChange={(event) => setUpstream(event.target.value)} /></label><label><span>{tr('order')}</span><input value={ord} inputMode="numeric" onChange={(event) => setOrd(event.target.value)} /></label><button className="btn btn-secondary" type="submit" disabled={create.isPending}>{tr('addBinding')}</button></form>
+    <form className="form-grid binding-form" onSubmit={add}><label><span>{tr('donationKeyId')}</span><input value={donationKeyID} inputMode="numeric" onChange={(event) => setDonationKeyID(event.target.value)} disabled={!bindingsReady || create.isPending} /></label><label><span>{tr('upstreamModel')}</span><input value={upstream} onChange={(event) => setUpstream(event.target.value)} disabled={!bindingsReady || create.isPending} /></label><label><span>{tr('order')}</span><input value={ord} inputMode="numeric" onChange={(event) => setOrd(event.target.value)} disabled={!bindingsReady || create.isPending} /></label><button className="btn btn-secondary" type="submit" disabled={!bindingsReady || create.isPending}>{tr('addBinding')}</button></form>
     {error ? <p className="field-error" role="alert">{error}</p> : null}
   </details>;
 }
@@ -203,19 +289,20 @@ function ModelCard({ frame, model, onEdit, onDelete }: { frame: CharityManagemen
   const rate = model.success_samples ? Math.round(model.success_count * 100 / model.success_samples) : 0;
   return <article className="item-card charity-model-card"><div className="item-header"><div><h3>{model.full_name}</h3><p className="item-meta">{model.pricing_mode === 'per_token' ? tr('perToken') : tr('perRequest')} · {tr('successRate', { rate, count: model.success_samples })}</p></div><StatusBadge active={model.enabled} label={model.enabled ? tr('enabled') : tr('disabled')} danger={!model.enabled} /></div>
     <CharityPriceTable mode={model.pricing_mode} rows={rowsForModel(model, tr)} discount={{ percent: model.discount.percent, enabled: model.discount.enabled, startAt: model.discount.start_at, endAt: model.discount.end_at }} />
+    {model.flatten_tool_calls ? <p className="risk-note" role="note"><strong>{tr('flattenEnabled')}</strong> {tr('flattenRisk')}</p> : null}
     <div className="form-actions"><button type="button" className="btn btn-secondary" onClick={onEdit}>{tr('edit')}</button><button type="button" className="btn btn-danger" onClick={onDelete}>{tr('delete')}</button></div>
     <Bindings frame={frame} model={model} />
   </article>;
 }
 
-function DonationKeyEditor({ frame, keyRow, onChange }: { frame: CharityManagementFrame; keyRow: ManagementDonationKey; onChange: (next: ManagementDonationKey) => void }) {
+function DonationKeyEditor({ frame, keyRow, onChange }: { frame: CharityManagementFrame; keyRow: DonationKeyDraft; onChange: (next: DonationKeyDraft) => void }) {
   const tr = useText(frame);
   return <fieldset className="donation-review-key"><legend>{keyRow.display ?? tr('keyHidden')}</legend><div className="form-grid">
-    <label><span>{tr('maxConcurrency')}</span><input type="number" min="0" max="100000" value={keyRow.max_concurrency} onChange={(event) => onChange({ ...keyRow, max_concurrency: Number(event.target.value) })} /></label>
-    <label><span>{tr('rpmLimit')}</span><input type="number" min="0" max="4096" value={keyRow.rpm_limit} onChange={(event) => onChange({ ...keyRow, rpm_limit: Number(event.target.value) })} /></label>
-    <label><span>{tr('usageCap')}</span><input value={keyRow.credits_usage_cap_milli} inputMode="numeric" onChange={(event) => onChange({ ...keyRow, credits_usage_cap_milli: event.target.value })} /></label>
+    <label><span>{tr('maxConcurrency')}</span><input type="number" min="0" max="100000" maxLength={6} value={keyRow.max_concurrency} onChange={(event) => onChange({ ...keyRow, max_concurrency: event.target.value })} /></label>
+    <label><span>{tr('rpmLimit')}</span><input type="number" min="0" max="4096" maxLength={4} value={keyRow.rpm_limit} onChange={(event) => onChange({ ...keyRow, rpm_limit: event.target.value })} /></label>
+    <label><span>{tr('usageCap')}</span><input value={keyRow.credits_usage_cap_milli} maxLength={19} inputMode="numeric" onChange={(event) => onChange({ ...keyRow, credits_usage_cap_milli: event.target.value })} /></label>
     <label className="checkbox-label"><input type="checkbox" checked={keyRow.enabled} onChange={(event) => onChange({ ...keyRow, enabled: event.target.checked })} /><span>{tr('enabled')}</span></label>
-  </div><p className="muted">{tr('usageUsed', { value: formatCreditsFromMilli(keyRow.credits_used_milli).exact })}</p></fieldset>;
+  </div><p className="muted">{tr('usageUsed', { value: formatCreditsFromMilli(keyRow.credits_used_milli).exact })}</p>{keyRow.force_store_false === 'not_applicable' ? null : <p className="muted">{tr('storeReadOnly')}: {keyRow.force_store_false ? tr('storeNoStore') : tr('storeDefault')}</p>}</fieldset>;
 }
 
 function DonationCard({ frame, donation, onDeleted }: { frame: CharityManagementFrame; donation: ManagementDonation; onDeleted: () => void }) {
@@ -231,27 +318,55 @@ function DonationCard({ frame, donation, onDeleted }: { frame: CharityManagement
   const [actionError, setActionError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [expiry, setExpiry] = useState(unixDate(donation.expires_at));
-  const [draftKeys, setDraftKeys] = useState<ManagementDonationKey[]>([]);
+  const [draftKeys, setDraftKeys] = useState<DonationKeyDraft[]>([]);
   const full = detail.data;
+  const detailReady = !detail.isPending && !detail.error && Boolean(full);
   useEffect(() => {
     if (!full?.keys) return;
     // The detail query is the authoritative replacement for this edit draft.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDraftKeys(full.keys);
+    setDraftKeys(full.keys.map(donationKeyDraft));
   }, [full?.keys]);
   const run = async (action: string) => {
     setActionError('');
-    try { await review.mutateAsync({ id: donation.id, action, expires_at: dateUnix(expiry), ...(note.trim() ? { note: note.trim() } : {}), ...(draftKeys.length ? { keys: draftKeys.map((key) => ({ id: Number(key.id), max_concurrency: key.max_concurrency, rpm_limit: key.rpm_limit, credits_usage_cap_milli: key.credits_usage_cap_milli, enabled: key.enabled })) } : {}) }); setNote(''); } catch (requestError) { setActionError(errorText(requestError)); }
+    if (!detailReady) {
+      setActionError(tr('detailUnavailable'));
+      return;
+    }
+    const keyPayload = [] as Array<Record<string, unknown>>;
+    for (const key of draftKeys) {
+      const donationKeyNumericID = positiveDecimalIDNumber(key.id) ?? null;
+      const maxConcurrency = optionalReviewerLimit(key.max_concurrency, 100_000);
+      const rpm = optionalReviewerLimit(key.rpm_limit, 4_096);
+      const usageCap = optionalReviewerAmount(key.credits_usage_cap_milli);
+      if (donationKeyNumericID === null || maxConcurrency === null || rpm === null || usageCap === null) {
+        setActionError(tr('limitsInvalid'));
+        return;
+      }
+      keyPayload.push({
+        id: donationKeyNumericID,
+        ...(maxConcurrency !== undefined ? { max_concurrency: maxConcurrency } : {}),
+        ...(rpm !== undefined ? { rpm_limit: rpm } : {}),
+        ...(usageCap !== undefined ? { credits_usage_cap_milli: usageCap } : {}),
+        enabled: key.enabled,
+      });
+    }
+    const expiryAt = dateUnix(expiry);
+    if (expiryAt === INVALID_DATE) {
+      setActionError(tr('expiryInvalid'));
+      return;
+    }
+    try { await review.mutateAsync({ id: donation.id, action, expires_at: expiryAt, ...(note.trim() ? { note: note.trim() } : {}), ...(keyPayload.length ? { keys: keyPayload } : {}) }); setNote(''); } catch (requestError) { setActionError(errorText(requestError)); }
   };
   const softDelete = async () => { setActionError(''); try { await remove.mutateAsync(donation.id); setConfirmDelete(false); onDeleted(); } catch (requestError) { setActionError(errorText(requestError)); } };
   const statusLabel = tr(`status.${donation.status}`);
   return <article className="item-card donation-review-card"><div className="item-header"><div><h3>{tr('donationNumber', { id: donation.id })}</h3><p className="item-meta">{donation.endpoint_base_url} · {donation.user_id ? `${tr('submitter')} ${donation.user_id}` : ''}</p></div><StatusBadge active={donation.enabled && donation.status === 'approved'} label={statusLabel} danger={donation.status === 'rejected' || donation.status === 'deleted'} /></div>
     <p className="donation-description">{donation.description}</p>
     {donation.expires_at ? <p className="muted">{tr('expiresAt', { value: new Date(donation.expires_at * 1000).toLocaleString() })}</p> : null}
-    {detail.isPending ? <LoadingState label={tr('loadingDetails')} /> : detail.error ? <ErrorState error={detail.error} /> : full?.keys.length ? <div className="donation-key-editors">{draftKeys.map((keyRow) => <DonationKeyEditor key={keyRow.id} frame={frame} keyRow={keyRow} onChange={(next) => setDraftKeys((current) => current.map((item) => item.id === next.id ? next : item))} />)}</div> : null}
+    {detail.isPending ? <LoadingState label={tr('loadingDetails')} /> : detail.error ? <ErrorState error={detail.error} onRetry={() => void detail.refetch()} /> : full?.keys.length ? <div className="donation-key-editors">{draftKeys.map((keyRow) => <DonationKeyEditor key={keyRow.id} frame={frame} keyRow={keyRow} onChange={(next) => setDraftKeys((current) => current.map((item) => item.id === next.id ? next : item))} />)}</div> : null}
     <div className="form-grid"><label><span>{tr('expires')}</span><input type="datetime-local" value={expiry} onChange={(event) => setExpiry(event.target.value)} /><small className="muted">{tr('expiryHint')}</small></label><label className="full-width"><span>{tr('reviewNote')}</span><textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={4096} rows={2} /></label></div>
     {actionError ? <p className="field-error" role="alert">{actionError}</p> : null}
-    <div className="form-actions"><button type="button" className="btn btn-primary" onClick={() => void run('approve')} disabled={review.isPending || donation.status !== 'pending'}>{tr('approve')}</button><button type="button" className="btn btn-secondary" onClick={() => void run('reject')} disabled={review.isPending || donation.status !== 'pending'}>{tr('reject')}</button><button type="button" className="btn btn-secondary" onClick={() => void run(donation.enabled ? 'disable' : 'enable')} disabled={review.isPending || donation.status !== 'approved'}>{donation.enabled ? tr('disable') : tr('enable')}</button><button type="button" className="btn btn-secondary" onClick={() => void run('update')} disabled={review.isPending}>{tr('saveKeyLimits')}</button><button type="button" className="btn btn-danger" onClick={() => setConfirmDelete(true)} disabled={remove.isPending || donation.status === 'deleted'}>{tr('delete')}</button></div>
+    <div className="form-actions"><button type="button" className="btn btn-primary" onClick={() => void run('approve')} disabled={!detailReady || review.isPending || donation.status !== 'pending'}>{tr('approve')}</button><button type="button" className="btn btn-secondary" onClick={() => void run('reject')} disabled={!detailReady || review.isPending || donation.status !== 'pending'}>{tr('reject')}</button><button type="button" className="btn btn-secondary" onClick={() => void run(donation.enabled ? 'disable' : 'enable')} disabled={!detailReady || review.isPending || donation.status !== 'approved'}>{donation.enabled ? tr('disable') : tr('enable')}</button><button type="button" className="btn btn-secondary" onClick={() => void run('update')} disabled={!detailReady || review.isPending}>{tr('saveKeyLimits')}</button><button type="button" className="btn btn-danger" onClick={() => setConfirmDelete(true)} disabled={!detailReady || remove.isPending || donation.status === 'deleted'}>{tr('delete')}</button></div>
     {full?.reviews.length ? <details className="review-history"><summary>{tr('reviewHistory')}</summary><ul className="plain-list">{full.reviews.map((item) => <li key={item.id}><strong>{item.action}</strong>{item.note ? ` · ${item.note}` : ''}</li>)}</ul></details> : null}
     <ConfirmDialog open={confirmDelete} title={tr('deleteDonationTitle')} description={tr('deleteDonationBody')} confirmLabel={tr('delete')} danger busy={remove.isPending} onCancel={() => setConfirmDelete(false)} onConfirm={() => void softDelete()} />
   </article>;
@@ -319,9 +434,12 @@ function CharitySettings({ frame }: { frame: CharityManagementFrame }) {
 export function CharityManagement({ frame }: { frame: CharityManagementFrame }) {
   const tr = useText(frame);
   const client = useQueryClient();
+  const capability = useManagementCapability(frame);
   const donations = useManagementDonations(frame, 1, 'pending');
   const models = useManagementModels(frame);
-  const forbidden = isForbidden(donations.error) || isForbidden(models.error);
+  const forbidden = !capability.authorityReady || capability.data === true
+    || isForbidden(donations.error) || isUnauthorized(donations.error)
+    || isForbidden(models.error) || isUnauthorized(models.error);
   useEffect(() => {
     if (!forbidden) return;
     client.removeQueries({ queryKey: charityManagementKeys.root(frame) });

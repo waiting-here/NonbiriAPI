@@ -27,12 +27,26 @@ type CallerModel struct {
 // currently usable candidate set. FullName is an opaque routing key and is
 // never split or interpreted.
 type ForwardRoute struct {
-	ModelID       int64
-	UserID        int64
-	FullName      string
-	RouteStrategy string
-	SilentRetry   bool
-	Candidates    []ForwardCandidate
+	ModelID          int64
+	UserID           int64
+	FullName         string
+	RouteStrategy    string
+	SilentRetry      bool
+	FlattenToolCalls bool
+	Candidates       []ForwardCandidate
+}
+
+// LogicalForwardRoute is the dry-run-only model projection.  Unlike
+// ForwardRoute it never joins bindings, endpoint keys, fetched caches, or
+// physical connector metadata.  Keeping this as a separate query seam is
+// essential: a dry request must not materialize a candidate set before it is
+// known that an actual send is authorized.
+type LogicalForwardRoute struct {
+	ModelID         int64
+	UserID          int64
+	FullName        string
+	RouteStrategy   string
+	FlattenToolCall bool
 }
 
 // ForwardCandidate is non-sensitive selector metadata. The candidate query
@@ -43,6 +57,7 @@ type ForwardCandidate struct {
 	ModelID         int64
 	EndpointID      int64
 	EndpointKeyID   int64
+	ConnectorType   string
 	UpstreamModelID string
 	Ord             int64
 }
@@ -58,6 +73,7 @@ type ForwardTarget struct {
 	ConnectorType   string
 	BaseURL         string
 	UpstreamModelID string
+	ForceStoreFalse bool
 	encryptedSecret string
 }
 
@@ -126,6 +142,32 @@ LIMIT ?`, userID, limit+1)
 	return models, nil
 }
 
+// ResolveLogicalForwardRoute reads only the owner-scoped logical model row.
+// It is intentionally separate from ResolveForwardRoute so Debug dry-run can
+// validate model identity and model-level policy with zero physical candidate,
+// endpoint, key, Vault, DNS, egress, or charity-reservation work.
+func (s *Store) ResolveLogicalForwardRoute(ctx context.Context, userID int64, fullName string) (LogicalForwardRoute, error) {
+	if s == nil || userID <= 0 || fullName == "" {
+		return LogicalForwardRoute{}, ErrNotFound
+	}
+	var route LogicalForwardRoute
+	var flatten int
+	err := s.db.QueryRowContext(ctx, `
+SELECT id, user_id, full_name, route_strategy, flatten_tool_calls
+FROM models
+WHERE user_id=? AND full_name=?`, userID, fullName).Scan(
+		&route.ModelID, &route.UserID, &route.FullName, &route.RouteStrategy, &flatten,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return LogicalForwardRoute{}, ErrNotFound
+	}
+	if err != nil {
+		return LogicalForwardRoute{}, fmt.Errorf("query logical forward route: %w", err)
+	}
+	route.FlattenToolCall = flatten != 0
+	return route, nil
+}
+
 // ResolveForwardRoute resolves fullName only inside userID's ownership scope
 // and returns the complete usable binding set in (ord,id) order. Candidates
 // are filtered in SQL, never by reading globally-addressed ids and checking
@@ -152,12 +194,12 @@ func (s *Store) ResolveForwardRoute(ctx context.Context, userID int64, fullName 
 	}()
 
 	var route ForwardRoute
-	var silentRetry int
+	var silentRetry, flattenInt int
 	err = tx.QueryRowContext(ctx, `
-SELECT id, user_id, full_name, route_strategy, silent_retry
+SELECT id, user_id, full_name, route_strategy, silent_retry, flatten_tool_calls
 FROM models
 WHERE user_id=? AND full_name=?`, userID, fullName).
-		Scan(&route.ModelID, &route.UserID, &route.FullName, &route.RouteStrategy, &silentRetry)
+		Scan(&route.ModelID, &route.UserID, &route.FullName, &route.RouteStrategy, &silentRetry, &flattenInt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ForwardRoute{}, ErrNotFound
@@ -165,9 +207,27 @@ WHERE user_id=? AND full_name=?`, userID, fullName).
 		return ForwardRoute{}, fmt.Errorf("resolve caller model: %w", err)
 	}
 	route.SilentRetry = silentRetry != 0
+	route.FlattenToolCalls = flattenInt != 0
+	if route.FlattenToolCalls {
+		// The write paths enforce an all-OpenAI invariant. Keep a defensive
+		// read-side check so a damaged database cannot be "repaired" by
+		// silently filtering an Anthropic binding into a successful route.
+		var incompatible int
+		if err := tx.QueryRowContext(ctx, `
+SELECT COUNT(*)
+FROM model_bindings b
+JOIN endpoint_keys ek ON ek.id=b.endpoint_key_id
+JOIN endpoints e ON e.id=ek.endpoint_id
+WHERE b.model_id=? AND e.connector_type <> 'openai-compatible'`, route.ModelID).Scan(&incompatible); err != nil {
+			return ForwardRoute{}, fmt.Errorf("validate forward flatten policy: %w", err)
+		}
+		if incompatible != 0 {
+			return ForwardRoute{}, ErrConflict
+		}
+	}
 
 	rows, err := tx.QueryContext(ctx, `
-SELECT b.id, b.model_id, e.id, ek.id, b.upstream_model_id, b.ord
+SELECT b.id, b.model_id, e.id, ek.id, e.connector_type, b.upstream_model_id, b.ord
 FROM model_bindings b
 JOIN models m
   ON m.id=b.model_id
@@ -203,6 +263,7 @@ LIMIT ?`, route.ModelID, userID, fullName, userID, limit+1)
 			&candidate.ModelID,
 			&candidate.EndpointID,
 			&candidate.EndpointKeyID,
+			&candidate.ConnectorType,
 			&candidate.UpstreamModelID,
 			&candidate.Ord,
 		); err != nil {
@@ -237,8 +298,10 @@ func (s *Store) GetForwardTarget(ctx context.Context, userID int64, fullName str
 	}
 	var target ForwardTarget
 	var baseURL, ciphertext sql.NullString
+	var forceStoreFalse int
 	err := s.db.QueryRowContext(ctx, `
 SELECT b.id, e.id, ek.id, e.connector_type,
+       ek.force_store_false,
        CASE WHEN length(CAST(e.base_url AS BLOB)) BETWEEN 1 AND ? THEN e.base_url END,
        b.upstream_model_id,
        CASE WHEN length(CAST(ek.encrypted_secret AS BLOB)) BETWEEN 1 AND ? THEN ek.encrypted_secret END
@@ -265,6 +328,7 @@ WHERE b.id=?`, maxStoredEndpointBaseURLBytes, maxEndpointCredentialEnvelopeBytes
 			&target.EndpointID,
 			&target.EndpointKeyID,
 			&target.ConnectorType,
+			&forceStoreFalse,
 			&baseURL,
 			&target.UpstreamModelID,
 			&ciphertext,
@@ -279,6 +343,7 @@ WHERE b.id=?`, maxStoredEndpointBaseURLBytes, maxEndpointCredentialEnvelopeBytes
 		return ForwardTarget{}, ErrEndpointCredentialUnavailable
 	}
 	target.BaseURL = baseURL.String
+	target.ForceStoreFalse = forceStoreFalse != 0
 	target.encryptedSecret = ciphertext.String
 	return target, nil
 }

@@ -130,7 +130,8 @@ func newAuditFixtureWithTimeout(t *testing.T, upstreamURLs []string, hooks forwa
 		t.Fatal(err)
 	}
 	registry := endpoint.NewRegistry()
-	adapter, err := openai.NewAdapter(openai.AdapterConfig{Backend: mustLocalBackend(t, stack)})
+	localBackend := mustLocalBackend(t, stack)
+	adapter, err := openai.NewAdapter(openai.AdapterConfig{Backend: localBackend})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +145,7 @@ func newAuditFixtureWithTimeout(t *testing.T, upstreamURLs []string, hooks forwa
 		t.Fatal(err)
 	}
 	runner, err := forward.NewSecureRunner(forward.SecureRunnerConfig{
-		Repository: store, Secrets: vault, Registry: registry, Adapters: []forward.Adapter{adapter},
+		Repository: store, Secrets: vault, Registry: registry, Adapters: []forward.Adapter{adapter}, Backend: localBackend,
 		SafetyIdentifiers: safetyIdentifierFactory,
 	})
 	if err != nil {
@@ -414,8 +415,10 @@ func TestAuditForwardSilentRetryFailoverOrdered(t *testing.T) {
 
 func TestAuditForwardFailoverSameOriginDifferentPathsKeepsSafetyIdentifier(t *testing.T) {
 	safetyIDs := make(chan string, 2)
+	requestBodies := make(chan string, 2)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		requestBodies <- string(body)
 		var payload struct {
 			Safety string `json:"safety_identifier"`
 		}
@@ -440,6 +443,10 @@ func TestAuditForwardFailoverSameOriginDifferentPathsKeepsSafetyIdentifier(t *te
 	firstSafety, secondSafety := <-safetyIDs, <-safetyIDs
 	if firstSafety == "" || firstSafety != secondSafety || !strings.HasPrefix(firstSafety, "nbu_v3_") {
 		t.Fatalf("same-origin path failover identifiers=%q,%q", firstSafety, secondSafety)
+	}
+	firstBody, secondBody := <-requestBodies, <-requestBodies
+	if firstBody != secondBody {
+		t.Fatalf("attempt request snapshot drifted across failover:\nfirst=%s\nsecond=%s", firstBody, secondBody)
 	}
 }
 

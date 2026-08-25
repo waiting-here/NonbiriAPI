@@ -637,6 +637,8 @@ func TestHandlerModelSilentRetry(t *testing.T) {
 	// A non-bool silent_retry is rejected at decode time (the field is *bool).
 	rec = doRequest(t, h, http.MethodPost, "/api/models", `{"provider":"p","model":"bad","silent_retry":"true"}`)
 	assertErr(t, rec, http.StatusBadRequest, httperr.CodeInvalidRequest)
+	rec = doRequest(t, h, http.MethodPost, "/api/models", `{"provider":"p","model":"duplicate","flatten_tool_calls":true,"flatten_tool_calls":false}`)
+	assertErr(t, rec, http.StatusBadRequest, httperr.CodeInvalidRequest)
 
 	// An unknown field is rejected (DisallowUnknownFields).
 	rec = doRequest(t, h, http.MethodPost, "/api/models", `{"provider":"p","model":"unk","retry_silently":true}`)

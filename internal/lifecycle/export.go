@@ -205,6 +205,22 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	if s == nil || s.store == nil || user == nil || user.ID <= 0 || !user.IsActive() {
 		return nil, ErrExportTooLarge
 	}
+	// Refresh the row at generation time. A session principal may predate an
+	// administrator limit edit; exports must carry the current nullable values
+	// and the effective defaults used at this exact generation.
+	currentUser, err := s.store.GetUserByID(user.ID)
+	if err != nil {
+		return nil, err
+	}
+	if currentUser == nil || !currentUser.IsActive() {
+		return nil, db.ErrNotFound
+	}
+	user = currentUser
+	defaults, err := s.store.GetUserLimitDefaults(ctx)
+	if err != nil {
+		return nil, err
+	}
+	limitProjection := db.ProjectUserLimits(user, defaults)
 	limit := db.ExportCollectionLimit
 	endpoints, err := s.store.ListExportEndpoints(ctx, user.ID, limit)
 	if err != nil {
@@ -258,12 +274,28 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	if err != nil {
 		return nil, err
 	}
+	gameSettlements, err := s.store.ListExportGameSettlements(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
+	gameRounds, err := s.store.ListExportGameRounds(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
+	fishingOutcomes, err := s.store.ListExportFishingOutcomes(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
+	fishingBest, err := s.store.ListExportFishingBest(ctx, user.ID, limit)
+	if err != nil {
+		return nil, err
+	}
 
 	keysByEndpoint := make(map[int64][]exportKey, len(keys))
 	for _, key := range keys {
 		keysByEndpoint[key.EndpointID] = append(keysByEndpoint[key.EndpointID], exportKey{
 			ID: key.ID, DisplayHead: key.DisplayHead, DisplayTail: key.DisplayTail,
-			Note: key.Note, Enabled: key.Enabled, CreatedAt: key.CreatedAt, UpdatedAt: key.UpdatedAt,
+			Note: key.Note, Enabled: key.Enabled, ForceStoreFalse: key.ForceStoreFalse, CreatedAt: key.CreatedAt, UpdatedAt: key.UpdatedAt,
 		})
 	}
 	bindingsByModel := make(map[int64][]exportBinding, len(bindings))
@@ -275,15 +307,22 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	}
 
 	packageValue := exportPackage{
-		SchemaVersion: 2,
+		SchemaVersion: 3,
 		ExportedAt:    time.Now().UTC(),
 		User: exportUser{
 			ID: user.ID, DiscordID: user.DiscordID, Username: user.Username, Avatar: user.Avatar,
+			GuildNick: user.GuildNick, GuildAvatarURL: user.GuildAvatarURL,
 			Lang: user.Lang, Credits: credits.FormatAmount(user.Credits),
 			DonationCredit: credits.FormatAmount(user.DonationCredit),
 			ManualLevel:    user.Level, AutoLevel: user.AutoLevel,
-			EndpointLimit: user.EndpointLimit, RPMLimit: user.RPMLimit,
-			CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt,
+			EndpointLimit:             limitProjection.EndpointLimit,
+			EffectiveEndpointLimit:    limitProjection.EffectiveEndpointLimit,
+			RPMLimit:                  limitProjection.RPMLimit,
+			EffectiveRPMLimit:         limitProjection.EffectiveRPMLimit,
+			ConcurrencyLimit:          limitProjection.ConcurrencyLimit,
+			EffectiveConcurrencyLimit: limitProjection.EffectiveConcurrencyLimit,
+			GameProfilePublic:         user.GameProfilePublic,
+			CreatedAt:                 user.CreatedAt, UpdatedAt: user.UpdatedAt,
 		},
 		Endpoints: make([]exportEndpoint, 0, len(endpoints)),
 		Models:    make([]exportModel, 0, len(models)),
@@ -310,6 +349,10 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 		Donations:           make([]db.DonationExportRow, 0, len(donations)),
 		CharityReservations: make([]db.CharityReservationExportRow, 0, len(charityReservations)),
 		DonorRewards:        make([]db.DonorRewardExportRow, 0, len(donorRewards)),
+		GameSettlements:     make([]db.GameSettlementExportRow, 0, len(gameSettlements)),
+		GameRounds:          make([]db.GameRoundExportRow, 0, len(gameRounds)),
+		FishingOutcomes:     make([]db.FishingOutcomeExportRow, 0, len(fishingOutcomes)),
+		FishingBest:         make([]db.FishingBestExportRow, 0, len(fishingBest)),
 	}
 	for _, day := range activityDaily {
 		packageValue.ActivityDaily = append(packageValue.ActivityDaily, day)
@@ -329,6 +372,18 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	for _, row := range donorRewards {
 		packageValue.DonorRewards = append(packageValue.DonorRewards, row)
 	}
+	for _, row := range gameSettlements {
+		packageValue.GameSettlements = append(packageValue.GameSettlements, row)
+	}
+	for _, row := range gameRounds {
+		packageValue.GameRounds = append(packageValue.GameRounds, row)
+	}
+	for _, row := range fishingOutcomes {
+		packageValue.FishingOutcomes = append(packageValue.FishingOutcomes, row)
+	}
+	for _, row := range fishingBest {
+		packageValue.FishingBest = append(packageValue.FishingBest, row)
+	}
 	for _, ep := range endpoints {
 		packageValue.Endpoints = append(packageValue.Endpoints, exportEndpoint{
 			ID: ep.ID, ConnectorType: ep.ConnectorType, BaseURL: ep.BaseURL, Note: ep.Note,
@@ -339,7 +394,7 @@ func (s *ExportService) BuildExport(ctx context.Context, user *db.User) ([]byte,
 	for _, m := range models {
 		packageValue.Models = append(packageValue.Models, exportModel{
 			ID: m.ID, Provider: m.Provider, Model: m.Model, FullName: m.FullName,
-			RouteStrategy: m.RouteStrategy, SilentRetry: m.SilentRetry,
+			RouteStrategy: m.RouteStrategy, SilentRetry: m.SilentRetry, FlattenToolCalls: m.FlattenToolCalls,
 			CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt, Bindings: bindingsByModel[m.ID],
 		})
 	}
@@ -397,15 +452,21 @@ type exportPackage struct {
 	CharityReservations []db.CharityReservationExportRow `json:"charity_reservations"`
 	// DonorRewards is the donor's own reward summary; it never includes
 	// consumer identity or request data.
-	DonorRewards []db.DonorRewardExportRow `json:"donor_rewards"`
+	DonorRewards    []db.DonorRewardExportRow    `json:"donor_rewards"`
+	GameSettlements []db.GameSettlementExportRow `json:"game_settlements"`
+	GameRounds      []db.GameRoundExportRow      `json:"game_rounds"`
+	FishingOutcomes []db.FishingOutcomeExportRow `json:"game_fishing_outcomes"`
+	FishingBest     []db.FishingBestExportRow    `json:"game_fishing_best"`
 }
 
 type exportUser struct {
-	ID        int64  `json:"id"`
-	DiscordID string `json:"discord_id"`
-	Username  string `json:"username"`
-	Avatar    string `json:"avatar"`
-	Lang      string `json:"lang"`
+	ID             int64  `json:"id"`
+	DiscordID      string `json:"discord_id"`
+	Username       string `json:"username"`
+	Avatar         string `json:"avatar"`
+	GuildNick      string `json:"guild_nick"`
+	GuildAvatarURL string `json:"guild_avatar_url"`
+	Lang           string `json:"lang"`
 	// Economic balances as canonical decimal strings: the signed consumption
 	// balance and the cumulative donor-reward balance.
 	Credits        string `json:"credits"`
@@ -414,12 +475,17 @@ type exportUser struct {
 	// manual_level is the nullable manual override (null = automatic);
 	// auto_level is the persisted automatic high-water mark (1..4). No
 	// violation-window or threshold-configuration data is exported.
-	ManualLevel   *int      `json:"manual_level"`
-	AutoLevel     int       `json:"auto_level"`
-	EndpointLimit *int      `json:"endpoint_limit"`
-	RPMLimit      *int      `json:"rpm_limit"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ManualLevel               *int      `json:"manual_level"`
+	AutoLevel                 int       `json:"auto_level"`
+	EndpointLimit             *int      `json:"endpoint_limit"`
+	EffectiveEndpointLimit    int       `json:"effective_endpoint_limit"`
+	RPMLimit                  *int      `json:"rpm_limit"`
+	EffectiveRPMLimit         int       `json:"effective_rpm_limit"`
+	ConcurrencyLimit          *int      `json:"concurrency_limit"`
+	EffectiveConcurrencyLimit int       `json:"effective_concurrency_limit"`
+	GameProfilePublic         bool      `json:"game_profile_public"`
+	CreatedAt                 time.Time `json:"created_at"`
+	UpdatedAt                 time.Time `json:"updated_at"`
 }
 
 type exportEndpoint struct {
@@ -436,25 +502,27 @@ type exportEndpoint struct {
 }
 
 type exportKey struct {
-	ID          int64  `json:"id"`
-	DisplayHead string `json:"display_head"`
-	DisplayTail string `json:"display_tail"`
-	Note        string `json:"note"`
-	Enabled     bool   `json:"enabled"`
-	CreatedAt   int64  `json:"created_at"`
-	UpdatedAt   int64  `json:"updated_at"`
+	ID              int64  `json:"id"`
+	DisplayHead     string `json:"display_head"`
+	DisplayTail     string `json:"display_tail"`
+	Note            string `json:"note"`
+	Enabled         bool   `json:"enabled"`
+	ForceStoreFalse bool   `json:"force_store_false"`
+	CreatedAt       int64  `json:"created_at"`
+	UpdatedAt       int64  `json:"updated_at"`
 }
 
 type exportModel struct {
-	ID            int64           `json:"id"`
-	Provider      string          `json:"provider"`
-	Model         string          `json:"model"`
-	FullName      string          `json:"full_name"`
-	RouteStrategy string          `json:"route_strategy"`
-	SilentRetry   bool            `json:"silent_retry"`
-	CreatedAt     int64           `json:"created_at"`
-	UpdatedAt     int64           `json:"updated_at"`
-	Bindings      []exportBinding `json:"bindings"`
+	ID               int64           `json:"id"`
+	Provider         string          `json:"provider"`
+	Model            string          `json:"model"`
+	FullName         string          `json:"full_name"`
+	RouteStrategy    string          `json:"route_strategy"`
+	SilentRetry      bool            `json:"silent_retry"`
+	FlattenToolCalls bool            `json:"flatten_tool_calls"`
+	CreatedAt        int64           `json:"created_at"`
+	UpdatedAt        int64           `json:"updated_at"`
+	Bindings         []exportBinding `json:"bindings"`
 }
 
 type exportBinding struct {

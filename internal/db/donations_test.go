@@ -358,6 +358,76 @@ func TestDonationNestedCreateRollbackNoResidualSecret(t *testing.T) {
 	}
 }
 
+// TestNestedDonationStorePolicyIsOwnerScopedAndOpenAIOnly covers the nested
+// donation creation path: a donor owns the fresh physical key and may opt it
+// into force_store_false, while an Anthropic nested endpoint rejects the same
+// policy atomically before any endpoint, donation, key, or audit row commits.
+func TestNestedDonationStorePolicyIsOwnerScopedAndOpenAIOnly(t *testing.T) {
+	st := newDonationTestStore(t)
+	ctx := context.Background()
+	uid := newDonationUser(t, st, "nested-policy")
+
+	in := CreateDonationInput{
+		UserID: uid, Description: "nested policy", Now: 100,
+		New: &NewEndpointSpec{ConnectorType: "openai-compatible", BaseURL: "https://nested-policy.example.com"},
+		Keys: []NewKeySpec{{
+			Secret: []byte("sk-nested-policy"), Enabled: true, ForceStoreFalse: true,
+			DisplayHead: "h", DisplayTail: "t",
+		}},
+	}
+	d, err := st.CreateDonation(ctx, in)
+	if err != nil {
+		t.Fatalf("nested OpenAI policy create: %v", err)
+	}
+	var keyID int64
+	var force int
+	if err := st.DB().QueryRow(`SELECT id, force_store_false FROM endpoint_keys WHERE endpoint_id=?`, d.EndpointID).Scan(&keyID, &force); err != nil {
+		t.Fatalf("read nested policy key: %v", err)
+	}
+	if force != 1 {
+		t.Fatalf("nested force_store_false = %d, want 1", force)
+	}
+	var actorRole, resourceType, policy string
+	var oldValue, newValue int
+	if err := st.DB().QueryRow(`
+SELECT actor_role, resource_type, policy, old_value, new_value
+FROM policy_audits WHERE resource_id=? ORDER BY id DESC LIMIT 1`, keyID).
+		Scan(&actorRole, &resourceType, &policy, &oldValue, &newValue); err != nil {
+		t.Fatalf("read nested policy audit: %v", err)
+	}
+	if actorRole != "owner" || resourceType != "endpoint_key" || policy != "force_store_false" || oldValue != 0 || newValue != 1 {
+		t.Fatalf("nested policy audit = %q/%q/%q %d->%d", actorRole, resourceType, policy, oldValue, newValue)
+	}
+
+	beforeEndpoints := countDonationRows(t, st, `SELECT COUNT(*) FROM endpoints WHERE user_id=?`, uid)
+	beforeDonations := countDonationRows(t, st, `SELECT COUNT(*) FROM donations WHERE user_id=?`, uid)
+	beforeKeys := countDonationRows(t, st, `SELECT COUNT(*) FROM endpoint_keys WHERE endpoint_id IN (SELECT id FROM endpoints WHERE user_id=?)`, uid)
+	beforeAudits := countDonationRows(t, st, `SELECT COUNT(*) FROM policy_audits WHERE actor_user_id=?`, uid)
+	anthropic := CreateDonationInput{
+		UserID: uid, Description: "anthropic policy", Now: 101,
+		New: &NewEndpointSpec{ConnectorType: "anthropic-compatible", BaseURL: "https://nested-anthropic.example.com"},
+		Keys: []NewKeySpec{{
+			Secret: []byte("sk-nested-anthropic-policy"), Enabled: true, ForceStoreFalse: true,
+			DisplayHead: "h", DisplayTail: "t",
+		}},
+	}
+	if _, err := st.CreateDonation(ctx, anthropic); !errors.Is(err, ErrInvalidValue) {
+		t.Fatalf("nested Anthropic policy error = %v, want ErrInvalidValue", err)
+	}
+	if got := countDonationRows(t, st, `SELECT COUNT(*) FROM endpoints WHERE user_id=?`, uid); got != beforeEndpoints {
+		t.Fatalf("Anthropic rejection endpoints = %d, want %d", got, beforeEndpoints)
+	}
+	if got := countDonationRows(t, st, `SELECT COUNT(*) FROM donations WHERE user_id=?`, uid); got != beforeDonations {
+		t.Fatalf("Anthropic rejection donations = %d, want %d", got, beforeDonations)
+	}
+	if got := countDonationRows(t, st, `SELECT COUNT(*) FROM endpoint_keys WHERE endpoint_id IN (SELECT id FROM endpoints WHERE user_id=?)`, uid); got != beforeKeys {
+		t.Fatalf("Anthropic rejection keys = %d, want %d", got, beforeKeys)
+	}
+	if got := countDonationRows(t, st, `SELECT COUNT(*) FROM policy_audits WHERE actor_user_id=?`, uid); got != beforeAudits {
+		t.Fatalf("Anthropic rejection audits = %d, want %d", got, beforeAudits)
+	}
+}
+
 // TestDonationExpirySweepsAndReclaims covers the lazy expiry sweep: an expired
 // approved+enabled donation is disabled with a system review entry and its
 // claims released; extending the expiry and re-enabling re-acquires them.

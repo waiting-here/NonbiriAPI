@@ -21,6 +21,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
+	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -210,6 +211,164 @@ func wantNoStore(t *testing.T, rec *httptest.ResponseRecorder) {
 	}
 }
 
+func TestDeleteRetirementBoundaryCommitAbortAndMalformed(t *testing.T) {
+	h := newHarness(t)
+	var mu sync.Mutex
+	events := make([]string, 0, 12)
+	begin := func(userID int64) (func() bool, func() bool, error) {
+		if current, err := h.store.GetUserByID(userID); err != nil || current == nil {
+			return nil, nil, errors.New("target must exist when retirement begins")
+		}
+		mu.Lock()
+		events = append(events, "begin:"+strconv.FormatInt(userID, 10))
+		mu.Unlock()
+		var done atomic.Bool
+		terminal := func(kind string) func() bool {
+			return func() bool {
+				if !done.CompareAndSwap(false, true) {
+					return false
+				}
+				mu.Lock()
+				events = append(events, kind+":"+strconv.FormatInt(userID, 10))
+				mu.Unlock()
+				return true
+			}
+		}
+		return terminal("commit"), terminal("abort"), nil
+	}
+	beginDeletion := func(userID int64) (func() bool, func() bool, error) {
+		mu.Lock()
+		events = append(events, "delete-begin:"+strconv.FormatInt(userID, 10))
+		mu.Unlock()
+		var done atomic.Bool
+		terminal := func(kind string) func() bool {
+			return func() bool {
+				if !done.CompareAndSwap(false, true) {
+					return false
+				}
+				mu.Lock()
+				events = append(events, kind+":"+strconv.FormatInt(userID, 10))
+				mu.Unlock()
+				return true
+			}
+		}
+		return terminal("delete-commit"), terminal("delete-abort"), nil
+	}
+	svc, err := NewService(Config{
+		Store: h.store, Elevation: h.elevation, AdminVerifier: h.adminAuth,
+		BeginUserRetirement: begin,
+		BeginUserDeletion:   beginDeletion,
+		BeforeDeleteUser: func(userID int64) {
+			mu.Lock()
+			events = append(events, "beforedelete:"+strconv.FormatInt(userID, 10))
+			mu.Unlock()
+		},
+		PreDeleteUser: func(userID int64) {
+			mu.Lock()
+			events = append(events, "predelete:"+strconv.FormatInt(userID, 10))
+			mu.Unlock()
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+
+	self := h.seedUser("retire-self")
+	selfToken := h.issueUser(self.ID)
+	selfBinding := db.SessionHash(h.userSessions[self.ID])
+	if err := svc.DeleteOwnAccountBound(context.Background(), self, selfToken, selfBinding); err != nil {
+		t.Fatalf("self delete: %v", err)
+	}
+	adminTarget := h.seedUser("retire-admin")
+	adminToken := h.issueAdmin()
+	if err := svc.DeleteUserAsAdminBound(context.Background(), h.adminUser, adminTarget.ID, adminToken, db.SessionHash(h.adminToken)); err != nil {
+		t.Fatalf("admin delete: %v", err)
+	}
+
+	// A DB failure after begin/pre-delete must Abort and leave the account
+	// recoverable. A canceled context deterministically fails the transaction.
+	failing := h.seedUser("retire-failure")
+	failingToken := h.issueAdmin()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := svc.DeleteUserAsAdminBound(ctx, h.adminUser, failing.ID, failingToken, db.SessionHash(h.adminToken)); err == nil {
+		t.Fatal("canceled delete unexpectedly succeeded")
+	}
+	if current, err := h.store.GetUserByID(failing.ID); err != nil || current == nil {
+		t.Fatalf("failed delete was not recoverable: current=%+v err=%v", current, err)
+	}
+
+	mu.Lock()
+	joined := strings.Join(events, ",")
+	mu.Unlock()
+	for _, want := range []string{
+		"begin:" + strconv.FormatInt(self.ID, 10) + ",delete-begin:" + strconv.FormatInt(self.ID, 10) + ",beforedelete:" + strconv.FormatInt(self.ID, 10) + ",predelete:" + strconv.FormatInt(self.ID, 10) + ",delete-commit:" + strconv.FormatInt(self.ID, 10) + ",commit:" + strconv.FormatInt(self.ID, 10),
+		"begin:" + strconv.FormatInt(adminTarget.ID, 10) + ",delete-begin:" + strconv.FormatInt(adminTarget.ID, 10) + ",beforedelete:" + strconv.FormatInt(adminTarget.ID, 10) + ",predelete:" + strconv.FormatInt(adminTarget.ID, 10) + ",delete-commit:" + strconv.FormatInt(adminTarget.ID, 10) + ",commit:" + strconv.FormatInt(adminTarget.ID, 10),
+		"begin:" + strconv.FormatInt(failing.ID, 10) + ",delete-begin:" + strconv.FormatInt(failing.ID, 10) + ",beforedelete:" + strconv.FormatInt(failing.ID, 10) + ",predelete:" + strconv.FormatInt(failing.ID, 10) + ",delete-abort:" + strconv.FormatInt(failing.ID, 10) + ",abort:" + strconv.FormatInt(failing.ID, 10),
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("events=%s missing %s", joined, want)
+		}
+	}
+
+	for _, tc := range []struct {
+		name  string
+		begin func(int64) (func() bool, func() bool, error)
+	}{
+		{"begin error", func(int64) (func() bool, func() bool, error) { return nil, nil, errors.New("blocked") }},
+		{"malformed", func(int64) (func() bool, func() bool, error) { return nil, nil, nil }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			target := h.seedUser("retire-invalid-" + tc.name)
+			invalidSvc, err := NewService(Config{
+				Store: h.store, Elevation: h.elevation, AdminVerifier: h.adminAuth,
+				BeginUserRetirement: tc.begin,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer invalidSvc.Close()
+			token := h.issueAdmin()
+			if err := invalidSvc.DeleteUserAsAdminBound(context.Background(), h.adminUser, target.ID, token, db.SessionHash(h.adminToken)); err == nil {
+				t.Fatal("invalid retirement dependency accepted")
+			}
+			if current, err := h.store.GetUserByID(target.ID); err != nil || current == nil {
+				t.Fatalf("invalid dependency mutated DB current=%+v err=%v", current, err)
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		name  string
+		begin func(int64) (func() bool, func() bool, error)
+	}{
+		{"delete begin error", func(int64) (func() bool, func() bool, error) {
+			return nil, nil, errors.New("delete state unavailable")
+		}},
+		{"delete malformed", func(int64) (func() bool, func() bool, error) { return nil, nil, nil }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			target := h.seedUser("retire-invalid-" + tc.name)
+			invalidSvc, err := NewService(Config{
+				Store: h.store, Elevation: h.elevation, AdminVerifier: h.adminAuth,
+				BeginUserDeletion: tc.begin,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer invalidSvc.Close()
+			token := h.issueAdmin()
+			if err := invalidSvc.DeleteUserAsAdminBound(context.Background(), h.adminUser, target.ID, token, db.SessionHash(h.adminToken)); err == nil {
+				t.Fatal("invalid deletion dependency accepted")
+			}
+			if current, err := h.store.GetUserByID(target.ID); err != nil || current == nil {
+				t.Fatalf("invalid deletion dependency mutated DB current=%+v err=%v", current, err)
+			}
+		})
+	}
+}
+
 func TestSelfServiceDeleteSuccess(t *testing.T) {
 	h := newHarness(t)
 	user := h.seedUser("self-1")
@@ -239,6 +398,65 @@ func TestSelfServiceDeleteSuccess(t *testing.T) {
 	}
 	if !cleared {
 		t.Fatalf("user session cookie not cleared")
+	}
+}
+
+func TestSelfServiceDeleteDoesNotHoldAUserReadLease(t *testing.T) {
+	h := newHarness(t)
+	gate, err := lifecyclegate.New(lifecyclegate.Config{MaxUsers: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gate.Close()
+	service, err := NewService(Config{
+		Store: h.store, Elevation: h.elevation, AdminVerifier: h.adminAuth,
+		BeginUserRetirementContext: func(ctx context.Context, userID int64) (func() bool, func() bool, error) {
+			retirement, beginErr := gate.BeginUserRetirementContext(ctx, userID)
+			if beginErr != nil {
+				return nil, nil, beginErr
+			}
+			return retirement.Commit, retirement.Abort, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.Close()
+	user := h.seedUser("self-delete-gated")
+	requestSession := h.userSessionCookie(user.ID)
+	elevated := h.issueUser(user.ID)
+	userAuth, err := auth.NewUserAuth(auth.UserAuthConfig{
+		Store: h.store, Provider: stubDiscordProvider{}, ClientID: "client-id", Elevation: h.elevation,
+		SiteBaseURL: "https://example.com",
+		UserRequestGate: func(ctx context.Context, userID int64, binding string) (context.Context, func(), error) {
+			return gate.Admit(ctx, userID, binding, h.store.ValidateUserSessionBinding)
+		},
+		UserRequestGateExempt: func(r *http.Request) bool {
+			return r != nil && r.URL != nil && r.URL.Path == "/api/account/delete"
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer userAuth.Close()
+	handler := userAuth.Middleware(httpmw.API(http.HandlerFunc(service.DeleteOwnAccountHandler)))
+	req := stationReq(http.MethodPost, "https://example.com/api/account/delete", host.StationUser, `{"confirm":"DELETE"}`)
+	req.AddCookie(requestSession)
+	req.Header.Set(elevatedTokenHeader, elevated)
+	rec := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(rec, req)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("self-delete waited on its own user read lease")
+	}
+	wantCode(t, rec, http.StatusNoContent)
+	if current, err := h.store.GetUserByID(user.ID); err != nil || current != nil {
+		t.Fatalf("self-delete user=%#v err=%v", current, err)
 	}
 }
 

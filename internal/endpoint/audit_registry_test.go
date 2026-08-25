@@ -14,6 +14,9 @@ func TestAuditConnectorRegistryStrictness(t *testing.T) {
 	if !registry.Supported(endpoint.ConnectorOpenAICompatible) {
 		t.Fatal("openai-compatible is not registered")
 	}
+	if !registry.Supported(endpoint.ConnectorAnthropicCompatible) {
+		t.Fatal("anthropic-compatible is not registered")
+	}
 	// Zero-value registry supports nothing (fail closed).
 	var empty endpoint.Registry
 	if empty.Supported(endpoint.ConnectorOpenAICompatible) {
@@ -24,7 +27,6 @@ func TestAuditConnectorRegistryStrictness(t *testing.T) {
 	}
 
 	for _, raw := range []string{
-		"anthropic-compatible",
 		"dify",
 		"dify-app-api",
 		"openai",

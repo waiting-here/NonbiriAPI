@@ -2,11 +2,11 @@ package db
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
-	"strings"
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
@@ -61,8 +61,13 @@ var expectedTables = []string{
 	"endpoints",
 	"endpoint_keys",
 	"fetched_models",
+	"game_fishing_best",
+	"game_fishing_outcomes",
+	"game_rounds",
+	"game_settlements",
 	"models",
 	"model_bindings",
+	"policy_audits",
 	"request_logs",
 	"credit_ledger",
 	"checkins",
@@ -161,14 +166,14 @@ func TestOpenRejectsDirectoryAsDBPath(t *testing.T) {
 	if err == nil {
 		t.Fatal("Open accepted a directory as the database path")
 	}
-	if !strings.Contains(err.Error(), "database file") {
-		t.Fatalf("Open failed for the wrong reason (want path-shape guard, got %q): %v", err.Error(), err)
+	var startup *StartupError
+	if !errors.As(err, &startup) || startup.Kind != StartupUnsafePath {
+		t.Fatalf("Open failed for the wrong reason (want unsafe_path, got %q): %v", err.Error(), err)
 	}
 }
 
-// TestSchemaBootstrapIsIdempotent asserts that re-opening the same database
-// (which re-applies the schema via IF NOT EXISTS) succeeds and leaves the
-// entity set intact with no duplicate artifacts.
+// TestSchemaBootstrapIsIdempotent asserts that re-opening a validated current
+// database succeeds without applying DDL and leaves the entity set intact.
 func TestSchemaBootstrapIsIdempotent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "idem.db")
 
@@ -183,8 +188,7 @@ func TestSchemaBootstrapIsIdempotent(t *testing.T) {
 	if len(first) != len(expectedTables) || len(second) != len(expectedTables) {
 		t.Fatalf("table count changed after reopen: first=%d second=%d want=%d", len(first), len(second), len(expectedTables))
 	}
-	// Re-applying CREATE ... IF NOT EXISTS twice must not error and must not
-	// duplicate table rows (verified implicitly by Open succeeding above).
+	// Current startup validation must not duplicate or mutate schema objects.
 	for i, name := range second {
 		if first[i] != name {
 			t.Fatalf("table set changed after reopen at [%d]: %q vs %q", i, first[i], name)

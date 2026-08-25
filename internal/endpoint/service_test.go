@@ -229,6 +229,18 @@ func TestCreateEndpointAcceptsExplicitOpenAICompatible(t *testing.T) {
 	}
 }
 
+func TestCreateEndpointAcceptsExplicitAnthropicCompatible(t *testing.T) {
+	ts := newTestService(t)
+	uid := ts.seedUser(t, nil)
+	ep, err := ts.svc.CreateEndpoint(context.Background(), uid, "anthropic-compatible", "https://example.com/v1/", nil, nil)
+	if err != nil {
+		t.Fatalf("create endpoint: %v", err)
+	}
+	if ep.ConnectorType != "anthropic-compatible" {
+		t.Fatalf("connector = %q", ep.ConnectorType)
+	}
+}
+
 func TestCreateEndpointRejectsUnknownConnectorAndPersistsNothing(t *testing.T) {
 	ts := newTestService(t)
 	uid := ts.seedUser(t, nil)
@@ -236,7 +248,7 @@ func TestCreateEndpointRejectsUnknownConnectorAndPersistsNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("count before: %v", err)
 	}
-	for _, ct := range []string{"anthropic-compatible", "dify-app", "openai", "OpenAI-Compatible"} {
+	for _, ct := range []string{"dify-app", "openai", "OpenAI-Compatible"} {
 		if _, err := ts.svc.CreateEndpoint(context.Background(), uid, ct, "https://example.com/v1/", nil, nil); err == nil {
 			t.Errorf("CreateEndpoint with connector %q unexpectedly succeeded", ct)
 		}
@@ -410,7 +422,7 @@ func TestEndpointOwnershipMatrix(t *testing.T) {
 
 // --- endpoint cap -----------------------------------------------------------
 
-func TestEndpointCapMinOfGlobalAndUser(t *testing.T) {
+func TestEndpointCapExplicitOrDefault(t *testing.T) {
 	cases := []struct {
 		name        string
 		global      string // raw site_config value; "" means unset
@@ -423,9 +435,8 @@ func TestEndpointCapMinOfGlobalAndUser(t *testing.T) {
 		{"global default when unset", "", nil, db.DefaultEndpointLimit, 5, 5, 0},
 		{"global overrides default", "3", nil, 3, 5, 3, 2},
 		{"user override below global", "5", intPtr(2), 2, 5, 2, 3},
-		{"global below user override", "5", intPtr(10), 5, 7, 5, 2},
+		{"user override above default", "5", intPtr(10), 10, 7, 7, 0},
 		{"user zero blocks endpoints", "5", intPtr(0), 0, 3, 0, 3},
-		{"negative user override ignored", "2", intPtr(-1), 2, 4, 2, 2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

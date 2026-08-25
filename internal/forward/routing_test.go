@@ -136,7 +136,7 @@ func TestForwardAggregateTimeoutReturnsStablePreCommitFailure(t *testing.T) {
 		ModelID: 1, UserID: userID, FullName: "p/m", RouteStrategy: "ordered", SilentRetry: true,
 		Candidates: []db.ForwardCandidate{{
 			BindingID: 1, ModelID: 1, EndpointID: 1, EndpointKeyID: 1,
-			UpstreamModelID: "upstream/model",
+			ConnectorType: string(endpoint.ConnectorOpenAICompatible), UpstreamModelID: "upstream/model",
 		}},
 	}}
 	runner := attemptRunnerFunc(func(ctx context.Context, _ http.ResponseWriter, _ AttemptInput) openai.AttemptResult {

@@ -1,0 +1,36 @@
+{
+  "data": [
+    {
+      "key": "site_name",
+      "group": "identity",
+      "value_type": "text",
+      "title": {
+        "zh": "站点名称",
+        "en": "Site name"
+      },
+      "description": {
+        "zh": "显示在双站标题与公共配置中的实例名称。",
+        "en": "Instance name shown in both stations and public configuration."
+      },
+      "unit": {
+        "zh": "无",
+        "en": "none"
+      },
+      "nullable": false,
+      "raw_default": "",
+      "effective_fallback": "",
+      "minimum": 0,
+      "maximum": 256,
+      "zero_semantics": {
+        "zh": "JSON 数值 0 不符合此字段的类型或硬下限。",
+        "en": "JSON numeric zero is rejected by this field's type or hard minimum."
+      },
+      "null_semantics": {
+        "zh": "PATCH 不接受 JSON null；未写入的行使用目录中的原始默认/回退值。",
+        "en": "PATCH rejects JSON null; an unwritten row uses the catalog raw default/fallback."
+      },
+      "independent_gates": [],
+      "write_endpoint": "/admin/api/site-config/site_name"
+    }
+  ]
+}

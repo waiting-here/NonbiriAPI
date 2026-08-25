@@ -308,13 +308,38 @@ func TestIPThrottleReconfigureRejectsInvalidConfig(t *testing.T) {
 			t.Fatalf("reconfigure %#v error = %v, want ErrInvalidConfig", config, err)
 		}
 	}
-	// A zero Window/Penalty fall back to the package defaults rather than being
-	// rejected, matching NewIPThrottle.
+	// A zero Window still uses the window default, while a live zero penalty is
+	// explicit and removes the continuing penalty interval.
 	if err := throttle.Reconfigure(IPThrottleConfig{Limit: 1}); err != nil {
 		t.Fatalf("reconfigure with zero window/penalty = %v", err)
 	}
-	if config := throttle.Config(); config.Window != DefaultIPWindow || config.Penalty != DefaultIPPenalty {
+	if config := throttle.Config(); config.Window != DefaultIPWindow || config.Penalty != 0 {
 		t.Fatalf("default fallback = %#v", config)
+	}
+}
+
+func TestIPThrottleReconfigureZeroPenaltyDeniesOnlyTriggeringAttempt(t *testing.T) {
+	clock := newFakeClock()
+	throttle, err := NewIPThrottle(IPThrottleConfig{
+		Limit: 1, Window: 10 * time.Second, Penalty: 5 * time.Second,
+		MaxKeys: 4, MaxHitsPerKey: 4, MaxKeyBytes: 64,
+	}, WithClock(clock))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer throttle.Close()
+	if err := throttle.Reconfigure(IPThrottleConfig{Limit: 1, Window: 10 * time.Second, Penalty: 0}); err != nil {
+		t.Fatalf("reconfigure zero penalty: %v", err)
+	}
+	if decision, err := throttle.Allow("client"); err != nil || !decision.Allowed {
+		t.Fatalf("first attempt = %#v, %v", decision, err)
+	}
+	if decision, err := throttle.Allow("client"); err != nil || decision.Allowed ||
+		decision.Reason != IPPenalty || decision.RetryAfterSeconds != 0 {
+		t.Fatalf("triggering attempt = %#v, %v", decision, err)
+	}
+	if decision, err := throttle.Allow("client"); err != nil || !decision.Allowed {
+		t.Fatalf("attempt after zero penalty = %#v, %v", decision, err)
 	}
 }
 

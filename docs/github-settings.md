@@ -13,14 +13,14 @@ Private vulnerability reporting is enabled. Periodically verify it under **Setti
 Use **Settings → Branches** (or a repository ruleset) and create a rule for `master` with:
 
 - require a pull request before merging;
-- require the `Go checks` and `Web checks` status checks;
+- require the `Go checks`, `Web checks`, and aggregate `CodeQL` status checks;
 - block force pushes and branch deletion;
 - require conversation resolution;
 - do not permit bypassing the rule for routine or emergency changes.
 
 Direct updates to `master` are disabled: all changes, including emergency fixes, must arrive through a pull request from another branch. Keep local `master` aligned with `origin/master`; do not locally merge a feature branch into `master` and then try to push it.
 
-For a multi-part version, maintainers may use a milestone integration branch (for example, `dev/v1.0.0-alpha.2`), merge locally reviewed short-lived branches into it, and open one final pull request from that integration branch to `master`. The integration branch must remain buildable after each merge; local per-change review and gates are still required because the final pull request is not a substitute for incremental review.
+For a multi-part version, maintainers may use a milestone integration branch (for example, `dev/v1.0.0-alpha.3`), merge locally reviewed short-lived branches into it, and open one final pull request from that integration branch to `master`. The integration branch must remain buildable after each merge; local per-change review and gates are still required because the final pull request is not a substitute for incremental review.
 
 For a single-maintainer repository, requiring an approving review can make the owner unable to merge their own pull requests. Start with required status checks and no approval count, or add a trusted second maintainer before requiring one approval.
 
@@ -28,8 +28,9 @@ For a single-maintainer repository, requiring an approving review can make the o
 
 - Keep **Allow auto-merge** disabled until the checks and review process are familiar.
 - Enable Dependabot version updates using the committed `.github/dependabot.yml`.
+- Keep CodeQL default setup enabled for Go, JavaScript/TypeScript, and GitHub Actions. Require the aggregate result gate, review each alert against the exact data flow, and dismiss only a narrowly verified false positive rather than excluding the query globally.
 - Enable secret scanning and push protection if the repository plan provides them.
-- Keep the default branch as `master`; publish alpha releases, including `v1.0.0-alpha.2`, as pre-releases.
+- Keep the default branch as `master`; publish every alpha release as a pre-release. An unreleased development branch such as alpha.3 is not published until its owner-authorized tag and release steps are complete.
 - Keep Actions permissions at the workflow default of read-only contents; do not add deployment secrets to the CI workflow.
 
 ## Release and access hygiene

@@ -11,12 +11,15 @@ import {
   PageHeader,
   StatusBadge,
 } from '@shared/components/States';
-import { apiFetch, isApiError } from '@shared/query/http';
-import { hasControlCharacters } from '@shared/query/normalize';
+import { apiFetch, isApiError, isForbidden, isNotFoundError, isUnauthorized, refetchAuthoritativeQueries } from '@shared/query/http';
+import { isStationSessionChanged, stationSessionWrite } from '@shared/charityManagement';
+import { hasControlCharacters, positiveDecimalIDNumber } from '@shared/query/normalize';
 import {
   type ModelBinding,
   type PlatformModel,
+  normalizeBinding,
   normalizeBindingList,
+  normalizePlatformModel,
   useBindingUpstreamModels,
   useEndpointKeys,
   useEndpoints,
@@ -55,6 +58,10 @@ function isCharityPrefixError(error: unknown): boolean {
   return isApiError(error) && error.message.includes(CHARITY_PREFIX);
 }
 
+function stationClosed(error: unknown): boolean {
+  return isStationSessionChanged(error) || isUnauthorized(error) || isForbidden(error);
+}
+
 interface ModelFormProps {
   /** When present the form patches this model instead of creating one. */
   initial?: PlatformModel;
@@ -64,6 +71,7 @@ interface ModelFormProps {
 
 function ModelForm({ initial, onCancel, onSaved }: ModelFormProps) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const updateModel = useUpdateModel();
   const providerId = useId();
   const modelId = useId();
@@ -71,6 +79,7 @@ function ModelForm({ initial, onCancel, onSaved }: ModelFormProps) {
   const [model, setModel] = useState(initial?.model === '—' ? '' : (initial?.model ?? ''));
   const [strategy, setStrategy] = useState<'ordered' | 'random'>(initial?.route_strategy ?? 'ordered');
   const [silentRetry, setSilentRetry] = useState(initial?.silent_retry ?? false);
+  const [flattenToolCalls, setFlattenToolCalls] = useState(initial?.flatten_tool_calls ?? false);
   const [validationError, setValidationError] = useState('');
   const [requestError, setRequestError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
@@ -88,6 +97,7 @@ function ModelForm({ initial, onCancel, onSaved }: ModelFormProps) {
       return;
     }
     setBusy(true);
+    let requestError: unknown = null;
     try {
       if (initial) {
         await updateModel.mutateAsync({
@@ -96,22 +106,57 @@ function ModelForm({ initial, onCancel, onSaved }: ModelFormProps) {
           model,
           route_strategy: strategy,
           silent_retry: silentRetry,
+          flatten_tool_calls: flattenToolCalls,
         });
       } else {
-        await apiFetch<unknown>('/api/models', {
-          method: 'POST',
-          json: { provider, model, route_strategy: strategy, silent_retry: silentRetry },
-        });
+        const response = await stationSessionWrite(queryClient, 'steward', () =>
+          apiFetch<unknown>('/api/models', {
+            method: 'POST',
+            json: { provider, model, route_strategy: strategy, silent_retry: silentRetry, flatten_tool_calls: flattenToolCalls },
+          }),
+        );
+        // A successful create must carry the authoritative model projection;
+        // malformed/empty 2xx responses remain an unknown result.
+        normalizePlatformModel(response);
         setProvider('');
         setModel('');
         setSilentRetry(false);
+        setFlattenToolCalls(false);
       }
-      onSaved();
     } catch (error) {
-      setRequestError(error);
-    } finally {
-      setBusy(false);
+      requestError = error;
     }
+    if (stationClosed(requestError)) {
+      setBusy(false);
+      return;
+    }
+    let refreshError: unknown = null;
+      try {
+        await queryClient.refetchQueries({ queryKey: userKeys.models, type: 'active' });
+      } catch (error) {
+        refreshError = error;
+      }
+      refreshError ??= queryClient.getQueryState(userKeys.models)?.error ?? null;
+      const authoritative = initial
+        ? queryClient.getQueryData<PlatformModel[]>(userKeys.models)?.find((item) => item.id === initial.id)
+        : undefined;
+      if (authoritative) {
+        setProvider(authoritative.provider);
+        setModel(authoritative.model);
+        setStrategy(authoritative.route_strategy);
+        setSilentRetry(authoritative.silent_retry);
+        setFlattenToolCalls(authoritative.flatten_tool_calls);
+      }
+      if (requestError) {
+        // Do not roll back a policy checkbox based on a transport/409 error;
+        // the authority refetch above may prove that the write succeeded.
+        setRequestError(requestError);
+      } else if (refreshError) {
+        setRequestError(refreshError);
+      } else {
+        onSaved();
+      }
+    setBusy(false);
   };
 
   return (
@@ -167,13 +212,21 @@ function ModelForm({ initial, onCancel, onSaved }: ModelFormProps) {
             />
             <span>{t('user.models.silentRetry')}</span>
           </label>
+          <fieldset className="policy-fieldset full-width">
+            <legend>{t('user.models.flattenToolCalls')}</legend>
+            <label className="checkbox-label">
+              <input type="checkbox" checked={flattenToolCalls} onChange={(event) => setFlattenToolCalls(event.target.checked)} />
+              <span>{t('user.models.flattenExperimental')}</span>
+            </label>
+            <p className="risk-note">{t('user.models.flattenRisk')}</p>
+          </fieldset>
         </div>
         {validationError ? <p className="field-error" role="alert">{validationError}</p> : null}
         {requestError ? (
           isCharityPrefixError(requestError) ? (
             <p className="field-error" role="alert">{t('user.models.charityPrefixRejected')}</p>
           ) : isApiError(requestError) && requestError.code === 'conflict' ? (
-            <p className="field-error" role="alert">{t('user.models.nameConflict')}</p>
+            <ErrorState error={requestError} />
           ) : (
             <ErrorState error={requestError} />
           )
@@ -190,6 +243,7 @@ function ModelForm({ initial, onCancel, onSaved }: ModelFormProps) {
 
 function BindingForm({ modelId, onSaved }: { modelId: string; onSaved: () => void }) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const endpoints = useEndpoints(true);
   const [endpointId, setEndpointId] = useState('');
   const [keyId, setKeyId] = useState('');
@@ -197,10 +251,14 @@ function BindingForm({ modelId, onSaved }: { modelId: string; onSaved: () => voi
   const [requestError, setRequestError] = useState<unknown>(null);
   const [validationError, setValidationError] = useState('');
   const [busy, setBusy] = useState(false);
-  const keys = useEndpointKeys(endpointId || undefined, Boolean(endpointId));
+  const endpointConnectorType = endpoints.data?.find((endpoint) => endpoint.id === endpointId)?.connector_type;
+  const keys = useEndpointKeys(endpointId || undefined, Boolean(endpointId), endpointConnectorType);
   const keyModels = useKeyModels(endpointId || undefined, keyId || undefined, Boolean(keyId));
   const enabledEndpoints = endpoints.data?.filter((endpoint) => endpoint.enabled) ?? [];
   const enabledKeys = keys.data?.filter((key) => key.enabled) ?? [];
+  const endpointContextReady = !endpoints.isPending && !endpoints.error && Boolean(endpointId && endpointConnectorType)
+    && !keys.isPending && !keys.error && Boolean(keyId)
+    && !keyModels.isPending && !keyModels.error;
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -210,25 +268,44 @@ function BindingForm({ modelId, onSaved }: { modelId: string; onSaved: () => voi
       setValidationError(t('common.formInvalid'));
       return;
     }
-    const endpointKeyId = Number(keyId);
-    if (!Number.isSafeInteger(endpointKeyId) || endpointKeyId <= 0) {
+    if (!endpointContextReady) {
+      setRequestError(new Error(t('user.models.endpointContextUnavailable')));
+      return;
+    }
+    const endpointKeyId = positiveDecimalIDNumber(keyId) ?? null;
+    if (endpointKeyId === null) {
       setValidationError(t('common.formInvalid'));
       return;
     }
     const payload = { endpoint_key_id: endpointKeyId, upstream_model_id: upstreamModelId };
     setBusy(true);
+    let requestError: unknown = null;
     try {
-      await apiFetch<unknown>(`/api/models/${encodeURIComponent(modelId)}/bindings`, {
-        method: 'POST',
-        json: payload,
+      await stationSessionWrite(queryClient, 'steward', async () => {
+        const response = await apiFetch<unknown>(`/api/models/${encodeURIComponent(modelId)}/bindings`, {
+          method: 'POST',
+          json: payload,
+        });
+        normalizeBinding(response);
       });
-      setUpstreamModelId('');
-      onSaved();
     } catch (error) {
-      setRequestError(error);
-    } finally {
-      setBusy(false);
+      requestError = error;
     }
+    if (stationClosed(requestError)) {
+      setBusy(false);
+      return;
+    }
+    const refreshError = await refetchAuthoritativeQueries(queryClient, [
+        { queryKey: userKeys.bindings(modelId), exact: true, ignoreError: isNotFoundError, removeOnIgnoredError: true },
+        { queryKey: userKeys.models, exact: true },
+      ]);
+      if (requestError) setRequestError(requestError);
+      else if (refreshError) setRequestError(refreshError);
+      else {
+        setUpstreamModelId('');
+        onSaved();
+      }
+    setBusy(false);
   };
 
   if (endpoints.isPending) return <LoadingState />;
@@ -318,7 +395,7 @@ function BindingForm({ modelId, onSaved }: { modelId: string; onSaved: () => voi
       {validationError ? <p className="field-error" role="alert">{validationError}</p> : null}
       {requestError ? <ErrorState error={requestError} /> : null}
       <div className="form-actions">
-        <button type="submit" className="btn btn-primary" disabled={busy || !endpointId || !keyId || !upstreamModelId}>
+        <button type="submit" className="btn btn-primary" disabled={busy || !endpointId || !keyId || !upstreamModelId || !endpointContextReady}>
           {busy ? t('common.working') : t('user.models.addBinding')}
         </button>
       </div>
@@ -341,6 +418,7 @@ interface BindingEditFormProps {
  */
 function BindingEditForm({ modelId, binding, onSaved, onCancel }: BindingEditFormProps) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const updateBinding = useUpdateBinding();
   const upstreamSelectId = useId();
   const ordInputId = useId();
@@ -348,14 +426,16 @@ function BindingEditForm({ modelId, binding, onSaved, onCancel }: BindingEditFor
   const [upstreamModelId, setUpstreamModelId] = useState(binding.upstream_model_id);
   const [ordText, setOrdText] = useState(String(binding.ord));
   const [validationError, setValidationError] = useState('');
+  const [authorityError, setAuthorityError] = useState<unknown>(null);
 
   const parsedOrd = Number(ordText);
   const ordValid =
-    ordText.trim() !== '' && Number.isSafeInteger(parsedOrd) && parsedOrd >= 0 && parsedOrd <= 1_000_000;
+    /^(0|[1-9]\d*)$/.test(ordText) && Number.isSafeInteger(parsedOrd) && parsedOrd >= 0 && parsedOrd <= 1_000_000;
   const upstreamChanged = upstreamModelId !== binding.upstream_model_id;
   const ordChanged = ordValid && parsedOrd !== binding.ord;
   const dirty = upstreamChanged || ordChanged;
   const busy = updateBinding.isPending;
+  const upstreamContextReady = !upstream.isPending && !upstream.error && (upstream.data?.length ?? 0) > 0;
 
   // Keep the stored value selectable even when it has since dropped out of
   // the fetched cache, so the select never silently shows a wrong entry.
@@ -365,10 +445,17 @@ function BindingEditForm({ modelId, binding, onSaved, onCancel }: BindingEditFor
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setValidationError('');
+    setAuthorityError(null);
+    updateBinding.reset();
     if (!upstreamModelId || !ordValid) {
       setValidationError(t('common.formInvalid'));
       return;
     }
+    if (!upstreamContextReady) {
+      setValidationError(t('user.models.endpointContextUnavailable'));
+      return;
+    }
+    let requestError: unknown = null;
     try {
       await updateBinding.mutateAsync({
         modelId,
@@ -376,9 +463,25 @@ function BindingEditForm({ modelId, binding, onSaved, onCancel }: BindingEditFor
         ...(ordChanged ? { ord: parsedOrd } : {}),
         ...(upstreamChanged ? { upstream_model_id: upstreamModelId } : {}),
       });
+    } catch (error) {
+      // A transport/409/invalid-response error does not establish that the
+      // PATCH was rejected.  Keep the original error visible while the
+      // authoritative binding and model projections are refreshed below.
+      requestError = error;
+    }
+    if (stationClosed(requestError)) return;
+    let refreshError: unknown = null;
+    try {
+      refreshError = await refetchAuthoritativeQueries(queryClient, [
+        { queryKey: userKeys.bindings(modelId), exact: true, ignoreError: isNotFoundError, removeOnIgnoredError: true },
+        { queryKey: userKeys.models, exact: true },
+      ]);
+    } catch (error) {
+      refreshError = error;
+    }
+    if (refreshError) setAuthorityError(refreshError);
+    if (!requestError && !refreshError) {
       onSaved();
-    } catch {
-      // The mutation error renders through ErrorState below.
     }
   };
 
@@ -392,7 +495,7 @@ function BindingEditForm({ modelId, binding, onSaved, onCancel }: BindingEditFor
             id={upstreamSelectId}
             value={upstreamModelId}
             onChange={(event) => setUpstreamModelId(event.target.value)}
-            disabled={upstream.isPending}
+            disabled={!upstreamContextReady || busy}
           >
             {!currentKnown ? (
               <option value={binding.upstream_model_id}>{t('user.models.currentUpstream')}</option>
@@ -432,11 +535,12 @@ function BindingEditForm({ modelId, binding, onSaved, onCancel }: BindingEditFor
       </div>
       {validationError ? <p className="field-error" role="alert">{validationError}</p> : null}
       {updateBinding.error ? <ErrorState error={updateBinding.error} /> : null}
+      {authorityError ? <ErrorState error={authorityError} /> : null}
       <div className="form-actions">
         <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={busy}>
           {t('common.cancel')}
         </button>
-        <button type="submit" className="btn btn-primary" disabled={busy || !dirty || !ordValid}>
+        <button type="submit" className="btn btn-primary" disabled={busy || !dirty || !ordValid || !upstreamContextReady}>
           {busy ? t('common.working') : t('common.save')}
         </button>
       </div>
@@ -481,26 +585,54 @@ function BindingRow({
   onDeleted,
 }: BindingRowProps) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  // Resolve endpoint/key authority even when the inline editor is closed. A
+  // stale or unknown context must never expose a destructive binding action.
+  const upstream = useBindingUpstreamModels(binding, true);
+  const contextLoading = upstream.isPending || upstream.isFetching;
+  const contextUnknown = !Array.isArray(upstream.data);
+  const contextUnavailable = Array.isArray(upstream.data) && upstream.data.length === 0;
+  const deleteDisabled = busy || contextLoading || Boolean(upstream.error) || contextUnknown || contextUnavailable;
 
   const remove = async () => {
+    // The confirmation dialog can remain open while the authority query
+    // transitions to fetching/error. Re-check the latch here so a stale
+    // dialog cannot issue a DELETE after the row has become unsafe.
+    if (deleteDisabled) return;
     setError(null);
     setBusy(true);
+    let requestError: unknown = null;
     try {
-      await apiFetch<void>(
-        `/api/models/${encodeURIComponent(modelId)}/bindings/${encodeURIComponent(binding.id)}`,
-        { method: 'DELETE' },
+      await stationSessionWrite(queryClient, 'steward', () =>
+        apiFetch<void>(
+          `/api/models/${encodeURIComponent(modelId)}/bindings/${encodeURIComponent(binding.id)}`,
+          { method: 'DELETE' },
+        ),
       );
-      setDeleteOpen(false);
-      onDeleted();
-    } catch (requestError) {
-      setError(requestError);
-    } finally {
-      setBusy(false);
+    } catch (error) {
+      // Reconciliation below distinguishes a lost response from a rejected
+      // delete; never restore a local snapshot or retry the DELETE.
+      requestError = error;
     }
+    if (stationClosed(requestError)) {
+      setBusy(false);
+      return;
+    }
+    const refreshError = await refetchAuthoritativeQueries(queryClient, [
+        { queryKey: userKeys.bindings(modelId), exact: true, ignoreError: isNotFoundError, removeOnIgnoredError: true },
+        { queryKey: userKeys.models, exact: true },
+      ]);
+      if (requestError) setError(requestError);
+      else if (refreshError) setError(refreshError);
+      else {
+        setDeleteOpen(false);
+        onDeleted();
+      }
+    setBusy(false);
   };
 
   const rowClass = ['binding-row'];
@@ -576,10 +708,13 @@ function BindingRow({
         <button type="button" className="btn btn-secondary" onClick={() => setEditOpen((value) => !value)}>
           {editOpen ? t('common.close') : t('user.models.editBinding')}
         </button>
-        <button type="button" className="btn btn-danger" onClick={() => setDeleteOpen(true)}>
+        <button type="button" className="btn btn-danger" onClick={() => setDeleteOpen(true)} disabled={deleteDisabled}>
           {t('user.models.deleteBinding')}
         </button>
       </div>
+      {contextLoading ? <small className="muted" role="status">{t('common.loading')}</small> : null}
+      {upstream.error ? <ErrorState error={upstream.error} onRetry={() => void upstream.refetch()} /> : null}
+      {!contextLoading && !upstream.error && (contextUnknown || contextUnavailable) ? <p className="field-error" role="alert">{t('user.models.endpointContextUnavailable')}</p> : null}
       {editOpen ? (
         <BindingEditForm
           modelId={modelId}
@@ -637,27 +772,36 @@ function ModelCard({ model, onEdit, onChanged }: { model: PlatformModel; onEdit:
   const applyReorder = async (next: ModelBinding[]) => {
     if (reorderBusy) return;
     const queryKey = userKeys.bindings(model.id);
-    const previous = queryClient.getQueryData<ModelBinding[]>(queryKey);
     setReorderError(null);
-    setReorderBusy(true);
-    queryClient.setQueryData(queryKey, next);
-    try {
-      const payload = await apiFetch<unknown>(
-        `/api/models/${encodeURIComponent(model.id)}/bindings/order`,
-        { method: 'PUT', json: { order: next.map((binding) => Number(binding.id)) } },
-      );
-      queryClient.setQueryData(queryKey, normalizeBindingList(payload));
-    } catch (requestError) {
-      if (previous === undefined) {
-        queryClient.removeQueries({ queryKey });
-      } else {
-        queryClient.setQueryData(queryKey, previous);
-      }
-      void queryClient.invalidateQueries({ queryKey });
-      setReorderError(requestError);
-    } finally {
-      setReorderBusy(false);
+    const order = next.map((binding) => positiveDecimalIDNumber(binding.id) ?? null);
+    if (order.some((id): id is null => id === null)) {
+      setReorderError(new Error(t('user.models.invalidBinding')));
+      return;
     }
+    setReorderBusy(true);
+    let requestError: unknown = null;
+    try {
+      const payload = await stationSessionWrite(queryClient, 'steward', () =>
+        apiFetch<unknown>(
+          `/api/models/${encodeURIComponent(model.id)}/bindings/order`,
+          { method: 'PUT', json: { order } },
+        ),
+      );
+      normalizeBindingList(payload);
+    } catch (error) {
+      requestError = error;
+    }
+    if (stationClosed(requestError)) {
+      setReorderBusy(false);
+      return;
+    }
+    const refreshError = await refetchAuthoritativeQueries(queryClient, [
+        { queryKey, exact: true, ignoreError: isNotFoundError, removeOnIgnoredError: true },
+        { queryKey: userKeys.models, exact: true },
+      ]);
+      if (requestError) setReorderError(requestError);
+      else if (refreshError) setReorderError(refreshError);
+    setReorderBusy(false);
   };
 
   const handleDrop = () => {
@@ -695,16 +839,42 @@ function ModelCard({ model, onEdit, onChanged }: { model: PlatformModel; onEdit:
   const remove = async () => {
     setError(null);
     setDeleting(true);
+    let requestError: unknown = null;
     try {
-      await apiFetch<void>(`/api/models/${encodeURIComponent(model.id)}`, { method: 'DELETE' });
-      invalidate();
-      setDeleteOpen(false);
-      onChanged();
-    } catch (requestError) {
-      setError(requestError);
-    } finally {
-      setDeleting(false);
+      await stationSessionWrite(queryClient, 'steward', () =>
+        apiFetch<void>(`/api/models/${encodeURIComponent(model.id)}`, { method: 'DELETE' }),
+      );
+    } catch (error) {
+      requestError = error;
     }
+    if (stationClosed(requestError)) {
+      setDeleting(false);
+      return;
+    }
+    const refreshError = await refetchAuthoritativeQueries(queryClient, [
+        { queryKey: userKeys.models, exact: true, ignoreError: isNotFoundError, removeOnIgnoredError: true },
+        {
+          queryKey: userKeys.bindings(model.id),
+          exact: true,
+          ignoreError: isNotFoundError,
+          removeOnIgnoredError: true,
+        },
+      ]);
+      if (isNotFoundError(requestError)) {
+        // DELETE 404 is an authoritative already-deleted result. Remove the
+        // model list and its binding projection instead of keeping a stale
+        // card or dependent rows in the client cache.
+        queryClient.removeQueries({ queryKey: userKeys.models, exact: true });
+        queryClient.removeQueries({ queryKey: userKeys.bindings(model.id), exact: true });
+        queryClient.removeQueries({ queryKey: userKeys.donations });
+      }
+      if (requestError && !isNotFoundError(requestError)) setError(requestError);
+      else if (refreshError) setError(refreshError);
+      else {
+        setDeleteOpen(false);
+        onChanged();
+      }
+    setDeleting(false);
   };
 
   return (
@@ -718,6 +888,7 @@ function ModelCard({ model, onEdit, onChanged }: { model: PlatformModel; onEdit:
         </div>
         <div className="badge-list">
           {model.silent_retry ? <span className="tag">{t('user.models.silentRetry')}</span> : null}
+          {model.flatten_tool_calls ? <span className="tag risk-tag">{t('user.models.flattenEnabled')}</span> : null}
           {model.binding_count === 0 ? <span className="tag">{t('user.models.draft')}</span> : null}
           <StatusBadge active={model.binding_count > 0} label={t('user.models.bindingCount', { count: model.binding_count })} />
           <button type="button" className="btn btn-secondary" onClick={() => setOpen((value) => !value)}>

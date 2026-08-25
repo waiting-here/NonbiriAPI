@@ -3,6 +3,7 @@ package openai
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,8 +14,8 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
-	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
 
@@ -26,16 +27,17 @@ const (
 	DefaultStreamWriteTimeout         = 15 * time.Second
 )
 
-// FailureKind is a controlled classification. It never contains an upstream
-// body, endpoint URL, request value, credential, or transport error string.
-type FailureKind uint8
+// Compatibility aliases keep the protocol package's existing tests and
+// callers source-compatible while forwarding and accounting consume the
+// connector-neutral contract directly.
+type FailureKind = connectorcontract.FailureKind
 
 const (
-	FailureNone FailureKind = iota
-	FailureUpstream
-	FailureInternal
-	FailureCanceled
-	FailureSink
+	FailureNone     = connectorcontract.FailureNone
+	FailureUpstream = connectorcontract.FailureUpstream
+	FailureInternal = connectorcontract.FailureInternal
+	FailureCanceled = connectorcontract.FailureCanceled
+	FailureSink     = connectorcontract.FailureSink
 )
 
 // Credential carries short-lived copies consumed by Attempt. Bearer is the
@@ -91,23 +93,7 @@ func (Target) LogValue() slog.Value {
 	return slog.StringValue("[redacted upstream target]")
 }
 
-// AttemptResult contains only bounded metadata safe for forwarding hooks.
-// Diagnostic is locally generated and never includes raw upstream text.
-// EndpointBaseURL carries the canonical base URL actually dialed so the
-// frozen log contract's dispatch-time snapshot can be persisted; it is the
-// owner-visible value already stored plaintext in the endpoint row, never a
-// credential, secret material, or request/response content.
-type AttemptResult struct {
-	Success         bool
-	Committed       bool
-	SinkFailed      bool
-	Failure         FailureKind
-	Diagnostic      string
-	UpstreamStatus  int
-	ClientStatus    int
-	EndpointBaseURL string
-	Usage           Usage
-}
+type AttemptResult = connectorcontract.AttemptResult
 
 // AdapterConfig sets finite protocol bounds. A zero value selects the default;
 // configured values may tighten but never widen the shared egress body limit.
@@ -156,6 +142,21 @@ func NewAdapter(config AdapterConfig) (*Adapter, error) {
 	if config.StreamWriteTimeout == 0 {
 		config.StreamWriteTimeout = DefaultStreamWriteTimeout
 	}
+	if config.MaxJSONResponseBytes > DefaultMaxJSONResponseBytes {
+		config.MaxJSONResponseBytes = DefaultMaxJSONResponseBytes
+	}
+	if config.MaxStreamBytes > DefaultMaxStreamBytes {
+		config.MaxStreamBytes = DefaultMaxStreamBytes
+	}
+	if config.MaxSSELineBytes > DefaultMaxSSELineBytes {
+		config.MaxSSELineBytes = DefaultMaxSSELineBytes
+	}
+	if config.MaxSSEEventBytes > DefaultMaxSSEEventBytes {
+		config.MaxSSEEventBytes = DefaultMaxSSEEventBytes
+	}
+	if config.StreamWriteTimeout > DefaultStreamWriteTimeout {
+		config.StreamWriteTimeout = DefaultStreamWriteTimeout
+	}
 	sharedMax := config.Backend.MaxResponseBytes()
 	if config.MaxJSONResponseBytes > sharedMax {
 		config.MaxJSONResponseBytes = sharedMax
@@ -184,8 +185,8 @@ func NewAdapter(config AdapterConfig) (*Adapter, error) {
 
 // ConnectorType ties the adapter to the single authoritative endpoint
 // registry. Unknown persisted types never fall back to this adapter.
-func (*Adapter) ConnectorType() endpoint.ConnectorType {
-	return endpoint.ConnectorOpenAICompatible
+func (*Adapter) ConnectorType() connectorcontract.Type {
+	return connectorcontract.TypeOpenAICompatible
 }
 
 // Attempt performs exactly one upstream attempt. All pre-commit failures are
@@ -193,6 +194,13 @@ func (*Adapter) ConnectorType() endpoint.ConnectorType {
 // later routing layer. Once an SSE frame writes any byte, failures are emitted
 // only as a bounded local SSE error frame and never as a second HTTP envelope.
 func (a *Adapter) Attempt(ctx context.Context, writer http.ResponseWriter, target Target, request *ChatRequest, safetyIdentifier string) AttemptResult {
+	return a.AttemptWithPolicy(ctx, writer, target, request, connectorcontract.AttemptPolicy{SafetyIdentifier: safetyIdentifier})
+}
+
+// AttemptWithPolicy applies the immutable per-attempt OpenAI strategy
+// projection. Store policy affects only the final serialized request; tool
+// flattening affects only validated OpenAI responses after the shared guards.
+func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWriter, target Target, request *ChatRequest, policy connectorcontract.AttemptPolicy) AttemptResult {
 	result := AttemptResult{Failure: FailureInternal, Diagnostic: "forwarding attempt unavailable"}
 	defer target.credential.clear()
 	if a == nil || a.backend == nil || ctx == nil || writer == nil || request == nil {
@@ -209,7 +217,7 @@ func (a *Adapter) Attempt(ctx context.Context, writer http.ResponseWriter, targe
 	if err != nil {
 		return upstreamFailure("upstream endpoint was refused", 0)
 	}
-	body, err := request.marshalUpstream(target.upstreamModel, safetyIdentifier)
+	body, err := request.marshalUpstreamWithPolicy(target.upstreamModel, policy.SafetyIdentifier, policy)
 	if err != nil {
 		return result
 	}
@@ -261,6 +269,9 @@ func (a *Adapter) Attempt(ctx context.Context, writer http.ResponseWriter, targe
 		if !validResponseMediaType(response, "text/event-stream") {
 			return upstreamFailure("upstream stream content type was invalid", response.StatusCode)
 		}
+		if policy.FlattenToolCalls {
+			return a.flattenStream(ctx, writer, response, guard)
+		}
 		return a.stream(ctx, writer, response, guard)
 	}
 
@@ -270,10 +281,14 @@ func (a *Adapter) Attempt(ctx context.Context, writer http.ResponseWriter, targe
 	if !validResponseMediaType(response, "application/json") {
 		return upstreamFailure("upstream response content type was invalid", response.StatusCode)
 	}
-	return a.nonStream(ctx, writer, response, guard)
+	return a.nonStreamWithPolicy(ctx, writer, response, guard, policy)
 }
 
 func (a *Adapter) nonStream(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard *responseGuard) AttemptResult {
+	return a.nonStreamWithPolicy(ctx, writer, response, guard, connectorcontract.AttemptPolicy{})
+}
+
+func (a *Adapter) nonStreamWithPolicy(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard *responseGuard, policy connectorcontract.AttemptPolicy) AttemptResult {
 	if response.ContentLength > a.maxJSONResponseBytes {
 		return upstreamFailure("upstream response exceeded its limit", response.StatusCode)
 	}
@@ -294,6 +309,21 @@ func (a *Adapter) nonStream(ctx context.Context, writer http.ResponseWriter, res
 	}
 	if guard.ContainsJSON(body, body) {
 		return upstreamFailure("upstream response was rejected", response.StatusCode)
+	}
+	if policy.FlattenToolCalls {
+		flattened, ferr := flattenCompletion(body)
+		if ferr != nil {
+			return upstreamFailure("upstream response was invalid", response.StatusCode)
+		}
+		clear(body)
+		body = flattened
+		defer clear(body)
+		if int64(len(body)) > a.maxJSONResponseBytes {
+			return upstreamFailure("upstream response exceeded its limit", response.StatusCode)
+		}
+		if guard.ContainsJSON(body, body) {
+			return upstreamFailure("upstream response was rejected", response.StatusCode)
+		}
 	}
 	if ctx.Err() != nil {
 		return canceledFailure()
@@ -423,6 +453,273 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 	}
 }
 
+// flattenStream forwards ordinary content as soon as it has passed the
+// protocol and leak guards, while retaining only tool deltas until a valid
+// terminal marker proves that the whole call set is complete.
+func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard *responseGuard) AttemptResult {
+	streamCtx, cancelStream := context.WithCancel(ctx)
+	defer cancelStream()
+	events, errs := egress.StreamSSE(streamCtx, response.Body, egress.SSEOptions{
+		MaxBytes: a.maxStreamBytes, MaxLineBytes: a.maxSSELineBytes, MaxEventBytes: a.maxSSEEventBytes,
+		ReadBuffer: min(a.maxSSELineBytes, 64<<10), EventBuffer: 1,
+	})
+	usageFrames := make([][]byte, 0, 2)
+	defer func() {
+		for _, frame := range usageFrames {
+			clear(frame)
+		}
+	}()
+	states := make(map[int]*streamChoiceState)
+	defer clearStreamStates(states)
+	var firstRoot map[string]json.RawMessage
+	defer func() {
+		for _, value := range firstRoot {
+			clear(value)
+		}
+	}()
+	var usage Usage
+	usageCaptured, usagePoisoned := false, false
+	seenChunk := false
+	hasToolsSeen := false
+	controller := http.NewResponseController(writer)
+	defer func() { _ = controller.SetWriteDeadline(time.Time{}) }()
+	committed := false
+	failure := func(diagnostic string) AttemptResult {
+		return a.streamProtocolFailure(writer, controller, committed, usage, diagnostic)
+	}
+	writeFrame := func(frame, jsonData []byte) (bool, error) {
+		if (jsonData != nil && guard.ContainsJSON(frame, jsonData)) || (jsonData == nil && guard.ContainsBytes(frame)) {
+			return false, errFlattenStreamRejected
+		}
+		wrote, writeErr := a.writeStreamFrame(writer, controller, frame)
+		committed = committed || wrote
+		return wrote, writeErr
+	}
+	for {
+		event, ok, nextErr := nextSSEEvent(streamCtx, events, errs)
+		if nextErr != nil || !ok {
+			if ctx.Err() != nil {
+				result := canceledFailure()
+				result.Committed = committed
+				result.ClientStatus = committedStatus(committed)
+				result.Usage = usage
+				return result
+			}
+			return failure("upstream stream ended before completion")
+		}
+		if event.Event != "message" {
+			return failure("upstream stream event type was invalid")
+		}
+		if event.Data == "[DONE]" {
+			if !seenChunk {
+				return failure("upstream stream ended without a chunk")
+			}
+			if hasToolsSeen {
+				if firstRoot == nil {
+					return failure("upstream stream ended before completion")
+				}
+				body, err := streamCompletionBodyAfter(firstRoot, states)
+				if err != nil {
+					return failure("upstream stream ended before completion")
+				}
+				transformed, flattenErr := flattenCompletion(body)
+				clear(body)
+				if flattenErr != nil {
+					clear(transformed)
+					return failure("upstream stream was invalid")
+				}
+				content, finish, frameErr := completionToStreamFrames(transformed)
+				clear(transformed)
+				if frameErr != nil || len(content) > a.maxSSEEventBytes || len(finish) > a.maxSSEEventBytes ||
+					int64(len(content)) > a.maxStreamBytes || int64(len(finish)) > a.maxStreamBytes {
+					clear(content)
+					clear(finish)
+					return failure("upstream stream chunk exceeded protocol bounds")
+				}
+				contentFrame := append([]byte("data: "), content...)
+				contentFrame = append(contentFrame, '\n', '\n')
+				if _, writeErr := writeFrame(contentFrame, content); writeErr != nil {
+					clear(contentFrame)
+					clear(content)
+					clear(finish)
+					if errors.Is(writeErr, errFlattenStreamRejected) {
+						return failure("upstream stream was rejected")
+					}
+					return sinkFailureWithCommit(committed, usage)
+				}
+				clear(contentFrame)
+				clear(content)
+				finishFrame := append([]byte("data: "), finish...)
+				finishFrame = append(finishFrame, '\n', '\n')
+				if _, writeErr := writeFrame(finishFrame, finish); writeErr != nil {
+					clear(finishFrame)
+					clear(finish)
+					if errors.Is(writeErr, errFlattenStreamRejected) {
+						return failure("upstream stream was rejected")
+					}
+					return sinkFailureWithCommit(committed, usage)
+				}
+				clear(finishFrame)
+				clear(finish)
+			}
+			for _, frame := range usageFrames {
+				if _, writeErr := writeFrame(frame, streamFramePayload(frame)); writeErr != nil {
+					if errors.Is(writeErr, errFlattenStreamRejected) {
+						return failure("upstream stream was rejected")
+					}
+					return sinkFailureWithCommit(committed, usage)
+				}
+			}
+			final := []byte("data: [DONE]\n\n")
+			_, writeErr := writeFrame(final, nil)
+			if writeErr != nil {
+				if errors.Is(writeErr, errFlattenStreamRejected) {
+					return failure("upstream stream was rejected")
+				}
+				return sinkFailureWithCommit(committed, usage)
+			}
+			return AttemptResult{Success: true, Committed: committed, Failure: FailureNone, UpstreamStatus: response.StatusCode, ClientStatus: http.StatusOK, Usage: usage}
+		}
+		if len(event.Data) == 0 || len(event.Data) > a.maxSSEEventBytes || !validProtocolBytes([]byte(event.Data)) {
+			return failure("upstream stream chunk exceeded protocol bounds")
+		}
+		compact, chunkUsage, chunkMalformed, err := validateChunk([]byte(event.Data))
+		if err != nil {
+			return failure("upstream stream chunk was invalid")
+		}
+		var root map[string]json.RawMessage
+		if json.Unmarshal(compact, &root) != nil {
+			clear(compact)
+			return failure("upstream stream chunk was invalid")
+		}
+		var choices []json.RawMessage
+		if json.Unmarshal(root["choices"], &choices) != nil {
+			clear(compact)
+			return failure("upstream stream chunk was invalid")
+		}
+		// Compatible providers normally emit usage in a terminal choices:[]
+		// chunk. If one attaches a non-null usage object to a content/finish
+		// chunk, retain the original usage value but move it to a bounded
+		// usage-only chunk. A tool-bearing source frame cannot be forwarded as
+		// is because it would expose the structured tool delta that flattening
+		// promises to remove.
+		if usageRaw, present := root["usage"]; present && !isJSONNull(usageRaw) && len(choices) != 0 {
+			usagePayload, usageErr := isolatedUsageChunk(root, usageRaw)
+			if usageErr != nil || len(usagePayload) > a.maxSSEEventBytes || int64(len(usagePayload)) > a.maxStreamBytes {
+				clear(compact)
+				clear(usagePayload)
+				return failure("upstream stream chunk exceeded protocol bounds")
+			}
+			usageFrame := append([]byte("data: "), usagePayload...)
+			usageFrame = append(usageFrame, '\n', '\n')
+			clear(usagePayload)
+			usageFrames = append(usageFrames, usageFrame)
+
+			delete(root, "usage")
+			withoutUsage, marshalErr := json.Marshal(root)
+			clear(compact)
+			if marshalErr != nil || len(withoutUsage) > a.maxSSEEventBytes || int64(len(withoutUsage)) > a.maxStreamBytes {
+				clear(withoutUsage)
+				return failure("upstream stream chunk exceeded protocol bounds")
+			}
+			compact = withoutUsage
+		}
+		frame := append([]byte("data: "), compact...)
+		frame = append(frame, '\n', '\n')
+		clear(compact)
+		if firstRoot == nil && len(choices) > 0 {
+			firstRoot = root
+		}
+		_, toolsSeen, err := accumulateStreamChunk([]byte(event.Data), states)
+		if err != nil {
+			clear(frame)
+			return failure("upstream stream chunk was invalid")
+		}
+		if chunkMalformed {
+			usagePoisoned = true
+			usage = Usage{}
+		} else if chunkUsage.Present && !usagePoisoned {
+			if usageCaptured && chunkUsage != usage {
+				usagePoisoned = true
+				usage = Usage{}
+			} else if !usageCaptured {
+				usage = chunkUsage
+				usageCaptured = true
+			}
+		}
+		seenChunk = true
+		if len(choices) == 0 {
+			// Usage/empty-choice chunks are held until the terminal rewrite so
+			// tool streams preserve the required finish -> usage -> DONE order.
+			usageFrames = append(usageFrames, frame)
+			continue
+		}
+		if !toolsSeen && !hasToolsSeen {
+			if _, writeErr := writeFrame(frame, []byte(event.Data)); writeErr != nil {
+				clear(frame)
+				if errors.Is(writeErr, errFlattenStreamRejected) {
+					return failure("upstream stream was rejected")
+				}
+				return sinkFailureWithCommit(committed, usage)
+			}
+			clear(frame)
+			markStreamContentEmitted(states)
+		} else {
+			// Once a tool delta is observed, ordinary content is retained in
+			// state and emitted with the generated blocks at the terminal. This
+			// preserves the non-stream ordering of all content before tool tags.
+			clear(frame)
+		}
+		hasToolsSeen = hasToolsSeen || toolsSeen
+	}
+}
+
+func isolatedUsageChunk(root map[string]json.RawMessage, usage json.RawMessage) ([]byte, error) {
+	if len(root) == 0 || len(usage) == 0 || isJSONNull(usage) {
+		return nil, errToolFlatten
+	}
+	chunk := make(map[string]json.RawMessage, len(root))
+	for name, value := range root {
+		chunk[name] = value
+	}
+	chunk["choices"] = json.RawMessage(`[]`)
+	chunk["usage"] = usage
+	return json.Marshal(chunk)
+}
+
+func streamFramePayload(frame []byte) []byte {
+	trimmed := bytes.TrimSpace(frame)
+	trimmed = bytes.TrimSpace(bytes.TrimSuffix(trimmed, []byte("\n\n")))
+	if bytes.HasPrefix(trimmed, []byte("data:")) {
+		return bytes.TrimSpace(bytes.TrimPrefix(trimmed, []byte("data:")))
+	}
+	return trimmed
+}
+
+// accumulateStreamState reconstructs the buffered deltas once more to retain
+// a single source of truth for the bounded stream parser. It returns whether
+// any structured tool delta was observed.
+func accumulateStreamState(frames [][]byte, states map[int]*streamChoiceState) (map[string]json.RawMessage, bool, error) {
+	var first map[string]json.RawMessage
+	hasTools := false
+	for _, frame := range frames {
+		data := bytes.TrimSpace(frame)
+		if !bytes.HasPrefix(data, []byte("data:")) {
+			return nil, false, errToolFlatten
+		}
+		data = bytes.TrimSpace(bytes.TrimPrefix(data, []byte("data:")))
+		root, tools, err := accumulateStreamChunk(data, states)
+		if err != nil {
+			return nil, false, err
+		}
+		if first == nil {
+			first = root
+		}
+		hasTools = hasTools || tools
+	}
+	return first, hasTools, nil
+}
+
 func (a *Adapter) streamProtocolFailure(writer http.ResponseWriter, controller *http.ResponseController, committed bool, usage Usage, diagnostic string) AttemptResult {
 	if !committed {
 		result := upstreamFailure(diagnostic, http.StatusOK)
@@ -455,6 +752,8 @@ func (a *Adapter) writeStreamFrame(writer http.ResponseWriter, controller *http.
 	if a.streamWriteTimeout > 0 {
 		if err := controller.SetWriteDeadline(time.Now().Add(a.streamWriteTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
 			return false, err
+		} else if err == nil {
+			defer func() { _ = controller.SetWriteDeadline(time.Time{}) }()
 		}
 	}
 	n, err := writer.Write(frame)

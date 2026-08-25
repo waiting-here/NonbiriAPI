@@ -11,6 +11,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
 // maxBodyBytes bounds request bodies (nested submissions may carry several
@@ -125,7 +126,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 			}
 			keys = append(keys, NewKeyEntry{
 				Secret: []byte(k.Secret), Note: k.Note,
-				MaxConcurrency: mc, RPMLimit: rpm,
+				ForceStoreFalse: k.ForceStoreFalse.Value,
+				MaxConcurrency:  mc, RPMLimit: rpm,
 			})
 		}
 		enabled := true
@@ -276,10 +278,11 @@ type newEndpointReq struct {
 }
 
 type newKeyReq struct {
-	Secret         string `json:"secret"`
-	Note           string `json:"note,omitempty"`
-	MaxConcurrency *int   `json:"max_concurrency,omitempty"`
-	RPMLimit       *int   `json:"rpm_limit,omitempty"`
+	Secret          string             `json:"secret"`
+	Note            string             `json:"note,omitempty"`
+	ForceStoreFalse strictOptionalBool `json:"force_store_false,omitempty"`
+	MaxConcurrency  *int               `json:"max_concurrency,omitempty"`
+	RPMLimit        *int               `json:"rpm_limit,omitempty"`
 }
 
 type updateRequest struct {
@@ -296,6 +299,7 @@ type keysReplaceReq struct {
 type donationKeyResp struct {
 	ID                   int64  `json:"id"`
 	EndpointKeyID        *int64 `json:"endpoint_key_id"`
+	ForceStoreFalse      *bool  `json:"force_store_false,omitempty"`
 	DisplayHead          string `json:"display_head"`
 	DisplayTail          string `json:"display_tail"`
 	MaxConcurrency       int64  `json:"max_concurrency"`
@@ -361,9 +365,15 @@ func donationResponse(d db.Donation, keys []db.DonationKey, reviews []db.Donatio
 		Keys: make([]donationKeyResp, 0, len(keys)),
 	}
 	for _, k := range keys {
+		var forceStoreFalse *bool
+		if k.ConnectorType == "openai-compatible" {
+			value := k.ForceStoreFalse
+			forceStoreFalse = &value
+		}
 		resp.Keys = append(resp.Keys, donationKeyResp{
 			ID: k.ID, EndpointKeyID: k.EndpointKeyID,
-			DisplayHead: k.DisplayHead, DisplayTail: k.DisplayTail,
+			ForceStoreFalse: forceStoreFalse,
+			DisplayHead:     k.DisplayHead, DisplayTail: k.DisplayTail,
 			MaxConcurrency: k.MaxConcurrency, RPMLimit: k.RPMLimit,
 			CreditsUsageCapMilli: credits.FormatAmount(k.CreditsUsageCap),
 			CreditsUsedMilli:     credits.FormatAmount(k.CreditsUsed),
@@ -521,7 +531,19 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) httperr.Error {
 		return httperr.New(httperr.CodeInvalidRequest, "request body is required")
 	}
 	r.Body = http.MaxBytesReader(nil, r.Body, maxBodyBytes)
-	dec := json.NewDecoder(r.Body)
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			return httperr.New(httperr.CodePayloadTooLarge, "request body too large")
+		}
+		return httperr.New(httperr.CodeInvalidRequest, "malformed request body")
+	}
+	defer clear(data)
+	if err := strictjson.ValidateObject(data); err != nil {
+		return httperr.New(httperr.CodeInvalidRequest, "malformed request body")
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
 		var maxBytesErr *http.MaxBytesError
@@ -545,6 +567,27 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) httperr.Error {
 
 func writeInvalid(w http.ResponseWriter) {
 	writeErr(w, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
+}
+
+// strictOptionalBool distinguishes an omitted policy field from a JSON null,
+// number, or string. Policy booleans are intentionally not permissive wire
+// values: omission defaults false, while every supplied value must be JSON
+// true or false.
+type strictOptionalBool struct {
+	Value bool
+	set   bool
+}
+
+func (b *strictOptionalBool) UnmarshalJSON(data []byte) error {
+	switch string(data) {
+	case "true":
+		b.Value, b.set = true, true
+	case "false":
+		b.Value, b.set = false, true
+	default:
+		return errors.New("boolean required")
+	}
+	return nil
 }
 
 // writeServiceErr maps service/repository sentinels to stable envelopes.

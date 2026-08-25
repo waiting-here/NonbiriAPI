@@ -128,3 +128,52 @@ func TestSessionNegativeBalanceIsCanonicalString(t *testing.T) {
 		t.Fatalf("neutral projection = %+v", envelope.User)
 	}
 }
+
+func TestSessionProjectsRawAndEffectiveUserLimits(t *testing.T) {
+	st := authTestStore(t)
+	service := newTestUserAuth(t, st, &fakeDiscordProvider{login: DiscordLogin{
+		Identity: DiscordIdentity{ID: "discord-limits", Username: "limits"},
+	}}, nil)
+	user, err := st.CreateUser("discord-limits", "limits", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetSiteConfigValue("default_endpoint_limit", "0"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetSiteConfigValue("default_rpm_per_user", "40"); err != nil {
+		t.Fatal(err)
+	}
+	decode := func(rec *httptest.ResponseRecorder) UserResponse {
+		t.Helper()
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		}
+		var envelope userEnvelope
+		if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+			t.Fatal(err)
+		}
+		return envelope.User
+	}
+
+	projected := decode(sessionGet(t, service, st, user.ID))
+	if projected.EndpointLimit != nil || projected.RPMLimit != nil || projected.ConcurrencyLimit != nil ||
+		projected.EffectiveEndpointLimit != 0 || projected.EffectiveRPMLimit != 40 ||
+		projected.EffectiveConcurrencyLimit != db.DefaultUserConcurrencyLimit {
+		t.Fatalf("null projection=%+v", projected)
+	}
+	endpoint, rpm, concurrency := 9000, 41, 9
+	if _, err := st.UpdateUserLimits(user.ID, db.UserLimitPatch{
+		EndpointLimitSet: true, EndpointLimit: &endpoint,
+		RPMLimitSet: true, RPMLimit: &rpm,
+		ConcurrencyLimitSet: true, ConcurrencyLimit: &concurrency,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	projected = decode(sessionGet(t, service, st, user.ID))
+	if projected.EndpointLimit == nil || *projected.EndpointLimit != endpoint || projected.EffectiveEndpointLimit != endpoint ||
+		projected.RPMLimit == nil || *projected.RPMLimit != rpm || projected.EffectiveRPMLimit != rpm ||
+		projected.ConcurrencyLimit == nil || *projected.ConcurrencyLimit != concurrency || projected.EffectiveConcurrencyLimit != concurrency {
+		t.Fatalf("explicit projection=%+v", projected)
+	}
+}

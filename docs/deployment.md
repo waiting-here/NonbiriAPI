@@ -1,6 +1,6 @@
 # VPS deployment with systemd
 
-This guide describes the supported single-instance operating model for `v1.0.0-alpha.2`: one compiled binary, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS. See [configuration.md](configuration.md) for the full environment and runtime-settings reference.
+This guide describes the supported single-instance operating model for the unreleased `v1.0.0-alpha.3`: one compiled binary, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS. The latest published release remains alpha.2; do not treat development-branch instructions as production deployment authorization. See [configuration.md](configuration.md) for the full environment and runtime-settings reference.
 
 The commands are examples. Replace paths, hostnames, users, and package-manager commands for the target VPS. Do not copy real secrets into a Git checkout.
 
@@ -50,7 +50,7 @@ sudo chmod 0600 /etc/nonbiriapi/master.key
 
 Run those key-generation commands only on a new installation: the first command truncates its target. Replace the example key only before the first database is created. If a real database already exists, preserve its original key. The loader deliberately rejects group-readable modes such as `0640`; the service account must own the file. Unix mode `0400` or `0600` is accepted (`0600` is used by the generation commands).
 
-For a manual launch outside the example systemd unit, the application itself now enforces owner-only access to the database directory and files: on startup it resolves the database directory to an absolute path (so the current directory for a relative database path and root for a root-level path are covered too) and verifies it is owned by the current account and grants no group or other access, and it tightens the database file and its `-wal`/`-shm` sidecars to `0600`. If it cannot verify owner-only access it refuses to start, so a non-standard launch no longer depends on the operator remembering `umask`. Create the database directory with mode `0700` owned by the service account; a pre-existing database file left world-readable (for example `0644`) is tightened to `0600`, while a group/other-accessible directory, a wrong owner, or a symlink or non-regular file at the database path or its `-wal`/`-shm` sidecars causes startup to fail closed (sidecars are checked before the database is opened). SQLite creates the `-wal` and `-shm` sidecars with the same mode as the database file, so once the database is `0600` every later sidecar creation is owner-only as well. Setting `umask 077` remains useful as a defense-in-depth layer but is no longer the sole protection.
+For a manual launch outside the example systemd unit, the application enforces owner-only access to the database directory and files. It resolves the database directory to an absolute path and verifies that the current account owns it with no group/other access. Existing database/WAL/SHM paths must already be owner-owned regular non-symlink files with mode `0600`; a permissive, wrong-owner, substituted, or non-regular source is rejected without chmod, creation, removal, or SQLite recovery. Fresh files are created as `0600`, and later SQLite sidecars inherit that owner-only mode. Setting `umask 077` remains useful defense in depth but is not the sole protection.
 
 ## Build a release binary
 
@@ -71,7 +71,7 @@ The `dist` build tag is required for the real frontend. An untagged binary conta
 Install into a versioned directory and publish the symlink with a same-filesystem rename. Set `version` to the release being installed:
 
 ```sh
-version=1.0.0-alpha.2
+version=1.0.0-alpha.3
 release=/opt/nonbiriapi/releases/$version
 sudo install -d -o root -g root -m 0755 "$release"
 sudo install -o root -g root -m 0755 nonbiriapi "$release/nonbiriapi"
@@ -149,9 +149,32 @@ location / {
 
 Use separate `server` blocks/certificates for user and administrator hosts so the administrator host can have stricter network or identity controls. Adjust the upstream port and timeouts to the actual deployment; test SSE through the complete Cloudflare → Nginx → application path.
 
-## Manual update procedure
+## Alpha.3 fresh-only database and version changes
 
-1. Verify the release source and build on a separate build host.
+Alpha.3 accepts only a completely absent database set or a validated generation-1 database whose SQLite header contains `application_id=0x4E425249` and `user_version=1`. It does not run `ALTER`, schema repair, or the alpha.2 credential migration. Before a writable source open, an existing database is copied through no-follow read-only handles to a private validation directory; header, schema, foreign keys, indexes, sidecars, and contextual v2 credential envelopes are checked there. An alpha.1/alpha.2 file, empty file, unknown generation, corrupt or unexpected schema, unsafe file shape, rollback journal, or anomalous sidecar is refused without modifying the source set or creating a new source-side WAL/SHM.
+
+Therefore:
+
+- installing an alpha.3 binary over an alpha.2 database does not upgrade it;
+- switching only the binary to an older version is never a supported downgrade;
+- a stateful rollback must restore a complete compatible snapshot, not combine an old binary with the current database;
+- a cutover from alpha.2 to alpha.3 deliberately starts with an empty alpha.3 database and loses active application state unless the operator later re-enters it manually;
+- a fresh alpha.3 database starts with maintenance on, registration off, and games off. Keep those gates closed until instance legal text, required configuration, initialization, and smoke tests pass.
+
+The alpha.3 companion deployment helper is maintained separately and is **not shipped by this repository**. Any helper used for this cutover must expose exactly four operator entry classes:
+
+1. default interactive normal deployment to a trusted `origin` annotated tag or remote branch, fixed immediately to an immutable commit;
+2. `--restore-snapshot`, which accepts only a complete snapshot whose checksum, release, schema, configuration, master key, and unit match;
+3. `--destructive-fresh-deploy`, a permanent high-risk upgrade/downgrade escape hatch that first preserves a complete source snapshot, then removes only the revalidated active database/WAL/SHM paths and creates a fresh target-generation deployment;
+4. `snapshot inventory`, `snapshot import`, and `snapshot delete` management.
+
+The helper must present tags in version order and branches by name, identify branches as non-release targets, pin the selected commit, and allow `q` to exit before any destructive action. After the source snapshot has been verified, destructive fresh requires an interactive `/dev/tty` and one complete confirmation phrase bound to the operation, source and target refs/commits, revalidated absolute database path, and snapshot id; there is no `--yes`, `--no-backup`, or non-interactive bypass. A failure before the local commit point must restore the complete source state while retaining both the source snapshot and old release. Once local health has passed and the target is committed, a later public proxy/DNS/TLS check failure keeps the new service and source snapshot in place for diagnosis instead of automatically rolling back. If you do not have a separately reviewed compatible helper, use the manual procedure below only for a same-generation disposable/staging deployment or a verified compatible alpha.3 database; it is not a substitute for a destructive fresh cutover.
+
+A destructive fresh cutover deletes the active database set and therefore removes users, sessions, OAuth state, CallerKeys; endpoints, upstream secrets, physical keys, models and bindings; charity resources, donations, reviews and routing state; spendable `credits`, cumulative `donation_credit`, levels, check-ins, usage totals and per-user limits; request/usage logs, audits, alerts, activity and lifecycle records; display, OAuth-gate, anti-abuse, charity, economy, timezone, maintenance, registration and legal settings in `site_config`; Debug session state; and game data from the new active instance. The protected source snapshot remains sensitive and may still contain all of that data. It is not an account export and must be protected together with the original release, environment/configuration, master key, unit, manifest, and checksums.
+
+## Manual same-generation deployment procedure
+
+1. Verify the release source and build on a separate build host. Confirm that the target binary and current database generation are compatible; this procedure does not convert alpha.2 to alpha.3.
 2. Run the Go, race, frontend, and release-like embed gates.
 3. Copy the new binary to a new versioned release directory; do not overwrite the active binary in place.
 4. Stop the service before backing up or replacing the database-adjacent files:
@@ -160,7 +183,7 @@ Use separate `server` blocks/certificates for user and administrator hosts so th
    sudo systemctl stop nonbiriapi.service
    ```
 
-5. Back up the database and any SQLite sidecars as one protected set. When the service is stopped, copy the main file plus existing `-wal` and `-shm` files, or use a tested SQLite backup tool. Example:
+5. Create and verify a complete protected snapshot before changing the active release. It must keep the exact previous release, environment/configuration, master key, systemd unit, database and existing sidecars together with a manifest and checksums. The following command is only the database component of that complete snapshot; when the service is stopped, copy the main file plus existing `-wal` and `-shm` files, or use a tested SQLite backup tool:
 
    ```sh
    stamp=$(date -u +%Y%m%dT%H%M%SZ)
@@ -174,10 +197,10 @@ Use separate `server` blocks/certificates for user and administrator hosts so th
 
    Protect backups as carefully as the master key: the database contains encrypted credentials and private account metadata.
 
-6. Point `/opt/nonbiriapi/current` at the new release and start the service:
+6. Point `/opt/nonbiriapi/current` at the new compatible release and start the service:
 
    ```sh
-   version=1.0.0-alpha.2  # replace with the release being installed
+   version=1.0.0-alpha.3  # replace with the compatible release being installed
    sudo ln -sfn "/opt/nonbiriapi/releases/$version" /opt/nonbiriapi/current.next
    sudo mv -Tf /opt/nonbiriapi/current.next /opt/nonbiriapi/current
    sudo systemctl start nonbiriapi.service
@@ -186,37 +209,21 @@ Use separate `server` blocks/certificates for user and administrator hosts so th
 
 7. Verify both configured hosts through the reverse proxy, then inspect the journal for startup errors. Confirm the user station, admin station, login boundary, and `/healthz` response. Do not treat a running process alone as a successful deployment.
 
-If the binary fails to start, stop it, restore the previous symlink, and start the previous release. Do not delete the database or rotate the master key during rollback.
-
-The alpha.2 credential-envelope upgrade is a one-way in-place migration. On
-startup, the new binary upgrades endpoint credentials transactionally before it
-starts any HTTP listener or background worker. Any invalid credential aborts
-the complete credential batch and startup; it never leaves a partially upgraded
-batch serving traffic. Before installing this upgrade, stop the service and
-back up the database together with any WAL/SHM sidecars, the current binary, and
-the unchanged master key. Do not run the old binary against a database that has
-completed the credential migration. Downgrade only by restoring the complete
-pre-upgrade backup and then starting the old binary.
+If the binary fails to start, stop it. Reverting only the release symlink is allowed only when the previous binary is explicitly compatible with the unchanged database generation. Otherwise restore the complete pre-change snapshot — release, database/sidecars, environment, master key, and unit — before starting the old service. Never delete a database or rotate the master key as an improvised rollback.
 
 ## Backup and restore test
 
 A backup is not complete until it has been restored in an isolated directory with the same master key and opened by a test instance. Test this before onboarding users and periodically thereafter. Never test restoration against the production database path.
 
-## Upgrading from alpha.1 to alpha.2
+## Cutting over from alpha.1 or alpha.2
 
-Alpha.2 is a pre-1.0 development release with breaking schema changes. Always keep a tested backup before upgrading.
+There is no in-place path. With a separately reviewed compatible helper and explicit authorization for the destructive operation, use its destructive-fresh flow: select and pin the trusted target; stop the service; create and verify a complete source snapshot; enter the complete target-bound confirmation phrase from `/dev/tty`; remove only the exact revalidated active database/WAL/SHM; start the target against an absent database path; verify the fresh safety gates; then reapply approved instance legal text and required configuration. Do not copy tables, rows, encrypted credentials, site configuration, or legal overrides into generation 1 by hand.
 
-1. **Stop the service and back up.** Follow the [manual update procedure](#manual-update-procedure): stop the service, then copy the database and any existing `-wal`/`-shm` sidecars as one protected set. Keep the old binary, environment file, master key and database backup together.
-2. **New tables are automatic.** Tables introduced by alpha.2 use idempotent bootstrap statements and are created on the first boot of the new binary. The bootstrap is safe to repeat.
-3. **Existing-table columns are automatic.** On first boot, the alpha.2 binary idempotently adds its missing columns and backfills the legacy usage projection. Do not run hand-written `ALTER TABLE` statements: repeating them against a database that has already started under alpha.2 will fail with duplicate-column errors.
-4. **Credential envelope migration.** On startup, the binary upgrades endpoint-key envelopes automatically in an idempotent, transactional migration. The old binary cannot read the new envelope format; downgrade only by restoring the complete pre-upgrade backup.
-5. **Fresh database alternative.** For test or staging, delete the database and let the new binary create a fresh one. Keep and reuse the same master key; do not generate a replacement key for an existing deployment.
-6. **Breaking changes are expected.** Alpha is a pre-1.0 development phase. A versioned migration framework is planned for after 1.0, so always back up before an upgrade.
-7. **Rollback.** Stop the new service, restore the complete pre-upgrade backup (database plus sidecars), and start the old binary. Never run the old binary against a database that has completed the credential migration or schema changes.
+If the cutover fails before the target passes local health and reaches its recorded commit point, restore the complete source snapshot and old release. After that commit point, a failure limited to public proxy, DNS, or TLS checks keeps the new service and source snapshot in place and reports the external fault; it does not automatically roll back the database. If the source snapshot is missing, corrupt, incompatible, or has been cleaned up, stateful rollback is unavailable: the safe choices are to keep the current compatible deployment, repair/restore from another verified complete snapshot, or perform a separately confirmed destructive fresh deployment. The helper must never offer a binary-only downgrade or fabricate a database for the old version.
 
 ## Alpha limitations
 
-- The schema is bootstrapped idempotently. There is no general versioned migration framework; the alpha.2 credential-envelope upgrade uses one dedicated, idempotent startup migrator.
+- Alpha.3 is fresh-only generation 1. A current database is validated, not bootstrapped or migrated; a completely absent main/WAL/SHM path set permits fresh creation, while every unsupported existing state is rejected without repair.
 - SMTP settings are reserved and do not send alert email in the alpha releases.
 - Real Discord OAuth and upstream success flows must be tested with disposable staging credentials before public operation.
 - Choose a maintenance window for every update and keep a known-good binary, environment backup, and database backup together.

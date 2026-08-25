@@ -6,12 +6,14 @@ package adminapi
 // conflict envelope.
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"testing"
-
-	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/host"
 )
 
 func TestBanWithDurationSetsDeadlineAndClearsAutoFlag(t *testing.T) {
@@ -130,6 +132,7 @@ func TestSiteTimezonePatchValidation(t *testing.T) {
 
 	for _, raw := range []string{
 		`{"value":45}`,         // not a 30-minute multiple
+		`{"value":345}`,        // not a 30-minute multiple
 		`{"value":-721}`,       // below range
 		`{"value":841}`,        // above range
 		`{"value":30.5}`,       // non-integral
@@ -142,6 +145,9 @@ func TestSiteTimezonePatchValidation(t *testing.T) {
 		req := stationRequest(http.MethodPatch, "/admin/api/site-config/site_timezone_offset_minutes", host.StationAdmin, []byte(raw))
 		rec := do(t, e.mount(t, nil), withCookie(req, e.adminCookie(t)))
 		assertErr(t, rec, http.StatusBadRequest, "invalid_request")
+	}
+	if _, err := e.store.SiteTimezoneOffsetMinutes(); !errors.Is(err, db.ErrTimezoneUnavailable) {
+		t.Fatalf("invalid timezone patches wrote a value: %v", err)
 	}
 	for _, valid := range []int{-720, 840, -330} {
 		rec := adminPatch(t, e, nil, "/admin/api/site-config/site_timezone_offset_minutes", map[string]any{"value": valid})

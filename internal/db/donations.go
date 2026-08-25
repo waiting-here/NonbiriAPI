@@ -101,6 +101,8 @@ type DonationKey struct {
 	ID              int64
 	DonationID      int64
 	EndpointKeyID   *int64
+	ConnectorType   string
+	ForceStoreFalse bool
 	DisplayHead     string
 	DisplayTail     string
 	MaxConcurrency  int64
@@ -177,13 +179,14 @@ type ExistingEndpointKeys struct {
 // NewKeySpec describes one freshly entered key of a nested creation. Secret is
 // consumed and cleared by the repository; Note/fragments are bounded text.
 type NewKeySpec struct {
-	Secret         []byte
-	Note           string
-	Enabled        bool
-	DisplayHead    string
-	DisplayTail    string
-	MaxConcurrency int64
-	RPMLimit       int64
+	Secret          []byte
+	Note            string
+	Enabled         bool
+	ForceStoreFalse bool
+	DisplayHead     string
+	DisplayTail     string
+	MaxConcurrency  int64
+	RPMLimit        int64
 }
 
 // NewEndpointSpec describes the personal endpoint created atomically together
@@ -400,9 +403,15 @@ WHERE ek.id=? AND ek.endpoint_id=? AND e.user_id=? AND e.id=?`,
 		for i := range in.Keys {
 			k := in.Keys[i]
 			physicalKeyID, kerr := s.createEndpointKeyTx(ctx, tx, in.UserID, endpointID,
-				k.Secret, k.DisplayHead, k.DisplayTail, k.Note, k.Enabled, in.Now)
+				k.Secret, k.DisplayHead, k.DisplayTail, k.Note, k.Enabled, k.ForceStoreFalse, in.Now)
 			if kerr != nil {
 				return Donation{}, kerr
+			}
+			if k.ForceStoreFalse {
+				if err := appendPolicyAuditTx(ctx, tx, in.UserID, "owner", "endpoint_key", physicalKeyID,
+					"force_store_false", 0, 1, in.Now); err != nil {
+					return Donation{}, err
+				}
 			}
 			if _, err := insertDonationKeyTx(ctx, tx, donationID, &physicalKeyID,
 				k.DisplayHead, k.DisplayTail, k.MaxConcurrency, k.RPMLimit, true, in.Now); err != nil {
@@ -865,10 +874,14 @@ func (s *Store) ListReviewableDonations(ctx context.Context, status string, now 
 
 func listDonationKeysTx(ctx context.Context, q queryContexter, donationID int64) ([]DonationKey, error) {
 	rows, err := q.QueryContext(ctx, `
-SELECT id, donation_id, endpoint_key_id, display_head, display_tail,
-       max_concurrency, rpm_limit, credits_usage_cap, credits_used, credits_reserved,
-       enabled, created_at, updated_at
-FROM donation_keys WHERE donation_id=? ORDER BY id`, donationID)
+SELECT dk.id, dk.donation_id, dk.endpoint_key_id, dk.display_head, dk.display_tail,
+       COALESCE(e.connector_type, ''), COALESCE(ek.force_store_false, 0),
+       dk.max_concurrency, dk.rpm_limit, dk.credits_usage_cap, dk.credits_used, dk.credits_reserved,
+       dk.enabled, dk.created_at, dk.updated_at
+FROM donation_keys dk
+LEFT JOIN endpoint_keys ek ON ek.id = dk.endpoint_key_id
+LEFT JOIN endpoints e ON e.id = ek.endpoint_id
+WHERE dk.donation_id=? ORDER BY dk.id`, donationID)
 	if err != nil {
 		return nil, fmt.Errorf("list donation keys: %w", err)
 	}
@@ -878,14 +891,17 @@ FROM donation_keys WHERE donation_id=? ORDER BY id`, donationID)
 		var (
 			k          DonationKey
 			physicalID sql.NullInt64
+			forceInt   int
 			enabledInt int
 		)
-		if err := rows.Scan(&k.ID, &k.DonationID, &physicalID, &k.DisplayHead, &k.DisplayTail,
+		if err := rows.Scan(&k.ID, &k.DonationID, &physicalID, &k.DisplayHead, &k.DisplayTail, &k.ConnectorType,
+			&forceInt,
 			&k.MaxConcurrency, &k.RPMLimit, &k.CreditsUsageCap, &k.CreditsUsed, &k.CreditsReserved,
 			&enabledInt, &k.CreatedAt, &k.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan donation key: %w", err)
 		}
 		k.EndpointKeyID = nullInt64Ptr(physicalID)
+		k.ForceStoreFalse = forceInt == 1
 		k.Enabled = enabledInt == 1
 		out = append(out, k)
 	}

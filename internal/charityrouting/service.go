@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connector"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -59,7 +61,7 @@ var (
 // forward.SecureRunner. It performs exactly one upstream attempt through the
 // shared egress stack and owns no retry or accounting logic.
 type Runner interface {
-	RunCharity(ctx context.Context, writer http.ResponseWriter, input forward.CharityAttemptInput) openai.AttemptResult
+	RunCharity(ctx context.Context, writer http.ResponseWriter, input forward.CharityAttemptInput) connectorcontract.AttemptResult
 }
 
 // Repository is the persistence surface of the routing rail. It is satisfied
@@ -90,6 +92,7 @@ type ServiceConfig struct {
 	// any upstream dispatch. It is optional so the charity rail remains usable
 	// in focused tests and in deployments without the anti-abuse policy.
 	PreflightHook func(context.Context, int64, *openai.ChatRequest) error
+	Registry      *connector.Registry
 }
 
 // Service orchestrates one logical charity call end-to-end. Exactly one user
@@ -102,6 +105,7 @@ type Service struct {
 	timeout   time.Duration
 	preflight func(context.Context, int64, *openai.ChatRequest) error
 	limits    *keyLimiter
+	registry  *connector.Registry
 
 	mu      sync.Mutex
 	nextCtx uint64
@@ -127,6 +131,9 @@ func NewService(config ServiceConfig) (*Service, error) {
 	if config.Logger == nil {
 		config.Logger = slog.Default()
 	}
+	if config.Registry == nil {
+		config.Registry = connector.NewDefaultRegistry()
+	}
 	return &Service{
 		store:     config.Store,
 		runner:    config.Runner,
@@ -135,6 +142,7 @@ func NewService(config ServiceConfig) (*Service, error) {
 		timeout:   config.ForwardTimeout,
 		preflight: config.PreflightHook,
 		limits:    newKeyLimiter(),
+		registry:  config.Registry,
 		active:    make(map[int64]map[uint64]context.CancelFunc),
 	}, nil
 }
@@ -266,6 +274,76 @@ type charityModelLister interface {
 	ListCallerCharityModels(ctx context.Context, now int64, limit int) ([]db.CallerModel, error)
 }
 
+// logicalCharityModelResolver is the deliberately narrow dry-run seam. The
+// concrete store implements it with a single charity-model row query; test
+// repositories may implement it without exposing any candidate method.
+type logicalCharityModelResolver interface {
+	ResolveLogicalCharityRoute(context.Context, string) (db.LogicalCharityRoute, error)
+}
+
+// logicalCharityEligibility is the read-only counterpart to the reservation
+// transaction's feature/user gates. It must not invoke PreflightHook (which may
+// record policy activity) or any reservation/candidate path.
+type logicalCharityEligibility interface {
+	ValidateLogicalCharityCaller(context.Context, int64, int64) error
+}
+
+// ValidateLogicalDryRun resolves only the [公益] model identity and its
+// model-level flatten policy. It does not sweep donations, select/count
+// candidates, reserve credits, decrypt keys, resolve DNS, or call a runner.
+// The returned forward projection is intentionally compatible with the
+// personal logical dry-run seam so callers can combine both validators.
+func (s *Service) ValidateLogicalDryRun(ctx context.Context, userID int64, request *openai.ChatRequest) (forward.DryRunRoute, error) {
+	if s == nil || ctx == nil || userID <= 0 || request == nil || !strings.HasPrefix(request.Model, db.CharityPrefix) {
+		return forward.DryRunRoute{}, ErrModelNotFound
+	}
+	resolver, ok := s.store.(logicalCharityModelResolver)
+	if !ok {
+		return forward.DryRunRoute{}, ErrInternal
+	}
+	route, err := resolver.ResolveLogicalCharityRoute(ctx, request.Model)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			return forward.DryRunRoute{}, ErrModelNotFound
+		}
+		return forward.DryRunRoute{}, ErrInternal
+	}
+	if route.ModelID <= 0 || route.FullName != request.Model {
+		return forward.DryRunRoute{}, ErrInternal
+	}
+	eligibility, ok := s.store.(logicalCharityEligibility)
+	if !ok {
+		return forward.DryRunRoute{}, ErrInternal
+	}
+	if err := eligibility.ValidateLogicalCharityCaller(ctx, userID, s.now().Unix()); err != nil {
+		switch {
+		case errors.Is(err, db.ErrCharityDisabled):
+			return forward.DryRunRoute{}, ErrCharityDisabled
+		case errors.Is(err, db.ErrCharitySuspended):
+			return forward.DryRunRoute{}, ErrCharitySuspended
+		case errors.Is(err, db.ErrNotFound), errors.Is(err, db.ErrAdminProtected):
+			return forward.DryRunRoute{}, ErrModelNotFound
+		default:
+			return forward.DryRunRoute{}, ErrInternal
+		}
+	}
+	// Validate the same model-level flatten policy as the personal logical
+	// seam, but on an immutable private clone. This may inspect/transform only
+	// caller JSON; it must not enter capability filtering, candidate selection,
+	// donation reservation, secret access, DNS, or egress.
+	if route.FlattenToolCall {
+		clone, reverseErr := request.ReverseFlatten()
+		if reverseErr != nil || clone == nil {
+			return forward.DryRunRoute{}, ErrInternal
+		}
+		clone.Clear()
+	}
+	return forward.DryRunRoute{
+		ModelID: route.ModelID, FullName: route.FullName,
+		RouteStrategy: "ordered", FlattenToolCall: route.FlattenToolCall,
+	}, nil
+}
+
 // Forward orchestrates one logical charity call end-to-end over the frozen
 // reservation state machine (implementation contract §5). The consumer is
 // debited exactly once per invocation; retries across donated keys swap ONLY
@@ -276,15 +354,15 @@ type charityModelLister interface {
 // linearization point; only a protocol-terminating success writes the ring
 // buffer. The caller retains the runner's committed result; a pre-dispatch
 // control-flow failure is surfaced as a sentinel error.
-func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userID int64, request *openai.ChatRequest) (openai.AttemptResult, error) {
+func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userID int64, request *openai.ChatRequest) (connectorcontract.AttemptResult, error) {
 	if s == nil || ctx == nil || writer == nil || userID <= 0 || request == nil {
-		return openai.AttemptResult{}, ErrInternal
+		return connectorcontract.AttemptResult{}, ErrInternal
 	}
 	// Namespace isolation: only [公益]-prefixed models are addressable here.
 	// A personal model name can never enter this rail (the handler dispatches
 	// by prefix), and this guard fails closed if it ever does.
 	if !strings.HasPrefix(request.Model, db.CharityPrefix) {
-		return openai.AttemptResult{}, ErrModelNotFound
+		return connectorcontract.AttemptResult{}, ErrModelNotFound
 	}
 
 	parentCtx := ctx
@@ -307,27 +385,46 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 		}
 		switch {
 		case errors.Is(err, db.ErrNotFound):
-			return openai.AttemptResult{}, ErrModelNotFound
+			return connectorcontract.AttemptResult{}, ErrModelNotFound
 		default:
-			return openai.AttemptResult{}, ErrInternal
+			return connectorcontract.AttemptResult{}, ErrInternal
 		}
 	}
 	if len(route.Candidates) == 0 {
-		return openai.AttemptResult{}, ErrUnboundModel
+		return connectorcontract.AttemptResult{}, ErrUnboundModel
 	}
+	attemptRequest := request
+	if route.Model.FlattenToolCalls {
+		attemptRequest, err = request.ReverseFlatten()
+		if err != nil || attemptRequest == nil {
+			return connectorcontract.AttemptResult{}, ErrInternal
+		}
+		defer attemptRequest.Clear()
+	}
+	capable, allOpenAI, err := filterCharityCandidates(s.registry, attemptRequest, route.Candidates, route.Model.FlattenToolCalls)
+	if err != nil {
+		return connectorcontract.AttemptResult{}, ErrInternal
+	}
+	if len(capable) == 0 {
+		if allOpenAI {
+			return connectorcontract.AttemptResult{}, openai.ErrInvalidRequest
+		}
+		return connectorcontract.AttemptResult{}, forward.ErrUnsupportedCapabilities
+	}
+	route.Candidates = capable
 	// The anti-abuse hook runs only after the [公益] model and at least one
 	// candidate have resolved, but before any user/key reservation or upstream
 	// dispatch. Unknown models and empty candidate chains therefore never
 	// create a charity violation.
 	if s.preflight != nil {
-		if err := s.preflight(callCtx, userID, request); err != nil {
-			return openai.AttemptResult{}, err
+		if err := s.preflight(callCtx, userID, attemptRequest); err != nil {
+			return connectorcontract.AttemptResult{}, err
 		}
 	}
 
 	attemptID, err := newAttemptID()
 	if err != nil {
-		return openai.AttemptResult{}, ErrInternal
+		return connectorcontract.AttemptResult{}, ErrInternal
 	}
 
 	var (
@@ -335,9 +432,10 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 		snapshot      db.CharityPricingSnapshot
 		userReserved  int64
 		keyReserved   int64
-		lastResult    openai.AttemptResult
+		lastResult    connectorcontract.AttemptResult
 		admittedAny   bool
 	)
+	policyCache := make(map[int64]bool)
 	for i := range route.Candidates {
 		candidate := route.Candidates[i]
 		if callCtx.Err() != nil {
@@ -370,7 +468,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 		if reservationID == 0 {
 			res, snap, cerr := s.store.CreateCharityReservation(acctCtx, db.ReserveCharityInput{
 				UserID:        userID,
-				FullName:      request.Model,
+				FullName:      attemptRequest.Model,
 				BindingID:     candidate.BindingID,
 				DonationKeyID: candidate.DonationKeyID,
 				AttemptID:     attemptID,
@@ -381,18 +479,18 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 				s.limits.release(candidate.DonationKeyID, s.now())
 				switch {
 				case errors.Is(cerr, db.ErrInsufficientCredits):
-					return openai.AttemptResult{}, cerr
+					return connectorcontract.AttemptResult{}, cerr
 				case errors.Is(cerr, db.ErrCharityDisabled):
-					return openai.AttemptResult{}, ErrCharityDisabled
+					return connectorcontract.AttemptResult{}, ErrCharityDisabled
 				case errors.Is(cerr, db.ErrCharitySuspended):
-					return openai.AttemptResult{}, ErrCharitySuspended
+					return connectorcontract.AttemptResult{}, ErrCharitySuspended
 				case errors.Is(cerr, db.ErrCharityTokenReserveUnconfigured):
-					return openai.AttemptResult{}, ErrUnboundModel
+					return connectorcontract.AttemptResult{}, ErrUnboundModel
 				case errors.Is(cerr, db.ErrDonationKeyCapReached), errors.Is(cerr, db.ErrNotFound):
 					lastResult = admissionExhaustedResult()
 					continue
 				default:
-					return openai.AttemptResult{}, ErrInternal
+					return connectorcontract.AttemptResult{}, ErrInternal
 				}
 			}
 			reservationID = res.ID
@@ -409,7 +507,7 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 					lastResult = admissionExhaustedResult()
 					continue
 				default:
-					return openai.AttemptResult{}, ErrInternal
+					return connectorcontract.AttemptResult{}, ErrInternal
 				}
 			}
 			keyReserved = newKeyReserve
@@ -435,11 +533,17 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 			})
 		started := s.now()
 		result := s.runner.RunCharity(callCtx, dw, forward.CharityAttemptInput{
-			BindingID:      candidate.BindingID,
-			FullName:       route.Model.FullName,
-			Now:            nowUnix,
-			ConsumerUserID: userID,
-			Request:        request,
+			BindingID:             candidate.BindingID,
+			FullName:              route.Model.FullName,
+			ExpectedConnectorType: connectorcontract.Type(candidate.ConnectorType),
+			Now:                   nowUnix,
+			ConsumerUserID:        userID,
+			Request:               attemptRequest,
+			TraceID:               attemptID,
+			ObserverTraceID:       forward.ObserverTraceID(callCtx),
+			AttemptIndex:          i,
+			FlattenToolCalls:      route.Model.FlattenToolCalls,
+			PolicyCache:           policyCache,
 		})
 		if callCtx.Err() != nil && !result.Committed {
 			result = endedContextResult(parentCtx, callCtx)
@@ -505,13 +609,43 @@ func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userI
 	}
 	// No candidate was ever admitted: every donated key refused on its
 	// per-key limits. The frozen exit is 429 rate_limited.
-	return openai.AttemptResult{}, ErrKeysExhausted
+	return connectorcontract.AttemptResult{}, ErrKeysExhausted
+}
+
+func filterCharityCandidates(registry *connector.Registry, request *openai.ChatRequest, candidates []db.CharityCandidate, flattenToolCalls bool) ([]db.CharityCandidate, bool, error) {
+	if registry == nil || request == nil {
+		return nil, false, ErrInternal
+	}
+	capable := make([]db.CharityCandidate, 0, len(candidates))
+	allOpenAI := true
+	capabilityByType := make(map[connectorcontract.Type]bool)
+	for _, candidate := range candidates {
+		connectorType, err := registry.MustValidate(connectorcontract.Type(candidate.ConnectorType))
+		if err != nil {
+			return nil, false, err
+		}
+		allOpenAI = allOpenAI && connectorType == connectorcontract.TypeOpenAICompatible
+		if flattenToolCalls && connectorType != connectorcontract.TypeOpenAICompatible {
+			// Flatten is an all-OpenAI persisted-state invariant. A mixed
+			// projection is corruption, not a candidate to filter away.
+			return nil, allOpenAI, forward.ErrInternal
+		}
+		supported, evaluated := capabilityByType[connectorType]
+		if !evaluated {
+			supported = registry.SupportsRequest(connectorType, request)
+			capabilityByType[connectorType] = supported
+		}
+		if supported {
+			capable = append(capable, candidate)
+		}
+	}
+	return capable, allOpenAI, nil
 }
 
 // recordLog persists the charity request-log row with the reservation
 // correlation and the three charge columns. The consumer's own log projection
 // suppresses donor resources (base URL / key) for charity rows.
-func (s *Service) recordLog(ctx context.Context, userID int64, model, attemptID string, reservationID int64, candidate db.CharityCandidate, result openai.AttemptResult, plan db.CommitPlan, started, finished time.Time) {
+func (s *Service) recordLog(ctx context.Context, userID int64, model, attemptID string, reservationID int64, candidate db.CharityCandidate, result connectorcontract.AttemptResult, plan db.CommitPlan, started, finished time.Time) {
 	stableCode, clientStatus := classifyResult(result)
 	if result.ClientStatus == 0 {
 		result.ClientStatus = clientStatus
@@ -660,14 +794,14 @@ func newAttemptID() (string, error) {
 
 // classifyResult maps an attempt result onto the stable log error code and the
 // client status the personal exit already uses.
-func classifyResult(result openai.AttemptResult) (string, int) {
+func classifyResult(result connectorcontract.AttemptResult) (string, int) {
 	if result.Success {
 		return "", http.StatusOK
 	}
 	switch result.Failure {
-	case openai.FailureUpstream:
+	case connectorcontract.FailureUpstream:
 		return "upstream", http.StatusBadGateway
-	case openai.FailureCanceled, openai.FailureSink:
+	case connectorcontract.FailureCanceled, connectorcontract.FailureSink:
 		return "", 499
 	default:
 		return "internal", http.StatusInternalServerError
@@ -677,9 +811,9 @@ func classifyResult(result openai.AttemptResult) (string, int) {
 // admissionExhaustedResult is the placeholder result carried while every key
 // refuses admission; if no key is ever admitted it is discarded in favor of
 // the ErrKeysExhausted sentinel.
-func admissionExhaustedResult() openai.AttemptResult {
-	return openai.AttemptResult{
-		Failure:      openai.FailureUpstream,
+func admissionExhaustedResult() connectorcontract.AttemptResult {
+	return connectorcontract.AttemptResult{
+		Failure:      connectorcontract.FailureUpstream,
 		ClientStatus: http.StatusTooManyRequests,
 		Diagnostic:   "donation key admission refused",
 	}
@@ -689,15 +823,15 @@ func admissionExhaustedResult() openai.AttemptResult {
 // aggregate deadline. Before commit, the latter is a stable upstream failure
 // so the handler emits 502 instead of an empty response; after commit the
 // caller keeps the runner's committed result.
-func endedContextResult(parent, bounded context.Context) openai.AttemptResult {
+func endedContextResult(parent, bounded context.Context) connectorcontract.AttemptResult {
 	if parent != nil && parent.Err() == nil && bounded != nil && errors.Is(bounded.Err(), context.DeadlineExceeded) {
-		return openai.AttemptResult{
-			Failure:      openai.FailureUpstream,
+		return connectorcontract.AttemptResult{
+			Failure:      connectorcontract.FailureUpstream,
 			ClientStatus: http.StatusBadGateway,
 			Diagnostic:   "charity request timed out",
 		}
 	}
-	return openai.AttemptResult{Failure: openai.FailureCanceled, Diagnostic: "request canceled"}
+	return connectorcontract.AttemptResult{Failure: connectorcontract.FailureCanceled, Diagnostic: "request canceled"}
 }
 
 // boundDiag keeps diagnostics within the shared sink policy.

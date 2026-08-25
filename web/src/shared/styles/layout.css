@@ -451,6 +451,61 @@
   font-weight: 700;
 }
 
+.donation-key-selection {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0.65rem;
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-sm);
+}
+
+.compact-grid {
+  gap: 0.55rem;
+}
+
+.policy-fieldset {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  min-width: 0;
+  padding: 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--nb-color-warning) 65%, var(--nb-color-border));
+  border-radius: var(--nb-radius-sm);
+  background: var(--nb-color-warning-soft);
+}
+
+.policy-fieldset legend {
+  padding-inline: 0.35rem;
+  font-weight: 750;
+}
+
+.risk-note {
+  margin: 0;
+  min-width: 0;
+  color: var(--nb-color-danger);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.policy-fieldset .checkbox-label,
+.policy-fieldset .checkbox-label > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.risk-tag {
+  border-color: var(--nb-color-warning);
+  color: var(--nb-color-danger);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.tag.risk-tag {
+  white-space: normal;
+}
+
 .donation-key-list {
   display: grid;
   gap: 0.45rem;
@@ -1317,6 +1372,7 @@ tr:first-child td {
   grid-template-columns: minmax(12rem, 0.8fr) minmax(15rem, 1.2fr);
   gap: 1rem;
   align-items: start;
+  min-width: 0;
   padding: 0.8rem 0;
   border-top: 1px solid var(--nb-color-border);
 }
@@ -1325,6 +1381,7 @@ tr:first-child td {
   display: flex;
   align-items: start;
   gap: 0.55rem;
+  min-width: 0;
 }
 
 .config-control input,
@@ -1349,6 +1406,7 @@ tr:first-child td {
   display: grid;
   gap: 0.2rem;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .config-key-info strong {
@@ -1475,7 +1533,7 @@ tr:first-child td {
   font-weight: 700;
 }
 
-@media (max-width: 70rem) {
+@media (max-width: 80rem) {
   .site-header {
     flex-wrap: wrap;
   }
@@ -1562,6 +1620,19 @@ tr:first-child td {
     grid-template-columns: 1fr;
   }
 
+  .config-control {
+    flex-wrap: wrap;
+  }
+
+  .config-control > .inline-notice,
+  .config-control > .muted,
+  .config-control > .field-error,
+  .config-control > .inline-success {
+    flex: 1 1 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
   .preferences-form-row label {
     max-width: none;
   }
@@ -1593,6 +1664,16 @@ tr:first-child td {
   .toolbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .item-header > .badge-list {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .item-header > .badge-list > .risk-tag {
+    flex: 1 1 100%;
+    min-width: 0;
   }
 
   .detail-row {

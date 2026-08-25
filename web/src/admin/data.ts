@@ -1,5 +1,11 @@
+import { CancelledError } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiFetch } from '@shared/query/http';
+import {
+  beginManagementSessionRequest,
+  failManagementSessionRequest,
+  noteManagementSessionSuccess,
+} from '@shared/charityManagement';
 import {
   asArray,
   asRecord,
@@ -36,7 +42,11 @@ export interface AdminUser {
   /** Nullable ban deadline as unix seconds; absent while there is none. */
   banned_until?: number;
   endpoint_limit?: number;
+  effective_endpoint_limit: number;
   rpm_limit?: number;
+  effective_rpm_limit: number;
+  concurrency_limit?: number;
+  effective_concurrency_limit: number;
   total_requests: number;
   total_prompt_tokens: number;
   total_completion_tokens: number;
@@ -138,6 +148,45 @@ export interface AdminAlert {
 export type SiteConfigValue = string | number | boolean | null;
 export type SiteConfig = Record<string, SiteConfigValue>;
 
+export interface LocalizedCatalogText {
+  zh: string;
+  en: string;
+}
+
+export type SiteConfigCatalogValueType =
+  | 'text'
+  | 'locale'
+  | 'optional_locale'
+  | 'integer'
+  | 'optional_integer'
+  | 'boolean'
+  | 'multiline_text'
+  | 'amount'
+  | 'optional_amount'
+  | 'enum';
+
+export interface SiteConfigCatalogEntry {
+  key: string;
+  group: string;
+  value_type: SiteConfigCatalogValueType;
+  title: LocalizedCatalogText;
+  description: LocalizedCatalogText;
+  unit: LocalizedCatalogText;
+  nullable: boolean;
+  null_writable?: boolean;
+  raw_default: SiteConfigValue;
+  effective_fallback: SiteConfigValue;
+  minimum: string | number | null;
+  maximum: string | number | null;
+  step?: string | number | null;
+  allowed_values?: string[];
+  zero_semantics: LocalizedCatalogText | null;
+  null_semantics: LocalizedCatalogText;
+  empty_semantics?: LocalizedCatalogText;
+  independent_gates: LocalizedCatalogText[];
+  write_endpoint: string;
+}
+
 export const adminKeys = {
   all: ['admin'] as const,
   session: ['admin', 'session'] as const,
@@ -179,6 +228,7 @@ export const adminKeys = {
     ] as const,
   alertsRoot: ['admin', 'alerts'] as const,
   siteConfig: ['admin', 'site-config'] as const,
+  siteConfigCatalog: ['admin', 'site-config', 'catalog'] as const,
 };
 
 function recordValue(record: UnknownRecord, key: string): unknown {
@@ -195,6 +245,32 @@ function amountValue(value: unknown): string {
 // Nullable integer projection: present only for a finite number.
 function optionalNumberValue(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function invalidResponse(message: string): never {
+  throw new ApiError('invalid_response', message, 200);
+}
+
+function boundedInteger(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+  field: string,
+): number {
+  if (!Number.isSafeInteger(value) || (value as number) < minimum || (value as number) > maximum) {
+    return invalidResponse(`The server returned an invalid ${field}.`);
+  }
+  return value as number;
+}
+
+function optionalBoundedInteger(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+  field: string,
+): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  return boundedInteger(value, minimum, maximum, field);
 }
 
 interface PagePayload {
@@ -235,13 +311,19 @@ function normalizeSession(payload: unknown): AdminSessionResponse {
   return { admin: { username } };
 }
 
-function normalizeUser(payload: unknown): AdminUser {
+export function normalizeAdminUser(payload: unknown): AdminUser {
   const record = asRecord(payload) ?? {};
   const endpointLimit = recordValue(record, 'endpoint_limit');
   const rpmLimit = recordValue(record, 'rpm_limit');
+  const concurrencyLimit = recordValue(record, 'concurrency_limit');
   const bannedUntil = optionalNumberValue(recordValue(record, 'banned_until'));
   const level = optionalNumberValue(recordValue(record, 'level'));
   const autoLevel = optionalNumberValue(recordValue(record, 'auto_level'));
+  const explicitEndpointLimit = optionalBoundedInteger(endpointLimit, 0, 10_000, 'endpoint limit');
+  const explicitRPMLimit = optionalBoundedInteger(rpmLimit, 1, 4_096, 'RPM limit');
+  const explicitConcurrencyLimit = optionalBoundedInteger(
+    concurrencyLimit, 1, 100_000, 'concurrency limit',
+  );
   return {
     id: idValue(recordValue(record, 'id')),
     username: text(recordValue(record, 'username'), 128, '—'),
@@ -254,12 +336,24 @@ function normalizeUser(payload: unknown): AdminUser {
     ...(bannedUntil !== undefined && bannedUntil >= 0
       ? { banned_until: Math.trunc(bannedUntil) }
       : {}),
-    ...(typeof endpointLimit === 'number' && Number.isFinite(endpointLimit)
-      ? { endpoint_limit: Math.max(0, Math.trunc(endpointLimit)) }
+    ...(explicitEndpointLimit !== undefined
+      ? { endpoint_limit: explicitEndpointLimit }
       : {}),
-    ...(typeof rpmLimit === 'number' && Number.isFinite(rpmLimit)
-      ? { rpm_limit: Math.max(0, Math.trunc(rpmLimit)) }
+    effective_endpoint_limit: boundedInteger(
+      recordValue(record, 'effective_endpoint_limit'), 0, 10_000, 'effective endpoint limit',
+    ),
+    ...(explicitRPMLimit !== undefined
+      ? { rpm_limit: explicitRPMLimit }
       : {}),
+    effective_rpm_limit: boundedInteger(
+      recordValue(record, 'effective_rpm_limit'), 1, 4_096, 'effective RPM limit',
+    ),
+    ...(explicitConcurrencyLimit !== undefined
+      ? { concurrency_limit: explicitConcurrencyLimit }
+      : {}),
+    effective_concurrency_limit: boundedInteger(
+      recordValue(record, 'effective_concurrency_limit'), 1, 100_000, 'effective concurrency limit',
+    ),
     total_requests: Math.max(0, integerValue(recordValue(record, 'total_requests'))),
     total_prompt_tokens: Math.max(0, integerValue(recordValue(record, 'total_prompt_tokens'))),
     total_completion_tokens: Math.max(0, integerValue(recordValue(record, 'total_completion_tokens'))),
@@ -370,25 +464,237 @@ function normalizeAlert(payload: unknown): AdminAlert {
   };
 }
 
-function normalizeSiteConfig(payload: unknown): SiteConfig {
-  const record = asRecord(payload) ?? {};
+const SITE_CONFIG_CATALOG_TYPES = new Set<SiteConfigCatalogValueType>([
+  'text', 'locale', 'optional_locale', 'integer', 'optional_integer', 'boolean',
+  'multiline_text', 'amount', 'optional_amount', 'enum',
+]);
+
+function legalTextBytes(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
+}
+
+const LOSSLESS_LEGAL_CONFIG_KEYS = new Set([
+  'legal_privacy_override_zh',
+  'legal_privacy_override_en',
+  'legal_terms_override_zh',
+  'legal_terms_override_en',
+]);
+
+const CANONICAL_DECIMAL = /^-?(0|[1-9][0-9]*)$/;
+
+function hasDisallowedControl(value: string, legalText: boolean): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code === 0x7f || (code < 0x20 && (!legalText || (code !== 0x09 && code !== 0x0a && code !== 0x0d)))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function canonicalCatalogAmount(value: unknown, entry: SiteConfigCatalogEntry): string {
+  if (typeof value !== 'string' || !CANONICAL_DECIMAL.test(value) || value === '-0') {
+    return invalidResponse(`The server returned an invalid ${entry.key} amount.`);
+  }
+  try {
+    const parsed = BigInt(value);
+    if (typeof entry.minimum !== 'string' || typeof entry.maximum !== 'string' ||
+        !CANONICAL_DECIMAL.test(entry.minimum) || !CANONICAL_DECIMAL.test(entry.maximum) ||
+        parsed < BigInt(entry.minimum) || parsed > BigInt(entry.maximum)) {
+      return invalidResponse(`The server returned an out-of-range ${entry.key} amount.`);
+    }
+  } catch {
+    return invalidResponse(`The server returned an invalid ${entry.key} amount.`);
+  }
+  return value;
+}
+
+function normalizeCatalogConfigValue(raw: unknown, entry: SiteConfigCatalogEntry): SiteConfigValue {
+  if (raw === null) {
+    if (entry.nullable) return null;
+    return invalidResponse(`The server returned null for non-nullable ${entry.key}.`);
+  }
+  switch (entry.value_type) {
+    case 'boolean':
+      if (typeof raw !== 'boolean') return invalidResponse(`The server returned an invalid ${entry.key} boolean.`);
+      return raw;
+    case 'integer':
+    case 'optional_integer': {
+      if (!Number.isSafeInteger(raw)) return invalidResponse(`The server returned an invalid ${entry.key} integer.`);
+      const parsed = raw as number;
+      if (typeof entry.minimum !== 'number' || typeof entry.maximum !== 'number' ||
+          parsed < entry.minimum || parsed > entry.maximum ||
+          (typeof entry.step === 'number' && parsed % entry.step !== 0)) {
+        return invalidResponse(`The server returned an out-of-range ${entry.key} integer.`);
+      }
+      return parsed;
+    }
+    case 'amount':
+    case 'optional_amount':
+      return canonicalCatalogAmount(raw, entry);
+    case 'locale':
+    case 'optional_locale':
+    case 'enum': {
+      if (typeof raw !== 'string' || hasDisallowedControl(raw, false) ||
+          !entry.allowed_values || entry.allowed_values.length === 0 ||
+          (!entry.allowed_values.includes(raw) && raw !== entry.raw_default)) {
+        return invalidResponse(`The server returned an invalid ${entry.key} choice.`);
+      }
+      return raw;
+    }
+    case 'text':
+    case 'multiline_text': {
+      if (typeof raw !== 'string') return invalidResponse(`The server returned an invalid ${entry.key} text.`);
+      const legal = LOSSLESS_LEGAL_CONFIG_KEYS.has(entry.key);
+      const maximum = legal ? 65_536 : entry.maximum;
+      if (typeof maximum !== 'number' || !Number.isSafeInteger(maximum) || maximum < 0 ||
+          legalTextBytes(raw) > maximum || hasDisallowedControl(raw, legal)) {
+        return invalidResponse(`The server returned an invalid ${entry.key} text.`);
+      }
+      // Only the four legal override values are lossless large-body text.
+      // No trimming or newline conversion is permitted on those fields.
+      return raw;
+    }
+  }
+  return invalidResponse(`The server returned an unsupported ${entry.key} value type.`);
+}
+
+export function normalizeSiteConfig(
+  payload: unknown,
+  catalog: readonly SiteConfigCatalogEntry[],
+): SiteConfig {
+  const record = asRecord(payload);
+  if (!record) return invalidResponse('The server returned an invalid site configuration.');
+  const byKey = new Map(catalog.map((entry) => [entry.key, entry]));
   const result: SiteConfig = {};
   for (const [rawKey, raw] of Object.entries(record)) {
-    const key = text(rawKey, 96);
-    if (!key) continue;
-    if (typeof raw === 'string') result[key] = text(raw, 512);
-    else if (typeof raw === 'number' && Number.isFinite(raw)) result[key] = raw;
-    else if (typeof raw === 'boolean' || raw === null) result[key] = raw;
+    if (!rawKey || rawKey.length > 128) {
+      return invalidResponse('The server returned an invalid site configuration key.');
+    }
+    const entry = byKey.get(rawKey);
+    if (!entry) return invalidResponse('The server returned an unknown site configuration key.');
+    result[rawKey] = normalizeCatalogConfigValue(raw, entry);
   }
   return result;
 }
 
-export function useAdminSession() {
+function localizedCatalogText(value: unknown, field: string): LocalizedCatalogText {
+  const record = asRecord(value);
+  if (!record || typeof record.zh !== 'string' || typeof record.en !== 'string' ||
+      !record.zh.trim() || !record.en.trim() || record.zh.length > 4_096 || record.en.length > 4_096) {
+    return invalidResponse(`The server returned invalid catalog ${field}.`);
+  }
+  return { zh: record.zh, en: record.en };
+}
+
+function catalogScalar(value: unknown, field: string): SiteConfigValue {
+  if (value === null || typeof value === 'boolean' || typeof value === 'string') return value;
+  if (typeof value === 'number' && Number.isSafeInteger(value)) return value;
+  return invalidResponse(`The server returned invalid catalog ${field}.`);
+}
+
+function catalogBound(value: unknown, field: string): string | number | null {
+  if (value === null) return value;
+  if (typeof value === 'string' && CANONICAL_DECIMAL.test(value) && value !== '-0') return value;
+  if (typeof value === 'number' && Number.isSafeInteger(value)) return value;
+  return invalidResponse(`The server returned invalid catalog ${field}.`);
+}
+
+export function normalizeSiteConfigCatalog(payload: unknown): SiteConfigCatalogEntry[] {
+  const root = asRecord(payload);
+  if (!root || !Array.isArray(root.data)) {
+    return invalidResponse('The server returned an invalid configuration catalog.');
+  }
+  const seen = new Set<string>();
+  let previous = '';
+  return root.data.map((value, index) => {
+    const record = asRecord(value);
+    if (!record || typeof record.key !== 'string' || !record.key || record.key.length > 128 ||
+        typeof record.group !== 'string' || !record.group || record.group.length > 64 ||
+        typeof record.value_type !== 'string' ||
+        !SITE_CONFIG_CATALOG_TYPES.has(record.value_type as SiteConfigCatalogValueType) ||
+        typeof record.nullable !== 'boolean' ||
+        typeof record.write_endpoint !== 'string' ||
+        !record.write_endpoint.startsWith('/') || record.write_endpoint.length > 256 ||
+        !Array.isArray(record.independent_gates)) {
+      return invalidResponse(`The server returned an invalid catalog entry at ${index}.`);
+    }
+    if (record.null_writable !== undefined && typeof record.null_writable !== 'boolean') {
+      return invalidResponse('The server returned invalid catalog null write semantics.');
+    }
+    if (record.allowed_values !== undefined && !Array.isArray(record.allowed_values)) {
+      return invalidResponse('The server returned invalid catalog allowed values.');
+    }
+    if (record.step !== undefined && record.step !== null &&
+        typeof record.step !== 'string' && !Number.isSafeInteger(record.step)) {
+      return invalidResponse('The server returned invalid catalog step.');
+    }
+    if (seen.has(record.key) || (previous && previous >= record.key)) {
+      return invalidResponse('The configuration catalog is not uniquely key-sorted.');
+    }
+    previous = record.key;
+    seen.add(record.key);
+    const allowedValues = (record.allowed_values as unknown[] | undefined)?.map((item) => {
+      if (typeof item !== 'string' || item.length > 256) {
+        return invalidResponse('The server returned invalid catalog allowed values.');
+      }
+      return item;
+    });
+    if (allowedValues && new Set(allowedValues).size !== allowedValues.length) {
+      return invalidResponse('The server returned duplicate catalog allowed values.');
+    }
+    const zeroSemantics = record.zero_semantics === null
+      ? null
+      : localizedCatalogText(record.zero_semantics, 'zero semantics');
+    const emptySemantics = record.empty_semantics === undefined
+      ? undefined
+      : localizedCatalogText(record.empty_semantics, 'empty semantics');
+    return {
+      key: record.key,
+      group: record.group,
+      value_type: record.value_type as SiteConfigCatalogValueType,
+      title: localizedCatalogText(record.title, 'title'),
+      description: localizedCatalogText(record.description, 'description'),
+      unit: localizedCatalogText(record.unit, 'unit'),
+      nullable: record.nullable,
+      ...(record.null_writable === undefined ? {} : { null_writable: record.null_writable }),
+      raw_default: catalogScalar(record.raw_default, 'raw default'),
+      effective_fallback: catalogScalar(record.effective_fallback, 'effective fallback'),
+      minimum: catalogBound(record.minimum, 'minimum'),
+      maximum: catalogBound(record.maximum, 'maximum'),
+      ...(record.step === undefined ? {} : { step: catalogBound(record.step, 'step') }),
+      ...(allowedValues === undefined ? {} : { allowed_values: allowedValues }),
+      zero_semantics: zeroSemantics,
+      null_semantics: localizedCatalogText(record.null_semantics, 'null semantics'),
+      ...(emptySemantics === undefined ? {} : { empty_semantics: emptySemantics }),
+      independent_gates: record.independent_gates.map((gate) => localizedCatalogText(gate, 'gate')),
+      write_endpoint: record.write_endpoint,
+    };
+  });
+}
+
+export function useAdminSession(enabled = true) {
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: adminKeys.session,
-    queryFn: async () => normalizeSession(await apiFetch<unknown>('/admin/api/session')),
+    queryFn: async () => {
+      const generation = beginManagementSessionRequest(queryClient, 'admin');
+      try {
+        const value = normalizeSession(await apiFetch<unknown>('/admin/api/session'));
+        if (!noteManagementSessionSuccess(queryClient, 'admin', value, generation)) {
+          // An older response must not replace the current session projection
+          // after a logout/login or same-level administrator switch.
+          throw new CancelledError();
+        }
+        return value;
+      } catch (error) {
+        failManagementSessionRequest(queryClient, 'admin', generation);
+        throw error;
+      }
+    },
     staleTime: 15_000,
     retry: false,
+    enabled,
   });
 }
 
@@ -410,7 +716,7 @@ export function useAdminUsers(
         pageSize,
       );
       return {
-        items: result.items.map(normalizeUser),
+        items: result.items.map(normalizeAdminUser),
         hasNext: result.hasNext,
         ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
       } satisfies AdminPage<AdminUser>;
@@ -530,12 +836,29 @@ export function useAdminAlerts(
   });
 }
 
-export function useSiteConfig(enabled = true) {
+export function useSiteConfig(
+  catalog: readonly SiteConfigCatalogEntry[] | undefined,
+  enabled = true,
+) {
   return useQuery({
     queryKey: adminKeys.siteConfig,
-    queryFn: async () => normalizeSiteConfig(await apiFetch<unknown>('/admin/api/site-config')),
-    enabled,
+    queryFn: async () => normalizeSiteConfig(
+      await apiFetch<unknown>('/admin/api/site-config'),
+      catalog ?? [],
+    ),
+    enabled: enabled && catalog !== undefined,
     staleTime: 0,
+  });
+}
+
+export function useSiteConfigCatalog(enabled = true) {
+  return useQuery({
+    queryKey: adminKeys.siteConfigCatalog,
+    queryFn: async () => normalizeSiteConfigCatalog(
+      await apiFetch<unknown>('/admin/api/site-config/catalog'),
+    ),
+    enabled,
+    staleTime: 30_000,
   });
 }
 
@@ -594,7 +917,7 @@ export function useAdminAdjustUserCredits() {
       if (!asRecord(payload)) {
         throw new ApiError('invalid_response', 'The server returned an invalid user.', 200);
       }
-      return normalizeUser(payload);
+      return normalizeAdminUser(payload);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: adminKeys.usersRoot });
@@ -618,7 +941,7 @@ export function useAdminUpdateUserLevel() {
       if (!asRecord(payload)) {
         throw new ApiError('invalid_response', 'The server returned an invalid user.', 200);
       }
-      return normalizeUser(payload);
+      return normalizeAdminUser(payload);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: adminKeys.usersRoot });

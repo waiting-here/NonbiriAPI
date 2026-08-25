@@ -21,6 +21,8 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
@@ -81,7 +83,18 @@ const (
 	// (JSON null) means "no reserve price configured", which keeps every
 	// per-token charity model disabled (fail closed). It must never be
 	// mistaken for an explicit 0.
-	KeyCharityTokenReserveMilli = "charity_token_reserve_milli"
+	KeyCharityTokenReserveMilli    = "charity_token_reserve_milli"
+	KeyAnthropicDefaultMaxTokens   = "anthropic_default_max_tokens"
+	KeyGamesEnabled                = game.GamesEnabledKey
+	KeyGameFishingEnabled          = game.FishingEnabledKey
+	KeyGameFishingBaitWormPrice    = game.FishingWormPriceMilliKey
+	KeyGameFishingBaitLurePrice    = game.FishingLurePriceMilliKey
+	KeyGameFishingBaitPremiumPrice = game.FishingPremiumPriceMilliKey
+	KeyGameFishingRTP              = game.FishingStandardRTPKey
+	KeyGameFishingRTPPremium       = game.FishingPremiumRTPKey
+	KeyGameFishingTreasureBottle   = game.FishingTreasureBottleMultiplierKey
+	KeyGameFishingTreasureClover   = game.FishingTreasureCloverMultiplierKey
+	KeyGameFishingTreasureShell    = game.FishingTreasureShellMultiplierKey
 	// Anti-abuse policy keys are process-independent values; the policy rail
 	// reads them authoritatively for each relevant event.
 	KeyRPMBanThreshold                  = antiabuse.KeyRPMBanThreshold
@@ -122,6 +135,7 @@ const (
 	maxAntiAbuseSeconds          = int(db.MaxBanDurationSeconds)
 	maxAntiAbuseThreshold        = 4096
 	maxCharityMinChars           = antiabuse.MaxCharityContentRuneCount
+	maxTokenLimit                = 2147483647
 )
 
 type valueKind int
@@ -152,6 +166,9 @@ const (
 	// canonical positive string, so an explicit zero can never blur into the
 	// unset state (and vice versa).
 	kindOptionalAmount
+	// kindOptionalInt is absent on the raw wire when no row exists. PATCH
+	// accepts a canonical JSON integer or null; null removes the override.
+	kindOptionalInt
 )
 
 type keySpec struct {
@@ -166,6 +183,25 @@ type keySpec struct {
 	// documented default (projected while unset or corrupt).
 	allowed []string
 	defStr  string
+}
+
+var defaultFishingConfig = fishing.DefaultConfig()
+
+func mustDefaultFishingAmount(bait fishing.Bait) int64 {
+	raw, ok := defaultFishingConfig.BaitPricesMilli[bait]
+	value, err := credits.ParseAmount(raw)
+	if !ok || err != nil || value < fishing.MinimumBaitPriceMilli {
+		panic("invalid built-in fishing bait price")
+	}
+	return value
+}
+
+func mustDefaultFishingMultiplier(species string) int {
+	value, ok := defaultFishingConfig.TreasureMultipliers[species]
+	if !ok || value < fishing.MinimumTreasureMultiplier || value > fishing.MaximumTreasureMultiplier {
+		panic("invalid built-in fishing treasure multiplier")
+	}
+	return value
 }
 
 // knownSiteConfig maps every exact known key to its typed spec.
@@ -206,6 +242,17 @@ var knownSiteConfig = map[string]keySpec{
 	KeyCharityEnabled:                   {kind: kindBool, def: 0},
 	KeyDonationAcceptEnabled:            {kind: kindBool, def: 0},
 	KeyCharityTokenReserveMilli:         {kind: kindOptionalAmount},
+	KeyAnthropicDefaultMaxTokens:        {kind: kindOptionalInt, min: 1, max: maxTokenLimit, def: 65536},
+	KeyGamesEnabled:                     {kind: kindBool, def: 0},
+	KeyGameFishingEnabled:               {kind: kindBool, def: 0},
+	KeyGameFishingBaitWormPrice:         {kind: kindAmount, defAmount: mustDefaultFishingAmount(fishing.BaitWorm)},
+	KeyGameFishingBaitLurePrice:         {kind: kindAmount, defAmount: mustDefaultFishingAmount(fishing.BaitLure)},
+	KeyGameFishingBaitPremiumPrice:      {kind: kindAmount, defAmount: mustDefaultFishingAmount(fishing.BaitPremium)},
+	KeyGameFishingRTP:                   {kind: kindInt, min: fishing.MinimumRTPPercent, max: fishing.MaximumRTPPercent, def: defaultFishingConfig.StandardRTPPercent},
+	KeyGameFishingRTPPremium:            {kind: kindInt, min: fishing.MinimumRTPPercent, max: fishing.MaximumRTPPercent, def: defaultFishingConfig.PremiumRTPPercent},
+	KeyGameFishingTreasureBottle:        {kind: kindInt, min: fishing.MinimumTreasureMultiplier, max: fishing.MaximumTreasureMultiplier, def: mustDefaultFishingMultiplier("bottle")},
+	KeyGameFishingTreasureClover:        {kind: kindInt, min: fishing.MinimumTreasureMultiplier, max: fishing.MaximumTreasureMultiplier, def: mustDefaultFishingMultiplier("clover")},
+	KeyGameFishingTreasureShell:         {kind: kindInt, min: fishing.MinimumTreasureMultiplier, max: fishing.MaximumTreasureMultiplier, def: mustDefaultFishingMultiplier("shell")},
 	KeyRPMBanThreshold:                  {kind: kindInt, min: 0, max: maxAntiAbuseThreshold, def: antiabuse.DefaultRPMBanThreshold},
 	KeyRPMBanWindowSeconds:              {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultViolationWindow.Seconds())},
 	KeyRPMBanDurationSeconds:            {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultViolationWindow.Seconds())},
@@ -231,6 +278,27 @@ func knownSiteConfigKey(key string) bool {
 		return true
 	}
 	return strings.HasPrefix(key, alertPrefsPrefix)
+}
+
+func isLegalOverrideKey(key string) bool {
+	switch key {
+	case KeyLegalPrivacyOverrideZh, KeyLegalPrivacyOverrideEn, KeyLegalTermsOverrideZh, KeyLegalTermsOverrideEn:
+		return true
+	default:
+		return false
+	}
+}
+
+func isGameConfigKey(key string) bool {
+	switch key {
+	case KeyGamesEnabled, KeyGameFishingEnabled,
+		KeyGameFishingBaitWormPrice, KeyGameFishingBaitLurePrice, KeyGameFishingBaitPremiumPrice,
+		KeyGameFishingRTP, KeyGameFishingRTPPremium,
+		KeyGameFishingTreasureBottle, KeyGameFishingTreasureClover, KeyGameFishingTreasureShell:
+		return true
+	default:
+		return false
+	}
 }
 
 // textMaxFor returns the byte bound for a text key.
@@ -372,6 +440,11 @@ func typedSiteConfigValue(key, stored string) any {
 				return credits.FormatAmount(v)
 			}
 			return nil
+		case kindOptionalInt:
+			if n, err := parseCanonicalInt(stored); err == nil && n >= spec.min && n <= spec.max {
+				return n
+			}
+			return nil
 		case kindMultilineText:
 			if validMultilineText(stored, textMaxFor(key)) {
 				return stored
@@ -472,7 +545,7 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 			// leading zeros, whitespace or "-0" (credits.ParseAmount), and
 			// no negative amount.
 			n, err := credits.ParseAmount(value)
-			if err != nil || n < 0 {
+			if err != nil || n < 0 || (isFishingBaitPriceKey(key) && n < fishing.MinimumBaitPriceMilli) {
 				return "", invalid
 			}
 			return credits.FormatAmount(n), httperr.Error{}
@@ -502,6 +575,22 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 				}
 				return credits.FormatAmount(n), httperr.Error{}
 			}
+		case kindOptionalInt:
+			dec := json.NewDecoder(bytes.NewReader(raw))
+			dec.UseNumber()
+			var decoded any
+			if err := dec.Decode(&decoded); err != nil {
+				return "", invalid
+			}
+			num, ok := decoded.(json.Number)
+			if !ok {
+				return "", invalid
+			}
+			n, err := num.Int64()
+			if err != nil || strconv.FormatInt(n, 10) != num.String() || n < int64(spec.min) || n > int64(spec.max) {
+				return "", invalid
+			}
+			return num.String(), httperr.Error{}
 		case kindMultilineText:
 			var value string
 			if err := json.Unmarshal(raw, &value); err != nil || !validMultilineText(value, textMaxFor(key)) {
