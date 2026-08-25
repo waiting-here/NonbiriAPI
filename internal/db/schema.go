@@ -5,6 +5,12 @@
 // not idempotent: generation-one databases never run DDL again after creation.
 //
 // Time fields are INTEGER unix seconds. Booleans are INTEGER 0/1.
+//
+// The raw DDL, including its inline comments, is part of the frozen manifest
+// identity and cannot be editorially rewritten without rejecting existing
+// generation-one databases. A few alpha.2-era comments therefore remain in the
+// string below: auto_level still has no downgrade path, while alpha.3 now writes
+// the user/site game_active and game_rounds fields described by activity.go.
 package db
 
 const generationOneSchema = `
