@@ -13,7 +13,7 @@ Thank you for contributing. NonbiriAPI is released under the GNU AGPL v3.0. By s
 ## Development environment
 
 - Go 1.26.x.
-- Node.js 22.22 or newer and npm 12 for the frontend.
+- Node.js 22.22.2 or newer and npm 12.0.1 for the frontend.
 - Bash is required for the repository scripts (`set -euo pipefail` is used). On Windows, use Git Bash.
 
 The frontend dependencies are not part of the Go module. Run npm commands from the repository root with `--prefix web` or from `web/`.

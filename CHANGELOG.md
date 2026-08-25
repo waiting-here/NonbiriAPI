@@ -2,7 +2,7 @@
 
 All notable changes to NonbiriAPI are documented here.
 
-The project is currently in alpha. The latest published release is `v1.0.0-alpha.2`; the entries under Unreleased describe the locally implemented `v1.0.0-alpha.3` development target and are not a release promise until the release gates pass.
+The project is currently in alpha. The latest published release is `v1.0.0-alpha.2`; the entries under Unreleased describe the implemented `v1.0.0-alpha.3` development target. They are not a published release or upgrade authorization until an annotated tag and prerelease are published.
 
 ## [Unreleased]
 

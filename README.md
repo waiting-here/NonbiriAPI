@@ -39,7 +39,7 @@ Configure a user origin and a distinct administrator host. `NONBIRI_ADMIN_HOST` 
 Build-time requirements:
 
 - Go 1.26.x.
-- Node.js 22.22 or newer and npm 12 for the web build.
+- Node.js 22.22.2 or newer and npm 12.0.1 for the web build.
 
 Node.js is not needed to run the finished binary.
 

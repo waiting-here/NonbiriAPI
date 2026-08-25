@@ -212,16 +212,24 @@ sudo journalctl -u nonbiriapi.service -n 100 --no-pager
 Then through the reverse proxy, confirm:
 
 1. `GET https://<user-host>/healthz` returns a healthy response.
-2. The user station loads and the Discord sign-in flow reaches the callback.
+2. The user station loads and clearly shows the maintenance state. OAuth start,
+   callback and all other user APIs remain intentionally unavailable while
+   maintenance is on.
 3. The admin station (`https://<admin-host>`) shows the admin login, and the
    configured username/password signs in.
 4. After signing in to the admin station, set the Discord guild and role used by
    the registration gate (see [configuration.md](configuration.md)), review and
-   apply the instance-specific legal text, and verify all necessary limits and
-   upstream settings before inviting the first user.
-5. Keep maintenance on and registration and games off until legal text,
-   configuration, backups, and a disposable end-to-end call have been verified.
-   Enable them deliberately in that order; fresh defaults never opt the site in.
+   apply the instance-specific legal text, verify all necessary limits and
+   upstream settings, and prepare and restore-test a complete snapshot before
+   inviting the first user.
+5. Only after those checks pass, turn maintenance off. Keep games off and keep
+   registration closed unless a controlled registration test or onboarding
+   window is intended.
+6. For a disposable new-user OAuth test, deliberately open registration, confirm
+   that Discord sign-in reaches the callback and creates the expected account,
+   then complete an end-to-end call. Close registration again if onboarding is
+   not yet intended. Enable games only after their configuration and accounting
+   behavior have also been verified. Fresh defaults never opt the site in.
 
 Do not treat a running process alone as a successful deployment. A clean
 journal with both stations reachable and the login boundary enforced is the
