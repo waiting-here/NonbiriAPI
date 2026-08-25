@@ -21,12 +21,14 @@ The project is currently in alpha. The latest published release is `v1.0.0-alpha
 - Public admission now acquires one per-user in-flight permit before RPM reservation and request parsing. A concurrency denial creates no RPM hit or automatic penalty, and one logical request retains one permit across silent retries.
 - Account export schema is version 3 and includes the new limit, policy, guild-profile, game, and settlement-correlation fields while continuing to exclude credentials, ciphertext, request/response content, Debug Hub captures, and cross-party identities.
 - Account ban and deletion now close or invalidate in-flight user work across the forwarding, debug, and game boundaries before lifecycle mutation; game settlement, retention, deletion, and late-write paths are integrated into the central maintenance/lifecycle flow.
+- Frontend source builds now require Node.js 22.22.3 or newer with npm 12.0.1 so npm can bootstrap reliably before the normal install and build gates.
 
 ### Security and privacy
 
 - `store:false` is explicitly a best-effort upstream request, not a guarantee of zero retention: an upstream may ignore it or reject the field. Tool-call flattening can break normal structured tool workflows and is intended only for a specific compatibility need.
 - Debug dry runs perform no candidate selection, credential access, DNS/egress, charity reservation, usage accounting, or persistent request/activity logging. Live observation exposes only caller-visible, sanitized projections and never headers, credentials, internal resource identifiers, base URLs, safety pseudonyms, or raw upstream diagnostics.
 - Game costs and payouts use the same spendable credit balance as check-in and donor rewards. Game events never change the cumulative donor-reward statistic; anonymous leaderboard rows omit every identity field.
+- Anthropic response credential-reflection detection now scopes exact-match fingerprints with a short-lived per-attempt HMAC-SHA-256 key and clears keyed state after use; literal, decoded-JSON, and cross-fragment rejection behavior is unchanged.
 
 ## [1.0.0-alpha.2] - 2026-08-22
 

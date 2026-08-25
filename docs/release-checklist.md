@@ -68,7 +68,7 @@ CGO_ENABLED=0 go build -tags dist -trimpath -o nonbiriapi .
 
 - [ ] Review the final `git diff`, tracked generated files, executable bits, LF endings, and sensitive-file status.
 - [ ] If a version integration branch was used, review the complete merge-base-to-head diff and commit history, then open its single final pull request to the protected default branch.
-- [ ] Confirm required `Go checks` and `Web checks` pass on the exact release commit and branch protection remains active.
+- [ ] Confirm required `Go checks`, `Web checks`, and aggregate `CodeQL` checks pass on the exact release commit and branch protection remains active; verify every configured CodeQL language analysis completed successfully and review any alert individually.
 - [ ] Confirm private vulnerability reporting is reachable and no deployment secrets are present in Actions/release settings.
 - [ ] Prepare release notes with fresh cutover/upgrade, backup, compatibility or migration limits, complete-snapshot rollback, known limitations, and checksums/artifacts as applicable.
 - [ ] Create an annotated immutable tag only after owner authorization and green CI; never move a published tag silently.
