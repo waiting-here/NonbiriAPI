@@ -723,7 +723,7 @@ func streamCompletionBodyAfter(first map[string]json.RawMessage, states map[int]
 		}
 		choices = append(choices, map[string]any{"index": index, "message": message, "finish_reason": state.FinishReason})
 	}
-	root := make(map[string]json.RawMessage, len(first)+1)
+	root := make(map[string]json.RawMessage)
 	for key, value := range first {
 		root[key] = value
 	}
@@ -762,7 +762,7 @@ func completionToStreamFrames(body []byte) (contentFrame, finishFrame []byte, er
 		if json.Unmarshal(message, &messageFields) != nil {
 			return nil, nil, errToolFlatten
 		}
-		contentChoice := make(map[string]json.RawMessage, len(choice)+1)
+		contentChoice := make(map[string]json.RawMessage)
 		for key, value := range choice {
 			if key != "message" && key != "finish_reason" {
 				contentChoice[key] = value

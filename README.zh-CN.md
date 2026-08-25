@@ -37,7 +37,7 @@ NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网
 构建环境要求：
 
 - Go 1.26.x。
-- Node.js 22.22.2 或更新版本，以及用于构建前端的 npm 12.0.1。
+- Node.js 22.22.3 或更新版本，以及用于构建前端的 npm 12.0.1。
 
 运行构建完成的二进制不需要 Node.js。
 

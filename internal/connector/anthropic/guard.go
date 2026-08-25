@@ -40,6 +40,9 @@ func newSensitiveGuard(materials ...[]byte) *sensitiveGuard {
 		if len(material) == 0 {
 			continue
 		}
+		// SHA-256 is an in-memory exact-match fingerprint here, not a
+		// password verifier or persisted credential hash.
+		// codeql[go/weak-sensitive-data-hashing]
 		detector := &rollingDetector{length: len(material), digest: sha256.Sum256(material), window: make([]byte, len(material)), hasher: sha256.New(), power: 1}
 		for index, value := range material {
 			detector.patternHash = detector.patternHash*rollingBase + uint64(value)
