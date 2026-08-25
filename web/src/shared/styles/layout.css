@@ -1372,6 +1372,7 @@ tr:first-child td {
   grid-template-columns: minmax(12rem, 0.8fr) minmax(15rem, 1.2fr);
   gap: 1rem;
   align-items: start;
+  min-width: 0;
   padding: 0.8rem 0;
   border-top: 1px solid var(--nb-color-border);
 }
@@ -1380,6 +1381,7 @@ tr:first-child td {
   display: flex;
   align-items: start;
   gap: 0.55rem;
+  min-width: 0;
 }
 
 .config-control input,
@@ -1404,6 +1406,7 @@ tr:first-child td {
   display: grid;
   gap: 0.2rem;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .config-key-info strong {
@@ -1615,6 +1618,19 @@ tr:first-child td {
   .config-row,
   .security-actions {
     grid-template-columns: 1fr;
+  }
+
+  .config-control {
+    flex-wrap: wrap;
+  }
+
+  .config-control > .inline-notice,
+  .config-control > .muted,
+  .config-control > .field-error,
+  .config-control > .inline-success {
+    flex: 1 1 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .preferences-form-row label {
