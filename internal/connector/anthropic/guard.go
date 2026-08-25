@@ -2,8 +2,9 @@ package anthropic
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"hash"
@@ -13,13 +14,14 @@ import (
 
 const rollingBase uint64 = 257
 
-// sensitiveGuard retains only fingerprints and rolling windows. It is fed
+// sensitiveGuard retains only keyed fingerprints and rolling windows. It is fed
 // both generated wire bytes and decoded text/tool-argument deltas so JSON
 // escaping or frame boundaries cannot turn a reflected credential into a
 // caller-visible value.
 type sensitiveGuard struct {
-	detectors []*rollingDetector
-	matched   bool
+	fingerprintKey [sha256.Size]byte
+	detectors      []*rollingDetector
+	matched        bool
 }
 
 type rollingDetector struct {
@@ -36,14 +38,31 @@ type rollingDetector struct {
 
 func newSensitiveGuard(materials ...[]byte) *sensitiveGuard {
 	guard := &sensitiveGuard{detectors: make([]*rollingDetector, 0, len(materials))}
+	keyReady := false
 	for _, material := range materials {
 		if len(material) == 0 {
 			continue
 		}
-		// SHA-256 is an in-memory exact-match fingerprint here, not a
-		// password verifier or persisted credential hash.
-		// codeql[go/weak-sensitive-data-hashing]
-		detector := &rollingDetector{length: len(material), digest: sha256.Sum256(material), window: make([]byte, len(material)), hasher: sha256.New(), power: 1}
+		if !keyReady {
+			// This key is short-lived and cleared with the guard. It keeps the
+			// exact-match digest scoped to this response without making every
+			// candidate window pay the denial-of-service cost of a password KDF.
+			if _, err := rand.Read(guard.fingerprintKey[:]); err != nil {
+				panic("anthropic connector: credential fingerprint key unavailable")
+			}
+			keyReady = true
+		}
+		detector := &rollingDetector{
+			length: len(material),
+			window: make([]byte, len(material)),
+			hasher: hmac.New(sha256.New, guard.fingerprintKey[:]),
+			power:  1,
+		}
+		_, _ = detector.hasher.Write(material)
+		sum := detector.hasher.Sum(nil)
+		copy(detector.digest[:], sum)
+		clear(sum)
+		detector.hasher.Reset()
 		for index, value := range material {
 			detector.patternHash = detector.patternHash*rollingBase + uint64(value)
 			if index+1 < len(material) {
@@ -75,11 +94,12 @@ func (g *sensitiveGuard) clone() *sensitiveGuard {
 	if g == nil {
 		return clone
 	}
+	clone.fingerprintKey = g.fingerprintKey
 	clone.detectors = make([]*rollingDetector, 0, len(g.detectors))
 	for _, detector := range g.detectors {
 		clone.detectors = append(clone.detectors, &rollingDetector{
 			length: detector.length, patternHash: detector.patternHash, power: detector.power,
-			digest: detector.digest, window: make([]byte, detector.length), hasher: sha256.New(),
+			digest: detector.digest, window: make([]byte, detector.length), hasher: hmac.New(sha256.New, clone.fingerprintKey[:]),
 		})
 	}
 	return clone
@@ -196,7 +216,7 @@ func (d *rollingDetector) push(value byte) bool {
 	_, _ = d.hasher.Write(d.window[d.position:])
 	_, _ = d.hasher.Write(d.window[:d.position])
 	sum := d.hasher.Sum(nil)
-	matched := subtle.ConstantTimeCompare(sum, d.digest[:]) == 1
+	matched := hmac.Equal(sum, d.digest[:])
 	clear(sum)
 	return matched
 }
@@ -209,7 +229,10 @@ func (g *sensitiveGuard) Clear() {
 		clear(detector.window)
 		detector.window = nil
 		detector.hasher.Reset()
+		detector.hasher = nil
+		clear(detector.digest[:])
 	}
+	clear(g.fingerprintKey[:])
 	g.detectors = nil
 	g.matched = false
 }
