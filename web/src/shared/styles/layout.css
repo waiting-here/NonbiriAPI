@@ -1533,7 +1533,7 @@ tr:first-child td {
   font-weight: 700;
 }
 
-@media (max-width: 70rem) {
+@media (max-width: 80rem) {
   .site-header {
     flex-wrap: wrap;
   }
