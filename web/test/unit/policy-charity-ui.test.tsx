@@ -1308,7 +1308,22 @@ describe('experimental policy and charity controls', () => {
     };
     installJsonFetchFixtures([
       { method: 'GET', path: '/api/session', body: session },
-      { method: 'GET', path: '/api/config', body: { site_name: 'NonbiriAPI' } },
+      {
+        method: 'GET',
+        path: '/api/config',
+        body: {
+          site_name: 'NonbiriAPI',
+          site_logo_url: '',
+          legal_privacy_override_zh: '',
+          legal_privacy_override_en: '',
+          legal_terms_override_zh: '',
+          legal_terms_override_en: '',
+          legal_authoritative_locale: '',
+          maintenance_mode: false,
+          registration_open: true,
+          announcement_epoch: 'b1e_AAAAAAAAAAAAAAAAAAAAAA',
+        },
+      },
     ]);
     const rendered = await renderWithProviders(
       <Routes>
@@ -1454,7 +1469,18 @@ describe('experimental policy and charity controls', () => {
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const requestURL = new URL(input instanceof Request ? input.url : String(input), window.location.origin);
       if (requestURL.pathname === '/api/session') return jsonResponse(session);
-      if (requestURL.pathname === '/api/config') return jsonResponse({ site_name: 'NonbiriAPI' });
+      if (requestURL.pathname === '/api/config') return jsonResponse({
+        site_name: 'NonbiriAPI',
+        site_logo_url: '',
+        legal_privacy_override_zh: '',
+        legal_privacy_override_en: '',
+        legal_terms_override_zh: '',
+        legal_terms_override_en: '',
+        legal_authoritative_locale: '',
+        maintenance_mode: false,
+        registration_open: true,
+        announcement_epoch: 'b1e_AAAAAAAAAAAAAAAAAAAAAA',
+      });
       if (requestURL.pathname === '/api/auth/logout' && init?.method === 'POST') {
         return jsonResponse({ error: { code: 'logout_failed', message: 'logout refused' } }, 401);
       }
@@ -1464,6 +1490,7 @@ describe('experimental policy and charity controls', () => {
     const rendered = await renderWithProviders(<UserLayout />, { station: 'user', role: 'user' });
     await screen.findByText('fixture-user');
     rendered.queryClient.setQueryData(userKeys.models, [model]);
+    await rendered.user.click(screen.getByRole('button', { name: 'fixture-user' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Sign out' }));
     await expect(screen.findByText('logout refused')).resolves.toBeVisible();
     expect(screen.getByRole('link', { name: 'Sign in' })).toBeVisible();

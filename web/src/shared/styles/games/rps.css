@@ -1,0 +1,6 @@
+.nb-game-station--rps {
+  --nb-game-glow: rgb(124 58 237 / 0.18);
+  background:
+    linear-gradient(155deg, rgb(124 58 237 / 0.08), transparent 42%),
+    var(--nb-color-surface);
+}

@@ -21,17 +21,13 @@ html {
 
 body {
   min-width: 320px;
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-    'PingFang SC', 'Microsoft YaHei', sans-serif;
-  font-size: 16px;
-  line-height: 1.55;
+  font-family: var(--nb-font-sans);
+  font-size: calc(var(--nb-font-size-md) * var(--nb-font-scale));
+  line-height: var(--nb-line-normal);
   background: var(--nb-color-bg);
   color: var(--nb-color-text);
   -webkit-font-smoothing: antialiased;
-  transition:
-    background-color var(--nb-transition),
-    color var(--nb-transition);
+  transition: background-color var(--nb-transition), color var(--nb-transition);
 }
 
 h1,
@@ -44,7 +40,7 @@ p {
 h1,
 h2,
 h3 {
-  line-height: 1.2;
+  line-height: var(--nb-line-tight);
   letter-spacing: -0.02em;
 }
 
@@ -143,7 +139,7 @@ fieldset {
   position: absolute;
   left: -9999px;
   top: 0;
-  z-index: 100;
+  z-index: var(--nb-z-toast);
   padding: 0.6rem 0.9rem;
   background: var(--nb-color-accent);
   color: var(--nb-color-accent-contrast);
@@ -178,6 +174,28 @@ fieldset {
   font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;
+}
+
+/* Small global contracts used by both station shells. */
+.nb-screen-reader-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.nb-nowrap {
+  white-space: nowrap;
+}
+
+.nb-break-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 @media (prefers-reduced-motion: reduce) {

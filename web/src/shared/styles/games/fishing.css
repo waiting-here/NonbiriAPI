@@ -1,0 +1,6 @@
+.nb-game-station--fishing {
+  --nb-game-glow: rgb(14 165 233 / 0.2);
+  background:
+    linear-gradient(155deg, rgb(14 165 233 / 0.08), transparent 42%),
+    var(--nb-color-surface);
+}

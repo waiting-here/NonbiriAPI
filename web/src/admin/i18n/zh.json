@@ -11,6 +11,12 @@
       "login": "登录",
       "sessionUser": "当前账号：{{name}}"
     },
+    "navigation": {
+      "overview": "概览",
+      "users": "用户与权限",
+      "operations": "运营",
+      "content": "内容与经济"
+    },
     "dashboard": {
       "nav": "仪表盘",
       "title": "运营概览",

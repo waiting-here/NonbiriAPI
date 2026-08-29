@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, type RenderResult } from '@testing-library/react';
 import userEvent, { type UserEvent } from '@testing-library/user-event';
 import i18next, { type i18n } from 'i18next';
-import { createContext, useContext, type ReactElement, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactElement, type ReactNode } from 'react';
 import { I18nextProvider, initReactI18next } from 'react-i18next';
 import { MemoryRouter } from 'react-router';
 import { vi, type Mock } from 'vitest';
@@ -12,7 +12,7 @@ import commonEn from '../../src/shared/i18n/common/en.json';
 import commonZh from '../../src/shared/i18n/common/zh.json';
 import userEn from '../../src/user/i18n/en.json';
 import userZh from '../../src/user/i18n/zh.json';
-import { ThemeContext, type Theme } from '@shared/theme/context';
+import { ThemeContext, type Density, type FontSize, type Theme } from '@shared/theme/context';
 
 export type TestStation = 'admin' | 'user';
 export type TestRole = 'anonymous' | 'user' | 'level4' | 'level5' | 'admin';
@@ -23,6 +23,8 @@ interface RenderOptions {
   route?: string;
   locale?: TestLocale;
   theme?: Exclude<Theme, 'system'>;
+  density?: Density;
+  fontSize?: FontSize;
   role?: TestRole;
 }
 
@@ -274,7 +276,15 @@ export function assertNoSensitiveQueryCache(
 
 export async function renderWithProviders(
   ui: ReactElement,
-  { station, route = '/', locale = 'en', theme = 'light', role = 'anonymous' }: RenderOptions,
+  {
+    station,
+    route = '/',
+    locale = 'en',
+    theme = 'light',
+    density = 'comfortable',
+    fontSize = 'default',
+    role = 'anonymous',
+  }: RenderOptions,
 ): Promise<RenderWithProvidersResult> {
   const queryClient = createTestQueryClient();
   const testI18n = await createTestI18n(locale, station);
@@ -282,20 +292,36 @@ export async function renderWithProviders(
   document.documentElement.lang = locale === 'zh' ? 'zh-CN' : 'en';
   document.documentElement.dataset.theme = theme;
 
-  const setTheme = () => undefined;
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <I18nextProvider i18n={testI18n}>
-      <ThemeContext.Provider value={{ theme, setTheme, toggleTheme: setTheme }}>
-        <QueryClientProvider client={queryClient}>
-          <RoleContext.Provider value={role}>
-            <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
-          </RoleContext.Provider>
-        </QueryClientProvider>
-      </ThemeContext.Provider>
-    </I18nextProvider>
-  );
+  const Wrapper = ({ children }: { children: ReactNode }) => {
+    const [currentTheme, setCurrentTheme] = useState<Theme>(theme);
+    const [currentDensity, setCurrentDensity] = useState<Density>(density);
+    const [currentFontSize, setCurrentFontSize] = useState<FontSize>(fontSize);
 
-  const result = render(ui, { wrapper });
+    return (
+      <ThemeContext.Provider
+        value={{
+          theme: currentTheme,
+          setTheme: setCurrentTheme,
+          toggleTheme: () =>
+            setCurrentTheme((current) => (current === 'light' ? 'dark' : 'light')),
+          density: currentDensity,
+          setDensity: setCurrentDensity,
+          fontSize: currentFontSize,
+          setFontSize: setCurrentFontSize,
+        }}
+      >
+        <I18nextProvider i18n={testI18n}>
+          <QueryClientProvider client={queryClient}>
+            <RoleContext.Provider value={role}>
+              <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
+            </RoleContext.Provider>
+          </QueryClientProvider>
+        </I18nextProvider>
+      </ThemeContext.Provider>
+    );
+  };
+
+  const result = render(ui, { wrapper: Wrapper });
   return { ...result, i18n: testI18n, queryClient, user: userEvent.setup() };
 }
 

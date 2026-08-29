@@ -1,21 +1,35 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { NavLink, Outlet } from 'react-router';
 import { useTranslation } from 'react-i18next';
+import { Brand, useBrandFavicon } from '@shared/components/Brand';
+import { AccountMenu } from '@shared/components/AccountMenu';
 import { LanguageSwitcher } from '@shared/components/LanguageSwitcher';
+import { PublicShell } from '@shared/components/PublicShell';
 import { usePublicConfig } from '@shared/query/publicConfig';
-import { ErrorState, LoadingState } from '@shared/components/States';
+import { ErrorState, LoadingState, PageFooter } from '@shared/components/States';
+import { Icon } from '@shared/components/Icon';
+import { useOptionalToast } from '@shared/components/Toast';
 import { apiFetch, isApiError, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { ThemeToggle } from '@shared/theme/ThemeToggle';
+import { SHELL_DRAWER_MEDIA_QUERY } from '@shared/styles/tokens';
 import { useAdminSession } from '../data';
 import { clearManagementSession } from '@shared/charityManagement';
-import { NAV_ITEMS } from '../navigation';
+import { ADMIN_NAV_GROUPS, ADMIN_PRIMARY_NAV } from '../navigation';
+
+const ADMIN_GROUP_LABEL_KEYS: Record<(typeof ADMIN_NAV_GROUPS)[number], string> = {
+  overview: 'admin.navigation.overview',
+  users: 'admin.navigation.users',
+  operations: 'admin.navigation.operations',
+  content: 'admin.navigation.content',
+};
 
 function AdminLogin({ onSignedIn, notice }: { onSignedIn: () => Promise<void>; notice?: unknown }) {
   const { t } = useTranslation();
-  const config = usePublicConfig(true, '/admin/api/config');
-  const siteName = config.data?.siteName || t('app.name');
-  const siteLogoURL = config.data?.siteLogoURL;
+  // Anonymous admin bootstrap must remain local: /admin/api/config is an ADM
+  // route and a 401 response must never prevent this login surface from
+  // rendering. Authenticated AdminLayout owns the protected config query.
+  const siteName = t('app.name');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -48,14 +62,8 @@ function AdminLogin({ onSignedIn, notice }: { onSignedIn: () => Promise<void>; n
 
   return (
     <div className="auth-shell">
-      <header className="site-header">
-        <span className="brand">
-          {siteLogoURL ? (
-            <img className="brand-logo" src={siteLogoURL} alt="" aria-hidden="true" />
-          ) : null}
-          {siteName}
-          <span className="brand-suffix">{t('admin.shell.brandSuffix')}</span>
-        </span>
+      <header className="site-header nb-admin-header">
+        <Brand siteName={siteName} className="brand nb-admin-header__brand" suffix={<span className="brand-suffix nb-admin-header__suffix">{t('admin.shell.brandSuffix')}</span>} />
         <div className="site-actions">
           <LanguageSwitcher />
           <ThemeToggle />
@@ -106,30 +114,90 @@ function AdminLogin({ onSignedIn, notice }: { onSignedIn: () => Promise<void>; n
 export function AdminLayout() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const toastContext = useOptionalToast();
+  const clearToasts = toastContext?.clear;
   const [logoutRequested, setLogoutRequested] = useState(false);
   const session = useAdminSession(!logoutRequested);
-  const config = usePublicConfig(true, '/admin/api/config');
+  const config = usePublicConfig(Boolean(session.data) && !logoutRequested, '/admin/api/config');
   const siteName = config.data?.siteName || t('app.name');
   const siteLogoURL = config.data?.siteLogoURL;
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
   const [logoutError, setLogoutError] = useState<unknown>(null);
   const [logoutBusy, setLogoutBusy] = useState(false);
+  const toastIdentity = logoutRequested
+    ? 'logout'
+    : session.data?.admin.username
+      ? `admin:${session.data.admin.username}`
+      : 'anonymous';
+  const previousToastIdentityRef = useRef<string | undefined>(undefined);
+
+  const restoreMenuFocus = useCallback(() => {
+    // The menu button is hidden on desktop; only restore focus when the
+    // responsive drawer is available.
+    if (typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia(SHELL_DRAWER_MEDIA_QUERY.admin).matches) {
+      menuButtonRef.current?.focus();
+    }
+  }, []);
+  const closeMenu = useCallback(() => {
+    setMenuOpen(false);
+    restoreMenuFocus();
+  }, [restoreMenuFocus]);
 
   useEffect(() => {
     document.title = `${siteName} · ${t('admin.shell.title')}`;
   }, [t, siteName]);
 
-  // Sync the browser tab icon with the configured site logo. The default
-  // mark is baked into index.html; capture it on mount so clearing the logo
-  // restores it instead of leaving a stale icon.
-  const [defaultIcon] = useState(
-    () => document.querySelector<HTMLLinkElement>('link[rel="icon"]')?.href ?? '',
-  );
   useEffect(() => {
-    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-    if (!link) return;
-    link.href = siteLogoURL || defaultIcon;
-  }, [siteLogoURL, defaultIcon]);
+    if (previousToastIdentityRef.current && previousToastIdentityRef.current !== toastIdentity) clearToasts?.();
+    previousToastIdentityRef.current = toastIdentity;
+  }, [clearToasts, toastIdentity]);
+
+  useBrandFavicon(siteLogoURL);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const firstLink = sidebarRef.current?.querySelector<HTMLElement>('a[href], button:not([disabled])');
+    firstLink?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMenu();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(sidebarRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), select:not([disabled])',
+      ) ?? []);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [closeMenu, menuOpen]);
+
+  useEffect(() => {
+    if (!menuOpen || typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const media = window.matchMedia(SHELL_DRAWER_MEDIA_QUERY.admin);
+    const closeForDesktop = (event?: MediaQueryListEvent) => {
+      if (event && event.matches) return;
+      if (!media.matches) setMenuOpen(false);
+    };
+    closeForDesktop();
+    media.addEventListener('change', closeForDesktop);
+    return () => media.removeEventListener('change', closeForDesktop);
+  }, [menuOpen]);
 
   if (logoutRequested) {
     if (logoutBusy) return <LoadingState />;
@@ -159,6 +227,15 @@ export function AdminLayout() {
     );
   }
 
+  // Only an authenticated admin may reach the protected bootstrap. Do not
+  // mount the normal sidebar/content until its closed DTO has resolved.
+  if (config.isPending && !config.data) {
+    return <PublicShell station="admin" siteName={siteName}><div className="nb-page nb-page--readable"><LoadingState /></div></PublicShell>;
+  }
+  if (config.error && !config.data) {
+    return <PublicShell station="admin" siteName={siteName}><div className="nb-page nb-page--readable"><ErrorState error={config.error} onRetry={() => void config.refetch()} /></div></PublicShell>;
+  }
+
   const logout = async () => {
     setLogoutError(null);
     // Close the station at user intent, before the network request. A failed
@@ -185,31 +262,28 @@ export function AdminLayout() {
       <a className="skip-link" href="#main">
         {t('shell.skipToContent')}
       </a>
-      <header className="site-header">
-        <span className="brand">
-          {siteLogoURL ? (
-            <img className="brand-logo" src={siteLogoURL} alt="" aria-hidden="true" />
-          ) : null}
-          {siteName}
-          <span className="brand-suffix">{t('admin.shell.brandSuffix')}</span>
-        </span>
+      <header className="site-header nb-admin-header">
+        <Brand siteName={siteName} siteLogoURL={siteLogoURL} className="brand nb-admin-header__brand" suffix={<span className="brand-suffix nb-admin-header__suffix">{t('admin.shell.brandSuffix')}</span>} />
         <button
           type="button"
-          className="btn btn-secondary mobile-menu-btn admin-menu-btn"
+          ref={menuButtonRef}
+          className="btn btn-secondary mobile-menu-btn admin-menu-btn nb-menu-button"
           aria-expanded={menuOpen}
           aria-controls="admin-navigation"
           aria-label={t(menuOpen ? 'shell.closeMenu' : 'shell.openMenu')}
           onClick={() => setMenuOpen((open) => !open)}
         >
-          {menuOpen ? '×' : '☰'}
+          <Icon name={menuOpen ? 'close' : 'menu'} />
         </button>
-        <div className="site-actions">
-          <span className="user-chip">{t('admin.shell.sessionUser', { name: session.data.admin.username })}</span>
-          <LanguageSwitcher />
-          <ThemeToggle />
-          <button type="button" className="btn btn-secondary" onClick={() => void logout()} disabled={logoutBusy}>
-            {logoutBusy ? t('common.working') : t('common.signOut')}
-          </button>
+        <div className="site-actions nb-admin-header__actions">
+          <AccountMenu
+            displayName={session.data.admin.username}
+            signOutLabel={t('common.signOut')}
+            working={logoutBusy}
+            station="admin"
+            languageControl={<LanguageSwitcher />}
+            onSignOut={() => void logout()}
+          />
         </div>
       </header>
       {menuOpen ? (
@@ -217,31 +291,45 @@ export function AdminLayout() {
           type="button"
           className="shell-overlay"
           aria-label={t('shell.closeMenu')}
-          onClick={() => setMenuOpen(false)}
+          onClick={closeMenu}
         />
       ) : null}
-      <div className="admin-shell">
+      <div className="admin-shell nb-admin-shell">
         <aside
+          ref={sidebarRef}
           id="admin-navigation"
-          className={`admin-sidebar ${menuOpen ? 'is-open' : ''}`}
+          className={`admin-sidebar nb-admin-sidebar ${menuOpen ? 'is-open' : ''}`}
           aria-label={t('admin.shell.navLabel')}
         >
-          <nav>
-            <ul>
-              {NAV_ITEMS.map((item) => (
-                <li key={item.key}>
-                  <NavLink to={item.to} end={item.end} onClick={() => setMenuOpen(false)}>
-                    {t(`admin.${item.key}.nav`)}
-                  </NavLink>
-                </li>
-              ))}
-            </ul>
+          <nav className="nb-admin-sidebar__nav">
+            {ADMIN_NAV_GROUPS.map((group) => {
+              const items = ADMIN_PRIMARY_NAV.filter((item) => item.group === group);
+              if (items.length === 0) return null;
+              const groupTitle = t(ADMIN_GROUP_LABEL_KEYS[group], { defaultValue: t('admin.settings.nav') });
+              return (
+                <section className="nb-admin-sidebar__group" key={group}>
+                  <h2 className="nb-admin-sidebar__group-title">{groupTitle}</h2>
+                  {items.map((item) => {
+                    const label = item.labelKey
+                      ? t(item.labelKey, { defaultValue: item.fallbackLabelKey ? t(item.fallbackLabelKey) : item.labelKey })
+                      : t(`admin.${item.key}.nav`);
+                    return (
+                      <NavLink className="nb-admin-sidebar__link" key={item.key} to={item.to} end={item.end} onClick={closeMenu}>
+                        {item.icon ? <Icon name={item.icon} /> : null}
+                        <span className="nb-admin-sidebar__label">{label}</span>
+                      </NavLink>
+                    );
+                  })}
+                </section>
+              );
+            })}
           </nav>
         </aside>
-        <main id="main" className="admin-content" tabIndex={-1}>
+        <main id="main" className="admin-content nb-admin-content" tabIndex={-1}>
           {logoutError ? <ErrorState error={logoutError} /> : null}
           {/* Keep route-local mutation and form state scoped to one admin. */}
           <Outlet key={session.data.admin.username} />
+          <PageFooter copyright={t('common.copyright', { year: new Date().getFullYear() })} />
         </main>
       </div>
     </>

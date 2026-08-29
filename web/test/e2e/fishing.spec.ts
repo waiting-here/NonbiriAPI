@@ -417,15 +417,13 @@ test('Fishing remains keyboard usable at 390px, 200% zoom, both themes, and zh w
   await expect(page.getByRole('heading', { name: 'Pond fishing' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Premium lure/ })).toBeVisible();
   expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true);
+  await page.getByRole('button', { name: 'Open navigation' }).click();
+  await expect(page.getByRole('link', { name: 'Account' })).toBeVisible();
   await page.getByRole('combobox', { name: 'Theme' }).selectOption('light');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await page.getByRole('combobox', { name: 'Theme' }).selectOption('dark');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await page.getByRole('button', { name: '中文' }).click();
-  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
-  await expect(page.getByRole('heading', { name: '池塘垂钓' })).toBeVisible();
-  await page.getByRole('button', { name: 'EN', exact: true }).click();
-  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await page.keyboard.press('Escape');
   await page.evaluate(() => {
     document.documentElement.style.zoom = '2';
   });

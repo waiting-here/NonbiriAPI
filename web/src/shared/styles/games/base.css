@@ -1,0 +1,51 @@
+/* Layer 5: shared game surfaces. Game rules and state remain feature-owned. */
+
+.nb-game-station {
+  --nb-game-glow: rgb(37 99 235 / 0.18);
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-xl);
+  padding: clamp(var(--nb-space-4), 4vw, var(--nb-space-8));
+  background:
+    radial-gradient(circle at 90% 0, var(--nb-game-glow), transparent 20rem),
+    var(--nb-color-surface);
+  box-shadow: var(--nb-elevation-1);
+}
+
+.nb-game-station__hud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nb-space-3);
+  margin-bottom: var(--nb-space-5);
+}
+
+.nb-game-station__hud-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nb-space-2);
+}
+
+.nb-game-station__board {
+  min-width: 0;
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-lg);
+  padding: var(--nb-space-4);
+  background: color-mix(in srgb, var(--nb-color-surface-muted) 80%, transparent);
+}
+
+.nb-game-station__feedback {
+  margin-top: var(--nb-space-4);
+  color: var(--nb-color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.nb-game-art {
+  display: block;
+  width: 100%;
+  height: auto;
+}
