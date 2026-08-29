@@ -2,9 +2,11 @@
 
 All notable changes to NonbiriAPI are documented here.
 
-The project is currently in alpha. The latest published release is `v1.0.0-alpha.2`; the entries under Unreleased describe the implemented `v1.0.0-alpha.3` development target. They are not a published release or upgrade authorization until an annotated tag and prerelease are published.
+The project is currently in alpha. The latest published prerelease is `v1.0.0-alpha.3`; alpha releases are intended for controlled self-hosted trials.
 
 ## [Unreleased]
+
+## [1.0.0-alpha.3] - 2026-08-28
 
 ### Added
 
@@ -126,5 +128,6 @@ The project is currently in alpha. The latest published release is `v1.0.0-alpha
 - Purge expired sessions at startup and during the existing six-hour maintenance sweep.
 - Create missing database directories owner-only and align the systemd/key-file guidance with the runtime's strict permission checks.
 
+[1.0.0-alpha.3]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.3
 [1.0.0-alpha.2]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.2
 [1.0.0-alpha.1]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.1

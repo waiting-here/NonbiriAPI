@@ -2,7 +2,7 @@
 
 NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网关。用户可以管理自己持有的上游端点和凭据，拉取上游模型，创建用户自己的平台模型名称，并通过一个 `CallerKey` 调用这些模型。
 
-> **最新已发布版本：** `v1.0.0-alpha.2`。当前开发目标是尚未发布的 `v1.0.0-alpha.3`；本分支及其文档不等同于发布或升级授权。Alpha 仅适合受控的自托管试运行。正式开放给用户前，请先阅读部署、备份、隐私和安全文档。
+> **最新已发布预发布版本：** [`v1.0.0-alpha.3`](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.3)。Alpha 仅适合受控的自托管试运行；发布 prerelease 不等于授权任何特定部署者直接升级或上线。正式开放给用户前，请先阅读部署、备份、隐私和安全文档。
 >
 > 源码仓库：[github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
@@ -21,7 +21,7 @@ NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网
 - 服务端生成的上游安全伪名只在“同一用户 + 同一规范化上游 origin”范围内稳定；轮换与隐私边界见 [API 契约](docs/api-contract.md#21-post-v1chatcompletions)。
 - React 用户/管理员站点嵌入一个 Go 单二进制。
 
-尚未发布的 alpha.3 契约仍只暴露上述两个 OpenAI-compatible 入站接口。`anthropic-compatible` 端点在网关内部完成转换，NonbiriAPI 不暴露 Anthropic 原生公共入口。其他 OpenAI API 家族和连接器类型仍留待后续版本；严格的 Anthropic 子集与 token 上限规则见 [API 契约](docs/api-contract.md)。
+已发布的 alpha.3 契约仍只暴露上述两个 OpenAI-compatible 入站接口。`anthropic-compatible` 端点在网关内部完成转换，NonbiriAPI 不暴露 Anthropic 原生公共入口。其他 OpenAI API 家族和连接器类型仍留待后续版本；严格的 Anthropic 子集与 token 上限规则见 [API 契约](docs/api-contract.md)。
 
 ## 站点结构
 

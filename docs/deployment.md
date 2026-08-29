@@ -1,6 +1,6 @@
 # VPS deployment with systemd
 
-This guide describes the supported single-instance operating model for the unreleased `v1.0.0-alpha.3`: one compiled binary, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS. The latest published release remains alpha.2; do not treat development-branch instructions as production deployment authorization. See [configuration.md](configuration.md) for the full environment and runtime-settings reference.
+This guide describes the supported single-instance operating model for the published `v1.0.0-alpha.3` prerelease: one compiled binary, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS. Publishing a prerelease does not authorize a particular operator deployment; verify the fresh-only boundary, backups, configuration, legal text, and smoke tests before opening service. See [configuration.md](configuration.md) for the full environment and runtime-settings reference.
 
 The commands are examples. Replace paths, hostnames, users, and package-manager commands for the target VPS. Do not copy real secrets into a Git checkout.
 

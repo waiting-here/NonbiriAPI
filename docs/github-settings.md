@@ -30,7 +30,7 @@ For a single-maintainer repository, requiring an approving review can make the o
 - Enable Dependabot version updates using the committed `.github/dependabot.yml`.
 - Keep CodeQL default setup enabled for Go, JavaScript/TypeScript, and GitHub Actions. Require the aggregate result gate, review each alert against the exact data flow, and dismiss only a narrowly verified false positive rather than excluding the query globally.
 - Enable secret scanning and push protection if the repository plan provides them.
-- Keep the default branch as `master`; publish every alpha release as a pre-release. An unreleased development branch such as alpha.3 is not published until its owner-authorized tag and release steps are complete.
+- Keep the default branch as `master`; publish every alpha release as a pre-release. A development branch is not published until its owner-authorized tag and release steps are complete.
 - Keep Actions permissions at the workflow default of read-only contents; do not add deployment secrets to the CI workflow.
 
 ## Release and access hygiene

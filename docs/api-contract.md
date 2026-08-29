@@ -1,6 +1,6 @@
 # NonbiriAPI HTTP API Contract (`v1.0.0-alpha.3`)
 
-- Status: **implemented development contract for the unreleased `v1.0.0-alpha.3`**. The latest published release remains alpha.2.
+- Status: **published contract for the `v1.0.0-alpha.3` prerelease** (2026-08-28).
 - Scope: `/v1/chat/completions` and `/v1/models` remain the only public OpenAI-compatible ingress endpoints. OpenAI-compatible and Anthropic-compatible upstream connectors sit behind that ingress; there is no public Anthropic-native API. Embeddings, images, audio, files, moderation, and batch remain deferred.
 - Authority: this document defines the alpha.3 wire contract and is aligned with the integrated implementation, contract tests, accepted security/data-lifecycle decisions, and the emitted stable-code set of `internal/httperr`. Documentation errata may correct an omitted or misstated field without changing runtime behavior; other changes to endpoint paths, JSON fields, stable codes, auth behavior, cache policy, or diagnostic limits require a subsequent contract and changelog entry.
 

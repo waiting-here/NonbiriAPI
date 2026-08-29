@@ -30,7 +30,7 @@ The database directory and file hold encrypted upstream credentials and private 
 
 ## Runtime administrator settings
 
-The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values below describe the unreleased `v1.0.0-alpha.3` implementation. A fresh alpha.3 database explicitly seeds `maintenance_mode=true`, `registration_open=false`, `games_enabled=false`, and `game_fishing_enabled=false`; these safety seeds take precedence over generic code fallbacks.
+The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values below describe the published `v1.0.0-alpha.3` prerelease. A fresh alpha.3 database explicitly seeds `maintenance_mode=true`, `registration_open=false`, `games_enabled=false`, and `game_fishing_enabled=false`; these safety seeds take precedence over generic code fallbacks.
 
 | Key | Type / range | Default and effect |
 | --- | --- | --- |

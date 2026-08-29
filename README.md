@@ -4,7 +4,7 @@
 
 NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible ingress gateway. It lets each user manage their own upstream endpoints and credentials, discover upstream models, define user-owned platform model names, and call those models through a single `CallerKey`.
 
-> **Latest published release:** `v1.0.0-alpha.2`. The current development target is the unreleased `v1.0.0-alpha.3`; this branch and its documentation are not a release or an upgrade authorization. Alpha builds are intended only for controlled self-hosted trials. Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
+> **Latest published prerelease:** [`v1.0.0-alpha.3`](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.3). Alpha builds are intended only for controlled self-hosted trials; publishing a prerelease is not an authorization for any particular operator deployment. Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
 >
 > Source repository: [github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
@@ -23,7 +23,7 @@ NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible ingress g
 - Server-generated upstream safety pseudonyms scoped to one user and one canonical upstream origin; see the [API contract](docs/api-contract.md#21-post-v1chatcompletions) for their rotation and privacy boundary.
 - React user/admin stations embedded into a single Go binary.
 
-The unreleased alpha.3 contract still exposes only the two OpenAI-compatible ingress routes listed above. An `anthropic-compatible` endpoint is translated behind that ingress; NonbiriAPI does not expose an Anthropic-native public endpoint. Other OpenAI API families and connector types remain deferred. See the [API contract](docs/api-contract.md) for the strict Anthropic subset and token-limit rules.
+The published alpha.3 contract still exposes only the two OpenAI-compatible ingress routes listed above. An `anthropic-compatible` endpoint is translated behind that ingress; NonbiriAPI does not expose an Anthropic-native public endpoint. Other OpenAI API families and connector types remain deferred. See the [API contract](docs/api-contract.md) for the strict Anthropic subset and token-limit rules.
 
 ## Architecture
 
