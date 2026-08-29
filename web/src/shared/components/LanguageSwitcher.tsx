@@ -13,7 +13,11 @@ export function LanguageSwitcher() {
   const current: LanguageCode = i18n.resolvedLanguage?.startsWith('zh') ? 'zh' : 'en';
 
   const select = (code: LanguageCode) => {
-    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, code);
+    try {
+      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, code);
+    } catch {
+      // Language switching remains usable when storage is blocked.
+    }
     void i18n.changeLanguage(code);
   };
 
@@ -24,6 +28,7 @@ export function LanguageSwitcher() {
           key={code}
           type="button"
           aria-pressed={current === code}
+          aria-current={current === code ? 'true' : undefined}
           onClick={() => select(code)}
         >
           {label}

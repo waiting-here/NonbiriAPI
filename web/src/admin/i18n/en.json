@@ -11,6 +11,12 @@
       "login": "Sign in",
       "sessionUser": "Signed in as {{name}}"
     },
+    "navigation": {
+      "overview": "Overview",
+      "users": "Users & permissions",
+      "operations": "Operations",
+      "content": "Content & economy"
+    },
     "dashboard": {
       "nav": "Dashboard",
       "title": "Operations overview",

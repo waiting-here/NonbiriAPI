@@ -1,0 +1,170 @@
+/* Layer 5: admin station shell. The visual language is quieter and denser
+ * than the user station while sharing all tokens and primitives. */
+
+.nb-admin-shell {
+  display: grid;
+  grid-template-columns: 16rem minmax(0, 1fr);
+  min-height: calc(100dvh - 4.25rem);
+  background: var(--nb-color-bg);
+}
+
+.nb-admin-header {
+  position: sticky;
+  top: 0;
+  z-index: var(--nb-z-sticky);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--nb-space-5);
+  min-height: 4.25rem;
+  border-bottom: 1px solid var(--nb-color-border);
+  padding: 0.65rem clamp(var(--nb-space-4), 4vw, var(--nb-space-8));
+  background: var(--nb-color-surface);
+}
+
+.nb-admin-header__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--nb-space-3);
+  min-width: 0;
+}
+
+.nb-admin-header__suffix {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-pill);
+  padding: 0.2rem 0.5rem;
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-xs);
+  font-weight: var(--nb-font-weight-bold);
+  white-space: nowrap;
+}
+
+.nb-admin-header__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--nb-space-2);
+  min-width: 0;
+}
+
+.nb-admin-sidebar {
+  position: sticky;
+  top: 4.25rem;
+  align-self: start;
+  height: calc(100dvh - 4.25rem);
+  overflow-y: auto;
+  border-right: 1px solid var(--nb-color-border);
+  background: var(--nb-color-surface);
+}
+
+.nb-admin-sidebar__nav {
+  display: grid;
+  gap: var(--nb-space-5);
+  padding: var(--nb-space-5) var(--nb-space-3);
+}
+
+.nb-admin-sidebar__group {
+  display: grid;
+  gap: var(--nb-space-1);
+  min-width: 0;
+}
+
+.nb-admin-sidebar__group-title {
+  margin: 0;
+  padding: 0.4rem 0.7rem;
+  color: var(--nb-color-text-subtle);
+  font-size: var(--nb-font-size-xs);
+  font-weight: var(--nb-font-weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.nb-admin-sidebar__link {
+  display: flex;
+  align-items: center;
+  gap: var(--nb-space-2);
+  min-width: 0;
+  min-height: 2.65rem;
+  border-radius: var(--nb-radius-md);
+  padding: 0.5rem 0.7rem;
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+  font-weight: var(--nb-font-weight-semibold);
+  text-decoration: none;
+}
+
+.nb-admin-sidebar__link:hover,
+.nb-admin-sidebar__link[aria-current='page'] {
+  background: var(--nb-color-surface-emphasis);
+  color: var(--nb-color-text);
+}
+
+.nb-admin-sidebar__label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.nb-admin-sidebar__badge {
+  margin-left: auto;
+  background: var(--nb-color-danger);
+  color: var(--nb-color-on-danger);
+}
+
+.nb-admin-content {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.nb-admin-content > .nb-page {
+  width: 100%;
+}
+
+@media (max-width: 64rem) {
+  .nb-admin-shell {
+    display: block;
+  }
+
+  .nb-admin-header {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .nb-menu-button {
+    display: inline-flex !important;
+    order: initial;
+  }
+
+  .nb-admin-header__actions {
+    order: initial;
+    margin-left: 0;
+  }
+
+  .nb-admin-sidebar {
+    position: fixed;
+    inset: 4.25rem auto 0 0;
+    z-index: var(--nb-z-drawer);
+    width: min(20rem, calc(100vw - 3.5rem));
+    transform: translateX(-110%);
+    box-shadow: var(--nb-elevation-overlay);
+    transition: transform var(--nb-motion-standard) var(--nb-motion-ease);
+  }
+
+  .nb-admin-sidebar.is-open {
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 34rem) {
+  .nb-admin-header {
+    gap: var(--nb-space-3);
+    padding-inline: var(--nb-space-3);
+  }
+
+  .nb-admin-header__actions .nb-account-trigger__name,
+  .nb-admin-header__actions .user-chip-name {
+    display: none;
+  }
+}

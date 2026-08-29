@@ -1,56 +1,189 @@
-/* A small, dependency-free design system shared by both stations. */
-
+/*
+ * NonbiriAPI design tokens
+ *
+ * This file is the only CSS source of truth for visual primitives. Keep the
+ * legacy aliases at the bottom of each group while the existing alpha pages
+ * migrate to the `.nb-*` component vocabulary.
+ */
 :root {
   color-scheme: light;
 
-  --nb-color-bg: #f5f7fb;
+  /* Surfaces and ink */
+  --nb-color-bg: #f3f7fb;
   --nb-color-surface: #ffffff;
-  --nb-color-surface-alt: #eef2f7;
   --nb-color-surface-raised: #ffffff;
-  --nb-color-text: #172033;
-  --nb-color-text-muted: #627087;
-  --nb-color-border: #d8e0eb;
-  --nb-color-border-strong: #b9c6d7;
-  --nb-color-accent: #315bea;
-  --nb-color-accent-soft: #e8edff;
+  --nb-color-surface-muted: #edf3f8;
+  --nb-color-surface-emphasis: #e3edf8;
+  --nb-color-border: #d8e2ec;
+  --nb-color-border-strong: #b9c9d9;
+  --nb-color-text: #172536;
+  --nb-color-text-muted: #607084;
+  --nb-color-text-subtle: #7c8a9a;
+  --nb-color-on-accent: #ffffff;
+  --nb-color-on-danger: #ffffff;
   --nb-color-accent-contrast: #ffffff;
-  --nb-color-danger: #bd3d51;
-  --nb-color-danger-soft: #fff0f2;
-  --nb-color-success: #147a58;
-  --nb-color-success-soft: #e8f7f0;
-  --nb-color-warning: #946114;
-  --nb-color-warning-soft: #fff7df;
-  --nb-shadow-1: 0 1px 2px rgb(27 44 74 / 0.05), 0 8px 24px rgb(27 44 74 / 0.04);
-  --nb-shadow-2: 0 18px 45px rgb(27 44 74 / 0.14);
-  --nb-radius-sm: 7px;
-  --nb-radius-md: 13px;
-  --nb-radius-lg: 22px;
-  --nb-focus-ring: 0 0 0 3px rgb(49 91 234 / 0.25);
-  --nb-transition: 150ms ease;
-  --nb-content-width: 80rem;
+  --nb-color-surface-alt: #f8fafc;
+
+  /* Brand and semantic accents */
+  --nb-color-accent: #2563eb;
+  --nb-color-accent-hover: #1d4ed8;
+  --nb-color-accent-soft: #e7efff;
+  --nb-color-accent-quiet: #f1f5ff;
+  --nb-color-brand-start: #2563eb;
+  --nb-color-brand-end: #7c3aed;
+  --nb-brand-gradient: linear-gradient(135deg, var(--nb-color-brand-start), var(--nb-color-brand-end));
+  --nb-color-success: #138a5b;
+  --nb-color-success-soft: #e5f7ee;
+  --nb-color-warning: #aa6800;
+  --nb-color-warning-soft: #fff2d9;
+  --nb-color-danger: #c33a4b;
+  --nb-color-danger-hover: #a82c3c;
+  --nb-color-danger-soft: #ffeaee;
+  --nb-color-info: #1268a3;
+  --nb-color-info-soft: #e5f3fc;
+  --nb-color-focus: #7c3aed;
+
+  /* Four-point spacing scale */
+  --nb-space-0: 0;
+  --nb-space-1: 0.25rem;
+  --nb-space-2: 0.5rem;
+  --nb-space-3: 0.75rem;
+  --nb-space-4: 1rem;
+  --nb-space-5: 1.25rem;
+  --nb-space-6: 1.5rem;
+  --nb-space-7: 1.75rem;
+  --nb-space-8: 2rem;
+  --nb-space-10: 2.5rem;
+  --nb-space-12: 3rem;
+  --nb-space-16: 4rem;
+
+  /* Typography */
+  --nb-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --nb-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --nb-font-size-xs: 0.75rem;
+  --nb-font-size-sm: 0.875rem;
+  --nb-font-size-md: 1rem;
+  --nb-font-size-lg: 1.125rem;
+  --nb-font-size-xl: 1.25rem;
+  --nb-font-size-2xl: 1.75rem;
+  --nb-font-size-hero: clamp(2rem, 4vw, 3rem);
+  --nb-line-tight: 1.2;
+  --nb-line-normal: 1.5;
+  --nb-line-relaxed: 1.7;
+  --nb-font-weight-regular: 400;
+  --nb-font-weight-medium: 500;
+  --nb-font-weight-semibold: 600;
+  --nb-font-weight-bold: 700;
+
+  /* Shapes, depth and motion */
+  --nb-radius-none: 0;
+  --nb-radius-sm: 0.5rem;
+  --nb-radius-md: 0.75rem;
+  --nb-radius-lg: 1rem;
+  --nb-radius-xl: 1.25rem;
+  --nb-radius-pill: 999px;
+  --nb-elevation-0: none;
+  --nb-elevation-1: 0 1px 2px rgb(31 52 73 / 0.08), 0 4px 12px rgb(31 52 73 / 0.04);
+  --nb-elevation-2: 0 10px 30px rgb(31 52 73 / 0.12), 0 2px 8px rgb(31 52 73 / 0.06);
+  --nb-elevation-overlay: 0 18px 48px rgb(31 52 73 / 0.18);
+  --nb-motion-micro: 120ms;
+  --nb-motion-standard: 200ms;
+  --nb-motion-scene: 400ms;
+  --nb-motion-ease: cubic-bezier(0.2, 0.65, 0.3, 1);
+  --nb-focus-ring: 0 0 0 3px rgb(124 58 237 / 0.28);
+
+  /* Layout and layering */
+  --nb-content-readable: 62rem;
+  --nb-content-wide: 88rem;
+  --nb-shell-breakpoint: 70rem;
+  --nb-z-base: 0;
+  --nb-z-sticky: 20;
+  --nb-z-drawer: 40;
+  --nb-z-overlay: 60;
+  --nb-z-dialog: 80;
+  --nb-z-toast: 100;
+
+  /* Local preferences are changed by ThemeProvider data attributes. */
+  --nb-density-factor: 1;
+  --nb-font-scale: 1;
+
+  /* Alpha compatibility aliases. */
+  --nb-bg: var(--nb-color-bg);
+  --nb-surface: var(--nb-color-surface);
+  --nb-surface-raised: var(--nb-color-surface-raised);
+  --nb-border: var(--nb-color-border);
+  --nb-border-strong: var(--nb-color-border-strong);
+  --nb-text: var(--nb-color-text);
+  --nb-muted: var(--nb-color-text-muted);
+  --nb-accent: var(--nb-color-accent);
+  --nb-accent-hover: var(--nb-color-accent-hover);
+  --nb-danger: var(--nb-color-danger);
+  --nb-success: var(--nb-color-success);
+  --nb-warning: var(--nb-color-warning);
+  --nb-info: var(--nb-color-info);
+  --nb-shadow-sm: var(--nb-elevation-1);
+  --nb-shadow-md: var(--nb-elevation-2);
+  --nb-shadow-1: var(--nb-elevation-1);
+  --nb-shadow-2: var(--nb-elevation-2);
+  --nb-radius: var(--nb-radius-md);
+  --nb-radius-sm-legacy: var(--nb-radius-sm);
+  --nb-transition: var(--nb-motion-standard) var(--nb-motion-ease);
+  --nb-content-width: var(--nb-content-readable);
 }
 
 [data-theme='dark'] {
   color-scheme: dark;
+  --nb-color-bg: #101923;
+  --nb-color-surface: #172330;
+  --nb-color-surface-raised: #1d2c3c;
+  --nb-color-surface-muted: #1b2938;
+  --nb-color-surface-emphasis: #23374c;
+  --nb-color-border: #2d4052;
+  --nb-color-border-strong: #486075;
+  --nb-color-text: #eef5fb;
+  --nb-color-text-muted: #b2c1d0;
+  --nb-color-text-subtle: #8fa2b5;
+  --nb-color-on-accent: #ffffff;
+  --nb-color-on-danger: #111827;
+  /*
+   * Dark mode separates the link accent from filled-control colors. The
+   * former is deliberately light enough to read on dark surfaces; the
+   * latter is dark ink for the light-blue primary control background.
+   */
+  --nb-color-accent-contrast: #111827;
+  --nb-color-surface-alt: #1d2a38;
+  --nb-color-accent: #8bb5ff;
+  --nb-color-accent-hover: #b4cdff;
+  --nb-color-accent-soft: #233a65;
+  --nb-color-accent-quiet: #1b2b49;
+  --nb-color-brand-start: #3f6fd8;
+  --nb-color-brand-end: #7049b8;
+  --nb-color-success: #64d19e;
+  --nb-color-success-soft: #1c4637;
+  --nb-color-warning: #ffca68;
+  --nb-color-warning-soft: #4a371d;
+  --nb-color-danger: #ff8b9b;
+  --nb-color-danger-hover: #ffb0bb;
+  --nb-color-danger-soft: #4d2730;
+  --nb-color-info: #79c4f2;
+  --nb-color-info-soft: #1d3e52;
+  --nb-color-focus: #c1a6ff;
+  --nb-elevation-1: 0 1px 2px rgb(0 0 0 / 0.28), 0 4px 12px rgb(0 0 0 / 0.18);
+  --nb-elevation-2: 0 12px 32px rgb(0 0 0 / 0.32), 0 2px 8px rgb(0 0 0 / 0.2);
+  --nb-elevation-overlay: 0 18px 48px rgb(0 0 0 / 0.45);
+  --nb-focus-ring: 0 0 0 3px rgb(193 166 255 / 0.34);
+}
 
-  --nb-color-bg: #101521;
-  --nb-color-surface: #171e2d;
-  --nb-color-surface-alt: #202a3b;
-  --nb-color-surface-raised: #1c2638;
-  --nb-color-text: #edf2fb;
-  --nb-color-text-muted: #9aa9c1;
-  --nb-color-border: #2f3c51;
-  --nb-color-border-strong: #45546e;
-  --nb-color-accent: #88a5ff;
-  --nb-color-accent-soft: #242f58;
-  --nb-color-accent-contrast: #0d1630;
-  --nb-color-danger: #ff8797;
-  --nb-color-danger-soft: #3c222e;
-  --nb-color-success: #6bd1aa;
-  --nb-color-success-soft: #173a34;
-  --nb-color-warning: #eec373;
-  --nb-color-warning-soft: #3a3020;
-  --nb-shadow-1: 0 1px 2px rgb(0 0 0 / 0.22), 0 10px 28px rgb(0 0 0 / 0.12);
-  --nb-shadow-2: 0 20px 50px rgb(0 0 0 / 0.4);
-  --nb-focus-ring: 0 0 0 3px rgb(136 165 255 / 0.35);
+[data-density='compact'] {
+  --nb-density-factor: 0.875;
+}
+
+[data-font-size='large'] {
+  --nb-font-scale: 1.125;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+  }
 }

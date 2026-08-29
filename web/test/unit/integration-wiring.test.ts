@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import adminEn from '../../src/admin/i18n/en.json';
 import adminZh from '../../src/admin/i18n/zh.json';
-import { NAV_ITEMS as adminNav } from '../../src/admin/navigation';
+import { ADMIN_PRIMARY_NAV as adminNav } from '../../src/admin/navigation';
 import { router as adminRouter } from '../../src/admin/routes';
 import userEn from '../../src/user/i18n/en.json';
 import userZh from '../../src/user/i18n/zh.json';
-import { NAV_ITEMS as userNav } from '../../src/user/navigation';
+import { USER_PRIMARY_NAV as userNav } from '../../src/user/navigation';
 import { router as userRouter } from '../../src/user/routes';
 import { itemNames } from '../../src/user/games/fishing/text';
 
@@ -42,23 +42,19 @@ describe('alpha.3 central route and navigation wiring', () => {
       '/:home',
       '/endpoints:endpoints',
       '/models:models',
-      '/games:games',
       '/charity:charity',
-      '/keys:keys',
+      '/games:games',
       '/debug:debug',
-      '/logs:logs',
-      '/issues:issues',
-      '/account:account',
     ]);
     expect(adminNav.map(({ to, key }) => `${to}:${key}`)).toEqual([
-      '/:dashboard',
-      '/users:users',
-      '/logs:logs',
-      '/endpoints:endpoints',
-      '/alerts:alerts',
-      '/settings:settings',
-      '/games:games',
-      '/charity:charity',
+      '/:admin-home',
+      '/users:admin-users',
+      '/logs:admin-logs',
+      '/endpoints:admin-endpoints',
+      '/alerts:admin-alerts',
+      '/settings:admin-settings',
+      '/charity:admin-charity',
+      '/games:admin-games',
     ]);
   });
 });

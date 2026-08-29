@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>NonbiriAPI</title>
+  <defs>
+    <linearGradient id="nb-mark-gradient" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#nb-mark-gradient)"/>
+  <path d="M19 45V19h7l19 16V19h7v26h-7L26 29v16z" fill="#fff"/>
+</svg>

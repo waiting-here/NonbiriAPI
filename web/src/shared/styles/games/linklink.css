@@ -1,0 +1,6 @@
+.nb-game-station--linklink {
+  --nb-game-glow: rgb(16 185 129 / 0.17);
+  background:
+    linear-gradient(155deg, rgb(16 185 129 / 0.08), transparent 42%),
+    var(--nb-color-surface);
+}

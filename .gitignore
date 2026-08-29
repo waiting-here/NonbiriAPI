@@ -88,6 +88,9 @@ i18n.json
 *.gif
 *.webp
 *.svg
+!web/src/shared/assets/
+!web/src/shared/assets/*.svg
+!web/src/shared/assets/NOTICE.md
 
 # ===== Go =====
 

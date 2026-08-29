@@ -1,18 +1,21 @@
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, apiFetch } from './http';
-import { asRecord, optionalText, text, type UnknownRecord } from './normalize';
+import { asRecord, type UnknownRecord } from './normalize';
 
 // Display-only public site configuration. The backend /api/config endpoint
-// projects a strict allowlist (site_name, site_logo_url, default_locale) and
-// never carries secrets. Values are bounded and control-character-cleaned
-// again here; the logo URL is additionally constrained to http(s) so a
-// misconfigured or hostile value can never become a javascript:/data: vector
-// when rendered into an <img src>.
+// projects a strict allowlist (site_name, site_logo_url, legal overrides, and
+// station state) and
+// never carries secrets. The browser treats the response as a closed DTO:
+// missing/unknown fields and wrong types fail closed instead of silently
+// turning a malformed response into permissive maintenance=false state. The
+// logo URL is additionally constrained to public HTTPS so a misconfigured or
+// hostile value can never become a javascript:/data: vector when rendered
+// into an <img src>. Credentials in a configured URL are also rejected
+// because the browser must never send them to a branding host.
 
 export interface PublicConfig {
   siteName: string;
   siteLogoURL: string;
-  defaultLocale: 'zh' | 'en' | '';
   legalPrivacyOverrideZh: string;
   legalPrivacyOverrideEn: string;
   legalTermsOverrideZh: string;
@@ -20,58 +23,108 @@ export interface PublicConfig {
   legalAuthoritativeLocale: 'zh' | 'en' | '';
   maintenanceMode: boolean;
   registrationOpen: boolean;
+  announcementEpoch: string;
 }
 
-const HTTP_S = /^https?:\/\//i;
 const MAX_LEGAL_OVERRIDE = 65536;
+const MAX_SITE_NAME = 256;
+const MAX_LOGO_URL = 2048;
+const PUBLIC_CONFIG_KEYS = new Set([
+  'site_name',
+  'site_logo_url',
+  'legal_privacy_override_zh',
+  'legal_privacy_override_en',
+  'legal_terms_override_zh',
+  'legal_terms_override_en',
+  'legal_authoritative_locale',
+  'maintenance_mode',
+  'registration_open',
+  'announcement_epoch',
+]);
+
+// Every OID in the frozen wire contract uses 16 random bytes encoded as
+// unpadded base64url. The final quantum has four legal tail characters when
+// the unused bits are zero; keeping this check local prevents a malformed
+// bootstrap from becoming a cache/event identity later in the app.
+const ANNOUNCEMENT_EPOCH_PATTERN = /^b1e_[A-Za-z0-9_-]{21}[AQgw]$/;
+
+function invalidPublicConfig(): never {
+  throw new ApiError('invalid_response', 'The server returned an invalid public configuration.', 200);
+}
+
+function byteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
+}
+
+function requiredText(record: UnknownRecord, key: string, maxBytes: number, multiline = false): string {
+  const value = record[key];
+  if (typeof value !== 'string' || byteLength(value) > maxBytes) invalidPublicConfig();
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    const allowedWhitespace = multiline && (codePoint === 9 || codePoint === 10 || codePoint === 13);
+    if (codePoint < 32 || codePoint === 127) {
+      if (!allowedWhitespace) invalidPublicConfig();
+    }
+  }
+  return value;
+}
+
+export function isPublicLogoURL(
+  value: string | undefined | null,
+  origin = typeof window !== 'undefined' ? window.location.origin : '',
+): value is string {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:'
+      && Boolean(url.hostname)
+      && !url.username
+      && !url.password
+      && (!origin || url.origin !== origin);
+  } catch {
+    return false;
+  }
+}
 
 // Multiline legal override text preserves newlines/tabs (operators author
 // multi-paragraph documents) while dropping other control characters. This
 // mirrors the backend multiline bound; the value is rendered as text nodes
 // only, so it cannot become an HTML injection vector.
-function multilineText(value: unknown, max: number): string {
-  if (typeof value !== 'string') return '';
-  let out = '';
-  for (const character of value) {
-    const codePoint = character.codePointAt(0) ?? 0;
-    if (codePoint === 9 || codePoint === 10 || codePoint === 13) {
-      out += character;
-      continue;
-    }
-    if (codePoint < 32 || codePoint === 127) continue;
-    out += character;
+export function normalizePublicConfig(payload: unknown): PublicConfig {
+  const record = asRecord(payload);
+  if (!record || Object.keys(record).some((key) => !PUBLIC_CONFIG_KEYS.has(key))) invalidPublicConfig();
+  for (const key of PUBLIC_CONFIG_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(record, key)) invalidPublicConfig();
   }
-  const characters = Array.from(out);
-  return characters.length > max ? characters.slice(0, max).join('') : out;
-}
-
-function normalizePublicConfig(payload: unknown): PublicConfig {
-  const record = (asRecord(payload) ?? {}) as UnknownRecord;
-  const rawLogo = optionalText(record.site_logo_url, 2048);
-  const siteLogoURL = rawLogo && HTTP_S.test(rawLogo) ? rawLogo : '';
+  const rawLogo = requiredText(record, 'site_logo_url', MAX_LOGO_URL);
+  const siteLogoURL = rawLogo && isPublicLogoURL(rawLogo) ? rawLogo : '';
+  const legalAuthoritativeLocale = record.legal_authoritative_locale;
+  if (legalAuthoritativeLocale !== '' && legalAuthoritativeLocale !== 'zh' && legalAuthoritativeLocale !== 'en') {
+    invalidPublicConfig();
+  }
+  if (typeof record.maintenance_mode !== 'boolean' || typeof record.registration_open !== 'boolean') {
+    invalidPublicConfig();
+  }
+  if (typeof record.announcement_epoch !== 'string' || !ANNOUNCEMENT_EPOCH_PATTERN.test(record.announcement_epoch)) {
+    invalidPublicConfig();
+  }
   return {
-    siteName: text(record.site_name, 256, ''),
+    siteName: requiredText(record, 'site_name', MAX_SITE_NAME),
     siteLogoURL,
-    defaultLocale:
-      record.default_locale === 'zh' || record.default_locale === 'en'
-        ? (record.default_locale as 'zh' | 'en')
-        : '',
-    legalPrivacyOverrideZh: multilineText(record.legal_privacy_override_zh, MAX_LEGAL_OVERRIDE),
-    legalPrivacyOverrideEn: multilineText(record.legal_privacy_override_en, MAX_LEGAL_OVERRIDE),
-    legalTermsOverrideZh: multilineText(record.legal_terms_override_zh, MAX_LEGAL_OVERRIDE),
-    legalTermsOverrideEn: multilineText(record.legal_terms_override_en, MAX_LEGAL_OVERRIDE),
-    legalAuthoritativeLocale:
-      record.legal_authoritative_locale === 'zh' || record.legal_authoritative_locale === 'en'
-        ? (record.legal_authoritative_locale as 'zh' | 'en')
-        : '',
-    maintenanceMode: record.maintenance_mode === true,
-    registrationOpen: record.registration_open !== false,
+    legalPrivacyOverrideZh: requiredText(record, 'legal_privacy_override_zh', MAX_LEGAL_OVERRIDE, true),
+    legalPrivacyOverrideEn: requiredText(record, 'legal_privacy_override_en', MAX_LEGAL_OVERRIDE, true),
+    legalTermsOverrideZh: requiredText(record, 'legal_terms_override_zh', MAX_LEGAL_OVERRIDE, true),
+    legalTermsOverrideEn: requiredText(record, 'legal_terms_override_en', MAX_LEGAL_OVERRIDE, true),
+    legalAuthoritativeLocale: legalAuthoritativeLocale as 'zh' | 'en' | '',
+    maintenanceMode: record.maintenance_mode,
+    registrationOpen: record.registration_open,
+    announcementEpoch: record.announcement_epoch,
   };
 }
 
 export function usePublicConfig(enabled = true, path = '/api/config') {
   return useQuery({
-    queryKey: ['public-config'] as const,
+    queryKey: ['public-config', path] as const,
     queryFn: async () => {
       const payload = await apiFetch<unknown>(path);
       if (payload === undefined) throw new ApiError('invalid_response', 'The server returned an invalid response.', 200);

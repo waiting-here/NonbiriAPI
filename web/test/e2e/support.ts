@@ -174,9 +174,15 @@ export async function mockPublicConfig(page: Page, station: TestStation): Promis
     path: station === 'admin' ? '/admin/api/config' : '/api/config',
     body: {
       site_name: 'Fixture Site',
-      default_locale: 'en',
+      site_logo_url: '',
+      legal_privacy_override_zh: '',
+      legal_privacy_override_en: '',
+      legal_terms_override_zh: '',
+      legal_terms_override_en: '',
+      legal_authoritative_locale: '',
       maintenance_mode: false,
-      registration_open: false,
+      registration_open: true,
+      announcement_epoch: 'b1e_AAAAAAAAAAAAAAAAAAAAAA',
     },
   });
 }
