@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -203,6 +204,41 @@ func mutateBootstrapCurrent(t *testing.T, path, statement string, args ...any) {
 	}
 	if err := database.Close(); err != nil {
 		t.Fatalf("close external mutation database: %v", err)
+	}
+}
+
+func mutateBootstrapSchemaObjectSQL(t *testing.T, path, objectType, objectName, oldFragment, newFragment string) {
+	t.Helper()
+	database, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open current database to mutate schema object: %v", err)
+	}
+	database.SetMaxOpenConns(1)
+	defer func() { _ = database.Close() }()
+
+	var original string
+	if err := database.QueryRow(`SELECT sql FROM sqlite_schema WHERE type=? AND name=?`, objectType, objectName).Scan(&original); err != nil {
+		t.Fatalf("read schema object %s: %v", objectName, err)
+	}
+	if !strings.Contains(original, oldFragment) {
+		t.Fatalf("schema object %s does not contain current contract", objectName)
+	}
+	mutated := strings.Replace(original, oldFragment, newFragment, 1)
+	if _, err := database.Exec(`PRAGMA writable_schema=ON`); err != nil {
+		t.Fatalf("enable writable schema for %s: %v", objectName, err)
+	}
+	result, err := database.Exec(`UPDATE sqlite_schema SET sql=? WHERE type=? AND name=?`, mutated, objectType, objectName)
+	if err != nil {
+		t.Fatalf("mutate schema object %s: %v", objectName, err)
+	}
+	if rows, rowsErr := result.RowsAffected(); rowsErr != nil || rows != 1 {
+		if rowsErr != nil {
+			t.Fatalf("observe schema object %s mutation: %v", objectName, rowsErr)
+		}
+		t.Fatalf("schema object %s mutation changed %d rows", objectName, rows)
+	}
+	if _, err := database.Exec(`PRAGMA writable_schema=OFF`); err != nil {
+		t.Fatalf("disable writable schema for %s: %v", objectName, err)
 	}
 }
 
@@ -558,6 +594,17 @@ func TestGenerationTwoCurrentRejectsExternallyMutatedValidDatabaseWithoutSourceW
 		{name: "extra-schema-table", mutate: func(t *testing.T, path string) {
 			t.Helper()
 			mutateBootstrapCurrent(t, path, `CREATE TABLE bootstrap_extra_schema_object(id INTEGER PRIMARY KEY)`)
+		}},
+		{name: "old-maintenance-actor-contract", mutate: func(t *testing.T, path string) {
+			t.Helper()
+			const currentActorContract = "CHECK((actor_user_id IS NULL AND actor_discord_id IS NULL AND actor_role IS NULL) OR (actor_user_id IS NOT NULL AND actor_discord_id IS NULL AND actor_role IS NOT NULL AND actor_role='admin') OR (actor_user_id IS NOT NULL AND actor_discord_id IS NOT NULL AND actor_role IS NOT NULL AND actor_role='steward'))"
+			const oldActorContract = "CHECK((actor_user_id IS NULL AND actor_discord_id IS NULL AND actor_role IS NULL) OR (actor_user_id IS NOT NULL AND actor_discord_id IS NOT NULL AND actor_role IS NOT NULL))"
+			mutateBootstrapSchemaObjectSQL(t, path, "table", "maintenance_events", currentActorContract, oldActorContract)
+		}},
+		{name: "old-maintenance-deidentification-trigger", mutate: func(t *testing.T, path string) {
+			t.Helper()
+			const currentDeadlineContract = " OR\n     (OLD.resolved_at IS NOT NULL AND OLD.deidentify_at IS NOT NULL AND unixepoch()>=OLD.deidentify_at)"
+			mutateBootstrapSchemaObjectSQL(t, path, "trigger", "maintenance_events_no_update", currentDeadlineContract, "")
 		}},
 		{name: "missing-fixed-seed", mutate: func(t *testing.T, path string) {
 			t.Helper()
