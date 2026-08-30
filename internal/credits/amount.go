@@ -1,13 +1,13 @@
-// Package credits holds the pure economy primitives shared by every
-// accounting consumer: canonical decimal-string amounts, checked integer
-// arithmetic, the frozen four-bucket pricing formula, and the reservation
-// state machine.
+// Package credits holds request-local economy primitives: canonical int64
+// milli-credit inputs, checked pricing arithmetic, and the reservation state
+// model. Persistent wallet, pool and aggregate accounting uses the fixed-width
+// internal/ledger package and must never narrow those values back to int64.
 //
 // Money rules (implementation contract §1.2/§5.1):
 //
-//   - every economic value is an integer number of milli-credits (milli =
-//     1/1000 of a display credit) persisted as int64; there is no float
-//     anywhere in accounting;
+//   - each external pricing primitive is an integer number of milli-credits
+//     (milli = 1/1000 of a display credit) bounded to int64; there is no float
+//     anywhere in accounting, while account/ledger aggregates are SM128;
 //   - wire values are canonical decimal strings: optional "-" for the values
 //     that may be negative, digits only, no exponent, no "+", no leading
 //     zeros, no whitespace, no "-0";
