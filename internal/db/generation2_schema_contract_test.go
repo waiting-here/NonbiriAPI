@@ -142,6 +142,60 @@ func TestGenerationTwoCanonicalDDLExecutes(t *testing.T) {
 	}
 }
 
+func TestGenerationTwoRequestAttemptModelUsesUnicodeScalarBoundary(t *testing.T) {
+	database := openGenerationTwoDDLForTest(t)
+	userID := hostileInsertUser(t, database, "request-attempt-model", 0, 0)
+
+	insertLog := func(requestID, route, upstreamModelID string) int64 {
+		t.Helper()
+		hostileInsertLogicalRequest(t, database, requestID, userID, route, 1)
+		result, err := database.Exec(`
+INSERT INTO request_logs(logical_request_id,user_id,model,upstream_model_id,route_kind,endpoint_base_url,started_at)
+VALUES(?,?,'model',?,?,'https://upstream.example/v1',0)`, requestID, userID, upstreamModelID, route)
+		if err != nil {
+			t.Fatalf("insert %s request log: %v", route, err)
+		}
+		logID, err := result.LastInsertId()
+		if err != nil {
+			t.Fatalf("read request log id: %v", err)
+		}
+		return logID
+	}
+	insertAttempt := func(claimID string, logID int64, upstreamModelID string) error {
+		_, err := database.Exec(`
+INSERT INTO request_attempts(
+ claim_id,request_log_id,attempt_seq,connector_type,canonical_base_url,upstream_model_id,
+ result_kind,started_at,completed_at)
+VALUES(?,?,1,'openai-compatible','https://upstream.example/v1',?,'synthetic',0,0)`,
+			claimID, logID, upstreamModelID)
+		return err
+	}
+
+	discoveryLogID := insertLog(hostileOIDVariant("req_", 'D', 'Q'), "model_discovery", "")
+	if err := insertAttempt(hostileOIDVariant("clm_", 'D', 'Q'), discoveryLogID, ""); err != nil {
+		t.Fatalf("discovery empty upstream model rejected: %v", err)
+	}
+
+	maxModel := strings.Repeat("界", 512)
+	selfLogID := insertLog(hostileOIDVariant("req_", 'S', 'Q'), "openai_chat_completions", maxModel)
+	if err := insertAttempt(hostileOIDVariant("clm_", 'S', 'Q'), selfLogID, maxModel); err != nil {
+		t.Fatalf("512-scalar upstream model rejected: %v", err)
+	}
+
+	tooLong := strings.Repeat("界", 513)
+	requestID := hostileOIDVariant("req_", 'T', 'Q')
+	hostileInsertLogicalRequest(t, database, requestID, userID, "openai_chat_completions", 1)
+	if _, err := database.Exec(`
+INSERT INTO request_logs(logical_request_id,user_id,model,upstream_model_id,route_kind,endpoint_base_url,started_at)
+VALUES(?,?,'model',?,'openai_chat_completions','https://upstream.example/v1',0)`, requestID, userID, tooLong); err == nil {
+		t.Fatal("request log accepted a 513-scalar upstream model")
+	}
+	attemptLogID := insertLog(hostileOIDVariant("req_", 'U', 'Q'), "openai_chat_completions", maxModel)
+	if err := insertAttempt(hostileOIDVariant("clm_", 'T', 'Q'), attemptLogID, tooLong); err == nil {
+		t.Fatal("request attempt accepted a 513-scalar upstream model")
+	}
+}
+
 func TestGenerationTwoOIDConstraintsRejectHostileValues(t *testing.T) {
 	db := openGenerationTwoDDLForTest(t)
 	good := "op_" + strings.Repeat("A", 21) + "Q"
