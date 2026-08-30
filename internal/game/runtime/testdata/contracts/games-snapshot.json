@@ -1,0 +1,23 @@
+{
+  "server_now": 2000000000,
+  "balance": "1000000",
+  "tutorial_rps_seen": false,
+  "games_enabled": true,
+  "fishing": {"enabled": true, "available": true, "bait_prices": {"worm": "2500", "lure": "5000", "premium": "7500"}},
+  "linklink": {
+    "enabled": false,
+    "specs": {
+      "6x8": {"enabled": false, "price": "0", "seconds": 150},
+      "8x8": {"enabled": false, "price": "0", "seconds": 180},
+      "10x10": {"enabled": false, "price": "0", "seconds": 240}
+    }
+  },
+  "rps": {
+    "enabled": false,
+    "modes": {
+      "quick": {"enabled": false, "base": "0", "pumps_bp": {"platform": 100, "welfare": 100, "thursday": 100}, "queue_seconds": 120, "gesture_seconds": 20, "dealer_seconds": 15, "follower_seconds": 15, "queue_capacity": 4096},
+      "standard": {"enabled": false, "base": "0", "pumps_bp": {"platform": 100, "welfare": 100, "thursday": 100}, "queue_seconds": 120, "gesture_seconds": 20, "dealer_seconds": 15, "follower_seconds": 15, "queue_capacity": 4096},
+      "deathmatch": {"enabled": false, "base": "0", "pumps_bp": {"platform": 100, "welfare": 100, "thursday": 100}, "queue_seconds": 120, "gesture_seconds": 20, "dealer_seconds": 15, "follower_seconds": 15, "queue_capacity": 4096}
+    }
+  }
+}
