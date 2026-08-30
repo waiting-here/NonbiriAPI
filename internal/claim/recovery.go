@@ -139,26 +139,24 @@ EXISTS(SELECT 1 FROM dispatch_claims WHERE logical_request_id=? AND purpose='deb
 		requestID, requestID).Scan(&dispatched, &debugLive); err != nil {
 		return false, fmt.Errorf("claim: classify request recovery: %w", err)
 	}
-	input := CompleteRequestInput{
-		RequestID: requestID,
-		Caller: CallerResult{
+	input := CompleteRequestInput{RequestID: requestID}
+	if request.Route == RouteDiscovery {
+		input.Caller = CallerResult{Class: ResultSuccess, Status: 202}
+		input.Disposition = AccountingNone
+	} else {
+		input.Caller = CallerResult{
 			Class:     ResultFailed,
 			Status:    503,
 			ErrorCode: httperr.CodeServiceUnavailable,
-		},
-		Disposition: AccountingRelease,
-	}
-	if request.Route == RouteDiscovery {
-		input.Disposition = AccountingNone
-	}
-	if dispatched != 0 {
-		input.Caller.Status = 502
-		input.Caller.ErrorCode = httperr.CodeUpstream
-		if debugLive != 0 {
-			input.Caller.Status = 422
-			input.Caller.ErrorCode = httperr.CodeDebugLiveCancelled
 		}
-		if request.Route != RouteDiscovery {
+		input.Disposition = AccountingRelease
+		if dispatched != 0 {
+			input.Caller.Status = 502
+			input.Caller.ErrorCode = httperr.CodeUpstream
+			if debugLive != 0 {
+				input.Caller.Status = 422
+				input.Caller.ErrorCode = httperr.CodeDebugLiveCancelled
+			}
 			input.Disposition = AccountingCommit
 			input.ActualChargeMilli = request.ReservedMilli
 		}
