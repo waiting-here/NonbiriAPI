@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -21,15 +22,20 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
+	"github.com/waiting-here/NonbiriAPI/internal/charity"
+	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
+	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/donation"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/resourcebridge"
+	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 	"github.com/waiting-here/NonbiriAPI/web"
 )
@@ -245,16 +251,21 @@ func newHTTPHandler(cfg *config.Config) (http.Handler, error) {
 }
 
 type application struct {
-	handler     http.Handler
-	authRuntime *auth.Runtime
-	bridge      *resourcebridge.Runtime
-	claims      *claim.Service
-	authorizer  *authz.Authorizer
-	elevation   *elevation.Manager
-	gate        *maintenance.Gate
-	registry    *maintenance.Registry
-	maintenance *maintenance.Service
-	egress      *egress.Stack
+	handler         http.Handler
+	authRuntime     *auth.Runtime
+	bridge          *resourcebridge.Runtime
+	claims          *claim.Service
+	resourceRepo    *resources.Repository
+	discoveryWorker *resources.DiscoveryWorkerPool
+	donations       *donation.Service
+	charity         *charity.Service
+	charityRouting  *charityrouting.Service
+	authorizer      *authz.Authorizer
+	elevation       *elevation.Manager
+	gate            *maintenance.Gate
+	registry        *maintenance.Registry
+	maintenance     *maintenance.Service
+	egress          *egress.Stack
 
 	closeOnce sync.Once
 	closeErr  error
@@ -271,6 +282,9 @@ func (a *application) Close() error {
 				closeErrors = append(closeErrors, err)
 			}
 		}
+		if a.discoveryWorker != nil {
+			a.discoveryWorker.Close()
+		}
 		if a.bridge != nil {
 			if err := a.bridge.Close(); err != nil {
 				closeErrors = append(closeErrors, err)
@@ -282,6 +296,48 @@ func (a *application) Close() error {
 		a.closeErr = errors.Join(closeErrors...)
 	})
 	return a.closeErr
+}
+
+const (
+	discoveryWorkerMaxConcurrent = 4
+	discoveryWorkerMaxAdmitted   = 32
+	discoveryWorkerTimeout       = egress.DefaultRequestTimeout
+)
+
+// roleFinalTxAuthorizer adapts the request actor established by auth.Runtime
+// to the exact live role checks owned by authz.Authorizer. It carries no
+// cached authorization result: every domain call supplies its own final
+// transaction and revalidates the session, account and role in that tx.
+type roleFinalTxAuthorizer struct {
+	authorizer *authz.Authorizer
+}
+
+var _ donation.RoleFinalTxAuthorizer = (*roleFinalTxAuthorizer)(nil)
+
+func (authorizer *roleFinalTxAuthorizer) AuthorizeAdminMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
+	return authorizer.authorize(ctx, tx, userID, authz.ActorAdminSession, authz.RoleAdministrator)
+}
+
+func (authorizer *roleFinalTxAuthorizer) AuthorizeStewardMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
+	return authorizer.authorize(ctx, tx, userID, authz.ActorUserSession, authz.RoleSteward)
+}
+
+func (authorizer *roleFinalTxAuthorizer) authorize(
+	ctx context.Context,
+	tx *sql.Tx,
+	userID int64,
+	kind authz.ActorKind,
+	role authz.Role,
+) error {
+	if authorizer == nil || authorizer.authorizer == nil || ctx == nil || tx == nil {
+		return errors.New("role final-transaction authorization unavailable")
+	}
+	actor, ok := auth.ActorFromContext(ctx)
+	if !ok || actor.Kind != kind || actor.UserID != userID {
+		return authz.ErrUnauthorized
+	}
+	_, err := authorizer.authorizer.Authorize(ctx, tx, actor, authz.Requirement{Role: role})
+	return err
 }
 
 func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) (*application, error) {
@@ -312,12 +368,16 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		return nil, fmt.Errorf("create egress stack: %w", err)
 	}
 	var bridgeRuntime *resourcebridge.Runtime
+	var discoveryWorker *resources.DiscoveryWorkerPool
 	var authRuntime *auth.Runtime
 	cleanup := func() {
 		if authRuntime != nil {
 			_ = authRuntime.Close()
 		} else {
 			_ = elevationManager.Close()
+		}
+		if discoveryWorker != nil {
+			discoveryWorker.Close()
 		}
 		if bridgeRuntime != nil {
 			_ = bridgeRuntime.Close()
@@ -334,25 +394,6 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err != nil {
 		cleanup()
 		return nil, fmt.Errorf("create local backend: %w", err)
-	}
-	claimService, err := claim.New(claim.Dependencies{DB: store.DB(), Secrets: vault})
-	if err != nil {
-		cleanup()
-		return nil, fmt.Errorf("create claim service: %w", err)
-	}
-	if err := recoverClaimsBeforeListener(startupContext, claimService); err != nil {
-		cleanup()
-		return nil, err
-	}
-	bridgeRuntime, err = resourcebridge.New(resourcebridge.Config{
-		Store:   store,
-		Vault:   vault,
-		Claims:  claimService,
-		Backend: localBackend,
-	})
-	if err != nil {
-		cleanup()
-		return nil, fmt.Errorf("create resource bridge: %w", err)
 	}
 	discordProvider, err := auth.NewHTTPDiscordProvider(auth.HTTPDiscordProviderConfig{
 		ClientID:     cfg.DiscordClientID,
@@ -379,6 +420,115 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("create authentication runtime: %w", err)
 	}
+	roleAuthorizer := &roleFinalTxAuthorizer{authorizer: authorizer}
+	donationService, err := donation.New(donation.Config{
+		Store:      store,
+		OwnerAuth:  authRuntime,
+		RoleAuth:   roleAuthorizer,
+		CursorKeys: vault,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create donation service: %w", err)
+	}
+	charityService, err := charity.New(charity.Config{
+		Store:       store,
+		KeyDeletion: donationService,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create charity service: %w", err)
+	}
+	claimService, err := claim.New(claim.Dependencies{
+		DB:         store.DB(),
+		Secrets:    vault,
+		Accounting: claim.NewLedgerAccounting(),
+		Charity:    charityService,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create claim service: %w", err)
+	}
+	if err := recoverClaimsBeforeListener(startupContext, claimService); err != nil {
+		cleanup()
+		return nil, err
+	}
+	bridgeRuntime, err = resourcebridge.New(resourcebridge.Config{
+		Store:   store,
+		Vault:   vault,
+		Claims:  claimService,
+		Backend: localBackend,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create resource bridge: %w", err)
+	}
+	discoveryWorker, err = resources.NewDiscoveryWorkerPool(
+		discoveryWorkerMaxConcurrent,
+		discoveryWorkerMaxAdmitted,
+		discoveryWorkerTimeout,
+	)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create discovery worker: %w", err)
+	}
+	resourceRepository, err := resources.New(resources.Config{
+		Store:           store,
+		Connectors:      connector.NewDefaultRegistry(),
+		BaseURLs:        outbound,
+		Secrets:         bridgeRuntime,
+		KeyDeletion:     charityService,
+		DiscoveryRail:   bridgeRuntime,
+		DiscoveryWorker: discoveryWorker,
+		CursorKeys:      vault,
+		FinalAuth:       authRuntime,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create resource repository: %w", err)
+	}
+	if _, err := resourceRepository.RecoverStaleDiscoveries(startupContext); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("recover stale discoveries: %w", err)
+	}
+	charityRoutingService, err := charityrouting.New(charityrouting.Config{
+		Store:         store,
+		RoleAuth:      roleAuthorizer,
+		DonationState: donationService,
+		CursorKeys:    vault,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create charity routing service: %w", err)
+	}
+	if err := resources.RegisterRoutes(authRuntime, resourceRepository); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register resource routes: %w", err)
+	}
+	if err := donation.RegisterOwnerRoutes(authRuntime, donationService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register donation owner routes: %w", err)
+	}
+	if err := donation.RegisterAdminRoutes(authRuntime, donationService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register donation administrator routes: %w", err)
+	}
+	if err := donation.RegisterStewardRoutes(authRuntime, donationService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register donation steward routes: %w", err)
+	}
+	if err := charityrouting.RegisterOwnerRoutes(authRuntime, charityRoutingService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register charity capability routes: %w", err)
+	}
+	if err := charityrouting.RegisterAdminRoutes(authRuntime, charityRoutingService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register charity administrator routes: %w", err)
+	}
+	if err := charityrouting.RegisterStewardRoutes(authRuntime, charityRoutingService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register charity steward routes: %w", err)
+	}
 	if _, err := maintenanceService.PrepareListener(startupContext, store.DB()); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("prepare maintenance state: %w", err)
@@ -395,16 +545,21 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		return nil, err
 	}
 	return &application{
-		handler:     handler,
-		authRuntime: authRuntime,
-		bridge:      bridgeRuntime,
-		claims:      claimService,
-		authorizer:  authorizer,
-		elevation:   elevationManager,
-		gate:        gate,
-		registry:    registry,
-		maintenance: maintenanceService,
-		egress:      outbound,
+		handler:         handler,
+		authRuntime:     authRuntime,
+		bridge:          bridgeRuntime,
+		claims:          claimService,
+		resourceRepo:    resourceRepository,
+		discoveryWorker: discoveryWorker,
+		donations:       donationService,
+		charity:         charityService,
+		charityRouting:  charityRoutingService,
+		authorizer:      authorizer,
+		elevation:       elevationManager,
+		gate:            gate,
+		registry:        registry,
+		maintenance:     maintenanceService,
+		egress:          outbound,
 	}, nil
 }
 

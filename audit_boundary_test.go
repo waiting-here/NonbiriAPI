@@ -19,6 +19,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
+	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -78,13 +79,17 @@ func assertFreshSafeApplication(t *testing.T, app *application) {
 		{name: "admin health", host: auditAdminHost, path: "/healthz", want: http.StatusOK},
 		{name: "public bootstrap", host: auditUserHost, path: "/api/config", want: http.StatusOK},
 		{name: "public bootstrap rejects query", host: auditUserHost, path: "/api/config?unexpected=1", want: http.StatusBadRequest},
-		{name: "endpoint API dormant", host: auditUserHost, path: "/api/endpoints", want: http.StatusNotFound},
+		{name: "endpoint API mounted behind maintenance", host: auditUserHost, path: "/api/endpoints", want: http.StatusServiceUnavailable},
+		{name: "donation API mounted behind maintenance", host: auditUserHost, path: "/api/donations", want: http.StatusServiceUnavailable},
+		{name: "charity capability mounted behind maintenance", host: auditUserHost, path: "/api/charity/models", want: http.StatusServiceUnavailable},
 		{name: "game API dormant", host: auditUserHost, path: "/api/games", want: http.StatusNotFound},
 		{name: "export API dormant", host: auditUserHost, path: "/api/account/export", want: http.StatusNotFound},
 		{name: "caller models dormant", host: auditUserHost, path: "/v1/models", want: http.StatusNotFound},
 		{name: "caller chat dormant", host: auditUserHost, path: "/v1/chat/completions", want: http.StatusNotFound},
 		{name: "admin bootstrap requires future ADM owner", host: auditAdminHost, path: "/admin/api/config", want: http.StatusNotFound},
 		{name: "admin catalog dormant", host: auditAdminHost, path: "/admin/api/site-config", want: http.StatusNotFound},
+		{name: "admin donation requires session", host: auditAdminHost, path: "/admin/api/donations", want: http.StatusUnauthorized},
+		{name: "admin charity models require session", host: auditAdminHost, path: "/admin/api/charity-models", want: http.StatusUnauthorized},
 		{name: "admin cannot reach user bootstrap", host: auditAdminHost, path: "/api/config", want: http.StatusNotFound},
 		{name: "user cannot reach admin API", host: auditUserHost, path: "/admin/api/config", want: http.StatusNotFound},
 		{name: "unknown host rejected", host: "198.51.100.10", path: "/", want: http.StatusBadRequest},
@@ -93,9 +98,6 @@ func assertFreshSafeApplication(t *testing.T, app *application) {
 			rec := testHTTPResponse(t, app.handler, http.MethodGet, tc.host, tc.path)
 			if rec.Code != tc.want {
 				t.Fatalf("status=%d want=%d body=%s", rec.Code, tc.want, rec.Body.String())
-			}
-			if rec.Code == http.StatusServiceUnavailable {
-				t.Fatalf("dormant Generation 2 route used a temporary 503: %s", rec.Body.String())
 			}
 		})
 	}
@@ -195,7 +197,7 @@ func TestGenerationTwoFreshAndCurrentApplicationBoot(t *testing.T) {
 				t.Fatalf("pass %d app.Close: %v", pass, closeErr)
 			}
 		case <-time.After(2 * time.Second):
-			t.Fatalf("pass %d app.Close blocked; baseline must own no worker", pass)
+			t.Fatalf("pass %d app.Close blocked while stopping the idle discovery worker", pass)
 		}
 		if err := store.Close(); err != nil {
 			t.Fatalf("pass %d store.Close: %v", pass, err)
@@ -225,7 +227,8 @@ func TestGenerationTwoRootAuthenticationAndMaintenanceWiring(t *testing.T) {
 	}
 	defer func() { _ = app.Close() }()
 
-	if app.authRuntime == nil || app.bridge == nil || app.claims == nil || app.authorizer == nil ||
+	if app.authRuntime == nil || app.bridge == nil || app.claims == nil || app.resourceRepo == nil ||
+		app.discoveryWorker == nil || app.donations == nil || app.charity == nil || app.charityRouting == nil || app.authorizer == nil ||
 		app.elevation == nil || app.gate == nil || app.maintenance == nil || app.egress == nil {
 		t.Fatal("root runtime omitted a required Generation 2 owner")
 	}
@@ -312,6 +315,45 @@ FROM sessions s JOIN users u ON u.id=s.user_id WHERE u.is_admin=1`).Scan(&adminU
 	_ = replayTx.Rollback()
 	if !errors.Is(replayErr, authz.ErrElevatedRequired) {
 		t.Fatalf("elevation replay err=%v", replayErr)
+	}
+
+	disableOperationID, err := db.GenerateOpaqueID("op_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	disableTx, err := store.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	disableTransition, err := app.maintenance.DisableTx(context.Background(), disableTx, actor, maintenance.DisableCommand{
+		ExpectedRevision: state.Revision,
+		OperationID:      disableOperationID,
+		Reason:           "root route authorization verification",
+	})
+	if err != nil {
+		_ = disableTx.Rollback()
+		t.Fatalf("disable maintenance: %v", err)
+	}
+	if err := disableTx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := disableTransition.ObserveAfterCommit(context.Background(), store.DB()); err != nil {
+		t.Fatalf("observe maintenance disable: %v", err)
+	}
+	if app.gate.Enabled() {
+		t.Fatal("maintenance gate remained enabled")
+	}
+	for _, path := range []string{"/api/endpoints", "/api/donations", "/api/charity/models"} {
+		unauthenticated := testApplicationRequest(t, app.handler, http.MethodGet, auditUserHost, path, "", nil, nil)
+		if unauthenticated.Code != http.StatusUnauthorized {
+			t.Fatalf("unauthenticated mounted route %s status=%d body=%s", path, unauthenticated.Code, unauthenticated.Body.String())
+		}
+	}
+	for _, path := range []string{"/admin/api/donations", "/admin/api/charity-models"} {
+		authorized := testApplicationRequest(t, app.handler, http.MethodGet, auditAdminHost, path, "", []*http.Cookie{adminCookie}, nil)
+		if authorized.Code != http.StatusOK {
+			t.Fatalf("authenticated administrator route %s status=%d body=%s", path, authorized.Code, authorized.Body.String())
+		}
 	}
 
 	logout := testApplicationRequest(t, app.handler, http.MethodPost, auditAdminHost, "/admin/api/logout", "", []*http.Cookie{adminCookie}, map[string]string{
