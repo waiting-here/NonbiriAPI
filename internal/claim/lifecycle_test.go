@@ -40,6 +40,13 @@ func TestCharityClaimsSettleIndependently(t *testing.T) {
 		if err != nil {
 			t.Fatalf("claim charity attempt %d: %v", index+1, err)
 		}
+		fixture.charity.mu.Lock()
+		seamInput := fixture.charity.claims[len(fixture.charity.claims)-1]
+		fixture.charity.mu.Unlock()
+		if seamInput.UpstreamModelID != keys[index].candidate.UpstreamModelID {
+			t.Fatalf("charity seam upstream model = %q, want %q",
+				seamInput.UpstreamModelID, keys[index].candidate.UpstreamModelID)
+		}
 		dispatch, err := fixture.service.TakeForDispatch(context.Background(), handle)
 		if err != nil {
 			t.Fatalf("dispatch charity attempt %d: %v", index+1, err)

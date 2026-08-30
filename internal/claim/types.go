@@ -386,8 +386,8 @@ type RequestAccounting struct {
 // Charity owns donation membership, expiry, three-dimensional reservation,
 // price/reward calculation, and streak folding. PrepareAttempt is read-only
 // and freezes the actual values inside the current transaction. CompleteAttempt
-// persists exactly those prepared values and is called only from the
-// Accounting reservation mutation, alongside all B2 terminal facts.
+// persists exactly those prepared values and is called from the accounting
+// reservation mutation alongside all terminal charity facts.
 type Charity interface {
 	AcceptRequest(context.Context, *sql.Tx, CharityAcceptance) error
 	Claim(context.Context, *sql.Tx, CharityClaimInput) (CharityReservation, error)
@@ -408,14 +408,15 @@ type CharityAcceptance struct {
 }
 
 type CharityClaimInput struct {
-	RequestID     string
-	ClaimID       string
-	ActorUserID   int64
-	AttemptSeq    int
-	DonationKeyID int64
-	EndpointID    int64
-	EndpointKeyID int64
-	ClaimedAt     int64
+	RequestID       string
+	ClaimID         string
+	ActorUserID     int64
+	AttemptSeq      int
+	DonationKeyID   int64
+	EndpointID      int64
+	EndpointKeyID   int64
+	UpstreamModelID string
+	ClaimedAt       int64
 }
 
 type CharityReservation struct {

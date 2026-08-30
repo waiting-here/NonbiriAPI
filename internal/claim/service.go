@@ -311,14 +311,15 @@ WHERE k.id=?`, input.Candidate.EndpointKeyID).Scan(
 		}
 		var err error
 		reservation, err = s.charity.Claim(ctx, tx, CharityClaimInput{
-			RequestID:     input.RequestID,
-			ClaimID:       claimID,
-			ActorUserID:   input.ActorUserID,
-			AttemptSeq:    input.AttemptSeq,
-			DonationKeyID: input.DonationKeyID,
-			EndpointID:    target.endpointID,
-			EndpointKeyID: input.Candidate.EndpointKeyID,
-			ClaimedAt:     at,
+			RequestID:       input.RequestID,
+			ClaimID:         claimID,
+			ActorUserID:     input.ActorUserID,
+			AttemptSeq:      input.AttemptSeq,
+			DonationKeyID:   input.DonationKeyID,
+			EndpointID:      target.endpointID,
+			EndpointKeyID:   input.Candidate.EndpointKeyID,
+			UpstreamModelID: input.Candidate.UpstreamModelID,
+			ClaimedAt:       at,
 		})
 		if err != nil {
 			return Handle{}, fmt.Errorf("claim: reserve charity attempt: %w", err)
