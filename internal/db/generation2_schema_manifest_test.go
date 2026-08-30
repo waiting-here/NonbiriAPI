@@ -10,6 +10,12 @@ func TestGenerationTwoManifestUsesIndependentFixture(t *testing.T) {
 	db := openGenerationTwoDDLForTest(t)
 	defer db.Close()
 
+	manifest, err := readGenerationManifest(context.Background(), db)
+	if err != nil {
+		t.Fatalf("read canonical schema manifest: %v", err)
+	}
+	t.Logf("generation-two manifest sha256=%s", generationManifestDigest(manifest))
+
 	if err := validateGenerationTwoManifest(context.Background(), db); err != nil {
 		t.Fatalf("canonical schema does not match checked-in manifest fixture: %v", err)
 	}

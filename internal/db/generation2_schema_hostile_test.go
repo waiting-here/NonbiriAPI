@@ -1967,6 +1967,23 @@ INSERT INTO model_catalog_entries(
 	insertEntry(2, "automatic", "1:0", "provider/automatic", 1)
 	insertEntry(3, "automatic", "1:9999", "provider/automatic-max", 1)
 	insertEntry(4, "automatic", "9223372036854775807:9999", "provider/automatic-revision-max", hostileInt64Max)
+	maxModel := strings.Repeat("界", 512)
+	hostileMustExec(t, db, `
+INSERT INTO model_catalog_entries(
+ id,endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,created_at,updated_at
+) VALUES(5,?,'manual',?,?, '',1,0,0)`, keyID, maxModel, maxModel)
+	hostileMustExec(t, db, `
+INSERT INTO model_catalog_entries(
+ id,endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,created_at,updated_at
+) VALUES(6,?,'manual','provider-limit','provider-limit',?,1,0,0)`, keyID, strings.Repeat("供", 128))
+	hostileMustFail(t, db, `
+INSERT INTO model_catalog_entries(
+ id,endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,created_at,updated_at
+) VALUES(7,?,'manual',?,?, '',1,0,0)`, keyID, strings.Repeat("界", 513), strings.Repeat("界", 513))
+	hostileMustFail(t, db, `
+INSERT INTO model_catalog_entries(
+ id,endpoint_key_id,source_type,source_identity,normalized_model_id,provider,source_revision,created_at,updated_at
+) VALUES(8,?,'manual','provider-over','provider-over',?,1,0,0)`, keyID, strings.Repeat("供", 129))
 
 	for i, tc := range []struct {
 		name, sourceType, sourceIdentity, model string
@@ -2585,6 +2602,7 @@ func TestGenerationTwoHostileIdempotencyExpiryAcrossScopes(t *testing.T) {
 	db := openGenerationTwoDDLForTest(t)
 	scopes := []string{
 		"credential_report",
+		"control_mutation",
 		"openai_chat_completions",
 		"charity_chat_completions",
 		"model_discovery",
@@ -2634,6 +2652,10 @@ INSERT INTO idempotency_records(
 ) VALUES(?,?,?,?,'accepted',0,?,0,86401)`, scope, hostileBlob32(byte(i+3)), hostileBlob32(byte(i+35)), hostileBlob32(byte(i+67)), []byte{})
 		})
 	}
+	hostileMustFail(t, db, `
+INSERT INTO idempotency_records(
+ scope,actor_scope_hash,key_hash,request_hash,state,http_status,response_body,created_at,expires_at
+) VALUES('unknown',?,?,?,'accepted',0,?,0,86400)`, hostileBlob32(240), hostileBlob32(241), hostileBlob32(242), []byte{})
 }
 
 func TestGenerationTwoHostileIdempotencyIdentityAndTransitions(t *testing.T) {
