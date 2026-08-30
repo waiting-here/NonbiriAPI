@@ -155,6 +155,11 @@ func TestGenerationTwoContextRoundTripAndHostileEnvelopes(t *testing.T) {
 	legacy := "nbsec:" + "v1:aes-256-gcm:" + strings.Repeat("A", 16) + ":" + strings.Repeat("A", 23)
 	nonCanonical := contextEnvelopePrefix + strings.Repeat("A", 16) + ":" + strings.Repeat("A", 22) + "A="
 	unknown := "nbsec:v3:aes-256-gcm:" + strings.Repeat("A", 16) + ":" + strings.Repeat("A", 23)
+	sealedSeparator := strings.LastIndexByte(envelope, ':')
+	if sealedSeparator < 0 || sealedSeparator+1 >= len(envelope) {
+		t.Fatal("sealed envelope did not contain a ciphertext segment")
+	}
+	tooShortSealed := envelope[:sealedSeparator+2]
 	hostile := []string{
 		"",
 		legacy,
@@ -163,7 +168,7 @@ func TestGenerationTwoContextRoundTripAndHostileEnvelopes(t *testing.T) {
 		contextEnvelopePrefix + strings.Repeat("A", 16) + ":" + strings.Repeat("A", 23) + "=",
 		contextEnvelopePrefix + strings.Repeat("A", 15) + ":" + strings.Repeat("A", 23),
 		strings.Repeat("x", MaxEnvelopeBytes+1),
-		envelope[:len(envelope)-1],
+		tooShortSealed,
 	}
 	for i, encoded := range hostile {
 		if _, err := ParseEnvelopeVersion(encoded); !errors.Is(err, ErrInvalidCiphertext) {
