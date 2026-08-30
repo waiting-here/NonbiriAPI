@@ -500,6 +500,208 @@ FROM logical_requests WHERE id=?`, request.ID).Scan(&accounting, &reserved, &rem
 	}
 }
 
+func TestDiscoveryRecoveryUsesAcceptedCallerProjectionAcrossCrashWindows(t *testing.T) {
+	ctx := context.Background()
+	wantCaller := CallerResult{Class: ResultSuccess, Status: 202}
+	wantCompletion := func(requestID string) CompleteRequestInput {
+		return CompleteRequestInput{
+			RequestID:   requestID,
+			Caller:      wantCaller,
+			Disposition: AccountingNone,
+		}
+	}
+	newDiscovery := func(t *testing.T, label string) (*claimFixture, Request, Handle) {
+		t.Helper()
+		fixture := newClaimFixture(t)
+		userID := fixture.seedUser("discovery-recovery-"+label, false)
+		key := fixture.seedKey(userID, "discovery-recovery-"+label)
+		candidate := key.candidate
+		candidate.UpstreamModelID = ""
+		request, handle, err := fixture.service.ClaimDiscovery(ctx, DiscoveryClaimInput{
+			ActorUserID: userID,
+			Candidate:   candidate,
+		})
+		if err != nil {
+			t.Fatalf("claim discovery: %v", err)
+		}
+		return fixture, request, handle
+	}
+	requireReport := func(t *testing.T, report RecoveryReport, released, committed int) {
+		t.Helper()
+		if report.ReleasedClaims != released || report.CommittedClaims != committed ||
+			report.CompletedRequests != 1 || report.MarkedOrphans != 0 ||
+			report.DeletedOrphans != 0 || report.More {
+			t.Fatalf("recovery report = %+v, want released=%d committed=%d completed=1", report, released, committed)
+		}
+	}
+	requireProjection := func(t *testing.T, fixture *claimFixture, requestID string) Request {
+		t.Helper()
+		input := wantCompletion(requestID)
+		terminal, err := fixture.service.CompleteRequest(ctx, input)
+		if err != nil {
+			t.Fatalf("replay recovered discovery request: %v", err)
+		}
+		if terminal.State != RequestTerminal || terminal.ResultClass != ResultSuccess ||
+			terminal.CallerStatus != 202 || terminal.CallerErrorCode != "" ||
+			terminal.AccountingDisposition != AccountingNone || terminal.ReservedMilli != 0 ||
+			terminal.TerminalAt == 0 {
+			t.Fatalf("recovered discovery request = %+v", terminal)
+		}
+		fixture.requireCallerMirror(requestID, wantCaller, terminal.TerminalAt)
+		replay, err := fixture.service.CompleteRequest(ctx, input)
+		if err != nil || replay.TerminalAt != terminal.TerminalAt || replay.State != RequestTerminal {
+			t.Fatalf("second recovered discovery replay = %+v, %v", replay, err)
+		}
+		fixture.accounting.mu.Lock()
+		accountingRequests := len(fixture.accounting.requests)
+		fixture.accounting.mu.Unlock()
+		if accountingRequests != 0 {
+			t.Fatalf("discovery recovery invoked %d accounting request callbacks", accountingRequests)
+		}
+		return terminal
+	}
+
+	t.Run("claimed", func(t *testing.T) {
+		fixture, request, handle := newDiscovery(t, "claimed")
+		fixture.clock.Store(1_001)
+		report, err := fixture.service.RecoverNonterminal(ctx, MaxRecoveryBatch)
+		if err != nil {
+			t.Fatalf("recover claimed discovery: %v", err)
+		}
+		requireReport(t, report, 1, 0)
+		released, err := fixture.service.ReleaseUndispatched(ctx, handle)
+		if err != nil {
+			t.Fatalf("replay recovered discovery release: %v", err)
+		}
+		if released.State != StateReleased || released.CompletedAt != 1_001 ||
+			released.RewardState != RewardNotApplicable {
+			t.Fatalf("released discovery claim = %+v", released)
+		}
+		var attempts int
+		if err := fixture.db.QueryRow(`SELECT COUNT(*) FROM request_attempts WHERE claim_id=?`,
+			handle.ClaimID()).Scan(&attempts); err != nil {
+			t.Fatalf("count claimed-window attempts: %v", err)
+		}
+		if attempts != 0 {
+			t.Fatalf("claimed discovery recovery created %d attempt rows", attempts)
+		}
+		requireProjection(t, fixture, request.ID)
+
+		conflicts := []struct {
+			name  string
+			input CompleteRequestInput
+		}{
+			{
+				name: "failed",
+				input: CompleteRequestInput{RequestID: request.ID,
+					Caller:      CallerResult{Class: ResultFailed, Status: 502, ErrorCode: httperr.CodeUpstream},
+					Disposition: AccountingNone},
+			},
+			{
+				name: "status",
+				input: CompleteRequestInput{RequestID: request.ID,
+					Caller: CallerResult{Class: ResultSuccess, Status: 200}, Disposition: AccountingNone},
+			},
+			{
+				name: "error",
+				input: CompleteRequestInput{RequestID: request.ID,
+					Caller:      CallerResult{Class: ResultFailed, Status: 503, ErrorCode: httperr.CodeServiceUnavailable},
+					Disposition: AccountingNone},
+			},
+			{
+				name:  "disposition",
+				input: CompleteRequestInput{RequestID: request.ID, Caller: wantCaller, Disposition: AccountingRelease},
+			},
+			{
+				name: "charge",
+				input: CompleteRequestInput{RequestID: request.ID, Caller: wantCaller,
+					Disposition: AccountingCommit, ActualChargeMilli: 1},
+			},
+		}
+		for _, test := range conflicts {
+			t.Run(test.name, func(t *testing.T) {
+				_, err := fixture.service.CompleteRequest(ctx, test.input)
+				requireErrorIs(t, err, ErrConflict)
+			})
+		}
+	})
+
+	t.Run("dispatched", func(t *testing.T) {
+		fixture, request, handle := newDiscovery(t, "dispatched")
+		dispatch, err := fixture.service.TakeForDispatch(ctx, handle)
+		if err != nil {
+			t.Fatalf("dispatch discovery: %v", err)
+		}
+		dispatch.Clear()
+		fixture.clock.Store(1_001)
+		report, err := fixture.service.RecoverNonterminal(ctx, MaxRecoveryBatch)
+		if err != nil {
+			t.Fatalf("recover dispatched discovery: %v", err)
+		}
+		requireReport(t, report, 0, 1)
+		attempt, err := fixture.service.CompleteAttempt(ctx, handle, AttemptOutcome{Kind: ResultSynthetic})
+		if err != nil {
+			t.Fatalf("read recovered synthetic attempt: %v", err)
+		}
+		if attempt.State != StateCommitted || attempt.Kind != ResultSynthetic ||
+			attempt.UpstreamStatus != 502 || attempt.UpstreamCode != "" ||
+			attempt.Diagnostic != "dispatch outcome unavailable after restart" || attempt.Usage.Present ||
+			attempt.StartedAt != 1_000 || attempt.CompletedAt != 1_001 ||
+			attempt.RewardState != RewardNotApplicable {
+			t.Fatalf("recovered synthetic attempt = %+v", attempt)
+		}
+		requireProjection(t, fixture, request.ID)
+	})
+
+	t.Run("attempt committed", func(t *testing.T) {
+		fixture, request, handle := newDiscovery(t, "attempt-committed")
+		dispatch, err := fixture.service.TakeForDispatch(ctx, handle)
+		if err != nil {
+			t.Fatalf("dispatch discovery: %v", err)
+		}
+		dispatch.Clear()
+		fixture.clock.Store(1_001)
+		outcome := AttemptOutcome{
+			Kind:            ResultResponse,
+			UpstreamStatus:  429,
+			UpstreamCode:    "rate_limited",
+			Diagnostic:      "discovery upstream rejected the request",
+			ProtocolSuccess: false,
+			ResponseStarted: true,
+			Usage: connectorcontract.Usage{
+				UncachedInputTokens:   11,
+				CacheWriteInputTokens: 2,
+				CacheReadInputTokens:  3,
+				OutputTokens:          5,
+				Present:               true,
+			},
+		}
+		attempt, err := fixture.service.CompleteAttempt(ctx, handle, outcome)
+		if err != nil {
+			t.Fatalf("complete real discovery attempt: %v", err)
+		}
+		fixture.clock.Store(1_002)
+		report, err := fixture.service.RecoverNonterminal(ctx, MaxRecoveryBatch)
+		if err != nil {
+			t.Fatalf("recover discovery after attempt commit: %v", err)
+		}
+		requireReport(t, report, 0, 0)
+		replayedAttempt, err := fixture.service.CompleteAttempt(ctx, handle, AttemptOutcome{Kind: ResultSynthetic})
+		if err != nil {
+			t.Fatalf("replay real discovery attempt: %v", err)
+		}
+		if replayedAttempt.State != StateCommitted || replayedAttempt.Kind != attempt.Kind ||
+			replayedAttempt.UpstreamStatus != attempt.UpstreamStatus ||
+			replayedAttempt.UpstreamCode != attempt.UpstreamCode ||
+			replayedAttempt.Diagnostic != attempt.Diagnostic || replayedAttempt.Usage != attempt.Usage ||
+			replayedAttempt.StartedAt != attempt.StartedAt || replayedAttempt.CompletedAt != attempt.CompletedAt ||
+			replayedAttempt.RewardState != attempt.RewardState {
+			t.Fatalf("real discovery attempt changed during recovery: before=%+v after=%+v", attempt, replayedAttempt)
+		}
+		requireProjection(t, fixture, request.ID)
+	})
+}
+
 func TestRecoveryReleasesClaimedAndConservativelyCommitsDispatched(t *testing.T) {
 	fixture := newClaimFixture(t)
 	userID := fixture.seedUser("recovery", false)
@@ -571,6 +773,37 @@ FROM logical_requests WHERE id IN (?,?,?,?)`, acceptedRequest.ID, claimedRequest
 	}
 	if releasedRequests != 2 || committedRequests != 2 {
 		t.Fatalf("recovered requests = released %d committed %d", releasedRequests, committedRequests)
+	}
+	selfCaller := CallerResult{Class: ResultFailed, Status: 502, ErrorCode: httperr.CodeUpstream}
+	recoveredSelf, err := fixture.service.CompleteRequest(context.Background(), CompleteRequestInput{
+		RequestID:         dispatchedRequest.ID,
+		Caller:            selfCaller,
+		Disposition:       AccountingCommit,
+		ActualChargeMilli: dispatchedRequest.ReservedMilli,
+	})
+	if err != nil {
+		t.Fatalf("replay conservatively recovered self request: %v", err)
+	}
+	if recoveredSelf.ResultClass != ResultFailed || recoveredSelf.CallerStatus != 502 ||
+		recoveredSelf.CallerErrorCode != httperr.CodeUpstream ||
+		recoveredSelf.AccountingDisposition != AccountingCommit {
+		t.Fatalf("conservatively recovered self request = %+v", recoveredSelf)
+	}
+	fixture.requireCallerMirror(dispatchedRequest.ID, selfCaller, recoveredSelf.TerminalAt)
+	fixture.accounting.mu.Lock()
+	var selfAccounting RequestAccounting
+	var foundSelfAccounting bool
+	for _, completion := range fixture.accounting.requests {
+		if completion.RequestID == dispatchedRequest.ID {
+			selfAccounting = completion
+			foundSelfAccounting = true
+			break
+		}
+	}
+	fixture.accounting.mu.Unlock()
+	if !foundSelfAccounting || selfAccounting.Disposition != AccountingCommit ||
+		selfAccounting.ActualMilli != dispatchedRequest.ReservedMilli {
+		t.Fatalf("conservative self accounting = %+v, found=%v", selfAccounting, foundSelfAccounting)
 	}
 	replay, err := fixture.service.RecoverNonterminal(context.Background(), MaxRecoveryBatch)
 	if err != nil {
