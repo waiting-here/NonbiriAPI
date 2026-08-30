@@ -65,21 +65,25 @@ type queuedFrame struct {
 }
 
 type accountState struct {
-	mu            sync.Mutex
-	ring          []ringEntry
-	ringBytes     int
-	discarded     map[string]discardedEntry
-	subscribers   map[*Subscription]struct{}
-	rpsEpochKnown bool
-	rpsEpoch      *string
+	mu                   sync.Mutex
+	ring                 []ringEntry
+	ringBytes            int
+	discarded            map[string]discardedEntry
+	subscribers          map[*Subscription]struct{}
+	activitiesGeneration uint64
+	rpsEpochKnown        bool
+	rpsEpoch             *string
 }
 
 type Hub struct {
-	mu          sync.Mutex
-	accounts    map[int64]*accountState
-	connections atomic.Int64
-	closed      atomic.Bool
-	config      hubConfig
+	mu                    sync.Mutex
+	accounts              map[int64]*accountState
+	activitySubscriptions map[int64]int
+	activitiesBarrier     sync.RWMutex
+	activitiesGeneration  atomic.Uint64
+	connections           atomic.Int64
+	closed                atomic.Bool
+	config                hubConfig
 }
 
 func New(snapshots SnapshotAdapter, epochs IdentityEpochGuard) (*Hub, error) {
@@ -92,7 +96,13 @@ func newHub(config hubConfig) (*Hub, error) {
 		config.maxRingBytes <= 0 || config.ringAge <= 0 || config.heartbeat <= 0 || config.writeTimeout <= 0 {
 		return nil, errors.New("invalid account event hub configuration")
 	}
-	return &Hub{accounts: make(map[int64]*accountState), config: config}, nil
+	hub := &Hub{
+		accounts:              make(map[int64]*accountState),
+		activitySubscriptions: make(map[int64]int),
+		config:                config,
+	}
+	hub.activitiesGeneration.Store(1)
+	return hub, nil
 }
 
 func (hub *Hub) account(accountID int64) (*accountState, error) {
@@ -129,6 +139,69 @@ func (hub *Hub) reserveConnection() bool {
 
 func (hub *Hub) releaseConnection() {
 	hub.connections.Add(-1)
+}
+
+func (hub *Hub) registerActivitySubscription(accountID int64) (uint64, error) {
+	if hub == nil || accountID <= 0 || hub.closed.Load() {
+		return 0, ErrClosed
+	}
+	hub.mu.Lock()
+	defer hub.mu.Unlock()
+	if hub.closed.Load() {
+		return 0, ErrClosed
+	}
+	hub.activitySubscriptions[accountID]++
+	return hub.activitiesGeneration.Load(), nil
+}
+
+func (hub *Hub) unregisterActivitySubscription(accountID int64) {
+	if hub == nil || accountID <= 0 {
+		return
+	}
+	hub.mu.Lock()
+	defer hub.mu.Unlock()
+	remaining := hub.activitySubscriptions[accountID] - 1
+	if remaining <= 0 {
+		delete(hub.activitySubscriptions, accountID)
+		return
+	}
+	hub.activitySubscriptions[accountID] = remaining
+}
+
+// PrepareActivitiesPublish captures the generation that a caller must bind to
+// every subsequently rebuilt projection. A global change advances the
+// generation in O(1) and returns only accounts with a current activities
+// subscription; disconnected accounts recover through gap+snapshot on their
+// next subscription.
+func (hub *Hub) PrepareActivitiesPublish(global bool) (ActivitiesPublishPlan, error) {
+	if hub == nil || hub.closed.Load() {
+		return ActivitiesPublishPlan{}, ErrClosed
+	}
+	if global {
+		hub.activitiesBarrier.Lock()
+		defer hub.activitiesBarrier.Unlock()
+	}
+	hub.mu.Lock()
+	defer hub.mu.Unlock()
+	if hub.closed.Load() {
+		return ActivitiesPublishPlan{}, ErrClosed
+	}
+	generation := hub.activitiesGeneration.Load()
+	if global {
+		generation++
+		hub.activitiesGeneration.Store(generation)
+	}
+	plan := ActivitiesPublishPlan{Generation: generation}
+	if global {
+		plan.ActiveAccountIDs = make([]int64, 0, len(hub.activitySubscriptions))
+		for accountID := range hub.activitySubscriptions {
+			plan.ActiveAccountIDs = append(plan.ActiveAccountIDs, accountID)
+		}
+		sort.Slice(plan.ActiveAccountIDs, func(i, j int) bool {
+			return plan.ActiveAccountIDs[i] < plan.ActiveAccountIDs[j]
+		})
+	}
+	return plan, nil
 }
 
 func canonicalUnsigned(value string) bool {
@@ -205,11 +278,47 @@ func (hub *Hub) epochMatches(ctx context.Context, accountID int64, expected *str
 // transaction commits. RPS identity epoch is checked twice so a publish that
 // races account deletion/purge cannot reintroduce an old identity frame.
 func (hub *Hub) PublishCommitted(ctx context.Context, accountID int64, event PublishedEvent) (Frame, error) {
+	if event.Channel == ChannelActivities {
+		plan, err := hub.PrepareActivitiesPublish(false)
+		if err != nil {
+			return Frame{}, err
+		}
+		return hub.PublishActivitiesCommitted(ctx, accountID, plan, event)
+	}
+	return hub.publishCommitted(ctx, accountID, 0, event)
+}
+
+// PublishActivitiesCommitted rejects a projection if any global activity
+// mutation committed after its plan was captured. This prevents an older
+// projection from making an account appear current after a global invalidation.
+func (hub *Hub) PublishActivitiesCommitted(
+	ctx context.Context,
+	accountID int64,
+	plan ActivitiesPublishPlan,
+	event PublishedEvent,
+) (Frame, error) {
+	if event.Channel != ChannelActivities || plan.Generation == 0 {
+		return Frame{}, ErrInvalidEvent
+	}
+	if hub == nil || hub.activitiesGeneration.Load() != plan.Generation {
+		return Frame{}, ErrStaleActivitiesGeneration
+	}
+	return hub.publishCommitted(ctx, accountID, plan.Generation, event)
+}
+
+func (hub *Hub) publishCommitted(ctx context.Context, accountID int64, activitiesGeneration uint64, event PublishedEvent) (Frame, error) {
 	if ctx == nil || accountID <= 0 {
 		return Frame{}, ErrInvalidEvent
 	}
 	if err := hub.validateEvent(event); err != nil {
 		return Frame{}, err
+	}
+	if event.Channel == ChannelActivities {
+		hub.activitiesBarrier.RLock()
+		defer hub.activitiesBarrier.RUnlock()
+		if hub.activitiesGeneration.Load() != activitiesGeneration {
+			return Frame{}, ErrStaleActivitiesGeneration
+		}
 	}
 	if event.Channel == ChannelRPS {
 		matches, err := hub.epochMatches(ctx, accountID, event.IdentityEpoch)
@@ -229,6 +338,9 @@ func (hub *Hub) PublishCommitted(ctx context.Context, accountID int64, event Pub
 	if hub.closed.Load() {
 		return Frame{}, ErrClosed
 	}
+	if event.Channel == ChannelActivities && hub.activitiesGeneration.Load() != activitiesGeneration {
+		return Frame{}, ErrStaleActivitiesGeneration
+	}
 	if event.Channel == ChannelRPS {
 		matches, guardErr := hub.epochMatches(ctx, accountID, event.IdentityEpoch)
 		if guardErr != nil {
@@ -243,6 +355,9 @@ func (hub *Hub) PublishCommitted(ctx context.Context, accountID int64, event Pub
 		return Frame{}, err
 	}
 	hub.appendLocked(state, frame, hub.config.now())
+	if event.Channel == ChannelActivities {
+		state.activitiesGeneration = activitiesGeneration
+	}
 	for subscription := range state.subscribers {
 		if !subscription.topics[event.Channel] || subscription.closing || subscription.closed.Load() {
 			continue
@@ -469,6 +584,7 @@ func (hub *Hub) PurgeAccounts(ctx context.Context, accountIDs []int64) error {
 		return ErrClosed
 	}
 
+	activitiesGeneration := hub.activitiesGeneration.Load()
 	// Build every account's authoritative replacement before discarding any
 	// old frame. A snapshot failure therefore leaves the whole account set
 	// unchanged instead of exposing a partially purged participant set.
@@ -481,7 +597,7 @@ func (hub *Hub) PurgeAccounts(ctx context.Context, accountIDs []int64) error {
 		targets[index].frames = frames
 	}
 	for index := range targets {
-		hub.applyPurgeLocked(targets[index].state, targets[index].frames)
+		hub.applyPurgeLocked(targets[index].state, targets[index].frames, activitiesGeneration)
 	}
 	return nil
 }
@@ -510,7 +626,7 @@ func (hub *Hub) purgeFramesLocked(ctx context.Context, accountID int64, lastEven
 	return frames, nil
 }
 
-func (hub *Hub) applyPurgeLocked(state *accountState, frames []Frame) {
+func (hub *Hub) applyPurgeLocked(state *accountState, frames []Frame, activitiesGeneration uint64) {
 	now := hub.config.now()
 	for len(state.ring) > 0 {
 		hub.removeOldestLocked(state, GapRingEvicted, now)
@@ -539,6 +655,9 @@ func (hub *Hub) applyPurgeLocked(state *accountState, frames []Frame) {
 	}
 	for _, frame := range frames {
 		hub.appendLocked(state, frame, now)
+		if frame.Channel == ChannelActivities {
+			state.activitiesGeneration = activitiesGeneration
+		}
 		for subscription := range state.subscribers {
 			if !subscription.topics[frame.Channel] || subscription.closing || subscription.closed.Load() {
 				continue

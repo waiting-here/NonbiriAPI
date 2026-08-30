@@ -345,6 +345,127 @@ func TestSubscribeReplayAndGapReasons(t *testing.T) {
 	_ = expired.Close()
 }
 
+func TestActivitiesGlobalInvalidationIsBoundedAndForcesDisconnectedSnapshot(t *testing.T) {
+	authority := newTestAuthority(1, 2, 3)
+	hub, _ := newTestHub(t, authority, nil)
+
+	disconnected, err := hub.Subscribe(context.Background(), SubscribeRequest{
+		AccountID: 3, Channels: []Channel{ChannelActivities},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	disconnectedCursor := nextFrame(t, disconnected).ID
+	if err := disconnected.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := hub.Subscribe(context.Background(), SubscribeRequest{
+		AccountID: 1, Channels: []Channel{ChannelActivities},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = nextFrame(t, first)
+	second, err := hub.Subscribe(context.Background(), SubscribeRequest{
+		AccountID: 1, Channels: []Channel{ChannelActivities},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = nextFrame(t, second)
+	rpsOnly, err := hub.Subscribe(context.Background(), SubscribeRequest{
+		AccountID: 2, Channels: []Channel{ChannelRPS},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = nextFrame(t, rpsOnly)
+
+	stale, err := hub.PrepareActivitiesPublish(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := hub.PrepareActivitiesPublish(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Generation != stale.Generation+1 || len(plan.ActiveAccountIDs) != 1 || plan.ActiveAccountIDs[0] != 1 {
+		t.Fatalf("global plan=%+v stale=%+v", plan, stale)
+	}
+	if _, err := hub.PublishActivitiesCommitted(
+		context.Background(), 1, stale, published(ChannelActivities, TypeDelta, "2", nil, "stale"),
+	); !errors.Is(err, ErrStaleActivitiesGeneration) {
+		t.Fatalf("stale activities publish error=%v", err)
+	}
+	current, err := hub.PublishActivitiesCommitted(
+		context.Background(), 1, plan, published(ChannelActivities, TypeDelta, "2", nil, "current"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if frame := nextFrame(t, first); frame.ID != current.ID {
+		t.Fatalf("first live frame=%+v current=%+v", frame, current)
+	}
+	if frame := nextFrame(t, second); frame.ID != current.ID {
+		t.Fatalf("second live frame=%+v current=%+v", frame, current)
+	}
+
+	authority.setRevision(3, "2")
+	reconnect, err := hub.Subscribe(context.Background(), SubscribeRequest{
+		AccountID: 3, Channels: []Channel{ChannelActivities}, LastEventID: disconnectedCursor,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gap := decodedGap(t, nextFrame(t, reconnect))
+	if gap.Reason != GapRingEvicted || gap.LastEventID == nil || *gap.LastEventID != disconnectedCursor {
+		t.Fatalf("global invalidation gap=%+v", gap)
+	}
+	snapshot := nextFrame(t, reconnect)
+	if snapshot.Type != TypeSnapshot || snapshot.Revision == nil || *snapshot.Revision != "2" {
+		t.Fatalf("global invalidation snapshot=%+v", snapshot)
+	}
+
+	_ = reconnect.Close()
+	_ = first.Close()
+	nextPlan, err := hub.PrepareActivitiesPublish(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nextPlan.ActiveAccountIDs) != 1 || nextPlan.ActiveAccountIDs[0] != 1 {
+		t.Fatalf("one remaining activities subscriber plan=%+v", nextPlan)
+	}
+	_ = second.Close()
+	_ = rpsOnly.Close()
+	emptyPlan, err := hub.PrepareActivitiesPublish(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(emptyPlan.ActiveAccountIDs) != 0 {
+		t.Fatalf("closed subscribers remained active: %+v", emptyPlan)
+	}
+}
+
+func TestActivitiesInitialSnapshotFailureDoesNotLeakActiveRegistration(t *testing.T) {
+	authority := newTestAuthority(1)
+	authority.setFailure(1, ChannelActivities, errors.New("snapshot unavailable"))
+	hub, _ := newTestHub(t, authority, nil)
+
+	if _, err := hub.Subscribe(context.Background(), SubscribeRequest{
+		AccountID: 1, Channels: []Channel{ChannelActivities},
+	}); !errors.Is(err, ErrSnapshot) {
+		t.Fatalf("subscribe error=%v", err)
+	}
+	plan, err := hub.PrepareActivitiesPublish(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.ActiveAccountIDs) != 0 || hub.connections.Load() != 0 {
+		t.Fatalf("failed subscription leaked state: plan=%+v connections=%d", plan, hub.connections.Load())
+	}
+}
+
 func TestRingEvictionSlowConsumerCapacityAndClose(t *testing.T) {
 	authority := newTestAuthority(1, 2, 3)
 	hub, _ := newTestHub(t, authority, func(config *hubConfig) {

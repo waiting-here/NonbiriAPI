@@ -11,14 +11,15 @@ import (
 )
 
 type Subscription struct {
-	hub       *Hub
-	account   *accountState
-	accountID int64
-	topics    map[Channel]bool
-	queue     chan queuedFrame
-	closed    atomic.Bool
-	sequence  atomic.Uint64
-	closing   bool // guarded by account.mu
+	hub                *Hub
+	account            *accountState
+	accountID          int64
+	topics             map[Channel]bool
+	queue              chan queuedFrame
+	closed             atomic.Bool
+	sequence           atomic.Uint64
+	closing            bool // guarded by account.mu
+	activityRegistered bool
 
 	pendingMu  sync.Mutex
 	pending    []queuedFrame
@@ -83,8 +84,20 @@ func (hub *Hub) Subscribe(ctx context.Context, request SubscribeRequest) (*Subsc
 		hub: hub, account: state, accountID: request.AccountID,
 		topics: topics, queue: make(chan queuedFrame, hub.config.queueSize),
 	}
-	initial, err := hub.initialFramesLocked(ctx, request.AccountID, state, ordered, request.LastEventID)
+	activitiesGeneration := hub.activitiesGeneration.Load()
+	if topics[ChannelActivities] {
+		activitiesGeneration, err = hub.registerActivitySubscription(request.AccountID)
+		if err != nil {
+			return nil, err
+		}
+		subscription.activityRegistered = true
+	}
+	initial, err := hub.initialFramesLocked(ctx, request.AccountID, state, ordered, request.LastEventID, activitiesGeneration)
 	if err != nil {
+		if subscription.activityRegistered {
+			hub.unregisterActivitySubscription(request.AccountID)
+			subscription.activityRegistered = false
+		}
 		return nil, err
 	}
 	subscription.replacePending(initial)
@@ -93,12 +106,15 @@ func (hub *Hub) Subscribe(ctx context.Context, request SubscribeRequest) (*Subsc
 	return subscription, nil
 }
 
-func (hub *Hub) initialFramesLocked(ctx context.Context, accountID int64, state *accountState, channels []Channel, lastEventID string) ([]queuedFrame, error) {
+func (hub *Hub) initialFramesLocked(ctx context.Context, accountID int64, state *accountState, channels []Channel, lastEventID string, activitiesGeneration uint64) ([]queuedFrame, error) {
 	if lastEventID == "" {
-		return hub.snapshotSetLocked(ctx, accountID, state, channels, nil, "")
+		return hub.snapshotSetLocked(ctx, accountID, state, channels, nil, "", activitiesGeneration)
 	}
 	if !dbValidateSSE(lastEventID) {
-		return hub.snapshotSetLocked(ctx, accountID, state, channels, nil, GapProcessRestart)
+		return hub.snapshotSetLocked(ctx, accountID, state, channels, nil, GapProcessRestart, activitiesGeneration)
+	}
+	if containsChannel(channels, ChannelActivities) && state.activitiesGeneration != activitiesGeneration {
+		return hub.snapshotSetLocked(ctx, accountID, state, channels, &lastEventID, GapRingEvicted, activitiesGeneration)
 	}
 	for index := range state.ring {
 		if state.ring[index].frame.ID != lastEventID {
@@ -114,18 +130,18 @@ func (hub *Hub) initialFramesLocked(ctx context.Context, accountID int64, state 
 			}
 			if (!state.rpsEpochKnown && currentEpoch != nil) ||
 				(state.rpsEpochKnown && !samePointer(state.rpsEpoch, currentEpoch)) {
-				return hub.snapshotSetLocked(ctx, accountID, state, channels, &lastEventID, GapRingEvicted)
+				return hub.snapshotSetLocked(ctx, accountID, state, channels, &lastEventID, GapRingEvicted, activitiesGeneration)
 			}
 			cursor := state.ring[index].frame
 			if cursor.Channel == ChannelRPS && cursor.Type != TypeGap && !samePointer(cursor.IdentityEpoch, currentEpoch) {
-				return hub.snapshotSetLocked(ctx, accountID, state, channels, &lastEventID, GapRingEvicted)
+				return hub.snapshotSetLocked(ctx, accountID, state, channels, &lastEventID, GapRingEvicted, activitiesGeneration)
 			}
 		}
 		for _, entry := range state.ring[index+1:] {
 			for _, channel := range channels {
 				if entry.frame.Channel == channel {
 					if channel == ChannelRPS && entry.frame.Type != TypeGap && !samePointer(entry.frame.IdentityEpoch, currentEpoch) {
-						return hub.snapshotSetLocked(ctx, accountID, state, channels, &lastEventID, GapRingEvicted)
+						return hub.snapshotSetLocked(ctx, accountID, state, channels, &lastEventID, GapRingEvicted, activitiesGeneration)
 					}
 					frames = append(frames, queuedFrame{frame: entry.frame.clone()})
 					break
@@ -138,7 +154,7 @@ func (hub *Hub) initialFramesLocked(ctx context.Context, accountID int64, state 
 	if discarded, ok := state.discarded[lastEventID]; ok {
 		reason = discarded.reason
 	}
-	return hub.snapshotSetLocked(ctx, accountID, state, channels, &lastEventID, reason)
+	return hub.snapshotSetLocked(ctx, accountID, state, channels, &lastEventID, reason, activitiesGeneration)
 }
 
 func containsChannel(channels []Channel, wanted Channel) bool {
@@ -176,7 +192,7 @@ func cloneStringPointer(value *string) *string {
 	return &copyValue
 }
 
-func (hub *Hub) snapshotSetLocked(ctx context.Context, accountID int64, state *accountState, channels []Channel, cursor *string, reason GapReason) ([]queuedFrame, error) {
+func (hub *Hub) snapshotSetLocked(ctx context.Context, accountID int64, state *accountState, channels []Channel, cursor *string, reason GapReason, activitiesGeneration uint64) ([]queuedFrame, error) {
 	frames := make([]queuedFrame, 0, len(channels)*2)
 	for _, channel := range channels {
 		if reason != "" {
@@ -195,6 +211,9 @@ func (hub *Hub) snapshotSetLocked(ctx context.Context, accountID int64, state *a
 	now := hub.config.now()
 	for _, frame := range frames {
 		hub.appendLocked(state, frame.frame, now)
+		if frame.frame.Channel == ChannelActivities {
+			state.activitiesGeneration = activitiesGeneration
+		}
 	}
 	return frames, nil
 }
@@ -257,6 +276,10 @@ func (subscription *Subscription) closeLocked(state *accountState) {
 	subscription.sequence.Add(1)
 	subscription.deliveryMu.Unlock()
 	delete(state.subscribers, subscription)
+	if subscription.activityRegistered {
+		subscription.hub.unregisterActivitySubscription(subscription.accountID)
+		subscription.activityRegistered = false
+	}
 	close(subscription.queue)
 	subscription.hub.releaseConnection()
 }

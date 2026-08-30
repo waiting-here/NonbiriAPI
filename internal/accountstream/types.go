@@ -20,11 +20,12 @@ const (
 )
 
 var (
-	ErrClosed             = errors.New("account event hub is closed")
-	ErrCapacity           = errors.New("account event connection capacity exhausted")
-	ErrInvalidEvent       = errors.New("invalid account event")
-	ErrStaleIdentityEpoch = errors.New("stale account identity epoch")
-	ErrSnapshot           = errors.New("authoritative account snapshot unavailable")
+	ErrClosed                    = errors.New("account event hub is closed")
+	ErrCapacity                  = errors.New("account event connection capacity exhausted")
+	ErrInvalidEvent              = errors.New("invalid account event")
+	ErrStaleIdentityEpoch        = errors.New("stale account identity epoch")
+	ErrStaleActivitiesGeneration = errors.New("stale activities generation")
+	ErrSnapshot                  = errors.New("authoritative account snapshot unavailable")
 )
 
 type Channel string
@@ -91,6 +92,15 @@ type PublishedEvent struct {
 	Revision      *string
 	IdentityEpoch *string
 	Data          json.RawMessage
+}
+
+// ActivitiesPublishPlan binds a complete activities projection to the
+// process-local global-pool generation observed before that projection was
+// built. ActiveAccountIDs is populated only for a global invalidation and is
+// bounded by MaxGlobalConnections.
+type ActivitiesPublishPlan struct {
+	Generation       uint64
+	ActiveAccountIDs []int64
 }
 
 // Snapshot is returned by the authoritative domain adapter.
