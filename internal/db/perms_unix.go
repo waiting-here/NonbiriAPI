@@ -1,4 +1,4 @@
-//go:build unix
+//go:build linux && amd64
 
 package db
 
@@ -9,21 +9,19 @@ import (
 	"syscall"
 )
 
-// secureDBParentDir verifies the database parent directory is owned by the
-// current effective user and grants no group or other access. The directory is
-// resolved through os.Stat (following a final symlink), so an operator may
-// relocate the database directory to another volume via a symlink as long as
-// the resolved target is owner-only. A pre-existing directory that is group-
-// or other-accessible, or owned by another account, fails closed: the database
-// contains encrypted upstream credentials and private account metadata, and
-// startup must not rely on the operator remembering a restrictive umask.
+// secureDBParentDir verifies the configured final parent itself rather than a
+// symlink target. The common preflight has already walked every existing
+// component before MkdirAll; using Lstat here preserves the same static
+// no-follow rule for callers that invoke this helper directly. This is an
+// inspection-time check, not descriptor binding for a later SQLite xOpen or a
+// guarantee against a trusted local parent-directory race.
 func secureDBParentDir(dir string) error {
-	info, err := os.Stat(dir)
+	info, err := os.Lstat(dir)
 	if err != nil {
 		return fmt.Errorf("inspect database directory: %w", err)
 	}
-	if !info.IsDir() {
-		return fmt.Errorf("database directory path is not a directory")
+	if err := validateDBParentPath(dir, info); err != nil {
+		return err
 	}
 	if info.Mode().Perm()&0o077 != 0 {
 		return fmt.Errorf("database directory must grant no group or other access")
@@ -42,9 +40,11 @@ func secureDBParentDir(dir string) error {
 // fstat-verifies each is owned by the current effective user with exactly that
 // mode. Each file is opened with O_NOFOLLOW so a symlink substituted at the
 // configured pathname is refused rather than followed: chmod never lands on an
-// unrelated target. Files that do not yet exist (for example a -wal that
-// SQLite has not created) are skipped; the integration test covers the modes
-// once they are actually produced. Any failure fails closed.
+// unrelated target during this operation. This does not bind a later SQLite
+// xOpen or defend a trusted local parent-directory race. Files that do not yet
+// exist (for example a -wal that SQLite has not created) are skipped; the
+// integration test covers the modes once they are actually produced. Any
+// failure fails closed.
 func secureDBFiles(path string) error {
 	files := []struct {
 		path string
@@ -69,9 +69,9 @@ func secureOneDBFile(path, role string) error {
 		}
 		return fmt.Errorf("inspect %s: %w", role, err)
 	}
-	// O_NOFOLLOW refuses a final-component symlink, so the descriptor is bound
-	// to the regular file at the configured pathname and a later fchmod cannot
-	// touch a substituted target.
+	// O_NOFOLLOW refuses a final-component symlink, so this metadata operation
+	// cannot fchmod a substituted target. It is not a promise that SQLite's
+	// later pathname open is bound to this descriptor.
 	fd, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		return fmt.Errorf("open %s for permission check: %w", role, err)

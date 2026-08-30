@@ -40,15 +40,17 @@ func TestEnvelopeShapeAndStableCode(t *testing.T) {
 	if env.Error.Source != SourcePlatform {
 		t.Fatalf("source = %q, want %q", env.Error.Source, SourcePlatform)
 	}
-	if env.Error.Message != "model field is required" {
+	if env.Error.Message != "[NonbiriAPI] model field is required" {
 		t.Fatalf("message = %q", env.Error.Message)
 	}
-	if env.Error.Diag != "got empty model" {
-		t.Fatalf("diag = %q", env.Error.Diag)
+	if env.Error.Diag != "" {
+		t.Fatalf("platform diag = %q, want empty", env.Error.Diag)
 	}
-	// request_id omitted when unset.
-	if strings.Contains(rec.Body.String(), `"request_id"`) {
-		t.Fatalf("unexpected request_id in envelope: %s", rec.Body.String())
+	// Platform errors expose only the exact common fields.
+	for _, forbidden := range []string{`"upstream_code"`, `"diag"`, `"request_id"`, `"limit"`, `"resource"`} {
+		if strings.Contains(rec.Body.String(), forbidden) {
+			t.Fatalf("platform envelope leaked %s: %s", forbidden, rec.Body.String())
+		}
 	}
 	// source is always present on the wire, even when the caller did not set it.
 	if !strings.Contains(rec.Body.String(), `"source":"platform"`) {
@@ -58,24 +60,31 @@ func TestEnvelopeShapeAndStableCode(t *testing.T) {
 
 func TestStatusMapping(t *testing.T) {
 	cases := map[string]int{
-		CodeInvalidRequest:        http.StatusBadRequest,
-		CodeUnauthorized:          http.StatusUnauthorized,
-		CodeForbidden:             http.StatusForbidden,
-		CodeNotFound:              http.StatusNotFound,
-		CodeConflict:              http.StatusConflict,
-		CodeMethodNotAllowed:      http.StatusMethodNotAllowed,
-		CodeRateLimited:           http.StatusTooManyRequests,
-		CodePayloadTooLarge:       http.StatusRequestEntityTooLarge,
-		CodeUnboundModel:          http.StatusServiceUnavailable,
-		CodeUpstream:              http.StatusBadGateway,
-		CodeServiceUnavailable:    http.StatusServiceUnavailable,
-		CodeResourceLimitExceeded: http.StatusUnprocessableEntity,
-		CodeElevationRequired:     http.StatusForbidden,
-		CodeInsufficientCredits:   http.StatusForbidden,
-		CodeFeatureDisabled:       http.StatusForbidden,
-		CodeCharitySuspended:      http.StatusForbidden,
-		CodeContentTooShort:       http.StatusBadRequest,
-		CodeInternal:              http.StatusInternalServerError,
+		CodeInvalidRequest:          http.StatusBadRequest,
+		CodeContentTooShort:         http.StatusBadRequest,
+		CodeUnauthorized:            http.StatusUnauthorized,
+		CodeForbidden:               http.StatusForbidden,
+		CodeElevationRequired:       http.StatusForbidden,
+		CodeFeatureDisabled:         http.StatusForbidden,
+		CodeInsufficientCredits:     http.StatusForbidden,
+		CodeCharitySuspended:        http.StatusForbidden,
+		CodeCheckinCapReached:       http.StatusForbidden,
+		CodeNotFound:                http.StatusNotFound,
+		CodeConflict:                http.StatusConflict,
+		CodeAlreadyCheckedIn:        http.StatusConflict,
+		CodeDebugLiveCancelled:      http.StatusConflict,
+		CodeMethodNotAllowed:        http.StatusMethodNotAllowed,
+		CodeRateLimited:             http.StatusTooManyRequests,
+		CodePayloadTooLarge:         http.StatusRequestEntityTooLarge,
+		CodeUnboundModel:            http.StatusServiceUnavailable,
+		CodeMaintenance:             http.StatusServiceUnavailable,
+		CodeUpstream:                http.StatusBadGateway,
+		CodeServiceUnavailable:      http.StatusServiceUnavailable,
+		CodeResourceLimitExceeded:   http.StatusUnprocessableEntity,
+		CodeDebugDryRunIntercepted:  http.StatusUnprocessableEntity,
+		CodeDebugLiveResultCaptured: http.StatusUnprocessableEntity,
+		CodeResourceLocked:          http.StatusLocked,
+		CodeInternal:                http.StatusInternalServerError,
 	}
 	for code, wantStatus := range cases {
 		rec := httptest.NewRecorder()
@@ -86,6 +95,281 @@ func TestStatusMapping(t *testing.T) {
 		env := decodeEnvelope(t, rec.Body.String())
 		if env.Error.Code != code {
 			t.Errorf("code roundtrip %q -> %q", code, env.Error.Code)
+		}
+	}
+}
+
+func TestUpstreamErrorStatusOverride(t *testing.T) {
+	cases := []struct {
+		name       string
+		code       string
+		override   int
+		wantStatus int
+		wantCode   string
+	}{
+		{name: "lower 4xx", code: CodeUpstream, override: http.StatusBadRequest, wantStatus: http.StatusBadRequest, wantCode: CodeUpstream},
+		{name: "upper 4xx", code: CodeUpstream, override: 499, wantStatus: 499, wantCode: CodeUpstream},
+		{name: "bad gateway", code: CodeUpstream, override: http.StatusBadGateway, wantStatus: http.StatusBadGateway, wantCode: CodeUpstream},
+		{name: "gateway timeout", code: CodeUpstream, override: http.StatusGatewayTimeout, wantStatus: http.StatusGatewayTimeout, wantCode: CodeUpstream},
+		// A platform error cannot borrow an upstream status. It keeps its
+		// code-derived status, even when the requested value is otherwise legal.
+		{name: "platform code", code: CodeForbidden, override: http.StatusTeapot, wantStatus: http.StatusForbidden, wantCode: CodeForbidden},
+		// 5xx statuses other than 502/504 are not legal overrides, so the
+		// upstream code falls back to its ordinary 502 status.
+		{name: "upstream 500", code: CodeUpstream, override: http.StatusInternalServerError, wantStatus: http.StatusBadGateway, wantCode: CodeUpstream},
+		{name: "upstream 501", code: CodeUpstream, override: http.StatusNotImplemented, wantStatus: http.StatusBadGateway, wantCode: CodeUpstream},
+		{name: "upstream success", code: CodeUpstream, override: http.StatusOK, wantStatus: http.StatusBadGateway, wantCode: CodeUpstream},
+		{name: "upstream zero", code: CodeUpstream, override: 0, wantStatus: http.StatusBadGateway, wantCode: CodeUpstream},
+		{name: "unknown code", code: "future_code", override: http.StatusTeapot, wantStatus: http.StatusInternalServerError, wantCode: CodeInternal},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			WriteUpstreamError(rec, Error{
+				Code:    tc.code,
+				Message: "upstream [NonbiriAPI] status detail",
+				Diag:    "safe diagnostic",
+			}, tc.override)
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.wantStatus)
+			}
+			env := decodeEnvelope(t, rec.Body.String())
+			if env.Error.Code != tc.wantCode {
+				t.Fatalf("code = %q, want %q", env.Error.Code, tc.wantCode)
+			}
+			wantSource := SourcePlatform
+			if tc.wantCode == CodeUpstream {
+				wantSource = SourceUpstream
+			}
+			if env.Error.Source != wantSource {
+				t.Fatalf("source = %q, want %q", env.Error.Source, wantSource)
+			}
+			if tc.wantCode == CodeUpstream {
+				if strings.Contains(env.Error.Message, platformPrefix) {
+					t.Fatalf("upstream wire message retained platform marker: %q", env.Error.Message)
+				}
+			} else if strings.Count(env.Error.Message, platformPrefix) != 1 {
+				t.Fatalf("platform wire message marker count = %d, value=%q", strings.Count(env.Error.Message, platformPrefix), env.Error.Message)
+			}
+		})
+	}
+
+	// The ordinary sink has no override path: CodeUpstream remains 502.
+	rec := httptest.NewRecorder()
+	WriteError(rec, New(CodeUpstream, "upstream timeout"))
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("WriteError upstream status = %d, want 502", rec.Code)
+	}
+}
+
+func TestStableCodeClosedSet(t *testing.T) {
+	codes := []string{
+		CodeInvalidRequest, CodeContentTooShort, CodeUnauthorized, CodeForbidden,
+		CodeElevationRequired, CodeFeatureDisabled, CodeInsufficientCredits,
+		CodeCharitySuspended, CodeCheckinCapReached, CodeNotFound,
+		CodeMethodNotAllowed, CodeConflict, CodeAlreadyCheckedIn,
+		CodePayloadTooLarge, CodeResourceLimitExceeded, CodeResourceLocked,
+		CodeRateLimited, CodeUpstream, CodeMaintenance, CodeServiceUnavailable,
+		CodeUnboundModel, CodeInternal, CodeDebugDryRunIntercepted,
+		CodeDebugLiveResultCaptured, CodeDebugLiveCancelled,
+	}
+	seen := make(map[string]struct{}, len(codes))
+	for _, code := range codes {
+		if _, duplicate := seen[code]; duplicate {
+			t.Fatalf("stable code listed twice: %q", code)
+		}
+		seen[code] = struct{}{}
+		if !IsStableCode(code) {
+			t.Errorf("frozen stable code rejected: %q", code)
+		}
+	}
+	for _, alias := range []string{"", "unavailable", "too_large", "service-unavailable", "INTERNAL", "future_code"} {
+		if IsStableCode(alias) {
+			t.Errorf("non-canonical error code accepted: %q", alias)
+		}
+	}
+}
+
+func TestMessagePrefixAndByteBound(t *testing.T) {
+	cases := []struct {
+		name   string
+		error  Error
+		prefix bool
+	}{
+		{
+			name:   "platform",
+			error:  New(CodeConflict, "resource revision changed"),
+			prefix: true,
+		},
+		{
+			name:   "platform already prefixed",
+			error:  Error{Code: CodeConflict, Message: platformPrefix + platformPrefix + "resource revision changed"},
+			prefix: true,
+		},
+		{
+			name:   "platform marker in message",
+			error:  Error{Code: CodeConflict, Message: "before " + platformPrefix + "middle " + platformPrefix + "after"},
+			prefix: true,
+		},
+		{
+			name:   "platform leading markers",
+			error:  Error{Code: CodeConflict, Message: strings.Repeat(platformPrefix, 3) + "resource revision changed"},
+			prefix: true,
+		},
+		{
+			name:   "upstream",
+			error:  Error{Code: CodeUpstream, Message: "before " + platformPrefix + "upstream request " + platformPrefix + "failed"},
+			prefix: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			WriteError(rec, tc.error)
+			env := decodeEnvelope(t, rec.Body.String())
+			if !utf8.ValidString(env.Error.Message) || len(env.Error.Message) > msgBound {
+				t.Fatalf("message is not a bounded valid UTF-8 string: bytes=%d value=%q", len(env.Error.Message), env.Error.Message)
+			}
+			if tc.prefix {
+				if !strings.HasPrefix(env.Error.Message, platformPrefix) || strings.Count(env.Error.Message, platformPrefix) != 1 {
+					t.Fatalf("platform message prefix count = %d, value=%q", strings.Count(env.Error.Message, platformPrefix), env.Error.Message)
+				}
+				if tc.name == "platform marker in message" && env.Error.Message != platformPrefix+"before middle after" {
+					t.Fatalf("internal markers were not removed: %q", env.Error.Message)
+				}
+				if tc.name == "platform leading markers" && env.Error.Message != platformPrefix+"resource revision changed" {
+					t.Fatalf("leading markers were not collapsed: %q", env.Error.Message)
+				}
+			} else if strings.Contains(env.Error.Message, platformPrefix) {
+				t.Fatalf("upstream message retained platform prefix: %q", env.Error.Message)
+			}
+		})
+	}
+
+	// The prefix consumes part of the byte budget, and truncation must not cut
+	// a UTF-8 sequence or move the prefix outside the bound.
+	rec := httptest.NewRecorder()
+	WriteError(rec, New(CodeInternal, strings.Repeat("界", 1000)))
+	env := decodeEnvelope(t, rec.Body.String())
+	if len(env.Error.Message) != msgBound || !utf8.ValidString(env.Error.Message) {
+		t.Fatalf("platform message byte bound = %d, valid=%v; want %d", len(env.Error.Message), utf8.ValidString(env.Error.Message), msgBound)
+	}
+	if !strings.HasPrefix(env.Error.Message, platformPrefix) || strings.Count(env.Error.Message, platformPrefix) != 1 {
+		t.Fatalf("long platform prefix count = %d, value=%q", strings.Count(env.Error.Message, platformPrefix), env.Error.Message[:min(len(env.Error.Message), 40)])
+	}
+
+	rec = httptest.NewRecorder()
+	WriteError(rec, Error{Code: CodeUpstream, Message: strings.Repeat("界", 1000)})
+	env = decodeEnvelope(t, rec.Body.String())
+	if len(env.Error.Message) > msgBound || !utf8.ValidString(env.Error.Message) || strings.Contains(env.Error.Message, platformPrefix) {
+		t.Fatalf("long upstream message was not bounded/sanitized: bytes=%d value-prefix=%q", len(env.Error.Message), env.Error.Message[:min(len(env.Error.Message), 20)])
+	}
+
+	// Invalid bytes are repaired before marker removal and byte truncation; the
+	// final message remains valid UTF-8 and has exactly one platform marker.
+	invalid := Error{
+		Code:    CodeInternal,
+		Message: "界" + platformPrefix + string([]byte{0xff, 0xfe}) + strings.Repeat("界", 500),
+	}
+	rec = httptest.NewRecorder()
+	WriteError(rec, invalid)
+	env = decodeEnvelope(t, rec.Body.String())
+	if !utf8.ValidString(env.Error.Message) || len(env.Error.Message) > msgBound {
+		t.Fatalf("invalid UTF-8 message was not repaired/bounded: bytes=%d value=%q", len(env.Error.Message), env.Error.Message[:min(len(env.Error.Message), 40)])
+	}
+	if strings.Count(env.Error.Message, platformPrefix) != 1 || strings.Contains(env.Error.Message, platformPrefix+platformPrefix) {
+		t.Fatalf("invalid UTF-8 message marker handling = %q", env.Error.Message[:min(len(env.Error.Message), 40)])
+	}
+}
+
+func TestUpstreamCodeAndSSEWireConsistency(t *testing.T) {
+	input := Error{
+		Code:         CodeConflict,
+		Source:       SourcePlatform,
+		Message:      platformPrefix + platformPrefix + "resource revision changed",
+		UpstreamCode: "rate_limit_exceeded",
+		Diag:         "connector-safe diagnostic",
+	}
+	rec := httptest.NewRecorder()
+	WriteError(rec, input)
+	env := decodeEnvelope(t, rec.Body.String())
+	if env.Error.UpstreamCode != "" || env.Error.Diag != "" {
+		t.Fatalf("platform error exposed upstream context: %+v", env.Error)
+	}
+	if strings.Count(env.Error.Message, platformPrefix) != 1 {
+		t.Fatalf("JSON platform prefix count = %d, message=%q", strings.Count(env.Error.Message, platformPrefix), env.Error.Message)
+	}
+
+	frame := string(SSEErrorFrame(input))
+	if len(frame) > 4096 {
+		t.Fatalf("SSE error frame bytes = %d, want <= 4096", len(frame))
+	}
+	payload := strings.TrimSuffix(strings.TrimPrefix(frame, "data: "), "\n\n")
+	var body sseErrorPayload
+	if err := json.Unmarshal([]byte(payload), &body); err != nil {
+		t.Fatalf("SSE payload not JSON: %v", err)
+	}
+	if body.Error.Code != env.Error.Code || body.Error.Source != env.Error.Source || body.Error.Message != env.Error.Message || body.Error.UpstreamCode != env.Error.UpstreamCode {
+		t.Fatalf("JSON/SSE error mismatch: json=%+v sse=%+v", env.Error, body.Error)
+	}
+	if strings.Contains(payload, "diag") {
+		t.Fatalf("SSE frame leaked diag: %s", payload)
+	}
+
+	upstreamInput := Error{
+		Code:         CodeUpstream,
+		Source:       SourceUpstream,
+		Message:      "upstream request failed",
+		UpstreamCode: input.UpstreamCode,
+		Diag:         input.Diag,
+	}
+	upstreamRec := httptest.NewRecorder()
+	WriteUpstreamError(upstreamRec, upstreamInput, http.StatusBadGateway)
+	upstreamEnv := decodeEnvelope(t, upstreamRec.Body.String())
+	if upstreamEnv.Error.UpstreamCode != input.UpstreamCode || upstreamEnv.Error.Diag != input.Diag {
+		t.Fatalf("real upstream context was not retained: %+v", upstreamEnv.Error)
+	}
+
+	defaultUpstreamFrame := string(SSEErrorFrame(upstreamInput))
+	defaultPayload := strings.TrimSuffix(strings.TrimPrefix(defaultUpstreamFrame, "data: "), "\n\n")
+	var defaultBody sseErrorPayload
+	if err := json.Unmarshal([]byte(defaultPayload), &defaultBody); err != nil {
+		t.Fatalf("default upstream SSE payload not JSON: %v", err)
+	}
+	if defaultBody.Error.UpstreamCode != "" {
+		t.Fatalf("default SSE exposed upstream_code: %s", defaultPayload)
+	}
+	explicitFrame := string(SSEUpstreamErrorFrame(upstreamInput))
+	explicitPayload := strings.TrimSuffix(strings.TrimPrefix(explicitFrame, "data: "), "\n\n")
+	var explicitBody sseErrorPayload
+	if err := json.Unmarshal([]byte(explicitPayload), &explicitBody); err != nil {
+		t.Fatalf("explicit upstream SSE payload not JSON: %v", err)
+	}
+	if explicitBody.Error.UpstreamCode != input.UpstreamCode {
+		t.Fatalf("explicit upstream SSE did not retain upstream_code: %q", explicitBody.Error.UpstreamCode)
+	}
+
+	// JSON's HTML escaping can expand ampersands; the SSE sink must still
+	// enforce its independent 4 KiB terminal-frame budget.
+	largeFrame := SSEErrorFrame(New(CodeInternal, strings.Repeat("&", msgBound)))
+	if len(largeFrame) > sseErrorFrameBound {
+		t.Fatalf("expanded SSE error frame bytes = %d, want <= %d", len(largeFrame), sseErrorFrameBound)
+	}
+	largePayload := strings.TrimSuffix(strings.TrimPrefix(string(largeFrame), "data: "), "\n\n")
+	var largeBody sseErrorPayload
+	if err := json.Unmarshal([]byte(largePayload), &largeBody); err != nil {
+		t.Fatalf("expanded SSE payload not JSON: %v", err)
+	}
+	if !strings.HasPrefix(largeBody.Error.Message, platformPrefix) || strings.Count(largeBody.Error.Message, platformPrefix) != 1 {
+		t.Fatalf("expanded platform prefix count = %d, message=%q", strings.Count(largeBody.Error.Message, platformPrefix), largeBody.Error.Message[:min(len(largeBody.Error.Message), 40)])
+	}
+
+	for _, hostile := range []string{"bad\x00code", "bad\ncode", strings.Repeat("x", upstreamCodeBound+1)} {
+		rec := httptest.NewRecorder()
+		WriteError(rec, New(CodeUpstream, "failed").WithUpstreamCode(hostile))
+		env := decodeEnvelope(t, rec.Body.String())
+		if env.Error.UpstreamCode != "" || strings.Contains(rec.Body.String(), `"upstream_code"`) {
+			t.Fatalf("hostile upstream_code was not rejected: %q", env.Error.UpstreamCode)
 		}
 	}
 }
@@ -103,7 +387,9 @@ func TestSourceAttributionDerivedAtWireSink(t *testing.T) {
 		CodePayloadTooLarge, CodeElevationRequired, CodeUnboundModel,
 		CodeServiceUnavailable, CodeResourceLimitExceeded,
 		CodeInsufficientCredits, CodeFeatureDisabled, CodeCharitySuspended,
-		CodeContentTooShort,
+		CodeContentTooShort, CodeAlreadyCheckedIn, CodeCheckinCapReached,
+		CodeResourceLocked, CodeDebugDryRunIntercepted,
+		CodeDebugLiveResultCaptured, CodeDebugLiveCancelled,
 	}
 	for _, code := range upstream {
 		rec := httptest.NewRecorder()
@@ -209,7 +495,7 @@ func TestSSEErrorFrameShapeAndSource(t *testing.T) {
 	if body.Error.Code != CodeUpstream || body.Error.Source != SourceUpstream || body.Error.Message != "upstream stream failed" {
 		t.Fatalf("frame body = %+v", body.Error)
 	}
-	// The frame carries exactly code/source/message — no diag/request_id/etc.
+	// The frame carries only the safe error projection — no diag/request_id/etc.
 	for _, forbidden := range []string{"diag", "request_id", "limit", "resource", "type"} {
 		if strings.Contains(payload, "\""+forbidden+"\"") {
 			t.Fatalf("frame leaked %q field: %s", forbidden, payload)
@@ -232,7 +518,7 @@ func TestSSEErrorFrameShapeAndSource(t *testing.T) {
 	if err := json.Unmarshal([]byte(dp), &db); err != nil {
 		t.Fatalf("empty-code frame not JSON: %v", err)
 	}
-	if db.Error.Code != CodeInternal || db.Error.Source != SourcePlatform || db.Error.Message != "ab" {
+	if db.Error.Code != CodeInternal || db.Error.Source != SourcePlatform || db.Error.Message != "[NonbiriAPI] ab" {
 		t.Fatalf("empty-code frame body = %+v", db.Error)
 	}
 	// An invalid explicit source is dropped at the sink.
@@ -270,7 +556,7 @@ func TestSSEErrorFrameShapeAndSource(t *testing.T) {
 func TestMessageAndDiagAreBounded(t *testing.T) {
 	long := strings.Repeat("あ", 5000) // 3-byte runes: message uses a rune bound, diag a byte bound
 	rec := httptest.NewRecorder()
-	WriteError(rec, New(CodeInternal, long).WithDiag(long))
+	WriteUpstreamError(rec, New(CodeUpstream, long).WithDiag(long), http.StatusBadGateway)
 	env := decodeEnvelope(t, rec.Body.String())
 	// message keeps its human-safe rune limit.
 	if got := []rune(env.Error.Message); len(got) > msgBound {
@@ -290,19 +576,19 @@ func TestMessageAndDiagAreBounded(t *testing.T) {
 }
 
 func TestControlCharsStripped(t *testing.T) {
-	dirty := "a\x00b\x01c\rd\ne\tf"
+	dirty := "a\x00b\x01c\rd\ne\t\u0085\u009ff"
 	rec := httptest.NewRecorder()
-	WriteError(rec, New(CodeInvalidRequest, dirty).WithDiag(dirty))
+	WriteUpstreamError(rec, New(CodeUpstream, dirty).WithDiag(dirty), http.StatusBadGateway)
 	env := decodeEnvelope(t, rec.Body.String())
-	// message: all control chars (incl CR/LF/TAB) stripped -> "abcdef".
-	if strings.ContainsAny(env.Error.Message, "\x00\x01\r\n\t\x07\x1f\x7f") {
+	// message: all control chars (incl C0/C1, CR/LF/TAB) stripped -> "abcdef".
+	if strings.ContainsAny(env.Error.Message, "\x00\x01\r\n\t\x07\x1f\x7f\u0085\u009f") {
 		t.Fatalf("message retained control chars: %q", env.Error.Message)
 	}
 	if env.Error.Message != "abcdef" {
 		t.Fatalf("message = %q, want %q", env.Error.Message, "abcdef")
 	}
-	// diag: CR/LF/TAB -> space; other C0 and DEL stripped; no line forgery.
-	if strings.ContainsAny(env.Error.Diag, "\x00\x01\r\n\t") {
+	// diag: CR/LF/TAB -> space; other C0/C1 and DEL stripped; no line forgery.
+	if strings.ContainsAny(env.Error.Diag, "\x00\x01\r\n\t\u0085\u009f") {
 		t.Fatalf("diag retained stripped/line-forgery chars: %q", env.Error.Diag)
 	}
 	if env.Error.Diag != "abc d e f" {
@@ -315,7 +601,7 @@ func TestDiagByteBoundNotRuneBound(t *testing.T) {
 	// bound. A byte boundary must cut this; a rune boundary would let it through.
 	in := strings.Repeat("あ", 2000)
 	rec := httptest.NewRecorder()
-	WriteError(rec, New(CodeUpstream, "fail").WithDiag(in))
+	WriteUpstreamError(rec, New(CodeUpstream, "fail").WithDiag(in), http.StatusBadGateway)
 	env := decodeEnvelope(t, rec.Body.String())
 	if got := len(env.Error.Diag); got > diagnostic.MaxBytes {
 		t.Fatalf("diag byte length = %d, want <= %d", got, diagnostic.MaxBytes)
@@ -331,7 +617,7 @@ func TestDiagByteBoundNotRuneBound(t *testing.T) {
 func TestDiagNoLineForgery(t *testing.T) {
 	in := "ok\n[ERROR] forged admin action\r\n"
 	rec := httptest.NewRecorder()
-	WriteError(rec, New(CodeUpstream, "fail").WithDiag(in))
+	WriteUpstreamError(rec, New(CodeUpstream, "fail").WithDiag(in), http.StatusBadGateway)
 	env := decodeEnvelope(t, rec.Body.String())
 	if strings.ContainsAny(env.Error.Diag, "\r\n") {
 		t.Fatalf("diag allowed line forgery: %q", env.Error.Diag)
@@ -343,7 +629,7 @@ func TestDiagNoLineForgery(t *testing.T) {
 
 func TestDiagTruncationMarkerAndByteBound(t *testing.T) {
 	rec := httptest.NewRecorder()
-	WriteError(rec, New(CodeUpstream, "fail").WithDiag(strings.Repeat("x", diagnostic.MaxBytes+100)))
+	WriteUpstreamError(rec, New(CodeUpstream, "fail").WithDiag(strings.Repeat("x", diagnostic.MaxBytes+100)), http.StatusBadGateway)
 	env := decodeEnvelope(t, rec.Body.String())
 	if len(env.Error.Diag) > diagnostic.MaxBytes {
 		t.Fatalf("diag byte length = %d, want <= %d", len(env.Error.Diag), diagnostic.MaxBytes)
@@ -371,7 +657,7 @@ func TestDiagOmittedWhenEmpty(t *testing.T) {
 
 func TestDiagInvalidUTF8RepairedInEnvelope(t *testing.T) {
 	rec := httptest.NewRecorder()
-	WriteError(rec, New(CodeUpstream, "fail").WithDiag(string([]byte{'b', 'a', 'd', 0xff, 0xfe, 'e', 'n', 'd'})))
+	WriteUpstreamError(rec, New(CodeUpstream, "fail").WithDiag(string([]byte{'b', 'a', 'd', 0xff, 0xfe, 'e', 'n', 'd'})), http.StatusBadGateway)
 	env := decodeEnvelope(t, rec.Body.String())
 	if !utf8.ValidString(env.Error.Diag) {
 		t.Fatalf("diag not valid UTF-8: %q", env.Error.Diag)
@@ -385,25 +671,32 @@ func TestDiagInvalidUTF8RepairedInEnvelope(t *testing.T) {
 func TestWriteErrorReappliesWireSanitizers(t *testing.T) {
 	rec := httptest.NewRecorder()
 	WriteError(rec, Error{
-		Code:      CodeUpstream,
-		Message:   "raw\r\nmessage",
-		Diag:      "raw\r\n\t\x00diag" + strings.Repeat("x", diagnostic.MaxBytes),
-		RequestID: "request\r\nid" + strings.Repeat("z", requestIDBound),
+		Code:         CodeUpstream,
+		Message:      "raw\r\nmessage",
+		UpstreamCode: "upstream\r\ncode",
+		Diag:         "raw\r\n\t\x00diag" + strings.Repeat("x", diagnostic.MaxBytes),
 	})
 	env := decodeEnvelope(t, rec.Body.String())
 	if env.Error.Message != "rawmessage" {
 		t.Fatalf("message = %q, want sanitized direct Error message", env.Error.Message)
 	}
-	if strings.ContainsAny(env.Error.Diag, "\r\n\t\x00") || len(env.Error.Diag) > diagnostic.MaxBytes || !utf8.ValidString(env.Error.Diag) {
-		t.Fatalf("diag was not sanitized at wire sink: len=%d value=%q", len(env.Error.Diag), env.Error.Diag)
-	}
-	if strings.ContainsAny(env.Error.RequestID, "\r\n") || len([]rune(env.Error.RequestID)) > requestIDBound {
-		t.Fatalf("request id was not bounded/sanitized: %q", env.Error.RequestID)
+	if env.Error.Diag != "" || env.Error.UpstreamCode != "" {
+		t.Fatalf("default upstream sink exposed connector context: %+v", env.Error)
 	}
 
-	withID := New(CodeInternal, "failed").WithRequestID("id\r\n")
-	if strings.ContainsAny(withID.RequestID, "\r\n") {
-		t.Fatalf("WithRequestID retained controls: %q", withID.RequestID)
+	explicitRec := httptest.NewRecorder()
+	WriteUpstreamError(explicitRec, Error{
+		Code:         CodeUpstream,
+		Message:      "raw\r\nmessage",
+		UpstreamCode: "safe-code",
+		Diag:         "raw\r\n\t\x00diag" + strings.Repeat("x", diagnostic.MaxBytes),
+	}, http.StatusBadGateway)
+	explicitEnv := decodeEnvelope(t, explicitRec.Body.String())
+	if strings.ContainsAny(explicitEnv.Error.Diag, "\r\n\t\x00") || len(explicitEnv.Error.Diag) > diagnostic.MaxBytes || !utf8.ValidString(explicitEnv.Error.Diag) {
+		t.Fatalf("explicit upstream diag was not sanitized: len=%d value=%q", len(explicitEnv.Error.Diag), explicitEnv.Error.Diag)
+	}
+	if explicitEnv.Error.UpstreamCode != "safe-code" {
+		t.Fatalf("explicit upstream_code = %q, want safe-code", explicitEnv.Error.UpstreamCode)
 	}
 }
 
@@ -419,10 +712,14 @@ func TestEmptyCodeFallsBackToInternal(t *testing.T) {
 	}
 }
 
-func TestResourceLimitExceededEnvelope(t *testing.T) {
+func TestExactEnvelopeShape(t *testing.T) {
 	rec := httptest.NewRecorder()
-	WriteError(rec, New(CodeResourceLimitExceeded, "resource limit reached").
-		WithResourceLimit("endpoint_key", 20))
+	WriteError(rec, Error{
+		Code:         CodeResourceLimitExceeded,
+		Message:      "resource limit reached",
+		UpstreamCode: "should-not-leak",
+		Diag:         "should-not-leak",
+	})
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422", rec.Code)
@@ -431,26 +728,64 @@ func TestResourceLimitExceededEnvelope(t *testing.T) {
 	if env.Error.Code != CodeResourceLimitExceeded {
 		t.Fatalf("code = %q, want %q", env.Error.Code, CodeResourceLimitExceeded)
 	}
-	if env.Error.Limit != 20 {
-		t.Fatalf("limit = %d, want 20", env.Error.Limit)
-	}
-	if env.Error.Resource != "endpoint_key" {
-		t.Fatalf("resource = %q, want endpoint_key", env.Error.Resource)
+	if env.Error.UpstreamCode != "" || env.Error.Diag != "" {
+		t.Fatalf("platform context leaked: %+v", env.Error)
 	}
 
-	// limit/resource are omitted when unset (a non-resource-limit error).
-	rec2 := httptest.NewRecorder()
-	WriteError(rec2, New(CodeInvalidRequest, "bad"))
-	body := rec2.Body.String()
-	if strings.Contains(body, `"limit"`) || strings.Contains(body, `"resource"`) {
-		t.Fatalf("non-resource-limit error leaked limit/resource: %s", body)
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode raw envelope: %v", err)
 	}
+	rawError, ok := raw["error"]
+	if !ok {
+		t.Fatalf("missing error object: %s", rec.Body.String())
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(rawError, &fields); err != nil {
+		t.Fatalf("decode raw error: %v", err)
+	}
+	for _, field := range []string{"code", "source", "message"} {
+		if _, ok := fields[field]; !ok {
+			t.Fatalf("missing required field %q: %s", field, rec.Body.String())
+		}
+	}
+	for _, field := range []string{"upstream_code", "diag", "request_id", "limit", "resource"} {
+		if _, ok := fields[field]; ok {
+			t.Fatalf("unexpected field %q in platform envelope: %s", field, rec.Body.String())
+		}
+	}
+}
 
-	// resource is sanitized at the wire sink (defense-in-depth: a caller that
-	// constructs Error directly cannot push control characters to the wire).
-	rec3 := httptest.NewRecorder()
-	WriteError(rec3, Error{Code: CodeResourceLimitExceeded, Resource: "bad\x00resource\n"})
-	if env := decodeEnvelope(t, rec3.Body.String()); env.Error.Resource != "badresource" {
-		t.Fatalf("resource not sanitized: %q", env.Error.Resource)
+func TestNonUpstreamErrorsDropConnectorFields(t *testing.T) {
+	for _, code := range []string{
+		CodeRateLimited,
+		CodeCharitySuspended,
+		CodeFeatureDisabled,
+		CodeDebugDryRunIntercepted,
+		CodeDebugLiveResultCaptured,
+		CodeDebugLiveCancelled,
+		CodeResourceLimitExceeded,
+	} {
+		t.Run(code, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			WriteError(rec, Error{
+				Code:         code,
+				Message:      "failure",
+				UpstreamCode: "connector-code",
+				Diag:         "connector diagnostic",
+			})
+			env := decodeEnvelope(t, rec.Body.String())
+			if env.Error.Source != SourcePlatform {
+				t.Fatalf("source = %q, want %q", env.Error.Source, SourcePlatform)
+			}
+			if env.Error.UpstreamCode != "" || env.Error.Diag != "" {
+				t.Fatalf("non-upstream error exposed connector fields: %+v", env.Error)
+			}
+			for _, field := range []string{"upstream_code", "diag"} {
+				if strings.Contains(rec.Body.String(), `"`+field+`"`) {
+					t.Fatalf("non-upstream error emitted %q: %s", field, rec.Body.String())
+				}
+			}
+		})
 	}
 }
