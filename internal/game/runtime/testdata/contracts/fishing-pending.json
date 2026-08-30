@@ -1,0 +1,9 @@
+{
+  "batch_id": "fb_AAAAAAAAAAAAAAAAAAAAAA",
+  "bait": "worm",
+  "count": 10,
+  "entry_total": "25000",
+  "state": "settlement_pending",
+  "next_attempt_at": 2000000120,
+  "retry_exhausted": false
+}
