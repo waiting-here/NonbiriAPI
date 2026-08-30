@@ -553,10 +553,10 @@ func validateGenerationTwoConfigCombinations(values map[string]string) error {
 		return errors.New("activities require site timezone")
 	}
 	if welfareEnabled {
-		threshold, thresholdOK := generationTwoConfigUintValue(values, "activity_welfare_threshold_milli")
-		cap, capOK := generationTwoConfigUintValue(values, "activity_welfare_cap_milli")
-		if !thresholdOK || !capOK || threshold == 0 || cap == 0 {
-			return errors.New("welfare activity requires positive threshold and cap")
+		_, thresholdOK := generationTwoConfigUintValue(values, "activity_welfare_threshold_milli")
+		_, capOK := generationTwoConfigUintValue(values, "activity_welfare_cap_milli")
+		if !thresholdOK || !capOK {
+			return errors.New("welfare activity requires valid threshold and cap")
 		}
 	}
 	return nil
