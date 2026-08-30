@@ -200,7 +200,8 @@ func TestModelDiscoveryFailureBoundaries(t *testing.T) {
 			return fakeResponse(http.StatusOK, "application/json", largeBody), nil
 		}, wantFailure: connectorcontract.DiscoveryFailureProtocol, wantStatus: http.StatusOK, wantReceived: true, wantDiag: "upstream models response exceeded its limit", wantCalls: 1},
 		{name: "deadline", ctx: func() context.Context {
-			ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+			ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+			cancel()
 			return ctx
 		}, do: func(request *http.Request) (*http.Response, error) { return nil, request.Context().Err() }, wantFailure: connectorcontract.DiscoveryFailureTimeout, wantDiag: "model discovery timed out", wantCalls: 0},
 		{name: "canceled", ctx: func() context.Context {
