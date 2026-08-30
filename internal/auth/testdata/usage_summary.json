@@ -1,0 +1,10 @@
+{
+  "total_requests": "340282366920938463463374607431768211455",
+  "total_uncached_input_tokens": "1234",
+  "total_cache_write_input_tokens": "1234",
+  "total_cache_read_input_tokens": "1234",
+  "total_output_tokens": "1234",
+  "total_prompt_tokens": "3702",
+  "total_completion_tokens": "1234",
+  "total_unknown_usage_requests": "1234"
+}
