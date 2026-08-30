@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
@@ -61,6 +62,21 @@ func allZero(data []byte) bool {
 	return true
 }
 
+type unreadDiscoveryBody struct {
+	read   bool
+	closed bool
+}
+
+func (body *unreadDiscoveryBody) Read([]byte) (int, error) {
+	body.read = true
+	return 0, errors.New("untrusted response body must not be read")
+}
+
+func (body *unreadDiscoveryBody) Close() error {
+	body.closed = true
+	return nil
+}
+
 func TestModelDiscoveryPaginationHeadersAndCredentialLifetime(t *testing.T) {
 	requests := 0
 	client := &fakeEndpointClient{baseURL: "https://api.example/v1"}
@@ -98,7 +114,9 @@ func TestModelDiscoveryPaginationHeadersAndCredentialLifetime(t *testing.T) {
 	plaintext := []byte("sk-discovery")
 	ciphertext := []byte("cipher-discovery")
 	result := (ModelDiscoverer{}).Discover(context.Background(), discoveryInput(client, plaintext, ciphertext))
-	if result.Diagnostic != "" || len(result.Models) != 3 || result.Models[0].ID != "claude-a" || result.Models[1].ID != "claude/b" || result.Models[2].ID != "claude-c" {
+	if !result.Succeeded() || result.Failure != connectorcontract.DiscoveryFailureNone || !result.ResponseReceived ||
+		result.UpstreamStatus != http.StatusOK || result.Diagnostic != "" || len(result.Models) != 3 ||
+		result.Models[0].ID != "claude-a" || result.Models[1].ID != "claude/b" || result.Models[2].ID != "claude-c" {
 		t.Fatalf("result=%+v", result)
 	}
 	for _, model := range result.Models {
@@ -111,29 +129,97 @@ func TestModelDiscoveryPaginationHeadersAndCredentialLifetime(t *testing.T) {
 	}
 }
 
+func TestModelDiscoveryTypedSuccessAllowsEmptyModels(t *testing.T) {
+	client := &fakeEndpointClient{baseURL: "https://api.example/v1", do: func(*http.Request) (*http.Response, error) {
+		return fakeResponse(http.StatusOK, "application/json", modelsPage(nil, false)), nil
+	}}
+	plaintext := []byte("sk-empty")
+	ciphertext := []byte("cipher-empty")
+	result := (ModelDiscoverer{}).Discover(context.Background(), discoveryInput(client, plaintext, ciphertext))
+	if !result.Succeeded() || result.Failure != connectorcontract.DiscoveryFailureNone || !result.ResponseReceived ||
+		result.UpstreamStatus != http.StatusOK || result.Diagnostic != "" || len(result.Models) != 0 {
+		t.Fatalf("result=%+v", result)
+	}
+	if !allZero(plaintext) || !allZero(ciphertext) {
+		t.Fatalf("plaintext=%v ciphertext=%v", plaintext, ciphertext)
+	}
+}
+
+func TestModelDiscoveryDoesNotReadFailureBody(t *testing.T) {
+	body := &unreadDiscoveryBody{}
+	client := &fakeEndpointClient{baseURL: "https://api.example/v1", do: func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusUnauthorized, Header: make(http.Header), Body: body}, nil
+	}}
+	plaintext := []byte("sk-unread")
+	ciphertext := []byte("cipher-unread")
+	result := (ModelDiscoverer{}).Discover(context.Background(), discoveryInput(client, plaintext, ciphertext))
+	if result.Succeeded() || result.Failure != connectorcontract.DiscoveryFailureAuth || !result.ResponseReceived ||
+		result.UpstreamStatus != http.StatusUnauthorized || result.Diagnostic != "upstream returned status 401" ||
+		len(result.Models) != 0 || body.read || !body.closed || !allZero(plaintext) || !allZero(ciphertext) {
+		t.Fatalf("result=%+v body=%+v plaintext=%v ciphertext=%v", result, body, plaintext, ciphertext)
+	}
+}
+
 func TestModelDiscoveryFailureBoundaries(t *testing.T) {
 	largeBody := strings.Repeat("x", MaxModelsResponseBytes+1)
 	tests := []struct {
-		name      string
-		ctx       func() context.Context
-		do        func(*http.Request) (*http.Response, error)
-		wantDiag  string
-		wantCalls int
+		name         string
+		ctx          func() context.Context
+		do           func(*http.Request) (*http.Response, error)
+		wantFailure  connectorcontract.DiscoveryFailureKind
+		wantStatus   int
+		wantReceived bool
+		wantDiag     string
+		wantCalls    int
 	}{
-		{name: "404", do: func(*http.Request) (*http.Response, error) {
-			return fakeResponse(http.StatusNotFound, "application/json", `{}`), nil
-		}, wantDiag: "upstream returned status 404", wantCalls: 1},
+		{name: "401", do: func(*http.Request) (*http.Response, error) {
+			return fakeResponse(http.StatusUnauthorized, "application/json", `{"private":"sk-boundary"}`), nil
+		}, wantFailure: connectorcontract.DiscoveryFailureAuth, wantStatus: http.StatusUnauthorized, wantReceived: true, wantDiag: "upstream returned status 401", wantCalls: 1},
+		{name: "403", do: func(*http.Request) (*http.Response, error) {
+			return fakeResponse(http.StatusForbidden, "application/json", `{"private":"sk-boundary"}`), nil
+		}, wantFailure: connectorcontract.DiscoveryFailureAuth, wantStatus: http.StatusForbidden, wantReceived: true, wantDiag: "upstream returned status 403", wantCalls: 1},
+		{name: "403 without body", do: func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusForbidden, Header: make(http.Header)}, nil
+		}, wantFailure: connectorcontract.DiscoveryFailureAuth, wantStatus: http.StatusForbidden, wantReceived: true, wantDiag: "upstream returned status 403", wantCalls: 1},
+		{name: "429", do: func(*http.Request) (*http.Response, error) {
+			return fakeResponse(http.StatusTooManyRequests, "application/json", `{"private":"sk-boundary"}`), nil
+		}, wantFailure: connectorcontract.DiscoveryFailureRateLimit, wantStatus: http.StatusTooManyRequests, wantReceived: true, wantDiag: "upstream returned status 429", wantCalls: 1},
+		{name: "other non-2xx", do: func(*http.Request) (*http.Response, error) {
+			return fakeResponse(http.StatusBadGateway, "application/json", `{"private":"sk-boundary"}`), nil
+		}, wantFailure: connectorcontract.DiscoveryFailureProtocol, wantStatus: http.StatusBadGateway, wantReceived: true, wantDiag: "upstream returned status 502", wantCalls: 1},
 		{name: "nonstandard response", do: func(*http.Request) (*http.Response, error) {
 			return fakeResponse(http.StatusOK, "application/json", `{"data":[],"has_more":false,"unknown":1}`), nil
-		}, wantDiag: "invalid upstream models response", wantCalls: 1},
+		}, wantFailure: connectorcontract.DiscoveryFailureProtocol, wantStatus: http.StatusOK, wantReceived: true, wantDiag: "invalid upstream models response", wantCalls: 1},
+		{name: "malformed response", do: func(*http.Request) (*http.Response, error) {
+			return fakeResponse(http.StatusOK, "application/json", `{"data":`), nil
+		}, wantFailure: connectorcontract.DiscoveryFailureProtocol, wantStatus: http.StatusOK, wantReceived: true, wantDiag: "invalid upstream models response", wantCalls: 1},
 		{name: "wrong media type", do: func(*http.Request) (*http.Response, error) {
 			return fakeResponse(http.StatusOK, "text/plain", `{}`), nil
-		}, wantDiag: "upstream response content type was invalid", wantCalls: 1},
+		}, wantFailure: connectorcontract.DiscoveryFailureProtocol, wantStatus: http.StatusOK, wantReceived: true, wantDiag: "upstream response content type was invalid", wantCalls: 1},
 		{name: "response limit", do: func(*http.Request) (*http.Response, error) {
 			return fakeResponse(http.StatusOK, "application/json", largeBody), nil
-		}, wantDiag: "upstream models response exceeded its limit", wantCalls: 1},
-		{name: "canceled", ctx: func() context.Context { ctx, cancel := context.WithCancel(context.Background()); cancel(); return ctx }, do: func(request *http.Request) (*http.Response, error) { return nil, request.Context().Err() }, wantDiag: "model discovery canceled", wantCalls: 0},
-		{name: "transport", do: func(*http.Request) (*http.Response, error) { return nil, errors.New("private transport detail") }, wantDiag: "upstream request failed", wantCalls: 1},
+		}, wantFailure: connectorcontract.DiscoveryFailureProtocol, wantStatus: http.StatusOK, wantReceived: true, wantDiag: "upstream models response exceeded its limit", wantCalls: 1},
+		{name: "deadline", ctx: func() context.Context {
+			ctx, _ := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+			return ctx
+		}, do: func(request *http.Request) (*http.Response, error) { return nil, request.Context().Err() }, wantFailure: connectorcontract.DiscoveryFailureTimeout, wantDiag: "model discovery timed out", wantCalls: 0},
+		{name: "canceled", ctx: func() context.Context {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			return ctx
+		}, do: func(request *http.Request) (*http.Response, error) { return nil, request.Context().Err() }, wantFailure: connectorcontract.DiscoveryFailureInterrupted, wantDiag: "model discovery canceled", wantCalls: 0},
+		{name: "transport", do: func(*http.Request) (*http.Response, error) {
+			return nil, errors.New("private transport detail sk-boundary")
+		}, wantFailure: connectorcontract.DiscoveryFailureTransport, wantDiag: "upstream request failed", wantCalls: 1},
+		{name: "auth response and error", do: func(*http.Request) (*http.Response, error) {
+			return fakeResponse(http.StatusUnauthorized, "application/json", `{"private":"sk-boundary"}`), errors.New("private redirect detail")
+		}, wantFailure: connectorcontract.DiscoveryFailureAuth, wantStatus: http.StatusUnauthorized, wantReceived: true, wantDiag: "upstream request failed", wantCalls: 1},
+		{name: "nil response", do: func(*http.Request) (*http.Response, error) {
+			return nil, nil
+		}, wantFailure: connectorcontract.DiscoveryFailureTransport, wantDiag: "upstream response was unavailable", wantCalls: 1},
+		{name: "nil body", do: func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, nil
+		}, wantFailure: connectorcontract.DiscoveryFailureProtocol, wantStatus: http.StatusOK, wantReceived: true, wantDiag: "upstream response was unavailable", wantCalls: 1},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -146,8 +232,15 @@ func TestModelDiscoveryFailureBoundaries(t *testing.T) {
 			if test.ctx != nil {
 				ctx = test.ctx()
 			}
-			result := (ModelDiscoverer{}).Discover(ctx, discoveryInput(client, []byte("sk-key"), []byte("cipher")))
-			if len(result.Models) != 0 || result.Diagnostic != test.wantDiag || calls != test.wantCalls || strings.Contains(result.Diagnostic, "private") {
+			plaintext := []byte("sk-boundary")
+			ciphertext := []byte("cipher-boundary")
+			result := (ModelDiscoverer{}).Discover(ctx, discoveryInput(client, plaintext, ciphertext))
+			formatted := fmt.Sprintf("%+v", result)
+			if result.Succeeded() || len(result.Models) != 0 || result.Failure != test.wantFailure ||
+				result.UpstreamStatus != test.wantStatus || result.ResponseReceived != test.wantReceived ||
+				result.Diagnostic != test.wantDiag || calls != test.wantCalls || strings.Contains(formatted, "private") ||
+				strings.Contains(formatted, "sk-boundary") || strings.Contains(formatted, "cipher-boundary") ||
+				!allZero(plaintext) || !allZero(ciphertext) {
 				t.Fatalf("result=%+v calls=%d", result, calls)
 			}
 		})
@@ -201,7 +294,9 @@ func TestModelDiscoveryCountPageCursorAndDuplicateLimits(t *testing.T) {
 				return test.do(calls, request)
 			}}
 			result := (ModelDiscoverer{}).Discover(context.Background(), discoveryInput(client, []byte("sk-key"), []byte("cipher")))
-			if result.Diagnostic != "invalid upstream models response" || len(result.Models) != 0 || calls != test.want {
+			if result.Succeeded() || result.Failure != connectorcontract.DiscoveryFailureProtocol ||
+				!result.ResponseReceived || result.UpstreamStatus != http.StatusOK ||
+				result.Diagnostic != "invalid upstream models response" || len(result.Models) != 0 || calls != test.want {
 				t.Fatalf("result=%+v calls=%d want=%d", result, calls, test.want)
 			}
 		})
@@ -242,7 +337,11 @@ func TestModelDiscoveryRejectsCredentialReflectionBeforeCache(t *testing.T) {
 				return fakeResponse(http.StatusOK, "application/json", test.body), nil
 			}}
 			result := (ModelDiscoverer{}).Discover(context.Background(), discoveryInput(client, []byte(plain), []byte(cipher)))
-			if result.Diagnostic != "upstream models response was rejected" || len(result.Models) != 0 || strings.Contains(result.Diagnostic, plain) || strings.Contains(result.Diagnostic, cipher) {
+			formatted := fmt.Sprintf("%+v", result)
+			if result.Succeeded() || result.Failure != connectorcontract.DiscoveryFailureProtocol ||
+				!result.ResponseReceived || result.UpstreamStatus != http.StatusOK ||
+				result.Diagnostic != "upstream models response was rejected" || len(result.Models) != 0 ||
+				strings.Contains(formatted, plain) || strings.Contains(formatted, cipher) {
 				t.Fatalf("result=%+v", result)
 			}
 		})

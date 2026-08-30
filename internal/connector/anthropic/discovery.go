@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -28,33 +29,43 @@ const (
 type ModelDiscoverer struct{}
 
 func (ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.DiscoveryInput) connectorcontract.DiscoveryResult {
-	failed := func(message string) connectorcontract.DiscoveryResult {
-		return connectorcontract.DiscoveryResult{Diagnostic: diagnostic.BoundTo(message, maxDiscoveryDiagnostic)}
-	}
-	if ctx == nil || backend.IsNil(input.Backend) || input.Target.Type() != connectorcontract.TypeAnthropicCompatible || input.Credential == nil {
+	if ctx == nil {
 		if input.Credential != nil {
 			input.Credential.Clear()
 		}
-		return failed("model discovery is unavailable")
+		return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, nil, "model discovery is unavailable")
 	}
-	if ctx.Err() != nil {
-		input.Credential.Clear()
-		return failed("model discovery canceled")
+	if kind, failed := discoveryContextFailure(ctx, nil); failed {
+		if input.Credential != nil {
+			input.Credential.Clear()
+		}
+		return failedDiscoveryResult(kind, nil, discoveryContextDiagnostic(kind))
+	}
+	if backend.IsNil(input.Backend) || input.Target.Type() != connectorcontract.TypeAnthropicCompatible || input.Credential == nil {
+		if input.Credential != nil {
+			input.Credential.Clear()
+		}
+		return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, nil, "model discovery is unavailable")
 	}
 	client, err := input.Backend.Open(input.Target.BaseURL())
 	if err != nil || nilEndpointClient(client) {
 		input.Credential.Clear()
-		return failed("egress client unavailable")
+		if kind, failed := discoveryContextFailure(ctx, err); failed {
+			return failedDiscoveryResult(kind, nil, discoveryContextDiagnostic(kind))
+		}
+		return failedDiscoveryResult(connectorcontract.DiscoveryFailureTransport, nil, "egress client unavailable")
 	}
 	plaintext, ciphertext, ok := input.Credential.Take()
+	if !ok {
+		clear(plaintext)
+		clear(ciphertext)
+		return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, nil, "credential unavailable")
+	}
 	wireGuard := newSensitiveGuard(plaintext, ciphertext)
 	semanticGuard := wireGuard.clone()
 	defer wireGuard.Clear()
 	defer semanticGuard.Clear()
 	clear(ciphertext)
-	if !ok {
-		return failed("credential unavailable")
-	}
 	defer clear(plaintext)
 
 	models := make([]connectorcontract.DiscoveredModel, 0, 100)
@@ -63,16 +74,19 @@ func (ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.Dis
 	cursor := ""
 	remaining := int64(MaxModelsResponseBytes)
 	for page := 0; page < MaxDiscoveryPages; page++ {
-		if ctx.Err() != nil {
-			return failed("model discovery canceled")
+		if kind, failed := discoveryContextFailure(ctx, nil); failed {
+			return failedDiscoveryResult(kind, nil, discoveryContextDiagnostic(kind))
 		}
 		requestURL, err := modelsPageURL(client.BaseURL(), cursor)
 		if err != nil {
-			return failed("upstream request could not be built")
+			return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, nil, "upstream request could not be built")
 		}
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 		if err != nil {
-			return failed("upstream request could not be built")
+			if kind, failed := discoveryContextFailure(ctx, err); failed {
+				return failedDiscoveryResult(kind, nil, discoveryContextDiagnostic(kind))
+			}
+			return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, nil, "upstream request could not be built")
 		}
 		request.Header.Set("X-Api-Key", string(plaintext))
 		request.Header.Set("Anthropic-Version", AnthropicVersion)
@@ -86,76 +100,152 @@ func (ModelDiscoverer) Discover(ctx context.Context, input connectorcontract.Dis
 			if response != nil && response.Body != nil {
 				_ = response.Body.Close()
 			}
-			if ctx.Err() != nil {
-				return failed("model discovery canceled")
+			if kind, failed := discoveryContextFailure(ctx, err); failed {
+				return failedDiscoveryResult(kind, response, discoveryContextDiagnostic(kind))
 			}
-			return failed("upstream request failed")
+			if response != nil {
+				kind := connectorcontract.DiscoveryFailureProtocol
+				if response.StatusCode < http.StatusOK || response.StatusCode > 299 {
+					kind = discoveryStatusFailure(response.StatusCode)
+				}
+				return failedDiscoveryResult(kind, response, "upstream request failed")
+			}
+			return failedDiscoveryResult(connectorcontract.DiscoveryFailureTransport, nil, "upstream request failed")
 		}
-		if response == nil || response.Body == nil {
-			return failed("upstream response was unavailable")
+		if kind, failed := discoveryContextFailure(ctx, nil); failed {
+			if response != nil && response.Body != nil {
+				_ = response.Body.Close()
+			}
+			return failedDiscoveryResult(kind, response, discoveryContextDiagnostic(kind))
 		}
-		if ctx.Err() != nil {
-			_ = response.Body.Close()
-			return failed("model discovery canceled")
+		if response == nil {
+			return failedDiscoveryResult(connectorcontract.DiscoveryFailureTransport, nil, "upstream response was unavailable")
 		}
 		if response.StatusCode < http.StatusOK || response.StatusCode > 299 {
-			_ = response.Body.Close()
-			return failed(fmt.Sprintf("upstream returned status %d", response.StatusCode))
+			if response.Body != nil {
+				_ = response.Body.Close()
+			}
+			return failedDiscoveryResult(discoveryStatusFailure(response.StatusCode), response, fmt.Sprintf("upstream returned status %d", response.StatusCode))
+		}
+		if response.Body == nil {
+			return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "upstream response was unavailable")
 		}
 		if !validResponseMediaType(response, "application/json") {
 			_ = response.Body.Close()
-			return failed("upstream response content type was invalid")
+			return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "upstream response content type was invalid")
 		}
 		body, readErr := io.ReadAll(io.LimitReader(response.Body, remaining+1))
 		_ = response.Body.Close()
 		if readErr != nil {
 			clear(body)
-			if ctx.Err() != nil {
-				return failed("model discovery canceled")
+			if kind, failed := discoveryContextFailure(ctx, readErr); failed {
+				return failedDiscoveryResult(kind, response, discoveryContextDiagnostic(kind))
 			}
-			return failed("upstream response could not be read")
+			return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "upstream response could not be read")
 		}
 		if int64(len(body)) > remaining {
 			clear(body)
-			return failed("upstream models response exceeded its limit")
+			return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "upstream models response exceeded its limit")
+		}
+		if kind, failed := discoveryContextFailure(ctx, nil); failed {
+			clear(body)
+			return failedDiscoveryResult(kind, response, discoveryContextDiagnostic(kind))
 		}
 		if wireGuard.Contains(body) {
 			clear(body)
-			return failed("upstream models response was rejected")
+			return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "upstream models response was rejected")
 		}
 		remaining -= int64(len(body))
 		entries, hasMore, lastID, parseErr := parseModelsPage(body)
 		clear(body)
 		if parseErr != nil {
-			return failed("invalid upstream models response")
+			return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "invalid upstream models response")
 		}
 		for _, entry := range entries {
-			if semanticGuard.Contains([]byte(entry.ID)) || semanticGuard.Contains([]byte(entry.Provider)) {
-				return failed("upstream models response was rejected")
+			if containsSensitiveDiscoveryText(semanticGuard, entry.ID) || containsSensitiveDiscoveryText(semanticGuard, entry.Provider) {
+				return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "upstream models response was rejected")
 			}
 			if _, duplicate := seenIDs[entry.ID]; duplicate || len(models) == MaxDiscoveredModels {
-				return failed("invalid upstream models response")
+				return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "invalid upstream models response")
 			}
 			seenIDs[entry.ID] = struct{}{}
 			models = append(models, entry)
 		}
 		if !hasMore {
-			return connectorcontract.DiscoveryResult{Models: models}
+			return connectorcontract.DiscoveryResult{
+				Models:           models,
+				Failure:          connectorcontract.DiscoveryFailureNone,
+				UpstreamStatus:   response.StatusCode,
+				ResponseReceived: true,
+			}
 		}
 		if len(models) >= MaxDiscoveredModels || len(entries) == 0 || page+1 == MaxDiscoveryPages {
-			return failed("invalid upstream models response")
+			return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "invalid upstream models response")
 		}
 		next := lastID
 		if len([]byte(next)) > MaxCursorBytes || next == cursor {
-			return failed("invalid upstream models response")
+			return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "invalid upstream models response")
 		}
 		if _, duplicate := seenCursors[next]; duplicate {
-			return failed("invalid upstream models response")
+			return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, response, "invalid upstream models response")
 		}
 		seenCursors[next] = struct{}{}
 		cursor = next
 	}
-	return failed("invalid upstream models response")
+	return failedDiscoveryResult(connectorcontract.DiscoveryFailureProtocol, nil, "invalid upstream models response")
+}
+
+func failedDiscoveryResult(kind connectorcontract.DiscoveryFailureKind, response *http.Response, message string) connectorcontract.DiscoveryResult {
+	status := 0
+	received := response != nil
+	if received {
+		status = response.StatusCode
+	}
+	return connectorcontract.DiscoveryResult{
+		Failure:          kind,
+		UpstreamStatus:   status,
+		ResponseReceived: received,
+		Diagnostic:       diagnostic.BoundTo(message, maxDiscoveryDiagnostic),
+	}
+}
+
+func discoveryStatusFailure(status int) connectorcontract.DiscoveryFailureKind {
+	switch status {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return connectorcontract.DiscoveryFailureAuth
+	case http.StatusTooManyRequests:
+		return connectorcontract.DiscoveryFailureRateLimit
+	default:
+		return connectorcontract.DiscoveryFailureProtocol
+	}
+}
+
+func discoveryContextFailure(ctx context.Context, err error) (connectorcontract.DiscoveryFailureKind, bool) {
+	if ctx != nil && ctx.Err() != nil {
+		err = ctx.Err()
+	}
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return connectorcontract.DiscoveryFailureTimeout, true
+	case errors.Is(err, context.Canceled):
+		return connectorcontract.DiscoveryFailureInterrupted, true
+	default:
+		return connectorcontract.DiscoveryFailureNone, false
+	}
+}
+
+func discoveryContextDiagnostic(kind connectorcontract.DiscoveryFailureKind) string {
+	if kind == connectorcontract.DiscoveryFailureTimeout {
+		return "model discovery timed out"
+	}
+	return "model discovery canceled"
+}
+
+func containsSensitiveDiscoveryText(guard *sensitiveGuard, value string) bool {
+	data := []byte(value)
+	matched := guard.Contains(data)
+	clear(data)
+	return matched
 }
 
 func ModelsURL(baseURL string) string { return strings.TrimSuffix(baseURL, "/") + "/models" }
