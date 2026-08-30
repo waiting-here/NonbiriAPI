@@ -121,6 +121,20 @@ func validCommand(expectedRevision int64, operationID, reason string) bool {
 	return expectedRevision >= 1 && expectedRevision < maxInt64 && db.ValidateOpaqueID(operationID, "op_") && validReason(reason)
 }
 
+func maintenanceActorSnapshot(principal authz.Principal) (string, sql.NullString, error) {
+	switch principal.Role {
+	case authz.RoleAdministrator:
+		return "admin", sql.NullString{}, nil
+	case authz.RoleSteward:
+		if principal.DiscordID == "" {
+			return "", sql.NullString{}, authz.ErrForbidden
+		}
+		return "steward", sql.NullString{String: principal.DiscordID, Valid: true}, nil
+	default:
+		return "", sql.NullString{}, authz.ErrForbidden
+	}
+}
+
 // EnableTx atomically performs off-to-on CAS, final role authorization,
 // immutable event/audit, completed accepted-operation fact, singleton primary
 // alert and site-config mirror. It never changes process-visible gate state.
@@ -136,8 +150,9 @@ func (service *Service) EnableTx(ctx context.Context, tx *sql.Tx, actor authz.Ac
 	if err != nil {
 		return Transition{}, err
 	}
-	if principal.DiscordID == "" {
-		return Transition{}, authz.ErrForbidden
+	actorRole, actorDiscord, err := maintenanceActorSnapshot(principal)
+	if err != nil {
+		return Transition{}, err
 	}
 	now := service.now().Unix()
 	if now < 0 || now > maxUnixSecond-eventRetentionDays {
@@ -169,15 +184,11 @@ WHERE id=1 AND enabled=0 AND revision=? AND revision<?`,
 		return Transition{}, ErrInvariant
 	}
 
-	actorRole := "steward"
-	if requiredRole == authz.RoleAdministrator {
-		actorRole = "admin"
-	}
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO maintenance_events(
  id,actor_user_id,actor_discord_id,actor_role,action,reason,created_at
 ) VALUES(?,?,?,?,'enable',?,?)`,
-		command.OperationID, principal.UserID, principal.DiscordID, actorRole, command.Reason, now,
+		command.OperationID, principal.UserID, actorDiscord, actorRole, command.Reason, now,
 	); err != nil {
 		return Transition{}, fmt.Errorf("enable maintenance: append event: %w", err)
 	}
@@ -227,8 +238,9 @@ func (service *Service) DisableTx(ctx context.Context, tx *sql.Tx, actor authz.A
 	if err != nil {
 		return Transition{}, err
 	}
-	if principal.DiscordID == "" {
-		return Transition{}, authz.ErrForbidden
+	actorRole, actorDiscord, err := maintenanceActorSnapshot(principal)
+	if err != nil {
+		return Transition{}, err
 	}
 	now := service.now().Unix()
 	if now < 0 || now > maxUnixSecond-eventRetentionDays {
@@ -300,8 +312,8 @@ WHERE id=1 AND enabled=1 AND revision=? AND revision<?`,
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO maintenance_events(
  id,actor_user_id,actor_discord_id,actor_role,action,reason,created_at,resolved_at,deidentify_at,retain_until
-) VALUES(?,?,?,'admin','disable',?,?,?,?,?)`,
-		command.OperationID, principal.UserID, principal.DiscordID, command.Reason, now, now, now+actorVisibleDays, now+eventRetentionDays,
+) VALUES(?,?,?,?,'disable',?,?,?,?,?)`,
+		command.OperationID, principal.UserID, actorDiscord, actorRole, command.Reason, now, now, now+actorVisibleDays, now+eventRetentionDays,
 	); err != nil {
 		return Transition{}, fmt.Errorf("disable maintenance: append event: %w", err)
 	}
