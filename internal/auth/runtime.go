@@ -50,6 +50,7 @@ type Runtime struct {
 }
 
 var _ resources.UserRouteRegistrar = (*Runtime)(nil)
+var _ resources.ContinuationUserRouteRegistrar = (*Runtime)(nil)
 var _ resources.FinalTxAuthorizer = (*Runtime)(nil)
 
 func NewRuntime(c RuntimeConfig) (*Runtime, error) {
@@ -213,7 +214,7 @@ func validServeMuxPattern(pattern string) (valid bool) {
 }
 
 func (r *Runtime) registerUserInternal(method, pattern string, handler http.Handler, anonymous, maintenanceExempt bool) error {
-	wrapped := r.wrapUser(handler, anonymous, maintenanceExempt)
+	wrapped := r.wrapUser(handler, anonymous, maintenanceExempt, !maintenanceExempt)
 	return r.mountRoute(r.userMux, method, pattern, wrapped)
 }
 func (r *Runtime) registerAdminInternal(method, pattern string, handler http.Handler, anonymous, logout bool) error {
@@ -273,6 +274,24 @@ func (r *Runtime) RegisterUserRoute(method, pattern string, handler resources.Au
 		handler(w, req, resources.UserPrincipal{UserID: actor.UserID})
 	})
 	return r.registerUserInternal(method, pattern, adapter, false, false)
+}
+
+func (r *Runtime) RegisterContinuationUserRoute(method, pattern string, handler resources.AuthenticatedContinuationHandler) error {
+	if handler == nil {
+		return ErrInvalidRoute
+	}
+	adapter := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		actor, ok := ActorFromContext(req.Context())
+		if !ok || actor.Kind != authz.ActorUserSession || actor.UserID <= 0 || actor.SessionTokenHash == "" {
+			writeStableError(w, httperr.CodeUnauthorized, "authentication required")
+			return
+		}
+		handler(w, req, resources.ContinuationUserPrincipal{
+			UserID:         actor.UserID,
+			SessionBinding: actor.SessionTokenHash,
+		})
+	})
+	return r.mountRoute(r.userMux, method, pattern, r.wrapUser(adapter, false, true, true))
 }
 
 func (r *Runtime) RegisterAdminRoute(method, pattern string, handler http.Handler) error {
@@ -344,7 +363,7 @@ func (r *Runtime) isClosed() bool {
 	return r.closed
 }
 
-func (r *Runtime) wrapUser(next http.Handler, anonymous, maintenanceExempt bool) http.Handler {
+func (r *Runtime) wrapUser(next http.Handler, anonymous, maintenanceExempt, renewSession bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if !requireStation(w, req, host.StationUser) {
 			return
@@ -375,7 +394,7 @@ func (r *Runtime) wrapUser(next http.Handler, anonymous, maintenanceExempt bool)
 			r.writeSessionFailure(w, err)
 			return
 		}
-		if !maintenanceExempt {
+		if renewSession {
 			setUserSessionCookie(w, raw, timeFromUnix(p.expiresAt), r.now(), secureCookieForRequest(req, r.siteOrigin))
 		}
 		next.ServeHTTP(w, req.WithContext(withActor(req.Context(), p.actor)))

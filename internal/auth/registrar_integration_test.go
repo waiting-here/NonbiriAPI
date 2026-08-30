@@ -190,3 +190,49 @@ func TestOptionalUserRouteDistinguishesAnonymousAndAuthenticatedCallers(t *testi
 		t.Fatalf("maintenance=%d invocations=%d body=%s", maintenance.Code, invocations, maintenance.Body.String())
 	}
 }
+
+func TestContinuationRouteAuthenticatesDuringMaintenanceWithoutGrantingOrdinaryAccess(t *testing.T) {
+	f := newRuntimeFixture(t, nil)
+	invocations := 0
+	var principal resources.ContinuationUserPrincipal
+	if err := f.runtime.RegisterContinuationUserRoute(http.MethodPost, "/api/games/linklink/{id}/matches", func(w http.ResponseWriter, _ *http.Request, got resources.ContinuationUserPrincipal) {
+		invocations++
+		principal = got
+		w.WriteHeader(http.StatusNoContent)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	handler := f.runtime.UserHandler()
+	unauthenticated := request(t, handler, host.StationUser, http.MethodPost, "https://user.example/api/games/linklink/lnk_test/matches", "", nil, nil)
+	if unauthenticated.Code != http.StatusUnauthorized || invocations != 0 {
+		t.Fatalf("unauthenticated=%d invocations=%d body=%s", unauthenticated.Code, invocations, unauthenticated.Body.String())
+	}
+
+	cookie := loginUser(t, f, "continuation", "")
+	var userID int64
+	var binding string
+	if err := f.store.DB().QueryRow(`SELECT user_id,token_hash FROM sessions WHERE token_hash=?`, sessionLookupHash(cookie.Value)).Scan(&userID, &binding); err != nil {
+		t.Fatal(err)
+	}
+	f.gate.enabled = true
+	ordinary := request(t, handler, host.StationUser, http.MethodGet, "https://user.example/api/me", "", []*http.Cookie{cookie}, nil)
+	if ordinary.Code != http.StatusServiceUnavailable || invocations != 0 {
+		t.Fatalf("ordinary=%d invocations=%d body=%s", ordinary.Code, invocations, ordinary.Body.String())
+	}
+	continued := request(t, handler, host.StationUser, http.MethodPost, "https://user.example/api/games/linklink/lnk_test/matches", "", []*http.Cookie{cookie}, nil)
+	if continued.Code != http.StatusNoContent || invocations != 1 {
+		t.Fatalf("continued=%d invocations=%d body=%s", continued.Code, invocations, continued.Body.String())
+	}
+	if principal.UserID != userID || principal.SessionBinding != binding || principal.SessionBinding == cookie.Value {
+		t.Fatalf("principal=%+v user=%d binding=%q", principal, userID, binding)
+	}
+	if renewed := responseCookie(t, continued, UserSessionCookieName); renewed.Value != cookie.Value {
+		t.Fatalf("renewed cookie=%+v", renewed)
+	}
+
+	f.gate.ready = false
+	unready := request(t, handler, host.StationUser, http.MethodPost, "https://user.example/api/games/linklink/lnk_test/matches", "", []*http.Cookie{cookie}, nil)
+	if unready.Code != http.StatusServiceUnavailable || invocations != 1 {
+		t.Fatalf("unready=%d invocations=%d body=%s", unready.Code, invocations, unready.Body.String())
+	}
+}

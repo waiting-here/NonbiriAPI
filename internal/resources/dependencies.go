@@ -81,3 +81,22 @@ type AuthorizedUserHandler func(http.ResponseWriter, *http.Request, UserPrincipa
 type UserRouteRegistrar interface {
 	RegisterUserRoute(method, pattern string, handler AuthorizedUserHandler) error
 }
+
+// ContinuationUserPrincipal carries only the authenticated identity needed to
+// prove an already-open game continuation. SessionBinding is irreversible
+// session lookup material, never the raw browser cookie.
+type ContinuationUserPrincipal struct {
+	UserID         int64
+	SessionBinding string
+}
+
+type AuthenticatedContinuationHandler func(http.ResponseWriter, *http.Request, ContinuationUserPrincipal)
+
+// ContinuationUserRouteRegistrar is the narrow maintenance bypass for routes
+// that can only read or advance an already-open, session-bound game flow. The
+// handler must revalidate the live account, maintenance state, persisted lease,
+// and requested action in its final transaction; this boundary never grants
+// authority to create a lease or a new business operation during maintenance.
+type ContinuationUserRouteRegistrar interface {
+	RegisterContinuationUserRoute(method, pattern string, handler AuthenticatedContinuationHandler) error
+}
