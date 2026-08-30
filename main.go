@@ -12,15 +12,24 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/adminapi"
 	"github.com/waiting-here/NonbiriAPI/internal/applog"
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/backend"
+	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/elevation"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
+	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/resourcebridge"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 	"github.com/waiting-here/NonbiriAPI/web"
 )
@@ -182,6 +191,37 @@ func freshSafeMux(cfg *config.Config, store *db.Store) *http.ServeMux {
 	return mux
 }
 
+func generationTwoMux(cfg *config.Config, store *db.Store, authRuntime *auth.Runtime) (*http.ServeMux, error) {
+	if cfg == nil || store == nil || authRuntime == nil {
+		return nil, errors.New("Generation 2 HTTP dependencies are required")
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", healthz)
+
+	publicConfig := httpmw.API(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		servePublicConfig(store, w, r)
+	}))
+	mux.Handle("/api/config", publicConfig)
+
+	userAuth := authRuntime.UserHandler()
+	mux.Handle("/api", userAuth)
+	mux.Handle("/api/", userAuth)
+
+	callerAPI := httpmw.API(http.HandlerFunc(apiNotFound))
+	mux.Handle("/v1", callerAPI)
+	mux.Handle("/v1/", callerAPI)
+
+	// Administrator routes deliberately bypass the maintenance admission gate.
+	// The authentication runtime still enforces the admin host, password,
+	// credential generation, live session and final-transaction authorization.
+	adminAuth := authRuntime.AdminHandler()
+	mux.Handle("/admin/api", adminAuth)
+	mux.Handle("/admin/api/", adminAuth)
+
+	mux.Handle("/", web.NewMultiHandler(cfg.UserHost, cfg.AdminHost))
+	return mux, nil
+}
+
 func stationBoundary(cfg *config.Config, next http.Handler) (http.Handler, error) {
 	if cfg == nil || next == nil {
 		return nil, errors.New("HTTP boundary dependencies are required")
@@ -205,20 +245,180 @@ func newHTTPHandler(cfg *config.Config) (http.Handler, error) {
 }
 
 type application struct {
-	handler http.Handler
+	handler     http.Handler
+	authRuntime *auth.Runtime
+	bridge      *resourcebridge.Runtime
+	claims      *claim.Service
+	authorizer  *authz.Authorizer
+	elevation   *elevation.Manager
+	gate        *maintenance.Gate
+	registry    *maintenance.Registry
+	maintenance *maintenance.Service
+	egress      *egress.Stack
+
+	closeOnce sync.Once
+	closeErr  error
 }
 
 func (a *application) Close() error {
-	return nil
+	if a == nil {
+		return nil
+	}
+	a.closeOnce.Do(func() {
+		var closeErrors []error
+		if a.authRuntime != nil {
+			if err := a.authRuntime.Close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
+		}
+		if a.bridge != nil {
+			if err := a.bridge.Close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
+		}
+		if a.egress != nil {
+			a.egress.CloseIdleConnections()
+		}
+		a.closeErr = errors.Join(closeErrors...)
+	})
+	return a.closeErr
 }
 
 func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) (*application, error) {
 	if cfg == nil || store == nil || vault == nil {
 		return nil, errors.New("application dependencies are required")
 	}
-	handler, err := stationBoundary(cfg, freshSafeMux(cfg, store))
+
+	elevationManager, err := elevation.NewManager()
 	if err != nil {
+		return nil, fmt.Errorf("create elevation manager: %w", err)
+	}
+	authorizer := authz.New(authz.Options{Elevation: elevationManager})
+	gate := maintenance.NewGate()
+	registry := maintenance.NewRegistry()
+	maintenanceService, err := maintenance.NewService(maintenance.ServiceOptions{
+		Authorizer: authorizer,
+		Gate:       gate,
+		Registry:   registry,
+	})
+	if err != nil {
+		_ = elevationManager.Close()
+		return nil, fmt.Errorf("create maintenance service: %w", err)
+	}
+
+	outbound, err := egress.NewStack(egress.StackOptions{})
+	if err != nil {
+		_ = elevationManager.Close()
+		return nil, fmt.Errorf("create egress stack: %w", err)
+	}
+	var bridgeRuntime *resourcebridge.Runtime
+	var authRuntime *auth.Runtime
+	cleanup := func() {
+		if authRuntime != nil {
+			_ = authRuntime.Close()
+		} else {
+			_ = elevationManager.Close()
+		}
+		if bridgeRuntime != nil {
+			_ = bridgeRuntime.Close()
+		}
+		outbound.CloseIdleConnections()
+	}
+
+	startupContext := context.Background()
+	if err := outbound.AddSelfOrigins(startupContext, cfg); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register egress self origins: %w", err)
+	}
+	localBackend, err := backend.NewLocal(outbound)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create local backend: %w", err)
+	}
+	claimService, err := claim.New(claim.Dependencies{DB: store.DB(), Secrets: vault})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create claim service: %w", err)
+	}
+	if err := recoverClaimsBeforeListener(startupContext, claimService); err != nil {
+		cleanup()
 		return nil, err
 	}
-	return &application{handler: handler}, nil
+	bridgeRuntime, err = resourcebridge.New(resourcebridge.Config{
+		Store:   store,
+		Vault:   vault,
+		Claims:  claimService,
+		Backend: localBackend,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create resource bridge: %w", err)
+	}
+	discordProvider, err := auth.NewHTTPDiscordProvider(auth.HTTPDiscordProviderConfig{
+		ClientID:     cfg.DiscordClientID,
+		ClientSecret: cfg.DiscordClientSecret,
+		Scopes:       cfg.DiscordOAuthScopes,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create Discord authentication provider: %w", err)
+	}
+	authRuntime, err = auth.NewRuntime(auth.RuntimeConfig{
+		Store:                store,
+		Provider:             discordProvider,
+		DiscordClientID:      cfg.DiscordClientID,
+		UserSiteBaseURL:      cfg.SiteBaseURL,
+		AdminUsername:        cfg.AdminUsername,
+		AdminPassword:        cfg.AdminPassword,
+		CredentialKeyDeriver: vault,
+		Authorizer:           authorizer,
+		Maintenance:          gate,
+		Elevation:            elevationManager,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create authentication runtime: %w", err)
+	}
+	if _, err := maintenanceService.PrepareListener(startupContext, store.DB()); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("prepare maintenance state: %w", err)
+	}
+
+	mux, err := generationTwoMux(cfg, store, authRuntime)
+	if err != nil {
+		cleanup()
+		return nil, err
+	}
+	handler, err := stationBoundary(cfg, mux)
+	if err != nil {
+		cleanup()
+		return nil, err
+	}
+	return &application{
+		handler:     handler,
+		authRuntime: authRuntime,
+		bridge:      bridgeRuntime,
+		claims:      claimService,
+		authorizer:  authorizer,
+		elevation:   elevationManager,
+		gate:        gate,
+		registry:    registry,
+		maintenance: maintenanceService,
+		egress:      outbound,
+	}, nil
+}
+
+func recoverClaimsBeforeListener(ctx context.Context, service *claim.Service) error {
+	if ctx == nil || service == nil {
+		return errors.New("claim recovery dependencies are required")
+	}
+	for {
+		report, err := service.RecoverNonterminal(ctx, claim.MaxRecoveryBatch)
+		if err != nil {
+			return fmt.Errorf("recover nonterminal claims: %w", err)
+		}
+		if !report.More {
+			return nil
+		}
+	}
 }

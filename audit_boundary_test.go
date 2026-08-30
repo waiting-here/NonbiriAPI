@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -12,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
@@ -25,12 +29,43 @@ const (
 
 func auditConfig() *config.Config {
 	return &config.Config{
-		ListenAddr:        "127.0.0.1:18999",
-		UserHost:          auditUserHost,
-		AdminHost:         auditAdminHost,
-		SiteBaseURL:       "https://" + auditUserHost,
-		TrustedProxyCIDRs: []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")},
+		ListenAddr:          "127.0.0.1:18999",
+		UserHost:            auditUserHost,
+		AdminHost:           auditAdminHost,
+		SiteBaseURL:         "https://" + auditUserHost,
+		AdminUsername:       "operator",
+		AdminPassword:       "correct horse battery staple",
+		DiscordClientID:     "test-client",
+		DiscordClientSecret: "test-secret",
+		TrustedProxyCIDRs:   []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")},
 	}
+}
+
+func testApplicationRequest(t *testing.T, handler http.Handler, method, hostName, path, body string, cookies []*http.Cookie, headers map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	request := httptest.NewRequest(method, "http://wire.invalid"+path, strings.NewReader(body))
+	request.Host = hostName
+	request.RemoteAddr = "198.51.100.20:4242"
+	for _, cookie := range cookies {
+		request.AddCookie(cookie)
+	}
+	for name, value := range headers {
+		request.Header.Set(name, value)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	return response
+}
+
+func responseCookieNamed(t *testing.T, response *httptest.ResponseRecorder, name string) *http.Cookie {
+	t.Helper()
+	for _, cookie := range response.Result().Cookies() {
+		if cookie.Name == name && cookie.Value != "" {
+			return cookie
+		}
+	}
+	t.Fatalf("response did not set %s: status=%d body=%s", name, response.Code, response.Body.String())
+	return nil
 }
 
 func assertFreshSafeApplication(t *testing.T, app *application) {
@@ -165,5 +200,159 @@ func TestGenerationTwoFreshAndCurrentApplicationBoot(t *testing.T) {
 		if err := store.Close(); err != nil {
 			t.Fatalf("pass %d store.Close: %v", pass, err)
 		}
+	}
+}
+
+func TestGenerationTwoRootAuthenticationAndMaintenanceWiring(t *testing.T) {
+	key := bytes.Repeat([]byte{0x69}, secret.MasterKeyBytes)
+	vault, err := secret.New(key)
+	clear(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = vault.Close() }()
+
+	dbPath := filepath.Join(t.TempDir(), "root-auth.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+	app, err := buildApplication(auditConfig(), store, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = app.Close() }()
+
+	if app.authRuntime == nil || app.bridge == nil || app.claims == nil || app.authorizer == nil ||
+		app.elevation == nil || app.gate == nil || app.maintenance == nil || app.egress == nil {
+		t.Fatal("root runtime omitted a required Generation 2 owner")
+	}
+	state, ready := app.gate.State()
+	if !ready || !state.Enabled || app.registry == nil || !app.registry.Frozen() {
+		t.Fatalf("maintenance startup state=%+v ready=%v registry=%v", state, ready, app.registry != nil && app.registry.Frozen())
+	}
+
+	userSession := testApplicationRequest(t, app.handler, http.MethodGet, auditUserHost, "/api/session", "", nil, nil)
+	if userSession.Code != http.StatusServiceUnavailable || !strings.Contains(userSession.Body.String(), `"code":"maintenance"`) {
+		t.Fatalf("user session during maintenance status=%d body=%s", userSession.Code, userSession.Body.String())
+	}
+	oauthStart := testApplicationRequest(t, app.handler, http.MethodGet, auditUserHost, "/api/auth/discord/start", "", nil, nil)
+	if oauthStart.Code != http.StatusServiceUnavailable || !strings.Contains(oauthStart.Body.String(), `"code":"maintenance"`) {
+		t.Fatalf("OAuth start during maintenance status=%d body=%s", oauthStart.Code, oauthStart.Body.String())
+	}
+	caller := testApplicationRequest(t, app.handler, http.MethodGet, auditUserHost, "/v1/models", "", nil, nil)
+	if caller.Code != http.StatusNotFound {
+		t.Fatalf("dormant caller route status=%d body=%s", caller.Code, caller.Body.String())
+	}
+
+	wrongLogin := testApplicationRequest(t, app.handler, http.MethodPost, auditAdminHost, "/admin/api/login",
+		`{"username":"operator","password":"wrong password"}`, nil, map[string]string{"Content-Type": "application/json"})
+	if wrongLogin.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong admin password status=%d body=%s", wrongLogin.Code, wrongLogin.Body.String())
+	}
+	login := testApplicationRequest(t, app.handler, http.MethodPost, auditAdminHost, "/admin/api/login",
+		`{"username":"operator","password":"correct horse battery staple"}`, nil, map[string]string{"Content-Type": "application/json"})
+	if login.Code != http.StatusOK {
+		t.Fatalf("admin login during maintenance status=%d body=%s", login.Code, login.Body.String())
+	}
+	adminCookie := responseCookieNamed(t, login, auth.AdminSessionCookieName)
+	adminSession := testApplicationRequest(t, app.handler, http.MethodGet, auditAdminHost, "/admin/api/session", "", []*http.Cookie{adminCookie}, nil)
+	if adminSession.Code != http.StatusOK {
+		t.Fatalf("admin session during maintenance status=%d body=%s", adminSession.Code, adminSession.Body.String())
+	}
+
+	elevated := testApplicationRequest(t, app.handler, http.MethodPost, auditAdminHost, "/admin/api/auth/elevate",
+		`{"password":"correct horse battery staple"}`, []*http.Cookie{adminCookie}, map[string]string{
+			"Content-Type": "application/json",
+			"Origin":       "http://" + auditAdminHost,
+		})
+	if elevated.Code != http.StatusOK {
+		t.Fatalf("admin elevation during maintenance status=%d body=%s", elevated.Code, elevated.Body.String())
+	}
+	var elevationResponse auth.ElevationResponse
+	if err := json.Unmarshal(elevated.Body.Bytes(), &elevationResponse); err != nil || elevationResponse.Token == "" {
+		t.Fatalf("admin elevation body=%s err=%v", elevated.Body.String(), err)
+	}
+
+	var adminUserID int64
+	var tokenHash, credentialGeneration string
+	if err := store.DB().QueryRow(`SELECT s.user_id,s.token_hash,s.cred_gen
+FROM sessions s JOIN users u ON u.id=s.user_id WHERE u.is_admin=1`).Scan(&adminUserID, &tokenHash, &credentialGeneration); err != nil {
+		t.Fatal(err)
+	}
+	actor := authz.Actor{
+		Kind:              authz.ActorAdminSession,
+		UserID:            adminUserID,
+		SessionTokenHash:  tokenHash,
+		SessionGeneration: credentialGeneration,
+		ElevationToken:    elevationResponse.Token,
+	}
+	tx, err := store.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	principal, authorizeErr := app.authorizer.Authorize(context.Background(), tx, actor, authz.Requirement{
+		Role:           authz.RoleAdministrator,
+		FreshElevation: true,
+	})
+	_ = tx.Rollback()
+	if authorizeErr != nil || principal.UserID != adminUserID || principal.Role != authz.RoleAdministrator {
+		t.Fatalf("shared final authorization principal=%+v err=%v", principal, authorizeErr)
+	}
+	replayTx, err := store.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, replayErr := app.authorizer.Authorize(context.Background(), replayTx, actor, authz.Requirement{
+		Role:           authz.RoleAdministrator,
+		FreshElevation: true,
+	})
+	_ = replayTx.Rollback()
+	if !errors.Is(replayErr, authz.ErrElevatedRequired) {
+		t.Fatalf("elevation replay err=%v", replayErr)
+	}
+
+	logout := testApplicationRequest(t, app.handler, http.MethodPost, auditAdminHost, "/admin/api/logout", "", []*http.Cookie{adminCookie}, map[string]string{
+		"Origin": "http://" + auditAdminHost,
+	})
+	if logout.Code != http.StatusNoContent {
+		t.Fatalf("admin logout during maintenance status=%d body=%s", logout.Code, logout.Body.String())
+	}
+	stale := testApplicationRequest(t, app.handler, http.MethodGet, auditAdminHost, "/admin/api/session", "", []*http.Cookie{adminCookie}, nil)
+	if stale.Code != http.StatusUnauthorized {
+		t.Fatalf("logged-out admin session status=%d body=%s", stale.Code, stale.Body.String())
+	}
+}
+
+func TestApplicationCloseIsIdempotent(t *testing.T) {
+	key := bytes.Repeat([]byte{0x7a}, secret.MasterKeyBytes)
+	vault, err := secret.New(key)
+	clear(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = vault.Close() }()
+	dbPath := filepath.Join(t.TempDir(), "close.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+	app, err := buildApplication(auditConfig(), store, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := app.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.Close(); err != nil {
+		t.Fatal(err)
+	}
+	closed := testApplicationRequest(t, app.handler, http.MethodGet, auditAdminHost, "/admin/api/session", "", nil, nil)
+	if closed.Code != http.StatusServiceUnavailable {
+		t.Fatalf("closed authentication runtime status=%d body=%s", closed.Code, closed.Body.String())
 	}
 }
