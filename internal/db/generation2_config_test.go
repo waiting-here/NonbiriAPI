@@ -313,8 +313,8 @@ func TestGenerationTwoConfigCombinationHealth(t *testing.T) {
 		}
 		values["site_timezone_offset_minutes"] = "0"
 		values["activity_welfare_enabled"] = "1"
-		if err := validateGenerationTwoConfigCombinations(values); err == nil {
-			t.Fatal("welfare with zero threshold/cap accepted")
+		if err := validateGenerationTwoConfigCombinations(values); err != nil {
+			t.Fatalf("welfare with zero threshold/cap rejected: %v", err)
 		}
 		values["activity_welfare_threshold_milli"] = "100"
 		values["activity_welfare_cap_milli"] = "10"
@@ -380,6 +380,68 @@ func TestGenerationTwoConfigCombinationHealth(t *testing.T) {
 			t.Fatal("RPS basis-point sum at 10000 accepted")
 		}
 	})
+}
+
+func TestGenerationTwoWelfareConfigSnapshotZeroValueBoundaries(t *testing.T) {
+	base := generationTwoSeedValuesForTest(t)
+	base["site_timezone_offset_minutes"] = "0"
+	base["activities_enabled"] = "1"
+	base["activity_welfare_enabled"] = "1"
+
+	for _, tc := range []struct {
+		name      string
+		threshold string
+		cap       string
+	}{
+		{name: "zero threshold", threshold: "0", cap: "10"},
+		{name: "zero cap", threshold: "100", cap: "0"},
+		{name: "both zero", threshold: "0", cap: "0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			values := cloneGenerationTwoConfigValues(base)
+			values["activity_welfare_threshold_milli"] = tc.threshold
+			values["activity_welfare_cap_milli"] = tc.cap
+			if err := ValidateGenerationTwoConfigSnapshot(values); err != nil {
+				t.Fatalf("threshold=%s cap=%s rejected: %v", tc.threshold, tc.cap, err)
+			}
+		})
+	}
+}
+
+func TestGenerationTwoWelfareConfigSnapshotRejectsInvalidValues(t *testing.T) {
+	base := generationTwoSeedValuesForTest(t)
+	base["site_timezone_offset_minutes"] = "0"
+	base["activities_enabled"] = "1"
+	base["activity_welfare_enabled"] = "1"
+	base["activity_welfare_threshold_milli"] = "100"
+	base["activity_welfare_cap_milli"] = "10"
+
+	for _, tc := range []struct {
+		name    string
+		key     string
+		value   string
+		missing bool
+	}{
+		{name: "missing threshold", key: "activity_welfare_threshold_milli", missing: true},
+		{name: "missing cap", key: "activity_welfare_cap_milli", missing: true},
+		{name: "empty threshold", key: "activity_welfare_threshold_milli", value: ""},
+		{name: "negative cap", key: "activity_welfare_cap_milli", value: "-1"},
+		{name: "overflow threshold", key: "activity_welfare_threshold_milli", value: formatGenerationTwoUint(uint64(MaxMoneyMilli) + 1)},
+		{name: "invalid decimal cap", key: "activity_welfare_cap_milli", value: "1.5"},
+		{name: "noncanonical cap", key: "activity_welfare_cap_milli", value: "00"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			values := cloneGenerationTwoConfigValues(base)
+			if tc.missing {
+				delete(values, tc.key)
+			} else {
+				values[tc.key] = tc.value
+			}
+			if err := ValidateGenerationTwoConfigSnapshot(values); err == nil {
+				t.Fatalf("invalid welfare configuration %s=%q accepted", tc.key, tc.value)
+			}
+		})
+	}
 }
 
 func TestGenerationTwoEnabledRPSSnapshotSurvivesCloseReopen(t *testing.T) {

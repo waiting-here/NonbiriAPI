@@ -445,6 +445,69 @@ func TestGenerationTwoCurrentEnabledRPSSnapshotReopensWithSameVault(t *testing.T
 	}
 }
 
+func TestGenerationTwoCurrentEnabledWelfareZeroSnapshotReopensWithSameVault(t *testing.T) {
+	path := bootstrapTestPath(t, "restart-enabled-welfare-zero.db")
+	vault := bootstrapTestVault(t)
+	first, err := Open(path, vault)
+	if err != nil {
+		t.Fatalf("fresh Generation Two open: %v", err)
+	}
+	if first == nil || first.DB() == nil {
+		t.Fatal("fresh Generation Two open returned no store")
+	}
+
+	for _, setting := range []struct{ key, value string }{
+		{key: "site_timezone_offset_minutes", value: "0"},
+		{key: "activity_welfare_threshold_milli", value: "0"},
+		{key: "activity_welfare_cap_milli", value: "0"},
+		{key: "activities_enabled", value: "1"},
+		{key: "activity_welfare_enabled", value: "1"},
+	} {
+		tx, txErr := first.DB().BeginTx(context.Background(), nil)
+		if txErr != nil {
+			_ = first.Close()
+			t.Fatalf("begin welfare configuration transaction for %s: %v", setting.key, txErr)
+		}
+		if txErr = validateAndWriteGenerationTwoSiteConfigTx(context.Background(), tx, setting.key, setting.value, 1); txErr != nil {
+			_ = tx.Rollback()
+			_ = first.Close()
+			t.Fatalf("write welfare configuration %s=%s: %v", setting.key, setting.value, txErr)
+		}
+		if txErr = tx.Commit(); txErr != nil {
+			_ = first.Close()
+			t.Fatalf("commit welfare configuration %s=%s: %v", setting.key, setting.value, txErr)
+		}
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close enabled welfare Generation Two store: %v", err)
+	}
+
+	second, err := Open(path, vault)
+	if err != nil {
+		t.Fatalf("reopen enabled welfare Generation Two store: %v", err)
+	}
+	t.Cleanup(func() { _ = second.Close() })
+	values, err := readGenerationTwoSiteConfigSnapshot(context.Background(), second.DB())
+	if err != nil {
+		t.Fatalf("read enabled welfare snapshot after reopen: %v", err)
+	}
+	clean := generationTwoConfigSnapshotForValidation(values)
+	if err := ValidateGenerationTwoConfigSnapshot(clean); err != nil {
+		t.Fatalf("enabled welfare snapshot failed validation after reopen: %v", err)
+	}
+	for key, want := range map[string]string{
+		"site_timezone_offset_minutes":     "0",
+		"activities_enabled":               "1",
+		"activity_welfare_enabled":         "1",
+		"activity_welfare_threshold_milli": "0",
+		"activity_welfare_cap_milli":       "0",
+	} {
+		if got := clean[key]; got != want {
+			t.Fatalf("reopened welfare configuration %s=%q, want %q", key, got, want)
+		}
+	}
+}
+
 func TestGenerationTwoFreshFailureIsAtomicAndCleansOnlyOwnedFile(t *testing.T) {
 	preserveBootstrapHooks(t)
 	path := bootstrapTestPath(t, "fresh-failure.db")
