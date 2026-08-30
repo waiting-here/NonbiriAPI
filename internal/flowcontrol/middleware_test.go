@@ -113,7 +113,7 @@ func TestMiddlewareRateLimitedResponseIsStableAndBounded(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
 		t.Fatalf("decode envelope: %v body=%s", err, recorder.Body.String())
 	}
-	if envelope.Error.Code != httperr.CodeRateLimited || envelope.Error.Diag != "" || envelope.Error.RequestID != "" {
+	if envelope.Error.Code != httperr.CodeRateLimited || envelope.Error.Diag != "" {
 		t.Fatalf("unexpected envelope: %#v", envelope.Error)
 	}
 	body := recorder.Body.String()

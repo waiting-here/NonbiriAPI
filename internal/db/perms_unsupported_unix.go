@@ -1,12 +1,12 @@
-//go:build !unix && !windows
+//go:build unix && (!linux || !amd64)
 
 package db
 
 import "errors"
 
-// The beta.1 database security contract is implemented only for the intended
-// Linux/amd64 target. An unsupported OS has no equivalent permission check;
-// fail closed before a writable SQLite handle can be returned.
+// The release gate promises the hardened database path only on Linux/amd64.
+// Other Unix targets must not inherit a partially equivalent implementation
+// and then continue to a writable SQLite open.
 func secureDBParentDir(string) error {
 	return errors.New("database path security is unsupported on this target")
 }

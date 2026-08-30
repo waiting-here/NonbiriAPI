@@ -28,11 +28,16 @@ func assertLoadedMasterKey(t *testing.T, c *Config, expected []byte) {
 	}
 	t.Cleanup(func() { _ = reference.Close() })
 
-	envelope, err := loaded.Seal([]byte("configuration-key-check"))
+	contextID := []byte{0x92, 0x7a, 0x11, 0x04, 0x5d, 0xe8, 0x2c, 0xf0, 0x33, 0xa6, 0x7b, 0x19, 0xc4, 0x80, 0x56, 0xed}
+	credentialContext, err := secret.NewGenerationTwoEndpointKeyContext(contextID)
 	if err != nil {
-		t.Fatalf("loaded vault Seal: %v", err)
+		t.Fatalf("construct generation-two context: %v", err)
 	}
-	opened, err := reference.Open(envelope)
+	envelope, err := loaded.SealForGenerationTwoContext([]byte("configuration-key-check"), credentialContext)
+	if err != nil {
+		t.Fatalf("loaded vault generation-two seal: %v", err)
+	}
+	opened, err := reference.OpenForGenerationTwoContext(envelope, credentialContext)
 	if err != nil {
 		t.Fatal("loaded vault does not use the expected master key")
 	}
@@ -301,7 +306,14 @@ func TestMasterKeyFileRejectsUnsafeAndMalformedInputs(t *testing.T) {
 		}
 		if err := os.Symlink(target, link); err != nil {
 			if runtime.GOOS == "windows" && (errors.Is(err, os.ErrPermission) || strings.Contains(strings.ToLower(err.Error()), "privilege")) {
-				t.Skip("symlink creation is unavailable without the Windows privilege")
+				// Some Windows test hosts do not grant the optional symlink
+				// privilege. Keep this test deterministic there by exercising the
+				// same non-regular-file rejection path instead of skipping it.
+				t.Setenv("NONBIRI_MASTER_KEY_FILE", dir)
+				if _, fallbackErr := Load(); fallbackErr == nil {
+					t.Fatal("Load accepted a directory when the symlink probe was unavailable")
+				}
+				return
 			}
 			t.Fatalf("create symlink: %v", err)
 		}

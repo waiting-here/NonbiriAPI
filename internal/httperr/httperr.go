@@ -1,42 +1,49 @@
 // Package httperr defines the uniform JSON error envelope returned by the
 // platform and its stable code set. Error codes are stable machine identifiers
 // (never changed for an existing meaning); HTTP status is derived from the
-// code. Message and diag are length-bounded and control-char sanitized before
-// emission. Message is bounded to a short human-safe rune limit and stripped
-// of all control characters; it never carries raw upstream identifiers or
-// text. Diag is bounded to 4096 bytes by the shared internal/diagnostic
-// boundary, which also repairs invalid UTF-8, collapses CR/LF/TAB to spaces so
-// untrusted text cannot forge log lines, strips other C0 controls and DEL, and
-// marks truncation. Raw upstream identifiers and error text live only in diag,
-// and only after that shared bounding and sanitization. All error responses
-// carry Cache-Control: no-store so a cached error can never shadow a fresh
-// result.
+// code. The wire envelope contains only code, source, message, and optional
+// upstream_code/diag fields. Message and diag are length-bounded and
+// control-char sanitized before emission. Message is bounded to a short
+// human-safe UTF-8 byte limit and stripped of all control characters; it never
+// carries raw upstream identifiers or text. Diag is bounded to 4096 bytes by
+// the shared internal/diagnostic boundary, which also repairs invalid UTF-8,
+// collapses CR/LF/TAB to spaces so untrusted text cannot forge log lines,
+// strips other C0 controls and DEL, and marks truncation. Raw upstream
+// identifiers and error text live only in diag, and only after that shared
+// bounding and sanitization. All error responses carry Cache-Control:
+// no-store so a cached error can never shadow a fresh result.
 package httperr
 
 import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 )
 
 // Stable error codes. Add new codes; never redefine an existing one.
 const (
-	CodeInternal              = "internal"
-	CodeInvalidRequest        = "invalid_request"
-	CodeUnauthorized          = "unauthorized"
-	CodeForbidden             = "forbidden"
-	CodeNotFound              = "not_found"
-	CodeConflict              = "conflict"
-	CodeMethodNotAllowed      = "method_not_allowed"
-	CodeRateLimited           = "rate_limited"
-	CodePayloadTooLarge       = "payload_too_large"
-	CodeElevationRequired     = "elevated_required"
-	CodeUnboundModel          = "unbound_model"
-	CodeUpstream              = "upstream"
-	CodeServiceUnavailable    = "service_unavailable"
-	CodeResourceLimitExceeded = "resource_limit_exceeded"
+	CodeInternal                = "internal"
+	CodeInvalidRequest          = "invalid_request"
+	CodeUnauthorized            = "unauthorized"
+	CodeForbidden               = "forbidden"
+	CodeNotFound                = "not_found"
+	CodeConflict                = "conflict"
+	CodeMethodNotAllowed        = "method_not_allowed"
+	CodeRateLimited             = "rate_limited"
+	CodePayloadTooLarge         = "payload_too_large"
+	CodeElevationRequired       = "elevated_required"
+	CodeUnboundModel            = "unbound_model"
+	CodeUpstream                = "upstream"
+	CodeMaintenance             = "maintenance"
+	CodeServiceUnavailable      = "service_unavailable"
+	CodeResourceLimitExceeded   = "resource_limit_exceeded"
+	CodeResourceLocked          = "resource_locked"
+	CodeDebugDryRunIntercepted  = "debug_dry_run_intercepted"
+	CodeDebugLiveResultCaptured = "debug_live_result_captured"
+	CodeDebugLiveCancelled      = "debug_live_cancelled"
 	// Economy / feature-gate codes are reserved now (403) so later phases can
 	// emit a stable machine identifier without renumbering the wire contract.
 	// No business trigger is wired in this task.
@@ -61,20 +68,19 @@ const (
 )
 
 const (
-	msgBound       = 1000 // message: short, human-safe, rune limit
-	requestIDBound = 128  // correlation id: finite and control-safe at the wire sink
-	resourceBound  = 64   // resource name: short stable identifier, control-safe at the wire sink
+	msgBound           = 1024 // message: bounded UTF-8 bytes, including platform prefix
+	upstreamCodeBound  = 64   // connector code: bounded printable ASCII wire identifier
+	platformPrefix     = "[NonbiriAPI] "
+	sseErrorFrameBound = 4 * 1024
 )
 
 // Error is the inner "error" object of the envelope.
 type Error struct {
-	Code      string `json:"code"`
-	Source    string `json:"source"`
-	Message   string `json:"message"`
-	Diag      string `json:"diag,omitempty"`
-	RequestID string `json:"request_id,omitempty"`
-	Limit     int    `json:"limit,omitempty"`
-	Resource  string `json:"resource,omitempty"`
+	Code         string `json:"code"`
+	Source       string `json:"source"`
+	Message      string `json:"message"`
+	UpstreamCode string `json:"upstream_code,omitempty"`
+	Diag         string `json:"diag,omitempty"`
 }
 
 // Envelope is the top-level error response shape.
@@ -95,21 +101,32 @@ func (e Error) WithDiag(diag string) Error {
 	return e
 }
 
-// WithRequestID attaches a request correlation id.
-func (e Error) WithRequestID(id string) Error {
-	e.RequestID = sanitizeRequestID(id)
+// WithUpstreamCode attaches a bounded connector-owned machine identifier. It
+// is kept separate from Code: the latter is the platform's closed stable set,
+// while this field may preserve a safe upstream classification for an
+// explicitly whitelisted route.
+func (e Error) WithUpstreamCode(code string) Error {
+	e.UpstreamCode = sanitizeUpstreamCode(code)
 	return e
 }
 
-// WithResourceLimit attaches the effective cap and resource name to a
-// resource_limit_exceeded error so the caller can report which bounded
-// resource was refused and at what limit. resource is re-sanitized at the
-// wire sink; it is a short stable identifier (never request or secret
-// material).
-func (e Error) WithResourceLimit(resource string, limit int) Error {
-	e.Resource = resource
-	e.Limit = limit
-	return e
+// IsStableCode reports whether code belongs to the frozen Generation 2 error
+// closed set. Wire sinks use the same predicate to fail closed to internal.
+func IsStableCode(code string) bool {
+	switch code {
+	case CodeInternal, CodeInvalidRequest, CodeUnauthorized, CodeForbidden,
+		CodeNotFound, CodeConflict, CodeMethodNotAllowed, CodeRateLimited,
+		CodePayloadTooLarge, CodeElevationRequired, CodeUnboundModel,
+		CodeUpstream, CodeMaintenance, CodeServiceUnavailable,
+		CodeResourceLimitExceeded, CodeResourceLocked, CodeInsufficientCredits,
+		CodeFeatureDisabled, CodeCharitySuspended, CodeContentTooShort,
+		CodeAlreadyCheckedIn, CodeCheckinCapReached,
+		CodeDebugDryRunIntercepted, CodeDebugLiveResultCaptured,
+		CodeDebugLiveCancelled:
+		return true
+	default:
+		return false
+	}
 }
 
 // statusOf maps a stable code to its HTTP status. Unknown codes map to 500 to
@@ -135,10 +152,14 @@ func statusOf(code string) int {
 		return http.StatusRequestEntityTooLarge
 	case CodeUpstream:
 		return http.StatusBadGateway
-	case CodeUnboundModel, CodeServiceUnavailable:
+	case CodeUnboundModel, CodeMaintenance, CodeServiceUnavailable:
 		return http.StatusServiceUnavailable
-	case CodeResourceLimitExceeded:
+	case CodeResourceLimitExceeded, CodeDebugDryRunIntercepted, CodeDebugLiveResultCaptured:
 		return http.StatusUnprocessableEntity
+	case CodeResourceLocked:
+		return http.StatusLocked
+	case CodeDebugLiveCancelled:
+		return http.StatusConflict
 	default:
 		return http.StatusInternalServerError
 	}
@@ -165,6 +186,13 @@ func deriveSource(code, source string) string {
 	return derived
 }
 
+func canonicalCode(code string) string {
+	if IsStableCode(code) {
+		return code
+	}
+	return CodeInternal
+}
+
 // WithSource sets an explicit source attribution. It is honored at the wire
 // sink only when it matches the value derived from the code (upstream for
 // CodeUpstream, platform for every other code), so it can confirm but never
@@ -181,24 +209,58 @@ func (e Error) WithSource(source string) Error {
 // derived/validated here — the single wire sink — so a hand-constructed Error
 // can neither omit source nor forge a different attribution than its code.
 func WriteError(w http.ResponseWriter, e Error) {
-	// Error is exported for inspection and tests, so callers can construct one
-	// without New/WithDiag. Re-apply every wire-boundary sanitizer here; a
-	// final response sink must not depend on every caller remembering a helper.
-	e.Message = sanitizeMessage(e.Message)
-	e.Diag = sanitizeDiag(e.Diag)
-	e.RequestID = sanitizeRequestID(e.RequestID)
-	e.Resource = sanitizeResource(e.Resource)
+	writeError(w, e, nil, false)
+}
 
-	status := statusOf(e.Code)
-	if e.Code == "" {
-		e.Code = CodeInternal
-		status = http.StatusInternalServerError
+// WriteUpstreamError writes a CodeUpstream envelope while allowing the
+// caller-facing status to preserve a self-route upstream 4xx or timeout. Only
+// statuses 400..499, 502, and 504 are valid overrides, and only an exact
+// CodeUpstream error may use them. Any other combination falls back to the
+// ordinary code-derived status, so an invalid caller-supplied status can never
+// reach the wire.
+func WriteUpstreamError(w http.ResponseWriter, e Error, status int) {
+	if e.Code != CodeUpstream || !validUpstreamStatusOverride(status) {
+		writeError(w, e, nil, false)
+		return
 	}
-	e.Source = deriveSource(e.Code, e.Source)
+	writeError(w, e, &status, true)
+}
+
+func validUpstreamStatusOverride(status int) bool {
+	return status >= http.StatusBadRequest && status <= 499 ||
+		status == http.StatusBadGateway || status == http.StatusGatewayTimeout
+}
+
+func writeError(w http.ResponseWriter, e Error, statusOverride *int, allowUpstreamContext bool) {
+	e = sanitizeError(e, allowUpstreamContext)
+	status := statusOf(e.Code)
+	if e.Code == CodeUpstream && statusOverride != nil && validUpstreamStatusOverride(*statusOverride) {
+		status = *statusOverride
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(Envelope{Error: e})
+}
+
+func sanitizeError(e Error, allowUpstreamContext bool) Error {
+	// Error is exported for inspection and tests, so callers can construct one
+	// without New/WithDiag. Re-apply every wire-boundary sanitizer here; a
+	// final response sink must not depend on every caller remembering a helper.
+	e.Code = canonicalCode(e.Code)
+	e.Source = deriveSource(e.Code, e.Source)
+	e.Message = sanitizeWireMessage(e.Source, e.Message)
+	e.UpstreamCode = sanitizeUpstreamCode(e.UpstreamCode)
+	e.Diag = sanitizeDiag(e.Diag)
+	// Connector-owned context is opt-in at the sink. Ordinary WriteError and
+	// the default SSE path are fail-closed, even for CodeUpstream; only an
+	// explicit self/owner upstream API may opt in. Platform, public, and debug
+	// errors can never expose upstream_code/diag.
+	if !allowUpstreamContext || e.Code != CodeUpstream || e.Source != SourceUpstream {
+		e.UpstreamCode = ""
+		e.Diag = ""
+	}
+	return e
 }
 
 // WriteJSON writes a JSON success body with Cache-Control: no-store, the
@@ -213,16 +275,18 @@ func WriteJSON(w http.ResponseWriter, status int, body any) {
 
 // sseErrorPayload is the compact {error:{code,source,message}} shape shared by
 // the JSON envelope and an SSE error frame emitted after the commit boundary.
-// It deliberately omits diag/request_id/limit/resource: an in-stream frame has
-// no HTTP headers to carry them and the contract pins it to those three fields.
+// It deliberately omits diag and the other non-contract fields: an in-stream
+// frame has no HTTP headers to carry them and the contract pins it to this safe
+// projection (plus an optional upstream_code).
 type sseErrorPayload struct {
 	Error sseErrorBody `json:"error"`
 }
 
 type sseErrorBody struct {
-	Code    string `json:"code"`
-	Source  string `json:"source"`
-	Message string `json:"message"`
+	Code         string `json:"code"`
+	Source       string `json:"source"`
+	Message      string `json:"message"`
+	UpstreamCode string `json:"upstream_code,omitempty"`
 }
 
 // SSEErrorFrame returns a complete "data: <json>\n\n" SSE frame carrying the
@@ -234,63 +298,145 @@ type sseErrorBody struct {
 // sink; code is coerced to internal when empty. The returned frame is safe to
 // write verbatim onto a text/event-stream response.
 func SSEErrorFrame(e Error) []byte {
-	if e.Code == "" {
-		e.Code = CodeInternal
-	}
-	payload := sseErrorPayload{Error: sseErrorBody{
-		Code:    e.Code,
-		Source:  deriveSource(e.Code, e.Source),
-		Message: sanitizeMessage(e.Message),
-	}}
-	encoded, _ := json.Marshal(payload)
-	frame := make([]byte, 0, len(encoded)+8)
-	frame = append(frame, "data: "...)
-	frame = append(frame, encoded...)
-	frame = append(frame, '\n', '\n')
-	return frame
+	return sseErrorFrame(e, false)
 }
 
-// sanitizeMessage bounds to msgBound runes and strips all control characters.
+// SSEUpstreamErrorFrame returns an in-stream upstream error frame for an
+// explicitly self/owner-owned upstream route. The default SSEErrorFrame is
+// fail-closed and strips upstream_code even for CodeUpstream.
+func SSEUpstreamErrorFrame(e Error) []byte {
+	return sseErrorFrame(e, true)
+}
+
+func sseErrorFrame(e Error, allowUpstreamContext bool) []byte {
+	e = sanitizeError(e, allowUpstreamContext)
+	build := func(message string) []byte {
+		payload := sseErrorPayload{Error: sseErrorBody{
+			Code:         e.Code,
+			Source:       e.Source,
+			Message:      message,
+			UpstreamCode: e.UpstreamCode,
+		}}
+		encoded, _ := json.Marshal(payload)
+		frame := make([]byte, 0, len(encoded)+8)
+		frame = append(frame, "data: "...)
+		frame = append(frame, encoded...)
+		frame = append(frame, '\n', '\n')
+		return frame
+	}
+	frame := build(e.Message)
+	if len(frame) <= sseErrorFrameBound {
+		return frame
+	}
+
+	// JSON HTML escaping can expand a legal 1,024-byte message beyond the
+	// separate 4 KiB SSE frame budget. Retain the largest UTF-8-safe prefix that
+	// fits, preserving the platform prefix when present.
+	prefix := ""
+	content := e.Message
+	if e.Source == SourcePlatform && strings.HasPrefix(content, platformPrefix) {
+		prefix = platformPrefix
+		content = strings.TrimPrefix(content, platformPrefix)
+	}
+	best := build(prefix)
+	low, high := 0, len(content)
+	for low <= high {
+		middle := low + (high-low)/2
+		candidate := build(prefix + truncateUTF8Bytes(content, middle))
+		if len(candidate) <= sseErrorFrameBound {
+			best = candidate
+			low = middle + 1
+		} else {
+			high = middle - 1
+		}
+	}
+	return best
+}
+
+// sanitizeMessage bounds to msgBound UTF-8 bytes and strips all control
+// characters. The platform prefix is applied separately at the wire sink so
+// its bytes are included in the same bound.
 func sanitizeMessage(s string) string {
-	return controlStrip(boundByRunes(s, msgBound))
+	return truncateUTF8Bytes(controlStrip(s), msgBound)
+}
+
+func sanitizeWireMessage(source, message string) string {
+	// Prefix handling is deliberately centralized at both wire sinks. Remove
+	// every exact marker before applying the source-specific prefix, so an
+	// internal marker cannot smuggle platform attribution through either sink.
+	message = strings.ReplaceAll(controlStrip(message), platformPrefix, "")
+	if source == SourcePlatform {
+		contentBound := msgBound - len(platformPrefix)
+		if contentBound < 0 {
+			contentBound = 0
+		}
+		message = platformPrefix + truncateUTF8Bytes(message, contentBound)
+		return message
+	}
+	return truncateUTF8Bytes(message, msgBound)
 }
 
 // sanitizeDiag bounds diag to the shared diagnostic byte limit and applies its
 // UTF-8 repair and control-character normalization. Empty input returns the
 // empty string, which the omitempty JSON tag drops from the envelope.
 func sanitizeDiag(s string) string {
-	return diagnostic.Bound(s)
+	return diagnostic.Bound(stripC1Controls(s))
 }
 
-func sanitizeRequestID(s string) string {
-	return controlStrip(boundByRunes(s, requestIDBound))
+func sanitizeUpstreamCode(s string) string {
+	if s == "" {
+		return ""
+	}
+	if len(s) > upstreamCodeBound {
+		return ""
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < 0x21 || s[i] > 0x7e {
+			return ""
+		}
+	}
+	return s
 }
 
-// sanitizeResource bounds a resource name to resourceBound runes and strips
-// all control characters. It is defense-in-depth at the wire sink: callers
-// supply short stable identifiers.
-func sanitizeResource(s string) string {
-	return controlStrip(boundByRunes(s, resourceBound))
-}
-
-// boundByRunes returns s truncated to at most n runes, UTF-8 safe.
-func boundByRunes(s string, n int) string {
+// truncateUTF8Bytes returns at most n bytes while preserving valid UTF-8. Its
+// callers have already repaired invalid input, but keeping this helper safe on
+// its own prevents a byte-boundary change from ever emitting a partial rune.
+func truncateUTF8Bytes(s string, n int) string {
 	if n <= 0 {
 		return ""
 	}
-	r := []rune(s)
-	if len(r) <= n {
+	if len(s) <= n {
 		return s
 	}
-	return string(r[:n])
+	end := n
+	for end > 0 && !utf8.ValidString(s[:end]) {
+		end--
+	}
+	return s[:end]
 }
 
-// controlStrip removes C0 control characters (0x00-0x1F) and DEL (0x7F).
+// controlStrip removes C0/C1 control characters (0x00-0x1F, 0x80-0x9F) and
+// DEL (0x7F), keeping wire text from carrying terminal or line-control data.
 func controlStrip(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	for _, r := range s {
-		if r < 0x20 || r == 0x7F {
+		if r < 0x20 || (r >= 0x80 && r <= 0x9F) || r == 0x7F {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// stripC1Controls removes the Unicode C1 range while preserving the
+// diagnostic package's deliberate CR/LF/TAB-to-space normalization for C0
+// line separators.
+func stripC1Controls(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r >= 0x80 && r <= 0x9F {
 			continue
 		}
 		b.WriteRune(r)

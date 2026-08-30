@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
@@ -22,7 +23,7 @@ import (
 
 const (
 	DatabaseApplicationID uint32 = 0x4E425249
-	DatabaseUserVersion   uint32 = 1
+	DatabaseUserVersion   uint32 = 2
 )
 
 // StartupErrorKind is a stable, non-sensitive database startup category.
@@ -67,6 +68,17 @@ func (e *StartupError) Error() string {
 func (e *StartupError) Unwrap() error { return ErrDatabaseStartup }
 
 func startupError(kind StartupErrorKind) error { return &StartupError{Kind: kind} }
+
+func preserveStartupCategory(err error, fallback StartupErrorKind) error {
+	if err == nil {
+		return nil
+	}
+	var startupErr *StartupError
+	if errors.As(err, &startupErr) {
+		return err
+	}
+	return startupError(fallback)
+}
 
 func generationError(actual uint32) error {
 	return &StartupError{Kind: StartupWrongGeneration, ExpectedGeneration: DatabaseUserVersion, ActualGeneration: actual}
@@ -188,7 +200,7 @@ func recheckSourceSet(path string, original *sourceSnapshotSet) error {
 	return nil
 }
 
-func openGenerationOne(path string, secrets secret.Codec) (*Store, error) {
+func openGenerationTwo(path string, secrets secret.GenerationTwoContextCodec) (*Store, error) {
 	initial, err := captureSourceSet(path)
 	if err != nil {
 		return nil, err
@@ -206,12 +218,9 @@ func openGenerationOne(path string, secrets secret.Codec) (*Store, error) {
 		if !fresh {
 			return nil, startupError(StartupIncompleteFresh)
 		}
-		return createFreshGenerationOne(path, secrets)
+		return createFreshGenerationTwo(path, secrets)
 	}
 	defer initial.close()
-	if err := validateHeader(initial.main); err != nil {
-		return nil, err
-	}
 	if err := validateCurrentSnapshot(path, initial, secrets); err != nil {
 		return nil, err
 	}
@@ -219,7 +228,16 @@ func openGenerationOne(path string, secrets secret.Codec) (*Store, error) {
 }
 
 func validateHeader(main *sourceFileSnapshot) error {
-	if main == nil || main.size < 100 {
+	if main == nil {
+		return startupError(StartupInvalidHeader)
+	}
+	// An empty file is the distinctive incomplete-fresh marker.  Preserve
+	// that category so callers can distinguish it from a non-SQLite or
+	// truncated existing database without opening it for recovery.
+	if main.size == 0 {
+		return startupError(StartupIncompleteFresh)
+	}
+	if main.size < 100 {
 		return startupError(StartupInvalidHeader)
 	}
 	var header [100]byte
@@ -261,6 +279,15 @@ func makeOwnedFileEvidence(info os.FileInfo) ownedFileEvidence {
 func (e ownedFileEvidence) matches(info os.FileInfo) bool {
 	return e.info != nil && os.SameFile(e.info, info) && e.size == info.Size() &&
 		e.mtime == info.ModTime().UnixNano() && e.mode == info.Mode()
+}
+
+// matchesIdentity is used only for the O_EXCL-created fresh main database.
+// SQLite necessarily changes its size and timestamps while the fresh schema
+// is being built, but it must not change the underlying file identity.  The
+// sidecar evidence continues to use matches, since a sidecar has no equivalent
+// pre-creation identity proof.
+func (e ownedFileEvidence) matchesIdentity(info os.FileInfo) bool {
+	return e.info != nil && info != nil && os.SameFile(e.info, info)
 }
 
 func newValidationWorkspace() (*validationWorkspace, error) {
@@ -414,7 +441,7 @@ func equalDigest(sum []byte, expected [sha256.Size]byte) bool {
 	return len(sum) == len(expected) && string(sum) == string(expected[:])
 }
 
-func validateCurrentSnapshot(path string, source *sourceSnapshotSet, secrets secret.Codec) error {
+func validateCurrentSnapshot(path string, source *sourceSnapshotSet, secrets secret.GenerationTwoContextCodec) error {
 	workspace, err := newValidationWorkspace()
 	if err != nil {
 		return err
@@ -437,6 +464,13 @@ func validateCurrentSnapshot(path string, source *sourceSnapshotSet, secrets sec
 		validationErr = recheckSourceSet(path, source)
 	}
 	if validationErr == nil {
+		// The source path is never opened for a raw header read. Validate the
+		// copied main bytes first, then let the read-only SQLite validation see
+		// the copied main+WAL view. This keeps marker classification inside the
+		// private snapshot interval and ensures it cannot perform source writes.
+		validationErr = validateHeaderCopy(workspace.mainPath)
+	}
+	if validationErr == nil {
 		validationErr = validateReadOnlyCopy(workspace, secrets)
 	}
 	// validateReadOnlyCopy closes SQLite before returning. The final source
@@ -448,6 +482,24 @@ func validateCurrentSnapshot(path string, source *sourceSnapshotSet, secrets sec
 		return cleanupErr
 	}
 	return validationErr
+}
+
+// validateHeaderCopy reads only the private main-file copy created for
+// current-database preflight. The source descriptor is intentionally not
+// passed here: DEC-009 treats the local filesystem as trusted, while the
+// startup contract still requires header/generation classification before any
+// SQLite read-only open of the source data.
+func validateHeaderCopy(path string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return startupError(StartupInvalidHeader)
+	}
+	defer func() { _ = file.Close() }()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return startupError(StartupInvalidHeader)
+	}
+	return validateHeader(&sourceFileSnapshot{file: file, size: info.Size()})
 }
 
 func sqliteFileURI(path, mode string) (string, error) {
@@ -481,7 +533,7 @@ func openSQLite(path, mode string) (*sql.DB, error) {
 	return d, nil
 }
 
-func validateReadOnlyCopy(workspace *validationWorkspace, secrets secret.Codec) (result error) {
+func validateReadOnlyCopy(workspace *validationWorkspace, secrets secret.GenerationTwoContextCodec) (result error) {
 	d, err := openSQLite(workspace.mainPath, "ro")
 	if err != nil {
 		return startupError(StartupCorruptDatabase)
@@ -516,17 +568,23 @@ func validateReadOnlyCopy(workspace *validationWorkspace, secrets secret.Codec) 
 	if userVersion != DatabaseUserVersion {
 		return generationError(userVersion)
 	}
-	if err := quickCheck(ctx, d); err != nil {
-		return startupError(StartupCorruptDatabase)
-	}
 	if err := foreignKeyCheck(ctx, d); err != nil {
 		return startupError(StartupCorruptDatabase)
 	}
-	if err := validateGenerationOneManifest(ctx, d); err != nil {
+	if err := quickCheck(ctx, d); err != nil {
+		return startupError(StartupCorruptDatabase)
+	}
+	if err := validateGenerationTwoManifest(ctx, d); err != nil {
+		return startupError(StartupSchemaMismatch)
+	}
+	if err := validateGenerationTwoSeedManifest(ctx, d); err != nil {
 		return startupError(StartupSchemaMismatch)
 	}
 	if err := validateEndpointKeyEnvelopes(ctx, d, secrets); err != nil {
 		return startupError(StartupCredentialReject)
+	}
+	if _, err := validateCurrentGenerationTwoSiteConfig(ctx, d); err != nil {
+		return startupError(StartupSchemaMismatch)
 	}
 	return nil
 }
@@ -566,95 +624,333 @@ func foreignKeyCheck(ctx context.Context, q queryer) error {
 	return rows.Err()
 }
 
-func validateEndpointKeyEnvelopes(ctx context.Context, q queryer, codec secret.Codec) error {
+func validateEndpointKeyEnvelopes(ctx context.Context, q queryer, generationTwoCodec secret.GenerationTwoContextCodec) error {
+	if generationTwoCodec == nil {
+		return errors.New("generation-two secret codec unavailable")
+	}
+	// Validate every secret row, including orphaned rows. A join against the
+	// live endpoint-key set is insufficient: an unreferenced ciphertext is
+	// still persisted secret material and must have an authenticated Gen2
+	// context before the database can become writable.
 	rows, err := q.QueryContext(ctx, `
-SELECT ek.id,
-       e.id,
-       u.id,
-       typeof(e.base_url),
-       length(CAST(e.base_url AS BLOB)),
-       CASE
-         WHEN typeof(e.base_url)='text'
-          AND length(CAST(e.base_url AS BLOB)) BETWEEN 1 AND ?
-         THEN e.base_url
-       END,
-       typeof(ek.encrypted_secret),
-       length(CAST(ek.encrypted_secret AS BLOB)),
-       CASE
-         WHEN typeof(ek.encrypted_secret)='text'
-          AND length(CAST(ek.encrypted_secret AS BLOB)) BETWEEN 1 AND ?
-         THEN ek.encrypted_secret
-       END
-FROM endpoint_keys ek
-JOIN endpoints e ON e.id=ek.endpoint_id
-JOIN users u ON u.id=e.user_id
-ORDER BY ek.id`, maxStoredEndpointBaseURLBytes, maxEndpointCredentialEnvelopeBytes)
+SELECT id, context_id, canonical_base_url, connector_type,
+       typeof(encrypted_secret), length(CAST(encrypted_secret AS BLOB)),
+       CASE WHEN typeof(encrypted_secret)='text'
+                  AND length(CAST(encrypted_secret AS BLOB)) BETWEEN 1 AND ?
+            THEN encrypted_secret END,
+       orphaned_at,
+       (SELECT COUNT(*) FROM endpoint_keys ek WHERE ek.secret_ref_id=endpoint_key_secrets.id),
+       (SELECT COUNT(*) FROM dispatch_claims c WHERE c.secret_ref_id=endpoint_key_secrets.id AND c.state IN ('claimed','dispatched'))
+FROM endpoint_key_secrets
+ORDER BY id`, maxEndpointCredentialEnvelopeBytes)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var keyID, endpointID, userID int64
-		var baseType, ciphertextType string
-		var baseBytes, ciphertextBytes int64
-		var baseURL, ciphertext sql.NullString
-		if err := rows.Scan(
-			&keyID,
-			&endpointID,
-			&userID,
-			&baseType,
-			&baseBytes,
-			&baseURL,
-			&ciphertextType,
-			&ciphertextBytes,
-			&ciphertext,
-		); err != nil ||
-			keyID <= 0 || endpointID <= 0 || userID <= 0 ||
-			baseType != "text" || baseBytes < 1 || baseBytes > maxStoredEndpointBaseURLBytes ||
-			!baseURL.Valid || int64(len(baseURL.String)) != baseBytes || !utf8.ValidString(baseURL.String) ||
-			ciphertextType != "text" || ciphertextBytes < 1 || ciphertextBytes > maxEndpointCredentialEnvelopeBytes ||
-			!ciphertext.Valid || int64(len(ciphertext.String)) != ciphertextBytes || !utf8.ValidString(ciphertext.String) {
-			baseURL.String, ciphertext.String = "", ""
+		var id int64
+		var contextID []byte
+		var canonicalBaseURL, connector, ciphertextType string
+		var ciphertext sql.NullString
+		var ciphertextBytes int64
+		var orphanedAt sql.NullInt64
+		var endpointKeyRefs, pendingClaimRefs int
+		if err := rows.Scan(&id, &contextID, &canonicalBaseURL, &connector, &ciphertextType, &ciphertextBytes, &ciphertext, &orphanedAt, &endpointKeyRefs, &pendingClaimRefs); err != nil {
+			clear(contextID)
+			return err
+		}
+		validRow := id > 0 && len(contextID) == 16 && utf8.ValidString(canonicalBaseURL) &&
+			(connector == "openai-compatible" || connector == "anthropic-compatible") &&
+			ciphertextType == "text" && ciphertextBytes >= 1 && ciphertextBytes <= maxEndpointCredentialEnvelopeBytes &&
+			ciphertext.Valid && int64(len([]byte(ciphertext.String))) == ciphertextBytes && utf8.ValidString(ciphertext.String) &&
+			(!orphanedAt.Valid || (orphanedAt.Int64 >= 0 && orphanedAt.Int64 <= generationTwoMaxUnixSeconds))
+		if !validRow {
+			clear(contextID)
+			ciphertext.String = ""
 			return errors.New("invalid endpoint credential row")
 		}
-		_, origin, err := egress.CanonicalEndpointTarget(baseURL.String)
-		baseURL.String = ""
-		if err != nil {
+		target, _, originErr := egress.CanonicalEndpointTarget(canonicalBaseURL)
+		if originErr != nil || target != canonicalBaseURL {
+			clear(contextID)
 			ciphertext.String = ""
 			return errors.New("invalid endpoint credential origin")
 		}
-		credentialContext, err := secret.NewEndpointKeyContext(userID, endpointID, keyID, origin)
-		origin = ""
-		if err != nil {
+		credentialContext, contextErr := secret.NewGenerationTwoEndpointKeyContext(contextID)
+		clear(contextID)
+		if contextErr != nil {
 			ciphertext.String = ""
 			return errors.New("invalid endpoint credential context")
 		}
-		version, err := secret.ParseEnvelopeVersion(ciphertext.String)
-		if err != nil || version != secret.EnvelopeVersionV2 {
+		version, versionErr := secret.ParseEnvelopeVersion(ciphertext.String)
+		if versionErr != nil || version != secret.EnvelopeVersionV2 {
 			ciphertext.String = ""
 			return errors.New("invalid endpoint credential envelope")
 		}
-		plaintext, err := codec.OpenForContext(ciphertext.String, credentialContext)
+		plaintext, openErr := generationTwoCodec.OpenForGenerationTwoContext(ciphertext.String, credentialContext)
 		ciphertext.String = ""
 		clear(plaintext)
-		if err != nil {
+		if openErr != nil {
 			return errors.New("invalid endpoint credential authentication")
 		}
+		if orphanedAt.Valid && (endpointKeyRefs != 0 || pendingClaimRefs != 0) {
+			return errors.New("orphaned endpoint credential remains referenced")
+		}
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+
+	// Validate each live endpoint-key link separately. This catches identity
+	// drift (endpoint origin/connector versus immutable secret metadata) even
+	// when the envelope itself remains cryptographically valid.
+	rows, err = q.QueryContext(ctx, `
+SELECT ek.id, ek.secret_ref_id,
+       typeof(e.base_url), length(CAST(e.base_url AS BLOB)),
+       CASE WHEN typeof(e.base_url)='text'
+                  AND length(CAST(e.base_url AS BLOB)) BETWEEN 1 AND ?
+            THEN e.base_url END,
+       e.connector_type, eks.canonical_base_url, eks.connector_type, eks.orphaned_at
+FROM endpoint_keys ek
+JOIN endpoints e ON e.id=ek.endpoint_id
+JOIN endpoint_key_secrets eks ON eks.id=ek.secret_ref_id
+ORDER BY ek.id`, maxStoredEndpointBaseURLBytes)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var keyID, secretRefID int64
+		var baseType, endpointConnector, secretBaseURL, secretConnector string
+		var baseBytes int64
+		var baseURL sql.NullString
+		var orphanedAt sql.NullInt64
+		if err := rows.Scan(&keyID, &secretRefID, &baseType, &baseBytes, &baseURL, &endpointConnector, &secretBaseURL, &secretConnector, &orphanedAt); err != nil {
+			return err
+		}
+		if keyID <= 0 || secretRefID <= 0 || baseType != "text" || baseBytes < 1 || baseBytes > maxStoredEndpointBaseURLBytes ||
+			!baseURL.Valid || int64(len([]byte(baseURL.String))) != baseBytes || !utf8.ValidString(baseURL.String) ||
+			(endpointConnector != "openai-compatible" && endpointConnector != "anthropic-compatible") ||
+			secretConnector != endpointConnector || orphanedAt.Valid {
+			baseURL.String = ""
+			return errors.New("invalid endpoint credential link")
+		}
+		target, _, targetErr := egress.CanonicalEndpointTarget(baseURL.String)
+		baseURL.String = ""
+		if targetErr != nil || target != secretBaseURL {
+			return errors.New("invalid endpoint credential link origin")
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+
+	// A non-terminal claim keeps its secret live even if its endpoint key has
+	// already been detached. Such a claim must never point at an orphan marker.
+	var invalidClaims int
+	if err := q.QueryRowContext(ctx, `
+SELECT COUNT(*)
+FROM dispatch_claims c
+JOIN endpoint_key_secrets s ON s.id=c.secret_ref_id
+WHERE c.state IN ('claimed','dispatched') AND s.orphaned_at IS NOT NULL`).Scan(&invalidClaims); err != nil {
+		return err
+	}
+	if invalidClaims != 0 {
+		return errors.New("pending dispatch claim references orphaned credential")
+	}
+	return nil
+}
+
+const generationTwoMaxUnixSeconds int64 = 253402300799
+
+// reconcileEndpointKeySecretOrphans performs the bounded writable recovery
+// step for detached endpoint-key secret rows. A detached row remains live
+// while a claimed/dispatched request references it; otherwise it receives an
+// orphan marker and is swept after one hour. Each transaction handles at most
+// 100 rows and has its own two-second deadline. The stable id order and the
+// frozen decision time let the loop converge before the listener opens without
+// imposing a one-batch cap on a legitimate account deletion.
+func reconcileEndpointKeySecretOrphans(ctx context.Context, d *sql.DB) error {
+	if d == nil {
+		return errors.New("endpoint credential recovery: database unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	now := time.Now().Unix()
+	if now < 0 || now > generationTwoMaxUnixSeconds {
+		return errors.New("endpoint credential recovery: clock outside contract")
+	}
+	cutoff := now - 3600
+	if cutoff < 0 {
+		cutoff = 0
+	}
+	for {
+		batchCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		tx, err := d.BeginTx(batchCtx, nil)
+		if err != nil {
+			cancel()
+			return fmt.Errorf("endpoint credential recovery: begin: %w", err)
+		}
+		committed := false
+		batchFailure := func(batchErr error) error {
+			if !committed {
+				_ = tx.Rollback()
+			}
+			cancel()
+			return batchErr
+		}
+		deleteResult, err := tx.ExecContext(batchCtx, `DELETE FROM endpoint_key_secrets
+			WHERE id IN (SELECT s.id FROM endpoint_key_secrets s
+			            WHERE s.orphaned_at IS NOT NULL AND s.orphaned_at <= ?
+			              AND NOT EXISTS (SELECT 1 FROM endpoint_keys ek WHERE ek.secret_ref_id=s.id)
+			              AND NOT EXISTS (SELECT 1 FROM dispatch_claims c
+			                              WHERE c.secret_ref_id=s.id AND c.state IN ('claimed','dispatched'))
+			            ORDER BY s.id LIMIT 100)`, cutoff)
+		if err != nil {
+			return batchFailure(fmt.Errorf("endpoint credential recovery: sweep detached rows: %w", err))
+		}
+		deleted, err := deleteResult.RowsAffected()
+		if err != nil || deleted < 0 || deleted > 100 {
+			if err != nil {
+				return batchFailure(fmt.Errorf("endpoint credential recovery: invalid sweep count: %w", err))
+			}
+			return batchFailure(errors.New("endpoint credential recovery: invalid sweep count"))
+		}
+		remaining := int64(100) - deleted
+		marked := int64(0)
+		if remaining > 0 {
+			markResult, markErr := tx.ExecContext(batchCtx, `UPDATE endpoint_key_secrets
+				SET orphaned_at=?
+				WHERE id IN (SELECT s.id FROM endpoint_key_secrets s
+				            WHERE s.orphaned_at IS NULL
+				              AND NOT EXISTS (SELECT 1 FROM endpoint_keys ek WHERE ek.secret_ref_id=s.id)
+				              AND NOT EXISTS (SELECT 1 FROM dispatch_claims c
+				                              WHERE c.secret_ref_id=s.id AND c.state IN ('claimed','dispatched'))
+				            ORDER BY s.id LIMIT ?)`, now, remaining)
+			if markErr != nil {
+				return batchFailure(fmt.Errorf("endpoint credential recovery: mark detached rows: %w", markErr))
+			}
+			marked, err = markResult.RowsAffected()
+			if err != nil || marked < 0 || marked > remaining {
+				if err != nil {
+					return batchFailure(fmt.Errorf("endpoint credential recovery: invalid mark count: %w", err))
+				}
+				return batchFailure(errors.New("endpoint credential recovery: invalid mark count"))
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			return batchFailure(fmt.Errorf("endpoint credential recovery: commit: %w", err))
+		}
+		committed = true
+		cancel()
+		if deleted+marked == 0 {
+			return nil
+		}
+	}
+}
+
+func validateWritableGenerationTwoState(ctx context.Context, d *sql.DB, secrets secret.GenerationTwoContextCodec) error {
+	if d == nil {
+		return startupError(StartupInitialization)
+	}
+	var applicationID, userVersion uint32
+	if err := d.QueryRowContext(ctx, `PRAGMA application_id`).Scan(&applicationID); err != nil {
+		return startupError(StartupCorruptDatabase)
+	}
+	if applicationID != DatabaseApplicationID {
+		return startupError(StartupWrongIdentity)
+	}
+	if err := d.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&userVersion); err != nil {
+		return startupError(StartupCorruptDatabase)
+	}
+	if userVersion != DatabaseUserVersion {
+		return generationError(userVersion)
+	}
+	if err := foreignKeyCheck(ctx, d); err != nil {
+		return startupError(StartupCorruptDatabase)
+	}
+	if err := quickCheck(ctx, d); err != nil {
+		return startupError(StartupCorruptDatabase)
+	}
+	if err := validateGenerationTwoManifest(ctx, d); err != nil {
+		return startupError(StartupSchemaMismatch)
+	}
+	if err := validateGenerationTwoSeedManifest(ctx, d); err != nil {
+		return startupError(StartupSchemaMismatch)
+	}
+	if _, err := validateCurrentGenerationTwoSiteConfig(ctx, d); err != nil {
+		return startupError(StartupSchemaMismatch)
+	}
+	if err := validateEndpointKeyEnvelopes(ctx, d, secrets); err != nil {
+		return startupError(StartupCredentialReject)
+	}
+	return nil
 }
 
 var beforeWritableOpenHook func()
 var afterSnapshotCopyHook func()
 var freshSchemaFailureHook func() error
 
-func openValidatedSource(path string, expected *sourceSnapshotSet, secrets secret.Codec) (*Store, error) {
+// writableRecoveryPhaseHook is a bounded, pre-listener recovery seam. The
+// domain workers may install their recovery implementation, but the ordering
+// and the SQLite integrity checks remain owned by this package.
+var writableRecoveryPhaseHook func(context.Context, *sql.DB) error
+
+func checkpointAndRecoverBeforeListener(ctx context.Context, d *sql.DB, secrets secret.GenerationTwoContextCodec) error {
+	if d == nil {
+		return startupError(StartupInitialization)
+	}
+	var busy, logFrames, checkpointed int
+	if err := d.QueryRowContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &logFrames, &checkpointed); err != nil {
+		return startupError(StartupInitialization)
+	}
+	if busy != 0 || logFrames < 0 || checkpointed < 0 || checkpointed > logFrames {
+		return startupError(StartupInitialization)
+	}
+	if err := foreignKeyCheck(ctx, d); err != nil {
+		return startupError(StartupInitialization)
+	}
+	if err := quickCheck(ctx, d); err != nil {
+		return startupError(StartupInitialization)
+	}
+	if writableRecoveryPhaseHook != nil {
+		if err := writableRecoveryPhaseHook(ctx, d); err != nil {
+			return preserveStartupCategory(err, StartupInitialization)
+		}
+	}
+	// The hook runs before the listener and is allowed to repair only through
+	// this narrow seam. Re-run every integrity and current-state gate after it;
+	// a hook must never be able to mutate a valid database into an invalid one
+	// and still open the listener.
+	if err := foreignKeyCheck(ctx, d); err != nil {
+		return startupError(StartupCorruptDatabase)
+	}
+	if err := quickCheck(ctx, d); err != nil {
+		return startupError(StartupCorruptDatabase)
+	}
+	if err := reconcileEndpointKeySecretOrphans(ctx, d); err != nil {
+		return preserveStartupCategory(err, StartupInitialization)
+	}
+	if err := validateWritableGenerationTwoState(ctx, d, secrets); err != nil {
+		return err
+	}
+	return nil
+}
+
+func openValidatedSource(path string, expected *sourceSnapshotSet, secrets secret.GenerationTwoContextCodec) (*Store, error) {
 	if beforeWritableOpenHook != nil {
 		beforeWritableOpenHook()
 	}
 	// Keep the original no-follow handles alive and capture one last complete
-	// set immediately before sql.Open. On Windows those handles also deny path
-	// replacement; on Unix the owner-only parent gate excludes other users.
+	// set immediately before sql.Open. This is a low-cost static/source-change
+	// check under DEC-009; it does not bind SQLite's later xOpen to these
+	// descriptors or claim to close parent-directory/pathname races.
 	if err := recheckSourceSet(path, expected); err != nil {
 		return nil, err
 	}
@@ -666,6 +962,10 @@ func openValidatedSource(path string, expected *sourceSnapshotSet, secrets secre
 		_ = d.Close()
 		return nil, startupError(StartupInitialization)
 	}
+	failError := func(err error) (*Store, error) {
+		_ = d.Close()
+		return nil, preserveStartupCategory(err, StartupInitialization)
+	}
 	if _, err := d.Exec(`PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;`); err != nil {
 		return fail()
 	}
@@ -676,12 +976,29 @@ func openValidatedSource(path string, expected *sourceSnapshotSet, secrets secre
 	if err := secureDBFiles(path); err != nil {
 		return fail()
 	}
+	if err := checkpointAndRecoverBeforeListener(context.Background(), d, secrets); err != nil {
+		return failError(err)
+	}
 	return &Store{db: d, secrets: secrets}, nil
 }
 
 type freshOwnership struct {
 	path  string
 	files map[string]ownedFileEvidence
+}
+
+func requireFreshSidecarsAbsent(path string) error {
+	for _, suffix := range []string{"-journal", "-wal", "-shm"} {
+		info, err := os.Lstat(path + suffix)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return startupError(StartupUnsafePath)
+		}
+		return startupError(StartupSourceChanged)
+	}
+	return nil
 }
 
 func newFreshOwnership(path string, mainInfo os.FileInfo) *freshOwnership {
@@ -701,7 +1018,14 @@ func (o *freshOwnership) capturePresent() error {
 		if prior, ok := o.files[name]; ok && !os.SameFile(prior.info, info) {
 			return startupError(StartupCleanupFailure)
 		}
-		o.files[name] = makeOwnedFileEvidence(info)
+		if _, ok := o.files[name]; !ok {
+			// A sidecar first observed after the O_EXCL claim is not
+			// attributable to this handle: another creator can win the
+			// interval between the absence check and SQLite's open. Do not
+			// adopt it into the cleanup set. The caller fails closed and
+			// cleanup consequently cannot remove an unknown sidecar.
+			return startupError(StartupSourceChanged)
+		}
 	}
 	return nil
 }
@@ -710,23 +1034,100 @@ func (o *freshOwnership) cleanup() error {
 	if o == nil || o.path == "" {
 		return startupError(StartupCleanupFailure)
 	}
+	var cleanupErr error
 	for _, candidate := range []string{o.path + "-shm", o.path + "-wal", o.path + "-journal", o.path} {
 		info, err := os.Lstat(candidate)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
 		owned, ok := o.files[filepath.Base(candidate)]
-		if err != nil || !ok || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || !owned.matches(info) {
-			return startupError(StartupCleanupFailure)
+		if !ok {
+			// Unknown sidecars are deliberately left untouched.  capturePresent
+			// reports their presence as source_changed, but cleanup must still
+			// remove the O_EXCL-proven main file independently.
+			continue
 		}
-		if err := os.Remove(candidate); err != nil {
-			return startupError(StartupCleanupFailure)
+		if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			if cleanupErr == nil {
+				cleanupErr = startupError(StartupCleanupFailure)
+			}
+			continue
 		}
+		matches := owned.matches(info)
+		if filepath.Base(candidate) == filepath.Base(o.path) {
+			matches = owned.matchesIdentity(info)
+		}
+		if !matches {
+			if cleanupErr == nil {
+				cleanupErr = startupError(StartupCleanupFailure)
+			}
+			continue
+		}
+		if err := os.Remove(candidate); err != nil && cleanupErr == nil {
+			cleanupErr = startupError(StartupCleanupFailure)
+		}
+	}
+	return cleanupErr
+}
+
+func seedGenerationTwo(ctx context.Context, tx *sql.Tx, announcementEpoch string) error {
+	zero := make([]byte, 16)
+	if err := insertGenerationTwoConfig(ctx, tx, announcementEpoch); err != nil {
+		return err
+	}
+	for _, domain := range []string{"site", "activities", "games"} {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO config_revisions(domain,revision,updated_at) VALUES(?,?,0)`, domain, 1); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO site_usage_totals(id,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,updated_at) VALUES(1,?,?,?,?,?,?,?,0)`, zero, zero, zero, zero, zero, zero, zero); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO credit_capacity(id,last_ledger_seq,reserved_future_rows,revision) VALUES(1,0,?,?)`, zero, zero); err != nil {
+		return err
+	}
+	accountIDs := make(map[string]int64, 6)
+	for _, account := range []struct{ code, kind string }{
+		{code: "platform", kind: "platform"},
+		{code: "external", kind: "external"},
+		{code: "forward_reserve", kind: "platform"},
+		{code: "charity_reserve", kind: "platform"},
+		{code: "game_fishing_reserve", kind: "platform"},
+	} {
+		result, err := tx.ExecContext(ctx, `INSERT INTO credit_accounts(kind,code,balance_sign,balance_mag,created_at,updated_at) VALUES(?,?,0,?,?,0)`, account.kind, account.code, zero, 0)
+		if err != nil {
+			return err
+		}
+		id, err := result.LastInsertId()
+		if err != nil {
+			return err
+		}
+		accountIDs[account.code] = id
+	}
+	for _, pool := range []struct{ id, typ string }{{"", "welfare"}, {"", "thursday"}} {
+		poolID, err := GenerateOpaqueID("pol_")
+		if err != nil {
+			return err
+		}
+		result, err := tx.ExecContext(ctx, `INSERT INTO credit_accounts(kind,code,balance_sign,balance_mag,created_at,updated_at) VALUES('pool',?,0,?,?,0)`, "pool:"+poolID, zero, 0)
+		if err != nil {
+			return err
+		}
+		accountID, err := result.LastInsertId()
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO shared_pools(id,pool_type,account_id,state,revision,created_at) VALUES(?,?,?,'open',1,0)`, poolID, pool.typ, accountID); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO maintenance_state(id,enabled,revision,changed_at) VALUES(1,1,1,0)`); err != nil {
+		return err
 	}
 	return nil
 }
 
-func createFreshGenerationOne(path string, secrets secret.Codec) (*Store, error) {
+func createFreshGenerationTwo(path string, secrets secret.GenerationTwoContextCodec) (*Store, error) {
 	check, err := captureSourceSet(path)
 	if err != nil {
 		return nil, err
@@ -749,21 +1150,40 @@ func createFreshGenerationOne(path string, secrets secret.Codec) (*Store, error)
 		return nil, startupError(StartupInitialization)
 	}
 	owned := newFreshOwnership(path, createdInfo)
+	if err := requireFreshSidecarsAbsent(path); err != nil {
+		_ = owned.cleanup()
+		return nil, err
+	}
+	// O_EXCL establishes the fresh ownership claim before this open. The
+	// subsequent SQLite pathname open is intentionally the low-cost DEC-009
+	// boundary: it is not a custom-VFS descriptor binding and does not claim to
+	// resist a trusted local replacement between the two operations.
 	d, err := openSQLite(path, "rw")
 	if err != nil {
 		_ = owned.cleanup()
 		return nil, startupError(StartupInitialization)
 	}
 	fail := func(kind StartupErrorKind) (*Store, error) {
-		captureErr := owned.capturePresent()
 		_ = d.Close()
-		if captureErr != nil {
-			return nil, captureErr
-		}
+		captureErr := owned.capturePresent()
 		if cleanupErr := owned.cleanup(); cleanupErr != nil {
 			return nil, cleanupErr
 		}
+		if captureErr != nil {
+			return nil, captureErr
+		}
 		return nil, startupError(kind)
+	}
+	failError := func(err error) (*Store, error) {
+		_ = d.Close()
+		captureErr := owned.capturePresent()
+		if cleanupErr := owned.cleanup(); cleanupErr != nil {
+			return nil, cleanupErr
+		}
+		if captureErr != nil {
+			return nil, captureErr
+		}
+		return nil, preserveStartupCategory(err, StartupInitialization)
 	}
 	if _, err := d.Exec(`PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;`); err != nil {
 		return fail(StartupInitialization)
@@ -782,7 +1202,7 @@ func createFreshGenerationOne(path string, secrets secret.Codec) (*Store, error)
 			_ = tx.Rollback()
 		}
 	}()
-	if _, err := tx.ExecContext(ctx, generationOneSchema); err != nil {
+	if _, err := tx.ExecContext(ctx, generationTwoSchema); err != nil {
 		_ = tx.Rollback()
 		return fail(StartupSchemaMismatch)
 	}
@@ -792,20 +1212,32 @@ func createFreshGenerationOne(path string, secrets secret.Codec) (*Store, error)
 			return fail(StartupInitialization)
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `PRAGMA application_id=0x4E425249; PRAGMA user_version=1;`); err != nil {
+	if _, err := tx.ExecContext(ctx, `PRAGMA application_id=0x4E425249; PRAGMA user_version=2;`); err != nil {
 		_ = tx.Rollback()
 		return fail(StartupInitialization)
 	}
-	if _, err := tx.ExecContext(ctx, `
-INSERT INTO site_config(key,value,updated_at) VALUES
-('maintenance_mode','1',0),
-('registration_open','0',0),
-('games_enabled','0',0),
-('game_fishing_enabled','0',0)`); err != nil {
+	announcementEpoch, err := GenerateOpaqueID("b1e_")
+	if err != nil {
 		_ = tx.Rollback()
 		return fail(StartupInitialization)
 	}
-	if err := validateGenerationOneManifest(ctx, tx); err != nil {
+	if err := seedGenerationTwo(ctx, tx, announcementEpoch); err != nil {
+		_ = tx.Rollback()
+		return fail(StartupInitialization)
+	}
+	if err := validateGenerationTwoManifest(ctx, tx); err != nil {
+		_ = tx.Rollback()
+		return fail(StartupSchemaMismatch)
+	}
+	if err := validateGenerationTwoSeedManifest(ctx, tx); err != nil {
+		_ = tx.Rollback()
+		return fail(StartupSchemaMismatch)
+	}
+	if err := validateGenerationTwoFreshSeedManifest(ctx, tx); err != nil {
+		_ = tx.Rollback()
+		return fail(StartupSchemaMismatch)
+	}
+	if _, err := validateCurrentGenerationTwoSiteConfig(ctx, tx); err != nil {
 		_ = tx.Rollback()
 		return fail(StartupSchemaMismatch)
 	}
@@ -831,15 +1263,15 @@ INSERT INTO site_config(key,value,updated_at) VALUES
 	if err := secureDBFiles(path); err != nil {
 		return fail(StartupUnsafePath)
 	}
-	if err := validateEndpointKeyEnvelopes(ctx, d, secrets); err != nil {
-		return fail(StartupCredentialReject)
+	if err := checkpointAndRecoverBeforeListener(ctx, d, secrets); err != nil {
+		return failError(err)
 	}
 	return &Store{db: d, secrets: secrets}, nil
 }
 
-// GenerationOneSchemaHash is the externally reportable lock for the exact DDL
+// GenerationTwoSchemaHash is the externally reportable lock for the exact DDL
 // source. The manifest builder independently checks the pinned value.
-func GenerationOneSchemaHash() string {
-	sum := sha256.Sum256([]byte(generationOneSchema))
+func GenerationTwoSchemaHash() string {
+	sum := sha256.Sum256([]byte(generationTwoSchema))
 	return hex.EncodeToString(sum[:])
 }
