@@ -1,353 +1,352 @@
-import { useState, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
-import { formatDateTime } from '@shared/utils/datetime';
-import { useTranslation } from 'react-i18next';
-import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
-import { isApiError, isNotFoundError, isUnauthorized } from '@shared/query/http';
-import { isStationSessionChanged } from '@shared/charityManagement';
-import { CompactNumber } from '@shared/components/CompactNumber';
+import { PageHeader } from '@shared/components/States';
+import { isNotFoundError, isUnauthorized } from '@shared/query/http';
 import {
-  formatCompact,
-  formatCreditsFromMilli,
-  formatCount,
-  type FormattedNumber,
-} from '@shared/utils/formatNumber';
+  CoreErrorPanel,
+  CoreLoading,
+  CoreProfileGate,
+  CoreTime,
+  CoreUnavailable,
+  ExactCount,
+  ExactCredits,
+  StatusPill,
+} from '../features/core/components';
+import { useCoreCopy } from '../features/core/copy';
+import { CORE_ROUTE_PATHS } from '../features/core/descriptors';
 import {
-  useCheckin,
-  useCheckinStatus,
-  useUserMe,
-  useUserSession,
-  useUserUsage,
-  type CheckinResult,
-  type UserSummary,
-} from '../data';
+  CapabilityUnavailableError,
+  productionHomeAdapters,
+} from '../features/core/adapters';
+import { coreKeys, useCoreMe, useCoreSession } from '../features/core/queries';
+import type { HomeAdapters, HomeGameSummary, UserProfile } from '../features/core/types';
+import '../features/core/core.css';
 
-// Renders a balance with its exact milli-credit figure available on hover and
-// keyboard focus (and to assistive tech), so a rounded display value never
-// hides the precise amount. The display form is never a Number() conversion.
-function ExactMilliValue({ formatted, label }: { formatted: FormattedNumber; label: string }) {
-  const { t } = useTranslation();
-  const exact = t('user.home.exactMilli', { value: formatted.exact });
-  return (
-    <span className="compact-number" tabIndex={0} title={exact} aria-label={`${label} · ${exact}`}>
-      {formatted.display}
-    </span>
-  );
-}
+const GAME_PATHS: Record<HomeGameSummary['route_id'], string> = {
+  'game-fishing': '/games/fishing',
+  'game-linklink': '/games/linklink',
+  'game-rps': '/games/rps',
+};
+
+const GAME_LABELS = {
+  'game-fishing': 'home.gameFishing',
+  'game-linklink': 'home.gameLinklink',
+  'game-rps': 'home.gameRps',
+} as const;
 
 function SignedOutHome() {
-  const { t } = useTranslation();
+  const { t } = useCoreCopy();
   return (
-    <div className="page">
+    <div className="page core-page core-stack">
       <PageHeader
-        eyebrow={t('app.name')}
-        title={t('user.home.signedOutTitle')}
-        description={t('user.home.description')}
+        icon="home"
+        title={t('home.signedOutTitle')}
+        description={t('home.signedOutBody')}
       />
-      <section className="auth-panel" aria-labelledby="signed-out-title">
-        <span className="auth-mark" aria-hidden="true">
-          ◌
-        </span>
-        <div>
-          <h2 id="signed-out-title">{t('user.home.signedOutTitle')}</h2>
-          <p>{t('user.home.signedOutBody')}</p>
+      <section className="core-card">
+        <div className="core-card__header">
+          <div>
+            <h2>{t('home.signedOutTitle')}</h2>
+            <p className="core-muted">{t('home.signedOutBody')}</p>
+          </div>
           <a className="btn btn-primary" href="/api/auth/discord/start">
-            {t('common.signIn')}
+            {t('home.signIn')}
           </a>
-          <p className="legal-reminder">
-            {t('user.home.legalReminderPre')}
-            <Link to="/terms">{t('user.home.legalReminderTerms')}</Link>
-            {t('user.home.legalReminderAnd')}
-            <Link to="/privacy">{t('user.home.legalReminderPrivacy')}</Link>
-            {t('user.home.legalReminderPost')}
-          </p>
         </div>
       </section>
-      <Card>
-        <h2>{t('user.home.profileTitle')}</h2>
-        <p className="muted">{t('common.userSignInBody')}</p>
-      </Card>
     </div>
   );
 }
 
-// Server-projected economy state: both balances and the resolved level are
-// rendered exactly as the session reports them. The page computes nothing —
-// no eligibility, no thresholds, no post-delta balances.
-function EconomyCard({ user }: { user: UserSummary }) {
-  const { t } = useTranslation();
-  const credits = formatCreditsFromMilli(user.credits);
-  const donation = formatCreditsFromMilli(user.donation_credit);
-  const isManual = user.manual_level !== undefined;
+function ProfileCard({ user }: { user: UserProfile }) {
+  const { t } = useCoreCopy();
   return (
-    <Card>
-      <div className="card-title-row">
-        <h2>{t('user.home.economyTitle')}</h2>
+    <section className="core-card">
+      <div className="core-card__header">
+        <h2>{t('home.profileTitle')}</h2>
       </div>
-      <div className="metric-grid">
-        <div className="metric-card">
-          <p>{t('user.home.creditsBalance')}</p>
-          <strong className="metric-value">
-            <ExactMilliValue formatted={credits} label={t('user.home.creditsBalance')} />
-          </strong>
+      <dl className="core-detail-list">
+        <div>
+          <dt>{t('home.username')}</dt>
+          <dd>{user.guild_nick || user.username}</dd>
         </div>
-        <div className="metric-card">
-          <p>{t('user.home.donationCredit')}</p>
-          <strong className="metric-value">
-            <ExactMilliValue formatted={donation} label={t('user.home.donationCredit')} />
-          </strong>
+        <div>
+          <dt>{t('home.accountStatus')}</dt>
+          <dd>
+            <StatusPill tone={user.is_banned ? 'danger' : 'success'}>
+              {user.is_banned ? t('home.banned') : t('home.active')}
+            </StatusPill>
+          </dd>
         </div>
-        <div className="metric-card">
-          <p>{t('user.home.level')}</p>
-          <strong className="metric-value">
-            {t('user.home.levelValue', { level: user.effective_level })}
-            {isManual ? <span className="muted">{t('user.home.levelManualSuffix')}</span> : null}
-          </strong>
+        <div>
+          <dt>{t('common.created')}</dt>
+          <dd>
+            <CoreTime value={user.created_at} />
+          </dd>
         </div>
-      </div>
-    </Card>
+      </dl>
+    </section>
   );
 }
 
-interface CheckinNotice {
-  text: string;
-  kind: 'status' | 'error';
-}
-
-// The daily check-in card. Availability, today's status, the award range and
-// the threshold all come from GET /api/checkin; the award is drawn and applied
-// server-side, and every refusal message is shown verbatim.
-function CheckinCard({ signedIn }: { signedIn: boolean }) {
-  const { t } = useTranslation();
-  const status = useCheckinStatus(signedIn);
-  const checkin = useCheckin();
-  const [result, setResult] = useState<CheckinResult | null>(null);
-  const [notice, setNotice] = useState<CheckinNotice | null>(null);
-
-  const submit = () => {
-    setNotice(null);
-    checkin.mutate(undefined, {
-      onSuccess: (data) => setResult(data),
-      onError: (error) => {
-        if (isStationSessionChanged(error)) return;
-        if (isApiError(error) && error.code === 'already_checked_in') {
-          // The day was already consumed: the status query refetch settles the
-          // card into the checked-in state.
-          setResult(null);
-          setNotice({ text: error.message, kind: 'status' });
-          return;
-        }
-        // feature_disabled / checkin_cap_reached / transport failures render
-        // as text; the server message is already bounded and cleaned.
-        setNotice({
-          text: isApiError(error) ? error.message : t('common.errorBody'),
-          kind: 'error',
-        });
-      },
-    });
-  };
-
-  let body: ReactNode;
-  if (status.isPending) {
-    body = <LoadingState />;
-  } else if (status.error) {
-    body = <ErrorState error={status.error} onRetry={() => void status.refetch()} />;
-  } else if (!status.data.enabled) {
-    // Neutral, speculation-free state: the server never reveals why.
-    body = <p className="inline-notice">{t('user.checkin.unavailable')}</p>;
-  } else {
-    const min = formatCreditsFromMilli(status.data.award_min_milli);
-    const max = formatCreditsFromMilli(status.data.award_max_milli);
-    const cap = formatCreditsFromMilli(status.data.credits_cap_milli);
-    const noThreshold = status.data.credits_cap_milli === '0';
-    body = (
-      <>
-        <dl className="detail-grid">
-          <div className="detail-row">
-            <dt>{t('user.checkin.today')}</dt>
-            <dd>
-              {status.data.checked_in_today ? (
-                <StatusBadge active label={t('user.checkin.checkedIn')} />
-              ) : (
-                <StatusBadge active={false} label={t('user.checkin.notCheckedIn')} />
-              )}
-            </dd>
-          </div>
-          <div className="detail-row">
-            <dt>{t('user.checkin.awardRange')}</dt>
-            <dd>
-              {min.display} – {max.display}
-            </dd>
-          </div>
-          <div className="detail-row">
-            <dt>{t('user.checkin.threshold')}</dt>
-            <dd>{noThreshold ? t('user.checkin.thresholdNone') : cap.display}</dd>
-          </div>
-        </dl>
-        <p className="muted item-note">{t('user.checkin.thresholdHint')}</p>
-        {!status.data.checked_in_today ? (
-          <div className="form-actions">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={submit}
-              disabled={checkin.isPending}
-            >
-              {checkin.isPending ? t('common.working') : t('user.checkin.submit')}
-            </button>
-          </div>
-        ) : null}
-        {result ? (
-          <p className="inline-success" role="status">
-            {t('user.checkin.done', {
-              award: formatCreditsFromMilli(result.award_milli).display,
-              credits: formatCreditsFromMilli(result.credits).display,
-            })}
-          </p>
-        ) : null}
-        {notice ? (
-          <p
-            className={notice.kind === 'error' ? 'field-error' : 'inline-notice'}
-            role={notice.kind === 'error' ? 'alert' : 'status'}
-          >
-            {notice.text}
-          </p>
-        ) : null}
-      </>
-    );
-  }
-
+function EconomyCard({ accountId }: { accountId: string }) {
+  const { t } = useCoreCopy();
+  const me = useCoreMe(accountId);
   return (
-    <Card>
-      <div className="card-title-row">
-        <h2>{t('user.checkin.title')}</h2>
+    <section className="core-card">
+      <div className="core-card__header">
+        <h2>{t('home.economyTitle')}</h2>
       </div>
-      {body}
-    </Card>
+      {me.isPending ? (
+        <CoreLoading compact />
+      ) : me.error ? (
+        <CoreErrorPanel error={me.error} compact onRetry={() => void me.refetch()} />
+      ) : (
+        <div className="core-metrics">
+          <div className="core-metric">
+            <span>{t('home.balance')}</span>
+            <strong>
+              <ExactCredits value={me.data.user.balance} />
+            </strong>
+          </div>
+          <div className="core-metric">
+            <span>{t('home.donationCredit')}</span>
+            <strong>
+              <ExactCredits value={me.data.user.donation_credit} />
+            </strong>
+          </div>
+          <div className="core-metric">
+            <span>{t('home.level')}</span>
+            <strong>
+              {t('home.levelValue', {
+                level: me.data.user.effective_level,
+                name: me.data.user.level_display_name,
+              })}
+            </strong>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
-function HomeContent() {
-  const { t } = useTranslation();
-  const session = useUserSession();
-  const signedIn = !session.error && Boolean(session.data?.user);
-  const me = useUserMe(signedIn);
-  const usage = useUserUsage(signedIn);
-  const user = session.data?.user;
-
-  if (session.isPending) return <LoadingState />;
-  if (session.error && !isUnauthorized(session.error) && !isNotFoundError(session.error)) {
-    return <ErrorState error={session.error} onRetry={() => void session.refetch()} />;
-  }
-  if (!user) return <SignedOutHome />;
-
+function UsageCard({ user }: { user: UserProfile }) {
+  const { t } = useCoreCopy();
   return (
-    <div className="page">
-      <PageHeader
-        eyebrow={t('app.name')}
-        title={t('user.home.signedInTitle', { name: user.username })}
-        description={t('user.home.description')}
-      />
-
-      <section aria-labelledby="user-usage-title">
-        <h2 id="user-usage-title" className="section-title">
-          {t('user.home.usageTitle')}
-        </h2>
-        {usage.isPending ? (
-          <LoadingState />
-        ) : usage.error ? (
-          <ErrorState error={usage.error} onRetry={() => void usage.refetch()} />
-        ) : (
-          <div className="metric-grid">
-            <div className="metric-card">
-              <p>{t('user.home.requests')}</p>
-              <strong className="metric-value">{formatCount(usage.data.total_requests).display}</strong>
-            </div>
-            <div className="metric-card">
-              <p>{t('common.tokens.input')}</p>
-              <strong className="metric-value">
-                <CompactNumber value={formatCompact(usage.data.total_prompt_tokens)} />
-              </strong>
-            </div>
-            <div className="metric-card">
-              <p>{t('common.tokens.output')}</p>
-              <strong className="metric-value">
-                <CompactNumber value={formatCompact(usage.data.total_completion_tokens)} />
-              </strong>
-            </div>
-            <div className="metric-card">
-              <p>{t('user.home.unknownUsage')}</p>
-              <strong className="metric-value">
-                {formatCount(usage.data.total_unknown_usage_requests).display}
-              </strong>
-            </div>
-          </div>
-        )}
-      </section>
-
-      <section aria-labelledby="user-economy-title">
-        <h2 id="user-economy-title" className="section-title">
-          {t('user.home.economySectionTitle')}
-        </h2>
-        <div className="split-grid">
-          <EconomyCard user={user} />
-          <CheckinCard signedIn />
+    <section className="core-card">
+      <div className="core-card__header">
+        <h2>{t('home.usageTitle')}</h2>
+      </div>
+      <div className="core-metrics">
+        <div className="core-metric">
+          <span>{t('home.requests')}</span>
+          <strong>
+            <ExactCount value={user.usage.total_requests} />
+          </strong>
         </div>
+        <div className="core-metric">
+          <span>{t('home.promptTokens')}</span>
+          <strong>
+            <ExactCount value={user.usage.total_prompt_tokens} />
+          </strong>
+        </div>
+        <div className="core-metric">
+          <span>{t('home.outputTokens')}</span>
+          <strong>
+            <ExactCount value={user.usage.total_output_tokens} />
+          </strong>
+        </div>
+        <div className="core-metric">
+          <span>{t('home.unknownUsage')}</span>
+          <strong>
+            <ExactCount value={user.usage.total_unknown_usage_requests} />
+          </strong>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CapabilitySections({
+  accountId,
+  adapters,
+}: {
+  accountId: string;
+  adapters: HomeAdapters;
+}) {
+  const { t } = useCoreCopy();
+  const gamesLoader = adapters.games.state === 'available' ? adapters.games.load : null;
+  const announcementsLoader =
+    adapters.announcements.state === 'available' ? adapters.announcements.load : null;
+  const games = useQuery({
+    queryKey: coreKeys.home(accountId, 'games'),
+    queryFn: ({ signal }) => {
+      if (!gamesLoader) throw new CapabilityUnavailableError();
+      return gamesLoader(signal);
+    },
+    enabled: adapters.games.state === 'available',
+    retry: false,
+  });
+  const announcements = useQuery({
+    queryKey: coreKeys.home(accountId, 'announcements'),
+    queryFn: ({ signal }) => {
+      if (!announcementsLoader) throw new CapabilityUnavailableError();
+      return announcementsLoader(signal);
+    },
+    enabled: adapters.announcements.state === 'available',
+    retry: false,
+  });
+  return (
+    <>
+      <section className="core-card">
+        <div className="core-card__header">
+          <h2>{t('home.checkinTitle')}</h2>
+        </div>
+        <CoreUnavailable compact />
       </section>
 
-      <div className="split-grid">
-        <Card>
-          <div className="card-title-row">
-            <h2>{t('user.home.quickLinks')}</h2>
+      {adapters.games.state === 'unavailable' ? (
+        <section className="core-card">
+          <div className="core-card__header">
+            <h2>{t('home.gamesTitle')}</h2>
           </div>
-          <div className="form-actions">
-            <Link className="btn btn-primary" to="/endpoints">
-              {t('user.home.endpointsLink')}
-            </Link>
-            <Link className="btn btn-secondary" to="/models">
-              {t('user.home.modelsLink')}
-            </Link>
-            <Link className="btn btn-secondary" to="/keys">
-              {t('user.home.callerKeyLink')}
-            </Link>
+          <CoreUnavailable compact />
+        </section>
+      ) : games.isSuccess && games.data.length === 0 ? null : (
+        <section className="core-card">
+          <div className="core-card__header">
+            <h2>{t('home.gamesTitle')}</h2>
           </div>
-        </Card>
-
-        <Card>
-          <div className="card-title-row">
-            <h2>{t('user.home.profileTitle')}</h2>
-          </div>
-          {me.isPending ? (
-            <LoadingState />
-          ) : me.error ? (
-            <ErrorState error={me.error} onRetry={() => void me.refetch()} />
+          {games.isPending ? (
+            <CoreLoading compact />
+          ) : games.error ? (
+            <CoreErrorPanel compact error={games.error} onRetry={() => void games.refetch()} />
           ) : (
-            <dl className="detail-grid">
-              <div className="detail-row">
-                <dt>{t('user.home.username')}</dt>
-                <dd>{me.data.username}</dd>
-              </div>
-              <div className="detail-row">
-                <dt>{t('user.home.accountCreated')}</dt>
-                <dd>{formatDateTime(me.data.created_at)}</dd>
-              </div>
-              <div className="detail-row">
-                <dt>{t('user.home.accountStatus')}</dt>
-                <dd>
-                  <StatusBadge
-                    active={!me.data.is_banned}
-                    label={me.data.is_banned ? t('user.home.banned') : t('user.home.active')}
-                  />
-                </dd>
-              </div>
-            </dl>
+            <div className="core-choice-grid">
+              {games.data.map((item) => (
+                <Link
+                  key={`${item.route_id}:${item.kind}:${item.resource_id ?? ''}`}
+                  className="core-choice"
+                  to={GAME_PATHS[item.route_id]}
+                >
+                  <strong>{t(GAME_LABELS[item.route_id])}</strong>
+                  <span>{item.kind === 'continue' ? t('home.continue') : t('home.view')}</span>
+                </Link>
+              ))}
+            </div>
           )}
-        </Card>
+        </section>
+      )}
+
+      {adapters.announcements.state === 'unavailable' ? (
+        <section className="core-card">
+          <div className="core-card__header">
+            <h2>{t('home.announcementsTitle')}</h2>
+          </div>
+          <CoreUnavailable compact />
+        </section>
+      ) : announcements.isSuccess && announcements.data.length === 0 ? null : (
+        <section className="core-card">
+          <div className="core-card__header">
+            <h2>{t('home.announcementsTitle')}</h2>
+          </div>
+          {announcements.isPending ? (
+            <CoreLoading compact />
+          ) : announcements.error ? (
+            <CoreErrorPanel
+              compact
+              error={announcements.error}
+              onRetry={() => void announcements.refetch()}
+            />
+          ) : (
+            <ul className="core-endpoint-list">
+              {announcements.data.map((item) => (
+                <li key={item.id} className="core-endpoint-card">
+                  <Link to={`/announcements/${encodeURIComponent(item.id)}`}>
+                    <strong>{item.title}</strong>
+                  </Link>
+                  <p>{item.excerpt}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+    </>
+  );
+}
+
+export function HomeDashboard({
+  user,
+  adapters = productionHomeAdapters,
+}: {
+  user: UserProfile;
+  adapters?: HomeAdapters;
+}) {
+  const { t } = useCoreCopy();
+  return (
+    <div className="page core-page core-stack">
+      <PageHeader
+        icon="home"
+        title={t('home.title', { name: user.guild_nick || user.username })}
+        description={t('home.description')}
+      />
+      <div className="core-grid core-grid--wide">
+        <ProfileCard user={user} />
+        <EconomyCard accountId={user.id} />
       </div>
+      <UsageCard user={user} />
+      <CapabilitySections accountId={user.id} adapters={adapters} />
+      <section className="core-card">
+        <div className="core-card__header">
+          <h2>{t('home.quickTitle')}</h2>
+        </div>
+        <div className="core-choice-grid">
+          <Link className="core-choice" to={CORE_ROUTE_PATHS.endpoints}>
+            {t('home.endpoints')}
+          </Link>
+          <Link className="core-choice" to={CORE_ROUTE_PATHS.models}>
+            {t('home.models')}
+          </Link>
+          <Link className="core-choice" to={CORE_ROUTE_PATHS.keys}>
+            {t('home.callerKey')}
+          </Link>
+          <Link className="core-choice" to="/activities">
+            {t('home.activities')}
+          </Link>
+          <Link className="core-choice" to="/games">
+            {t('home.games')}
+          </Link>
+        </div>
+      </section>
     </div>
   );
 }
 
 export function HomePage() {
-  return <HomeContent />;
+  const session = useCoreSession();
+  if (session.isPending)
+    return (
+      <div className="page core-page">
+        <CoreLoading />
+      </div>
+    );
+  if (session.error) {
+    if (isUnauthorized(session.error) || isNotFoundError(session.error)) return <SignedOutHome />;
+    return (
+      <div className="page core-page">
+        <CoreErrorPanel error={session.error} onRetry={() => void session.refetch()} />
+      </div>
+    );
+  }
+  if (session.data === null) return <SignedOutHome />;
+  return (
+    <CoreProfileGate
+      key={session.data.accountId}
+      session={session.data}
+      signedOut={<SignedOutHome />}
+    >
+      {(user) => <HomeDashboard key={user.id} user={user} />}
+    </CoreProfileGate>
+  );
 }

@@ -17,12 +17,12 @@ import {
   normalizeCharityModel,
   normalizeDonationKey,
   normalizeDonation,
-  normalizeEndpoint,
   normalizeEndpointKey,
   normalizeUpstreamModel,
   normalizePlatformModel,
   normalizeUserSummary,
 } from '../../src/user/data';
+import { normalizeEndpoint as normalizeCoreEndpoint } from '../../src/user/features/core/normalizers';
 import {
   normalizeManagementCharityModel,
   normalizeManagementDonation,
@@ -97,6 +97,42 @@ function installSiteConfigServer(
   return { fetchMock, state, patches };
 }
 
+const coreBaseUser = {
+  id: '7',
+  username: 'fixture-user',
+  avatar: null,
+  avatar_url: null,
+  guild_nick: null,
+  guild_avatar_url: null,
+  lang: 'en',
+  is_banned: false,
+  banned_until: null,
+  charity_suspended_until: null,
+  endpoint_limit: null,
+  effective_endpoint_limit: '4',
+  rpm_limit: null,
+  effective_rpm_limit: '60',
+  concurrency_limit: null,
+  effective_concurrency_limit: '5',
+  balance: '1',
+  donation_credit: '2',
+  effective_level: 2,
+  level_display_name: 'Lv2',
+  game_profile_public: false,
+  created_at: 1_700_000_000,
+  updated_at: 1_700_000_001,
+  usage: {
+    total_requests: '1',
+    total_uncached_input_tokens: '2',
+    total_cache_write_input_tokens: '0',
+    total_cache_read_input_tokens: '0',
+    total_output_tokens: '3',
+    total_prompt_tokens: '2',
+    total_completion_tokens: '3',
+    total_unknown_usage_requests: '0',
+  },
+};
+
 const baseUser = {
   id: 7,
   username: 'fixture-user',
@@ -118,8 +154,8 @@ const baseUser = {
 describe('screenshot-facing configuration pages', () => {
   test('U1 removes only the internal level-computation implementation hint', async () => {
     installJsonFetchFixtures([
-      { method: 'GET', path: '/api/session', body: { user: baseUser } },
-      { method: 'GET', path: '/api/me', body: { user: baseUser } },
+      { method: 'GET', path: '/api/session', body: { user: coreBaseUser } },
+      { method: 'GET', path: '/api/me', body: { user: coreBaseUser } },
       { method: 'GET', path: '/api/me/usage', body: {
         total_requests: 1,
         total_prompt_tokens: 2,
@@ -130,8 +166,8 @@ describe('screenshot-facing configuration pages', () => {
     ]);
     await renderWithProviders(<HomePage />, { station: 'user', locale: 'en', role: 'user' });
 
-    expect(await screen.findByText('Current level')).toBeVisible();
-    expect(screen.getByText('Lv2')).toBeVisible();
+    expect(await screen.findByText('Effective level')).toBeVisible();
+    expect(screen.getByText('Lv2 · Lv2')).toBeVisible();
     expect(screen.queryByText(/This page computes nothing/i)).not.toBeInTheDocument();
   });
 
@@ -237,7 +273,7 @@ describe('authoritative site-config frontend', () => {
     const siteName = catalogEntry('site_name', {
       value_type: 'text', minimum: 0, maximum: 256,
     });
-    const locale = catalogEntry('default_locale', {
+    const locale = catalogEntry('legal_authoritative_locale', {
       value_type: 'locale', minimum: null, maximum: null, allowed_values: ['zh', 'en'],
     });
     const rpm = catalogEntry('global_rpm', { minimum: 1, maximum: 4_096 });
@@ -245,8 +281,8 @@ describe('authoritative site-config frontend', () => {
       .toThrow(/site_name text/i);
     expect(() => normalizeSiteConfig({ site_name: 'bad\u0001name' }, [siteName]))
       .toThrow(/site_name text/i);
-    expect(() => normalizeSiteConfig({ default_locale: 'fr' }, [locale]))
-      .toThrow(/default_locale choice/i);
+    expect(() => normalizeSiteConfig({ legal_authoritative_locale: 'fr' }, [locale]))
+      .toThrow(/legal_authoritative_locale choice/i);
     expect(() => normalizeSiteConfig({ global_rpm: '100' }, [rpm]))
       .toThrow(/global_rpm integer/i);
 
@@ -680,8 +716,11 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
     expect(() => normalizePlatformModel(platformModelFixture(2, { route_strategy: 'invalid' }))).toThrow(/route strategy/i);
     expect(() => normalizeCharityModel(charityModelFixture(3, { flatten_tool_calls: undefined }))).toThrow(/tool-call policy/i);
     expect(() => normalizeManagementCharityModel(charityModelFixture(3, { flatten_tool_calls: undefined }))).toThrow(/tool-call policy/i);
-    expect(() => normalizeEndpoint({ id: 1 })).toThrow(/model fetch status/i);
-    expect(() => normalizeEndpoint({ id: 1, connector_type: 'unknown', model_fetch_failed: false, model_fetch_failed_at: 0 })).toThrow(/connector type/i);
+    expect(() => normalizeCoreEndpoint({ id: '1' })).toThrow(/invalid endpoint/i);
+    expect(() => normalizeCoreEndpoint({
+      id: '1', connector_type: 'unknown', base_url: 'https://upstream.test/v1', note: '',
+      enabled: true, revision: '1', key_count: '0', created_at: 1, updated_at: 2,
+    })).toThrow(/connector type/i);
     expect(() => normalizeEndpointKey({ ...endpointKeyFixture(1), id: undefined }, 'openai-compatible')).toThrow(/endpoint key id/i);
   });
 
@@ -694,14 +733,15 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
       .toThrow(/unexpected store policy/i);
 
     const validEndpoint = {
-      id: 1, connector_type: 'openai-compatible', base_url: 'https://upstream.test/v1',
-      note: '', enabled: true, model_fetch_failed: false, model_fetch_failed_at: 0,
+      id: '1', connector_type: 'openai-compatible', base_url: 'https://upstream.test/v1',
+      note: '', enabled: true, revision: '1', key_count: '0',
       created_at: 1, updated_at: 2,
     };
-    expect(() => normalizeEndpoint({ ...validEndpoint, created_at: '2026-08-23T00:00:00Z' }))
-      .toThrow(/created timestamp/i);
-    expect(() => normalizeEndpoint({ ...validEndpoint, model_fetch_failed: true, model_fetch_failed_at: 0 }))
-      .toThrow(/failure timestamp/i);
+    expect(() => normalizeCoreEndpoint({
+      ...validEndpoint, created_at: '2026-08-23T00:00:00Z',
+    })).toThrow(/creation time/i);
+    expect(() => normalizeCoreEndpoint({ ...validEndpoint, unexpected_status: true }))
+      .toThrow(/invalid endpoint/i);
 
     const missingCurrent = charityModelFixture(3);
     delete (missingCurrent.prices as Record<string, unknown>).current_output_user_price_milli;

@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useEffect, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Route, Routes } from 'react-router';
@@ -23,8 +23,13 @@ import { EndpointsPage } from '../../src/user/pages/EndpointsPage';
 import { UserLayout } from '../../src/user/layouts/UserLayout';
 import { ModelsPage } from '../../src/user/pages/ModelsPage';
 import { StewardPage } from '../../src/user/pages/StewardPage';
-import { KeysPage } from '../../src/user/pages/KeysPage';
-import { AccountPage } from '../../src/user/pages/AccountPage';
+import { CallerKeyPanel } from '../../src/user/pages/KeysPage';
+import { AccountLifecyclePanel } from '../../src/user/features/core/AccountWorkspace';
+import { coreKeys } from '../../src/user/features/core/queries';
+import type {
+  AccountExportAttachment,
+  AccountLifecycleAdapter,
+} from '../../src/user/features/core/types';
 import { userKeys } from '../../src/user/data';
 import { ApiError } from '../../src/shared/query/http';
 import {
@@ -32,6 +37,23 @@ import {
   installJsonFetchFixtures,
   renderWithProviders,
 } from './support';
+
+const coreSession = {
+  user: {
+    id: '1', username: 'fixture-user', avatar: null, avatar_url: null,
+    guild_nick: null, guild_avatar_url: null, lang: 'en', is_banned: false,
+    banned_until: null, charity_suspended_until: null,
+    endpoint_limit: null, effective_endpoint_limit: '10', rpm_limit: null,
+    effective_rpm_limit: '60', concurrency_limit: null, effective_concurrency_limit: '5',
+    balance: '0', donation_credit: '0', effective_level: 2, level_display_name: 'Lv2',
+    game_profile_public: false, created_at: 1_700_000_000, updated_at: 1_700_000_001,
+    usage: {
+      total_requests: '0', total_uncached_input_tokens: '0', total_cache_write_input_tokens: '0',
+      total_cache_read_input_tokens: '0', total_output_tokens: '0', total_prompt_tokens: '0',
+      total_completion_tokens: '0', total_unknown_usage_requests: '0',
+    },
+  },
+};
 
 const session = {
   user: {
@@ -45,7 +67,7 @@ const session = {
 
 const endpoint = {
   id: 1, connector_type: 'openai-compatible', base_url: 'https://upstream.test/v1',
-  note: 'primary', enabled: true, model_fetch_failed: false, model_fetch_failed_at: 0,
+  note: 'primary', enabled: true,
   created_at: 1, updated_at: 2,
 };
 
@@ -59,6 +81,68 @@ const model = {
   route_strategy: 'ordered', silent_retry: false, flatten_tool_calls: false,
   binding_count: 2, created_at: 1, updated_at: 2,
 };
+
+const coreEndpoint = {
+  id: '1', connector_type: 'openai-compatible', base_url: 'https://upstream.test/v1',
+  note: 'primary', enabled: true, revision: '1', key_count: '1',
+  created_at: 1_700_000_000, updated_at: 1_700_000_001,
+};
+
+const coreEndpointKey = {
+  id: '2', endpoint_id: '1', display_head: 'sk-a', display_tail: 'tail', note: 'key note',
+  enabled: true, force_store_false: false, suspension_state: 'none', revision: '1',
+  created_at: 1_700_000_000, updated_at: 1_700_000_001,
+};
+
+const coreModel = {
+  id: '3', provider: 'provider', model: 'model', full_name: 'provider/model',
+  route_strategy: 'ordered', silent_retry: false, flatten_tool_calls: false,
+  revision: '1', binding_revision: '2', binding_count: '2',
+  created_at: 1_700_000_000, updated_at: 1_700_000_001,
+};
+
+const coreCatalogUnknown = {
+  evidence: {
+    state: 'unknown', revision: '1', result: null, safe_class: 'none',
+    observed_at: null, count: null,
+  },
+  automatic_entries: [], manual_entries: [], next_cursor: null,
+};
+
+const coreManualCatalog = {
+  ...coreCatalogUnknown,
+  manual_entries: [{
+    id: '31', source_type: 'manual', upstream_model_id: 'Vendor/Exact', provider: 'Vendor',
+    source_revision: '1', pair_revision: '2',
+    created_at: 1_700_000_003, updated_at: 1_700_000_004,
+  }],
+};
+
+function corePage<T>(data: T[]) {
+  return { data, next_cursor: null };
+}
+
+function coreBinding(id: string, upstreamModelId: string, ord: number) {
+  return {
+    id, endpoint_key_id: '2', upstream_model_id: upstreamModelId,
+    endpoint_base_url: coreEndpoint.base_url, connector_type: 'openai-compatible',
+    endpoint_note: coreEndpoint.note, endpoint_key_display_head: coreEndpointKey.display_head,
+    endpoint_key_display_tail: coreEndpointKey.display_tail, endpoint_key_note: coreEndpointKey.note,
+    ord,
+  };
+}
+
+function endpointRouteTree() {
+  return <Routes>
+    <Route path="/endpoints" element={<EndpointsPage />} />
+    <Route path="/endpoints/:endpointId" element={<EndpointsPage />} />
+  </Routes>;
+}
+
+function requestPath(input: string | URL | Request): string {
+  const url = new URL(input instanceof Request ? input.url : String(input), window.location.origin);
+  return `${url.pathname}${url.search}`;
+}
 
 const managedModel = {
   id: 7, provider: 'provider', model: 'charity-model', full_name: 'provider/charity-model',
@@ -100,6 +184,12 @@ function jsonResponse(body: unknown, status = 200): Response {
     status,
     headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
   });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((settle) => { resolve = settle; });
+  return { promise, resolve };
 }
 
 function ManagementBindingsProbe() {
@@ -175,88 +265,178 @@ function ManagementSessionGate({ frame, children }: { frame: 'admin' | 'steward'
 
 describe('experimental policy and charity controls', () => {
   test('edits the owner-only endpoint key policy and keeps a new secret out of query state', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const marker = 'synthetic-secret-123456';
-    const fetchMock = installJsonFetchFixtures([
-      { method: 'GET', path: '/api/session', body: session },
-      { method: 'GET', path: '/api/endpoints', body: [endpoint] },
-      { method: 'GET', path: '/api/endpoints/1/keys', body: [endpointKey] },
-      { method: 'PATCH', path: '/api/endpoints/1/keys/2', body: { ...endpointKey, note: 'updated', force_store_false: true } },
-      { method: 'POST', path: '/api/endpoints/1/keys', body: { ...endpointKey, id: 4, force_store_false: true } },
-      { method: 'GET', path: '/api/endpoints/1/keys/2/models', body: [] },
-    ]);
-    const rendered = await renderWithProviders(<EndpointsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Endpoint management' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Endpoint keys' }));
-    await screen.findByText('sk-a…tail');
-    await rendered.user.click(screen.getByRole('button', { name: 'Edit key metadata' }));
-    await rendered.user.clear(screen.getByLabelText('Key note'));
-    await rendered.user.type(screen.getByLabelText('Key note'), 'updated');
-    await rendered.user.click(screen.getByRole('checkbox', { name: 'Require upstream not to store prompts (Experimental)' }));
-    await rendered.user.click(screen.getByRole('button', { name: 'Save key metadata' }));
-    await waitFor(() => expect(lastBody(fetchMock, 'PATCH', '/api/endpoints/1/keys/2')).toEqual({
-      note: 'updated', enabled: true, force_store_false: true,
-    }));
-
-    await rendered.user.click(screen.getByRole('button', { name: 'Add key' }));
-    const secretInput = screen.getByPlaceholderText('Enter the upstream key once');
-    await rendered.user.type(secretInput, marker);
-    await rendered.user.click(screen.getByRole('checkbox', { name: 'Require upstream not to store prompts (Experimental)' }));
-    await rendered.user.click(screen.getByRole('button', { name: 'Save key' }));
-    await waitFor(() => expect(lastBody(fetchMock, 'POST', '/api/endpoints/1/keys')).toMatchObject({
-      secret: marker, force_store_false: true,
-    }));
-    expect(screen.queryByDisplayValue(marker)).toBeNull();
-    assertNoSensitiveQueryCache(rendered.queryClient, [marker]);
-    expect(confirmSpy).not.toHaveBeenCalled();
-  });
-
-  test('does not expose the OpenAI-only store policy on an Anthropic key', async () => {
-    const anthropicEndpoint = { ...endpoint, id: 4, connector_type: 'anthropic-compatible' };
-    const anthropicKey = { ...endpointKey } as Record<string, unknown>;
-    delete anthropicKey.force_store_false;
-    const fetchMock = installJsonFetchFixtures([
-      { method: 'GET', path: '/api/session', body: session },
-      { method: 'GET', path: '/api/endpoints', body: [anthropicEndpoint] },
-      { method: 'GET', path: '/api/endpoints/4/keys', body: [{ ...anthropicKey, id: 5 }] },
-    ]);
-    const rendered = await renderWithProviders(<EndpointsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Endpoint management' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Endpoint keys' }));
-    await screen.findByText('sk-a…tail');
-    await rendered.user.click(screen.getByRole('button', { name: 'Edit key metadata' }));
-    expect(screen.queryByRole('checkbox', { name: 'Require upstream not to store prompts (Experimental)' })).toBeNull();
-    expect(fetchMock).toHaveBeenCalled();
-  });
-
-  test('rolls an optimistic flatten checkbox back after a server conflict', async () => {
-    const fetchMock = installJsonFetchFixtures([
-      { method: 'GET', path: '/api/session', body: session },
-      { method: 'GET', path: '/api/models', body: [model] },
-      { method: 'PATCH', path: '/api/models/3', status: 409, body: { error: { code: 'conflict', message: 'conflict' } } },
-    ]);
-    const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Models and bindings' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Edit' }));
-    const checkbox = screen.getByRole('checkbox', { name: 'Experimental: flatten tool calls' });
-    await rendered.user.click(checkbox);
-    await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
-    await expect(screen.findByText('conflict')).resolves.toBeVisible();
-    expect(checkbox).not.toBeChecked();
-    expect(fetchMock).toHaveBeenCalled();
-  });
-
-  test('adopts a committed model policy after a conflict response and refetch', async () => {
-    let modelReads = 0;
-    const committed = { ...model, flatten_tool_calls: true };
+    let currentKey = { ...coreEndpointKey };
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const path = new URL(input instanceof Request ? input.url : String(input), window.location.origin).pathname;
+      const path = requestPath(input);
       const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
-      if (method === 'GET' && path === '/api/session') return jsonResponse(session);
-      if (method === 'GET' && path === '/api/models') {
-        modelReads += 1;
-        return jsonResponse([modelReads === 1 ? model : committed]);
+      if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
+      if (method === 'GET' && path === '/api/endpoints/1') return jsonResponse(coreEndpoint);
+      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50') return jsonResponse(corePage([currentKey]));
+      if (method === 'GET' && path === '/api/models?limit=50') return jsonResponse(corePage([]));
+      if (method === 'GET' && path === '/api/endpoints/1/keys/2/models?limit=50') return jsonResponse(coreCatalogUnknown);
+      if (method === 'PATCH' && path === '/api/endpoints/1/keys/2') {
+        currentKey = { ...currentKey, force_store_false: true, revision: '2', updated_at: 1_700_000_002 };
+        return jsonResponse(currentKey);
       }
+      if (method === 'POST' && path === '/api/endpoints/1/keys') {
+        return jsonResponse({
+          ...coreEndpointKey, id: '4', display_head: 'sk-new', display_tail: 'tail2',
+          note: 'created key', force_store_false: true,
+        }, 201);
+      }
+      throw new Error(`Unexpected fixture request: ${method} ${path}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const rendered = await renderWithProviders(endpointRouteTree(), {
+      station: 'user', role: 'user', route: '/endpoints/1',
+    });
+    await screen.findByRole('heading', { name: 'Endpoint details' });
+    const keyCard = (await screen.findByText('sk-a…tail')).closest('li');
+    if (!keyCard) throw new Error('EndpointKey card not found');
+    await rendered.user.click(within(keyCard).getByRole('button', { name: 'Require store=false' }));
+    await waitFor(() => expect(lastBody(fetchMock, 'PATCH', '/api/endpoints/1/keys/2')).toEqual({
+      force_store_false: true, expected_revision: '1',
+    }));
+    await screen.findByRole('button', { name: 'Stop requiring store=false' });
+
+    await rendered.user.click(screen.getByRole('button', { name: 'Add EndpointKey' }));
+    await rendered.user.type(screen.getByLabelText('Upstream secret'), marker);
+    await rendered.user.type(screen.getByLabelText('Key note'), 'created key');
+    await rendered.user.click(screen.getByLabelText(/I own this credential/));
+    await rendered.user.click(screen.getByLabelText('Force store=false'));
+    await rendered.user.click(screen.getByRole('button', { name: 'Add key' }));
+    await waitFor(() => expect(lastBody(fetchMock, 'POST', '/api/endpoints/1/keys')).toEqual({
+      secret: marker, note: 'created key', enabled: true,
+      force_store_false: true, ownership_confirmed: true,
+    }));
+    await waitFor(() => expect(screen.queryByDisplayValue(marker)).toBeNull());
+    expect(assertNoSensitiveQueryCache(rendered.queryClient, [marker]).hitSurfaces).toEqual([]);
+  });
+
+  test('does not expose the OpenAI-only store policy action on an Anthropic key', async () => {
+    const anthropicEndpoint = { ...coreEndpoint, id: '4', connector_type: 'anthropic-compatible' };
+    const anthropicKey = { ...coreEndpointKey, id: '5', endpoint_id: '4' };
+    const fetchMock = installJsonFetchFixtures([
+      { method: 'GET', path: '/api/session', body: coreSession },
+      { method: 'GET', path: '/api/endpoints/4', body: anthropicEndpoint },
+      { method: 'GET', path: '/api/endpoints/4/keys?limit=50', body: corePage([anthropicKey]) },
+      { method: 'GET', path: '/api/models?limit=50', body: corePage([]) },
+      { method: 'GET', path: '/api/endpoints/4/keys/5/models?limit=50', body: coreCatalogUnknown },
+    ]);
+    const rendered = await renderWithProviders(endpointRouteTree(), {
+      station: 'user', role: 'user', route: '/endpoints/4',
+    });
+    await screen.findByRole('heading', { name: 'Endpoint details' });
+    expect(screen.queryByRole('button', { name: 'Require store=false' })).toBeNull();
+    await rendered.user.click(screen.getByRole('button', { name: 'Add EndpointKey' }));
+    expect(screen.queryByLabelText('Force store=false')).toBeNull();
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  test('disables destructive manual catalog actions while routing authority cannot be read', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const path = requestPath(input);
+      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
+      if (method === 'GET' && path === '/api/endpoints/1') return jsonResponse(coreEndpoint);
+      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50') {
+        return jsonResponse(corePage([coreEndpointKey]));
+      }
+      if (method === 'GET' && path === '/api/models?limit=100') {
+        return jsonResponse(corePage([coreModel]));
+      }
+      if (method === 'GET' && path === '/api/models/3/bindings') {
+        return jsonResponse({ error: { code: 'temporarily_unavailable', message: 'try later' } }, 503);
+      }
+      if (method === 'GET' && path === '/api/endpoints/1/keys/2/models?limit=50') {
+        return jsonResponse(coreManualCatalog);
+      }
+      throw new Error(`Unexpected fixture request: ${method} ${path}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const rendered = await renderWithProviders(endpointRouteTree(), {
+      station: 'user', role: 'user', route: '/endpoints/1',
+    });
+
+    const entryRow = (await screen.findByText('Vendor/Exact')).closest('li');
+    if (!entryRow) throw new Error('Manual catalog row not found');
+    await rendered.user.click(within(entryRow).getByRole('button', { name: 'Edit' }));
+
+    expect(await within(entryRow).findByRole('alert')).toHaveTextContent(
+      /Binding impact could not be confirmed/,
+    );
+    const deleteButton = within(entryRow).getByRole('button', {
+      name: 'Delete entry atomically',
+    });
+    const updateButton = within(entryRow).getByRole('button', {
+      name: 'Update entry atomically',
+    });
+    expect(deleteButton).toBeDisabled();
+    expect(updateButton).toBeEnabled();
+
+    await rendered.user.clear(within(entryRow).getByLabelText('Exact upstream model ID'));
+    await rendered.user.type(
+      within(entryRow).getByLabelText('Exact upstream model ID'),
+      'Vendor/Changed',
+    );
+    expect(updateButton).toBeDisabled();
+    expect(fetchMock.mock.calls.filter((call) => {
+      const method = ((call[1] as RequestInit | undefined)?.method ?? 'GET').toUpperCase();
+      return method === 'PATCH' || method === 'DELETE';
+    })).toHaveLength(0);
+  });
+
+  test('refreshes model authority after a conflict without automatically retrying the mutation', async () => {
+    let modelReads = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const path = requestPath(input);
+      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
+      if (method === 'GET' && path === '/api/models?limit=50') return jsonResponse(corePage([coreModel]));
+      if (method === 'GET' && path === '/api/models/3') {
+        modelReads += 1;
+        return jsonResponse(coreModel);
+      }
+      if (method === 'GET' && path === '/api/models/3/bindings') {
+        return jsonResponse({ bindings: [coreBinding('10', 'gpt-a', 0), coreBinding('11', 'gpt-b', 1)], binding_revision: '2' });
+      }
+      if (method === 'GET' && path === '/api/endpoints?limit=50') return jsonResponse(corePage([]));
+      if (method === 'PATCH' && path === '/api/models/3') {
+        return jsonResponse({ error: { code: 'conflict', message: 'conflict' } }, 409);
+      }
+      throw new Error(`Unexpected fixture request: ${method} ${path}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
+    await screen.findByRole('heading', { name: 'Logical models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
+    await rendered.user.click(await screen.findByRole('button', { name: 'Edit logical model' }));
+    await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
+    await expect(screen.findByText(/This resource changed/)).resolves.toBeVisible();
+    await waitFor(() => expect(modelReads).toBeGreaterThan(1));
+    expect(fetchMock.mock.calls.filter((call) => (
+      requestPath(call[0] as string) === '/api/models/3' && (call[1] as RequestInit | undefined)?.method === 'PATCH'
+    ))).toHaveLength(1);
+  });
+
+  test('adopts a committed model policy after a conflict response and authoritative refetch', async () => {
+    let modelReads = 0;
+    const committed = { ...coreModel, flatten_tool_calls: true, revision: '2', updated_at: 1_700_000_002 };
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const path = requestPath(input);
+      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
+      if (method === 'GET' && path === '/api/models?limit=50') return jsonResponse(corePage([modelReads > 0 ? committed : coreModel]));
+      if (method === 'GET' && path === '/api/models/3') {
+        modelReads += 1;
+        return jsonResponse(modelReads === 1 ? coreModel : committed);
+      }
+      if (method === 'GET' && path === '/api/models/3/bindings') {
+        return jsonResponse({ bindings: [coreBinding('10', 'gpt-a', 0), coreBinding('11', 'gpt-b', 1)], binding_revision: '2' });
+      }
+      if (method === 'GET' && path === '/api/endpoints?limit=50') return jsonResponse(corePage([]));
       if (method === 'PATCH' && path === '/api/models/3') {
         return jsonResponse({ error: { code: 'conflict', message: 'response lost after commit' } }, 409);
       }
@@ -264,223 +444,271 @@ describe('experimental policy and charity controls', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Models and bindings' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Edit' }));
-    const checkbox = screen.getByRole('checkbox', { name: 'Experimental: flatten tool calls' });
-    await rendered.user.click(checkbox);
+    await screen.findByRole('heading', { name: 'Logical models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
+    await rendered.user.click(await screen.findByRole('button', { name: 'Edit logical model' }));
+    await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
-    await expect(screen.findByText('response lost after commit')).resolves.toBeVisible();
     await waitFor(() => expect(modelReads).toBeGreaterThan(1));
-    expect(checkbox).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Flatten tool calls' })).toBeChecked();
   });
 
-  test('refetches the key policy after a network failure and keeps a committed value', async () => {
+  test('refetches key authority after a lost response and keeps the committed store policy', async () => {
     let keyReads = 0;
-    const committed = { ...endpointKey, force_store_false: true };
+    const committed = { ...coreEndpointKey, force_store_false: true, revision: '2', updated_at: 1_700_000_002 };
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const path = new URL(input instanceof Request ? input.url : String(input), window.location.origin).pathname;
+      const path = requestPath(input);
       const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
-      if (method === 'GET' && path === '/api/session') return jsonResponse(session);
-      if (method === 'GET' && path === '/api/endpoints') return jsonResponse([endpoint]);
-      if (method === 'GET' && path === '/api/endpoints/1/keys') {
+      if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
+      if (method === 'GET' && path === '/api/endpoints/1') return jsonResponse(coreEndpoint);
+      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50') {
         keyReads += 1;
-        return jsonResponse([keyReads === 1 ? endpointKey : committed]);
+        return jsonResponse(corePage([keyReads === 1 ? coreEndpointKey : committed]));
       }
+      if (method === 'GET' && path === '/api/models?limit=50') return jsonResponse(corePage([]));
+      if (method === 'GET' && path === '/api/endpoints/1/keys/2/models?limit=50') return jsonResponse(coreCatalogUnknown);
       if (method === 'PATCH' && path === '/api/endpoints/1/keys/2') throw new TypeError('connection reset');
       throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    const rendered = await renderWithProviders(<EndpointsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Endpoint management' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Endpoint keys' }));
-    await screen.findByText('sk-a…tail');
-    await rendered.user.click(screen.getByRole('button', { name: 'Edit key metadata' }));
-    const checkbox = screen.getByRole('checkbox', { name: 'Require upstream not to store prompts (Experimental)' });
-    await rendered.user.click(checkbox);
-    await rendered.user.click(screen.getByRole('button', { name: 'Save key metadata' }));
-    await expect(screen.findByText(/network request failed/i)).resolves.toBeVisible();
+    const rendered = await renderWithProviders(endpointRouteTree(), {
+      station: 'user', role: 'user', route: '/endpoints/1',
+    });
+    const action = await screen.findByRole('button', { name: 'Require store=false' });
+    await rendered.user.click(action);
     await waitFor(() => expect(keyReads).toBeGreaterThan(1));
-    expect(checkbox).toBeChecked();
+    expect(await screen.findByRole('button', { name: 'Stop requiring store=false' })).toBeVisible();
+    expect(fetchMock.mock.calls.filter((call) => (
+      requestPath(call[0] as string) === '/api/endpoints/1/keys/2' && (call[1] as RequestInit | undefined)?.method === 'PATCH'
+    ))).toHaveLength(1);
   });
 
-  test('refetches the model policy after an invalid response and keeps a committed value', async () => {
+  test('fails closed on an invalid model mutation response without polluting authority', async () => {
     let modelReads = 0;
-    const committed = { ...model, flatten_tool_calls: true };
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const path = new URL(input instanceof Request ? input.url : String(input), window.location.origin).pathname;
+      const path = requestPath(input);
       const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
-      if (method === 'GET' && path === '/api/session') return jsonResponse(session);
-      if (method === 'GET' && path === '/api/models') {
+      if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
+      if (method === 'GET' && path === '/api/models?limit=50') return jsonResponse(corePage([coreModel]));
+      if (method === 'GET' && path === '/api/models/3') {
         modelReads += 1;
-        return jsonResponse([modelReads === 1 ? model : committed]);
+        return jsonResponse(coreModel);
       }
+      if (method === 'GET' && path === '/api/models/3/bindings') {
+        return jsonResponse({ bindings: [coreBinding('10', 'gpt-a', 0), coreBinding('11', 'gpt-b', 1)], binding_revision: '2' });
+      }
+      if (method === 'GET' && path === '/api/endpoints?limit=50') return jsonResponse(corePage([]));
       if (method === 'PATCH' && path === '/api/models/3') return jsonResponse({ committed: true });
       throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Models and bindings' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Edit' }));
-    const checkbox = screen.getByRole('checkbox', { name: 'Experimental: flatten tool calls' });
-    await rendered.user.click(checkbox);
+    await screen.findByRole('heading', { name: 'Logical models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
+    await rendered.user.click(await screen.findByRole('button', { name: 'Edit logical model' }));
+    await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
-    await expect(screen.findByText(/invalid response|invalid model/i)).resolves.toBeVisible();
-    await waitFor(() => expect(modelReads).toBeGreaterThan(1));
-    expect(checkbox).toBeChecked();
+    await expect(screen.findByText(/The response was lost/)).resolves.toBeVisible();
+    expect(modelReads).toBeGreaterThan(1);
+    expect(screen.getByRole('button', { name: 'Retry the same operation' })).toBeVisible();
+    expect(rendered.queryClient.getQueryData(coreKeys.model('1', '3'))).toMatchObject({
+      flatten_tool_calls: false, revision: '1',
+    });
   });
 
-  test('reconciles a lost endpoint-key create response before allowing a retry', async () => {
+  test('reconciles a lost endpoint-key create response before offering exact replay', async () => {
     let keyReads = 0;
-    const createdKey = { ...endpointKey, id: 4, display_head: 'sk-new', display_tail: 'tail2', note: 'created key' };
+    let keyPosts = 0;
+    const createdKey = {
+      ...coreEndpointKey, id: '4', display_head: 'sk-new', display_tail: 'tail2', note: 'created key',
+    };
     const marker = 'synthetic-key-create-secret-123456';
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const path = new URL(input instanceof Request ? input.url : String(input), window.location.origin).pathname;
+      const path = requestPath(input);
       const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
-      if (method === 'GET' && path === '/api/session') return jsonResponse(session);
-      if (method === 'GET' && path === '/api/endpoints') return jsonResponse([endpoint]);
-      if (method === 'GET' && path === '/api/endpoints/1/keys') {
+      if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
+      if (method === 'GET' && path === '/api/endpoints/1') return jsonResponse(coreEndpoint);
+      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50') {
         keyReads += 1;
-        return jsonResponse(keyReads === 1 ? [endpointKey] : [endpointKey, createdKey]);
+        return jsonResponse(corePage(keyReads === 1 ? [coreEndpointKey] : [coreEndpointKey, createdKey]));
       }
-      if (method === 'POST' && path === '/api/endpoints/1/keys') throw new TypeError('response lost after key create');
+      if (method === 'GET' && path === '/api/models?limit=50') return jsonResponse(corePage([]));
+      if (method === 'GET' && /^\/api\/endpoints\/1\/keys\/(2|4)\/models\?limit=50$/.test(path)) return jsonResponse(coreCatalogUnknown);
+      if (method === 'POST' && path === '/api/endpoints/1/keys') {
+        keyPosts += 1;
+        return jsonResponse({ error: { code: 'internal', message: 'safe uncertain response' } }, 503);
+      }
       throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    const rendered = await renderWithProviders(<EndpointsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Endpoint management' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Endpoint keys' }));
+    const rendered = await renderWithProviders(endpointRouteTree(), {
+      station: 'user', role: 'user', route: '/endpoints/1',
+    });
     await screen.findByText('sk-a…tail');
+    await rendered.user.click(screen.getByRole('button', { name: 'Add EndpointKey' }));
+    await rendered.user.type(screen.getByLabelText('Upstream secret'), marker);
+    await rendered.user.type(screen.getByLabelText('Key note'), 'created key');
+    await rendered.user.click(screen.getByLabelText(/I own this credential/));
     await rendered.user.click(screen.getByRole('button', { name: 'Add key' }));
-    await rendered.user.type(screen.getByPlaceholderText('Enter the upstream key once'), marker);
-    await rendered.user.click(screen.getByRole('button', { name: 'Save key' }));
-    await expect(screen.findByText(/network request failed/i)).resolves.toBeVisible();
     await screen.findByText('sk-new…tail2');
     await waitFor(() => expect(keyReads).toBeGreaterThan(1));
-    expect(fetchMock.mock.calls.filter((call) => {
-      const requestURL = new URL(String(call[0]), window.location.origin);
-      const requestInit = call[1] as RequestInit | undefined;
-      return requestURL.pathname === '/api/endpoints/1/keys' && requestInit?.method === 'POST';
-    })).toHaveLength(1);
-    expect(screen.queryByDisplayValue(marker)).toBeNull();
-    assertNoSensitiveQueryCache(rendered.queryClient, [marker]);
+    expect(screen.getByRole('button', { name: 'Retry the same operation' })).toBeVisible();
+    expect(keyPosts).toBe(1);
+    expect(assertNoSensitiveQueryCache(rendered.queryClient, [marker]).hitSurfaces).toEqual([]);
   });
 
-  test('reconciles a lost personal-model create response before allowing a retry', async () => {
+  test('reconciles a lost personal-model create response before offering exact replay', async () => {
     let modelReads = 0;
+    let modelPosts = 0;
     const createdModel = {
-      ...model, id: 4, provider: 'created-provider', model: 'created-model',
-      full_name: 'created-provider/created-model',
+      ...coreModel, id: '4', provider: 'created-provider', model: 'created-model',
+      full_name: 'created-provider/created-model', revision: '1', binding_revision: '0', binding_count: '0',
     };
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const path = new URL(input instanceof Request ? input.url : String(input), window.location.origin).pathname;
+      const path = requestPath(input);
       const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
-      if (method === 'GET' && path === '/api/session') return jsonResponse(session);
-      if (method === 'GET' && path === '/api/models') {
+      if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
+      if (method === 'GET' && path === '/api/models?limit=50') {
         modelReads += 1;
-        return jsonResponse([modelReads === 1 ? model : model, ...(modelReads > 1 ? [createdModel] : [])]);
+        return jsonResponse(corePage(modelReads === 1 ? [coreModel] : [coreModel, createdModel]));
       }
-      if (method === 'POST' && path === '/api/models') throw new TypeError('response lost after model create');
+      if (method === 'POST' && path === '/api/models') {
+        modelPosts += 1;
+        return jsonResponse({ error: { code: 'internal', message: 'safe uncertain response' } }, 503);
+      }
       throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Models and bindings' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Create model' }));
-    await rendered.user.type(screen.getByPlaceholderText('example-provider'), 'created-provider');
-    await rendered.user.type(screen.getByPlaceholderText('example-model'), 'created-model');
-    const createButtons = screen.getAllByRole('button', { name: 'Create model' });
-    await rendered.user.click(createButtons[createButtons.length - 1]);
-    await expect(screen.findByText(/network request failed/i)).resolves.toBeVisible();
+    await screen.findByRole('heading', { name: 'Logical models' });
+    await rendered.user.click(screen.getByRole('button', { name: 'Create logical model' }));
+    await rendered.user.type(screen.getByLabelText('Provider'), 'created-provider');
+    await rendered.user.type(screen.getByLabelText('Model'), 'created-model');
+    await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await screen.findByText('created-provider/created-model');
     await waitFor(() => expect(modelReads).toBeGreaterThan(1));
-    expect(fetchMock.mock.calls.filter((call) => {
-      const requestURL = new URL(String(call[0]), window.location.origin);
-      const requestInit = call[1] as RequestInit | undefined;
-      return requestURL.pathname === '/api/models' && requestInit?.method === 'POST';
-    })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Retry the same operation' })).toBeVisible();
+    expect(modelPosts).toBe(1);
   });
 
-  test('surfaces the real Anthropic binding policy conflict instead of treating it as a generic 409', async () => {
-    const anthropicEndpoint = { ...endpoint, id: 4, connector_type: 'anthropic-compatible' };
-    const anthropicKey = { ...endpointKey } as Record<string, unknown>;
-    delete anthropicKey.force_store_false;
-    const anthropicModel = { ...model, flatten_tool_calls: true, binding_count: 0 };
+  test('handles an Anthropic binding conflict as a frozen 409 with authoritative reconciliation', async () => {
+    const anthropicEndpoint = { ...coreEndpoint, id: '4', connector_type: 'anthropic-compatible' };
+    const anthropicKey = { ...coreEndpointKey, id: '5', endpoint_id: '4' };
+    const anthropicModel = { ...coreModel, flatten_tool_calls: true, binding_revision: '0', binding_count: '0' };
+    const candidate = {
+      endpoint_key_id: '5', endpoint_base_url: anthropicEndpoint.base_url,
+      connector_type: 'anthropic-compatible', endpoint_note: anthropicEndpoint.note,
+      endpoint_key_display_head: anthropicKey.display_head, endpoint_key_display_tail: anthropicKey.display_tail,
+      endpoint_key_note: anthropicKey.note, upstream_model_id: 'claude-3', source_types: ['automatic'],
+    };
+    let bindingReads = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const path = requestPath(input);
+      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
+      if (method === 'GET' && path === '/api/models?limit=50') return jsonResponse(corePage([anthropicModel]));
+      if (method === 'GET' && path === '/api/models/3') return jsonResponse(anthropicModel);
+      if (method === 'GET' && path === '/api/models/3/bindings') {
+        bindingReads += 1;
+        return jsonResponse({ bindings: [], binding_revision: '0' });
+      }
+      if (method === 'GET' && path === '/api/endpoints?limit=50') return jsonResponse(corePage([anthropicEndpoint]));
+      if (method === 'GET' && path === '/api/endpoints/4/keys?limit=50') return jsonResponse(corePage([anthropicKey]));
+      if (method === 'GET' && path.startsWith('/api/models/3/binding-candidates?')) {
+        const params = new URL(path, window.location.origin).searchParams;
+        return jsonResponse(corePage(params.get('source') === 'automatic' ? [candidate] : []));
+      }
+      if (method === 'POST' && path === '/api/models/3/bindings/batch') {
+        return jsonResponse({ error: { code: 'conflict', message: 'binding policy conflict' } }, 409);
+      }
+      throw new Error(`Unexpected fixture request: ${method} ${path}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
+    await screen.findByRole('heading', { name: 'Logical models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
+    await rendered.user.click(await screen.findByRole('button', { name: /Anthropic-compatible.*upstream\.test/ }));
+    await rendered.user.click(await screen.findByRole('button', { name: /sk-a…tail/ }));
+    await rendered.user.click(await screen.findByRole('button', { name: /claude-3/ }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Add 1 selected binding(s)' }));
+    await waitFor(() => expect(lastBody(fetchMock, 'POST', '/api/models/3/bindings/batch')).toEqual({
+      expected_binding_revision: '0',
+      selections: [{ endpoint_key_id: '5', upstream_model_id: 'claude-3' }],
+    }));
+    await waitFor(() => expect(bindingReads).toBeGreaterThan(1));
+    expect(screen.getByRole('button', { name: 'Add 1 selected binding(s)' })).toBeEnabled();
+    expect(fetchMock.mock.calls.filter((call) => (
+      requestPath(call[0] as string) === '/api/models/3/bindings/batch' && (call[1] as RequestInit | undefined)?.method === 'POST'
+    ))).toHaveLength(1);
+  });
+
+  test('sends the complete binding order and the revision-bound logical-model policy', async () => {
+    let currentModel = { ...coreModel };
+    let bindings = [coreBinding('10', 'gpt-a', 0), coreBinding('11', 'gpt-b', 1)];
+    let bindingRevision = '2';
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const path = requestPath(input);
+      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
+      if (method === 'GET' && path === '/api/models?limit=50') return jsonResponse(corePage([currentModel]));
+      if (method === 'GET' && path === '/api/models/3') return jsonResponse(currentModel);
+      if (method === 'GET' && path === '/api/models/3/bindings') return jsonResponse({ bindings, binding_revision: bindingRevision });
+      if (method === 'GET' && path === '/api/endpoints?limit=50') return jsonResponse(corePage([]));
+      if (method === 'PUT' && path === '/api/models/3/bindings/order') {
+        bindings = [coreBinding('11', 'gpt-b', 0), coreBinding('10', 'gpt-a', 1)];
+        bindingRevision = '3';
+        return jsonResponse({ bindings, binding_revision: bindingRevision });
+      }
+      if (method === 'PATCH' && path === '/api/models/3') {
+        currentModel = { ...currentModel, flatten_tool_calls: true, revision: '2', updated_at: 1_700_000_002 };
+        return jsonResponse(currentModel);
+      }
+      throw new Error(`Unexpected fixture request: ${method} ${path}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
+    await screen.findByRole('heading', { name: 'Logical models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
+    await rendered.user.click((await screen.findAllByRole('button', { name: 'Move down' }))[0]);
+    await rendered.user.click(screen.getByRole('button', { name: 'Save complete order' }));
+    await waitFor(() => expect(lastBody(fetchMock, 'PUT', '/api/models/3/bindings/order')).toEqual({
+      expected_binding_revision: '2', order: ['11', '10'],
+    }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Edit logical model' }));
+    await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(lastBody(fetchMock, 'PATCH', '/api/models/3')).toEqual({
+      provider: 'provider', model: 'model', route_strategy: 'ordered', silent_retry: false,
+      flatten_tool_calls: true, expected_revision: '1',
+    }));
+  });
+
+  test('keeps authoritative binding deletion available when the candidate endpoint page is empty', async () => {
+    const binding = coreBinding('10', 'gpt-a', 0);
+    const oneBindingModel = { ...coreModel, binding_count: '1' };
     const fetchMock = installJsonFetchFixtures([
-      { method: 'GET', path: '/api/session', body: session },
-      { method: 'GET', path: '/api/models', body: [anthropicModel] },
-      { method: 'GET', path: '/api/models/3/bindings', body: [] },
-      { method: 'GET', path: '/api/endpoints', body: [anthropicEndpoint] },
-      { method: 'GET', path: '/api/endpoints/4/keys', body: [{ ...anthropicKey, id: 5 }] },
-      { method: 'GET', path: '/api/endpoints/4/keys/5/models', body: [{ upstream_model_id: 'claude-3', provider: 'anthropic', fetched_at: 1, status: 'ok' }] },
+      { method: 'GET', path: '/api/session', body: coreSession },
+      { method: 'GET', path: '/api/models?limit=50', body: corePage([oneBindingModel]) },
+      { method: 'GET', path: '/api/models/3', body: oneBindingModel },
+      { method: 'GET', path: '/api/models/3/bindings', body: { bindings: [binding], binding_revision: '2' } },
+      { method: 'GET', path: '/api/endpoints?limit=50', body: corePage([]) },
       {
-        method: 'POST', path: '/api/models/3/bindings', status: 409,
-        body: { error: { code: 'conflict', message: 'flatten_tool_calls requires OpenAI-compatible bindings' } },
+        method: 'DELETE', path: '/api/models/3/bindings/10',
+        body: { bindings: [], binding_revision: '3' },
       },
     ]);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Models and bindings' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Show bindings' }));
-    await rendered.user.click(await screen.findByRole('button', { name: 'Add binding' }));
-    await rendered.user.selectOptions(screen.getByLabelText('Endpoint'), '4');
-    await rendered.user.selectOptions(await screen.findByLabelText('Endpoint key'), '5');
-    await rendered.user.selectOptions(await screen.findByLabelText('Upstream model'), 'claude-3');
-    const addButtons = screen.getAllByRole('button', { name: 'Add binding' });
-    await rendered.user.click(addButtons[addButtons.length - 1]);
-    await waitFor(() => expect(lastBody(fetchMock, 'POST', '/api/models/3/bindings')).toEqual({
-      endpoint_key_id: 5, upstream_model_id: 'claude-3',
-    }));
-    await expect(screen.findByText(/flatten_tool_calls requires OpenAI-compatible bindings/i)).resolves.toBeVisible();
-  });
-
-  test('sends logical-model flatten policy and renders its explicit risk', async () => {
-    const fetchMock = installJsonFetchFixtures([
-      { method: 'GET', path: '/api/session', body: session },
-      { method: 'GET', path: '/api/models', body: [model] },
-      { method: 'GET', path: '/api/models/3/bindings', body: [
-        { id: 10, endpoint_key_id: 2, upstream_model_id: 'gpt-a', endpoint_base_url: endpoint.base_url, endpoint_key_display_head: 'sk-a', endpoint_key_display_tail: 'tail', endpoint_key_note: 'key note', endpoint_note: 'primary', ord: 0 },
-        { id: 11, endpoint_key_id: 2, upstream_model_id: 'gpt-b', endpoint_base_url: endpoint.base_url, endpoint_key_display_head: 'sk-a', endpoint_key_display_tail: 'tail', endpoint_key_note: 'key note', endpoint_note: 'primary', ord: 1 },
-      ] },
-      { method: 'PUT', path: '/api/models/3/bindings/order', body: [] },
-      { method: 'PATCH', path: '/api/models/3', body: { ...model, flatten_tool_calls: true } },
-    ]);
-    const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Models and bindings' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Show bindings' }));
-    const dragHandle = (await screen.findAllByRole('button', { name: 'Drag, or focus and use the arrow keys, to reorder bindings' }))[0];
-    await dragHandle.focus();
-    await rendered.user.keyboard('{ArrowDown}');
-    await waitFor(() => expect(lastBody(fetchMock, 'PUT', '/api/models/3/bindings/order')).toEqual({ order: [11, 10] }));
-    await rendered.user.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
-    await rendered.user.click(screen.getByRole('checkbox', { name: 'Experimental: flatten tool calls' }));
-    expect(screen.getByText(/flattening can break normal tool calls/i)).toBeInTheDocument();
-    await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(lastBody(fetchMock, 'PATCH', '/api/models/3')).toMatchObject({
-      provider: 'provider', model: 'model', flatten_tool_calls: true,
-    }));
-  });
-
-  test('keeps binding deletion disabled when upstream ownership context is unavailable', async () => {
-    const fetchMock = installJsonFetchFixtures([
-      { method: 'GET', path: '/api/session', body: session },
-      { method: 'GET', path: '/api/models', body: [model] },
-      { method: 'GET', path: '/api/models/3/bindings', body: [{
-        id: 10, endpoint_key_id: 2, upstream_model_id: 'gpt-a', endpoint_base_url: endpoint.base_url,
-        endpoint_key_display_head: 'sk-a', endpoint_key_display_tail: 'tail', ord: 0,
-      }] },
-      // The binding's endpoint/key no longer resolves to an enabled owner.
-      { method: 'GET', path: '/api/endpoints', body: [] },
-    ]);
-    const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Models and bindings' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Show bindings' }));
-    const remove = await screen.findByRole('button', { name: 'Delete binding' });
-    await waitFor(() => expect(remove).toBeDisabled());
-    expect(screen.getByRole('alert')).toHaveTextContent(/endpoint and key context/i);
+    await screen.findByRole('heading', { name: 'Logical models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
+    const remove = await screen.findByRole('button', { name: 'Remove binding' });
+    expect(remove).toBeEnabled();
     await rendered.user.click(remove);
-    expect(fetchMock.mock.calls.some((call) => {
-      const requestURL = new URL(String(call[0]), window.location.origin);
-      return requestURL.pathname === '/api/models/3/bindings/10' && (call[1] as RequestInit | undefined)?.method === 'DELETE';
-    })).toBe(false);
+    const dialog = screen.getByRole('alertdialog');
+    await rendered.user.click(within(dialog).getByRole('button', { name: 'Remove binding' }));
+    await waitFor(() => expect(lastBody(fetchMock, 'DELETE', '/api/models/3/bindings/10')).toEqual({
+      expected_binding_revision: '2',
+    }));
+    await waitFor(() => expect(screen.queryByText('gpt-a')).toBeNull());
   });
 
   test('shows a donor charity flatten policy and only the owner donation without a model editor', async () => {
@@ -690,30 +918,33 @@ describe('experimental policy and charity controls', () => {
   });
 
   test('fails closed when an OpenAI key response omits its required store policy', async () => {
-    const malformedKey = { ...endpointKey } as Record<string, unknown>;
+    const malformedKey = { ...coreEndpointKey } as Record<string, unknown>;
     delete malformedKey.force_store_false;
     installJsonFetchFixtures([
-      { method: 'GET', path: '/api/session', body: session },
-      { method: 'GET', path: '/api/endpoints', body: [endpoint] },
-      { method: 'GET', path: '/api/endpoints/1/keys', body: [{ ...malformedKey }] },
+      { method: 'GET', path: '/api/session', body: coreSession },
+      { method: 'GET', path: '/api/endpoints/1', body: coreEndpoint },
+      { method: 'GET', path: '/api/endpoints/1/keys?limit=50', body: corePage([malformedKey]) },
     ]);
-    const rendered = await renderWithProviders(<EndpointsPage />, { station: 'user', role: 'user' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Endpoint keys' }));
+    await renderWithProviders(endpointRouteTree(), {
+      station: 'user', role: 'user', route: '/endpoints/1',
+    });
     await expect(screen.findByRole('alert')).resolves.toBeVisible();
   });
 
   test('fails closed when a binding order exceeds the frozen range', async () => {
     installJsonFetchFixtures([
-      { method: 'GET', path: '/api/session', body: session },
-      { method: 'GET', path: '/api/models', body: [model] },
-      { method: 'GET', path: '/api/models/3/bindings', body: [{
-        id: 10, endpoint_key_id: 2, upstream_model_id: 'gpt-a', endpoint_base_url: endpoint.base_url,
-        endpoint_key_display_head: 'sk-a', endpoint_key_display_tail: 'tail', ord: 1_000_001,
-      }] },
+      { method: 'GET', path: '/api/session', body: coreSession },
+      { method: 'GET', path: '/api/models?limit=50', body: corePage([coreModel]) },
+      { method: 'GET', path: '/api/models/3', body: coreModel },
+      {
+        method: 'GET', path: '/api/models/3/bindings',
+        body: { bindings: [{ ...coreBinding('10', 'gpt-a', 0), ord: 1_000_001 }], binding_revision: '2' },
+      },
+      { method: 'GET', path: '/api/endpoints?limit=50', body: corePage([]) },
     ]);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Models and bindings' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Show bindings' }));
+    await screen.findByRole('heading', { name: 'Logical models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
     await expect(screen.findByRole('alert')).resolves.toBeVisible();
   });
 
@@ -1375,92 +1606,91 @@ describe('experimental policy and charity controls', () => {
   });
 
   test('never reveals a caller key returned after the account changes', async () => {
-    const marker = 'nbk_account_a_one_time_secret_123456';
-    let release!: () => void;
-    let regenerateStarted = false;
-    const responseGate = new Promise<void>((resolve) => { release = resolve; });
+    const marker = `nbk_${'A'.repeat(43)}`;
+    const lateResponse = deferred<Response>();
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const requestURL = new URL(input instanceof Request ? input.url : String(input), window.location.origin);
+      const path = requestPath(input);
       const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
-      if (method === 'GET' && requestURL.pathname === '/api/session') return jsonResponse(session);
-      if (method === 'GET' && requestURL.pathname === '/api/caller-key') {
-        return jsonResponse({ error: { code: 'not_found', message: 'no key' } }, 404);
+      if (method === 'GET' && path === '/api/caller-key') {
+        const headers = new Headers({ 'content-type': 'application/json' });
+        headers.set('X-Nonbiri-CallerKey-Generation', '0');
+        return new Response('null', { status: 200, headers });
       }
-      if (method === 'POST' && requestURL.pathname === '/api/caller-key/regenerate') {
-        regenerateStarted = true;
-        await responseGate;
-        return jsonResponse({ secret: marker });
+      if (method === 'POST' && path === '/api/caller-key/regenerate') {
+        return lateResponse.promise;
       }
-      throw new Error(`Unexpected fixture request: ${method} ${requestURL.pathname}`);
+      throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    const rendered = await renderWithProviders(<KeysPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Platform caller key' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Generate caller key' }));
-    const dialog = screen.getByRole('alertdialog');
-    await rendered.user.click(within(dialog).getByRole('button', { name: 'Generate caller key' }));
-    await waitFor(() => expect(regenerateStarted).toBe(true));
+    const rendered = await renderWithProviders(<CallerKeyPanel accountId="1" />, {
+      station: 'user', role: 'user', locale: 'en',
+    });
+    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    await screen.findByText('No CallerKey exists');
+    await rendered.user.click(screen.getByRole('button', { name: 'Generate CallerKey' }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true));
 
-    const otherSession = { user: { ...session.user, id: '2', username: 'account-b' } };
-    const generation = beginManagementSessionRequest(rendered.queryClient, 'steward');
-    expect(noteManagementSessionSuccess(rendered.queryClient, 'steward', otherSession, generation)).toBe(true);
-    rendered.queryClient.setQueryData(userKeys.session, otherSession);
-    release();
+    rendered.rerender(<CallerKeyPanel accountId="2" />);
+    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '2' } });
+    await act(async () => {
+      lateResponse.resolve(jsonResponse({
+        secret: marker,
+        metadata: {
+          display: 'nbk_AAAA…AAAA', created_at: 1_700_000_000,
+          updated_at: 1_700_000_000, generation: '1',
+        },
+      }));
+      await lateResponse.promise;
+    });
 
-    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Generate caller key' })).toBeEnabled());
-    expect(screen.queryByText(marker)).toBeNull();
-    assertNoSensitiveQueryCache(rendered.queryClient, [marker]);
+    await waitFor(() => expect(screen.queryByText(marker)).toBeNull());
+    expect(rendered.queryClient.getQueryData(coreKeys.callerKey('2'))).toEqual({ generation: '0', metadata: null });
+    expect(assertNoSensitiveQueryCache(rendered.queryClient, [marker]).hitSurfaces).toEqual([]);
   });
 
   test('does not download an export returned for the previous account', async () => {
     const marker = 'account-a-export-marker-123456';
-    const otherSession = { user: { ...session.user, id: '2', username: 'account-b' } };
-    let currentSession = session;
-    let release!: () => void;
-    let exportStarted = false;
-    const responseGate = new Promise<void>((resolve) => { release = resolve; });
+    const completion = deferred<AccountExportAttachment>();
+    const exportV4 = vi.fn(() => completion.promise);
+    const adapter: AccountLifecycleAdapter = {
+      capabilities: { exportV4: true, deleteAccount: false },
+      beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
+      exportV4,
+      deleteAccount: vi.fn(async () => undefined),
+      readAccountAuthority: vi.fn(async () => 'active' as const),
+    };
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
-    document.cookie = 'nb_elevated=test-token-123456; path=/';
+    window.sessionStorage.setItem('nb.pending.elevation', 'export');
+    window.sessionStorage.setItem('nb.pending.elevation.account', '1');
+    document.cookie = 'nb_elevated=test-token-123456; Path=/; SameSite=Lax';
     try {
-      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-        const requestURL = new URL(input instanceof Request ? input.url : String(input), window.location.origin);
-        const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
-        if (method === 'GET' && requestURL.pathname === '/api/session') return jsonResponse(currentSession);
-        if (method === 'GET' && requestURL.pathname === '/api/me') return jsonResponse(currentSession.user);
-        if (method === 'GET' && requestURL.pathname === '/api/me/usage') {
-          return jsonResponse({
-            total_requests: 0,
-            total_prompt_tokens: 0,
-            total_completion_tokens: 0,
-            total_unknown_usage_requests: 0,
-          });
-        }
-        if (method === 'POST' && requestURL.pathname === '/api/account/export') {
-          exportStarted = true;
-          await responseGate;
-          return jsonResponse({ marker });
-        }
-        throw new Error(`Unexpected fixture request: ${method} ${requestURL.pathname}`);
+      const rendered = await renderWithProviders(
+        <AccountLifecyclePanel accountId="1" adapter={adapter} />,
+        { station: 'user', role: 'user', locale: 'en' },
+      );
+      rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+      const dialog = await screen.findByRole('alertdialog');
+      await rendered.user.click(within(dialog).getByRole('button', { name: 'Create export' }));
+      await waitFor(() => expect(exportV4).toHaveBeenCalledTimes(1));
+
+      rendered.rerender(<AccountLifecyclePanel accountId="2" adapter={adapter} />);
+      const currentSession = { user: { id: '2' } };
+      rendered.queryClient.setQueryData(coreKeys.session, currentSession);
+      await act(async () => {
+        completion.resolve({
+          blob: new Blob([marker], { type: 'application/json' }),
+          schemaVersion: 4,
+        });
+        await completion.promise;
       });
-      vi.stubGlobal('fetch', fetchMock);
-      const rendered = await renderWithProviders(<AccountPage />, { station: 'user', role: 'user' });
-      await screen.findByRole('heading', { name: 'Account and data' });
-      await rendered.user.click(screen.getByRole('button', { name: 'Export account data' }));
-      const dialog = screen.getByRole('alertdialog');
-      await rendered.user.click(within(dialog).getByRole('button', { name: 'Export' }));
-      await waitFor(() => expect(exportStarted).toBe(true));
 
-      const generation = beginManagementSessionRequest(rendered.queryClient, 'steward');
-      expect(noteManagementSessionSuccess(rendered.queryClient, 'steward', otherSession, generation)).toBe(true);
-      currentSession = otherSession;
-      rendered.queryClient.setQueryData(userKeys.session, otherSession);
-      release();
-
-      await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Export' })).toBeEnabled());
       expect(clickSpy).not.toHaveBeenCalled();
-      assertNoSensitiveQueryCache(rendered.queryClient, [marker]);
+      expect(rendered.queryClient.getQueryData(coreKeys.session)).toEqual(currentSession);
+      expect(assertNoSensitiveQueryCache(rendered.queryClient, [marker]).hitSurfaces).toEqual([]);
     } finally {
       document.cookie = 'nb_elevated=; Max-Age=0; path=/';
+      window.sessionStorage.removeItem('nb.pending.elevation');
+      window.sessionStorage.removeItem('nb.pending.elevation.account');
       clickSpy.mockRestore();
     }
   });
@@ -1593,71 +1823,257 @@ describe('experimental policy and charity controls', () => {
     expect(client.getQueryData(charityManagementKeys.capability('steward'))).toBe(false);
   });
 
-  test('treats key-delete 404 reconciliation as deletion and removes dependent projections', async () => {
-    let keyReads = 0;
+  test('treats a 204 key deletion as authoritative and removes the key projection', async () => {
+    let deleted = false;
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const requestURL = new URL(input instanceof Request ? input.url : String(input), window.location.origin);
-      const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
-      if (method === 'GET' && requestURL.pathname === '/api/session') return jsonResponse(session);
-      if (method === 'GET' && requestURL.pathname === '/api/endpoints') return jsonResponse([endpoint]);
-      if (method === 'GET' && requestURL.pathname === '/api/endpoints/1/keys') {
-        keyReads += 1;
-        return keyReads === 1 ? jsonResponse([endpointKey]) : jsonResponse({ error: { code: 'not_found', message: 'deleted' } }, 404);
+      const path = requestPath(input);
+      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
+      if (method === 'GET' && path === '/api/endpoints/1') {
+        return jsonResponse(deleted ? { ...coreEndpoint, revision: '2', key_count: '0' } : coreEndpoint);
       }
-      if (method === 'GET' && requestURL.pathname === '/api/endpoints/1/keys/2/models') {
-        return jsonResponse({ error: { code: 'not_found', message: 'deleted' } }, 404);
+      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50') {
+        return jsonResponse(corePage(deleted ? [] : [coreEndpointKey]));
       }
-      if (method === 'DELETE' && requestURL.pathname === '/api/endpoints/1/keys/2') {
-        return jsonResponse({ error: { code: 'not_found', message: 'already deleted' } }, 404);
+      if (method === 'GET' && path === '/api/models?limit=50') return jsonResponse(corePage([]));
+      if (method === 'GET' && path === '/api/endpoints/1/keys/2/models?limit=50') return jsonResponse(coreCatalogUnknown);
+      if (method === 'DELETE' && path === '/api/endpoints/1/keys/2') {
+        deleted = true;
+        return new Response(null, { status: 204 });
       }
-      throw new Error(`Unexpected fixture request: ${method} ${requestURL.pathname}`);
+      throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    const rendered = await renderWithProviders(<EndpointsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Endpoint management' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Endpoint keys' }));
+    const rendered = await renderWithProviders(endpointRouteTree(), {
+      station: 'user', role: 'user', route: '/endpoints/1',
+    });
+    rendered.queryClient.setQueryData(coreKeys.endpoints('1'), corePage([coreEndpoint]));
+    expect(rendered.queryClient.getQueryState(coreKeys.endpoints('1'))?.isInvalidated).toBe(false);
     await screen.findByText('sk-a…tail');
-    rendered.queryClient.setQueryData([...userKeys.keyModels('1', '2'), 'openai-compatible'], [{ id: 'cached-model' }]);
-    rendered.queryClient.setQueryData(userKeys.models, [model]);
-    rendered.queryClient.setQueryData(userKeys.bindings('3'), [{ id: 'cached-binding' }]);
-    rendered.queryClient.setQueryData(userKeys.donations, [{ id: 'cached-donation' }]);
     await rendered.user.click(screen.getByRole('button', { name: 'Delete key' }));
     const dialog = screen.getByRole('alertdialog');
     await rendered.user.click(within(dialog).getByRole('button', { name: 'Delete key' }));
-    await waitFor(() => expect(rendered.queryClient.getQueryData(userKeys.keyModels('1', '2'))).toBeUndefined());
-    expect(rendered.queryClient.getQueryData(userKeys.endpointKeys('1'))).toBeUndefined();
-    expect(rendered.queryClient.getQueryData(userKeys.models)).toBeUndefined();
-    expect(rendered.queryClient.getQueryData(userKeys.bindings('3'))).toBeUndefined();
-    expect(rendered.queryClient.getQueryData(userKeys.donations)).toBeUndefined();
-    expect(screen.queryByText('sk-a…tail')).toBeNull();
+    await waitFor(() => expect(screen.queryByText('sk-a…tail')).toBeNull());
+    expect(lastBody(fetchMock, 'DELETE', '/api/endpoints/1/keys/2')).toEqual({ expected_revision: '1' });
+    expect(new Headers((fetchMock.mock.calls.find((call) => (
+      requestPath(call[0] as string) === '/api/endpoints/1/keys/2' && (call[1] as RequestInit | undefined)?.method === 'DELETE'
+    ))?.[1] as RequestInit | undefined)?.headers).get('Idempotency-Key')).toMatch(/^[A-Za-z0-9_-]{22,128}$/);
+    expect(rendered.queryClient.getQueryState(coreKeys.endpoints('1'))?.isInvalidated).toBe(true);
   });
 
-  test('treats model-delete 404 as deletion and evicts model dependents', async () => {
-    let modelReads = 0;
+  test('invalidates the H1 endpoint list after an authoritative endpoint deletion', async () => {
+    let deleted = false;
+    let listReads = 0;
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const requestURL = new URL(input instanceof Request ? input.url : String(input), window.location.origin);
-      const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
-      if (method === 'GET' && requestURL.pathname === '/api/session') return jsonResponse(session);
-      if (method === 'GET' && requestURL.pathname === '/api/models') {
-        modelReads += 1;
-        return modelReads === 1 ? jsonResponse([model]) : jsonResponse({ error: { code: 'not_found', message: 'deleted' } }, 404);
+      const path = requestPath(input);
+      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
+      if (method === 'GET' && path === '/api/endpoints/1') return jsonResponse(coreEndpoint);
+      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50') {
+        return jsonResponse(corePage([]));
       }
-      if (method === 'DELETE' && requestURL.pathname === '/api/models/3') {
+      if (method === 'GET' && path === '/api/endpoints?limit=50') {
+        listReads += 1;
+        return jsonResponse(corePage(deleted ? [] : [coreEndpoint]));
+      }
+      if (method === 'DELETE' && path === '/api/endpoints/1') {
+        deleted = true;
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`Unexpected fixture request: ${method} ${path}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const rendered = await renderWithProviders(endpointRouteTree(), {
+      station: 'user', role: 'user', route: '/endpoints/1',
+    });
+    rendered.queryClient.setQueryDefaults(coreKeys.endpointsRoot('1'), { staleTime: Infinity });
+    rendered.queryClient.setQueryData(coreKeys.endpoints('1'), corePage([coreEndpoint]));
+
+    await screen.findByRole('heading', { name: 'Endpoint details' });
+    await rendered.user.click(screen.getByRole('button', { name: 'Delete endpoint' }));
+    await rendered.user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete endpoint' }),
+    );
+
+    expect(await screen.findByText('No endpoints yet')).toBeVisible();
+    expect(listReads).toBe(1);
+    expect(lastBody(fetchMock, 'DELETE', '/api/endpoints/1')).toEqual({
+      expected_revision: '1',
+    });
+  });
+
+  test('keeps endpoint deletion reconciliation reachable until a later 404 refreshes the list', async () => {
+    let detailReads = 0;
+    let deleteCalls = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const path = requestPath(input);
+      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
+      if (method === 'GET' && path === '/api/endpoints/1') {
+        detailReads += 1;
+        if (detailReads === 1) return jsonResponse(coreEndpoint);
+        if (detailReads === 2) {
+          return jsonResponse({ error: { code: 'internal', message: 'authority unavailable' } }, 503);
+        }
         return jsonResponse({ error: { code: 'not_found', message: 'already deleted' } }, 404);
       }
-      throw new Error(`Unexpected fixture request: ${method} ${requestURL.pathname}`);
+      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50') {
+        return jsonResponse(corePage([]));
+      }
+      if (method === 'GET' && path === '/api/endpoints?limit=50') {
+        return jsonResponse(corePage(detailReads >= 3 ? [] : [coreEndpoint]));
+      }
+      if (method === 'DELETE' && path === '/api/endpoints/1') {
+        deleteCalls += 1;
+        throw new TypeError('connection reset before authority was readable');
+      }
+      throw new Error(`Unexpected fixture request: ${method} ${path}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const rendered = await renderWithProviders(endpointRouteTree(), {
+      station: 'user', role: 'user', route: '/endpoints/1',
+    });
+    rendered.queryClient.setQueryDefaults(coreKeys.endpointsRoot('1'), { staleTime: Infinity });
+    rendered.queryClient.setQueryData(coreKeys.endpoints('1'), corePage([coreEndpoint]));
+
+    await screen.findByRole('heading', { name: 'Endpoint details' });
+    await rendered.user.click(screen.getByRole('button', { name: 'Delete endpoint' }));
+    await rendered.user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete endpoint' }),
+    );
+
+    expect(await screen.findByText(/The response was lost/)).toBeVisible();
+    await rendered.user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Check authoritative state' }));
+
+    expect(await screen.findByText('No endpoints yet')).toBeVisible();
+    expect(deleteCalls).toBe(1);
+    expect(detailReads).toBeGreaterThanOrEqual(3);
+  });
+
+  test('treats a 204 model deletion as authoritative and returns to the model list', async () => {
+    let deleted = false;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const path = requestPath(input);
+      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
+      if (method === 'GET' && path === '/api/models?limit=50') return jsonResponse(corePage(deleted ? [] : [coreModel]));
+      if (method === 'GET' && path === '/api/models/3') return jsonResponse(coreModel);
+      if (method === 'GET' && path === '/api/models/3/bindings') {
+        return jsonResponse({ bindings: [coreBinding('10', 'gpt-a', 0), coreBinding('11', 'gpt-b', 1)], binding_revision: '2' });
+      }
+      if (method === 'GET' && path === '/api/endpoints?limit=50') return jsonResponse(corePage([]));
+      if (method === 'DELETE' && path === '/api/models/3') {
+        deleted = true;
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Models and bindings' });
-    rendered.queryClient.setQueryData(userKeys.bindings('3'), [{ id: 'cached-binding' }]);
-    rendered.queryClient.setQueryData(userKeys.donations, [{ id: 'cached-donation' }]);
-    await rendered.user.click(screen.getByRole('button', { name: 'Delete model' }));
+    await screen.findByRole('heading', { name: 'Logical models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
+    await rendered.user.click(await screen.findByRole('button', { name: 'Delete logical model' }));
     const dialog = screen.getByRole('alertdialog');
-    await rendered.user.click(within(dialog).getByRole('button', { name: 'Delete' }));
-    await waitFor(() => expect(rendered.queryClient.getQueryData(userKeys.models)).toBeUndefined());
-    expect(rendered.queryClient.getQueryData(userKeys.bindings('3'))).toBeUndefined();
-    expect(rendered.queryClient.getQueryData(userKeys.donations)).toBeUndefined();
+    await rendered.user.click(within(dialog).getByRole('button', { name: 'Delete logical model' }));
+    await screen.findByText('No logical models');
+    expect(lastBody(fetchMock, 'DELETE', '/api/models/3')).toEqual({ expected_revision: '1' });
+  });
+
+  test('invalidates the model list when a lost delete response reconciles directly to 404', async () => {
+    let detailReads = 0;
+    let deleteCalls = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const path = requestPath(input);
+      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
+      if (method === 'GET' && path === '/api/models?limit=50') {
+        return jsonResponse(corePage(detailReads >= 2 ? [] : [coreModel]));
+      }
+      if (method === 'GET' && path === '/api/models/3') {
+        detailReads += 1;
+        return detailReads === 1
+          ? jsonResponse(coreModel)
+          : jsonResponse({ error: { code: 'not_found', message: 'already deleted' } }, 404);
+      }
+      if (method === 'GET' && path === '/api/models/3/bindings') {
+        return jsonResponse({ bindings: [], binding_revision: '2' });
+      }
+      if (method === 'GET' && path === '/api/endpoints?limit=50') {
+        return jsonResponse(corePage([]));
+      }
+      if (method === 'DELETE' && path === '/api/models/3') {
+        deleteCalls += 1;
+        throw new TypeError('connection reset after commit');
+      }
+      throw new Error(`Unexpected fixture request: ${method} ${path}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
+    rendered.queryClient.setQueryDefaults(coreKeys.modelsRoot('1'), { staleTime: Infinity });
+    await screen.findByRole('heading', { name: 'Logical models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
+    await rendered.user.click(await screen.findByRole('button', { name: 'Delete logical model' }));
+    await rendered.user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Delete logical model',
+      }),
+    );
+
+    expect(await screen.findByText('No logical models')).toBeVisible();
+    expect(deleteCalls).toBe(1);
+    expect(detailReads).toBe(2);
+  });
+
+  test('invalidates the model list when manual deletion reconciliation later confirms 404', async () => {
+    let detailReads = 0;
+    let deleteCalls = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const path = requestPath(input);
+      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
+      if (method === 'GET' && path === '/api/models?limit=50') {
+        return jsonResponse(corePage(detailReads >= 3 ? [] : [coreModel]));
+      }
+      if (method === 'GET' && path === '/api/models/3') {
+        detailReads += 1;
+        if (detailReads === 1) return jsonResponse(coreModel);
+        if (detailReads === 2) {
+          return jsonResponse({ error: { code: 'internal', message: 'authority unavailable' } }, 503);
+        }
+        return jsonResponse({ error: { code: 'not_found', message: 'already deleted' } }, 404);
+      }
+      if (method === 'GET' && path === '/api/models/3/bindings') {
+        return jsonResponse({ bindings: [], binding_revision: '2' });
+      }
+      if (method === 'GET' && path === '/api/endpoints?limit=50') {
+        return jsonResponse(corePage([]));
+      }
+      if (method === 'DELETE' && path === '/api/models/3') {
+        deleteCalls += 1;
+        throw new TypeError('connection reset before authority was readable');
+      }
+      throw new Error(`Unexpected fixture request: ${method} ${path}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
+    rendered.queryClient.setQueryDefaults(coreKeys.modelsRoot('1'), { staleTime: Infinity });
+    await screen.findByRole('heading', { name: 'Logical models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
+    await rendered.user.click(await screen.findByRole('button', { name: 'Delete logical model' }));
+    await rendered.user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Delete logical model',
+      }),
+    );
+
+    expect(await screen.findByText(/The response was lost/)).toBeVisible();
+    await rendered.user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Check authoritative state' }));
+
+    expect(await screen.findByText('No logical models')).toBeVisible();
+    expect(deleteCalls).toBe(1);
+    expect(detailReads).toBe(3);
   });
 
   test('treats an owner donation delete 404 as already deleted', async () => {
