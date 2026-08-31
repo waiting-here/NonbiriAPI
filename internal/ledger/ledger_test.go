@@ -601,20 +601,30 @@ func TestRPSQueueReleaseRequiresExactAccountDrain(t *testing.T) {
 	tx := beginLedgerTestTx(t, store.DB())
 	userID, wallet := seedLedgerUser(t, tx, "rps-release-drain")
 	external, _ := CodedAccount(ctx, tx, "external")
-	fund, _ := NewAdminUserAdjustment(
-		Meta{OperationID: mustLedgerID(t, "op_"), ActorUserID: userID, CreatedAt: ledgerTestNow},
-		wallet.ID, external.ID, AmountFromMilli(10), 0, Amount{}, "fund")
-	if _, err := Apply(ctx, tx, fund); err != nil {
+	for i, amount := range []Amount{AmountFromMilli(db.MaxMoneyMilli), AmountFromMilli(1)} {
+		fund, err := NewAdminUserAdjustment(
+			Meta{OperationID: mustLedgerID(t, "op_"), ActorUserID: userID, CreatedAt: ledgerTestNow + int64(i)},
+			wallet.ID, external.ID, amount, 0, Amount{}, "fund")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Apply(ctx, tx, fund); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reserved := AmountFromMilli(db.MaxMoneyMilli + 1)
+	reservedU128, err := db.U128FromBig(reserved.Big())
+	if err != nil {
 		t.Fatal(err)
 	}
 	queueID := mustLedgerID(t, "rpsq_")
-	queueAccount, err := CreateRPSQueueAccount(ctx, tx, queueID, ledgerTestNow)
+	queueAccount, err := CreateRPSQueueAccount(ctx, tx, queueID, ledgerTestNow+2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	one := mustU128(t, "1")
 	ref, _ := RPSQueueReservation(queueID)
-	reserveMeta := Meta{OperationID: mustLedgerID(t, "op_"), ActorUserID: userID, CreatedAt: ledgerTestNow + 1}
+	reserveMeta := Meta{OperationID: mustLedgerID(t, "op_"), ActorUserID: userID, CreatedAt: ledgerTestNow + 2}
 	if err := Reserve(ctx, tx, ref, one, func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
 INSERT INTO game_rps_queue(
@@ -622,18 +632,39 @@ INSERT INTO game_rps_queue(
  ledger_rows_remaining,device_token_hash,source_ip_hash,deadline,created_at)
 VALUES(?,?,?,'quick',?,?,?,?,?,?,?,?)`,
 			queueID, userID, queueAccount.ID, db.EncodeU128(one), reserveMeta.OperationID,
-			db.EncodeU128(mustU128(t, "10")), db.EncodeU128(one), make([]byte, 32), make([]byte, 32), ledgerTestNow+60, ledgerTestNow)
+			db.EncodeU128(reservedU128), db.EncodeU128(one), make([]byte, 32), make([]byte, 32), ledgerTestNow+60, ledgerTestNow)
 		return err
 	}); err != nil {
 		t.Fatal(err)
 	}
-	reservePlan, _ := NewRPSQueueReserve(reserveMeta, queueID, wallet.ID, queueAccount.ID, AmountFromMilli(10))
-	if _, err := Apply(ctx, tx, reservePlan); err != nil {
+	reservePlan, err := NewRPSQueueReserve(reserveMeta, queueID, wallet.ID, queueAccount.ID, reserved)
+	if err != nil {
 		t.Fatal(err)
 	}
-	releasePlan, _ := NewRPSQueueRelease(
-		Meta{OperationID: mustLedgerID(t, "op_"), ActorUserID: userID, CreatedAt: ledgerTestNow + 2},
-		queueID, queueAccount.ID, wallet.ID, AmountFromMilli(9))
+	reservedResult, err := Apply(ctx, tx, reservePlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayReserve, err := NewRPSQueueReserve(
+		Meta{OperationID: mustLedgerID(t, "op_"), ActorUserID: userID, CreatedAt: ledgerTestNow + 3},
+		queueID, wallet.ID, queueAccount.ID, reserved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayedReserve, err := Apply(ctx, tx, replayReserve)
+	if err != nil || replayedReserve.OperationID != reservedResult.OperationID || replayedReserve.LedgerSeq != reservedResult.LedgerSeq {
+		t.Fatalf("aggregate reserve replay = (%+v,%v), want %+v", replayedReserve, err, reservedResult)
+	}
+	capacity, err := ReadCapacity(ctx, tx)
+	if err != nil || capacity.ReservedFutureRows.Decimal() != "1" {
+		t.Fatalf("capacity after aggregate reserve = (%+v,%v)", capacity, err)
+	}
+	releasePlan, err := NewRPSQueueRelease(
+		Meta{OperationID: mustLedgerID(t, "op_"), ActorUserID: userID, CreatedAt: ledgerTestNow + 4},
+		queueID, queueAccount.ID, wallet.ID, AmountFromMilli(db.MaxMoneyMilli))
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, err = ConsumeReserved(ctx, tx, ref, releasePlan, func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `DELETE FROM game_rps_queue WHERE id=?`, queueID)
 		return err
@@ -642,7 +673,7 @@ VALUES(?,?,?,'quick',?,?,?,?,?,?,?,?)`,
 		t.Fatalf("under-drain error = %v", err)
 	}
 	queueBalance, err := ReadAccount(ctx, tx, queueAccount.ID)
-	if err != nil || queueBalance.Balance.Decimal() != "10" {
+	if err != nil || queueBalance.Balance.Decimal() != reserved.Decimal() {
 		t.Fatalf("queue balance after rollback = (%s,%v)", queueBalance.Balance.Decimal(), err)
 	}
 	var queueRows, operations int
@@ -652,11 +683,50 @@ VALUES(?,?,?,'quick',?,?,?,?,?,?,?,?)`,
 	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM credit_operations`).Scan(&operations); err != nil {
 		t.Fatal(err)
 	}
-	if queueRows != 1 || operations != 2 {
+	if queueRows != 1 || operations != 3 {
 		t.Fatalf("rollback queue rows=%d operations=%d", queueRows, operations)
 	}
+	exactRelease, err := NewRPSQueueRelease(
+		Meta{OperationID: mustLedgerID(t, "op_"), ActorUserID: userID, CreatedAt: ledgerTestNow + 5},
+		queueID, queueAccount.ID, wallet.ID, reserved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	released, err := ConsumeReserved(ctx, tx, ref, exactRelease, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `DELETE FROM game_rps_queue WHERE id=?`, queueID)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("aggregate exact release: %v", err)
+	}
+	replayRelease, err := NewRPSQueueRelease(
+		Meta{OperationID: mustLedgerID(t, "op_"), ActorUserID: userID, CreatedAt: ledgerTestNow + 6},
+		queueID, queueAccount.ID, wallet.ID, reserved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayCalled := false
+	replayedRelease, err := ConsumeReserved(ctx, tx, ref, replayRelease, func(context.Context, *sql.Tx) error {
+		replayCalled = true
+		return errors.New("must not run")
+	})
+	if err != nil || replayCalled || replayedRelease.OperationID != released.OperationID || replayedRelease.LedgerSeq != released.LedgerSeq {
+		t.Fatalf("aggregate release replay = (%+v,%v), called=%v want=%+v", replayedRelease, err, replayCalled, released)
+	}
+	capacity, err = ReadCapacity(ctx, tx)
+	if err != nil || capacity.ReservedFutureRows.Big().Sign() != 0 {
+		t.Fatalf("capacity after aggregate release = (%+v,%v)", capacity, err)
+	}
+	queueBalance, err = ReadAccount(ctx, tx, queueAccount.ID)
+	if err != nil || !queueBalance.Balance.IsZero() {
+		t.Fatalf("queue balance after aggregate release = (%s,%v)", queueBalance.Balance.Decimal(), err)
+	}
+	walletBalance, err := ReadAccount(ctx, tx, wallet.ID)
+	if err != nil || walletBalance.Balance.Decimal() != reserved.Decimal() {
+		t.Fatalf("wallet after aggregate release = (%s,%v)", walletBalance.Balance.Decimal(), err)
+	}
 	if err := ValidateRecovery(ctx, tx); err != nil {
-		t.Fatalf("recovery after under-drain rollback: %v", err)
+		t.Fatalf("recovery after aggregate release: %v", err)
 	}
 	_ = tx.Rollback()
 }
@@ -669,6 +739,12 @@ func TestRPSSessionStartConsumesQueuesAndReservesSessionH(t *testing.T) {
 	one := mustU128(t, "1")
 	three := mustU128(t, "3")
 	zero := db.U128{}
+	aggregate := AmountFromMilli(db.MaxMoneyMilli + 1)
+	aggregateU128, err := db.U128FromBig(aggregate.Big())
+	if err != nil {
+		t.Fatal(err)
+	}
+	aggregateTotal := AmountFromMilli(3 * (db.MaxMoneyMilli + 1))
 	type queueFixture struct {
 		id          string
 		account     Account
@@ -679,9 +755,16 @@ func TestRPSSessionStartConsumesQueuesAndReservesSessionH(t *testing.T) {
 	queues := make([]queueFixture, 0, 3)
 	for i := 0; i < 3; i++ {
 		userID, wallet := seedLedgerUser(t, tx, "rps-user-"+string(rune('a'+i)))
-		fund, _ := NewAdminUserAdjustment(Meta{OperationID: mustLedgerID(t, "op_"), ActorUserID: userID, CreatedAt: ledgerTestNow}, wallet.ID, external.ID, AmountFromMilli(100), 0, Amount{}, "fund")
-		if _, err := Apply(ctx, tx, fund); err != nil {
-			t.Fatal(err)
+		for fundingStep, amount := range []Amount{AmountFromMilli(db.MaxMoneyMilli), AmountFromMilli(1)} {
+			fund, err := NewAdminUserAdjustment(
+				Meta{OperationID: mustLedgerID(t, "op_"), ActorUserID: userID, CreatedAt: ledgerTestNow + int64(fundingStep)},
+				wallet.ID, external.ID, amount, 0, Amount{}, "fund")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Apply(ctx, tx, fund); err != nil {
+				t.Fatal(err)
+			}
 		}
 		queueID := mustLedgerID(t, "rpsq_")
 		queueAccount, err := CreateRPSQueueAccount(ctx, tx, queueID, ledgerTestNow)
@@ -697,12 +780,15 @@ INSERT INTO game_rps_queue(
  ledger_rows_remaining,device_token_hash,source_ip_hash,deadline,created_at)
 VALUES(?,?,?,'quick',?,?,?,?,?,?,?,?)`,
 				queueID, userID, queueAccount.ID, db.EncodeU128(one), reserveMeta.OperationID,
-				db.EncodeU128(mustU128(t, "10")), db.EncodeU128(one), make([]byte, 32), make([]byte, 32), ledgerTestNow+60, ledgerTestNow)
+				db.EncodeU128(aggregateU128), db.EncodeU128(one), make([]byte, 32), make([]byte, 32), ledgerTestNow+60, ledgerTestNow)
 			return err
 		}); err != nil {
 			t.Fatalf("reserve queue: %v", err)
 		}
-		queuePlan, _ := NewRPSQueueReserve(reserveMeta, queueID, wallet.ID, queueAccount.ID, AmountFromMilli(10))
+		queuePlan, err := NewRPSQueueReserve(reserveMeta, queueID, wallet.ID, queueAccount.ID, aggregate)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if _, err := Apply(ctx, tx, queuePlan); err != nil {
 			t.Fatalf("queue reserve operation: %v", err)
 		}
@@ -716,7 +802,7 @@ VALUES(?,?,?,'quick',?,?,?,?,?,?,?,?)`,
 	}
 	inputs := [3]RPSQueueInput{}
 	for i, queue := range queues {
-		inputs[i] = RPSQueueInput{QueueID: queue.id, AccountID: queue.account.ID, Amount: AmountFromMilli(10)}
+		inputs[i] = RPSQueueInput{QueueID: queue.id, AccountID: queue.account.ID, Amount: aggregate}
 	}
 	startMeta := Meta{OperationID: mustLedgerID(t, "op_"), CreatedAt: ledgerTestNow + 2}
 	startPlan, err := NewRPSSessionStart(startMeta, sessionID, sessionAccount.ID, three, inputs)
@@ -757,6 +843,24 @@ VALUES(?,?,'quick',1,?,?,?,?,?, ?,?,0,5,0,0,0,20,15,15,?,?,?,?,?,?,?,?,?,?,?,?,?
 	if len(started.Entries) != 4 {
 		t.Fatalf("start entries = %d", len(started.Entries))
 	}
+	sessionBalance, err := ReadAccount(ctx, tx, sessionAccount.ID)
+	if err != nil || sessionBalance.Balance.Decimal() != aggregateTotal.Decimal() {
+		t.Fatalf("aggregate session balance = (%s,%v)", sessionBalance.Balance.Decimal(), err)
+	}
+	replayStart, err := NewRPSSessionStart(
+		Meta{OperationID: mustLedgerID(t, "op_"), CreatedAt: ledgerTestNow + 3},
+		sessionID, sessionAccount.ID, three, inputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayStartCalled := false
+	replayedStart, err := ConsumeReserved(ctx, tx, *replayStart.spec.capacity.consume, replayStart, func(context.Context, *sql.Tx) error {
+		replayStartCalled = true
+		return errors.New("must not run")
+	})
+	if err != nil || replayStartCalled || replayedStart.OperationID != started.OperationID || replayedStart.LedgerSeq != started.LedgerSeq {
+		t.Fatalf("aggregate session start replay = (%+v,%v), called=%v want=%+v", replayedStart, err, replayStartCalled, started)
+	}
 	capacity, err := ReadCapacity(ctx, tx)
 	if err != nil || capacity.ReservedFutureRows.Decimal() != "3" {
 		t.Fatalf("capacity after start = (%+v,%v)", capacity, err)
@@ -771,7 +875,7 @@ VALUES(?,?,'quick',1,?,?,?,?,?, ?,?,0,5,0,0,0,20,15,15,?,?,?,?,?,?,?,?,?,?,?,?,?
 	terminalPlan, err := NewRPSTerminal(
 		Meta{OperationID: mustLedgerID(t, "op_"), CreatedAt: ledgerTestNow + 3},
 		sessionID, sessionAccount.ID, external.ID, welfareAccountID,
-		[]RPSTerminalPayout{{UserAccountID: queues[0].wallet.ID, Amount: AmountFromMilli(30)}}, Amount{}, Amount{})
+		[]RPSTerminalPayout{{UserAccountID: queues[0].wallet.ID, Amount: aggregateTotal}}, Amount{}, Amount{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -787,7 +891,7 @@ VALUES(?,?,'quick',1,?,?,?,?,?, ?,?,0,5,0,0,0,20,15,15,?,?,?,?,?,?,?,?,?,?,?,?,?
 	if err != nil || capacity.ReservedFutureRows.Big().Sign() != 0 {
 		t.Fatalf("capacity after terminal = (%+v,%v)", capacity, err)
 	}
-	sessionBalance, err := ReadAccount(ctx, tx, sessionAccount.ID)
+	sessionBalance, err = ReadAccount(ctx, tx, sessionAccount.ID)
 	if err != nil || !sessionBalance.Balance.IsZero() {
 		t.Fatalf("session balance after terminal = (%s,%v)", sessionBalance.Balance.Decimal(), err)
 	}
