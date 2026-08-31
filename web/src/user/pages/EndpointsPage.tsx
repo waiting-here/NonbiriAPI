@@ -1,872 +1,163 @@
-import { useId, useMemo, useState, type FormEvent } from 'react';
-import { formatDateTime } from '@shared/utils/datetime';
-import { useQueryClient } from '@tanstack/react-query';
-import { useTranslation } from 'react-i18next';
+import { useState } from 'react';
+import { Link, useParams } from 'react-router';
+import { PageHeader } from '@shared/components/States';
 import {
-  Card,
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  PageHeader,
-  StatusBadge,
-} from '@shared/components/States';
-import { ConfirmDialog } from '@shared/components/ConfirmDialog';
-import { apiFetch, isForbidden, isNotFoundError, isUnauthorized, refetchAuthoritativeQueries } from '@shared/query/http';
-import { isStationSessionChanged, stationSessionWrite } from '@shared/charityManagement';
-import {
-  type Endpoint,
-  type EndpointKey,
-  normalizeEndpoint,
-  normalizeEndpointKey,
-  useEndpointKeys,
-  useEndpoints,
-  useKeyModels,
-  userKeys,
-} from '../data';
-import { UserPageGate } from '../components/UserPageGate';
+  ConnectorLabel,
+  CoreEmpty,
+  CoreErrorPanel,
+  CoreLoading,
+  CoreTime,
+  CoreUserGate,
+  SafeCopyValue,
+  StatusPill,
+} from '../features/core/components';
+import { EndpointDetail } from '../features/core/EndpointDetail';
+import { EndpointWizard } from '../features/core/EndpointWizard';
+import { useCoreCopy } from '../features/core/copy';
+import { CORE_ROUTE_PATHS } from '../features/core/descriptors';
+import { useEndpointsPage } from '../features/core/queries';
+import type { UserProfile } from '../features/core/types';
+import '../features/core/core.css';
 
-function stationClosed(error: unknown): boolean {
-  return isStationSessionChanged(error) || isUnauthorized(error) || isForbidden(error);
-}
-
-interface EndpointFormProps {
-  initial?: Endpoint;
-  onCancel?: () => void;
-  onSaved: () => void;
-}
-
-function EndpointForm({ initial, onCancel, onSaved }: EndpointFormProps) {
-  const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const urlHintId = useId();
-  const urlErrorId = useId();
-  const [baseUrl, setBaseUrl] = useState(initial?.base_url === '—' ? '' : initial?.base_url ?? '');
-  const [note, setNote] = useState(initial?.note ?? '');
-  const [enabled, setEnabled] = useState(initial?.enabled ?? true);
-  const [validationError, setValidationError] = useState('');
-  const [requestError, setRequestError] = useState<unknown>(null);
-  const [busy, setBusy] = useState(false);
-
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setValidationError('');
-    setRequestError(null);
-    const value = baseUrl.trim();
-    try {
-      const parsed = new URL(value);
-      if (
-        !parsed.hostname ||
-        (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
-        parsed.username ||
-        parsed.password ||
-        parsed.search ||
-        parsed.hash
-      ) {
-        throw new Error('invalid');
-      }
-    } catch {
-      setValidationError(t('user.endpoints.invalidUrl'));
-      return;
-    }
-
-    setBusy(true);
-    let requestError: unknown = null;
-    try {
-      const path = initial
-        ? `/api/endpoints/${encodeURIComponent(initial.id)}`
-        : '/api/endpoints';
-      await stationSessionWrite(queryClient, 'steward', async () => {
-        const response = await apiFetch<unknown>(path, {
-          method: initial ? 'PATCH' : 'POST',
-          json: { base_url: value, note: note.trim() || undefined, enabled },
-        });
-        normalizeEndpoint(response);
-      });
-    } catch (error) {
-      requestError = error;
-    }
-    if (stationClosed(requestError)) {
-      setBusy(false);
-      return;
-    }
-    let refreshError: unknown = null;
-      try {
-        await queryClient.refetchQueries({ queryKey: userKeys.endpoints, exact: true, type: 'active' });
-      } catch (error) {
-        refreshError = error;
-      }
-      refreshError ??= queryClient.getQueryState(userKeys.endpoints)?.error ?? null;
-      if (requestError) {
-        // A lost create/update response is not proof that the server rejected
-        // the write. Keep the error visible and leave the form open so the
-        // refreshed list can be checked before retrying.
-        setRequestError(requestError);
-      } else if (refreshError) {
-        setRequestError(refreshError);
-      } else {
-        onSaved();
-      }
-    setBusy(false);
-  };
+function EndpointList({ user }: { user: UserProfile }) {
+  const { t } = useCoreCopy();
+  const [cursorStack, setCursorStack] = useState<Array<string | undefined>>([undefined]);
+  const [creating, setCreating] = useState(false);
+  const cursor = cursorStack.at(-1);
+  const endpoints = useEndpointsPage(user.id, cursor);
 
   return (
-    <Card>
-      <div className="card-title-row">
-        <h2>{initial ? t('user.endpoints.editTitle') : t('user.endpoints.addTitle')}</h2>
-        {initial ? (
-          <button type="button" className="btn btn-quiet" onClick={onCancel}>
-            {t('user.endpoints.cancel')}
-          </button>
-        ) : null}
-      </div>
-      <form onSubmit={submit} noValidate>
-        <div className="form-grid">
-          <label className="full-width">
-            <span>
-              {t('user.endpoints.baseUrl')} <em>{t('common.required')}</em>
-            </span>
-            <input
-              type="url"
-              value={baseUrl}
-              onChange={(event) => setBaseUrl(event.target.value)}
-              placeholder="https://api.example.com/v1"
-              maxLength={2048}
-              required
-              aria-invalid={Boolean(validationError)}
-              aria-describedby={`${urlHintId}${validationError ? ` ${urlErrorId}` : ''}`}
-            />
-            <small id={urlHintId} className="muted">
-              {t('user.endpoints.baseUrlHint')}
-            </small>
-            {validationError ? (
-              <small id={urlErrorId} className="field-error" role="alert">
-                {validationError}
-              </small>
-            ) : null}
-          </label>
-          <label>
-            <span>{t('user.endpoints.note')}</span>
-            <textarea
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              placeholder={t('user.endpoints.notePlaceholder')}
-              maxLength={512}
-            />
-          </label>
-          <label className="check-field">
-            <input
-              type="checkbox"
-              checked={enabled}
-              onChange={(event) => setEnabled(event.target.checked)}
-            />
-            <span>{t('user.endpoints.enabled')}</span>
-          </label>
-        </div>
-        {requestError ? <ErrorState error={requestError} /> : null}
-        <div className="form-actions">
-          {initial ? (
-            <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={busy}>
-              {t('common.cancel')}
-            </button>
-          ) : null}
-          <button type="submit" className="btn btn-primary" disabled={busy}>
-            {busy ? t('common.working') : initial ? t('user.endpoints.save') : t('user.endpoints.create')}
-          </button>
-        </div>
-      </form>
-    </Card>
-  );
-}
-
-function AddKeyForm({ endpointId, connectorType, onCancel, onSaved }: { endpointId: string; connectorType: string; onCancel: () => void; onSaved: () => void }) {
-  const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const secretHintId = useId();
-  const [secret, setSecret] = useState('');
-  const [keyNote, setKeyNote] = useState('');
-  const [enabled, setEnabled] = useState(true);
-  const [forceStoreFalse, setForceStoreFalse] = useState(false);
-  const [requestError, setRequestError] = useState<unknown>(null);
-  const [busy, setBusy] = useState(false);
-  const openAI = connectorType === 'openai-compatible';
-
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setRequestError(null);
-    const submittedSecret = secret;
-    setSecret('');
-    if (!submittedSecret) {
-      setRequestError(new Error(t('common.formInvalid')));
-      return;
-    }
-    setBusy(true);
-    let requestError: unknown = null;
-    try {
-      await stationSessionWrite(queryClient, 'steward', async () => {
-        const response = await apiFetch<unknown>(`/api/endpoints/${encodeURIComponent(endpointId)}/keys`, {
-          method: 'POST',
-          json: {
-            secret: submittedSecret,
-            note: keyNote.trim() || undefined,
-            enabled,
-            ...(openAI ? { force_store_false: forceStoreFalse } : {}),
-          },
-        });
-        normalizeEndpointKey(response, connectorType);
-      });
-    } catch (error) {
-      requestError = error;
-    }
-    // The submitted secret is not kept in form state or a query/mutation cache.
-    setSecret('');
-    if (stationClosed(requestError)) {
-      setBusy(false);
-      return;
-    }
-    let refreshError: unknown = null;
-      const keyQueryKey = [...userKeys.endpointKeys(endpointId), connectorType] as const;
-      try {
-        await queryClient.refetchQueries({ queryKey: keyQueryKey, exact: true, type: 'active' });
-      } catch (error) {
-        refreshError = error;
-      }
-      refreshError ??= queryClient.getQueryState(keyQueryKey)?.error ?? null;
-      if (requestError) {
-        // Do not retry a create automatically: the server may have committed
-        // the key even though its response was lost.
-        setRequestError(requestError);
-      } else if (refreshError) {
-        setRequestError(refreshError);
-      } else {
-        setKeyNote('');
-        setEnabled(true);
-        setForceStoreFalse(false);
-        onSaved();
-      }
-    setBusy(false);
-  };
-
-  return (
-    <form className="card compact-card" onSubmit={submit} noValidate>
-      <h3>{t('user.endpoints.addKey')}</h3>
-      <label>
-        <span>{t('user.endpoints.secret')}</span>
-        <input
-          type="password"
-          value={secret}
-          onChange={(event) => setSecret(event.target.value)}
-          placeholder={t('user.endpoints.secretPlaceholder')}
-          autoComplete="new-password"
-          maxLength={4096}
-          required
-          aria-describedby={secretHintId}
-        />
-        <small id={secretHintId} className="muted">
-          {t('user.endpoints.secretHint')}
-        </small>
-      </label>
-      <label>
-        <span>{t('user.endpoints.keyNote')}</span>
-        <input
-          value={keyNote}
-          onChange={(event) => setKeyNote(event.target.value)}
-          placeholder={t('user.endpoints.keyNotePlaceholder')}
-          maxLength={512}
-        />
-      </label>
-      <label className="check-field">
-        <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
-        <span>{t('user.endpoints.enabled')}</span>
-      </label>
-      {openAI ? (
-        <fieldset className="policy-fieldset">
-          <legend>{t('user.endpoints.storePolicy')}</legend>
-          <label className="checkbox-label">
-            <input type="checkbox" checked={forceStoreFalse} onChange={(event) => setForceStoreFalse(event.target.checked)} />
-            <span>{t('user.endpoints.storeExperimental')}</span>
-          </label>
-          <p className="risk-note">{t('user.endpoints.storePolicyRisk')}</p>
-        </fieldset>
-      ) : null}
-      {requestError ? <ErrorState error={requestError} /> : null}
-      <div className="form-actions">
-        <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={busy}>
-          {t('common.cancel')}
-        </button>
-        <button type="submit" className="btn btn-primary" disabled={busy}>
-          {busy ? t('common.working') : t('user.endpoints.saveKey')}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function EndpointKeyCard({ endpointId, connectorType, keyData }: { endpointId: string; connectorType: string; keyData: EndpointKey }) {
-  const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [requestError, setRequestError] = useState<unknown>(null);
-  const [busyAction, setBusyAction] = useState<'toggle' | 'refresh' | 'delete' | 'save' | null>(null);
-  const [keyNote, setKeyNote] = useState(keyData.note);
-  const [keyEnabled, setKeyEnabled] = useState(keyData.enabled);
-  const [forceStoreFalse, setForceStoreFalse] = useState(keyData.force_store_false === true);
-  const openAI = connectorType === 'openai-compatible';
-  const models = useKeyModels(endpointId, keyData.id, open);
-
-  const invalidateKey = () => {
-    void queryClient.invalidateQueries({ queryKey: userKeys.endpointKeys(endpointId) });
-    void queryClient.invalidateQueries({ queryKey: userKeys.keyModels(endpointId, keyData.id) });
-    void queryClient.invalidateQueries({ queryKey: userKeys.models });
-    void queryClient.invalidateQueries({ queryKey: userKeys.bindingsRoot });
-  };
-
-  // A failed PATCH is not proof that the server did not commit the policy:
-  // the response may have been lost after the write. Always refetch the
-  // endpoint-key projection before deciding what the editor should show.
-  const refreshAuthoritativeKey = async (): Promise<unknown | null> => {
-    const keyQueryKey = [...userKeys.endpointKeys(endpointId), connectorType] as const;
-    let refreshError = await refetchAuthoritativeQueries(queryClient, [{
-      queryKey: keyQueryKey,
-      exact: true,
-      ignoreError: isNotFoundError,
-      removeOnIgnoredError: true,
-    }]);
-    const queries = queryClient.getQueryCache().findAll({ queryKey: keyQueryKey, exact: true });
-    const failedQuery = queries.find((query) => query.state.error);
-    refreshError ??= failedQuery?.state.error ?? null;
-    const authoritative = queries
-      .filter((query) => !query.state.error && Array.isArray(query.state.data))
-      .flatMap((query) => query.state.data as EndpointKey[])
-      .find((key) => key.id === keyData.id);
-    if (authoritative) {
-      setKeyNote(authoritative.note);
-      setKeyEnabled(authoritative.enabled);
-      setForceStoreFalse(authoritative.force_store_false === true);
-    }
-    return refreshError;
-  };
-
-  const toggle = async () => {
-    setRequestError(null);
-    setBusyAction('toggle');
-    let requestError: unknown = null;
-    try {
-      await stationSessionWrite(queryClient, 'steward', async () => {
-        const response = await apiFetch<unknown>(
-          `/api/endpoints/${encodeURIComponent(endpointId)}/keys/${encodeURIComponent(keyData.id)}`,
-          { method: 'PATCH', json: { enabled: !keyData.enabled } },
-        );
-        normalizeEndpointKey(response, connectorType);
-      });
-    } catch (error) {
-      requestError = error;
-    }
-    if (stationClosed(requestError)) {
-      setBusyAction(null);
-      return;
-    }
-    const refreshError = await refetchAuthoritativeQueries(queryClient, [
-        {
-          queryKey: userKeys.endpointKeys(endpointId), exact: false,
-          ignoreError: isNotFoundError, removeOnIgnoredError: true,
-        },
-      ]);
-      if (requestError) setRequestError(requestError);
-      else if (refreshError) setRequestError(refreshError);
-      else invalidateKey();
-    setBusyAction(null);
-  };
-
-  const beginEdit = () => {
-    setKeyNote(keyData.note);
-    setKeyEnabled(keyData.enabled);
-    setForceStoreFalse(keyData.force_store_false === true);
-    setRequestError(null);
-    setEditOpen(true);
-  };
-
-  const saveMetadata = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setRequestError(null);
-    setBusyAction('save');
-    let requestError: unknown = null;
-    try {
-      await stationSessionWrite(queryClient, 'steward', async () => {
-        const response = await apiFetch<unknown>(
-          `/api/endpoints/${encodeURIComponent(endpointId)}/keys/${encodeURIComponent(keyData.id)}`,
-          {
-            method: 'PATCH',
-            json: {
-              note: keyNote.trim(),
-              enabled: keyEnabled,
-              ...(openAI ? { force_store_false: forceStoreFalse } : {}),
-            },
-          },
-        );
-        normalizeEndpointKey(response, connectorType);
-      });
-    } catch (error) {
-      requestError = error;
-    }
-    if (stationClosed(requestError)) {
-      setBusyAction(null);
-      return;
-    }
-    const refreshError = await refreshAuthoritativeKey();
-      // Keep the original request error visible. In particular, a 409 does
-      // not establish that the policy was not committed; the refetched row is
-      // the only authority for the checkbox state.
-      if (requestError && !isNotFoundError(requestError)) {
-        setRequestError(requestError);
-      } else if (refreshError) {
-        setRequestError(refreshError);
-      } else {
-        setEditOpen(false);
-        invalidateKey();
-      }
-    setBusyAction(null);
-  };
-
-  const refresh = async () => {
-    setRequestError(null);
-    setBusyAction('refresh');
-    try {
-      await stationSessionWrite(queryClient, 'steward', () =>
-        apiFetch<unknown>(
-          `/api/endpoints/${encodeURIComponent(endpointId)}/keys/${encodeURIComponent(keyData.id)}/models/refresh`,
-          { method: 'POST' },
-        ),
-      );
-      await queryClient.invalidateQueries({ queryKey: userKeys.keyModels(endpointId, keyData.id) });
-      await queryClient.invalidateQueries({ queryKey: userKeys.endpoints });
-    } catch (error) {
-      if (!stationClosed(error)) setRequestError(error);
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
-  const remove = async () => {
-    setRequestError(null);
-    setBusyAction('delete');
-    let requestError: unknown = null;
-    try {
-      await stationSessionWrite(queryClient, 'steward', () =>
-        apiFetch<void>(
-          `/api/endpoints/${encodeURIComponent(endpointId)}/keys/${encodeURIComponent(keyData.id)}`,
-          { method: 'DELETE' },
-        ),
-      );
-    } catch (error) {
-      requestError = error;
-    }
-    if (stationClosed(requestError)) {
-      setBusyAction(null);
-      return;
-    }
-    const refreshError = await refetchAuthoritativeQueries(queryClient, [
-        {
-          queryKey: userKeys.endpointKeys(endpointId), exact: false,
-          ignoreError: isNotFoundError, removeOnIgnoredError: true,
-        },
-        {
-          queryKey: userKeys.keyModels(endpointId, keyData.id), exact: false,
-          ignoreError: isNotFoundError, removeOnIgnoredError: true,
-        },
-      ]);
-      if (isNotFoundError(requestError)) {
-        // DELETE 404 is an authoritative already-deleted result. Evict the
-        // key and every projection that can retain its models or bindings.
-        queryClient.removeQueries({ queryKey: userKeys.endpointKeys(endpointId), exact: false });
-        queryClient.removeQueries({ queryKey: userKeys.keyModels(endpointId, keyData.id), exact: false });
-        queryClient.removeQueries({ queryKey: userKeys.models, exact: true });
-        queryClient.removeQueries({ queryKey: userKeys.bindingsRoot, exact: false });
-        queryClient.removeQueries({ queryKey: userKeys.donations, exact: false });
-        setDeleteOpen(false);
-      } else if (requestError) setRequestError(requestError);
-      else if (refreshError) setRequestError(refreshError);
-      else {
-        setDeleteOpen(false);
-        queryClient.removeQueries({ queryKey: userKeys.keyModels(endpointId, keyData.id), exact: false });
-        invalidateKey();
-      }
-    setBusyAction(null);
-  };
-
-  return (
-    <article className="item-card">
-      <div className="item-header">
-        <div>
-          <h3 className="mono">{keyData.display ?? t('user.endpoints.keyHidden')}</h3>
-          <p className="item-meta">
-            {keyData.note || t('user.endpoints.keyHidden')} · {formatDateTime(keyData.updated_at)}
-          </p>
-        </div>
-        <div className="badge-list">
-          <StatusBadge active={keyData.enabled} />
-          {openAI && keyData.force_store_false === true ? <span className="tag risk-tag">{t('user.endpoints.storeEnabled')}</span> : null}
-          <button type="button" className="btn btn-secondary" onClick={beginEdit} disabled={busyAction !== null}>
-            {t('user.endpoints.editKey')}
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={() => setOpen((value) => !value)}>
-            {open ? t('user.endpoints.hideModels') : t('user.endpoints.showModels')}
-          </button>
-          <button type="button" className="btn btn-quiet" onClick={() => void refresh()} disabled={busyAction !== null}>
-            {busyAction === 'refresh' ? t('common.working') : t('user.endpoints.refreshModels')}
-          </button>
-          <button type="button" className="btn btn-quiet" onClick={() => void toggle()} disabled={busyAction !== null}>
-            {keyData.enabled ? t('user.endpoints.disableKey') : t('user.endpoints.enableKey')}
-          </button>
-          <button type="button" className="btn btn-danger" onClick={() => setDeleteOpen(true)} disabled={busyAction !== null}>
-            {t('user.endpoints.deleteKey')}
-          </button>
-        </div>
-      </div>
-      {requestError ? <ErrorState error={requestError} /> : null}
-      {editOpen ? (
-        <form className="nested-panel key-metadata-form" onSubmit={saveMetadata}>
-          <div className="form-grid">
-            <label>
-              <span>{t('user.endpoints.keyNote')}</span>
-              <input value={keyNote} maxLength={512} onChange={(event) => setKeyNote(event.target.value)} />
-            </label>
-            <label className="check-field">
-              <input type="checkbox" checked={keyEnabled} onChange={(event) => setKeyEnabled(event.target.checked)} />
-              <span>{t('user.endpoints.enabled')}</span>
-            </label>
-          </div>
-          {openAI ? (
-            <fieldset className="policy-fieldset">
-              <legend>{t('user.endpoints.storePolicy')}</legend>
-              <label className="checkbox-label">
-                <input type="checkbox" checked={forceStoreFalse} onChange={(event) => setForceStoreFalse(event.target.checked)} />
-                <span>{t('user.endpoints.storeExperimental')}</span>
-              </label>
-              <p className="risk-note">{t('user.endpoints.storePolicyRisk')}</p>
-            </fieldset>
-          ) : null}
-          <div className="form-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => setEditOpen(false)} disabled={busyAction === 'save'}>{t('common.cancel')}</button>
-            <button type="submit" className="btn btn-primary" disabled={busyAction !== null}>{busyAction === 'save' ? t('common.working') : t('user.endpoints.saveKeyMetadata')}</button>
-          </div>
-        </form>
-      ) : null}
-      {open ? (
-        <div className="nested-panel">
-          {models.isPending ? (
-            <LoadingState />
-          ) : models.error ? (
-            <ErrorState error={models.error} onRetry={() => void models.refetch()} />
-          ) : models.data.length === 0 ? (
-            <EmptyState title={t('user.endpoints.modelsEmpty')} body={t('user.endpoints.modelsEmptyBody')} />
-          ) : (
-            <ul className="plain-list">
-              {models.data.map((model) => (
-                <li key={`${model.provider}:${model.upstream_model_id}`}>
-                  <span className="mono">{model.upstream_model_id}</span>
-                  <span className="muted">{model.provider} · {model.status}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      ) : null}
-      <ConfirmDialog
-        open={deleteOpen}
-        title={t('user.endpoints.deleteKeyTitle')}
-        description={t('user.endpoints.deleteKeyBody')}
-        confirmLabel={t('user.endpoints.deleteKeyConfirm')}
-        danger
-        busy={busyAction === 'delete'}
-        onCancel={() => setDeleteOpen(false)}
-        onConfirm={() => void remove()}
-      />
-    </article>
-  );
-}
-
-function EndpointCard({ endpoint, onEdit, onDeleted }: { endpoint: Endpoint; onEdit: () => void; onDeleted: () => void }) {
-  const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [addKeyOpen, setAddKeyOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [requestError, setRequestError] = useState<unknown>(null);
-  const [deleting, setDeleting] = useState(false);
-  // Fetch the key list up front so its count is visible in the collapsed
-  // card header (the per-endpoint key list is server-capped, so the fan-out
-  // is bounded; the same cached query backs the expanded panel below).
-  const keys = useEndpointKeys(endpoint.id, true, endpoint.connector_type);
-
-  const remove = async () => {
-    setRequestError(null);
-    setDeleting(true);
-    let requestError: unknown = null;
-    try {
-      await stationSessionWrite(queryClient, 'steward', () =>
-        apiFetch<void>(`/api/endpoints/${encodeURIComponent(endpoint.id)}`, { method: 'DELETE' }),
-      );
-    } catch (error) {
-      // A lost/invalid response does not prove that deletion failed.  Keep the
-      // original error and reconcile every projection from the server before
-      // deciding whether the card can be removed.
-      requestError = error;
-    }
-    if (stationClosed(requestError)) {
-      setDeleting(false);
-      return;
-    }
-    let refreshError: unknown = null;
-    try {
-      refreshError = await refetchAuthoritativeQueries(queryClient, [
-        { queryKey: userKeys.endpoints, exact: true, ignoreError: isNotFoundError, removeOnIgnoredError: true },
-        { queryKey: userKeys.endpointKeys(endpoint.id), exact: false, ignoreError: isNotFoundError, removeOnIgnoredError: true },
-        { queryKey: userKeys.keyModelsRoot, exact: false, ignoreError: isNotFoundError, removeOnIgnoredError: true },
-        { queryKey: userKeys.models, exact: true, ignoreError: isNotFoundError, removeOnIgnoredError: true },
-        { queryKey: userKeys.bindingsRoot, exact: false, ignoreError: isNotFoundError, removeOnIgnoredError: true },
-      ]);
-    } catch (error) {
-      refreshError = error;
-    }
-    if (isNotFoundError(requestError)) {
-      queryClient.removeQueries({ queryKey: userKeys.endpointKeys(endpoint.id), exact: false });
-      queryClient.removeQueries({ queryKey: userKeys.keyModelsRoot, exact: false });
-      queryClient.removeQueries({ queryKey: userKeys.models });
-      queryClient.removeQueries({ queryKey: userKeys.bindingsRoot });
-      queryClient.removeQueries({ queryKey: userKeys.donations });
-    }
-    if (requestError && !isNotFoundError(requestError)) setRequestError(requestError);
-    else if (refreshError) setRequestError(refreshError);
-    else {
-      queryClient.removeQueries({ queryKey: userKeys.endpointKeys(endpoint.id) });
-      queryClient.removeQueries({ queryKey: userKeys.keyModelsRoot });
-      queryClient.removeQueries({ queryKey: userKeys.models });
-      queryClient.removeQueries({ queryKey: userKeys.bindingsRoot });
-      queryClient.removeQueries({ queryKey: userKeys.donations });
-      setDeleteOpen(false);
-      onDeleted();
-    }
-    setDeleting(false);
-  };
-
-  return (
-    <article className={`item-card ${endpoint.enabled ? '' : 'is-warning'}`}>
-      <div className="item-header">
-        <div>
-          <h2 className="mono">{endpoint.base_url}</h2>
-          <p className="item-meta">{endpoint.connector_type} · {formatDateTime(endpoint.updated_at)}</p>
-        </div>
-        <div className="badge-list">
-          <StatusBadge active={endpoint.enabled} />
-          {endpoint.model_fetch_failed ? (
-            <StatusBadge danger active={false} label={t('user.endpoints.modelFetchFailed')} />
-          ) : null}
-          <button type="button" className="btn btn-secondary" onClick={onEdit}>
-            {t('user.endpoints.edit')}
-          </button>
-          <button type="button" className="btn btn-danger" onClick={() => setDeleteOpen(true)}>
-            {t('user.endpoints.delete')}
-          </button>
-        </div>
-      </div>
-      {endpoint.note ? <p className="item-note">{endpoint.note}</p> : null}
-      <dl className="detail-grid">
-        <div className="detail-row">
-          <dt>{t('user.endpoints.connector')}</dt>
-          <dd>{t('user.endpoints.connectorValue')}</dd>
-        </div>
-        <div className="detail-row">
-          <dt>{t('user.endpoints.keyTitle')}</dt>
-          <dd>{keys.data ? t('user.endpoints.keyCount', { count: keys.data.length }) : '—'}</dd>
-        </div>
-      </dl>
-      <div className="form-actions">
-        <button type="button" className="btn btn-secondary" onClick={() => setOpen((value) => !value)}>
-          {open ? t('common.close') : t('user.endpoints.keyTitle')}
-        </button>
-        {open ? (
-          <button type="button" className="btn btn-primary" onClick={() => setAddKeyOpen((value) => !value)}>
-            {addKeyOpen ? t('common.close') : t('user.endpoints.addKey')}
-          </button>
-        ) : null}
-      </div>
-      {requestError ? <ErrorState error={requestError} /> : null}
-      {open ? (
-        <div className="nested-panel">
-          {addKeyOpen ? (
-            <AddKeyForm
-              endpointId={endpoint.id}
-              connectorType={endpoint.connector_type}
-              onCancel={() => setAddKeyOpen(false)}
-              onSaved={() => {
-                setAddKeyOpen(false);
-                void queryClient.invalidateQueries({ queryKey: userKeys.endpointKeys(endpoint.id) });
-              }}
-            />
-          ) : null}
-          {keys.isPending ? (
-            <LoadingState />
-          ) : keys.error ? (
-            <ErrorState error={keys.error} onRetry={() => void keys.refetch()} />
-          ) : keys.data.length === 0 ? (
-            <EmptyState title={t('user.endpoints.noKeys')} body={t('user.endpoints.noKeysBody')} />
-          ) : (
-            <div className="item-list">
-              {keys.data.map((key) => (
-                <EndpointKeyCard key={key.id} endpointId={endpoint.id} connectorType={endpoint.connector_type} keyData={key} />
-              ))}
-            </div>
-          )}
-        </div>
-      ) : null}
-      <ConfirmDialog
-        open={deleteOpen}
-        title={t('user.endpoints.deleteTitle')}
-        description={t('user.endpoints.deleteBody')}
-        confirmLabel={t('user.endpoints.deleteConfirm')}
-        danger
-        busy={deleting}
-        onCancel={() => setDeleteOpen(false)}
-        onConfirm={() => void remove()}
-      />
-    </article>
-  );
-}
-
-function EndpointsContent() {
-  const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const endpoints = useEndpoints(true);
-  const [editing, setEditing] = useState<Endpoint | undefined>();
-  const [showCreate, setShowCreate] = useState(false);
-  const [query, setQuery] = useState('');
-  const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
-
-  const filtered = useMemo(() => {
-    const data = endpoints.data ?? [];
-    const needle = query.trim().toLowerCase();
-    return data.filter((endpoint) => {
-      if (enabledFilter === 'enabled' && !endpoint.enabled) return false;
-      if (enabledFilter === 'disabled' && endpoint.enabled) return false;
-      if (!needle) return true;
-      return [endpoint.base_url, endpoint.note].some((value) =>
-        value.toLowerCase().includes(needle),
-      );
-    });
-  }, [endpoints.data, query, enabledFilter]);
-
-  const invalidateAfterEndpointChange = () => {
-    void queryClient.invalidateQueries({ queryKey: userKeys.endpoints });
-    void queryClient.invalidateQueries({ queryKey: userKeys.endpointKeysRoot });
-    void queryClient.invalidateQueries({ queryKey: userKeys.keyModelsRoot });
-    void queryClient.invalidateQueries({ queryKey: userKeys.models });
-    void queryClient.invalidateQueries({ queryKey: userKeys.bindingsRoot });
-  };
-
-  if (endpoints.isPending) return <LoadingState />;
-  if (endpoints.error) return <ErrorState error={endpoints.error} onRetry={() => void endpoints.refetch()} />;
-
-  return (
-    <div className="page">
+    <div className="page core-page core-stack">
       <PageHeader
-        eyebrow={t('app.name')}
-        title={t('user.endpoints.title')}
-        description={t('user.endpoints.description')}
+        icon="resources"
+        title={t('endpoints.title')}
+        description={t('endpoints.description')}
         actions={
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => {
-              setEditing(undefined);
-              setShowCreate((value) => !value);
-            }}
-          >
-            {showCreate ? t('common.close') : t('user.endpoints.create')}
+          <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
+            {t('endpoints.create')}
           </button>
         }
       />
-      <p className="inline-notice">{t('user.endpoints.endpointLimit')}</p>
-      {showCreate && !editing ? (
-        <EndpointForm
-          onSaved={() => {
-            setShowCreate(false);
-            invalidateAfterEndpointChange();
-          }}
+
+      {creating ? (
+        <EndpointWizard
+          accountId={user.id}
+          onClose={() => setCreating(false)}
+          onCreated={() => void endpoints.refetch()}
         />
       ) : null}
-      {editing ? (
-        <EndpointForm
-          key={editing.id}
-          initial={editing}
-          onCancel={() => setEditing(undefined)}
-          onSaved={() => {
-            setEditing(undefined);
-            invalidateAfterEndpointChange();
-          }}
+
+      {endpoints.isPending ? (
+        <CoreLoading />
+      ) : endpoints.error ? (
+        <CoreErrorPanel error={endpoints.error} onRetry={() => void endpoints.refetch()} />
+      ) : endpoints.data.data.length === 0 && cursorStack.length === 1 ? (
+        <CoreEmpty
+          title={t('endpoints.emptyTitle')}
+          body={t('endpoints.emptyBody')}
+          action={
+            <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
+              {t('endpoints.create')}
+            </button>
+          }
         />
-      ) : null}
-      {endpoints.data.length === 0 ? (
-        <EmptyState title={t('user.endpoints.noEndpoints')} body={t('user.endpoints.noEndpointsBody')} />
       ) : (
-        <Card>
-          <div className="card-title-row">
-            <h2>{t('user.endpoints.listTitle')}</h2>
-            <span className="muted">{filtered.length}</span>
-          </div>
-          <div className="filter-bar" role="search">
-            <label>
-              <span>{t('common.search')}</span>
-              <input
-                type="search"
-                value={query}
-                maxLength={256}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={t('user.endpoints.searchPlaceholder')}
-                aria-label={t('user.endpoints.searchAria')}
-              />
-            </label>
-            <label>
-              <span>{t('user.endpoints.filterEnabled')}</span>
-              <select
-                value={enabledFilter}
-                onChange={(event) => setEnabledFilter(event.target.value as 'all' | 'enabled' | 'disabled')}
-                aria-label={t('user.endpoints.filterEnabled')}
+        <section className="core-card">
+          <ul className="core-endpoint-list">
+            {endpoints.data.data.map((endpoint) => (
+              <li key={endpoint.id} className="core-endpoint-card">
+                <div className="core-endpoint-card__top">
+                  <div>
+                    <strong>
+                      <ConnectorLabel value={endpoint.connector_type} />
+                    </strong>
+                  </div>
+                  <StatusPill tone={endpoint.enabled ? 'success' : 'neutral'}>
+                    {endpoint.enabled ? t('common.enabled') : t('common.disabled')}
+                  </StatusPill>
+                </div>
+                <dl className="core-detail-list">
+                  <div>
+                    <dt>{t('endpoints.baseUrl')}</dt>
+                    <dd>
+                      <SafeCopyValue value={endpoint.base_url} label={t('endpoints.baseUrl')} />
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{t('endpoints.note')}</dt>
+                    <dd>{endpoint.note || t('common.notSet')}</dd>
+                  </div>
+                  <div>
+                    <dt>{t('endpoints.keyCount')}</dt>
+                    <dd className="core-number">{endpoint.key_count}</dd>
+                  </div>
+                  <div>
+                    <dt>{t('common.updated')}</dt>
+                    <dd>
+                      <CoreTime value={endpoint.updated_at} />
+                    </dd>
+                  </div>
+                </dl>
+                <div className="core-row-actions">
+                  <span />
+                  <Link
+                    className="btn btn-secondary"
+                    to={CORE_ROUTE_PATHS.endpointDetail(endpoint.id)}
+                  >
+                    {t('endpoints.manage')}
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {cursorStack.length > 1 || endpoints.data.next_cursor ? (
+            <nav className="core-pagination" aria-label={t('endpoints.title')}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={cursorStack.length <= 1}
+                onClick={() => setCursorStack((current) => current.slice(0, -1))}
               >
-                <option value="all">{t('common.all')}</option>
-                <option value="enabled">{t('common.enabled')}</option>
-                <option value="disabled">{t('common.disabled')}</option>
-              </select>
-            </label>
-          </div>
-          {filtered.length === 0 ? (
-            <EmptyState title={t('common.noResults')} body={t('common.noResultsBody')} />
-          ) : (
-            <div className="item-list">
-              {filtered.map((endpoint) => (
-                <EndpointCard
-                  key={endpoint.id}
-                  endpoint={endpoint}
-                  onEdit={() => {
-                    setShowCreate(false);
-                    setEditing(endpoint);
-                  }}
-                  onDeleted={invalidateAfterEndpointChange}
-                />
-              ))}
-            </div>
-          )}
-        </Card>
+                {t('common.previous')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={!endpoints.data.next_cursor}
+                onClick={() => {
+                  if (endpoints.data.next_cursor) {
+                    setCursorStack((current) => [
+                      ...current,
+                      endpoints.data.next_cursor ?? undefined,
+                    ]);
+                  }
+                }}
+              >
+                {t('common.next')}
+              </button>
+            </nav>
+          ) : null}
+        </section>
       )}
     </div>
   );
 }
 
 export function EndpointsPage() {
+  const { endpointId } = useParams<{ endpointId?: string }>();
   return (
-    <UserPageGate>
-      <EndpointsContent />
-    </UserPageGate>
+    <CoreUserGate>
+      {(user) =>
+        endpointId ? (
+          <EndpointDetail
+            key={`${user.id}:${endpointId}`}
+            accountId={user.id}
+            endpointId={endpointId}
+          />
+        ) : (
+          <EndpointList key={user.id} user={user} />
+        )
+      }
+    </CoreUserGate>
   );
 }
