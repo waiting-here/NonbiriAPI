@@ -1,0 +1,7 @@
+id,route_kind,caller_result_class,caller_status,caller_error_code,started_at,completed_at,user_id,attempt_count,uncached_input_tokens,cache_write_input_tokens,cache_read_input_tokens,output_tokens,total_tokens,usage_unknown,charge
+req_bG9nLXdpcmUAAAAAAAAAAQ,openai_chat_completions,failed,422,debug_live_result_captured,100,110,101,2,1,2,3,4,10,false,1.234
+req_bG9nLXdpcmUAAAAAAAAAAg,charity_chat_completions,success,200,,200,220,101,2,5,0,0,5,10,false,0
+req_bG9nLXdpcmUAAAAAAAAAAw,model_discovery,cancelled,,,300,305,101,0,0,0,0,0,0,true,0
+req_bG9nLXdpcmUAAAAAAAAABA,openai_chat_completions,failed,502,upstream,400,410,202,1,7,0,0,1,8,false,0
+req_bG9nLXdpcmUAAAAAAAAABQ,openai_chat_completions,success,200,,500,510,,0,1,1,1,1,4,false,0
+req_bG9nLXdpcmUAAAAAAAAABg,openai_chat_completions,,,,600,,101,0,0,0,0,0,0,false,0
