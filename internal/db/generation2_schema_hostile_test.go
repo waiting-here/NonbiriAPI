@@ -1767,7 +1767,9 @@ INSERT INTO thursday_participants(
  period_id,participant_ref,user_id,contribution_count,contributed_mag,eligible_at_freeze,
  payout_mag,unpaid_reason,settled,ledger_rows_remaining,created_at,updated_at
 ) VALUES(?,?,?, ?,?,?, ?, 'account_deleted',1,?,0,0)`, periodID, hostileOIDVariant("thp_", 'E', 'Q'), uid, hostileBlob16(1), hostileBlob16(1), 0, hostileBlob16(0), hostileBlob16(0))
-	hostileMustFail(t, db, `
+	// Deidentification after a banned settlement preserves the ineligible
+	// classification instead of rewriting it as an account deletion.
+	hostileMustExec(t, db, `
 INSERT INTO thursday_participants(
  period_id,participant_ref,user_id,contribution_count,contributed_mag,eligible_at_freeze,
  payout_mag,unpaid_reason,settled,ledger_rows_remaining,created_at,updated_at
@@ -1813,6 +1815,187 @@ VALUES(?,'1970-01-03',1,?,0,0,1,0)`, uid, hostileOIDVariant("op_", 'Z', 'Q'))
 	}
 	if poolCount != 2 {
 		t.Fatalf("expected both Thursday pools, got %d", poolCount)
+	}
+}
+
+func TestGenerationTwoHostileThursdayDeidentifiedSettlementMatrix(t *testing.T) {
+	tests := []struct {
+		name      string
+		eligible  int
+		payout    []byte
+		reason    any
+		settled   int
+		remaining []byte
+		allowed   bool
+	}{
+		{
+			name:      "account_deleted_ineligible_zero_payout",
+			eligible:  0,
+			payout:    hostileBlob16(0),
+			reason:    "account_deleted",
+			settled:   1,
+			remaining: hostileBlob16(0),
+			allowed:   true,
+		},
+		{
+			name:      "account_deleted_eligible_zero_payout",
+			eligible:  1,
+			payout:    hostileBlob16(0),
+			reason:    "account_deleted",
+			settled:   1,
+			remaining: hostileBlob16(0),
+			allowed:   true,
+		},
+		{
+			name:      "account_banned_ineligible_zero_payout",
+			eligible:  0,
+			payout:    hostileBlob16(0),
+			reason:    "account_banned",
+			settled:   1,
+			remaining: hostileBlob16(0),
+			allowed:   true,
+		},
+		{
+			name:      "eligible_zero_payout",
+			eligible:  1,
+			payout:    hostileBlob16(0),
+			reason:    nil,
+			settled:   1,
+			remaining: hostileBlob16(0),
+			allowed:   true,
+		},
+		{
+			name:      "eligible_positive_payout",
+			eligible:  1,
+			payout:    hostileBlob16(1),
+			reason:    nil,
+			settled:   1,
+			remaining: hostileBlob16(0),
+			allowed:   true,
+		},
+		{
+			name:      "eligible_maximum_payout",
+			eligible:  1,
+			payout:    hostileMaxU128(),
+			reason:    nil,
+			settled:   1,
+			remaining: hostileBlob16(0),
+			allowed:   true,
+		},
+		{
+			name:      "account_banned_eligible",
+			eligible:  1,
+			payout:    hostileBlob16(0),
+			reason:    "account_banned",
+			settled:   1,
+			remaining: hostileBlob16(0),
+		},
+		{
+			name:      "null_reason_ineligible",
+			eligible:  0,
+			payout:    hostileBlob16(0),
+			reason:    nil,
+			settled:   1,
+			remaining: hostileBlob16(0),
+		},
+		{
+			name:      "account_deleted_ineligible_positive_payout",
+			eligible:  0,
+			payout:    hostileBlob16(1),
+			reason:    "account_deleted",
+			settled:   1,
+			remaining: hostileBlob16(0),
+		},
+		{
+			name:      "account_deleted_eligible_positive_payout",
+			eligible:  1,
+			payout:    hostileBlob16(1),
+			reason:    "account_deleted",
+			settled:   1,
+			remaining: hostileBlob16(0),
+		},
+		{
+			name:      "account_banned_ineligible_positive_payout",
+			eligible:  0,
+			payout:    hostileBlob16(1),
+			reason:    "account_banned",
+			settled:   1,
+			remaining: hostileBlob16(0),
+		},
+		{
+			name:      "account_banned_eligible_positive_payout",
+			eligible:  1,
+			payout:    hostileBlob16(1),
+			reason:    "account_banned",
+			settled:   1,
+			remaining: hostileBlob16(0),
+		},
+		{
+			name:      "unsettled_null_user",
+			eligible:  1,
+			payout:    hostileBlob16(0),
+			reason:    nil,
+			settled:   0,
+			remaining: hostileBlob16(1),
+		},
+		{
+			name:      "settled_remaining_nonzero",
+			eligible:  1,
+			payout:    hostileBlob16(0),
+			reason:    nil,
+			settled:   1,
+			remaining: hostileBlob16(1),
+		},
+	}
+
+	const insertParticipant = `
+INSERT INTO thursday_participants(
+ period_id,participant_ref,user_id,contribution_count,contributed_mag,eligible_at_freeze,
+ payout_mag,unpaid_reason,settled,ledger_rows_remaining,created_at,updated_at
+) VALUES(?,?,NULL,?,?,?,?,?,?,?,0,0)`
+	const updateParticipant = `
+UPDATE thursday_participants
+SET user_id=NULL,eligible_at_freeze=?,payout_mag=?,unpaid_reason=?,settled=?,
+    ledger_rows_remaining=?,updated_at=1
+WHERE period_id=? AND participant_ref=?`
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run("insert/"+tt.name, func(t *testing.T) {
+			db := openGenerationTwoDDLForTest(t)
+			periodID, _, _ := hostileInsertThursdayFixture(t, db)
+			participantID := hostileOIDVariant("thp_", 'M', 'Q')
+			args := []any{
+				periodID, participantID, hostileBlob16(1), hostileBlob16(1), tt.eligible,
+				tt.payout, tt.reason, tt.settled, tt.remaining,
+			}
+			if tt.allowed {
+				hostileMustExec(t, db, insertParticipant, args...)
+				return
+			}
+			hostileMustFail(t, db, insertParticipant, args...)
+		})
+
+		t.Run("update/"+tt.name, func(t *testing.T) {
+			db := openGenerationTwoDDLForTest(t)
+			uid := hostileInsertUser(t, db, "thursday-matrix", 0, 0)
+			periodID, _, _ := hostileInsertThursdayFixture(t, db)
+			participantID := hostileOIDVariant("thp_", 'M', 'Q')
+			hostileMustExec(t, db, `
+INSERT INTO thursday_participants(
+ period_id,participant_ref,user_id,contribution_count,contributed_mag,eligible_at_freeze,
+ payout_mag,settled,ledger_rows_remaining,created_at,updated_at
+) VALUES(?,?,?, ?,?,?, ?,0,?,0,0)`, periodID, participantID, uid, hostileBlob16(1), hostileBlob16(1), 1, hostileBlob16(0), hostileBlob16(1))
+			args := []any{
+				tt.eligible, tt.payout, tt.reason, tt.settled, tt.remaining,
+				periodID, participantID,
+			}
+			if tt.allowed {
+				hostileMustExec(t, db, updateParticipant, args...)
+				return
+			}
+			hostileMustFail(t, db, updateParticipant, args...)
+		})
 	}
 }
 

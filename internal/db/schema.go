@@ -673,7 +673,12 @@ WHEN typeof(NEW.contribution_count)<>'blob' OR length(NEW.contribution_count)<>1
  OR NEW.created_at NOT BETWEEN 0 AND 253402300799 OR NEW.updated_at NOT BETWEEN 0 AND 253402300799 OR NEW.updated_at<NEW.created_at
  OR (NEW.settled=0 AND (NEW.user_id IS NULL OR hex(NEW.ledger_rows_remaining)<>'00000000000000000000000000000001' OR hex(NEW.payout_mag)<>'00000000000000000000000000000000' OR NEW.unpaid_reason IS NOT NULL))
  OR (NEW.settled=1 AND hex(NEW.ledger_rows_remaining)<>'00000000000000000000000000000000')
- OR (NEW.settled=1 AND NEW.user_id IS NULL AND (NEW.unpaid_reason IS NULL OR NEW.unpaid_reason<>'account_deleted' OR hex(NEW.payout_mag)<>'00000000000000000000000000000000'))
+ OR (NEW.settled=1 AND NEW.user_id IS NULL AND CASE
+      WHEN NEW.unpaid_reason='account_deleted' AND hex(NEW.payout_mag)='00000000000000000000000000000000' THEN 0
+      WHEN NEW.eligible_at_freeze=0 AND NEW.unpaid_reason='account_banned' AND hex(NEW.payout_mag)='00000000000000000000000000000000' THEN 0
+      WHEN NEW.eligible_at_freeze=1 AND NEW.unpaid_reason IS NULL THEN 0
+      ELSE 1
+    END=1)
  OR (NEW.settled=1 AND NEW.user_id IS NOT NULL AND NEW.eligible_at_freeze=0 AND (NEW.unpaid_reason IS NULL OR NEW.unpaid_reason<>'account_banned' OR hex(NEW.payout_mag)<>'00000000000000000000000000000000'))
  OR (NEW.settled=1 AND NEW.user_id IS NOT NULL AND NEW.eligible_at_freeze=1 AND NEW.unpaid_reason IS NOT NULL)
 BEGIN SELECT RAISE(ABORT,'thursday participant matrix is invalid'); END;
@@ -685,7 +690,12 @@ WHEN typeof(NEW.contribution_count)<>'blob' OR length(NEW.contribution_count)<>1
  OR NEW.created_at NOT BETWEEN 0 AND 253402300799 OR NEW.updated_at NOT BETWEEN 0 AND 253402300799 OR NEW.updated_at<NEW.created_at
  OR (NEW.settled=0 AND (NEW.user_id IS NULL OR hex(NEW.ledger_rows_remaining)<>'00000000000000000000000000000001' OR hex(NEW.payout_mag)<>'00000000000000000000000000000000' OR NEW.unpaid_reason IS NOT NULL))
  OR (NEW.settled=1 AND hex(NEW.ledger_rows_remaining)<>'00000000000000000000000000000000')
- OR (NEW.settled=1 AND NEW.user_id IS NULL AND (NEW.unpaid_reason IS NULL OR NEW.unpaid_reason<>'account_deleted' OR hex(NEW.payout_mag)<>'00000000000000000000000000000000'))
+ OR (NEW.settled=1 AND NEW.user_id IS NULL AND CASE
+      WHEN NEW.unpaid_reason='account_deleted' AND hex(NEW.payout_mag)='00000000000000000000000000000000' THEN 0
+      WHEN NEW.eligible_at_freeze=0 AND NEW.unpaid_reason='account_banned' AND hex(NEW.payout_mag)='00000000000000000000000000000000' THEN 0
+      WHEN NEW.eligible_at_freeze=1 AND NEW.unpaid_reason IS NULL THEN 0
+      ELSE 1
+    END=1)
  OR (NEW.settled=1 AND NEW.user_id IS NOT NULL AND NEW.eligible_at_freeze=0 AND (NEW.unpaid_reason IS NULL OR NEW.unpaid_reason<>'account_banned' OR hex(NEW.payout_mag)<>'00000000000000000000000000000000'))
  OR (NEW.settled=1 AND NEW.user_id IS NOT NULL AND NEW.eligible_at_freeze=1 AND NEW.unpaid_reason IS NOT NULL)
 BEGIN SELECT RAISE(ABORT,'thursday participant matrix is invalid'); END;
