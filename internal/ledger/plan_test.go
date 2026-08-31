@@ -271,3 +271,35 @@ func TestPlanRejectsOpenEndedInputs(t *testing.T) {
 		t.Fatalf("unbound donation change = %v", err)
 	}
 }
+
+func TestRPSAggregateConstructorsAcceptAbovePrimitiveLimit(t *testing.T) {
+	meta := Meta{OperationID: mustLedgerID(t, "op_"), ActorUserID: 1, CreatedAt: ledgerTestNow}
+	aggregate := mustAmount(t, "9000000000000001")
+	queueID := mustLedgerID(t, "rpsq_")
+	if plan, err := NewRPSQueueReserve(meta, queueID, 1, 2, aggregate); err != nil {
+		t.Fatalf("aggregate queue reserve: %v", err)
+	} else if err := validatePlan(plan); err != nil {
+		t.Fatalf("validate aggregate queue reserve: %v", err)
+	}
+	if plan, err := NewRPSQueueRelease(meta, queueID, 2, 1, aggregate); err != nil {
+		t.Fatalf("aggregate queue release: %v", err)
+	} else if err := validatePlan(plan); err != nil {
+		t.Fatalf("validate aggregate queue release: %v", err)
+	}
+	inputs := [3]RPSQueueInput{}
+	for i := range inputs {
+		inputs[i] = RPSQueueInput{
+			QueueID: mustLedgerID(t, "rpsq_"), AccountID: int64(i + 3), Amount: aggregate,
+		}
+	}
+	plan, err := NewRPSSessionStart(meta, mustLedgerID(t, "rps_"), 6, mustU128(t, "1"), inputs)
+	if err != nil {
+		t.Fatalf("aggregate session start: %v", err)
+	}
+	if err := validatePlan(plan); err != nil {
+		t.Fatalf("validate aggregate session start: %v", err)
+	}
+	if got := plan.spec.entries[len(plan.spec.entries)-1].delta.Decimal(); got != "27000000000000003" {
+		t.Fatalf("aggregate session amount = %s", got)
+	}
+}
