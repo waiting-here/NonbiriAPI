@@ -218,6 +218,9 @@ SELECT ?,?,?,?,?,?,?,1,0,?,? WHERE EXISTS(SELECT 1 FROM users WHERE id=? AND is_
 	if err != nil {
 		return MutationResult[Model]{}, err
 	}
+	if err := r.projection.ReconcileRoutingProjection(ctx, tx, userID, modelID); err != nil {
+		return MutationResult[Model]{}, fmt.Errorf("resources: project new model routing: %w", err)
+	}
 	out, err := finishJSONMutation(ctx, tx, decision, http.StatusCreated, model)
 	if err != nil {
 		return MutationResult[Model]{}, err
@@ -355,6 +358,9 @@ func (r *Repository) DeleteModel(ctx context.Context, userID, modelID int64, mut
 	if _, err := getModelTx(ctx, tx, userID, modelID); err != nil {
 		return MutationResult[struct{}]{}, err
 	}
+	if err := r.projection.PrepareModelDeletion(ctx, tx, userID, modelID, now); err != nil {
+		return MutationResult[struct{}]{}, fmt.Errorf("resources: prepare model projection deletion: %w", err)
+	}
 	result, err := tx.ExecContext(ctx, `DELETE FROM models WHERE id=? AND user_id=? AND revision=?`, modelID, userID, expectedRevision)
 	if err != nil {
 		return MutationResult[struct{}]{}, fmt.Errorf("resources: delete model: %w", err)
@@ -491,6 +497,9 @@ VALUES(?,?,?,?,?,?)`, modelID, selection.EndpointKeyID, selection.UpstreamModelI
 	}
 	if err := advanceBindingRevisionTx(ctx, tx, userID, modelID, expectedBindingRevision, now); err != nil {
 		return MutationResult[BindingsResponse]{}, err
+	}
+	if err := r.projection.ReconcileRoutingProjection(ctx, tx, userID, modelID); err != nil {
+		return MutationResult[BindingsResponse]{}, fmt.Errorf("resources: project added bindings: %w", err)
 	}
 	bindings, err := listBindingsTx(ctx, tx, userID, modelID)
 	if err != nil {
@@ -734,6 +743,9 @@ func (r *Repository) DeleteBinding(ctx context.Context, userID, modelID, binding
 	}
 	if err := advanceBindingRevisionTx(ctx, tx, userID, modelID, expectedBindingRevision, now); err != nil {
 		return MutationResult[BindingsResponse]{}, err
+	}
+	if err := r.projection.ReconcileRoutingProjection(ctx, tx, userID, modelID); err != nil {
+		return MutationResult[BindingsResponse]{}, fmt.Errorf("resources: project deleted binding: %w", err)
 	}
 	bindings, err := listBindingsTx(ctx, tx, userID, modelID)
 	if err != nil {

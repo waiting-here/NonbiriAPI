@@ -201,7 +201,7 @@ func sortedQueueInputs(inputs [3]RPSQueueInput) ([3]RPSQueueInput, error) {
 	sort.Slice(inputs[:], func(i, j int) bool { return inputs[i].QueueID < inputs[j].QueueID })
 	seenAccounts := make(map[int64]struct{}, 3)
 	for i, input := range inputs {
-		if !db.ValidateOpaqueID(input.QueueID, "rpsq_") || input.AccountID <= 0 || !positive(input.Amount) || !validPrimitive(input.Amount) {
+		if !db.ValidateOpaqueID(input.QueueID, "rpsq_") || input.AccountID <= 0 || !positive(input.Amount) {
 			return [3]RPSQueueInput{}, ErrInvalidPlan
 		}
 		if i > 0 && inputs[i-1].QueueID == input.QueueID {

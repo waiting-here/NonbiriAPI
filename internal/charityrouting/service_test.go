@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -50,13 +51,19 @@ func (auth *routingTestAuth) AuthorizeStewardMutation(ctx context.Context, tx *s
 	return nil
 }
 
-type routingDonationState struct{ dueCalls atomic.Int64 }
+type routingDonationState struct {
+	dueCalls atomic.Int64
+	dueHook  func(context.Context, *sql.Tx, int64, int) error
+}
 
 func (*routingDonationState) MaterializeExpiryTx(context.Context, *sql.Tx, int64, int64) (bool, error) {
 	return false, nil
 }
-func (state *routingDonationState) MaterializeDueExpiriesTx(context.Context, *sql.Tx, int64, int) error {
+func (state *routingDonationState) MaterializeDueExpiriesTx(ctx context.Context, tx *sql.Tx, now int64, limit int) error {
 	state.dueCalls.Add(1)
+	if state.dueHook != nil {
+		return state.dueHook(ctx, tx, now, limit)
+	}
 	return nil
 }
 
@@ -150,6 +157,20 @@ func (environment *routingTestEnv) createModel(t *testing.T, seed byte) AdminCha
 		t.Fatal(err)
 	}
 	return result.Value
+}
+
+func (environment *routingTestEnv) setCapabilityGates(t *testing.T, charity, donation string) {
+	t.Helper()
+	result, err := environment.store.DB().Exec(`UPDATE site_config
+SET value=CASE key WHEN 'charity_enabled' THEN ? WHEN 'donation_accept_enabled' THEN ? END
+WHERE key IN ('charity_enabled','donation_accept_enabled')`, charity, donation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed, err := result.RowsAffected()
+	if err != nil || changed != 2 {
+		t.Fatalf("capability gate rows changed = %d, %v", changed, err)
+	}
 }
 
 func TestModelRevisionNestedDiscountAndRoleAuthorization(t *testing.T) {
@@ -302,6 +323,7 @@ func TestBindingCandidateRuntimeCapacityAndSignedCursor(t *testing.T) {
 func TestCapabilityReleasesRowsBeforeSnapshotWithSingleConnection(t *testing.T) {
 	environment := newRoutingTestEnv(t)
 	environment.store.DB().SetMaxOpenConns(1)
+	environment.setCapabilityGates(t, "1", "1")
 	environment.seedUser(t, true, nil)
 	owner := environment.seedUser(t, false, nil)
 	model := environment.createModel(t, 'G')
@@ -321,8 +343,210 @@ func TestCapabilityReleasesRowsBeforeSnapshotWithSingleConnection(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Capability with one connection: %v", err)
 	}
-	if capability.State != "available" || len(capability.Models) != 1 || capability.Models[0].ID != model.ID {
+	if capability.State != "available" || capability.DonationIntake != "open" ||
+		len(capability.Models) != 1 || capability.Models[0].ID != model.ID {
 		t.Fatalf("Capability = %+v, want one available model", capability)
+	}
+}
+
+func TestCapabilityDonationIntakeCombinations(t *testing.T) {
+	tests := []struct {
+		name       string
+		charity    string
+		donation   string
+		wantState  string
+		wantIntake string
+	}{
+		{name: "both closed", charity: "0", donation: "0", wantState: "feature_disabled", wantIntake: "closed"},
+		{name: "charity only", charity: "1", donation: "0", wantState: "no_models", wantIntake: "closed"},
+		{name: "both open", charity: "1", donation: "1", wantState: "no_models", wantIntake: "open"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			environment := newRoutingTestEnv(t)
+			environment.setCapabilityGates(t, test.charity, test.donation)
+			capability, err := environment.service.Capability(context.Background(), routingTestNow)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if capability.State != test.wantState || capability.DonationIntake != test.wantIntake ||
+				capability.Models == nil || len(capability.Models) != 0 {
+				t.Fatalf("Capability = %+v", capability)
+			}
+		})
+	}
+}
+
+func TestCapabilityRejectsMissingInvalidOrContradictoryGates(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*routingTestEnv, *testing.T)
+	}{
+		{name: "missing charity", mutate: func(environment *routingTestEnv, t *testing.T) {
+			_, err := environment.store.DB().Exec(`DELETE FROM site_config WHERE key='charity_enabled'`)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "missing donation", mutate: func(environment *routingTestEnv, t *testing.T) {
+			_, err := environment.store.DB().Exec(`DELETE FROM site_config WHERE key='donation_accept_enabled'`)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "invalid charity", mutate: func(environment *routingTestEnv, t *testing.T) {
+			_, err := environment.store.DB().Exec(`UPDATE site_config SET value='2' WHERE key='charity_enabled'`)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "invalid donation", mutate: func(environment *routingTestEnv, t *testing.T) {
+			_, err := environment.store.DB().Exec(`UPDATE site_config SET value='2' WHERE key='donation_accept_enabled'`)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "donation without charity", mutate: func(environment *routingTestEnv, t *testing.T) {
+			environment.setCapabilityGates(t, "0", "1")
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			environment := newRoutingTestEnv(t)
+			test.mutate(environment, t)
+			capability, err := environment.service.Capability(context.Background(), routingTestNow)
+			if !errors.Is(err, ErrInvariant) {
+				t.Fatalf("Capability error = %v, want invariant", err)
+			}
+			if capability.State != "" || capability.Models != nil || capability.DonationIntake != "" {
+				t.Fatalf("Capability on invariant failure = %+v", capability)
+			}
+		})
+	}
+}
+
+func TestCapabilityDatabaseFailureIsNotProjectedAsClosed(t *testing.T) {
+	environment := newRoutingTestEnv(t)
+	if _, err := environment.store.DB().Exec(`DROP TABLE site_config`); err != nil {
+		t.Fatal(err)
+	}
+	capability, err := environment.service.Capability(context.Background(), routingTestNow)
+	if err == nil || errors.Is(err, ErrInvariant) {
+		t.Fatalf("Capability error = %v, want internal database error", err)
+	}
+	if capability.State != "" || capability.Models != nil || capability.DonationIntake != "" {
+		t.Fatalf("Capability on database failure = %+v", capability)
+	}
+}
+
+func TestCapabilityModelStatesAndCandidatePrivacy(t *testing.T) {
+	environment := newRoutingTestEnv(t)
+	environment.setCapabilityGates(t, "0", "0")
+	capability, err := environment.service.Capability(context.Background(), routingTestNow)
+	if err != nil || capability.State != "feature_disabled" || capability.DonationIntake != "closed" {
+		t.Fatalf("disabled Capability = %+v, %v", capability, err)
+	}
+
+	environment.setCapabilityGates(t, "1", "1")
+	capability, err = environment.service.Capability(context.Background(), routingTestNow)
+	if err != nil || capability.State != "no_models" || capability.DonationIntake != "open" {
+		t.Fatalf("empty Capability = %+v, %v", capability, err)
+	}
+
+	environment.seedUser(t, true, nil)
+	owner := environment.seedUser(t, false, nil)
+	model := environment.createModel(t, 'I')
+	modelID, _ := parsePositiveID(model.ID)
+	capability, err = environment.service.Capability(context.Background(), routingTestNow)
+	if err != nil || capability.State != "no_candidates" || capability.DonationIntake != "open" || len(capability.Models) != 0 {
+		t.Fatalf("candidate-free Capability = %+v, %v", capability, err)
+	}
+
+	_, donationKeyID, _ := environment.seedCandidate(t, owner, 'z', "private-upstream")
+	batch := BindingBatch{ExpectedBindingRevision: "0", Selections: []BindingSelection{{
+		DonationKeyID: fmt.Sprint(donationKeyID), UpstreamModelID: "private-upstream",
+	}}}
+	if _, err := environment.service.AddBindingsAdmin(context.Background(), modelID,
+		routingMutation(t, 'J', http.MethodPost, routeAdminBindingBatch, []int64{modelID}, map[string]any{"available": true}), batch); err != nil {
+		t.Fatal(err)
+	}
+	capability, err = environment.service.Capability(context.Background(), routingTestNow)
+	if err != nil || capability.State != "available" || capability.DonationIntake != "open" ||
+		len(capability.Models) != 1 || capability.Models[0].ID != model.ID {
+		t.Fatalf("available Capability = %+v, %v", capability, err)
+	}
+	body := fmt.Sprintf("%+v", capability)
+	for _, private := range []string{"private-upstream", "private key note", "https://z.routing.test/v1"} {
+		if strings.Contains(body, private) {
+			t.Fatalf("Capability leaks private candidate value %q: %s", private, body)
+		}
+	}
+}
+
+func TestCapabilityFreezesIntakeBeforeCandidateSnapshots(t *testing.T) {
+	environment := newRoutingTestEnv(t)
+	environment.setCapabilityGates(t, "1", "1")
+	environment.seedUser(t, true, nil)
+	owner := environment.seedUser(t, false, nil)
+	model := environment.createModel(t, 'K')
+	modelID, _ := parsePositiveID(model.ID)
+	_, donationKeyID, _ := environment.seedCandidate(t, owner, 'w', "freeze-model")
+	batch := BindingBatch{ExpectedBindingRevision: "0", Selections: []BindingSelection{{
+		DonationKeyID: fmt.Sprint(donationKeyID), UpstreamModelID: "freeze-model",
+	}}}
+	if _, err := environment.service.AddBindingsAdmin(context.Background(), modelID,
+		routingMutation(t, 'L', http.MethodPost, routeAdminBindingBatch, []int64{modelID}, map[string]any{"freeze": true}), batch); err != nil {
+		t.Fatal(err)
+	}
+	environment.state.dueHook = func(ctx context.Context, tx *sql.Tx, _ int64, _ int) error {
+		_, err := tx.ExecContext(ctx, `UPDATE site_config SET value='0' WHERE key='donation_accept_enabled'`)
+		return err
+	}
+	capability, err := environment.service.Capability(context.Background(), routingTestNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if capability.State != "available" || capability.DonationIntake != "open" {
+		t.Fatalf("Capability = %+v, want frozen open intake", capability)
+	}
+	var stored string
+	if err := environment.store.DB().QueryRow(`SELECT value FROM site_config WHERE key='donation_accept_enabled'`).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored != "0" {
+		t.Fatalf("donation gate = %q, want candidate snapshot mutation", stored)
+	}
+}
+
+func TestCapabilityHTTPJSONGolden(t *testing.T) {
+	tests := []struct {
+		name     string
+		charity  string
+		donation string
+		want     string
+	}{
+		{name: "both closed", charity: "0", donation: "0", want: `{"state":"feature_disabled","models":[],"donation_intake":"closed"}` + "\n"},
+		{name: "charity only", charity: "1", donation: "0", want: `{"state":"no_models","models":[],"donation_intake":"closed"}` + "\n"},
+		{name: "both open", charity: "1", donation: "1", want: `{"state":"no_models","models":[],"donation_intake":"open"}` + "\n"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			environment := newRoutingTestEnv(t)
+			environment.setCapabilityGates(t, test.charity, test.donation)
+			request := httptest.NewRequest(http.MethodGet, routeCapability, nil)
+			response := httptest.NewRecorder()
+			(&httpAPI{service: environment.service}).capability(response, request, UserPrincipal{UserID: 1})
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+			}
+			if response.Header().Get("Content-Type") != "application/json; charset=utf-8" ||
+				response.Header().Get("Cache-Control") != "no-store" {
+				t.Fatalf("headers = %v", response.Header())
+			}
+			if response.Body.String() != test.want {
+				t.Fatalf("body = %q, want %q", response.Body.String(), test.want)
+			}
+		})
 	}
 }
 

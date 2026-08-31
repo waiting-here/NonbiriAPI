@@ -38,6 +38,25 @@ type EndpointKeyDeletionHook interface {
 	PrepareEndpointKeyDeletion(context.Context, *sql.Tx, int64, []int64, int64) error
 }
 
+// EndpointKeyCreationHook lets the report owner attach an already-active
+// fingerprint reason to a newly-created owner key before that key becomes
+// visible. The hook runs after the key and its discovery evidence are written,
+// in the caller's transaction, and must not authorize or commit.
+type EndpointKeyCreationHook interface {
+	ProtectNewEndpointKey(context.Context, *sql.Tx, int64, int64, int64) error
+}
+
+// ResourceProjectionHook keeps the account-private issue projection aligned
+// with resource authority changes. Every method runs inside the resource mutation's
+// transaction; implementations may write only their derived projection.
+type ResourceProjectionHook interface {
+	ReconcileModelDiscovery(context.Context, *sql.Tx, int64, int64) error
+	ReconcileRoutingProjection(context.Context, *sql.Tx, int64, int64) error
+	PrepareEndpointDeletion(context.Context, *sql.Tx, int64, int64, int64) error
+	PrepareEndpointKeyDeletion(context.Context, *sql.Tx, int64, []int64, int64) error
+	PrepareModelDeletion(context.Context, *sql.Tx, int64, int64, int64) error
+}
+
 // DiscoveryClaimRail owns claim, secret access, dispatch ordering, and the
 // actual connector call. Its result contains only bounded catalog facts.
 type DiscoveryClaimRail interface {

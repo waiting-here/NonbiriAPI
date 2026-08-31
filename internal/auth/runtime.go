@@ -42,11 +42,12 @@ type Runtime struct {
 	now                               func() time.Time
 	idleTTL, absoluteTTL              time.Duration
 
-	mu                        sync.Mutex
-	userMux, adminMux         *http.ServeMux
-	routes                    map[string]struct{}
-	frozen, closed            bool
-	userHandler, adminHandler http.Handler
+	mu                              sync.Mutex
+	userMux, adminMux               *http.ServeMux
+	routes                          map[string]struct{}
+	userSessionInvalidationObserver UserSessionInvalidationObserver
+	frozen, closed                  bool
+	userHandler, adminHandler       http.Handler
 }
 
 var _ resources.UserRouteRegistrar = (*Runtime)(nil)

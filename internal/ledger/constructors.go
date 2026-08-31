@@ -328,7 +328,7 @@ func NewLinkLinkEntry(meta Meta, sessionID string, userAccountID, platformAccoun
 }
 
 func NewRPSQueueReserve(meta Meta, queueID string, userAccountID, queueAccountID int64, reserved Amount) (Plan, error) {
-	if userAccountID <= 0 || queueAccountID <= 0 || !positive(reserved) || !validPrimitive(reserved) {
+	if userAccountID <= 0 || queueAccountID <= 0 || !positive(reserved) {
 		return Plan{}, ErrInvalidPlan
 	}
 	plan, err := newPlan(meta, KindRPSQueueReserve, sourceRPSQueue, queueID, db.U128{})
@@ -340,7 +340,7 @@ func NewRPSQueueReserve(meta Meta, queueID string, userAccountID, queueAccountID
 }
 
 func NewRPSQueueRelease(meta Meta, queueID string, queueAccountID, userAccountID int64, reserved Amount) (Plan, error) {
-	if queueAccountID <= 0 || userAccountID <= 0 || !positive(reserved) || !validPrimitive(reserved) {
+	if queueAccountID <= 0 || userAccountID <= 0 || !positive(reserved) {
 		return Plan{}, ErrInvalidPlan
 	}
 	ref, err := RPSQueueReservation(queueID)

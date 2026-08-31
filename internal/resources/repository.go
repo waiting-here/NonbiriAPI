@@ -38,6 +38,8 @@ type Config struct {
 	BaseURLs        BaseURLValidator
 	Secrets         SecretWriter
 	KeyDeletion     EndpointKeyDeletionHook
+	KeyCreation     EndpointKeyCreationHook
+	Projection      ResourceProjectionHook
 	DiscoveryRail   DiscoveryClaimRail
 	DiscoveryWorker DiscoveryWorker
 	CursorKeys      CursorKeyDeriver
@@ -53,6 +55,8 @@ type Repository struct {
 	baseURLs        BaseURLValidator
 	secrets         SecretWriter
 	keyDeletion     EndpointKeyDeletionHook
+	keyCreation     EndpointKeyCreationHook
+	projection      ResourceProjectionHook
 	discoveryRail   DiscoveryClaimRail
 	discoveryWorker DiscoveryWorker
 	finalAuth       FinalTxAuthorizer
@@ -65,7 +69,8 @@ type Repository struct {
 func New(config Config) (*Repository, error) {
 	if config.Store == nil || config.Store.DB() == nil || config.Connectors == nil ||
 		isNilInterface(config.BaseURLs) || isNilInterface(config.Secrets) ||
-		isNilInterface(config.KeyDeletion) ||
+		isNilInterface(config.KeyDeletion) || isNilInterface(config.KeyCreation) ||
+		isNilInterface(config.Projection) ||
 		isNilInterface(config.DiscoveryRail) || isNilInterface(config.DiscoveryWorker) ||
 		isNilInterface(config.CursorKeys) ||
 		isNilInterface(config.FinalAuth) {
@@ -82,7 +87,8 @@ func New(config Config) (*Repository, error) {
 	}
 	return &Repository{
 		db: config.Store.DB(), connectors: config.Connectors, baseURLs: config.BaseURLs,
-		secrets: config.Secrets, keyDeletion: config.KeyDeletion, discoveryRail: config.DiscoveryRail,
+		secrets: config.Secrets, keyDeletion: config.KeyDeletion, keyCreation: config.KeyCreation,
+		projection: config.Projection, discoveryRail: config.DiscoveryRail,
 		discoveryWorker: config.DiscoveryWorker,
 		finalAuth:       config.FinalAuth,
 		cursors:         cursorCodec{keys: config.CursorKeys}, random: config.Random,

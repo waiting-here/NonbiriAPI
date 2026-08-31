@@ -103,7 +103,13 @@ func (r *Repository) CreateManualEntries(ctx context.Context, userID, endpointID
 		return MutationResult[ManualEntriesResponse]{}, ErrResourceLocked
 	}
 	created := make([]CatalogEntry, 0, len(entries))
+	changedPairs := make([]string, 0, len(entries))
 	for _, input := range entries {
+		before, exists, err := readPairStateTx(ctx, tx, keyID, input.UpstreamModelID)
+		if err != nil {
+			return MutationResult[ManualEntriesResponse]{}, err
+		}
+		beforeEligible := exists && before.eligible()
 		pairRevision, err := addManualSupportTx(ctx, tx, keyID, input.UpstreamModelID, now)
 		if err != nil {
 			return MutationResult[ManualEntriesResponse]{}, err
@@ -123,6 +129,16 @@ VALUES(?,'manual',?,?,?,?,?,?)`, keyID, input.UpstreamModelID, input.UpstreamMod
 			return MutationResult[ManualEntriesResponse]{}, err
 		}
 		created = append(created, entry)
+		if !beforeEligible {
+			changedPairs = append(changedPairs, input.UpstreamModelID)
+		}
+	}
+	modelIDs, err := modelsUsingKeyPairsTx(ctx, tx, userID, keyID, changedPairs)
+	if err != nil {
+		return MutationResult[ManualEntriesResponse]{}, err
+	}
+	if err := r.reconcileRoutingModelIDsTx(ctx, tx, userID, modelIDs); err != nil {
+		return MutationResult[ManualEntriesResponse]{}, err
 	}
 	response := ManualEntriesResponse{Entries: created}
 	out, err := finishJSONMutation(ctx, tx, decision, http.StatusCreated, response)
@@ -251,6 +267,14 @@ func (r *Repository) UpdateManualEntry(ctx context.Context, userID, endpointID, 
 		}
 		return MutationResult[ManualUpdateResponse]{}, ErrUnavailable
 	}
+	newPairWasEligible := false
+	if input.UpstreamModelID != current.modelID {
+		newState, newExists, err := readPairStateTx(ctx, tx, keyID, input.UpstreamModelID)
+		if err != nil {
+			return MutationResult[ManualUpdateResponse]{}, err
+		}
+		newPairWasEligible = newExists && newState.eligible()
+	}
 	var newPairRevision int64
 	if input.UpstreamModelID == current.modelID {
 		if oldState.pairRevision == int64(^uint64(0)>>1) {
@@ -294,6 +318,28 @@ WHERE id=? AND endpoint_key_id=? AND source_type='manual'`, input.UpstreamModelI
 		return MutationResult[ManualUpdateResponse]{}, err
 	}
 	if err := cleanCatalogPairTx(ctx, tx, keyID, current.modelID); err != nil {
+		return MutationResult[ManualUpdateResponse]{}, err
+	}
+	changedPairs := make([]string, 0, 2)
+	if input.UpstreamModelID != current.modelID {
+		oldAfter, oldExists, err := readPairStateTx(ctx, tx, keyID, current.modelID)
+		if err != nil {
+			return MutationResult[ManualUpdateResponse]{}, err
+		}
+		oldAfterEligible := oldExists && oldAfter.eligible()
+		if oldState.eligible() != oldAfterEligible {
+			changedPairs = append(changedPairs, current.modelID)
+		}
+		if !newPairWasEligible {
+			changedPairs = append(changedPairs, input.UpstreamModelID)
+		}
+	}
+	pairModelIDs, err := modelsUsingKeyPairsTx(ctx, tx, userID, keyID, changedPairs)
+	if err != nil {
+		return MutationResult[ManualUpdateResponse]{}, err
+	}
+	reconcileIDs := append(append([]int64(nil), affectedIDs...), pairModelIDs...)
+	if err := r.reconcileRoutingModelIDsTx(ctx, tx, userID, reconcileIDs); err != nil {
 		return MutationResult[ManualUpdateResponse]{}, err
 	}
 	entry, err := catalogEntryTx(ctx, tx, keyID, entryID)
@@ -357,10 +403,25 @@ func (r *Repository) DeleteManualEntry(ctx context.Context, userID, endpointID, 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM model_catalog_entries WHERE id=? AND endpoint_key_id=? AND source_type='manual'`, entryID, keyID); err != nil {
 		return MutationResult[struct{}]{}, fmt.Errorf("resources: delete manual catalog entry: %w", err)
 	}
-	if _, err := applyBindingReplacementsTx(ctx, tx, userID, keyID, current.modelID, input.Replacements, now); err != nil {
+	affectedIDs, err := applyBindingReplacementsTx(ctx, tx, userID, keyID, current.modelID, input.Replacements, now)
+	if err != nil {
 		return MutationResult[struct{}]{}, err
 	}
 	if err := cleanCatalogPairTx(ctx, tx, keyID, current.modelID); err != nil {
+		return MutationResult[struct{}]{}, err
+	}
+	after, afterExists, err := readPairStateTx(ctx, tx, keyID, current.modelID)
+	if err != nil {
+		return MutationResult[struct{}]{}, err
+	}
+	if !afterExists || !after.eligible() {
+		pairModelIDs, err := modelsUsingKeyPairsTx(ctx, tx, userID, keyID, []string{current.modelID})
+		if err != nil {
+			return MutationResult[struct{}]{}, err
+		}
+		affectedIDs = append(affectedIDs, pairModelIDs...)
+	}
+	if err := r.reconcileRoutingModelIDsTx(ctx, tx, userID, affectedIDs); err != nil {
 		return MutationResult[struct{}]{}, err
 	}
 	out, err := finishEmptyMutation(ctx, tx, decision, http.StatusNoContent)

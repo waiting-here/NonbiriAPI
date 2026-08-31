@@ -1,0 +1,42 @@
+{
+  "dry": {
+    "status": 422,
+    "mode": "dry-run",
+    "body": {
+      "error": {
+        "code": "debug_dry_run_intercepted",
+        "message": "[NonbiriAPI] Debug dry run intercepted this request. It was captured on the Debug page and was not sent upstream.",
+        "source": "platform"
+      }
+    },
+    "content_type": "application/json; charset=utf-8",
+    "cache_control": "no-store"
+  },
+  "live": {
+    "status": 422,
+    "mode": "live-captured",
+    "body": {
+      "error": {
+        "code": "debug_live_result_captured",
+        "message": "[NonbiriAPI] The upstream response was captured by the Debug page.",
+        "source": "platform"
+      }
+    },
+    "content_type": "application/json; charset=utf-8",
+    "cache_control": "no-store"
+  },
+  "cancelled": {
+    "status": 409,
+    "mode": "live-cancelled",
+    "body": {
+      "error": {
+        "code": "debug_live_cancelled",
+        "message": "[NonbiriAPI] The Debug live request was cancelled.",
+        "source": "platform"
+      }
+    },
+    "content_type": "application/json; charset=utf-8",
+    "cache_control": "no-store"
+  },
+  "stream": "data: {\"error\":{\"code\":\"debug_live_cancelled\",\"source\":\"platform\",\"message\":\"[NonbiriAPI] The Debug live request was cancelled.\"}}\n\n"
+}

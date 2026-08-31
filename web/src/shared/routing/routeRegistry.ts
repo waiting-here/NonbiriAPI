@@ -31,7 +31,7 @@ const admin = (descriptor: Omit<RouteDescriptor, 'station'>): RouteDescriptor =>
 export const USER_ROUTE_DESCRIPTORS = [
   user({ id: 'home', path: '/', access: 'public', layout: 'wide', end: true, nav: true, registered: true, icon: 'home', labelKey: 'user.home.nav' }),
   user({ id: 'endpoints', path: '/endpoints', access: 'user', layout: 'wide', nav: true, registered: true, icon: 'resources', labelKey: 'user.resources.nav', fallbackLabelKey: 'user.endpoints.nav' }),
-  user({ id: 'endpoint-detail', path: '/endpoints/:endpointId', access: 'user', layout: 'readable' }),
+  user({ id: 'endpoint-detail', path: '/endpoints/:endpointId', access: 'user', layout: 'readable', registered: true }),
   user({ id: 'models', path: '/models', access: 'user', layout: 'wide', nav: true, registered: true, icon: 'models', labelKey: 'user.models.nav' }),
   user({ id: 'charity', path: '/charity', access: 'user', layout: 'wide', nav: true, registered: true, icon: 'charity', labelKey: 'user.charity.nav' }),
   user({ id: 'donation-detail', path: '/charity/donations/:donationId', access: 'user', layout: 'readable' }),

@@ -17,7 +17,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
+	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/adminapi"
+	"github.com/waiting-here/NonbiriAPI/internal/announcements"
 	"github.com/waiting-here/NonbiriAPI/internal/applog"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
@@ -33,7 +36,9 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
+	"github.com/waiting-here/NonbiriAPI/internal/issues"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/reports"
 	"github.com/waiting-here/NonbiriAPI/internal/resourcebridge"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -117,6 +122,9 @@ func run() int {
 		} else {
 			slog.Error("http server stopped before shutdown completed")
 		}
+		return 1
+	case err := <-app.failures:
+		slog.Error("application background worker failed", "err", err)
 		return 1
 	}
 	slog.Info("shutdown initiated")
@@ -260,6 +268,16 @@ type application struct {
 	donations       *donation.Service
 	charity         *charity.Service
 	charityRouting  *charityrouting.Service
+	announcements   *announcements.Service
+	issues          *issues.Service
+	reports         *reports.Repository
+	activities      *activities.Service
+	activityRepo    *activities.Repository
+	activityEvents  *accountstream.Hub
+	activityWorker  *activities.SettlementWorker
+	activityCancel  context.CancelFunc
+	activityDone    <-chan struct{}
+	failures        <-chan error
 	authorizer      *authz.Authorizer
 	elevation       *elevation.Manager
 	gate            *maintenance.Gate
@@ -277,6 +295,25 @@ func (a *application) Close() error {
 	}
 	a.closeOnce.Do(func() {
 		var closeErrors []error
+		if a.reports != nil {
+			if err := a.reports.Close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
+		}
+		if a.activityCancel != nil {
+			a.activityCancel()
+		}
+		if a.activityWorker != nil {
+			a.activityWorker.Close()
+		}
+		if a.activityDone != nil {
+			<-a.activityDone
+		}
+		if a.activityEvents != nil {
+			if err := a.activityEvents.Close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
+		}
 		if a.authRuntime != nil {
 			if err := a.authRuntime.Close(); err != nil {
 				closeErrors = append(closeErrors, err)
@@ -313,8 +350,18 @@ type roleFinalTxAuthorizer struct {
 }
 
 var _ donation.RoleFinalTxAuthorizer = (*roleFinalTxAuthorizer)(nil)
+var _ activities.AdminFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
+var _ announcements.AdminFinalTxAuthorizer = (*roleFinalTxAuthorizer)(nil)
 
 func (authorizer *roleFinalTxAuthorizer) AuthorizeAdminMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
+	return authorizer.authorize(ctx, tx, userID, authz.ActorAdminSession, authz.RoleAdministrator)
+}
+
+func (authorizer *roleFinalTxAuthorizer) AuthorizeAdmin(ctx context.Context, tx *sql.Tx, userID int64) error {
+	return authorizer.authorize(ctx, tx, userID, authz.ActorAdminSession, authz.RoleAdministrator)
+}
+
+func (authorizer *roleFinalTxAuthorizer) AuthorizeAdminFinalTx(ctx context.Context, tx *sql.Tx, userID int64) error {
 	return authorizer.authorize(ctx, tx, userID, authz.ActorAdminSession, authz.RoleAdministrator)
 }
 
@@ -338,6 +385,140 @@ func (authorizer *roleFinalTxAuthorizer) authorize(
 	}
 	_, err := authorizer.authorizer.Authorize(ctx, tx, actor, authz.Requirement{Role: role})
 	return err
+}
+
+type activityRouteRegistrar struct{ runtime *auth.Runtime }
+
+var _ activities.UserRouteRegistrar = activityRouteRegistrar{}
+var _ activities.AdminRouteRegistrar = activityRouteRegistrar{}
+
+func (registrar activityRouteRegistrar) RegisterUserRoute(method, pattern string, handler activities.AuthorizedUserHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterUserRoute(method, pattern, func(writer http.ResponseWriter, request *http.Request, principal resources.UserPrincipal) {
+		handler(writer, request, activities.UserPrincipal{UserID: principal.UserID})
+	})
+}
+
+func (registrar activityRouteRegistrar) RegisterAdminRoute(method, pattern string, handler activities.AuthorizedAdminHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterAdminRoute(method, pattern, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		actor, ok := auth.ActorFromContext(request.Context())
+		if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
+			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+			return
+		}
+		handler(writer, request, activities.AdminPrincipal{UserID: actor.UserID})
+	}))
+}
+
+type announcementRouteRegistrar struct{ runtime *auth.Runtime }
+
+var _ announcements.UserRouteRegistrar = announcementRouteRegistrar{}
+var _ announcements.AdminRouteRegistrar = announcementRouteRegistrar{}
+
+func (registrar announcementRouteRegistrar) RegisterUserRoute(method, pattern string, handler announcements.AuthorizedUserHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterUserRoute(method, pattern, func(writer http.ResponseWriter, request *http.Request, principal resources.UserPrincipal) {
+		handler(writer, request, announcements.UserPrincipal{UserID: principal.UserID})
+	})
+}
+
+func (registrar announcementRouteRegistrar) RegisterAdminRoute(method, pattern string, handler announcements.AuthorizedAdminHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterAdminRoute(method, pattern, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		actor, ok := auth.ActorFromContext(request.Context())
+		if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
+			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+			return
+		}
+		handler(writer, request, announcements.AdminPrincipal{UserID: actor.UserID})
+	}))
+}
+
+type issueRouteRegistrar struct{ runtime *auth.Runtime }
+
+var _ issues.UserRouteRegistrar = issueRouteRegistrar{}
+
+func (registrar issueRouteRegistrar) RegisterUserRoute(method, pattern string, handler issues.AuthorizedUserHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterUserRoute(method, pattern, func(writer http.ResponseWriter, request *http.Request, principal resources.UserPrincipal) {
+		handler(writer, request, issues.UserPrincipal{UserID: principal.UserID})
+	})
+}
+
+// emptyResourceValidationAuthority is the production authority when no
+// explicit endpoint validator feed is configured. Discovery and routing
+// remain live authorities; this closed provider contributes no synthetic
+// credential/configuration evidence.
+type emptyResourceValidationAuthority struct{}
+
+var _ issues.ResourceValidationAuthority = emptyResourceValidationAuthority{}
+
+func (emptyResourceValidationAuthority) Current(
+	ctx context.Context,
+	tx *sql.Tx,
+	userID int64,
+	kind issues.ResourceKind,
+	resourceID int64,
+	root issues.RootCause,
+) (issues.ResourceValidationState, error) {
+	if ctx == nil || tx == nil || userID <= 0 || resourceID <= 0 || kind == "" || root == "" {
+		return issues.ResourceValidationState{}, errors.New("resource validation authority received an invalid target")
+	}
+	return issues.ResourceValidationState{ObservedAt: 0}, nil
+}
+
+func (emptyResourceValidationAuthority) Scan(
+	ctx context.Context,
+	tx *sql.Tx,
+	userID int64,
+	cursor string,
+	limit int,
+) (issues.ResourceValidationBatch, error) {
+	if ctx == nil || tx == nil || userID <= 0 || cursor != "" || limit < 1 || limit > 100 {
+		return issues.ResourceValidationBatch{}, errors.New("resource validation authority received an invalid scan")
+	}
+	return issues.ResourceValidationBatch{Items: []issues.ResourceValidationTarget{}, Done: true}, nil
+}
+
+type activityMutationGate struct{}
+
+var _ activities.UserMutationGate = activityMutationGate{}
+
+func (activityMutationGate) AuthorizeUserActivity(ctx context.Context, tx *sql.Tx, userID int64) error {
+	if ctx == nil || tx == nil || userID <= 0 {
+		return activities.ErrUnauthorized
+	}
+	var enabled int
+	if err := tx.QueryRowContext(ctx, `SELECT enabled FROM maintenance_state WHERE id=1`).Scan(&enabled); err != nil {
+		return fmt.Errorf("read maintenance state: %w", err)
+	}
+	switch enabled {
+	case 0:
+		return nil
+	case 1:
+		return activities.ErrMaintenance
+	default:
+		return activities.ErrInvariant
+	}
+}
+
+type activityPublishReporter struct{}
+
+func (activityPublishReporter) ReportActivitiesPublishError(err error) {
+	if err != nil {
+		slog.Error("activity account event publication failed", "err", err)
+	}
 }
 
 func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) (*application, error) {
@@ -369,8 +550,21 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	}
 	var bridgeRuntime *resourcebridge.Runtime
 	var discoveryWorker *resources.DiscoveryWorkerPool
+	var resourceRepository *resources.Repository
+	var reportRepository *reports.Repository
 	var authRuntime *auth.Runtime
+	var activityEvents *accountstream.Hub
+	var activityWorker *activities.SettlementWorker
 	cleanup := func() {
+		if reportRepository != nil {
+			_ = reportRepository.Close()
+		}
+		if activityWorker != nil {
+			activityWorker.Close()
+		}
+		if activityEvents != nil {
+			_ = activityEvents.Close()
+		}
 		if authRuntime != nil {
 			_ = authRuntime.Close()
 		} else {
@@ -472,12 +666,53 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("create discovery worker: %w", err)
 	}
-	resourceRepository, err := resources.New(resources.Config{
+	connectorRegistry := connector.NewDefaultRegistry()
+	announcementRepository, err := announcements.NewRepository(announcements.Config{
+		Store: store, CursorKeys: vault, FinalAuth: roleAuthorizer,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create announcement repository: %w", err)
+	}
+	announcementService, err := announcements.NewService(announcementRepository)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create announcement service: %w", err)
+	}
+	issueRepository, err := issues.NewRepository(issues.Config{
+		Store: store, CursorKeys: vault, ResourceValidation: emptyResourceValidationAuthority{},
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create issue repository: %w", err)
+	}
+	issueService, err := issues.NewService(issueRepository)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create issue service: %w", err)
+	}
+	reportRepository, err = reports.New(reports.Config{
+		Store: store, Connectors: connectorRegistry, BaseURLs: outbound,
+		KeyDeriver: vault, Authorizer: authorizer, IssueProjection: issueService.Sources(),
+		DeleteKey: func(ctx context.Context, tx *sql.Tx, ownerUserID, endpointKeyID, decisionNow int64) error {
+			if resourceRepository == nil {
+				return errors.New("resource deletion capability unavailable")
+			}
+			return resourceRepository.DeleteEndpointKeyForReport(ctx, tx, ownerUserID, endpointKeyID, decisionNow)
+		},
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create report repository: %w", err)
+	}
+	resourceRepository, err = resources.New(resources.Config{
 		Store:           store,
-		Connectors:      connector.NewDefaultRegistry(),
+		Connectors:      connectorRegistry,
 		BaseURLs:        outbound,
 		Secrets:         bridgeRuntime,
 		KeyDeletion:     charityService,
+		KeyCreation:     reportRepository,
+		Projection:      issueService.Sources(),
 		DiscoveryRail:   bridgeRuntime,
 		DiscoveryWorker: discoveryWorker,
 		CursorKeys:      vault,
@@ -486,6 +721,10 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err != nil {
 		cleanup()
 		return nil, fmt.Errorf("create resource repository: %w", err)
+	}
+	if err := recoverReportsBeforeListener(startupContext, reportRepository); err != nil {
+		cleanup()
+		return nil, err
 	}
 	if _, err := resourceRepository.RecoverStaleDiscoveries(startupContext); err != nil {
 		cleanup()
@@ -500,6 +739,53 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err != nil {
 		cleanup()
 		return nil, fmt.Errorf("create charity routing service: %w", err)
+	}
+	activityRepository, err := activities.NewRepository(activities.RepositoryConfig{
+		Store:          store,
+		UserFinalAuth:  authRuntime,
+		AdminFinalAuth: roleAuthorizer,
+		UserGate:       activityMutationGate{},
+		CursorKeys:     vault,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create activities repository: %w", err)
+	}
+	activityEvents, err = accountstream.New(activityRepository, nil)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create account event hub: %w", err)
+	}
+	activityPublisher, err := activities.NewAccountstreamPublisher(activityRepository, activityEvents)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create activities publisher: %w", err)
+	}
+	activityService, err := activities.NewService(activities.ServiceConfig{
+		Repository: activityRepository,
+		Publisher:  activityPublisher,
+		Reporter:   activityPublishReporter{},
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create activities service: %w", err)
+	}
+	activityWorker, err = activities.NewSettlementWorker(activityService, 0)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create activities settlement worker: %w", err)
+	}
+	if err := activityWorker.RecoverBeforeListener(startupContext); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("recover activities before listener: %w", err)
+	}
+	if err := recoverAnnouncementsBeforeListener(startupContext, announcementService); err != nil {
+		cleanup()
+		return nil, err
+	}
+	if err := recoverIssuesBeforeListener(startupContext, issueService); err != nil {
+		cleanup()
+		return nil, err
 	}
 	if err := resources.RegisterRoutes(authRuntime, resourceRepository); err != nil {
 		cleanup()
@@ -529,6 +815,24 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("register charity steward routes: %w", err)
 	}
+	activityRoutes := activityRouteRegistrar{runtime: authRuntime}
+	if err := activities.RegisterRoutes(activityRoutes, activityRoutes, activityService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register activities routes: %w", err)
+	}
+	announcementRoutes := announcementRouteRegistrar{runtime: authRuntime}
+	if err := announcements.RegisterRoutes(announcementRoutes, announcementRoutes, announcementService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register announcement routes: %w", err)
+	}
+	if err := issues.RegisterRoutes(issueRouteRegistrar{runtime: authRuntime}, issueService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register issue routes: %w", err)
+	}
+	if err := reportRepository.RegisterRoutes(authRuntime); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register report routes: %w", err)
+	}
 	if _, err := maintenanceService.PrepareListener(startupContext, store.DB()); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("prepare maintenance state: %w", err)
@@ -544,6 +848,21 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, err
 	}
+	if err := reportRepository.StartWorker(context.Background()); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("start report worker: %w", err)
+	}
+	activityContext, activityCancel := context.WithCancel(context.Background())
+	activityDone := make(chan struct{})
+	failures := make(chan error, 1)
+	go func() {
+		defer close(activityDone)
+		err := activityWorker.Run(activityContext)
+		if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, activities.ErrClosed) {
+			return
+		}
+		failures <- fmt.Errorf("activities settlement worker: %w", err)
+	}()
 	return &application{
 		handler:         handler,
 		authRuntime:     authRuntime,
@@ -554,6 +873,16 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		donations:       donationService,
 		charity:         charityService,
 		charityRouting:  charityRoutingService,
+		announcements:   announcementService,
+		issues:          issueService,
+		reports:         reportRepository,
+		activities:      activityService,
+		activityRepo:    activityRepository,
+		activityEvents:  activityEvents,
+		activityWorker:  activityWorker,
+		activityCancel:  activityCancel,
+		activityDone:    activityDone,
+		failures:        failures,
 		authorizer:      authorizer,
 		elevation:       elevationManager,
 		gate:            gate,
@@ -576,4 +905,49 @@ func recoverClaimsBeforeListener(ctx context.Context, service *claim.Service) er
 			return nil
 		}
 	}
+}
+
+const lifecycleRecoveryBatch = 100
+
+func recoverReportsBeforeListener(ctx context.Context, repository *reports.Repository) error {
+	if ctx == nil || repository == nil {
+		return errors.New("report recovery dependencies are required")
+	}
+	result, err := repository.RecoverBeforeListener(ctx)
+	if err != nil {
+		return fmt.Errorf("recover reports before listener: %w", err)
+	}
+	for result.More {
+		result, err = repository.RunWorkerOnce(ctx)
+		if err != nil {
+			return fmt.Errorf("continue report recovery before listener: %w", err)
+		}
+	}
+	return nil
+}
+
+func recoverAnnouncementsBeforeListener(ctx context.Context, service *announcements.Service) error {
+	if ctx == nil || service == nil {
+		return errors.New("announcement recovery dependencies are required")
+	}
+	for {
+		result, err := service.RecoverBeforeListener(ctx, lifecycleRecoveryBatch)
+		if err != nil {
+			return fmt.Errorf("recover announcements before listener: %w", err)
+		}
+		if result.Expired < lifecycleRecoveryBatch && result.ActorsDeidentified < lifecycleRecoveryBatch &&
+			result.AuditsDeleted < lifecycleRecoveryBatch {
+			return nil
+		}
+	}
+}
+
+func recoverIssuesBeforeListener(ctx context.Context, service *issues.Service) error {
+	if ctx == nil || service == nil {
+		return errors.New("issue recovery dependencies are required")
+	}
+	if _, _, err := service.RecoverBeforeListener(ctx, lifecycleRecoveryBatch); err != nil {
+		return fmt.Errorf("recover issues before listener: %w", err)
+	}
+	return nil
 }

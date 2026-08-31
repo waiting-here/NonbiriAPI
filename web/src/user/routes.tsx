@@ -16,6 +16,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, lazy: async () => ({ Component: (await import('./pages/HomePage')).HomePage }) },
       { path: pathFor('endpoints'), lazy: async () => ({ Component: (await import('./pages/EndpointsPage')).EndpointsPage }) },
+      { path: pathFor('endpoint-detail'), lazy: async () => ({ Component: (await import('./pages/EndpointsPage')).EndpointsPage }) },
       { path: pathFor('models'), lazy: async () => ({ Component: (await import('./pages/ModelsPage')).ModelsPage }) },
       { path: pathFor('games'), lazy: async () => ({ Component: (await import('./pages/GamesPage')).GamesPage }) },
       { path: pathFor('charity'), lazy: async () => ({ Component: (await import('./pages/CharityPage')).CharityPage }) },
