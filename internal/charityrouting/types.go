@@ -50,8 +50,9 @@ type CapabilityModel struct {
 }
 
 type Capability struct {
-	State  string            `json:"state"`
-	Models []CapabilityModel `json:"models"`
+	State          string            `json:"state"`
+	Models         []CapabilityModel `json:"models"`
+	DonationIntake string            `json:"donation_intake"`
 }
 
 type AdminTokenPrices struct {
