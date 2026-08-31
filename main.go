@@ -17,6 +17,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
+	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/adminapi"
 	"github.com/waiting-here/NonbiriAPI/internal/applog"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
@@ -117,6 +119,9 @@ func run() int {
 		} else {
 			slog.Error("http server stopped before shutdown completed")
 		}
+		return 1
+	case err := <-app.failures:
+		slog.Error("application background worker failed", "err", err)
 		return 1
 	}
 	slog.Info("shutdown initiated")
@@ -260,6 +265,13 @@ type application struct {
 	donations       *donation.Service
 	charity         *charity.Service
 	charityRouting  *charityrouting.Service
+	activities      *activities.Service
+	activityRepo    *activities.Repository
+	activityEvents  *accountstream.Hub
+	activityWorker  *activities.SettlementWorker
+	activityCancel  context.CancelFunc
+	activityDone    <-chan struct{}
+	failures        <-chan error
 	authorizer      *authz.Authorizer
 	elevation       *elevation.Manager
 	gate            *maintenance.Gate
@@ -277,6 +289,20 @@ func (a *application) Close() error {
 	}
 	a.closeOnce.Do(func() {
 		var closeErrors []error
+		if a.activityCancel != nil {
+			a.activityCancel()
+		}
+		if a.activityWorker != nil {
+			a.activityWorker.Close()
+		}
+		if a.activityDone != nil {
+			<-a.activityDone
+		}
+		if a.activityEvents != nil {
+			if err := a.activityEvents.Close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
+		}
 		if a.authRuntime != nil {
 			if err := a.authRuntime.Close(); err != nil {
 				closeErrors = append(closeErrors, err)
@@ -313,8 +339,13 @@ type roleFinalTxAuthorizer struct {
 }
 
 var _ donation.RoleFinalTxAuthorizer = (*roleFinalTxAuthorizer)(nil)
+var _ activities.AdminFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
 
 func (authorizer *roleFinalTxAuthorizer) AuthorizeAdminMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
+	return authorizer.authorize(ctx, tx, userID, authz.ActorAdminSession, authz.RoleAdministrator)
+}
+
+func (authorizer *roleFinalTxAuthorizer) AuthorizeAdmin(ctx context.Context, tx *sql.Tx, userID int64) error {
 	return authorizer.authorize(ctx, tx, userID, authz.ActorAdminSession, authz.RoleAdministrator)
 }
 
@@ -338,6 +369,64 @@ func (authorizer *roleFinalTxAuthorizer) authorize(
 	}
 	_, err := authorizer.authorizer.Authorize(ctx, tx, actor, authz.Requirement{Role: role})
 	return err
+}
+
+type activityRouteRegistrar struct{ runtime *auth.Runtime }
+
+var _ activities.UserRouteRegistrar = activityRouteRegistrar{}
+var _ activities.AdminRouteRegistrar = activityRouteRegistrar{}
+
+func (registrar activityRouteRegistrar) RegisterUserRoute(method, pattern string, handler activities.AuthorizedUserHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterUserRoute(method, pattern, func(writer http.ResponseWriter, request *http.Request, principal resources.UserPrincipal) {
+		handler(writer, request, activities.UserPrincipal{UserID: principal.UserID})
+	})
+}
+
+func (registrar activityRouteRegistrar) RegisterAdminRoute(method, pattern string, handler activities.AuthorizedAdminHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterAdminRoute(method, pattern, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		actor, ok := auth.ActorFromContext(request.Context())
+		if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
+			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+			return
+		}
+		handler(writer, request, activities.AdminPrincipal{UserID: actor.UserID})
+	}))
+}
+
+type activityMutationGate struct{}
+
+var _ activities.UserMutationGate = activityMutationGate{}
+
+func (activityMutationGate) AuthorizeUserActivity(ctx context.Context, tx *sql.Tx, userID int64) error {
+	if ctx == nil || tx == nil || userID <= 0 {
+		return activities.ErrUnauthorized
+	}
+	var enabled int
+	if err := tx.QueryRowContext(ctx, `SELECT enabled FROM maintenance_state WHERE id=1`).Scan(&enabled); err != nil {
+		return fmt.Errorf("read maintenance state: %w", err)
+	}
+	switch enabled {
+	case 0:
+		return nil
+	case 1:
+		return activities.ErrMaintenance
+	default:
+		return activities.ErrInvariant
+	}
+}
+
+type activityPublishReporter struct{}
+
+func (activityPublishReporter) ReportActivitiesPublishError(err error) {
+	if err != nil {
+		slog.Error("activity account event publication failed", "err", err)
+	}
 }
 
 func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) (*application, error) {
@@ -370,7 +459,15 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	var bridgeRuntime *resourcebridge.Runtime
 	var discoveryWorker *resources.DiscoveryWorkerPool
 	var authRuntime *auth.Runtime
+	var activityEvents *accountstream.Hub
+	var activityWorker *activities.SettlementWorker
 	cleanup := func() {
+		if activityWorker != nil {
+			activityWorker.Close()
+		}
+		if activityEvents != nil {
+			_ = activityEvents.Close()
+		}
 		if authRuntime != nil {
 			_ = authRuntime.Close()
 		} else {
@@ -501,6 +598,45 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("create charity routing service: %w", err)
 	}
+	activityRepository, err := activities.NewRepository(activities.RepositoryConfig{
+		Store:          store,
+		UserFinalAuth:  authRuntime,
+		AdminFinalAuth: roleAuthorizer,
+		UserGate:       activityMutationGate{},
+		CursorKeys:     vault,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create activities repository: %w", err)
+	}
+	activityEvents, err = accountstream.New(activityRepository, nil)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create account event hub: %w", err)
+	}
+	activityPublisher, err := activities.NewAccountstreamPublisher(activityRepository, activityEvents)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create activities publisher: %w", err)
+	}
+	activityService, err := activities.NewService(activities.ServiceConfig{
+		Repository: activityRepository,
+		Publisher:  activityPublisher,
+		Reporter:   activityPublishReporter{},
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create activities service: %w", err)
+	}
+	activityWorker, err = activities.NewSettlementWorker(activityService, 0)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create activities settlement worker: %w", err)
+	}
+	if err := activityWorker.RecoverBeforeListener(startupContext); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("recover activities before listener: %w", err)
+	}
 	if err := resources.RegisterRoutes(authRuntime, resourceRepository); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("register resource routes: %w", err)
@@ -529,6 +665,11 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("register charity steward routes: %w", err)
 	}
+	activityRoutes := activityRouteRegistrar{runtime: authRuntime}
+	if err := activities.RegisterRoutes(activityRoutes, activityRoutes, activityService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register activities routes: %w", err)
+	}
 	if _, err := maintenanceService.PrepareListener(startupContext, store.DB()); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("prepare maintenance state: %w", err)
@@ -544,6 +685,17 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, err
 	}
+	activityContext, activityCancel := context.WithCancel(context.Background())
+	activityDone := make(chan struct{})
+	failures := make(chan error, 1)
+	go func() {
+		defer close(activityDone)
+		err := activityWorker.Run(activityContext)
+		if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, activities.ErrClosed) {
+			return
+		}
+		failures <- fmt.Errorf("activities settlement worker: %w", err)
+	}()
 	return &application{
 		handler:         handler,
 		authRuntime:     authRuntime,
@@ -554,6 +706,13 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		donations:       donationService,
 		charity:         charityService,
 		charityRouting:  charityRoutingService,
+		activities:      activityService,
+		activityRepo:    activityRepository,
+		activityEvents:  activityEvents,
+		activityWorker:  activityWorker,
+		activityCancel:  activityCancel,
+		activityDone:    activityDone,
+		failures:        failures,
 		authorizer:      authorizer,
 		elevation:       elevationManager,
 		gate:            gate,
