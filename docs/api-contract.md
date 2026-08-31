@@ -165,7 +165,7 @@ Request body uses the OpenAI Chat Completions shape. Ordinary call parameters ar
 
 | Field | Required | Notes |
 |---|---|---|
-| `model` | yes | a platform model full name `provider/model`; resolved against the caller's models only |
+| `model` | yes | a non-empty opaque platform model full name: personal `provider/model` names are at most 129 Unicode runes, charity `[公益]provider/model` names are at most 133, and caller input is capped at 133; valid UTF-8, no control characters/DEL, and no leading/trailing Unicode whitespace; resolved against the caller's models only |
 | `stream` | no | `true` selects SSE; omitted/`false` selects the single JSON response |
 | `max_tokens`, `max_completion_tokens` | no | absent or JSON `null` means unspecified; either one valid integer in `[1,2147483647]` is accepted; if both are valid they must be equal. OpenAI attempts keep an unspecified limit absent; Anthropic attempts use the raw administrator default, or 65536 when that raw value is null. The fallback is not a cap |
 | other fields | no | preserved, except caller `safety_identifier` is overwritten and streaming requests authoritatively merge `stream_options.include_usage=true` while retaining other `stream_options` members |
