@@ -19,9 +19,10 @@ import (
 const (
 	// MaxRequestBodyBytes is the caller request ceiling for chat completions.
 	MaxRequestBodyBytes int64 = 1 << 20
-	// MaxPlatformModelRunes follows the persisted provider/model bounds:
-	// 64 runes + one separator + 64 runes. The value remains opaque here.
-	MaxPlatformModelRunes = 129
+	// MaxPlatformModelRunes covers personal names (64 provider runes + "/" +
+	// 64 model runes = 129) and charity names ("[公益]" + personal = 133).
+	// The value remains opaque here.
+	MaxPlatformModelRunes = 133
 	maxTopLevelFields     = 1024
 	maxFieldNameRunes     = 256
 	maxForwardBodyBytes   = MaxRequestBodyBytes + (16 << 10)
