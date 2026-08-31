@@ -181,17 +181,23 @@ func (s *Service) Capability(ctx context.Context, decisionNow int64) (Capability
 	if s == nil || s.db == nil || ctx == nil || decisionNow < 0 || decisionNow > maxUnixSecond {
 		return Capability{}, ErrInvalidRequest
 	}
-	var gate string
-	if err := s.db.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key='charity_enabled'`).Scan(&gate); err != nil {
-		return Capability{}, fmt.Errorf("charity routing: read capability gate: %w", err)
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return Capability{}, fmt.Errorf("charity routing: begin capability snapshot: %w", err)
 	}
-	if gate != "0" && gate != "1" {
+	defer tx.Rollback()
+	charityGate, err := capabilityGateTx(ctx, tx, "charity_enabled")
+	if err != nil {
+		return Capability{}, err
+	}
+	donationGate, err := capabilityGateTx(ctx, tx, "donation_accept_enabled")
+	if err != nil {
+		return Capability{}, err
+	}
+	if charityGate == "0" && donationGate == "1" {
 		return Capability{}, ErrInvariant
 	}
-	if gate == "0" {
-		return Capability{State: "feature_disabled", Models: []CapabilityModel{}}, nil
-	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id,provider,model,full_name FROM charity_models
+	rows, err := tx.QueryContext(ctx, `SELECT id,provider,model,full_name FROM charity_models
 WHERE enabled=1 ORDER BY id`)
 	if err != nil {
 		return Capability{}, fmt.Errorf("charity routing: read capability models: %w", err)
@@ -213,13 +219,25 @@ WHERE enabled=1 ORDER BY id`)
 		_ = rows.Close()
 		return Capability{}, fmt.Errorf("charity routing: iterate capability models: %w", err)
 	}
-	// Snapshot opens its own transaction. Release the model-list connection
-	// first so the production single-connection pool cannot self-deadlock.
 	if err := rows.Close(); err != nil {
 		return Capability{}, fmt.Errorf("charity routing: close capability models: %w", err)
 	}
+	// Snapshot opens its own transaction and can materialize donation expiry.
+	// Commit the complete gate/model fact snapshot first so a one-connection
+	// production pool cannot self-deadlock and later candidate changes cannot
+	// rewrite the intake fact observed above.
+	if err := tx.Commit(); err != nil {
+		return Capability{}, fmt.Errorf("charity routing: commit capability snapshot: %w", err)
+	}
+	donationIntake := "closed"
+	if charityGate == "1" && donationGate == "1" {
+		donationIntake = "open"
+	}
+	if charityGate == "0" {
+		return Capability{State: "feature_disabled", Models: []CapabilityModel{}, DonationIntake: donationIntake}, nil
+	}
 	if len(models) == 0 {
-		return Capability{State: "no_models", Models: []CapabilityModel{}}, nil
+		return Capability{State: "no_models", Models: []CapabilityModel{}, DonationIntake: donationIntake}, nil
 	}
 	available := make([]CapabilityModel, 0, len(models))
 	for index, id := range modelIDs {
@@ -230,7 +248,21 @@ WHERE enabled=1 ORDER BY id`)
 		}
 	}
 	if len(available) == 0 {
-		return Capability{State: "no_candidates", Models: []CapabilityModel{}}, nil
+		return Capability{State: "no_candidates", Models: []CapabilityModel{}, DonationIntake: donationIntake}, nil
 	}
-	return Capability{State: "available", Models: available}, nil
+	return Capability{State: "available", Models: available, DonationIntake: donationIntake}, nil
+}
+
+func capabilityGateTx(ctx context.Context, tx *sql.Tx, key string) (string, error) {
+	var value string
+	if err := tx.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key=?`, key).Scan(&value); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrInvariant
+		}
+		return "", fmt.Errorf("charity routing: read capability gate: %w", err)
+	}
+	if value != "0" && value != "1" {
+		return "", ErrInvariant
+	}
+	return value, nil
 }
