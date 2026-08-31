@@ -429,9 +429,15 @@ func (r *Runtime) userLogout(w http.ResponseWriter, req *http.Request) {
 	}
 	clearElevatedCookie(w, secureCookieForRequest(req, r.siteOrigin))
 	if raw, ok := cookieValue(req, UserSessionCookieName); ok {
-		if err := r.deleteSession(req.Context(), raw); err != nil {
+		deleted, err := r.deleteSession(req.Context(), raw)
+		if err != nil {
 			writeStableError(w, httperr.CodeInternal, "logout failed")
 			return
+		}
+		if deleted {
+			if actor, present := ActorFromContext(req.Context()); present && actor.Kind == authz.ActorUserSession {
+				r.notifyUserSessionInvalidated(actor.UserID)
+			}
 		}
 	}
 	clearUserSessionCookie(w, secureCookieForRequest(req, r.siteOrigin))
@@ -508,7 +514,7 @@ func (r *Runtime) adminLogout(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if raw, ok := cookieValue(req, AdminSessionCookieName); ok {
-		if err := r.deleteSession(req.Context(), raw); err != nil {
+		if _, err := r.deleteSession(req.Context(), raw); err != nil {
 			writeStableError(w, httperr.CodeInternal, "logout failed")
 			return
 		}

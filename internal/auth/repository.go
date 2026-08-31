@@ -25,6 +25,7 @@ var (
 )
 
 const maxUnixSecond = int64(253402300799)
+const sha256HexBytes = sha256.Size * 2
 
 type sessionPrincipal struct {
 	actor     authz.Actor
@@ -48,30 +49,35 @@ func sessionLookupHash(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (r *Runtime) createSessionTx(ctx context.Context, tx *sql.Tx, userID int64, credGen string, now int64) (string, int64, error) {
+func (r *Runtime) createSessionTx(ctx context.Context, tx *sql.Tx, userID int64, credGen string, now int64) (string, int64, bool, error) {
 	if userID <= 0 || credGen == "" || now < 0 {
-		return "", 0, errSessionUnauthorized
+		return "", 0, false, errSessionUnauthorized
 	}
 	token, err := randomOpaque(32)
 	if err != nil {
-		return "", 0, fmt.Errorf("create session material: %w", err)
+		return "", 0, false, fmt.Errorf("create session material: %w", err)
 	}
 	hash := sessionLookupHash(token)
 	absolute := now + int64(r.absoluteTTL/time.Second)
 	if absolute > maxUnixSecond {
-		return "", 0, fmt.Errorf("create session: invalid expiry")
+		return "", 0, false, fmt.Errorf("create session: invalid expiry")
 	}
 	expires := now + int64(r.idleTTL/time.Second)
 	if expires > absolute {
 		expires = absolute
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=?`, userID); err != nil {
-		return "", 0, fmt.Errorf("replace session: %w", err)
+	result, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id=?`, userID)
+	if err != nil {
+		return "", 0, false, fmt.Errorf("replace session: %w", err)
+	}
+	replaced, err := result.RowsAffected()
+	if err != nil {
+		return "", 0, false, fmt.Errorf("replace session: rows affected: %w", err)
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO sessions(token_hash,user_id,oauth_state,last_seen_at,expires_at,absolute_expires_at,created_at,cred_gen) VALUES(?,?,'',?,?,?,?,?)`, hash, userID, now, expires, absolute, now, credGen); err != nil {
-		return "", 0, fmt.Errorf("create session: %w", err)
+		return "", 0, false, fmt.Errorf("create session: %w", err)
 	}
-	return token, expires, nil
+	return token, expires, replaced > 0, nil
 }
 
 func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.ActorKind, elevationToken string) (sessionPrincipal, error) {
@@ -111,9 +117,17 @@ func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.
 		return sessionPrincipal{}, errSessionForbidden
 	}
 	if expires <= now || absolute <= now {
-		_, _ = tx.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash=?`, hash)
-		if err := tx.Commit(); err == nil {
-			done = true
+		result, deleteErr := tx.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash=? AND user_id=?`, hash, p.actor.UserID)
+		if deleteErr == nil {
+			deleted, rowsErr := result.RowsAffected()
+			if rowsErr == nil && deleted == 1 {
+				if commitErr := tx.Commit(); commitErr == nil {
+					done = true
+					if !expectedAdmin {
+						r.notifyUserSessionInvalidated(p.actor.UserID)
+					}
+				}
+			}
 		}
 		return sessionPrincipal{}, errSessionUnauthorized
 	}
@@ -157,15 +171,19 @@ func (r *Runtime) authenticate(ctx context.Context, rawToken string, kind authz.
 	return p, nil
 }
 
-func (r *Runtime) deleteSession(ctx context.Context, rawToken string) error {
+func (r *Runtime) deleteSession(ctx context.Context, rawToken string) (bool, error) {
 	if rawToken == "" {
-		return nil
+		return false, nil
 	}
-	_, err := r.db.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash=?`, sessionLookupHash(rawToken))
+	result, err := r.db.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash=?`, sessionLookupHash(rawToken))
 	if err != nil {
-		return fmt.Errorf("delete session: %w", err)
+		return false, fmt.Errorf("delete session: %w", err)
 	}
-	return nil
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("delete session: rows affected: %w", err)
+	}
+	return deleted == 1, nil
 }
 
 type userRow struct {
@@ -482,7 +500,7 @@ func (r *Runtime) refreshExistingUser(ctx context.Context, userID int64, identit
 	if err != nil {
 		return "", 0, err
 	}
-	token, expiry, err := r.createSessionTx(ctx, tx, userID, generation, now)
+	token, expiry, replaced, err := r.createSessionTx(ctx, tx, userID, generation, now)
 	if err != nil {
 		return "", 0, err
 	}
@@ -490,6 +508,9 @@ func (r *Runtime) refreshExistingUser(ctx context.Context, userID int64, identit
 		return "", 0, err
 	}
 	done = true
+	if replaced {
+		r.notifyUserSessionInvalidated(userID)
+	}
 	return token, expiry, nil
 }
 
@@ -545,7 +566,7 @@ func (r *Runtime) registerUser(ctx context.Context, identity DiscordIdentity, me
 	if err != nil {
 		return 0, "", 0, err
 	}
-	token, expiry, err := r.createSessionTx(ctx, tx, userID, generation, now)
+	token, expiry, _, err := r.createSessionTx(ctx, tx, userID, generation, now)
 	if err != nil {
 		return 0, "", 0, err
 	}
@@ -588,7 +609,7 @@ func (r *Runtime) ensureAdminAndSession(ctx context.Context) (string, int64, err
 			return "", 0, errIdentityConflict
 		}
 	}
-	token, expiry, err := r.createSessionTx(ctx, tx, id, r.adminCredentialGeneration, now)
+	token, expiry, _, err := r.createSessionTx(ctx, tx, id, r.adminCredentialGeneration, now)
 	if err != nil {
 		return "", 0, err
 	}
