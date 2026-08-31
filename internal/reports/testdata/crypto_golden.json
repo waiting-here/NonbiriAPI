@@ -1,0 +1,31 @@
+{
+  "master": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "connector": "openai-compatible",
+  "base_url": "https://example.com/v1",
+  "secret": "sëcret🔑",
+  "note": "报告 é",
+  "case_id": "rpc_AAAAAAAAAAAAAAAAAAAAAA",
+  "endpoint_key_id": 42,
+  "keys": {
+    "fingerprint": "7cf516915a495aacc930e51715cb14046e73ec98442726e99d69504d03e099aa",
+    "idempotency": "2e7dddf74e57be067837d04c05e1d6733a0ae96ddc74e9f4492922f08d1de7d6",
+    "target": "d5c024f8883fb16244f21cf10668911f19acdef20dfd73e3fd790683be0704d3",
+    "source_ip": "c735af23921139d038e7f7524868f07e0b80c11df89507239bdb1ae7d6578dc2",
+    "rate": "3b3d40ec1c7f59c900963932c34d590573f6cac63410aac8c83e0eb7267db272"
+  },
+  "fingerprint": "95969538de4e68fc5c1f92b4bd1d8d627aab443d14174941c285789ecfaa1bb3",
+  "request_hash": "dbc90ca20afd5b119980c88a990ae684505722ddd615e524413aa2f3deca50e6",
+  "empty_note_request_hash": "f6638435c88fec476dc9f71b6f6e0bc84708f857293bbd46381067c5278902a5",
+  "material_hash": "f8193ee62b89d229f19ab9c61163f12c3b9e88c667c85fa322073e9da4f9874b",
+  "key_ref": "cee9d4753e1a4b20a034ffcc7fec7fe7d1c84bee3a9da6ba40edf2ba73ed03f7",
+  "rates": {
+    "ip": "0b013a1233c7b13c11ea33176a83055a47a428398153cc8bc8dfa21b32d49e26",
+    "account": "0121fc8c781043a2490e1f6c81c8be7bd94b7312179d319684826f8fc8f1198b",
+    "fingerprint": "736feccfc0773af63816e0420bc6f112a8bd8646cc4856c8a0ed3af0e9124608",
+    "global": "af220deb6a278dd6d40269ce01b53f394e651a193e2b5e82b16130692d4eeeaa"
+  },
+  "ipv4_mapped": "00000000000000000000ffffc0000201",
+  "ipv6": "20010db8000000000000000000000001",
+  "ipv4_envelope": "01000102030405060708090a0b70ccc2d3518b962428377bb9934c776ee04b50cd5a77ce01e33e5f1e3cec264a",
+  "ipv6_envelope": "010c0d0e0f1011121314151617e56dc3a0a70b8782c708c2bf7c86dabe79c2543e0589790034723e3d975dafe7"
+}
