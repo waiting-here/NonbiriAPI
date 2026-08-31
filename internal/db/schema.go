@@ -774,7 +774,7 @@ CREATE INDEX idx_rps_queue_user ON game_rps_queue(user_id,id);
 CREATE TABLE game_rps_sessions (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='rps_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), account_id INTEGER NOT NULL UNIQUE REFERENCES credit_accounts(id) ON DELETE RESTRICT, mode TEXT NOT NULL CHECK(mode IN ('quick','standard','deathmatch')), rules_version INTEGER NOT NULL CHECK(rules_version>=1), state TEXT NOT NULL CHECK(state IN ('started','terminal_processing')), phase TEXT NOT NULL CHECK(phase IN ('gesture','dealer_raise','followers','paid_pool_gesture','free_pool_gesture','ultimate_gesture','terminal_processing')), revision BLOB NOT NULL CHECK(typeof(revision)='blob' AND length(revision)=16), phase_seq BLOB NOT NULL CHECK(typeof(phase_seq)='blob' AND length(phase_seq)=16), identity_epoch BLOB NOT NULL CHECK(typeof(identity_epoch)='blob' AND length(identity_epoch)=16), cut_seq BLOB NOT NULL CHECK(typeof(cut_seq)='blob' AND length(cut_seq)=16), ledger_rows_remaining BLOB NOT NULL CHECK(typeof(ledger_rows_remaining)='blob' AND length(ledger_rows_remaining)=16), dealer_seat INTEGER CHECK(dealer_seat BETWEEN 0 AND 2), base_milli INTEGER NOT NULL CHECK(base_milli BETWEEN 0 AND 9000000000000000), platform_bp INTEGER NOT NULL CHECK(platform_bp BETWEEN 0 AND 9999), welfare_bp INTEGER NOT NULL CHECK(welfare_bp BETWEEN 0 AND 9999), thursday_bp INTEGER NOT NULL CHECK(thursday_bp BETWEEN 0 AND 9999), gesture_seconds INTEGER NOT NULL CHECK(gesture_seconds BETWEEN 5 AND 20), dealer_seconds INTEGER NOT NULL CHECK(dealer_seconds BETWEEN 5 AND 15), follower_seconds INTEGER NOT NULL CHECK(follower_seconds BETWEEN 5 AND 15), player_pool BLOB NOT NULL CHECK(typeof(player_pool)='blob' AND length(player_pool)=16), permanent_multiplier BLOB NOT NULL CHECK(typeof(permanent_multiplier)='blob' AND length(permanent_multiplier)=16), pool_base_multiplier BLOB CHECK(pool_base_multiplier IS NULL OR (typeof(pool_base_multiplier)='blob' AND length(pool_base_multiplier)=16 AND hex(pool_base_multiplier)<>'00000000000000000000000000000000')), current_plan_multiplier BLOB CHECK(current_plan_multiplier IS NULL OR (typeof(current_plan_multiplier)='blob' AND length(current_plan_multiplier)=16 AND hex(current_plan_multiplier)<>'00000000000000000000000000000000')), dealer_raise BLOB CHECK(dealer_raise IS NULL OR (typeof(dealer_raise)='blob' AND length(dealer_raise)=16 AND hex(dealer_raise)<>'00000000000000000000000000000000')), base_round_count BLOB NOT NULL CHECK(typeof(base_round_count)='blob' AND length(base_round_count)=16), paid_tie_count BLOB NOT NULL CHECK(typeof(paid_tie_count)='blob' AND length(paid_tie_count)=16), free_tie_count BLOB NOT NULL CHECK(typeof(free_tie_count)='blob' AND length(free_tie_count)=16), paid_pool_streak BLOB NOT NULL CHECK(typeof(paid_pool_streak)='blob' AND length(paid_pool_streak)=16), free_pool_streak BLOB NOT NULL CHECK(typeof(free_pool_streak)='blob' AND length(free_pool_streak)=16), platform_cut_total BLOB NOT NULL CHECK(typeof(platform_cut_total)='blob' AND length(platform_cut_total)=16), welfare_cut_total BLOB NOT NULL CHECK(typeof(welfare_cut_total)='blob' AND length(welfare_cut_total)=16), thursday_cut_total BLOB NOT NULL CHECK(typeof(thursday_cut_total)='blob' AND length(thursday_cut_total)=16), welfare_carry_total BLOB NOT NULL CHECK(typeof(welfare_carry_total)='blob' AND length(welfare_carry_total)=16), reminder_state TEXT NOT NULL DEFAULT 'none' CHECK(reminder_state IN ('none','active')), phase_deadline INTEGER CHECK(phase_deadline IS NULL OR phase_deadline BETWEEN 0 AND 253402300799), health_epoch INTEGER NOT NULL DEFAULT 0 CHECK(health_epoch>=0), recent_events_blob BLOB NOT NULL DEFAULT X'' CHECK(typeof(recent_events_blob)='blob' AND length(recent_events_blob)<=131072), recent_first_seq BLOB NOT NULL CHECK(typeof(recent_first_seq)='blob' AND length(recent_first_seq)=16), recent_last_seq BLOB NOT NULL CHECK(typeof(recent_last_seq)='blob' AND length(recent_last_seq)=16), recent_event_count INTEGER NOT NULL DEFAULT 0 CHECK(recent_event_count BETWEEN 0 AND 64), terminal_operation_id TEXT CHECK(terminal_operation_id IS NULL OR (length(terminal_operation_id)=25 AND substr(terminal_operation_id,1,3)='op_' AND substr(terminal_operation_id,4) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(terminal_operation_id,-1,1) IN ('A','Q','g','w'))), terminal_retry_attempt_count BLOB NOT NULL CHECK(typeof(terminal_retry_attempt_count)='blob' AND length(terminal_retry_attempt_count)=16), terminal_next_retry_at INTEGER, terminal_last_error_class TEXT CHECK(terminal_last_error_class IS NULL OR terminal_last_error_class IN ('db_busy','internal_retryable','invariant_violation')), started_at INTEGER NOT NULL, terminal_reason TEXT CHECK(terminal_reason IS NULL OR terminal_reason IN ('quick_resolved','standard_round_limit','standard_insufficient_balance','deathmatch_balance_exhausted','ultimate_resolved','free_tie_limit')), CHECK((state='started' AND phase IN ('gesture','dealer_raise','followers','paid_pool_gesture','free_pool_gesture','ultimate_gesture') AND phase_deadline IS NOT NULL AND terminal_operation_id IS NULL AND terminal_reason IS NULL AND hex(terminal_retry_attempt_count)='00000000000000000000000000000000' AND terminal_next_retry_at IS NULL AND terminal_last_error_class IS NULL) OR (state='terminal_processing' AND phase='terminal_processing' AND phase_deadline IS NULL AND terminal_operation_id IS NOT NULL AND terminal_reason IS NOT NULL AND (hex(terminal_retry_attempt_count)='00000000000000000000000000000000' AND terminal_next_retry_at IS NULL AND terminal_last_error_class IS NULL OR hex(terminal_retry_attempt_count)<>'00000000000000000000000000000000' AND terminal_next_retry_at IS NOT NULL AND terminal_last_error_class IS NOT NULL))), CHECK((phase IN ('gesture','dealer_raise','followers','ultimate_gesture') AND current_plan_multiplier IS NOT NULL AND pool_base_multiplier IS NULL) OR (phase IN ('paid_pool_gesture','free_pool_gesture') AND current_plan_multiplier IS NULL AND pool_base_multiplier IS NOT NULL) OR (phase='terminal_processing' AND current_plan_multiplier IS NULL AND pool_base_multiplier IS NULL)), CHECK((phase='followers' AND (dealer_raise IS NULL OR hex(dealer_raise)<>'00000000000000000000000000000000')) OR (phase<>'followers' AND dealer_raise IS NULL)), CHECK((reminder_state='none') OR (phase='free_pool_gesture' AND free_pool_streak IN (X'00000000000000000000000000000003',X'00000000000000000000000000000004',X'00000000000000000000000000000005'))));
 CREATE INDEX idx_rps_sessions_state ON game_rps_sessions(state,phase_deadline,id);
 CREATE INDEX idx_rps_sessions_mode ON game_rps_sessions(mode,id);
-CREATE TABLE game_rps_seats (session_id TEXT NOT NULL REFERENCES game_rps_sessions(id) ON DELETE CASCADE CHECK(length(session_id)=26 AND substr(session_id,1,4)='rps_' AND substr(session_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(session_id,-1,1) IN ('A','Q','g','w')), seat_no INTEGER NOT NULL CHECK(seat_no BETWEEN 0 AND 2), user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, deletion_state TEXT NOT NULL CHECK(deletion_state IN ('active','deletion_pending','deidentified')), display_name_snapshot TEXT, avatar_url_snapshot TEXT, starting_balance BLOB NOT NULL CHECK(typeof(starting_balance)='blob' AND length(starting_balance)=16), current_balance BLOB NOT NULL CHECK(typeof(current_balance)='blob' AND length(current_balance)=16), current_round_input BLOB NOT NULL CHECK(typeof(current_round_input)='blob' AND length(current_round_input)=16), current_all_in INTEGER NOT NULL CHECK(current_all_in IN (0,1)), current_gesture_envelope BLOB CHECK(current_gesture_envelope IS NULL OR (typeof(current_gesture_envelope)='blob' AND length(current_gesture_envelope) IN (33,34,37) AND substr(current_gesture_envelope,1,1)=X'01')), follower_action TEXT CHECK(follower_action IS NULL OR follower_action IN ('call','surrender')), last_action_phase_seq BLOB CHECK(last_action_phase_seq IS NULL OR (typeof(last_action_phase_seq)='blob' AND length(last_action_phase_seq)=16)), total_input BLOB NOT NULL CHECK(typeof(total_input)='blob' AND length(total_input)=32), total_returned BLOB NOT NULL CHECK(typeof(total_returned)='blob' AND length(total_returned)=32), terminal_return BLOB CHECK(terminal_return IS NULL OR (typeof(terminal_return)='blob' AND length(terminal_return)=16)), wallet_net_sign INTEGER CHECK(wallet_net_sign IS NULL OR wallet_net_sign IN (-1,0,1)), wallet_net_mag BLOB, rock_count BLOB NOT NULL CHECK(typeof(rock_count)='blob' AND length(rock_count)=16), scissors_count BLOB NOT NULL CHECK(typeof(scissors_count)='blob' AND length(scissors_count)=16), paper_count BLOB NOT NULL CHECK(typeof(paper_count)='blob' AND length(paper_count)=16), timeout_count BLOB NOT NULL CHECK(typeof(timeout_count)='blob' AND length(timeout_count)=16), snapshot_completed_count BLOB CHECK(snapshot_completed_count IS NULL OR (typeof(snapshot_completed_count)='blob' AND length(snapshot_completed_count)=16)), snapshot_profitable_count BLOB CHECK(snapshot_profitable_count IS NULL OR (typeof(snapshot_profitable_count)='blob' AND length(snapshot_profitable_count)=16)), snapshot_rock_count BLOB CHECK(snapshot_rock_count IS NULL OR (typeof(snapshot_rock_count)='blob' AND length(snapshot_rock_count)=16)), snapshot_scissors_count BLOB CHECK(snapshot_scissors_count IS NULL OR (typeof(snapshot_scissors_count)='blob' AND length(snapshot_scissors_count)=16)), snapshot_paper_count BLOB CHECK(snapshot_paper_count IS NULL OR (typeof(snapshot_paper_count)='blob' AND length(snapshot_paper_count)=16)), stats_applied INTEGER NOT NULL DEFAULT 0 CHECK(stats_applied IN (0,1)), PRIMARY KEY(session_id,seat_no), CHECK((terminal_return IS NULL AND wallet_net_sign IS NULL AND wallet_net_mag IS NULL) OR (terminal_return IS NOT NULL AND wallet_net_sign IS NOT NULL AND wallet_net_mag IS NOT NULL)), CHECK((wallet_net_sign IS NULL AND wallet_net_mag IS NULL) OR (wallet_net_sign IS NOT NULL AND typeof(wallet_net_mag)='blob' AND length(wallet_net_mag)=16 AND substr(hex(wallet_net_mag),1,1) IN ('0','1','2','3','4','5','6','7') AND ((wallet_net_sign=0 AND hex(wallet_net_mag)='00000000000000000000000000000000') OR (wallet_net_sign<>0 AND hex(wallet_net_mag)<>'00000000000000000000000000000000')))), CHECK((snapshot_completed_count IS NULL AND snapshot_profitable_count IS NULL AND snapshot_rock_count IS NULL AND snapshot_scissors_count IS NULL AND snapshot_paper_count IS NULL) OR (snapshot_completed_count IS NOT NULL AND snapshot_profitable_count IS NOT NULL AND snapshot_rock_count IS NOT NULL AND snapshot_scissors_count IS NOT NULL AND snapshot_paper_count IS NOT NULL)), CHECK((deletion_state='active') OR (display_name_snapshot IS NULL AND avatar_url_snapshot IS NULL AND snapshot_completed_count IS NULL AND snapshot_profitable_count IS NULL AND snapshot_rock_count IS NULL AND snapshot_scissors_count IS NULL AND snapshot_paper_count IS NULL)));
+CREATE TABLE game_rps_seats (session_id TEXT NOT NULL REFERENCES game_rps_sessions(id) ON DELETE CASCADE CHECK(length(session_id)=26 AND substr(session_id,1,4)='rps_' AND substr(session_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(session_id,-1,1) IN ('A','Q','g','w')), seat_no INTEGER NOT NULL CHECK(seat_no BETWEEN 0 AND 2), user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, deletion_state TEXT NOT NULL CHECK(deletion_state IN ('active','deletion_pending','deidentified')), display_name_snapshot TEXT, avatar_url_snapshot TEXT, starting_balance BLOB NOT NULL CHECK(typeof(starting_balance)='blob' AND length(starting_balance)=16), current_balance BLOB NOT NULL CHECK(typeof(current_balance)='blob' AND length(current_balance)=16), current_round_input BLOB NOT NULL CHECK(typeof(current_round_input)='blob' AND length(current_round_input)=16), current_all_in INTEGER NOT NULL CHECK(current_all_in IN (0,1)), current_gesture_envelope BLOB CHECK(current_gesture_envelope IS NULL OR (typeof(current_gesture_envelope)='blob' AND length(current_gesture_envelope) IN (33,34,37) AND substr(current_gesture_envelope,1,1)=X'01')), current_gesture_phase_seq BLOB CHECK(current_gesture_phase_seq IS NULL OR (typeof(current_gesture_phase_seq)='blob' AND length(current_gesture_phase_seq)=16)), follower_action TEXT CHECK(follower_action IS NULL OR follower_action IN ('call','surrender')), last_action_phase_seq BLOB CHECK(last_action_phase_seq IS NULL OR (typeof(last_action_phase_seq)='blob' AND length(last_action_phase_seq)=16)), total_input BLOB NOT NULL CHECK(typeof(total_input)='blob' AND length(total_input)=32), total_returned BLOB NOT NULL CHECK(typeof(total_returned)='blob' AND length(total_returned)=32), terminal_return BLOB CHECK(terminal_return IS NULL OR (typeof(terminal_return)='blob' AND length(terminal_return)=16)), wallet_net_sign INTEGER CHECK(wallet_net_sign IS NULL OR wallet_net_sign IN (-1,0,1)), wallet_net_mag BLOB, rock_count BLOB NOT NULL CHECK(typeof(rock_count)='blob' AND length(rock_count)=16), scissors_count BLOB NOT NULL CHECK(typeof(scissors_count)='blob' AND length(scissors_count)=16), paper_count BLOB NOT NULL CHECK(typeof(paper_count)='blob' AND length(paper_count)=16), timeout_count BLOB NOT NULL CHECK(typeof(timeout_count)='blob' AND length(timeout_count)=16), snapshot_completed_count BLOB CHECK(snapshot_completed_count IS NULL OR (typeof(snapshot_completed_count)='blob' AND length(snapshot_completed_count)=16)), snapshot_profitable_count BLOB CHECK(snapshot_profitable_count IS NULL OR (typeof(snapshot_profitable_count)='blob' AND length(snapshot_profitable_count)=16)), snapshot_rock_count BLOB CHECK(snapshot_rock_count IS NULL OR (typeof(snapshot_rock_count)='blob' AND length(snapshot_rock_count)=16)), snapshot_scissors_count BLOB CHECK(snapshot_scissors_count IS NULL OR (typeof(snapshot_scissors_count)='blob' AND length(snapshot_scissors_count)=16)), snapshot_paper_count BLOB CHECK(snapshot_paper_count IS NULL OR (typeof(snapshot_paper_count)='blob' AND length(snapshot_paper_count)=16)), stats_applied INTEGER NOT NULL DEFAULT 0 CHECK(stats_applied IN (0,1)), PRIMARY KEY(session_id,seat_no), CHECK((current_gesture_envelope IS NULL AND current_gesture_phase_seq IS NULL) OR (current_gesture_envelope IS NOT NULL AND current_gesture_phase_seq IS NOT NULL)), CHECK((terminal_return IS NULL AND wallet_net_sign IS NULL AND wallet_net_mag IS NULL) OR (terminal_return IS NOT NULL AND wallet_net_sign IS NOT NULL AND wallet_net_mag IS NOT NULL)), CHECK((wallet_net_sign IS NULL AND wallet_net_mag IS NULL) OR (wallet_net_sign IS NOT NULL AND typeof(wallet_net_mag)='blob' AND length(wallet_net_mag)=16 AND substr(hex(wallet_net_mag),1,1) IN ('0','1','2','3','4','5','6','7') AND ((wallet_net_sign=0 AND hex(wallet_net_mag)='00000000000000000000000000000000') OR (wallet_net_sign<>0 AND hex(wallet_net_mag)<>'00000000000000000000000000000000')))), CHECK((snapshot_completed_count IS NULL AND snapshot_profitable_count IS NULL AND snapshot_rock_count IS NULL AND snapshot_scissors_count IS NULL AND snapshot_paper_count IS NULL) OR (snapshot_completed_count IS NOT NULL AND snapshot_profitable_count IS NOT NULL AND snapshot_rock_count IS NOT NULL AND snapshot_scissors_count IS NOT NULL AND snapshot_paper_count IS NOT NULL)), CHECK((deletion_state='active') OR (display_name_snapshot IS NULL AND avatar_url_snapshot IS NULL AND snapshot_completed_count IS NULL AND snapshot_profitable_count IS NULL AND snapshot_rock_count IS NULL AND snapshot_scissors_count IS NULL AND snapshot_paper_count IS NULL)));
 CREATE UNIQUE INDEX idx_rps_seats_active_user ON game_rps_seats(user_id) WHERE user_id IS NOT NULL AND deletion_state='active';
 CREATE INDEX idx_rps_seats_user ON game_rps_seats(user_id,session_id,seat_no);
 CREATE TABLE game_rps_user_slots (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, queue_id TEXT REFERENCES game_rps_queue(id) ON DELETE CASCADE CHECK(queue_id IS NULL OR (length(queue_id)=27 AND substr(queue_id,1,5)='rpsq_' AND substr(queue_id,6) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(queue_id,-1,1) IN ('A','Q','g','w'))), session_id TEXT REFERENCES game_rps_sessions(id) ON DELETE CASCADE CHECK(session_id IS NULL OR (length(session_id)=26 AND substr(session_id,1,4)='rps_' AND substr(session_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(session_id,-1,1) IN ('A','Q','g','w'))), created_at INTEGER NOT NULL, CHECK((queue_id IS NOT NULL AND session_id IS NULL) OR (queue_id IS NULL AND session_id IS NOT NULL)));
@@ -1277,69 +1277,99 @@ WHEN hex(NEW.revision)='00000000000000000000000000000000'
  OR (NEW.phase_deadline IS NOT NULL AND NEW.phase_deadline NOT BETWEEN 0 AND 253402300799)
 BEGIN SELECT RAISE(ABORT,'rps session scalar is invalid'); END;
 CREATE TRIGGER rps_seat_phase_seq_guard BEFORE INSERT ON game_rps_seats
-WHEN NEW.last_action_phase_seq IS NOT NULL AND hex(NEW.last_action_phase_seq)='00000000000000000000000000000000'
+WHEN (NEW.current_gesture_phase_seq IS NOT NULL AND hex(NEW.current_gesture_phase_seq)='00000000000000000000000000000000')
+  OR (NEW.last_action_phase_seq IS NOT NULL AND hex(NEW.last_action_phase_seq)='00000000000000000000000000000000')
 BEGIN SELECT RAISE(ABORT,'rps seat phase sequence is invalid'); END;
-CREATE TRIGGER rps_seat_phase_seq_update_guard BEFORE UPDATE OF last_action_phase_seq ON game_rps_seats
- WHEN (NEW.last_action_phase_seq IS NULL AND OLD.last_action_phase_seq IS NOT NULL AND NEW.current_gesture_envelope IS NOT NULL)
-   OR (NEW.last_action_phase_seq IS NOT NULL AND hex(NEW.last_action_phase_seq)='00000000000000000000000000000000')
-   OR (OLD.follower_action IS NOT NULL AND NEW.last_action_phase_seq IS NOT OLD.last_action_phase_seq AND NEW.follower_action IS OLD.follower_action)
- BEGIN SELECT RAISE(ABORT,'rps seat phase sequence is invalid'); END;
+CREATE TRIGGER rps_seat_phase_seq_update_guard BEFORE UPDATE OF current_gesture_phase_seq,last_action_phase_seq ON game_rps_seats
+WHEN (NEW.current_gesture_phase_seq IS NOT NULL AND hex(NEW.current_gesture_phase_seq)='00000000000000000000000000000000')
+  OR (NEW.last_action_phase_seq IS NOT NULL AND hex(NEW.last_action_phase_seq)='00000000000000000000000000000000')
+BEGIN SELECT RAISE(ABORT,'rps seat phase sequence is invalid'); END;
 CREATE TRIGGER rps_seat_follower_action_guard BEFORE INSERT ON game_rps_seats
 WHEN NEW.follower_action IS NOT NULL AND NOT EXISTS(
  SELECT 1 FROM game_rps_sessions s
- WHERE s.id=NEW.session_id AND s.phase='followers' AND s.dealer_seat IS NOT NEW.seat_no)
+ WHERE s.id=NEW.session_id AND s.phase='followers' AND s.dealer_seat IS NOT NEW.seat_no
+   AND NEW.current_gesture_envelope IS NOT NULL AND NEW.current_gesture_phase_seq<s.phase_seq
+   AND NEW.last_action_phase_seq IS s.phase_seq)
 BEGIN SELECT RAISE(ABORT,'rps follower action is invalid for this seat'); END;
-CREATE TRIGGER rps_seat_follower_action_update_guard BEFORE UPDATE OF follower_action,last_action_phase_seq,session_id,seat_no ON game_rps_seats
-WHEN (NEW.follower_action IS NOT NULL AND NOT EXISTS(
- SELECT 1 FROM game_rps_sessions s
- WHERE s.id=NEW.session_id AND s.phase='followers' AND s.dealer_seat IS NOT NEW.seat_no))
- OR (NEW.follower_action IS NOT NULL AND NEW.last_action_phase_seq IS NULL)
- OR (NEW.follower_action IS NOT NULL AND NEW.last_action_phase_seq IS OLD.last_action_phase_seq)
- OR (NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS NOT NULL AND NOT EXISTS(
-   SELECT 1 FROM game_rps_sessions s
-   WHERE s.id=NEW.session_id AND s.phase IN ('gesture','paid_pool_gesture','free_pool_gesture','ultimate_gesture')
-     AND NEW.current_gesture_envelope IS NOT NULL))
+CREATE TRIGGER rps_seat_follower_action_update_guard BEFORE UPDATE OF current_gesture_envelope,current_gesture_phase_seq,follower_action,last_action_phase_seq,session_id,seat_no ON game_rps_seats
+WHEN OLD.follower_action IS NOT NULL
+ AND (NEW.follower_action IS NOT OLD.follower_action OR NEW.last_action_phase_seq IS NOT OLD.last_action_phase_seq)
+ AND NOT (
+   NEW.current_gesture_envelope IS NULL AND NEW.current_gesture_phase_seq IS NULL AND
+   NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS NULL AND
+   EXISTS(SELECT 1 FROM game_rps_sessions s
+          WHERE s.id=NEW.session_id
+            AND s.phase IN ('gesture','paid_pool_gesture','free_pool_gesture','ultimate_gesture','terminal_processing')
+            AND s.phase_seq>OLD.current_gesture_phase_seq)
+ )
 BEGIN SELECT RAISE(ABORT,'rps follower action is invalid for this seat'); END;
 CREATE TRIGGER rps_seat_action_phase_matrix_guard BEFORE INSERT ON game_rps_seats
 WHEN NOT EXISTS(
  SELECT 1 FROM game_rps_sessions s
  WHERE s.id=NEW.session_id AND (
    (s.phase IN ('gesture','paid_pool_gesture','free_pool_gesture','ultimate_gesture') AND
-    ((NEW.current_gesture_envelope IS NULL AND NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS NULL) OR
-     (NEW.current_gesture_envelope IS NOT NULL AND NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS s.phase_seq))) OR
-   (s.phase='followers' AND NEW.current_gesture_envelope IS NULL AND
-    ((NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS NULL) OR
-     (NEW.follower_action IS NOT NULL AND NEW.last_action_phase_seq IS s.phase_seq AND s.dealer_seat IS NOT NEW.seat_no))) OR
-   (s.phase IN ('dealer_raise','terminal_processing') AND NEW.current_gesture_envelope IS NULL AND
-    NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS NULL)
+    ((NEW.current_gesture_envelope IS NULL AND NEW.current_gesture_phase_seq IS NULL AND
+      NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS NULL) OR
+     (NEW.current_gesture_envelope IS NOT NULL AND NEW.current_gesture_phase_seq IS s.phase_seq AND
+      NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS s.phase_seq))) OR
+   (s.phase='dealer_raise' AND NEW.current_gesture_envelope IS NOT NULL AND
+    NEW.current_gesture_phase_seq<s.phase_seq AND NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS NULL) OR
+   (s.phase='followers' AND NEW.current_gesture_envelope IS NOT NULL AND NEW.current_gesture_phase_seq<s.phase_seq AND
+    ((s.dealer_seat IS NEW.seat_no AND NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS NULL) OR
+     (s.dealer_seat IS NOT NEW.seat_no AND
+      ((NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS NULL) OR
+       (NEW.follower_action IS NOT NULL AND NEW.last_action_phase_seq IS s.phase_seq))))) OR
+   (s.phase='terminal_processing' AND NEW.current_gesture_envelope IS NULL AND
+    NEW.current_gesture_phase_seq IS NULL AND NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS NULL)
  ))
 BEGIN SELECT RAISE(ABORT,'rps seat action phase matrix is invalid'); END;
-CREATE TRIGGER rps_seat_action_phase_matrix_update_guard BEFORE UPDATE OF current_gesture_envelope,follower_action,last_action_phase_seq,session_id,seat_no ON game_rps_seats
+CREATE TRIGGER rps_seat_action_phase_matrix_update_guard BEFORE UPDATE ON game_rps_seats
 WHEN NOT EXISTS(
  SELECT 1 FROM game_rps_sessions s
  WHERE s.id=NEW.session_id AND (
    (s.phase IN ('gesture','paid_pool_gesture','free_pool_gesture','ultimate_gesture') AND
-    ((NEW.current_gesture_envelope IS NULL AND NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS NULL) OR
-     (NEW.current_gesture_envelope IS NOT NULL AND NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS s.phase_seq))) OR
-   (s.phase='followers' AND NEW.current_gesture_envelope IS NULL AND
-    ((NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS NULL) OR
-     (NEW.follower_action IS NOT NULL AND NEW.last_action_phase_seq IS s.phase_seq AND s.dealer_seat IS NOT NEW.seat_no))) OR
-   (s.phase IN ('dealer_raise','terminal_processing') AND NEW.current_gesture_envelope IS NULL AND
-    NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS NULL)
+    ((NEW.current_gesture_envelope IS NULL AND NEW.current_gesture_phase_seq IS NULL AND
+      NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS NULL) OR
+     (NEW.current_gesture_envelope IS NOT NULL AND NEW.current_gesture_phase_seq IS s.phase_seq AND
+      NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS s.phase_seq))) OR
+   (s.phase='dealer_raise' AND NEW.current_gesture_envelope IS NOT NULL AND
+    NEW.current_gesture_phase_seq<s.phase_seq AND NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS NULL) OR
+   (s.phase='followers' AND NEW.current_gesture_envelope IS NOT NULL AND NEW.current_gesture_phase_seq<s.phase_seq AND
+    ((s.dealer_seat IS NEW.seat_no AND NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS NULL) OR
+     (s.dealer_seat IS NOT NEW.seat_no AND
+      ((NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS NULL) OR
+       (NEW.follower_action IS NOT NULL AND NEW.last_action_phase_seq IS s.phase_seq))))) OR
+   (s.phase='terminal_processing' AND NEW.current_gesture_envelope IS NULL AND
+    NEW.current_gesture_phase_seq IS NULL AND NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS NULL)
  ))
 BEGIN SELECT RAISE(ABORT,'rps seat action phase matrix is invalid'); END;
 CREATE TRIGGER rps_gesture_envelope_guard BEFORE INSERT ON game_rps_seats
- WHEN NEW.current_gesture_envelope IS NOT NULL AND
-      (typeof(NEW.current_gesture_envelope)<>'blob' OR length(NEW.current_gesture_envelope) NOT IN (33,34,37) OR substr(NEW.current_gesture_envelope,1,1) IS NOT X'01' OR
-       NOT EXISTS(SELECT 1 FROM game_rps_sessions s WHERE s.id=NEW.session_id AND s.phase IN ('gesture','paid_pool_gesture','free_pool_gesture','ultimate_gesture')))
- BEGIN SELECT RAISE(ABORT,'rps gesture envelope is invalid'); END;
- CREATE TRIGGER rps_gesture_envelope_update_guard BEFORE UPDATE OF current_gesture_envelope ON game_rps_seats
- WHEN (NEW.current_gesture_envelope IS NULL AND OLD.current_gesture_envelope IS NOT NULL)
-   OR (NEW.current_gesture_envelope IS NOT NULL AND
-      (typeof(NEW.current_gesture_envelope)<>'blob' OR length(NEW.current_gesture_envelope) NOT IN (33,34,37) OR substr(NEW.current_gesture_envelope,1,1) IS NOT X'01' OR
-       NOT EXISTS(SELECT 1 FROM game_rps_sessions s WHERE s.id=NEW.session_id AND s.phase IN ('gesture','paid_pool_gesture','free_pool_gesture','ultimate_gesture'))))
- BEGIN SELECT RAISE(ABORT,'rps gesture envelope is invalid'); END;
- CREATE TRIGGER rps_seat_terminal_matrix_guard BEFORE INSERT ON game_rps_seats
+WHEN NEW.current_gesture_envelope IS NOT NULL AND
+     (typeof(NEW.current_gesture_envelope)<>'blob' OR length(NEW.current_gesture_envelope) NOT IN (33,34,37) OR
+      substr(NEW.current_gesture_envelope,1,1) IS NOT X'01')
+BEGIN SELECT RAISE(ABORT,'rps gesture envelope is invalid'); END;
+CREATE TRIGGER rps_gesture_envelope_update_guard BEFORE UPDATE OF current_gesture_envelope,current_gesture_phase_seq ON game_rps_seats
+WHEN (NEW.current_gesture_envelope IS NOT NULL AND
+      (typeof(NEW.current_gesture_envelope)<>'blob' OR length(NEW.current_gesture_envelope) NOT IN (33,34,37) OR substr(NEW.current_gesture_envelope,1,1) IS NOT X'01'))
+  OR (OLD.current_gesture_envelope IS NULL AND NEW.current_gesture_envelope IS NOT NULL AND
+      NOT EXISTS(SELECT 1 FROM game_rps_sessions s
+                 WHERE s.id=NEW.session_id
+                   AND s.phase IN ('gesture','paid_pool_gesture','free_pool_gesture','ultimate_gesture')
+                   AND NEW.current_gesture_phase_seq IS s.phase_seq
+                   AND NEW.last_action_phase_seq IS s.phase_seq
+                   AND NEW.follower_action IS NULL))
+  OR (OLD.current_gesture_envelope IS NOT NULL AND NEW.current_gesture_envelope IS NOT NULL AND
+      (NEW.current_gesture_envelope IS NOT OLD.current_gesture_envelope OR
+       NEW.current_gesture_phase_seq IS NOT OLD.current_gesture_phase_seq))
+  OR (OLD.current_gesture_envelope IS NOT NULL AND NEW.current_gesture_envelope IS NULL AND NOT (
+      NEW.current_gesture_phase_seq IS NULL AND NEW.follower_action IS NULL AND NEW.last_action_phase_seq IS NULL AND
+      EXISTS(SELECT 1 FROM game_rps_sessions s
+             WHERE s.id=NEW.session_id
+               AND s.phase IN ('gesture','paid_pool_gesture','free_pool_gesture','ultimate_gesture','terminal_processing')
+               AND s.phase_seq>OLD.current_gesture_phase_seq)
+  ))
+BEGIN SELECT RAISE(ABORT,'rps gesture envelope is invalid'); END;
+CREATE TRIGGER rps_seat_terminal_matrix_guard BEFORE INSERT ON game_rps_seats
 WHEN (NEW.terminal_return IS NOT NULL OR NEW.wallet_net_sign IS NOT NULL OR NEW.wallet_net_mag IS NOT NULL)
  AND NOT EXISTS(SELECT 1 FROM game_rps_sessions s WHERE s.id=NEW.session_id AND s.state='terminal_processing')
 BEGIN SELECT RAISE(ABORT,'rps terminal seat data requires terminal processing'); END;
@@ -2219,6 +2249,7 @@ CREATE TRIGGER generation_two_rps_seats_u128_guard BEFORE INSERT ON game_rps_sea
 WHEN typeof(NEW.starting_balance)<>'blob' OR length(NEW.starting_balance)<>16 OR substr(hex(NEW.starting_balance),1,1) NOT IN ('0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F')
  OR typeof(NEW.current_balance)<>'blob' OR length(NEW.current_balance)<>16 OR substr(hex(NEW.current_balance),1,1) NOT IN ('0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F')
  OR typeof(NEW.current_round_input)<>'blob' OR length(NEW.current_round_input)<>16 OR substr(hex(NEW.current_round_input),1,1) NOT IN ('0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F')
+ OR (NEW.current_gesture_phase_seq IS NOT NULL AND (typeof(NEW.current_gesture_phase_seq)<>'blob' OR length(NEW.current_gesture_phase_seq)<>16 OR substr(hex(NEW.current_gesture_phase_seq),1,1) NOT IN ('0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F')))
  OR (NEW.terminal_return IS NOT NULL AND (typeof(NEW.terminal_return)<>'blob' OR length(NEW.terminal_return)<>16 OR substr(hex(NEW.terminal_return),1,1) NOT IN ('0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F')))
  OR (NEW.wallet_net_mag IS NOT NULL AND (typeof(NEW.wallet_net_mag)<>'blob' OR length(NEW.wallet_net_mag)<>16 OR substr(hex(NEW.wallet_net_mag),1,1) NOT IN ('0','1','2','3','4','5','6','7')))
  OR typeof(NEW.rock_count)<>'blob' OR length(NEW.rock_count)<>16 OR substr(hex(NEW.rock_count),1,1) NOT IN ('0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F')
@@ -2235,6 +2266,7 @@ CREATE TRIGGER generation_two_rps_seats_u128_update_guard BEFORE UPDATE ON game_
 WHEN typeof(NEW.starting_balance)<>'blob' OR length(NEW.starting_balance)<>16 OR substr(hex(NEW.starting_balance),1,1) NOT IN ('0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F')
  OR typeof(NEW.current_balance)<>'blob' OR length(NEW.current_balance)<>16 OR substr(hex(NEW.current_balance),1,1) NOT IN ('0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F')
  OR typeof(NEW.current_round_input)<>'blob' OR length(NEW.current_round_input)<>16 OR substr(hex(NEW.current_round_input),1,1) NOT IN ('0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F')
+ OR (NEW.current_gesture_phase_seq IS NOT NULL AND (typeof(NEW.current_gesture_phase_seq)<>'blob' OR length(NEW.current_gesture_phase_seq)<>16 OR substr(hex(NEW.current_gesture_phase_seq),1,1) NOT IN ('0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F')))
  OR (NEW.terminal_return IS NOT NULL AND (typeof(NEW.terminal_return)<>'blob' OR length(NEW.terminal_return)<>16 OR substr(hex(NEW.terminal_return),1,1) NOT IN ('0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F')))
  OR (NEW.wallet_net_mag IS NOT NULL AND (typeof(NEW.wallet_net_mag)<>'blob' OR length(NEW.wallet_net_mag)<>16 OR substr(hex(NEW.wallet_net_mag),1,1) NOT IN ('0','1','2','3','4','5','6','7')))
  OR typeof(NEW.rock_count)<>'blob' OR length(NEW.rock_count)<>16 OR substr(hex(NEW.rock_count),1,1) NOT IN ('0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F')

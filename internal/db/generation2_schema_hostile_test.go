@@ -499,18 +499,37 @@ INSERT INTO game_rps_sessions(
 		"none", deadline, zero, zero, terminalOperationID, zero, terminalReason)
 }
 
-func hostileInsertRPSSeat(t *testing.T, db *sql.DB, sessionID string, seatNo int, userID any, envelope, lastPhase any, terminalReturn any, netSign any, netMag any, deletionState string) {
-	t.Helper()
-	zero := hostileBlob16(0)
-	hostileMustExec(t, db, `
+const hostileRPSSeatInsertSQL = `
 INSERT INTO game_rps_seats(
  session_id,seat_no,user_id,deletion_state,starting_balance,current_balance,current_round_input,
- current_all_in,current_gesture_envelope,follower_action,last_action_phase_seq,total_input,
+ current_all_in,current_gesture_envelope,current_gesture_phase_seq,follower_action,last_action_phase_seq,total_input,
  total_returned,terminal_return,wallet_net_sign,wallet_net_mag,rock_count,scissors_count,
  paper_count,timeout_count,stats_applied
-) VALUES(?,?,?,?,?,?,?,0,?,NULL,?,?,?,?,?,?,?,?,?, ?,0)`,
-		sessionID, seatNo, userID, deletionState, zero, zero, zero, envelope, lastPhase,
+) VALUES(?,?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`
+
+func hostileInsertRPSSeat(t *testing.T, db *sql.DB, sessionID string, seatNo int, userID any, envelope, lastPhase any, terminalReturn any, netSign any, netMag any, deletionState string) {
+	t.Helper()
+	var gesturePhase any
+	if envelope != nil {
+		gesturePhase = lastPhase
+	}
+	hostileInsertRPSSeatWithActions(t, db, sessionID, seatNo, userID, envelope, gesturePhase, nil, lastPhase, terminalReturn, netSign, netMag, deletionState)
+}
+
+func hostileInsertRPSSeatWithActions(t *testing.T, db *sql.DB, sessionID string, seatNo int, userID any, envelope, gesturePhase, followerAction, lastPhase any, terminalReturn any, netSign any, netMag any, deletionState string) {
+	t.Helper()
+	zero := hostileBlob16(0)
+	hostileMustExec(t, db, hostileRPSSeatInsertSQL,
+		sessionID, seatNo, userID, deletionState, zero, zero, zero, envelope, gesturePhase, followerAction, lastPhase,
 		hostileBlob32(0), hostileBlob32(0), terminalReturn, netSign, netMag, zero, zero, zero, zero)
+}
+
+func hostileMustFailRPSSeatWithActions(t *testing.T, db *sql.DB, sessionID string, seatNo int, userID any, envelope, gesturePhase, followerAction, lastPhase any, deletionState string) {
+	t.Helper()
+	zero := hostileBlob16(0)
+	hostileMustFail(t, db, hostileRPSSeatInsertSQL,
+		sessionID, seatNo, userID, deletionState, zero, zero, zero, envelope, gesturePhase, followerAction, lastPhase,
+		hostileBlob32(0), hostileBlob32(0), nil, nil, nil, zero, zero, zero, zero)
 }
 
 func hostileInsertRPSQueue(t *testing.T, db *sql.DB, marker byte, mode string, reserved, remaining []byte) (string, int64) {
@@ -800,12 +819,13 @@ WHERE session_id=? AND seat_no=0`, hostileHigh128(), negativeRPSID)
 	rpsID := hostileOID("rps_")
 	accountID := hostileInsertRPSAccount(t, db, rpsID)
 	hostileInsertRPSSession(t, db, rpsID, "gesture", "started", accountID)
-	hostileInsertRPSSeat(t, db, rpsID, 0, hostileInsertUser(t, db, "wide-rps", 0, 0), hostileEnvelope(33, 0x01), hostileBlob16(1), nil, nil, nil, "active")
+	hostileInsertRPSSeat(t, db, rpsID, 0, hostileInsertUser(t, db, "wide-rps", 0, 0), nil, nil, nil, nil, nil, "active")
 	hostileMustExec(t, db, `
 UPDATE game_rps_sessions SET revision=?,phase_seq=?,identity_epoch=?,cut_seq=?,player_pool=?,
  permanent_multiplier=?,base_round_count=?,paid_tie_count=?,free_tie_count=?,paid_pool_streak=?,
  free_pool_streak=?,platform_cut_total=?,welfare_cut_total=?,thursday_cut_total=?,welfare_carry_total=?
  WHERE id=?`, twoTo63, twoTo63, high, max, max, max, max, max, max, max, max, max, max, max, max, rpsID)
+	hostileMustExec(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=?,current_gesture_phase_seq=?,last_action_phase_seq=? WHERE session_id=? AND seat_no=0`, hostileEnvelope(33, 0x01), twoTo63, twoTo63, rpsID)
 	hostileMustFail(t, db, `UPDATE game_rps_sessions SET player_pool=? WHERE id=?`, []byte{1}, rpsID)
 	hostileMustExec(t, db, `
 UPDATE game_rps_seats SET starting_balance=?,current_balance=?,current_round_input=?,rock_count=?,
@@ -2075,35 +2095,144 @@ INSERT INTO game_rps_summaries(
 	hostileMustFail(t, db, `UPDATE game_rps_sessions SET current_plan_multiplier=NULL WHERE id=?`, gestureID)
 	hostileMustFail(t, db, `UPDATE game_rps_sessions SET pool_base_multiplier=? WHERE id=?`, one, gestureID)
 	hostileMustFail(t, db, `UPDATE game_rps_sessions SET reminder_state='active' WHERE id=?`, gestureID)
-	// A submitted gesture is represented by the envelope/phase-seq pair;
-	// keeping only one half is hostile and must not be used as a fixture.
-	hostileInsertRPSSeat(t, db, gestureID, 0, uid, hostileEnvelope(33, 0x01), one, nil, nil, nil, "active")
+
+	// Each gesture phase accepts both a canonical pair on INSERT and the first
+	// null-to-pair binding on UPDATE. The two phase sequences are the current
+	// session sequence; a half pair or a different/zero sequence is rejected.
+	gesturePhases := []string{"gesture", "paid_pool_gesture", "free_pool_gesture", "ultimate_gesture"}
+	gestureEnvelopeLengths := []int{33, 34, 37, 33}
+	for i, phase := range gesturePhases {
+		id := phaseIDs[phase]
+		directUser := uid
+		if phase != "gesture" {
+			directUser = hostileInsertUser(t, db, "rps-direct-gesture-"+phase, 0, 0)
+		}
+		hostileInsertRPSSeat(t, db, id, 0, directUser, hostileEnvelope(gestureEnvelopeLengths[i], 0x01), one, nil, nil, nil, "active")
+		bindingUser := hostileInsertUser(t, db, "rps-bound-gesture-"+phase, 0, 0)
+		hostileInsertRPSSeat(t, db, id, 1, bindingUser, nil, nil, nil, nil, nil, "active")
+		hostileMustFail(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=? WHERE session_id=? AND seat_no=1`, hostileEnvelope(33, 0x01), id)
+		hostileMustFail(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=?,current_gesture_phase_seq=?,last_action_phase_seq=? WHERE session_id=? AND seat_no=1`, hostileEnvelope(33, 0x01), "1", one, id)
+		hostileMustFail(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=?,current_gesture_phase_seq=?,last_action_phase_seq=? WHERE session_id=? AND seat_no=1`, hostileEnvelope(33, 0x01), hostileBlob16(0), hostileBlob16(0), id)
+		hostileMustFail(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=?,current_gesture_phase_seq=?,last_action_phase_seq=? WHERE session_id=? AND seat_no=1`, hostileEnvelope(33, 0x01), hostileBlob16(2), hostileBlob16(2), id)
+		hostileMustExec(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=?,current_gesture_phase_seq=?,last_action_phase_seq=? WHERE session_id=? AND seat_no=1`, hostileEnvelope(33, 0x01), one, one, id)
+	}
+	badPairUser := hostileInsertUser(t, db, "rps-half-pair", 0, 0)
+	hostileMustFailRPSSeatWithActions(t, db, gestureID, 2, badPairUser, hostileEnvelope(33, 0x01), nil, nil, one, "active")
+	hostileInsertRPSSeat(t, db, gestureID, 2, badPairUser, hostileEnvelope(37, 0x01), one, nil, nil, nil, "active")
+
+	// A bound pair is immutable in place. It can only be consumed together,
+	// after the session has advanced beyond the gesture's dedicated AAD phase.
 	hostileMustExec(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=? WHERE session_id=? AND seat_no=0`, hostileEnvelope(33, 0x01), gestureID)
-	hostileMustExec(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=? WHERE session_id=? AND seat_no=0`, hostileEnvelope(34, 0x01), gestureID)
-	hostileMustExec(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=? WHERE session_id=? AND seat_no=0`, hostileEnvelope(37, 0x01), gestureID)
+	hostileMustFail(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=? WHERE session_id=? AND seat_no=0`, hostileEnvelope(34, 0x01), gestureID)
+	hostileMustFail(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=? WHERE session_id=? AND seat_no=0`, hostileEnvelope(37, 0x01), gestureID)
 	hostileMustFail(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=? WHERE session_id=? AND seat_no=0`, hostileEnvelope(33, 0x00), gestureID)
 	hostileMustFail(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=? WHERE session_id=? AND seat_no=0`, make([]byte, 32), gestureID)
 	hostileMustFail(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=? WHERE session_id=? AND seat_no=0`, make([]byte, 38), gestureID)
 	hostileMustFail(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=NULL WHERE session_id=? AND seat_no=0`, gestureID)
+	hostileMustFail(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=NULL,current_gesture_phase_seq=NULL,last_action_phase_seq=NULL WHERE session_id=? AND seat_no=0`, gestureID)
 	hostileMustFail(t, db, `UPDATE game_rps_seats SET last_action_phase_seq=NULL WHERE session_id=? AND seat_no=0`, gestureID)
+	hostileMustFail(t, db, `UPDATE game_rps_seats SET current_gesture_phase_seq=? WHERE session_id=? AND seat_no=0`, hostileBlob16(2), gestureID)
 	hostileMustFail(t, db, `UPDATE game_rps_seats SET last_action_phase_seq=? WHERE session_id=? AND seat_no=0`, hostileBlob16(0), gestureID)
-	dealerRaiseID := phaseIDs["dealer_raise"]
-	dealerRaiseUser := hostileInsertUser(t, db, "rps-dealer-raise", 0, 0)
-	hostileInsertRPSSeat(t, db, dealerRaiseID, 0, dealerRaiseUser, nil, nil, nil, nil, nil, "active")
-	hostileMustFail(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=? WHERE session_id=? AND seat_no=0`, hostileEnvelope(33, 0x01), dealerRaiseID)
 
-	// The seat action matrix follows the session phase: follower actions are
-	// only valid for the two non-dealer seats during followers.
+	// dealer_raise and followers INSERTs carry the original non-zero gesture
+	// phase, which must be strictly older than the current session phase.
+	two := hostileBlob16(2)
+	three := hostileBlob16(3)
+	four := hostileBlob16(4)
+	hostileMustExec(t, db, `UPDATE game_rps_sessions SET phase='dealer_raise',revision=?,phase_seq=? WHERE id=?`, two, two, gestureID)
+	hostileMustExec(t, db, `UPDATE game_rps_seats SET last_action_phase_seq=NULL WHERE session_id=?`, gestureID)
+	var crossedDealerCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM game_rps_seats WHERE session_id=? AND current_gesture_envelope IS NOT NULL AND current_gesture_phase_seq=? AND follower_action IS NULL AND last_action_phase_seq IS NULL`, gestureID, one).Scan(&crossedDealerCount); err != nil {
+		t.Fatalf("count dealer-retained RPS pairs: %v", err)
+	}
+	if crossedDealerCount != 3 {
+		t.Fatalf("dealer transition retained %d gesture pairs, want 3", crossedDealerCount)
+	}
+	hostileMustExec(t, db, `UPDATE game_rps_sessions SET phase='followers',revision=?,phase_seq=?,dealer_raise=? WHERE id=?`, three, three, one, gestureID)
+	hostileMustExec(t, db, `UPDATE game_rps_seats SET follower_action='call',last_action_phase_seq=? WHERE session_id=? AND seat_no=1`, three, gestureID)
+	hostileMustExec(t, db, `UPDATE game_rps_seats SET follower_action='surrender',last_action_phase_seq=? WHERE session_id=? AND seat_no=2`, three, gestureID)
+	hostileMustExec(t, db, `UPDATE game_rps_sessions SET phase='gesture',revision=?,phase_seq=?,dealer_raise=NULL WHERE id=?`, four, four, gestureID)
+	hostileMustExec(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=NULL,current_gesture_phase_seq=NULL,follower_action=NULL,last_action_phase_seq=NULL WHERE session_id=?`, gestureID)
+
+	dealerRaiseID := phaseIDs["dealer_raise"]
+	hostileMustExec(t, db, `UPDATE game_rps_sessions SET revision=?,phase_seq=? WHERE id=?`, two, two, dealerRaiseID)
+	dealerRaiseUser := hostileInsertUser(t, db, "rps-dealer-raise", 0, 0)
+	hostileInsertRPSSeatWithActions(t, db, dealerRaiseID, 0, dealerRaiseUser, hostileEnvelope(33, 0x01), one, nil, nil, nil, nil, nil, "active")
+	hostileMustFailRPSSeatWithActions(t, db, dealerRaiseID, 1, hostileInsertUser(t, db, "rps-dealer-current-phase", 0, 0), hostileEnvelope(33, 0x01), two, nil, nil, "active")
+	hostileMustFailRPSSeatWithActions(t, db, dealerRaiseID, 1, hostileInsertUser(t, db, "rps-dealer-zero-phase", 0, 0), hostileEnvelope(33, 0x01), zero, nil, nil, "active")
+	hostileMustFailRPSSeatWithActions(t, db, dealerRaiseID, 1, hostileInsertUser(t, db, "rps-dealer-last-action", 0, 0), hostileEnvelope(33, 0x01), one, nil, one, "active")
+	hostileMustFail(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=? WHERE session_id=? AND seat_no=0`, hostileEnvelope(34, 0x01), dealerRaiseID)
+
 	followersID := phaseIDs["followers"]
+	hostileMustExec(t, db, `UPDATE game_rps_sessions SET revision=?,phase_seq=? WHERE id=?`, three, three, followersID)
 	followerDealer := hostileInsertUser(t, db, "rps-follower-dealer", 0, 0)
 	followerOne := hostileInsertUser(t, db, "rps-follower-one", 0, 0)
 	followerTwo := hostileInsertUser(t, db, "rps-follower-two", 0, 0)
-	hostileInsertRPSSeat(t, db, followersID, 0, followerDealer, nil, nil, nil, nil, nil, "active")
-	hostileInsertRPSSeat(t, db, followersID, 1, followerOne, nil, nil, nil, nil, nil, "active")
-	hostileInsertRPSSeat(t, db, followersID, 2, followerTwo, nil, nil, nil, nil, nil, "active")
-	hostileMustFail(t, db, `UPDATE game_rps_seats SET follower_action='call',last_action_phase_seq=? WHERE session_id=? AND seat_no=0`, one, followersID)
-	hostileMustExec(t, db, `UPDATE game_rps_seats SET follower_action='call',last_action_phase_seq=? WHERE session_id=? AND seat_no=1`, one, followersID)
-	hostileMustFail(t, db, `UPDATE game_rps_seats SET follower_action='call' WHERE session_id=? AND seat_no=1`, followersID)
+	hostileMustFailRPSSeatWithActions(t, db, followersID, 0, followerDealer, hostileEnvelope(33, 0x01), one, "call", three, "active")
+	hostileInsertRPSSeatWithActions(t, db, followersID, 0, followerDealer, hostileEnvelope(33, 0x01), one, nil, nil, nil, nil, nil, "active")
+	hostileMustFailRPSSeatWithActions(t, db, followersID, 1, followerOne, hostileEnvelope(34, 0x01), three, nil, nil, "active")
+	hostileMustFailRPSSeatWithActions(t, db, followersID, 1, followerOne, hostileEnvelope(34, 0x01), one, "call", nil, "active")
+	hostileInsertRPSSeatWithActions(t, db, followersID, 1, followerOne, hostileEnvelope(34, 0x01), one, nil, nil, nil, nil, nil, "active")
+	hostileInsertRPSSeatWithActions(t, db, followersID, 2, followerTwo, hostileEnvelope(37, 0x01), one, "surrender", three, nil, nil, nil, "active")
+	hostileMustExec(t, db, `UPDATE game_rps_seats SET follower_action='call',last_action_phase_seq=? WHERE session_id=? AND seat_no=1`, three, followersID)
+	hostileMustFail(t, db, `UPDATE game_rps_seats SET last_action_phase_seq=NULL WHERE session_id=? AND seat_no=1`, followersID)
+	hostileMustFail(t, db, `UPDATE game_rps_seats SET follower_action='surrender',last_action_phase_seq=? WHERE session_id=? AND seat_no=1`, three, followersID)
+	hostileMustFail(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=NULL,current_gesture_phase_seq=NULL,follower_action=NULL,last_action_phase_seq=NULL WHERE session_id=? AND seat_no=2`, followersID)
+
+	// De-identification retains both the gesture pair and an already submitted
+	// follower action. It cannot use deletion as an early-consumption path.
+	hostileMustExec(t, db, `UPDATE game_rps_seats SET user_id=NULL,deletion_state='deletion_pending' WHERE session_id=? AND seat_no=2`, followersID)
+	var retainedEnvelope, retainedGesturePhase, retainedFollower, retainedLast any
+	if err := db.QueryRow(`SELECT current_gesture_envelope,current_gesture_phase_seq,follower_action,last_action_phase_seq FROM game_rps_seats WHERE session_id=? AND seat_no=2`, followersID).Scan(&retainedEnvelope, &retainedGesturePhase, &retainedFollower, &retainedLast); err != nil {
+		t.Fatalf("read retained deleted-seat actions: %v", err)
+	}
+	if retainedEnvelope == nil || retainedGesturePhase == nil || retainedFollower != "surrender" || retainedLast == nil {
+		t.Fatal("de-identification did not retain submitted RPS recovery inputs")
+	}
+
+	// Once the session reaches the next stable gesture phase, the reducer may
+	// clear the pair and all current actions together. Pair halves and follower
+	// remnants remain invalid even after that phase transition.
+	hostileMustExec(t, db, `UPDATE game_rps_sessions SET phase='gesture',revision=?,phase_seq=?,dealer_raise=NULL WHERE id=?`, four, four, followersID)
+	hostileMustFail(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=NULL WHERE session_id=? AND seat_no=2`, followersID)
+	hostileMustFail(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=NULL,current_gesture_phase_seq=NULL WHERE session_id=? AND seat_no=2`, followersID)
+	hostileMustExec(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=NULL,current_gesture_phase_seq=NULL,follower_action=NULL,last_action_phase_seq=NULL WHERE session_id=?`, followersID)
+	var retainedCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM game_rps_seats WHERE session_id=? AND (current_gesture_envelope IS NOT NULL OR current_gesture_phase_seq IS NOT NULL OR follower_action IS NOT NULL OR last_action_phase_seq IS NOT NULL)`, followersID).Scan(&retainedCount); err != nil {
+		t.Fatalf("count cleared RPS actions: %v", err)
+	}
+	if retainedCount != 0 {
+		t.Fatalf("legal final clear left %d RPS action rows", retainedCount)
+	}
+
+	// terminal_processing likewise rejects retained recovery inputs on any
+	// seat write. Clearing the complete pair after the session transition may
+	// be combined with freezing the terminal return facts.
+	terminalClearID := hostileOIDVariant("rps_", 'T', 'Q')
+	terminalClearAccount := hostileInsertRPSAccount(t, db, terminalClearID)
+	hostileInsertRPSSession(t, db, terminalClearID, "gesture", "started", terminalClearAccount)
+	terminalClearUser := hostileInsertUser(t, db, "rps-terminal-clear", 0, 0)
+	hostileInsertRPSSeat(t, db, terminalClearID, 0, terminalClearUser, hostileEnvelope(33, 0x01), one, nil, nil, nil, "active")
+	hostileMustExec(t, db, `
+UPDATE game_rps_sessions
+SET state='terminal_processing',phase='terminal_processing',revision=?,phase_seq=?,
+    pool_base_multiplier=NULL,current_plan_multiplier=NULL,dealer_raise=NULL,phase_deadline=NULL,
+    terminal_operation_id=?,terminal_reason='quick_resolved'
+WHERE id=?`, two, two, hostileOIDVariant("op_", 'T', 'Q'), terminalClearID)
+	hostileMustFail(t, db, `UPDATE game_rps_seats SET terminal_return=?,wallet_net_sign=1,wallet_net_mag=? WHERE session_id=? AND seat_no=0`, one, one, terminalClearID)
+	hostileMustExec(t, db, `
+UPDATE game_rps_seats
+SET current_gesture_envelope=NULL,current_gesture_phase_seq=NULL,follower_action=NULL,last_action_phase_seq=NULL,
+    terminal_return=?,wallet_net_sign=1,wallet_net_mag=?
+WHERE session_id=? AND seat_no=0`, one, one, terminalClearID)
+	var terminalEnvelope, terminalGesturePhase any
+	if err := db.QueryRow(`SELECT current_gesture_envelope,current_gesture_phase_seq FROM game_rps_seats WHERE session_id=? AND seat_no=0`, terminalClearID).Scan(&terminalEnvelope, &terminalGesturePhase); err != nil {
+		t.Fatalf("read terminal-cleared gesture pair: %v", err)
+	}
+	if terminalEnvelope != nil || terminalGesturePhase != nil {
+		t.Fatal("terminal transition retained an RPS gesture pair")
+	}
+	hostileMustFailRPSSeatWithActions(t, db, terminalID, 1, nil, hostileEnvelope(33, 0x01), one, nil, nil, "deletion_pending")
 
 	// Terminal return and wallet net are an all-or-nothing pair and can only
 	// be frozen while the session is in terminal_processing.
@@ -2278,13 +2407,15 @@ INSERT INTO game_rps_queue(
 	followerID := hostileOIDVariant("rps_", 'f', 'Q')
 	followerAccount := hostileInsertRPSAccount(t, db, followerID)
 	hostileInsertRPSSession(t, db, followerID, "followers", "started", followerAccount)
+	two := hostileBlob16(2)
+	hostileMustExec(t, db, `UPDATE game_rps_sessions SET revision=?,phase_seq=? WHERE id=?`, two, two, followerID)
 	followerUser0 := hostileInsertUser(t, db, "game-follower-zero", 0, 0)
 	followerUser1 := hostileInsertUser(t, db, "game-follower-one", 0, 0)
-	hostileInsertRPSSeat(t, db, followerID, 0, followerUser0, nil, nil, nil, nil, nil, "active")
-	hostileInsertRPSSeat(t, db, followerID, 1, followerUser1, nil, nil, nil, nil, nil, "active")
-	hostileMustExec(t, db, `UPDATE game_rps_seats SET follower_action='surrender',last_action_phase_seq=? WHERE session_id=? AND seat_no=1`, one, followerID)
-	hostileMustFail(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=? WHERE session_id=? AND seat_no=1`, hostileEnvelope(33, 0x01), followerID)
-	hostileMustFail(t, db, `UPDATE game_rps_seats SET last_action_phase_seq=? WHERE session_id=? AND seat_no=1`, hostileBlob16(2), followerID)
+	hostileInsertRPSSeatWithActions(t, db, followerID, 0, followerUser0, hostileEnvelope(33, 0x01), one, nil, nil, nil, nil, nil, "active")
+	hostileInsertRPSSeatWithActions(t, db, followerID, 1, followerUser1, hostileEnvelope(33, 0x01), one, nil, nil, nil, nil, nil, "active")
+	hostileMustExec(t, db, `UPDATE game_rps_seats SET follower_action='surrender',last_action_phase_seq=? WHERE session_id=? AND seat_no=1`, two, followerID)
+	hostileMustFail(t, db, `UPDATE game_rps_seats SET current_gesture_envelope=? WHERE session_id=? AND seat_no=1`, hostileEnvelope(34, 0x01), followerID)
+	hostileMustFail(t, db, `UPDATE game_rps_seats SET last_action_phase_seq=? WHERE session_id=? AND seat_no=1`, hostileBlob16(3), followerID)
 
 	identityID := hostileOIDVariant("rps_", 'i', 'Q')
 	identityAccount := hostileInsertRPSAccount(t, db, identityID)
