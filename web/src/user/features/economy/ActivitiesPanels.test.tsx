@@ -2,6 +2,7 @@ import { screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@shared/query/http';
 import { renderWithProviders } from '../../../../test/unit/support';
+import userEn from '../../i18n/en.json';
 import { ActivitiesPage } from '../../pages/ActivitiesPage';
 import { ThursdayCard, WelfareCard } from './ActivitiesPanels';
 import * as economyQueries from './queries';
@@ -77,6 +78,8 @@ const thursday: ThursdayView = {
   lastResult: null,
 };
 
+const activityCopy = userEn.user.activities;
+
 describe('activity cards', () => {
   beforeEach(() => {
     claimMutation = mutationResult();
@@ -128,8 +131,8 @@ describe('activity cards', () => {
       station: 'user',
       role: 'user',
     });
-    const actionName = 'user.activities.thursday.contributeOnce';
-    const welfareActionName = 'user.activities.welfare.claim';
+    const actionName = activityCopy.thursday.contributeOnce;
+    const welfareActionName = activityCopy.welfare.claim;
     await rendered.user.click(screen.getByRole('button', { name: welfareActionName }));
     await rendered.user.click(screen.getByRole('button', { name: actionName }));
     expect(screen.getByRole('button', { name: welfareActionName })).toBeDisabled();
@@ -160,7 +163,7 @@ describe('activity cards', () => {
     rendered.rerender(<ActivitiesPage />);
     expect(screen.getByRole('button', { name: welfareActionName })).toBeEnabled();
     expect(screen.getByRole('button', { name: actionName })).toBeEnabled();
-    expect(screen.getAllByText('user.activities.mutationReconciled')).toHaveLength(2);
+    expect(screen.getAllByText(activityCopy.mutationReconciled)).toHaveLength(2);
   });
 
   it('disables a zero welfare award without consuming an intent', async () => {
@@ -168,7 +171,7 @@ describe('activity cards', () => {
       station: 'user',
       role: 'user',
     });
-    expect(screen.getByRole('button', { name: 'user.activities.welfare.claim' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: activityCopy.welfare.claim })).toBeDisabled();
     expect(screen.getByText('0', { exact: true })).toBeInTheDocument();
     expect(claimMutation.mutateAsync).not.toHaveBeenCalled();
   });
@@ -188,8 +191,8 @@ describe('activity cards', () => {
       station: 'user',
       role: 'user',
     });
-    expect(screen.getAllByText('user.activities.welfare.zeroAward')).toHaveLength(2);
-    expect(screen.queryByText('user.activities.welfare.claimedAmount')).toBeNull();
+    expect(screen.getAllByText(activityCopy.welfare.zeroAward)).toHaveLength(2);
+    expect(screen.queryByText(activityCopy.welfare.claimedAmount)).toBeNull();
   });
 
   it('renders literature as text, exposes one fixed action, and hides internal ids', async () => {
@@ -243,7 +246,7 @@ describe('activity cards', () => {
       />,
     );
     expect(
-      screen.getByRole('button', { name: 'user.activities.thursday.contributeOnce' }),
+      screen.getByRole('button', { name: activityCopy.thursday.contributeOnce }),
     ).toBeDisabled();
     await rendered.user.click(screen.getByRole('button', { name: /retry/i }));
     expect(contributionMutation.retryReconcile).toHaveBeenCalledTimes(1);
@@ -252,11 +255,11 @@ describe('activity cards', () => {
     contributionMutation.reconcileError = null;
     rendered.rerender(<ThursdayCard thursday={thursday} masterAvailable />);
     expect(
-      screen.getByRole('button', { name: 'user.activities.thursday.contributeOnce' }),
+      screen.getByRole('button', { name: activityCopy.thursday.contributeOnce }),
     ).toBeEnabled();
-    expect(screen.getByText('user.activities.mutationReconciled')).toBeInTheDocument();
+    expect(screen.getByText(activityCopy.mutationReconciled)).toBeInTheDocument();
     await rendered.user.click(
-      screen.getByRole('button', { name: 'user.activities.thursday.contributeOnce' }),
+      screen.getByRole('button', { name: activityCopy.thursday.contributeOnce }),
     );
     expect(contributionMutation.mutateAsync).toHaveBeenCalledTimes(2);
   });
@@ -280,27 +283,25 @@ describe('activity cards', () => {
       { station: 'user', role: 'user' },
     );
     await rendered.user.click(screen.getByRole('button'));
-    expect(screen.getByRole('button', { name: 'user.activities.welfare.claim' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: activityCopy.welfare.claim })).toBeDisabled();
     rendered.rerender(<WelfareCard welfare={{ ...available, poolBalance: '9' }} masterAvailable />);
-    expect(screen.getByRole('button', { name: 'user.activities.welfare.claim' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: activityCopy.welfare.claim })).toBeDisabled();
     rendered.rerender(
       <WelfareCard
         welfare={{ ...available, siteDay: '2026-09-01', poolBalance: '9' }}
         masterAvailable
       />,
     );
-    expect(screen.getByRole('button', { name: 'user.activities.welfare.claim' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: activityCopy.welfare.claim })).toBeDisabled();
     await rendered.user.click(screen.getByRole('button', { name: /retry/i }));
     expect(claimMutation.retryReconcile).toHaveBeenCalledTimes(1);
     expect(claimMutation.mutateAsync).toHaveBeenCalledTimes(1);
     claimMutation.reconcileGeneration = 1;
     claimMutation.reconcileError = null;
     rendered.rerender(<WelfareCard welfare={available} masterAvailable />);
-    expect(screen.getByRole('button', { name: 'user.activities.welfare.claim' })).toBeEnabled();
-    expect(screen.getByText('user.activities.mutationReconciled')).toBeInTheDocument();
-    await rendered.user.click(
-      screen.getByRole('button', { name: 'user.activities.welfare.claim' }),
-    );
+    expect(screen.getByRole('button', { name: activityCopy.welfare.claim })).toBeEnabled();
+    expect(screen.getByText(activityCopy.mutationReconciled)).toBeInTheDocument();
+    await rendered.user.click(screen.getByRole('button', { name: activityCopy.welfare.claim }));
     expect(claimMutation.mutateAsync).toHaveBeenCalledTimes(2);
   });
 
@@ -319,7 +320,7 @@ describe('activity cards', () => {
       />,
       { station: 'user', role: 'user' },
     );
-    expect(screen.getByText('user.activities.thursday.lastResultTitle')).toBeInTheDocument();
+    expect(screen.getByText(activityCopy.thursday.lastResultTitle)).toBeInTheDocument();
     rendered.rerender(
       <ThursdayCard
         thursday={{
@@ -331,10 +332,10 @@ describe('activity cards', () => {
         masterAvailable
       />,
     );
-    expect(screen.queryByText('user.activities.thursday.lastResultTitle')).toBeNull();
+    expect(screen.queryByText(activityCopy.thursday.lastResultTitle)).toBeNull();
     rendered.rerender(
       <ThursdayCard thursday={{ ...thursday, state: 'open', lastResult }} masterAvailable />,
     );
-    expect(screen.queryByText('user.activities.thursday.lastResultTitle')).toBeNull();
+    expect(screen.queryByText(activityCopy.thursday.lastResultTitle)).toBeNull();
   });
 });

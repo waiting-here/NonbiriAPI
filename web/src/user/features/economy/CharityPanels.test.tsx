@@ -2,6 +2,7 @@ import { screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@shared/query/http';
 import { renderWithProviders } from '../../../../test/unit/support';
+import userEn from '../../i18n/en.json';
 import { CharityPage } from '../../pages/CharityPage';
 import {
   DonationCard,
@@ -74,6 +75,8 @@ const CHARITY_OPEN: CharityCapability = {
   donationIntake: 'open',
 };
 
+const charityCopy = userEn.user.charity;
+
 function createMutation(error: ApiError) {
   return {
     data: undefined,
@@ -110,8 +113,8 @@ describe('donation intake authority', () => {
         station: 'user',
         role: 'user',
       });
-      expect(screen.getByText(`user.charity.intakeState.${state}`)).toBeInTheDocument();
-      expect(screen.getByText(`user.charity.intakeBody.${state}`)).toBeInTheDocument();
+      expect(screen.getByText(charityCopy.intakeState[state])).toBeInTheDocument();
+      expect(screen.getByText(charityCopy.intakeBody[state])).toBeInTheDocument();
       expect(rendered.container).not.toHaveTextContent('unknown');
     },
   );
@@ -178,7 +181,7 @@ describe('donation composer recovery', () => {
     unknown.reconcileGeneration = 1;
     rendered.rerender(<CharityPage />);
     expect(screen.getByRole('button', { name: /submit for review/i })).toBeEnabled();
-    expect(screen.getByText('user.charity.mutationReconciled')).toBeInTheDocument();
+    expect(screen.getByText(charityCopy.mutationReconciled)).toBeInTheDocument();
   });
 
   it('preserves only the description and requires key/ownership reconfirmation after 409', async () => {
@@ -232,7 +235,7 @@ describe('donation composer recovery', () => {
     expect(unknown.mutateAsync).toHaveBeenCalledTimes(1);
     unknown.reconcileGeneration = 1;
     rendered.rerender(<Host announcementEpoch="announcement-2" />);
-    expect(screen.getByText('user.charity.mutationReconciled')).toBeInTheDocument();
+    expect(screen.getByText(charityCopy.mutationReconciled)).toBeInTheDocument();
     expect(submit).toBeEnabled();
     const refreshedCheckboxes = screen.getAllByRole('checkbox');
     await user.click(refreshedCheckboxes[0]);
@@ -263,7 +266,7 @@ describe('donation composer recovery', () => {
     unknown.reconcileGeneration = 1;
     rendered.rerender(<DonationComposer choices={choices} draftNamespace="account-8b" />);
     expect(screen.getByRole('button', { name: /submit for review/i })).toBeEnabled();
-    expect(screen.getByText('user.charity.mutationReconciled')).toBeInTheDocument();
+    expect(screen.getByText(charityCopy.mutationReconciled)).toBeInTheDocument();
   });
 
   it('allows the canonical empty description and never offers a second endpoint or secret form', async () => {
@@ -335,8 +338,8 @@ describe('donation composer recovery', () => {
       station: 'user',
       role: 'user',
     });
-    expect(screen.getByText('user.charity.keyState.physical_disabled')).toBeInTheDocument();
-    expect(screen.getByText('user.charity.keyState.failure_disabled')).toBeInTheDocument();
+    expect(screen.getByText(charityCopy.keyState.physical_disabled)).toBeInTheDocument();
+    expect(screen.getByText(charityCopy.keyState.failure_disabled)).toBeInTheDocument();
     rendered.rerender(
       <DonationKeyPanel
         donationKey={{
@@ -348,9 +351,9 @@ describe('donation composer recovery', () => {
         }}
       />,
     );
-    expect(screen.getByText('user.charity.keyState.price_exhausted')).toBeInTheDocument();
-    expect(screen.getByText('user.charity.keyState.calls_exhausted')).toBeInTheDocument();
-    expect(screen.getByText('user.charity.keyState.tokens_exhausted')).toBeInTheDocument();
+    expect(screen.getByText(charityCopy.keyState.price_exhausted)).toBeInTheDocument();
+    expect(screen.getByText(charityCopy.keyState.calls_exhausted)).toBeInTheDocument();
+    expect(screen.getByText(charityCopy.keyState.tokens_exhausted)).toBeInTheDocument();
   });
 
   it.each([
@@ -398,7 +401,7 @@ describe('donation composer recovery', () => {
       rendered.rerender(<DonationCard donation={donation} showDetailLink={showDetailLink} />);
       expect(screen.getByRole('textbox')).toHaveValue('preserved safe edit');
       expect(screen.getByRole('button', { name: /save/i })).toBeEnabled();
-      expect(screen.getByText('user.charity.mutationReconciled')).toBeInTheDocument();
+      expect(screen.getByText(charityCopy.mutationReconciled)).toBeInTheDocument();
     },
   );
 
@@ -432,14 +435,15 @@ describe('donation composer recovery', () => {
         station: 'user',
         role: 'user',
       });
-      await rendered.user.click(screen.getByRole('button', { name: `user.charity.${operation}` }));
+      const operationLabel = charityCopy[operation];
+      await rendered.user.click(screen.getByRole('button', { name: operationLabel }));
       const operationButtons = screen.getAllByRole('button', {
-        name: `user.charity.${operation}`,
+        name: operationLabel,
       });
       await rendered.user.click(operationButtons[operationButtons.length - 1]);
       await waitFor(() => expect(rejected.mutateAsync).toHaveBeenCalledTimes(1));
       await waitFor(() =>
-        expect(screen.getByRole('button', { name: `user.charity.${operation}` })).toBeDisabled(),
+        expect(screen.getByRole('button', { name: operationLabel })).toBeDisabled(),
       );
       await rendered.user.click(screen.getByRole('button', { name: /retry/i }));
       expect(rejected.retryReconcile).toHaveBeenCalledTimes(1);
@@ -448,8 +452,8 @@ describe('donation composer recovery', () => {
       rejected.reconcileGeneration = 1;
       rejected.reconcileError = null;
       rendered.rerender(<DonationCard donation={donation} />);
-      expect(screen.getByRole('button', { name: `user.charity.${operation}` })).toBeEnabled();
-      expect(screen.getByText('user.charity.mutationReconciled')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: operationLabel })).toBeEnabled();
+      expect(screen.getByText(charityCopy.mutationReconciled)).toBeInTheDocument();
     },
   );
 });
