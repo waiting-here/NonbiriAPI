@@ -1,0 +1,417 @@
+{
+  "modes": [
+    "dry",
+    "live"
+  ],
+  "route_kinds": [
+    "openai_chat_completions",
+    "charity_chat_completions"
+  ],
+  "trace_states": [
+    "capturing",
+    "terminal"
+  ],
+  "result_kinds": [
+    "response",
+    "synthetic"
+  ],
+  "result_sources": [
+    "platform",
+    "upstream"
+  ],
+  "event_kinds": [
+    "snapshot",
+    "trace_upsert",
+    "gap",
+    "session_end"
+  ],
+  "gap_reasons": [
+    "cursor_invalid",
+    "process_restart",
+    "ring_expired",
+    "ring_evicted",
+    "slow_consumer"
+  ],
+  "end_reasons": [
+    "stopped",
+    "replaced",
+    "idle_expired",
+    "absolute_expired",
+    "auth_revoked",
+    "account_banned",
+    "account_deleted",
+    "shutdown"
+  ],
+  "metadata": [
+    {
+      "active": false
+    },
+    {
+      "active": true,
+      "id": "dbs_bm9uYmlyaSEAAAAAAAAAAQ",
+      "generation": "3",
+      "revision": "7",
+      "mode": "live",
+      "created_at": 1000,
+      "expires_at": 4600,
+      "idle_expires_at": 1600,
+      "inflight_count": 1,
+      "connected_subscribers": 2,
+      "last_event_id": "dbe_bm9uYmlyaSEAAAAAAAAAYw",
+      "limits": {
+        "session_bytes": 4194304,
+        "traces": 32,
+        "events": 128,
+        "subscribers": 2,
+        "event_bytes": 524288,
+        "trace_bytes": 786432
+      }
+    }
+  ],
+  "bodies": [
+    {
+      "media_type": "application/json",
+      "byte_count": 30,
+      "text": "{\"messages\":[null,false,0,\"\"]}",
+      "base64": null,
+      "truncated": false
+    },
+    {
+      "media_type": "application/octet-stream",
+      "byte_count": 3,
+      "text": null,
+      "base64": "AP9/",
+      "truncated": false
+    }
+  ],
+  "upstream_results": [
+    {
+      "result_kind": "response",
+      "status_code": 429,
+      "upstream_code": "rate_limit",
+      "diag": "connector-safe rate diagnostic",
+      "usage": {
+        "uncached_input_tokens": "3",
+        "cache_write_input_tokens": "2",
+        "cache_read_input_tokens": "1",
+        "output_tokens": "4",
+        "total_tokens": "10",
+        "usage_unknown": false,
+        "charge": "1.25"
+      },
+      "completed_at": 1010
+    },
+    {
+      "result_kind": "synthetic",
+      "status_code": 504,
+      "upstream_code": "timeout",
+      "diag": "connector-safe timeout diagnostic",
+      "usage": {
+        "uncached_input_tokens": "0",
+        "cache_write_input_tokens": "0",
+        "cache_read_input_tokens": "0",
+        "output_tokens": "0",
+        "total_tokens": "0",
+        "usage_unknown": true,
+        "charge": "0"
+      },
+      "completed_at": 1011
+    }
+  ],
+  "caller_results": [
+    {
+      "http_status": 422,
+      "error_code": "debug_dry_run_intercepted",
+      "source": "platform",
+      "message": "[NonbiriAPI] Debug dry run intercepted this request.",
+      "completed_at": 1002
+    },
+    {
+      "http_status": 422,
+      "error_code": "debug_live_result_captured",
+      "source": "platform",
+      "message": "[NonbiriAPI] Debug live result was captured.",
+      "completed_at": 1010
+    },
+    {
+      "http_status": 502,
+      "error_code": "upstream",
+      "source": "upstream",
+      "message": "normalized upstream failure",
+      "completed_at": 1011
+    },
+    {
+      "http_status": 499,
+      "error_code": null,
+      "source": "platform",
+      "message": "[NonbiriAPI] The caller cancelled the request.",
+      "completed_at": 1012
+    }
+  ],
+  "events": [
+    {
+      "version": 2,
+      "event_id": "dbe_bm9uYmlyaSEAAAAAAAAAZA",
+      "session_id": "dbs_bm9uYmlyaSEAAAAAAAAAAQ",
+      "generation": "3",
+      "kind": "snapshot",
+      "occurred_at": 1200,
+      "data": {
+        "session": {
+          "active": true,
+          "id": "dbs_bm9uYmlyaSEAAAAAAAAAAQ",
+          "generation": "3",
+          "revision": "7",
+          "mode": "live",
+          "created_at": 1000,
+          "expires_at": 4600,
+          "idle_expires_at": 1600,
+          "inflight_count": 1,
+          "connected_subscribers": 2,
+          "last_event_id": "dbe_bm9uYmlyaSEAAAAAAAAAYw",
+          "limits": {
+            "session_bytes": 4194304,
+            "traces": 32,
+            "events": 128,
+            "subscribers": 2,
+            "event_bytes": 524288,
+            "trace_bytes": 786432
+          }
+        },
+        "traces": [
+          {
+            "trace_id": "dbt_bm9uYmlyaSEAAAAAAAAAAQ",
+            "revision": "1",
+            "state": "capturing",
+            "request": {
+              "route_kind": "openai_chat_completions",
+              "model": "provider/model",
+              "stream": true,
+              "body": {
+                "media_type": "application/json",
+                "byte_count": 30,
+                "text": "{\"messages\":[null,false,0,\"\"]}",
+                "base64": null,
+                "truncated": false
+              }
+            },
+            "upstream_result": null,
+            "caller_result": null,
+            "created_at": 1000,
+            "updated_at": 1000,
+            "truncated": false
+          }
+        ],
+        "first_event_id": "dbe_bm9uYmlyaSEAAAAAAAAAWg",
+        "last_event_id": "dbe_bm9uYmlyaSEAAAAAAAAAYw"
+      }
+    },
+    {
+      "version": 2,
+      "event_id": "dbe_bm9uYmlyaSEAAAAAAAAAZQ",
+      "session_id": "dbs_bm9uYmlyaSEAAAAAAAAAAQ",
+      "generation": "3",
+      "kind": "trace_upsert",
+      "occurred_at": 1201,
+      "data": {
+        "trace_id": "dbt_bm9uYmlyaSEAAAAAAAAAAg",
+        "revision": "3",
+        "state": "terminal",
+        "request": {
+          "route_kind": "charity_chat_completions",
+          "model": "公益/模型",
+          "stream": false,
+          "body": {
+            "media_type": "application/octet-stream",
+            "byte_count": 3,
+            "text": null,
+            "base64": "AP9/",
+            "truncated": false
+          }
+        },
+        "upstream_result": {
+          "result_kind": "response",
+          "status_code": 429,
+          "upstream_code": "rate_limit",
+          "diag": "connector-safe rate diagnostic",
+          "usage": {
+            "uncached_input_tokens": "3",
+            "cache_write_input_tokens": "2",
+            "cache_read_input_tokens": "1",
+            "output_tokens": "4",
+            "total_tokens": "10",
+            "usage_unknown": false,
+            "charge": "1.25"
+          },
+          "completed_at": 1010
+        },
+        "caller_result": {
+          "http_status": 422,
+          "error_code": "debug_live_result_captured",
+          "source": "platform",
+          "message": "[NonbiriAPI] Debug live result was captured.",
+          "completed_at": 1010
+        },
+        "created_at": 1001,
+        "updated_at": 1010,
+        "truncated": false
+      }
+    },
+    {
+      "version": 2,
+      "event_id": "dbe_bm9uYmlyaSEAAAAAAAAAbg",
+      "session_id": "dbs_bm9uYmlyaSEAAAAAAAAAAQ",
+      "generation": "3",
+      "kind": "gap",
+      "occurred_at": 1210,
+      "data": {
+        "reason": "cursor_invalid",
+        "first_available_event_id": null
+      }
+    },
+    {
+      "version": 2,
+      "event_id": "dbe_bm9uYmlyaSEAAAAAAAAAbw",
+      "session_id": "dbs_bm9uYmlyaSEAAAAAAAAAAQ",
+      "generation": "3",
+      "kind": "gap",
+      "occurred_at": 1211,
+      "data": {
+        "reason": "process_restart",
+        "first_available_event_id": "dbe_bm9uYmlyaSEAAAAAAAAAWg"
+      }
+    },
+    {
+      "version": 2,
+      "event_id": "dbe_bm9uYmlyaSEAAAAAAAAAcA",
+      "session_id": "dbs_bm9uYmlyaSEAAAAAAAAAAQ",
+      "generation": "3",
+      "kind": "gap",
+      "occurred_at": 1212,
+      "data": {
+        "reason": "ring_expired",
+        "first_available_event_id": "dbe_bm9uYmlyaSEAAAAAAAAAWg"
+      }
+    },
+    {
+      "version": 2,
+      "event_id": "dbe_bm9uYmlyaSEAAAAAAAAAcQ",
+      "session_id": "dbs_bm9uYmlyaSEAAAAAAAAAAQ",
+      "generation": "3",
+      "kind": "gap",
+      "occurred_at": 1213,
+      "data": {
+        "reason": "ring_evicted",
+        "first_available_event_id": "dbe_bm9uYmlyaSEAAAAAAAAAWg"
+      }
+    },
+    {
+      "version": 2,
+      "event_id": "dbe_bm9uYmlyaSEAAAAAAAAAcg",
+      "session_id": "dbs_bm9uYmlyaSEAAAAAAAAAAQ",
+      "generation": "3",
+      "kind": "gap",
+      "occurred_at": 1214,
+      "data": {
+        "reason": "slow_consumer",
+        "first_available_event_id": "dbe_bm9uYmlyaSEAAAAAAAAAWg"
+      }
+    },
+    {
+      "version": 2,
+      "event_id": "dbe_bm9uYmlyaSEAAAAAAAAAeA",
+      "session_id": "dbs_bm9uYmlyaSEAAAAAAAAAAQ",
+      "generation": "3",
+      "kind": "session_end",
+      "occurred_at": 1220,
+      "data": {
+        "reason": "stopped",
+        "cancelled_inflight_count": 0
+      }
+    },
+    {
+      "version": 2,
+      "event_id": "dbe_bm9uYmlyaSEAAAAAAAAAeQ",
+      "session_id": "dbs_bm9uYmlyaSEAAAAAAAAAAQ",
+      "generation": "3",
+      "kind": "session_end",
+      "occurred_at": 1221,
+      "data": {
+        "reason": "replaced",
+        "cancelled_inflight_count": 1
+      }
+    },
+    {
+      "version": 2,
+      "event_id": "dbe_bm9uYmlyaSEAAAAAAAAAeg",
+      "session_id": "dbs_bm9uYmlyaSEAAAAAAAAAAQ",
+      "generation": "3",
+      "kind": "session_end",
+      "occurred_at": 1222,
+      "data": {
+        "reason": "idle_expired",
+        "cancelled_inflight_count": 2
+      }
+    },
+    {
+      "version": 2,
+      "event_id": "dbe_bm9uYmlyaSEAAAAAAAAAew",
+      "session_id": "dbs_bm9uYmlyaSEAAAAAAAAAAQ",
+      "generation": "3",
+      "kind": "session_end",
+      "occurred_at": 1223,
+      "data": {
+        "reason": "absolute_expired",
+        "cancelled_inflight_count": 0
+      }
+    },
+    {
+      "version": 2,
+      "event_id": "dbe_bm9uYmlyaSEAAAAAAAAAfA",
+      "session_id": "dbs_bm9uYmlyaSEAAAAAAAAAAQ",
+      "generation": "3",
+      "kind": "session_end",
+      "occurred_at": 1224,
+      "data": {
+        "reason": "auth_revoked",
+        "cancelled_inflight_count": 1
+      }
+    },
+    {
+      "version": 2,
+      "event_id": "dbe_bm9uYmlyaSEAAAAAAAAAfQ",
+      "session_id": "dbs_bm9uYmlyaSEAAAAAAAAAAQ",
+      "generation": "3",
+      "kind": "session_end",
+      "occurred_at": 1225,
+      "data": {
+        "reason": "account_banned",
+        "cancelled_inflight_count": 2
+      }
+    },
+    {
+      "version": 2,
+      "event_id": "dbe_bm9uYmlyaSEAAAAAAAAAfg",
+      "session_id": "dbs_bm9uYmlyaSEAAAAAAAAAAQ",
+      "generation": "3",
+      "kind": "session_end",
+      "occurred_at": 1226,
+      "data": {
+        "reason": "account_deleted",
+        "cancelled_inflight_count": 0
+      }
+    },
+    {
+      "version": 2,
+      "event_id": "dbe_bm9uYmlyaSEAAAAAAAAAfw",
+      "session_id": "dbs_bm9uYmlyaSEAAAAAAAAAAQ",
+      "generation": "3",
+      "kind": "session_end",
+      "occurred_at": 1227,
+      "data": {
+        "reason": "shutdown",
+        "cancelled_inflight_count": 1
+      }
+    }
+  ]
+}
