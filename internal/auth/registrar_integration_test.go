@@ -32,6 +32,26 @@ func (registrarDeletion) PrepareEndpointKeyDeletion(context.Context, *sql.Tx, in
 	return nil
 }
 
+func (registrarDeletion) ProtectNewEndpointKey(context.Context, *sql.Tx, int64, int64, int64) error {
+	return nil
+}
+
+func (registrarDeletion) ReconcileModelDiscovery(context.Context, *sql.Tx, int64, int64) error {
+	return nil
+}
+
+func (registrarDeletion) ReconcileRoutingProjection(context.Context, *sql.Tx, int64, int64) error {
+	return nil
+}
+
+func (registrarDeletion) PrepareEndpointDeletion(context.Context, *sql.Tx, int64, int64, int64) error {
+	return nil
+}
+
+func (registrarDeletion) PrepareModelDeletion(context.Context, *sql.Tx, int64, int64, int64) error {
+	return nil
+}
+
 type registrarDiscovery struct{}
 
 func (registrarDiscovery) Discover(context.Context, resources.DiscoveryClaimInput) (resources.DiscoveryClaimResult, error) {
@@ -45,7 +65,7 @@ func TestResourcesRegisterRoutesAcceptsServeMuxVariablesAndPassesPathValue(t *te
 		t.Fatal(err)
 	}
 	t.Cleanup(worker.Close)
-	repository, err := resources.New(resources.Config{Store: f.store, Connectors: connector.NewDefaultRegistry(), BaseURLs: registrarBaseURLs{}, Secrets: registrarSecrets{}, KeyDeletion: registrarDeletion{}, DiscoveryRail: registrarDiscovery{}, DiscoveryWorker: worker, CursorKeys: f.vault, FinalAuth: f.runtime, Now: f.clock.Now})
+	repository, err := resources.New(resources.Config{Store: f.store, Connectors: connector.NewDefaultRegistry(), BaseURLs: registrarBaseURLs{}, Secrets: registrarSecrets{}, KeyDeletion: registrarDeletion{}, KeyCreation: registrarDeletion{}, Projection: registrarDeletion{}, DiscoveryRail: registrarDiscovery{}, DiscoveryWorker: worker, CursorKeys: f.vault, FinalAuth: f.runtime, Now: f.clock.Now})
 	if err != nil {
 		t.Fatal(err)
 	}

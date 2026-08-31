@@ -30,9 +30,10 @@ const (
 )
 
 type reportTestOptions struct {
-	delay      DelayFunc
-	random     io.Reader
-	deleteHook *reportTestDeletionHook
+	delay           DelayFunc
+	random          io.Reader
+	deleteHook      *reportTestDeletionHook
+	issueProjection IssueProjectionHook
 }
 
 type reportTestEnvironment struct {
@@ -107,6 +108,12 @@ func (hook *reportTestDeletionHook) callCount() int {
 
 type reportTestBaseURLs struct{}
 
+type reportTestIssueProjection struct{}
+
+func (reportTestIssueProjection) ReconcileReportReason(context.Context, *sql.Tx, int64, int64) error {
+	return nil
+}
+
 func (reportTestBaseURLs) ValidateBaseURL(value string) (string, error) {
 	switch value {
 	case reportTestBaseURL:
@@ -151,13 +158,16 @@ func newReportTestEnvironmentWith(t *testing.T, options reportTestOptions) *repo
 			return context.Cause(ctx)
 		}
 	}
+	if options.issueProjection == nil {
+		options.issueProjection = reportTestIssueProjection{}
+	}
 	repository, err := New(Config{
 		Store: store, Connectors: connector.NewDefaultRegistry(), BaseURLs: reportTestBaseURLs{},
 		KeyDeriver: vault,
 		Authorizer: authz.New(authz.Options{Now: func() time.Time {
 			return time.Unix(environment.clock.Load(), 0)
 		}}),
-		DeleteKey: options.deleteHook.deleteKey, Random: options.random,
+		DeleteKey: options.deleteHook.deleteKey, IssueProjection: options.issueProjection, Random: options.random,
 		Now:   func() time.Time { return time.Unix(environment.clock.Load(), 0) },
 		Delay: options.delay, GenerateID: environment.generateID,
 	})

@@ -86,6 +86,39 @@ func (repository *Repository) expireActiveCaseTx(
 	deadline int64,
 	now int64,
 ) (bool, error) {
+	return repository.expireActiveCaseCoreTx(
+		ctx, tx, caseID, status, fingerprint, materialVersion, targetVersion, deadline, now, true,
+	)
+}
+
+func (repository *Repository) expireActiveCaseWithoutIssueProjectionTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	caseID string,
+	status string,
+	fingerprint []byte,
+	materialVersion int64,
+	targetVersion int64,
+	deadline int64,
+	now int64,
+) (bool, error) {
+	return repository.expireActiveCaseCoreTx(
+		ctx, tx, caseID, status, fingerprint, materialVersion, targetVersion, deadline, now, false,
+	)
+}
+
+func (repository *Repository) expireActiveCaseCoreTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	caseID string,
+	status string,
+	fingerprint []byte,
+	materialVersion int64,
+	targetVersion int64,
+	deadline int64,
+	now int64,
+	reconcileIssues bool,
+) (bool, error) {
 	if ctx == nil || tx == nil || len(fingerprint) != 32 || materialVersion < 1 || targetVersion < 1 ||
 		deadline < 0 || now < deadline || (status != "pending_indexing" && status != "pending_review") {
 		return false, ErrInvariant
@@ -117,9 +150,24 @@ state='released',decided_version=?,updated_at=? WHERE case_id=? AND state='prote
 		targetVersion, now, caseID); err != nil {
 		return false, fmt.Errorf("reports: release expired targets: %w", err)
 	}
+	issueTransitions := make(reportIssueTransitions)
+	if reconcileIssues {
+		issueTargets, err := readCaseIssueTargetsTx(ctx, tx, caseID)
+		if err != nil {
+			return false, err
+		}
+		if err := snapshotReportIssueTargetsTx(ctx, tx, issueTransitions, issueTargets); err != nil {
+			return false, err
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM endpoint_key_suspensions
 WHERE reason_type='report_case' AND report_case_id=?`, caseID); err != nil {
 		return false, fmt.Errorf("reports: release expired suspension: %w", err)
+	}
+	if reconcileIssues {
+		if err := repository.reconcileReportIssueTransitionsTx(ctx, tx, issueTransitions); err != nil {
+			return false, err
+		}
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO report_decisions(
 case_id,material_version,target_version,actor_user_id,action,reason,created_at)

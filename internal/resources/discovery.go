@@ -289,6 +289,9 @@ WHERE endpoint_key_id=? AND revision=? AND state<>'checking'`, newRevision, oper
 	if updated != 1 {
 		return MutationResult[DiscoveryAccepted]{}, ErrConflict
 	}
+	if err := r.reconcileDiscoveryKeyTx(ctx, tx, keyID); err != nil {
+		return MutationResult[DiscoveryAccepted]{}, err
+	}
 	checking := DiscoveryEvidence{State: "checking", Revision: strconv.FormatInt(newRevision, 10), SafeClass: "none", ObservedAt: &now}
 	accepted := DiscoveryAccepted{OperationID: operationID, Evidence: checking}
 	out, err := finishJSONMutation(ctx, tx, decision, http.StatusAccepted, accepted)
@@ -406,6 +409,8 @@ SELECT EXISTS(SELECT 1 FROM model_discovery_evidence WHERE endpoint_key_id=?)`, 
 		if evidenceExists != 0 {
 			return ErrConflict
 		}
+	} else if err := r.reconcileDiscoveryKeyTx(ctx, tx, keyID); err != nil {
+		return err
 	}
 	result, err := tx.ExecContext(ctx, `
 UPDATE accepted_operations
@@ -548,23 +553,29 @@ WHERE state='checking' AND started_at<=? ORDER BY endpoint_key_id`, now-staleDis
 	if err != nil {
 		return 0, fmt.Errorf("resources: list stale discoveries: %w", err)
 	}
-	var checkpoints []string
+	type staleDiscovery struct {
+		keyID      int64
+		checkpoint string
+	}
+	var stale []staleDiscovery
 	for rows.Next() {
 		var keyID, revision int64
 		if err := rows.Scan(&keyID, &revision); err != nil {
 			rows.Close()
 			return 0, fmt.Errorf("resources: scan stale discovery: %w", err)
 		}
-		checkpoints = append(checkpoints, strconv.FormatInt(keyID, 10)+":"+strconv.FormatInt(revision, 10))
+		stale = append(stale, staleDiscovery{
+			keyID: keyID, checkpoint: strconv.FormatInt(keyID, 10) + ":" + strconv.FormatInt(revision, 10),
+		})
 	}
 	if err := rows.Close(); err != nil {
 		return 0, fmt.Errorf("resources: close stale discoveries: %w", err)
 	}
-	for _, checkpoint := range checkpoints {
+	for _, item := range stale {
 		if _, err := tx.ExecContext(ctx, `
 UPDATE accepted_operations
 SET state='completed',checkpoint='',last_error_class=NULL,terminal_at=?
-WHERE kind='model_discovery' AND checkpoint=? AND state IN ('accepted','running')`, now, checkpoint); err != nil {
+WHERE kind='model_discovery' AND checkpoint=? AND state IN ('accepted','running')`, now, item.checkpoint); err != nil {
 			return 0, fmt.Errorf("resources: recover discovery operation: %w", err)
 		}
 	}
@@ -578,6 +589,11 @@ WHERE state='checking' AND started_at<=?`, now, now-staleDiscoverySecond)
 	evidenceCount, err := result.RowsAffected()
 	if err != nil {
 		return 0, fmt.Errorf("resources: observe stale discovery recovery: %w", err)
+	}
+	for _, item := range stale {
+		if err := r.reconcileDiscoveryKeyTx(ctx, tx, item.keyID); err != nil {
+			return 0, err
+		}
 	}
 	orphaned, err := tx.ExecContext(ctx, `
 UPDATE accepted_operations AS op

@@ -159,6 +159,12 @@ func (repository *Repository) captureEndpointKeyTx(
 	if err != nil {
 		return false, err
 	}
+	issueTransitions := make(reportIssueTransitions)
+	if err := snapshotReportIssueTargetsTx(ctx, tx, issueTransitions, []reportIssueTarget{{
+		ownerUserID: snapshot.ownerUserID, endpointKeyID: snapshot.keyID,
+	}}); err != nil {
+		return false, err
+	}
 	keyRef, err := repository.keys.targetDigest(caseID, snapshot.keyID)
 	if err != nil {
 		return false, err
@@ -172,6 +178,9 @@ SELECT 1 FROM report_targets WHERE case_id=? AND key_ref=?)`, caseID, keyRef[:])
 		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO endpoint_key_suspensions(
 endpoint_key_id,reason_type,report_case_id,created_at) VALUES(?,'report_case',?,?)`, snapshot.keyID, caseID, now); err != nil {
 			return false, fmt.Errorf("reports: restore target suspension: %w", err)
+		}
+		if err := repository.reconcileReportIssueTransitionsTx(ctx, tx, issueTransitions); err != nil {
+			return false, err
 		}
 		return false, nil
 	}
@@ -225,6 +234,9 @@ WHERE id=? AND status=? AND target_version=? AND target_count=?`,
 	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO endpoint_key_suspensions(
 endpoint_key_id,reason_type,report_case_id,created_at) VALUES(?,'report_case',?,?)`, snapshot.keyID, caseID, now); err != nil {
 		return false, fmt.Errorf("reports: apply target suspension: %w", err)
+	}
+	if err := repository.reconcileReportIssueTransitionsTx(ctx, tx, issueTransitions); err != nil {
+		return false, err
 	}
 	return true, nil
 }

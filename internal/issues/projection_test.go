@@ -150,6 +150,8 @@ func TestIssueReportReasonFilteringAndRederivation(t *testing.T) {
 	ownerID := environment.seedUser(t, "report-owner")
 	endpointID := environment.seedEndpoint(t, ownerID)
 	keyID := environment.seedEndpointKey(t, endpointID)
+	modelID := environment.seedModel(t, ownerID, "report-routing")
+	environment.makeBindingAvailable(t, modelID, keyID, "report-upstream")
 	environment.setDiscovery(t, keyID, "failed", "auth", issueTestNow)
 	environment.validation.set(ownerID, ResourceEndpointKey, keyID, RootCredentialInvalid, ResourceValidationState{
 		Active: true, ObservedAt: issueTestNow, SafeDetail: "credential_rejected",
@@ -167,8 +169,13 @@ func TestIssueReportReasonFilteringAndRederivation(t *testing.T) {
 	withIssueTx(t, environment, func(tx *sql.Tx) error {
 		return environment.service.Sources().ReconcileReportReason(context.Background(), tx, ownerID, keyID)
 	})
-	if got := len(listIssues(t, environment, ownerID, "current").Data); got != 0 {
-		t.Fatalf("report reason did not filter current issues: %d", got)
+	filtered := listIssues(t, environment, ownerID, "current")
+	if len(filtered.Data) != 1 {
+		t.Fatalf("report reason did not filter key issues and project routing: %+v", filtered)
+	}
+	routing := findIssue(t, filtered.Data, SourceRoutingProjection, RootNoRoutableBinding)
+	if routing.ResourceKind != ResourceModel || routing.Count != "1" {
+		t.Fatalf("report reason routing projection: %+v", routing)
 	}
 
 	injectedID := issueOpaqueID("iss_", 9001)
@@ -180,7 +187,7 @@ INSERT INTO user_issues(
  'endpoint_key',?,?,?,1)`, injectedID, ownerID, strconv.FormatInt(keyID, 10), strconv.FormatInt(endpointID, 10), issueTestNow, issueTestNow); err != nil {
 		t.Fatalf("inject filtered projection: %v", err)
 	}
-	if got := len(listIssues(t, environment, ownerID, "current").Data); got != 0 {
+	if got := len(listIssues(t, environment, ownerID, "current").Data); got != 1 {
 		t.Fatalf("list leaked issue hidden by live report reason: %+v", listIssues(t, environment, ownerID, "current"))
 	}
 	if _, err := environment.store.DB().Exec(`DELETE FROM user_issues WHERE id=?`, injectedID); err != nil {

@@ -282,8 +282,16 @@ FROM idempotency_records WHERE scope='credential_report' AND actor_scope_hash=? 
 		return ErrInvariant
 	}
 	workerNeeded := false
+	issueTransitions := make(reportIssueTransitions)
 	if found && caseRow.status != "approved_processing" && caseRow.deadline <= now {
-		expired, err := repository.expireActiveCaseTx(
+		deferredIssueTargets, err := readCaseIssueTargetsTx(ctx, tx, caseRow.id)
+		if err != nil {
+			return err
+		}
+		if err := snapshotReportIssueTargetsTx(ctx, tx, issueTransitions, deferredIssueTargets); err != nil {
+			return err
+		}
+		expired, err := repository.expireActiveCaseWithoutIssueProjectionTx(
 			ctx, tx, caseRow.id, caseRow.status, fingerprint[:], caseRow.materialVersion,
 			caseRow.targetVersion, caseRow.deadline, now,
 		)
@@ -315,6 +323,15 @@ FROM idempotency_records WHERE scope='credential_report' AND actor_scope_hash=? 
 	}
 	if found {
 		workerNeeded = true
+		fingerprintTargets, err := readFingerprintIssueTargetsTx(
+			ctx, tx, fingerprint[:], submission.ConnectorType, submission.CanonicalBaseURL,
+		)
+		if err != nil {
+			return err
+		}
+		if err := snapshotReportIssueTargetsTx(ctx, tx, issueTransitions, fingerprintTargets); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `
 INSERT OR IGNORE INTO endpoint_key_suspensions(endpoint_key_id,reason_type,report_case_id,created_at)
 SELECT k.id,'report_case',?,? FROM endpoint_keys k
@@ -323,6 +340,9 @@ WHERE k.secret_fingerprint=? AND e.connector_type=? AND e.base_url=?`,
 			caseRow.id, now, fingerprint[:], submission.ConnectorType, submission.CanonicalBaseURL); err != nil {
 			return fmt.Errorf("reports: apply fingerprint suspension: %w", err)
 		}
+	}
+	if err := repository.reconcileReportIssueTransitionsTx(ctx, tx, issueTransitions); err != nil {
+		return err
 	}
 	updated, err := tx.ExecContext(ctx, `UPDATE idempotency_records
 SET state='completed',http_status=?,response_body=?

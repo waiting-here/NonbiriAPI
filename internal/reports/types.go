@@ -53,26 +53,34 @@ type GenerationTwoSubkeyDeriver interface {
 
 // EndpointKeyDeletionFunc is the sole approved-processing capability. It runs
 // inside the report worker's transaction and must perform the integrated
-// C1/D1 deletion path, including binding, donation, claim, and secret cleanup.
+// resource deletion path, including binding, donation, claim, and secret cleanup.
 // It must not independently authorize or commit.
 type EndpointKeyDeletionFunc func(context.Context, *sql.Tx, int64, int64, int64) error
+
+// IssueProjectionHook filters and re-derives the owner-private issue
+// projection whenever the persisted report reason set changes. It runs in the
+// report owner's transaction and must not authorize or commit.
+type IssueProjectionHook interface {
+	ReconcileReportReason(context.Context, *sql.Tx, int64, int64) error
+}
 
 // DelayFunc makes the uniform public acceptance delay testable without
 // weakening the production context-cancellable timer.
 type DelayFunc func(context.Context, time.Duration) error
 
 type Config struct {
-	Store          *db.Store
-	Connectors     *connector.Registry
-	BaseURLs       BaseURLValidator
-	KeyDeriver     GenerationTwoSubkeyDeriver
-	Authorizer     *authz.Authorizer
-	DeleteKey      EndpointKeyDeletionFunc
-	Random         io.Reader
-	Now            func() time.Time
-	Delay          DelayFunc
-	GenerateID     func(string) (string, error)
-	WorkerInterval time.Duration
+	Store           *db.Store
+	Connectors      *connector.Registry
+	BaseURLs        BaseURLValidator
+	KeyDeriver      GenerationTwoSubkeyDeriver
+	Authorizer      *authz.Authorizer
+	DeleteKey       EndpointKeyDeletionFunc
+	IssueProjection IssueProjectionHook
+	Random          io.Reader
+	Now             func() time.Time
+	Delay           DelayFunc
+	GenerateID      func(string) (string, error)
+	WorkerInterval  time.Duration
 }
 
 // RouteRegistrar is implemented by auth.Runtime. Its optional-user wrapper

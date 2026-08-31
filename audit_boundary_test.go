@@ -45,7 +45,12 @@ func auditConfig() *config.Config {
 
 func testApplicationRequest(t *testing.T, handler http.Handler, method, hostName, path, body string, cookies []*http.Cookie, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
-	request := httptest.NewRequest(method, "http://wire.invalid"+path, strings.NewReader(body))
+	var request *http.Request
+	if body == "" {
+		request = httptest.NewRequest(method, "http://wire.invalid"+path, nil)
+	} else {
+		request = httptest.NewRequest(method, "http://wire.invalid"+path, strings.NewReader(body))
+	}
 	request.Host = hostName
 	request.RemoteAddr = "198.51.100.20:4242"
 	for _, cookie := range cookies {
@@ -84,6 +89,8 @@ func assertFreshSafeApplication(t *testing.T, app *application) {
 		{name: "donation API mounted behind maintenance", host: auditUserHost, path: "/api/donations", want: http.StatusServiceUnavailable},
 		{name: "charity capability mounted behind maintenance", host: auditUserHost, path: "/api/charity/models", want: http.StatusServiceUnavailable},
 		{name: "activities API mounted behind maintenance", host: auditUserHost, path: "/api/activities", want: http.StatusServiceUnavailable},
+		{name: "announcements API mounted behind maintenance", host: auditUserHost, path: "/api/announcements", want: http.StatusServiceUnavailable},
+		{name: "issues API mounted behind maintenance", host: auditUserHost, path: "/api/issues?state=current", want: http.StatusServiceUnavailable},
 		{name: "game API dormant", host: auditUserHost, path: "/api/games", want: http.StatusNotFound},
 		{name: "export API dormant", host: auditUserHost, path: "/api/account/export", want: http.StatusNotFound},
 		{name: "caller models dormant", host: auditUserHost, path: "/v1/models", want: http.StatusNotFound},
@@ -93,6 +100,8 @@ func assertFreshSafeApplication(t *testing.T, app *application) {
 		{name: "admin donation requires session", host: auditAdminHost, path: "/admin/api/donations", want: http.StatusUnauthorized},
 		{name: "admin charity models require session", host: auditAdminHost, path: "/admin/api/charity-models", want: http.StatusUnauthorized},
 		{name: "admin activities require session", host: auditAdminHost, path: "/admin/api/activities/thursday", want: http.StatusUnauthorized},
+		{name: "admin announcements require session", host: auditAdminHost, path: "/admin/api/announcements", want: http.StatusUnauthorized},
+		{name: "admin reports require session", host: auditAdminHost, path: "/admin/api/reports/badge", want: http.StatusUnauthorized},
 		{name: "admin cannot reach user bootstrap", host: auditAdminHost, path: "/api/config", want: http.StatusNotFound},
 		{name: "user cannot reach admin API", host: auditUserHost, path: "/admin/api/config", want: http.StatusNotFound},
 		{name: "unknown host rejected", host: "198.51.100.10", path: "/", want: http.StatusBadRequest},
@@ -103,6 +112,13 @@ func assertFreshSafeApplication(t *testing.T, app *application) {
 				t.Fatalf("status=%d want=%d body=%s", rec.Code, tc.want, rec.Body.String())
 			}
 		})
+	}
+	publicReport := testApplicationRequest(t, app.handler, http.MethodPost, auditUserHost, "/api/reports/credential-theft", `{}`, nil, map[string]string{
+		"Content-Type": "application/json",
+		"Origin":       "http://" + auditUserHost,
+	})
+	if publicReport.Code != http.StatusServiceUnavailable {
+		t.Fatalf("public report during maintenance status=%d body=%s", publicReport.Code, publicReport.Body.String())
 	}
 
 	for _, tc := range []struct {
@@ -231,7 +247,8 @@ func TestGenerationTwoRootAuthenticationAndMaintenanceWiring(t *testing.T) {
 	defer func() { _ = app.Close() }()
 
 	if app.authRuntime == nil || app.bridge == nil || app.claims == nil || app.resourceRepo == nil ||
-		app.discoveryWorker == nil || app.donations == nil || app.charity == nil || app.charityRouting == nil || app.activities == nil ||
+		app.discoveryWorker == nil || app.donations == nil || app.charity == nil || app.charityRouting == nil ||
+		app.announcements == nil || app.issues == nil || app.reports == nil || app.activities == nil ||
 		app.activityRepo == nil || app.activityEvents == nil || app.activityWorker == nil || app.activityDone == nil || app.failures == nil || app.authorizer == nil ||
 		app.elevation == nil || app.gate == nil || app.maintenance == nil || app.egress == nil {
 		t.Fatal("root runtime omitted a required Generation 2 owner")
@@ -369,17 +386,24 @@ FROM sessions s JOIN users u ON u.id=s.user_id WHERE u.is_admin=1`).Scan(&adminU
 		t.Fatalf("activity final-transaction gate after maintenance disable err=%v", gateErr)
 	}
 	_ = activityTx.Rollback()
-	for _, path := range []string{"/api/endpoints", "/api/donations", "/api/charity/models", "/api/activities"} {
+	for _, path := range []string{"/api/endpoints", "/api/donations", "/api/charity/models", "/api/activities", "/api/announcements", "/api/issues?state=current"} {
 		unauthenticated := testApplicationRequest(t, app.handler, http.MethodGet, auditUserHost, path, "", nil, nil)
 		if unauthenticated.Code != http.StatusUnauthorized {
 			t.Fatalf("unauthenticated mounted route %s status=%d body=%s", path, unauthenticated.Code, unauthenticated.Body.String())
 		}
 	}
-	for _, path := range []string{"/admin/api/donations", "/admin/api/charity-models", "/admin/api/activities/thursday"} {
+	for _, path := range []string{"/admin/api/donations", "/admin/api/charity-models", "/admin/api/activities/thursday", "/admin/api/announcements", "/admin/api/reports/badge"} {
 		authorized := testApplicationRequest(t, app.handler, http.MethodGet, auditAdminHost, path, "", []*http.Cookie{adminCookie}, nil)
 		if authorized.Code != http.StatusOK {
 			t.Fatalf("authenticated administrator route %s status=%d body=%s", path, authorized.Code, authorized.Body.String())
 		}
+	}
+	invalidPublicReport := testApplicationRequest(t, app.handler, http.MethodPost, auditUserHost, "/api/reports/credential-theft", `{}`, nil, map[string]string{
+		"Content-Type": "application/json",
+		"Origin":       "http://" + auditUserHost,
+	})
+	if invalidPublicReport.Code != http.StatusBadRequest {
+		t.Fatalf("invalid public report after maintenance status=%d body=%s", invalidPublicReport.Code, invalidPublicReport.Body.String())
 	}
 
 	logout := testApplicationRequest(t, app.handler, http.MethodPost, auditAdminHost, "/admin/api/logout", "", []*http.Cookie{adminCookie}, map[string]string{

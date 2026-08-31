@@ -277,6 +277,17 @@ func (r *Repository) PatchEndpoint(ctx context.Context, userID, endpointID int64
 			return MutationResult[Endpoint]{}, ErrConflict
 		}
 	}
+	var affectedModels []bindingRevisionTarget
+	if current.Enabled != enabled {
+		keyIDs, err := verifiedEndpointKeyIDsTx(ctx, tx, userID, endpointID)
+		if err != nil {
+			return MutationResult[Endpoint]{}, err
+		}
+		affectedModels, err = bindingRevisionTargetsForKeysTx(ctx, tx, userID, keyIDs)
+		if err != nil {
+			return MutationResult[Endpoint]{}, err
+		}
+	}
 	result, err := tx.ExecContext(ctx, `
 UPDATE endpoints SET note=?,enabled=?,revision=revision+1,updated_at=?
 WHERE id=? AND user_id=? AND revision=?`, note, boolInt(enabled), now, endpointID, userID, input.ExpectedRevision)
@@ -286,6 +297,9 @@ WHERE id=? AND user_id=? AND revision=?`, note, boolInt(enabled), now, endpointI
 	updated, _ := result.RowsAffected()
 	if updated != 1 {
 		return MutationResult[Endpoint]{}, ErrConflict
+	}
+	if err := r.reconcileRoutingTargetsTx(ctx, tx, userID, affectedModels); err != nil {
+		return MutationResult[Endpoint]{}, err
 	}
 	item, err := getEndpointTx(ctx, tx, userID, endpointID)
 	if err != nil {
@@ -352,6 +366,9 @@ func (r *Repository) DeleteEndpoint(ctx context.Context, userID, endpointID int6
 	if err := validateBindingRevisionTargets(models); err != nil {
 		return MutationResult[struct{}]{}, err
 	}
+	if err := r.projection.PrepareEndpointDeletion(ctx, tx, userID, endpointID, now); err != nil {
+		return MutationResult[struct{}]{}, fmt.Errorf("resources: prepare endpoint projection deletion: %w", err)
+	}
 	if err := r.keyDeletion.PrepareEndpointKeyDeletion(ctx, tx, userID, keyIDs, now); err != nil {
 		return MutationResult[struct{}]{}, fmt.Errorf("resources: prepare endpoint key deletion: %w", err)
 	}
@@ -370,6 +387,9 @@ func (r *Repository) DeleteEndpoint(ctx context.Context, userID, endpointID int6
 		if err := r.secrets.MarkEndpointSecretOrphaned(ctx, tx, ref, now); err != nil {
 			return MutationResult[struct{}]{}, fmt.Errorf("resources: orphan endpoint secret: %w", err)
 		}
+	}
+	if err := r.reconcileRoutingTargetsTx(ctx, tx, userID, models); err != nil {
+		return MutationResult[struct{}]{}, err
 	}
 	out, err := finishEmptyMutation(ctx, tx, decision, http.StatusNoContent)
 	if err != nil {
@@ -742,6 +762,12 @@ INSERT INTO model_discovery_evidence(endpoint_key_id,state,revision,safe_class,s
 VALUES(?,'unknown',1,'none','',0)`, keyID); err != nil {
 		return MutationResult[EndpointKey]{}, fmt.Errorf("resources: initialize discovery evidence: %w", err)
 	}
+	if err := r.keyCreation.ProtectNewEndpointKey(ctx, tx, userID, keyID, now); err != nil {
+		return MutationResult[EndpointKey]{}, fmt.Errorf("resources: protect new endpoint key: %w", err)
+	}
+	if err := r.projection.ReconcileModelDiscovery(ctx, tx, userID, keyID); err != nil {
+		return MutationResult[EndpointKey]{}, fmt.Errorf("resources: project new endpoint key discovery: %w", err)
+	}
 	if input.ForceStoreFalse {
 		if err := writePolicyAudit(ctx, tx, userID, "endpoint_key", keyID, "force_store_false", false, true, now); err != nil {
 			return MutationResult[EndpointKey]{}, err
@@ -820,6 +846,13 @@ func (r *Repository) PatchEndpointKey(ctx context.Context, userID, endpointID, k
 			return MutationResult[EndpointKey]{}, ErrConflict
 		}
 	}
+	var affectedModels []bindingRevisionTarget
+	if current.Enabled != enabled {
+		affectedModels, err = bindingRevisionTargetsForKeysTx(ctx, tx, userID, []int64{keyID})
+		if err != nil {
+			return MutationResult[EndpointKey]{}, err
+		}
+	}
 	result, err := tx.ExecContext(ctx, `
 UPDATE endpoint_keys SET note=?,enabled=?,force_store_false=?,revision=revision+1,updated_at=?
 WHERE id=? AND endpoint_id=? AND revision=?`, note, boolInt(enabled), boolInt(forceStore), now, keyID, endpointID, input.ExpectedRevision)
@@ -834,6 +867,9 @@ WHERE id=? AND endpoint_id=? AND revision=?`, note, boolInt(enabled), boolInt(fo
 		if err := writePolicyAudit(ctx, tx, userID, "endpoint_key", keyID, "force_store_false", current.ForceStoreFalse, forceStore, now); err != nil {
 			return MutationResult[EndpointKey]{}, err
 		}
+	}
+	if err := r.reconcileRoutingTargetsTx(ctx, tx, userID, affectedModels); err != nil {
+		return MutationResult[EndpointKey]{}, err
 	}
 	item, err := getEndpointKeyTx(ctx, tx, userID, endpointID, keyID)
 	if err != nil {
@@ -892,6 +928,9 @@ func (r *Repository) DeleteEndpointKey(ctx context.Context, userID, endpointID, 
 	if err := validateBindingRevisionTargets(models); err != nil {
 		return MutationResult[struct{}]{}, err
 	}
+	if err := r.projection.PrepareEndpointKeyDeletion(ctx, tx, userID, []int64{keyID}, now); err != nil {
+		return MutationResult[struct{}]{}, fmt.Errorf("resources: prepare endpoint key projection deletion: %w", err)
+	}
 	if err := r.keyDeletion.PrepareEndpointKeyDeletion(ctx, tx, userID, []int64{keyID}, now); err != nil {
 		return MutationResult[struct{}]{}, fmt.Errorf("resources: prepare endpoint key deletion: %w", err)
 	}
@@ -908,6 +947,9 @@ func (r *Repository) DeleteEndpointKey(ctx context.Context, userID, endpointID, 
 	}
 	if err := r.secrets.MarkEndpointSecretOrphaned(ctx, tx, secretRef, now); err != nil {
 		return MutationResult[struct{}]{}, fmt.Errorf("resources: orphan endpoint secret: %w", err)
+	}
+	if err := r.reconcileRoutingTargetsTx(ctx, tx, userID, models); err != nil {
+		return MutationResult[struct{}]{}, err
 	}
 	out, err := finishEmptyMutation(ctx, tx, decision, http.StatusNoContent)
 	if err != nil {

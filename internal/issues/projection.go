@@ -130,10 +130,9 @@ func (adapter *SourceAdapter) reconcileRoutingTracked(ctx context.Context, tx *s
 	if _, err := readOwnerProjection(ctx, tx, ownerUserID, ResourceModel, modelID); err != nil {
 		return err
 	}
-	var updatedAt int64
 	var available int
 	err := tx.QueryRowContext(ctx, `
-SELECT m.updated_at,EXISTS(
+SELECT EXISTS(
  SELECT 1 FROM model_bindings b
  JOIN endpoint_keys k ON k.id=b.endpoint_key_id
  JOIN endpoints e ON e.id=k.endpoint_id
@@ -142,7 +141,7 @@ SELECT m.updated_at,EXISTS(
  WHERE b.model_id=m.id AND e.user_id=m.user_id AND e.enabled=1 AND k.enabled=1
    AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id)
    AND (p.manual_supports>0 OR (p.automatic_supports>0 AND d.state='succeeded' AND d.revision=p.automatic_revision))
-) FROM models m WHERE m.id=? AND m.user_id=?`, modelID, ownerUserID).Scan(&updatedAt, &available)
+) FROM models m WHERE m.id=? AND m.user_id=?`, modelID, ownerUserID).Scan(&available)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -152,7 +151,7 @@ SELECT m.updated_at,EXISTS(
 	return adapter.repository.reconcileTx(ctx, tx, sourceObservation{
 		userID: ownerUserID, source: SourceRoutingProjection, resourceKind: ResourceModel,
 		resourceID: modelID, rootCause: RootNoRoutableBinding, active: available == 0,
-		observedAt: updatedAt, increment: increment, capacityLimited: capacityLimited,
+		observedAt: now, increment: increment, capacityLimited: capacityLimited,
 	}, now)
 }
 
@@ -344,8 +343,9 @@ VALUES('issue_projection_incomplete','Issue projection is incomplete for one acc
 	return nil
 }
 
-// ReconcileReportReason reads the persisted report-reason set. While any
-// reason exists it closes/filter the key's current issues. Once the set is
+// ReconcileReportReason reads the persisted report-reason set after an
+// aggregate inactive<->active transition. While any reason exists it filters
+// the key's current issues and re-derives affected routing. Once the set is
 // empty, all three authorities are re-derived without manufacturing a count.
 func (adapter *SourceAdapter) ReconcileReportReason(ctx context.Context, tx *sql.Tx, ownerUserID, endpointKeyID int64) error {
 	if adapter == nil || adapter.repository == nil || tx == nil || ownerUserID <= 0 || endpointKeyID <= 0 {
@@ -371,7 +371,18 @@ WHERE user_id=? AND resource_kind='endpoint_key' AND resource_ref=? AND state='c
 			return fmt.Errorf("issues: filter report-reason projection: %w", err)
 		}
 		if affected, _ := result.RowsAffected(); affected > 0 {
-			return trimClosedTx(ctx, tx, ownerUserID)
+			if err := trimClosedTx(ctx, tx, ownerUserID); err != nil {
+				return err
+			}
+		}
+		modelIDs, err := modelsUsingKeys(ctx, tx, ownerUserID, []int64{endpointKeyID})
+		if err != nil {
+			return err
+		}
+		for _, modelID := range modelIDs {
+			if err := adapter.reconcileRouting(ctx, tx, ownerUserID, modelID, now, true); err != nil {
+				return err
+			}
 		}
 		return nil
 	}

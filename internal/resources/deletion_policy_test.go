@@ -128,6 +128,8 @@ func TestRepositoryRequiresEndpointKeyDeletionHook(t *testing.T) {
 		Connectors:      environment.repository.connectors,
 		BaseURLs:        environment.repository.baseURLs,
 		Secrets:         environment.secrets,
+		KeyCreation:     resourceTestLifecycleHook{},
+		Projection:      resourceTestLifecycleHook{},
 		DiscoveryRail:   environment.discovery,
 		DiscoveryWorker: environment.worker,
 		CursorKeys:      environment.vault,

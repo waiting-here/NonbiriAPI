@@ -20,6 +20,7 @@ type Repository struct {
 	baseURLs    BaseURLValidator
 	authorizer  *authz.Authorizer
 	deleteKey   EndpointKeyDeletionFunc
+	issues      IssueProjectionHook
 	keys        *reportKeys
 	cursors     *cursorCodec
 	now         func() time.Time
@@ -69,7 +70,8 @@ func defaultDelay(ctx context.Context, duration time.Duration) error {
 
 func New(config Config) (*Repository, error) {
 	if config.Store == nil || config.Store.DB() == nil || config.Connectors == nil || nilInterface(config.BaseURLs) ||
-		nilInterface(config.KeyDeriver) || config.Authorizer == nil || config.DeleteKey == nil {
+		nilInterface(config.KeyDeriver) || config.Authorizer == nil || config.DeleteKey == nil ||
+		nilInterface(config.IssueProjection) {
 		return nil, errors.New("reports: complete dependencies are required")
 	}
 	if config.Random == nil {
@@ -107,7 +109,7 @@ func New(config Config) (*Repository, error) {
 	}
 	repository := &Repository{
 		db: config.Store.DB(), connectors: config.Connectors, baseURLs: config.BaseURLs, authorizer: config.Authorizer,
-		deleteKey: config.DeleteKey, keys: keys, cursors: cursors, now: config.Now,
+		deleteKey: config.DeleteKey, issues: config.IssueProjection, keys: keys, cursors: cursors, now: config.Now,
 		delay: config.Delay, generateID: config.GenerateID,
 		publicSlots: make(chan struct{}, publicConcurrency), interval: config.WorkerInterval,
 		workerLimit: workerTransactionLimit,

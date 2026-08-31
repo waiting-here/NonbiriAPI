@@ -62,6 +62,32 @@ func (bulkDeletionDiscoveryWorker) ReserveDiscovery() (resources.DiscoveryReserv
 	return nil, false
 }
 
+type bulkDeletionLifecycleHook struct{}
+
+func (bulkDeletionLifecycleHook) ProtectNewEndpointKey(context.Context, *sql.Tx, int64, int64, int64) error {
+	return nil
+}
+
+func (bulkDeletionLifecycleHook) ReconcileModelDiscovery(context.Context, *sql.Tx, int64, int64) error {
+	return nil
+}
+
+func (bulkDeletionLifecycleHook) ReconcileRoutingProjection(context.Context, *sql.Tx, int64, int64) error {
+	return nil
+}
+
+func (bulkDeletionLifecycleHook) PrepareEndpointDeletion(context.Context, *sql.Tx, int64, int64, int64) error {
+	return nil
+}
+
+func (bulkDeletionLifecycleHook) PrepareEndpointKeyDeletion(context.Context, *sql.Tx, int64, []int64, int64) error {
+	return nil
+}
+
+func (bulkDeletionLifecycleHook) PrepareModelDeletion(context.Context, *sql.Tx, int64, int64, int64) error {
+	return nil
+}
+
 func TestResourcesRepositoryDeletesEndpointWithMoreThanDonationCreateLimit(t *testing.T) {
 	environment := newDonationTestEnv(t)
 	owner := environment.seedUser(t, "bulk-delete-owner", nil, false)
@@ -92,6 +118,7 @@ WHERE key='default_endpoint_key_limit'`); err != nil {
 		Store: environment.store, Connectors: connector.NewDefaultRegistry(),
 		BaseURLs: bulkDeletionBaseURLValidator{}, Secrets: bulkDeletionSecretWriter{},
 		KeyDeletion: environment.service, DiscoveryRail: bulkDeletionDiscoveryRail{},
+		KeyCreation: bulkDeletionLifecycleHook{}, Projection: bulkDeletionLifecycleHook{},
 		DiscoveryWorker: bulkDeletionDiscoveryWorker{}, CursorKeys: environment.vault,
 		FinalAuth: environment.auth,
 		Now:       func() time.Time { return time.Unix(environment.clock.Load(), 0) },

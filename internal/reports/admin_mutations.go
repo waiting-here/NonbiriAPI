@@ -337,8 +337,19 @@ WHERE id=? AND status='pending_review' AND deadline>? AND material_version=? AND
 WHERE case_id=? AND state='protected'`, row.targetVersion, now, caseID); err != nil {
 		return MutationResult{}, fmt.Errorf("reports: release rejected targets: %w", err)
 	}
+	issueTargets, err := readCaseIssueTargetsTx(ctx, tx, caseID)
+	if err != nil {
+		return MutationResult{}, err
+	}
+	issueTransitions := make(reportIssueTransitions)
+	if err := snapshotReportIssueTargetsTx(ctx, tx, issueTransitions, issueTargets); err != nil {
+		return MutationResult{}, err
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM endpoint_key_suspensions WHERE reason_type='report_case' AND report_case_id=?`, caseID); err != nil {
 		return MutationResult{}, fmt.Errorf("reports: release rejected suspension: %w", err)
+	}
+	if err := repository.reconcileReportIssueTransitionsTx(ctx, tx, issueTransitions); err != nil {
+		return MutationResult{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO report_decisions(
 case_id,material_version,target_version,actor_user_id,action,reason,created_at)

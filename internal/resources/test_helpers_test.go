@@ -67,13 +67,15 @@ func newResourceTestEnvironmentWithDiscoveryPool(
 	authorizer := &resourceTestAuthorizer{}
 	secrets := &resourceTestSecretWriter{}
 	deletions := &resourceTestEndpointKeyDeletionHook{}
+	lifecycle := resourceTestLifecycleHook{}
 	discovery := &resourceTestDiscoveryRail{result: DiscoveryClaimResult{Succeeded: true, Models: []DiscoveredModel{}}}
 	clock := &atomic.Int64{}
 	clock.Store(resourceTestNow)
 	repository, err := New(Config{
 		Store: store, Connectors: connector.NewDefaultRegistry(),
 		BaseURLs: resourceTestBaseURLValidator{}, Secrets: secrets,
-		KeyDeletion:   deletions,
+		KeyDeletion: deletions,
+		KeyCreation: lifecycle, Projection: lifecycle,
 		DiscoveryRail: discovery, DiscoveryWorker: worker,
 		CursorKeys: vault, FinalAuth: authorizer,
 		Now: func() time.Time { return time.Unix(clock.Load(), 0) },
@@ -87,6 +89,32 @@ func newResourceTestEnvironmentWithDiscoveryPool(
 		worker: worker,
 		clock:  clock,
 	}
+}
+
+type resourceTestLifecycleHook struct{}
+
+func (resourceTestLifecycleHook) ProtectNewEndpointKey(context.Context, *sql.Tx, int64, int64, int64) error {
+	return nil
+}
+
+func (resourceTestLifecycleHook) ReconcileModelDiscovery(context.Context, *sql.Tx, int64, int64) error {
+	return nil
+}
+
+func (resourceTestLifecycleHook) ReconcileRoutingProjection(context.Context, *sql.Tx, int64, int64) error {
+	return nil
+}
+
+func (resourceTestLifecycleHook) PrepareEndpointDeletion(context.Context, *sql.Tx, int64, int64, int64) error {
+	return nil
+}
+
+func (resourceTestLifecycleHook) PrepareEndpointKeyDeletion(context.Context, *sql.Tx, int64, []int64, int64) error {
+	return nil
+}
+
+func (resourceTestLifecycleHook) PrepareModelDeletion(context.Context, *sql.Tx, int64, int64, int64) error {
+	return nil
 }
 
 func (environment *resourceTestEnvironment) seedUser(t *testing.T, discordID string) int64 {
