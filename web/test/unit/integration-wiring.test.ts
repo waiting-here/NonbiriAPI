@@ -34,6 +34,10 @@ describe('alpha.3 central route and navigation wiring', () => {
     expect(userPaths.indexOf('games')).toBe(userPaths.indexOf('models') + 1);
     expect(userPaths.indexOf('debug')).toBe(userPaths.indexOf('keys') + 1);
     expect(userChildren.find((route) => route.path === 'games')?.lazy).toBeTypeOf('function');
+    expect(userChildren.find((route) => route.path === 'activities')?.lazy).toBeTypeOf('function');
+    expect(
+      userChildren.find((route) => route.path === 'charity/donations/:donationId')?.lazy,
+    ).toBeTypeOf('function');
     expect(userChildren.find((route) => route.path === 'debug')?.lazy).toBeTypeOf('function');
     expect(adminPaths.indexOf('games')).toBe(adminPaths.indexOf('settings') + 1);
     expect(adminChildren.find((route) => route.path === 'games')?.lazy).toBeTypeOf('function');
@@ -43,6 +47,7 @@ describe('alpha.3 central route and navigation wiring', () => {
       '/endpoints:endpoints',
       '/models:models',
       '/charity:charity',
+      '/activities:activities',
       '/games:games',
       '/debug:debug',
     ]);
