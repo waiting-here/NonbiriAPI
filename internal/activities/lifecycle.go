@@ -15,7 +15,7 @@ const maxActivityExportRows = 10_000
 // It excludes shared pool history, operation IDs, checkpoints and participant
 // references.
 func (r *Repository) ExportUser(ctx context.Context, userID int64) (UserExport, error) {
-	if r == nil || ctx == nil || userID <= 0 {
+	if r == nil || r.db == nil || ctx == nil || userID <= 0 {
 		return UserExport{}, ErrInvalidRequest
 	}
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
@@ -23,6 +23,23 @@ func (r *Repository) ExportUser(ctx context.Context, userID int64) (UserExport, 
 		return UserExport{}, classifyDatabaseError("begin activity export", err)
 	}
 	defer tx.Rollback()
+	export, err := r.ExportUserTx(ctx, tx, userID, maxActivityExportRows)
+	if err != nil {
+		return UserExport{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return UserExport{}, classifyDatabaseError("commit activity export", err)
+	}
+	return export, nil
+}
+
+// ExportUserTx returns the account's activity facts from the caller-owned
+// transaction. The caller owns authorization, snapshot selection, and commit.
+// Each exported collection fails closed when it contains more than limit rows.
+func (r *Repository) ExportUserTx(ctx context.Context, tx *sql.Tx, userID int64, limit int) (UserExport, error) {
+	if r == nil || ctx == nil || tx == nil || userID <= 0 || limit < 1 || limit > maxActivityExportRows {
+		return UserExport{}, ErrInvalidRequest
+	}
 	var exists int
 	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id=?)`, userID).Scan(&exists); err != nil {
 		return UserExport{}, classifyDatabaseError("read activity export owner", err)
@@ -33,7 +50,7 @@ func (r *Repository) ExportUser(ctx context.Context, userID int64) (UserExport, 
 	export := UserExport{WelfareClaims: []WelfareClaimExport{}, Thursday: []ThursdayParticipantExport{}}
 	claimRows, err := tx.QueryContext(ctx, `
 SELECT site_day,threshold_milli,cap_milli,award_milli,created_at
-FROM welfare_claims WHERE user_id=? ORDER BY site_day,created_at LIMIT ?`, userID, maxActivityExportRows+1)
+FROM welfare_claims WHERE user_id=? ORDER BY site_day,created_at LIMIT ?`, userID, limit+1)
 	if err != nil {
 		return UserExport{}, classifyDatabaseError("read welfare export", err)
 	}
@@ -52,7 +69,7 @@ FROM welfare_claims WHERE user_id=? ORDER BY site_day,created_at LIMIT ?`, userI
 	if err := claimRows.Close(); err != nil {
 		return UserExport{}, classifyDatabaseError("close welfare export", err)
 	}
-	if len(export.WelfareClaims) > maxActivityExportRows {
+	if len(export.WelfareClaims) > limit {
 		return UserExport{}, ErrResourceLimit
 	}
 	participantRows, err := tx.QueryContext(ctx, `
@@ -60,7 +77,7 @@ SELECT p.period_id,t.period_key,p.contribution_count,p.contributed_mag,p.eligibl
  p.settled,p.payout_mag,p.unpaid_reason,p.created_at,p.updated_at
 FROM thursday_participants p
 JOIN thursday_periods t ON t.id=p.period_id
-WHERE p.user_id=? ORDER BY t.opens_at,p.period_id LIMIT ?`, userID, maxActivityExportRows+1)
+WHERE p.user_id=? ORDER BY t.opens_at,p.period_id LIMIT ?`, userID, limit+1)
 	if err != nil {
 		return UserExport{}, classifyDatabaseError("read Thursday export", err)
 	}
@@ -106,11 +123,8 @@ WHERE p.user_id=? ORDER BY t.opens_at,p.period_id LIMIT ?`, userID, maxActivityE
 	if err := participantRows.Close(); err != nil {
 		return UserExport{}, classifyDatabaseError("close Thursday export", err)
 	}
-	if len(export.Thursday) > maxActivityExportRows {
+	if len(export.Thursday) > limit {
 		return UserExport{}, ErrResourceLimit
-	}
-	if err := tx.Commit(); err != nil {
-		return UserExport{}, classifyDatabaseError("commit activity export", err)
 	}
 	return export, nil
 }

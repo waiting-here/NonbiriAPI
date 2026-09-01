@@ -20,6 +20,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
+	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
@@ -46,6 +47,7 @@ type Runtime struct {
 	userMux, adminMux               *http.ServeMux
 	routes                          map[string]struct{}
 	userSessionInvalidationObserver UserSessionInvalidationObserver
+	userLifecycle                   *lifecyclegate.Gate
 	frozen, closed                  bool
 	userHandler, adminHandler       http.Handler
 }
@@ -395,10 +397,16 @@ func (r *Runtime) wrapUser(next http.Handler, anonymous, maintenanceExempt, rene
 			r.writeSessionFailure(w, err)
 			return
 		}
+		requestContext, release, err := r.admitUserLifecycle(req.Context(), p.actor)
+		if err != nil {
+			r.writeUserLifecycleFailure(w, err)
+			return
+		}
+		defer release()
 		if renewSession {
 			setUserSessionCookie(w, raw, timeFromUnix(p.expiresAt), r.now(), secureCookieForRequest(req, r.siteOrigin))
 		}
-		next.ServeHTTP(w, req.WithContext(withActor(req.Context(), p.actor)))
+		next.ServeHTTP(w, req.WithContext(requestContext))
 	})
 }
 
@@ -433,10 +441,40 @@ func (r *Runtime) wrapOptionalUser(next OptionalUserHandler) http.Handler {
 			r.writeSessionFailure(w, err)
 			return
 		}
+		requestContext, release, err := r.admitUserLifecycle(req.Context(), p.actor)
+		if err != nil {
+			r.writeUserLifecycleFailure(w, err)
+			return
+		}
+		defer release()
 		setUserSessionCookie(w, raw, timeFromUnix(p.expiresAt), r.now(), secureCookieForRequest(req, r.siteOrigin))
 		principal := &OptionalUserPrincipal{UserID: p.actor.UserID}
-		next(w, req.WithContext(withActor(req.Context(), p.actor)), principal)
+		next(w, req.WithContext(requestContext), principal)
 	})
+}
+
+func (r *Runtime) admitUserLifecycle(ctx context.Context, actor authz.Actor) (context.Context, func(), error) {
+	actorContext := withActor(ctx, actor)
+	r.mu.Lock()
+	gate := r.userLifecycle
+	r.mu.Unlock()
+	if gate == nil {
+		return actorContext, func() {}, nil
+	}
+	return gate.Admit(actorContext, actor.UserID, actor.SessionTokenHash,
+		func(validateContext context.Context, userID int64, binding string) (bool, error) {
+			state, err := r.VerifyUserSessionBinding(validateContext, userID, binding)
+			return state == UserSessionBindingActive, err
+		})
+}
+
+func (r *Runtime) writeUserLifecycleFailure(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, lifecyclegate.ErrInvalid), errors.Is(err, lifecyclegate.ErrRetiring):
+		writeStableError(w, httperr.CodeUnauthorized, "authentication required")
+	default:
+		writeStableError(w, httperr.CodeServiceUnavailable, "service unavailable")
+	}
 }
 
 func (r *Runtime) wrapAdmin(next http.Handler, anonymous, logout bool) http.Handler {

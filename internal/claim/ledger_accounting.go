@@ -104,6 +104,27 @@ func (*LedgerAccounting) ReleaseUndispatched(
 	return nil
 }
 
+func (*LedgerAccounting) ReleaseUnusedForDeletion(
+	ctx context.Context,
+	tx *sql.Tx,
+	requestID string,
+	rows uint16,
+	persistence DomainPersistence,
+) error {
+	if ctx == nil || tx == nil || persistence == nil ||
+		!db.ValidateOpaqueID(requestID, "req_") || rows == 0 || rows > MaxAttempts {
+		return ErrInvalidInput
+	}
+	ref, err := ledger.LogicalRequestReservation(requestID)
+	if err != nil {
+		return fmt.Errorf("claim: create deletion reservation reference: %w", err)
+	}
+	if err := ledger.ReleaseReserved(ctx, tx, ref, accountingRows(rows), ledgerMutation(persistence)); err != nil {
+		return fmt.Errorf("claim: release deletion accounting capacity: %w", err)
+	}
+	return nil
+}
+
 func (*LedgerAccounting) CompleteAttempt(
 	ctx context.Context,
 	tx *sql.Tx,

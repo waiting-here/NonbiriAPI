@@ -32,7 +32,19 @@ type CursorKeyDeriver interface {
 type Repository struct {
 	db         *sql.DB
 	cursorKeys CursorKeyDeriver
+	heldRead   AdminHeldReadAuthorizer
 	now        func() time.Time
+}
+
+func (repository *Repository) decisionNow() (int64, error) {
+	if repository == nil || repository.now == nil {
+		return 0, ErrUnavailable
+	}
+	now := repository.now().Unix()
+	if now < 0 || now > maxUnixSecond {
+		return 0, ErrUnavailable
+	}
+	return now, nil
 }
 
 func (repository *Repository) beginStewardRead(
@@ -193,7 +205,7 @@ func (repository *Repository) decodeListCursor(token, scope, owner string) (list
 	if now < 0 {
 		return listCursor{}, ErrUnavailable
 	}
-	decoded, err := db.DecodePaginationCursor(key, token, scope, owner, uint64(now))
+	decoded, err := db.DecodePaginationCursorWithDerivedKey(key, token, scope, owner, uint64(now))
 	if err != nil || len(decoded.Atoms) != 2 || decoded.Atoms[0].Kind != db.CursorUint ||
 		decoded.Atoms[1].Kind != db.CursorUint || decoded.Atoms[0].Uint > uint64(maxUnixSecond) ||
 		decoded.Atoms[1].Uint == 0 || decoded.Atoms[1].Uint > uint64(^uint64(0)>>1) {
@@ -215,7 +227,7 @@ func (repository *Repository) encodeListCursor(scope, owner string, cursor listC
 	if now < 0 || now > maxUnixSecond {
 		return "", ErrUnavailable
 	}
-	token, err := db.EncodePaginationCursor(key, scope, owner, uint64(now+int64(cursorLifetime/time.Second)), []db.CursorAtom{
+	token, err := db.EncodePaginationCursorWithDerivedKey(key, scope, owner, uint64(now+int64(cursorLifetime/time.Second)), []db.CursorAtom{
 		{Kind: db.CursorUint, Uint: uint64(cursor.startedAt)},
 		{Kind: db.CursorUint, Uint: uint64(cursor.rowID)},
 	})
@@ -238,7 +250,7 @@ func (repository *Repository) decodeAttemptCursor(token, scope, owner string) (i
 	if now < 0 {
 		return 0, ErrUnavailable
 	}
-	decoded, err := db.DecodePaginationCursor(key, token, scope, owner, uint64(now))
+	decoded, err := db.DecodePaginationCursorWithDerivedKey(key, token, scope, owner, uint64(now))
 	if err != nil || len(decoded.Atoms) != 1 || decoded.Atoms[0].Kind != db.CursorUint ||
 		decoded.Atoms[0].Uint > 100 {
 		return 0, ErrInvalid
@@ -259,7 +271,7 @@ func (repository *Repository) encodeAttemptCursor(scope, owner string, sequence 
 	if now < 0 || now > maxUnixSecond {
 		return "", ErrUnavailable
 	}
-	token, err := db.EncodePaginationCursor(key, scope, owner, uint64(now+int64(cursorLifetime/time.Second)), []db.CursorAtom{
+	token, err := db.EncodePaginationCursorWithDerivedKey(key, scope, owner, uint64(now+int64(cursorLifetime/time.Second)), []db.CursorAtom{
 		{Kind: db.CursorUint, Uint: uint64(sequence)},
 	})
 	if err != nil {

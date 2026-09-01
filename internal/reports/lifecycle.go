@@ -241,3 +241,96 @@ WHERE id=? AND status=? AND target_version=?`,
 	}
 	return nil
 }
+
+// LifecycleHeldCaseState is the report-owned legal-hold root projection. It
+// exposes only existence, the original 90-day deadline, and the irreversible
+// marker; report materials, targets, and decisions remain in this package.
+type LifecycleHeldCaseState struct {
+	Exists            bool
+	OrdinaryDeadline  int64
+	LegalHoldConsumed bool
+}
+
+func (repository *Repository) InspectLifecycleHeldCase(
+	ctx context.Context,
+	tx *sql.Tx,
+	caseID string,
+	decisionNow int64,
+) (LifecycleHeldCaseState, error) {
+	if err := repository.admit(); err != nil {
+		return LifecycleHeldCaseState{}, err
+	}
+	defer repository.release()
+	if ctx == nil || tx == nil || !db.ValidateOpaqueID(caseID, "rpc_") ||
+		decisionNow < 0 || decisionNow > maxUnixSecond {
+		return LifecycleHeldCaseState{}, ErrInvalidRequest
+	}
+	return readLifecycleHeldCaseState(ctx, tx, caseID)
+}
+
+func readLifecycleHeldCaseState(
+	ctx context.Context,
+	tx *sql.Tx,
+	caseID string,
+) (LifecycleHeldCaseState, error) {
+	var status string
+	var createdAt int64
+	var marker int
+	err := tx.QueryRowContext(ctx, `SELECT status,created_at,legal_hold_consumed
+FROM report_cases WHERE id=?`, caseID).Scan(&status, &createdAt, &marker)
+	if err == sql.ErrNoRows {
+		return LifecycleHeldCaseState{}, nil
+	}
+	if err != nil {
+		return LifecycleHeldCaseState{}, fmt.Errorf("reports: inspect lifecycle held case: %w", err)
+	}
+	if !validCaseStatus(status, false) || createdAt < 0 ||
+		createdAt > maxUnixSecond-caseRetentionSeconds || (marker != 0 && marker != 1) {
+		return LifecycleHeldCaseState{}, ErrInvariant
+	}
+	return LifecycleHeldCaseState{
+		Exists: true, OrdinaryDeadline: createdAt + caseRetentionSeconds,
+		LegalHoldConsumed: marker == 1,
+	}, nil
+}
+
+func (repository *Repository) ConsumeLifecycleHeldCaseMarker(
+	ctx context.Context,
+	tx *sql.Tx,
+	caseID string,
+) error {
+	if err := repository.admit(); err != nil {
+		return err
+	}
+	defer repository.release()
+	if ctx == nil || tx == nil || !db.ValidateOpaqueID(caseID, "rpc_") {
+		return ErrInvalidRequest
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE report_cases SET legal_hold_consumed=1
+WHERE id=? AND legal_hold_consumed=0`, caseID)
+	if err != nil {
+		return fmt.Errorf("reports: consume lifecycle held case marker: %w", err)
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("reports: count lifecycle held case marker: %w", err)
+	}
+	if changed != 1 {
+		return ErrConflict
+	}
+	return nil
+}
+
+// ReadLifecycleHeldCase confirms only the report aggregate root. Existing
+// report admin detail paths remain responsible for projecting the case plus
+// its materials, targets, and decisions; no rate, operation, or secret rows
+// are widened by this seam.
+func (repository *Repository) ReadLifecycleHeldCase(
+	ctx context.Context,
+	tx *sql.Tx,
+	caseID string,
+	decisionNow int64,
+) (bool, error) {
+	state, err := repository.InspectLifecycleHeldCase(ctx, tx, caseID, decisionNow)
+	return state.Exists, err
+}

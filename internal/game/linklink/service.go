@@ -69,11 +69,12 @@ type Service struct {
 	leaseMu sync.RWMutex
 	leases  map[leaseBindingKey]leaseBinding
 
-	workerMu     sync.Mutex
-	workerCancel context.CancelFunc
-	workerDone   chan struct{}
-	recovered    atomic.Bool
-	closed       atomic.Bool
+	workerMu          sync.Mutex
+	workerCancel      context.CancelFunc
+	workerDone        chan struct{}
+	recoveryValidated atomic.Bool
+	recovered         atomic.Bool
+	closed            atomic.Bool
 
 	// Narrow deterministic seam for reshuffle rollback tests.
 	beforeReshuffleCommit func() error

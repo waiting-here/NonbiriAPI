@@ -3721,14 +3721,17 @@ UPDATE legal_holds SET state='released',revision=2,ended_by_user_id=?,ended_at=1
 WHERE id=?`, adminID, readRetainUntil, readHoldID)
 	hostileMustExec(t, db, `UPDATE legal_hold_read_audits SET retain_until=? WHERE hold_id_text=? AND admin_user_id=? AND read_kind='metadata'`, readRetainUntil, readHoldID, adminID)
 	hostileMustFail(t, db, `UPDATE legal_hold_read_audits SET retain_until=? WHERE hold_id_text=? AND admin_user_id=? AND read_kind='metadata'`, readRetainUntil+1, readHoldID, adminID)
-	hostileMustFail(t, db, `UPDATE legal_hold_read_audits SET retain_until=?,read_count=3 WHERE hold_id_text=? AND admin_user_id=? AND read_kind='metadata'`, readRetainUntil, readHoldID, adminID)
+	hostileMustExec(t, db, `UPDATE legal_hold_read_audits SET last_read_at=102,read_count=3 WHERE hold_id_text=? AND admin_user_id=? AND read_kind='metadata'`, readHoldID, adminID)
+	hostileMustFail(t, db, `UPDATE legal_hold_read_audits SET last_read_at=103,read_count=3 WHERE hold_id_text=? AND admin_user_id=? AND read_kind='metadata'`, readHoldID, adminID)
+	hostileMustFail(t, db, `UPDATE legal_hold_read_audits SET last_read_at=104,read_count=5 WHERE hold_id_text=? AND admin_user_id=? AND read_kind='metadata'`, readHoldID, adminID)
+	hostileMustFail(t, db, `UPDATE legal_hold_read_audits SET retain_until=?,last_read_at=103,read_count=4 WHERE hold_id_text=? AND admin_user_id=? AND read_kind='metadata'`, readRetainUntil+1, readHoldID, adminID)
 	var firstRead, lastRead, readCount int64
 	var readRetain sql.NullInt64
 	if err := db.QueryRow(`SELECT first_read_at,last_read_at,read_count,retain_until FROM legal_hold_read_audits WHERE hold_id_text=? AND admin_user_id=? AND read_kind='metadata'`, readHoldID, adminID).Scan(&firstRead, &lastRead, &readCount, &readRetain); err != nil {
 		t.Fatal(err)
 	}
-	if firstRead != 100 || lastRead != 101 || readCount != 2 || !readRetain.Valid || readRetain.Int64 != readRetainUntil {
-		t.Fatalf("read audit fields changed during retention update: first=%d last=%d count=%d retain=%v", firstRead, lastRead, readCount, readRetain)
+	if firstRead != 100 || lastRead != 102 || readCount != 3 || !readRetain.Valid || readRetain.Int64 != readRetainUntil {
+		t.Fatalf("ended-hold read audit rollup mismatch: first=%d last=%d count=%d retain=%v", firstRead, lastRead, readCount, readRetain)
 	}
 
 	// Cleanup may remove ended hold metadata, but the root's irreversible

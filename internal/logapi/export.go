@@ -31,8 +31,14 @@ func (repository *Repository) ExportAdmin(ctx context.Context, filter ListFilter
 	if err != nil {
 		return nil, err
 	}
-	query := `SELECT ` + commonListColumns + `,l.user_id FROM request_logs l WHERE 1=1`
+	now, err := repository.decisionNow()
+	if err != nil {
+		return nil, err
+	}
+	query := `SELECT ` + commonListColumns + `,l.user_id FROM request_logs l
+WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args := make([]any, 0, 16)
+	args = append(args, now-requestLogRetentionSeconds)
 	if normalized.UserID != nil {
 		query += ` AND l.user_id=?`
 		args = append(args, *normalized.UserID)

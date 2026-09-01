@@ -169,9 +169,24 @@ type AdminQueueCount struct {
 
 type UserExport struct {
 	Pending  []FishingSettlementPending `json:"fishing_pending"`
-	Terminal []FishingBatchResult       `json:"fishing_terminal"`
+	Terminal []FishingTerminalExport    `json:"fishing_terminal"`
 	Single   *FishingLeaderboardRow     `json:"fishing_single_best"`
 	Total    *FishingLeaderboardRow     `json:"fishing_rolling_total"`
+}
+
+// FishingTerminalExport is the lifecycle-only terminal projection. RevealedAt
+// is deliberately kept out of FishingBatchResult so the public game response
+// remains the frozen closed DTO while account export can include ACK state.
+type FishingTerminalExport struct {
+	BatchID     string           `json:"batch_id"`
+	Bait        string           `json:"bait"`
+	Count       int              `json:"count"`
+	UnitPrice   string           `json:"unit_price"`
+	EntryTotal  string           `json:"entry_total"`
+	Outcomes    []FishingOutcome `json:"outcomes"`
+	PayoutTotal string           `json:"payout_total"`
+	SettledAt   int64            `json:"settled_at"`
+	RevealedAt  *int64           `json:"revealed_at"`
 }
 
 type AdminRouteRegistrar interface {

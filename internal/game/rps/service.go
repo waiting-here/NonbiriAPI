@@ -117,11 +117,12 @@ type Service struct {
 	leaseMu       sync.RWMutex
 	leaseBindings map[leaseBindingKey]leaseBinding
 
-	workerMu     sync.Mutex
-	workerCancel context.CancelFunc
-	workerDone   chan struct{}
-	recovered    atomic.Bool
-	closed       atomic.Bool
+	workerMu          sync.Mutex
+	workerCancel      context.CancelFunc
+	workerDone        chan struct{}
+	recoveryValidated atomic.Bool
+	recovered         atomic.Bool
+	closed            atomic.Bool
 
 	// Narrow deterministic seams used by transaction rollback tests.
 	beforeTerminalCommit func() error

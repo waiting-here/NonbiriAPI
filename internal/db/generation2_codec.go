@@ -617,6 +617,16 @@ func EncodePaginationCursor(masterKey []byte, scope, owner string, expiry uint64
 		return "", ErrInvalidCursor
 	}
 	defer clear(key)
+	return EncodePaginationCursorWithDerivedKey(key, scope, owner, expiry, atoms)
+}
+
+// EncodePaginationCursorWithDerivedKey accepts only the canonical Kc already
+// derived for pagination-cursor/v1. It lets Vault-backed callers avoid a
+// second HKDF while preserving the exact frozen cursor bytes.
+func EncodePaginationCursorWithDerivedKey(key []byte, scope, owner string, expiry uint64, atoms []CursorAtom) (string, error) {
+	if len(key) != sha256.Size {
+		return "", ErrInvalidCursor
+	}
 	if scope == "" || !utf8.ValidString(scope) || len(scope) > maxCursorBytes || !utf8.ValidString(owner) || len(owner) > maxCursorBytes || expiry > maxCursorExpiry || len(atoms) > 65535 {
 		return "", ErrInvalidCursor
 	}
@@ -647,12 +657,21 @@ func EncodePaginationCursor(masterKey []byte, scope, owner string, expiry uint64
 }
 
 func DecodePaginationCursor(masterKey []byte, token, expectedScope, expectedOwner string, now uint64) (PaginationCursor, error) {
-	var out PaginationCursor
 	key, err := DeriveGenerationTwoKey(masterKey, []byte("pagination-cursor/v1"))
 	if err != nil {
-		return out, ErrInvalidCursor
+		return PaginationCursor{}, ErrInvalidCursor
 	}
 	defer clear(key)
+	return DecodePaginationCursorWithDerivedKey(key, token, expectedScope, expectedOwner, now)
+}
+
+// DecodePaginationCursorWithDerivedKey is the Vault-backed counterpart of
+// EncodePaginationCursorWithDerivedKey.
+func DecodePaginationCursorWithDerivedKey(key []byte, token, expectedScope, expectedOwner string, now uint64) (PaginationCursor, error) {
+	var out PaginationCursor
+	if len(key) != sha256.Size {
+		return out, ErrInvalidCursor
+	}
 	if token == "" || len(token) > maxCursorBytes || expectedScope == "" || len(expectedScope) > maxCursorBytes || len(expectedOwner) > maxCursorBytes || !utf8.ValidString(expectedScope) || !utf8.ValidString(expectedOwner) {
 		return out, ErrInvalidCursor
 	}
@@ -712,7 +731,7 @@ func DecodePaginationCursor(masterKey []byte, token, expectedScope, expectedOwne
 	if pos != len(payload) {
 		return PaginationCursor{}, ErrInvalidCursor
 	}
-	canonical, err := EncodePaginationCursor(masterKey, out.Scope, out.Owner, out.Expiry, out.Atoms)
+	canonical, err := EncodePaginationCursorWithDerivedKey(key, out.Scope, out.Owner, out.Expiry, out.Atoms)
 	if err != nil || canonical != token {
 		return PaginationCursor{}, ErrInvalidCursor
 	}

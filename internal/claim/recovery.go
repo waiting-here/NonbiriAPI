@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
@@ -17,9 +18,43 @@ func (s *Service) RecoverNonterminal(ctx context.Context, limit int) (RecoveryRe
 	if s == nil || s.db == nil || ctx == nil || limit < 1 || limit > MaxRecoveryBatch {
 		return RecoveryReport{}, ErrInvalidInput
 	}
+	at, err := s.nowUnix()
+	if err != nil {
+		return RecoveryReport{}, err
+	}
+	report, err := s.RecoverNonterminalAt(ctx, at, limit, time.Time{})
+	if err != nil {
+		return report, err
+	}
+	maintenance, err := s.MaintainOrphanSecretsAt(ctx, at, limit, time.Time{})
+	if err != nil {
+		return report, err
+	}
+	report.MarkedOrphans = maintenance.Marked
+	report.DeletedOrphans = maintenance.Deleted
+	report.More = report.More || maintenance.More
+	return report, nil
+}
+
+// RecoverNonterminalAt recovers only claim and logical-request state using one
+// caller-supplied decision time. Secret retention is deliberately a separate
+// lifecycle slot. At most limit claims and requests are terminalized.
+func (s *Service) RecoverNonterminalAt(
+	ctx context.Context,
+	decisionNow int64,
+	limit int,
+	budgetDeadline time.Time,
+) (RecoveryReport, error) {
+	if s == nil || s.db == nil || ctx == nil || decisionNow < 0 || decisionNow > maxUnixSecond ||
+		limit < 1 || limit > MaxRecoveryBatch {
+		return RecoveryReport{}, ErrInvalidInput
+	}
+	workerCtx, cancel := recoveryBudgetContext(ctx, budgetDeadline)
+	defer cancel()
+
 	var report RecoveryReport
 	for report.ReleasedClaims+report.CommittedClaims < limit {
-		state, err := s.recoverOneClaim(ctx)
+		state, err := s.recoverOneClaimAt(workerCtx, decisionNow)
 		if errors.Is(err, sql.ErrNoRows) {
 			break
 		}
@@ -33,7 +68,7 @@ func (s *Service) RecoverNonterminal(ctx context.Context, limit int) (RecoveryRe
 		}
 	}
 	for report.ReleasedClaims+report.CommittedClaims+report.CompletedRequests < limit {
-		completed, err := s.recoverOneRequest(ctx)
+		completed, err := s.recoverOneRequestAt(workerCtx, decisionNow)
 		if errors.Is(err, sql.ErrNoRows) {
 			break
 		}
@@ -44,13 +79,7 @@ func (s *Service) RecoverNonterminal(ctx context.Context, limit int) (RecoveryRe
 			report.CompletedRequests++
 		}
 	}
-	maintenance, err := s.MaintainOrphanSecrets(ctx, limit)
-	if err != nil {
-		return report, err
-	}
-	report.MarkedOrphans = maintenance.Marked
-	report.DeletedOrphans = maintenance.Deleted
-	more, err := s.hasRecoveryWork(ctx)
+	more, err := s.hasClaimRecoveryWork(workerCtx)
 	if err != nil {
 		return report, err
 	}
@@ -58,11 +87,7 @@ func (s *Service) RecoverNonterminal(ctx context.Context, limit int) (RecoveryRe
 	return report, nil
 }
 
-func (s *Service) recoverOneClaim(ctx context.Context) (ClaimState, error) {
-	at, err := s.nowUnix()
-	if err != nil {
-		return "", err
-	}
+func (s *Service) recoverOneClaimAt(ctx context.Context, at int64) (ClaimState, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return "", fmt.Errorf("claim: begin claim recovery: %w", err)
@@ -110,11 +135,7 @@ WHERE state IN ('claimed','dispatched') ORDER BY claim_now,id LIMIT 1`).Scan(&cl
 	return StateCommitted, nil
 }
 
-func (s *Service) recoverOneRequest(ctx context.Context) (bool, error) {
-	at, err := s.nowUnix()
-	if err != nil {
-		return false, err
-	}
+func (s *Service) recoverOneRequestAt(ctx context.Context, at int64) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, fmt.Errorf("claim: begin request recovery: %w", err)
@@ -181,16 +202,37 @@ func (s *Service) MaintainOrphanSecrets(ctx context.Context, limit int) (Mainten
 	if err != nil {
 		return MaintenanceReport{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	return s.MaintainOrphanSecretsAt(ctx, at, limit, time.Time{})
+}
+
+// MaintainOrphanSecretsAt marks unreachable credential rows and deletes rows
+// that have been orphaned for at least one hour at the frozen decision time.
+// Deletion remains ahead of marking and the combined batch never exceeds
+// limit. A zero budget deadline is reserved for the compatibility wrapper;
+// lifecycle always supplies an explicit deadline.
+func (s *Service) MaintainOrphanSecretsAt(
+	ctx context.Context,
+	decisionNow int64,
+	limit int,
+	budgetDeadline time.Time,
+) (MaintenanceReport, error) {
+	if s == nil || s.db == nil || ctx == nil || decisionNow < 0 || decisionNow > maxUnixSecond ||
+		limit < 1 || limit > MaxRecoveryBatch {
+		return MaintenanceReport{}, ErrInvalidInput
+	}
+	workerCtx, cancel := recoveryBudgetContext(ctx, budgetDeadline)
+	defer cancel()
+
+	tx, err := s.db.BeginTx(workerCtx, nil)
 	if err != nil {
 		return MaintenanceReport{}, fmt.Errorf("claim: begin credential maintenance: %w", err)
 	}
 	defer tx.Rollback()
 	threshold := int64(-1)
-	if at >= int64(OrphanSecretTTL.Seconds()) {
-		threshold = at - int64(OrphanSecretTTL.Seconds())
+	if decisionNow >= int64(OrphanSecretTTL.Seconds()) {
+		threshold = decisionNow - int64(OrphanSecretTTL.Seconds())
 	}
-	deletedResult, err := tx.ExecContext(ctx, `DELETE FROM endpoint_key_secrets
+	deletedResult, err := tx.ExecContext(workerCtx, `DELETE FROM endpoint_key_secrets
 WHERE id IN (
  SELECT id FROM endpoint_key_secrets
  WHERE orphaned_at IS NOT NULL AND orphaned_at<=?
@@ -206,10 +248,13 @@ WHERE id IN (
 	if err != nil {
 		return MaintenanceReport{}, fmt.Errorf("claim: count deleted credentials: %w", err)
 	}
+	if deleted < 0 || deleted > int64(limit) {
+		return MaintenanceReport{}, ErrInvariant
+	}
 	remaining := limit - int(deleted)
 	marked := int64(0)
 	if remaining > 0 {
-		markedResult, err := tx.ExecContext(ctx, `UPDATE endpoint_key_secrets SET orphaned_at=?
+		markedResult, err := tx.ExecContext(workerCtx, `UPDATE endpoint_key_secrets SET orphaned_at=?
 WHERE id IN (
  SELECT id FROM endpoint_key_secrets
  WHERE orphaned_at IS NULL
@@ -217,7 +262,7 @@ WHERE id IN (
    AND NOT EXISTS(SELECT 1 FROM dispatch_claims c WHERE c.secret_ref_id=endpoint_key_secrets.id
                   AND c.state IN ('claimed','dispatched'))
  ORDER BY id LIMIT ?
-) AND orphaned_at IS NULL`, at, remaining)
+) AND orphaned_at IS NULL`, decisionNow, remaining)
 		if err != nil {
 			return MaintenanceReport{}, fmt.Errorf("claim: mark orphan credentials: %w", err)
 		}
@@ -225,33 +270,51 @@ WHERE id IN (
 		if err != nil {
 			return MaintenanceReport{}, fmt.Errorf("claim: count orphan credentials: %w", err)
 		}
+		if marked < 0 || marked > int64(remaining) {
+			return MaintenanceReport{}, ErrInvariant
+		}
+	}
+	more, err := hasOrphanSecretWork(workerCtx, tx, threshold)
+	if err != nil {
+		return MaintenanceReport{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return MaintenanceReport{}, fmt.Errorf("claim: commit credential maintenance: %w", err)
 	}
-	return MaintenanceReport{Marked: int(marked), Deleted: int(deleted)}, nil
+	return MaintenanceReport{Marked: int(marked), Deleted: int(deleted), More: more}, nil
 }
 
-func (s *Service) hasRecoveryWork(ctx context.Context) (bool, error) {
-	at, err := s.nowUnix()
-	if err != nil {
-		return false, err
-	}
-	threshold := int64(-1)
-	if at >= int64(OrphanSecretTTL.Seconds()) {
-		threshold = at - int64(OrphanSecretTTL.Seconds())
-	}
+func (s *Service) hasClaimRecoveryWork(ctx context.Context) (bool, error) {
 	var pending int
-	err = s.db.QueryRowContext(ctx, `SELECT
+	err := s.db.QueryRowContext(ctx, `SELECT
 EXISTS(SELECT 1 FROM dispatch_claims WHERE state IN ('claimed','dispatched'))
-OR EXISTS(SELECT 1 FROM logical_requests WHERE state<>'terminal')
-OR EXISTS(SELECT 1 FROM endpoint_key_secrets s
-          WHERE (s.orphaned_at IS NULL OR s.orphaned_at<=?)
-            AND NOT EXISTS(SELECT 1 FROM endpoint_keys k WHERE k.secret_ref_id=s.id)
-            AND NOT EXISTS(SELECT 1 FROM dispatch_claims c WHERE c.secret_ref_id=s.id
-                           AND c.state IN ('claimed','dispatched')))`, threshold).Scan(&pending)
+OR EXISTS(SELECT 1 FROM logical_requests WHERE state<>'terminal')`).Scan(&pending)
 	if err != nil {
 		return false, fmt.Errorf("claim: inspect recovery backlog: %w", err)
 	}
 	return pending != 0, nil
+}
+
+func hasOrphanSecretWork(ctx context.Context, tx *sql.Tx, threshold int64) (bool, error) {
+	var pending int
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
+ SELECT 1 FROM endpoint_key_secrets s
+ WHERE (s.orphaned_at IS NULL OR s.orphaned_at<=?)
+   AND NOT EXISTS(SELECT 1 FROM endpoint_keys k WHERE k.secret_ref_id=s.id)
+   AND NOT EXISTS(SELECT 1 FROM dispatch_claims c WHERE c.secret_ref_id=s.id
+                  AND c.state IN ('claimed','dispatched'))
+)`, threshold).Scan(&pending); err != nil {
+		return false, fmt.Errorf("claim: inspect orphan credential backlog: %w", err)
+	}
+	if pending != 0 && pending != 1 {
+		return false, ErrInvariant
+	}
+	return pending == 1, nil
+}
+
+func recoveryBudgetContext(ctx context.Context, deadline time.Time) (context.Context, context.CancelFunc) {
+	if deadline.IsZero() {
+		return ctx, func() {}
+	}
+	return context.WithDeadline(ctx, deadline)
 }

@@ -97,7 +97,7 @@ func assertFreshSafeApplication(t *testing.T, app *application) {
 		{name: "Debug API mounted behind maintenance", host: auditUserHost, path: "/api/debug/session", want: http.StatusServiceUnavailable},
 		{name: "log API mounted behind maintenance", host: auditUserHost, path: "/api/logs", want: http.StatusServiceUnavailable},
 		{name: "account events require a session before continuation", host: auditUserHost, path: "/api/events", want: http.StatusUnauthorized},
-		{name: "export API dormant", host: auditUserHost, path: "/api/account/export", want: http.StatusNotFound},
+		{name: "export rejects wrong method", host: auditUserHost, path: "/api/account/export", want: http.StatusMethodNotAllowed},
 		{name: "caller models mounted behind maintenance", host: auditUserHost, path: "/v1/models", want: http.StatusServiceUnavailable},
 		{name: "caller chat mounted behind maintenance", host: auditUserHost, path: "/v1/chat/completions", want: http.StatusServiceUnavailable},
 		{name: "admin bootstrap requires future ADM owner", host: auditAdminHost, path: "/admin/api/config", want: http.StatusNotFound},
@@ -256,7 +256,7 @@ func TestGenerationTwoRootAuthenticationAndMaintenanceWiring(t *testing.T) {
 	if app.authRuntime == nil || app.bridge == nil || app.claims == nil || app.resourceRepo == nil ||
 		app.discoveryWorker == nil || app.donations == nil || app.charity == nil || app.charityRouting == nil ||
 		app.announcements == nil || app.issues == nil || app.reports == nil || app.activities == nil ||
-		app.activityRepo == nil || app.activityEvents == nil || app.activityWorker == nil || app.activityDone == nil ||
+		app.activityRepo == nil || app.activityEvents == nil || app.lifecycle == nil || app.lifecycleDone == nil ||
 		app.debug == nil || app.logs == nil || app.accountEvents == nil || app.forward == nil || app.games == nil ||
 		app.failures == nil || app.authorizer == nil ||
 		app.elevation == nil || app.gate == nil || app.maintenance == nil || app.egress == nil {
@@ -283,6 +283,14 @@ func TestGenerationTwoRootAuthenticationAndMaintenanceWiring(t *testing.T) {
 	oauthStart := testApplicationRequest(t, app.handler, http.MethodGet, auditUserHost, "/api/auth/discord/start", "", nil, nil)
 	if oauthStart.Code != http.StatusServiceUnavailable || !strings.Contains(oauthStart.Body.String(), `"code":"maintenance"`) {
 		t.Fatalf("OAuth start during maintenance status=%d body=%s", oauthStart.Code, oauthStart.Body.String())
+	}
+	export := testApplicationRequest(t, app.handler, http.MethodPost, auditUserHost, "/api/account/export", "", nil, nil)
+	if export.Code != http.StatusServiceUnavailable || !strings.Contains(export.Body.String(), `"code":"maintenance"`) {
+		t.Fatalf("account export during maintenance status=%d body=%s", export.Code, export.Body.String())
+	}
+	legalHolds := testApplicationRequest(t, app.handler, http.MethodGet, auditAdminHost, "/admin/api/legal-holds", "", nil, nil)
+	if legalHolds.Code != http.StatusUnauthorized {
+		t.Fatalf("legal hold route without admin authentication status=%d body=%s", legalHolds.Code, legalHolds.Body.String())
 	}
 	caller := testApplicationRequest(t, app.handler, http.MethodGet, auditUserHost, "/v1/models", "", nil, nil)
 	if caller.Code != http.StatusServiceUnavailable || !strings.Contains(caller.Body.String(), `"code":"maintenance"`) {

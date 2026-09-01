@@ -115,6 +115,32 @@ func TestContextAwareRetirementDoesNotWaitForCurrentRequest(t *testing.T) {
 	}
 }
 
+func TestAccountDeletionRetirementKeepsExcludedRequestUsable(t *testing.T) {
+	gate, err := New(Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gate.Close()
+	ctx, release, err := gate.Admit(context.Background(), 22, "browser-session", allowValidator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	retirement, err := gate.BeginUserRetirementExcludingContext(ctx, 22)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ctx.Err(); err != nil {
+		t.Fatalf("excluded request was canceled: %v", err)
+	}
+	if _, _, err := gate.Admit(context.Background(), 22, "replacement", allowValidator); !errors.Is(err, ErrRetiring) {
+		t.Fatalf("replacement admission err=%v, want ErrRetiring", err)
+	}
+	if !retirement.Abort() {
+		t.Fatal("account-deletion retirement did not abort")
+	}
+}
+
 func TestSecondCredentialValidationRunsInsideLease(t *testing.T) {
 	gate, err := New(Config{})
 	if err != nil {

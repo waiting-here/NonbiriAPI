@@ -3,6 +3,7 @@ package issues
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 // RecoverBeforeListener is a bounded hook for the root lifecycle. It performs
@@ -31,6 +32,27 @@ func (service *Service) RetainClosed(ctx context.Context, limit int) (RetentionR
 	if err != nil {
 		return RetentionResult{}, err
 	}
+	return service.retainClosedAt(ctx, now, limit)
+}
+
+// RetainLifecycleClosed runs one issue-owned retention transaction with the
+// coordinator's frozen time and deadline.
+func (service *Service) RetainLifecycleClosed(
+	ctx context.Context,
+	decisionNow int64,
+	limit int,
+	budgetDeadline time.Time,
+) (RetentionResult, error) {
+	if service == nil || service.repository == nil || ctx == nil || ctx.Err() != nil ||
+		decisionNow < 0 || decisionNow > maxUnixSecond || limit < 1 || limit > 100 || budgetDeadline.IsZero() {
+		return RetentionResult{}, ErrInvalidRequest
+	}
+	workerCtx, cancel := context.WithDeadline(ctx, budgetDeadline)
+	defer cancel()
+	return service.retainClosedAt(workerCtx, decisionNow, limit)
+}
+
+func (service *Service) retainClosedAt(ctx context.Context, decisionNow int64, limit int) (RetentionResult, error) {
 	tx, err := beginTx(ctx, service.repository.db)
 	if err != nil {
 		return RetentionResult{}, err
@@ -42,7 +64,7 @@ DELETE FROM user_issues WHERE id IN (
  SELECT id FROM user_issues
  WHERE state='closed' AND retain_until<=?
  ORDER BY retain_until,id LIMIT ?
-)`, now, limit)
+)`, decisionNow, limit)
 	if err != nil {
 		return RetentionResult{}, fmt.Errorf("issues: delete expired closed history: %w", err)
 	}

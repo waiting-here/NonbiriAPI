@@ -3,10 +3,14 @@ package runtime
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
+
+var ErrLifecycleResourceLimit = errors.New("game runtime: lifecycle resource limit")
 
 // LifecycleAdapter is the account-lifecycle seam. DeletionGuard spans the coordinator's
 // outer transaction so a new start cannot enter between cleanup and account
@@ -58,6 +62,21 @@ func (guard *DeletionGuard) Abort() bool {
 		return false
 	}
 	return guard.abort()
+}
+
+// PrepareDeleteTx joins the caller-owned account deletion transaction. The
+// lifecycle coordinator already holds the shared StartLimiter retirement
+// boundary, so this method must not acquire a second per-user marker.
+func (adapter *LifecycleAdapter) PrepareDeleteTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	userID, decisionNow int64,
+) error {
+	if adapter == nil || adapter.service == nil || ctx == nil || tx == nil || userID <= 0 ||
+		decisionNow < 0 || decisionNow > 253402300799 {
+		return ErrInvalidRequest
+	}
+	return adapter.service.prepareDeletion(ctx, tx, userID, decisionNow)
 }
 
 func (service *Service) prepareDeletion(ctx context.Context, tx *sql.Tx, userID, at int64) error {
@@ -126,55 +145,219 @@ func (service *Service) prepareDeletion(ctx context.Context, tx *sql.Tx, userID,
 	return nil
 }
 
-// ExportUser reads only safe Fishing projections in the caller transaction.
+// ExportUser preserves the package-local lifecycle seam for existing callers.
 func (adapter *LifecycleAdapter) ExportUser(ctx context.Context, tx *sql.Tx, userID, now int64) (UserExport, error) {
-	if adapter == nil || adapter.service == nil || tx == nil || userID <= 0 {
+	return adapter.ExportTx(ctx, tx, userID, now, 10_000)
+}
+
+// ExportTx reads only safe Fishing projections in the caller transaction.
+// It applies the frozen collection limit independently to pending and terminal
+// arrays and uses only decisionNow for lifecycle cutoffs.
+func (adapter *LifecycleAdapter) ExportTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	userID, decisionNow int64,
+	limit int,
+) (UserExport, error) {
+	if adapter == nil || adapter.service == nil || ctx == nil || tx == nil || userID <= 0 ||
+		decisionNow < 0 || decisionNow > 253402300799 || limit < 1 || limit > 10_000 {
 		return UserExport{}, ErrInvalidRequest
 	}
-	if err := adapter.service.expireRankFactsInTx(ctx, tx, now, adapter.service.budgetNow().Add(rankBudget)); err != nil {
+	if err := adapter.service.expireRankFactsInTx(ctx, tx, decisionNow, adapter.service.budgetNow().Add(rankBudget)); err != nil {
 		return UserExport{}, err
 	}
-	result := UserExport{Pending: []FishingSettlementPending{}, Terminal: []FishingBatchResult{}}
-	rows, err := tx.QueryContext(ctx, `SELECT id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,state,attempt_count,next_attempt_at,retry_exhausted,created_at,settled_at,revealed_at FROM game_fishing_batches WHERE user_id=? AND (state='reserved' OR (state='committed' AND settled_at>?)) ORDER BY created_at,id`, userID, now-int64(rankWindow.Seconds()))
+	result := UserExport{Pending: []FishingSettlementPending{}, Terminal: []FishingTerminalExport{}}
+	rows, err := tx.QueryContext(ctx, `SELECT id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,state,attempt_count,next_attempt_at,retry_exhausted,created_at,settled_at,revealed_at FROM game_fishing_batches WHERE user_id=? AND state='reserved' ORDER BY created_at,id LIMIT ?`, userID, limit+1)
 	if err != nil {
 		return result, classifyDB(err)
 	}
-	records := make([]batchRecord, 0)
+	pendingRecords := make([]batchRecord, 0, 1)
 	for rows.Next() {
 		record, scanErr := scanBatch(rows)
 		if scanErr != nil {
 			rows.Close()
 			return result, classifyDB(scanErr)
 		}
-		records = append(records, record)
+		pendingRecords = append(pendingRecords, record)
+		if len(pendingRecords) > limit {
+			_ = rows.Close()
+			return result, ErrLifecycleResourceLimit
+		}
 	}
 	if err = rows.Err(); err != nil {
 		rows.Close()
 		return result, classifyDB(err)
 	}
 	rows.Close()
-	for _, record := range records {
-		if record.State == "reserved" {
-			result.Pending = append(result.Pending, *pendingFromRecord(record))
-			continue
+	for _, record := range pendingRecords {
+		result.Pending = append(result.Pending, *pendingFromRecord(record))
+	}
+	cutoff := decisionNow - int64(rankWindow/time.Second)
+	rows, err = tx.QueryContext(ctx, `SELECT id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,state,attempt_count,next_attempt_at,retry_exhausted,created_at,settled_at,revealed_at FROM game_fishing_batches WHERE user_id=? AND state='committed' AND settled_at>? ORDER BY created_at,id LIMIT ?`, userID, cutoff, limit+1)
+	if err != nil {
+		return result, classifyDB(err)
+	}
+	for rows.Next() {
+		record, scanErr := scanBatch(rows)
+		if scanErr != nil {
+			_ = rows.Close()
+			return result, classifyDB(scanErr)
 		}
 		terminal, loadErr := loadResultTx(ctx, tx, record, false)
 		if loadErr != nil {
+			_ = rows.Close()
 			return result, loadErr
 		}
-		result.Terminal = append(result.Terminal, *terminal)
+		var revealedAt *int64
+		if record.RevealedAt.Valid {
+			value := record.RevealedAt.Int64
+			revealedAt = &value
+		}
+		result.Terminal = append(result.Terminal, FishingTerminalExport{
+			BatchID: terminal.BatchID, Bait: terminal.Bait, Count: terminal.Count,
+			UnitPrice: terminal.UnitPrice, EntryTotal: terminal.EntryTotal, Outcomes: terminal.Outcomes,
+			PayoutTotal: terminal.PayoutTotal, SettledAt: terminal.SettledAt, RevealedAt: revealedAt,
+		})
+		if len(result.Terminal) > limit {
+			_ = rows.Close()
+			return result, ErrLifecycleResourceLimit
+		}
 	}
-	single, err := querySingleLeaderboard(ctx, tx, userID, now)
+	if err = rows.Err(); err != nil {
+		_ = rows.Close()
+		return result, classifyDB(err)
+	}
+	if err = rows.Close(); err != nil {
+		return result, classifyDB(err)
+	}
+	single, err := querySingleLeaderboard(ctx, tx, userID, decisionNow)
 	if err != nil {
 		return result, err
 	}
 	result.Single = ownLeaderboardRow(single)
-	total, err := queryTotalLeaderboard(ctx, tx, userID, now)
+	total, err := queryTotalLeaderboard(ctx, tx, userID, decisionNow)
 	if err != nil {
 		return result, err
 	}
 	result.Total = ownLeaderboardRow(total)
 	return result, nil
+}
+
+type RetentionResult struct {
+	Processed int
+	More      bool
+}
+
+// Retain processes at most limit due rank facts and terminal batches in one
+// bounded domain transaction. Reserved batches are never retention targets.
+func (adapter *LifecycleAdapter) Retain(
+	ctx context.Context,
+	decisionNow int64,
+	limit int,
+	budgetDeadline time.Time,
+) (RetentionResult, error) {
+	if adapter == nil || adapter.service == nil || ctx == nil || decisionNow < 0 || decisionNow > 253402300799 ||
+		limit < 1 || limit > workerBatchSize || budgetDeadline.IsZero() {
+		return RetentionResult{}, ErrInvalidRequest
+	}
+	workerCtx, cancel := context.WithDeadline(ctx, budgetDeadline)
+	defer cancel()
+	tx, err := adapter.service.database.BeginTx(workerCtx, nil)
+	if err != nil {
+		return RetentionResult{}, classifyDB(err)
+	}
+	defer tx.Rollback()
+	processed := 0
+	rows, err := tx.QueryContext(workerCtx, `SELECT batch_id_text,user_id,expires_at,payout_total
+FROM game_fishing_rank_facts
+WHERE aggregate_applied=1 AND expires_at<=?
+ORDER BY expires_at,batch_id_text LIMIT ?`, decisionNow, limit)
+	if err != nil {
+		return RetentionResult{}, classifyDB(err)
+	}
+	facts := make([]expiringFact, 0, limit)
+	for rows.Next() {
+		var fact expiringFact
+		var payout []byte
+		if err = rows.Scan(&fact.BatchID, &fact.UserID, &fact.ExpiresAt, &payout); err != nil {
+			_ = rows.Close()
+			return RetentionResult{}, classifyDB(err)
+		}
+		fact.Payout, err = db.DecodeU128(payout)
+		if err != nil {
+			_ = rows.Close()
+			return RetentionResult{}, ErrInvariant
+		}
+		facts = append(facts, fact)
+	}
+	if err = rows.Err(); err != nil {
+		_ = rows.Close()
+		return RetentionResult{}, classifyDB(err)
+	}
+	if err = rows.Close(); err != nil {
+		return RetentionResult{}, classifyDB(err)
+	}
+	for _, fact := range facts {
+		if err := expireOneFact(workerCtx, tx, fact); err != nil {
+			return RetentionResult{}, err
+		}
+	}
+	processed += len(facts)
+
+	cutoff := decisionNow - int64(rankWindow/time.Second)
+	if processed < limit {
+		rows, err = tx.QueryContext(workerCtx, `SELECT id FROM game_fishing_batches
+WHERE state IN ('committed','released') AND settled_at<=?
+ORDER BY settled_at,id LIMIT ?`, cutoff, limit-processed)
+		if err != nil {
+			return RetentionResult{}, classifyDB(err)
+		}
+		ids := make([]string, 0, limit-processed)
+		for rows.Next() {
+			var id string
+			if err = rows.Scan(&id); err != nil {
+				_ = rows.Close()
+				return RetentionResult{}, classifyDB(err)
+			}
+			ids = append(ids, id)
+		}
+		if err = rows.Err(); err != nil {
+			_ = rows.Close()
+			return RetentionResult{}, classifyDB(err)
+		}
+		if err = rows.Close(); err != nil {
+			return RetentionResult{}, classifyDB(err)
+		}
+		for _, id := range ids {
+			result, deleteErr := tx.ExecContext(workerCtx, `DELETE FROM game_fishing_batches
+WHERE id=? AND state IN ('committed','released') AND settled_at<=?`, id, cutoff)
+			if deleteErr != nil {
+				return RetentionResult{}, classifyDB(deleteErr)
+			}
+			changed, rowsErr := result.RowsAffected()
+			if rowsErr != nil {
+				return RetentionResult{}, classifyDB(rowsErr)
+			}
+			if changed != 1 {
+				return RetentionResult{}, ErrConflict
+			}
+		}
+		processed += len(ids)
+	}
+	var more int
+	if err := tx.QueryRowContext(workerCtx, `SELECT
+EXISTS(SELECT 1 FROM game_fishing_rank_facts WHERE aggregate_applied=1 AND expires_at<=?) OR
+EXISTS(SELECT 1 FROM game_fishing_batches WHERE state IN ('committed','released') AND settled_at<=?)`,
+		decisionNow, cutoff).Scan(&more); err != nil {
+		return RetentionResult{}, classifyDB(err)
+	}
+	if more != 0 && more != 1 {
+		return RetentionResult{}, ErrInvariant
+	}
+	if err := tx.Commit(); err != nil {
+		return RetentionResult{}, classifyDB(err)
+	}
+	return RetentionResult{Processed: processed, More: more == 1}, nil
 }
 
 func ownLeaderboardRow(board FishingLeaderboard) *FishingLeaderboardRow {

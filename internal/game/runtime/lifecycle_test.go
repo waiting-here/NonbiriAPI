@@ -252,6 +252,49 @@ func TestFishingSettlementAndDeletionPrepareRaceConverges(t *testing.T) {
 	}
 }
 
+func TestFishingPrepareDeleteTxUsesCoordinatorOwnedRetirement(t *testing.T) {
+	fixture := newGameFixture(t, &scriptedSource{})
+	userID := fixture.seedUser("delete-tx-boundary", fixtureFunding)
+	fixture.service.beforeSettlement = func(string) error { return errInjected }
+	_, pending, err := fixture.service.StartFishing(context.Background(), StartInput{
+		UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(307),
+	})
+	if err != nil || pending == nil {
+		t.Fatalf("pending = (%#v,%v)", pending, err)
+	}
+	commit, abort, err := fixture.service.limiter.BeginUserDeletion(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	finished := false
+	defer func() {
+		if !finished {
+			_ = abort()
+		}
+	}()
+	tx, err := fixture.database.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.service.Lifecycle().PrepareDeleteTx(context.Background(), tx, userID, fixture.clock.Load()+1); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if !commit() {
+		t.Fatal("commit coordinator-owned retirement")
+	}
+	finished = true
+	if fixture.scalar(`SELECT COUNT(*) FROM game_fishing_batches WHERE id=?`, pending.BatchID) != 0 {
+		t.Fatal("transaction deletion left reserved batch")
+	}
+	if fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='fishing_release' AND source_id=?`, pending.BatchID) != 1 {
+		t.Fatal("transaction deletion did not release reservation")
+	}
+}
+
 func TestLifecycleExportAndCleanupBoundaries(t *testing.T) {
 	fixture := newGameFixture(t, &scriptedSource{max: true})
 	terminalUser := fixture.seedUser("export-terminal", fixtureFunding)
@@ -276,8 +319,26 @@ func TestLifecycleExportAndCleanupBoundaries(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = tx.Rollback()
-	if len(exported.Pending) != 0 || len(exported.Terminal) != 1 || exported.Terminal[0].BatchID != terminal.BatchID || exported.Single == nil || exported.Total == nil {
+	if len(exported.Pending) != 0 || len(exported.Terminal) != 1 || exported.Terminal[0].BatchID != terminal.BatchID ||
+		exported.Terminal[0].RevealedAt != nil || exported.Single == nil || exported.Total == nil {
 		t.Fatalf("terminal export = %#v", exported)
+	}
+	if err := fixture.service.AcknowledgeFishing(context.Background(), terminalUser, terminal.BatchID); err != nil {
+		t.Fatalf("ack terminal: %v", err)
+	}
+	tx, err = fixture.database.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revealedExport, err := fixture.service.Lifecycle().ExportTx(context.Background(), tx, terminalUser, fixture.clock.Load(), 10_000)
+	if err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	_ = tx.Rollback()
+	if len(revealedExport.Terminal) != 1 || revealedExport.Terminal[0].RevealedAt == nil ||
+		*revealedExport.Terminal[0].RevealedAt != fixture.clock.Load() {
+		t.Fatalf("revealed export = %#v", revealedExport.Terminal)
 	}
 	tx, err = fixture.database.BeginTx(context.Background(), nil)
 	if err != nil {
@@ -294,18 +355,44 @@ func TestLifecycleExportAndCleanupBoundaries(t *testing.T) {
 	}
 
 	window := int64(rankWindow.Seconds())
-	deleted, err := fixture.service.Lifecycle().Cleanup(context.Background(), terminal.SettledAt+window-1)
-	if err != nil || deleted != 0 || fixture.scalar(`SELECT COUNT(*) FROM game_fishing_batches WHERE id=?`, terminal.BatchID) != 1 {
-		t.Fatalf("cleanup -1 = deleted %d err %v", deleted, err)
+	deadline := time.Now().Add(time.Second)
+	retained, err := fixture.service.Lifecycle().Retain(context.Background(), terminal.SettledAt+window-1, 1, deadline)
+	if err != nil || retained.Processed != 0 || retained.More || fixture.scalar(`SELECT COUNT(*) FROM game_fishing_batches WHERE id=?`, terminal.BatchID) != 1 {
+		t.Fatalf("retention -1 = %#v err %v", retained, err)
 	}
-	deleted, err = fixture.service.Lifecycle().Cleanup(context.Background(), terminal.SettledAt+window)
-	if err != nil || deleted != 1 || fixture.scalar(`SELECT COUNT(*) FROM game_fishing_batches WHERE id=?`, terminal.BatchID) != 0 {
-		t.Fatalf("cleanup boundary = deleted %d err %v", deleted, err)
+	retained, err = fixture.service.Lifecycle().Retain(context.Background(), terminal.SettledAt+window, 1, time.Now().Add(time.Second))
+	if err != nil || retained.Processed != 1 || !retained.More || fixture.scalar(`SELECT COUNT(*) FROM game_fishing_batches WHERE id=?`, terminal.BatchID) != 1 {
+		t.Fatalf("retention boundary rank pass = %#v err %v", retained, err)
+	}
+	retained, err = fixture.service.Lifecycle().Retain(context.Background(), terminal.SettledAt+window, 1, time.Now().Add(time.Second))
+	if err != nil || retained.Processed != 1 || retained.More || fixture.scalar(`SELECT COUNT(*) FROM game_fishing_batches WHERE id=?`, terminal.BatchID) != 0 {
+		t.Fatalf("retention boundary batch pass = %#v err %v", retained, err)
 	}
 	if fixture.scalar(`SELECT COUNT(*) FROM game_fishing_best WHERE user_id=? AND batch_id IS NULL AND ordinal IS NULL`, terminalUser) != 1 {
 		t.Fatal("cleanup did not preserve denormalized best snapshot")
 	}
 	if fixture.scalar(`SELECT COUNT(*) FROM game_fishing_batches WHERE id=? AND state='reserved'`, waiting.BatchID) != 1 {
-		t.Fatal("cleanup removed a reserved batch")
+		t.Fatal("retention removed a reserved batch")
+	}
+}
+
+func TestFishingExportTxAppliesTerminalCollectionLimit(t *testing.T) {
+	fixture := newGameFixture(t, &scriptedSource{max: true})
+	userID := fixture.seedUser("export-limit", fixtureFunding)
+	for index := 0; index < 2; index++ {
+		result, pending, err := fixture.service.StartFishing(context.Background(), StartInput{
+			UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(320 + index),
+		})
+		if err != nil || pending != nil || result == nil {
+			t.Fatalf("start %d = (%#v,%#v,%v)", index, result, pending, err)
+		}
+	}
+	tx, err := fixture.database.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if _, err := fixture.service.Lifecycle().ExportTx(context.Background(), tx, userID, fixture.clock.Load(), 1); !errors.Is(err, ErrLifecycleResourceLimit) {
+		t.Fatalf("ExportTx error = %v", err)
 	}
 }

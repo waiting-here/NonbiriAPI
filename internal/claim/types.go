@@ -319,6 +319,7 @@ type RecoveryReport struct {
 type MaintenanceReport struct {
 	Marked  int
 	Deleted int
+	More    bool
 }
 
 // Accounting is the narrow adapter to the central ledger. Every method is
@@ -335,6 +336,8 @@ type MaintenanceReport struct {
 //     applied in the same outer transaction, where Apply obtains the writer
 //     position and linearizes the final current-row capacity check.
 //   - ReleaseUndispatched releases one row.
+//   - ReleaseUnusedForDeletion releases only never-claimable future rows after
+//     account deletion has frozen the exact in-flight claim set.
 //   - CompleteAttempt consumes one row only for RewardPosted; every other
 //     reward state releases one row without a donor-reward operation.
 //   - CompleteRequest first releases RemainingRows-1 through releaseUnused
@@ -346,6 +349,7 @@ type MaintenanceReport struct {
 type Accounting interface {
 	ReserveRequest(ctx context.Context, tx *sql.Tx, input RequestReservation, persistence DomainPersistence) error
 	ReleaseUndispatched(ctx context.Context, tx *sql.Tx, input ClaimAccounting, persistence DomainPersistence) error
+	ReleaseUnusedForDeletion(ctx context.Context, tx *sql.Tx, requestID string, rows uint16, persistence DomainPersistence) error
 	CompleteAttempt(ctx context.Context, tx *sql.Tx, input ClaimAccounting, persistence DomainPersistence) error
 	CompleteRequest(ctx context.Context, tx *sql.Tx, input RequestAccounting, releaseUnused, terminal DomainPersistence) error
 }

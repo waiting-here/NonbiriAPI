@@ -55,13 +55,14 @@ type Service struct {
 	workerInterval    time.Duration
 	budgetNow         func() time.Time
 
-	rngMu        sync.Mutex
-	workerMu     sync.Mutex
-	workerCancel context.CancelFunc
-	workerDone   chan struct{}
-	wake         chan struct{}
-	recovered    atomic.Bool
-	closed       atomic.Bool
+	rngMu             sync.Mutex
+	workerMu          sync.Mutex
+	workerCancel      context.CancelFunc
+	workerDone        chan struct{}
+	wake              chan struct{}
+	recoveryValidated atomic.Bool
+	recovered         atomic.Bool
+	closed            atomic.Bool
 
 	// Narrow deterministic fault/transition seams used only by package tests.
 	beforeSettlement       func(string) error
@@ -139,23 +140,8 @@ func (service *Service) RecoverBeforeListen(ctx context.Context) error {
 	if service == nil || service.closed.Load() {
 		return ErrClosed
 	}
-	tx, err := service.database.BeginTx(ctx, nil)
-	if err != nil {
-		return classifyDB(err)
-	}
-	reservations, err := ledger.RecoverNonterminal(ctx, tx)
-	if err == nil {
-		for _, reservation := range reservations {
-			if reservation.Domain == "fishing_batch" && reservation.Rows.Decimal() != "1" {
-				err = ErrInvariant
-				break
-			}
-		}
-	}
-	if rollbackErr := tx.Rollback(); err == nil && rollbackErr != nil {
-		err = rollbackErr
-	}
-	if err != nil {
+	service.recovered.Store(false)
+	if err := service.ValidatePersistedState(ctx); err != nil {
 		return err
 	}
 	for {

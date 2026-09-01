@@ -24,6 +24,13 @@ func (r *Repository) RunSettlementStep(ctx context.Context) (WorkerResult, Publi
 	if err != nil {
 		return WorkerResult{}, PublishFacts{}, err
 	}
+	return r.runSettlementStepAt(ctx, now, SettlementBatchSize)
+}
+
+func (r *Repository) runSettlementStepAt(ctx context.Context, now int64, batchLimit int) (WorkerResult, PublishFacts, error) {
+	if r == nil || ctx == nil || now < 0 || now > maxUnixSecond || batchLimit < 1 || batchLimit > SettlementBatchSize {
+		return WorkerResult{}, PublishFacts{}, ErrInvalidRequest
+	}
 	tx, err := beginTx(ctx, r.db)
 	if err != nil {
 		return WorkerResult{}, PublishFacts{}, err
@@ -40,7 +47,7 @@ func (r *Repository) RunSettlementStep(ctx context.Context) (WorkerResult, Publi
 		}
 		return WorkerResult{}, PublishFacts{}, nil
 	}
-	result, facts, err := r.settlePeriodStepTx(ctx, tx, period, now)
+	result, facts, err := r.settlePeriodStepLimitTx(ctx, tx, period, now, batchLimit)
 	if err != nil {
 		return WorkerResult{}, PublishFacts{}, err
 	}
@@ -65,6 +72,13 @@ ORDER BY CASE state WHEN 'settling' THEN 0 ELSE 1 END,closes_at,id LIMIT 1`, now
 }
 
 func (r *Repository) settlePeriodStepTx(ctx context.Context, tx *sql.Tx, period periodRecord, now int64) (WorkerResult, PublishFacts, error) {
+	return r.settlePeriodStepLimitTx(ctx, tx, period, now, SettlementBatchSize)
+}
+
+func (r *Repository) settlePeriodStepLimitTx(ctx context.Context, tx *sql.Tx, period periodRecord, now int64, batchLimit int) (WorkerResult, PublishFacts, error) {
+	if batchLimit < 1 || batchLimit > SettlementBatchSize {
+		return WorkerResult{}, PublishFacts{}, ErrInvalidRequest
+	}
 	result := WorkerResult{Changed: true, More: true, PeriodID: period.id}
 	switch period.state {
 	case PeriodStateConfigured, PeriodStateOpen:
@@ -76,7 +90,7 @@ func (r *Repository) settlePeriodStepTx(ctx context.Context, tx *sql.Tx, period 
 		}
 		return result, PublishFacts{Global: true}, nil
 	case PeriodStateSettling:
-		processed, more, facts, err := r.processThursdayBatchTx(ctx, tx, period, now)
+		processed, more, facts, err := r.processThursdayBatchLimitTx(ctx, tx, period, now, batchLimit)
 		if err != nil {
 			return WorkerResult{}, PublishFacts{}, err
 		}
@@ -209,8 +223,15 @@ func basisPointFloor(value db.U128, basisPoints int) (db.U128, error) {
 }
 
 func (r *Repository) processThursdayBatchTx(ctx context.Context, tx *sql.Tx, period periodRecord, now int64) (int, bool, PublishFacts, error) {
+	return r.processThursdayBatchLimitTx(ctx, tx, period, now, SettlementBatchSize)
+}
+
+func (r *Repository) processThursdayBatchLimitTx(ctx context.Context, tx *sql.Tx, period periodRecord, now int64, batchLimit int) (int, bool, PublishFacts, error) {
 	if period.state != PeriodStateSettling {
 		return 0, false, PublishFacts{}, ErrInvariant
+	}
+	if batchLimit < 1 || batchLimit > SettlementBatchSize {
+		return 0, false, PublishFacts{}, ErrInvalidRequest
 	}
 	cursor := ""
 	if period.settlementCursor.Valid {
@@ -219,11 +240,11 @@ func (r *Repository) processThursdayBatchTx(ctx context.Context, tx *sql.Tx, per
 	rows, err := tx.QueryContext(ctx, `
 SELECT `+participantColumns()+` FROM thursday_participants
 WHERE period_id=? AND participant_ref>?
-ORDER BY participant_ref LIMIT ?`, period.id, cursor, SettlementBatchSize)
+ORDER BY participant_ref LIMIT ?`, period.id, cursor, batchLimit)
 	if err != nil {
 		return 0, false, PublishFacts{}, classifyDatabaseError("read Thursday settlement batch", err)
 	}
-	participants := make([]participantRecord, 0, SettlementBatchSize)
+	participants := make([]participantRecord, 0, batchLimit)
 	for rows.Next() {
 		record, err := scanParticipantRecord(rows)
 		if err != nil {

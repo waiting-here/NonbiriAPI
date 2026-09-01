@@ -26,13 +26,18 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 	if err != nil {
 		return Page[UserLogRow]{}, err
 	}
+	now, err := repository.decisionNow()
+	if err != nil {
+		return Page[UserLogRow]{}, err
+	}
 	owner := filterOwner("user", userID, filter)
 	cursor, err := repository.decodeListCursor(filter.Cursor, "logapi-user-list-v1", owner)
 	if err != nil {
 		return Page[UserLogRow]{}, err
 	}
-	query := `SELECT ` + commonListColumns + `,l.model FROM request_logs l WHERE l.user_id=?`
-	args := []any{userID}
+	query := `SELECT ` + commonListColumns + `,l.model FROM request_logs l
+WHERE l.user_id=? AND (l.completed_at IS NULL OR l.completed_at>?)`
+	args := []any{userID, now - requestLogRetentionSeconds}
 	if filter.Model != nil {
 		query += ` AND l.model=?`
 		args = append(args, *filter.Model)
@@ -122,13 +127,19 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 	if err != nil {
 		return Page[AdminLogRow]{}, err
 	}
+	now, err := repository.decisionNow()
+	if err != nil {
+		return Page[AdminLogRow]{}, err
+	}
 	owner := filterOwner("admin", 0, filter)
 	cursor, err := repository.decodeListCursor(filter.Cursor, "logapi-admin-list-v1", owner)
 	if err != nil {
 		return Page[AdminLogRow]{}, err
 	}
-	query := `SELECT ` + commonListColumns + `,l.user_id FROM request_logs l WHERE 1=1`
+	query := `SELECT ` + commonListColumns + `,l.user_id FROM request_logs l
+WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args := make([]any, 0, 16)
+	args = append(args, now-requestLogRetentionSeconds)
 	if filter.UserID != nil {
 		query += ` AND l.user_id=?`
 		args = append(args, *filter.UserID)
@@ -218,6 +229,10 @@ func (repository *Repository) ListSteward(
 	if err != nil {
 		return Page[StewardLogRow]{}, err
 	}
+	now, err := repository.decisionNow()
+	if err != nil {
+		return Page[StewardLogRow]{}, err
+	}
 	owner := filterOwner("steward", stewardUserID, filter)
 	cursor, err := repository.decodeListCursor(filter.Cursor, "logapi-steward-list-v1", owner)
 	if err != nil {
@@ -230,8 +245,10 @@ func (repository *Repository) ListSteward(
 	defer tx.Rollback()
 	// This query is deliberately independent from Admin list SQL. Its SELECT
 	// omits identity/model/note columns before filtering or scanning.
-	query := `SELECT ` + commonListColumns + ` FROM request_logs l WHERE 1=1`
+	query := `SELECT ` + commonListColumns + ` FROM request_logs l
+WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args := make([]any, 0, 16)
+	args = append(args, now-requestLogRetentionSeconds)
 	if filter.EndpointBaseURL != nil {
 		query += ` AND EXISTS(SELECT 1 FROM request_attempts sa WHERE sa.request_log_id=l.id AND sa.canonical_base_url=?)`
 		args = append(args, *filter.EndpointBaseURL)
