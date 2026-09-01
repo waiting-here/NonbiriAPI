@@ -13,8 +13,6 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
-const maxUnixSecond = int64(253402300799)
-
 type identityLifecycle interface {
 	ExportLifecycleIdentity(context.Context, *sql.Tx, int64, int64, int) (auth.LifecycleIdentity, auth.LifecycleUsage, error)
 	PrepareLifecycleAccountDeletion(context.Context, *sql.Tx, int64, int64) (auth.LifecycleDeletionFinalizer, error)

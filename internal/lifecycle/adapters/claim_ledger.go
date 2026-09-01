@@ -14,8 +14,6 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 )
 
-const maxUnixSecond = int64(253402300799)
-
 // ClaimDeleteAdapter delegates request/claim handoff to claim.Service inside
 // the coordinator-owned deletion transaction.
 type ClaimDeleteAdapter struct {
