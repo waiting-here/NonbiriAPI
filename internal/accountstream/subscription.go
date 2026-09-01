@@ -287,9 +287,9 @@ func (subscription *Subscription) closeLocked(state *accountState) {
 	subscription.hub.releaseConnection()
 }
 
-// discardLocked is the permanent-account-deletion variant of closeLocked.
-// The caller holds account.mu; queued and pending frames are removed before
-// the subscription is closed so no deleted identity remains deliverable.
+// discardLocked is the identity-discarding variant of closeLocked. The caller
+// holds account.mu; queued and pending frames are removed before the
+// subscription is closed so no stale identity remains deliverable.
 func (subscription *Subscription) discardLocked(state *accountState) {
 	if !subscription.closed.CompareAndSwap(false, true) {
 		return

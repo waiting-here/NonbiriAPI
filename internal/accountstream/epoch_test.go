@@ -414,3 +414,93 @@ func TestForgetAccountsRejectsInvalidOrCancelledInputWithoutMutation(t *testing.
 		t.Fatalf("invalid forget mutated %d tombstones", forgotten)
 	}
 }
+
+func TestDiscardAccountsClearsWithoutTombstoneAndAllowsRebuild(t *testing.T) {
+	authority := newTestAuthority(1)
+	authority.setEpoch(1, stringPointer("1"))
+	hub, _ := newTestHub(t, authority, nil)
+	subscription, err := hub.Subscribe(context.Background(), SubscribeRequest{
+		AccountID: 1, Channels: []Channel{ChannelActivities, ChannelRPS},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = nextFrame(t, subscription)
+	_ = nextFrame(t, subscription)
+	if _, err := hub.PublishCommitted(context.Background(), 1,
+		published(ChannelRPS, TypeDelta, "2", stringPointer("1"), "old-identity")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := hub.DiscardAccounts(context.Background(), []int64{1, 1, 999}); err != nil {
+		t.Fatalf("discard accounts: %v", err)
+	}
+	if _, err := subscription.Next(context.Background()); !errors.Is(err, ErrClosed) {
+		t.Fatalf("discarded subscription remained readable: %v", err)
+	}
+	state := hub.accounts[1]
+	state.mu.Lock()
+	ring := len(state.ring)
+	ringBytes := state.ringBytes
+	discarded := len(state.discarded)
+	subscribers := len(state.subscribers)
+	epochKnown, epoch := state.rpsEpochKnown, state.rpsEpoch
+	state.mu.Unlock()
+	if ring != 0 || ringBytes != 0 || discarded != 0 || subscribers != 0 || epochKnown || epoch != nil {
+		t.Fatalf("discarded state ring=%d bytes=%d discarded=%d subscribers=%d epoch=%v/%v",
+			ring, ringBytes, discarded, subscribers, epochKnown, epoch)
+	}
+	hub.mu.Lock()
+	_, forgotten := hub.forgotten[1]
+	_, unknownStateCreated := hub.accounts[999]
+	_, unknownForgotten := hub.forgotten[999]
+	hub.mu.Unlock()
+	if forgotten || unknownStateCreated || unknownForgotten || hub.connections.Load() != 0 {
+		t.Fatalf("discard bookkeeping forgotten=%v unknown_state=%v unknown_marker=%v connections=%d",
+			forgotten, unknownStateCreated, unknownForgotten, hub.connections.Load())
+	}
+
+	authority.setRevision(1, "3")
+	authority.setEpoch(1, stringPointer("2"))
+	if err := hub.PurgeAccounts(context.Background(), []int64{1}); err != nil {
+		t.Fatalf("rebuild discarded account: %v", err)
+	}
+	replacement, err := hub.Subscribe(context.Background(), SubscribeRequest{
+		AccountID: 1, Channels: []Channel{ChannelRPS},
+	})
+	if err != nil {
+		t.Fatalf("discarded account could not resubscribe: %v", err)
+	}
+	initial := nextFrame(t, replacement)
+	if initial.Type != TypeSnapshot || initial.IdentityEpoch == nil || *initial.IdentityEpoch != "2" {
+		t.Fatalf("replacement snapshot=%+v", initial)
+	}
+	fresh, err := hub.PublishCommitted(context.Background(), 1,
+		published(ChannelRPS, TypeDelta, "4", stringPointer("2"), "new-identity"))
+	if err != nil {
+		t.Fatalf("publish after rebuild: %v", err)
+	}
+	if delivered := nextFrame(t, replacement); delivered.ID != fresh.ID {
+		t.Fatalf("replacement delivery=%+v fresh=%+v", delivered, fresh)
+	}
+	_ = replacement.Close()
+}
+
+func TestDiscardAccountsRejectsInvalidCancelledOrForgottenInput(t *testing.T) {
+	authority := newTestAuthority(1)
+	hub, _ := newTestHub(t, authority, nil)
+	if err := hub.DiscardAccounts(context.Background(), []int64{0}); !errors.Is(err, ErrInvalidEvent) {
+		t.Fatalf("invalid account error=%v", err)
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := hub.DiscardAccounts(cancelled, []int64{1}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled discard error=%v", err)
+	}
+	if err := hub.ForgetAccounts(context.Background(), []int64{1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := hub.DiscardAccounts(context.Background(), []int64{1}); !errors.Is(err, ErrClosed) {
+		t.Fatalf("forgotten discard error=%v", err)
+	}
+}

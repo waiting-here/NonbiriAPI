@@ -430,22 +430,72 @@ func (hub *Hub) ForgetAccounts(ctx context.Context, accountIDs []int64) error {
 	hub.mu.Unlock()
 
 	for _, target := range targets {
-		target.state.mu.Lock()
-		for subscription := range target.state.subscribers {
-			subscription.discardLocked(target.state)
-		}
-		for index := range target.state.ring {
-			target.state.ring[index] = ringEntry{}
-		}
-		target.state.ring = nil
-		target.state.ringBytes = 0
-		clear(target.state.discarded)
-		target.state.activitiesGeneration = 0
-		target.state.rpsEpochKnown = false
-		target.state.rpsEpoch = nil
-		target.state.mu.Unlock()
+		hub.discardAccountState(target.state)
 	}
 	return nil
+}
+
+// DiscardAccounts closes subscriptions and removes stale process-local frames
+// without permanently tombstoning the accounts. It is used for surviving
+// participants whose identity projection changed: callers rebuild them with
+// PurgeAccounts after every old frame has become unreadable.
+func (hub *Hub) DiscardAccounts(ctx context.Context, accountIDs []int64) error {
+	if hub == nil || ctx == nil || hub.closed.Load() {
+		return ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	unique := make(map[int64]struct{}, len(accountIDs))
+	for _, accountID := range accountIDs {
+		if accountID <= 0 {
+			return ErrInvalidEvent
+		}
+		unique[accountID] = struct{}{}
+	}
+	ids := make([]int64, 0, len(unique))
+	for accountID := range unique {
+		ids = append(ids, accountID)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+
+	states := make([]*accountState, 0, len(ids))
+	hub.mu.Lock()
+	if hub.closed.Load() {
+		hub.mu.Unlock()
+		return ErrClosed
+	}
+	for _, accountID := range ids {
+		if _, forgotten := hub.forgotten[accountID]; forgotten {
+			hub.mu.Unlock()
+			return ErrClosed
+		}
+		if state := hub.accounts[accountID]; state != nil {
+			states = append(states, state)
+		}
+	}
+	hub.mu.Unlock()
+	for _, state := range states {
+		hub.discardAccountState(state)
+	}
+	return nil
+}
+
+func (hub *Hub) discardAccountState(state *accountState) {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	for subscription := range state.subscribers {
+		subscription.discardLocked(state)
+	}
+	for index := range state.ring {
+		state.ring[index] = ringEntry{}
+	}
+	state.ring = nil
+	state.ringBytes = 0
+	clear(state.discarded)
+	state.activitiesGeneration = 0
+	state.rpsEpochKnown = false
+	state.rpsEpoch = nil
 }
 
 func (hub *Hub) newFrame(channel Channel, eventType EventType, revision, epoch *string, data json.RawMessage) (Frame, error) {
