@@ -547,6 +547,41 @@ INSERT INTO game_rps_queue(
 	return queueID, accountID
 }
 
+func TestGenerationTwoRPSUserSlotCardinality(t *testing.T) {
+	db := openGenerationTwoDDLForTest(t)
+	defer db.Close()
+
+	sessionID := hostileOIDVariant("rps_", 'S', 'Q')
+	accountID := hostileInsertRPSAccount(t, db, sessionID)
+	hostileInsertRPSSession(t, db, sessionID, "gesture", "started", accountID)
+	for _, label := range []string{"rps-slot-one", "rps-slot-two", "rps-slot-three"} {
+		userID := hostileInsertUser(t, db, label, 0, 0)
+		hostileMustExec(t, db,
+			`INSERT INTO game_rps_user_slots(user_id,queue_id,session_id,created_at) VALUES(?,NULL,?,0)`,
+			userID, sessionID)
+	}
+	var sessionSlots int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM game_rps_user_slots WHERE session_id=?`, sessionID).Scan(&sessionSlots); err != nil {
+		t.Fatalf("count RPS session slots: %v", err)
+	}
+	if sessionSlots != 3 {
+		t.Fatalf("RPS session has %d user slots, want 3", sessionSlots)
+	}
+
+	queueID, _ := hostileInsertRPSQueue(t, db, 'U', "quick", hostileBlob16(1), hostileBlob16(1))
+	var queuedUserID int64
+	if err := db.QueryRow(`SELECT user_id FROM game_rps_queue WHERE id=?`, queueID).Scan(&queuedUserID); err != nil {
+		t.Fatalf("read queued user: %v", err)
+	}
+	hostileMustExec(t, db,
+		`INSERT INTO game_rps_user_slots(user_id,queue_id,session_id,created_at) VALUES(?,?,NULL,0)`,
+		queuedUserID, queueID)
+	secondQueuedUserID := hostileInsertUser(t, db, "rps-slot-duplicate-queue", 0, 0)
+	hostileMustFail(t, db,
+		`INSERT INTO game_rps_user_slots(user_id,queue_id,session_id,created_at) VALUES(?,?,NULL,0)`,
+		secondQueuedUserID, queueID)
+}
+
 func hostileInsertFishingBatch(t *testing.T, db *sql.DB, batchID string, userID int64, operationID string) {
 	t.Helper()
 	hostileMustExec(t, db, `
