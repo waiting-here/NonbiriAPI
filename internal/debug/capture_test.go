@@ -132,8 +132,47 @@ func TestLiveCaptureFreezesModePurposeAndSafeProjection(t *testing.T) {
 		UserID: 8, RouteKind: RouteCharityChat, Model: "charity/model", Charity: true,
 		MediaType: "application/json", Body: []byte(`{}`), IdentityCertain: true,
 	})
-	if err != nil || charity.Mode != ModeLive || charity.ClaimPurpose != claim.PurposeCharity {
+	if err != nil || charity.Mode != ModeLive || charity.ClaimPurpose != claim.PurposeCharity || charity.Trace == nil {
 		t.Fatalf("charity live decision = (%+v,%v)", charity, err)
+	}
+	if err := charity.Trace.MarkDispatched(); err != nil {
+		t.Fatalf("charity MarkDispatched: %v", err)
+	}
+	hostileStatus := http.StatusTeapot
+	hostileCode, hostileDiag := "hostile_upstream_code", "hostile real upstream diagnostic"
+	hostile := DebugUpstreamResult{
+		ResultKind: ResultResponse, StatusCode: &hostileStatus,
+		UpstreamCode: &hostileCode, Diag: &hostileDiag,
+		Usage: ZeroLogUsage(), CompletedAt: 2_002,
+	}
+	if err := charity.Trace.RecordUpstream(hostile); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("charity hostile upstream result = %v", err)
+	}
+	hub.mu.Lock()
+	rejected := cloneTrace(hub.activeByUser[8].traces[charity.Trace.TraceID()].trace)
+	hub.mu.Unlock()
+	if rejected.UpstreamResult != nil {
+		t.Fatalf("charity retained hostile upstream result: %+v", rejected.UpstreamResult)
+	}
+
+	safeStatus := http.StatusBadGateway
+	safe := DebugUpstreamResult{
+		ResultKind: ResultSynthetic, StatusCode: &safeStatus,
+		Usage: ZeroLogUsage(), CompletedAt: 2_002,
+	}
+	if err := charity.Trace.RecordUpstream(safe); err != nil {
+		t.Fatalf("charity safe RecordUpstream: %v", err)
+	}
+	if err := charity.Trace.CompleteLiveCaptured("en"); err != nil {
+		t.Fatalf("charity CompleteLiveCaptured: %v", err)
+	}
+	hub.mu.Lock()
+	projected := cloneTrace(hub.activeByUser[8].traces[charity.Trace.TraceID()].trace)
+	hub.mu.Unlock()
+	if projected.UpstreamResult == nil || projected.UpstreamResult.ResultKind != ResultSynthetic ||
+		projected.UpstreamResult.StatusCode == nil || *projected.UpstreamResult.StatusCode != http.StatusBadGateway ||
+		projected.UpstreamResult.UpstreamCode != nil || projected.UpstreamResult.Diag != nil {
+		t.Fatalf("charity safe projection = %+v", projected.UpstreamResult)
 	}
 }
 

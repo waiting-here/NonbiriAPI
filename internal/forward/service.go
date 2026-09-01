@@ -318,7 +318,7 @@ func (service *Service) Chat(
 
 	caller, failure := service.classifyCaller(parent, executionContext, plan, run)
 	if decision.Active && run.dispatched {
-		caller, failure = service.completeDebugTrace(parent, decision, run, actualCharge, caller, failure)
+		caller, failure = service.completeDebugTrace(parent, decision, plan.route, run, actualCharge, caller, failure)
 	} else if decision.Active {
 		caller, failure = service.completeUndispatchedDebug(parent, executionContext, decision, caller, failure)
 	}
@@ -676,6 +676,7 @@ func (service *Service) classifyCaller(parent, executionContext context.Context,
 func (service *Service) completeDebugTrace(
 	parent context.Context,
 	decision debug.CaptureDecision,
+	route claim.RouteKind,
 	run attemptRun,
 	actualCharge int64,
 	caller claim.CallerResult,
@@ -695,7 +696,7 @@ func (service *Service) completeDebugTrace(
 		return callerFromFailure(value), &value
 	}
 	if run.hasResult {
-		projected := debugUpstreamResult(run.result, actualCharge, service.mustNowUnix())
+		projected := debugUpstreamResult(run.result, route, actualCharge, service.mustNowUnix())
 		if err := decision.Trace.RecordUpstream(projected); err != nil {
 			value := platformFailure(httperr.CodeDebugLiveCancelled, "Debug live request was cancelled")
 			return callerFromFailure(value), &value
@@ -902,7 +903,7 @@ func traceID(trace *debug.TraceHandle, fallback string) string {
 	return fallback
 }
 
-func debugUpstreamResult(result connectorcontract.AttemptResult, chargeMilli, completedAt int64) debug.DebugUpstreamResult {
+func debugUpstreamResult(result connectorcontract.AttemptResult, route claim.RouteKind, chargeMilli, completedAt int64) debug.DebugUpstreamResult {
 	kind := debug.ResultSynthetic
 	var status *int
 	if result.UpstreamStatus != 0 {
@@ -925,6 +926,15 @@ func debugUpstreamResult(result connectorcontract.AttemptResult, chargeMilli, co
 			UsageUnknown: !usage.Present, Charge: credits.FormatAmount(chargeMilli),
 		},
 		CompletedAt: completedAt,
+	}
+	if route == claim.RouteCharityChat {
+		status := http.StatusBadGateway
+		if result.Success {
+			status = http.StatusOK
+		}
+		projection.ResultKind = debug.ResultSynthetic
+		projection.StatusCode = &status
+		return projection
 	}
 	if result.Diagnostic != "" {
 		value := diagnostic.Bound(result.Diagnostic)
