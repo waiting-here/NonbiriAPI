@@ -541,7 +541,30 @@ func ComputeGameLeaderboardTieKey(masterKey []byte, game, board, mode string, us
 	if !validGameLeaderboardTuple(game, board, mode) || userID <= 0 {
 		return [32]byte{}, ErrInvalidWideScalar
 	}
-	return generationTwoHMAC(masterKey, gameLeaderboardTieInfo, []byte(game), []byte(board), []byte(mode), []byte(strconv.FormatInt(userID, 10)))
+	leaderboardKey, err := DeriveGenerationTwoKey(masterKey, []byte(gameLeaderboardTieInfo))
+	if err != nil {
+		return [32]byte{}, err
+	}
+	defer clear(leaderboardKey)
+	return ComputeGameLeaderboardTieKeyFromDerivedKey(leaderboardKey, game, board, mode, userID)
+}
+
+// ComputeGameLeaderboardTieKeyFromDerivedKey computes the frozen leaderboard
+// tie digest from Klb, the exact 32-byte key already derived with
+// game-leaderboard-tie/v1. This lets opaque key owners expose only the
+// purpose-bound key without making callers retain or reveal the process
+// master key.
+func ComputeGameLeaderboardTieKeyFromDerivedKey(leaderboardKey []byte, game, board, mode string, userID int64) ([32]byte, error) {
+	if len(leaderboardKey) != sha256.Size || !validGameLeaderboardTuple(game, board, mode) || userID <= 0 {
+		return [32]byte{}, ErrInvalidWideScalar
+	}
+	mac := hmac.New(sha256.New, leaderboardKey)
+	for _, field := range [][]byte{[]byte(game), []byte(board), []byte(mode), []byte(strconv.FormatInt(userID, 10))} {
+		_, _ = mac.Write(generationTwoField(field))
+	}
+	var out [sha256.Size]byte
+	copy(out[:], mac.Sum(nil))
+	return out, nil
 }
 
 func validGameLeaderboardTuple(game, board, mode string) bool {

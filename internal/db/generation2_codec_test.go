@@ -289,6 +289,18 @@ func TestGenerationTwoDigestVectors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	leaderboardKey, err := DeriveGenerationTwoKey(master, []byte(gameLeaderboardTieInfo))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(leaderboardKey)
+	derivedTie, err := ComputeGameLeaderboardTieKeyFromDerivedKey(leaderboardKey, "rps", "net_profit", "deathmatch", 42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if derivedTie != tie {
+		t.Fatalf("derived leaderboard tie=%x, want %x", derivedTie, tie)
+	}
 	// Values are fixed golden vectors for the frozen field framing and HKDF
 	// info labels. Keep each expected value independent so a domain mix-up is
 	// visible even when the underlying HMAC primitive remains correct.
@@ -324,6 +336,11 @@ func TestGenerationTwoDigestVectors(t *testing.T) {
 	}
 	if fingerprint == requestHash || requestHash == targetRef || fingerprintRate == accountRate || accountRate == globalRate {
 		t.Fatal("digest domains unexpectedly collided")
+	}
+	for _, key := range [][]byte{nil, make([]byte, 31), make([]byte, 33)} {
+		if _, err := ComputeGameLeaderboardTieKeyFromDerivedKey(key, "rps", "net_profit", "deathmatch", 42); err == nil {
+			t.Fatalf("derived leaderboard key length %d accepted", len(key))
+		}
 	}
 	if _, err := ComputeCredentialReportRateToken(master, "account", []byte("0")); err == nil {
 		t.Fatal("zero account rate scope accepted")

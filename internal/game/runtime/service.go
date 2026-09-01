@@ -27,33 +27,33 @@ const (
 )
 
 type Options struct {
-	Store           *db.Store
-	UserAuthorizer  resources.FinalTxAuthorizer
-	AdminAuthorizer AdminFinalAuthorizer
-	Limiter         *game.StartLimiter
-	Random          fishing.IntSource
-	Now             func() time.Time
-	GenerateID      func(string) (string, error)
-	TieMasterKey    []byte
-	Capability      game.RuntimeCapability
-	RPSHealth       RPSHealthProbe
-	WorkerInterval  time.Duration
-	BudgetNow       func() time.Time
+	Store             *db.Store
+	UserAuthorizer    resources.FinalTxAuthorizer
+	AdminAuthorizer   AdminFinalAuthorizer
+	Limiter           *game.StartLimiter
+	Random            fishing.IntSource
+	Now               func() time.Time
+	GenerateID        func(string) (string, error)
+	LeaderboardTieKey []byte
+	Capability        game.RuntimeCapability
+	RPSHealth         RPSHealthProbe
+	WorkerInterval    time.Duration
+	BudgetNow         func() time.Time
 }
 
 type Service struct {
-	database        *sql.DB
-	userAuthorizer  resources.FinalTxAuthorizer
-	adminAuthorizer AdminFinalAuthorizer
-	limiter         *game.StartLimiter
-	random          fishing.IntSource
-	now             func() time.Time
-	generateID      func(string) (string, error)
-	tieMasterKey    []byte
-	capability      game.RuntimeCapability
-	rpsHealth       RPSHealthProbe
-	workerInterval  time.Duration
-	budgetNow       func() time.Time
+	database          *sql.DB
+	userAuthorizer    resources.FinalTxAuthorizer
+	adminAuthorizer   AdminFinalAuthorizer
+	limiter           *game.StartLimiter
+	random            fishing.IntSource
+	now               func() time.Time
+	generateID        func(string) (string, error)
+	leaderboardTieKey []byte
+	capability        game.RuntimeCapability
+	rpsHealth         RPSHealthProbe
+	workerInterval    time.Duration
+	budgetNow         func() time.Time
 
 	rngMu        sync.Mutex
 	workerMu     sync.Mutex
@@ -97,15 +97,15 @@ func New(options Options) (*Service, error) {
 	if options.BudgetNow == nil {
 		options.BudgetNow = time.Now
 	}
-	if len(options.TieMasterKey) < 16 {
+	if len(options.LeaderboardTieKey) != 32 {
 		return nil, errors.New("game runtime: leaderboard key is required")
 	}
-	key := append([]byte(nil), options.TieMasterKey...)
+	key := append([]byte(nil), options.LeaderboardTieKey...)
 	return &Service{
 		database: options.Store.DB(), userAuthorizer: options.UserAuthorizer,
 		adminAuthorizer: options.AdminAuthorizer, limiter: options.Limiter,
 		random: options.Random, now: options.Now, generateID: options.GenerateID,
-		tieMasterKey: key, capability: options.Capability, rpsHealth: options.RPSHealth,
+		leaderboardTieKey: key, capability: options.Capability, rpsHealth: options.RPSHealth,
 		workerInterval: options.WorkerInterval, budgetNow: options.BudgetNow,
 		wake: make(chan struct{}, 1),
 	}, nil
@@ -129,7 +129,7 @@ func (service *Service) Close() error {
 	if service.limiter != nil {
 		service.limiter.Close()
 	}
-	clear(service.tieMasterKey)
+	clear(service.leaderboardTieKey)
 	return nil
 }
 

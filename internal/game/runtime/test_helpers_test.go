@@ -151,8 +151,8 @@ func newGameFixture(t *testing.T, source *scriptedSource) *gameFixture {
 	service, err := New(Options{
 		Store: store, UserAuthorizer: fixture.userAuth, AdminAuthorizer: fixture.adminAuth,
 		Random: source, Now: func() time.Time { return time.Unix(fixture.clock.Load(), 0).UTC() },
-		TieMasterKey:   []byte("0123456789abcdef0123456789abcdef"),
-		WorkerInterval: time.Minute,
+		LeaderboardTieKey: []byte("0123456789abcdef0123456789abcdef"),
+		WorkerInterval:    time.Minute,
 	})
 	if err != nil {
 		_ = store.Close()

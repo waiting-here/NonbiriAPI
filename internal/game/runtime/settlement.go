@@ -141,7 +141,7 @@ func (service *Service) settle(ctx context.Context, batchID string, expectedUser
 }
 
 func (service *Service) applyBest(ctx context.Context, tx *sql.Tx, record batchRecord, caughtAt int64) error {
-	tie, err := db.ComputeGameLeaderboardTieKey(service.tieMasterKey, game.FishingID, "single", "", record.UserID)
+	tie, err := db.ComputeGameLeaderboardTieKeyFromDerivedKey(service.leaderboardTieKey, game.FishingID, "single", "", record.UserID)
 	if err != nil {
 		return ErrInvariant
 	}
@@ -184,7 +184,7 @@ func (service *Service) applyBest(ctx context.Context, tx *sql.Tx, record batchR
 func (service *Service) applyRankFact(ctx context.Context, tx *sql.Tx, record batchRecord, settledAt int64) error {
 	payout, _ := db.U128FromBig(big.NewInt(record.PayoutTotal))
 	one, _ := db.U128FromBig(big.NewInt(1))
-	tie, err := db.ComputeGameLeaderboardTieKey(service.tieMasterKey, game.FishingID, "total", "", record.UserID)
+	tie, err := db.ComputeGameLeaderboardTieKeyFromDerivedKey(service.leaderboardTieKey, game.FishingID, "total", "", record.UserID)
 	if err != nil {
 		return ErrInvariant
 	}
