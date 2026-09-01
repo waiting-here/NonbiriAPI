@@ -45,13 +45,20 @@ func (service *Service) expireRankFacts(ctx context.Context, queryNow int64) (in
 }
 
 func (service *Service) expireRankFactsBatchTx(ctx context.Context, tx *sql.Tx, queryNow int64) (int, error) {
+	return service.expireRankFactsBatchTxLimit(ctx, tx, queryNow, workerBatchSize)
+}
+
+func (service *Service) expireRankFactsBatchTxLimit(ctx context.Context, tx *sql.Tx, queryNow int64, limit int) (int, error) {
+	if service == nil || ctx == nil || tx == nil || queryNow < 0 || queryNow > 253402300799 || limit < 1 || limit > workerBatchSize {
+		return 0, ErrInvalidRequest
+	}
 	rows, err := tx.QueryContext(ctx, `SELECT session_id_text,user_id,mode,expires_at,wallet_net_sign,wallet_net_mag,profitable
-FROM game_rps_rank_facts WHERE aggregate_applied=1 AND expires_at<=?
-ORDER BY expires_at,session_id_text,user_id LIMIT ?`, queryNow, workerBatchSize)
+	FROM game_rps_rank_facts WHERE aggregate_applied=1 AND expires_at<=?
+	ORDER BY expires_at,session_id_text,user_id LIMIT ?`, queryNow, limit)
 	if err != nil {
 		return 0, classifyDB(err)
 	}
-	facts := make([]expiringRankFact, 0, workerBatchSize)
+	facts := make([]expiringRankFact, 0, limit)
 	for rows.Next() {
 		var fact expiringRankFact
 		var raw []byte
