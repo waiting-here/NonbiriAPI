@@ -13,13 +13,13 @@ func (s *Service) encodeCursor(scope, owner string, now, id int64) (string, erro
 	if s == nil || nilDependency(s.cursorKeys) || id <= 0 {
 		return "", ErrUnavailable
 	}
-	key, err := s.cursorKeys.DeriveGenerationTwoSubkey([]byte("donation-pagination/v1"))
+	key, err := s.cursorKeys.DeriveGenerationTwoSubkey([]byte("pagination-cursor/v1"))
 	if err != nil || len(key) != 32 {
 		clear(key)
 		return "", ErrUnavailable
 	}
 	defer clear(key)
-	token, err := db.EncodePaginationCursor(key, scope, owner, uint64(now+cursorLifetime), []db.CursorAtom{{Kind: db.CursorUint, Uint: uint64(id)}})
+	token, err := db.EncodePaginationCursorWithDerivedKey(key, scope, owner, uint64(now+cursorLifetime), []db.CursorAtom{{Kind: db.CursorUint, Uint: uint64(id)}})
 	if err != nil {
 		return "", ErrUnavailable
 	}
@@ -33,13 +33,13 @@ func (s *Service) decodeCursor(token, scope, owner string, now int64) (int64, er
 	if s == nil || nilDependency(s.cursorKeys) {
 		return 0, ErrUnavailable
 	}
-	key, err := s.cursorKeys.DeriveGenerationTwoSubkey([]byte("donation-pagination/v1"))
+	key, err := s.cursorKeys.DeriveGenerationTwoSubkey([]byte("pagination-cursor/v1"))
 	if err != nil || len(key) != 32 {
 		clear(key)
 		return 0, ErrUnavailable
 	}
 	defer clear(key)
-	decoded, err := db.DecodePaginationCursor(key, token, scope, owner, uint64(now))
+	decoded, err := db.DecodePaginationCursorWithDerivedKey(key, token, scope, owner, uint64(now))
 	if err != nil || len(decoded.Atoms) != 1 || decoded.Atoms[0].Kind != db.CursorUint || decoded.Atoms[0].Uint > uint64(^uint64(0)>>1) {
 		return 0, ErrInvalidRequest
 	}

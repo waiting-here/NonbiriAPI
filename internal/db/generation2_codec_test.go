@@ -554,6 +554,23 @@ func TestPaginationCursorCanonicalAndHostile(t *testing.T) {
 	if token != wantToken {
 		t.Fatalf("cursor golden = %q, want %q", token, wantToken)
 	}
+	derivedKey, err := DeriveGenerationTwoKey(master, []byte("pagination-cursor/v1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	derivedToken, err := EncodePaginationCursorWithDerivedKey(derivedKey, "user-endpoints", "user-42", maxCursorExpiry, atoms)
+	if err != nil || derivedToken != token {
+		clear(derivedKey)
+		t.Fatalf("derived-key cursor = %q, %v", derivedToken, err)
+	}
+	derivedDecoded, err := DecodePaginationCursorWithDerivedKey(derivedKey, token, "user-endpoints", "user-42", maxCursorExpiry-1)
+	clear(derivedKey)
+	if err != nil || !reflect.DeepEqual(derivedDecoded, decodedPaginationCursor("user-endpoints", "user-42", maxCursorExpiry, atoms)) {
+		t.Fatalf("derived-key cursor round trip = %+v, %v", derivedDecoded, err)
+	}
+	if _, err := EncodePaginationCursorWithDerivedKey(master[:31], "scope", "", 1, nil); err == nil {
+		t.Fatal("short derived cursor key accepted")
+	}
 	if strings.Contains(token, "=") || len(token) > maxCursorBytes {
 		t.Fatalf("noncanonical cursor token %q", token)
 	}
@@ -631,6 +648,10 @@ func TestPaginationCursorCanonicalAndHostile(t *testing.T) {
 	if _, err := DecodePaginationCursor(master, token+"=", "user-endpoints", "user-42", maxCursorExpiry-1); err == nil {
 		t.Fatal("padded cursor accepted")
 	}
+}
+
+func decodedPaginationCursor(scope, owner string, expiry uint64, atoms []CursorAtom) PaginationCursor {
+	return PaginationCursor{Scope: scope, Owner: owner, Expiry: expiry, Atoms: atoms}
 }
 
 func TestLeaderboardTieTupleWhitelist(t *testing.T) {

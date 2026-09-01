@@ -17,6 +17,7 @@ const (
 	MaxExportBytes        = 16 << 20
 	WorkerBatchLimit      = 100
 	WorkerBudget          = 2 * time.Second
+	WorkerSweepInterval   = 30 * time.Second
 	MaintenanceInterval   = 6 * time.Hour
 	LegalHoldMaximum      = 365 * 24 * time.Hour
 	LegalHoldMetadataLife = 400 * 24 * time.Hour
@@ -46,6 +47,10 @@ type UserFinalAuthorizer interface {
 type AdminFinalAuthorizer interface {
 	AuthorizeAdmin(context.Context, *sql.Tx, int64) error
 	AuthorizeFreshAdmin(context.Context, *sql.Tx, int64) error
+}
+
+type CursorKeyDeriver interface {
+	DeriveGenerationTwoSubkey([]byte) ([]byte, error)
 }
 
 // RetirementBoundary closes every process-local admission rail before the

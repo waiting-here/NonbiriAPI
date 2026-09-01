@@ -14,7 +14,7 @@ func (s *Service) cursorKey() ([]byte, error) {
 	if s == nil || nilDependency(s.cursorKeys) {
 		return nil, ErrUnavailable
 	}
-	key, err := s.cursorKeys.DeriveGenerationTwoSubkey([]byte("charity-routing-pagination/v1"))
+	key, err := s.cursorKeys.DeriveGenerationTwoSubkey([]byte("pagination-cursor/v1"))
 	if err != nil || len(key) != sha256.Size {
 		clear(key)
 		return nil, ErrUnavailable
@@ -31,7 +31,7 @@ func (s *Service) encodeModelCursor(scope, owner string, now, modelID int64) (st
 		return "", err
 	}
 	defer clear(key)
-	token, err := db.EncodePaginationCursor(key, scope, owner, uint64(now+charityCursorLifetime),
+	token, err := db.EncodePaginationCursorWithDerivedKey(key, scope, owner, uint64(now+charityCursorLifetime),
 		[]db.CursorAtom{{Kind: db.CursorUint, Uint: uint64(modelID)}})
 	if err != nil {
 		return "", ErrUnavailable
@@ -48,7 +48,7 @@ func (s *Service) decodeModelCursor(token, scope, owner string, now int64) (int6
 		return 0, err
 	}
 	defer clear(key)
-	decoded, err := db.DecodePaginationCursor(key, token, scope, owner, uint64(now))
+	decoded, err := db.DecodePaginationCursorWithDerivedKey(key, token, scope, owner, uint64(now))
 	if err != nil || len(decoded.Atoms) != 1 || decoded.Atoms[0].Kind != db.CursorUint || decoded.Atoms[0].Uint > uint64(^uint64(0)>>1) {
 		return 0, ErrInvalidRequest
 	}
@@ -64,7 +64,7 @@ func (s *Service) encodeCandidateCursor(scope, owner string, now, keyID int64, m
 		return "", err
 	}
 	defer clear(key)
-	token, err := db.EncodePaginationCursor(key, scope, owner, uint64(now+charityCursorLifetime), []db.CursorAtom{
+	token, err := db.EncodePaginationCursorWithDerivedKey(key, scope, owner, uint64(now+charityCursorLifetime), []db.CursorAtom{
 		{Kind: db.CursorUint, Uint: uint64(keyID)}, {Kind: db.CursorText, Text: modelID},
 	})
 	if err != nil {
@@ -82,7 +82,7 @@ func (s *Service) decodeCandidateCursor(token, scope, owner string, now int64) (
 		return 0, "", err
 	}
 	defer clear(key)
-	decoded, err := db.DecodePaginationCursor(key, token, scope, owner, uint64(now))
+	decoded, err := db.DecodePaginationCursorWithDerivedKey(key, token, scope, owner, uint64(now))
 	if err != nil || len(decoded.Atoms) != 2 || decoded.Atoms[0].Kind != db.CursorUint ||
 		decoded.Atoms[0].Uint > uint64(^uint64(0)>>1) || decoded.Atoms[1].Kind != db.CursorText || decoded.Atoms[1].Text == "" {
 		return 0, "", ErrInvalidRequest

@@ -340,6 +340,7 @@ type LinkLinkSummaryExport struct {
 	Deadline       int64   `json:"deadline"`
 	TerminalAt     int64   `json:"terminal_at"`
 	PairsRemoved   int     `json:"pairs_removed"`
+	TotalPairs     int     `json:"total_pairs"`
 	Score          *string `json:"score"`
 }
 
@@ -361,6 +362,23 @@ type RPSCurrentExport struct {
 }
 
 type RPSPendingExport struct {
+	SessionID      string                 `json:"session_id"`
+	Mode           string                 `json:"mode"`
+	TerminalReason string                 `json:"terminal_reason"`
+	OwnSeatNo      int                    `json:"own_seat_no"`
+	OwnInput       string                 `json:"own_input"`
+	OwnReturned    string                 `json:"own_returned"`
+	OwnWalletNet   string                 `json:"own_wallet_net"`
+	Seats          []RPSPendingSeatExport `json:"seats"`
+	CreatedAt      int64                  `json:"created_at"`
+}
+
+type RPSPendingSeatExport struct {
+	SeatNo int    `json:"seat_no"`
+	Result string `json:"result"`
+}
+
+type RPSSummaryExport struct {
 	SessionID      string        `json:"session_id"`
 	Mode           string        `json:"mode"`
 	TerminalReason string        `json:"terminal_reason"`
@@ -368,8 +386,6 @@ type RPSPendingExport struct {
 	TerminalAt     int64         `json:"terminal_at"`
 	OwnSeat        RPSSeatExport `json:"own_seat"`
 }
-
-type RPSSummaryExport = RPSPendingExport
 
 type RPSSeatExport struct {
 	SeatNo        int    `json:"seat_no"`
@@ -394,6 +410,14 @@ type ExportRequest struct {
 	UserID      int64
 	DecisionNow int64
 	Limit       int
+}
+
+// ExportFinalizer owns process-local state derived by lazy convergence during
+// export. The coordinator commits it only after the shared database snapshot
+// commits and aborts it on every error or size-limit path.
+type ExportFinalizer interface {
+	Commit() bool
+	Abort() bool
 }
 
 type IdentityExporter interface {
@@ -425,13 +449,13 @@ type CharityExporter interface {
 }
 
 type FishingExporter interface {
-	ExportFishing(context.Context, *sql.Tx, ExportRequest) (FishingExport, error)
+	ExportFishing(context.Context, *sql.Tx, ExportRequest) (FishingExport, ExportFinalizer, error)
 }
 
 type LinkLinkExporter interface {
-	ExportLinkLink(context.Context, *sql.Tx, ExportRequest) (LinkLinkExport, error)
+	ExportLinkLink(context.Context, *sql.Tx, ExportRequest) (LinkLinkExport, ExportFinalizer, error)
 }
 
 type RPSExporter interface {
-	ExportRPS(context.Context, *sql.Tx, ExportRequest) (RPSExport, error)
+	ExportRPS(context.Context, *sql.Tx, ExportRequest) (RPSExport, ExportFinalizer, error)
 }
