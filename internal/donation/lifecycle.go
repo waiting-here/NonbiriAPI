@@ -475,7 +475,34 @@ func (s *Service) ExportUser(ctx context.Context, tx *sql.Tx, userID int64, limi
 	if s == nil || ctx == nil || tx == nil || userID <= 0 || limit < 1 || limit > 10000 {
 		return nil, ErrInvalidRequest
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT id FROM donations WHERE user_id=? ORDER BY id LIMIT ?`, userID, limit+1)
+	decisionNow, err := s.nowUnix()
+	if err != nil {
+		return nil, err
+	}
+	return s.ExportUserTx(ctx, tx, userID, decisionNow, limit)
+}
+
+// ExportUserTx returns the donor's ordinary-retention view from the
+// caller-owned transaction and fixed decision time. Active legal hold never
+// widens this owner export: terminal rows at or beyond their 400-day deadline
+// are excluded even if physical cleanup is paused.
+func (s *Service) ExportUserTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	userID, decisionNow int64,
+	limit int,
+) ([]ExportDonation, error) {
+	if s == nil || ctx == nil || tx == nil || userID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond ||
+		limit < 1 || limit > 10000 {
+		return nil, ErrInvalidRequest
+	}
+	cutoff := decisionNow - terminalRetention
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM donations
+WHERE user_id=? AND (
+ status IN ('pending','approved') OR
+ (status IN ('rejected','deleted','expired') AND terminal_at IS NOT NULL AND terminal_at>?)
+)
+ORDER BY id LIMIT ?`, userID, cutoff, limit+1)
 	if err != nil {
 		return nil, fmt.Errorf("donation: read export identities: %w", err)
 	}
@@ -486,13 +513,12 @@ func (s *Service) ExportUser(ctx context.Context, tx *sql.Tx, userID int64, limi
 	if len(ids) > limit {
 		return nil, ErrResourceLimit
 	}
-	now, err := s.nowUnix()
-	if err != nil {
-		return nil, err
-	}
 	items := make([]ExportDonation, 0, len(ids))
 	for _, id := range ids {
-		projection, err := getOwnerDonationTx(ctx, tx, userID, id, now)
+		if _, err := materializeDonationExpiryTx(ctx, tx, id, decisionNow); err != nil {
+			return nil, err
+		}
+		projection, err := getOwnerDonationTx(ctx, tx, userID, id, decisionNow)
 		if err != nil {
 			return nil, err
 		}
@@ -515,15 +541,31 @@ func (s *Service) Cleanup(ctx context.Context, decisionNow int64, limit int) (in
 	if s == nil || s.db == nil || ctx == nil || decisionNow < 0 || decisionNow > maxUnixSecond || limit < 1 || limit > 100 {
 		return 0, ErrInvalidRequest
 	}
-	cutoff := decisionNow - terminalRetention
-	if cutoff < 0 {
-		cutoff = 0
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("donation: begin retention cleanup: %w", err)
 	}
 	defer tx.Rollback()
+	count, err := s.CleanupTx(ctx, tx, decisionNow, limit)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("donation: commit retention cleanup: %w", err)
+	}
+	return count, nil
+}
+
+// CleanupTx performs one bounded terminal-donation cleanup batch in the
+// caller-owned transaction. The caller decides whether the batch commits.
+func (s *Service) CleanupTx(ctx context.Context, tx *sql.Tx, decisionNow int64, limit int) (int, error) {
+	if s == nil || ctx == nil || tx == nil || decisionNow < 0 || decisionNow > maxUnixSecond || limit < 1 || limit > 100 {
+		return 0, ErrInvalidRequest
+	}
+	cutoff := decisionNow - terminalRetention
+	if cutoff < 0 {
+		cutoff = 0
+	}
 	rows, err := tx.QueryContext(ctx, `SELECT d.id FROM donations d
 WHERE d.status IN ('rejected','deleted','expired') AND d.terminal_at IS NOT NULL AND d.terminal_at<=?
 AND NOT EXISTS(SELECT 1 FROM donation_keys dk JOIN donation_usage_reservations r
@@ -546,9 +588,6 @@ ORDER BY d.terminal_at,d.id LIMIT ?`, cutoff, limit)
 		if err := requireOne(result); err != nil {
 			return 0, ErrInvariant
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("donation: commit retention cleanup: %w", err)
 	}
 	return len(ids), nil
 }
