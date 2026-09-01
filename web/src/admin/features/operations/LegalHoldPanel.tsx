@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { clearStationSession } from '@shared/charityManagement';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
@@ -20,12 +21,27 @@ import { useRetainedOperation } from './useRetainedOperation';
 
 const KINDS: HeldObjectKind[] = ['maintenance_event', 'report_case', 'announcement_audit', 'donation', 'request_log'];
 
+const KIND_LABEL_KEYS: Record<HeldObjectKind, string> = {
+  maintenance_event: 'admin.legalHolds.objectKind.maintenanceEvent',
+  report_case: 'admin.legalHolds.objectKind.reportCase',
+  announcement_audit: 'admin.legalHolds.objectKind.announcementAudit',
+  donation: 'admin.legalHolds.objectKind.donation',
+  request_log: 'admin.legalHolds.objectKind.requestLog',
+};
+
+const STATE_LABEL_KEYS: Record<'active' | 'released' | 'expired', string> = {
+  active: 'admin.legalHolds.state.active',
+  released: 'admin.legalHolds.state.released',
+  expired: 'admin.legalHolds.state.expired',
+};
+
 function isFinalAuthorityLoss(error: unknown): boolean {
   return isUnauthorized(error)
     || (isForbidden(error) && !(error instanceof ApiError && error.code === 'elevated_required'));
 }
 
 export function LegalHoldPanel() {
+  const { t } = useTranslation();
   const client = useQueryClient();
   const authorityEpoch = useRef(0);
   const createElevationToken = useRef<string | null>(null);
@@ -47,18 +63,18 @@ export function LegalHoldPanel() {
     const epoch = authorityEpoch.current;
     const token = createElevationToken.current;
     createElevationToken.current = null;
-    if (!token) throw new ApiError('elevated_required', 'Fresh administrator elevation is required.', 403);
+    if (!token) throw new ApiError('elevated_required', t('admin.legalHolds.errors.elevationRequired'), 403);
     const hold = await createLegalHold({ object_kind: input.object_kind, object_ref: input.object_ref, basis: input.basis, expires_at: input.expires_at, confirmation: true }, key, token);
-    if (epoch !== authorityEpoch.current) throw new ApiError('authority_changed', 'Administrator authority changed.', 401);
+    if (epoch !== authorityEpoch.current) throw new ApiError('authority_changed', t('admin.legalHolds.errors.authorityChanged'), 401);
     return hold;
   }, reconcile);
   const release = useRetainedOperation(async (input: { id: string; revision: string; reason: string }, key) => {
     const epoch = authorityEpoch.current;
     const token = releaseElevationToken.current;
     releaseElevationToken.current = null;
-    if (!token) throw new ApiError('elevated_required', 'Fresh administrator elevation is required.', 403);
+    if (!token) throw new ApiError('elevated_required', t('admin.legalHolds.errors.elevationRequired'), 403);
     const hold = await releaseLegalHold(input.id, { expected_revision: input.revision, reason: input.reason, confirmation: true }, key, token);
-    if (epoch !== authorityEpoch.current) throw new ApiError('authority_changed', 'Administrator authority changed.', 401);
+    if (epoch !== authorityEpoch.current) throw new ApiError('authority_changed', t('admin.legalHolds.errors.authorityChanged'), 401);
     return hold;
   }, reconcile);
   const createError = create.error;
@@ -156,17 +172,125 @@ export function LegalHoldPanel() {
   return (
     <div className="ops-stack">
       <Card className="ops-danger">
-        <h2>Legal holds</h2>
-        <p>Metadata only. A hold may preserve one eligible aggregate for at most 365 days, once. It never pauses account revocation or deletion, business deadlines, settlement, or adjudication.</p>
-        <div className="ops-toolbar"><label><span>State</span><select value={state} onChange={(event) => { pager.reset(); setState(event.target.value); }}><option value="">All</option><option value="active">Active</option><option value="released">Released</option><option value="expired">Expired</option></select></label><label><span>Object kind</span><select value={kind} onChange={(event) => { pager.reset(); setKind(event.target.value); }}><option value="">All</option>{KINDS.map((value) => <option key={value}>{value}</option>)}</select></label></div>
-        {list.isPending ? <LoadingState /> : list.error ? <ErrorState error={list.error} onRetry={() => void list.refetch()} /> : list.data.data.length === 0 ? <EmptyState title="No legal-hold metadata" body="No hold matches this filter." /> : <><div className="ops-table-scroll"><table className="ops-table"><thead><tr><th>Object</th><th>State</th><th>Window</th><th>Detail</th></tr></thead><tbody>{list.data.data.map((hold) => <tr key={hold.id}><td>{hold.object_kind}<small>{hold.object_ref}</small></td><td><StatusBadge active={hold.state === 'active'} label={hold.state} /></td><td>{formatDateTime(hold.created_at)} — {formatDateTime(hold.expires_at)}</td><td><button className="btn btn-secondary" type="button" onClick={() => setSelected(hold.id)}>Metadata</button></td></tr>)}</tbody></table></div><CursorPagination page={pager.page} nextCursor={list.data.next_cursor} onPrevious={pager.previous} onNext={pager.next} /></>}
+        <h2>{t('admin.legalHolds.title')}</h2>
+        <p>{t('admin.legalHolds.description')}</p>
+        <div className="ops-toolbar">
+          <label>
+            <span>{t('admin.legalHolds.filters.state')}</span>
+            <select value={state} onChange={(event) => { pager.reset(); setState(event.target.value); }}>
+              <option value="">{t('admin.legalHolds.filters.all')}</option>
+              <option value="active">{t(STATE_LABEL_KEYS.active)}</option>
+              <option value="released">{t(STATE_LABEL_KEYS.released)}</option>
+              <option value="expired">{t(STATE_LABEL_KEYS.expired)}</option>
+            </select>
+          </label>
+          <label>
+            <span>{t('admin.legalHolds.filters.objectKind')}</span>
+            <select value={kind} onChange={(event) => { pager.reset(); setKind(event.target.value); }}>
+              <option value="">{t('admin.legalHolds.filters.all')}</option>
+              {KINDS.map((value) => <option key={value} value={value}>{t(KIND_LABEL_KEYS[value])}</option>)}
+            </select>
+          </label>
+        </div>
+        {list.isPending ? <LoadingState /> : list.error ? <ErrorState error={list.error} onRetry={() => void list.refetch()} /> : list.data.data.length === 0 ? (
+          <EmptyState title={t('admin.legalHolds.empty.title')} body={t('admin.legalHolds.empty.body')} />
+        ) : <>
+          <div className="ops-table-scroll">
+            <table className="ops-table">
+              <thead><tr><th>{t('admin.legalHolds.table.object')}</th><th>{t('admin.legalHolds.table.state')}</th><th>{t('admin.legalHolds.table.window')}</th><th>{t('admin.legalHolds.table.detail')}</th></tr></thead>
+              <tbody>{list.data.data.map((hold) => (
+                <tr key={hold.id}>
+                  <td>{t(KIND_LABEL_KEYS[hold.object_kind])}<small>{hold.object_ref}</small></td>
+                  <td><StatusBadge active={hold.state === 'active'} label={t(STATE_LABEL_KEYS[hold.state])} /></td>
+                  <td>{formatDateTime(hold.created_at)} — {formatDateTime(hold.expires_at)}</td>
+                  <td><button className="btn btn-secondary" type="button" onClick={() => setSelected(hold.id)}>{t('admin.legalHolds.actions.metadata')}</button></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+          <CursorPagination page={pager.page} nextCursor={list.data.next_cursor} onPrevious={pager.previous} onNext={pager.next} />
+        </>}
       </Card>
-      {selected ? <Card>{detail.isPending ? <LoadingState /> : detail.error ? <ErrorState error={detail.error} onRetry={() => void detail.refetch()} /> : <><h3>Hold metadata</h3><dl className="ops-kv"><dt>ID / revision</dt><dd>{detail.data.id} / {detail.data.revision}</dd><dt>Object</dt><dd>{detail.data.object_kind} · {detail.data.object_ref}</dd><dt>State</dt><dd>{detail.data.state}</dd><dt>Basis</dt><dd>{detail.data.basis}</dd><dt>Expires</dt><dd>{formatDateTime(detail.data.expires_at)}</dd>{detail.data.end_reason ? <><dt>End reason</dt><dd>{detail.data.end_reason}</dd></> : null}</dl>{detail.data.state === 'active' ? <><label className="ops-form-field"><span>Release reason</span><input maxLength={1024} value={releaseDraft.reason} onChange={(event) => setReleaseDraft({ ...releaseDraft, reason: event.target.value })} /></label><label className="ops-form-field"><span>Administrator password (fresh elevation)</span><input type="password" autoComplete="current-password" value={releaseDraft.password} onChange={(event) => setReleaseDraft({ ...releaseDraft, password: event.target.value })} /></label><label><input type="checkbox" checked={releaseDraft.confirmed} onChange={(event) => setReleaseDraft({ ...releaseDraft, confirmed: event.target.checked })} /> Release is final; this object cannot receive another hold.</label><button className="btn btn-danger" type="button" disabled={!releaseDraft.reason.trim() || !releaseDraft.password || !releaseDraft.confirmed || release.isPending} onClick={() => setConfirmation('release')}>Release hold</button></> : null}</>}</Card> : null}
+      {selected ? <Card>{detail.isPending ? <LoadingState /> : detail.error ? <ErrorState error={detail.error} onRetry={() => void detail.refetch()} /> : <>
+        <h3>{t('admin.legalHolds.detail.title')}</h3>
+        <dl className="ops-kv">
+          <dt>{t('admin.legalHolds.detail.idRevision')}</dt><dd>{detail.data.id} / {detail.data.revision}</dd>
+          <dt>{t('admin.legalHolds.detail.object')}</dt><dd>{t(KIND_LABEL_KEYS[detail.data.object_kind])} · {detail.data.object_ref}</dd>
+          <dt>{t('admin.legalHolds.detail.state')}</dt><dd>{t(STATE_LABEL_KEYS[detail.data.state])}</dd>
+          <dt>{t('admin.legalHolds.detail.basis')}</dt><dd>{detail.data.basis}</dd>
+          <dt>{t('admin.legalHolds.detail.expires')}</dt><dd>{formatDateTime(detail.data.expires_at)}</dd>
+          {detail.data.end_reason ? <>
+            <dt>{t('admin.legalHolds.detail.endReason')}</dt>
+            <dd>{detail.data.state === 'expired'
+              ? t('admin.legalHolds.endReason.expired')
+              : t('admin.legalHolds.endReason.released', { reason: detail.data.end_reason })}</dd>
+          </> : null}
+        </dl>
+        {detail.data.state === 'active' ? <>
+          <label className="ops-form-field">
+            <span>{t('admin.legalHolds.release.reason')}</span>
+            <input maxLength={1024} value={releaseDraft.reason} onChange={(event) => setReleaseDraft({ ...releaseDraft, reason: event.target.value })} />
+          </label>
+          <label className="ops-form-field">
+            <span>{t('admin.legalHolds.release.password')}</span>
+            <input type="password" autoComplete="current-password" value={releaseDraft.password} onChange={(event) => setReleaseDraft({ ...releaseDraft, password: event.target.value })} />
+          </label>
+          <label>
+            <input type="checkbox" checked={releaseDraft.confirmed} onChange={(event) => setReleaseDraft({ ...releaseDraft, confirmed: event.target.checked })} />{' '}
+            {t('admin.legalHolds.release.confirmation')}
+          </label>
+          <button className="btn btn-danger" type="button" disabled={!releaseDraft.reason.trim() || !releaseDraft.password || !releaseDraft.confirmed || release.isPending} onClick={() => setConfirmation('release')}>
+            {t('admin.legalHolds.actions.release')}
+          </button>
+        </> : null}
+      </>}</Card> : null}
       <Card className="ops-danger">
-        <h3>Create one-time hold</h3>
-        <div className="ops-field-grid"><label><span>Object kind</span><select value={createDraft.object_kind} onChange={(event) => { setCreateExpiry(null); setCreateDraft({ ...createDraft, object_kind: event.target.value as HeldObjectKind }); }}>{KINDS.map((value) => <option key={value}>{value}</option>)}</select></label><label><span>Exact object reference</span><input value={createDraft.object_ref} onChange={(event) => { setCreateExpiry(null); setCreateDraft({ ...createDraft, object_ref: event.target.value }); }} /></label><label><span>Days (1–365)</span><input type="number" min="1" max="365" value={createDraft.days} onChange={(event) => { setCreateExpiry(null); setCreateDraft({ ...createDraft, days: event.target.value }); }} /></label><label><span>Administrator password</span><input type="password" autoComplete="current-password" value={createDraft.password} onChange={(event) => setCreateDraft({ ...createDraft, password: event.target.value })} /></label></div><label className="ops-form-field"><span>Basis</span><textarea maxLength={1024} value={createDraft.basis} onChange={(event) => { setCreateExpiry(null); setCreateDraft({ ...createDraft, basis: event.target.value }); }} /></label><label><input type="checkbox" checked={createDraft.confirmed} onChange={(event) => setCreateDraft({ ...createDraft, confirmed: event.target.checked })} /> I confirm this exact aggregate, expiry, and irreversible one-hold limit.</label>{create.error ? <ErrorState error={create.error} /> : release.error ? <ErrorState error={release.error} /> : elevationError ? <ErrorState error={elevationError} /> : null}<button className="btn btn-danger" type="button" disabled={!createDraft.object_ref.trim() || !createDraft.basis.trim() || !createDraft.password || !createDraft.confirmed || !validDays || create.isPending || elevating} onClick={() => { setCreateExpiry((value) => value ?? Math.floor(Date.now() / 1_000) + days * 86_400); setConfirmation('create'); }}>Create legal hold</button>
+        <h3>{t('admin.legalHolds.create.title')}</h3>
+        <div className="ops-field-grid">
+          <label>
+            <span>{t('admin.legalHolds.create.objectKind')}</span>
+            <select value={createDraft.object_kind} onChange={(event) => { setCreateExpiry(null); setCreateDraft({ ...createDraft, object_kind: event.target.value as HeldObjectKind }); }}>
+              {KINDS.map((value) => <option key={value} value={value}>{t(KIND_LABEL_KEYS[value])}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>{t('admin.legalHolds.create.objectReference')}</span>
+            <input value={createDraft.object_ref} onChange={(event) => { setCreateExpiry(null); setCreateDraft({ ...createDraft, object_ref: event.target.value }); }} />
+          </label>
+          <label>
+            <span>{t('admin.legalHolds.create.days')}</span>
+            <input type="number" min="1" max="365" value={createDraft.days} onChange={(event) => { setCreateExpiry(null); setCreateDraft({ ...createDraft, days: event.target.value }); }} />
+          </label>
+          <label>
+            <span>{t('admin.legalHolds.create.password')}</span>
+            <input type="password" autoComplete="current-password" value={createDraft.password} onChange={(event) => setCreateDraft({ ...createDraft, password: event.target.value })} />
+          </label>
+        </div>
+        <label className="ops-form-field">
+          <span>{t('admin.legalHolds.create.basis')}</span>
+          <textarea maxLength={1024} value={createDraft.basis} onChange={(event) => { setCreateExpiry(null); setCreateDraft({ ...createDraft, basis: event.target.value }); }} />
+        </label>
+        <label>
+          <input type="checkbox" checked={createDraft.confirmed} onChange={(event) => setCreateDraft({ ...createDraft, confirmed: event.target.checked })} />{' '}
+          {t('admin.legalHolds.create.confirmation')}
+        </label>
+        {create.error ? <ErrorState error={create.error} /> : release.error ? <ErrorState error={release.error} /> : elevationError ? <ErrorState error={elevationError} /> : null}
+        <button className="btn btn-danger" type="button" disabled={!createDraft.object_ref.trim() || !createDraft.basis.trim() || !createDraft.password || !createDraft.confirmed || !validDays || create.isPending || elevating} onClick={() => { setCreateExpiry((value) => value ?? Math.floor(Date.now() / 1_000) + days * 86_400); setConfirmation('create'); }}>
+          {t('admin.legalHolds.actions.create')}
+        </button>
       </Card>
-      {confirmation ? <ConfirmDialog open title={confirmation === 'create' ? 'Create this legal hold?' : 'Release this legal hold?'} description={confirmation === 'create' ? `The hold expires after ${days} day(s), cannot be extended, copied, reopened, or recreated.` : 'Release is final and ordinary cleanup may proceed immediately when its original deadline has passed.'} confirmLabel={confirmation === 'create' ? 'Create hold' : 'Release hold'} danger busy={create.isPending || release.isPending || elevating} onCancel={() => { setConfirmation(null); setCreateDraft((current) => ({ ...current, password: '', confirmed: false })); setReleaseDraft((current) => ({ ...current, password: '', confirmed: false })); setElevationError(null); }} onConfirm={() => { if (confirmation === 'create') void submitCreate(); else void submitRelease(); }} /> : null}
+      {confirmation ? <ConfirmDialog
+        open
+        title={t(confirmation === 'create' ? 'admin.legalHolds.confirm.createTitle' : 'admin.legalHolds.confirm.releaseTitle')}
+        description={confirmation === 'create'
+          ? t('admin.legalHolds.confirm.createDescription', { days })
+          : t('admin.legalHolds.confirm.releaseDescription')}
+        confirmLabel={t(confirmation === 'create' ? 'admin.legalHolds.confirm.createAction' : 'admin.legalHolds.confirm.releaseAction')}
+        danger
+        busy={create.isPending || release.isPending || elevating}
+        onCancel={() => { setConfirmation(null); setCreateDraft((current) => ({ ...current, password: '', confirmed: false })); setReleaseDraft((current) => ({ ...current, password: '', confirmed: false })); setElevationError(null); }}
+        onConfirm={() => { if (confirmation === 'create') void submitCreate(); else void submitRelease(); }}
+      /> : null}
     </div>
   );
 }
