@@ -8,6 +8,7 @@ interface ConfirmDialogProps {
   confirmLabel: string;
   cancelLabel?: string;
   busy?: boolean;
+  confirmDisabled?: boolean;
   danger?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -24,6 +25,7 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel,
   busy = false,
+  confirmDisabled = false,
   danger = false,
   onConfirm,
   onCancel,
@@ -150,7 +152,7 @@ export function ConfirmDialog({
             type="button"
             className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`}
             onClick={onConfirm}
-            disabled={busy}
+            disabled={busy || confirmDisabled}
           >
             {busy ? t('common.working') : confirmLabel}
           </button>
