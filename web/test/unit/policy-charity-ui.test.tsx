@@ -32,6 +32,9 @@ import type {
 } from '../../src/user/features/core/types';
 import { userKeys } from '../../src/user/data';
 import { ApiError } from '../../src/shared/query/http';
+import { charityKeys } from '../../src/shared/operations/charity';
+import { roleLogKeys } from '../../src/shared/components/log/data';
+import { operationsKeys } from '../../src/user/features/operations/data';
 import {
   assertNoSensitiveQueryCache,
   installJsonFetchFixtures,
@@ -250,6 +253,79 @@ const managedModel = {
   discount: { percent: 100, enabled: false, start_at: null, end_at: null },
   success_samples: 0,
   success_count: 0,
+};
+
+const managedModelFixture = {
+  id: '7',
+  provider: 'provider',
+  model: 'charity-model',
+  full_name: '[公益]provider/charity-model',
+  enabled: true,
+  pricing: { mode: 'per_request', user_price: '0', donor_reward: '0' },
+  discount: { enabled: false, percent: 0, start_at: null, end_at: null },
+  flatten_tool_calls: false,
+  revision: '1',
+  binding_revision: '1',
+  binding_count: '1',
+  rolling_success: { sample_count: '0', success_count: '0', percent: null },
+  created_at: 1,
+  updated_at: 2,
+};
+
+const managedKeyFixture = {
+  id: '6',
+  endpoint_key_id: '2',
+  display_head: 'sk-a',
+  display_tail: 'tail',
+  safe_source: { base_url: endpoint.base_url, connector_type: 'openai-compatible' },
+  physical_enabled: true,
+  charity_state: 'pending',
+  limits: { price: null, calls: null, tokens: null },
+  usage: {
+    price_used: '0',
+    price_inflight: '0',
+    calls_used: '0',
+    calls_inflight: '0',
+    tokens_used: '0',
+    tokens_inflight: '0',
+  },
+  token_reserve: 32,
+  streak: { generation: '1', count: '0', failure_disabled: false },
+  ended_reason: null,
+  safe_note: 'reviewer-safe',
+};
+
+function pendingDonationFixture(frame: 'admin' | 'steward', id: string, description: string) {
+  return {
+    id,
+    status: 'pending',
+    revision: '1',
+    description,
+    review_result: null,
+    expires_at: null,
+    keys: [managedKeyFixture],
+    owner: frame === 'admin'
+      ? { user_id: '1', discord_id: null, display_name: 'fixture-user' }
+      : { user_id: '1', display_name: 'fixture-user' },
+    reviewer: null,
+    created_at: 1,
+    updated_at: 2,
+  };
+}
+
+const bindingFixture = {
+  id: '10',
+  ord: 0,
+  donation_key_id: '6',
+  donation_id: '9',
+  source: {
+    connector_type: 'openai-compatible',
+    canonical_base_url: endpoint.base_url,
+    display_head: 'sk-a',
+    display_tail: 'tail',
+  },
+  upstream_model_id: 'gpt-a',
+  source_types: ['manual'],
 };
 
 function lastBody(
@@ -1179,40 +1255,18 @@ describe('experimental policy and charity controls', () => {
   });
 
   test('rejects a non-empty invalid reviewer expiry and sends no PATCH', async () => {
-    const listDonation = {
-      id: 20,
-      user_id: 1,
-      endpoint_base_url: endpoint.base_url,
-      status: 'pending',
-      enabled: false,
-      description: 'review expiry fixture',
-      review_note: '',
-      created_at: 1,
-      updated_at: 2,
+    const detailDonation = {
+      ...pendingDonationFixture('admin', '20', 'review expiry fixture'),
+      expires_at: 1_700_000_000,
     };
-    const detailDonation = { ...listDonation, expires_at: 1700000000, keys: [], reviews: [] };
     const fetchMock = installJsonFetchFixtures([
       {
         method: 'GET',
-        path: '/admin/api/donations?page=1&page_size=20&status=pending',
-        body: { data: [listDonation], has_more: false, total: 1 },
+        path: '/admin/api/donations?limit=50',
+        body: { data: [detailDonation], next_cursor: null },
       },
       { method: 'GET', path: '/admin/api/donations/20', body: detailDonation },
-      {
-        method: 'GET',
-        path: '/admin/api/charity-models?page=1&page_size=100',
-        body: { data: [], has_more: false, total: 0 },
-      },
-      {
-        method: 'GET',
-        path: '/admin/api/site-config',
-        body: {
-          charity_enabled: true,
-          donation_accept_enabled: true,
-          charity_token_reserve_milli: null,
-        },
-      },
-      { method: 'PATCH', path: '/admin/api/donations/20', body: detailDonation },
+      { method: 'POST', path: '/admin/api/donations/20/review', body: detailDonation },
     ]);
     const rendered = await renderWithProviders(
       <ManagementSessionGate frame="admin">
@@ -1220,8 +1274,13 @@ describe('experimental policy and charity controls', () => {
       </ManagementSessionGate>,
       { station: 'admin', role: 'admin' },
     );
-    await screen.findByRole('heading', { name: 'Donation review queue' });
     await screen.findByText('review expiry fixture');
+    await rendered.user.click(screen.getByRole('button', { name: 'Review' }));
+    await screen.findByRole('heading', { name: 'Review pending submission' });
+    await rendered.user.type(screen.getByLabelText('Reason'), 'expiry validation');
+    await rendered.user.click(screen.getByRole('checkbox', {
+      name: 'I confirm this review result and its whole-donation consequences.',
+    }));
     const expiry = document.querySelector<HTMLInputElement>('input[type="datetime-local"]');
     if (!expiry) throw new Error('review expiry control not found');
     Object.defineProperty(expiry, 'value', {
@@ -1230,41 +1289,28 @@ describe('experimental policy and charity controls', () => {
       value: 'not-a-date',
     });
     fireEvent.change(expiry);
-    await rendered.user.click(screen.getByRole('button', { name: 'Approve donation' }));
     await expect(
-      screen.findByText('Enter a valid expiry date, or leave it blank to clear the expiry.'),
+      screen.findByText('Whole-donation expiry must be a valid supported date.'),
     ).resolves.toBeVisible();
     expect(
       fetchMock.mock.calls.filter((call) => {
         const requestURL = new URL(String(call[0]), window.location.origin);
         const requestInit = call[1] as RequestInit | undefined;
-        return requestURL.pathname === '/admin/api/donations/20' && requestInit?.method === 'PATCH';
+        return requestURL.pathname === '/admin/api/donations/20/review' && requestInit?.method === 'POST';
       }),
     ).toHaveLength(0);
-    Object.defineProperty(expiry, 'value', { configurable: true, writable: true, value: '' });
-    fireEvent.change(expiry);
+    await rendered.user.click(screen.getByRole('checkbox', { name: 'No expiry' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Approve donation' }));
     await waitFor(() =>
-      expect(lastBody(fetchMock, 'PATCH', '/admin/api/donations/20')).toMatchObject({
-        action: 'approve',
+      expect(lastBody(fetchMock, 'POST', '/admin/api/donations/20/review')).toMatchObject({
+        decision: 'approve',
         expires_at: null,
       }),
     );
   });
 
   test('keeps management actions disabled on detail failure and enables them after retry', async () => {
-    const listDonation = {
-      id: 21,
-      user_id: 1,
-      endpoint_base_url: endpoint.base_url,
-      status: 'pending',
-      enabled: false,
-      description: 'detail retry fixture',
-      review_note: '',
-      created_at: 1,
-      updated_at: 2,
-    };
-    const detailDonation = { ...listDonation, expires_at: null, keys: [], reviews: [] };
+    const detailDonation = pendingDonationFixture('admin', '21', 'detail retry fixture');
     let detailReads = 0;
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const requestURL = new URL(
@@ -1275,7 +1321,7 @@ describe('experimental policy and charity controls', () => {
         init?.method ?? (input instanceof Request ? input.method : 'GET')
       ).toUpperCase();
       if (method === 'GET' && requestURL.pathname === '/admin/api/donations')
-        return jsonResponse({ data: [listDonation], has_more: false, total: 1 });
+        return jsonResponse({ data: [detailDonation], next_cursor: null });
       if (method === 'GET' && requestURL.pathname === '/admin/api/donations/21') {
         detailReads += 1;
         return detailReads === 1
@@ -1285,15 +1331,7 @@ describe('experimental policy and charity controls', () => {
             )
           : jsonResponse(detailDonation);
       }
-      if (method === 'GET' && requestURL.pathname === '/admin/api/charity-models')
-        return jsonResponse({ data: [], has_more: false, total: 0 });
-      if (method === 'GET' && requestURL.pathname === '/admin/api/site-config')
-        return jsonResponse({
-          charity_enabled: true,
-          donation_accept_enabled: true,
-          charity_token_reserve_milli: null,
-        });
-      if (method === 'PATCH' && requestURL.pathname === '/admin/api/donations/21')
+      if (method === 'POST' && requestURL.pathname === '/admin/api/donations/21/review')
         return jsonResponse(detailDonation);
       throw new Error(
         `Unexpected fixture request: ${method} ${requestURL.pathname}${requestURL.search}`,
@@ -1307,16 +1345,18 @@ describe('experimental policy and charity controls', () => {
       { station: 'admin', role: 'admin' },
     );
     await screen.findByText('detail retry fixture');
-    const approve = screen.getByRole('button', { name: 'Approve donation' });
-    expect(approve).toBeDisabled();
+    await rendered.user.click(screen.getByRole('button', { name: 'Review' }));
     await waitFor(() => expect(detailReads).toBeGreaterThan(0));
     await rendered.user.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(detailReads).toBe(2));
-    await waitFor(() => expect(approve).toBeEnabled());
-    await rendered.user.click(approve);
+    await rendered.user.type(screen.getByLabelText('Reason'), 'detail recovered');
+    await rendered.user.click(screen.getByRole('checkbox', {
+      name: 'I confirm this review result and its whole-donation consequences.',
+    }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Approve donation' }));
     await waitFor(() =>
-      expect(lastBody(fetchMock, 'PATCH', '/admin/api/donations/21')).toMatchObject({
-        action: 'approve',
+      expect(lastBody(fetchMock, 'POST', '/admin/api/donations/21/review')).toMatchObject({
+        decision: 'approve',
       }),
     );
   });
@@ -1340,84 +1380,59 @@ describe('experimental policy and charity controls', () => {
       const fetchMock = installJsonFetchFixtures([
         {
           method: 'GET',
-          path: `${basePath}/donations?page=1&page_size=20&status=pending`,
-          body: { data: [], has_more: false, total: 0 },
+          path: `${basePath}/donations?limit=50`,
+          body: { data: [], next_cursor: null },
         },
         {
           method: 'GET',
-          path: `${basePath}/charity-models?page=1&page_size=100`,
-          body: { data: [managedModel], has_more: false, total: 1 },
+          path: `${basePath}/charity-models?limit=50`,
+          body: { data: [managedModelFixture], next_cursor: null },
         },
         {
           method: 'GET',
           path: `${basePath}/charity-models/7/bindings`,
-          body: {
-            data: [
-              {
-                id: 10,
-                charity_model_id: 7,
-                donation_key_id: 6,
-                upstream_model_id: 'gpt-a',
-                ord: 0,
-                endpoint_base_url: endpoint.base_url,
-                key_display_head: 'sk-a',
-                key_display_tail: 'tail',
-                donation_key_enabled: true,
-              },
-            ],
-          },
+          body: { bindings: [bindingFixture], binding_revision: '1' },
         },
-        ...(frame === 'admin'
-          ? [
-              {
-                method: 'GET',
-                path: '/admin/api/site-config',
-                body: {
-                  charity_enabled: true,
-                  donation_accept_enabled: true,
-                  charity_token_reserve_milli: null,
-                },
-              },
-            ]
-          : []),
+        {
+          method: 'GET',
+          path: `${basePath}/charity-models/7/binding-candidates?limit=50`,
+          body: { data: [], next_cursor: null },
+        },
         {
           method: 'PATCH',
           path: `${basePath}/charity-models/7`,
-          body: { ...managedModel, flatten_tool_calls: true },
+          body: { ...managedModelFixture, flatten_tool_calls: true, revision: '2' },
         },
         {
           method: 'POST',
           path: `${basePath}/charity-models`,
           body: {
-            ...managedModel,
-            id: 8,
+            ...managedModelFixture,
+            id: '8',
             provider: 'new-provider',
             model: 'new-model',
-            full_name: 'new-provider/new-model',
+            full_name: '[公益]new-provider/new-model',
             flatten_tool_calls: true,
           },
         },
       ]);
-      const rendered = await renderWithProviders(
-        <ManagementSessionGate frame={frame}>
-          <CharityManagement frame={frame} />
-        </ManagementSessionGate>,
-        { station, role },
-      );
-      await screen.findByRole('heading', { name: 'Donation review queue' });
-      await screen.findByText('provider/charity-model');
-      await rendered.user.click(screen.getByText('Bindings', { exact: true }));
-      await expect(screen.findByText('sk-a…tail')).resolves.toBeVisible();
-      await rendered.user.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
-      const editForm = rendered.container.querySelector('form.charity-editor');
-      if (!editForm) throw new Error('Missing charity model editor');
+      const rendered = await renderWithProviders(<CharityManagement frame={frame} />, {
+        station,
+        role,
+      });
+      await rendered.user.click(screen.getByRole('tab', { name: 'Models and bindings' }));
+      await screen.findByText('[公益]provider/charity-model');
+      await rendered.user.click(screen.getByRole('button', { name: 'Manage' }));
+      const editHeading = await screen.findByRole('heading', { name: '[公益]provider/charity-model' });
+      const editForm = editHeading.closest('.card');
+      if (!(editForm instanceof HTMLElement)) throw new Error('Missing charity model editor');
       await rendered.user.click(
-        within(editForm as HTMLElement).getByRole('checkbox', {
-          name: 'Experimental: flatten tool calls',
+        within(editForm).getByRole('checkbox', {
+          name: 'Flatten tool calls',
         }),
       );
       await rendered.user.click(
-        within(editForm as HTMLElement).getByRole('button', { name: 'Save' }),
+        within(editForm).getByRole('button', { name: 'Save model' }),
       );
       await waitFor(() =>
         expect(lastBody(fetchMock, 'PATCH', `${basePath}/charity-models/7`)).toMatchObject({
@@ -1425,24 +1440,24 @@ describe('experimental policy and charity controls', () => {
         }),
       );
 
-      await rendered.user.click(screen.getByRole('button', { name: 'Add charity model' }));
-      const createForm = rendered.container.querySelector('form.charity-editor');
-      if (!createForm) throw new Error('Missing charity model creation form');
+      const createHeading = screen.getByRole('heading', { name: 'Create charity model' });
+      const createForm = createHeading.closest('.card');
+      if (!(createForm instanceof HTMLElement)) throw new Error('Missing charity model creation form');
       await rendered.user.type(
-        within(createForm as HTMLElement).getByLabelText('Provider'),
+        within(createForm).getByLabelText('Provider'),
         'new-provider',
       );
       await rendered.user.type(
-        within(createForm as HTMLElement).getByLabelText('Model'),
+        within(createForm).getByLabelText('Model'),
         'new-model',
       );
       await rendered.user.click(
-        within(createForm as HTMLElement).getByRole('checkbox', {
-          name: 'Experimental: flatten tool calls',
+        within(createForm).getByRole('checkbox', {
+          name: 'Flatten tool calls',
         }),
       );
       await rendered.user.click(
-        within(createForm as HTMLElement).getByRole('button', { name: 'Save' }),
+        within(createForm).getByRole('button', { name: 'Create model' }),
       );
       await waitFor(() =>
         expect(lastBody(fetchMock, 'POST', `${basePath}/charity-models`)).toMatchObject({
@@ -1459,15 +1474,16 @@ describe('experimental policy and charity controls', () => {
     const fetchMock = installJsonFetchFixtures([
       {
         method: 'GET',
-        path: '/api/steward/donations?page=1&page_size=20&status=pending',
-        body: { data: [], has_more: false, total: 0 },
+        path: '/api/steward/donations?limit=50',
+        body: { data: [], next_cursor: null },
       },
       {
         method: 'GET',
-        path: '/api/steward/charity-models?page=1&page_size=100',
-        body: { data: [managedModel], has_more: false, total: 1 },
+        path: '/api/steward/charity-models?limit=50',
+        body: { data: [managedModelFixture], next_cursor: null },
       },
-      { method: 'GET', path: '/api/steward/charity-models/7/bindings', body: { data: [] } },
+      { method: 'GET', path: '/api/steward/charity-models/7/bindings', body: { bindings: [bindingFixture], binding_revision: '1' } },
+      { method: 'GET', path: '/api/steward/charity-models/7/binding-candidates?limit=50', body: { data: [], next_cursor: null } },
       {
         method: 'PATCH',
         path: '/api/steward/charity-models/7',
@@ -1478,62 +1494,43 @@ describe('experimental policy and charity controls', () => {
       // capability latch closed after the write is rejected.
       { method: 'GET', path: '/api/session', body: revokedSession },
     ]);
-    const rendered = await renderWithProviders(
-      <ManagementSessionGate frame="steward">
-        <CharityManagement frame="steward" />
-      </ManagementSessionGate>,
-      { station: 'user', role: 'level5' },
-    );
-    await screen.findByText('provider/charity-model');
-    await rendered.user.click(screen.getByRole('button', { name: 'Edit' }));
-    const editForm = rendered.container.querySelector('form.charity-editor');
-    if (!editForm) throw new Error('Missing charity model editor');
+    const rendered = await renderWithProviders(<CharityManagement frame="steward" />, {
+      station: 'user',
+      role: 'level5',
+    });
+    await rendered.user.click(screen.getByRole('tab', { name: 'Models and bindings' }));
+    await screen.findByText('[公益]provider/charity-model');
+    await rendered.user.click(screen.getByRole('button', { name: 'Manage' }));
+    const editHeading = await screen.findByRole('heading', { name: '[公益]provider/charity-model' });
+    const editForm = editHeading.closest('.card');
+    if (!(editForm instanceof HTMLElement)) throw new Error('Missing charity model editor');
     await rendered.user.click(
-      within(editForm as HTMLElement).getByRole('checkbox', {
-        name: 'Experimental: flatten tool calls',
+      within(editForm).getByRole('checkbox', {
+        name: 'Flatten tool calls',
       }),
     );
     await rendered.user.click(
-      within(editForm as HTMLElement).getByRole('button', { name: 'Save' }),
+      within(editForm).getByRole('button', { name: 'Save model' }),
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/capability is no longer active/i)).toBeVisible();
+      expect(screen.getByText(/Charity management access is no longer available/i)).toBeVisible();
       expect(
-        screen.queryByRole('checkbox', { name: 'Experimental: flatten tool calls' }),
+        screen.queryByRole('checkbox', { name: 'Flatten tool calls' }),
       ).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Add charity model' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Create model' })).toBeNull();
     });
-    expect(rendered.queryClient.getQueryData(charityManagementKeys.capability('steward'))).toBe(
-      true,
-    );
 
-    // The normal forbidden effect evicts the management root.  The revoke
-    // sentinel is deliberately outside that root and must not recreate a
-    // writable view while the session refresh is still in flight.
-    rendered.queryClient.removeQueries({ queryKey: charityManagementKeys.root('steward') });
-    expect(rendered.queryClient.getQueryData(charityManagementKeys.capability('steward'))).toBe(
-      true,
-    );
-    expect(screen.queryByRole('button', { name: 'Add charity model' })).toBeNull();
+    // Evicting the remote query cache must not reopen the component-local
+    // fail-closed latch after an authoritative rejection.
+    rendered.queryClient.removeQueries({ queryKey: charityKeys.root('steward') });
+    expect(screen.queryByRole('button', { name: 'Create model' })).toBeNull();
 
-    // Cache invalidation must not refetch the local placeholder and reopen
-    // controls after an authoritative rejection. A separately successful,
-    // identity-checked session refresh is the only recovery path.
     await rendered.queryClient.invalidateQueries({
-      queryKey: charityManagementKeys.capability('steward'),
+      queryKey: charityKeys.root('steward'),
     });
-    expect(rendered.queryClient.getQueryData(charityManagementKeys.capability('steward'))).toBe(
-      true,
-    );
-    expect(screen.queryByRole('button', { name: 'Add charity model' })).toBeNull();
-
-    expect(
-      fetchMock.mock.calls.some((call) => {
-        const requestURL = new URL(String(call[0]), window.location.origin);
-        return requestURL.pathname === '/api/session';
-      }),
-    ).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Create model' })).toBeNull();
+    expect(fetchMock).toHaveBeenCalled();
   });
 
   test.each([
@@ -1550,131 +1547,56 @@ describe('experimental policy and charity controls', () => {
       role: 'level5' as const,
     },
   ])(
-    'shows the physical-key store policy read-only for the $frame review role and preserves donation-key ids',
+    'keeps the physical source read-only for the $frame review role and preserves donation-key ids',
     async ({ frame, basePath, station, role }) => {
-      const listDonation = {
-        id: 9,
-        user_id: 1,
-        endpoint_base_url: endpoint.base_url,
-        status: 'pending',
-        enabled: false,
-        description: 'review fixture',
-        review_note: '',
-        created_at: 1,
-        updated_at: 2,
-      };
-      const detailDonation = {
-        ...listDonation,
-        keys: [
-          {
-            id: 6,
-            endpoint_key_id: 2,
-            display_head: 'sk-a',
-            display_tail: 'tail',
-            max_concurrency: 2,
-            rpm_limit: 30,
-            credits_usage_cap_milli: '1000',
-            credits_used_milli: '10',
-            credits_reserved_milli: '0',
-            enabled: true,
-            force_store_false: true,
-          },
-        ],
-        reviews: [],
+      const detailDonation = pendingDonationFixture(frame, '9', 'review fixture');
+      const reviewedDonation = {
+        ...detailDonation,
+        status: 'approved',
+        revision: '2',
+        review_result: { decision: 'approve', reason: 'approved', reviewed_at: 3 },
+        reviewer: { user_id: '9', role: frame },
+        keys: [{ ...managedKeyFixture, charity_state: 'available' }],
+        updated_at: 3,
       };
       const fetchMock = installJsonFetchFixtures([
         {
           method: 'GET',
-          path: `${basePath}/donations?page=1&page_size=20&status=pending`,
-          body: { data: [listDonation], has_more: false, total: 1 },
+          path: `${basePath}/donations?limit=50`,
+          body: { data: [detailDonation], next_cursor: null },
         },
         { method: 'GET', path: `${basePath}/donations/9`, body: detailDonation },
         {
-          method: 'GET',
-          path: `${basePath}/charity-models?page=1&page_size=100`,
-          body: { data: [], has_more: false, total: 0 },
+          method: 'POST',
+          path: `${basePath}/donations/9/review`,
+          body: reviewedDonation,
         },
-        ...(frame === 'admin'
-          ? [
-              {
-                method: 'GET',
-                path: '/admin/api/site-config',
-                body: {
-                  charity_enabled: false,
-                  donation_accept_enabled: false,
-                  charity_token_reserve_milli: null,
-                },
-              },
-            ]
-          : []),
-        { method: 'PATCH', path: `${basePath}/donations/9`, body: detailDonation },
       ]);
-      const rendered = await renderWithProviders(
-        <ManagementSessionGate frame={frame}>
-          <CharityManagement frame={frame} />
-        </ManagementSessionGate>,
-        { station, role },
-      );
-      await screen.findByRole('heading', { name: 'Donation review queue' });
-      expect(
-        await screen.findByText(
-          /Upstream prompt storage policy \(read-only\): Require upstream not to store prompts \(Experimental\)/,
-        ),
-      ).toBeVisible();
-      await rendered.user.click(screen.getByRole('button', { name: 'Save key limits' }));
-      await waitFor(() =>
-        expect(lastBody(fetchMock, 'PATCH', `${basePath}/donations/9`)).toEqual({
-          action: 'update',
-          expires_at: null,
-          keys: [
-            {
-              id: 6,
-              max_concurrency: 2,
-              rpm_limit: 30,
-              credits_usage_cap_milli: '1000',
-              enabled: true,
-            },
-          ],
-        }),
-      );
-      expect(lastBody(fetchMock, 'PATCH', `${basePath}/donations/9`)).not.toHaveProperty(
-        'keys.0.force_store_false',
-      );
-
-      const maxConcurrency = screen.getByLabelText('Max concurrency (0 = unlimited)');
-      const rpmLimit = screen.getByLabelText('Requests per minute (0 = unlimited)');
-      await rendered.user.clear(maxConcurrency);
-      await rendered.user.click(screen.getByRole('button', { name: 'Save key limits' }));
-      await waitFor(() =>
-        expect(lastBody(fetchMock, 'PATCH', `${basePath}/donations/9`)).toEqual({
-          action: 'update',
-          expires_at: null,
-          keys: [{ id: 6, rpm_limit: 30, credits_usage_cap_milli: '1000', enabled: true }],
-        }),
-      );
-      await rendered.user.clear(rpmLimit);
-      await rendered.user.type(rpmLimit, '0');
-      await rendered.user.click(screen.getByRole('button', { name: 'Save key limits' }));
-      await waitFor(() =>
-        expect(lastBody(fetchMock, 'PATCH', `${basePath}/donations/9`)).toEqual({
-          action: 'update',
-          expires_at: null,
-          keys: [{ id: 6, rpm_limit: 0, credits_usage_cap_milli: '1000', enabled: true }],
-        }),
-      );
-      const usageCap = screen.getByLabelText('Usage cap (milli-credits; 0 = unlimited)');
-      await rendered.user.clear(usageCap);
-      await rendered.user.type(usageCap, '9223372036854775808');
-      await rendered.user.click(screen.getByRole('button', { name: 'Save key limits' }));
-      await expect(
-        screen.findByText(/Leave a reviewer limit blank to omit it/i),
-      ).resolves.toBeVisible();
+      const rendered = await renderWithProviders(<CharityManagement frame={frame} />, {
+        station,
+        role,
+      });
+      await screen.findByText('review fixture');
+      await rendered.user.click(screen.getByRole('button', { name: 'Review' }));
+      await screen.findByRole('heading', { name: /sk-a…tail.*upstream\.test\/v1/i });
+      expect(screen.getByText('physical enabled')).toBeVisible();
+      await rendered.user.type(screen.getByLabelText('Reason'), 'approved');
+      await rendered.user.click(screen.getByRole('checkbox', {
+        name: 'I confirm this review result and its whole-donation consequences.',
+      }));
+      await rendered.user.click(screen.getByRole('button', { name: 'Approve donation' }));
+      await waitFor(() => expect(lastBody(fetchMock, 'POST', `${basePath}/donations/9/review`)).toBeDefined());
+      const body = lastBody(fetchMock, 'POST', `${basePath}/donations/9/review`);
+      expect(body).toHaveProperty('key_settings.0.donation_key_id', '6');
+      expect(body).not.toHaveProperty('key_settings.0.endpoint_key_id');
+      expect(body).not.toHaveProperty('key_settings.0.physical_enabled');
+      expect(body).not.toHaveProperty('key_settings.0.safe_source');
     },
   );
 
   test('clears level-5 steward data after a server-forced demotion', async () => {
-    const levelFive = { ...session, user: { ...session.user, effective_level: 5 } };
-    const demoted = { ...session, user: { ...session.user, effective_level: 4 } };
+    const levelFive = { ...coreSession, user: { ...coreSession.user, effective_level: 5 } };
+    const demoted = { ...coreSession, user: { ...coreSession.user, effective_level: 4 } };
     let sessionCalls = 0;
     let revoke = false;
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -1692,7 +1614,7 @@ describe('experimental policy and charity controls', () => {
       }
       if (method === 'GET' && requestURL.pathname === '/api/steward/logs') {
         if (!revoke)
-          return new Response(JSON.stringify({ data: [], has_more: false, total: 0 }), {
+          return new Response(JSON.stringify({ data: [], next_cursor: null }), {
             status: 200,
             headers: { 'content-type': 'application/json' },
           });
@@ -1713,28 +1635,26 @@ describe('experimental policy and charity controls', () => {
       station: 'user',
       role: 'level5',
     });
-    await screen.findByText('No request logs');
-    rendered.queryClient.setQueryData(charityManagementKeys.models('steward'), [managedModel]);
+    await screen.findByText('No logs');
+    rendered.queryClient.setQueryData(charityKeys.models('steward', '', '', null), { data: [managedModelFixture], next_cursor: null });
     revoke = true;
-    await rendered.queryClient.invalidateQueries({ queryKey: userKeys.stewardLogsRoot });
-    await expect(
-      screen.findByText(/requires the server-resolved level 5 capability/i),
-    ).resolves.toBeVisible();
+    await rendered.queryClient.invalidateQueries({ queryKey: roleLogKeys.root('steward') });
+    await expect(screen.findByText(/requires a current, unbanned account/i)).resolves.toBeVisible();
     expect(sessionCalls).toBeGreaterThanOrEqual(2);
     expect(
-      rendered.queryClient.getQueryData(charityManagementKeys.models('steward')),
+      rendered.queryClient.getQueryData(charityKeys.models('steward', '', '', null)),
     ).toBeUndefined();
     expect(
       rendered.queryClient
         .getQueryCache()
         .getAll()
-        .filter((query) => query.queryKey[1] === 'steward-logs')
+        .filter((query) => query.queryKey.slice(0, 4).join('/') === 'user/operations/steward/logs')
         .every((query) => query.state.data === undefined),
     ).toBe(true);
   });
 
   test('reopens the same steward user after a newer authoritative session success', async () => {
-    const levelFive = { ...session, user: { ...session.user, effective_level: 5 } };
+    const levelFive = { ...coreSession, user: { ...coreSession.user, effective_level: 5 } };
     let sessionCalls = 0;
     let logCalls = 0;
     let revoke = false;
@@ -1761,7 +1681,7 @@ describe('experimental policy and charity controls', () => {
             403,
           );
         }
-        return jsonResponse({ data: [], has_more: false, total: 0 });
+        return jsonResponse({ data: [], next_cursor: null });
       }
       throw new Error(
         `Unregistered test request: ${method} ${requestURL.pathname}${requestURL.search}`,
@@ -1772,23 +1692,21 @@ describe('experimental policy and charity controls', () => {
       station: 'user',
       role: 'level5',
     });
-    await screen.findByText('No request logs');
+    await screen.findByText('No logs');
     revoke = true;
-    await rendered.queryClient.invalidateQueries({ queryKey: userKeys.stewardLogsRoot });
-    await expect(
-      screen.findByText(/requires the server-resolved level 5 capability/i),
-    ).resolves.toBeVisible();
+    await rendered.queryClient.invalidateQueries({ queryKey: roleLogKeys.root('steward') });
+    await waitFor(() => expect(screen.queryByRole('tab', { name: 'My charity resources' })).toBeNull());
     await waitFor(() => expect(sessionCalls).toBeGreaterThanOrEqual(2));
     releaseRefresh();
     await waitFor(() =>
-      expect(screen.queryByText(/requires the server-resolved level 5 capability/i)).toBeNull(),
+      expect(screen.queryByText(/requires a current, unbanned account/i)).toBeNull(),
     );
-    expect(screen.getByText('No request logs')).toBeVisible();
+    await expect(screen.findByText('No logs')).resolves.toBeVisible();
   });
 
   test('clears charity management data and removes write controls after an L5 downgrade', async () => {
-    const levelFive = { ...session, user: { ...session.user, effective_level: 5 } };
-    const demoted = { ...session, user: { ...session.user, effective_level: 4 } };
+    const levelFive = { ...coreSession, user: { ...coreSession.user, effective_level: 5 } };
+    const demoted = { ...coreSession, user: { ...coreSession.user, effective_level: 4 } };
     let sessionCalls = 0;
     let demote = false;
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -1805,25 +1723,25 @@ describe('experimental policy and charity controls', () => {
         });
       }
       if (method === 'GET' && requestURL.pathname === '/api/steward/logs') {
-        return new Response(JSON.stringify({ data: [], has_more: false, total: 0 }), {
+        return new Response(JSON.stringify({ data: [], next_cursor: null }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
       }
       if (method === 'GET' && requestURL.pathname === '/api/steward/donations') {
-        return new Response(JSON.stringify({ data: [], has_more: false, total: 0 }), {
+        return new Response(JSON.stringify({ data: [], next_cursor: null }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
       }
       if (method === 'GET' && requestURL.pathname === '/api/steward/charity-models') {
-        return new Response(JSON.stringify({ data: [managedModel], has_more: false, total: 1 }), {
+        return new Response(JSON.stringify({ data: [managedModelFixture], next_cursor: null }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
       }
       if (method === 'GET' && requestURL.pathname === '/api/steward/charity-models/7/bindings') {
-        return new Response(JSON.stringify({ data: [] }), {
+        return new Response(JSON.stringify({ bindings: [], binding_revision: '1' }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -1837,22 +1755,21 @@ describe('experimental policy and charity controls', () => {
       station: 'user',
       role: 'level5',
     });
-    await screen.findByText('No request logs');
-    await rendered.user.click(screen.getByRole('tab', { name: 'Charity management' }));
-    await screen.findByText('provider/charity-model');
+    await screen.findByText('No logs');
+    await rendered.user.click(screen.getByRole('tab', { name: 'My charity resources' }));
+    await rendered.user.click(screen.getByRole('tab', { name: 'Models and bindings' }));
+    await screen.findByText('[公益]provider/charity-model');
     expect(
-      rendered.queryClient.getQueryData(charityManagementKeys.models('steward')),
+      rendered.queryClient.getQueryData(charityKeys.models('steward', '', '', null)),
     ).toBeDefined();
 
     demote = true;
-    await rendered.queryClient.invalidateQueries({ queryKey: userKeys.session });
-    await screen.findByText(
-      'This co-management surface requires the server-resolved level 5 capability.',
-    );
+    await rendered.queryClient.invalidateQueries({ queryKey: operationsKeys.session });
+    await screen.findByText(/requires a current, unbanned account/i);
     expect(
-      rendered.queryClient.getQueryData(charityManagementKeys.models('steward')),
+      rendered.queryClient.getQueryData(charityKeys.models('steward', '', '', null)),
     ).toBeUndefined();
-    expect(screen.queryByRole('checkbox', { name: 'Experimental: flatten tool calls' })).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: 'Flatten tool calls' })).toBeNull();
     expect(
       fetchMock.mock.calls.some((call) => {
         const requestURL = new URL(String(call[0]), window.location.origin);

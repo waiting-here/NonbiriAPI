@@ -1,142 +1,25 @@
 import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Card, EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
+import { CursorPagination } from '@shared/operations/CursorPagination';
+import { useCursorPager } from '@shared/operations/useCursorPager';
 import { formatDateTime } from '@shared/utils/datetime';
-import { useTranslation } from 'react-i18next';
-import {
-  Card,
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  PageHeader,
-  Pagination,
-  ReadOnlyValue,
-  StatusBadge,
-} from '@shared/components/States';
-import { useAdminAlerts, useResolveAdminAlert } from '../data';
-
-const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+import { adminCoreKeys, getAdminAlerts, setAdminAlertResolved } from '../features/operations/core';
+import '@shared/operations/operations.css';
 
 export function AlertsPage() {
-  const { t } = useTranslation();
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_OPTIONS[1]);
-  const [draftResolved, setDraftResolved] = useState<'all' | 'unresolved' | 'resolved'>('all');
-  const [resolvedFilter, setResolvedFilter] = useState<boolean | undefined>(undefined);
-  const alerts = useAdminAlerts(page, resolvedFilter, pageSize);
-  const resolve = useResolveAdminAlert();
-
-  const changePageSize = (size: number) => {
-    setPageSize(size);
-    setPage(1);
-  };
-
+  const client = useQueryClient();
+  const pager = useCursorPager();
+  const [resolved, setResolved] = useState<'' | 'true' | 'false'>('false');
+  const result = useQuery({ queryKey: adminCoreKeys.alerts(resolved, pager.cursor), queryFn: () => getAdminAlerts(resolved, pager.cursor), retry: false });
+  const mutation = useMutation({ retry: false, mutationFn: ({ id, value }: { id: string; value: boolean }) => setAdminAlertResolved(id, value), onSettled: () => client.invalidateQueries({ queryKey: ['admin', 'operations', 'alerts'] }) });
   return (
-    <div className="page">
-      <PageHeader
-        eyebrow={t('app.name')}
-        title={t('admin.alerts.title')}
-        description={t('admin.alerts.description')}
-      />
+    <div className="page ops-page">
+      <PageHeader title="Operational alerts" description="Ordinary operational alerts are separate from credential-report review and its badge." />
       <Card>
-        <div className="card-title-row">
-          <h2>{t('admin.alerts.listTitle')}</h2>
-          <span className="muted">{t('common.page', { page })}</span>
-        </div>
-        <form
-          className="filter-bar"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setResolvedFilter(
-              draftResolved === 'all' ? undefined : draftResolved === 'resolved',
-            );
-            setPage(1);
-          }}
-        >
-          <label>
-            <span>{t('admin.alerts.filterResolved')}</span>
-            <select
-              value={draftResolved}
-              onChange={(event) => setDraftResolved(event.target.value as 'all' | 'unresolved' | 'resolved')}
-              aria-label={t('common.filterResolvedAria')}
-            >
-              <option value="all">{t('common.all')}</option>
-              <option value="unresolved">{t('common.unresolved')}</option>
-              <option value="resolved">{t('common.resolved')}</option>
-            </select>
-          </label>
-          <div className="filter-actions">
-            <button type="submit" className="btn btn-quiet">
-              {t('common.applyFilter')}
-            </button>
-            <button
-              type="button"
-              className="btn btn-link"
-              onClick={() => {
-                setDraftResolved('all');
-                setResolvedFilter(undefined);
-                setPage(1);
-              }}
-            >
-              {t('common.resetFilter')}
-            </button>
-          </div>
-        </form>
-        {resolve.error ? <ErrorState error={resolve.error} /> : null}
-        {alerts.isPending ? <LoadingState /> : alerts.error ? <ErrorState error={alerts.error} onRetry={() => void alerts.refetch()} /> : alerts.data.items.length === 0 ? (
-          <EmptyState title={t('admin.alerts.empty')} body={t('admin.alerts.emptyBody')} />
-        ) : (
-          <>
-            <div className="table-wrap">
-              <table>
-                <caption>{t('admin.alerts.listTitle')}</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">{t('admin.alerts.kind')}</th>
-                    <th scope="col">{t('admin.alerts.message')}</th>
-                    <th scope="col">{t('admin.alerts.reference')}</th>
-                    <th scope="col">{t('admin.alerts.subject')}</th>
-                    <th scope="col">{t('admin.alerts.created')}</th>
-                    <th scope="col">{t('admin.alerts.resolved')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {alerts.data.items.map((alert) => (
-                    <tr key={alert.id}>
-                      <td>{alert.kind}</td>
-                      <td>{alert.message}</td>
-                      <td><ReadOnlyValue value={alert.ref} /></td>
-                      <td><ReadOnlyValue value={alert.subject_user_id} /></td>
-                      <td><ReadOnlyValue value={formatDateTime(alert.created_at)} /></td>
-                      <td>
-                        <StatusBadge
-                          active={alert.resolved}
-                          label={alert.resolved ? t('admin.alerts.resolvedValue') : t('admin.alerts.open')}
-                        />
-                        {alert.resolved_at !== '—' ? <span className="table-note">{formatDateTime(alert.resolved_at)}</span> : null}
-                        <button
-                          type="button"
-                          className="btn btn-quiet"
-                          disabled={resolve.isPending}
-                          onClick={() => resolve.mutate({ alertId: alert.id, resolved: !alert.resolved })}
-                        >
-                          {alert.resolved ? t('admin.alerts.reopen') : t('admin.alerts.resolve')}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <Pagination
-              page={page}
-              hasNext={alerts.data.hasNext}
-              onChange={setPage}
-              pageSize={pageSize}
-              pageSizeOptions={PAGE_SIZE_OPTIONS}
-              onPageSizeChange={changePageSize}
-              onJumpToPage={setPage}
-            />
-          </>
-        )}
+        <label className="ops-form-field"><span>Resolution</span><select value={resolved} onChange={(event) => { setResolved(event.target.value as typeof resolved); pager.reset(); }}><option value="false">Open</option><option value="true">Resolved</option><option value="">All</option></select></label>
+        {mutation.error ? <ErrorState error={mutation.error} /> : null}
+        {result.isPending ? <LoadingState /> : result.error ? <ErrorState error={result.error} onRetry={() => void result.refetch()} /> : result.data.data.length === 0 ? <EmptyState title="No alerts" body="The selected authority view is empty." /> : <><div className="ops-table-scroll"><table className="ops-table"><thead><tr><th>Kind</th><th>Safe message</th><th>Reference</th><th>Subject</th><th>Created</th><th>State</th><th>Action</th></tr></thead><tbody>{result.data.data.map((alert) => <tr key={alert.id}><td>{alert.kind}</td><td className="ops-wrap">{alert.message}</td><td>{alert.ref ?? '—'}</td><td>{alert.subject_user_id ?? '—'}</td><td>{formatDateTime(alert.created_at)}</td><td><StatusBadge active={alert.resolved} label={alert.resolved ? `Resolved ${alert.resolved_at ? formatDateTime(alert.resolved_at) : ''}` : 'Open'} /></td><td><button className="btn btn-secondary" type="button" disabled={mutation.isPending} onClick={() => mutation.mutate({ id: alert.id, value: !alert.resolved })}>{alert.resolved ? 'Reopen' : 'Resolve'}</button></td></tr>)}</tbody></table></div><CursorPagination page={pager.page} nextCursor={result.data.next_cursor} onPrevious={pager.previous} onNext={pager.next} /></>}
       </Card>
     </div>
   );

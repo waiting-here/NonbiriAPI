@@ -1,18 +1,19 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, test, vi, type Mock } from 'vitest';
-import backendCatalogCore from '../fixtures/site-config-catalog-core.json';
 import { SettingsPage } from '../../src/admin/pages/SettingsPage';
 import { GamesPage } from '../../src/admin/pages/GamesPage';
 import { UsersPage } from '../../src/admin/pages/UsersPage';
+import { normalizeAdminUser } from '../../src/admin/data';
 import {
-  normalizeAdminUser,
-  normalizeSiteConfig,
-  normalizeSiteConfigCatalog,
+  normalizeSiteConfigCatalogEntry,
   type SiteConfigCatalogEntry,
-  type SiteConfig,
-} from '../../src/admin/data';
-import { exactCreditDisplay, humanReadableSeconds } from '../../src/admin/utils/catalogDisplay';
-import { normalizeAdminGameConfig, type AdminGameConfig } from '../../src/admin/features/games/data';
+} from '../../src/admin/features/operations/core';
+import {
+  normalizeActiveCounts,
+  normalizeGamesConfig,
+  type ActiveCounts,
+  type GamesConfig,
+} from '../../src/admin/features/operations/economy';
 import {
   normalizeCharityModel,
   normalizeDonationKey,
@@ -47,10 +48,14 @@ function catalogEntry(
   return {
     key,
     group: 'fixture',
-    value_type: 'integer',
-    title: { zh: `${key} 中文`, en: key === 'anthropic_default_max_tokens'
-      ? 'Default Anthropic max output tokens'
-      : 'Site timezone offset' },
+    type: 'integer',
+    title: {
+      zh: `${key} 中文`,
+      en:
+        key === 'anthropic_default_max_tokens'
+          ? 'Default Anthropic max output tokens'
+          : 'Site timezone offset',
+    },
     description: { zh: '用途', en: 'Purpose' },
     unit: { zh: '分钟', en: 'minutes' },
     nullable: false,
@@ -70,26 +75,47 @@ function catalogEntry(
   };
 }
 
+interface SiteConfigSnapshot {
+  revision: string;
+  values: Record<string, string | number | boolean | null>;
+}
+
 function installSiteConfigServer(
-  initial: SiteConfig,
+  initial: SiteConfigSnapshot,
   catalog: readonly SiteConfigCatalogEntry[],
   catalogResponse: unknown = { data: catalog },
-): { fetchMock: Mock; state: SiteConfig; patches: Array<{ path: string; value: unknown }> } {
-  const state = { ...initial };
+): {
+  fetchMock: Mock;
+  state: SiteConfigSnapshot;
+  patches: Array<{ path: string; value: unknown }>;
+} {
+  const state = structuredClone(initial);
   const patches: Array<{ path: string; value: unknown }> = [];
   const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-    const path = new URL(input instanceof Request ? input.url : String(input), window.location.origin).pathname;
-    const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+    const path = new URL(
+      input instanceof Request ? input.url : String(input),
+      window.location.origin,
+    ).pathname;
+    const method = (
+      init?.method ?? (input instanceof Request ? input.method : 'GET')
+    ).toUpperCase();
     if (method === 'GET' && path === '/admin/api/site-config') return jsonResponse(state);
     if (method === 'GET' && path === '/admin/api/site-config/catalog') {
       return jsonResponse(catalogResponse);
+    }
+    if (method === 'GET' && path === '/admin/api/maintenance') {
+      return jsonResponse({ enabled: false, revision: '1' });
+    }
+    if (method === 'GET' && path === '/admin/api/legal-holds') {
+      return jsonResponse({ data: [], next_cursor: null });
     }
     if (method === 'PATCH' && path.startsWith('/admin/api/site-config/')) {
       const body = JSON.parse(String(init?.body)) as { value: unknown };
       const key = decodeURIComponent(path.slice('/admin/api/site-config/'.length));
       patches.push({ path, value: body.value });
-      state[key] = body.value as SiteConfig[string];
-      return jsonResponse({ key, value: body.value });
+      state.values[key] = body.value as SiteConfigSnapshot['values'][string];
+      state.revision = String(BigInt(state.revision) + 1n);
+      return jsonResponse({ key, value: body.value, revision: state.revision });
     }
     throw new Error(`Unexpected fixture request: ${method} ${path}`);
   });
@@ -156,12 +182,16 @@ describe('screenshot-facing configuration pages', () => {
     installJsonFetchFixtures([
       { method: 'GET', path: '/api/session', body: { user: coreBaseUser } },
       { method: 'GET', path: '/api/me', body: { user: coreBaseUser } },
-      { method: 'GET', path: '/api/me/usage', body: {
-        total_requests: 1,
-        total_prompt_tokens: 2,
-        total_completion_tokens: 3,
-        total_unknown_usage_requests: 0,
-      } },
+      {
+        method: 'GET',
+        path: '/api/me/usage',
+        body: {
+          total_requests: 1,
+          total_prompt_tokens: 2,
+          total_completion_tokens: 3,
+          total_unknown_usage_requests: 0,
+        },
+      },
       { method: 'GET', path: '/api/checkin', body: { enabled: false } },
     ]);
     await renderWithProviders(<HomePage />, { station: 'user', locale: 'en', role: 'user' });
@@ -191,7 +221,7 @@ describe('screenshot-facing configuration pages', () => {
 describe('authoritative site-config frontend', () => {
   test('rejects non-canonical Anthropic integers and enforces the frozen timezone step', async () => {
     const anthropic = catalogEntry('anthropic_default_max_tokens', {
-      value_type: 'optional_integer',
+      type: 'integer',
       nullable: true,
       null_writable: true,
       raw_default: null,
@@ -200,137 +230,180 @@ describe('authoritative site-config frontend', () => {
       maximum: 2_147_483_647,
       step: 1,
       unit: { zh: 'Token', en: 'tokens' },
-      zero_semantics: null,
       null_semantics: { zh: '使用内建值', en: 'Use built-in 65536' },
       empty_semantics: { zh: '留空重置', en: 'Empty form sends JSON null and resets the override' },
     });
     const timezone = catalogEntry('site_timezone_offset_minutes', {
-      value_type: 'optional_integer',
+      type: 'integer',
       nullable: true,
       raw_default: null,
       effective_fallback: null,
       step: 30,
     });
     const server = installSiteConfigServer(
-      { anthropic_default_max_tokens: null, site_timezone_offset_minutes: null },
+      {
+        revision: '1',
+        values: { anthropic_default_max_tokens: null, site_timezone_offset_minutes: null },
+      },
       [anthropic, timezone],
     );
     const rendered = await renderWithProviders(<SettingsPage />, {
-      station: 'admin', locale: 'en', role: 'admin',
+      station: 'admin',
+      locale: 'en',
+      role: 'admin',
     });
+    await rendered.user.click((await screen.findByText('fixture')).closest('button')!);
 
-    const anthropicInput = await screen.findByLabelText('Default Anthropic max output tokens');
-    const anthropicForm = anthropicInput.closest('form');
+    let anthropicInput = screen.getByLabelText('Default Anthropic max output tokens');
+    let anthropicForm = anthropicInput.closest('form');
     expect(anthropicForm).not.toBeNull();
-    const anthropicSave = within(anthropicForm!).getByRole('button');
+    expect(anthropicInput).toBeDisabled();
+    await rendered.user.click(
+      within(anthropicForm!).getByLabelText(/Remove the explicit override/i),
+    );
+    expect(anthropicInput).toBeEnabled();
     for (const invalid of ['1e3', '0', '1.5', '01', ' 1']) {
       fireEvent.change(anthropicInput, { target: { value: invalid } });
-      await rendered.user.click(anthropicSave);
-      expect(within(anthropicForm!).getByRole('alert')).toHaveTextContent(/canonical value/i);
+      expect(within(anthropicForm!).getByRole('alert')).toHaveTextContent(
+        /canonical integer value/i,
+      );
+      expect(within(anthropicForm!).getByRole('button', { name: 'Save value' })).toBeDisabled();
     }
     expect(server.patches).toHaveLength(0);
 
     fireEvent.change(anthropicInput, { target: { value: '131072' } });
-    await rendered.user.click(anthropicSave);
-    await waitFor(() => expect(server.patches).toContainEqual({
-      path: '/admin/api/site-config/anthropic_default_max_tokens', value: 131_072,
-    }));
-    fireEvent.change(anthropicInput, { target: { value: '' } });
-    await rendered.user.click(within(anthropicForm!).getByRole('button', { name: 'Remove override' }));
+    await rendered.user.click(within(anthropicForm!).getByRole('button', { name: 'Save value' }));
+    await waitFor(() =>
+      expect(server.patches).toContainEqual({
+        path: '/admin/api/site-config/anthropic_default_max_tokens',
+        value: 131_072,
+      }),
+    );
+    anthropicInput = await screen.findByLabelText('Default Anthropic max output tokens');
+    anthropicForm = anthropicInput.closest('form');
+    await rendered.user.click(
+      within(anthropicForm!).getByLabelText(/Remove the explicit override/i),
+    );
+    await rendered.user.click(
+      within(anthropicForm!).getByRole('button', { name: 'Remove override' }),
+    );
     await waitFor(() => expect(server.patches.at(-1)?.value).toBeNull());
 
-    const timezoneInput = screen.getByLabelText('Site timezone offset');
+    let timezoneInput = await screen.findByLabelText('Site timezone offset');
     const timezoneForm = timezoneInput.closest('form');
     expect(timezoneForm).not.toBeNull();
-    for (const [raw, preview, numeric] of [
-      ['-300', 'UTC-05:00', -300],
-      ['0', 'UTC+00:00', 0],
-      ['480', 'UTC+08:00', 480],
-    ] as const) {
-      fireEvent.change(timezoneInput, { target: { value: raw } });
-      expect(within(timezoneForm!).getByText(`Preview: ${preview}`)).toBeVisible();
-      await rendered.user.click(within(timezoneForm!).getByRole('button', { name: 'Save value' }));
-      await waitFor(() => expect(server.patches.at(-1)?.value).toBe(numeric));
-    }
+    expect(timezoneInput).toBeEnabled();
+    expect(timezoneInput).toHaveAttribute('min', '-720');
+    expect(timezoneInput).toHaveAttribute('max', '840');
+    expect(timezoneInput).toHaveAttribute('step', '30');
     const patchCount = server.patches.length;
     fireEvent.change(timezoneInput, { target: { value: '345' } });
-    await rendered.user.click(within(timezoneForm!).getByRole('button', { name: 'Save value' }));
-    expect(within(timezoneForm!).getByRole('alert')).toHaveTextContent(/canonical value/i);
+    expect(within(timezoneForm!).getByRole('alert')).toHaveTextContent(
+      /canonical integer value/i,
+    );
+    expect(within(timezoneForm!).getByRole('button', { name: 'Save value' })).toBeDisabled();
     expect(server.patches).toHaveLength(patchCount);
+
+    fireEvent.change(timezoneInput, { target: { value: '-300' } });
+    expect(within(timezoneForm!).getByText('Preview: UTC-05:00')).toBeVisible();
+    await rendered.user.click(within(timezoneForm!).getByRole('button', { name: 'Save value' }));
+    await waitFor(() => expect(server.patches.at(-1)?.value).toBe(-300));
+    timezoneInput = await screen.findByLabelText('Site timezone offset');
+    expect(timezoneInput).toHaveValue(-300);
   });
 
-  test('preserves only legal text losslessly and rejects malformed non-legal server values', () => {
-    const exact = `  first\r\n\tsecond \n${'界'.repeat(100)}`;
-    const legal = catalogEntry('legal_terms_override_en', {
-      value_type: 'multiline_text', minimum: 0, maximum: 65_536,
+  test('accepts only the closed Generation 2 catalog entry shape', () => {
+    const current = catalogEntry('site_name', {
+      type: 'string',
+      title: { zh: '站点名称', en: 'Site name' },
+      unit: null,
+      raw_default: 'NonbiriAPI',
+      effective_fallback: 'NonbiriAPI',
+      minimum: 1,
+      maximum: 256,
+      step: null,
     });
-    expect(normalizeSiteConfig({ legal_terms_override_en: exact }, [legal]).legal_terms_override_en).toBe(exact);
-    expect(() => normalizeSiteConfig({ legal_terms_override_en: '界'.repeat(21_846) }, [legal]))
-      .toThrow(/legal_terms_override_en text/i);
-    expect(() => normalizeSiteConfig({ legal_terms_override_en: 12.5 }, [legal]))
-      .toThrow(/legal_terms_override_en text/i);
+    expect(normalizeSiteConfigCatalogEntry(current)).toEqual(current);
+    expect(() =>
+      normalizeSiteConfigCatalogEntry({
+        ...current,
+        type: undefined,
+        value_type: 'text',
+      }),
+    ).toThrow(/site configuration catalog entry/i);
+    expect(() => normalizeSiteConfigCatalogEntry({ ...current, alpha_optional: true })).toThrow(
+      /site configuration catalog entry/i,
+    );
+  });
 
+  test('rejects the stale alpha flat settings snapshot', async () => {
     const siteName = catalogEntry('site_name', {
-      value_type: 'text', minimum: 0, maximum: 256,
+      type: 'string',
+      title: { zh: '站点名称', en: 'Site name' },
+      unit: null,
+      raw_default: 'NonbiriAPI',
+      effective_fallback: 'NonbiriAPI',
+      minimum: 1,
+      maximum: 256,
+      step: null,
     });
-    const locale = catalogEntry('legal_authoritative_locale', {
-      value_type: 'locale', minimum: null, maximum: null, allowed_values: ['zh', 'en'],
-    });
-    const rpm = catalogEntry('global_rpm', { minimum: 1, maximum: 4_096 });
-    expect(() => normalizeSiteConfig({ site_name: 'x'.repeat(257) }, [siteName]))
-      .toThrow(/site_name text/i);
-    expect(() => normalizeSiteConfig({ site_name: 'bad\u0001name' }, [siteName]))
-      .toThrow(/site_name text/i);
-    expect(() => normalizeSiteConfig({ legal_authoritative_locale: 'fr' }, [locale]))
-      .toThrow(/legal_authoritative_locale choice/i);
-    expect(() => normalizeSiteConfig({ global_rpm: '100' }, [rpm]))
-      .toThrow(/global_rpm integer/i);
-
-    const first = catalogEntry('a');
-    const second = catalogEntry('b');
-    expect(normalizeSiteConfigCatalog({ data: [first, second] })).toHaveLength(2);
-    expect(() => normalizeSiteConfigCatalog({ data: [second, first] })).toThrow(/key-sorted/i);
-    expect(() => normalizeSiteConfigCatalog({ data: [{ ...first, title: { en: '', zh: '标题' } }] }))
-      .toThrow(/catalog title/i);
-  });
-
-  test('consumes the backend-verified frozen core fixture with safe optional-field fallbacks', async () => {
-    const normalized = normalizeSiteConfigCatalog(backendCatalogCore);
-    expect(normalized).toHaveLength(1);
-    expect(normalized[0]?.allowed_values).toBeUndefined();
-    expect(normalized[0]?.independent_gates).toEqual([]);
-    installSiteConfigServer({ site_name: 'Fixture' }, [], backendCatalogCore);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const path = new URL(
+          input instanceof Request ? input.url : String(input),
+          window.location.origin,
+        ).pathname;
+        if (path === '/admin/api/site-config/catalog') return jsonResponse({ data: [siteName] });
+        if (path === '/admin/api/site-config') return jsonResponse({ site_name: 'Alpha fixture' });
+        if (path === '/admin/api/maintenance') {
+          return jsonResponse({ enabled: false, revision: '1' });
+        }
+        if (path === '/admin/api/legal-holds') return jsonResponse({ data: [], next_cursor: null });
+        throw new Error(`Unexpected fixture request: GET ${path}`);
+      }),
+    );
     await renderWithProviders(<SettingsPage />, {
-      station: 'admin', locale: 'en', role: 'admin',
+      station: 'admin',
+      locale: 'en',
+      role: 'admin',
     });
-    expect(await screen.findByLabelText('Site name')).toHaveValue('Fixture');
+    expect(await screen.findByText(/service returned an invalid response/i)).toBeVisible();
+    expect(screen.queryByLabelText('Site name')).not.toBeInTheDocument();
   });
 
-  test('saves, refreshes, and resaves an exact 65536-byte legal document', async () => {
+  test('preserves line endings at the exact 65536-byte legal boundary and rejects one byte more', async () => {
     const prefix = '  标题\r\n\tparagraph \r\n';
     const prefixBytes = new TextEncoder().encode(prefix).byteLength;
     const document = prefix + 'x'.repeat(65_536 - prefixBytes);
     expect(new TextEncoder().encode(document)).toHaveLength(65_536);
     const legal = catalogEntry('legal_terms_override_en', {
-      value_type: 'multiline_text',
+      group: 'legal',
+      type: 'text',
       title: { zh: '服务条款覆盖（英文）', en: 'Terms override (English)' },
       description: { zh: '逐字节保留', en: 'Preserved byte for byte' },
-      unit: { zh: '无', en: 'none' },
+      unit: null,
       raw_default: '',
       effective_fallback: '',
       minimum: 0,
       maximum: 65_536,
       step: null,
     });
-    const server = installSiteConfigServer({ legal_terms_override_en: document }, [legal]);
+    const server = installSiteConfigServer(
+      { revision: '9', values: { legal_terms_override_en: document } },
+      [legal],
+    );
     const rendered = await renderWithProviders(<SettingsPage />, {
-      station: 'admin', locale: 'en', role: 'admin',
+      station: 'admin',
+      locale: 'en',
+      role: 'admin',
     });
-    const textarea = await screen.findByLabelText('Terms override (English)');
-    const form = textarea.closest('form');
+    await rendered.user.click((await screen.findByText('legal')).closest('button')!);
+    let textarea = screen.getByLabelText('Terms override (English)');
+    let form = textarea.closest('form');
     expect(form).not.toBeNull();
     expect(within(form!).getByText('65536 / 65536 UTF-8 bytes')).toBeVisible();
-    const save = within(form!).getByRole('button', { name: 'Save value' });
+    let save = within(form!).getByRole('button', { name: 'Save value' });
     await rendered.user.click(save);
     await waitFor(() => expect(server.patches).toHaveLength(1));
     expect(server.patches[0]?.path).toBe('/admin/api/site-config/legal_terms_override_en');
@@ -339,270 +412,653 @@ describe('authoritative site-config frontend', () => {
     const browserDocument = document.replaceAll('\r\n', '\n');
     const editedBrowserDocument = `${browserDocument.slice(0, -1)}y`;
     const editedDocument = `${document.slice(0, -1)}y`;
+    textarea = await screen.findByLabelText('Terms override (English)');
+    form = textarea.closest('form');
+    save = within(form!).getByRole('button', { name: 'Save value' });
     fireEvent.change(textarea, { target: { value: editedBrowserDocument } });
     await rendered.user.click(save);
     await waitFor(() => expect(server.patches).toHaveLength(2));
     expect(server.patches[1]?.value === editedDocument).toBe(true);
     expect(String(server.patches[1]?.value).replaceAll('\r\n', '')).not.toContain('\n');
 
-    fireEvent.change(textarea, { target: { value: browserDocument } });
-    await rendered.user.click(save);
-    await waitFor(() => expect(server.patches).toHaveLength(3));
-    expect(server.patches[2]?.value === document).toBe(true);
+    textarea = await screen.findByLabelText('Terms override (English)');
+    form = textarea.closest('form');
+    fireEvent.change(textarea, { target: { value: 'x'.repeat(65_537) } });
+    expect(within(form!).getByText('65537 / 65536 UTF-8 bytes')).toBeVisible();
+    expect(within(form!).getByRole('alert')).toHaveTextContent(/no larger than 65536 UTF-8 bytes/i);
+    expect(within(form!).getByRole('button', { name: 'Save value' })).toBeDisabled();
+    expect(server.patches).toHaveLength(2);
   });
 
-  test('renders exact milli-credit and human-readable seconds previews without float conversion', async () => {
-    expect(humanReadableSeconds(90_061, 'en')).toBe('1d 1h 1m 1s');
-    expect(humanReadableSeconds(90_061, 'zh')).toBe('1 天 1 小时 1 分钟 1 秒');
-    expect(humanReadableSeconds(-3_661, 'en')).toBe('-1h 1m 1s');
-    expect(exactCreditDisplay('9223372036854775807')).toBe('9223372036854775.807');
-    expect(exactCreditDisplay('-1001')).toBe('-1.001');
-
-    const milli = catalogEntry('credits_cap_milli', {
-      value_type: 'amount', title: { zh: '签到积分门槛', en: 'Check-in credit threshold' },
-      unit: { zh: '毫积分', en: 'milli-credits' }, raw_default: '0',
-      effective_fallback: '0', minimum: '0', maximum: '9223372036854775807', step: '1',
+  test('renders exact amount and human-readable seconds previews without float conversion', async () => {
+    const amount = catalogEntry('credits_cap', {
+      type: 'amount',
+      title: { zh: '签到积分门槛', en: 'Check-in credit threshold' },
+      unit: { zh: '积分', en: 'credits' },
+      raw_default: '0',
+      effective_fallback: '0',
+      minimum: '0',
+      maximum: '9000000000000',
+      step: '0.001',
     });
     const seconds = catalogEntry('rpm_ban_duration_seconds', {
       title: { zh: 'RPM 封禁时长', en: 'RPM auto-ban duration' },
-      unit: { zh: '秒', en: 'seconds' }, raw_default: 3_661, effective_fallback: 3_661,
-      minimum: 1, maximum: 86_400, step: 1,
+      unit: { zh: '秒', en: 'seconds' },
+      raw_default: 3_661,
+      effective_fallback: 3_661,
+      minimum: 1,
+      maximum: 86_400,
+      step: 1,
     });
-    installSiteConfigServer({
-      credits_cap_milli: '9223372036854775807', rpm_ban_duration_seconds: 3_661,
-    }, [milli, seconds]);
-    const rendered = await renderWithProviders(<SettingsPage />, { station: 'admin', locale: 'en', role: 'admin' });
-    expect(await screen.findByText(/Exact milli-credits: 9223372036854775807/)).toHaveTextContent(
-      'Display credits: 9223372036854775.807',
+    const server = installSiteConfigServer(
+      {
+        revision: '11',
+        values: { credits_cap: '1234567.089', rpm_ban_duration_seconds: 3_661 },
+      },
+      [amount, seconds],
     );
-    expect(screen.getByText('Human-readable duration: 1h 1m 1s')).toBeVisible();
-    await rendered.i18n.changeLanguage('zh');
-    expect(await screen.findByText(/精确毫积分：9223372036854775807/)).toHaveTextContent(
-      '展示积分：9223372036854775.807',
-    );
-    expect(screen.getByText('人类可读时长：1 小时 1 分钟 1 秒')).toBeVisible();
+    const rendered = await renderWithProviders(<SettingsPage />, {
+      station: 'admin',
+      locale: 'en',
+      role: 'admin',
+    });
+    await rendered.user.click((await screen.findByText('fixture')).closest('button')!);
+    expect(screen.getByText('Amount preview: 1,234,567.089 credits')).toBeVisible();
+    expect(screen.getByText('Duration preview: 1h 1m 1s')).toBeVisible();
+
+    const amountInput = screen.getByLabelText('Check-in credit threshold');
+    expect(amountInput).toHaveAttribute('min', '0');
+    expect(amountInput).toHaveAttribute('max', '9000000000000');
+    expect(amountInput).toHaveAttribute('step', '0.001');
+    const amountForm = amountInput.closest('form');
+    fireEvent.change(amountInput, { target: { value: '1.230' } });
+    expect(within(amountForm!).getByRole('alert')).toHaveTextContent(/canonical amount value/i);
+    expect(within(amountForm!).getByRole('button', { name: 'Save value' })).toBeDisabled();
+    expect(server.patches).toHaveLength(0);
+
+    fireEvent.change(amountInput, { target: { value: '9000000000000' } });
+    expect(
+      within(amountForm!).getByText('Amount preview: 9,000,000,000,000 credits'),
+    ).toBeVisible();
+    await rendered.user.click(within(amountForm!).getByRole('button', { name: 'Save value' }));
+    await waitFor(() => expect(server.patches.at(-1)?.value).toBe('9000000000000'));
   });
 
   test('does not claim a timezone conflict restored authority when the refetch fails', async () => {
     const timezone = catalogEntry('site_timezone_offset_minutes', {
-      value_type: 'optional_integer', nullable: true, raw_default: null,
-      effective_fallback: null, step: 30,
+      type: 'integer',
+      nullable: true,
+      raw_default: null,
+      effective_fallback: null,
+      step: 30,
     });
     let configReads = 0;
-    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const path = new URL(input instanceof Request ? input.url : String(input), window.location.origin).pathname;
-      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
-      if (method === 'GET' && path === '/admin/api/site-config/catalog') return jsonResponse({ data: [timezone] });
-      if (method === 'GET' && path === '/admin/api/site-config') {
-        configReads += 1;
-        return configReads === 1
-          ? jsonResponse({ site_timezone_offset_minutes: 0 })
-          : jsonResponse({ error: { code: 'service_unavailable', message: 'refresh failed' } }, 503);
-      }
-      if (method === 'PATCH' && path.endsWith('/site_timezone_offset_minutes')) {
-        return jsonResponse({ error: { code: 'conflict', message: 'timezone locked' } }, 409);
-      }
-      throw new Error(`Unexpected fixture request: ${method} ${path}`);
-    }));
-    const rendered = await renderWithProviders(<SettingsPage />, {
-      station: 'admin', locale: 'en', role: 'admin',
-    });
-    const input = await screen.findByLabelText('Site timezone offset');
-    fireEvent.change(input, { target: { value: '30' } });
-    await rendered.user.click(within(input.closest('form')!).getByRole('button', { name: 'Save value' }));
-    expect(await within(input.closest('form')!).findByRole('alert')).toHaveTextContent(
-      /could not be refreshed/i,
+    let patchWrites = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const path = new URL(
+          input instanceof Request ? input.url : String(input),
+          window.location.origin,
+        ).pathname;
+        const method = (
+          init?.method ?? (input instanceof Request ? input.method : 'GET')
+        ).toUpperCase();
+        if (method === 'GET' && path === '/admin/api/site-config/catalog') {
+          return jsonResponse({ data: [timezone] });
+        }
+        if (method === 'GET' && path === '/admin/api/site-config') {
+          configReads += 1;
+          return configReads === 1
+            ? jsonResponse({
+                revision: '4',
+                values: { site_timezone_offset_minutes: 0 },
+              })
+            : jsonResponse(
+                { error: { code: 'service_unavailable', message: 'refresh failed' } },
+                503,
+              );
+        }
+        if (method === 'GET' && path === '/admin/api/maintenance') {
+          return jsonResponse({ enabled: false, revision: '1' });
+        }
+        if (method === 'GET' && path === '/admin/api/legal-holds') {
+          return jsonResponse({ data: [], next_cursor: null });
+        }
+        if (method === 'PATCH' && path.endsWith('/site_timezone_offset_minutes')) {
+          patchWrites += 1;
+          return jsonResponse({ error: { code: 'conflict', message: 'timezone locked' } }, 409);
+        }
+        throw new Error(`Unexpected fixture request: ${method} ${path}`);
+      }),
     );
-    expect(within(input.closest('form')!).getByRole('alert')).not.toHaveTextContent(/has been restored/i);
+    const rendered = await renderWithProviders(<SettingsPage />, {
+      station: 'admin',
+      locale: 'en',
+      role: 'admin',
+    });
+    await rendered.user.click((await screen.findByText('fixture')).closest('button')!);
+    const input = screen.getByLabelText('Site timezone offset');
+    fireEvent.change(input, { target: { value: '30' } });
+    await rendered.user.click(
+      within(input.closest('form')!).getByRole('button', { name: 'Save value' }),
+    );
+    await waitFor(() => expect(configReads).toBe(2));
+    expect(patchWrites).toBe(1);
+    expect(input).toHaveValue(30);
+    expect(screen.getByText('timezone locked')).toBeVisible();
+    expect(screen.getByText('refresh failed')).toBeVisible();
+    expect(screen.queryByText(/has been restored/i)).not.toBeInTheDocument();
+  });
+
+  test('disables a setting editor and authority actions while save is pending', async () => {
+    const siteName = catalogEntry('site_name', {
+      type: 'string',
+      title: { zh: '站点名称', en: 'Site name' },
+      unit: null,
+      raw_default: 'Before',
+      effective_fallback: 'Before',
+      minimum: 1,
+      maximum: 256,
+      step: null,
+    });
+    const snapshot: SiteConfigSnapshot = {
+      revision: '1',
+      values: { site_name: 'Before' },
+    };
+    let patchBody: unknown;
+    let resolvePatch: ((response: Response) => void) | undefined;
+    const pendingPatch = new Promise<Response>((resolve) => {
+      resolvePatch = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const path = new URL(
+          input instanceof Request ? input.url : String(input),
+          window.location.origin,
+        ).pathname;
+        const method = (
+          init?.method ?? (input instanceof Request ? input.method : 'GET')
+        ).toUpperCase();
+        if (method === 'GET' && path === '/admin/api/site-config/catalog') {
+          return jsonResponse({ data: [siteName] });
+        }
+        if (method === 'GET' && path === '/admin/api/site-config') return jsonResponse(snapshot);
+        if (method === 'GET' && path === '/admin/api/maintenance') {
+          return jsonResponse({ enabled: false, revision: '1' });
+        }
+        if (method === 'GET' && path === '/admin/api/legal-holds') {
+          return jsonResponse({ data: [], next_cursor: null });
+        }
+        if (method === 'PATCH' && path === '/admin/api/site-config/site_name') {
+          patchBody = JSON.parse(String(init?.body));
+          return pendingPatch;
+        }
+        throw new Error(`Unexpected fixture request: ${method} ${path}`);
+      }),
+    );
+    const rendered = await renderWithProviders(<SettingsPage />, {
+      station: 'admin',
+      locale: 'en',
+      role: 'admin',
+    });
+    await rendered.user.click((await screen.findByText('fixture')).closest('button')!);
+    const input = screen.getByLabelText('Site name');
+    const form = input.closest('form');
+    fireEvent.change(input, { target: { value: 'After' } });
+    await rendered.user.click(within(form!).getByRole('button', { name: 'Save value' }));
+
+    expect(patchBody).toEqual({ value: 'After' });
+    expect(input).toBeDisabled();
+    expect(within(form!).getByRole('button', { name: 'Saving…' })).toBeDisabled();
+    expect(within(form!).getByRole('button', { name: 'Restore authority value' })).toBeDisabled();
+    expect(within(form!).getByRole('button', { name: 'Reload authority' })).toBeDisabled();
+
+    snapshot.revision = '2';
+    snapshot.values.site_name = 'After';
+    resolvePatch?.(jsonResponse({ key: 'site_name', value: 'After', revision: '2' }));
+    await waitFor(() => expect(screen.getByLabelText('Site name')).toBeEnabled());
+    expect(screen.getByLabelText('Site name')).toHaveValue('After');
   });
 });
 
 describe('admin per-user limit explanations', () => {
   test('states the built-in concurrency default and independent gate composition', async () => {
     const adminUser = {
-      id: 7, username: 'fixture-user', discord_id: 'discord', is_banned: false,
-      banned_reason: '', endpoint_limit: null, effective_endpoint_limit: 4,
-      rpm_limit: null, effective_rpm_limit: 60,
-      concurrency_limit: null, effective_concurrency_limit: 5,
-      total_requests: 0, total_prompt_tokens: 0, total_completion_tokens: 0,
-      total_unknown_usage_requests: 0, credits_balance: '0', donation_credit_balance: '0',
-      level: null, auto_level: 1, created_at: '2026-08-23T00:00:00Z',
+      id: '7',
+      username: 'fixture-user',
+      discord_id: 'discord',
+      avatar_url: null,
+      guild_nick: null,
+      guild_avatar_url: null,
+      is_admin: false,
+      is_banned: false,
+      banned_reason: '',
+      banned_until: null,
+      charity_suspended_until: null,
+      endpoint_limit: null,
+      effective_endpoint_limit: '4',
+      rpm_limit: null,
+      effective_rpm_limit: '60',
+      concurrency_limit: null,
+      effective_concurrency_limit: '5',
+      lang: 'en',
+      balance: '0',
+      donation_credit: '0',
+      level: { manual: null, automatic: 1, effective: 1, display_name: 'Lv1' },
+      game_profile_public: false,
+      revision: '1',
+      usage: {
+        total_requests: '0',
+        total_uncached_input_tokens: '0',
+        total_cache_write_input_tokens: '0',
+        total_cache_read_input_tokens: '0',
+        total_output_tokens: '0',
+        total_prompt_tokens: '0',
+        total_completion_tokens: '0',
+        total_unknown_usage_requests: '0',
+      },
+      created_at: 1_700_000_000,
+      updated_at: 1_700_000_001,
     };
-    installJsonFetchFixtures([{
-      method: 'GET', path: '/admin/api/users?page=1&page_size=20',
-      body: { data: [adminUser], has_more: false },
-    }]);
+    installJsonFetchFixtures([
+      {
+        method: 'GET',
+        path: '/admin/api/users?limit=50',
+        body: { data: [adminUser], next_cursor: null },
+      },
+      { method: 'GET', path: '/admin/api/users/7', body: adminUser },
+    ]);
     const rendered = await renderWithProviders(<UsersPage />, {
-      station: 'admin', locale: 'en', role: 'admin',
+      station: 'admin',
+      locale: 'en',
+      role: 'admin',
     });
     await rendered.user.click(await screen.findByRole('button', { name: 'Manage' }));
     const note = screen.getByText(/built-in default of 5/i);
     expect(note).toHaveTextContent(/global RPM, global egress, endpoint and key gates/i);
     expect(note).toHaveTextContent(/effective is not the final minimum/i);
     await rendered.i18n.changeLanguage('zh');
-    expect(await screen.findByText(/内建默认值 5/)).toHaveTextContent(/全站 RPM、全站出站并发、端点和密钥/);
+    expect(await screen.findByText(/内建默认值 5/)).toHaveTextContent(
+      /全站 RPM、全站出站并发、端点和密钥/,
+    );
     expect(screen.getByText(/内建默认值 5/)).toHaveTextContent(/不是所有门禁取最小后的最终上限/);
   });
 });
 
-const initialGameConfig: AdminGameConfig = {
+const initialGameConfig: GamesConfig = {
+  revision: '7',
   master_enabled: false,
   fishing: {
     enabled: false,
-    bait_prices: { worm: '2500000', lure: '5000000', premium: '7500000' },
+    bait_prices: { worm: '2.5', lure: '5', premium: '7.5' },
     rtp_percent: { standard: 90, premium: 88 },
     treasure_multipliers: { bottle: 2, clover: 3, shell: 5 },
   },
+  linklink: {
+    enabled: false,
+    specs: {
+      '6x8': { enabled: true, price: '1' },
+      '8x8': { enabled: true, price: '2' },
+      '10x10': { enabled: false, price: '3.125' },
+    },
+  },
+  rps: {
+    enabled: false,
+    modes: {
+      quick: {
+        enabled: true,
+        base: '1',
+        pumps_bp: { platform: 100, welfare: 200, thursday: 300 },
+        queue_seconds: 60,
+        gesture_seconds: 10,
+        dealer_seconds: 10,
+        follower_seconds: 10,
+        queue_capacity: 1_024,
+      },
+      standard: {
+        enabled: true,
+        base: '2',
+        pumps_bp: { platform: 200, welfare: 300, thursday: 400 },
+        queue_seconds: 90,
+        gesture_seconds: 15,
+        dealer_seconds: 12,
+        follower_seconds: 12,
+        queue_capacity: 2_048,
+      },
+      deathmatch: {
+        enabled: false,
+        base: '3',
+        pumps_bp: { platform: 300, welfare: 400, thursday: 500 },
+        queue_seconds: 120,
+        gesture_seconds: 20,
+        dealer_seconds: 15,
+        follower_seconds: 15,
+        queue_capacity: 4_096,
+      },
+    },
+  },
 };
 
-function cloneGameConfig(value: AdminGameConfig): AdminGameConfig {
+const activeGameCounts: ActiveCounts = {
+  games: [
+    { game: 'fishing', mode: null, spec: null, phase: 'casting', count: '9007199254740993' },
+    { game: 'linklink', mode: null, spec: '10x10', phase: 'playing', count: '2' },
+    { game: 'rps', mode: 'deathmatch', spec: null, phase: 'gesture', count: '3' },
+  ],
+  queues: [
+    { mode: 'quick', count: '5' },
+    { mode: 'standard', count: '0' },
+    { mode: 'deathmatch', count: '7' },
+  ],
+};
+
+function cloneGameConfig(value: GamesConfig): GamesConfig {
   return structuredClone(value);
 }
 
 function installGameServer(options: { rejectPatch?: boolean } = {}) {
-  const state = cloneGameConfig(initialGameConfig);
-  const patches: unknown[] = [];
+  let state = cloneGameConfig(initialGameConfig);
+  const patches: Record<string, unknown>[] = [];
   const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-    const path = new URL(input instanceof Request ? input.url : String(input), window.location.origin).pathname;
-    const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+    const path = new URL(
+      input instanceof Request ? input.url : String(input),
+      window.location.origin,
+    ).pathname;
+    const method = (
+      init?.method ?? (input instanceof Request ? input.method : 'GET')
+    ).toUpperCase();
+    if (method === 'GET' && path === '/admin/api/games/config') return jsonResponse(state);
+    if (method === 'GET' && path === '/admin/api/games/active-counts') {
+      return jsonResponse(activeGameCounts);
+    }
     if (path !== '/admin/api/games/config') throw new Error(`Unexpected path ${path}`);
-    if (method === 'GET') return jsonResponse(state);
     if (method !== 'PATCH') throw new Error(`Unexpected method ${method}`);
     const patch = JSON.parse(String(init?.body)) as Record<string, unknown>;
     patches.push(patch);
     if (options.rejectPatch) {
-      return jsonResponse({ error: { code: 'invalid_request', message: 'Invalid fishing economy.' } }, 400);
+      return jsonResponse(
+        { error: { code: 'invalid_request', message: 'Invalid fishing economy.' } },
+        400,
+      );
     }
-    const fishing = patch.fishing as Record<string, unknown> | undefined;
-    if (typeof patch.master_enabled === 'boolean') state.master_enabled = patch.master_enabled;
-    if (typeof fishing?.enabled === 'boolean') state.fishing.enabled = fishing.enabled;
-    Object.assign(state.fishing.bait_prices, fishing?.bait_prices ?? {});
-    Object.assign(state.fishing.rtp_percent, fishing?.rtp_percent ?? {});
-    Object.assign(state.fishing.treasure_multipliers, fishing?.treasure_multipliers ?? {});
-    // Prove that the page renders the returned full snapshot rather than the submitted draft.
-    if ((fishing?.bait_prices as Record<string, unknown> | undefined)?.worm === '9007199254740993') {
-      state.fishing.bait_prices.worm = '9007199254740994';
-    }
+    const mutable = patch as {
+      expected_revision: string;
+      master_enabled: boolean;
+      fishing: GamesConfig['fishing'];
+      linklink: GamesConfig['linklink'];
+      rps: {
+        enabled: boolean;
+        modes: Record<
+          'quick' | 'standard' | 'deathmatch',
+          Omit<GamesConfig['rps']['modes']['quick'], 'queue_capacity'>
+        >;
+      };
+    };
+    const previous = state;
+    state = {
+      revision: String(BigInt(state.revision) + 1n),
+      master_enabled: mutable.master_enabled,
+      fishing: structuredClone(mutable.fishing),
+      linklink: structuredClone(mutable.linklink),
+      rps: {
+        enabled: mutable.rps.enabled,
+        modes: {
+          quick: {
+            ...structuredClone(mutable.rps.modes.quick),
+            queue_capacity: previous.rps.modes.quick.queue_capacity,
+          },
+          standard: {
+            ...structuredClone(mutable.rps.modes.standard),
+            queue_capacity: previous.rps.modes.standard.queue_capacity,
+          },
+          deathmatch: {
+            ...structuredClone(mutable.rps.modes.deathmatch),
+            queue_capacity: previous.rps.modes.deathmatch.queue_capacity,
+          },
+        },
+      },
+    };
     return jsonResponse(state);
   });
   vi.stubGlobal('fetch', fetchMock);
-  return { fetchMock, patches, get state() { return state; } };
+  return {
+    fetchMock,
+    patches,
+    get state() {
+      return state;
+    },
+  };
 }
 
 describe('standalone Admin Games feature', () => {
-  test('uses exact price strings, touched-only patches, authoritative snapshots, and resets saved state on edit', async () => {
+  test('sends the frozen full mutable PATCH, excludes queue capacity, and renders exact active counts', async () => {
     const server = installGameServer();
     const rendered = await renderWithProviders(<GamesPage />, {
-      station: 'admin', locale: 'en', role: 'admin',
+      station: 'admin',
+      locale: 'en',
+      role: 'admin',
     });
-    const save = await screen.findByRole('button', { name: 'Save game configuration' });
-    const worm = screen.getByLabelText('Worm bait');
-    fireEvent.change(worm, { target: { value: '9007199254740993' } });
+    const save = await screen.findByRole('button', { name: 'Save atomic game configuration' });
+    expect(screen.getByText(/phase casting · 9007199254740993/)).toBeVisible();
+    expect(screen.getByText(/spec 10x10 · phase playing · 2/)).toBeVisible();
+    expect(screen.getByText(/mode deathmatch · phase gesture · 3/)).toBeVisible();
+    const queues = screen.getByRole('heading', { name: 'RPS queues' }).closest('section');
+    expect(queues).toHaveTextContent('quick: 5');
+    expect(queues).toHaveTextContent('standard: 0');
+    expect(queues).toHaveTextContent('deathmatch: 7');
+
+    const worm = screen.getByLabelText(/worm bait price/i);
+    fireEvent.change(worm, { target: { value: '3' } });
     await rendered.user.click(save);
     await waitFor(() => expect(server.patches).toHaveLength(1));
-    expect(server.patches[0]).toEqual({ fishing: { bait_prices: { worm: '9007199254740993' } } });
-    await waitFor(() => expect(screen.getByLabelText('Worm bait')).toHaveValue('9007199254740994'));
-    expect(screen.getByRole('status')).toHaveTextContent(/authoritative server response/i);
-
-    await rendered.user.click(save);
-    expect(await screen.findByRole('alert')).toHaveTextContent(/canonical values/i);
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText('Message bottle'), { target: { value: '7' } });
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    await rendered.user.click(save);
-    await waitFor(() => expect(server.patches).toHaveLength(2));
-    expect(server.patches[1]).toEqual({ fishing: { treasure_multipliers: { bottle: 7 } } });
-
-    const edits: Array<[string, string | boolean, unknown]> = [
-      ['Games master switch', true, { master_enabled: true }],
-      ['Fishing enabled', true, { fishing: { enabled: true } }],
-      ['Lure bait', '6000000', { fishing: { bait_prices: { lure: '6000000' } } }],
-      ['Premium bait', '8000000', { fishing: { bait_prices: { premium: '8000000' } } }],
-      ['Standard bait RTP', '91', { fishing: { rtp_percent: { standard: 91 } } }],
-      ['Premium bait RTP', '89', { fishing: { rtp_percent: { premium: 89 } } }],
-      ['Lucky clover', '4', { fishing: { treasure_multipliers: { clover: 4 } } }],
-      ['Pearl shell', '6', { fishing: { treasure_multipliers: { shell: 6 } } }],
-    ];
-    for (const [label, value, expected] of edits) {
-      const control = screen.getByLabelText(label);
-      if (typeof value === 'boolean') await rendered.user.click(control);
-      else fireEvent.change(control, { target: { value } });
-      await rendered.user.click(save);
-      await waitFor(() => expect(server.patches.at(-1)).toEqual(expected));
-    }
+    expect(server.patches[0]).toEqual({
+      expected_revision: '7',
+      master_enabled: false,
+      fishing: {
+        ...initialGameConfig.fishing,
+        bait_prices: { ...initialGameConfig.fishing.bait_prices, worm: '3' },
+      },
+      linklink: initialGameConfig.linklink,
+      rps: {
+        enabled: false,
+        modes: {
+          quick: {
+            enabled: true,
+            base: '1',
+            pumps_bp: { platform: 100, welfare: 200, thursday: 300 },
+            queue_seconds: 60,
+            gesture_seconds: 10,
+            dealer_seconds: 10,
+            follower_seconds: 10,
+          },
+          standard: {
+            enabled: true,
+            base: '2',
+            pumps_bp: { platform: 200, welfare: 300, thursday: 400 },
+            queue_seconds: 90,
+            gesture_seconds: 15,
+            dealer_seconds: 12,
+            follower_seconds: 12,
+          },
+          deathmatch: {
+            enabled: false,
+            base: '3',
+            pumps_bp: { platform: 300, welfare: 400, thursday: 500 },
+            queue_seconds: 120,
+            gesture_seconds: 20,
+            dealer_seconds: 15,
+            follower_seconds: 15,
+          },
+        },
+      },
+    });
+    expect(JSON.stringify(server.patches[0])).not.toContain('queue_capacity');
+    await waitFor(() => expect(screen.getByText(/Revision 8/)).toBeVisible());
+    expect(screen.getByLabelText(/worm bait price/i)).toHaveValue(3);
+    expect(screen.getByText('1024')).toBeVisible();
   });
 
-  test('does not guess a saved state after an invalid full-economy combination', async () => {
+  test('blocks local range violations but leaves full economy compilation authoritative', async () => {
     const server = installGameServer({ rejectPatch: true });
     const rendered = await renderWithProviders(<GamesPage />, {
-      station: 'admin', locale: 'en', role: 'admin',
+      station: 'admin',
+      locale: 'en',
+      role: 'admin',
     });
-    const input = await screen.findByLabelText('Standard bait RTP');
+    const save = await screen.findByRole('button', { name: 'Save atomic game configuration' });
+    const quickPlatform = screen.getByLabelText(/quick platform cut/i);
+    fireEvent.change(quickPlatform, { target: { value: '9999' } });
+    await rendered.user.click(save);
+    expect(screen.getByRole('alert')).toHaveTextContent(/must total less than 10000 basis points/i);
+    expect(server.patches).toHaveLength(0);
+
+    fireEvent.change(quickPlatform, { target: { value: '100' } });
+    const input = screen.getByLabelText(/standard Fishing RTP percent/i);
     fireEvent.change(input, { target: { value: '100' } });
-    await rendered.user.click(screen.getByRole('button', { name: 'Save game configuration' }));
+    await rendered.user.click(save);
     expect(await screen.findByText('Invalid fishing economy.')).toBeVisible();
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    expect(input).toHaveValue('100');
+    expect(input).toHaveValue(100);
     expect(server.state).toEqual(initialGameConfig);
-    fireEvent.change(screen.getByLabelText('Lucky clover'), { target: { value: '4' } });
+    expect(server.patches).toHaveLength(1);
+    fireEvent.change(screen.getByLabelText(/clover treasure multiplier/i), {
+      target: { value: '4' },
+    });
     expect(screen.queryByText('Invalid fishing economy.')).not.toBeInTheDocument();
   });
 
   test('disables every editor while a late authoritative response is pending', async () => {
+    let state = cloneGameConfig(initialGameConfig);
     let resolvePatch: ((response: Response) => void) | undefined;
-    const pendingPatch = new Promise<Response>((resolve) => { resolvePatch = resolve; });
-    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
-      if (method === 'GET') return jsonResponse(initialGameConfig);
-      return pendingPatch;
-    }));
-    const rendered = await renderWithProviders(<GamesPage />, {
-      station: 'admin', locale: 'en', role: 'admin',
+    const pendingPatch = new Promise<Response>((resolve) => {
+      resolvePatch = resolve;
     });
-    const worm = await screen.findByLabelText('Worm bait');
-    fireEvent.change(worm, { target: { value: '3000000' } });
-    await rendered.user.click(screen.getByRole('button', { name: 'Save game configuration' }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const path = new URL(
+          input instanceof Request ? input.url : String(input),
+          window.location.origin,
+        ).pathname;
+        const method = (
+          init?.method ?? (input instanceof Request ? input.method : 'GET')
+        ).toUpperCase();
+        if (method === 'GET' && path === '/admin/api/games/config') return jsonResponse(state);
+        if (method === 'GET' && path === '/admin/api/games/active-counts') {
+          return jsonResponse(activeGameCounts);
+        }
+        if (method === 'PATCH' && path === '/admin/api/games/config') return pendingPatch;
+        throw new Error(`Unexpected fixture request: ${method} ${path}`);
+      }),
+    );
+    const rendered = await renderWithProviders(<GamesPage />, {
+      station: 'admin',
+      locale: 'en',
+      role: 'admin',
+    });
+    const worm = await screen.findByLabelText(/worm bait price/i);
+    fireEvent.change(worm, { target: { value: '3' } });
+    await rendered.user.click(
+      screen.getByRole('button', { name: 'Save atomic game configuration' }),
+    );
     expect(worm).toBeDisabled();
-    expect(screen.getByLabelText('Games master switch')).toBeDisabled();
-    resolvePatch?.(jsonResponse({
-      ...initialGameConfig,
-      fishing: { ...initialGameConfig.fishing, bait_prices: {
-        ...initialGameConfig.fishing.bait_prices, worm: '3000000',
-      } },
-    }));
-    await waitFor(() => expect(screen.getByLabelText('Worm bait')).toBeEnabled());
-    expect(screen.getByLabelText('Worm bait')).toHaveValue('3000000');
+    expect(screen.getByLabelText('Games master enabled')).toBeDisabled();
+    expect(screen.getByLabelText(/6x8 entry price/i)).toBeDisabled();
+    expect(screen.getByLabelText(/quick base/i)).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Restore authority values' })).toBeDisabled();
+
+    state = {
+      ...state,
+      revision: '8',
+      fishing: {
+        ...state.fishing,
+        bait_prices: { ...state.fishing.bait_prices, worm: '3' },
+      },
+    };
+    resolvePatch?.(jsonResponse(state));
+    await waitFor(() => expect(screen.getByLabelText(/worm bait price/i)).toBeEnabled());
+    expect(screen.getByLabelText(/worm bait price/i)).toHaveValue(3);
   });
 
-  test('strictly rejects malformed GET fields instead of inventing game values', () => {
-    expect(normalizeAdminGameConfig(initialGameConfig)).toEqual(initialGameConfig);
-    expect(() => normalizeAdminGameConfig({ ...initialGameConfig, master_enabled: 0 })).toThrow(
+  test('strictly rejects stale or malformed config and active-count DTOs', () => {
+    expect(normalizeGamesConfig(initialGameConfig)).toEqual(initialGameConfig);
+    expect(() =>
+      normalizeGamesConfig({
+        master_enabled: initialGameConfig.master_enabled,
+        fishing: initialGameConfig.fishing,
+      }),
+    ).toThrow(/games configuration/i);
+    expect(() => normalizeGamesConfig({ ...initialGameConfig, master_enabled: 0 })).toThrow(
       /master switch/i,
     );
-    expect(() => normalizeAdminGameConfig({
-      ...initialGameConfig,
-      fishing: { ...initialGameConfig.fishing, bait_prices: {
-        ...initialGameConfig.fishing.bait_prices, worm: '01',
-      } },
-    })).toThrow(/worm price/i);
+    expect(() =>
+      normalizeGamesConfig({
+        ...initialGameConfig,
+        fishing: {
+          ...initialGameConfig.fishing,
+          bait_prices: { ...initialGameConfig.fishing.bait_prices, worm: '01' },
+        },
+      }),
+    ).toThrow(/worm price/i);
+    expect(() =>
+      normalizeGamesConfig({
+        ...initialGameConfig,
+        rps: {
+          ...initialGameConfig.rps,
+          modes: {
+            ...initialGameConfig.rps.modes,
+            quick: {
+              enabled: true,
+              base: '1',
+              pumps_bp: { platform: 100, welfare: 200, thursday: 300 },
+              queue_seconds: 60,
+              gesture_seconds: 10,
+              dealer_seconds: 10,
+              follower_seconds: 10,
+            },
+          },
+        },
+      }),
+    ).toThrow(/quick RPS/i);
+
+    expect(normalizeActiveCounts(activeGameCounts)).toEqual(activeGameCounts);
+    expect(() => normalizeActiveCounts({ active: [] })).toThrow(/active game counts/i);
+    expect(() =>
+      normalizeActiveCounts({
+        ...activeGameCounts,
+        games: [{ ...activeGameCounts.games[0], count: 1 }],
+      }),
+    ).toThrow(/active game count/i);
   });
 });
 
 function completePrices() {
   return {
-    request_user_price_milli: '0', request_donor_reward_milli: '0',
-    uncached_user_price_milli: '0', cache_write_user_price_milli: '0',
-    cache_read_user_price_milli: '0', output_user_price_milli: '0',
-    uncached_donor_reward_milli: '0', cache_write_donor_reward_milli: '0',
-    cache_read_donor_reward_milli: '0', output_donor_reward_milli: '0',
-    current_request_user_price_milli: '0', current_uncached_user_price_milli: '0',
-    current_cache_write_user_price_milli: '0', current_cache_read_user_price_milli: '0',
+    request_user_price_milli: '0',
+    request_donor_reward_milli: '0',
+    uncached_user_price_milli: '0',
+    cache_write_user_price_milli: '0',
+    cache_read_user_price_milli: '0',
+    output_user_price_milli: '0',
+    uncached_donor_reward_milli: '0',
+    cache_write_donor_reward_milli: '0',
+    cache_read_donor_reward_milli: '0',
+    output_donor_reward_milli: '0',
+    current_request_user_price_milli: '0',
+    current_uncached_user_price_milli: '0',
+    current_cache_write_user_price_milli: '0',
+    current_cache_read_user_price_milli: '0',
     current_output_user_price_milli: '0',
   };
 }
 
-function endpointKeyFixture(id: unknown, forceStoreFalse: unknown = false, connectorType = 'openai-compatible') {
+function endpointKeyFixture(
+  id: unknown,
+  forceStoreFalse: unknown = false,
+  connectorType = 'openai-compatible',
+) {
   const fixture = {
     id,
     note: '',
@@ -611,7 +1067,8 @@ function endpointKeyFixture(id: unknown, forceStoreFalse: unknown = false, conne
     created_at: 1,
     updated_at: 2,
   };
-  if (connectorType === 'anthropic-compatible') delete (fixture as Record<string, unknown>).force_store_false;
+  if (connectorType === 'anthropic-compatible')
+    delete (fixture as Record<string, unknown>).force_store_false;
   return fixture;
 }
 
@@ -657,135 +1114,272 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
     expect(normalizedUser).not.toHaveProperty('rpm_limit');
     expect(normalizedUser).not.toHaveProperty('concurrency_limit');
     expect(normalizedUser).toMatchObject({
-      effective_endpoint_limit: 4, effective_rpm_limit: 60, effective_concurrency_limit: 5,
+      effective_endpoint_limit: 4,
+      effective_rpm_limit: 60,
+      effective_concurrency_limit: 5,
     });
     const admin = normalizeAdminUser({
-      id: 7, username: 'fixture-user', discord_id: 'discord', is_banned: false,
-      endpoint_limit: 50, effective_endpoint_limit: 50,
-      rpm_limit: 4000, effective_rpm_limit: 4000,
-      concurrency_limit: 70000, effective_concurrency_limit: 70000,
-      total_requests: 0, total_prompt_tokens: 0, total_completion_tokens: 0,
-      total_unknown_usage_requests: 0, credits_balance: '0', donation_credit_balance: '0',
-      auto_level: 1, created_at: '2026-08-23T00:00:00Z',
+      id: 7,
+      username: 'fixture-user',
+      discord_id: 'discord',
+      is_banned: false,
+      endpoint_limit: 50,
+      effective_endpoint_limit: 50,
+      rpm_limit: 4000,
+      effective_rpm_limit: 4000,
+      concurrency_limit: 70000,
+      effective_concurrency_limit: 70000,
+      total_requests: 0,
+      total_prompt_tokens: 0,
+      total_completion_tokens: 0,
+      total_unknown_usage_requests: 0,
+      credits_balance: '0',
+      donation_credit_balance: '0',
+      auto_level: 1,
+      created_at: '2026-08-23T00:00:00Z',
     });
     expect(admin).toMatchObject({ endpoint_limit: 50, rpm_limit: 4000, concurrency_limit: 70000 });
-    expect(() => normalizeAdminUser({ ...admin, effective_concurrency_limit: 100_001 }))
-      .toThrow(/effective concurrency limit/i);
+    expect(() => normalizeAdminUser({ ...admin, effective_concurrency_limit: 100_001 })).toThrow(
+      /effective concurrency limit/i,
+    );
   });
 
   test('projects policy ownership fields and preserves strict donation limits and amounts', () => {
-    expect(normalizeEndpointKey(endpointKeyFixture(1, true), 'openai-compatible').force_store_false).toBe(true);
-    expect(normalizePlatformModel(platformModelFixture(2, { flatten_tool_calls: true })).flatten_tool_calls).toBe(true);
+    expect(
+      normalizeEndpointKey(endpointKeyFixture(1, true), 'openai-compatible').force_store_false,
+    ).toBe(true);
+    expect(
+      normalizePlatformModel(platformModelFixture(2, { flatten_tool_calls: true }))
+        .flatten_tool_calls,
+    ).toBe(true);
     const modelFixture = charityModelFixture(3, { flatten_tool_calls: true });
     expect(normalizeCharityModel(modelFixture).flatten_tool_calls).toBe(true);
     expect(normalizeManagementCharityModel(modelFixture).flatten_tool_calls).toBe(true);
     const keyFixture = {
-      id: 4, max_concurrency: 100_000, rpm_limit: 4_096,
-      credits_usage_cap_milli: '9007199254740993', credits_used_milli: '0',
-      credits_reserved_milli: '0', enabled: true, force_store_false: true,
+      id: 4,
+      max_concurrency: 100_000,
+      rpm_limit: 4_096,
+      credits_usage_cap_milli: '9007199254740993',
+      credits_used_milli: '0',
+      credits_reserved_milli: '0',
+      enabled: true,
+      force_store_false: true,
     };
     expect(normalizeDonationKey(keyFixture, 'openai-compatible')).toMatchObject({
-      max_concurrency: 100_000, rpm_limit: 4_096,
-      credits_usage_cap_milli: '9007199254740993', force_store_false: true,
+      max_concurrency: 100_000,
+      rpm_limit: 4_096,
+      credits_usage_cap_milli: '9007199254740993',
+      force_store_false: true,
     });
     expect(normalizeManagementDonationKey(keyFixture).force_store_false).toBe(true);
-    expect(() => normalizeEndpointKey(endpointKeyFixture(1, 1), 'openai-compatible')).toThrow(/store policy/i);
-    expect(() => normalizePlatformModel(platformModelFixture(2, { flatten_tool_calls: 'true' })))
-      .toThrow(/tool-call policy/i);
-    expect(() => normalizeDonationKey({ ...keyFixture, rpm_limit: 4_097 }, 'openai-compatible')).toThrow(/donation key RPM/i);
-    expect(() => normalizeManagementDonationKey({
-      ...keyFixture, credits_usage_cap_milli: '01',
-    })).toThrow(/amount/i);
+    expect(() => normalizeEndpointKey(endpointKeyFixture(1, 1), 'openai-compatible')).toThrow(
+      /store policy/i,
+    );
+    expect(() =>
+      normalizePlatformModel(platformModelFixture(2, { flatten_tool_calls: 'true' })),
+    ).toThrow(/tool-call policy/i);
+    expect(() =>
+      normalizeDonationKey({ ...keyFixture, rpm_limit: 4_097 }, 'openai-compatible'),
+    ).toThrow(/donation key RPM/i);
+    expect(() =>
+      normalizeManagementDonationKey({
+        ...keyFixture,
+        credits_usage_cap_milli: '01',
+      }),
+    ).toThrow(/amount/i);
   });
 
   test('preserves Anthropic policy absence while rejecting malformed policy and connector fields', () => {
     const keyFixture = {
-      id: 4, max_concurrency: 1, rpm_limit: 2,
-      credits_usage_cap_milli: '0', credits_used_milli: '0',
-      credits_reserved_milli: '0', enabled: true,
+      id: 4,
+      max_concurrency: 1,
+      rpm_limit: 2,
+      credits_usage_cap_milli: '0',
+      credits_used_milli: '0',
+      credits_reserved_milli: '0',
+      enabled: true,
     };
-    expect(normalizeDonationKey(keyFixture, 'anthropic-compatible').force_store_false).toBe('not_applicable');
+    expect(normalizeDonationKey(keyFixture, 'anthropic-compatible').force_store_false).toBe(
+      'not_applicable',
+    );
     expect(normalizeManagementDonationKey(keyFixture).force_store_false).toBe('not_applicable');
-    expect(normalizeDonationKey({ ...keyFixture, force_store_false: false }, 'openai-compatible').force_store_false).toBe(false);
-    expect(normalizeDonationKey({ ...keyFixture, force_store_false: true }, 'openai-compatible').force_store_false).toBe(true);
-    expect(() => normalizeDonationKey({ ...keyFixture, force_store_false: null }, 'openai-compatible')).toThrow(/store policy/i);
-    expect(() => normalizeDonationKey({ ...keyFixture, force_store_false: 'false' }, 'openai-compatible')).toThrow(/store policy/i);
-    expect(() => normalizePlatformModel(platformModelFixture(2, { route_strategy: undefined }))).toThrow(/route strategy/i);
-    expect(() => normalizePlatformModel(platformModelFixture(2, { silent_retry: undefined }))).toThrow(/silent-retry policy/i);
-    expect(() => normalizePlatformModel(platformModelFixture(2, { flatten_tool_calls: undefined }))).toThrow(/tool-call policy/i);
-    expect(() => normalizePlatformModel(platformModelFixture(2, { route_strategy: 'invalid' }))).toThrow(/route strategy/i);
-    expect(() => normalizeCharityModel(charityModelFixture(3, { flatten_tool_calls: undefined }))).toThrow(/tool-call policy/i);
-    expect(() => normalizeManagementCharityModel(charityModelFixture(3, { flatten_tool_calls: undefined }))).toThrow(/tool-call policy/i);
+    expect(
+      normalizeDonationKey({ ...keyFixture, force_store_false: false }, 'openai-compatible')
+        .force_store_false,
+    ).toBe(false);
+    expect(
+      normalizeDonationKey({ ...keyFixture, force_store_false: true }, 'openai-compatible')
+        .force_store_false,
+    ).toBe(true);
+    expect(() =>
+      normalizeDonationKey({ ...keyFixture, force_store_false: null }, 'openai-compatible'),
+    ).toThrow(/store policy/i);
+    expect(() =>
+      normalizeDonationKey({ ...keyFixture, force_store_false: 'false' }, 'openai-compatible'),
+    ).toThrow(/store policy/i);
+    expect(() =>
+      normalizePlatformModel(platformModelFixture(2, { route_strategy: undefined })),
+    ).toThrow(/route strategy/i);
+    expect(() =>
+      normalizePlatformModel(platformModelFixture(2, { silent_retry: undefined })),
+    ).toThrow(/silent-retry policy/i);
+    expect(() =>
+      normalizePlatformModel(platformModelFixture(2, { flatten_tool_calls: undefined })),
+    ).toThrow(/tool-call policy/i);
+    expect(() =>
+      normalizePlatformModel(platformModelFixture(2, { route_strategy: 'invalid' })),
+    ).toThrow(/route strategy/i);
+    expect(() =>
+      normalizeCharityModel(charityModelFixture(3, { flatten_tool_calls: undefined })),
+    ).toThrow(/tool-call policy/i);
+    expect(() =>
+      normalizeManagementCharityModel(charityModelFixture(3, { flatten_tool_calls: undefined })),
+    ).toThrow(/tool-call policy/i);
     expect(() => normalizeCoreEndpoint({ id: '1' })).toThrow(/invalid endpoint/i);
-    expect(() => normalizeCoreEndpoint({
-      id: '1', connector_type: 'unknown', base_url: 'https://upstream.test/v1', note: '',
-      enabled: true, revision: '1', key_count: '0', created_at: 1, updated_at: 2,
-    })).toThrow(/connector type/i);
-    expect(() => normalizeEndpointKey({ ...endpointKeyFixture(1), id: undefined }, 'openai-compatible')).toThrow(/endpoint key id/i);
+    expect(() =>
+      normalizeCoreEndpoint({
+        id: '1',
+        connector_type: 'unknown',
+        base_url: 'https://upstream.test/v1',
+        note: '',
+        enabled: true,
+        revision: '1',
+        key_count: '0',
+        created_at: 1,
+        updated_at: 2,
+      }),
+    ).toThrow(/connector type/i);
+    expect(() =>
+      normalizeEndpointKey({ ...endpointKeyFixture(1), id: undefined }, 'openai-compatible'),
+    ).toThrow(/endpoint key id/i);
   });
 
   test('requires connector-specific policy fields and rejects non-Unix or incomplete projections', () => {
-    expect(() => normalizeEndpointKey({ ...endpointKeyFixture(1), force_store_false: undefined }, 'openai-compatible'))
-      .toThrow(/store policy/i);
-    expect(normalizeEndpointKey(endpointKeyFixture(1, false, 'anthropic-compatible'), 'anthropic-compatible').force_store_false)
-      .toBe('not_applicable');
-    expect(() => normalizeEndpointKey({ ...endpointKeyFixture(1, false, 'anthropic-compatible'), force_store_false: false }, 'anthropic-compatible'))
-      .toThrow(/unexpected store policy/i);
+    expect(() =>
+      normalizeEndpointKey(
+        { ...endpointKeyFixture(1), force_store_false: undefined },
+        'openai-compatible',
+      ),
+    ).toThrow(/store policy/i);
+    expect(
+      normalizeEndpointKey(
+        endpointKeyFixture(1, false, 'anthropic-compatible'),
+        'anthropic-compatible',
+      ).force_store_false,
+    ).toBe('not_applicable');
+    expect(() =>
+      normalizeEndpointKey(
+        { ...endpointKeyFixture(1, false, 'anthropic-compatible'), force_store_false: false },
+        'anthropic-compatible',
+      ),
+    ).toThrow(/unexpected store policy/i);
 
     const validEndpoint = {
-      id: '1', connector_type: 'openai-compatible', base_url: 'https://upstream.test/v1',
-      note: '', enabled: true, revision: '1', key_count: '0',
-      created_at: 1, updated_at: 2,
+      id: '1',
+      connector_type: 'openai-compatible',
+      base_url: 'https://upstream.test/v1',
+      note: '',
+      enabled: true,
+      revision: '1',
+      key_count: '0',
+      created_at: 1,
+      updated_at: 2,
     };
-    expect(() => normalizeCoreEndpoint({
-      ...validEndpoint, created_at: '2026-08-23T00:00:00Z',
-    })).toThrow(/creation time/i);
-    expect(() => normalizeCoreEndpoint({ ...validEndpoint, unexpected_status: true }))
-      .toThrow(/invalid endpoint/i);
+    expect(() =>
+      normalizeCoreEndpoint({
+        ...validEndpoint,
+        created_at: '2026-08-23T00:00:00Z',
+      }),
+    ).toThrow(/creation time/i);
+    expect(() => normalizeCoreEndpoint({ ...validEndpoint, unexpected_status: true })).toThrow(
+      /invalid endpoint/i,
+    );
 
     const missingCurrent = charityModelFixture(3);
     delete (missingCurrent.prices as Record<string, unknown>).current_output_user_price_milli;
     expect(() => normalizeCharityModel(missingCurrent)).toThrow(/current_output_user_price_milli/i);
-    expect(() => normalizeCharityModel(charityModelFixture(3, { availability_reason: 'unknown' })))
-      .toThrow(/availability reason/i);
-    expect(() => normalizeCharityModel(charityModelFixture(3, { available: false, availability_reason: 'ok' })))
-      .toThrow(/availability reason/i);
-    expect(() => normalizeUpstreamModel({ upstream_model_id: 'gpt', provider: 'p', fetched_at: 1, status: 'failed' }))
-      .toThrow(/upstream model status/i);
+    expect(() =>
+      normalizeCharityModel(charityModelFixture(3, { availability_reason: 'unknown' })),
+    ).toThrow(/availability reason/i);
+    expect(() =>
+      normalizeCharityModel(
+        charityModelFixture(3, { available: false, availability_reason: 'ok' }),
+      ),
+    ).toThrow(/availability reason/i);
+    expect(() =>
+      normalizeUpstreamModel({
+        upstream_model_id: 'gpt',
+        provider: 'p',
+        fetched_at: 1,
+        status: 'failed',
+      }),
+    ).toThrow(/upstream model status/i);
   });
 
   test('normalizes omitted reviews to an empty list but rejects invalid or zero timestamps', () => {
     const donation = {
-      id: 1, endpoint_id: 2, endpoint_base_url: 'https://upstream.test/v1', status: 'pending',
-      enabled: false, description: '', review_note: '', created_at: 1, updated_at: 2, keys: [],
+      id: 1,
+      endpoint_id: 2,
+      endpoint_base_url: 'https://upstream.test/v1',
+      status: 'pending',
+      enabled: false,
+      description: '',
+      review_note: '',
+      created_at: 1,
+      updated_at: 2,
+      keys: [],
     };
     expect(normalizeDonation(donation, true, 'openai-compatible').reviews).toEqual([]);
     expect(normalizeManagementDonation(donation, true).reviews).toEqual([]);
-    expect(() => normalizeDonation({ ...donation, reviews: {} }, true, 'openai-compatible'))
-      .toThrow(/review list/i);
-    expect(() => normalizeManagementDonation({ ...donation, reviews: {} }, true))
-      .toThrow(/review list/i);
-    expect(() => normalizeDonation({ ...donation, created_at: 0 }, true, 'openai-compatible'))
-      .toThrow(/created timestamp/i);
-    expect(() => normalizeDonation({ ...donation, expires_at: 0 }, true, 'openai-compatible'))
-      .toThrow(/expiry timestamp/i);
-    expect(() => normalizeDonation({ ...donation, reviewed_at: '2026-08-23T00:00:00Z' }, true, 'openai-compatible'))
-      .toThrow(/review timestamp/i);
+    expect(() =>
+      normalizeDonation({ ...donation, reviews: {} }, true, 'openai-compatible'),
+    ).toThrow(/review list/i);
+    expect(() => normalizeManagementDonation({ ...donation, reviews: {} }, true)).toThrow(
+      /review list/i,
+    );
+    expect(() =>
+      normalizeDonation({ ...donation, created_at: 0 }, true, 'openai-compatible'),
+    ).toThrow(/created timestamp/i);
+    expect(() =>
+      normalizeDonation({ ...donation, expires_at: 0 }, true, 'openai-compatible'),
+    ).toThrow(/expiry timestamp/i);
+    expect(() =>
+      normalizeDonation(
+        { ...donation, reviewed_at: '2026-08-23T00:00:00Z' },
+        true,
+        'openai-compatible',
+      ),
+    ).toThrow(/review timestamp/i);
   });
 
   test('keeps resource IDs opaque and validates only legacy numeric payload boundaries', () => {
-    const invalidIDs: unknown[] = ['', '\u0001', 'x'.repeat(129), 0, -1, 2.5, Number.MAX_SAFE_INTEGER + 1];
+    const invalidIDs: unknown[] = [
+      '',
+      '\u0001',
+      'x'.repeat(129),
+      0,
+      -1,
+      2.5,
+      Number.MAX_SAFE_INTEGER + 1,
+    ];
     for (const id of invalidIDs) {
-      expect(() => normalizeEndpointKey(endpointKeyFixture(id), 'openai-compatible')).toThrow(/endpoint key id/i);
+      expect(() => normalizeEndpointKey(endpointKeyFixture(id), 'openai-compatible')).toThrow(
+        /endpoint key id/i,
+      );
       expect(() => normalizePlatformModel(platformModelFixture(id))).toThrow(/model id/i);
-      expect(() => normalizeManagementCharityModel(charityModelFixture(id))).toThrow(/charity model id/i);
+      expect(() => normalizeManagementCharityModel(charityModelFixture(id))).toThrow(
+        /charity model id/i,
+      );
     }
-    expect(normalizeEndpointKey(endpointKeyFixture('model:2'), 'openai-compatible').id).toBe('model:2');
+    expect(normalizeEndpointKey(endpointKeyFixture('model:2'), 'openai-compatible').id).toBe(
+      'model:2',
+    );
     expect(normalizePlatformModel(platformModelFixture('model:2')).id).toBe('model:2');
     expect(positiveDecimalIDNumber('2e3')).toBeUndefined();
     expect(positiveDecimalIDNumber('01')).toBeUndefined();
     expect(positiveDecimalIDNumber('2000')).toBe(2000);
-    expect(normalizeEndpointKey(endpointKeyFixture('9007199254740991'), 'openai-compatible').id)
-      .toBe('9007199254740991');
+    expect(
+      normalizeEndpointKey(endpointKeyFixture('9007199254740991'), 'openai-compatible').id,
+    ).toBe('9007199254740991');
   });
 });

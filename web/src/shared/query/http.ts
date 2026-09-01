@@ -244,8 +244,9 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
     );
   }
 
-  // 202/204 responses and logout/delete operations intentionally have no body.
-  if (response.status === 204 || response.status === 202) return undefined as T;
+  // A 204 response is universally bodyless. Successful 202 responses in the
+  // frozen API carry operation receipts and must still be decoded.
+  if (response.status === 204) return undefined as T;
   const contentType = response.headers.get('content-type') ?? '';
   try {
     // The contract uses JSON. A few test/proxy layers omit the content type,
