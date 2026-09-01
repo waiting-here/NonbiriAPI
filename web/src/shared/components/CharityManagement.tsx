@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { CursorPagination } from '@shared/operations/CursorPagination';
@@ -24,6 +25,8 @@ import {
   type AdminDonation,
   type CharityModel,
   type CharityRole,
+  type CharityState,
+  type DonationStatus,
   type ManagedDonationKey,
   type StewardDonation,
   type TokenPrices,
@@ -32,6 +35,30 @@ import { useRetainedOperation } from '../../admin/features/operations/useRetaine
 import '@shared/operations/operations.css';
 
 type ManagedDonation = AdminDonation | StewardDonation;
+
+const charityCopyKey = (role: CharityRole, key: string) =>
+  `${role === 'admin' ? 'admin.charity' : 'user.steward'}.${key}`;
+const charityStatusKey = (role: CharityRole, status: DonationStatus) =>
+  charityCopyKey(role, `status.${status}`);
+const charityStateKey = (state: CharityState) => `common.operations.charity.charityState.${state}`;
+const reviewerRoleKey = (role: 'admin' | 'steward') => `common.operations.charity.role.${role}`;
+const sourceTypeKey = (source: 'automatic' | 'manual') =>
+  `common.operations.charity.sourceType.${source}`;
+const tokenPriceKeyPart: Record<keyof TokenPrices, string> = {
+  uncached_input: 'uncached',
+  cache_write_input: 'cache_write',
+  cache_read_input: 'cache_read',
+  output: 'output',
+};
+const tokenPriceCopyKey = (
+  role: CharityRole,
+  side: 'userPrices' | 'donorRewards',
+  field: keyof TokenPrices,
+) =>
+  charityCopyKey(
+    role,
+    `${tokenPriceKeyPart[field]}_${side === 'userPrices' ? 'user_price' : 'donor_reward'}_milli`,
+  );
 
 const MAX_MONEY_MILLI = 9_000_000_000_000_000n;
 const MAX_TOKEN_RESERVE = 2_147_483_647;
@@ -47,9 +74,11 @@ function hasForbiddenControl(value: string): boolean {
 }
 
 function validText(value: string, maximum: number, required = false): boolean {
-  return (!required || value.trim().length > 0)
-    && Array.from(value).length <= maximum
-    && !hasForbiddenControl(value);
+  return (
+    (!required || value.trim().length > 0) &&
+    Array.from(value).length <= maximum &&
+    !hasForbiddenControl(value)
+  );
 }
 
 function validCount(value: string | null): boolean {
@@ -88,6 +117,7 @@ function NullableValue({
   value: string | null;
   onChange: (value: string | null) => void;
 }) {
+  const { t } = useTranslation();
   const valueId = useId();
   const unlimitedId = useId();
   const [unlimited, setUnlimited] = useState(value === null);
@@ -102,16 +132,16 @@ function NullableValue({
       />
       <small>
         <label htmlFor={unlimitedId}>
-        <input
-          id={unlimitedId}
-          type="checkbox"
-          checked={unlimited}
-          onChange={(event) => {
-            setUnlimited(event.target.checked);
-            onChange(event.target.checked ? null : '0');
-          }}
-        />{' '}
-          Unlimited {label.toLowerCase()}
+          <input
+            id={unlimitedId}
+            type="checkbox"
+            checked={unlimited}
+            onChange={(event) => {
+              setUnlimited(event.target.checked);
+              onChange(event.target.checked ? null : '0');
+            }}
+          />{' '}
+          {t('common.operations.charity.noLimit')}
         </label>
       </small>
     </div>
@@ -147,18 +177,20 @@ const keyManagementDraft = (key: ManagedDonationKey): KeyManagementDraft => ({
   enabled: null,
 });
 
-function keySettingsError(value: Omit<KeySettingsDraft, 'enabled'>): string | null {
+type KeySettingsValidation = 'priceLimit' | 'countLimits' | 'tokenReserve' | 'safeNote';
+
+function keySettingsError(value: Omit<KeySettingsDraft, 'enabled'>): KeySettingsValidation | null {
   if (!validAmount(value.price_limit)) {
-    return 'Price limit must be an exact non-negative credit amount with at most three decimals.';
+    return 'priceLimit';
   }
   if (!validCount(value.calls_limit) || !validCount(value.tokens_limit)) {
-    return 'Call and token limits must be canonical integers no greater than 9,000,000,000,000,000.';
+    return 'countLimits';
   }
   if (!validTokenReserve(value.token_reserve)) {
-    return 'Token reserve must be an integer from 0 through 2,147,483,647.';
+    return 'tokenReserve';
   }
   if (!validText(value.safe_note, 256)) {
-    return 'Reviewer-safe note must be at most 256 characters and contain no control characters.';
+    return 'safeNote';
   }
   return null;
 }
@@ -176,6 +208,7 @@ function DonationKeyEditor({
   refresh: () => Promise<unknown>;
   onCapabilityLoss?: () => void;
 }) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState(() => keyManagementDraft(item));
   const [reset, setReset] = useState(false);
   const save = useRetainedOperation<
@@ -208,12 +241,20 @@ function DonationKeyEditor({
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
   if (capabilityLost) {
-    return <p className="field-error" role="alert">Charity management access is no longer available.</p>;
+    return (
+      <p className="field-error" role="alert">
+        {t('common.operations.charity.accessLost')}
+      </p>
+    );
   }
   return (
     <section className="ops-subcard">
       <h4>
-        Key {item.id} · {item.display_head}…{item.display_tail}
+        {t('common.operations.charity.keyHeading', {
+          id: item.id,
+          head: item.display_head,
+          tail: item.display_tail,
+        })}
       </h4>
       <p>
         {item.safe_source.connector_type} · {item.safe_source.base_url}
@@ -222,29 +263,43 @@ function DonationKeyEditor({
         <StatusBadge
           active={item.charity_state === 'available'}
           danger={item.streak.failure_disabled}
-          label={item.charity_state}
+          label={t(charityStateKey(item.charity_state))}
         />
-        <span>physical {item.physical_enabled ? 'enabled' : 'disabled'}</span>
-        <span>streak {item.streak.count}</span>
+        <span>
+          {t('common.operations.charity.physicalState', {
+            state: t(item.physical_enabled ? 'common.enabled' : 'common.disabled'),
+          })}
+        </span>
+        <span>{t('common.operations.charity.failureStreak', { count: item.streak.count })}</span>
       </div>
       <dl className="ops-kv">
-        <dt>Price</dt>
+        <dt>{t('common.operations.charity.priceCredits')}</dt>
         <dd>
-          {item.usage.price_used} used + {item.usage.price_inflight} in flight /{' '}
-          {item.limits.price ?? 'unlimited'}
+          {t('common.operations.charity.usageLimit', {
+            used: item.usage.price_used,
+            inflight: item.usage.price_inflight,
+            limit: item.limits.price ?? t('common.operations.charity.unlimited'),
+          })}
         </dd>
-        <dt>Calls</dt>
+        <dt>{t('common.operations.charity.calls')}</dt>
         <dd>
-          {item.usage.calls_used} + {item.usage.calls_inflight} / {item.limits.calls ?? 'unlimited'}
+          {t('common.operations.charity.usageLimit', {
+            used: item.usage.calls_used,
+            inflight: item.usage.calls_inflight,
+            limit: item.limits.calls ?? t('common.operations.charity.unlimited'),
+          })}
         </dd>
-        <dt>Tokens</dt>
+        <dt>{t('common.operations.charity.tokens')}</dt>
         <dd>
-          {item.usage.tokens_used} + {item.usage.tokens_inflight} /{' '}
-          {item.limits.tokens ?? 'unlimited'}
+          {t('common.operations.charity.usageLimit', {
+            used: item.usage.tokens_used,
+            inflight: item.usage.tokens_inflight,
+            limit: item.limits.tokens ?? t('common.operations.charity.unlimited'),
+          })}
         </dd>
         {item.ended_reason ? (
           <>
-            <dt>Ended</dt>
+            <dt>{t('common.operations.charity.endedReason')}</dt>
             <dd>{item.ended_reason}</dd>
           </>
         ) : null}
@@ -253,22 +308,22 @@ function DonationKeyEditor({
         <>
           <div className="ops-field-grid">
             <NullableValue
-              label="Price limit"
+              label={t('common.operations.charity.priceLimitCredits')}
               value={draft.price_limit}
               onChange={(value) => setDraft({ ...draft, price_limit: value })}
             />
             <NullableValue
-              label="Call limit"
+              label={t('common.operations.charity.callLimit')}
               value={draft.calls_limit}
               onChange={(value) => setDraft({ ...draft, calls_limit: value })}
             />
             <NullableValue
-              label="Token limit"
+              label={t('common.operations.charity.tokenLimit')}
               value={draft.tokens_limit}
               onChange={(value) => setDraft({ ...draft, tokens_limit: value })}
             />
             <label>
-              <span>Token reserve</span>
+              <span>{t('common.operations.charity.tokenReserve')}</span>
               <input
                 type="number"
                 min="0"
@@ -281,27 +336,26 @@ function DonationKeyEditor({
               />
             </label>
             <label>
-              <span>Reviewer-safe note</span>
+              <span>{t('common.operations.charity.safeNote')}</span>
               <input
                 value={draft.safe_note}
                 onChange={(event) => setDraft({ ...draft, safe_note: event.target.value })}
               />
             </label>
             <label>
-              <span>Charity switch change</span>
+              <span>{t('common.operations.charity.charitySwitchChange')}</span>
               <select
                 value={draft.enabled === null ? '' : String(draft.enabled)}
                 onChange={(event) =>
                   setDraft({
                     ...draft,
-                    enabled:
-                      event.target.value === '' ? null : event.target.value === 'true',
+                    enabled: event.target.value === '' ? null : event.target.value === 'true',
                   })
                 }
               >
-                <option value="">Leave unchanged</option>
-                <option value="true">Enable for charity</option>
-                <option value="false">Disable for charity</option>
+                <option value="">{t('common.operations.charity.leaveUnchanged')}</option>
+                <option value="true">{t('common.operations.charity.enableForCharity')}</option>
+                <option value="false">{t('common.operations.charity.disableForCharity')}</option>
               </select>
             </label>
             {item.streak.failure_disabled ? (
@@ -311,11 +365,15 @@ function DonationKeyEditor({
                   checked={reset}
                   onChange={(event) => setReset(event.target.checked)}
                 />{' '}
-                Reset failure streak
+                {t('common.operations.charity.resetFailureStreak')}
               </label>
             ) : null}
           </div>
-          {validationError ? <p className="field-error" role="alert">{validationError}</p> : null}
+          {validationError ? (
+            <p className="field-error" role="alert">
+              {t(`common.operations.charity.validation.${validationError}`)}
+            </p>
+          ) : null}
           {save.error ? <ErrorState error={save.error} /> : null}
           <button
             className="btn btn-secondary"
@@ -323,11 +381,11 @@ function DonationKeyEditor({
             disabled={save.isPending || Boolean(validationError)}
             onClick={() => save.mutate({ ...draft, reset_failure_streak: reset })}
           >
-            Save key controls
+            {t(charityCopyKey(role, 'saveKeyLimits'))}
           </button>
         </>
       ) : (
-        <p className="muted">Key limits become editable after approval.</p>
+        <p className="muted">{t('common.operations.charity.keyEditableAfterApproval')}</p>
       )}
     </section>
   );
@@ -344,6 +402,7 @@ function DonationDetail({
   refresh: () => Promise<unknown>;
   onCapabilityLoss?: () => void;
 }) {
+  const { t } = useTranslation();
   const [decision, setDecision] = useState<'approve' | 'reject'>('approve');
   const [reason, setReason] = useState('');
   const [expires, setExpires] = useState(() => dateTimeDraft(item.expires_at).value);
@@ -390,20 +449,25 @@ function DonationDetail({
     refresh,
     charityKeys.root(role),
   );
-  const owner = item.owner ?? { user_id: 'deidentified', display_name: 'Deidentified' };
+  const owner = item.owner ?? {
+    user_id: t('common.operations.charity.deidentified'),
+    display_name: t('common.operations.charity.deidentified'),
+  };
   const expiry = expires ? Math.floor(Date.parse(expires) / 1_000) : NaN;
-  let validationError: string | null = null;
+  let validationError:
+    KeySettingsValidation | 'reviewReason' | 'expiry' | 'completeSettings' | null = null;
   if (!validText(reason.trim(), 1_024, true)) {
-    validationError = 'Review reason is required and must be at most 1,024 characters.';
+    validationError = 'reviewReason';
   } else if (decision === 'approve') {
     if (!noExpiry && (!Number.isSafeInteger(expiry) || expiry < 0 || expiry > MAX_UNIX_SECOND)) {
-      validationError = 'Whole-donation expiry must be a valid supported date.';
+      validationError = 'expiry';
     } else if (item.keys.length === 0 || item.keys.some((entry) => !keys[entry.id])) {
-      validationError = 'Approval requires a complete setting for every surviving key.';
+      validationError = 'completeSettings';
     } else {
-      validationError = item.keys
-        .map((entry) => keySettingsError(keys[entry.id]))
-        .find((error): error is string => error !== null) ?? null;
+      validationError =
+        item.keys
+          .map((entry) => keySettingsError(keys[entry.id]))
+          .find((error): error is KeySettingsValidation => error !== null) ?? null;
     }
   }
   const capabilityLost = isUnauthorized(review.error) || isForbidden(review.error);
@@ -411,69 +475,72 @@ function DonationDetail({
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
   if (capabilityLost) {
-    return <Card><p className="field-error" role="alert">Charity management access is no longer available.</p></Card>;
+    return (
+      <Card>
+        <p className="field-error" role="alert">
+          {t('common.operations.charity.accessLost')}
+        </p>
+      </Card>
+    );
   }
   return (
     <div className="ops-stack">
       <Card>
-        <h3>Donation {item.id}</h3>
+        <h3>{t(charityCopyKey(role, 'donationNumber'), { id: item.id })}</h3>
         <div className="ops-toolbar">
           <StatusBadge
             active={item.status === 'approved'}
             danger={
               item.status === 'rejected' || item.status === 'deleted' || item.status === 'expired'
             }
-            label={item.status}
+            label={t(charityStatusKey(role, item.status))}
           />
-          <span>revision {item.revision}</span>
+          <span>{t('common.operations.charity.revision', { revision: item.revision })}</span>
         </div>
         <dl className="ops-kv">
-          <dt>Owner</dt>
+          <dt>{t('common.operations.charity.owner')}</dt>
           <dd>
             {owner.display_name} · {owner.user_id}
             {role === 'admin' && 'discord_id' in owner
-              ? ` · ${owner.discord_id ?? 'Discord detached'}`
+              ? ` · ${owner.discord_id ?? t('common.operations.charity.discordDetached')}`
               : ''}
           </dd>
-          <dt>Donor description</dt>
-          <dd>{item.description || 'No description'}</dd>
-          <dt>Created / updated</dt>
+          <dt>{t('common.operations.charity.donorDescription')}</dt>
+          <dd>{item.description || t('common.operations.charity.noDescription')}</dd>
+          <dt>{t('common.operations.charity.createdUpdated')}</dt>
           <dd>
             {formatDateTime(item.created_at)} / {formatDateTime(item.updated_at)}
           </dd>
           {item.expires_at !== null ? (
             <>
-              <dt>Expires</dt>
+              <dt>{t(charityCopyKey(role, 'expires'))}</dt>
               <dd>{formatDateTime(item.expires_at)}</dd>
             </>
           ) : null}
           {item.review_result ? (
             <>
-              <dt>Review</dt>
+              <dt>{t('common.operations.charity.review')}</dt>
               <dd>
-                {item.review_result.decision} · {item.review_result.reason} ·{' '}
-                {formatDateTime(item.review_result.reviewed_at)}
+                {t(`common.operations.charity.decision.${item.review_result.decision}`)} ·{' '}
+                {item.review_result.reason} · {formatDateTime(item.review_result.reviewed_at)}
               </dd>
             </>
           ) : null}
-          <dt>Reviewer</dt>
+          <dt>{t('common.operations.charity.reviewer')}</dt>
           <dd>
             {item.reviewer
-              ? `${item.reviewer.role} · ${item.reviewer.user_id ?? 'deidentified'}`
-              : 'not reviewed'}
+              ? `${t(reviewerRoleKey(item.reviewer.role))} · ${item.reviewer.user_id ?? t('common.operations.charity.deidentified')}`
+              : t('common.operations.charity.notReviewed')}
           </dd>
         </dl>
       </Card>
       {item.status === 'pending' ? (
         <Card>
-          <h3>Review pending submission</h3>
-          <p>
-            Approval requires a complete setting for every currently surviving key. The donor
-            description, physical source, and endpoint ownership cannot be edited here.
-          </p>
+          <h3>{t('common.operations.charity.pendingReviewTitle')}</h3>
+          <p>{t('common.operations.charity.pendingReviewBody')}</p>
           <div className="ops-field-grid">
             <label>
-              <span>Decision</span>
+              <span>{t('common.operations.charity.decisionLabel')}</span>
               <select
                 value={decision}
                 onChange={(event) => {
@@ -481,21 +548,18 @@ function DonationDetail({
                   setConfirmed(false);
                 }}
               >
-                <option value="approve">Approve</option>
-                <option value="reject">Reject</option>
+                <option value="approve">{t('common.operations.charity.decision.approve')}</option>
+                <option value="reject">{t('common.operations.charity.decision.reject')}</option>
               </select>
             </label>
             <label>
-              <span>Reason</span>
-              <input
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-              />
+              <span>{t('common.operations.charity.reason')}</span>
+              <input value={reason} onChange={(event) => setReason(event.target.value)} />
             </label>
             {decision === 'approve' ? (
               <>
                 <label>
-                  <span>Whole-donation expiry</span>
+                  <span>{t('common.operations.charity.wholeDonationExpiry')}</span>
                   <input
                     type="datetime-local"
                     step="1"
@@ -510,7 +574,7 @@ function DonationDetail({
                     checked={noExpiry}
                     onChange={(event) => setNoExpiry(event.target.checked)}
                   />{' '}
-                  No expiry
+                  {t('common.operations.charity.noExpiry')}
                 </label>
               </>
             ) : null}
@@ -526,28 +590,28 @@ function DonationDetail({
                     </h4>
                     <div className="ops-field-grid">
                       <NullableValue
-                        label="Price limit"
+                        label={t('common.operations.charity.priceLimitCredits')}
                         value={draft.price_limit}
                         onChange={(value) =>
                           setKeys({ ...keys, [entry.id]: { ...draft, price_limit: value } })
                         }
                       />
                       <NullableValue
-                        label="Call limit"
+                        label={t('common.operations.charity.callLimit')}
                         value={draft.calls_limit}
                         onChange={(value) =>
                           setKeys({ ...keys, [entry.id]: { ...draft, calls_limit: value } })
                         }
                       />
                       <NullableValue
-                        label="Token limit"
+                        label={t('common.operations.charity.tokenLimit')}
                         value={draft.tokens_limit}
                         onChange={(value) =>
                           setKeys({ ...keys, [entry.id]: { ...draft, tokens_limit: value } })
                         }
                       />
                       <label>
-                        <span>Token reserve</span>
+                        <span>{t('common.operations.charity.tokenReserve')}</span>
                         <input
                           type="number"
                           min="0"
@@ -563,7 +627,7 @@ function DonationDetail({
                         />
                       </label>
                       <label>
-                        <span>Reviewer-safe note</span>
+                        <span>{t('common.operations.charity.safeNote')}</span>
                         <input
                           value={draft.safe_note}
                           onChange={(event) =>
@@ -585,7 +649,7 @@ function DonationDetail({
                             })
                           }
                         />{' '}
-                        Enable for charity
+                        {t('common.operations.charity.enableForCharity')}
                       </label>
                     </div>
                   </section>
@@ -599,21 +663,18 @@ function DonationDetail({
               checked={confirmed}
               onChange={(event) => setConfirmed(event.target.checked)}
             />{' '}
-            I confirm this review result and its whole-donation consequences.
+            {t('common.operations.charity.confirmReview')}
           </label>
           {validationError && (reason.length > 0 || confirmed) ? (
-            <p className="field-error" role="alert">{validationError}</p>
+            <p className="field-error" role="alert">
+              {t(`common.operations.charity.validation.${validationError}`)}
+            </p>
           ) : null}
           {review.error ? <ErrorState error={review.error} /> : null}
           <button
             className={decision === 'reject' ? 'btn btn-danger' : 'btn btn-primary'}
             type="button"
-            disabled={
-              !reason.trim() ||
-              !confirmed ||
-              review.isPending ||
-              Boolean(validationError)
-            }
+            disabled={!reason.trim() || !confirmed || review.isPending || Boolean(validationError)}
             onClick={() =>
               review.mutate({
                 decision,
@@ -623,12 +684,12 @@ function DonationDetail({
               })
             }
           >
-            {decision === 'approve' ? 'Approve donation' : 'Reject donation'}
+            {t(charityCopyKey(role, decision === 'approve' ? 'approve' : 'reject'))}
           </button>
         </Card>
       ) : null}
       <Card>
-        <h3>Donation keys</h3>
+        <h3>{t('common.operations.charity.donationKeys')}</h3>
         <div className="ops-stack">
           {item.keys.map((key) => (
             <DonationKeyEditor
@@ -653,6 +714,7 @@ function DonationsPanel({
   role: CharityRole;
   onCapabilityLoss?: () => void;
 }) {
+  const { t } = useTranslation();
   const pager = useCursorPager();
   const [status, setStatus] = useState('');
   const [selected, setSelected] = useState('');
@@ -667,8 +729,11 @@ function DonationsPanel({
     enabled: Boolean(selected),
     retry: false,
   });
-  const capabilityLost = isUnauthorized(list.error) || isForbidden(list.error)
-    || isUnauthorized(detail.error) || isForbidden(detail.error);
+  const capabilityLost =
+    isUnauthorized(list.error) ||
+    isForbidden(list.error) ||
+    isUnauthorized(detail.error) ||
+    isForbidden(detail.error);
   useEffect(() => {
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
@@ -676,14 +741,20 @@ function DonationsPanel({
     await Promise.all([list.refetch(), selected ? detail.refetch() : Promise.resolve()]);
   };
   if (capabilityLost) {
-    return <Card><p className="field-error" role="alert">Charity management access is no longer available.</p></Card>;
+    return (
+      <Card>
+        <p className="field-error" role="alert">
+          {t('common.operations.charity.accessLost')}
+        </p>
+      </Card>
+    );
   }
   return (
     <div className="ops-stack">
       <Card>
         <div className="ops-toolbar">
           <label>
-            <span>Status</span>
+            <span>{t(charityCopyKey(role, 'statusFilter'))}</span>
             <select
               value={status}
               onChange={(event) => {
@@ -692,9 +763,11 @@ function DonationsPanel({
                 setStatus(event.target.value);
               }}
             >
-              <option value="">All</option>
+              <option value="">{t(charityCopyKey(role, 'allStatuses'))}</option>
               {['pending', 'approved', 'rejected', 'deleted', 'expired'].map((value) => (
-                <option key={value}>{value}</option>
+                <option key={value} value={value}>
+                  {t(charityStatusKey(role, value as DonationStatus))}
+                </option>
               ))}
             </select>
           </label>
@@ -705,8 +778,8 @@ function DonationsPanel({
           <ErrorState error={list.error} onRetry={() => void list.refetch()} />
         ) : list.data.data.length === 0 ? (
           <EmptyState
-            title="No donations"
-            body="No surviving donation matches this role-safe filter."
+            title={t(charityCopyKey(role, 'noDonations'))}
+            body={t(charityCopyKey(role, 'noDonationsBody'))}
           />
         ) : (
           <>
@@ -714,11 +787,11 @@ function DonationsPanel({
               <table className="ops-table">
                 <thead>
                   <tr>
-                    <th>Donation</th>
-                    <th>Owner</th>
-                    <th>Status</th>
-                    <th>Keys</th>
-                    <th>Open</th>
+                    <th>{t('common.operations.charity.donation')}</th>
+                    <th>{t('common.operations.charity.owner')}</th>
+                    <th>{t('common.status')}</th>
+                    <th>{t('common.operations.charity.keys')}</th>
+                    <th>{t('common.operations.charity.open')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -728,9 +801,14 @@ function DonationsPanel({
                         {item.id}
                         <small>{item.description}</small>
                       </td>
-                      <td>{item.owner?.display_name ?? 'Deidentified'}</td>
                       <td>
-                        <StatusBadge active={item.status === 'approved'} label={item.status} />
+                        {item.owner?.display_name ?? t('common.operations.charity.deidentified')}
+                      </td>
+                      <td>
+                        <StatusBadge
+                          active={item.status === 'approved'}
+                          label={t(charityStatusKey(role, item.status))}
+                        />
                       </td>
                       <td>{item.keys.length}</td>
                       <td>
@@ -739,7 +817,7 @@ function DonationsPanel({
                           type="button"
                           onClick={() => setSelected(item.id)}
                         >
-                          Review
+                          {t('common.operations.charity.openReview')}
                         </button>
                       </td>
                     </tr>
@@ -752,6 +830,11 @@ function DonationsPanel({
               nextCursor={list.data.next_cursor}
               onPrevious={pager.previous}
               onNext={pager.next}
+              labels={{
+                previous: t(charityCopyKey(role, 'previous')),
+                next: t(charityCopyKey(role, 'next')),
+                page: t('common.operations.charity.page'),
+              }}
             />
           </>
         )}
@@ -855,29 +938,40 @@ function modelBody(draft: ModelDraft) {
   };
 }
 
-function modelDraftError(draft: ModelDraft): string | null {
+type ModelValidation = 'modelIdentity' | 'modelPrices' | 'discountPercent' | 'discountDates';
+
+function modelDraftError(draft: ModelDraft): ModelValidation | null {
   const provider = draft.provider.trim();
   const model = draft.model.trim();
-  if (!validText(provider, 64, true) || !validText(model, 64, true) || provider.startsWith('[公益]')) {
-    return 'Provider and model are required, limited to 64 characters, and cannot reuse the charity prefix.';
+  if (
+    !validText(provider, 64, true) ||
+    !validText(model, 64, true) ||
+    provider.startsWith('[公益]')
+  ) {
+    return 'modelIdentity';
   }
-  const prices = draft.mode === 'per_request'
-    ? [draft.requestUser, draft.requestDonor]
-    : [...Object.values(draft.userPrices), ...Object.values(draft.donorRewards)];
+  const prices =
+    draft.mode === 'per_request'
+      ? [draft.requestUser, draft.requestDonor]
+      : [...Object.values(draft.userPrices), ...Object.values(draft.donorRewards)];
   if (prices.some((value) => !validAmount(value))) {
-    return 'Every price must be an exact non-negative credit amount with at most three decimals.';
+    return 'modelPrices';
   }
-  if (!Number.isInteger(draft.discountPercent)
-    || draft.discountPercent < 0
-    || draft.discountPercent > 100) {
-    return 'Discount percent must be an integer from 0 through 100.';
+  if (
+    !Number.isInteger(draft.discountPercent) ||
+    draft.discountPercent < 0 ||
+    draft.discountPercent > 100
+  ) {
+    return 'discountPercent';
   }
   const start = dateTimeEpoch(draft.discountStart);
   const end = dateTimeEpoch(draft.discountEnd);
-  if (start !== null && (!Number.isSafeInteger(start) || start < 0 || start > MAX_UNIX_SECOND)
-    || end !== null && (!Number.isSafeInteger(end) || end < 0 || end > MAX_UNIX_SECOND)
-    || start !== null && end !== null && end <= start) {
-    return 'Discount dates must be valid and the end must be later than the start.';
+  if (
+    (start !== null && (!Number.isSafeInteger(start) || start < 0 || start > MAX_UNIX_SECOND)) ||
+    (end !== null && (!Number.isSafeInteger(end) || end < 0 || end > MAX_UNIX_SECOND)) ||
+    (start !== null && end !== null && end <= start)
+  ) {
+    return 'discountDates';
   }
   return null;
 }
@@ -895,6 +989,7 @@ function ModelForm({
   onDeleted?: () => void;
   onCapabilityLoss?: () => void;
 }) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState(() => modelDraft(model));
   const [confirmDelete, setConfirmDelete] = useState(false);
   const save = useRetainedOperation<ModelDraft, CharityModel>(
@@ -917,50 +1012,68 @@ function ModelForm({
     charityKeys.root(role),
   );
   const validationError = modelDraftError(draft);
-  const capabilityLost = isUnauthorized(save.error) || isForbidden(save.error)
-    || isUnauthorized(remove.error) || isForbidden(remove.error);
+  const capabilityLost =
+    isUnauthorized(save.error) ||
+    isForbidden(save.error) ||
+    isUnauthorized(remove.error) ||
+    isForbidden(remove.error);
   useEffect(() => {
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
   if (capabilityLost) {
-    return <Card><p className="field-error" role="alert">Charity management access is no longer available.</p></Card>;
+    return (
+      <Card>
+        <p className="field-error" role="alert">
+          {t('common.operations.charity.accessLost')}
+        </p>
+      </Card>
+    );
   }
   const setPrice = (side: 'userPrices' | 'donorRewards', field: keyof TokenPrices, value: string) =>
     setDraft({ ...draft, [side]: { ...draft[side], [field]: value } });
   return (
     <Card>
-      <h3>{model ? model.full_name : 'Create charity model'}</h3>
+      <h3>{model ? model.full_name : t(charityCopyKey(role, 'newModel'))}</h3>
       {model ? (
         <p>
-          Revision {model.revision} · bindings {model.binding_count} · rolling success{' '}
-          {model.rolling_success.percent ?? 'no sample'}%
+          {t('common.operations.charity.modelSummary', {
+            revision: model.revision,
+            bindings: model.binding_count,
+            success:
+              model.rolling_success.percent === null
+                ? t('common.operations.charity.noSample')
+                : t(charityCopyKey(role, 'successRate'), {
+                    rate: model.rolling_success.percent,
+                    count: model.rolling_success.sample_count,
+                  }),
+          })}
         </p>
       ) : null}
       <div className="ops-field-grid">
         <label>
-          <span>Provider</span>
+          <span>{t(charityCopyKey(role, 'provider'))}</span>
           <input
             value={draft.provider}
             onChange={(event) => setDraft({ ...draft, provider: event.target.value })}
           />
         </label>
         <label>
-          <span>Model</span>
+          <span>{t(charityCopyKey(role, 'model'))}</span>
           <input
             value={draft.model}
             onChange={(event) => setDraft({ ...draft, model: event.target.value })}
           />
         </label>
         <label>
-          <span>Pricing mode</span>
+          <span>{t(charityCopyKey(role, 'pricingMode'))}</span>
           <select
             value={draft.mode}
             onChange={(event) =>
               setDraft({ ...draft, mode: event.target.value as ModelDraft['mode'] })
             }
           >
-            <option value="per_request">Per request</option>
-            <option value="per_token">Per token</option>
+            <option value="per_request">{t(charityCopyKey(role, 'perRequest'))}</option>
+            <option value="per_token">{t(charityCopyKey(role, 'perToken'))}</option>
           </select>
         </label>
         <label>
@@ -969,7 +1082,7 @@ function ModelForm({
             checked={draft.enabled}
             onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })}
           />{' '}
-          Enabled for new claims
+          {t('common.operations.charity.enabledForNewClaims')}
         </label>
         <label>
           <input
@@ -977,20 +1090,20 @@ function ModelForm({
             checked={draft.flatten}
             onChange={(event) => setDraft({ ...draft, flatten: event.target.checked })}
           />{' '}
-          Flatten tool calls
+          {t(charityCopyKey(role, 'flattenExperimental'))}
         </label>
       </div>
       {draft.mode === 'per_request' ? (
         <div className="ops-field-grid">
           <label>
-            <span>User price</span>
+            <span>{t(charityCopyKey(role, 'request_user_price_milli'))}</span>
             <input
               value={draft.requestUser}
               onChange={(event) => setDraft({ ...draft, requestUser: event.target.value })}
             />
           </label>
           <label>
-            <span>Donor reward</span>
+            <span>{t(charityCopyKey(role, 'request_donor_reward_milli'))}</span>
             <input
               value={draft.requestDonor}
               onChange={(event) => setDraft({ ...draft, requestDonor: event.target.value })}
@@ -1001,10 +1114,14 @@ function ModelForm({
         <div className="ops-grid">
           {(['userPrices', 'donorRewards'] as const).map((side) => (
             <section key={side} className="ops-subcard">
-              <h4>{side === 'userPrices' ? 'User prices' : 'Donor rewards'}</h4>
+              <h4>
+                {t(
+                  `common.operations.charity.${side === 'userPrices' ? 'userPrices' : 'donorRewards'}`,
+                )}
+              </h4>
               {(Object.keys(draft[side]) as (keyof TokenPrices)[]).map((field) => (
                 <label key={field}>
-                  <span>{field.replaceAll('_', ' ')}</span>
+                  <span>{t(tokenPriceCopyKey(role, side, field))}</span>
                   <input
                     value={draft[side][field]}
                     onChange={(event) => setPrice(side, field, event.target.value)}
@@ -1022,10 +1139,10 @@ function ModelForm({
             checked={draft.discountEnabled}
             onChange={(event) => setDraft({ ...draft, discountEnabled: event.target.checked })}
           />{' '}
-          Discount enabled
+          {t(charityCopyKey(role, 'discountEnabled'))}
         </label>
         <label>
-          <span>Discount percent</span>
+          <span>{t(charityCopyKey(role, 'discountPercent'))}</span>
           <input
             type="number"
             min="0"
@@ -1037,7 +1154,7 @@ function ModelForm({
           />
         </label>
         <label>
-          <span>Discount start</span>
+          <span>{t(charityCopyKey(role, 'discountStart'))}</span>
           <input
             type="datetime-local"
             step="1"
@@ -1051,7 +1168,7 @@ function ModelForm({
           />
         </label>
         <label>
-          <span>Discount end</span>
+          <span>{t(charityCopyKey(role, 'discountEnd'))}</span>
           <input
             type="datetime-local"
             step="1"
@@ -1070,7 +1187,11 @@ function ModelForm({
       ) : remove.error ? (
         <ErrorState error={remove.error} />
       ) : null}
-      {validationError ? <p className="field-error" role="alert">{validationError}</p> : null}
+      {validationError ? (
+        <p className="field-error" role="alert">
+          {t(`common.operations.charity.validation.${validationError}`)}
+        </p>
+      ) : null}
       <div className="ops-actions">
         <button
           className="btn btn-primary"
@@ -1078,20 +1199,20 @@ function ModelForm({
           disabled={Boolean(validationError) || save.isPending}
           onClick={() => save.mutate(draft)}
         >
-          {model ? 'Save model' : 'Create model'}
+          {model ? t('common.operations.charity.saveModel') : t(charityCopyKey(role, 'newModel'))}
         </button>
         {model ? (
           <button className="btn btn-danger" type="button" onClick={() => setConfirmDelete(true)}>
-            Delete model
+            {t('common.operations.charity.deleteModel')}
           </button>
         ) : null}
       </div>
       {confirmDelete && model ? (
         <ConfirmDialog
           open
-          title="Delete charity model?"
-          description="The logical model and its binding projection are removed. Existing accepted work keeps its frozen authority."
-          confirmLabel="DELETE model"
+          title={t(charityCopyKey(role, 'deleteModelTitle'))}
+          description={t('common.operations.charity.deleteModelBody')}
+          confirmLabel={t('common.operations.charity.deleteModelConfirm')}
           danger
           busy={remove.isPending}
           onCancel={() => setConfirmDelete(false)}
@@ -1105,7 +1226,16 @@ function ModelForm({
   );
 }
 
-function BindingsPanel({ role, model, onCapabilityLoss }: { role: CharityRole; model: CharityModel; onCapabilityLoss?: () => void }) {
+function BindingsPanel({
+  role,
+  model,
+  onCapabilityLoss,
+}: {
+  role: CharityRole;
+  model: CharityModel;
+  onCapabilityLoss?: () => void;
+}) {
+  const { t } = useTranslation();
   const pager = useCursorPager();
   const [queryDraft, setQueryDraft] = useState('');
   const [query, setQuery] = useState('');
@@ -1120,8 +1250,11 @@ function BindingsPanel({ role, model, onCapabilityLoss }: { role: CharityRole; m
     queryFn: () => getManagedBindingCandidates(role, model.id, query, pager.cursor),
     retry: false,
   });
-  const capabilityLost = isUnauthorized(bindings.error) || isForbidden(bindings.error)
-    || isUnauthorized(candidates.error) || isForbidden(candidates.error);
+  const capabilityLost =
+    isUnauthorized(bindings.error) ||
+    isForbidden(bindings.error) ||
+    isUnauthorized(candidates.error) ||
+    isForbidden(candidates.error);
   useEffect(() => {
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
@@ -1151,9 +1284,13 @@ function BindingsPanel({ role, model, onCapabilityLoss }: { role: CharityRole; m
     reconcile,
     charityKeys.root(role),
   );
-  const mutationCapabilityLost = isUnauthorized(add.error) || isForbidden(add.error)
-    || isUnauthorized(order.error) || isForbidden(order.error)
-    || isUnauthorized(remove.error) || isForbidden(remove.error);
+  const mutationCapabilityLost =
+    isUnauthorized(add.error) ||
+    isForbidden(add.error) ||
+    isUnauthorized(order.error) ||
+    isForbidden(order.error) ||
+    isUnauthorized(remove.error) ||
+    isForbidden(remove.error);
   useEffect(() => {
     if (mutationCapabilityLost) onCapabilityLoss?.();
   }, [mutationCapabilityLost, onCapabilityLoss]);
@@ -1174,26 +1311,35 @@ function BindingsPanel({ role, model, onCapabilityLoss }: { role: CharityRole; m
     [candidates.data, selected],
   );
   if (capabilityLost || mutationCapabilityLost) {
-    return <Card><p className="field-error" role="alert">Charity management access is no longer available.</p></Card>;
+    return (
+      <Card>
+        <p className="field-error" role="alert">
+          {t('common.operations.charity.accessLost')}
+        </p>
+      </Card>
+    );
   }
   return (
     <Card>
-      <h3>Ordered bindings</h3>
+      <h3>{t('common.operations.charity.orderedBindings')}</h3>
       {bindings.isPending ? (
         <LoadingState />
       ) : bindings.error ? (
         <ErrorState error={bindings.error} onRetry={() => void bindings.refetch()} />
       ) : bindings.data.bindings.length === 0 ? (
-        <EmptyState title="No bindings" body="Add one or more role-safe candidates below." />
+        <EmptyState
+          title={t(charityCopyKey(role, 'noBindings'))}
+          body={t('common.operations.charity.noBindingsBody')}
+        />
       ) : (
         <div className="ops-table-scroll">
           <table className="ops-table">
             <thead>
               <tr>
-                <th>Order</th>
-                <th>Source</th>
-                <th>Upstream model</th>
-                <th>Actions</th>
+                <th>{t(charityCopyKey(role, 'order'))}</th>
+                <th>{t('common.operations.charity.source')}</th>
+                <th>{t(charityCopyKey(role, 'upstreamModel'))}</th>
+                <th>{t(charityCopyKey(role, 'actions'))}</th>
               </tr>
             </thead>
             <tbody>
@@ -1212,7 +1358,7 @@ function BindingsPanel({ role, model, onCapabilityLoss }: { role: CharityRole; m
                       disabled={index === 0 || order.isPending}
                       onClick={() => move(index, -1)}
                     >
-                      Up
+                      {t('common.operations.charity.moveUp')}
                     </button>
                     <button
                       className="btn btn-secondary"
@@ -1220,7 +1366,7 @@ function BindingsPanel({ role, model, onCapabilityLoss }: { role: CharityRole; m
                       disabled={index === bindings.data.bindings.length - 1 || order.isPending}
                       onClick={() => move(index, 1)}
                     >
-                      Down
+                      {t('common.operations.charity.moveDown')}
                     </button>
                     <button
                       className="btn btn-danger"
@@ -1230,7 +1376,7 @@ function BindingsPanel({ role, model, onCapabilityLoss }: { role: CharityRole; m
                         remove.mutate({ id: entry.id, revision: bindings.data.binding_revision })
                       }
                     >
-                      Remove
+                      {t('common.operations.charity.remove')}
                     </button>
                   </td>
                 </tr>
@@ -1239,7 +1385,7 @@ function BindingsPanel({ role, model, onCapabilityLoss }: { role: CharityRole; m
           </table>
         </div>
       )}
-      <h3>Binding candidates</h3>
+      <h3>{t('common.operations.charity.bindingCandidates')}</h3>
       <form
         className="ops-toolbar"
         onSubmit={(event) => {
@@ -1249,11 +1395,11 @@ function BindingsPanel({ role, model, onCapabilityLoss }: { role: CharityRole; m
         }}
       >
         <label>
-          <span>Safe source/model search</span>
+          <span>{t('common.operations.charity.safeSourceSearch')}</span>
           <input value={queryDraft} onChange={(event) => setQueryDraft(event.target.value)} />
         </label>
         <button className="btn btn-secondary" type="submit">
-          Search
+          {t('common.search')}
         </button>
       </form>
       {candidates.isPending ? (
@@ -1261,7 +1407,10 @@ function BindingsPanel({ role, model, onCapabilityLoss }: { role: CharityRole; m
       ) : candidates.error ? (
         <ErrorState error={candidates.error} onRetry={() => void candidates.refetch()} />
       ) : candidates.data.data.length === 0 ? (
-        <EmptyState title="No candidates" body="No approved role-safe candidate matches." />
+        <EmptyState
+          title={t('common.operations.charity.noCandidates')}
+          body={t('common.operations.charity.noCandidatesBody')}
+        />
       ) : (
         <>
           {candidates.data.data.map((entry) => {
@@ -1274,7 +1423,8 @@ function BindingsPanel({ role, model, onCapabilityLoss }: { role: CharityRole; m
                   onChange={(event) => setSelected({ ...selected, [key]: event.target.checked })}
                 />{' '}
                 {entry.source.connector_type} · {entry.source.canonical_base_url} ·{' '}
-                {entry.upstream_model_id} ({entry.source_types.join('/')})
+                {entry.upstream_model_id} (
+                {entry.source_types.map((source) => t(sourceTypeKey(source))).join(' / ')})
               </label>
             );
           })}
@@ -1283,6 +1433,11 @@ function BindingsPanel({ role, model, onCapabilityLoss }: { role: CharityRole; m
             nextCursor={candidates.data.next_cursor}
             onPrevious={pager.previous}
             onNext={pager.next}
+            labels={{
+              previous: t(charityCopyKey(role, 'previous')),
+              next: t(charityCopyKey(role, 'next')),
+              page: t('common.operations.charity.page'),
+            }}
           />
         </>
       )}
@@ -1299,7 +1454,7 @@ function BindingsPanel({ role, model, onCapabilityLoss }: { role: CharityRole; m
             )
           }
         >
-          Add selected atomically
+          {t('common.operations.charity.addSelected')}
         </button>
       </div>
       {add.error ? (
@@ -1313,7 +1468,14 @@ function BindingsPanel({ role, model, onCapabilityLoss }: { role: CharityRole; m
   );
 }
 
-function ModelsPanel({ role, onCapabilityLoss }: { role: CharityRole; onCapabilityLoss?: () => void }) {
+function ModelsPanel({
+  role,
+  onCapabilityLoss,
+}: {
+  role: CharityRole;
+  onCapabilityLoss?: () => void;
+}) {
+  const { t } = useTranslation();
   const pager = useCursorPager();
   const [queryDraft, setQueryDraft] = useState('');
   const [query, setQuery] = useState('');
@@ -1334,7 +1496,13 @@ function ModelsPanel({ role, onCapabilityLoss }: { role: CharityRole; onCapabili
       setSelected(result.data.data.find((item) => item.id === selected.id) ?? null);
   };
   if (capabilityLost) {
-    return <Card><p className="field-error" role="alert">Charity management access is no longer available.</p></Card>;
+    return (
+      <Card>
+        <p className="field-error" role="alert">
+          {t('common.operations.charity.accessLost')}
+        </p>
+      </Card>
+    );
   }
   return (
     <div className="ops-stack">
@@ -1349,11 +1517,11 @@ function ModelsPanel({ role, onCapabilityLoss }: { role: CharityRole; onCapabili
           }}
         >
           <label>
-            <span>Search models</span>
+            <span>{t('common.operations.charity.searchModels')}</span>
             <input value={queryDraft} onChange={(event) => setQueryDraft(event.target.value)} />
           </label>
           <label>
-            <span>Enabled</span>
+            <span>{t(charityCopyKey(role, 'enabled'))}</span>
             <select
               value={enabled}
               onChange={(event) => {
@@ -1361,13 +1529,13 @@ function ModelsPanel({ role, onCapabilityLoss }: { role: CharityRole; onCapabili
                 setEnabled(event.target.value);
               }}
             >
-              <option value="">All</option>
-              <option value="true">Enabled</option>
-              <option value="false">Disabled</option>
+              <option value="">{t('common.all')}</option>
+              <option value="true">{t(charityCopyKey(role, 'enabled'))}</option>
+              <option value="false">{t(charityCopyKey(role, 'disabled'))}</option>
             </select>
           </label>
           <button className="btn btn-secondary" type="submit">
-            Apply
+            {t('common.applyFilter')}
           </button>
         </form>
         {models.isPending ? (
@@ -1375,18 +1543,21 @@ function ModelsPanel({ role, onCapabilityLoss }: { role: CharityRole; onCapabili
         ) : models.error ? (
           <ErrorState error={models.error} onRetry={() => void models.refetch()} />
         ) : models.data.data.length === 0 ? (
-          <EmptyState title="No charity models" body="No logical model matches this filter." />
+          <EmptyState
+            title={t(charityCopyKey(role, 'noModels'))}
+            body={t(charityCopyKey(role, 'noModelsBody'))}
+          />
         ) : (
           <>
             <div className="ops-table-scroll">
               <table className="ops-table">
                 <thead>
                   <tr>
-                    <th>Model</th>
-                    <th>State</th>
-                    <th>Pricing</th>
-                    <th>Bindings</th>
-                    <th>Open</th>
+                    <th>{t(charityCopyKey(role, 'model'))}</th>
+                    <th>{t('common.operations.charity.state')}</th>
+                    <th>{t('common.operations.charity.pricing')}</th>
+                    <th>{t(charityCopyKey(role, 'bindings'))}</th>
+                    <th>{t('common.operations.charity.open')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1399,10 +1570,17 @@ function ModelsPanel({ role, onCapabilityLoss }: { role: CharityRole; onCapabili
                       <td>
                         <StatusBadge
                           active={model.enabled}
-                          label={model.enabled ? 'enabled' : 'disabled'}
+                          label={t(charityCopyKey(role, model.enabled ? 'enabled' : 'disabled'))}
                         />
                       </td>
-                      <td>{model.pricing.mode}</td>
+                      <td>
+                        {t(
+                          charityCopyKey(
+                            role,
+                            model.pricing.mode === 'per_request' ? 'perRequest' : 'perToken',
+                          ),
+                        )}
+                      </td>
                       <td>{model.binding_count}</td>
                       <td>
                         <button
@@ -1410,7 +1588,7 @@ function ModelsPanel({ role, onCapabilityLoss }: { role: CharityRole; onCapabili
                           type="button"
                           onClick={() => setSelected(model)}
                         >
-                          Manage
+                          {t('common.operations.charity.manage')}
                         </button>
                       </td>
                     </tr>
@@ -1423,6 +1601,11 @@ function ModelsPanel({ role, onCapabilityLoss }: { role: CharityRole; onCapabili
               nextCursor={models.data.next_cursor}
               onPrevious={pager.previous}
               onNext={pager.next}
+              labels={{
+                previous: t(charityCopyKey(role, 'previous')),
+                next: t(charityCopyKey(role, 'next')),
+                page: t('common.operations.charity.page'),
+              }}
             />
           </>
         )}
@@ -1456,6 +1639,7 @@ export function CharityManagement({
   frame: CharityRole;
   onCapabilityLoss?: () => void;
 }) {
+  const { t } = useTranslation();
   const [section, setSection] = useState<'donations' | 'models'>('donations');
   const [capabilityLost, setCapabilityLost] = useState(false);
   const clearCapability = useCallback(() => {
@@ -1466,14 +1650,18 @@ export function CharityManagement({
     return (
       <Card>
         <p className="field-error" role="alert">
-          Charity management access is no longer available.
+          {t('common.operations.charity.accessLost')}
         </p>
       </Card>
     );
   }
   return (
     <div className="ops-stack">
-      <div className="ops-tabs" role="tablist" aria-label="Charity management sections">
+      <div
+        className="ops-tabs"
+        role="tablist"
+        aria-label={t('common.operations.charity.sectionsLabel')}
+      >
         <button
           className={section === 'donations' ? 'btn btn-primary' : 'btn btn-secondary'}
           type="button"
@@ -1481,7 +1669,7 @@ export function CharityManagement({
           aria-selected={section === 'donations'}
           onClick={() => setSection('donations')}
         >
-          Donations
+          {t(charityCopyKey(frame, 'donationsTitle'))}
         </button>
         <button
           className={section === 'models' ? 'btn btn-primary' : 'btn btn-secondary'}
@@ -1490,7 +1678,7 @@ export function CharityManagement({
           aria-selected={section === 'models'}
           onClick={() => setSection('models')}
         >
-          Models and bindings
+          {t(charityCopyKey(frame, 'modelsTitle'))}
         </button>
       </div>
       {section === 'donations' ? (
