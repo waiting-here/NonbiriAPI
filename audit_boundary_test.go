@@ -100,8 +100,10 @@ func assertFreshSafeApplication(t *testing.T, app *application) {
 		{name: "export rejects wrong method", host: auditUserHost, path: "/api/account/export", want: http.StatusMethodNotAllowed},
 		{name: "caller models mounted behind maintenance", host: auditUserHost, path: "/v1/models", want: http.StatusServiceUnavailable},
 		{name: "caller chat mounted behind maintenance", host: auditUserHost, path: "/v1/chat/completions", want: http.StatusServiceUnavailable},
-		{name: "admin bootstrap requires future ADM owner", host: auditAdminHost, path: "/admin/api/config", want: http.StatusNotFound},
-		{name: "admin catalog dormant", host: auditAdminHost, path: "/admin/api/site-config", want: http.StatusNotFound},
+		{name: "admin bootstrap requires session", host: auditAdminHost, path: "/admin/api/config", want: http.StatusUnauthorized},
+		{name: "admin catalog requires session", host: auditAdminHost, path: "/admin/api/site-config", want: http.StatusUnauthorized},
+		{name: "admin users require session", host: auditAdminHost, path: "/admin/api/users", want: http.StatusUnauthorized},
+		{name: "admin alerts require session", host: auditAdminHost, path: "/admin/api/alerts", want: http.StatusUnauthorized},
 		{name: "admin donation requires session", host: auditAdminHost, path: "/admin/api/donations", want: http.StatusUnauthorized},
 		{name: "admin charity models require session", host: auditAdminHost, path: "/admin/api/charity-models", want: http.StatusUnauthorized},
 		{name: "admin activities require session", host: auditAdminHost, path: "/admin/api/activities/thursday", want: http.StatusUnauthorized},
@@ -257,7 +259,8 @@ func TestGenerationTwoRootAuthenticationAndMaintenanceWiring(t *testing.T) {
 	if app.authRuntime == nil || app.bridge == nil || app.claims == nil || app.resourceRepo == nil ||
 		app.discoveryWorker == nil || app.donations == nil || app.charity == nil || app.charityRouting == nil ||
 		app.announcements == nil || app.issues == nil || app.reports == nil || app.activities == nil ||
-		app.activityRepo == nil || app.activityEvents == nil || app.lifecycle == nil || app.lifecycleDone == nil ||
+		app.activityRepo == nil || app.activityEvents == nil || app.adminConfig == nil || app.adminAlerts == nil ||
+		app.adminUsers == nil || app.lifecycle == nil || app.lifecycleDone == nil ||
 		app.debug == nil || app.logs == nil || app.accountEvents == nil || app.forward == nil || app.games == nil ||
 		app.failures == nil || app.authorizer == nil ||
 		app.elevation == nil || app.gate == nil || app.maintenance == nil || app.egress == nil {
@@ -320,6 +323,16 @@ func TestGenerationTwoRootAuthenticationAndMaintenanceWiring(t *testing.T) {
 	adminMaintenance := testApplicationRequest(t, app.handler, http.MethodGet, auditAdminHost, "/admin/api/maintenance", "", []*http.Cookie{adminCookie}, nil)
 	if adminMaintenance.Code != http.StatusOK || strings.TrimSpace(adminMaintenance.Body.String()) != `{"enabled":true,"revision":"1"}` {
 		t.Fatalf("admin maintenance during maintenance status=%d body=%s", adminMaintenance.Code, adminMaintenance.Body.String())
+	}
+	for _, path := range []string{
+		"/admin/api/config", "/admin/api/site-config", "/admin/api/site-config/catalog",
+		"/admin/api/users", "/admin/api/usage?group_by=site", "/admin/api/activity",
+		"/admin/api/overview/endpoints", "/admin/api/alerts",
+	} {
+		response := testApplicationRequest(t, app.handler, http.MethodGet, auditAdminHost, path, "", []*http.Cookie{adminCookie}, nil)
+		if response.Code != http.StatusOK {
+			t.Fatalf("administrator route during maintenance %s status=%d body=%s", path, response.Code, response.Body.String())
+		}
 	}
 
 	elevated := testApplicationRequest(t, app.handler, http.MethodPost, auditAdminHost, "/admin/api/auth/elevate",

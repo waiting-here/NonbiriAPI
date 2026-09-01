@@ -19,7 +19,9 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
+	"github.com/waiting-here/NonbiriAPI/internal/adminalerts"
 	"github.com/waiting-here/NonbiriAPI/internal/adminapi"
+	"github.com/waiting-here/NonbiriAPI/internal/adminusers"
 	"github.com/waiting-here/NonbiriAPI/internal/announcements"
 	"github.com/waiting-here/NonbiriAPI/internal/applog"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
@@ -285,6 +287,9 @@ type application struct {
 	activities      *activities.Service
 	activityRepo    *activities.Repository
 	activityEvents  *accountstream.Hub
+	adminConfig     *adminapi.SiteConfigRuntime
+	adminAlerts     *adminalerts.Repository
+	adminUsers      *adminusers.Service
 	lifecycle       *lifecycle.Coordinator
 	lifecycleCancel context.CancelFunc
 	lifecycleDone   <-chan struct{}
@@ -402,6 +407,9 @@ type roleFinalTxAuthorizer struct {
 var _ donation.RoleFinalTxAuthorizer = (*roleFinalTxAuthorizer)(nil)
 var _ activities.AdminFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
 var _ announcements.AdminFinalTxAuthorizer = (*roleFinalTxAuthorizer)(nil)
+var _ adminapi.SiteConfigFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
+var _ adminalerts.AdminFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
+var _ adminusers.AdminFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
 var _ logapi.StewardAuthorizer = (*roleFinalTxAuthorizer)(nil)
 
 func (authorizer *roleFinalTxAuthorizer) AuthorizeAdminMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
@@ -440,6 +448,60 @@ func (authorizer *roleFinalTxAuthorizer) authorize(
 	}
 	_, err := authorizer.authorizer.Authorize(ctx, tx, actor, authz.Requirement{Role: role})
 	return err
+}
+
+type siteConfigRouteRegistrar struct{ runtime *auth.Runtime }
+
+var _ adminapi.SiteConfigRouteRegistrar = siteConfigRouteRegistrar{}
+
+func (registrar siteConfigRouteRegistrar) RegisterAdminRoute(method, pattern string, handler adminapi.SiteConfigAuthorizedAdminHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterAdminRoute(method, pattern, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		actor, ok := auth.ActorFromContext(request.Context())
+		if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
+			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+			return
+		}
+		handler(writer, request, adminapi.SiteConfigAdminPrincipal{UserID: actor.UserID})
+	}))
+}
+
+type adminAlertRouteRegistrar struct{ runtime *auth.Runtime }
+
+var _ adminalerts.AdminRouteRegistrar = adminAlertRouteRegistrar{}
+
+func (registrar adminAlertRouteRegistrar) RegisterAdminRoute(method, pattern string, handler adminalerts.AuthorizedAdminHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterAdminRoute(method, pattern, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		actor, ok := auth.ActorFromContext(request.Context())
+		if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
+			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+			return
+		}
+		handler(writer, request, adminalerts.AdminPrincipal{UserID: actor.UserID})
+	}))
+}
+
+type adminUserRouteRegistrar struct{ runtime *auth.Runtime }
+
+var _ adminusers.AdminRouteRegistrar = adminUserRouteRegistrar{}
+
+func (registrar adminUserRouteRegistrar) RegisterAdminRoute(method, pattern string, handler adminusers.AuthorizedAdminHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterAdminRoute(method, pattern, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		actor, ok := auth.ActorFromContext(request.Context())
+		if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
+			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+			return
+		}
+		handler(writer, request, adminusers.AdminPrincipal{UserID: actor.UserID})
+	}))
 }
 
 type activityRouteRegistrar struct{ runtime *auth.Runtime }
@@ -728,6 +790,25 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		return nil, fmt.Errorf("create authentication runtime: %w", err)
 	}
 	roleAuthorizer := &roleFinalTxAuthorizer{authorizer: authorizer}
+	adminConfigRepository, err := adminapi.NewSiteConfigRepository(adminapi.SiteConfigRepositoryOptions{
+		Store: store, FinalAuthorizer: roleAuthorizer,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create administrator site configuration repository: %w", err)
+	}
+	adminConfigRuntime, err := adminapi.NewSiteConfigRuntime(adminConfigRepository)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create administrator site configuration runtime: %w", err)
+	}
+	adminAlertRepository, err := adminalerts.NewRepository(adminalerts.Config{
+		Store: store, CursorKeys: vault, FinalAuth: roleAuthorizer,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create administrator alert repository: %w", err)
+	}
 	donationService, err := donation.New(donation.Config{
 		Store:      store,
 		OwnerAuth:  authRuntime,
@@ -917,11 +998,19 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("register RPS maintenance continuation: %w", err)
 	}
-	if err := authRuntime.AttachUserSessionInvalidationObserver(&userSessionInvalidationFanout{
+	userInvalidations := &userSessionInvalidationFanout{
 		debug: debugHub, connections: accountConnections,
-	}); err != nil {
+	}
+	if err := authRuntime.AttachUserSessionInvalidationObserver(userInvalidations); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("attach user-session invalidation observer: %w", err)
+	}
+	adminUserService, err := adminusers.NewService(adminusers.ServiceConfig{
+		Database: store.DB(), CursorKeys: vault, FinalAuth: roleAuthorizer, Invalidator: userInvalidations,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create administrator user service: %w", err)
 	}
 	forwardRuntime, err = newPublicForwardRuntime(
 		store, vault, claimService, charityService, charityRoutingService, resourceRepository,
@@ -945,6 +1034,18 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err != nil {
 		cleanup()
 		return nil, fmt.Errorf("create account lifecycle coordinator: %w", err)
+	}
+	if err := adminapi.RegisterSiteConfigRoutes(siteConfigRouteRegistrar{runtime: authRuntime}, adminConfigRuntime); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register administrator site configuration routes: %w", err)
+	}
+	if err := adminusers.RegisterRoutes(adminUserRouteRegistrar{runtime: authRuntime}, adminUserService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register administrator user routes: %w", err)
+	}
+	if err := adminalerts.RegisterRoutes(adminAlertRouteRegistrar{runtime: authRuntime}, adminAlertRepository); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register administrator alert routes: %w", err)
 	}
 	if err := resources.RegisterRoutes(authRuntime, resourceRepository); err != nil {
 		cleanup()
@@ -1106,6 +1207,9 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		activities:      activityService,
 		activityRepo:    activityRepository,
 		activityEvents:  activityEvents,
+		adminConfig:     adminConfigRuntime,
+		adminAlerts:     adminAlertRepository,
+		adminUsers:      adminUserService,
 		lifecycle:       lifecycleCoordinator,
 		lifecycleCancel: lifecycleCancel,
 		lifecycleDone:   lifecycleDone,

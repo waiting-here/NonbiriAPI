@@ -281,3 +281,7 @@ func (fanout *userSessionInvalidationFanout) UserSessionInvalidated(userID int64
 		_ = fanout.debug.TerminateUser(userID, debug.EndAuthRevoked)
 	}
 }
+
+func (fanout *userSessionInvalidationFanout) InvalidateUserAuthority(userID int64) {
+	fanout.UserSessionInvalidated(userID)
+}
