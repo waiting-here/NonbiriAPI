@@ -1,5 +1,7 @@
 import type { ComponentType } from 'react';
 import { FishingGame } from './fishing/FishingGame';
+import { LinkLinkGame } from './linklink/LinkLinkGame';
+import { RPSGame } from './rps/RPSGame';
 
 /**
  * The user station keeps game registration separate from connector
@@ -36,5 +38,17 @@ export const gameRegistry: readonly GameRegistration[] = Object.freeze([
     version: 1,
     titleKey: 'games.fishing.title',
     page: FishingGame,
+  },
+  {
+    id: 'linklink',
+    version: 1,
+    titleKey: 'games.linklink.title',
+    page: LinkLinkGame,
+  },
+  {
+    id: 'rps',
+    version: 1,
+    titleKey: 'games.rps.title',
+    page: RPSGame,
   },
 ]);
