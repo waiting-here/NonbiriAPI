@@ -35,6 +35,18 @@ export const router = createBrowserRouter([
         lazy: async () => ({ Component: (await import('./pages/GamesPage')).GamesPage }),
       },
       {
+        path: pathFor('game-fishing'),
+        lazy: async () => ({ Component: (await import('./pages/GamesPage')).GamesPage }),
+      },
+      {
+        path: pathFor('game-linklink'),
+        lazy: async () => ({ Component: (await import('./pages/GamesPage')).GamesPage }),
+      },
+      {
+        path: pathFor('game-rps'),
+        lazy: async () => ({ Component: (await import('./pages/GamesPage')).GamesPage }),
+      },
+      {
         path: pathFor('charity'),
         lazy: async () => ({ Component: (await import('./pages/CharityPage')).CharityPage }),
       },
