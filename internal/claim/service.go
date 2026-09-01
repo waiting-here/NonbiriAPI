@@ -22,6 +22,7 @@ type Service struct {
 	secrets    secret.GenerationTwoContextCodec
 	accounting Accounting
 	charity    Charity
+	acceptance AcceptanceGate
 	now        func() time.Time
 }
 
@@ -43,6 +44,7 @@ func New(dependencies Dependencies) (*Service, error) {
 		secrets:    dependencies.Secrets,
 		accounting: dependencies.Accounting,
 		charity:    dependencies.Charity,
+		acceptance: dependencies.Acceptance,
 		now:        dependencies.Now,
 	}, nil
 }
@@ -53,7 +55,7 @@ func (s *Service) Accept(ctx context.Context, input AcceptInput) (Request, error
 	if s == nil || s.db == nil || ctx == nil || !validAcceptInput(input) {
 		return Request{}, ErrInvalidInput
 	}
-	if s.accounting == nil || (input.Route == RouteCharityChat && s.charity == nil) {
+	if s.accounting == nil || s.acceptance == nil || (input.Route == RouteCharityChat && s.charity == nil) {
 		return Request{}, ErrDependencyUnavailable
 	}
 	requestID, err := db.GenerateOpaqueID("req_")
@@ -72,6 +74,9 @@ func (s *Service) Accept(ctx context.Context, input AcceptInput) (Request, error
 	defer tx.Rollback()
 	if err := requireActiveUser(ctx, tx, input.UserID, at, input.Route == RouteCharityChat); err != nil {
 		return Request{}, err
+	}
+	if err := s.acceptance.AuthorizeChatAcceptance(ctx, tx, input.UserID, at); err != nil {
+		return Request{}, fmt.Errorf("claim: authorize chat acceptance: %w", err)
 	}
 	futureRows := 1
 	if input.Route == RouteCharityChat {

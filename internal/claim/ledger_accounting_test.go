@@ -526,7 +526,8 @@ func (f *claimFixture) useLedgerAccounting() {
 	f.t.Helper()
 	service, err := New(Dependencies{
 		DB: f.db, Secrets: f.codec, Accounting: NewLedgerAccounting(), Charity: f.charity,
-		Now: func() time.Time { return time.Unix(f.clock.Load(), 0) },
+		Acceptance: allowAcceptanceGate{},
+		Now:        func() time.Time { return time.Unix(f.clock.Load(), 0) },
 	})
 	if err != nil {
 		f.t.Fatalf("new claim service with ledger accounting: %v", err)

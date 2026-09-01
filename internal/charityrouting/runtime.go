@@ -6,12 +6,203 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sort"
 	"strconv"
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
+
+const (
+	MaxAvailableModels   = 1000
+	MaxRuntimeCandidates = 100
+)
+
+// Preflight performs only candidate-free logical, policy, content, caller,
+// and credit admission. In particular it does not materialize donation
+// expiry, inspect a binding, health state, or three-dimensional key capacity.
+func (s *Service) Preflight(ctx context.Context, userID int64, fullName string, request *openai.ChatRequest, decisionNow int64) (RuntimePreflight, error) {
+	if s == nil || s.db == nil || ctx == nil || userID <= 0 || request == nil ||
+		fullName == "" || fullName != request.Model || decisionNow < 0 || decisionNow > maxUnixSecond {
+		return RuntimePreflight{}, ErrInvalidRequest
+	}
+	actual, err := request.CharityTextRuneCount()
+	if err != nil {
+		return RuntimePreflight{}, ErrInvalidRequest
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return RuntimePreflight{}, fmt.Errorf("charity routing: begin preflight: %w", err)
+	}
+	defer tx.Rollback()
+	var admin, banned int
+	var bannedUntil, suspendedUntil sql.NullInt64
+	var gate, minimumText string
+	err = tx.QueryRowContext(ctx, `SELECT u.is_admin,u.is_banned,u.banned_until,u.charity_suspended_until,
+c.value,m.value
+FROM users u
+JOIN site_config c ON c.key='charity_enabled'
+JOIN site_config m ON m.key='charity_min_chars'
+WHERE u.id=?`, userID).Scan(&admin, &banned, &bannedUntil, &suspendedUntil, &gate, &minimumText)
+	if errors.Is(err, sql.ErrNoRows) {
+		return RuntimePreflight{}, ErrUnauthorized
+	}
+	if err != nil {
+		return RuntimePreflight{}, fmt.Errorf("charity routing: read preflight caller: %w", err)
+	}
+	if admin != 0 || banned != 0 && (!bannedUntil.Valid || bannedUntil.Int64 > decisionNow) {
+		return RuntimePreflight{}, ErrUnauthorized
+	}
+	if gate != "0" && gate != "1" {
+		return RuntimePreflight{}, ErrInvariant
+	}
+	if gate == "0" {
+		return RuntimePreflight{}, ErrFeatureDisabled
+	}
+	if suspendedUntil.Valid && suspendedUntil.Int64 > decisionNow {
+		return RuntimePreflight{}, ErrCharitySuspended
+	}
+	minimum, err := strconv.Atoi(minimumText)
+	if err != nil || minimum < 0 || int64(minimum) > openai.MaxRequestBodyBytes {
+		return RuntimePreflight{}, ErrInvariant
+	}
+	if actual < minimum {
+		return RuntimePreflight{}, &ContentTooShortError{Actual: actual, Minimum: minimum}
+	}
+
+	var preflight RuntimePreflight
+	var enabled, discount, discountEnabled int
+	var pricingMode string
+	var requestPrice int64
+	var discountStart, discountEnd sql.NullInt64
+	err = tx.QueryRowContext(ctx, `SELECT id,provider,model,full_name,enabled,flatten_tool_calls,
+pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at
+FROM charity_models WHERE full_name=?`, fullName).Scan(&preflight.ModelID, &preflight.Provider, &preflight.Model,
+		&preflight.FullName, &enabled, &preflight.FlattenToolCalls, &pricingMode, &requestPrice,
+		&discount, &discountEnabled, &discountStart, &discountEnd)
+	if errors.Is(err, sql.ErrNoRows) {
+		return RuntimePreflight{}, ErrNotFound
+	}
+	if err != nil {
+		return RuntimePreflight{}, fmt.Errorf("charity routing: read preflight model: %w", err)
+	}
+	if enabled != 1 {
+		return RuntimePreflight{}, ErrNotFound
+	}
+	activeDiscount := discount
+	if discountEnabled != 1 || discountStart.Valid && decisionNow < discountStart.Int64 || discountEnd.Valid && decisionNow >= discountEnd.Int64 {
+		activeDiscount = 100
+	}
+	if pricingMode == "per_request" {
+		preflight.ReservedMilli, err = credits.ApplyDiscountPercent(requestPrice, activeDiscount)
+		if err != nil {
+			return RuntimePreflight{}, ErrInvariant
+		}
+	} else if pricingMode == "per_token" {
+		var stored sql.NullString
+		if err := tx.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key='charity_token_reserve_milli'`).Scan(&stored); err != nil {
+			return RuntimePreflight{}, fmt.Errorf("charity routing: read preflight token reserve: %w", err)
+		}
+		if !stored.Valid {
+			return RuntimePreflight{}, ErrNotFound
+		}
+		preflight.ReservedMilli, err = strconv.ParseInt(stored.String, 10, 64)
+		if err != nil || preflight.ReservedMilli < 1 || preflight.ReservedMilli > db.MaxMoneyMilli {
+			return RuntimePreflight{}, ErrInvariant
+		}
+	} else {
+		return RuntimePreflight{}, ErrInvariant
+	}
+	var balanceSign int
+	var balanceMagnitude []byte
+	if err := tx.QueryRowContext(ctx, `SELECT balance_sign,balance_mag FROM credit_accounts
+WHERE kind='user' AND user_id=?`, userID).Scan(&balanceSign, &balanceMagnitude); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return RuntimePreflight{}, ErrInvariant
+		}
+		return RuntimePreflight{}, fmt.Errorf("charity routing: read preflight balance: %w", err)
+	}
+	magnitude, err := db.DecodeU128(balanceMagnitude)
+	if err != nil || balanceSign < -1 || balanceSign > 1 || balanceSign == 0 && magnitude.Big().Sign() != 0 || balanceSign != 0 && magnitude.Big().Sign() == 0 {
+		return RuntimePreflight{}, ErrInvariant
+	}
+	if preflight.ReservedMilli > 0 && (balanceSign <= 0 || magnitude.Big().Cmp(big.NewInt(preflight.ReservedMilli)) < 0) {
+		return RuntimePreflight{}, ErrInsufficientCredits
+	}
+	if err := tx.Commit(); err != nil {
+		return RuntimePreflight{}, fmt.Errorf("charity routing: commit preflight: %w", err)
+	}
+	return preflight, nil
+}
+
+// ListAvailableModels returns the bounded safe model projection used by the
+// public OpenAI list. Availability is evaluated through Snapshot, but neither
+// donation/key identities nor candidate counts leave this method.
+func (s *Service) ListAvailableModels(ctx context.Context, decisionNow int64, limit int) ([]AvailableModel, error) {
+	if s == nil || s.db == nil || ctx == nil || decisionNow < 0 || decisionNow > maxUnixSecond || limit < 1 || limit > MaxAvailableModels {
+		return nil, ErrInvalidRequest
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, fmt.Errorf("charity routing: begin available model list: %w", err)
+	}
+	defer tx.Rollback()
+	gate, err := capabilityGateTx(ctx, tx, "charity_enabled")
+	if err != nil {
+		return nil, err
+	}
+	if gate == "0" {
+		if err := tx.Commit(); err != nil {
+			return nil, fmt.Errorf("charity routing: commit disabled model list: %w", err)
+		}
+		return []AvailableModel{}, nil
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT id,provider,full_name,created_at FROM charity_models
+WHERE enabled=1 ORDER BY full_name,id LIMIT ?`, limit+1)
+	if err != nil {
+		return nil, fmt.Errorf("charity routing: read available model list: %w", err)
+	}
+	models := make([]AvailableModel, 0, limit)
+	for rows.Next() {
+		var model AvailableModel
+		if err := rows.Scan(&model.ModelID, &model.Provider, &model.FullName, &model.CreatedAt); err != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("charity routing: scan available model list: %w", err)
+		}
+		models = append(models, model)
+		if len(models) > limit {
+			_ = rows.Close()
+			return nil, ErrResourceLimit
+		}
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, fmt.Errorf("charity routing: iterate available model list: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("charity routing: close available model list: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("charity routing: commit available model list: %w", err)
+	}
+	available := make([]AvailableModel, 0, len(models))
+	for _, model := range models {
+		if _, err := s.Snapshot(ctx, model.ModelID, decisionNow); err == nil {
+			available = append(available, model)
+		} else if !errors.Is(err, ErrUnavailable) && !errors.Is(err, ErrNotFound) {
+			return nil, err
+		}
+	}
+	sort.Slice(available, func(i, j int) bool {
+		if available[i].FullName == available[j].FullName {
+			return available[i].ModelID < available[j].ModelID
+		}
+		return available[i].FullName < available[j].FullName
+	})
+	return available, nil
+}
 
 // Snapshot returns the current credential-free candidate set. Every candidate
 // passes the same physical, membership, expiry, suspension, catalog, binding,
@@ -95,7 +286,7 @@ WHERE b.charity_model_id=? AND d.status='approved' AND (d.expires_at IS NULL OR 
 AND d.user_id IS NOT NULL AND dk.ended_at IS NULL AND dk.enabled=1 AND dk.failure_disabled=0
 AND k.enabled=1 AND e.enabled=1 AND (pc.automatic_supports>0 OR pc.manual_supports>0)
 AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id)
-ORDER BY b.ord,b.id`, modelID, decisionNow)
+ORDER BY b.ord,b.id LIMIT ?`, modelID, decisionNow, MaxRuntimeCandidates+1)
 	if err != nil {
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: read runtime candidates: %w", err)
 	}
@@ -138,6 +329,9 @@ ORDER BY b.ord,b.id`, modelID, decisionNow)
 		candidate.Policy.ForceStoreFalse = forceStore == 1
 		candidate.Policy.FlattenToolCalls = snapshot.FlattenToolCalls
 		snapshot.candidates = append(snapshot.candidates, candidate)
+		if len(snapshot.candidates) > MaxRuntimeCandidates {
+			return RuntimeSnapshot{}, ErrResourceLimit
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: iterate runtime candidates: %w", err)

@@ -491,6 +491,12 @@ type testKey struct {
 	candidate  Candidate
 }
 
+type allowAcceptanceGate struct{}
+
+func (allowAcceptanceGate) AuthorizeChatAcceptance(context.Context, *sql.Tx, int64, int64) error {
+	return nil
+}
+
 func newClaimFixture(t *testing.T) *claimFixture {
 	t.Helper()
 	codec := newTestCodec()
@@ -525,6 +531,7 @@ kind TEXT NOT NULL,source_id TEXT NOT NULL,PRIMARY KEY(kind,source_id)) WITHOUT 
 		Secrets:    codec,
 		Accounting: fixture.accounting,
 		Charity:    fixture.charity,
+		Acceptance: allowAcceptanceGate{},
 		Now: func() time.Time {
 			return time.Unix(fixture.clock.Load(), 0)
 		},

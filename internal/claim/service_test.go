@@ -13,6 +13,89 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 )
 
+type inspectingAcceptanceGate struct {
+	calls int
+	err   error
+}
+
+func (gate *inspectingAcceptanceGate) AuthorizeChatAcceptance(ctx context.Context, tx *sql.Tx, userID, decisionNow int64) error {
+	gate.calls++
+	if userID <= 0 || decisionNow < 0 {
+		return ErrInvalidInput
+	}
+	var requestRows, logRows int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM logical_requests`).Scan(&requestRows); err != nil {
+		return err
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM request_logs`).Scan(&logRows); err != nil {
+		return err
+	}
+	if requestRows != 0 || logRows != 0 {
+		return errors.New("acceptance gate observed premature request facts")
+	}
+	return gate.err
+}
+
+func TestAcceptRunsFinalGateAfterUserRevalidationBeforeAllWrites(t *testing.T) {
+	fixture := newClaimFixture(t)
+	userID := fixture.seedUser("acceptance-order", false)
+	gateErr := errors.New("maintenance won acceptance")
+	gate := &inspectingAcceptanceGate{err: gateErr}
+	fixture.service.acceptance = gate
+
+	_, err := fixture.service.Accept(context.Background(), AcceptInput{
+		UserID: userID, Route: RouteOpenAIChat, ModelSnapshot: "public/model", AttemptLimit: 1,
+	})
+	if !errors.Is(err, gateErr) || gate.calls != 1 {
+		t.Fatalf("gated acceptance = calls %d err %v", gate.calls, err)
+	}
+	for _, query := range []string{
+		`SELECT COUNT(*) FROM logical_requests`,
+		`SELECT COUNT(*) FROM request_logs`,
+		`SELECT COUNT(*) FROM claim_test_ledger_rows`,
+	} {
+		var count int
+		if err := fixture.db.QueryRow(query).Scan(&count); err != nil || count != 0 {
+			t.Fatalf("gated acceptance wrote rows for %q: count=%d err=%v", query, count, err)
+		}
+	}
+
+	gate.err = nil
+	if _, err := fixture.service.Accept(context.Background(), AcceptInput{
+		UserID: userID, Route: RouteOpenAIChat, ModelSnapshot: "public/model", AttemptLimit: 1,
+	}); err != nil {
+		t.Fatalf("open acceptance: %v", err)
+	}
+	if gate.calls != 2 {
+		t.Fatalf("acceptance gate calls = %d, want 2", gate.calls)
+	}
+}
+
+func TestAcceptMissingGateFailsClosedAndBannedUserWinsBeforeGate(t *testing.T) {
+	fixture := newClaimFixture(t)
+	userID := fixture.seedUser("acceptance-fail-closed", false)
+	fixture.service.acceptance = nil
+	if _, err := fixture.service.Accept(context.Background(), AcceptInput{
+		UserID: userID, Route: RouteOpenAIChat, ModelSnapshot: "public/model", AttemptLimit: 1,
+	}); !errors.Is(err, ErrDependencyUnavailable) {
+		t.Fatalf("missing gate error = %v", err)
+	}
+
+	gate := &inspectingAcceptanceGate{}
+	fixture.service.acceptance = gate
+	if _, err := fixture.db.Exec(`UPDATE users SET is_banned=1,banned_until=NULL WHERE id=?`, userID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.service.Accept(context.Background(), AcceptInput{
+		UserID: userID, Route: RouteOpenAIChat, ModelSnapshot: "public/model", AttemptLimit: 1,
+	}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("banned acceptance error = %v", err)
+	}
+	if gate.calls != 0 {
+		t.Fatalf("gate ran before user revalidation: %d", gate.calls)
+	}
+}
+
 func TestDispatchRailPersistsBeforeCredentialAndSeparatesAttemptFromCaller(t *testing.T) {
 	fixture := newClaimFixture(t)
 	userID := fixture.seedUser("dispatch-owner", false)
