@@ -247,8 +247,13 @@ func (trace DebugTrace) valid() bool {
 		trace.CreatedAt < 0 || trace.UpdatedAt < trace.CreatedAt {
 		return false
 	}
-	if trace.UpstreamResult != nil && !trace.UpstreamResult.valid() {
-		return false
+	if trace.UpstreamResult != nil {
+		if !trace.UpstreamResult.valid() {
+			return false
+		}
+		if trace.Request.RouteKind == RouteCharityChat && !trace.UpstreamResult.validCharityProjection() {
+			return false
+		}
 	}
 	if trace.CallerResult != nil && !trace.CallerResult.valid() {
 		return false
@@ -256,6 +261,12 @@ func (trace DebugTrace) valid() bool {
 	return trace.Truncated == trace.Request.Body.Truncated &&
 		((trace.State == TraceCapturing && trace.CallerResult == nil) ||
 			(trace.State == TraceTerminal && trace.CallerResult != nil))
+}
+
+func (result DebugUpstreamResult) validCharityProjection() bool {
+	return result.ResultKind == ResultSynthetic && result.StatusCode != nil &&
+		(*result.StatusCode == http.StatusOK || *result.StatusCode == http.StatusBadGateway) &&
+		result.UpstreamCode == nil && result.Diag == nil
 }
 
 type SessionLimits struct {

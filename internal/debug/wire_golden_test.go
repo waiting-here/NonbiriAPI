@@ -32,6 +32,10 @@ func TestDebugV2ClosedWireGolden(t *testing.T) {
 		ResultKind: ResultResponse, StatusCode: &responseStatus, UpstreamCode: &responseCode,
 		Diag: &responseDiag, Usage: usage, CompletedAt: 1_010,
 	}
+	charityStatus := 502
+	charityResult := DebugUpstreamResult{
+		ResultKind: ResultSynthetic, StatusCode: &charityStatus, Usage: usage, CompletedAt: 1_010,
+	}
 	syntheticResult := DebugUpstreamResult{
 		ResultKind: ResultSynthetic, StatusCode: &syntheticStatus, UpstreamCode: &syntheticCode,
 		Diag: &syntheticDiag, Usage: unknownUsage, CompletedAt: 1_011,
@@ -63,7 +67,7 @@ func TestDebugV2ClosedWireGolden(t *testing.T) {
 	terminalResponse := DebugTrace{
 		TraceID: testOpaqueID("dbt_", 2), Revision: "3", State: TraceTerminal,
 		Request:        DebugRequest{RouteKind: RouteCharityChat, Model: "公益/模型", Body: binaryBody},
-		UpstreamResult: &responseResult, CallerResult: &liveCaller,
+		UpstreamResult: &charityResult, CallerResult: &liveCaller,
 		CreatedAt: 1_001, UpdatedAt: 1_010,
 	}
 	sessionID := testOpaqueID("dbs_", 1)

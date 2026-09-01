@@ -230,10 +230,10 @@
           }
         },
         "upstream_result": {
-          "result_kind": "response",
-          "status_code": 429,
-          "upstream_code": "rate_limit",
-          "diag": "connector-safe rate diagnostic",
+          "result_kind": "synthetic",
+          "status_code": 502,
+          "upstream_code": null,
+          "diag": null,
           "usage": {
             "uncached_input_tokens": "3",
             "cache_write_input_tokens": "2",

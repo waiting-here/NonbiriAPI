@@ -571,6 +571,46 @@ func TestRoutineFormattingRedactsPhysicalCandidateFacts(t *testing.T) {
 		}
 	}
 }
+func TestDebugUpstreamResultProjectsCharityWithoutChangingSelf(t *testing.T) {
+	result := connectorcontract.AttemptResult{
+		Failure: connectorcontract.FailureUpstream, UpstreamStatus: http.StatusTeapot,
+		Diagnostic: "owner-safe connector diagnostic",
+		Usage: connectorcontract.Usage{
+			Present: true, UncachedInputTokens: 3, CacheWriteInputTokens: 2,
+			CacheReadInputTokens: 1, OutputTokens: 4,
+		},
+	}
+	self := debugUpstreamResult(result, claim.RouteOpenAIChat, 17, 4_000)
+	if self.ResultKind != debug.ResultResponse || self.StatusCode == nil ||
+		*self.StatusCode != http.StatusTeapot || self.Diag == nil ||
+		*self.Diag != result.Diagnostic {
+		t.Fatalf("self projection changed: %+v", self)
+	}
+
+	charity := debugUpstreamResult(result, claim.RouteCharityChat, 17, 4_000)
+	if charity.ResultKind != debug.ResultSynthetic || charity.StatusCode == nil ||
+		*charity.StatusCode != http.StatusBadGateway || charity.UpstreamCode != nil || charity.Diag != nil {
+		t.Fatalf("charity failure projection = %+v", charity)
+	}
+	if charity.Usage.UncachedInputTokens != "3" || charity.Usage.CacheWriteInputTokens != "2" ||
+		charity.Usage.CacheReadInputTokens != "1" || charity.Usage.OutputTokens != "4" ||
+		charity.Usage.TotalTokens != "10" || charity.Usage.UsageUnknown ||
+		charity.Usage.Charge != "17" || charity.CompletedAt != 4_000 {
+		t.Fatalf("charity usage projection = %+v", charity)
+	}
+
+	success := connectorcontract.AttemptResult{
+		Success: true, Committed: true, Failure: connectorcontract.FailureNone,
+		UpstreamStatus: 299, Diagnostic: "owner-safe success diagnostic",
+		Usage: result.Usage,
+	}
+	charitySuccess := debugUpstreamResult(success, claim.RouteCharityChat, 19, 4_001)
+	if charitySuccess.ResultKind != debug.ResultSynthetic || charitySuccess.StatusCode == nil ||
+		*charitySuccess.StatusCode != http.StatusOK ||
+		charitySuccess.UpstreamCode != nil || charitySuccess.Diag != nil {
+		t.Fatalf("charity success projection = %+v", charitySuccess)
+	}
+}
 
 func TestDebugLiveSuppressesAllUpstreamBytesAndUsesDebugPurpose(t *testing.T) {
 	hub, err := debug.NewHub(activeIdentityVerifier{})
@@ -630,8 +670,9 @@ func TestCharityDebugLiveKeepsCharityPurposeAndAccounting(t *testing.T) {
 	fixture.charges.charge = 6
 	fixture.addDispatch(fixture.charity.snapshot.Candidates[0])
 	fixture.openAI.results = []connectorcontract.AttemptResult{{
-		Success: true, Committed: true, Failure: connectorcontract.FailureNone,
-		UpstreamStatus: http.StatusOK, ClientStatus: http.StatusOK,
+		Failure: connectorcontract.FailureUpstream, UpstreamStatus: http.StatusTeapot,
+		Diagnostic: "HOSTILE_REAL_STATUS_AND_DIAGNOSTIC",
+		Usage:      connectorcontract.Usage{Present: true, UncachedInputTokens: 2, OutputTokens: 1},
 	}}
 	fixture.openAI.bodies = [][]byte{[]byte("CHARITY_RAW_UPSTREAM")}
 	request := decodeChatForTest(t, `{"model":"[公益]care/model","messages":[{"role":"user","content":"hello"}]}`)
@@ -650,6 +691,36 @@ func TestCharityDebugLiveKeepsCharityPurposeAndAccounting(t *testing.T) {
 	if terminal.Disposition != claim.AccountingCommit || terminal.ActualChargeMilli != 6 ||
 		terminal.Caller.ErrorCode != httperr.CodeDebugLiveResultCaptured {
 		t.Fatalf("charity live terminal=%+v", terminal)
+	}
+	subscription, err := hub.Subscribe(context.Background(), 1, "browser-binding", "")
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	t.Cleanup(func() { _ = subscription.Close() })
+	snapshotContext, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	event, err := subscription.Next(snapshotContext)
+	if err != nil {
+		t.Fatalf("snapshot Next: %v", err)
+	}
+	if event.Kind != debug.EventSnapshot {
+		t.Fatalf("snapshot event kind = %q", event.Kind)
+	}
+	var snapshot debug.SnapshotData
+	if err := json.Unmarshal(event.Data, &snapshot); err != nil {
+		t.Fatalf("decode snapshot: %v", err)
+	}
+	if len(snapshot.Traces) != 1 || snapshot.Traces[0].Request.RouteKind != debug.RouteCharityChat {
+		t.Fatalf("charity debug traces = %+v", snapshot.Traces)
+	}
+	upstream := snapshot.Traces[0].UpstreamResult
+	if upstream == nil || upstream.ResultKind != debug.ResultSynthetic || upstream.StatusCode == nil ||
+		*upstream.StatusCode != http.StatusBadGateway || upstream.UpstreamCode != nil || upstream.Diag != nil ||
+		upstream.Usage.TotalTokens != "3" || upstream.Usage.Charge != "6" {
+		t.Fatalf("charity debug upstream projection = %+v", upstream)
+	}
+	if encoded := string(event.Data); strings.Contains(encoded, "HOSTILE_REAL_STATUS_AND_DIAGNOSTIC") {
+		t.Fatalf("charity debug wire leaked real upstream facts: %s", encoded)
 	}
 }
 
