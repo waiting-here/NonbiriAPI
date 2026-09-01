@@ -71,10 +71,10 @@ async function apiError(response: Response): Promise<ApiError> {
   );
 }
 
-export async function coreRequest(
+export async function coreRawRequest(
   path: string,
   options: CoreRequestOptions = {},
-): Promise<CoreResponse> {
+): Promise<Response> {
   const { json, headers, ...init } = options;
   const requestHeaders = new Headers(headers);
   requestHeaders.set('Accept', 'application/json');
@@ -95,6 +95,14 @@ export async function coreRequest(
     throw new ApiError('network_error', 'The network request failed.', 0);
   }
   if (!response.ok) throw await apiError(response);
+  return response;
+}
+
+export async function coreRequest(
+  path: string,
+  options: CoreRequestOptions = {},
+): Promise<CoreResponse> {
+  const response = await coreRawRequest(path, options);
   if (response.status === 204)
     return { status: response.status, headers: response.headers, payload: undefined };
   let payload: unknown;

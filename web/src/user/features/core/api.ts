@@ -1,4 +1,4 @@
-import { ApiError } from '@shared/query/http';
+import { ApiError, isApiError } from '@shared/query/http';
 import {
   canonicalBaseURLPreview,
   canonicalCandidateFilters,
@@ -27,9 +27,11 @@ import {
   validateRevisionInput,
   validateScalarInput,
 } from './normalizers';
-import { coreRequest, operationHeaders } from './request';
+import { coreRawRequest, coreRequest, operationHeaders } from './request';
 import {
   CONNECTOR_TYPES,
+  type AccountAuthority,
+  type AccountExportAttachment,
   type BindingCandidate,
   type BindingReplacement,
   type BindingSelection,
@@ -160,6 +162,163 @@ export async function beginElevation(signal?: AbortSignal): Promise<string> {
   const response = await coreRequest('/api/auth/elevate', { method: 'POST', signal });
   expectedStatus(response.status, 200, 'elevation');
   return normalizeAuthorizationURL(response.payload);
+}
+
+const MAX_ACCOUNT_EXPORT_BYTES = 16 * 1024 * 1024;
+const ACCOUNT_EXPORT_KEYS = [
+  'schema_version',
+  'generated_at',
+  'user',
+  'endpoints',
+  'catalog_pairs',
+  'models',
+  'caller_key',
+  'usage',
+  'log_summary',
+  'issues',
+  'credit_ledger',
+  'welfare_claims',
+  'thursday',
+  'donations',
+  'charity',
+  'fishing',
+  'linklink',
+  'rps',
+] as const;
+const ELEVATED_TOKEN = /^[A-Za-z0-9._-]{8,512}$/;
+
+function accountIdentity(value: string): string {
+  return validateRevisionInput(value, 'account id', true);
+}
+
+function elevatedHeaders(token: string): HeadersInit {
+  if (!ELEVATED_TOKEN.test(token))
+    throw new ApiError('invalid_request', 'Invalid elevated capability.', 400);
+  return { 'X-Elevated-Token': token };
+}
+
+async function boundedAccountExport(response: Response): Promise<Uint8Array> {
+  const declaredLength = response.headers.get('Content-Length');
+  if (declaredLength !== null) {
+    if (!/^(0|[1-9][0-9]*)$/.test(declaredLength))
+      throw new ApiError('invalid_response', 'The server returned an invalid export length.', 200);
+    const length = Number(declaredLength);
+    if (!Number.isSafeInteger(length) || length > MAX_ACCOUNT_EXPORT_BYTES)
+      throw new ApiError('invalid_response', 'The server returned an oversized export.', 200);
+  }
+  if (!response.body)
+    throw new ApiError('invalid_response', 'The server returned an empty export.', 200);
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.byteLength;
+    if (total > MAX_ACCOUNT_EXPORT_BYTES) {
+      await reader.cancel();
+      throw new ApiError('invalid_response', 'The server returned an oversized export.', 200);
+    }
+    chunks.push(value);
+  }
+  if (total === 0)
+    throw new ApiError('invalid_response', 'The server returned an empty export.', 200);
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+function validateAccountExport(bytes: Uint8Array): void {
+  let value: unknown;
+  try {
+    value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown;
+  } catch {
+    throw new ApiError('invalid_response', 'The server returned an invalid account export.', 200);
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value))
+    throw new ApiError('invalid_response', 'The server returned an invalid account export.', 200);
+  const record = value as Record<string, unknown>;
+  const expected = new Set<string>(ACCOUNT_EXPORT_KEYS);
+  if (
+    record.schema_version !== 4 ||
+    Object.keys(record).length !== ACCOUNT_EXPORT_KEYS.length ||
+    Object.keys(record).some((key) => !expected.has(key))
+  ) {
+    throw new ApiError('invalid_response', 'The server returned an invalid account export.', 200);
+  }
+}
+
+export async function exportAccountV4(
+  accountId: string,
+  elevatedToken: string,
+  signal?: AbortSignal,
+): Promise<AccountExportAttachment> {
+  accountIdentity(accountId);
+  const response = await coreRawRequest('/api/account/export', {
+    method: 'POST',
+    headers: elevatedHeaders(elevatedToken),
+    signal,
+  });
+  expectedStatus(response.status, 200, 'account export');
+  const contentType = response.headers.get('Content-Type')?.toLowerCase() ?? '';
+  const disposition = response.headers.get('Content-Disposition') ?? '';
+  if (
+    !contentType.startsWith('application/json') ||
+    disposition !== 'attachment; filename="nonbiriapi-account-export-v4.json"'
+  ) {
+    throw new ApiError('invalid_response', 'The server returned invalid export metadata.', 200);
+  }
+  const bytes = await boundedAccountExport(response);
+  validateAccountExport(bytes);
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return {
+    blob: new Blob([buffer], { type: 'application/json' }),
+    schemaVersion: 4,
+  };
+}
+
+export async function deleteCurrentAccount(
+  accountId: string,
+  elevatedToken: string,
+  confirmation: 'DELETE',
+  signal?: AbortSignal,
+): Promise<void> {
+  accountIdentity(accountId);
+  if (confirmation !== 'DELETE')
+    throw new ApiError('invalid_request', 'Invalid account deletion confirmation.', 400);
+  const response = await coreRequest('/api/account/delete', {
+    method: 'POST',
+    headers: elevatedHeaders(elevatedToken),
+    json: { confirm: confirmation },
+    signal,
+  });
+  expectedStatus(response.status, 204, 'account deletion');
+}
+
+export async function readAccountAuthority(
+  accountId: string,
+  signal?: AbortSignal,
+): Promise<AccountAuthority> {
+  const expectedAccount = accountIdentity(accountId);
+  try {
+    const response = await getSession(signal);
+    if (response.user.id !== expectedAccount)
+      throw new ApiError('invalid_response', 'The server returned a different account.', 200);
+    return 'active';
+  } catch (error) {
+    // A successful synchronous deletion revokes the browser session in the
+    // same transaction. After an unknown delete response, an unauthorized
+    // session is therefore the only available authoritative terminal signal.
+    if (isApiError(error) && error.status === 401) return 'deleted';
+    throw error;
+  }
 }
 
 export async function listEndpoints(
@@ -543,19 +702,14 @@ export async function updateManualEntry(
   for (const affected of result.affected_models) {
     for (const binding of affected.bindings) {
       if (projectedBindings.has(binding.id)) {
-        throw new ApiError(
-          'invalid_response',
-          'The server repeated an affected binding.',
-          200,
-        );
+        throw new ApiError('invalid_response', 'The server repeated an affected binding.', 200);
       }
       projectedBindings.set(binding.id, binding.upstream_model_id);
     }
   }
   for (const replacement of canonicalReplacements) {
     if (
-      projectedBindings.get(replacement.binding_id) !==
-      replacement.replacement_upstream_model_id
+      projectedBindings.get(replacement.binding_id) !== replacement.replacement_upstream_model_id
     ) {
       throw new ApiError(
         'invalid_response',

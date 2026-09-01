@@ -1,4 +1,5 @@
 import { ApiError } from '@shared/query/http';
+import { beginElevation, deleteCurrentAccount, exportAccountV4, readAccountAuthority } from './api';
 import type { AccountLifecycleAdapter, HomeAdapters } from './types';
 
 export class CapabilityUnavailableError extends ApiError {
@@ -30,4 +31,17 @@ export const disabledAccountLifecycleAdapter: AccountLifecycleAdapter = Object.f
   exportV4: unavailable,
   deleteAccount: unavailable,
   readAccountAuthority: unavailable,
+});
+
+export const productionAccountLifecycleAdapter = Object.freeze<AccountLifecycleAdapter>({
+  capabilities: Object.freeze({ exportV4: true, deleteAccount: true }),
+  beginElevation: async (_intent, accountId) => {
+    if (!/^[1-9][0-9]*$/.test(accountId))
+      throw new ApiError('invalid_request', 'Invalid account id.', 400);
+    return beginElevation();
+  },
+  exportV4: ({ accountId, elevatedToken }) => exportAccountV4(accountId, elevatedToken),
+  deleteAccount: ({ accountId, elevatedToken, confirmation }) =>
+    deleteCurrentAccount(accountId, elevatedToken, confirmation),
+  readAccountAuthority,
 });
