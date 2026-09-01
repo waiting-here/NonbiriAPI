@@ -3,15 +3,21 @@ package rps
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"sort"
 	"strconv"
 	"sync/atomic"
+	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
+	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 )
+
+var ErrPostCommitRequired = errors.New("rps: lifecycle post-commit finalizer required")
 
 type LifecycleAdapter struct{ service *Service }
 
@@ -31,13 +37,37 @@ type DeletionFinalizer struct {
 	done      atomic.Bool
 }
 
+type ExportFinalizer struct {
+	service         *Service
+	events          []preparedAccountEvent
+	facts           activities.PublishFacts
+	publishActivity bool
+	done            atomic.Bool
+}
+
+type preparedAccountEvent struct {
+	userID int64
+	event  accountstream.PublishedEvent
+}
+
+type RetentionResult struct {
+	Processed int
+	More      bool
+}
+
 // PrepareUserDeletion joins the caller-owned account deletion transaction.
 // The shared StartLimiter deletion marker is owned by the L1 coordinator; this
 // adapter intentionally does not acquire another one. decisionNow is the
 // coordinator's transaction-wide frozen Unix second; the adapter must not read
 // its own clock and thereby split one deletion decision across instants.
 func (adapter *LifecycleAdapter) PrepareUserDeletion(ctx context.Context, tx *sql.Tx, userID, decisionNow int64) (*DeletionFinalizer, error) {
-	if adapter == nil || adapter.service == nil || tx == nil || userID <= 0 || decisionNow < 0 || decisionNow > 253402300799 {
+	return adapter.PrepareDeleteTx(ctx, tx, userID, decisionNow)
+}
+
+// PrepareDeleteTx joins the caller-owned account deletion transaction and uses
+// only the coordinator's transaction-wide frozen decision time.
+func (adapter *LifecycleAdapter) PrepareDeleteTx(ctx context.Context, tx *sql.Tx, userID, decisionNow int64) (*DeletionFinalizer, error) {
+	if adapter == nil || adapter.service == nil || ctx == nil || tx == nil || userID <= 0 || decisionNow < 0 || decisionNow > 253402300799 {
 		return nil, ErrInvalidRequest
 	}
 	service := adapter.service
@@ -118,10 +148,10 @@ func (adapter *LifecycleAdapter) PrepareUserDeletion(ctx context.Context, tx *sq
 }
 
 func detachTerminalIdentityTx(ctx context.Context, tx *sql.Tx, userID int64, survivors map[int64]struct{}) error {
-	rows, err := tx.QueryContext(ctx, `SELECT own.session_id,own.seat_no,p.user_id
-FROM game_rps_summary_seats own
-LEFT JOIN game_rps_pending_results p ON p.session_id_text=own.session_id AND p.user_id<>?
-WHERE own.user_id=? ORDER BY own.session_id,p.user_id`, userID, userID)
+	rows, err := tx.QueryContext(ctx, `SELECT own.session_id,own.seat_no,peer.user_id
+	FROM game_rps_summary_seats own
+	JOIN game_rps_summary_seats peer ON peer.session_id=own.session_id
+	WHERE own.user_id=? ORDER BY own.session_id,peer.seat_no`, userID)
 	if err != nil {
 		return classifyDB(err)
 	}
@@ -148,7 +178,9 @@ WHERE own.user_id=? ORDER BY own.session_id,p.user_id`, userID, userID)
 				_ = rows.Close()
 				return ErrInvariant
 			}
-			survivors[survivor.Int64] = struct{}{}
+			if survivor.Int64 != userID {
+				survivors[survivor.Int64] = struct{}{}
+			}
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -258,28 +290,59 @@ WHERE slot.user_id=? AND slot.session_id IS NOT NULL`, userID).Scan(&sessionID, 
 }
 
 func (adapter *LifecycleAdapter) ExportUser(ctx context.Context, tx *sql.Tx, userID, now int64) (UserExport, error) {
-	if adapter == nil || adapter.service == nil || tx == nil || userID <= 0 || now < 0 || now > 253402300799 {
-		return UserExport{}, ErrInvalidRequest
+	result, finalizer, err := adapter.ExportTx(ctx, tx, userID, now, 10000)
+	if err != nil {
+		return UserExport{}, err
+	}
+	if finalizer != nil {
+		_ = finalizer.Abort()
+		return UserExport{}, ErrPostCommitRequired
+	}
+	return result, nil
+}
+
+// ExportTx reads the safe RPS slice from the caller-owned transaction. Queue
+// expiry and phase-deadline convergence use only decisionNow. Any resulting
+// account-stream/activity publication is returned as a one-shot finalizer and
+// must run only after the outer transaction commits.
+func (adapter *LifecycleAdapter) ExportTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	userID, decisionNow int64,
+	limit int,
+) (UserExport, *ExportFinalizer, error) {
+	if adapter == nil || adapter.service == nil || ctx == nil || tx == nil || userID <= 0 ||
+		decisionNow < 0 || decisionNow > 253402300799 || limit < 1 || limit > 10000 {
+		return UserExport{}, nil, ErrInvalidRequest
 	}
 	service := adapter.service
 	result := UserExport{Summaries: []SummaryExport{}}
+	var finalizer *ExportFinalizer
 	if pending, found, err := loadPending(ctx, tx, userID); err != nil {
-		return UserExport{}, err
+		return UserExport{}, nil, err
 	} else if found {
 		result.Pending = &pending
 	}
 	if record, found, err := loadSessionByUser(ctx, tx, userID); err != nil {
-		return UserExport{}, err
+		return UserExport{}, nil, err
 	} else if found {
-		if record.State == StateStarted && record.PhaseDeadline != nil && now >= *record.PhaseDeadline {
-			reduced := reducer{service: service, ctx: ctx, tx: tx, record: &record, expectedRevision: record.Revision, now: now}
+		if record.State == StateStarted && record.PhaseDeadline != nil && decisionNow >= *record.PhaseDeadline {
+			users := sessionUsers(&record)
+			reduced := reducer{service: service, ctx: ctx, tx: tx, record: &record, expectedRevision: record.Revision, now: decisionNow}
 			if err := reduced.applyDeadlineDefaults(); err != nil {
-				return UserExport{}, err
+				return UserExport{}, nil, err
+			}
+			if reduced.terminal != nil {
+				users = reduced.terminal.Users
+			}
+			finalizer, err = newExportFinalizer(ctx, tx, service, decisionNow, users, reduced.facts, true)
+			if err != nil {
+				return UserExport{}, nil, err
 			}
 		}
-		home, err := service.projectHomeTx(ctx, tx, userID, now)
+		home, err := service.projectHomeTx(ctx, tx, userID, decisionNow)
 		if err != nil {
-			return UserExport{}, err
+			return UserExport{}, nil, err
 		}
 		if home.Kind == "session" {
 			result.Current = &home
@@ -287,19 +350,31 @@ func (adapter *LifecycleAdapter) ExportUser(ctx context.Context, tx *sql.Tx, use
 			result.Pending = home.Result
 		}
 	} else if queue, found, err := loadQueueByUser(ctx, tx, userID); err != nil {
-		return UserExport{}, err
+		return UserExport{}, nil, err
 	} else if found {
-		view := queueView(queue, now)
-		home := HomeState{Kind: "queue", Queue: &view}
-		result.Current = &home
+		if decisionNow >= queue.Deadline {
+			if err := service.releaseQueueTx(ctx, tx, queue, decisionNow, 0); err != nil {
+				return UserExport{}, nil, err
+			}
+			finalizer, err = newExportFinalizer(
+				ctx, tx, service, decisionNow, []int64{userID}, activities.PublishFacts{}, false,
+			)
+			if err != nil {
+				return UserExport{}, nil, err
+			}
+		} else {
+			view := queueView(queue, decisionNow)
+			home := HomeState{Kind: "queue", Queue: &view}
+			result.Current = &home
+		}
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT s.session_id,s.mode,s.terminal_reason,s.started_at,s.terminal_at,
 seat.seat_no,seat.input,seat.returned,seat.wallet_net_sign,seat.wallet_net_mag,seat.timeout_count,
 seat.rock_count,seat.scissors_count,seat.paper_count
 FROM game_rps_summaries s JOIN game_rps_summary_seats seat ON seat.session_id=s.session_id
-WHERE seat.user_id=? AND s.delete_at>? ORDER BY s.terminal_at,s.session_id LIMIT 10001`, userID, now)
+	WHERE seat.user_id=? AND s.delete_at>? ORDER BY s.terminal_at,s.session_id LIMIT ?`, userID, decisionNow, limit+1)
 	if err != nil {
-		return UserExport{}, classifyDB(err)
+		return UserExport{}, nil, classifyDB(err)
 	}
 	for rows.Next() {
 		var summary SummaryExport
@@ -309,30 +384,30 @@ WHERE seat.user_id=? AND s.delete_at>? ORDER BY s.terminal_at,s.session_id LIMIT
 		if err := rows.Scan(&summary.SessionID, &summary.Mode, &summary.TerminalReason, &summary.StartedAt, &summary.TerminalAt,
 			&seat.SeatNo, &inputRaw, &returnedRaw, &sign, &walletRaw, &timeoutRaw, &rockRaw, &scissorsRaw, &paperRaw); err != nil {
 			_ = rows.Close()
-			return UserExport{}, classifyDB(err)
+			return UserExport{}, nil, classifyDB(err)
 		}
 		input, err := db.DecodeU256(inputRaw)
 		if err != nil {
 			_ = rows.Close()
-			return UserExport{}, ErrInvariant
+			return UserExport{}, nil, ErrInvariant
 		}
 		returned, err := db.DecodeU256(returnedRaw)
 		if err != nil {
 			_ = rows.Close()
-			return UserExport{}, ErrInvariant
+			return UserExport{}, nil, ErrInvariant
 		}
 		wide := [5]db.U128{}
 		for index, raw := range [][]byte{walletRaw, timeoutRaw, rockRaw, scissorsRaw, paperRaw} {
 			wide[index], err = db.DecodeU128(raw)
 			if err != nil {
 				_ = rows.Close()
-				return UserExport{}, ErrInvariant
+				return UserExport{}, nil, ErrInvariant
 			}
 		}
 		if sign < -1 || sign > 1 || !validTerminalReason(summary.TerminalReason) || game.ResolveMode(game.RPSID, summary.Mode) != nil ||
 			seat.SeatNo < 0 || seat.SeatNo > 2 {
 			_ = rows.Close()
-			return UserExport{}, ErrInvariant
+			return UserExport{}, nil, ErrInvariant
 		}
 		seat.Input, seat.Returned = formatMilli(input.Big()), formatMilli(returned.Big())
 		seat.WalletNet = formatSignedMilli(sign, wide[0].Big())
@@ -340,30 +415,30 @@ WHERE seat.user_id=? AND s.delete_at>? ORDER BY s.terminal_at,s.session_id LIMIT
 		seat.ScissorsCount, seat.PaperCount = wide[3].Decimal(), wide[4].Decimal()
 		summary.OwnSeat = seat
 		result.Summaries = append(result.Summaries, summary)
-		if len(result.Summaries) > 10000 {
+		if len(result.Summaries) > limit {
 			_ = rows.Close()
-			return UserExport{}, ErrResourceLimit
+			return UserExport{}, nil, ErrResourceLimit
 		}
 	}
 	if err := rows.Err(); err != nil {
 		_ = rows.Close()
-		return UserExport{}, classifyDB(err)
+		return UserExport{}, nil, classifyDB(err)
 	}
 	if err := rows.Close(); err != nil {
-		return UserExport{}, classifyDB(err)
+		return UserExport{}, nil, classifyDB(err)
 	}
 	var funRaw [5][]byte
 	err = tx.QueryRowContext(ctx, `SELECT completed_count,profitable_count,rock_count,scissors_count,paper_count
 FROM game_rps_fun_stats WHERE user_id=?`, userID).Scan(&funRaw[0], &funRaw[1], &funRaw[2], &funRaw[3], &funRaw[4])
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return UserExport{}, classifyDB(err)
+		return UserExport{}, nil, classifyDB(err)
 	}
 	if err == nil {
 		values := [5]db.U128{}
 		for index, raw := range funRaw {
 			values[index], err = db.DecodeU128(raw)
 			if err != nil {
-				return UserExport{}, ErrInvariant
+				return UserExport{}, nil, ErrInvariant
 			}
 		}
 		result.FunStats = &FunStatsExport{CompletedCount: values[0].Decimal(), ProfitableCount: values[1].Decimal(),
@@ -371,14 +446,173 @@ FROM game_rps_fun_stats WHERE user_id=?`, userID).Scan(&funRaw[0], &funRaw[1], &
 	}
 	var tutorial int
 	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(p.tutorial_rps_seen,0) FROM users u
-LEFT JOIN game_user_preferences p ON p.user_id=u.id WHERE u.id=?`, userID).Scan(&tutorial); err != nil {
-		return UserExport{}, classifyDB(err)
+	LEFT JOIN game_user_preferences p ON p.user_id=u.id WHERE u.id=?`, userID).Scan(&tutorial); err != nil {
+		return UserExport{}, nil, classifyDB(err)
 	}
 	if tutorial != 0 && tutorial != 1 {
-		return UserExport{}, ErrInvariant
+		return UserExport{}, nil, ErrInvariant
 	}
 	result.TutorialSeen = tutorial == 1
-	return result, nil
+	return result, finalizer, nil
+}
+
+func newExportFinalizer(
+	ctx context.Context,
+	tx *sql.Tx,
+	service *Service,
+	decisionNow int64,
+	users []int64,
+	facts activities.PublishFacts,
+	publishActivity bool,
+) (*ExportFinalizer, error) {
+	seen := make(map[int64]struct{}, len(users))
+	ordered := make([]int64, 0, len(users))
+	for _, userID := range users {
+		if userID <= 0 {
+			return nil, ErrInvariant
+		}
+		if _, exists := seen[userID]; exists {
+			continue
+		}
+		seen[userID] = struct{}{}
+		ordered = append(ordered, userID)
+	}
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i] < ordered[j] })
+	events := make([]preparedAccountEvent, 0, len(ordered))
+	for _, userID := range ordered {
+		home, err := service.projectHomeTx(ctx, tx, userID, decisionNow)
+		if err != nil {
+			return nil, err
+		}
+		body, err := json.Marshal(home)
+		if err != nil || len(body) > maxProjectedStateBytes {
+			return nil, ErrResourceLimit
+		}
+		var revision, epoch *string
+		if home.Session != nil {
+			value, identity := home.Session.Revision, home.Session.IdentityEpoch
+			revision, epoch = &value, &identity
+		} else if home.Queue != nil {
+			value := home.Queue.Revision
+			revision = &value
+		}
+		events = append(events, preparedAccountEvent{userID: userID, event: accountstream.PublishedEvent{
+			Channel: accountstream.ChannelRPS, Type: accountstream.TypeDelta,
+			Revision: revision, IdentityEpoch: epoch, Data: body,
+		}})
+	}
+	copyFacts := activities.PublishFacts{Global: facts.Global, AccountIDs: append([]int64(nil), facts.AccountIDs...)}
+	return &ExportFinalizer{service: service, events: events, facts: copyFacts, publishActivity: publishActivity}, nil
+}
+
+func (finalizer *ExportFinalizer) Commit() bool {
+	if finalizer == nil || finalizer.service == nil || !finalizer.done.CompareAndSwap(false, true) {
+		return false
+	}
+	ctx := context.Background()
+	for _, prepared := range finalizer.events {
+		_, err := finalizer.service.accountEvents.PublishCommitted(ctx, prepared.userID, prepared.event)
+		finalizer.service.reportPublish(err)
+	}
+	if finalizer.publishActivity {
+		if err := finalizer.service.activityEvents.Publish(ctx, finalizer.facts); err != nil {
+			finalizer.service.reportPublish(err)
+		}
+	}
+	return true
+}
+
+func (finalizer *ExportFinalizer) Abort() bool {
+	return finalizer != nil && finalizer.done.CompareAndSwap(false, true)
+}
+
+// Retain removes at most limit due rank facts, shared summaries, and technical
+// lease rows in one domain-owned transaction. Session/queue convergence remains
+// on the recovery rail and is not reimplemented here.
+func (adapter *LifecycleAdapter) Retain(
+	ctx context.Context,
+	decisionNow int64,
+	limit int,
+	budgetDeadline time.Time,
+) (RetentionResult, error) {
+	if adapter == nil || adapter.service == nil || ctx == nil || decisionNow < 0 || decisionNow > 253402300799 ||
+		limit < 1 || limit > workerBatchSize {
+		return RetentionResult{}, ErrInvalidRequest
+	}
+	service := adapter.service
+	if service.closed.Load() || !service.recovered.Load() {
+		return RetentionResult{}, ErrServiceUnavailable
+	}
+	workerCtx, cancel := context.WithDeadline(ctx, budgetDeadline)
+	defer cancel()
+	tx, err := service.database.BeginTx(workerCtx, nil)
+	if err != nil {
+		return RetentionResult{}, classifyDB(err)
+	}
+	defer tx.Rollback()
+	processed := 0
+	if !rpsRetentionBudgetExpired(budgetDeadline) {
+		count, err := service.expireRankFactsBatchTxLimit(workerCtx, tx, decisionNow, limit-processed)
+		if err != nil {
+			return RetentionResult{}, err
+		}
+		processed += count
+	}
+	if processed < limit && !rpsRetentionBudgetExpired(budgetDeadline) {
+		result, err := tx.ExecContext(workerCtx, `DELETE FROM game_rps_summaries WHERE session_id IN (
+ SELECT session_id FROM game_rps_summaries WHERE delete_at<=? ORDER BY delete_at,session_id LIMIT ?
+)`, decisionNow, limit-processed)
+		if err != nil {
+			return RetentionResult{}, classifyDB(err)
+		}
+		changed, err := result.RowsAffected()
+		if err != nil {
+			return RetentionResult{}, classifyDB(err)
+		}
+		processed += int(changed)
+	}
+	if processed < limit && !rpsRetentionBudgetExpired(budgetDeadline) {
+		result, err := tx.ExecContext(workerCtx, `DELETE FROM game_online_leases WHERE rowid IN (
+ SELECT lease.rowid FROM game_online_leases lease
+ WHERE substr(lease.session_id,1,4)='rps_' AND (lease.health_epoch<>? OR
+  (lease.expires_at<=? AND NOT EXISTS(
+   SELECT 1 FROM game_rps_sessions active WHERE active.id=lease.session_id AND active.state='started')))
+ ORDER BY lease.expires_at,lease.session_id,lease.user_id LIMIT ?
+)`, service.healthEpoch, decisionNow, limit-processed)
+		if err != nil {
+			return RetentionResult{}, classifyDB(err)
+		}
+		changed, err := result.RowsAffected()
+		if err != nil {
+			return RetentionResult{}, classifyDB(err)
+		}
+		processed += int(changed)
+	}
+	var more int
+	if err := tx.QueryRowContext(workerCtx, `SELECT EXISTS(
+ SELECT 1 FROM game_rps_rank_facts WHERE aggregate_applied=1 AND expires_at<=?
+) OR EXISTS(
+ SELECT 1 FROM game_rps_summaries WHERE delete_at<=?
+) OR EXISTS(
+ SELECT 1 FROM game_online_leases lease
+ WHERE substr(lease.session_id,1,4)='rps_' AND (lease.health_epoch<>? OR
+  (lease.expires_at<=? AND NOT EXISTS(
+   SELECT 1 FROM game_rps_sessions active WHERE active.id=lease.session_id AND active.state='started')))
+)`, decisionNow, decisionNow, service.healthEpoch, decisionNow).Scan(&more); err != nil {
+		return RetentionResult{}, classifyDB(err)
+	}
+	if more != 0 && more != 1 {
+		return RetentionResult{}, ErrInvariant
+	}
+	if err := tx.Commit(); err != nil {
+		return RetentionResult{}, classifyDB(err)
+	}
+	service.forgetExpiredLeases(decisionNow)
+	return RetentionResult{Processed: processed, More: more == 1}, nil
+}
+
+func rpsRetentionBudgetExpired(deadline time.Time) bool {
+	return !deadline.IsZero() && !time.Now().Before(deadline)
 }
 
 func (adapter *LifecycleAdapter) Cleanup(ctx context.Context, now int64) (int, error) {

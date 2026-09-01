@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
@@ -351,6 +352,143 @@ func TestLifecycleExportAndCleanupRecoveryGate(t *testing.T) {
 	}
 }
 
+func TestLifecycleExportTxQueueExpiryUsesFrozenNowAndPostCommitPublish(t *testing.T) {
+	fixture := newRPSFixture(t)
+	userID, _ := fixture.seedUser("export-expired-queue", 100_000)
+	queued := fixture.enqueue(userID, game.RPSModeQuick, 0x48, 0x49, 1160)
+	fixture.account.mu.Lock()
+	publishedBefore := fixture.account.events[userID]
+	fixture.account.mu.Unlock()
+	fixture.clock.Store(-1)
+
+	tx, err := fixture.database.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exported, finalizer, err := fixture.service.Lifecycle().ExportTx(
+		context.Background(), tx, userID, queued.Queue.Deadline, 10,
+	)
+	if err != nil || finalizer == nil || exported.Current != nil {
+		_ = tx.Rollback()
+		t.Fatalf("expired queue export=(%+v,%v,%v)", exported, finalizer, err)
+	}
+	var queuedInTx int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM game_rps_queue WHERE user_id=?`, userID).Scan(&queuedInTx); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if queuedInTx != 0 {
+		_ = tx.Rollback()
+		t.Fatal("expired queue remained inside export transaction")
+	}
+	var operationNow int64
+	if err := tx.QueryRow(`SELECT created_at FROM credit_operations WHERE kind='rps_queue_release' AND source_id=?`, queued.Queue.ID).Scan(&operationNow); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if operationNow != queued.Queue.Deadline {
+		_ = tx.Rollback()
+		t.Fatalf("queue release now=%d want=%d", operationNow, queued.Queue.Deadline)
+	}
+	fixture.account.mu.Lock()
+	publishedDuringTx := fixture.account.events[userID]
+	fixture.account.mu.Unlock()
+	if publishedDuringTx != publishedBefore {
+		_ = tx.Rollback()
+		t.Fatal("account event published before outer commit")
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	if !finalizer.Abort() {
+		t.Fatal("export finalizer abort")
+	}
+	if fixture.scalar(`SELECT COUNT(*) FROM game_rps_queue WHERE user_id=?`, userID) != 1 {
+		t.Fatal("rolled-back export released queue")
+	}
+
+	tx, err = fixture.database.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, finalizer, err = fixture.service.Lifecycle().ExportTx(
+		context.Background(), tx, userID, queued.Queue.Deadline, 10,
+	)
+	if err != nil || finalizer == nil {
+		_ = tx.Rollback()
+		t.Fatalf("committed queue export=(%v,%v)", finalizer, err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if !finalizer.Commit() {
+		t.Fatal("export finalizer commit")
+	}
+	fixture.account.mu.Lock()
+	publishedAfter := fixture.account.events[userID]
+	fixture.account.mu.Unlock()
+	if publishedAfter != publishedBefore+1 {
+		t.Fatalf("post-commit account events=%d want=%d", publishedAfter, publishedBefore+1)
+	}
+}
+
+func TestLifecycleExportTxDeadlineDefersAccountAndActivityPublish(t *testing.T) {
+	fixture := newRPSFixture(t)
+	users, _ := fixture.startThree(game.RPSModeQuick, 100_000, 1170)
+	record := fixture.sessionForUser(users[0])
+	fixture.account.mu.Lock()
+	publishedBefore := make(map[int64]int, len(users))
+	for _, userID := range users {
+		publishedBefore[userID] = fixture.account.events[userID]
+	}
+	fixture.account.mu.Unlock()
+	activityBefore := fixture.activity.calls.Load()
+	fixture.clock.Store(-1)
+
+	tx, err := fixture.database.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exported, finalizer, err := fixture.service.Lifecycle().ExportTx(
+		context.Background(), tx, users[0], *record.PhaseDeadline, 10,
+	)
+	if err != nil || finalizer == nil || exported.Pending == nil || len(exported.Summaries) != 1 {
+		_ = tx.Rollback()
+		t.Fatalf("deadline export=(%+v,%v,%v)", exported, finalizer, err)
+	}
+	fixture.account.mu.Lock()
+	for _, userID := range users {
+		if fixture.account.events[userID] != publishedBefore[userID] {
+			fixture.account.mu.Unlock()
+			_ = tx.Rollback()
+			t.Fatal("account event published before deadline export commit")
+		}
+	}
+	fixture.account.mu.Unlock()
+	if fixture.activity.calls.Load() != activityBefore {
+		_ = tx.Rollback()
+		t.Fatal("activity event published before deadline export commit")
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if !finalizer.Commit() {
+		t.Fatal("export finalizer commit")
+	}
+	fixture.account.mu.Lock()
+	for _, userID := range users {
+		actual := fixture.account.events[userID]
+		if actual != publishedBefore[userID]+1 {
+			fixture.account.mu.Unlock()
+			t.Fatalf("user %d post-commit publishes=%d want=%d", userID, actual, publishedBefore[userID]+1)
+		}
+	}
+	fixture.account.mu.Unlock()
+	if fixture.activity.calls.Load() != activityBefore+1 {
+		t.Fatalf("post-commit activity publishes=%d want=%d", fixture.activity.calls.Load(), activityBefore+1)
+	}
+}
+
 func TestLifecycleDeletionUsesCallerFrozenDecisionNow(t *testing.T) {
 	fixture := newRPSFixture(t)
 	userID, _ := fixture.seedUser("delete-frozen-now", 100_000)
@@ -614,6 +752,96 @@ WHERE session_id_text=? AND `+column+`<>'deidentified'`, record.ID).Scan(&nonDei
 	}
 	if nonDeidentified != 0 {
 		t.Fatalf("survivor pending results retained deleted seat outcome: %d", nonDeidentified)
+	}
+}
+
+func TestLifecycleTerminalFirstDeletionPurgesAllSummarySurvivorsAfterPeerACK(t *testing.T) {
+	fixture := newRPSFixture(t)
+	users, bindings := fixture.startThree(game.RPSModeQuick, 100_000, 1450)
+	record := fixture.sessionForUser(users[0])
+	deletedSeat, ok := seatForUser(&record, users[0])
+	if !ok {
+		t.Fatal("deleted seat missing")
+	}
+	key := 1470
+	fixture.playGestures(record.ID, bindings, [3]string{GestureRock, GestureScissors, GestureScissors}, &key)
+	if _, err := fixture.service.ACK(context.Background(), ACKInput{
+		UserID: users[1], SessionBinding: bindings[users[1]], SessionID: record.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if fixture.scalar(`SELECT COUNT(*) FROM game_rps_pending_results WHERE session_id_text=?`, record.ID) != 2 {
+		t.Fatal("peer ACK did not remove exactly one pending result")
+	}
+
+	tx, err := fixture.database.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	finalizer, err := fixture.service.Lifecycle().PrepareDeleteTx(
+		context.Background(), tx, users[0], fixture.clock.Load(),
+	)
+	if err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if !finalizer.Commit() {
+		t.Fatal("delete finalizer commit")
+	}
+	fixture.account.mu.Lock()
+	discarded := append([]int64(nil), fixture.account.discarded...)
+	purged := append([]int64(nil), fixture.account.purged...)
+	fixture.account.mu.Unlock()
+	for name, values := range map[string][]int64{"discarded": discarded, "purged": purged} {
+		seen := map[int64]bool{}
+		for _, userID := range values {
+			seen[userID] = true
+		}
+		if len(values) != 2 || seen[users[0]] || !seen[users[1]] || !seen[users[2]] {
+			t.Fatalf("%s survivors=%v", name, values)
+		}
+	}
+	if fixture.scalar(`SELECT COUNT(*) FROM game_rps_pending_results WHERE session_id_text=?`, record.ID) != 1 ||
+		fixture.scalar(`SELECT COUNT(*) FROM game_rps_pending_results WHERE session_id_text=? AND user_id=?`, record.ID, users[2]) != 1 {
+		t.Fatal("terminal-first deletion changed ACKed pending state or retained deleted pending")
+	}
+	column := []string{"seat0_result", "seat1_result", "seat2_result"}[deletedSeat]
+	var outcome string
+	if err := fixture.database.QueryRow(`SELECT `+column+` FROM game_rps_pending_results WHERE session_id_text=?`, record.ID).Scan(&outcome); err != nil {
+		t.Fatal(err)
+	}
+	if outcome != "deidentified" {
+		t.Fatalf("surviving pending result=%s", outcome)
+	}
+}
+
+func TestLifecycleRetentionIsBoundedAndExactAtDeadline(t *testing.T) {
+	fixture := newRPSFixture(t)
+	users, bindings := fixture.startThree(game.RPSModeQuick, 100_000, 1480)
+	record := fixture.sessionForUser(users[0])
+	key := 1500
+	fixture.playGestures(record.ID, bindings, [3]string{GestureRock, GestureScissors, GestureScissors}, &key)
+	var deleteAt int64
+	if err := fixture.database.QueryRow(`SELECT delete_at FROM game_rps_summaries WHERE session_id=?`, record.ID).Scan(&deleteAt); err != nil {
+		t.Fatal(err)
+	}
+	before, err := fixture.service.Lifecycle().Retain(context.Background(), deleteAt-1, 1, time.Now().Add(time.Second))
+	if err != nil || before.Processed != 0 || before.More {
+		t.Fatalf("retention before deadline=(%+v,%v)", before, err)
+	}
+	for index := 0; index < 4; index++ {
+		work, err := fixture.service.Lifecycle().Retain(context.Background(), deleteAt, 1, time.Now().Add(time.Second))
+		wantMore := index < 3
+		if err != nil || work.Processed != 1 || work.More != wantMore {
+			t.Fatalf("retention pass %d=(%+v,%v), want more=%v", index, work, err, wantMore)
+		}
+	}
+	if fixture.scalar(`SELECT COUNT(*) FROM game_rps_rank_facts WHERE session_id_text=?`, record.ID) != 0 ||
+		fixture.scalar(`SELECT COUNT(*) FROM game_rps_summaries WHERE session_id=?`, record.ID) != 0 {
+		t.Fatal("bounded retention left due facts or summary")
 	}
 }
 
