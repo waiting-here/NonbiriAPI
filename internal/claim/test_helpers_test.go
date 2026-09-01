@@ -172,6 +172,36 @@ func (a *testAccounting) ReleaseUndispatched(
 	return nil
 }
 
+func (a *testAccounting) ReleaseUnusedForDeletion(
+	ctx context.Context,
+	tx *sql.Tx,
+	requestID string,
+	rows uint16,
+	persist DomainPersistence,
+) error {
+	before, err := testRemainingRows(tx, requestID)
+	if err != nil {
+		return err
+	}
+	if rows == 0 || uint64(rows) >= before || persist == nil {
+		return errors.New("invalid deletion capacity release precondition")
+	}
+	if err := persist(ctx, tx); err != nil {
+		return err
+	}
+	if err := a.failAt("deletion_after_unused"); err != nil {
+		return err
+	}
+	after, err := testRemainingRows(tx, requestID)
+	if err != nil {
+		return err
+	}
+	if before-after != uint64(rows) {
+		return fmt.Errorf("deletion capacity release delta %d -> %d, want %d", before, after, rows)
+	}
+	return testAdjustCapacity(ctx, tx, -int64(rows), 0)
+}
+
 func (a *testAccounting) CompleteAttempt(
 	ctx context.Context,
 	tx *sql.Tx,
