@@ -1,15 +1,4 @@
-import type { TFunction } from 'i18next';
-
-/** Keep feature defaults usable until the shared catalogs provide a key. */
-export function gameText(
-  t: TFunction,
-  key: string,
-  defaultValue: string,
-  options?: Record<string, unknown>,
-): string {
-  return t(key, { defaultValue, ...(options ?? {}) });
-}
-
+/** Stable species roster retained for the shared catalog completeness gate. */
 export const itemNames: Readonly<Record<string, string>> = Object.freeze({
   whitebait: 'Whitebait',
   gudgeon: 'Gudgeon',
@@ -48,9 +37,45 @@ export const itemNames: Readonly<Record<string, string>> = Object.freeze({
   unknown: 'Unknown catch',
 });
 
-export function itemName(t: TFunction, key: string): string {
-  const known = Object.prototype.hasOwnProperty.call(itemNames, key);
-  const fallback = known ? itemNames[key] : itemNames.unknown;
-  const lookup = known ? `games.fishing.items.${key}` : 'games.fishing.items.unknown';
-  return gameText(t, lookup, fallback);
+const itemNamesZH: Readonly<Record<string, string>> = Object.freeze({
+  whitebait: '银鱼',
+  gudgeon: '鮈鱼',
+  horse_mouth: '马口鱼',
+  smelt: '胡瓜鱼',
+  loach: '泥鳅',
+  crucian: '鲫鱼',
+  tilapia: '罗非鱼',
+  yellow_catfish: '黄颡鱼',
+  ayu: '香鱼',
+  stream_carp: '溪流鲤',
+  common_carp: '鲤鱼',
+  snakehead: '乌鳢',
+  catfish: '鲶鱼',
+  mandarin_fish: '鳜鱼',
+  rainbow_trout: '虹鳟',
+  grass_carp: '草鱼',
+  silver_carp: '白鲢',
+  bighead_carp: '花鲢',
+  black_carp: '青鱼',
+  japanese_eel: '日本鳗鲡',
+  yellowcheek: '鳡鱼',
+  taimen: '哲罗鲑',
+  koi: '锦鲤',
+  boot: '旧靴子',
+  seaweed: '水草',
+  plastic_bag: '塑料袋',
+  branch: '树枝',
+  old_tire: '旧轮胎',
+  glasses: '眼镜',
+  phone_case: '手机壳',
+  fry: '小鱼苗',
+  bottle: '宝物瓶',
+  clover: '幸运草',
+  shell: '宝贝贝壳',
+  unknown: '未知收获',
+});
+
+export function fishingItemName(key: string, language: string): string {
+  const dictionary = language === 'zh' ? itemNamesZH : itemNames;
+  return dictionary[key] ?? dictionary.unknown;
 }
