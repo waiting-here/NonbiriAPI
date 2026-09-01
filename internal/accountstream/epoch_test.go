@@ -326,3 +326,91 @@ func TestConcurrentPublishPurgeReplayStress(t *testing.T) {
 	cancel()
 	consumers.Wait()
 }
+
+func TestForgetAccountsClearsDeletedIdentityWithoutSnapshot(t *testing.T) {
+	authority := newTestAuthority(1)
+	authority.setEpoch(1, stringPointer("1"))
+	hub, _ := newTestHub(t, authority, nil)
+	subscription, err := hub.Subscribe(context.Background(), SubscribeRequest{
+		AccountID: 1, Channels: []Channel{ChannelActivities, ChannelRPS},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hub.PublishCommitted(context.Background(), 1,
+		published(ChannelRPS, TypeDelta, "2", stringPointer("1"), "deleted-identity")); err != nil {
+		t.Fatal(err)
+	}
+	authority.mu.Lock()
+	authority.fail["1/activities"] = errors.New("account deleted")
+	authority.fail["1/rps"] = errors.New("account deleted")
+	authority.mu.Unlock()
+
+	if err := hub.ForgetAccounts(context.Background(), []int64{1, 1, 999}); err != nil {
+		t.Fatalf("forget accounts: %v", err)
+	}
+	if _, err := subscription.Next(context.Background()); !errors.Is(err, ErrClosed) {
+		t.Fatalf("forgotten subscription remained readable: %v", err)
+	}
+	subscription.pendingMu.Lock()
+	pending := len(subscription.pending)
+	subscription.pendingMu.Unlock()
+	if pending != 0 || len(subscription.queue) != 0 {
+		t.Fatalf("forgotten subscription retained pending=%d queued=%d", pending, len(subscription.queue))
+	}
+
+	state := hub.accounts[1]
+	state.mu.Lock()
+	ring := len(state.ring)
+	ringBytes := state.ringBytes
+	discarded := len(state.discarded)
+	subscribers := len(state.subscribers)
+	epochKnown, epoch := state.rpsEpochKnown, state.rpsEpoch
+	state.mu.Unlock()
+	if ring != 0 || ringBytes != 0 || discarded != 0 || subscribers != 0 || epochKnown || epoch != nil {
+		t.Fatalf("forgotten state ring=%d bytes=%d discarded=%d subscribers=%d epoch=%v/%v",
+			ring, ringBytes, discarded, subscribers, epochKnown, epoch)
+	}
+	hub.mu.Lock()
+	_, activityRegistered := hub.activitySubscriptions[1]
+	_, unknownStateCreated := hub.accounts[999]
+	_, unknownForgotten := hub.forgotten[999]
+	hub.mu.Unlock()
+	if activityRegistered || unknownStateCreated || !unknownForgotten || hub.connections.Load() != 0 {
+		t.Fatalf("forget bookkeeping activity=%v unknown_state=%v unknown_marker=%v connections=%d",
+			activityRegistered, unknownStateCreated, unknownForgotten, hub.connections.Load())
+	}
+
+	if _, err := hub.PublishActivitiesCommitted(context.Background(), 1,
+		ActivitiesPublishPlan{Generation: hub.activitiesGeneration.Load()},
+		published(ChannelActivities, TypeDelta, "3", nil, "late")); !errors.Is(err, ErrClosed) {
+		t.Fatalf("late publish after forget: %v", err)
+	}
+	if _, err := hub.Subscribe(context.Background(), SubscribeRequest{
+		AccountID: 1, Channels: []Channel{ChannelRPS},
+	}); !errors.Is(err, ErrClosed) {
+		t.Fatalf("forgotten account resubscribed: %v", err)
+	}
+	if err := hub.PurgeAccounts(context.Background(), []int64{1}); !errors.Is(err, ErrClosed) {
+		t.Fatalf("forgotten account rebuilt: %v", err)
+	}
+}
+
+func TestForgetAccountsRejectsInvalidOrCancelledInputWithoutMutation(t *testing.T) {
+	authority := newTestAuthority(1)
+	hub, _ := newTestHub(t, authority, nil)
+	if err := hub.ForgetAccounts(context.Background(), []int64{0}); !errors.Is(err, ErrInvalidEvent) {
+		t.Fatalf("invalid account error=%v", err)
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := hub.ForgetAccounts(cancelled, []int64{1}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled forget error=%v", err)
+	}
+	hub.mu.Lock()
+	forgotten := len(hub.forgotten)
+	hub.mu.Unlock()
+	if forgotten != 0 {
+		t.Fatalf("invalid forget mutated %d tombstones", forgotten)
+	}
+}

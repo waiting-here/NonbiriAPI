@@ -78,6 +78,7 @@ type accountState struct {
 type Hub struct {
 	mu                    sync.Mutex
 	accounts              map[int64]*accountState
+	forgotten             map[int64]struct{}
 	activitySubscriptions map[int64]int
 	activitiesBarrier     sync.RWMutex
 	activitiesGeneration  atomic.Uint64
@@ -98,6 +99,7 @@ func newHub(config hubConfig) (*Hub, error) {
 	}
 	hub := &Hub{
 		accounts:              make(map[int64]*accountState),
+		forgotten:             make(map[int64]struct{}),
 		activitySubscriptions: make(map[int64]int),
 		config:                config,
 	}
@@ -114,6 +116,9 @@ func (hub *Hub) account(accountID int64) (*accountState, error) {
 	if hub.closed.Load() {
 		return nil, ErrClosed
 	}
+	if _, forgotten := hub.forgotten[accountID]; forgotten {
+		return nil, ErrClosed
+	}
 	state := hub.accounts[accountID]
 	if state == nil {
 		state = &accountState{
@@ -123,6 +128,16 @@ func (hub *Hub) account(accountID int64) (*accountState, error) {
 		hub.accounts[accountID] = state
 	}
 	return state, nil
+}
+
+func (hub *Hub) accountForgotten(accountID int64) bool {
+	if hub == nil || accountID <= 0 {
+		return true
+	}
+	hub.mu.Lock()
+	defer hub.mu.Unlock()
+	_, forgotten := hub.forgotten[accountID]
+	return forgotten
 }
 
 func (hub *Hub) reserveConnection() bool {
@@ -335,7 +350,7 @@ func (hub *Hub) publishCommitted(ctx context.Context, accountID int64, activitie
 	}
 	state.mu.Lock()
 	defer state.mu.Unlock()
-	if hub.closed.Load() {
+	if hub.closed.Load() || hub.accountForgotten(accountID) {
 		return Frame{}, ErrClosed
 	}
 	if event.Channel == ChannelActivities && hub.activitiesGeneration.Load() != activitiesGeneration {
@@ -369,6 +384,68 @@ func (hub *Hub) publishCommitted(ctx context.Context, accountID int64, activitie
 		}
 	}
 	return frame.clone(), nil
+}
+
+// ForgetAccounts permanently closes and discards every process-local frame
+// for deleted account identities. Unlike PurgeAccounts it deliberately does
+// not request a replacement snapshot: a deleted account is no longer a valid
+// snapshot subject. The tombstone also rejects delayed post-commit publishers
+// that obtained their account state before deletion completed.
+func (hub *Hub) ForgetAccounts(ctx context.Context, accountIDs []int64) error {
+	if hub == nil || ctx == nil || hub.closed.Load() {
+		return ErrClosed
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	unique := make(map[int64]struct{}, len(accountIDs))
+	for _, accountID := range accountIDs {
+		if accountID <= 0 {
+			return ErrInvalidEvent
+		}
+		unique[accountID] = struct{}{}
+	}
+	ids := make([]int64, 0, len(unique))
+	for accountID := range unique {
+		ids = append(ids, accountID)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+
+	type forgetTarget struct {
+		accountID int64
+		state     *accountState
+	}
+	targets := make([]forgetTarget, 0, len(ids))
+	hub.mu.Lock()
+	if hub.closed.Load() {
+		hub.mu.Unlock()
+		return ErrClosed
+	}
+	for _, accountID := range ids {
+		hub.forgotten[accountID] = struct{}{}
+		if state := hub.accounts[accountID]; state != nil {
+			targets = append(targets, forgetTarget{accountID: accountID, state: state})
+		}
+	}
+	hub.mu.Unlock()
+
+	for _, target := range targets {
+		target.state.mu.Lock()
+		for subscription := range target.state.subscribers {
+			subscription.discardLocked(target.state)
+		}
+		for index := range target.state.ring {
+			target.state.ring[index] = ringEntry{}
+		}
+		target.state.ring = nil
+		target.state.ringBytes = 0
+		clear(target.state.discarded)
+		target.state.activitiesGeneration = 0
+		target.state.rpsEpochKnown = false
+		target.state.rpsEpoch = nil
+		target.state.mu.Unlock()
+	}
+	return nil
 }
 
 func (hub *Hub) newFrame(channel Channel, eventType EventType, revision, epoch *string, data json.RawMessage) (Frame, error) {
@@ -582,6 +659,11 @@ func (hub *Hub) PurgeAccounts(ctx context.Context, accountIDs []int64) error {
 	}()
 	if hub.closed.Load() {
 		return ErrClosed
+	}
+	for _, target := range targets {
+		if hub.accountForgotten(target.accountID) {
+			return ErrClosed
+		}
 	}
 
 	activitiesGeneration := hub.activitiesGeneration.Load()

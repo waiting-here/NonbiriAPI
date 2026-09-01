@@ -72,7 +72,7 @@ func (hub *Hub) Subscribe(ctx context.Context, request SubscribeRequest) (*Subsc
 	}
 	state.mu.Lock()
 	defer state.mu.Unlock()
-	if hub.closed.Load() {
+	if hub.closed.Load() || hub.accountForgotten(request.AccountID) {
 		return nil, ErrClosed
 	}
 	if len(state.subscribers) >= hub.config.maxPerAccount {
@@ -220,6 +220,9 @@ func (hub *Hub) snapshotSetLocked(ctx context.Context, accountID int64, state *a
 
 func (subscription *Subscription) replacePending(frames []queuedFrame) {
 	subscription.pendingMu.Lock()
+	for index := range subscription.pending {
+		subscription.pending[index] = queuedFrame{}
+	}
 	subscription.pending = append(subscription.pending[:0], frames...)
 	subscription.pendingMu.Unlock()
 }
@@ -282,6 +285,34 @@ func (subscription *Subscription) closeLocked(state *accountState) {
 	}
 	close(subscription.queue)
 	subscription.hub.releaseConnection()
+}
+
+// discardLocked is the permanent-account-deletion variant of closeLocked.
+// The caller holds account.mu; queued and pending frames are removed before
+// the subscription is closed so no deleted identity remains deliverable.
+func (subscription *Subscription) discardLocked(state *accountState) {
+	if !subscription.closed.CompareAndSwap(false, true) {
+		return
+	}
+	subscription.deliveryMu.Lock()
+	subscription.sequence.Add(1)
+	subscription.replacePending(nil)
+	for {
+		select {
+		case <-subscription.queue:
+		default:
+			goto drained
+		}
+	}
+drained:
+	delete(state.subscribers, subscription)
+	if subscription.activityRegistered {
+		subscription.hub.unregisterActivitySubscription(subscription.accountID)
+		subscription.activityRegistered = false
+	}
+	close(subscription.queue)
+	subscription.hub.releaseConnection()
+	subscription.deliveryMu.Unlock()
 }
 
 func (subscription *Subscription) Close() error {
