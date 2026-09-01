@@ -22,6 +22,12 @@ var (
 	ErrNotFound          = errors.New("routing: model not found")
 	ErrAmbiguousIdentity = errors.New("routing: model identity is ambiguous")
 	ErrUnbound           = errors.New("routing: model has no available bindings")
+	ErrResourceLimit     = errors.New("routing: resource limit exceeded")
+)
+
+const (
+	MaxSnapshotCandidates = 100
+	MaxRoutableModels     = 1000
 )
 
 type Store struct {
@@ -38,6 +44,43 @@ func New(store *db.Store) (*Store, error) {
 type Identity struct {
 	ModelID  string
 	FullName string
+}
+
+// LogicalPreflight is the candidate-free owner-scoped routing decision. Its
+// fields are safe logical-model facts only; no binding, endpoint, key, catalog
+// row, or secret reference can be represented by this type.
+type LogicalPreflight struct {
+	modelID          int64
+	ownerUserID      int64
+	provider         string
+	model            string
+	fullName         string
+	routeStrategy    string
+	silentRetry      bool
+	flattenToolCalls bool
+	revision         int64
+	bindingRevision  int64
+}
+
+func (p LogicalPreflight) ModelID() int64         { return p.modelID }
+func (p LogicalPreflight) OwnerUserID() int64     { return p.ownerUserID }
+func (p LogicalPreflight) Provider() string       { return p.provider }
+func (p LogicalPreflight) Model() string          { return p.model }
+func (p LogicalPreflight) FullName() string       { return p.fullName }
+func (p LogicalPreflight) RouteStrategy() string  { return p.routeStrategy }
+func (p LogicalPreflight) SilentRetry() bool      { return p.silentRetry }
+func (p LogicalPreflight) FlattenToolCalls() bool { return p.flattenToolCalls }
+func (p LogicalPreflight) Revision() int64        { return p.revision }
+func (p LogicalPreflight) BindingRevision() int64 { return p.bindingRevision }
+func (LogicalPreflight) String() string           { return "[redacted logical route]" }
+func (LogicalPreflight) GoString() string         { return "[redacted logical route]" }
+func (LogicalPreflight) LogValue() slog.Value     { return slog.StringValue("[redacted logical route]") }
+
+type RoutableModel struct {
+	ModelID   int64
+	Provider  string
+	FullName  string
+	CreatedAt int64
 }
 
 type Candidate struct {
@@ -103,6 +146,81 @@ type modelFacts struct {
 	silentRetry, flattenToolCalls         int
 }
 
+// Preflight resolves one caller-supplied model identifier under both legal
+// interpretations. A decimal string may name a row id and may independently
+// be a full name; disagreement is rejected instead of selecting one by
+// precedence. This transaction never reads physical candidates.
+func (s *Store) Preflight(ctx context.Context, ownerUserID int64, identifier string) (LogicalPreflight, error) {
+	if s == nil || s.db == nil || ctx == nil || ownerUserID <= 0 || identifier == "" {
+		return LogicalPreflight{}, ErrInvalidIdentity
+	}
+	modelID, hasID, idErr := parseModelID(identifier)
+	hasName := validFullName(identifier)
+	if !hasID && !hasName {
+		if idErr != nil {
+			return LogicalPreflight{}, ErrInvalidIdentity
+		}
+		return LogicalPreflight{}, ErrInvalidIdentity
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return LogicalPreflight{}, fmt.Errorf("routing: begin preflight: %w", err)
+	}
+	defer tx.Rollback()
+	facts, err := resolveIdentifier(ctx, tx, ownerUserID, modelID, hasID, identifier, hasName)
+	if err != nil {
+		return LogicalPreflight{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return LogicalPreflight{}, fmt.Errorf("routing: commit preflight: %w", err)
+	}
+	return logicalPreflight(facts), nil
+}
+
+// ListRoutableModels returns only logical rows for which at least one current
+// usable binding exists. The EXISTS predicate does not materialize candidates,
+// and limit+1 turns a damaged/oversized projection into an explicit failure.
+func (s *Store) ListRoutableModels(ctx context.Context, ownerUserID int64, limit int) ([]RoutableModel, error) {
+	if s == nil || s.db == nil || ctx == nil || ownerUserID <= 0 || limit < 1 || limit > MaxRoutableModels {
+		return nil, ErrInvalidIdentity
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT m.id,m.provider,m.full_name,m.created_at
+FROM models m
+WHERE m.user_id=? AND EXISTS(
+ SELECT 1 FROM model_bindings b
+ JOIN endpoint_keys k ON k.id=b.endpoint_key_id
+ JOIN endpoints e ON e.id=k.endpoint_id
+ JOIN model_pair_catalog p ON p.endpoint_key_id=k.id AND p.normalized_model_id=b.upstream_model_id
+ JOIN model_discovery_evidence d ON d.endpoint_key_id=k.id
+ WHERE b.model_id=m.id AND e.user_id=m.user_id AND e.enabled=1 AND k.enabled=1
+   AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id)
+   AND (p.manual_supports>0 OR (p.automatic_supports>0 AND d.state='succeeded' AND d.revision=p.automatic_revision))
+)
+ORDER BY m.full_name,m.id LIMIT ?`, ownerUserID, limit+1)
+	if err != nil {
+		return nil, fmt.Errorf("routing: list routable models: %w", err)
+	}
+	defer rows.Close()
+	models := make([]RoutableModel, 0, limit)
+	for rows.Next() {
+		var model RoutableModel
+		if err := rows.Scan(&model.ModelID, &model.Provider, &model.FullName, &model.CreatedAt); err != nil {
+			return nil, fmt.Errorf("routing: scan routable model: %w", err)
+		}
+		if model.ModelID <= 0 || model.CreatedAt < 0 || !validFullName(model.FullName) {
+			return nil, errors.New("routing: invalid persisted routable model")
+		}
+		models = append(models, model)
+		if len(models) > limit {
+			return nil, ErrResourceLimit
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("routing: iterate routable models: %w", err)
+	}
+	return models, nil
+}
+
 func (s *Store) Snapshot(ctx context.Context, ownerUserID int64, identity Identity) (Snapshot, error) {
 	if s == nil || s.db == nil || ctx == nil || ownerUserID <= 0 {
 		return Snapshot{}, ErrInvalidIdentity
@@ -116,22 +234,9 @@ func (s *Store) Snapshot(ctx context.Context, ownerUserID int64, identity Identi
 		return Snapshot{}, fmt.Errorf("routing: begin snapshot: %w", err)
 	}
 	defer tx.Rollback()
-	var facts modelFacts
-	if hasID {
-		facts, err = readModelByID(ctx, tx, ownerUserID, modelID)
-		if err != nil {
-			return Snapshot{}, err
-		}
-	}
-	if identity.FullName != "" {
-		byName, err := readModelByName(ctx, tx, ownerUserID, identity.FullName)
-		if err != nil {
-			return Snapshot{}, err
-		}
-		if hasID && byName.id != facts.id {
-			return Snapshot{}, ErrAmbiguousIdentity
-		}
-		facts = byName
+	facts, err := resolveIdentifier(ctx, tx, ownerUserID, modelID, hasID, identity.FullName, identity.FullName != "")
+	if err != nil {
+		return Snapshot{}, err
 	}
 	candidates, err := readCandidates(ctx, tx, ownerUserID, facts.id)
 	if err != nil {
@@ -150,6 +255,48 @@ func (s *Store) Snapshot(ctx context.Context, ownerUserID int64, identity Identi
 		revision: facts.revision, bindingRevision: facts.bindingRevision,
 		candidates: append([]Candidate(nil), candidates...),
 	}, nil
+}
+
+func resolveIdentifier(ctx context.Context, tx *sql.Tx, ownerUserID, modelID int64, hasID bool, fullName string, hasName bool) (modelFacts, error) {
+	var byID, byName modelFacts
+	var idFound, nameFound bool
+	if hasID {
+		var err error
+		byID, err = readModelByID(ctx, tx, ownerUserID, modelID)
+		if err == nil {
+			idFound = true
+		} else if !errors.Is(err, ErrNotFound) {
+			return modelFacts{}, err
+		}
+	}
+	if hasName {
+		var err error
+		byName, err = readModelByName(ctx, tx, ownerUserID, fullName)
+		if err == nil {
+			nameFound = true
+		} else if !errors.Is(err, ErrNotFound) {
+			return modelFacts{}, err
+		}
+	}
+	if idFound && nameFound && byID.id != byName.id {
+		return modelFacts{}, ErrAmbiguousIdentity
+	}
+	if idFound {
+		return byID, nil
+	}
+	if nameFound {
+		return byName, nil
+	}
+	return modelFacts{}, ErrNotFound
+}
+
+func logicalPreflight(facts modelFacts) LogicalPreflight {
+	return LogicalPreflight{
+		modelID: facts.id, ownerUserID: facts.userID, provider: facts.provider, model: facts.model,
+		fullName: facts.fullName, routeStrategy: facts.strategy, silentRetry: facts.silentRetry == 1,
+		flattenToolCalls: facts.flattenToolCalls == 1, revision: facts.revision,
+		bindingRevision: facts.bindingRevision,
+	}
 }
 
 func validFullName(value string) bool {
@@ -234,7 +381,7 @@ JOIN model_discovery_evidence d ON d.endpoint_key_id=k.id
 WHERE m.id=? AND m.user_id=? AND e.user_id=? AND e.enabled=1 AND k.enabled=1
   AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id)
   AND (p.manual_supports>0 OR (p.automatic_supports>0 AND d.state='succeeded' AND d.revision=p.automatic_revision))
-ORDER BY b.ord,b.id`, modelID, ownerUserID, ownerUserID)
+ORDER BY b.ord,b.id LIMIT ?`, modelID, ownerUserID, ownerUserID, MaxSnapshotCandidates+1)
 	if err != nil {
 		return nil, fmt.Errorf("routing: read candidates: %w", err)
 	}
@@ -264,6 +411,9 @@ ORDER BY b.ord,b.id`, modelID, ownerUserID, ownerUserID)
 		seen[identity] = struct{}{}
 		candidate.forceStoreFalse = forceStore == 1
 		candidates = append(candidates, candidate)
+		if len(candidates) > MaxSnapshotCandidates {
+			return nil, ErrResourceLimit
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("routing: read candidates: %w", err)

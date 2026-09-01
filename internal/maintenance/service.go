@@ -26,6 +26,7 @@ var (
 	ErrInvalidMutation  = errors.New("invalid maintenance mutation")
 	ErrInvariant        = errors.New("maintenance invariant failed")
 	ErrNotInMaintenance = errors.New("maintenance continuation is not active")
+	ErrMaintenanceOn    = errors.New("maintenance admission is closed")
 )
 
 type ServiceOptions struct {
@@ -33,6 +34,31 @@ type ServiceOptions struct {
 	Gate       *Gate
 	Registry   *Registry
 	Now        func() time.Time
+}
+
+// AuthorizeChatAcceptance is the transaction-local final gate used by the
+// public chat claim rail. It deliberately reads the committed singleton and
+// its site-config mirror through the caller's transaction; the process-local
+// Gate is only an observation and cannot authorize an economic acceptance.
+func (service *Service) AuthorizeChatAcceptance(ctx context.Context, tx *sql.Tx, userID, decisionNow int64) error {
+	if service == nil || ctx == nil || tx == nil || userID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond {
+		return ErrInvalidMutation
+	}
+	var enabled int
+	var mirror string
+	if err := tx.QueryRowContext(ctx, `SELECT m.enabled,c.value
+FROM maintenance_state m
+JOIN site_config c ON c.key='maintenance_mode'
+WHERE m.id=1`).Scan(&enabled, &mirror); err != nil {
+		return fmt.Errorf("authorize chat acceptance: read maintenance singleton: %w", err)
+	}
+	if (enabled != 0 && enabled != 1) || (mirror != "0" && mirror != "1") || (enabled == 1) != (mirror == "1") {
+		return ErrInvariant
+	}
+	if enabled == 1 {
+		return ErrMaintenanceOn
+	}
+	return nil
 }
 
 type Service struct {

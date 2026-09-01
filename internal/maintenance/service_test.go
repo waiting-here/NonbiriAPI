@@ -126,6 +126,51 @@ func beginMaintenanceTx(t *testing.T, database *sql.DB) *sql.Tx {
 	return tx
 }
 
+func TestChatAcceptanceUsesCallerTransactionAndIgnoresProcessProjection(t *testing.T) {
+	store := openMaintenanceStore(t)
+	service, gate := newMaintenanceService(t, NewRegistry())
+	if gate.Ready() {
+		t.Fatal("test gate unexpectedly initialized")
+	}
+	tx := beginMaintenanceTx(t, store.DB())
+	if err := service.AuthorizeChatAcceptance(context.Background(), tx, 7, maintenanceTestNow); !errors.Is(err, ErrMaintenanceOn) {
+		_ = tx.Rollback()
+		t.Fatalf("fresh maintenance acceptance error = %v, want enabled", err)
+	}
+	if _, err := tx.Exec(`UPDATE maintenance_state SET enabled=0,revision=revision+1,changed_at=? WHERE id=1`, maintenanceTestNow); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`UPDATE site_config SET value='0',updated_at=? WHERE key='maintenance_mode'`, maintenanceTestNow); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := service.AuthorizeChatAcceptance(context.Background(), tx, 7, maintenanceTestNow); err != nil {
+		_ = tx.Rollback()
+		t.Fatalf("transaction-local open acceptance: %v", err)
+	}
+	_ = tx.Rollback()
+}
+
+func TestChatAcceptanceRejectsMirrorMismatchAndInvalidInputs(t *testing.T) {
+	store := openMaintenanceStore(t)
+	service, _ := newMaintenanceService(t, NewRegistry())
+	tx := beginMaintenanceTx(t, store.DB())
+	if _, err := tx.Exec(`UPDATE site_config SET value='0',updated_at=? WHERE key='maintenance_mode'`, maintenanceTestNow); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := service.AuthorizeChatAcceptance(context.Background(), tx, 1, maintenanceTestNow); !errors.Is(err, ErrInvariant) {
+		_ = tx.Rollback()
+		t.Fatalf("mirror mismatch error = %v, want invariant", err)
+	}
+	_ = tx.Rollback()
+
+	if err := service.AuthorizeChatAcceptance(context.Background(), nil, 1, maintenanceTestNow); !errors.Is(err, ErrInvalidMutation) {
+		t.Fatalf("nil transaction error = %v", err)
+	}
+}
+
 func commitMaintenanceTransition(t *testing.T, database *sql.DB, tx *sql.Tx, transition Transition) {
 	t.Helper()
 	if err := tx.Commit(); err != nil {

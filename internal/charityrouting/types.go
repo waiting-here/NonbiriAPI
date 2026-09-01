@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -16,15 +17,33 @@ import (
 )
 
 var (
-	ErrInvalidRequest = errors.New("charity routing: invalid request")
-	ErrUnauthorized   = errors.New("charity routing: unauthorized")
-	ErrForbidden      = errors.New("charity routing: forbidden")
-	ErrNotFound       = errors.New("charity routing: not found")
-	ErrConflict       = errors.New("charity routing: conflict")
-	ErrResourceLimit  = errors.New("charity routing: resource limit exceeded")
-	ErrUnavailable    = errors.New("charity routing: unavailable")
-	ErrInvariant      = errors.New("charity routing: invariant violation")
+	ErrInvalidRequest      = errors.New("charity routing: invalid request")
+	ErrUnauthorized        = errors.New("charity routing: unauthorized")
+	ErrForbidden           = errors.New("charity routing: forbidden")
+	ErrNotFound            = errors.New("charity routing: not found")
+	ErrConflict            = errors.New("charity routing: conflict")
+	ErrResourceLimit       = errors.New("charity routing: resource limit exceeded")
+	ErrUnavailable         = errors.New("charity routing: unavailable")
+	ErrInvariant           = errors.New("charity routing: invariant violation")
+	ErrFeatureDisabled     = errors.New("charity routing: feature disabled")
+	ErrCharitySuspended    = errors.New("charity routing: caller suspended")
+	ErrInsufficientCredits = errors.New("charity routing: insufficient credits")
+	ErrContentTooShort     = errors.New("charity routing: content too short")
 )
+
+type ContentTooShortError struct {
+	Actual  int
+	Minimum int
+}
+
+func (e *ContentTooShortError) Error() string {
+	if e == nil {
+		return ErrContentTooShort.Error()
+	}
+	return fmt.Sprintf("charity routing: content has %d runes; minimum is %d", e.Actual, e.Minimum)
+}
+
+func (*ContentTooShortError) Unwrap() error { return ErrContentTooShort }
 
 type RoleFinalTxAuthorizer = donation.RoleFinalTxAuthorizer
 type AdminRouteRegistrar = donation.AdminRouteRegistrar
@@ -324,6 +343,25 @@ type RuntimeSnapshot struct {
 	FlattenToolCalls bool
 	ReservedMilli    int64
 	candidates       []RuntimeCandidate
+}
+
+// RuntimePreflight carries only candidate-free logical, policy, and caller
+// eligibility facts. It intentionally has no endpoint, key, donation, health,
+// quota, or binding field.
+type RuntimePreflight struct {
+	ModelID          int64
+	Provider         string
+	Model            string
+	FullName         string
+	FlattenToolCalls bool
+	ReservedMilli    int64
+}
+
+type AvailableModel struct {
+	ModelID   int64
+	Provider  string
+	FullName  string
+	CreatedAt int64
 }
 
 func (snapshot RuntimeSnapshot) Candidates() []RuntimeCandidate {

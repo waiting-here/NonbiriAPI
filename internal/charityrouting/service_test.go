@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
@@ -124,6 +125,23 @@ revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, discord, "
 	}
 	id, _ := result.LastInsertId()
 	return id
+}
+
+func (environment *routingTestEnv) seedUserBalance(t *testing.T, userID int64, decimal string) {
+	t.Helper()
+	magnitude, err := db.ParseU128Decimal(decimal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sign := 1
+	if decimal == "0" {
+		sign = 0
+	}
+	if _, err := environment.store.DB().Exec(`INSERT INTO credit_accounts(
+kind,user_id,code,balance_sign,balance_mag,created_at,updated_at)
+VALUES('user',?,NULL,?,?,?,?)`, userID, sign, db.EncodeU128(magnitude), routingTestNow, routingTestNow); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func routingMutation(t *testing.T, seed byte, method, route string, ids []int64, body any) resources.ControlMutation {
@@ -317,6 +335,120 @@ func TestBindingCandidateRuntimeCapacityAndSignedCursor(t *testing.T) {
 	}
 	if environment.state.dueCalls.Load() == 0 {
 		t.Fatal("routing reads did not invoke expiry owner")
+	}
+}
+
+func TestRuntimePreflightIsCandidateFreeAndEnforcesCallerPolicy(t *testing.T) {
+	environment := newRoutingTestEnv(t)
+	environment.seedUser(t, true, nil)
+	caller := environment.seedUser(t, false, nil)
+	environment.seedUserBalance(t, caller, "100000")
+	model := environment.createModel(t, 'M')
+	modelID, _ := parsePositiveID(model.ID)
+	if _, err := environment.store.DB().Exec(`UPDATE site_config SET value='3' WHERE key='charity_min_chars'`); err != nil {
+		t.Fatal(err)
+	}
+	request, err := openai.DecodeChatRequest(strings.NewReader(`{"model":"[公益]provider/model","messages":[{"role":"user","content":"hello"}]}`), openai.MaxRequestBodyBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(request.Clear)
+
+	preflight, err := environment.service.Preflight(context.Background(), caller, request.Model, request, routingTestNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preflight.ModelID != modelID || preflight.FullName != request.Model || preflight.ReservedMilli != 2400 || !preflight.FlattenToolCalls {
+		t.Fatalf("preflight=%+v", preflight)
+	}
+	if environment.state.dueCalls.Load() != 0 {
+		t.Fatalf("candidate-free preflight materialized donation state %d times", environment.state.dueCalls.Load())
+	}
+	if _, err := environment.service.Snapshot(context.Background(), modelID, routingTestNow); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("candidate-free model snapshot error=%v", err)
+	}
+	if environment.state.dueCalls.Load() != 1 {
+		t.Fatalf("snapshot expiry calls=%d", environment.state.dueCalls.Load())
+	}
+
+	short, err := openai.DecodeChatRequest(strings.NewReader(`{"model":"[公益]provider/model","messages":[{"role":"user","content":"hi"}]}`), openai.MaxRequestBodyBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer short.Clear()
+	if _, err := environment.service.Preflight(context.Background(), caller, short.Model, short, routingTestNow); !errors.Is(err, ErrContentTooShort) {
+		t.Fatalf("short-content error=%v", err)
+	}
+	if _, err := environment.store.DB().Exec(`UPDATE users SET charity_suspended_until=? WHERE id=?`, routingTestNow+1, caller); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := environment.service.Preflight(context.Background(), caller, request.Model, request, routingTestNow); !errors.Is(err, ErrCharitySuspended) {
+		t.Fatalf("suspended error=%v", err)
+	}
+	if _, err := environment.store.DB().Exec(`UPDATE users SET charity_suspended_until=NULL WHERE id=?`, caller); err != nil {
+		t.Fatal(err)
+	}
+	zero := db.EncodeU128(db.U128{})
+	if _, err := environment.store.DB().Exec(`UPDATE credit_accounts SET balance_sign=0,balance_mag=? WHERE user_id=?`, zero, caller); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := environment.service.Preflight(context.Background(), caller, request.Model, request, routingTestNow); !errors.Is(err, ErrInsufficientCredits) {
+		t.Fatalf("insufficient-credit error=%v", err)
+	}
+}
+
+func TestAvailableModelListTracksGateCandidateAndStableBound(t *testing.T) {
+	environment := newRoutingTestEnv(t)
+	environment.seedUser(t, true, nil)
+	owner := environment.seedUser(t, false, nil)
+	first := environment.createModel(t, 'N')
+	firstID, _ := parsePositiveID(first.ID)
+	secondInput := testModelCreate()
+	secondInput.Provider = "alpha"
+	secondInput.Model = "second"
+	secondResult, err := environment.service.CreateAdmin(context.Background(),
+		routingMutation(t, 'O', http.MethodPost, routeAdminModels, nil, map[string]any{"second": true}), secondInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondID, _ := parsePositiveID(secondResult.Value.ID)
+
+	models, err := environment.service.ListAvailableModels(context.Background(), routingTestNow, 10)
+	if err != nil || len(models) != 0 {
+		t.Fatalf("unbound available models=%+v err=%v", models, err)
+	}
+	_, firstKey, _ := environment.seedCandidate(t, owner, 'm', "upstream-first")
+	_, secondKey, _ := environment.seedCandidate(t, owner, 'n', "upstream-second")
+	for _, binding := range []struct {
+		modelID  int64
+		keyID    int64
+		upstream string
+		seed     byte
+	}{
+		{modelID: firstID, keyID: firstKey, upstream: "upstream-first", seed: 'P'},
+		{modelID: secondID, keyID: secondKey, upstream: "upstream-second", seed: 'Q'},
+	} {
+		if _, err := environment.service.AddBindingsAdmin(context.Background(), binding.modelID,
+			routingMutation(t, binding.seed, http.MethodPost, routeAdminBindingBatch, []int64{binding.modelID}, map[string]any{"bind": binding.upstream}),
+			BindingBatch{ExpectedBindingRevision: "0", Selections: []BindingSelection{{
+				DonationKeyID: fmt.Sprint(binding.keyID), UpstreamModelID: binding.upstream,
+			}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	models, err = environment.service.ListAvailableModels(context.Background(), routingTestNow, 10)
+	if err != nil || len(models) != 2 || models[0].FullName != "[公益]alpha/second" || models[1].FullName != "[公益]provider/model" {
+		t.Fatalf("available models=%+v err=%v", models, err)
+	}
+	if _, err := environment.service.ListAvailableModels(context.Background(), routingTestNow, 1); !errors.Is(err, ErrResourceLimit) {
+		t.Fatalf("available model bound error=%v", err)
+	}
+	if _, err := environment.store.DB().Exec(`UPDATE site_config SET value='0' WHERE key='charity_enabled'`); err != nil {
+		t.Fatal(err)
+	}
+	models, err = environment.service.ListAvailableModels(context.Background(), routingTestNow, 10)
+	if err != nil || models == nil || len(models) != 0 {
+		t.Fatalf("disabled available models=%+v err=%v", models, err)
 	}
 }
 

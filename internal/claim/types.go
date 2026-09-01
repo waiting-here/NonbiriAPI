@@ -355,6 +355,13 @@ type Accounting interface {
 // context and transaction and must not commit or open another transaction.
 type DomainPersistence func(context.Context, *sql.Tx) error
 
+// AcceptanceGate is the final transaction-local admission decision for an
+// economic chat request. It runs after the account has been revalidated and
+// before any reservation, request, log, or domain fact is written.
+type AcceptanceGate interface {
+	AuthorizeChatAcceptance(context.Context, *sql.Tx, int64, int64) error
+}
+
 type RequestReservation struct {
 	RequestID     string
 	UserID        int64
@@ -473,5 +480,6 @@ type Dependencies struct {
 	Secrets    secret.GenerationTwoContextCodec
 	Accounting Accounting
 	Charity    Charity
+	Acceptance AcceptanceGate
 	Now        func() time.Time
 }
