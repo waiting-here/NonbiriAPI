@@ -1433,6 +1433,25 @@ WHEN NEW.expires_at NOT BETWEEN 0 AND 253402300799
 BEGIN SELECT RAISE(ABORT,'game lease time is invalid'); END;
 CREATE TRIGGER users_admin_immutable BEFORE UPDATE OF is_admin ON users WHEN OLD.is_admin<>NEW.is_admin BEGIN SELECT RAISE(ABORT,'is_admin is immutable'); END;
 CREATE TRIGGER users_admin_delete_guard BEFORE DELETE ON users WHEN OLD.is_admin=1 BEGIN SELECT RAISE(ABORT,'environment admin cannot be deleted'); END;
+CREATE TRIGGER users_request_handoff_delete_guard BEFORE DELETE ON users
+WHEN EXISTS(
+ SELECT 1 FROM logical_requests r
+ WHERE r.user_id=OLD.id AND r.settlement_destination='user'
+   AND (r.accounting_state='reserved' OR EXISTS(
+    SELECT 1 FROM dispatch_claims c
+    WHERE c.logical_request_id=r.id AND c.state IN ('claimed','dispatched')
+   ))
+)
+BEGIN SELECT RAISE(ABORT,'user request settlement is not handed off'); END;
+CREATE TRIGGER users_fishing_reservation_delete_guard BEFORE DELETE ON users
+WHEN EXISTS(SELECT 1 FROM game_fishing_batches b WHERE b.user_id=OLD.id AND b.state='reserved')
+BEGIN SELECT RAISE(ABORT,'user fishing reservation is not released'); END;
+CREATE TRIGGER users_rps_queue_delete_guard BEFORE DELETE ON users
+WHEN EXISTS(SELECT 1 FROM game_rps_queue q WHERE q.user_id=OLD.id)
+BEGIN SELECT RAISE(ABORT,'user rps queue reservation is not released'); END;
+CREATE TRIGGER users_rps_session_delete_guard BEFORE DELETE ON users
+WHEN EXISTS(SELECT 1 FROM game_rps_seats s WHERE s.user_id=OLD.id AND s.deletion_state='active')
+BEGIN SELECT RAISE(ABORT,'user rps session is not handed off'); END;
 CREATE TRIGGER users_maintenance_actor_deidentify BEFORE DELETE ON users
 BEGIN
  INSERT INTO user_deletion_markers(user_id) VALUES(OLD.id);
