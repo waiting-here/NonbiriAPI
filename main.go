@@ -511,6 +511,39 @@ func (registrar issueRouteRegistrar) RegisterUserRoute(method, pattern string, h
 	})
 }
 
+type maintenanceRouteRegistrar struct{ runtime *auth.Runtime }
+
+var _ maintenance.StewardRouteRegistrar = maintenanceRouteRegistrar{}
+var _ maintenance.AdminRouteRegistrar = maintenanceRouteRegistrar{}
+
+func (registrar maintenanceRouteRegistrar) RegisterStewardRoute(method, pattern string, handler maintenance.AuthorizedHTTPHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterUserRoute(method, pattern, func(writer http.ResponseWriter, request *http.Request, _ resources.UserPrincipal) {
+		actor, ok := auth.ActorFromContext(request.Context())
+		if !ok || actor.Kind != authz.ActorUserSession || actor.UserID <= 0 {
+			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+			return
+		}
+		handler(writer, request, maintenance.HTTPPrincipal{Actor: actor})
+	})
+}
+
+func (registrar maintenanceRouteRegistrar) RegisterAdminRoute(method, pattern string, handler maintenance.AuthorizedHTTPHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterAdminRoute(method, pattern, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		actor, ok := auth.ActorFromContext(request.Context())
+		if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
+			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+			return
+		}
+		handler(writer, request, maintenance.HTTPPrincipal{Actor: actor})
+	}))
+}
+
 // emptyResourceValidationAuthority is the production authority when no
 // explicit endpoint validator feed is configured. Discovery and routing
 // remain live authorities; this closed provider contributes no synthetic
@@ -958,6 +991,13 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err := reportRepository.RegisterRoutes(authRuntime); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("register report routes: %w", err)
+	}
+	maintenanceRoutes := maintenanceRouteRegistrar{runtime: authRuntime}
+	if err := maintenance.RegisterRoutes(maintenanceRoutes, maintenanceRoutes, maintenance.HTTPOptions{
+		Database: store.DB(), Service: maintenanceService,
+	}); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register maintenance routes: %w", err)
 	}
 	if err := debug.RegisterRoutes(debugRouteRegistrar{runtime: authRuntime}, debugHub, debugMutations); err != nil {
 		cleanup()

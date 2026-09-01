@@ -22,7 +22,6 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
-	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -96,6 +95,7 @@ func assertFreshSafeApplication(t *testing.T, app *application) {
 		{name: "game API mounted behind maintenance", host: auditUserHost, path: "/api/games", want: http.StatusServiceUnavailable},
 		{name: "Debug API mounted behind maintenance", host: auditUserHost, path: "/api/debug/session", want: http.StatusServiceUnavailable},
 		{name: "log API mounted behind maintenance", host: auditUserHost, path: "/api/logs", want: http.StatusServiceUnavailable},
+		{name: "steward maintenance mounted behind maintenance", host: auditUserHost, path: "/api/steward/maintenance", want: http.StatusServiceUnavailable},
 		{name: "account events require a session before continuation", host: auditUserHost, path: "/api/events", want: http.StatusUnauthorized},
 		{name: "export rejects wrong method", host: auditUserHost, path: "/api/account/export", want: http.StatusMethodNotAllowed},
 		{name: "caller models mounted behind maintenance", host: auditUserHost, path: "/v1/models", want: http.StatusServiceUnavailable},
@@ -108,6 +108,7 @@ func assertFreshSafeApplication(t *testing.T, app *application) {
 		{name: "admin announcements require session", host: auditAdminHost, path: "/admin/api/announcements", want: http.StatusUnauthorized},
 		{name: "admin reports require session", host: auditAdminHost, path: "/admin/api/reports/badge", want: http.StatusUnauthorized},
 		{name: "admin logs require session", host: auditAdminHost, path: "/admin/api/logs", want: http.StatusUnauthorized},
+		{name: "admin maintenance requires session", host: auditAdminHost, path: "/admin/api/maintenance", want: http.StatusUnauthorized},
 		{name: "admin games require session", host: auditAdminHost, path: "/admin/api/games/config", want: http.StatusUnauthorized},
 		{name: "admin cannot reach user bootstrap", host: auditAdminHost, path: "/api/config", want: http.StatusNotFound},
 		{name: "user cannot reach admin API", host: auditUserHost, path: "/admin/api/config", want: http.StatusNotFound},
@@ -316,6 +317,10 @@ func TestGenerationTwoRootAuthenticationAndMaintenanceWiring(t *testing.T) {
 	if adminThursday.Code != http.StatusOK || strings.TrimSpace(adminThursday.Body.String()) != `{"period":null}` {
 		t.Fatalf("admin activities during maintenance status=%d body=%s", adminThursday.Code, adminThursday.Body.String())
 	}
+	adminMaintenance := testApplicationRequest(t, app.handler, http.MethodGet, auditAdminHost, "/admin/api/maintenance", "", []*http.Cookie{adminCookie}, nil)
+	if adminMaintenance.Code != http.StatusOK || strings.TrimSpace(adminMaintenance.Body.String()) != `{"enabled":true,"revision":"1"}` {
+		t.Fatalf("admin maintenance during maintenance status=%d body=%s", adminMaintenance.Code, adminMaintenance.Body.String())
+	}
 
 	elevated := testApplicationRequest(t, app.handler, http.MethodPost, auditAdminHost, "/admin/api/auth/elevate",
 		`{"password":"correct horse battery staple"}`, []*http.Cookie{adminCookie}, map[string]string{
@@ -368,28 +373,14 @@ FROM sessions s JOIN users u ON u.id=s.user_id WHERE u.is_admin=1`).Scan(&adminU
 		t.Fatalf("elevation replay err=%v", replayErr)
 	}
 
-	disableOperationID, err := db.GenerateOpaqueID("op_")
-	if err != nil {
-		t.Fatal(err)
-	}
-	disableTx, err := store.DB().BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	disableTransition, err := app.maintenance.DisableTx(context.Background(), disableTx, actor, maintenance.DisableCommand{
-		ExpectedRevision: state.Revision,
-		OperationID:      disableOperationID,
-		Reason:           "root route authorization verification",
-	})
-	if err != nil {
-		_ = disableTx.Rollback()
-		t.Fatalf("disable maintenance: %v", err)
-	}
-	if err := disableTx.Commit(); err != nil {
-		t.Fatal(err)
-	}
-	if err := disableTransition.ObserveAfterCommit(context.Background(), store.DB()); err != nil {
-		t.Fatalf("observe maintenance disable: %v", err)
+	disable := testApplicationRequest(t, app.handler, http.MethodPost, auditAdminHost, "/admin/api/maintenance/disable",
+		`{"expected_revision":"1","reason":"root route authorization verification"}`, []*http.Cookie{adminCookie}, map[string]string{
+			"Content-Type":    "application/json",
+			"Origin":          "http://" + auditAdminHost,
+			"Idempotency-Key": strings.Repeat("M", 22),
+		})
+	if disable.Code != http.StatusOK || strings.TrimSpace(disable.Body.String()) != `{"enabled":false,"revision":"2"}` {
+		t.Fatalf("disable maintenance route=%d %s", disable.Code, disable.Body.String())
 	}
 	if app.gate.Enabled() {
 		t.Fatal("maintenance gate remained enabled")
@@ -403,7 +394,7 @@ FROM sessions s JOIN users u ON u.id=s.user_id WHERE u.is_admin=1`).Scan(&adminU
 		t.Fatalf("activity final-transaction gate after maintenance disable err=%v", gateErr)
 	}
 	_ = activityTx.Rollback()
-	for _, path := range []string{"/api/endpoints", "/api/donations", "/api/charity/models", "/api/activities", "/api/announcements", "/api/issues?state=current", "/api/games", "/api/debug/session", "/api/logs", "/api/events"} {
+	for _, path := range []string{"/api/endpoints", "/api/donations", "/api/charity/models", "/api/activities", "/api/announcements", "/api/issues?state=current", "/api/games", "/api/debug/session", "/api/logs", "/api/steward/maintenance", "/api/events"} {
 		unauthenticated := testApplicationRequest(t, app.handler, http.MethodGet, auditUserHost, path, "", nil, nil)
 		if unauthenticated.Code != http.StatusUnauthorized {
 			t.Fatalf("unauthenticated mounted route %s status=%d body=%s", path, unauthenticated.Code, unauthenticated.Body.String())

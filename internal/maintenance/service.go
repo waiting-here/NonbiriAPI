@@ -400,8 +400,12 @@ func (service *Service) AuthorizeContinuation(ctx context.Context, tx *sql.Tx, r
 // LoadState validates the singleton and its committed event/alert/operation
 // facts. This is the crash-continuation path when a process died after commit
 // but before applying the in-memory observation.
-func LoadState(ctx context.Context, database *sql.DB) (State, error) {
-	if ctx == nil || database == nil {
+type stateQueryer interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func loadState(ctx context.Context, queryer stateQueryer) (State, error) {
+	if ctx == nil || queryer == nil {
 		return State{}, ErrInvariant
 	}
 	var (
@@ -411,7 +415,7 @@ func LoadState(ctx context.Context, database *sql.DB) (State, error) {
 		currentEvent sql.NullString
 		configValue  string
 	)
-	if err := database.QueryRowContext(ctx, `
+	if err := queryer.QueryRowContext(ctx, `
 SELECT m.enabled,m.revision,m.changed_at,m.current_event_id,c.value
 FROM maintenance_state m
 JOIN site_config c ON c.key='maintenance_mode'
@@ -431,7 +435,7 @@ WHERE m.id=1`).Scan(&enabled, &revision, &changedAt, &currentEvent, &configValue
 		}
 		var action string
 		var resolved sql.NullInt64
-		if err := database.QueryRowContext(ctx, `SELECT action,resolved_at FROM maintenance_events WHERE id=?`, currentEvent.String).Scan(&action, &resolved); err != nil {
+		if err := queryer.QueryRowContext(ctx, `SELECT action,resolved_at FROM maintenance_events WHERE id=?`, currentEvent.String).Scan(&action, &resolved); err != nil {
 			return State{}, fmt.Errorf("load maintenance current event: %w", err)
 		}
 		if state.Enabled {
@@ -439,14 +443,14 @@ WHERE m.id=1`).Scan(&enabled, &revision, &changedAt, &currentEvent, &configValue
 				return State{}, ErrInvariant
 			}
 			var operationKind, operationState string
-			if err := database.QueryRowContext(ctx, `SELECT kind,state FROM accepted_operations WHERE id=?`, currentEvent.String).Scan(&operationKind, &operationState); err != nil {
+			if err := queryer.QueryRowContext(ctx, `SELECT kind,state FROM accepted_operations WHERE id=?`, currentEvent.String).Scan(&operationKind, &operationState); err != nil {
 				return State{}, fmt.Errorf("load maintenance accepted operation: %w", err)
 			}
 			if operationKind != "maintenance_enable" || operationState != "completed" {
 				return State{}, ErrInvariant
 			}
 			var alertCount int
-			if err := database.QueryRowContext(ctx, `SELECT COUNT(*) FROM admin_alerts WHERE kind='maintenance_enabled' AND ref=? AND resolved=0`, currentEvent.String).Scan(&alertCount); err != nil {
+			if err := queryer.QueryRowContext(ctx, `SELECT COUNT(*) FROM admin_alerts WHERE kind='maintenance_enabled' AND ref=? AND resolved=0`, currentEvent.String).Scan(&alertCount); err != nil {
 				return State{}, fmt.Errorf("load maintenance primary alert: %w", err)
 			}
 			if alertCount != 1 {
@@ -460,11 +464,18 @@ WHERE m.id=1`).Scan(&enabled, &revision, &changedAt, &currentEvent, &configValue
 	}
 
 	var unresolved int
-	if err := database.QueryRowContext(ctx, `SELECT COUNT(*) FROM admin_alerts WHERE kind='maintenance_enabled' AND resolved=0`).Scan(&unresolved); err != nil {
+	if err := queryer.QueryRowContext(ctx, `SELECT COUNT(*) FROM admin_alerts WHERE kind='maintenance_enabled' AND resolved=0`).Scan(&unresolved); err != nil {
 		return State{}, fmt.Errorf("load maintenance alert set: %w", err)
 	}
 	if (state.Enabled && currentEvent.Valid && unresolved != 1) || (!state.Enabled && unresolved != 0) || (state.Enabled && !currentEvent.Valid && unresolved != 0) {
 		return State{}, ErrInvariant
 	}
 	return state, nil
+}
+
+func LoadState(ctx context.Context, database *sql.DB) (State, error) {
+	if database == nil {
+		return State{}, ErrInvariant
+	}
+	return loadState(ctx, database)
 }
