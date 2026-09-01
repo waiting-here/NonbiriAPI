@@ -10,6 +10,11 @@ import {
 } from '../features/operations/data';
 import '@shared/operations/operations.css';
 
+const CONNECTOR_LABEL_KEYS: Record<CredentialReportInput['connector_type'], string> = {
+  'openai-compatible': 'user.report.connector.openaiCompatible',
+  'anthropic-compatible': 'user.report.connector.anthropicCompatible',
+};
+
 function validBaseURL(value: string): boolean {
   if (new TextEncoder().encode(value).byteLength > 4_096) return false;
   try {
@@ -21,8 +26,7 @@ function validBaseURL(value: string): boolean {
 }
 
 export function CredentialReportPage() {
-  const { i18n } = useTranslation();
-  const zh = i18n.resolvedLanguage?.toLowerCase().startsWith('zh') ?? false;
+  const { t } = useTranslation();
   const config = usePublicConfig();
   const [connector, setConnector] = useState<CredentialReportInput['connector_type']>('openai-compatible');
   const [baseURL, setBaseURL] = useState('');
@@ -31,7 +35,7 @@ export function CredentialReportPage() {
   const intentKey = useRef<string | null>(null);
   const [state, setState] = useState<'idle' | 'submitting' | 'accepted'>('idle');
   const [error, setError] = useState<unknown>(null);
-  const [validation, setValidation] = useState('');
+  const [validation, setValidation] = useState(false);
 
   useEffect(() => {
     const clear = () => {
@@ -51,16 +55,16 @@ export function CredentialReportPage() {
 
   const clearForm = () => {
     intentKey.current = null;
-    setBaseURL(''); setSecret(''); setNote(''); setError(null); setValidation(''); setState('idle');
+    setBaseURL(''); setSecret(''); setNote(''); setError(null); setValidation(false); setState('idle');
   };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    setValidation(''); setError(null);
+    setValidation(false); setError(null);
     if (config.data?.maintenanceMode) return;
     if (!validBaseURL(payload.base_url) || !secret || new TextEncoder().encode(secret).byteLength > 65_536
       || Array.from(note).length > 2_048) {
-      setValidation(zh ? '请检查端点 URL、凭据和补充说明的长度。' : 'Check the endpoint URL, credential, and note length.');
+      setValidation(true);
       return;
     }
     const currentIntent = intentKey.current ?? operationKey();
@@ -82,39 +86,42 @@ export function CredentialReportPage() {
 
   return (
     <div className="page ops-stack">
-      <PageHeader eyebrow="Security" title={zh ? '举报疑似泄露凭据' : 'Report a suspected leaked credential'}
-        description={zh ? '匿名与登录用户使用相同入口；结果不会透露是否命中本站数据。' : 'Anonymous and signed-in reporters use the same endpoint; the result never reveals whether a match exists.'} />
+      <PageHeader
+        eyebrow={t('user.report.eyebrow')}
+        title={t('user.report.title')}
+        description={t('user.report.description')}
+      />
       {config.isPending ? <LoadingState /> : config.error ? <ErrorState error={config.error} onRetry={() => void config.refetch()} /> : (
         <Card className="ops-stack">
-          {config.data.maintenanceMode ? <p className="inline-notice" role="status">{zh ? '维护期间暂不接受新举报。' : 'New reports are unavailable during maintenance.'}</p> : null}
+          {config.data.maintenanceMode ? <p className="inline-notice" role="status">{t('user.report.maintenanceUnavailable')}</p> : null}
           {state === 'accepted' ? (
-            <div role="status" className="ops-stack"><h2>{zh ? '举报已受理' : 'Report accepted'}</h2>
-              <p>{zh ? '若存在匹配凭据，系统会临时保护并由管理员复核。' : 'If matching credentials exist, temporary protection will be applied and an administrator will review the report.'}</p>
-              <button type="button" className="btn btn-secondary" onClick={() => setState('idle')}>{zh ? '提交另一份举报' : 'Submit another report'}</button>
+            <div role="status" className="ops-stack"><h2>{t('user.report.acceptedTitle')}</h2>
+              <p>{t('user.report.acceptedBody')}</p>
+              <button type="button" className="btn btn-secondary" onClick={() => setState('idle')}>{t('user.report.submitAnother')}</button>
             </div>
           ) : (
             <form className="ops-stack" onSubmit={submit}>
-              <label className="ops-form-field">{zh ? 'Connector 类型' : 'Connector type'}
+              <label className="ops-form-field">{t('user.report.connectorLabel')}
                 <select value={connector} onChange={(event) => { intentKey.current = null; setConnector(event.target.value as CredentialReportInput['connector_type']); }}>
-                  <option value="openai-compatible">OpenAI-compatible</option>
-                  <option value="anthropic-compatible">Anthropic-compatible</option>
+                  <option value="openai-compatible">{t(CONNECTOR_LABEL_KEYS['openai-compatible'])}</option>
+                  <option value="anthropic-compatible">{t(CONNECTOR_LABEL_KEYS['anthropic-compatible'])}</option>
                 </select>
               </label>
-              <label className="ops-form-field">{zh ? '规范端点 URL' : 'Canonical endpoint URL'}
+              <label className="ops-form-field">{t('user.report.baseUrlLabel')}
                 <input type="url" required maxLength={4096} value={baseURL} onChange={(event) => { intentKey.current = null; setBaseURL(event.target.value); }} autoComplete="url" />
               </label>
-              <label className="ops-form-field">{zh ? '疑似泄露的凭据' : 'Suspected leaked credential'}
+              <label className="ops-form-field">{t('user.report.secretLabel')}
                 <textarea className="ops-secret" required rows={4} value={secret} onChange={(event) => { intentKey.current = null; setSecret(event.target.value); }} autoComplete="off" spellCheck={false} />
               </label>
-              <label className="ops-form-field">{zh ? '补充说明（可选）' : 'Additional note (optional)'}
+              <label className="ops-form-field">{t('user.report.noteLabel')}
                 <textarea rows={5} maxLength={2048} value={note} onChange={(event) => { intentKey.current = null; setNote(event.target.value); }} />
               </label>
-              <p className="inline-notice">{zh ? '请勿在补充说明中填写任何凭据。' : 'Do not put credentials in the additional note.'}</p>
-              {validation ? <p className="field-error" role="alert">{validation}</p> : null}
+              <p className="inline-notice">{t('user.report.noteWarning')}</p>
+              {validation ? <p className="field-error" role="alert">{t('user.report.validationError')}</p> : null}
               {error ? <ErrorState error={error} /> : null}
               <div className="ops-actions">
-                <button className="btn btn-primary" type="submit" disabled={state === 'submitting' || config.data.maintenanceMode}>{state === 'submitting' ? (zh ? '提交中…' : 'Submitting…') : (zh ? '提交举报' : 'Submit report')}</button>
-                <button className="btn btn-secondary" type="button" onClick={clearForm}>{zh ? '取消并清除' : 'Cancel and clear'}</button>
+                <button className="btn btn-primary" type="submit" disabled={state === 'submitting' || config.data.maintenanceMode}>{state === 'submitting' ? t('user.report.submitting') : t('user.report.submit')}</button>
+                <button className="btn btn-secondary" type="button" onClick={clearForm}>{t('user.report.cancelAndClear')}</button>
               </div>
             </form>
           )}
