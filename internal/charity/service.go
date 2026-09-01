@@ -1104,38 +1104,14 @@ func (s *Service) Cleanup(ctx context.Context, decisionNow int64, limit int) (in
 		return 0, fmt.Errorf("charity: begin cleanup: %w", err)
 	}
 	defer tx.Rollback()
-	cutoff := decisionNow - terminalRetention
-	if cutoff < 0 {
-		cutoff = 0
-	}
-	result, err := tx.ExecContext(ctx, `DELETE FROM donation_usage_reservations WHERE claim_id IN (
-SELECT claim_id FROM donation_usage_reservations
-WHERE state IN ('committed','released') AND finalized_at<=? ORDER BY finalized_at,claim_id LIMIT ?)`, cutoff, limit)
+	count, err := s.CleanupTx(ctx, tx, decisionNow, limit)
 	if err != nil {
-		return 0, fmt.Errorf("charity: delete terminal usage: %w", err)
-	}
-	count, err := result.RowsAffected()
-	if err != nil {
-		return 0, fmt.Errorf("charity: count cleanup: %w", err)
-	}
-	remaining := int64(limit) - count
-	if remaining > 0 {
-		result, err = tx.ExecContext(ctx, `DELETE FROM charity_reservations WHERE logical_request_id IN (
-SELECT logical_request_id FROM charity_reservations
-WHERE state IN ('committed','released') AND finalized_at<=? ORDER BY finalized_at,logical_request_id LIMIT ?)`, cutoff, remaining)
-		if err != nil {
-			return 0, fmt.Errorf("charity: delete terminal request reservations: %w", err)
-		}
-		requestCount, err := result.RowsAffected()
-		if err != nil {
-			return 0, fmt.Errorf("charity: count request cleanup: %w", err)
-		}
-		count += requestCount
+		return 0, err
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("charity: commit cleanup: %w", err)
 	}
-	return int(count), nil
+	return count, nil
 }
 
 func validAttemptInput(input claim.CharityAttemptInput) bool {
