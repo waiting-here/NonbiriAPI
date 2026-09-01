@@ -31,12 +31,17 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
+	"github.com/waiting-here/NonbiriAPI/internal/game/linklink"
+	"github.com/waiting-here/NonbiriAPI/internal/game/rps"
+	gameruntime "github.com/waiting-here/NonbiriAPI/internal/game/runtime"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 	"github.com/waiting-here/NonbiriAPI/internal/issues"
+	"github.com/waiting-here/NonbiriAPI/internal/logapi"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/reports"
 	"github.com/waiting-here/NonbiriAPI/internal/resourcebridge"
@@ -114,28 +119,34 @@ func run() int {
 		serveErr <- srv.ListenAndServe()
 	}()
 
+	exitCode := 0
+	serverRunning := true
 	select {
 	case <-ctx.Done():
 	case err := <-serveErr:
+		serverRunning = false
 		if !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("http server stopped with error", "err", err)
 		} else {
 			slog.Error("http server stopped before shutdown completed")
 		}
-		return 1
+		exitCode = 1
 	case err := <-app.failures:
 		slog.Error("application background worker failed", "err", err)
-		return 1
+		exitCode = 1
 	}
 	slog.Info("shutdown initiated")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		slog.Error("http shutdown error", "err", err)
-		return 1
+	app.BeginShutdown()
+	if serverRunning {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			slog.Error("http shutdown error", "err", err)
+			return 1
+		}
 	}
 	slog.Info("shutdown complete")
-	return 0
+	return exitCode
 }
 
 func healthz(w http.ResponseWriter, r *http.Request) {
@@ -162,9 +173,8 @@ func apiNotFound(w http.ResponseWriter, _ *http.Request) {
 	httperr.WriteError(w, httperr.New(httperr.CodeNotFound, "not found"))
 }
 
-// servePublicConfig is the only Generation 2 API mounted at the atomic
-// baseline. The administrator projection is intentionally absent until its
-// authenticated owner registers it.
+// servePublicConfig is the anonymous Generation 2 bootstrap projection. All
+// other production APIs are mounted by their authenticated domain owners.
 func servePublicConfig(store *db.Store, w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		httperr.WriteError(w, httperr.New(httperr.CodeMethodNotAllowed, "method not allowed"))
@@ -205,8 +215,8 @@ func freshSafeMux(cfg *config.Config, store *db.Store) *http.ServeMux {
 	return mux
 }
 
-func generationTwoMux(cfg *config.Config, store *db.Store, authRuntime *auth.Runtime) (*http.ServeMux, error) {
-	if cfg == nil || store == nil || authRuntime == nil {
+func generationTwoMux(cfg *config.Config, store *db.Store, authRuntime *auth.Runtime, callerHandler http.Handler) (*http.ServeMux, error) {
+	if cfg == nil || store == nil || authRuntime == nil || callerHandler == nil {
 		return nil, errors.New("Generation 2 HTTP dependencies are required")
 	}
 	mux := http.NewServeMux()
@@ -221,7 +231,7 @@ func generationTwoMux(cfg *config.Config, store *db.Store, authRuntime *auth.Run
 	mux.Handle("/api", userAuth)
 	mux.Handle("/api/", userAuth)
 
-	callerAPI := httpmw.API(http.HandlerFunc(apiNotFound))
+	callerAPI := httpmw.API(callerHandler)
 	mux.Handle("/v1", callerAPI)
 	mux.Handle("/v1/", callerAPI)
 
@@ -277,6 +287,11 @@ type application struct {
 	activityWorker  *activities.SettlementWorker
 	activityCancel  context.CancelFunc
 	activityDone    <-chan struct{}
+	debug           *debug.Hub
+	logs            *logapi.Repository
+	accountEvents   *accountEventConnections
+	forward         *publicForwardRuntime
+	games           *gameRuntimeBundle
 	failures        <-chan error
 	authorizer      *authz.Authorizer
 	elevation       *elevation.Manager
@@ -285,8 +300,29 @@ type application struct {
 	maintenance     *maintenance.Service
 	egress          *egress.Stack
 
-	closeOnce sync.Once
-	closeErr  error
+	shutdownOnce sync.Once
+	closeOnce    sync.Once
+	closeErr     error
+}
+
+// BeginShutdown closes process-local streaming and caller admission before
+// http.Server.Shutdown starts waiting for active connections. Durable workers
+// remain owned by Close and leave unfinished work at their checkpoints.
+func (a *application) BeginShutdown() {
+	if a == nil {
+		return
+	}
+	a.shutdownOnce.Do(func() {
+		if a.accountEvents != nil {
+			_ = a.accountEvents.Close()
+		}
+		if a.forward != nil {
+			a.forward.BeginShutdown()
+		}
+		if a.debug != nil {
+			_ = a.debug.Close()
+		}
+	})
 }
 
 func (a *application) Close() error {
@@ -294,6 +330,7 @@ func (a *application) Close() error {
 		return nil
 	}
 	a.closeOnce.Do(func() {
+		a.BeginShutdown()
 		var closeErrors []error
 		if a.reports != nil {
 			if err := a.reports.Close(); err != nil {
@@ -308,6 +345,16 @@ func (a *application) Close() error {
 		}
 		if a.activityDone != nil {
 			<-a.activityDone
+		}
+		if a.games != nil {
+			if err := a.games.Close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
+		}
+		if a.forward != nil {
+			if err := a.forward.Close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
 		}
 		if a.activityEvents != nil {
 			if err := a.activityEvents.Close(); err != nil {
@@ -352,6 +399,7 @@ type roleFinalTxAuthorizer struct {
 var _ donation.RoleFinalTxAuthorizer = (*roleFinalTxAuthorizer)(nil)
 var _ activities.AdminFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
 var _ announcements.AdminFinalTxAuthorizer = (*roleFinalTxAuthorizer)(nil)
+var _ logapi.StewardAuthorizer = (*roleFinalTxAuthorizer)(nil)
 
 func (authorizer *roleFinalTxAuthorizer) AuthorizeAdminMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
 	return authorizer.authorize(ctx, tx, userID, authz.ActorAdminSession, authz.RoleAdministrator)
@@ -366,6 +414,10 @@ func (authorizer *roleFinalTxAuthorizer) AuthorizeAdminFinalTx(ctx context.Conte
 }
 
 func (authorizer *roleFinalTxAuthorizer) AuthorizeStewardMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
+	return authorizer.authorize(ctx, tx, userID, authz.ActorUserSession, authz.RoleSteward)
+}
+
+func (authorizer *roleFinalTxAuthorizer) AuthorizeStewardRead(ctx context.Context, tx *sql.Tx, userID int64) error {
 	return authorizer.authorize(ctx, tx, userID, authz.ActorUserSession, authz.RoleSteward)
 }
 
@@ -555,12 +607,28 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	var authRuntime *auth.Runtime
 	var activityEvents *accountstream.Hub
 	var activityWorker *activities.SettlementWorker
+	var debugHub *debug.Hub
+	var accountConnections *accountEventConnections
+	var forwardRuntime *publicForwardRuntime
+	var gameRuntimes *gameRuntimeBundle
 	cleanup := func() {
+		if accountConnections != nil {
+			_ = accountConnections.Close()
+		}
+		if debugHub != nil {
+			_ = debugHub.Close()
+		}
 		if reportRepository != nil {
 			_ = reportRepository.Close()
 		}
 		if activityWorker != nil {
 			activityWorker.Close()
+		}
+		if gameRuntimes != nil {
+			_ = gameRuntimes.Close()
+		}
+		if forwardRuntime != nil {
+			_ = forwardRuntime.Close()
 		}
 		if activityEvents != nil {
 			_ = activityEvents.Close()
@@ -583,6 +651,15 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err := outbound.AddSelfOrigins(startupContext, cfg); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("register egress self origins: %w", err)
+	}
+	rpmLimits, concurrencyLimits, err := loadRuntimeLimits(store)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("load runtime limits: %w", err)
+	}
+	if err := outbound.SetConcurrencyLimits(concurrencyLimits); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("apply egress concurrency limits: %w", err)
 	}
 	localBackend, err := backend.NewLocal(outbound)
 	if err != nil {
@@ -638,6 +715,7 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		Secrets:    vault,
 		Accounting: claim.NewLedgerAccounting(),
 		Charity:    charityService,
+		Acceptance: maintenanceService,
 	})
 	if err != nil {
 		cleanup()
@@ -751,11 +829,17 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("create activities repository: %w", err)
 	}
-	activityEvents, err = accountstream.New(activityRepository, nil)
+	accountSources, err := newAccountEventSources(activityRepository)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create account event sources: %w", err)
+	}
+	activityEvents, err = accountstream.New(accountSources, accountSources)
 	if err != nil {
 		cleanup()
 		return nil, fmt.Errorf("create account event hub: %w", err)
 	}
+	accountConnections = newAccountEventConnections()
 	activityPublisher, err := activities.NewAccountstreamPublisher(activityRepository, activityEvents)
 	if err != nil {
 		cleanup()
@@ -784,6 +868,51 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		return nil, err
 	}
 	if err := recoverIssuesBeforeListener(startupContext, issueService); err != nil {
+		cleanup()
+		return nil, err
+	}
+	debugHub, err = debug.NewHub(debugIdentityAuthority{runtime: authRuntime})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create Debug hub: %w", err)
+	}
+	debugMutations, err := debug.NewMutationRepository(store.DB())
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create Debug mutation repository: %w", err)
+	}
+	logRepository, err := logapi.NewRepository(store.DB(), vault)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create log repository: %w", err)
+	}
+	gameRuntimes, err = newGameRuntimeBundle(
+		store, vault, authRuntime, roleAuthorizer, maintenanceService, activityRepository,
+		activityPublisher, activityEvents, accountSources,
+	)
+	if err != nil {
+		cleanup()
+		return nil, err
+	}
+	if err := linklink.RegisterContinuation(registry, gameRuntimes.linklink); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register LinkLink maintenance continuation: %w", err)
+	}
+	if err := rps.RegisterContinuation(registry, gameRuntimes.rps); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register RPS maintenance continuation: %w", err)
+	}
+	if err := authRuntime.AttachUserSessionInvalidationObserver(&userSessionInvalidationFanout{
+		debug: debugHub, connections: accountConnections,
+	}); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("attach user-session invalidation observer: %w", err)
+	}
+	forwardRuntime, err = newPublicForwardRuntime(
+		store, vault, claimService, charityService, charityRoutingService, resourceRepository,
+		connectorRegistry, localBackend, debugHub, gate, rpmLimits,
+	)
+	if err != nil {
 		cleanup()
 		return nil, err
 	}
@@ -833,12 +962,60 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("register report routes: %w", err)
 	}
+	if err := debug.RegisterRoutes(debugRouteRegistrar{runtime: authRuntime}, debugHub, debugMutations); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register Debug routes: %w", err)
+	}
+	if err := logapi.RegisterUserRoutes(authRuntime, logRepository); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register user log routes: %w", err)
+	}
+	if err := logapi.RegisterStewardRoutes(authRuntime, logRepository, roleAuthorizer); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register steward log routes: %w", err)
+	}
+	if err := logapi.RegisterAdminRoutes(authRuntime, logRepository); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register administrator log routes: %w", err)
+	}
+	if err := gameruntime.RegisterUserRoutes(authRuntime, gameRuntimes.fishing); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register Fishing routes: %w", err)
+	}
+	if err := gameruntime.RegisterAdminRoutes(authRuntime, gameRuntimes.fishing); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register game administrator routes: %w", err)
+	}
+	if err := linklink.RegisterRoutes(authRuntime, authRuntime, gameRuntimes.linklink); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register LinkLink routes: %w", err)
+	}
+	if err := rps.RegisterRoutes(authRuntime, authRuntime, gameRuntimes.rps); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register RPS routes: %w", err)
+	}
+	if err := registerAccountEventRoute(authRuntime, gate, gameRuntimes.rps, activityEvents, accountConnections); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register account event route: %w", err)
+	}
 	if _, err := maintenanceService.PrepareListener(startupContext, store.DB()); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("prepare maintenance state: %w", err)
 	}
+	if err := gameRuntimes.linklink.RecoverBeforeListen(startupContext); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("recover LinkLink before listener: %w", err)
+	}
+	if err := gameRuntimes.rps.RecoverBeforeListen(startupContext); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("recover RPS before listener: %w", err)
+	}
+	if err := gameRuntimes.fishing.RecoverBeforeListen(startupContext); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("recover Fishing before listener: %w", err)
+	}
 
-	mux, err := generationTwoMux(cfg, store, authRuntime)
+	mux, err := generationTwoMux(cfg, store, authRuntime, forwardRuntime.handler)
 	if err != nil {
 		cleanup()
 		return nil, err
@@ -851,6 +1028,19 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err := reportRepository.StartWorker(context.Background()); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("start report worker: %w", err)
+	}
+	gameWorkerContext := context.Background()
+	if err := gameRuntimes.linklink.StartWorker(gameWorkerContext); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("start LinkLink worker: %w", err)
+	}
+	if err := gameRuntimes.rps.StartWorker(gameWorkerContext); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("start RPS worker: %w", err)
+	}
+	if err := gameRuntimes.fishing.StartWorker(gameWorkerContext); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("start Fishing worker: %w", err)
 	}
 	activityContext, activityCancel := context.WithCancel(context.Background())
 	activityDone := make(chan struct{})
@@ -882,6 +1072,11 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		activityWorker:  activityWorker,
 		activityCancel:  activityCancel,
 		activityDone:    activityDone,
+		debug:           debugHub,
+		logs:            logRepository,
+		accountEvents:   accountConnections,
+		forward:         forwardRuntime,
+		games:           gameRuntimes,
 		failures:        failures,
 		authorizer:      authorizer,
 		elevation:       elevationManager,
