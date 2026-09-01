@@ -1563,9 +1563,10 @@ WHEN NOT EXISTS(SELECT 1 FROM legal_holds h WHERE h.id=NEW.hold_id_text)
  OR typeof(NEW.last_read_at)<>'integer' OR NEW.last_read_at NOT BETWEEN 0 AND 253402300799
  OR typeof(NEW.read_count)<>'integer' OR NEW.read_count<1
  OR (NOT (
-       (NEW.hold_id_text IS OLD.hold_id_text AND NEW.admin_user_id IS OLD.admin_user_id AND NEW.read_kind IS OLD.read_kind AND
-        OLD.retain_until IS NULL AND NEW.first_read_at=OLD.first_read_at AND NEW.last_read_at>=OLD.last_read_at AND NEW.read_count=OLD.read_count+1 AND
-        NEW.retain_until IS OLD.retain_until) OR
+        (NEW.hold_id_text IS OLD.hold_id_text AND NEW.admin_user_id IS OLD.admin_user_id AND NEW.read_kind IS OLD.read_kind AND
+         NEW.first_read_at=OLD.first_read_at AND NEW.last_read_at>=OLD.last_read_at AND NEW.read_count=OLD.read_count+1 AND
+         NEW.retain_until IS OLD.retain_until AND (NEW.retain_until IS NULL OR
+          EXISTS(SELECT 1 FROM legal_holds h WHERE h.id=NEW.hold_id_text AND h.state IN ('released','expired') AND NEW.retain_until=h.retain_until))) OR
        (NEW.hold_id_text IS OLD.hold_id_text AND NEW.admin_user_id IS OLD.admin_user_id AND NEW.read_kind IS OLD.read_kind AND
         NEW.first_read_at=OLD.first_read_at AND NEW.last_read_at=OLD.last_read_at AND NEW.read_count=OLD.read_count AND
         OLD.retain_until IS NULL AND NEW.retain_until IS NOT NULL AND
