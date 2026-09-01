@@ -12,12 +12,21 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
+	"github.com/waiting-here/NonbiriAPI/internal/logapi"
 )
+
+type claimDeleteLifecycle interface {
+	PrepareAccountDeletion(context.Context, *sql.Tx, int64, int64) error
+}
+
+type requestLogDeleteLifecycle interface {
+	PrepareLifecycleAccountDeletion(context.Context, *sql.Tx, int64, int64) error
+}
 
 // ClaimDeleteAdapter delegates request/claim handoff to claim.Service inside
 // the coordinator-owned deletion transaction.
 type ClaimDeleteAdapter struct {
-	service *claim.Service
+	service claimDeleteLifecycle
 }
 
 var _ lifecycle.DeleteAdapter = (*ClaimDeleteAdapter)(nil)
@@ -29,6 +38,56 @@ func NewClaimDeleteAdapter(service *claim.Service) (*ClaimDeleteAdapter, error) 
 	return &ClaimDeleteAdapter{service: service}, nil
 }
 
+// ClaimLogDeleteAdapter owns the fixed third account-deletion slot. Claim
+// handoff must precede request-log detachment inside the shared transaction.
+type ClaimLogDeleteAdapter struct {
+	claims claimDeleteLifecycle
+	logs   requestLogDeleteLifecycle
+}
+
+func NewClaimLogDeleteAdapter(
+	claims *claim.Service,
+	logs *logapi.Repository,
+) (*ClaimLogDeleteAdapter, error) {
+	if claims == nil || logs == nil {
+		return nil, lifecycle.ErrInvalid
+	}
+	return &ClaimLogDeleteAdapter{claims: claims, logs: logs}, nil
+}
+
+func (adapter *ClaimLogDeleteAdapter) PrepareDelete(
+	ctx context.Context,
+	tx *sql.Tx,
+	request lifecycle.DeleteRequest,
+) (lifecycle.DeleteFinalizer, error) {
+	if adapter == nil || adapter.claims == nil || adapter.logs == nil || !validDeleteCall(ctx, tx, request) {
+		return nil, lifecycle.ErrInvalid
+	}
+	if err := adapter.claims.PrepareAccountDeletion(ctx, tx, request.UserID, request.DecisionNow); err != nil {
+		return nil, translateClaimDeleteError(err)
+	}
+	if err := adapter.logs.PrepareLifecycleAccountDeletion(ctx, tx, request.UserID, request.DecisionNow); err != nil {
+		return nil, translateError(err)
+	}
+	return nil, nil
+}
+
+func translateClaimDeleteError(err error) error {
+	var target error
+	switch {
+	case errors.Is(err, claim.ErrInvalidInput):
+		target = lifecycle.ErrInvalid
+	case errors.Is(err, claim.ErrConflict), errors.Is(err, claim.ErrAlreadyDispatched),
+		errors.Is(err, claim.ErrNotDispatched), errors.Is(err, claim.ErrTerminal):
+		target = lifecycle.ErrConflict
+	case errors.Is(err, claim.ErrInvariant):
+		target = lifecycle.ErrInvariant
+	default:
+		target = lifecycle.ErrUnavailable
+	}
+	return fmt.Errorf("%w: %v", target, err)
+}
+
 func (a *ClaimDeleteAdapter) PrepareDelete(
 	ctx context.Context,
 	tx *sql.Tx,
@@ -38,10 +97,12 @@ func (a *ClaimDeleteAdapter) PrepareDelete(
 		return nil, lifecycle.ErrInvalid
 	}
 	if err := a.service.PrepareAccountDeletion(ctx, tx, request.UserID, request.DecisionNow); err != nil {
-		return nil, fmt.Errorf("lifecycle adapters: prepare claim deletion: %w", err)
+		return nil, translateClaimDeleteError(err)
 	}
 	return nil, nil
 }
+
+var _ lifecycle.DeleteAdapter = (*ClaimLogDeleteAdapter)(nil)
 
 // LedgerAdapter exposes only owner-safe export and the closed account deletion
 // operation. It cannot construct an arbitrary ledger plan.

@@ -55,6 +55,7 @@ type Service struct {
 	db         *sql.DB
 	ownerAuth  OwnerFinalTxAuthorizer
 	roleAuth   RoleFinalTxAuthorizer
+	heldRead   AdminHeldReadAuthorizer
 	cursorKeys resources.CursorKeyDeriver
 	now        func() time.Time
 }

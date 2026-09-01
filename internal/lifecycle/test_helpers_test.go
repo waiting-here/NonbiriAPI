@@ -332,7 +332,8 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 		Retention: RetentionAdapters{
 			Sessions: noopRetention("sessions"), RequestLogs: noopRetention("request_logs"), Audits: noopRetention("audits"),
 			Issues: noopRetention("issues"), Fishing: noopRetention("fishing"), LinkLink: noopRetention("linklink"),
-			RPS: noopRetention("rps"), Reports: noopRetention("reports"), Idempotency: noopRetention("idempotency"), Secrets: noopRetention("secrets"),
+			RPS: noopRetention("rps"), Reports: noopRetention("reports"), Donations: noopRetention("donations"),
+			Charity: noopRetention("charity"), Idempotency: noopRetention("idempotency"), Secrets: noopRetention("secrets"),
 		},
 		HeldObjects: HeldObjectAdapters{
 			MaintenanceEvent: held, ReportCase: held, AnnouncementAudit: held, Donation: held, RequestLog: held,

@@ -61,7 +61,6 @@ var (
 	_ lifecycle.IdentityExporter = (*AccountResources)(nil)
 	_ lifecycle.ResourceExporter = (*AccountResources)(nil)
 	_ lifecycle.IssueExporter    = (*AccountResources)(nil)
-	_ lifecycle.DeleteAdapter    = (*AccountResources)(nil)
 )
 
 func (adapter *AccountResources) ExportIdentity(
@@ -226,39 +225,6 @@ func (adapter *AccountResources) ExportIssues(
 		items = append(items, item)
 	}
 	return items, nil
-}
-
-func (adapter *AccountResources) PrepareDelete(
-	ctx context.Context,
-	tx *sql.Tx,
-	request lifecycle.DeleteRequest,
-) (lifecycle.DeleteFinalizer, error) {
-	if adapter == nil || adapter.identity == nil || adapter.resources == nil || adapter.issues == nil || adapter.logs == nil ||
-		ctx == nil || tx == nil || request.UserID <= 0 || request.DecisionNow < 0 || request.DecisionNow > maxUnixSecond {
-		return nil, lifecycle.ErrInvalid
-	}
-	finalizer, err := adapter.identity.PrepareLifecycleAccountDeletion(
-		ctx, tx, request.UserID, request.DecisionNow,
-	)
-	if err != nil {
-		return nil, translateError(err)
-	}
-	abort := func(err error) (lifecycle.DeleteFinalizer, error) {
-		if finalizer != nil {
-			_ = finalizer.Abort()
-		}
-		return nil, translateError(err)
-	}
-	if err := adapter.resources.PrepareLifecycleAccountDeletion(ctx, tx, request.UserID, request.DecisionNow); err != nil {
-		return abort(err)
-	}
-	if err := adapter.issues.PrepareAccountDeletion(ctx, tx, request.UserID, request.DecisionNow); err != nil {
-		return abort(err)
-	}
-	if err := adapter.logs.PrepareLifecycleAccountDeletion(ctx, tx, request.UserID, request.DecisionNow); err != nil {
-		return abort(err)
-	}
-	return finalizer, nil
 }
 
 func (adapter *AccountResources) validateExport(ctx context.Context, tx *sql.Tx, request lifecycle.ExportRequest) error {

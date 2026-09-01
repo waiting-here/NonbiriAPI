@@ -12,12 +12,52 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
+	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
+	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
 type observedInvalidation struct {
 	userID int64
 	state  UserSessionBindingState
 	err    error
+}
+
+func TestAttachedUserLifecycleGatePreservesDeletingBrowserRequest(t *testing.T) {
+	fixture := newRuntimeFixture(t, nil)
+	gate, err := lifecyclegate.New(lifecyclegate.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gate.Close()
+	if err := fixture.runtime.AttachUserLifecycleGate(gate); err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.runtime.AttachUserLifecycleGate(gate); !errors.Is(err, ErrUserLifecycleSet) {
+		t.Fatalf("second lifecycle gate attachment err=%v", err)
+	}
+	if err := fixture.runtime.RegisterUserRoute(http.MethodPost, "/api/lifecycle-probe",
+		func(writer http.ResponseWriter, request *http.Request, principal resources.UserPrincipal) {
+			retirement, beginErr := gate.BeginUserRetirementExcludingContext(request.Context(), principal.UserID)
+			if beginErr != nil {
+				t.Errorf("begin retirement: %v", beginErr)
+				return
+			}
+			if request.Context().Err() != nil {
+				t.Errorf("deleting request was canceled: %v", request.Context().Err())
+			}
+			if !retirement.Abort() {
+				t.Error("retirement abort failed")
+			}
+			writer.WriteHeader(http.StatusNoContent)
+		}); err != nil {
+		t.Fatal(err)
+	}
+	cookie := loginUser(t, fixture, "lifecycle-gate", "")
+	response := request(t, fixture.runtime.UserHandler(), host.StationUser, http.MethodPost,
+		"https://user.example/api/lifecycle-probe", "", []*http.Cookie{cookie}, nil)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("lifecycle probe status=%d body=%s", response.Code, response.Body.String())
+	}
 }
 
 type recordingSessionInvalidationObserver struct {

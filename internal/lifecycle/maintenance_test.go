@@ -41,7 +41,8 @@ func retentionAdaptersWithRecorder(record func(string)) RetentionAdapters {
 	return RetentionAdapters{
 		Sessions: makeAdapter("sessions"), RequestLogs: makeAdapter("request_logs"), Audits: makeAdapter("audits"),
 		Issues: makeAdapter("issues"), Fishing: makeAdapter("fishing"), LinkLink: makeAdapter("linklink"),
-		RPS: makeAdapter("rps"), Reports: makeAdapter("reports"), Idempotency: makeAdapter("idempotency"), Secrets: makeAdapter("secrets"),
+		RPS: makeAdapter("rps"), Reports: makeAdapter("reports"), Donations: makeAdapter("donations"),
+		Charity: makeAdapter("charity"), Idempotency: makeAdapter("idempotency"), Secrets: makeAdapter("secrets"),
 	}
 }
 
@@ -59,7 +60,8 @@ func TestMaintenanceRunsFrozenRecoveryThenRetentionOrder(t *testing.T) {
 		"recovery:idempotency", "recovery:discovery", "recovery:claims", "recovery:thursday", "recovery:reports",
 		"recovery:fishing", "recovery:linklink", "recovery:rps", "recovery:donations", "recovery:secrets",
 		"retention:sessions", "retention:request_logs", "retention:audits", "retention:issues", "retention:fishing",
-		"retention:linklink", "retention:rps", "retention:reports", "retention:idempotency", "retention:secrets",
+		"retention:linklink", "retention:rps", "retention:reports", "retention:donations", "retention:charity",
+		"retention:idempotency", "retention:secrets",
 	}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("maintenance order = %v, want %v", calls, want)
@@ -153,16 +155,22 @@ func TestMaintenanceSuccessSchedulesBothWorkers(t *testing.T) {
 	if recoveryCalls.Load() != 1 || retentionCalls.Load() != 1 {
 		t.Fatalf("calls recovery=%d retention=%d, want one each", recoveryCalls.Load(), retentionCalls.Load())
 	}
-	for _, workerKey := range []string{lifecycleRecoveryWorkerKey, lifecycleRetentionWorkerKey} {
+	for _, testCase := range []struct {
+		workerKey string
+		interval  time.Duration
+	}{
+		{workerKey: lifecycleRecoveryWorkerKey, interval: WorkerSweepInterval},
+		{workerKey: lifecycleRetentionWorkerKey, interval: MaintenanceInterval},
+	} {
 		var attempt, next int64
 		var lastError string
 		if err := fixture.store.DB().QueryRow(`
 SELECT attempt_count,next_attempt_at,last_error_class
-FROM worker_checkpoints WHERE worker_key=?`, workerKey).Scan(&attempt, &next, &lastError); err != nil {
-			t.Fatalf("read %s checkpoint: %v", workerKey, err)
+FROM worker_checkpoints WHERE worker_key=?`, testCase.workerKey).Scan(&attempt, &next, &lastError); err != nil {
+			t.Fatalf("read %s checkpoint: %v", testCase.workerKey, err)
 		}
-		if attempt != 0 || next != 100+int64(MaintenanceInterval/time.Second) || lastError != "" {
-			t.Fatalf("%s checkpoint attempt=%d next=%d error=%q", workerKey, attempt, next, lastError)
+		if attempt != 0 || next != 100+int64(testCase.interval/time.Second) || lastError != "" {
+			t.Fatalf("%s checkpoint attempt=%d next=%d error=%q", testCase.workerKey, attempt, next, lastError)
 		}
 	}
 	var alerts int
@@ -219,7 +227,7 @@ func TestMaintenanceFailureBackoffDeduplicatesAndResolvesAlert(t *testing.T) {
 		t.Fatalf("successful retry RunDue: %v", err)
 	}
 	assertLifecycleWorkerState(t, fixture, lifecycleRecoveryWorkerKey, 0,
-		190+int64(MaintenanceInterval/time.Second), "")
+		190+int64(WorkerSweepInterval/time.Second), "")
 	assertLifecycleWorkerAlerts(t, fixture, 1, 0, 1)
 	if recoveryCalls.Load() != 3 {
 		t.Fatalf("recovery calls = %d, want 3", recoveryCalls.Load())

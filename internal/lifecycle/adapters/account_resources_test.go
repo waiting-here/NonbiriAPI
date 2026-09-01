@@ -244,7 +244,7 @@ func TestAccountResourcesUsesOneFrozenSnapshot(t *testing.T) {
 	}
 }
 
-func TestAccountResourcesTranslatesLimitAndRollsBackDeleteFailure(t *testing.T) {
+func TestAccountResourcesTranslatesLimit(t *testing.T) {
 	database := newAdapterTestDatabase(t)
 	tx, err := database.BeginTx(context.Background(), nil)
 	if err != nil {
@@ -260,42 +260,7 @@ func TestAccountResourcesTranslatesLimitAndRollsBackDeleteFailure(t *testing.T) 
 		_ = tx.Rollback()
 		t.Fatalf("resource limit translation=%v", err)
 	}
-	_ = tx.Rollback()
-
-	tx, err = database.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	state.expectedTx = tx
-	state.deleteFailure = "issues"
-	state.finalizer = &adapterTestFinalizer{}
-	finalizer, err := adapter.PrepareDelete(context.Background(), tx, lifecycle.DeleteRequest{
-		UserID: 12, DecisionNow: state.expectedNow,
-	})
-	if !errors.Is(err, lifecycle.ErrUnavailable) || finalizer != nil {
-		_ = tx.Rollback()
-		t.Fatalf("delete failure finalizer=%v error=%v", finalizer, err)
-	}
-	if !state.finalizer.aborted || state.finalizer.committed {
-		_ = tx.Rollback()
-		t.Fatalf("delete finalizer state=%+v", state.finalizer)
-	}
-	wantDeleteCalls := []string{"identity", "resources", "issues"}
-	if len(state.deleteCalls) != len(wantDeleteCalls) {
-		_ = tx.Rollback()
-		t.Fatalf("delete calls=%v", state.deleteCalls)
-	}
-	for index := range wantDeleteCalls {
-		if state.deleteCalls[index] != wantDeleteCalls[index] {
-			_ = tx.Rollback()
-			t.Fatalf("delete calls=%v", state.deleteCalls)
-		}
-	}
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
-	}
-	var rows int
-	if err := database.QueryRow(`SELECT count(*) FROM delete_steps`).Scan(&rows); err != nil || rows != 0 {
-		t.Fatalf("rolled-back delete rows=%d err=%v", rows, err)
 	}
 }

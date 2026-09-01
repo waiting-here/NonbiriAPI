@@ -237,6 +237,9 @@ func (coordinator *Coordinator) ReleaseLegalHold(ctx context.Context, input Lega
 		!db.ValidateOpaqueID(input.HoldID, "lgh_") || revisionErr != nil || !validHoldText(input.Reason) || !input.Confirmation {
 		return MutationResult[LegalHoldDetail]{}, ErrInvalid
 	}
+	if coordinator.closed.Load() {
+		return MutationResult[LegalHoldDetail]{}, ErrClosed
+	}
 	canonicalBody, err := idempotency.CanonicalJSON(struct {
 		ExpectedRevision string `json:"expected_revision"`
 		Reason           string `json:"reason"`
@@ -376,6 +379,9 @@ func (coordinator *Coordinator) ListLegalHolds(ctx context.Context, filter Legal
 		filter.Kind != "" && !filter.Kind.Valid() {
 		return LegalHoldPage{}, ErrInvalid
 	}
+	if coordinator.closed.Load() {
+		return LegalHoldPage{}, ErrClosed
+	}
 	if filter.Limit == 0 {
 		filter.Limit = legalHoldDefaultLimit
 	}
@@ -478,6 +484,9 @@ func (coordinator *Coordinator) GetLegalHold(ctx context.Context, adminID int64,
 	if coordinator == nil || ctx == nil || !validDecision(adminID, decisionNow) || !db.ValidateOpaqueID(holdID, "lgh_") {
 		return LegalHoldDetail{}, ErrInvalid
 	}
+	if coordinator.closed.Load() {
+		return LegalHoldDetail{}, ErrClosed
+	}
 	tx, err := coordinator.database.BeginTx(ctx, nil)
 	if err != nil {
 		return LegalHoldDetail{}, fmt.Errorf("lifecycle: begin legal hold detail: %w", err)
@@ -517,6 +526,9 @@ func (coordinator *Coordinator) AuthorizeHeldObjectRead(ctx context.Context, tx 
 	if coordinator == nil || ctx == nil || tx == nil || !validDecision(adminID, decisionNow) ||
 		!kind.Valid() || !validHeldObjectRef(kind, objectRef) {
 		return false, ErrInvalid
+	}
+	if coordinator.closed.Load() {
+		return false, ErrClosed
 	}
 	if err := coordinator.adminAuth.AuthorizeAdmin(ctx, tx, adminID); err != nil {
 		return false, err
@@ -743,6 +755,9 @@ ORDER BY retain_until,id LIMIT ?`, decisionNow, limit)
 		ids = append(ids, id)
 	}
 	if err := rows.Close(); err != nil {
+		return WorkResult{}, err
+	}
+	if err := rows.Err(); err != nil {
 		return WorkResult{}, err
 	}
 	for _, id := range ids {

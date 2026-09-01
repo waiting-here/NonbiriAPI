@@ -32,7 +32,19 @@ type CursorKeyDeriver interface {
 type Repository struct {
 	db         *sql.DB
 	cursorKeys CursorKeyDeriver
+	heldRead   AdminHeldReadAuthorizer
 	now        func() time.Time
+}
+
+func (repository *Repository) decisionNow() (int64, error) {
+	if repository == nil || repository.now == nil {
+		return 0, ErrUnavailable
+	}
+	now := repository.now().Unix()
+	if now < 0 || now > maxUnixSecond {
+		return 0, ErrUnavailable
+	}
+	return now, nil
 }
 
 func (repository *Repository) beginStewardRead(

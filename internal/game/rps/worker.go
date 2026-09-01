@@ -19,7 +19,7 @@ func (service *Service) RecoverBeforeListen(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := service.validatePersistedState(ctx); err != nil {
+	if err := service.ValidatePersistedState(ctx); err != nil {
 		return err
 	}
 	if _, err := service.database.ExecContext(ctx, `DELETE FROM game_online_leases WHERE substr(session_id,1,4)='rps_'`); err != nil {
@@ -168,35 +168,43 @@ VALUES('invariant_violation','RPS persisted state failed validation',?,?,0)`, re
 
 func (service *Service) recoverHealthEpoch(ctx context.Context, now int64) error {
 	for {
-		rows, err := service.database.QueryContext(ctx, `SELECT id FROM game_rps_sessions WHERE health_epoch<>? ORDER BY id LIMIT ?`, service.healthEpoch, workerBatchSize)
+		count, err := service.recoverHealthEpochBatch(ctx, now, workerBatchSize)
 		if err != nil {
-			return classifyDB(err)
+			return err
 		}
-		ids := make([]string, 0, workerBatchSize)
-		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
-				_ = rows.Close()
-				return classifyDB(err)
-			}
-			ids = append(ids, id)
-		}
-		if err := rows.Err(); err != nil {
-			_ = rows.Close()
-			return classifyDB(err)
-		}
-		if err := rows.Close(); err != nil {
-			return classifyDB(err)
-		}
-		for _, id := range ids {
-			if err := service.recoverOneHealthEpoch(ctx, id, now); err != nil {
-				return err
-			}
-		}
-		if len(ids) < workerBatchSize {
+		if count < workerBatchSize {
 			return nil
 		}
 	}
+}
+
+func (service *Service) recoverHealthEpochBatch(ctx context.Context, now int64, limit int) (int, error) {
+	rows, err := service.database.QueryContext(ctx, `SELECT id FROM game_rps_sessions WHERE health_epoch<>? ORDER BY id LIMIT ?`, service.healthEpoch, limit)
+	if err != nil {
+		return 0, classifyDB(err)
+	}
+	ids := make([]string, 0, limit)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return 0, classifyDB(err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return 0, classifyDB(err)
+	}
+	if err := rows.Close(); err != nil {
+		return 0, classifyDB(err)
+	}
+	for _, id := range ids {
+		if err := service.recoverOneHealthEpoch(ctx, id, now); err != nil {
+			return 0, err
+		}
+	}
+	return len(ids), nil
 }
 
 func (service *Service) recoverOneHealthEpoch(ctx context.Context, sessionID string, now int64) error {
@@ -243,19 +251,36 @@ func (service *Service) recoverOneHealthEpoch(ctx context.Context, sessionID str
 }
 
 func (service *Service) sweepQueues(ctx context.Context, now int64) (int, error) {
+	return service.sweepQueuesBatch(ctx, now, workerBatchSize)
+}
+
+func (service *Service) sweepQueuesBatch(ctx context.Context, now int64, limit int) (int, error) {
+	ids, err := service.recoveryQueueIDs(ctx, now, limit)
+	if err != nil {
+		return 0, err
+	}
+	for _, id := range ids {
+		if err := service.releaseQueueSystem(ctx, id, now); err != nil && !errors.Is(err, ErrNotFound) && !errors.Is(err, ErrConflict) {
+			return 0, err
+		}
+	}
+	return len(ids), nil
+}
+
+func (service *Service) recoveryQueueIDs(ctx context.Context, now int64, limit int) ([]string, error) {
 	tx, err := service.database.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
-		return 0, classifyDB(err)
+		return nil, classifyDB(err)
 	}
 	maintenance, err := maintenanceEnabled(ctx, tx)
 	if err != nil {
 		_ = tx.Rollback()
-		return 0, err
+		return nil, err
 	}
 	snapshot, err := service.readSnapshot(ctx, tx)
 	_ = tx.Rollback()
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	disabled := map[string]bool{}
 	for _, mode := range []string{game.RPSModeQuick, game.RPSModeStandard, game.RPSModeDeathmatch} {
@@ -264,32 +289,27 @@ func (service *Service) sweepQueues(ctx context.Context, now int64) (int, error)
 	rows, err := service.database.QueryContext(ctx, `SELECT q.id FROM game_rps_queue q JOIN users u ON u.id=q.user_id
 WHERE q.deadline<=? OR u.is_admin<>0 OR (u.is_banned<>0 AND (u.banned_until IS NULL OR u.banned_until>?))
 OR (q.mode='quick' AND ?) OR (q.mode='standard' AND ?) OR (q.mode='deathmatch' AND ?)
-ORDER BY q.deadline,q.created_at,q.id LIMIT ?`, now, now, disabled[game.RPSModeQuick], disabled[game.RPSModeStandard], disabled[game.RPSModeDeathmatch], workerBatchSize)
+ORDER BY q.deadline,q.created_at,q.id LIMIT ?`, now, now, disabled[game.RPSModeQuick], disabled[game.RPSModeStandard], disabled[game.RPSModeDeathmatch], limit)
 	if err != nil {
-		return 0, classifyDB(err)
+		return nil, classifyDB(err)
 	}
-	ids := make([]string, 0, workerBatchSize)
+	ids := make([]string, 0, limit)
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
 			_ = rows.Close()
-			return 0, classifyDB(err)
+			return nil, classifyDB(err)
 		}
 		ids = append(ids, id)
 	}
 	if err := rows.Err(); err != nil {
 		_ = rows.Close()
-		return 0, classifyDB(err)
+		return nil, classifyDB(err)
 	}
 	if err := rows.Close(); err != nil {
-		return 0, classifyDB(err)
+		return nil, classifyDB(err)
 	}
-	for _, id := range ids {
-		if err := service.releaseQueueSystem(ctx, id, now); err != nil && !errors.Is(err, ErrNotFound) && !errors.Is(err, ErrConflict) {
-			return 0, err
-		}
-	}
-	return len(ids), nil
+	return ids, nil
 }
 
 func (service *Service) releaseQueueSystem(ctx context.Context, queueID string, now int64) error {
@@ -316,12 +336,16 @@ func (service *Service) releaseQueueSystem(ctx context.Context, queueID string, 
 }
 
 func (service *Service) runDeadlineSessions(ctx context.Context, now int64) (int, error) {
+	return service.runDeadlineSessionsBatch(ctx, now, workerBatchSize)
+}
+
+func (service *Service) runDeadlineSessionsBatch(ctx context.Context, now int64, limit int) (int, error) {
 	rows, err := service.database.QueryContext(ctx, `SELECT id FROM game_rps_sessions
-WHERE state='started' AND phase_deadline<=? ORDER BY phase_deadline,id LIMIT ?`, now, workerBatchSize)
+WHERE state='started' AND phase_deadline<=? ORDER BY phase_deadline,id LIMIT ?`, now, limit)
 	if err != nil {
 		return 0, classifyDB(err)
 	}
-	ids := make([]string, 0, workerBatchSize)
+	ids := make([]string, 0, limit)
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
@@ -388,13 +412,17 @@ func (service *Service) runDeadlineOne(ctx context.Context, sessionID string, no
 }
 
 func (service *Service) runTerminalRetries(ctx context.Context, now int64) (int, error) {
+	return service.runTerminalRetriesBatch(ctx, now, workerBatchSize)
+}
+
+func (service *Service) runTerminalRetriesBatch(ctx context.Context, now int64, limit int) (int, error) {
 	rows, err := service.database.QueryContext(ctx, `SELECT id FROM game_rps_sessions
 WHERE state='terminal_processing' AND (terminal_next_retry_at IS NULL OR terminal_next_retry_at<=?)
-ORDER BY COALESCE(terminal_next_retry_at,0),id LIMIT ?`, now, workerBatchSize)
+ORDER BY COALESCE(terminal_next_retry_at,0),id LIMIT ?`, now, limit)
 	if err != nil {
 		return 0, classifyDB(err)
 	}
-	ids := make([]string, 0, workerBatchSize)
+	ids := make([]string, 0, limit)
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {

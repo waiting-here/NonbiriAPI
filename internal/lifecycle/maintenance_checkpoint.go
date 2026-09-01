@@ -67,7 +67,11 @@ func (coordinator *Coordinator) recordWorkerOutcome(
 	}
 	var next worker.Checkpoint
 	if runErr == nil {
-		nextAt := decisionNow + int64(MaintenanceInterval.Seconds())
+		interval := MaintenanceInterval
+		if workerKey == lifecycleRecoveryWorkerKey {
+			interval = WorkerSweepInterval
+		}
+		nextAt := decisionNow + int64(interval.Seconds())
 		if nextAt < decisionNow || nextAt > maximumUnixSecond {
 			nextAt = maximumUnixSecond
 		}

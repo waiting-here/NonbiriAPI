@@ -41,6 +41,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 	"github.com/waiting-here/NonbiriAPI/internal/issues"
+	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 	"github.com/waiting-here/NonbiriAPI/internal/logapi"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/reports"
@@ -284,9 +285,9 @@ type application struct {
 	activities      *activities.Service
 	activityRepo    *activities.Repository
 	activityEvents  *accountstream.Hub
-	activityWorker  *activities.SettlementWorker
-	activityCancel  context.CancelFunc
-	activityDone    <-chan struct{}
+	lifecycle       *lifecycle.Coordinator
+	lifecycleCancel context.CancelFunc
+	lifecycleDone   <-chan struct{}
 	debug           *debug.Hub
 	logs            *logapi.Repository
 	accountEvents   *accountEventConnections
@@ -332,19 +333,21 @@ func (a *application) Close() error {
 	a.closeOnce.Do(func() {
 		a.BeginShutdown()
 		var closeErrors []error
+		if a.lifecycleCancel != nil {
+			a.lifecycleCancel()
+		}
+		if a.lifecycleDone != nil {
+			<-a.lifecycleDone
+		}
+		if a.lifecycle != nil {
+			if err := a.lifecycle.Close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
+		}
 		if a.reports != nil {
 			if err := a.reports.Close(); err != nil {
 				closeErrors = append(closeErrors, err)
 			}
-		}
-		if a.activityCancel != nil {
-			a.activityCancel()
-		}
-		if a.activityWorker != nil {
-			a.activityWorker.Close()
-		}
-		if a.activityDone != nil {
-			<-a.activityDone
 		}
 		if a.games != nil {
 			if err := a.games.Close(); err != nil {
@@ -606,7 +609,7 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	var reportRepository *reports.Repository
 	var authRuntime *auth.Runtime
 	var activityEvents *accountstream.Hub
-	var activityWorker *activities.SettlementWorker
+	var lifecycleCoordinator *lifecycle.Coordinator
 	var debugHub *debug.Hub
 	var accountConnections *accountEventConnections
 	var forwardRuntime *publicForwardRuntime
@@ -621,8 +624,8 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		if reportRepository != nil {
 			_ = reportRepository.Close()
 		}
-		if activityWorker != nil {
-			activityWorker.Close()
+		if lifecycleCoordinator != nil {
+			_ = lifecycleCoordinator.Close()
 		}
 		if gameRuntimes != nil {
 			_ = gameRuntimes.Close()
@@ -721,10 +724,6 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("create claim service: %w", err)
 	}
-	if err := recoverClaimsBeforeListener(startupContext, claimService); err != nil {
-		cleanup()
-		return nil, err
-	}
 	bridgeRuntime, err = resourcebridge.New(resourcebridge.Config{
 		Store:   store,
 		Vault:   vault,
@@ -800,14 +799,6 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("create resource repository: %w", err)
 	}
-	if err := recoverReportsBeforeListener(startupContext, reportRepository); err != nil {
-		cleanup()
-		return nil, err
-	}
-	if _, err := resourceRepository.RecoverStaleDiscoveries(startupContext); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("recover stale discoveries: %w", err)
-	}
 	charityRoutingService, err := charityrouting.New(charityrouting.Config{
 		Store:         store,
 		RoleAuth:      roleAuthorizer,
@@ -853,15 +844,6 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err != nil {
 		cleanup()
 		return nil, fmt.Errorf("create activities service: %w", err)
-	}
-	activityWorker, err = activities.NewSettlementWorker(activityService, 0)
-	if err != nil {
-		cleanup()
-		return nil, fmt.Errorf("create activities settlement worker: %w", err)
-	}
-	if err := activityWorker.RecoverBeforeListener(startupContext); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("recover activities before listener: %w", err)
 	}
 	if err := recoverAnnouncementsBeforeListener(startupContext, announcementService); err != nil {
 		cleanup()
@@ -915,6 +897,21 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err != nil {
 		cleanup()
 		return nil, err
+	}
+	if err := authRuntime.AttachUserLifecycleGate(forwardRuntime.lifecycle); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("attach shared user lifecycle gate: %w", err)
+	}
+	lifecycleCoordinator, err = newLifecycleCoordinator(
+		store, vault, authRuntime, roleAuthorizer, forwardRuntime, gameRuntimes,
+		claimService, resourceRepository, issueService, logRepository,
+		activityService, activityRepository, donationService, charityService,
+		reportRepository, announcementRepository, maintenanceService,
+		activityEvents, debugHub,
+	)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create account lifecycle coordinator: %w", err)
 	}
 	if err := resources.RegisterRoutes(authRuntime, resourceRepository); err != nil {
 		cleanup()
@@ -994,6 +991,11 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("register RPS routes: %w", err)
 	}
+	lifecycleRoutes := lifecycleRouteRegistrar{runtime: authRuntime}
+	if err := lifecycle.RegisterRoutes(lifecycleRoutes, lifecycleRoutes, lifecycleCoordinator); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register account lifecycle routes: %w", err)
+	}
 	if err := registerAccountEventRoute(authRuntime, gate, gameRuntimes.rps, activityEvents, accountConnections); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("register account event route: %w", err)
@@ -1002,17 +1004,21 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("prepare maintenance state: %w", err)
 	}
-	if err := gameRuntimes.linklink.RecoverBeforeListen(startupContext); err != nil {
+	if err := gameRuntimes.linklink.ValidatePersistedState(startupContext); err != nil {
 		cleanup()
-		return nil, fmt.Errorf("recover LinkLink before listener: %w", err)
+		return nil, fmt.Errorf("validate LinkLink persisted state: %w", err)
 	}
-	if err := gameRuntimes.rps.RecoverBeforeListen(startupContext); err != nil {
+	if err := gameRuntimes.rps.ValidatePersistedState(startupContext); err != nil {
 		cleanup()
-		return nil, fmt.Errorf("recover RPS before listener: %w", err)
+		return nil, fmt.Errorf("validate RPS persisted state: %w", err)
 	}
-	if err := gameRuntimes.fishing.RecoverBeforeListen(startupContext); err != nil {
+	if err := gameRuntimes.fishing.ValidatePersistedState(startupContext); err != nil {
 		cleanup()
-		return nil, fmt.Errorf("recover Fishing before listener: %w", err)
+		return nil, fmt.Errorf("validate Fishing persisted state: %w", err)
+	}
+	if err := lifecycleCoordinator.RecoverBeforeListener(startupContext); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("recover account lifecycle before listener: %w", err)
 	}
 
 	mux, err := generationTwoMux(cfg, store, authRuntime, forwardRuntime.handler)
@@ -1024,10 +1030,6 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err != nil {
 		cleanup()
 		return nil, err
-	}
-	if err := reportRepository.StartWorker(context.Background()); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("start report worker: %w", err)
 	}
 	gameWorkerContext := context.Background()
 	if err := gameRuntimes.linklink.StartWorker(gameWorkerContext); err != nil {
@@ -1042,17 +1044,12 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("start Fishing worker: %w", err)
 	}
-	activityContext, activityCancel := context.WithCancel(context.Background())
-	activityDone := make(chan struct{})
+	lifecycleCancel, lifecycleDone, err := startLifecycleWorker(context.Background(), lifecycleCoordinator)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("start account lifecycle worker: %w", err)
+	}
 	failures := make(chan error, 1)
-	go func() {
-		defer close(activityDone)
-		err := activityWorker.Run(activityContext)
-		if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, activities.ErrClosed) {
-			return
-		}
-		failures <- fmt.Errorf("activities settlement worker: %w", err)
-	}()
 	return &application{
 		handler:         handler,
 		authRuntime:     authRuntime,
@@ -1069,9 +1066,9 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		activities:      activityService,
 		activityRepo:    activityRepository,
 		activityEvents:  activityEvents,
-		activityWorker:  activityWorker,
-		activityCancel:  activityCancel,
-		activityDone:    activityDone,
+		lifecycle:       lifecycleCoordinator,
+		lifecycleCancel: lifecycleCancel,
+		lifecycleDone:   lifecycleDone,
 		debug:           debugHub,
 		logs:            logRepository,
 		accountEvents:   accountConnections,
@@ -1087,39 +1084,7 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	}, nil
 }
 
-func recoverClaimsBeforeListener(ctx context.Context, service *claim.Service) error {
-	if ctx == nil || service == nil {
-		return errors.New("claim recovery dependencies are required")
-	}
-	for {
-		report, err := service.RecoverNonterminal(ctx, claim.MaxRecoveryBatch)
-		if err != nil {
-			return fmt.Errorf("recover nonterminal claims: %w", err)
-		}
-		if !report.More {
-			return nil
-		}
-	}
-}
-
 const lifecycleRecoveryBatch = 100
-
-func recoverReportsBeforeListener(ctx context.Context, repository *reports.Repository) error {
-	if ctx == nil || repository == nil {
-		return errors.New("report recovery dependencies are required")
-	}
-	result, err := repository.RecoverBeforeListener(ctx)
-	if err != nil {
-		return fmt.Errorf("recover reports before listener: %w", err)
-	}
-	for result.More {
-		result, err = repository.RunWorkerOnce(ctx)
-		if err != nil {
-			return fmt.Errorf("continue report recovery before listener: %w", err)
-		}
-	}
-	return nil
-}
 
 func recoverAnnouncementsBeforeListener(ctx context.Context, service *announcements.Service) error {
 	if ctx == nil || service == nil {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
+	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 )
 
 // UserSessionBindingState is the closed authority result for an irreversible
@@ -25,7 +26,30 @@ var (
 	ErrInvalidUserSessionBinding          = errors.New("user session binding is invalid")
 	ErrInvalidUserSessionObserver         = errors.New("user session invalidation observer is invalid")
 	ErrUserSessionInvalidationObserverSet = errors.New("user session invalidation observer is already attached")
+	ErrInvalidUserLifecycle               = errors.New("user lifecycle gate is invalid")
+	ErrUserLifecycleSet                   = errors.New("user lifecycle gate is already attached")
 )
+
+// AttachUserLifecycleGate installs the process-wide browser/CallerKey
+// retirement gate before route registration is frozen.
+func (r *Runtime) AttachUserLifecycleGate(gate *lifecyclegate.Gate) error {
+	if r == nil || gate == nil {
+		return ErrInvalidUserLifecycle
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		return ErrClosed
+	}
+	if r.frozen {
+		return ErrFrozen
+	}
+	if r.userLifecycle != nil {
+		return ErrUserLifecycleSet
+	}
+	r.userLifecycle = gate
+	return nil
+}
 
 // UserSessionInvalidationObserver receives committed user-session
 // invalidations. The callback never receives raw session material.

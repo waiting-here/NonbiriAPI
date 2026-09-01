@@ -249,3 +249,11 @@ type WorkerResult struct {
 	CasesProcessed int
 	More           bool
 }
+
+// LifecycleWorkResult is the narrow result consumed by the cross-domain
+// lifecycle coordinator. Processed is bounded by the supplied batch limit;
+// More asks the coordinator to invoke another bounded pass.
+type LifecycleWorkResult struct {
+	Processed int
+	More      bool
+}

@@ -19,11 +19,12 @@ import (
 )
 
 const (
-	routeCatalog            = "/api/endpoints/{id}/keys/{keyId}/models"
-	routeDiscovery          = "/api/endpoints/{id}/keys/{keyId}/models/refresh"
-	routeManualCatalog      = "/api/endpoints/{id}/keys/{keyId}/models/manual"
-	routeManualEntry        = "/api/endpoints/{id}/keys/{keyId}/models/manual/{entryId}"
-	discoveryCleanupTimeout = 5 * time.Second
+	routeCatalog              = "/api/endpoints/{id}/keys/{keyId}/models"
+	routeDiscovery            = "/api/endpoints/{id}/keys/{keyId}/models/refresh"
+	routeManualCatalog        = "/api/endpoints/{id}/keys/{keyId}/models/manual"
+	routeManualEntry          = "/api/endpoints/{id}/keys/{keyId}/models/manual/{entryId}"
+	discoveryCleanupTimeout   = 5 * time.Second
+	maxDiscoveryRecoveryBatch = 100
 )
 
 type discoveryRow struct {
@@ -533,88 +534,208 @@ func validSafeDiagnostic(value string) bool {
 	return true
 }
 
+type DiscoveryRecoveryResult struct {
+	Processed int
+	More      bool
+}
+
+// RecoverStaleDiscoveries retains the startup compatibility entrypoint while
+// delegating to the bounded lifecycle seam with one frozen decision time.
 func (r *Repository) RecoverStaleDiscoveries(ctx context.Context) (int64, error) {
-	if r == nil {
+	if r == nil || ctx == nil {
 		return 0, ErrUnavailable
 	}
-	now, err := r.nowUnix()
+	decisionNow, err := r.nowUnix()
 	if err != nil {
 		return 0, err
 	}
-	tx, err := beginTx(ctx, r.db)
+	var total int64
+	for {
+		result, err := r.RecoverStaleDiscoveriesAt(
+			ctx, decisionNow, maxDiscoveryRecoveryBatch, time.Time{},
+		)
+		if err != nil {
+			return total, err
+		}
+		total += int64(result.Processed)
+		if !result.More {
+			return total, nil
+		}
+		if result.Processed == 0 {
+			return total, ErrUnavailable
+		}
+	}
+}
+
+// RecoverStaleDiscoveriesAt terminalizes at most limit stale discovery roots
+// and orphaned accepted operations. It never retries network discovery. A
+// zero budget deadline is reserved for the compatibility wrapper; lifecycle
+// always supplies an explicit deadline.
+func (r *Repository) RecoverStaleDiscoveriesAt(
+	ctx context.Context,
+	decisionNow int64,
+	limit int,
+	budgetDeadline time.Time,
+) (DiscoveryRecoveryResult, error) {
+	if r == nil || r.db == nil || ctx == nil || decisionNow < 0 || decisionNow > maxUnixSecond ||
+		limit < 1 || limit > maxDiscoveryRecoveryBatch {
+		return DiscoveryRecoveryResult{}, ErrInvalidRequest
+	}
+	workerCtx, cancel := discoveryRecoveryContext(ctx, budgetDeadline)
+	defer cancel()
+
+	tx, err := beginTx(workerCtx, r.db)
 	if err != nil {
-		return 0, err
+		return DiscoveryRecoveryResult{}, err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
-	rows, err := tx.QueryContext(ctx, `
-SELECT endpoint_key_id,revision FROM model_discovery_evidence
-WHERE state='checking' AND started_at<=? ORDER BY endpoint_key_id`, now-staleDiscoverySecond)
-	if err != nil {
-		return 0, fmt.Errorf("resources: list stale discoveries: %w", err)
-	}
+	threshold := decisionNow - staleDiscoverySecond
+
 	type staleDiscovery struct {
 		keyID      int64
+		revision   int64
 		checkpoint string
 	}
-	var stale []staleDiscovery
+	rows, err := tx.QueryContext(workerCtx, `
+SELECT endpoint_key_id,revision FROM model_discovery_evidence
+WHERE state='checking' AND started_at<=?
+ORDER BY endpoint_key_id LIMIT ?`, threshold, limit)
+	if err != nil {
+		return DiscoveryRecoveryResult{}, fmt.Errorf("resources: list stale discoveries: %w", err)
+	}
+	stale := make([]staleDiscovery, 0, limit)
 	for rows.Next() {
-		var keyID, revision int64
-		if err := rows.Scan(&keyID, &revision); err != nil {
-			rows.Close()
-			return 0, fmt.Errorf("resources: scan stale discovery: %w", err)
+		var item staleDiscovery
+		if err := rows.Scan(&item.keyID, &item.revision); err != nil {
+			_ = rows.Close()
+			return DiscoveryRecoveryResult{}, fmt.Errorf("resources: scan stale discovery: %w", err)
 		}
-		stale = append(stale, staleDiscovery{
-			keyID: keyID, checkpoint: strconv.FormatInt(keyID, 10) + ":" + strconv.FormatInt(revision, 10),
-		})
+		item.checkpoint = strconv.FormatInt(item.keyID, 10) + ":" + strconv.FormatInt(item.revision, 10)
+		stale = append(stale, item)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return DiscoveryRecoveryResult{}, fmt.Errorf("resources: iterate stale discoveries: %w", err)
 	}
 	if err := rows.Close(); err != nil {
-		return 0, fmt.Errorf("resources: close stale discoveries: %w", err)
+		return DiscoveryRecoveryResult{}, fmt.Errorf("resources: close stale discoveries: %w", err)
 	}
+
+	processed := 0
 	for _, item := range stale {
-		if _, err := tx.ExecContext(ctx, `
-UPDATE accepted_operations
-SET state='completed',checkpoint='',last_error_class=NULL,terminal_at=?
-WHERE kind='model_discovery' AND checkpoint=? AND state IN ('accepted','running')`, now, item.checkpoint); err != nil {
-			return 0, fmt.Errorf("resources: recover discovery operation: %w", err)
-		}
-	}
-	result, err := tx.ExecContext(ctx, `
+		result, err := tx.ExecContext(workerCtx, `
 UPDATE model_discovery_evidence
 SET state='failed',operation_hash=NULL,safe_class='interrupted',safe_diag='',completed_at=?,fetched_count=0
-WHERE state='checking' AND started_at<=?`, now, now-staleDiscoverySecond)
-	if err != nil {
-		return 0, fmt.Errorf("resources: recover stale discoveries: %w", err)
-	}
-	evidenceCount, err := result.RowsAffected()
-	if err != nil {
-		return 0, fmt.Errorf("resources: observe stale discovery recovery: %w", err)
-	}
-	for _, item := range stale {
-		if err := r.reconcileDiscoveryKeyTx(ctx, tx, item.keyID); err != nil {
-			return 0, err
+WHERE endpoint_key_id=? AND revision=? AND state='checking' AND started_at<=?`,
+			decisionNow, item.keyID, item.revision, threshold)
+		if err != nil {
+			return DiscoveryRecoveryResult{}, fmt.Errorf("resources: recover stale discovery: %w", err)
 		}
-	}
-	orphaned, err := tx.ExecContext(ctx, `
-UPDATE accepted_operations AS op
+		changed, err := result.RowsAffected()
+		if err != nil {
+			return DiscoveryRecoveryResult{}, fmt.Errorf("resources: observe stale discovery recovery: %w", err)
+		}
+		if changed == 0 {
+			continue
+		}
+		if changed != 1 {
+			return DiscoveryRecoveryResult{}, ErrUnavailable
+		}
+		if _, err := tx.ExecContext(workerCtx, `
+UPDATE accepted_operations
 SET state='completed',checkpoint='',last_error_class=NULL,terminal_at=?
+WHERE kind='model_discovery' AND checkpoint=? AND state IN ('accepted','running')`,
+			decisionNow, item.checkpoint); err != nil {
+			return DiscoveryRecoveryResult{}, fmt.Errorf("resources: recover discovery operation: %w", err)
+		}
+		if err := r.reconcileDiscoveryKeyTx(workerCtx, tx, item.keyID); err != nil {
+			return DiscoveryRecoveryResult{}, err
+		}
+		processed++
+	}
+
+	remaining := limit - processed
+	if remaining > 0 {
+		rows, err = tx.QueryContext(workerCtx, `
+SELECT op.id FROM accepted_operations AS op
 WHERE op.kind='model_discovery' AND op.state IN ('accepted','running') AND op.created_at<=?
   AND NOT EXISTS(
     SELECT 1 FROM model_discovery_evidence d
     WHERE d.state='checking'
       AND op.checkpoint=CAST(d.endpoint_key_id AS TEXT)||':'||CAST(d.revision AS TEXT)
-  )`, now, now-staleDiscoverySecond)
-	if err != nil {
-		return 0, fmt.Errorf("resources: recover orphaned discovery operations: %w", err)
+  )
+ORDER BY op.created_at,op.id LIMIT ?`, threshold, remaining)
+		if err != nil {
+			return DiscoveryRecoveryResult{}, fmt.Errorf("resources: list orphaned discovery operations: %w", err)
+		}
+		operationIDs := make([]string, 0, remaining)
+		for rows.Next() {
+			var operationID string
+			if err := rows.Scan(&operationID); err != nil {
+				_ = rows.Close()
+				return DiscoveryRecoveryResult{}, fmt.Errorf("resources: scan orphaned discovery operation: %w", err)
+			}
+			operationIDs = append(operationIDs, operationID)
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return DiscoveryRecoveryResult{}, fmt.Errorf("resources: iterate orphaned discovery operations: %w", err)
+		}
+		if err := rows.Close(); err != nil {
+			return DiscoveryRecoveryResult{}, fmt.Errorf("resources: close orphaned discovery operations: %w", err)
+		}
+		for _, operationID := range operationIDs {
+			result, err := tx.ExecContext(workerCtx, `
+UPDATE accepted_operations
+SET state='completed',checkpoint='',last_error_class=NULL,terminal_at=?
+WHERE id=? AND kind='model_discovery' AND state IN ('accepted','running') AND created_at<=?
+  AND NOT EXISTS(
+    SELECT 1 FROM model_discovery_evidence d
+    WHERE d.state='checking'
+      AND accepted_operations.checkpoint=CAST(d.endpoint_key_id AS TEXT)||':'||CAST(d.revision AS TEXT)
+  )`, decisionNow, operationID, threshold)
+			if err != nil {
+				return DiscoveryRecoveryResult{}, fmt.Errorf("resources: recover orphaned discovery operation: %w", err)
+			}
+			changed, err := result.RowsAffected()
+			if err != nil {
+				return DiscoveryRecoveryResult{}, fmt.Errorf("resources: observe orphaned discovery recovery: %w", err)
+			}
+			if changed < 0 || changed > 1 {
+				return DiscoveryRecoveryResult{}, ErrUnavailable
+			}
+			processed += int(changed)
+		}
 	}
-	orphanedCount, err := orphaned.RowsAffected()
-	if err != nil {
-		return 0, fmt.Errorf("resources: observe orphaned discovery recovery: %w", err)
+
+	var more int
+	if err := tx.QueryRowContext(workerCtx, `SELECT
+EXISTS(SELECT 1 FROM model_discovery_evidence
+       WHERE state='checking' AND started_at<=?)
+OR EXISTS(SELECT 1 FROM accepted_operations AS op
+          WHERE op.kind='model_discovery' AND op.state IN ('accepted','running') AND op.created_at<=?
+            AND NOT EXISTS(
+              SELECT 1 FROM model_discovery_evidence d
+              WHERE d.state='checking'
+                AND op.checkpoint=CAST(d.endpoint_key_id AS TEXT)||':'||CAST(d.revision AS TEXT)
+            ))`, threshold, threshold).Scan(&more); err != nil {
+		return DiscoveryRecoveryResult{}, fmt.Errorf("resources: inspect discovery recovery backlog: %w", err)
+	}
+	if more != 0 && more != 1 {
+		return DiscoveryRecoveryResult{}, ErrUnavailable
 	}
 	if err := commitTx(tx, &committed); err != nil {
-		return 0, err
+		return DiscoveryRecoveryResult{}, err
 	}
-	return evidenceCount + orphanedCount, nil
+	return DiscoveryRecoveryResult{Processed: processed, More: more == 1}, nil
+}
+
+func discoveryRecoveryContext(ctx context.Context, deadline time.Time) (context.Context, context.CancelFunc) {
+	if deadline.IsZero() {
+		return ctx, func() {}
+	}
+	return context.WithDeadline(ctx, deadline)
 }
 
 func validateCatalogText(value string, minRunes, maxRunes int) bool {

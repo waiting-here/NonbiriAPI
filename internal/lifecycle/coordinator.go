@@ -106,6 +106,8 @@ type RetentionAdapters struct {
 	LinkLink    RetentionAdapter
 	RPS         RetentionAdapter
 	Reports     RetentionAdapter
+	Donations   RetentionAdapter
+	Charity     RetentionAdapter
 	Idempotency RetentionAdapter
 	Secrets     RetentionAdapter
 }
@@ -120,6 +122,8 @@ func (adapters RetentionAdapters) ordered() []RetentionAdapter {
 		adapters.LinkLink,
 		adapters.RPS,
 		adapters.Reports,
+		adapters.Donations,
+		adapters.Charity,
 		adapters.Idempotency,
 		adapters.Secrets,
 	}

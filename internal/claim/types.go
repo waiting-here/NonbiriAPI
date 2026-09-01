@@ -319,6 +319,7 @@ type RecoveryReport struct {
 type MaintenanceReport struct {
 	Marked  int
 	Deleted int
+	More    bool
 }
 
 // Accounting is the narrow adapter to the central ledger. Every method is

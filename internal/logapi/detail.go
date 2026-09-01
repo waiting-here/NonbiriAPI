@@ -17,12 +17,19 @@ func (repository *Repository) GetUser(ctx context.Context, userID int64, request
 	if err != nil {
 		return nil, err
 	}
+	now, err := repository.decisionNow()
+	if err != nil {
+		return nil, err
+	}
 	var model string
 	record, err := scanCommon(repository.db.QueryRowContext(ctx,
 		`SELECT `+commonListColumns+`,l.model FROM request_logs l WHERE l.logical_request_id=? AND l.user_id=?`,
 		requestID, userID), &model)
 	if err != nil {
 		return nil, translateSQLError(err)
+	}
+	if !requestLogOrdinarilyVisible(record.completedAt, now) {
+		return nil, ErrNotFound
 	}
 	usage, err := usageFromRecord(record)
 	if err != nil || !utf8.ValidString(model) || len(model) > 512 {
@@ -71,11 +78,34 @@ func (repository *Repository) GetAdmin(ctx context.Context, requestID string, fi
 	if err != nil {
 		return AdminLogDetail{}, err
 	}
+	now, err := repository.decisionNow()
+	if err != nil {
+		return AdminLogDetail{}, err
+	}
+	tx, err := repository.db.BeginTx(ctx, nil)
+	if err != nil {
+		return AdminLogDetail{}, translateSQLError(err)
+	}
+	defer tx.Rollback()
 	var userID sql.NullInt64
-	record, err := scanCommon(repository.db.QueryRowContext(ctx,
+	record, err := scanCommon(tx.QueryRowContext(ctx,
 		`SELECT `+commonListColumns+`,l.user_id FROM request_logs l WHERE l.logical_request_id=?`, requestID), &userID)
 	if err != nil {
 		return AdminLogDetail{}, translateSQLError(err)
+	}
+	ordinary := requestLogOrdinarilyVisible(record.completedAt, now)
+	held := false
+	if repository.heldRead != nil {
+		held, err = repository.heldRead.AuthorizeHeldRequestLogRead(ctx, tx, record.rowID, now)
+		if err != nil {
+			return AdminLogDetail{}, err
+		}
+	}
+	if !ordinary && !held {
+		if err := tx.Commit(); err != nil {
+			return AdminLogDetail{}, translateSQLError(err)
+		}
+		return AdminLogDetail{}, ErrNotFound
 	}
 	usage, err := usageFromRecord(record)
 	if err != nil {
@@ -88,9 +118,12 @@ func (repository *Repository) GetAdmin(ctx context.Context, requestID string, fi
 		StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
 		UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10),
 	}
-	attempts, err := repository.listAdminAttempts(ctx, record.rowID, requestID, filter)
+	attempts, err := repository.listAdminAttemptsTx(ctx, tx, record.rowID, requestID, filter)
 	if err != nil {
 		return AdminLogDetail{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return AdminLogDetail{}, translateSQLError(err)
 	}
 	return AdminLogDetail{Request: row, Attempts: attempts}, nil
 }
@@ -110,6 +143,10 @@ func (repository *Repository) GetSteward(
 	if err != nil {
 		return StewardLogDetail{}, err
 	}
+	now, err := repository.decisionNow()
+	if err != nil {
+		return StewardLogDetail{}, err
+	}
 	tx, err := repository.beginStewardRead(ctx, stewardUserID, authorizer)
 	if err != nil {
 		return StewardLogDetail{}, err
@@ -120,6 +157,9 @@ func (repository *Repository) GetSteward(
 		`SELECT `+commonListColumns+` FROM request_logs l WHERE l.logical_request_id=?`, requestID))
 	if err != nil {
 		return StewardLogDetail{}, translateSQLError(err)
+	}
+	if !requestLogOrdinarilyVisible(record.completedAt, now) {
+		return StewardLogDetail{}, ErrNotFound
 	}
 	usage, err := usageFromRecord(record)
 	if err != nil {
@@ -275,6 +315,23 @@ WHERE a.request_log_id=? AND a.attempt_seq>? ORDER BY a.attempt_seq ASC LIMIT ?`
 }
 
 func (repository *Repository) listAdminAttempts(ctx context.Context, requestLogID int64, requestID string, filter AttemptFilter) (Page[AdminLogAttempt], error) {
+	return repository.listAdminAttemptsTx(ctx, repository.db, requestLogID, requestID, filter)
+}
+
+type adminAttemptQueryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func (repository *Repository) listAdminAttemptsTx(
+	ctx context.Context,
+	queryer adminAttemptQueryer,
+	requestLogID int64,
+	requestID string,
+	filter AttemptFilter,
+) (Page[AdminLogAttempt], error) {
+	if queryer == nil {
+		return Page[AdminLogAttempt]{}, ErrInvalid
+	}
 	owner := attemptOwner("admin", 0, requestID)
 	cursor, err := repository.decodeAttemptCursor(filter.Cursor, "logapi-admin-attempt-v1", owner)
 	if err != nil {
@@ -282,7 +339,7 @@ func (repository *Repository) listAdminAttempts(ctx context.Context, requestLogI
 	}
 	query := `SELECT ` + attemptColumns + ` FROM request_attempts a
 WHERE a.request_log_id=? AND a.attempt_seq>? ORDER BY a.attempt_seq ASC LIMIT ?`
-	rows, err := repository.db.QueryContext(ctx, query, requestLogID, cursor, filter.Limit+1)
+	rows, err := queryer.QueryContext(ctx, query, requestLogID, cursor, filter.Limit+1)
 	if err != nil {
 		return Page[AdminLogAttempt]{}, translateSQLError(err)
 	}
@@ -323,6 +380,19 @@ WHERE a.request_log_id=? AND a.attempt_seq>? ORDER BY a.attempt_seq ASC LIMIT ?`
 		page.NextCursor = &next
 	}
 	return page, nil
+}
+
+func requestLogOrdinarilyVisible(completedAt sql.NullInt64, now int64) bool {
+	if !completedAt.Valid {
+		return true
+	}
+	if completedAt.Int64 < 0 || completedAt.Int64 > maxUnixSecond {
+		return false
+	}
+	if completedAt.Int64 > maxUnixSecond-requestLogRetentionSeconds {
+		return true
+	}
+	return now < completedAt.Int64+requestLogRetentionSeconds
 }
 
 func (repository *Repository) listStewardAttempts(

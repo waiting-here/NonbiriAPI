@@ -186,17 +186,24 @@ type UserRetirement struct {
 // BeginUserRetirement closes new admission, cancels active user contexts, and
 // waits for all active leases to release.
 func (g *Gate) BeginUserRetirement(userID int64) (*UserRetirement, error) {
-	return g.beginUserRetirement(userID, nil)
+	return g.beginUserRetirement(userID, nil, false)
 }
 
 // BeginUserRetirementContext is the context-aware form used by request-driven
 // automatic bans. The request carrying ctx is cancelled but not waited on by
 // the barrier, preventing the denial callback from waiting on itself.
 func (g *Gate) BeginUserRetirementContext(ctx context.Context, userID int64) (*UserRetirement, error) {
-	return g.beginUserRetirement(userID, leaseFromContext(ctx))
+	return g.beginUserRetirement(userID, leaseFromContext(ctx), true)
 }
 
-func (g *Gate) beginUserRetirement(userID int64, excluded *lease) (*UserRetirement, error) {
+// BeginUserRetirementExcludingContext is the account-deletion form. It keeps
+// the retiring request usable while excluding it from the drain wait; every
+// other admitted request is still cancelled and drained before it returns.
+func (g *Gate) BeginUserRetirementExcludingContext(ctx context.Context, userID int64) (*UserRetirement, error) {
+	return g.beginUserRetirement(userID, leaseFromContext(ctx), false)
+}
+
+func (g *Gate) beginUserRetirement(userID int64, excluded *lease, cancelExcluded bool) (*UserRetirement, error) {
 	if g == nil || userID <= 0 {
 		return nil, ErrInvalid
 	}
@@ -240,6 +247,9 @@ func (g *Gate) beginUserRetirement(userID int64, excluded *lease) (*UserRetireme
 	}
 	cancels := make([]context.CancelFunc, 0, len(state.active))
 	for l := range state.active {
+		if l == excluded && !cancelExcluded {
+			continue
+		}
 		cancels = append(cancels, l.cancel)
 	}
 	g.mu.Unlock()

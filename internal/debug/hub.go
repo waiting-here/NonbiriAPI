@@ -172,6 +172,7 @@ type Hub struct {
 
 	activeByUser map[int64]*session
 	sessions     map[*session]struct{}
+	forgotten    map[int64]struct{}
 	knownEvents  map[string]knownEvent
 	knownOrder   []string
 	generation   uint64
@@ -197,6 +198,7 @@ func newHub(config hubConfig) (*Hub, error) {
 	}
 	hub := &Hub{
 		activeByUser: make(map[int64]*session), sessions: make(map[*session]struct{}),
+		forgotten:   make(map[int64]struct{}),
 		knownEvents: make(map[string]knownEvent),
 		config:      config, stopSweep: make(chan struct{}), sweepDone: make(chan struct{}),
 	}
@@ -259,6 +261,9 @@ func (hub *Hub) createLocked(userID int64, binding string, now time.Time) (*sess
 	if userID <= 0 || binding == "" || !utf8.ValidString(binding) || len(binding) > 256 {
 		return nil, ErrInvalid
 	}
+	if _, forgotten := hub.forgotten[userID]; forgotten {
+		return nil, ErrNoActiveSession
+	}
 	if len(hub.activeByUser) >= MaxGlobalSessions {
 		return nil, ErrCapacity
 	}
@@ -295,6 +300,9 @@ func (hub *Hub) Start(userID int64, identityBinding string) (DebugSessionMetadat
 	defer hub.mu.Unlock()
 	if hub.closed {
 		return DebugSessionMetadata{}, false, ErrClosed
+	}
+	if _, forgotten := hub.forgotten[userID]; forgotten {
+		return DebugSessionMetadata{}, false, ErrNoActiveSession
 	}
 	now := hub.config.now()
 	if existing := hub.activeByUser[userID]; existing != nil && !existing.ended {

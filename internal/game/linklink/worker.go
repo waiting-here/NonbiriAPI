@@ -16,7 +16,7 @@ func (service *Service) RecoverBeforeListen(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := service.validatePersistedSessions(ctx); err != nil {
+	if err := service.ValidatePersistedState(ctx); err != nil {
 		return err
 	}
 	for {

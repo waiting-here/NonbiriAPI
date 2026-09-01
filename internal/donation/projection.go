@@ -34,6 +34,13 @@ func (s *Service) GetOwner(ctx context.Context, userID, donationID int64) (Donat
 	if _, err := materializeDonationExpiryTx(ctx, tx, donationID, now); err != nil {
 		return Donation{}, err
 	}
+	visible, err := donationOrdinarilyVisibleTx(ctx, tx, donationID, now)
+	if err != nil {
+		return Donation{}, err
+	}
+	if !visible {
+		return Donation{}, ErrNotFound
+	}
 	value, err := getOwnerDonationTx(ctx, tx, userID, donationID, now)
 	if err != nil {
 		return Donation{}, err
@@ -59,6 +66,23 @@ func (s *Service) GetAdmin(ctx context.Context, donationID int64) (AdminDonation
 	defer tx.Rollback()
 	if _, err := materializeDonationExpiryTx(ctx, tx, donationID, now); err != nil {
 		return AdminDonation{}, err
+	}
+	ordinary, err := donationOrdinarilyVisibleTx(ctx, tx, donationID, now)
+	if err != nil {
+		return AdminDonation{}, err
+	}
+	held := false
+	if s.heldRead != nil {
+		held, err = s.heldRead.AuthorizeHeldDonationRead(ctx, tx, donationID, now)
+		if err != nil {
+			return AdminDonation{}, err
+		}
+	}
+	if !ordinary && !held {
+		if err := tx.Commit(); err != nil {
+			return AdminDonation{}, fmt.Errorf("donation: commit hidden admin read: %w", err)
+		}
+		return AdminDonation{}, ErrNotFound
 	}
 	value, err := getAdminDonationTx(ctx, tx, donationID, now)
 	if err != nil {
@@ -88,6 +112,13 @@ func (s *Service) GetSteward(ctx context.Context, userID, donationID int64) (Ste
 	}
 	if _, err := materializeDonationExpiryTx(ctx, tx, donationID, now); err != nil {
 		return StewardDonation{}, err
+	}
+	visible, err := donationOrdinarilyVisibleTx(ctx, tx, donationID, now)
+	if err != nil {
+		return StewardDonation{}, err
+	}
+	if !visible {
+		return StewardDonation{}, ErrNotFound
 	}
 	value, err := getAdminDonationTx(ctx, tx, donationID, now)
 	if err != nil {
@@ -120,7 +151,10 @@ func (s *Service) ListOwner(ctx context.Context, userID, afterID int64, limit in
 	if err := materializeDueExpiriesTx(ctx, tx, now, 100); err != nil {
 		return nil, 0, err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT id FROM donations WHERE user_id=? AND id>? ORDER BY id LIMIT ?`, userID, afterID, limit+1)
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM donations
+WHERE user_id=? AND id>?
+ AND (status IN ('pending','approved') OR terminal_at>?)
+ORDER BY id LIMIT ?`, userID, afterID, now-terminalRetention, limit+1)
 	if err != nil {
 		return nil, 0, fmt.Errorf("donation: list owner ids: %w", err)
 	}
@@ -188,8 +222,9 @@ func (s *Service) listRole(ctx context.Context, userID int64, status string, aft
 	if err := materializeDueExpiriesTx(ctx, tx, now, 100); err != nil {
 		return nil, 0, err
 	}
-	query := `SELECT id FROM donations WHERE id>?`
-	args := []any{afterID}
+	query := `SELECT id FROM donations WHERE id>?
+ AND (status IN ('pending','approved') OR terminal_at>?)`
+	args := []any{afterID, now - terminalRetention}
 	if own {
 		query += ` AND user_id=?`
 		args = append(args, userID)
@@ -241,6 +276,37 @@ func scanIDs(rows *sql.Rows) ([]int64, error) {
 		return nil, fmt.Errorf("donation: iterate list identities: %w", err)
 	}
 	return ids, nil
+}
+
+func donationOrdinarilyVisibleTx(ctx context.Context, tx *sql.Tx, donationID, now int64) (bool, error) {
+	var status string
+	var terminalAt sql.NullInt64
+	err := tx.QueryRowContext(ctx, `SELECT status,terminal_at FROM donations WHERE id=?`, donationID).Scan(
+		&status, &terminalAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, ErrNotFound
+	}
+	if err != nil {
+		return false, fmt.Errorf("donation: inspect ordinary visibility: %w", err)
+	}
+	switch status {
+	case "pending", "approved":
+		if terminalAt.Valid {
+			return false, ErrInvariant
+		}
+		return true, nil
+	case "rejected", "deleted", "expired":
+		if !terminalAt.Valid || terminalAt.Int64 < 0 || terminalAt.Int64 > maxUnixSecond {
+			return false, ErrInvariant
+		}
+		if terminalAt.Int64 > maxUnixSecond-terminalRetention {
+			return true, nil
+		}
+		return now < terminalAt.Int64+terminalRetention, nil
+	default:
+		return false, ErrInvariant
+	}
 }
 
 func getOwnerDonationTx(ctx context.Context, tx *sql.Tx, userID, donationID, now int64) (Donation, error) {
