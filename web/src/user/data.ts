@@ -23,37 +23,17 @@ import {
   text,
   type UnknownRecord,
 } from '@shared/query/normalize';
+import {
+  normalizeEndpoint as normalizeCoreEndpoint,
+  normalizeUserEnvelope as normalizeCoreUserEnvelope,
+  normalizeUserProfile as normalizeCoreUserProfile,
+} from './features/core/normalizers';
+import type {
+  Endpoint as CoreEndpoint,
+  UserProfile as CoreUserProfile,
+} from './features/core/types';
 
-export interface UserSummary {
-  id: string;
-  username: string;
-  avatar?: string;
-  avatar_url?: string;
-  guild_nick: string;
-  guild_avatar_url?: string;
-  lang: 'zh' | 'en';
-  is_banned: boolean;
-  blocked_reason?: string;
-  endpoint_limit?: number;
-  effective_endpoint_limit: number;
-  rpm_limit?: number;
-  effective_rpm_limit: number;
-  concurrency_limit?: number;
-  effective_concurrency_limit: number;
-  /** Canonical decimal milli-credit string; the signed consumption balance. */
-  credits: string;
-  /** Canonical decimal milli-credit string; the non-negative donor reward. */
-  donation_credit: string;
-  /** Server-resolved effective level (1..5) for the request. */
-  effective_level: number;
-  /** Manual override when non-null; absent means the automatic level applies. */
-  manual_level?: number;
-  /** Nullable ban deadline as unix seconds; absent while there is none. */
-  banned_until?: number;
-  /** Nullable charity-only suspension deadline as unix seconds. */
-  charity_suspended_until?: number;
-  created_at: string;
-}
+export type UserSummary = CoreUserProfile;
 
 /**
  * The check-in status projection. While the feature is unavailable the server
@@ -88,17 +68,7 @@ export interface UsageSummary {
   total_unknown_usage_requests: number;
 }
 
-export interface Endpoint {
-  id: string;
-  connector_type: string;
-  base_url: string;
-  note: string;
-  enabled: boolean;
-  model_fetch_failed: boolean;
-  model_fetch_failed_at: string;
-  created_at: string;
-  updated_at: string;
-}
+export type Endpoint = CoreEndpoint;
 
 export interface EndpointKey {
   id: string;
@@ -296,7 +266,19 @@ export const userKeys = {
   logsRoot: ['user', 'logs'] as const,
   logOptions: ['user', 'log-options'] as const,
   stewardLogs: (page: number, filter: StewardLogFilter, pageSize: number) =>
-    ['user', 'steward-logs', page, filter.userId ?? '', filter.endpointBaseURL ?? '', filter.upstreamModel ?? '', filter.errorCode ?? '', filter.status ?? '', filter.fromUnix ?? '', filter.toUnix ?? '', pageSize] as const,
+    [
+      'user',
+      'steward-logs',
+      page,
+      filter.userId ?? '',
+      filter.endpointBaseURL ?? '',
+      filter.upstreamModel ?? '',
+      filter.errorCode ?? '',
+      filter.status ?? '',
+      filter.fromUnix ?? '',
+      filter.toUnix ?? '',
+      pageSize,
+    ] as const,
   stewardLogsRoot: ['user', 'steward-logs'] as const,
   checkin: ['user', 'checkin'] as const,
   charityModels: ['user', 'charity-models'] as const,
@@ -315,11 +297,6 @@ function amountValue(value: unknown): string {
   return typeof value === 'string' && value.length <= 32 ? value : '';
 }
 
-// Nullable integer projection: present only for a finite number.
-function optionalNumberValue(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
 function strictInteger(value: unknown, minimum: number, maximum: number, field: string): number {
   if (!Number.isSafeInteger(value) || (value as number) < minimum || (value as number) > maximum) {
     throw new ApiError('invalid_response', `The server returned an invalid ${field}.`, 200);
@@ -329,7 +306,8 @@ function strictInteger(value: unknown, minimum: number, maximum: number, field: 
 
 function requiredRecord(value: unknown, field: string): UnknownRecord {
   const record = asRecord(value);
-  if (!record) throw new ApiError('invalid_response', `The server returned an invalid ${field}.`, 200);
+  if (!record)
+    throw new ApiError('invalid_response', `The server returned an invalid ${field}.`, 200);
   return record;
 }
 
@@ -338,10 +316,12 @@ function requiredRecord(value: unknown, field: string): UnknownRecord {
  * fragments use the separate displayText helper below when cleaning is part
  * of their rendering contract. */
 function requiredText(value: unknown, max: number, field: string, allowEmpty = false): string {
-  if (typeof value !== 'string'
-    || hasControlCharacters(value)
-    || Array.from(value).length > max
-    || (!allowEmpty && !value.trim())) {
+  if (
+    typeof value !== 'string' ||
+    hasControlCharacters(value) ||
+    Array.from(value).length > max ||
+    (!allowEmpty && !value.trim())
+  ) {
     throw new ApiError('invalid_response', `The server returned an invalid ${field}.`, 200);
   }
   return value;
@@ -428,96 +408,18 @@ function requiredBoolean(value: unknown, field: string): boolean {
 
 export type StorePolicy = boolean | 'not_applicable';
 
-function optionalStrictInteger(
-  value: unknown,
-  minimum: number,
-  maximum: number,
-  field: string,
-): number | undefined {
-  if (value === null || value === undefined) return undefined;
-  return strictInteger(value, minimum, maximum, field);
-}
-
-function levelValue(value: unknown, fallback: number): number {
-  const parsed = optionalNumberValue(value);
-  return parsed !== undefined && parsed >= 1 && parsed <= 5 ? Math.trunc(parsed) : fallback;
-}
-
 export function normalizeUserSummary(value: unknown): UserSummary {
-  const record = asRecord(value) ?? {};
-  const lang = recordValue(record, 'lang') === 'zh' ? 'zh' : 'en';
-  const endpointLimit = recordValue(record, 'endpoint_limit');
-  const rpmLimit = recordValue(record, 'rpm_limit');
-  const concurrencyLimit = recordValue(record, 'concurrency_limit');
-  const manualLevel = optionalNumberValue(recordValue(record, 'manual_level'));
-  const bannedUntil = optionalNumberValue(recordValue(record, 'banned_until'));
-  const charitySuspendedUntil = optionalNumberValue(recordValue(record, 'charity_suspended_until'));
-  const explicitEndpointLimit = optionalStrictInteger(endpointLimit, 0, 10_000, 'endpoint limit');
-  const explicitRPMLimit = optionalStrictInteger(rpmLimit, 1, 4_096, 'RPM limit');
-  const explicitConcurrencyLimit = optionalStrictInteger(
-    concurrencyLimit, 1, 100_000, 'concurrency limit',
-  );
-  return {
-    id: idValue(recordValue(record, 'id')),
-    username: text(recordValue(record, 'username'), 128, '—'),
-    ...(optionalText(recordValue(record, 'avatar'), 512)
-      ? { avatar: optionalText(recordValue(record, 'avatar'), 512) }
-      : {}),
-    ...(optionalText(recordValue(record, 'avatar_url'), 512)
-      ? { avatar_url: optionalText(recordValue(record, 'avatar_url'), 512) }
-      : {}),
-    guild_nick: text(recordValue(record, 'guild_nick'), 128),
-    ...(optionalText(recordValue(record, 'guild_avatar_url'), 512)
-      ? { guild_avatar_url: optionalText(recordValue(record, 'guild_avatar_url'), 512) }
-      : {}),
-    lang,
-    is_banned: booleanValue(recordValue(record, 'is_banned')),
-    ...(optionalText(recordValue(record, 'blocked_reason'), 512)
-      ? { blocked_reason: optionalText(recordValue(record, 'blocked_reason'), 512) }
-      : {}),
-    ...(explicitEndpointLimit !== undefined
-      ? { endpoint_limit: explicitEndpointLimit }
-      : {}),
-    effective_endpoint_limit: strictInteger(
-      recordValue(record, 'effective_endpoint_limit'), 0, 10_000, 'effective endpoint limit',
-    ),
-    ...(explicitRPMLimit !== undefined
-      ? { rpm_limit: explicitRPMLimit }
-      : {}),
-    effective_rpm_limit: strictInteger(
-      recordValue(record, 'effective_rpm_limit'), 1, 4_096, 'effective RPM limit',
-    ),
-    ...(explicitConcurrencyLimit !== undefined
-      ? { concurrency_limit: explicitConcurrencyLimit }
-      : {}),
-    effective_concurrency_limit: strictInteger(
-      recordValue(record, 'effective_concurrency_limit'), 1, 100_000, 'effective concurrency limit',
-    ),
-    credits: amountValue(recordValue(record, 'credits')),
-    donation_credit: amountValue(recordValue(record, 'donation_credit')),
-    effective_level: levelValue(recordValue(record, 'effective_level'), 1),
-    ...(manualLevel !== undefined && manualLevel >= 1 && manualLevel <= 5
-      ? { manual_level: Math.trunc(manualLevel) }
-      : {}),
-    ...(bannedUntil !== undefined && bannedUntil >= 0 ? { banned_until: Math.trunc(bannedUntil) } : {}),
-    ...(charitySuspendedUntil !== undefined && charitySuspendedUntil >= 0
-      ? { charity_suspended_until: Math.trunc(charitySuspendedUntil) }
-      : {}),
-    created_at: dateValue(recordValue(record, 'created_at')),
-  };
+  return normalizeCoreUserProfile(value);
 }
 
 function normalizeSession(value: unknown): UserSessionResponse {
-  const record = asRecord(value);
-  if (!record || !asRecord(record.user)) {
-    throw new ApiError('invalid_response', 'The server returned an invalid session.', 200);
-  }
-  return { user: normalizeUserSummary(record.user) };
+  return normalizeCoreUserEnvelope(value);
 }
 
 function normalizeUsage(value: unknown): UsageSummary {
   const record = asRecord(value);
-  if (!record) throw new ApiError('invalid_response', 'The server returned an invalid usage summary.', 200);
+  if (!record)
+    throw new ApiError('invalid_response', 'The server returned an invalid usage summary.', 200);
   const required = (key: string): number => {
     const raw = recordValue(record, key);
     if (typeof raw !== 'number' || !Number.isFinite(raw)) {
@@ -536,10 +438,12 @@ function normalizeUsage(value: unknown): UsageSummary {
 function listPayload(value: unknown): unknown[] {
   if (Array.isArray(value)) return value.slice(0, 1000);
   const record = requiredRecord(value, 'list');
-  if (!Array.isArray(record.data)
-    || typeof record.has_more !== 'boolean'
-    || !Number.isSafeInteger(record.total)
-    || (record.total as number) < 0) {
+  if (
+    !Array.isArray(record.data) ||
+    typeof record.has_more !== 'boolean' ||
+    !Number.isSafeInteger(record.total) ||
+    (record.total as number) < 0
+  ) {
     throw new ApiError('invalid_response', 'The server returned an invalid list.', 200);
   }
   return record.data.slice(0, 1000);
@@ -548,10 +452,12 @@ function listPayload(value: unknown): unknown[] {
 function donationListPayload(value: unknown): unknown[] {
   if (Array.isArray(value)) return value.slice(0, 1000);
   const record = requiredRecord(value, 'donation list');
-  if (!Array.isArray(record.data)
-    || typeof record.has_more !== 'boolean'
-    || !Number.isSafeInteger(record.total)
-    || (record.total as number) < 0) {
+  if (
+    !Array.isArray(record.data) ||
+    typeof record.has_more !== 'boolean' ||
+    !Number.isSafeInteger(record.total) ||
+    (record.total as number) < 0
+  ) {
     throw new ApiError('invalid_response', 'The server returned an invalid donation list.', 200);
   }
   return record.data.slice(0, 1000);
@@ -567,35 +473,24 @@ function donationListPayload(value: unknown): unknown[] {
 function charityModelsPayload(value: unknown): unknown[] {
   const record = requiredRecord(value, 'charity model list');
   if (!Array.isArray(record.data) || Object.keys(record).some((key) => key !== 'data')) {
-    throw new ApiError('invalid_response', 'The server returned an invalid charity model list.', 200);
+    throw new ApiError(
+      'invalid_response',
+      'The server returned an invalid charity model list.',
+      200,
+    );
   }
   return record.data.slice(0, 1000);
 }
 
 export function normalizeEndpoint(value: unknown): Endpoint {
-  const record = requiredRecord(value, 'endpoint');
-  const failedAt = recordValue(record, 'model_fetch_failed_at');
-  const modelFetchFailed = requiredBoolean(recordValue(record, 'model_fetch_failed'), 'model fetch status');
-  if (typeof failedAt !== 'number' || !Number.isSafeInteger(failedAt) || failedAt < 0
-    || (modelFetchFailed ? failedAt <= 0 : failedAt !== 0)) {
-    throw new ApiError('invalid_response', 'The server returned an invalid model fetch failure timestamp.', 200);
-  }
-  return {
-    id: requiredID(recordValue(record, 'id'), 'endpoint id'),
-    connector_type: connectorType(recordValue(record, 'connector_type')),
-    base_url: requiredText(recordValue(record, 'base_url'), 2048, 'endpoint base URL'),
-    note: requiredText(recordValue(record, 'note'), 512, 'endpoint note', true),
-    enabled: requiredBoolean(recordValue(record, 'enabled'), 'endpoint enabled'),
-    model_fetch_failed: modelFetchFailed,
-    model_fetch_failed_at: modelFetchFailed ? requiredTimestamp(failedAt, 'model fetch failure timestamp') : '',
-    created_at: requiredTimestamp(recordValue(record, 'created_at'), 'endpoint created timestamp'),
-    updated_at: requiredTimestamp(recordValue(record, 'updated_at'), 'endpoint updated timestamp'),
-  };
+  return normalizeCoreEndpoint(value);
 }
 
 function safeDisplayFragment(value: unknown, max = 64): string | undefined {
   const candidate = displayText(value, max, 'key display');
-  return candidate && (candidate.includes('…') || candidate.includes('...')) ? candidate : undefined;
+  return candidate && (candidate.includes('…') || candidate.includes('...'))
+    ? candidate
+    : undefined;
 }
 
 // Build the masked key preview (head…tail) from persisted first/last fragments.
@@ -611,10 +506,12 @@ function formatFragment(head: string | undefined, tail: string | undefined): str
 function fragmentFromRecord(record: UnknownRecord): string | undefined {
   const directDisplay = safeDisplayFragment(recordValue(record, 'display'));
   if (directDisplay) return directDisplay;
-  const head = displayText(recordValue(record, 'display_head'), 8, 'key display head')
-    ?? displayText(recordValue(record, 'secret_head'), 8, 'key display head');
-  const tail = displayText(recordValue(record, 'display_tail'), 8, 'key display tail')
-    ?? displayText(recordValue(record, 'secret_tail'), 8, 'key display tail');
+  const head =
+    displayText(recordValue(record, 'display_head'), 8, 'key display head') ??
+    displayText(recordValue(record, 'secret_head'), 8, 'key display head');
+  const tail =
+    displayText(recordValue(record, 'display_tail'), 8, 'key display tail') ??
+    displayText(recordValue(record, 'secret_tail'), 8, 'key display tail');
   return formatFragment(head, tail);
 }
 
@@ -632,7 +529,11 @@ export function normalizeEndpointKey(value: unknown, connectorTypeValue: string)
     storePolicyValue = rawStorePolicy;
   } else {
     if (hasStorePolicy) {
-      throw new ApiError('invalid_response', 'The server returned an unexpected store policy.', 200);
+      throw new ApiError(
+        'invalid_response',
+        'The server returned an unexpected store policy.',
+        200,
+      );
     }
     storePolicyValue = 'not_applicable';
   }
@@ -642,8 +543,14 @@ export function normalizeEndpointKey(value: unknown, connectorTypeValue: string)
     note: requiredText(recordValue(record, 'note'), 512, 'endpoint key note', true),
     enabled: requiredBoolean(recordValue(record, 'enabled'), 'endpoint key enabled'),
     force_store_false: storePolicyValue,
-    created_at: requiredTimestamp(recordValue(record, 'created_at'), 'endpoint key created timestamp'),
-    updated_at: requiredTimestamp(recordValue(record, 'updated_at'), 'endpoint key updated timestamp'),
+    created_at: requiredTimestamp(
+      recordValue(record, 'created_at'),
+      'endpoint key created timestamp',
+    ),
+    updated_at: requiredTimestamp(
+      recordValue(record, 'updated_at'),
+      'endpoint key updated timestamp',
+    ),
   };
 }
 
@@ -651,12 +558,23 @@ export function normalizeUpstreamModel(value: unknown): UpstreamModel {
   const record = requiredRecord(value, 'upstream model');
   const status = recordValue(record, 'status');
   if (status !== 'ok') {
-    throw new ApiError('invalid_response', 'The server returned an invalid upstream model status.', 200);
+    throw new ApiError(
+      'invalid_response',
+      'The server returned an invalid upstream model status.',
+      200,
+    );
   }
   return {
-    upstream_model_id: requiredText(recordValue(record, 'upstream_model_id'), 512, 'upstream model id'),
+    upstream_model_id: requiredText(
+      recordValue(record, 'upstream_model_id'),
+      512,
+      'upstream model id',
+    ),
     provider: requiredText(recordValue(record, 'provider'), 128, 'upstream model provider'),
-    fetched_at: requiredTimestamp(recordValue(record, 'fetched_at'), 'upstream model fetched timestamp'),
+    fetched_at: requiredTimestamp(
+      recordValue(record, 'fetched_at'),
+      'upstream model fetched timestamp',
+    ),
     status,
   };
 }
@@ -670,7 +588,10 @@ export function normalizePlatformModel(value: unknown): PlatformModel {
     full_name: requiredText(recordValue(record, 'full_name'), 160, 'model full name'),
     route_strategy: routeStrategy(recordValue(record, 'route_strategy')),
     silent_retry: requiredBoolean(recordValue(record, 'silent_retry'), 'silent-retry policy'),
-    flatten_tool_calls: requiredBoolean(recordValue(record, 'flatten_tool_calls'), 'tool-call policy'),
+    flatten_tool_calls: requiredBoolean(
+      recordValue(record, 'flatten_tool_calls'),
+      'tool-call policy',
+    ),
     binding_count: requiredCount(recordValue(record, 'binding_count'), 'binding count'),
     created_at: requiredTimestamp(recordValue(record, 'created_at'), 'model created timestamp'),
     updated_at: requiredTimestamp(recordValue(record, 'updated_at'), 'model updated timestamp'),
@@ -679,17 +600,35 @@ export function normalizePlatformModel(value: unknown): PlatformModel {
 
 export function normalizeBinding(value: unknown): ModelBinding {
   const record = requiredRecord(value, 'model binding');
-  const keyHead = optionalTextStrict(recordValue(record, 'endpoint_key_display_head'), 8, 'endpoint key display head');
-  const keyTail = optionalTextStrict(recordValue(record, 'endpoint_key_display_tail'), 8, 'endpoint key display tail');
+  const keyHead = optionalTextStrict(
+    recordValue(record, 'endpoint_key_display_head'),
+    8,
+    'endpoint key display head',
+  );
+  const keyTail = optionalTextStrict(
+    recordValue(record, 'endpoint_key_display_tail'),
+    8,
+    'endpoint key display tail',
+  );
   const keyDisplay = formatFragment(keyHead, keyTail);
   return {
     id: requiredID(recordValue(record, 'id'), 'binding id'),
     endpoint_key_id: requiredID(recordValue(record, 'endpoint_key_id'), 'endpoint key id'),
-    upstream_model_id: requiredText(recordValue(record, 'upstream_model_id'), 256, 'upstream model id'),
-    endpoint_base_url: requiredText(recordValue(record, 'endpoint_base_url'), 2048, 'endpoint base URL'),
+    upstream_model_id: requiredText(
+      recordValue(record, 'upstream_model_id'),
+      256,
+      'upstream model id',
+    ),
+    endpoint_base_url: requiredText(
+      recordValue(record, 'endpoint_base_url'),
+      2048,
+      'endpoint base URL',
+    ),
     ...(keyDisplay ? { endpoint_key_display: keyDisplay } : {}),
-    endpoint_key_note: optionalTextStrict(recordValue(record, 'endpoint_key_note'), 512, 'endpoint key note') ?? '',
-    endpoint_note: optionalTextStrict(recordValue(record, 'endpoint_note'), 512, 'endpoint note') ?? '',
+    endpoint_key_note:
+      optionalTextStrict(recordValue(record, 'endpoint_key_note'), 512, 'endpoint key note') ?? '',
+    endpoint_note:
+      optionalTextStrict(recordValue(record, 'endpoint_note'), 512, 'endpoint note') ?? '',
     ord: strictInteger(recordValue(record, 'ord'), 0, 1_000_000, 'binding order'),
   };
 }
@@ -737,8 +676,7 @@ function normalizeIssuePage(value: unknown, pageSize = 20): IssuePage {
   }
   const record = asRecord(value);
   const result = listResult(value, pageSize);
-  const hasMore =
-    typeof record?.has_more === 'boolean' ? record.has_more : result.hasNext;
+  const hasMore = typeof record?.has_more === 'boolean' ? record.has_more : result.hasNext;
   const items = result.items.map(normalizeUserIssue);
   const last = items[items.length - 1];
   return {
@@ -851,7 +789,12 @@ export function normalizeSecret(value: unknown): CallerKeySecret {
     throw new ApiError('invalid_response', 'The server returned an invalid caller key.', 200);
   }
   const secret = rawSecret;
-  if (secret !== secret.trim() || !secret.startsWith('nbk_') || secret.length < 8 || secret.length > 512) {
+  if (
+    secret !== secret.trim() ||
+    !secret.startsWith('nbk_') ||
+    secret.length < 8 ||
+    secret.length > 512
+  ) {
     throw new ApiError('invalid_response', 'The server returned an invalid caller key.', 200);
   }
   if (hasControlCharacters(secret)) {
@@ -925,7 +868,8 @@ export function useUserUsage(enabled = true) {
 export function useEndpoints(enabled = true) {
   return useQuery({
     queryKey: userKeys.endpoints,
-    queryFn: async () => listPayload(await apiFetch<unknown>('/api/endpoints')).map(normalizeEndpoint),
+    queryFn: async () =>
+      listPayload(await apiFetch<unknown>('/api/endpoints')).map(normalizeEndpoint),
     enabled,
   });
 }
@@ -979,7 +923,8 @@ export function useKeyModels(
 export function usePlatformModels(enabled = true) {
   return useQuery({
     queryKey: userKeys.models,
-    queryFn: async () => listPayload(await apiFetch<unknown>('/api/models')).map(normalizePlatformModel),
+    queryFn: async () =>
+      listPayload(await apiFetch<unknown>('/api/models')).map(normalizePlatformModel),
     enabled,
   });
 }
@@ -1020,10 +965,10 @@ export function useUpdateModel() {
     mutationFn: async ({ modelId, ...patch }: UpdateModelInput) => {
       const modelID = requiredID(modelId, 'model id');
       const payload = await stationSessionWrite(queryClient, 'steward', () =>
-        apiFetch<unknown>(
-          `/api/models/${encodeURIComponent(modelID)}`,
-          { method: 'PATCH', json: patch },
-        ),
+        apiFetch<unknown>(`/api/models/${encodeURIComponent(modelID)}`, {
+          method: 'PATCH',
+          json: patch,
+        }),
       );
       if (!asRecord(payload)) {
         throw new ApiError('invalid_response', 'The server returned an invalid model.', 200);
@@ -1094,7 +1039,9 @@ export function useBindingUpstreamModels(
       : [...userKeys.keyModelsRoot, 'binding', 'none'],
     queryFn: async () => {
       if (!binding) return [];
-      const endpoints = listPayload(await apiFetch<unknown>('/api/endpoints')).map(normalizeEndpoint);
+      const endpoints = listPayload(await apiFetch<unknown>('/api/endpoints')).map(
+        normalizeEndpoint,
+      );
       const candidates = endpoints.filter(
         (endpoint) => endpoint.enabled && endpoint.base_url === binding.endpoint_base_url,
       );
@@ -1202,7 +1149,8 @@ export function useStewardLogs(
   if (filter.toUnix !== undefined) params.set('to', String(filter.toUnix));
   return useQuery({
     queryKey: userKeys.stewardLogs(page, filter, pageSize),
-    queryFn: async () => normalizeStewardLogPage(await apiFetch<unknown>(`/api/steward/logs?${params}`)),
+    queryFn: async () =>
+      normalizeStewardLogPage(await apiFetch<unknown>(`/api/steward/logs?${params}`)),
     enabled,
   });
 }
@@ -1248,7 +1196,11 @@ function normalizeCheckinStatus(payload: unknown): CheckinStatus {
   const requiredAmount = (key: string): string => {
     const value = amountValue(recordValue(record, key));
     if (!value) {
-      throw new ApiError('invalid_response', 'The server returned an invalid check-in status.', 200);
+      throw new ApiError(
+        'invalid_response',
+        'The server returned an invalid check-in status.',
+        200,
+      );
     }
     return value;
   };
@@ -1374,23 +1326,47 @@ export function normalizeCharityModel(value: unknown): CharityModel {
   const rawDiscount = requiredRecord(recordValue(record, 'discount'), 'charity model discount');
   const pricingMode = recordValue(record, 'pricing_mode');
   if (pricingMode !== 'per_token' && pricingMode !== 'per_request') {
-    throw new ApiError('invalid_response', 'The server returned an invalid charity pricing mode.', 200);
+    throw new ApiError(
+      'invalid_response',
+      'The server returned an invalid charity pricing mode.',
+      200,
+    );
   }
   const price = (key: string) => amountString(recordValue(rawPrices, key));
-  const current = (key: string) => amountString(recordValue(rawPrices, key), `charity model ${key}`);
-  const samples = requiredCount(recordValue(record, 'success_samples'), 'charity model success sample count');
-  const success = requiredCount(recordValue(record, 'success_count'), 'charity model success count');
+  const current = (key: string) =>
+    amountString(recordValue(rawPrices, key), `charity model ${key}`);
+  const samples = requiredCount(
+    recordValue(record, 'success_samples'),
+    'charity model success sample count',
+  );
+  const success = requiredCount(
+    recordValue(record, 'success_count'),
+    'charity model success count',
+  );
   if (success > samples) {
-    throw new ApiError('invalid_response', 'The server returned an invalid charity model success count.', 200);
+    throw new ApiError(
+      'invalid_response',
+      'The server returned an invalid charity model success count.',
+      200,
+    );
   }
-  const start = optionalUnix(recordValue(rawDiscount, 'start_at'), 'charity discount start timestamp');
+  const start = optionalUnix(
+    recordValue(rawDiscount, 'start_at'),
+    'charity discount start timestamp',
+  );
   const end = optionalUnix(recordValue(rawDiscount, 'end_at'), 'charity discount end timestamp');
   const available = requiredBoolean(recordValue(record, 'available'), 'charity model availability');
   const availabilityReason = recordValue(record, 'availability_reason');
-  if (typeof availabilityReason !== 'string'
-    || (available && availabilityReason !== 'ok')
-    || (!available && availabilityReason !== 'no_candidate')) {
-    throw new ApiError('invalid_response', 'The server returned an invalid charity model availability reason.', 200);
+  if (
+    typeof availabilityReason !== 'string' ||
+    (available && availabilityReason !== 'ok') ||
+    (!available && availabilityReason !== 'no_candidate')
+  ) {
+    throw new ApiError(
+      'invalid_response',
+      'The server returned an invalid charity model availability reason.',
+      200,
+    );
   }
   return {
     id: requiredID(recordValue(record, 'id'), 'charity model id'),
@@ -1398,7 +1374,10 @@ export function normalizeCharityModel(value: unknown): CharityModel {
     model: requiredText(recordValue(record, 'model'), 256, 'charity model name'),
     full_name: requiredText(recordValue(record, 'full_name'), 512, 'charity model full name'),
     enabled: requiredBoolean(recordValue(record, 'enabled'), 'charity model enabled'),
-    flatten_tool_calls: requiredBoolean(recordValue(record, 'flatten_tool_calls'), 'charity tool-call policy'),
+    flatten_tool_calls: requiredBoolean(
+      recordValue(record, 'flatten_tool_calls'),
+      'charity tool-call policy',
+    ),
     pricing_mode: pricingMode,
     prices: {
       request_user_price_milli: price('request_user_price_milli'),
@@ -1418,7 +1397,12 @@ export function normalizeCharityModel(value: unknown): CharityModel {
       current_output_user_price_milli: current('current_output_user_price_milli'),
     },
     discount: {
-      percent: strictInteger(recordValue(rawDiscount, 'percent'), 0, 100, 'charity discount percent'),
+      percent: strictInteger(
+        recordValue(rawDiscount, 'percent'),
+        0,
+        100,
+        'charity discount percent',
+      ),
       enabled: requiredBoolean(recordValue(rawDiscount, 'enabled'), 'charity discount enabled'),
       ...(start !== undefined ? { start_at: start } : {}),
       ...(end !== undefined ? { end_at: end } : {}),
@@ -1440,19 +1424,30 @@ export function normalizeCharityModel(value: unknown): CharityModel {
 export function normalizeDonationKey(value: unknown, connectorTypeValue: string): DonationKey {
   const record = requiredRecord(value, 'donation key');
   const endpointKeyID = optionalID(recordValue(record, 'endpoint_key_id'), 'endpoint key id');
-  const display = safeFragment(recordValue(record, 'display_head'), recordValue(record, 'display_tail'));
+  const display = safeFragment(
+    recordValue(record, 'display_head'),
+    recordValue(record, 'display_tail'),
+  );
   const connector = connectorType(connectorTypeValue);
   const hasStorePolicy = Object.prototype.hasOwnProperty.call(record, 'force_store_false');
   const rawStorePolicy = recordValue(record, 'force_store_false');
   let storePolicyValue: StorePolicy;
   if (connector === 'openai-compatible') {
     if (!hasStorePolicy || typeof rawStorePolicy !== 'boolean') {
-      throw new ApiError('invalid_response', 'The server returned an invalid donation-key store policy.', 200);
+      throw new ApiError(
+        'invalid_response',
+        'The server returned an invalid donation-key store policy.',
+        200,
+      );
     }
     storePolicyValue = rawStorePolicy;
   } else {
     if (hasStorePolicy) {
-      throw new ApiError('invalid_response', 'The server returned an unexpected donation-key store policy.', 200);
+      throw new ApiError(
+        'invalid_response',
+        'The server returned an unexpected donation-key store policy.',
+        200,
+      );
     }
     storePolicyValue = 'not_applicable';
   }
@@ -1460,7 +1455,12 @@ export function normalizeDonationKey(value: unknown, connectorTypeValue: string)
     id: requiredID(recordValue(record, 'id'), 'donation key id'),
     ...(endpointKeyID ? { endpoint_key_id: endpointKeyID } : {}),
     ...(display ? { display } : {}),
-    max_concurrency: strictInteger(recordValue(record, 'max_concurrency'), 0, 100_000, 'donation key concurrency'),
+    max_concurrency: strictInteger(
+      recordValue(record, 'max_concurrency'),
+      0,
+      100_000,
+      'donation key concurrency',
+    ),
     rpm_limit: strictInteger(recordValue(record, 'rpm_limit'), 0, 4_096, 'donation key RPM'),
     credits_usage_cap_milli: amountString(recordValue(record, 'credits_usage_cap_milli')),
     credits_used_milli: amountString(recordValue(record, 'credits_used_milli')),
@@ -1470,7 +1470,11 @@ export function normalizeDonationKey(value: unknown, connectorTypeValue: string)
   };
 }
 
-export function normalizeDonation(value: unknown, detailed = false, connectorTypeValue?: string): Donation {
+export function normalizeDonation(
+  value: unknown,
+  detailed = false,
+  connectorTypeValue?: string,
+): Donation {
   const record = requiredRecord(value, 'donation');
   const status = donationStatus(recordValue(record, 'status'));
   const rawKeys = detailed ? recordValue(record, 'keys') : undefined;
@@ -1478,41 +1482,82 @@ export function normalizeDonation(value: unknown, detailed = false, connectorTyp
   const endpointID = optionalID(recordValue(record, 'endpoint_id'), 'endpoint id');
   const expiresAt = optionalUnix(recordValue(record, 'expires_at'), 'donation expiry timestamp');
   const reviewedAt = optionalUnix(recordValue(record, 'reviewed_at'), 'donation review timestamp');
-  if (detailed && !Array.isArray(rawKeys)) throw new ApiError('invalid_response', 'The server returned an invalid donation keys list.', 200);
-  if (detailed && rawReviews !== undefined && !Array.isArray(rawReviews)) throw new ApiError('invalid_response', 'The server returned an invalid donation review list.', 200);
+  if (detailed && !Array.isArray(rawKeys))
+    throw new ApiError(
+      'invalid_response',
+      'The server returned an invalid donation keys list.',
+      200,
+    );
+  if (detailed && rawReviews !== undefined && !Array.isArray(rawReviews))
+    throw new ApiError(
+      'invalid_response',
+      'The server returned an invalid donation review list.',
+      200,
+    );
   if (detailed && (rawKeys as unknown[]).length > 0 && !connectorTypeValue) {
     throw new ApiError('invalid_response', 'The donation key connector type is unavailable.', 200);
   }
   return {
     id: requiredID(recordValue(record, 'id'), 'donation id'),
     ...(endpointID ? { endpoint_id: endpointID } : {}),
-    endpoint_base_url: requiredText(recordValue(record, 'endpoint_base_url'), 2048, 'donation endpoint base URL'),
+    endpoint_base_url: requiredText(
+      recordValue(record, 'endpoint_base_url'),
+      2048,
+      'donation endpoint base URL',
+    ),
     status,
     enabled: requiredBoolean(recordValue(record, 'enabled'), 'donation enabled'),
-    description: requiredText(recordValue(record, 'description'), 4096, 'donation description', true),
-    review_note: requiredText(recordValue(record, 'review_note'), 4096, 'donation review note', true),
+    description: requiredText(
+      recordValue(record, 'description'),
+      4096,
+      'donation description',
+      true,
+    ),
+    review_note: requiredText(
+      recordValue(record, 'review_note'),
+      4096,
+      'donation review note',
+      true,
+    ),
     ...(expiresAt !== undefined ? { expires_at: expiresAt } : {}),
     ...(reviewedAt !== undefined ? { reviewed_at: reviewedAt } : {}),
-    created_at: requiredUnixSeconds(recordValue(record, 'created_at'), 'donation created timestamp'),
-    updated_at: requiredUnixSeconds(recordValue(record, 'updated_at'), 'donation updated timestamp'),
-    keys: detailed ? (rawKeys as unknown[]).map((key) => normalizeDonationKey(key, connectorTypeValue!)) : [],
-    reviews: detailed && Array.isArray(rawReviews) ? rawReviews.map((review) => {
-      const item = requiredRecord(review, 'donation review');
-      return {
-        id: requiredID(recordValue(item, 'id'), 'review id'),
-        reviewer_role: requiredText(recordValue(item, 'reviewer_role'), 32, 'reviewer role'),
-        action: requiredText(recordValue(item, 'action'), 32, 'review action'),
-        note: requiredText(recordValue(item, 'note'), 4096, 'review note', true),
-        created_at: requiredUnixSeconds(recordValue(item, 'created_at'), 'review created timestamp'),
-      };
-    }) : [],
+    created_at: requiredUnixSeconds(
+      recordValue(record, 'created_at'),
+      'donation created timestamp',
+    ),
+    updated_at: requiredUnixSeconds(
+      recordValue(record, 'updated_at'),
+      'donation updated timestamp',
+    ),
+    keys: detailed
+      ? (rawKeys as unknown[]).map((key) => normalizeDonationKey(key, connectorTypeValue!))
+      : [],
+    reviews:
+      detailed && Array.isArray(rawReviews)
+        ? rawReviews.map((review) => {
+            const item = requiredRecord(review, 'donation review');
+            return {
+              id: requiredID(recordValue(item, 'id'), 'review id'),
+              reviewer_role: requiredText(recordValue(item, 'reviewer_role'), 32, 'reviewer role'),
+              action: requiredText(recordValue(item, 'action'), 32, 'review action'),
+              note: requiredText(recordValue(item, 'note'), 4096, 'review note', true),
+              created_at: requiredUnixSeconds(
+                recordValue(item, 'created_at'),
+                'review created timestamp',
+              ),
+            };
+          })
+        : [],
   };
 }
 
 export function useCharityModels(enabled = true) {
   return useQuery({
     queryKey: userKeys.charityModels,
-    queryFn: async () => charityModelsPayload(await apiFetch<unknown>('/api/charity/models')).map((value) => normalizeCharityModel(value)),
+    queryFn: async () =>
+      charityModelsPayload(await apiFetch<unknown>('/api/charity/models')).map((value) =>
+        normalizeCharityModel(value),
+      ),
     enabled,
     staleTime: 15_000,
   });
@@ -1521,7 +1566,10 @@ export function useCharityModels(enabled = true) {
 export function useDonations(enabled = true) {
   return useQuery({
     queryKey: userKeys.donations,
-    queryFn: async () => donationListPayload(await apiFetch<unknown>('/api/donations')).map((value) => normalizeDonation(value)),
+    queryFn: async () =>
+      donationListPayload(await apiFetch<unknown>('/api/donations')).map((value) =>
+        normalizeDonation(value),
+      ),
     enabled,
   });
 }
@@ -1605,13 +1653,19 @@ export function useCheckin() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      const record = asRecord(await stationSessionWrite(queryClient, 'steward', () =>
-        apiFetch<unknown>('/api/checkin', { method: 'POST' }),
-      ));
+      const record = asRecord(
+        await stationSessionWrite(queryClient, 'steward', () =>
+          apiFetch<unknown>('/api/checkin', { method: 'POST' }),
+        ),
+      );
       const award = record ? amountValue(recordValue(record, 'award_milli')) : '';
       const credits = record ? amountValue(recordValue(record, 'credits')) : '';
       if (!award || !credits) {
-        throw new ApiError('invalid_response', 'The server returned an invalid check-in result.', 200);
+        throw new ApiError(
+          'invalid_response',
+          'The server returned an invalid check-in result.',
+          200,
+        );
       }
       return { award_milli: award, credits } satisfies CheckinResult;
     },

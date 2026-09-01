@@ -76,24 +76,7 @@ const coreSession = {
   },
 };
 
-const session = {
-  user: {
-    id: '1',
-    username: 'fixture-user',
-    lang: 'en',
-    is_banned: false,
-    endpoint_limit: null,
-    effective_endpoint_limit: 10,
-    rpm_limit: null,
-    effective_rpm_limit: 60,
-    concurrency_limit: null,
-    effective_concurrency_limit: 5,
-    credits: '0',
-    donation_credit: '0',
-    effective_level: 2,
-    created_at: '2026-08-23T00:00:00Z',
-  },
-};
+const session = coreSession;
 
 const endpoint = {
   id: 1,

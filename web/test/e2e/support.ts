@@ -111,18 +111,37 @@ function userSession(role: Exclude<TestRole, 'anonymous' | 'admin'>) {
     user: {
       id: '1',
       username: 'fixture-user',
+      avatar: null,
+      avatar_url: null,
+      guild_nick: null,
+      guild_avatar_url: null,
       lang: 'en',
       is_banned: false,
+      banned_until: null,
+      charity_suspended_until: null,
       endpoint_limit: null,
-      effective_endpoint_limit: 10,
+      effective_endpoint_limit: '10',
       rpm_limit: null,
-      effective_rpm_limit: 60,
+      effective_rpm_limit: '60',
       concurrency_limit: null,
-      effective_concurrency_limit: 5,
-      credits: '0',
+      effective_concurrency_limit: '5',
+      balance: '0',
       donation_credit: '0',
       effective_level: level,
-      created_at: '2026-01-01T00:00:00Z',
+      level_display_name: `Lv${level}`,
+      game_profile_public: false,
+      created_at: 1_700_000_000,
+      updated_at: 1_700_000_001,
+      usage: {
+        total_requests: '0',
+        total_uncached_input_tokens: '0',
+        total_cache_write_input_tokens: '0',
+        total_cache_read_input_tokens: '0',
+        total_output_tokens: '0',
+        total_prompt_tokens: '0',
+        total_completion_tokens: '0',
+        total_unknown_usage_requests: '0',
+      },
     },
   };
 }
@@ -164,7 +183,11 @@ export async function mockRoleSession(
   }
   if (role === 'admin')
     throw new Error('The user station cannot receive an administrator session.');
-  await mockJson(page, { origin, method: 'GET', path, body: userSession(role) });
+  const body = userSession(role);
+  await mockJson(page, { origin, method: 'GET', path, body });
+  // The shell keeps a deliberately narrow session projection. Generation 2
+  // pages then read the same account through /api/me for the strict profile.
+  await mockJson(page, { origin, method: 'GET', path: '/api/me', body });
 }
 
 export async function mockPublicConfig(page: Page, station: TestStation): Promise<void> {
