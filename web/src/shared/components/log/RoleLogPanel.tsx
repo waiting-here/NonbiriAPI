@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { clearStationSession } from '@shared/charityManagement';
 import { isApiError } from '@shared/query/http';
 import { formatDateTime } from '@shared/utils/datetime';
@@ -15,42 +16,24 @@ import {
   useRoleLogs,
   validateLogFilter,
   type LogFiltersValue,
+  type LogResultClass,
   type LogRole,
+  type LogRouteKind,
   type RoleLogAttempt,
   type RoleLogDetail,
   type RoleLogRow,
 } from './data';
 
-interface Copy {
-  title: string;
-  empty: string;
-  emptyBody: string;
-  apply: string;
-  clear: string;
-  details: string;
-  close: string;
-  previous: string;
-  next: string;
-  page: string;
-  filterInvalid: string;
-  loadingDetail: string;
-  attempts: string;
-  noAttempts: string;
-  exportCsv: string;
-  exportJson: string;
-}
+const ROUTE_LABEL_KEYS: Record<LogRouteKind, string> = {
+  openai_chat_completions: 'common.operations.logs.route.openaiChatCompletions',
+  charity_chat_completions: 'common.operations.logs.route.charityChatCompletions',
+  model_discovery: 'common.operations.logs.route.modelDiscovery',
+};
 
-const COPY: Record<'zh' | 'en', Copy> = {
-  zh: {
-    title: '请求日志', empty: '没有日志', emptyBody: '当前筛选范围内没有可见记录。', apply: '应用筛选', clear: '清除',
-    details: '详情', close: '关闭', previous: '上一页', next: '下一页', page: '页', filterInvalid: '状态码或时间范围无效。',
-    loadingDetail: '正在读取详情…', attempts: '上游尝试', noAttempts: '该投影不公开上游尝试。', exportCsv: '导出 CSV', exportJson: '导出 JSON',
-  },
-  en: {
-    title: 'Request logs', empty: 'No logs', emptyBody: 'No visible records match the current filters.', apply: 'Apply filters', clear: 'Clear',
-    details: 'Details', close: 'Close', previous: 'Previous', next: 'Next', page: 'Page', filterInvalid: 'The status code or time range is invalid.',
-    loadingDetail: 'Loading details…', attempts: 'Upstream attempts', noAttempts: 'This projection does not expose upstream attempts.', exportCsv: 'Export CSV', exportJson: 'Export JSON',
-  },
+const RESULT_LABEL_KEYS: Record<LogResultClass, string> = {
+  success: 'common.operations.logs.resultValue.success',
+  failed: 'common.operations.logs.resultValue.failed',
+  cancelled: 'common.operations.logs.resultValue.cancelled',
 };
 
 function datetimeUnix(value: string): number | undefined {
@@ -58,10 +41,6 @@ function datetimeUnix(value: string): number | undefined {
   const milliseconds = Date.parse(value);
   if (!Number.isFinite(milliseconds) || milliseconds < 0) return undefined;
   return Math.floor(milliseconds / 1_000);
-}
-
-function resultLabel(row: RoleLogRow): string {
-  return row.caller_result_class ?? 'pending';
 }
 
 function requestFrom(detail: RoleLogDetail): RoleLogRow {
@@ -74,26 +53,25 @@ function isFinalAuthorityError(error: unknown): boolean {
 
 function AttemptTable({
   detail,
-  copy,
   page,
   onPrevious,
   onNext,
 }: {
   detail: RoleLogDetail;
-  copy: Copy;
   page: number;
   onPrevious: () => void;
   onNext: (cursor: string) => void;
 }) {
-  if (!('attempts' in detail)) return <p>{copy.noAttempts}</p>;
+  const { t } = useTranslation();
+  if (!('attempts' in detail)) return <p>{t('common.operations.logs.noAttempts')}</p>;
   const attempts = detail.attempts;
   return (
     <div className="ops-stack">
-      {attempts.data.length === 0 ? <p>{copy.noAttempts}</p> : (
+      {attempts.data.length === 0 ? <p>{t('common.operations.logs.noAttempts')}</p> : (
         <div className="ops-table-scroll">
           <table className="ops-table">
-            <caption>{copy.attempts}</caption>
-            <thead><tr><th>#</th><th>Endpoint</th><th>Connector / model</th><th>Status</th><th>Usage</th><th>Diagnostic</th></tr></thead>
+            <caption>{t('common.operations.logs.attempts')}</caption>
+            <thead><tr><th>#</th><th>{t('logs.endpointBaseUrl')}</th><th>{t('common.operations.logs.connectorModel')}</th><th>{t('common.status')}</th><th>{t('logs.tokens')}</th><th>{t('logs.diag')}</th></tr></thead>
             <tbody>
               {attempts.data.map((attempt: RoleLogAttempt) => (
                 <tr key={attempt.attempt_seq}>
@@ -119,7 +97,7 @@ function AttemptTable({
         nextCursor={attempts.next_cursor}
         onPrevious={onPrevious}
         onNext={onNext}
-        labels={{ previous: copy.previous, next: copy.next, page: copy.page }}
+        labels={{ previous: t('common.previous'), next: t('common.next'), page: t('common.operations.logs.pageLabel') }}
       />
     </div>
   );
@@ -127,7 +105,6 @@ function AttemptTable({
 
 export function RoleLogPanel({
   role,
-  language = 'en',
   enabled = true,
   onAuthorityLoss,
 }: {
@@ -136,7 +113,7 @@ export function RoleLogPanel({
   enabled?: boolean;
   onAuthorityLoss?: () => void;
 }) {
-  const copy = COPY[language.toLowerCase().startsWith('zh') ? 'zh' : 'en'];
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const pager = useCursorPager();
   const attemptPager = useCursorPager();
@@ -186,16 +163,20 @@ export function RoleLogPanel({
 
   const fields = useMemo(() => {
     const values: Array<{ key: string; label: string; max: number }> = [];
-    if (role === 'user') values.push({ key: 'model', label: 'Model', max: 133 });
-    if (role === 'admin') values.push({ key: 'user_id', label: 'User ID', max: 39 });
+    if (role === 'user') values.push({ key: 'model', label: t('common.model'), max: 133 });
+    if (role === 'admin') values.push({ key: 'user_id', label: t('common.userId'), max: 39 });
     if (role !== 'user') {
-      values.push({ key: 'endpoint_base_url', label: 'Endpoint base URL', max: 512 });
-      values.push({ key: 'upstream_model', label: 'Upstream model', max: 512 });
+      values.push({ key: 'endpoint_base_url', label: t('logs.endpointBaseUrl'), max: 512 });
+      values.push({ key: 'upstream_model', label: t('logs.upstreamModel'), max: 512 });
     }
-    values.push({ key: 'error_code', label: 'Error code', max: 96 });
-    values.push({ key: 'status', label: 'Caller status', max: 3 });
+    values.push({ key: 'error_code', label: t('logs.errorCode'), max: 96 });
+    values.push({ key: 'status', label: t('common.status'), max: 3 });
     return values;
-  }, [role]);
+  }, [role, t]);
+  const routeLabel = (route: LogRouteKind) => t(ROUTE_LABEL_KEYS[route]);
+  const resultLabel = (row: RoleLogRow) => row.caller_result_class
+    ? t(RESULT_LABEL_KEYS[row.caller_result_class])
+    : t('common.operations.logs.resultValue.pending');
 
   const apply = (event: FormEvent) => {
     event.preventDefault();
@@ -204,7 +185,7 @@ export function RoleLogPanel({
     const to = datetimeUnix(toDraft);
     if ((fromDraft && from === undefined) || (toDraft && to === undefined) || (from !== undefined && to !== undefined && from >= to)
       || (raw.status?.trim() && !/^[1-5][0-9]{2}$/.test(raw.status.trim()))) {
-      setValidation(copy.filterInvalid);
+      setValidation(t('common.operations.logs.filterInvalid'));
       return;
     }
     setFilter({ ...validateLogFilter(role, raw), ...(from === undefined ? {} : { from }), ...(to === undefined ? {} : { to }) });
@@ -214,40 +195,49 @@ export function RoleLogPanel({
   };
 
   const columns: LogColumn<RoleLogRow>[] = [
-    { key: 'time', header: 'Time', render: (row) => formatDateTime(row.started_at) },
-    { key: 'route', header: 'Route', render: (row) => <span className="mono">{row.route_kind}</span> },
-    ...(role === 'user' ? [{ key: 'model', header: 'Model', render: (row: RoleLogRow) => 'model' in row ? row.model : '—' }] : []),
-    ...(role === 'admin' ? [{ key: 'user', header: 'User', render: (row: RoleLogRow) => 'user_id' in row ? row.user_id ?? '—' : '—' }] : []),
-    { key: 'result', header: 'Result', render: resultLabel },
-    { key: 'status', header: 'Status', render: (row) => row.caller_status ?? '—' },
-    { key: 'error', header: 'Error', render: (row) => <span className="mono">{row.caller_error_code ?? '—'}</span> },
-    { key: 'usage', header: 'Usage', render: (row) => <TokenBuckets row={row.usage} /> },
-    { key: 'charge', header: 'Charge', render: (row) => <span className="mono">{row.usage.charge}</span> },
+    { key: 'time', header: t('logs.time'), render: (row) => formatDateTime(row.started_at) },
+    { key: 'route', header: t('logs.routeKind'), render: (row) => routeLabel(row.route_kind) },
+    ...(role === 'user' ? [{ key: 'model', header: t('common.model'), render: (row: RoleLogRow) => 'model' in row ? row.model : '—' }] : []),
+    ...(role === 'admin' ? [{ key: 'user', header: t('common.userId'), render: (row: RoleLogRow) => 'user_id' in row ? row.user_id ?? '—' : '—' }] : []),
+    { key: 'result', header: t('common.operations.logs.result'), render: resultLabel },
+    { key: 'status', header: t('common.status'), render: (row) => row.caller_status ?? '—' },
+    { key: 'error', header: t('logs.error'), render: (row) => <span className="mono">{row.caller_error_code ?? '—'}</span> },
+    { key: 'usage', header: t('logs.tokens'), render: (row) => <TokenBuckets row={row.usage} /> },
+    { key: 'charge', header: t('common.operations.logs.charge'), render: (row) => <span className="mono">{row.usage.charge}</span> },
   ];
 
   let detailBody: ReactNode = null;
-  if (selectedID && detail.isPending) detailBody = copy.loadingDetail;
+  if (selectedID && detail.isPending) detailBody = t('common.loading');
   else if (selectedID && detail.error) detailBody = <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />;
 
   const detailFields = detail.data ? [
-    { label: 'Request', value: <span className="mono">{requestFrom(detail.data).id}</span> },
-    { label: 'Route', value: <span className="mono">{requestFrom(detail.data).route_kind}</span> },
-    { label: 'Caller result', value: `${resultLabel(requestFrom(detail.data))} / ${requestFrom(detail.data).caller_status ?? '—'}` },
-    { label: 'Caller error', value: <span className="mono">{requestFrom(detail.data).caller_error_code ?? '—'}</span> },
-    { label: 'Usage', value: <TokenBuckets row={requestFrom(detail.data).usage} /> },
+    { label: t('common.operations.logs.request'), value: <span className="mono">{requestFrom(detail.data).id}</span> },
+    { label: t('logs.routeKind'), value: routeLabel(requestFrom(detail.data).route_kind) },
+    { label: t('common.operations.logs.callerResult'), value: `${resultLabel(requestFrom(detail.data))} / ${requestFrom(detail.data).caller_status ?? '—'}` },
+    { label: t('common.operations.logs.callerError'), value: <span className="mono">{requestFrom(detail.data).caller_error_code ?? '—'}</span> },
+    { label: t('logs.tokens'), value: <TokenBuckets row={requestFrom(detail.data).usage} /> },
     {
-      label: copy.attempts,
+      label: t('common.operations.logs.attempts'),
       value: (
         <AttemptTable
           detail={detail.data}
-          copy={copy}
           page={attemptPager.page}
           onPrevious={attemptPager.previous}
           onNext={attemptPager.next}
         />
       ),
     },
-  ] : detailBody ? [{ label: copy.details, value: detailBody }] : [];
+  ] : detailBody ? [{ label: t('logs.details'), value: detailBody }] : [];
+
+  const title = role === 'admin'
+    ? t('admin.logs.logsTitle')
+    : role === 'user' ? t('user.logs.title') : t('common.operations.logs.stewardTitle');
+  const empty = role === 'admin'
+    ? t('admin.logs.noLogs')
+    : role === 'user' ? t('user.logs.empty') : t('common.operations.logs.stewardEmpty');
+  const emptyBody = role === 'admin'
+    ? t('admin.logs.noLogsBody')
+    : role === 'user' ? t('user.logs.emptyBody') : t('common.operations.logs.stewardEmptyBody');
 
   if (authorityClosed) {
     return <Card><ErrorState error={authorityError ?? revokedError} /></Card>;
@@ -256,11 +246,11 @@ export function RoleLogPanel({
   return (
     <Card className="ops-stack">
       <div className="card-title-row">
-        <h2>{copy.title}</h2>
+        <h2>{title}</h2>
         {role === 'admin' ? (
           <div className="ops-actions">
-            <a className="btn btn-secondary" href={adminLogExportPath(filter, 'csv')} download>{copy.exportCsv}</a>
-            <a className="btn btn-secondary" href={adminLogExportPath(filter, 'json')} download>{copy.exportJson}</a>
+            <a className="btn btn-secondary" href={adminLogExportPath(filter, 'csv')} download>{t('admin.logs.exportCsv')}</a>
+            <a className="btn btn-secondary" href={adminLogExportPath(filter, 'json')} download>{t('admin.logs.exportJson')}</a>
           </div>
         ) : null}
       </div>
@@ -275,32 +265,32 @@ export function RoleLogPanel({
               />
             </label>
           ))}
-          <label>From<input type="datetime-local" value={fromDraft} onChange={(event) => setFromDraft(event.target.value)} /></label>
-          <label>To<input type="datetime-local" value={toDraft} onChange={(event) => setToDraft(event.target.value)} /></label>
+          <label>{t('common.from')}<input type="datetime-local" value={fromDraft} onChange={(event) => setFromDraft(event.target.value)} /></label>
+          <label>{t('common.to')}<input type="datetime-local" value={toDraft} onChange={(event) => setToDraft(event.target.value)} /></label>
         </div>
         {validation ? <p className="field-error" role="alert">{validation}</p> : null}
         <div className="ops-actions">
-          <button className="btn btn-primary" type="submit">{copy.apply}</button>
+          <button className="btn btn-primary" type="submit">{t('common.applyFilter')}</button>
           <button className="btn btn-secondary" type="button" onClick={() => {
             setRaw({}); setFromDraft(''); setToDraft(''); setFilter({}); setValidation(''); setSelectedID(null); pager.reset(); attemptPager.reset();
-          }}>{copy.clear}</button>
+          }}>{t('common.resetFilter')}</button>
         </div>
       </form>
       {logs.isPending ? <LoadingState /> : logs.error ? <ErrorState error={logs.error} onRetry={() => void logs.refetch()} />
-        : logs.data.data.length === 0 ? <EmptyState title={copy.empty} body={copy.emptyBody} /> : (
+        : logs.data.data.length === 0 ? <EmptyState title={empty} body={emptyBody} /> : (
           <>
             <LogTable
-              caption={copy.title}
+              caption={title}
               columns={columns}
               rows={logs.data.data}
               rowKey={(row) => row.id}
               actions={(row) => <button type="button" className="btn btn-secondary" onClick={() => {
                 attemptPager.reset();
                 setSelectedID(row.id);
-              }}>{copy.details}</button>}
+              }}>{t('logs.details')}</button>}
             />
             <CursorPagination page={pager.page} nextCursor={logs.data.next_cursor} onPrevious={pager.previous} onNext={pager.next}
-              labels={{ previous: copy.previous, next: copy.next, page: copy.page }} />
+              labels={{ previous: t('common.previous'), next: t('common.next'), page: t('common.operations.logs.pageLabel') }} />
           </>
         )}
       <LogDetailDrawer
@@ -309,7 +299,7 @@ export function RoleLogPanel({
           setSelectedID(null);
           attemptPager.reset();
         }}
-        title={selectedID ? `${copy.details} ${selectedID}` : copy.details}
+        title={selectedID ? `${t('logs.drawerTitle')} ${selectedID}` : t('logs.drawerTitle')}
         fields={detailFields}
       />
     </Card>

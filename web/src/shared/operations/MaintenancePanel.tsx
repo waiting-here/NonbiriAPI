@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { Card, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
@@ -26,6 +27,7 @@ export function MaintenancePanel({
   role: MaintenanceRole;
   onAuthorityLoss?: () => void;
 }) {
+  const { t } = useTranslation();
   const state = useQuery({
     queryKey: maintenanceKeys.state(role),
     queryFn: () => getMaintenanceState(role),
@@ -67,32 +69,36 @@ export function MaintenancePanel({
   const mayAct = Boolean(authority && (role === 'admin' || !authority.enabled));
   const action: MaintenanceAction = authority?.enabled ? 'disable' : 'enable';
   const reasonOK = validReason(reason);
-  const title = role === 'steward' ? 'Emergency maintenance' : 'Maintenance control';
-  const actionLabel = action === 'enable' ? 'Enable maintenance' : 'Disable maintenance';
+  const title = role === 'steward'
+    ? t('common.operations.maintenance.stewardTitle')
+    : t('common.operations.maintenance.adminTitle');
+  const actionLabel = action === 'enable'
+    ? t('common.operations.maintenance.enableAction')
+    : t('common.operations.maintenance.disableAction');
   const description = action === 'enable'
-    ? 'New business and ordinary user requests will be refused. Already accepted continuation work and the authenticated administrator station remain available.'
-    : 'Ordinary admission will resume after the authoritative maintenance transition commits. Authentication and all resource gates remain unchanged.';
+    ? t('common.operations.maintenance.enableDescription')
+    : t('common.operations.maintenance.disableDescription');
 
   return (
     <Card className="ops-danger">
       <div className="ops-toolbar">
         <div><h2>{title}</h2><p>{description}</p></div>
-        {authority ? <StatusBadge active={!authority.enabled} danger={authority.enabled} label={authority.enabled ? 'maintenance on' : 'maintenance off'} /> : null}
+        {authority ? <StatusBadge active={!authority.enabled} danger={authority.enabled} label={authority.enabled ? t('common.operations.maintenance.enabledStatus') : t('common.operations.maintenance.disabledStatus')} /> : null}
       </div>
-      {authority ? <p className="muted">Authority revision {authority.revision}. Success, conflict, or an unknown response reloads this singleton and never repeats the transition automatically.</p> : null}
-      {role === 'steward' && authority?.enabled ? <p>Stewards cannot disable maintenance. Use the authenticated administrator station to restore ordinary admission.</p> : null}
+      {authority ? <p className="muted">{t('common.operations.maintenance.authorityRevision', { revision: authority.revision })}</p> : null}
+      {role === 'steward' && authority?.enabled ? <p>{t('common.operations.maintenance.stewardCannotDisable')}</p> : null}
       {state.error && state.data ? <ErrorState error={state.error} onRetry={() => void state.refetch()} /> : null}
       {transition.error ? <ErrorState error={transition.error} /> : null}
       {mayAct ? <>
-        <label className="ops-form-field"><span>Reason</span><textarea rows={4} value={reason} onChange={(event) => setReason(event.target.value)} /></label>
-        {!reasonOK && reason.length > 0 ? <p className="field-error" role="alert">Enter a non-blank reason no larger than 4,096 UTF-8 bytes.</p> : null}
+        <label className="ops-form-field"><span>{t('common.operations.maintenance.reasonLabel')}</span><textarea rows={4} value={reason} onChange={(event) => setReason(event.target.value)} /></label>
+        {!reasonOK && reason.length > 0 ? <p className="field-error" role="alert">{t('common.operations.maintenance.reasonInvalid')}</p> : null}
         <button className="btn btn-danger" type="button" disabled={!reasonOK || transition.isPending} onClick={() => { transition.reset(); setConfirmation(action); }}>{actionLabel}</button>
       </> : null}
       <ConfirmDialog
         open={confirmation !== null}
-        title={confirmation === 'enable' ? 'Enable maintenance?' : 'Disable maintenance?'}
+        title={confirmation === 'enable' ? t('common.operations.maintenance.enableConfirmTitle') : t('common.operations.maintenance.disableConfirmTitle')}
         description={description}
-        confirmLabel={confirmation === 'enable' ? 'Enable maintenance' : 'Disable maintenance'}
+        confirmLabel={confirmation === 'enable' ? t('common.operations.maintenance.enableAction') : t('common.operations.maintenance.disableAction')}
         busy={transition.isPending}
         danger
         onCancel={() => { if (!transition.isPending) setConfirmation(null); }}

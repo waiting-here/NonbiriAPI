@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import type { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import {
   Card,
   EmptyState,
@@ -26,6 +28,61 @@ type RPSSeconds = 'queue_seconds' | 'gesture_seconds' | 'dealer_seconds' | 'foll
 
 const MAX_AMOUNT_MILLI = 9_000_000_000_000_000n;
 const RPS_MODES: readonly RPSMode[] = ['quick', 'standard', 'deathmatch'];
+const GAME_LABEL_KEYS: Record<GameName, string> = {
+  fishing: 'admin.games.sections.fishing',
+  linklink: 'admin.games.sections.linklink',
+  rps: 'admin.games.sections.rps',
+};
+const BAIT_LABEL_KEYS = {
+  worm: 'admin.games.worm',
+  lure: 'admin.games.lure',
+  premium: 'admin.games.premium',
+} as const;
+const FISHING_RTP_LABEL_KEYS = {
+  standard: 'admin.games.standardRTP',
+  premium: 'admin.games.premiumRTP',
+} as const;
+const TREASURE_LABEL_KEYS = {
+  bottle: 'admin.games.bottle',
+  clover: 'admin.games.clover',
+  shell: 'admin.games.shell',
+} as const;
+const LINKLINK_SPEC_LABEL_KEYS: Record<string, string> = {
+  '6x8': 'admin.games.linklink.specs.6x8',
+  '8x8': 'admin.games.linklink.specs.8x8',
+  '10x10': 'admin.games.linklink.specs.10x10',
+};
+const RPS_MODE_LABEL_KEYS: Record<RPSMode, string> = {
+  quick: 'admin.games.rps.modes.quick',
+  standard: 'admin.games.rps.modes.standard',
+  deathmatch: 'admin.games.rps.modes.deathmatch',
+};
+const RPS_PUMP_LABEL_KEYS = {
+  platform: 'admin.games.rps.pumps.platform',
+  welfare: 'admin.games.rps.pumps.welfare',
+  thursday: 'admin.games.rps.pumps.thursday',
+} as const;
+const RPS_DEADLINE_LABEL_KEYS: Record<RPSSeconds, string> = {
+  queue_seconds: 'admin.games.rps.deadlines.queue',
+  gesture_seconds: 'admin.games.rps.deadlines.gesture',
+  dealer_seconds: 'admin.games.rps.deadlines.dealer',
+  follower_seconds: 'admin.games.rps.deadlines.follower',
+};
+const RPS_PHASE_LABEL_KEYS: Record<string, string> = {
+  gesture: 'admin.games.rps.phases.gesture',
+  dealer_raise: 'admin.games.rps.phases.dealerRaise',
+  followers: 'admin.games.rps.phases.followers',
+  paid_pool_gesture: 'admin.games.rps.phases.paidPoolGesture',
+  free_pool_gesture: 'admin.games.rps.phases.freePoolGesture',
+  ultimate_gesture: 'admin.games.rps.phases.ultimateGesture',
+  terminal_processing: 'admin.games.rps.phases.terminalProcessing',
+};
+
+const enumLabel = (
+  t: TFunction,
+  labels: Readonly<Record<string, string>>,
+  value: string,
+) => t(labels[value] ?? 'admin.games.enums.unknown', { value });
 
 function amountMilli(value: string): bigint | null {
   const match = /^(0|[1-9][0-9]*)(?:\.([0-9]{1,3}))?$/.exec(value);
@@ -41,44 +98,97 @@ function amountMilli(value: string): bigint | null {
 const validInteger = (value: number, minimum: number, maximum: number) =>
   Number.isSafeInteger(value) && value >= minimum && value <= maximum;
 
-function validateGamesDraft(draft: GamesConfig): string | null {
+function validateGamesDraft(draft: GamesConfig, t: TFunction): string | null {
   for (const bait of ['worm', 'lure', 'premium'] as const) {
     const value = amountMilli(draft.fishing.bait_prices[bait]);
     if (value === null || value < 1n)
-      return `${bait} bait price must be a canonical credit amount of at least 0.001.`;
+      return t('admin.games.validation.amountMinimum', {
+        field: t(BAIT_LABEL_KEYS[bait]),
+        minimum: '0.001',
+      });
   }
   for (const mode of ['standard', 'premium'] as const) {
     if (!validInteger(draft.fishing.rtp_percent[mode], 0, 100))
-      return `${mode} Fishing RTP must be an integer from 0 to 100.`;
+      return t('admin.games.validation.integerRange', {
+        field: t(FISHING_RTP_LABEL_KEYS[mode]),
+        minimum: 0,
+        maximum: 100,
+      });
   }
   for (const treasure of ['bottle', 'clover', 'shell'] as const) {
     if (!validInteger(draft.fishing.treasure_multipliers[treasure], 0, 1_000_000)) {
-      return `${treasure} multiplier must be an integer from 0 to 1000000.`;
+      return t('admin.games.validation.integerRange', {
+        field: t(TREASURE_LABEL_KEYS[treasure]),
+        minimum: 0,
+        maximum: 1_000_000,
+      });
     }
   }
   for (const spec of ['6x8', '8x8', '10x10'] as const) {
     if (amountMilli(draft.linklink.specs[spec].price) === null)
-      return `${spec} LinkLink price must be a canonical non-negative credit amount.`;
+      return t('admin.games.validation.amountNonNegative', {
+        field: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, spec),
+      });
   }
   for (const mode of RPS_MODES) {
     const value = draft.rps.modes[mode];
     if (amountMilli(value.base) === null)
-      return `${mode} RPS base must be a canonical non-negative credit amount.`;
+      return t('admin.games.validation.amountNonNegative', {
+        field: t('admin.games.rps.base', { mode: t(RPS_MODE_LABEL_KEYS[mode]) }),
+      });
     for (const pump of ['platform', 'welfare', 'thursday'] as const) {
       if (!validInteger(value.pumps_bp[pump], 0, 9_999))
-        return `${mode} ${pump} cut must be an integer from 0 to 9999 basis points.`;
+        return t('admin.games.validation.integerRange', {
+          field: t('admin.games.rps.cut', {
+            mode: t(RPS_MODE_LABEL_KEYS[mode]),
+            pump: t(RPS_PUMP_LABEL_KEYS[pump]),
+          }),
+          minimum: 0,
+          maximum: 9_999,
+        });
     }
     if (value.pumps_bp.platform + value.pumps_bp.welfare + value.pumps_bp.thursday >= 10_000) {
-      return `${mode} RPS pool cuts must total less than 10000 basis points.`;
+      return t('admin.games.validation.totalCuts', {
+        mode: t(RPS_MODE_LABEL_KEYS[mode]),
+        maximum: 10_000,
+      });
     }
     if (!validInteger(value.queue_seconds, 30, 120))
-      return `${mode} queue deadline must be an integer from 30 to 120 seconds.`;
+      return t('admin.games.validation.integerRange', {
+        field: t('admin.games.rps.deadline', {
+          mode: t(RPS_MODE_LABEL_KEYS[mode]),
+          deadline: t(RPS_DEADLINE_LABEL_KEYS.queue_seconds),
+        }),
+        minimum: 30,
+        maximum: 120,
+      });
     if (!validInteger(value.gesture_seconds, 5, 20))
-      return `${mode} gesture deadline must be an integer from 5 to 20 seconds.`;
+      return t('admin.games.validation.integerRange', {
+        field: t('admin.games.rps.deadline', {
+          mode: t(RPS_MODE_LABEL_KEYS[mode]),
+          deadline: t(RPS_DEADLINE_LABEL_KEYS.gesture_seconds),
+        }),
+        minimum: 5,
+        maximum: 20,
+      });
     if (!validInteger(value.dealer_seconds, 5, 15))
-      return `${mode} dealer deadline must be an integer from 5 to 15 seconds.`;
+      return t('admin.games.validation.integerRange', {
+        field: t('admin.games.rps.deadline', {
+          mode: t(RPS_MODE_LABEL_KEYS[mode]),
+          deadline: t(RPS_DEADLINE_LABEL_KEYS.dealer_seconds),
+        }),
+        minimum: 5,
+        maximum: 15,
+      });
     if (!validInteger(value.follower_seconds, 5, 15))
-      return `${mode} follower deadline must be an integer from 5 to 15 seconds.`;
+      return t('admin.games.validation.integerRange', {
+        field: t('admin.games.rps.deadline', {
+          mode: t(RPS_MODE_LABEL_KEYS[mode]),
+          deadline: t(RPS_DEADLINE_LABEL_KEYS.follower_seconds),
+        }),
+        minimum: 5,
+        maximum: 15,
+      });
   }
   return null;
 }
@@ -92,6 +202,7 @@ function GamesEditor({
   authority: GamesConfig;
   refresh: () => Promise<unknown>;
 }) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState(authority);
   const [validation, setValidation] = useState<string | null>(null);
   const save = useRetainedOperation<GamesConfig, GamesConfig>(
@@ -117,7 +228,7 @@ function GamesEditor({
   };
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    const error = validateGamesDraft(draft);
+    const error = validateGamesDraft(draft, t);
     setValidation(error);
     if (error === null) save.mutate(draft);
   };
@@ -130,11 +241,8 @@ function GamesEditor({
   return (
     <form className="ops-stack" noValidate onSubmit={submit}>
       <Card>
-        <h2>Global gate</h2>
-        <p>
-          Revision {authority.revision}. Saved changes only govern newly accepted games; in-flight
-          sessions keep their frozen terms.
-        </p>
+        <h2>{t('admin.games.controls.globalGate')}</h2>
+        <p>{t('admin.games.controls.revisionTerms', { revision: authority.revision })}</p>
         <label>
           <input
             type="checkbox"
@@ -144,11 +252,11 @@ function GamesEditor({
               edit((current) => ({ ...current, master_enabled: event.target.checked }))
             }
           />
-          Games master enabled
+          {t('admin.games.masterEnabled')}
         </label>
       </Card>
       <Card>
-        <h2>Fishing</h2>
+        <h2>{t('admin.games.sections.fishing')}</h2>
         <label>
           <input
             type="checkbox"
@@ -156,12 +264,12 @@ function GamesEditor({
             disabled={save.isPending}
             onChange={(event) => setGameEnabled('fishing', event.target.checked)}
           />
-          Fishing enabled
+          {t('admin.games.fishingEnabled')}
         </label>
         <div className="ops-field-grid">
           {(['worm', 'lure', 'premium'] as const).map((bait) => (
             <label key={bait}>
-              <span>{bait} bait price (credits)</span>
+              <span>{t('admin.games.controls.priceCredits', { field: t(BAIT_LABEL_KEYS[bait]) })}</span>
               <input
                 type="number"
                 inputMode="decimal"
@@ -184,7 +292,7 @@ function GamesEditor({
           ))}
           {(['standard', 'premium'] as const).map((mode) => (
             <label key={mode}>
-              <span>{mode} Fishing RTP percent</span>
+              <span>{t(FISHING_RTP_LABEL_KEYS[mode])}</span>
               <input
                 type="number"
                 min="0"
@@ -209,7 +317,7 @@ function GamesEditor({
           ))}
           {(['bottle', 'clover', 'shell'] as const).map((treasure) => (
             <label key={treasure}>
-              <span>{treasure} treasure multiplier</span>
+              <span>{t(TREASURE_LABEL_KEYS[treasure])}</span>
               <input
                 type="number"
                 min="0"
@@ -235,7 +343,7 @@ function GamesEditor({
         </div>
       </Card>
       <Card>
-        <h2>LinkLink</h2>
+        <h2>{t('admin.games.sections.linklink')}</h2>
         <label>
           <input
             type="checkbox"
@@ -243,7 +351,7 @@ function GamesEditor({
             disabled={save.isPending}
             onChange={(event) => setGameEnabled('linklink', event.target.checked)}
           />
-          LinkLink enabled
+          {t('admin.games.linklink.enabled')}
         </label>
         <div className="ops-field-grid">
           {(['6x8', '8x8', '10x10'] as const).map((spec) => (
@@ -269,10 +377,10 @@ function GamesEditor({
                     }))
                   }
                 />
-                {spec} enabled
+                {t('admin.games.linklink.specEnabled', { spec: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, spec) })}
               </label>
               <label>
-                <span>{spec} entry price (credits)</span>
+                <span>{t('admin.games.linklink.entryPrice', { spec: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, spec) })}</span>
                 <input
                   type="number"
                   inputMode="decimal"
@@ -300,7 +408,7 @@ function GamesEditor({
         </div>
       </Card>
       <Card>
-        <h2>Three-player RPS</h2>
+        <h2>{t('admin.games.sections.rps')}</h2>
         <label>
           <input
             type="checkbox"
@@ -308,14 +416,14 @@ function GamesEditor({
             disabled={save.isPending}
             onChange={(event) => setGameEnabled('rps', event.target.checked)}
           />
-          RPS enabled
+          {t('admin.games.rps.enabled')}
         </label>
         <div className="ops-stack">
           {RPS_MODES.map((mode) => {
             const value = draft.rps.modes[mode];
             return (
               <section key={mode} className="ops-subcard">
-                <h3>{mode}</h3>
+                <h3>{t(RPS_MODE_LABEL_KEYS[mode])}</h3>
                 <label>
                   <input
                     type="checkbox"
@@ -323,11 +431,11 @@ function GamesEditor({
                     disabled={save.isPending}
                     onChange={(event) => setRPSMode(mode, { enabled: event.target.checked })}
                   />
-                  {mode} mode enabled
+                  {t('admin.games.rps.modeEnabled', { mode: t(RPS_MODE_LABEL_KEYS[mode]) })}
                 </label>
                 <div className="ops-field-grid">
                   <label>
-                    <span>{mode} base (credits)</span>
+                    <span>{t('admin.games.rps.base', { mode: t(RPS_MODE_LABEL_KEYS[mode]) })}</span>
                     <input
                       type="number"
                       inputMode="decimal"
@@ -342,7 +450,7 @@ function GamesEditor({
                   {(['platform', 'welfare', 'thursday'] as const).map((pump) => (
                     <label key={pump}>
                       <span>
-                        {mode} {pump} cut (bp)
+                        {t('admin.games.rps.cut', { mode: t(RPS_MODE_LABEL_KEYS[mode]), pump: t(RPS_PUMP_LABEL_KEYS[pump]) })}
                       </span>
                       <input
                         type="number"
@@ -379,7 +487,7 @@ function GamesEditor({
                     return (
                       <label key={field}>
                         <span>
-                          {mode} {field.replaceAll('_', ' ')}
+                          {t('admin.games.rps.deadline', { mode: t(RPS_MODE_LABEL_KEYS[mode]), deadline: t(RPS_DEADLINE_LABEL_KEYS[field]) })}
                         </span>
                         <input
                           type="number"
@@ -396,9 +504,9 @@ function GamesEditor({
                     );
                   })}
                   <div>
-                    <span>{mode} queue capacity</span>
+                    <span>{t('admin.games.rps.queueCapacity', { mode: t(RPS_MODE_LABEL_KEYS[mode]) })}</span>
                     <strong>{value.queue_capacity}</strong>
-                    <small> Read-only runtime capacity; it is excluded from PATCH.</small>
+                    <small> {t('admin.games.rps.queueCapacityHint')}</small>
                   </div>
                 </div>
               </section>
@@ -414,7 +522,7 @@ function GamesEditor({
       {save.error ? <ErrorState error={save.error} /> : null}
       <div className="ops-actions">
         <button className="btn btn-primary" type="submit" disabled={save.isPending}>
-          {save.isPending ? 'Saving…' : 'Save atomic game configuration'}
+          {save.isPending ? t('common.working') : t('admin.games.save')}
         </button>
         <button
           className="btn btn-secondary"
@@ -422,13 +530,14 @@ function GamesEditor({
           disabled={save.isPending}
           onClick={restore}
         >
-          Restore authority values
+          {t('admin.games.restoreAuthorityValues')}
         </button>
       </div>
     </form>
   );
 }
 export function GamesPage() {
+  const { t } = useTranslation();
   const config = useQuery({
     queryKey: adminEconomyKeys.games,
     queryFn: getGamesConfig,
@@ -445,45 +554,45 @@ export function GamesPage() {
   return (
     <div className="page ops-page">
       <PageHeader
-        title="Games"
-        description="Configure future game acceptance while monitoring independent in-flight and queue counts."
+        title={t('admin.games.title')}
+        description={t('admin.games.operationsDescription')}
       />
       <Card>
-        <h2>Live authority counts</h2>
+        <h2>{t('admin.games.counts.title')}</h2>
         {counts.isPending ? (
           <LoadingState />
         ) : counts.error ? (
           <ErrorState error={counts.error} onRetry={() => void counts.refetch()} />
         ) : counts.data.games.length === 0 && counts.data.queues.length === 0 ? (
           <EmptyState
-            title="No in-flight games"
-            body="No active session or waiting queue is currently reported."
+            title={t('admin.games.counts.empty')}
+            body={t('admin.games.counts.emptyBody')}
           />
         ) : (
           <div className="ops-grid">
             <section>
-              <h3>Games</h3>
+              <h3>{t('admin.games.counts.games')}</h3>
               {counts.data.games.map((row, index) => {
                 const dimensions =
                   [
-                    row.mode ? `mode ${row.mode}` : null,
-                    row.spec ? `spec ${row.spec}` : null,
-                    row.phase ? `phase ${row.phase}` : null,
+                    row.mode ? t('admin.games.counts.mode', { value: enumLabel(t, RPS_MODE_LABEL_KEYS, row.mode) }) : null,
+                    row.spec ? t('admin.games.counts.spec', { value: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, row.spec) }) : null,
+                    row.phase ? t('admin.games.counts.phase', { value: enumLabel(t, RPS_PHASE_LABEL_KEYS, row.phase) }) : null,
                   ]
                     .filter(Boolean)
-                    .join(' · ') || 'active';
+                    .join(' · ') || t('admin.games.counts.active');
                 return (
                   <p key={`${row.game}:${row.mode}:${row.spec}:${row.phase}:${index}`}>
-                    <StatusBadge active label={row.game} /> {dimensions} · {row.count}
+                    <StatusBadge active label={enumLabel(t, GAME_LABEL_KEYS, row.game)} /> {dimensions} · {row.count}
                   </p>
                 );
               })}
             </section>
             <section>
-              <h3>RPS queues</h3>
+              <h3>{t('admin.games.counts.rpsQueues')}</h3>
               {counts.data.queues.map((row) => (
                 <p key={row.mode}>
-                  {row.mode}: {row.count}
+                  {t(RPS_MODE_LABEL_KEYS[row.mode])}: {row.count}
                 </p>
               ))}
             </section>

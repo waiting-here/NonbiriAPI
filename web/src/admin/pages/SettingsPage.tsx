@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import {
   Card,
@@ -34,6 +35,50 @@ const MAX_AMOUNT_MILLI = 9_000_000_000_000_000n;
 type CatalogValue = string | number | boolean | null;
 type ParseResult = { value: CatalogValue; error: null } | { value: undefined; error: string };
 type LineEndings = 'crlf' | 'lf' | 'cr' | 'mixed' | 'none';
+
+const CATALOG_LOCALES = { en: 'en', zh: 'zh' } as const;
+const SETTING_TYPE_LABEL_KEYS: Record<SiteConfigCatalogEntry['type'], string> = {
+  boolean: 'admin.settings.booleanValue',
+  integer: 'admin.settings.numberValue',
+  amount: 'admin.settings.numberValue',
+  string: 'admin.settings.textValue',
+  text: 'admin.settings.textValue',
+  enum: 'admin.settings.enumValue',
+};
+const GROUP_LABEL_KEYS: Record<string, string> = {
+  identity: 'admin.settings.groups.identity',
+  legal: 'admin.settings.groups.legal',
+  limits: 'admin.settings.groups.limits',
+  access: 'admin.settings.groups.access',
+  economy: 'admin.settings.groups.economy',
+  charity: 'admin.settings.groups.charity',
+  abuse: 'admin.settings.groups.abuse',
+  connector: 'admin.settings.groups.connector',
+  games: 'admin.settings.groups.games',
+  announcements: 'admin.settings.groups.announcements',
+  activities: 'admin.settings.groups.activities',
+  reports: 'admin.settings.groups.reports',
+  alerts: 'admin.settings.groups.alerts',
+};
+const ENUM_VALUE_LABEL_KEYS: Record<string, string> = {
+  '': 'admin.settings.enumValues.empty',
+  zh: 'admin.settings.enumValues.zh',
+  en: 'admin.settings.enumValues.en',
+  enabled: 'admin.settings.enumValues.enabled',
+  level_gated: 'admin.settings.enumValues.levelGated',
+  disabled: 'admin.settings.enumValues.disabled',
+};
+
+const catalogLocale = (language: string) => {
+  const base = language.split('-')[0] as keyof typeof CATALOG_LOCALES;
+  return CATALOG_LOCALES[base] ?? 'en';
+};
+const settingTypeLabel = (t: TFunction, type: SiteConfigCatalogEntry['type']) =>
+  t(SETTING_TYPE_LABEL_KEYS[type]);
+const groupLabel = (t: TFunction, group: string) =>
+  t(GROUP_LABEL_KEYS[group] ?? 'admin.settings.groups.unknown', { group });
+const enumValueLabel = (t: TFunction, value: string) =>
+  t(ENUM_VALUE_LABEL_KEYS[value] ?? 'admin.settings.enumValues.unknown', { value });
 
 const utf8Bytes = (value: string) => new TextEncoder().encode(value).byteLength;
 
@@ -80,23 +125,29 @@ function parseSetting(
   entry: SiteConfigCatalogEntry,
   draft: string,
   explicitNull: boolean,
+  t: TFunction,
 ): ParseResult {
   const invalid = (detail: string): ParseResult => ({
     value: undefined,
-    error: `Enter a canonical ${entry.type} value ${detail}.`,
+    error: t('admin.settings.validation.canonical', {
+      type: settingTypeLabel(t, entry.type),
+      detail,
+    }),
   });
   if (explicitNull)
-    return entry.null_writable ? { value: null, error: null } : invalid('that is not null');
+    return entry.null_writable
+      ? { value: null, error: null }
+      : invalid(t('admin.settings.validation.notNull'));
   if (entry.type === 'boolean') {
     return draft === 'true'
       ? { value: true, error: null }
       : draft === 'false'
         ? { value: false, error: null }
-        : invalid('using true or false');
+        : invalid(t('admin.settings.validation.boolean'));
   }
   if (entry.type === 'integer') {
     if (!/^-?(0|[1-9][0-9]*)$/.test(draft))
-      return invalid('without whitespace, fractions, exponents, or leading zeroes');
+      return invalid(t('admin.settings.validation.integerSyntax'));
     const value = Number(draft);
     const min = catalogInteger(entry.minimum);
     const max = catalogInteger(entry.maximum);
@@ -112,7 +163,11 @@ function parseSetting(
       (value - min) % step !== 0
     ) {
       return invalid(
-        `within ${String(entry.minimum)}–${String(entry.maximum)} on step ${String(entry.step)}`,
+        t('admin.settings.validation.rangeStep', {
+          minimum: String(entry.minimum),
+          maximum: String(entry.maximum),
+          step: String(entry.step),
+        }),
       );
     }
     return { value, error: null };
@@ -133,7 +188,11 @@ function parseSetting(
       (value - min) % step !== 0n
     ) {
       return invalid(
-        `within ${String(entry.minimum)}–${String(entry.maximum)} credits on step ${String(entry.step)}`,
+        t('admin.settings.validation.amountRangeStep', {
+          minimum: String(entry.minimum),
+          maximum: String(entry.maximum),
+          step: String(entry.step),
+        }),
       );
     }
     return { value: draft, error: null };
@@ -141,20 +200,25 @@ function parseSetting(
   if (entry.type === 'enum')
     return entry.allowed_values.includes(draft)
       ? { value: draft, error: null }
-      : invalid('from the allowed choices');
+      : invalid(t('admin.settings.validation.allowedChoice'));
   if (hasForbiddenControl(draft, entry.type === 'text'))
-    return invalid('without control characters');
+    return invalid(t('admin.settings.validation.noControlCharacters'));
   if (LEGAL_KEYS.has(entry.key)) {
     return utf8Bytes(draft) <= LEGAL_MAX_BYTES
       ? { value: draft, error: null }
-      : invalid(`no larger than ${LEGAL_MAX_BYTES} UTF-8 bytes`);
+      : invalid(t('admin.settings.validation.maxUtf8Bytes', { maximum: LEGAL_MAX_BYTES }));
   }
   const min = catalogInteger(entry.minimum);
   const max = catalogInteger(entry.maximum);
   const length = [...draft].length;
   return min !== null && max !== null && length >= min && length <= max
     ? { value: draft, error: null }
-    : invalid(`with ${String(entry.minimum)}–${String(entry.maximum)} Unicode characters`);
+    : invalid(
+        t('admin.settings.validation.unicodeLength', {
+          minimum: String(entry.minimum),
+          maximum: String(entry.maximum),
+        }),
+      );
 }
 
 const scalar = (value: unknown) => (value === null ? 'null' : value === '' ? '""' : String(value));
@@ -173,14 +237,17 @@ function SettingField({
   value,
   revision,
   language,
+  catalogLabels,
   reload,
 }: {
   entry: SiteConfigCatalogEntry;
   value: CatalogValue;
   revision: string;
   language: string;
+  catalogLabels: Readonly<Record<string, string>>;
   reload: () => Promise<unknown>;
 }) {
+  const { t } = useTranslation();
   const initial = value === null ? '' : String(value);
   const [draft, setDraft] = useState(initial);
   const [explicitNull, setExplicitNull] = useState(value === null && entry.null_writable);
@@ -195,9 +262,9 @@ function SettingField({
   const submissionDraft = LEGAL_KEYS.has(entry.key)
     ? restoreLineEndings(draft, endingStyle)
     : draft;
-  const parsed = parseSetting(entry, submissionDraft, explicitNull);
+  const parsed = parseSetting(entry, submissionDraft, explicitNull, t);
   const busy = save.isPending || reloading;
-  const locale = language.startsWith('zh') ? 'zh' : 'en';
+  const locale = catalogLocale(language);
   const inputID = `site-setting-${entry.key}`;
   const changeDraft = (next: string) => {
     save.reset();
@@ -231,15 +298,20 @@ function SettingField({
     typeof parsed.value === 'number' &&
     entry.key === 'site_timezone_offset_minutes'
   ) {
-    preview = `Preview: ${timezonePreview(parsed.value)}`;
+    preview = t('admin.settings.timezonePreview', { value: timezonePreview(parsed.value) });
   } else if (
     parsed.error === null &&
     typeof parsed.value === 'number' &&
     entry.unit?.en === 'seconds'
   ) {
-    preview = `Duration preview: ${humanReadableSeconds(parsed.value, language)}`;
+    preview = t('admin.settings.catalogDurationPreview', {
+      value: humanReadableSeconds(parsed.value, language),
+    });
   } else if (parsed.error === null && typeof parsed.value === 'string' && entry.type === 'amount') {
-    preview = `Amount preview: ${creditPreview(parsed.value)} credits`;
+    preview = t('admin.settings.catalogMilliPreview', {
+      raw: amountMilli(parsed.value)?.toString() ?? '',
+      credits: creditPreview(parsed.value),
+    });
   }
 
   const control =
@@ -250,8 +322,8 @@ function SettingField({
         disabled={busy || explicitNull || !writable}
         onChange={(event) => changeDraft(event.target.value)}
       >
-        <option value="true">Enabled</option>
-        <option value="false">Disabled</option>
+        <option value="true">{t('common.enabled')}</option>
+        <option value="false">{t('common.disabled')}</option>
       </select>
     ) : entry.type === 'enum' ? (
       <select
@@ -262,7 +334,7 @@ function SettingField({
       >
         {entry.allowed_values.map((allowed) => (
           <option key={allowed || 'empty'} value={allowed}>
-            {allowed || '""'}
+            {enumValueLabel(t, allowed)}
           </option>
         ))}
       </select>
@@ -304,17 +376,19 @@ function SettingField({
         <h3>{entry.title[locale]}</h3>
         <p>{entry.description[locale]}</p>
         <small>
-          {entry.key} · {entry.type}
+          {entry.key} · {settingTypeLabel(t, entry.type)}
           {entry.unit ? ` · ${entry.unit[locale]}` : ''}
         </small>
         <p className="muted">
-          Default {scalar(entry.raw_default)} · effective fallback{' '}
-          {scalar(entry.effective_fallback)}
+          {t('admin.settings.catalogDefault')} {scalar(entry.raw_default)} ·{' '}
+          {t('admin.settings.catalogEffective')} {scalar(entry.effective_fallback)}
         </p>
         {entry.minimum !== null || entry.maximum !== null ? (
           <p className="muted">
-            Range {scalar(entry.minimum)}–{scalar(entry.maximum)}
-            {entry.step !== null ? ` · step ${scalar(entry.step)}` : ''}
+            {t('admin.settings.catalogRange')} {scalar(entry.minimum)}–{scalar(entry.maximum)}
+            {entry.step !== null
+              ? ` · ${t('admin.settings.catalogStep')} ${scalar(entry.step)}`
+              : ''}
           </p>
         ) : null}
       </div>
@@ -331,15 +405,18 @@ function SettingField({
               disabled={busy || !writable}
               onChange={(event) => changeNull(event.target.checked)}
             />
-            Remove the explicit override and use the effective fallback
+            {t('admin.settings.restoreFallback')}
           </label>
         ) : null}
         {value === null && !entry.null_writable ? (
-          <p className="muted">Not configured yet. Enter the first authoritative value.</p>
+          <p className="muted">{t('admin.settings.notConfigured')}</p>
         ) : null}
         {LEGAL_KEYS.has(entry.key) ? (
           <p className="muted">
-            {utf8Bytes(submissionDraft)} / {LEGAL_MAX_BYTES} UTF-8 bytes
+            {t('admin.settings.legalBytes', {
+              count: utf8Bytes(submissionDraft),
+              max: LEGAL_MAX_BYTES,
+            })}
           </p>
         ) : null}
         {preview ? <p className="muted">{preview}</p> : null}
@@ -349,18 +426,21 @@ function SettingField({
           <p className="muted">{entry.empty_semantics[locale]}</p>
         ) : null}
         {entry.key === 'site_logo_url' ? (
-          <p className="inline-notice">
-            A remote logo makes a public third-party browser request and may fail independently.
-            Never place a secret in this URL.
-          </p>
+          <p className="inline-notice">{t('admin.settings.remoteLogoWarning')}</p>
         ) : null}
         {entry.independent_gates.length ? (
-          <p className="muted">Independent gates: {entry.independent_gates.join(', ')}</p>
+          <p className="muted">
+            {t('admin.settings.catalogIndependentGate')}:{' '}
+            {entry.independent_gates
+              .map(
+                (gate) =>
+                  catalogLabels[gate] ?? t('admin.settings.unknownCatalogGate', { key: gate }),
+              )
+              .join(', ')}
+          </p>
         ) : null}
         {!writable ? (
-          <p className="muted">
-            Read-only here; this value is owned by its dedicated authority page.
-          </p>
+          <p className="muted">{t('admin.settings.readOnlyAuthority')}</p>
         ) : null}
         {dirty && parsed.error ? (
           <p className="field-error" role="alert">
@@ -374,7 +454,11 @@ function SettingField({
             type="submit"
             disabled={!writable || parsed.error !== null || busy}
           >
-            {save.isPending ? 'Saving…' : explicitNull ? 'Remove override' : 'Save value'}
+            {save.isPending
+              ? t('common.working')
+              : explicitNull
+                ? t('admin.settings.restoreFallback')
+                : t('admin.settings.save')}
           </button>
           <button
             className="btn btn-secondary"
@@ -382,7 +466,7 @@ function SettingField({
             disabled={busy}
             onClick={restoreAuthorityValue}
           >
-            Restore authority value
+            {t('admin.settings.restoreAuthorityValue')}
           </button>
           <button
             className="btn btn-secondary"
@@ -390,13 +474,10 @@ function SettingField({
             disabled={busy}
             onClick={() => void reloadAuthority()}
           >
-            {reloading ? 'Reloading…' : 'Reload authority'}
+            {reloading ? t('common.loading') : t('admin.settings.reloadAuthority')}
           </button>
         </div>
-        <small>
-          Authority revision {revision}. A conflict or unknown response reloads the complete
-          authority snapshot without resubmitting.
-        </small>
+        <small>{t('admin.settings.authorityRevisionNote', { revision })}</small>
       </div>
     </form>
   );
@@ -407,6 +488,7 @@ function Group({
   values,
   revision,
   language,
+  catalogLabels,
   reload,
 }: {
   name: string;
@@ -414,8 +496,10 @@ function Group({
   values: Record<string, CatalogValue>;
   revision: string;
   language: string;
+  catalogLabels: Readonly<Record<string, string>>;
   reload: () => Promise<unknown>;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   return (
     <Card>
@@ -425,8 +509,8 @@ function Group({
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        <span>{name}</span>
-        <span>{entries.length} settings</span>
+        <span>{groupLabel(t, name)}</span>
+        <span>{t('admin.settings.groupCount', { count: entries.length })}</span>
       </button>
       {open ? (
         <div className="ops-stack">
@@ -437,6 +521,7 @@ function Group({
               value={values[entry.key]}
               revision={revision}
               language={language}
+              catalogLabels={catalogLabels}
               reload={reload}
             />
           ))}
@@ -452,8 +537,9 @@ export function SettingsPage() {
     queryFn: getSiteConfigBundle,
     retry: false,
   });
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [search, setSearch] = useState('');
+  const locale = catalogLocale(i18n.resolvedLanguage ?? i18n.language);
   const groups = useMemo(() => {
     if (!authority.data) return new Map<string, SiteConfigCatalogEntry[]>();
     const needle = search.trim().toLocaleLowerCase();
@@ -468,6 +554,13 @@ export function SettingsPage() {
     }
     return result;
   }, [authority.data, search]);
+  const catalogLabels = useMemo(
+    () =>
+      Object.fromEntries(
+        (authority.data?.catalog ?? []).map((entry) => [entry.key, entry.title[locale]]),
+      ),
+    [authority.data, locale],
+  );
   const ordinary = [...groups].filter(([name]) => !DANGEROUS_GROUPS.has(name));
   const dangerous = [...groups].filter(([name]) => DANGEROUS_GROUPS.has(name));
   const initialFailure = !authority.data && authority.error;
@@ -475,8 +568,8 @@ export function SettingsPage() {
   return (
     <div className="page ops-page">
       <PageHeader
-        title="Site settings"
-        description="Search the server catalog, edit ordinary fields by scope, and keep access/legal controls physically isolated."
+        title={t('admin.settings.title')}
+        description={t('admin.settings.description')}
       />
       {authority.isPending ? (
         <LoadingState />
@@ -490,15 +583,20 @@ export function SettingsPage() {
           <Card>
             <div className="ops-toolbar">
               <label>
-                <span>Search catalog</span>
+                <span>{t('common.search')}</span>
                 <input value={search} onChange={(event) => setSearch(event.target.value)} />
               </label>
-              <StatusBadge active label={`revision ${authority.data.revision}`} />
+              <StatusBadge
+                active
+                label={t('admin.settings.authorityRevision', {
+                  revision: authority.data.revision,
+                })}
+              />
             </div>
           </Card>
           <div className="ops-settings-columns">
             <section>
-              <h2>Ordinary settings</h2>
+              <h2>{t('admin.settings.ordinaryTitle')}</h2>
               {ordinary.length ? (
                 ordinary.map(([name, entries]) => (
                   <Group
@@ -508,22 +606,20 @@ export function SettingsPage() {
                     values={authority.data.values}
                     revision={authority.data.revision}
                     language={i18n.language}
+                    catalogLabels={catalogLabels}
                     reload={() => authority.refetch()}
                   />
                 ))
               ) : (
                 <EmptyState
-                  title="No ordinary settings"
-                  body="No ordinary catalog entry matches the search."
+                  title={t('admin.settings.ordinaryEmpty')}
+                  body={t('admin.settings.ordinaryEmptyBody')}
                 />
               )}
             </section>
             <section className="ops-danger">
-              <h2>Dangerous and legal settings</h2>
-              <p>
-                Access, abuse, and legal changes can affect admission or published policy. Review
-                each server description before saving.
-              </p>
+              <h2>{t('admin.settings.dangerousTitle')}</h2>
+              <p>{t('admin.settings.dangerousDescription')}</p>
               {dangerous.length ? (
                 dangerous.map(([name, entries]) => (
                   <Group
@@ -533,13 +629,14 @@ export function SettingsPage() {
                     values={authority.data.values}
                     revision={authority.data.revision}
                     language={i18n.language}
+                    catalogLabels={catalogLabels}
                     reload={() => authority.refetch()}
                   />
                 ))
               ) : (
                 <EmptyState
-                  title="No dangerous settings"
-                  body="No dangerous catalog entry matches the search."
+                  title={t('admin.settings.dangerousEmpty')}
+                  body={t('admin.settings.dangerousEmptyBody')}
                 />
               )}
             </section>
