@@ -379,9 +379,6 @@ export function FishingGame() {
       setAckStatus({ batchID, state: 'sending' });
       try {
         await acknowledgeFishing(batchID);
-        setOperation(null);
-        setActionState('idle');
-        setActionError(null);
         setAckStatus(null);
         await refreshAfterMutation();
         await queryClient.invalidateQueries({
@@ -508,7 +505,6 @@ export function FishingGame() {
     state.isPending ||
     state.error ||
     pending ||
-    result ||
     replayOperation ||
     effectiveActionState !== 'idle',
   );

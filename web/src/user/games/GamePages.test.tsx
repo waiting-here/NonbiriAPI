@@ -335,6 +335,7 @@ describe('beta.1 game pages', () => {
     const retry = await screen.findByRole('button', { name: 'Retry result ACK' });
     expect(screen.getByText(/exact result remains visible/i)).toBeInTheDocument();
     expect(screen.getAllByText('Whitebait')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Start this batch' })).toBeEnabled();
     await rendered.user.click(retry);
     await waitFor(() => expect(screen.queryAllByText('Whitebait')).toHaveLength(0));
     expect(attempts).toBe(2);

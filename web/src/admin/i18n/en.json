@@ -5,7 +5,7 @@
       "navLabel": "Administration navigation",
       "brandSuffix": "Operations",
       "loginTitle": "Administrator sign in",
-      "loginBody": "The administrator account is configured by the service operator. This station never shares user-station session state.",
+      "loginBody": "The administrator account is configured by the service operator.",
       "username": "Username",
       "password": "Password",
       "login": "Sign in",
@@ -20,7 +20,7 @@
     "dashboard": {
       "nav": "Dashboard",
       "title": "Operations overview",
-      "description": "Read-only site signals from the administrator API. Missing backend data stays unavailable rather than becoming a client-side guess.",
+      "description": "Read site signals from the administrator API.",
       "usageTitle": "Site usage",
       "usersTitle": "Recent user records",
       "endpointsTitle": "Endpoint overview",
@@ -178,7 +178,7 @@
     "endpoints": {
       "nav": "Endpoints",
       "title": "Endpoint overview",
-      "description": "Global endpoint metadata grouped by stored base URL. Plaintext upstream secrets and user-private notes are never returned to this station.",
+      "description": "Global endpoint metadata grouped by stored base URL.",
       "listTitle": "Configured endpoints",
       "baseUrl": "Base URL",
       "users": "Users",

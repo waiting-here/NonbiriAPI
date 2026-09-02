@@ -5,7 +5,7 @@
       "navLabel": "管理导航",
       "brandSuffix": "运营",
       "loginTitle": "管理员登录",
-      "loginBody": "管理员账号由服务运营方配置。本管理站不会共享用户站的会话状态。",
+      "loginBody": "管理员账号由服务运营方配置。",
       "username": "用户名",
       "password": "密码",
       "login": "登录",
@@ -20,7 +20,7 @@
     "dashboard": {
       "nav": "仪表盘",
       "title": "运营概览",
-      "description": "读取管理员 API 的站点信号。后端没有返回的数据会保持不可用，不会由客户端猜测。",
+      "description": "读取管理员 API 的站点信号。",
       "usageTitle": "站点用量",
       "usersTitle": "用户记录",
       "endpointsTitle": "端点概览",
@@ -178,7 +178,7 @@
     "endpoints": {
       "nav": "端点",
       "title": "端点概览",
-      "description": "按已存储的基础 URL 分组显示全局端点元数据。本管理站永远不会收到明文上游密钥或用户私有备注。",
+      "description": "按已存储的基础 URL 分组显示全局端点元数据。",
       "listTitle": "已配置端点",
       "baseUrl": "基础 URL",
       "users": "用户数",

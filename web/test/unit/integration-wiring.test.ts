@@ -127,8 +127,6 @@ describe('alpha.3 central catalog completeness', () => {
       'avatarFallback',
       'avatarAlt',
       'anonymous',
-      'level4Hint',
-      'level4',
       'totalScore',
       'me',
       'singleTitle',

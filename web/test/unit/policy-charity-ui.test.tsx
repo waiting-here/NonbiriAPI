@@ -1152,7 +1152,7 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.type(screen.getByLabelText('Donation description'), 'fixture donation');
     await rendered.user.click(
       screen.getByRole('checkbox', {
-        name: 'I own every selected resource and am authorized to contribute its capacity.',
+        name: 'I own every selected resource or have authorization to contribute its capacity.',
       }),
     );
     expect(screen.queryByPlaceholderText(/new key/i)).toBeNull();
@@ -1403,6 +1403,10 @@ describe('experimental policy and charity controls', () => {
         station,
         role,
       });
+      const flattenLabel =
+        frame === 'admin'
+          ? 'Experimental: flatten tool calls'
+          : '[Experimental] Flatten tool calls';
       await rendered.user.click(
         screen.getByRole('tab', { name: 'Charity models and bindings' }),
       );
@@ -1413,7 +1417,7 @@ describe('experimental policy and charity controls', () => {
       if (!(editForm instanceof HTMLElement)) throw new Error('Missing charity model editor');
       await rendered.user.click(
         within(editForm).getByRole('checkbox', {
-          name: 'Experimental: flatten tool calls',
+          name: flattenLabel,
         }),
       );
       await rendered.user.click(
@@ -1438,7 +1442,7 @@ describe('experimental policy and charity controls', () => {
       );
       await rendered.user.click(
         within(createForm).getByRole('checkbox', {
-          name: 'Experimental: flatten tool calls',
+          name: flattenLabel,
         }),
       );
       await rendered.user.click(
@@ -1493,7 +1497,7 @@ describe('experimental policy and charity controls', () => {
     if (!(editForm instanceof HTMLElement)) throw new Error('Missing charity model editor');
     await rendered.user.click(
       within(editForm).getByRole('checkbox', {
-        name: 'Experimental: flatten tool calls',
+        name: '[Experimental] Flatten tool calls',
       }),
     );
     await rendered.user.click(
@@ -1503,7 +1507,7 @@ describe('experimental policy and charity controls', () => {
     await waitFor(() => {
       expect(screen.getByText(/Charity management access is no longer available/i)).toBeVisible();
       expect(
-        screen.queryByRole('checkbox', { name: 'Experimental: flatten tool calls' }),
+        screen.queryByRole('checkbox', { name: '[Experimental] Flatten tool calls' }),
       ).toBeNull();
       expect(screen.queryByRole('button', { name: 'Add charity model' })).toBeNull();
     });
@@ -1763,7 +1767,7 @@ describe('experimental policy and charity controls', () => {
       rendered.queryClient.getQueryData(charityKeys.models('steward', '', '', null)),
     ).toBeUndefined();
     expect(
-      screen.queryByRole('checkbox', { name: 'Experimental: flatten tool calls' }),
+      screen.queryByRole('checkbox', { name: '[Experimental] Flatten tool calls' }),
     ).toBeNull();
     expect(
       fetchMock.mock.calls.some((call) => {
