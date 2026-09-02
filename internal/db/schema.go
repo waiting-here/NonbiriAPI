@@ -166,6 +166,47 @@ CREATE TABLE config_revisions (
  updated_at INTEGER NOT NULL
 );
 
+-- ===== mainstream channel authority and endpoint provenance ================
+CREATE TABLE mainstream_channels (
+ id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='mch_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
+ name TEXT NOT NULL CHECK(typeof(name)='text' AND length(name) BETWEEN 1 AND 128),
+ category TEXT NOT NULL CHECK(category IN ('subscription','api_platform')),
+ connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible')),
+ canonical_base_url TEXT NOT NULL CHECK(typeof(canonical_base_url)='text' AND length(CAST(canonical_base_url AS BLOB)) BETWEEN 1 AND 4096),
+ enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
+ state TEXT NOT NULL CHECK(state IN ('active','retired')),
+ revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9223372036854775807),
+ created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799),
+ updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799),
+ retired_at INTEGER CHECK(retired_at IS NULL OR retired_at BETWEEN 0 AND 253402300799),
+ CHECK((state='active' AND retired_at IS NULL) OR (state='retired' AND enabled=0 AND retired_at IS NOT NULL))
+);
+CREATE INDEX idx_mainstream_channels_admin_cursor ON mainstream_channels(state,updated_at,id);
+CREATE INDEX idx_mainstream_channels_options ON mainstream_channels(state,enabled,name,id);
+CREATE TRIGGER mainstream_channels_retire_terminal_guard BEFORE UPDATE OF state ON mainstream_channels
+WHEN OLD.state='retired' AND NEW.state<>'retired'
+BEGIN SELECT RAISE(ABORT,'retired mainstream channel cannot recover'); END;
+CREATE TRIGGER mainstream_channels_active_enabled_limit_guard BEFORE INSERT ON mainstream_channels
+WHEN NEW.state='active' AND NEW.enabled=1
+ AND (SELECT COUNT(*) FROM mainstream_channels WHERE state='active' AND enabled=1)>=100
+BEGIN SELECT RAISE(ABORT,'active mainstream channel limit exceeded'); END;
+CREATE TRIGGER mainstream_channels_active_enabled_limit_update_guard BEFORE UPDATE OF state,enabled ON mainstream_channels
+WHEN NOT (OLD.state='active' AND OLD.enabled=1) AND NEW.state='active' AND NEW.enabled=1
+ AND (SELECT COUNT(*) FROM mainstream_channels WHERE state='active' AND enabled=1 AND id<>NEW.id)>=100
+BEGIN SELECT RAISE(ABORT,'active mainstream channel limit exceeded'); END;
+CREATE TRIGGER generation_two_integer_type_mainstream_channels_insert_guard BEFORE INSERT ON mainstream_channels
+WHEN (NEW.revision IS NOT NULL AND typeof(NEW.revision)<>'integer')
+ OR (NEW.created_at IS NOT NULL AND typeof(NEW.created_at)<>'integer')
+ OR (NEW.updated_at IS NOT NULL AND typeof(NEW.updated_at)<>'integer')
+ OR (NEW.retired_at IS NOT NULL AND typeof(NEW.retired_at)<>'integer')
+BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
+CREATE TRIGGER generation_two_integer_type_mainstream_channels_update_guard BEFORE UPDATE ON mainstream_channels
+WHEN (NEW.revision IS NOT NULL AND typeof(NEW.revision)<>'integer')
+ OR (NEW.created_at IS NOT NULL AND typeof(NEW.created_at)<>'integer')
+ OR (NEW.updated_at IS NOT NULL AND typeof(NEW.updated_at)<>'integer')
+ OR (NEW.retired_at IS NOT NULL AND typeof(NEW.retired_at)<>'integer')
+BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
+
 -- ===== caller keys, endpoint identity, and model catalog ====================
 CREATE TABLE caller_keys (
  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -202,15 +243,28 @@ CREATE TABLE endpoints (
  note TEXT NOT NULL DEFAULT '',
  enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
  revision INTEGER NOT NULL DEFAULT 1 CHECK(revision BETWEEN 1 AND 9223372036854775807),
+ mainstream_channel_id TEXT REFERENCES mainstream_channels(id) ON DELETE RESTRICT
+   CHECK(mainstream_channel_id IS NULL OR (length(mainstream_channel_id)=26 AND substr(mainstream_channel_id,1,4)='mch_' AND substr(mainstream_channel_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(mainstream_channel_id,-1,1) IN ('A','Q','g','w'))),
+ mainstream_channel_revision INTEGER CHECK(mainstream_channel_revision IS NULL OR (typeof(mainstream_channel_revision)='integer' AND mainstream_channel_revision BETWEEN 1 AND 9223372036854775807)),
+ mainstream_channel_name TEXT CHECK(mainstream_channel_name IS NULL OR (typeof(mainstream_channel_name)='text' AND length(mainstream_channel_name) BETWEEN 1 AND 128)),
+ mainstream_channel_category TEXT CHECK(mainstream_channel_category IS NULL OR mainstream_channel_category IN ('subscription','api_platform')),
  created_at INTEGER NOT NULL,
  updated_at INTEGER NOT NULL,
- UNIQUE(id,user_id)
+ UNIQUE(id,user_id),
+ CHECK((mainstream_channel_id IS NULL AND mainstream_channel_revision IS NULL AND mainstream_channel_name IS NULL AND mainstream_channel_category IS NULL)
+   OR (mainstream_channel_id IS NOT NULL AND mainstream_channel_revision IS NOT NULL AND mainstream_channel_name IS NOT NULL AND mainstream_channel_category IS NOT NULL))
 );
 CREATE INDEX idx_endpoints_user_cursor ON endpoints(user_id,updated_at,id);
 CREATE INDEX idx_endpoints_user_base ON endpoints(user_id,base_url,id);
 CREATE TRIGGER endpoints_identity_immutable BEFORE UPDATE OF connector_type,base_url ON endpoints
 WHEN OLD.connector_type<>NEW.connector_type OR OLD.base_url<>NEW.base_url
 BEGIN SELECT RAISE(ABORT,'endpoint identity is immutable'); END;
+CREATE TRIGGER endpoints_channel_snapshot_immutable BEFORE UPDATE OF mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category ON endpoints
+WHEN NEW.mainstream_channel_id IS NOT OLD.mainstream_channel_id
+ OR NEW.mainstream_channel_revision IS NOT OLD.mainstream_channel_revision
+ OR NEW.mainstream_channel_name IS NOT OLD.mainstream_channel_name
+ OR NEW.mainstream_channel_category IS NOT OLD.mainstream_channel_category
+BEGIN SELECT RAISE(ABORT,'endpoint channel provenance is immutable'); END;
 
 CREATE TABLE endpoint_key_secrets (
  id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0),
@@ -368,11 +422,72 @@ CREATE TABLE donation_keys (
  price_limit_mag BLOB CHECK(price_limit_mag IS NULL OR (typeof(price_limit_mag)='blob' AND length(price_limit_mag)=16)), call_limit_mag BLOB CHECK(call_limit_mag IS NULL OR (typeof(call_limit_mag)='blob' AND length(call_limit_mag)=16)), token_limit_mag BLOB CHECK(token_limit_mag IS NULL OR (typeof(token_limit_mag)='blob' AND length(token_limit_mag)=16)),
  price_used_mag BLOB NOT NULL CHECK(typeof(price_used_mag)='blob' AND length(price_used_mag)=16), price_reserved_mag BLOB NOT NULL CHECK(typeof(price_reserved_mag)='blob' AND length(price_reserved_mag)=16), calls_used BLOB NOT NULL CHECK(typeof(calls_used)='blob' AND length(calls_used)=16), calls_reserved BLOB NOT NULL CHECK(typeof(calls_reserved)='blob' AND length(calls_reserved)=16), tokens_used BLOB NOT NULL CHECK(typeof(tokens_used)='blob' AND length(tokens_used)=16), tokens_reserved BLOB NOT NULL CHECK(typeof(tokens_reserved)='blob' AND length(tokens_reserved)=16),
  token_reserve INTEGER NOT NULL DEFAULT 0 CHECK(token_reserve BETWEEN 0 AND 2147483647), enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)), failure_disabled INTEGER NOT NULL DEFAULT 0 CHECK(failure_disabled IN (0,1)), failure_streak BLOB NOT NULL CHECK(typeof(failure_streak)='blob' AND length(failure_streak)=16), streak_generation BLOB NOT NULL CHECK(typeof(streak_generation)='blob' AND length(streak_generation)=16 AND hex(streak_generation)<>'00000000000000000000000000000000'), next_claim_seq BLOB NOT NULL CHECK(typeof(next_claim_seq)='blob' AND length(next_claim_seq)=16), next_fold_seq BLOB NOT NULL CHECK(typeof(next_fold_seq)='blob' AND length(next_fold_seq)=16 AND hex(next_fold_seq)<=hex(next_claim_seq)), safe_note TEXT NOT NULL DEFAULT '', ended_reason TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, ended_at INTEGER,
- UNIQUE(id,donation_id), CHECK(typeof(display_head)='text' AND typeof(display_tail)='text' AND typeof(canonical_base_url)='text' AND typeof(safe_note)='text'), CHECK(length(CAST(display_head AS BLOB)) BETWEEN 0 AND 16 AND length(CAST(display_tail AS BLOB)) BETWEEN 0 AND 16 AND display_head NOT GLOB '*[^ -~]*' AND display_tail NOT GLOB '*[^ -~]*'), CHECK(length(CAST(canonical_base_url AS BLOB)) BETWEEN 0 AND 4096), CHECK(length(safe_note) BETWEEN 0 AND 256), CHECK(ended_reason IS NULL OR ended_reason IN ('withdrawn','terminated','expired','member_removed','account_deleted'))
+ authorized_expires_at INTEGER CHECK(authorized_expires_at IS NULL OR (typeof(authorized_expires_at)='integer' AND authorized_expires_at BETWEEN 0 AND 253402300799)),
+ expires_at INTEGER CHECK(expires_at IS NULL OR (typeof(expires_at)='integer' AND expires_at BETWEEN 0 AND 253402300799)),
+ mainstream_channel_id TEXT REFERENCES mainstream_channels(id) ON DELETE RESTRICT
+   CHECK(mainstream_channel_id IS NULL OR (length(mainstream_channel_id)=26 AND substr(mainstream_channel_id,1,4)='mch_' AND substr(mainstream_channel_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(mainstream_channel_id,-1,1) IN ('A','Q','g','w'))),
+ mainstream_channel_revision INTEGER CHECK(mainstream_channel_revision IS NULL OR (typeof(mainstream_channel_revision)='integer' AND mainstream_channel_revision BETWEEN 1 AND 9223372036854775807)),
+ mainstream_channel_name TEXT CHECK(mainstream_channel_name IS NULL OR (typeof(mainstream_channel_name)='text' AND length(mainstream_channel_name) BETWEEN 1 AND 128)),
+ mainstream_channel_category TEXT CHECK(mainstream_channel_category IS NULL OR mainstream_channel_category IN ('subscription','api_platform')),
+ source_endpoint_key_id INTEGER NOT NULL CHECK(typeof(source_endpoint_key_id)='integer' AND source_endpoint_key_id>0),
+ report_fingerprint BLOB CHECK(report_fingerprint IS NULL OR (typeof(report_fingerprint)='blob' AND length(report_fingerprint)=32)),
+ report_match_until INTEGER CHECK(report_match_until IS NULL OR (typeof(report_match_until)='integer' AND report_match_until BETWEEN 0 AND 253402300799)),
+ UNIQUE(id,donation_id), CHECK(typeof(display_head)='text' AND typeof(display_tail)='text' AND typeof(canonical_base_url)='text' AND typeof(safe_note)='text'), CHECK(length(CAST(display_head AS BLOB)) BETWEEN 0 AND 16 AND length(CAST(display_tail AS BLOB)) BETWEEN 0 AND 16 AND display_head NOT GLOB '*[^ -~]*' AND display_tail NOT GLOB '*[^ -~]*'), CHECK(length(CAST(canonical_base_url AS BLOB)) BETWEEN 0 AND 4096), CHECK(length(safe_note) BETWEEN 0 AND 256), CHECK(ended_reason IS NULL OR ended_reason IN ('withdrawn','terminated','expired','member_removed','account_deleted')),
+ CHECK(endpoint_key_id IS NOT NULL OR ended_at IS NOT NULL),
+ CHECK(endpoint_key_id IS NULL OR endpoint_key_id=source_endpoint_key_id),
+ CHECK((mainstream_channel_id IS NULL AND mainstream_channel_revision IS NULL AND mainstream_channel_name IS NULL AND mainstream_channel_category IS NULL)
+   OR (mainstream_channel_id IS NOT NULL AND mainstream_channel_revision IS NOT NULL AND mainstream_channel_name IS NOT NULL AND mainstream_channel_category IS NOT NULL)),
+ CHECK(authorized_expires_at IS NULL OR (expires_at IS NOT NULL AND expires_at<=authorized_expires_at)),
+ CHECK((ended_at IS NULL AND ended_reason IS NULL AND report_fingerprint IS NOT NULL AND report_match_until IS NULL)
+   OR (ended_at IS NOT NULL AND ended_reason IS NOT NULL AND enabled=0 AND report_match_until IS NOT NULL AND report_match_until=ended_at+7776000))
 );
  CREATE INDEX idx_donation_keys_donation ON donation_keys(donation_id);
  CREATE INDEX idx_donation_keys_route ON donation_keys(enabled,failure_disabled,ended_at,id);
  CREATE UNIQUE INDEX idx_donation_keys_donation_endpoint ON donation_keys(donation_id,endpoint_key_id) WHERE endpoint_key_id IS NOT NULL;
+CREATE INDEX idx_donation_keys_source_key ON donation_keys(source_endpoint_key_id,id);
+CREATE INDEX idx_donation_keys_report_fingerprint ON donation_keys(report_fingerprint) WHERE report_fingerprint IS NOT NULL;
+CREATE INDEX idx_donation_keys_report_match ON donation_keys(report_match_until,id) WHERE report_match_until IS NOT NULL;
+CREATE TRIGGER donation_key_initial_expiry_guard BEFORE INSERT ON donation_keys
+WHEN NEW.authorized_expires_at IS NOT NEW.expires_at
+BEGIN SELECT RAISE(ABORT,'donation key initial expiry must equal donor authorization'); END;
+CREATE TRIGGER donation_key_donor_expiry_immutable BEFORE UPDATE OF authorized_expires_at ON donation_keys
+WHEN NEW.authorized_expires_at IS NOT OLD.authorized_expires_at
+BEGIN SELECT RAISE(ABORT,'donation donor expiry authorization is immutable'); END;
+CREATE TRIGGER donation_key_provenance_immutable BEFORE UPDATE OF donation_id,display_head,display_tail,canonical_base_url,connector_type,mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category ON donation_keys
+WHEN NEW.donation_id IS NOT OLD.donation_id
+ OR NEW.display_head IS NOT OLD.display_head
+ OR NEW.display_tail IS NOT OLD.display_tail
+ OR NEW.canonical_base_url IS NOT OLD.canonical_base_url
+ OR NEW.connector_type IS NOT OLD.connector_type
+ OR NEW.mainstream_channel_id IS NOT OLD.mainstream_channel_id
+ OR NEW.mainstream_channel_revision IS NOT OLD.mainstream_channel_revision
+ OR NEW.mainstream_channel_name IS NOT OLD.mainstream_channel_name
+ OR NEW.mainstream_channel_category IS NOT OLD.mainstream_channel_category
+BEGIN SELECT RAISE(ABORT,'donation key provenance is immutable'); END;
+CREATE TRIGGER donation_key_source_key_immutable BEFORE UPDATE OF source_endpoint_key_id ON donation_keys
+WHEN NEW.source_endpoint_key_id IS NOT OLD.source_endpoint_key_id
+BEGIN SELECT RAISE(ABORT,'donation key source endpoint key is immutable'); END;
+CREATE TRIGGER donation_key_tombstone_immutable BEFORE UPDATE OF endpoint_key_id ON donation_keys
+WHEN OLD.endpoint_key_id IS NULL AND NEW.endpoint_key_id IS NOT NULL
+BEGIN SELECT RAISE(ABORT,'donation key tombstone cannot recover a physical key'); END;
+CREATE TRIGGER donation_key_terminal_immutable BEFORE UPDATE OF ended_at,ended_reason,report_match_until,expires_at ON donation_keys
+WHEN (OLD.ended_at IS NULL AND NOT (
+       (NEW.ended_at IS NULL AND NEW.ended_reason IS NULL AND NEW.report_match_until IS NULL)
+       OR (NEW.ended_at IS NOT NULL AND NEW.ended_reason IS NOT NULL
+           AND NEW.report_match_until=NEW.ended_at+7776000 AND NEW.expires_at IS OLD.expires_at)))
+ OR (OLD.ended_at IS NOT NULL AND (
+       NEW.ended_at IS NOT OLD.ended_at OR NEW.ended_reason IS NOT OLD.ended_reason
+       OR NEW.report_match_until IS NOT OLD.report_match_until OR NEW.expires_at IS NOT OLD.expires_at))
+BEGIN SELECT RAISE(ABORT,'donation key terminal facts are immutable'); END;
+CREATE TRIGGER donation_key_report_fingerprint_insert_guard BEFORE INSERT ON donation_keys
+WHEN NEW.ended_at IS NOT NULL AND NEW.report_fingerprint IS NULL
+BEGIN SELECT RAISE(ABORT,'donation key terminal fingerprint must be retained on insert'); END;
+CREATE TRIGGER donation_key_report_fingerprint_update_guard BEFORE UPDATE OF report_fingerprint ON donation_keys
+WHEN NEW.report_fingerprint IS NOT OLD.report_fingerprint AND NOT (
+ OLD.report_fingerprint IS NOT NULL AND NEW.report_fingerprint IS NULL
+ AND OLD.ended_at IS NOT NULL AND OLD.report_match_until IS NOT NULL
+ AND NEW.updated_at>=OLD.report_match_until AND unixepoch()>=OLD.report_match_until)
+BEGIN SELECT RAISE(ABORT,'donation key report fingerprint mutation is not allowed'); END;
 
 CREATE TABLE charity_model_bindings (
  id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), charity_model_id INTEGER NOT NULL REFERENCES charity_models(id) ON DELETE CASCADE, donation_key_id INTEGER NOT NULL REFERENCES donation_keys(id) ON DELETE CASCADE, endpoint_key_id INTEGER NOT NULL, upstream_model_id TEXT NOT NULL, ord INTEGER NOT NULL DEFAULT 0 CHECK(ord BETWEEN 0 AND 255), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
@@ -701,9 +816,13 @@ WHEN typeof(NEW.contribution_count)<>'blob' OR length(NEW.contribution_count)<>1
 BEGIN SELECT RAISE(ABORT,'thursday participant matrix is invalid'); END;
 
 -- ===== donations, charity reservations, and report/security facts ==========
- CREATE TABLE donations (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','deleted','expired')), revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9223372036854775807), description TEXT NOT NULL DEFAULT '', review_note TEXT NOT NULL DEFAULT '', reviewed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, reviewed_by_role TEXT NOT NULL DEFAULT '' CHECK(reviewed_by_role IN ('','admin','level5')), expires_at INTEGER, reviewed_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, terminal_at INTEGER, legal_hold_consumed INTEGER NOT NULL DEFAULT 0 CHECK(legal_hold_consumed IN (0,1)));
+ CREATE TABLE donations (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','deleted','expired')), revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9223372036854775807), description TEXT NOT NULL DEFAULT '', review_note TEXT NOT NULL DEFAULT '', reviewed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, reviewed_by_role TEXT NOT NULL DEFAULT '' CHECK(reviewed_by_role IN ('','admin','level5')), reviewed_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, terminal_at INTEGER, legal_hold_consumed INTEGER NOT NULL DEFAULT 0 CHECK(legal_hold_consumed IN (0,1)), CHECK((status IN ('pending','approved') AND terminal_at IS NULL) OR (status IN ('rejected','deleted','expired') AND terminal_at IS NOT NULL)));
 CREATE INDEX idx_donations_user ON donations(user_id,created_at,id);
-CREATE INDEX idx_donations_status ON donations(status,expires_at,id);
+CREATE INDEX idx_donations_status ON donations(status,terminal_at,id);
+CREATE TRIGGER donation_terminal_immutable BEFORE UPDATE OF status,terminal_at ON donations
+WHEN OLD.status IN ('rejected','deleted','expired')
+ AND (NEW.status IS NOT OLD.status OR NEW.terminal_at IS NOT OLD.terminal_at)
+BEGIN SELECT RAISE(ABORT,'terminal donation cannot reopen or move its terminal time'); END;
 CREATE TABLE donation_key_memberships (endpoint_key_id INTEGER PRIMARY KEY REFERENCES endpoint_keys(id) ON DELETE RESTRICT, donation_key_id INTEGER NOT NULL UNIQUE REFERENCES donation_keys(id) ON DELETE CASCADE, donation_id INTEGER NOT NULL REFERENCES donations(id) ON DELETE CASCADE, created_at INTEGER NOT NULL);
 CREATE INDEX idx_donation_memberships_donation ON donation_key_memberships(donation_id,endpoint_key_id);
  CREATE TABLE donation_reviews (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), donation_id INTEGER NOT NULL REFERENCES donations(id) ON DELETE CASCADE, submission_revision INTEGER NOT NULL DEFAULT 1 CHECK(submission_revision BETWEEN 1 AND 9223372036854775807), reviewer_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, reviewer_role TEXT NOT NULL DEFAULT '' CHECK(reviewer_role IN ('','admin','level5')), action TEXT NOT NULL CHECK(action IN ('approve','reject','withdraw','terminate','expire','enable','disable','limit_update','note_update','member_removed')), note TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
@@ -714,15 +833,18 @@ CREATE INDEX idx_charity_reservations_user ON charity_reservations(user_id,creat
 CREATE TABLE donation_usage_reservations (claim_id TEXT NOT NULL PRIMARY KEY CHECK(length(claim_id)=26 AND substr(claim_id,1,4)='clm_' AND substr(claim_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(claim_id,-1,1) IN ('A','Q','g','w')), donation_key_id INTEGER REFERENCES donation_keys(id) ON DELETE SET NULL, streak_generation BLOB NOT NULL CHECK(typeof(streak_generation)='blob' AND length(streak_generation)=16), claim_seq BLOB NOT NULL CHECK(typeof(claim_seq)='blob' AND length(claim_seq)=16), price_reserved_milli INTEGER NOT NULL CHECK(price_reserved_milli BETWEEN 0 AND 9000000000000000), price_actual_milli INTEGER CHECK(price_actual_milli IS NULL OR price_actual_milli BETWEEN 0 AND 9000000000000000), reward_actual_milli INTEGER CHECK(reward_actual_milli IS NULL OR reward_actual_milli BETWEEN 0 AND 9000000000000000), calls_reserved INTEGER NOT NULL CHECK(calls_reserved IN (0,1)), calls_actual INTEGER CHECK(calls_actual IS NULL OR calls_actual IN (0,1)), tokens_reserved INTEGER NOT NULL CHECK(tokens_reserved BETWEEN 0 AND 2147483647), tokens_actual INTEGER CHECK(tokens_actual IS NULL OR tokens_actual BETWEEN 0 AND 2147483647), protocol_success INTEGER CHECK(protocol_success IS NULL OR protocol_success IN (0,1)), usage_unknown INTEGER CHECK(usage_unknown IS NULL OR usage_unknown IN (0,1)), state TEXT NOT NULL CHECK(state IN ('reserved','committed','released')), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), finalized_at INTEGER CHECK(finalized_at IS NULL OR finalized_at BETWEEN 0 AND 253402300799), UNIQUE(donation_key_id,streak_generation,claim_seq), CHECK((state='reserved' AND price_actual_milli IS NULL AND reward_actual_milli IS NULL AND calls_actual IS NULL AND tokens_actual IS NULL AND protocol_success IS NULL AND usage_unknown IS NULL AND finalized_at IS NULL) OR (state='committed' AND price_actual_milli IS NOT NULL AND reward_actual_milli IS NOT NULL AND calls_actual IS NOT NULL AND tokens_actual IS NOT NULL AND protocol_success IS NOT NULL AND usage_unknown IS NOT NULL AND finalized_at IS NOT NULL) OR (state='released' AND finalized_at IS NOT NULL AND ((price_actual_milli IS NULL AND reward_actual_milli IS NULL AND calls_actual IS NULL AND tokens_actual IS NULL AND protocol_success IS NULL AND usage_unknown IS NULL) OR (price_actual_milli IS NOT NULL AND reward_actual_milli IS NOT NULL AND calls_actual IS NOT NULL AND tokens_actual IS NOT NULL AND protocol_success IS NOT NULL AND usage_unknown IS NOT NULL)))));
 CREATE INDEX idx_donation_usage_key_state ON donation_usage_reservations(donation_key_id,state,claim_seq);
 
-CREATE TABLE report_cases (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='rpc_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), fingerprint BLOB NOT NULL CHECK(typeof(fingerprint)='blob' AND length(fingerprint)=32), connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible')), canonical_base_url TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('pending_indexing','pending_review','approved_processing','approved','rejected','expired')), progress_state TEXT NOT NULL CHECK(progress_state IN ('in_progress','complete')), material_version INTEGER NOT NULL CHECK(material_version BETWEEN 1 AND 9223372036854775807), target_version INTEGER NOT NULL CHECK(target_version BETWEEN 1 AND 9223372036854775807), deadline INTEGER NOT NULL, cursor_text TEXT, material_count INTEGER NOT NULL CHECK(material_count>=0), target_count INTEGER NOT NULL CHECK(target_count>=0), distinct_owner_count INTEGER NOT NULL CHECK(distinct_owner_count>=0), processed_target_count INTEGER NOT NULL DEFAULT 0 CHECK(processed_target_count>=0), deleted_target_count INTEGER NOT NULL DEFAULT 0 CHECK(deleted_target_count>=0), released_target_count INTEGER NOT NULL DEFAULT 0 CHECK(released_target_count>=0), decision_reason TEXT, decision_actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, decision_at INTEGER, retry_attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(retry_attempt_count>=0), next_retry_at INTEGER, last_error_class TEXT CHECK(last_error_class IS NULL OR last_error_class IN ('db_busy','internal_retryable','invariant_violation')), created_at INTEGER NOT NULL, terminal_at INTEGER, legal_hold_consumed INTEGER NOT NULL DEFAULT 0 CHECK(legal_hold_consumed IN (0,1)), CHECK(processed_target_count<=target_count AND deleted_target_count<=target_count AND released_target_count<=target_count), CHECK((progress_state='in_progress' AND status IN ('pending_indexing','approved_processing')) OR (progress_state='complete' AND status IN ('pending_review','approved','rejected')) OR status='expired'));
+CREATE TABLE report_cases (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='rpc_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), fingerprint BLOB NOT NULL CHECK(typeof(fingerprint)='blob' AND length(fingerprint)=32), connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible')), canonical_base_url TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('pending_indexing','pending_review','approved_processing','approved','rejected','expired')), progress_state TEXT NOT NULL CHECK(progress_state IN ('in_progress','complete')), material_version INTEGER NOT NULL CHECK(material_version BETWEEN 1 AND 9223372036854775807), target_version INTEGER NOT NULL CHECK(target_version BETWEEN 1 AND 9223372036854775807), deadline INTEGER NOT NULL, cursor_source TEXT CHECK(cursor_source IS NULL OR cursor_source IN ('endpoint','donation')), cursor_id INTEGER CHECK(cursor_id IS NULL OR (typeof(cursor_id)='integer' AND cursor_id BETWEEN 0 AND 9223372036854775807)), material_count INTEGER NOT NULL CHECK(material_count>=0), target_count INTEGER NOT NULL CHECK(target_count>=0), distinct_owner_count INTEGER NOT NULL CHECK(distinct_owner_count>=0), processed_target_count INTEGER NOT NULL DEFAULT 0 CHECK(processed_target_count>=0), deleted_target_count INTEGER NOT NULL DEFAULT 0 CHECK(deleted_target_count>=0), released_target_count INTEGER NOT NULL DEFAULT 0 CHECK(released_target_count>=0), decision_reason TEXT, decision_actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, decision_at INTEGER, retry_attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(retry_attempt_count>=0), next_retry_at INTEGER, last_error_class TEXT CHECK(last_error_class IS NULL OR last_error_class IN ('db_busy','internal_retryable','invariant_violation')), created_at INTEGER NOT NULL, terminal_at INTEGER, legal_hold_consumed INTEGER NOT NULL DEFAULT 0 CHECK(legal_hold_consumed IN (0,1)), CHECK(processed_target_count<=target_count AND deleted_target_count<=target_count AND released_target_count<=target_count), CHECK((cursor_source IS NULL AND cursor_id IS NULL) OR (cursor_source IS NOT NULL AND cursor_id IS NOT NULL)), CHECK(cursor_id IS NULL OR cursor_id>0 OR cursor_source='donation'), CHECK((progress_state='in_progress' AND status IN ('pending_indexing','approved_processing')) OR (progress_state='complete' AND status IN ('pending_review','approved','rejected')) OR status='expired'));
 CREATE UNIQUE INDEX idx_report_cases_active_fingerprint ON report_cases(fingerprint) WHERE status IN ('pending_indexing','pending_review','approved_processing');
 CREATE INDEX idx_report_cases_status_deadline ON report_cases(status,deadline,id);
 CREATE INDEX idx_report_cases_retry ON report_cases(next_retry_at,id);
  CREATE TABLE report_materials (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), case_id TEXT NOT NULL REFERENCES report_cases(id) ON DELETE CASCADE CHECK(length(case_id)=26 AND substr(case_id,1,4)='rpc_' AND substr(case_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(case_id,-1,1) IN ('A','Q','g','w')), material_hash BLOB NOT NULL CHECK(typeof(material_hash)='blob' AND length(material_hash)=32), note_text TEXT NOT NULL DEFAULT '', reporter_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, reporter_discord_id TEXT CHECK(reporter_discord_id IS NULL OR (length(CAST(reporter_discord_id AS BLOB)) BETWEEN 1 AND 64 AND reporter_discord_id NOT GLOB '*[^ -~]*')), source_ip_envelope BLOB NOT NULL CHECK(typeof(source_ip_envelope)='blob' AND length(source_ip_envelope)=45), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), UNIQUE(case_id,material_hash));
 CREATE INDEX idx_report_materials_case ON report_materials(case_id,id);
-CREATE TABLE report_targets (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='rpt_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), case_id TEXT NOT NULL REFERENCES report_cases(id) ON DELETE CASCADE CHECK(length(case_id)=26 AND substr(case_id,1,4)='rpc_' AND substr(case_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(case_id,-1,1) IN ('A','Q','g','w')), target_seq INTEGER NOT NULL CHECK(target_seq BETWEEN 0 AND 9223372036854775807), endpoint_key_id INTEGER REFERENCES endpoint_keys(id) ON DELETE SET NULL, key_ref BLOB NOT NULL CHECK(typeof(key_ref)='blob' AND length(key_ref)=32), owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, owner_discord_id TEXT CHECK(owner_discord_id IS NULL OR (length(CAST(owner_discord_id AS BLOB)) BETWEEN 1 AND 64 AND owner_discord_id NOT GLOB '*[^ -~]*')), owner_display_name TEXT CHECK(owner_display_name IS NULL OR (typeof(owner_display_name)='text' AND length(CAST(owner_display_name AS BLOB))<=512)), connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible')), canonical_base_url TEXT NOT NULL CHECK(typeof(canonical_base_url)='text' AND length(CAST(canonical_base_url AS BLOB)) BETWEEN 1 AND 4096), key_display_head TEXT NOT NULL DEFAULT '' CHECK(length(CAST(key_display_head AS BLOB))<=16), key_display_tail TEXT NOT NULL DEFAULT '' CHECK(length(CAST(key_display_tail AS BLOB))<=16), state TEXT NOT NULL CHECK(state IN ('protected','deleted_by_owner','deleted_by_account','deleted_by_approval','released')), discovered_version INTEGER NOT NULL CHECK(discovered_version BETWEEN 1 AND 9223372036854775807), decided_version INTEGER CHECK(decided_version IS NULL OR decided_version BETWEEN 1 AND 9223372036854775807), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799), UNIQUE(case_id,key_ref), UNIQUE(case_id,target_seq));
+CREATE TABLE report_targets (id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='rpt_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')), case_id TEXT NOT NULL REFERENCES report_cases(id) ON DELETE CASCADE CHECK(length(case_id)=26 AND substr(case_id,1,4)='rpc_' AND substr(case_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(case_id,-1,1) IN ('A','Q','g','w')), target_seq INTEGER NOT NULL CHECK(target_seq BETWEEN 0 AND 9223372036854775807), endpoint_key_id INTEGER REFERENCES endpoint_keys(id) ON DELETE SET NULL, source_endpoint_key_id INTEGER NOT NULL CHECK(typeof(source_endpoint_key_id)='integer' AND source_endpoint_key_id>0), key_ref BLOB NOT NULL CHECK(typeof(key_ref)='blob' AND length(key_ref)=32), owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, owner_discord_id TEXT CHECK(owner_discord_id IS NULL OR (length(CAST(owner_discord_id AS BLOB)) BETWEEN 1 AND 64 AND owner_discord_id NOT GLOB '*[^ -~]*')), owner_display_name TEXT CHECK(owner_display_name IS NULL OR (typeof(owner_display_name)='text' AND length(CAST(owner_display_name AS BLOB))<=512)), connector_type TEXT NOT NULL CHECK(connector_type IN ('openai-compatible','anthropic-compatible')), canonical_base_url TEXT NOT NULL CHECK(typeof(canonical_base_url)='text' AND length(CAST(canonical_base_url AS BLOB)) BETWEEN 1 AND 4096), key_display_head TEXT NOT NULL DEFAULT '' CHECK(length(CAST(key_display_head AS BLOB))<=16), key_display_tail TEXT NOT NULL DEFAULT '' CHECK(length(CAST(key_display_tail AS BLOB))<=16), state TEXT NOT NULL CHECK(state IN ('protected','deleted_by_owner','deleted_by_account','deleted_by_approval','released')), discovered_version INTEGER NOT NULL CHECK(discovered_version BETWEEN 1 AND 9223372036854775807), decided_version INTEGER CHECK(decided_version IS NULL OR decided_version BETWEEN 1 AND 9223372036854775807), created_at INTEGER NOT NULL CHECK(created_at BETWEEN 0 AND 253402300799), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799), UNIQUE(case_id,key_ref), UNIQUE(case_id,target_seq));
 CREATE INDEX idx_report_targets_case_state ON report_targets(case_id,state,target_seq,id);
 CREATE INDEX idx_report_targets_owner ON report_targets(owner_user_id,id);
+CREATE TRIGGER report_target_source_key_immutable BEFORE UPDATE OF source_endpoint_key_id ON report_targets
+WHEN NEW.source_endpoint_key_id IS NOT OLD.source_endpoint_key_id
+BEGIN SELECT RAISE(ABORT,'report target source endpoint key is immutable'); END;
  CREATE TABLE report_decisions (id INTEGER PRIMARY KEY AUTOINCREMENT CHECK(id>0), case_id TEXT NOT NULL REFERENCES report_cases(id) ON DELETE CASCADE CHECK(length(case_id)=26 AND substr(case_id,1,4)='rpc_' AND substr(case_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(case_id,-1,1) IN ('A','Q','g','w')), material_version INTEGER NOT NULL CHECK(material_version BETWEEN 1 AND 9223372036854775807), target_version INTEGER NOT NULL CHECK(target_version BETWEEN 1 AND 9223372036854775807), actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, action TEXT NOT NULL CHECK(action IN ('approve','reject','expire','resume_processing')), reason TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
 CREATE INDEX idx_report_decisions_case ON report_decisions(case_id,id);
 CREATE TABLE report_rate_buckets (scope TEXT NOT NULL CHECK(scope IN ('ip','account','fingerprint','global')), scope_hash BLOB NOT NULL CHECK(typeof(scope_hash)='blob' AND length(scope_hash)=32), window_start INTEGER NOT NULL CHECK(window_start BETWEEN 0 AND 253402300799), count INTEGER NOT NULL CHECK(count BETWEEN 0 AND 4096), updated_at INTEGER NOT NULL CHECK(updated_at BETWEEN 0 AND 253402300799), expires_at INTEGER NOT NULL CHECK(expires_at BETWEEN 0 AND 253402300799), PRIMARY KEY(scope,scope_hash,window_start), CHECK((scope IN ('ip','account','fingerprint') AND expires_at=window_start+1200) OR (scope='global' AND expires_at=window_start+120)));
@@ -881,7 +1003,6 @@ BEGIN SELECT RAISE(ABORT,'credit operation source is not canonical text'); END;
 CREATE TRIGGER report_case_scalar_guard BEFORE INSERT ON report_cases
 WHEN typeof(NEW.canonical_base_url)<>'text'
  OR length(CAST(NEW.canonical_base_url AS BLOB)) NOT BETWEEN 1 AND 4096
- OR (NEW.cursor_text IS NOT NULL AND (typeof(NEW.cursor_text)<>'text' OR length(CAST(NEW.cursor_text AS BLOB))>512))
  OR (NEW.decision_reason IS NOT NULL AND (typeof(NEW.decision_reason)<>'text' OR length(NEW.decision_reason)>2048))
  OR NEW.deadline NOT BETWEEN 0 AND 253402300799
  OR NEW.created_at NOT BETWEEN 0 AND 253402300799
@@ -906,7 +1027,6 @@ BEGIN SELECT RAISE(ABORT,'report case scalar/state invariant'); END;
 CREATE TRIGGER report_case_scalar_update_guard BEFORE UPDATE ON report_cases
 WHEN typeof(NEW.canonical_base_url)<>'text'
  OR length(CAST(NEW.canonical_base_url AS BLOB)) NOT BETWEEN 1 AND 4096
- OR (NEW.cursor_text IS NOT NULL AND (typeof(NEW.cursor_text)<>'text' OR length(CAST(NEW.cursor_text AS BLOB))>512))
  OR (NEW.decision_reason IS NOT NULL AND (typeof(NEW.decision_reason)<>'text' OR length(NEW.decision_reason)>2048))
  OR NEW.deadline NOT BETWEEN 0 AND 253402300799
  OR NEW.created_at NOT BETWEEN 0 AND 253402300799
@@ -1077,10 +1197,10 @@ BEGIN SELECT RAISE(ABORT,'charity binding endpoint mismatch'); END;
  WHEN NOT EXISTS(SELECT 1 FROM donation_keys d WHERE d.id=NEW.donation_key_id AND d.endpoint_key_id=NEW.endpoint_key_id)
  BEGIN SELECT RAISE(ABORT,'charity binding endpoint mismatch'); END;
  CREATE TRIGGER donation_key_membership_consistency_guard BEFORE INSERT ON donation_key_memberships
- WHEN NOT EXISTS(SELECT 1 FROM donation_keys d WHERE d.id=NEW.donation_key_id AND d.donation_id=NEW.donation_id AND d.endpoint_key_id=NEW.endpoint_key_id)
+ WHEN NOT EXISTS(SELECT 1 FROM donation_keys d WHERE d.id=NEW.donation_key_id AND d.donation_id=NEW.donation_id AND d.endpoint_key_id=NEW.endpoint_key_id AND d.ended_at IS NULL)
  BEGIN SELECT RAISE(ABORT,'donation key membership identity mismatch'); END;
  CREATE TRIGGER donation_key_membership_consistency_update_guard BEFORE UPDATE OF endpoint_key_id,donation_key_id,donation_id ON donation_key_memberships
- WHEN NOT EXISTS(SELECT 1 FROM donation_keys d WHERE d.id=NEW.donation_key_id AND d.donation_id=NEW.donation_id AND d.endpoint_key_id=NEW.endpoint_key_id)
+ WHEN NOT EXISTS(SELECT 1 FROM donation_keys d WHERE d.id=NEW.donation_key_id AND d.donation_id=NEW.donation_id AND d.endpoint_key_id=NEW.endpoint_key_id AND d.ended_at IS NULL)
  BEGIN SELECT RAISE(ABORT,'donation key membership identity mismatch'); END;
 CREATE TRIGGER rps_queue_account_guard BEFORE INSERT ON game_rps_queue
 WHEN NOT EXISTS(SELECT 1 FROM credit_accounts a WHERE a.id=NEW.account_id AND a.kind='platform' AND a.code='rps-queue:'||NEW.id)
@@ -1818,11 +1938,13 @@ CREATE TRIGGER generation_two_donation_keys_time_guard BEFORE INSERT ON donation
 WHEN typeof(NEW.created_at)<>'integer' OR NEW.created_at NOT BETWEEN 0 AND 253402300799
  OR typeof(NEW.updated_at)<>'integer' OR NEW.updated_at NOT BETWEEN 0 AND 253402300799
  OR (NEW.ended_at IS NOT NULL AND (typeof(NEW.ended_at)<>'integer' OR NEW.ended_at NOT BETWEEN 0 AND 253402300799))
+ OR (NEW.report_match_until IS NOT NULL AND (typeof(NEW.report_match_until)<>'integer' OR NEW.report_match_until NOT BETWEEN 0 AND 253402300799))
 BEGIN SELECT RAISE(ABORT,'donation key timestamp is outside UTC range'); END;
 CREATE TRIGGER generation_two_donation_keys_time_update_guard BEFORE UPDATE ON donation_keys
 WHEN typeof(NEW.created_at)<>'integer' OR NEW.created_at NOT BETWEEN 0 AND 253402300799
  OR typeof(NEW.updated_at)<>'integer' OR NEW.updated_at NOT BETWEEN 0 AND 253402300799
  OR (NEW.ended_at IS NOT NULL AND (typeof(NEW.ended_at)<>'integer' OR NEW.ended_at NOT BETWEEN 0 AND 253402300799))
+ OR (NEW.report_match_until IS NOT NULL AND (typeof(NEW.report_match_until)<>'integer' OR NEW.report_match_until NOT BETWEEN 0 AND 253402300799))
 BEGIN SELECT RAISE(ABORT,'donation key timestamp is outside UTC range'); END;
 
 CREATE TRIGGER generation_two_credit_accounts_time_guard BEFORE INSERT ON credit_accounts
@@ -1834,15 +1956,13 @@ WHEN typeof(NEW.created_at)<>'integer' OR NEW.created_at NOT BETWEEN 0 AND 25340
  OR typeof(NEW.updated_at)<>'integer' OR NEW.updated_at NOT BETWEEN 0 AND 253402300799
 BEGIN SELECT RAISE(ABORT,'credit account timestamp is outside UTC range'); END;
 CREATE TRIGGER generation_two_donations_time_guard BEFORE INSERT ON donations
-WHEN (NEW.expires_at IS NOT NULL AND (typeof(NEW.expires_at)<>'integer' OR NEW.expires_at NOT BETWEEN 0 AND 253402300799))
- OR (NEW.reviewed_at IS NOT NULL AND (typeof(NEW.reviewed_at)<>'integer' OR NEW.reviewed_at NOT BETWEEN 0 AND 253402300799))
+WHEN (NEW.reviewed_at IS NOT NULL AND (typeof(NEW.reviewed_at)<>'integer' OR NEW.reviewed_at NOT BETWEEN 0 AND 253402300799))
  OR typeof(NEW.created_at)<>'integer' OR NEW.created_at NOT BETWEEN 0 AND 253402300799
  OR typeof(NEW.updated_at)<>'integer' OR NEW.updated_at NOT BETWEEN 0 AND 253402300799
  OR (NEW.terminal_at IS NOT NULL AND (typeof(NEW.terminal_at)<>'integer' OR NEW.terminal_at NOT BETWEEN 0 AND 253402300799))
 BEGIN SELECT RAISE(ABORT,'donation timestamp is outside UTC range'); END;
 CREATE TRIGGER generation_two_donations_time_update_guard BEFORE UPDATE ON donations
-WHEN (NEW.expires_at IS NOT NULL AND (typeof(NEW.expires_at)<>'integer' OR NEW.expires_at NOT BETWEEN 0 AND 253402300799))
- OR (NEW.reviewed_at IS NOT NULL AND (typeof(NEW.reviewed_at)<>'integer' OR NEW.reviewed_at NOT BETWEEN 0 AND 253402300799))
+WHEN (NEW.reviewed_at IS NOT NULL AND (typeof(NEW.reviewed_at)<>'integer' OR NEW.reviewed_at NOT BETWEEN 0 AND 253402300799))
  OR typeof(NEW.created_at)<>'integer' OR NEW.created_at NOT BETWEEN 0 AND 253402300799
  OR typeof(NEW.updated_at)<>'integer' OR NEW.updated_at NOT BETWEEN 0 AND 253402300799
  OR (NEW.terminal_at IS NOT NULL AND (typeof(NEW.terminal_at)<>'integer' OR NEW.terminal_at NOT BETWEEN 0 AND 253402300799))
@@ -2724,6 +2844,11 @@ WHEN (NEW.id IS NOT NULL AND typeof(NEW.id)<>'integer')
  OR (NEW.created_at IS NOT NULL AND typeof(NEW.created_at)<>'integer')
  OR (NEW.updated_at IS NOT NULL AND typeof(NEW.updated_at)<>'integer')
  OR (NEW.ended_at IS NOT NULL AND typeof(NEW.ended_at)<>'integer')
+ OR (NEW.authorized_expires_at IS NOT NULL AND typeof(NEW.authorized_expires_at)<>'integer')
+ OR (NEW.expires_at IS NOT NULL AND typeof(NEW.expires_at)<>'integer')
+ OR (NEW.mainstream_channel_revision IS NOT NULL AND typeof(NEW.mainstream_channel_revision)<>'integer')
+ OR (NEW.source_endpoint_key_id IS NOT NULL AND typeof(NEW.source_endpoint_key_id)<>'integer')
+ OR (NEW.report_match_until IS NOT NULL AND typeof(NEW.report_match_until)<>'integer')
 BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
 CREATE TRIGGER generation_two_integer_type_donation_keys_update_guard BEFORE UPDATE ON donation_keys
 WHEN (NEW.id IS NOT NULL AND typeof(NEW.id)<>'integer')
@@ -2735,6 +2860,11 @@ WHEN (NEW.id IS NOT NULL AND typeof(NEW.id)<>'integer')
  OR (NEW.created_at IS NOT NULL AND typeof(NEW.created_at)<>'integer')
  OR (NEW.updated_at IS NOT NULL AND typeof(NEW.updated_at)<>'integer')
  OR (NEW.ended_at IS NOT NULL AND typeof(NEW.ended_at)<>'integer')
+ OR (NEW.authorized_expires_at IS NOT NULL AND typeof(NEW.authorized_expires_at)<>'integer')
+ OR (NEW.expires_at IS NOT NULL AND typeof(NEW.expires_at)<>'integer')
+ OR (NEW.mainstream_channel_revision IS NOT NULL AND typeof(NEW.mainstream_channel_revision)<>'integer')
+ OR (NEW.source_endpoint_key_id IS NOT NULL AND typeof(NEW.source_endpoint_key_id)<>'integer')
+ OR (NEW.report_match_until IS NOT NULL AND typeof(NEW.report_match_until)<>'integer')
 BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
 CREATE TRIGGER generation_two_integer_type_donation_reviews_insert_guard BEFORE INSERT ON donation_reviews
 WHEN (NEW.id IS NOT NULL AND typeof(NEW.id)<>'integer')
@@ -2783,7 +2913,6 @@ WHEN (NEW.id IS NOT NULL AND typeof(NEW.id)<>'integer')
  OR (NEW.user_id IS NOT NULL AND typeof(NEW.user_id)<>'integer')
  OR (NEW.revision IS NOT NULL AND typeof(NEW.revision)<>'integer')
  OR (NEW.reviewed_by_user_id IS NOT NULL AND typeof(NEW.reviewed_by_user_id)<>'integer')
- OR (NEW.expires_at IS NOT NULL AND typeof(NEW.expires_at)<>'integer')
  OR (NEW.reviewed_at IS NOT NULL AND typeof(NEW.reviewed_at)<>'integer')
  OR (NEW.created_at IS NOT NULL AND typeof(NEW.created_at)<>'integer')
  OR (NEW.updated_at IS NOT NULL AND typeof(NEW.updated_at)<>'integer')
@@ -2795,7 +2924,6 @@ WHEN (NEW.id IS NOT NULL AND typeof(NEW.id)<>'integer')
  OR (NEW.user_id IS NOT NULL AND typeof(NEW.user_id)<>'integer')
  OR (NEW.revision IS NOT NULL AND typeof(NEW.revision)<>'integer')
  OR (NEW.reviewed_by_user_id IS NOT NULL AND typeof(NEW.reviewed_by_user_id)<>'integer')
- OR (NEW.expires_at IS NOT NULL AND typeof(NEW.expires_at)<>'integer')
  OR (NEW.reviewed_at IS NOT NULL AND typeof(NEW.reviewed_at)<>'integer')
  OR (NEW.created_at IS NOT NULL AND typeof(NEW.created_at)<>'integer')
  OR (NEW.updated_at IS NOT NULL AND typeof(NEW.updated_at)<>'integer')
@@ -3334,6 +3462,7 @@ CREATE TRIGGER generation_two_integer_type_report_cases_insert_guard BEFORE INSE
 WHEN (NEW.material_version IS NOT NULL AND typeof(NEW.material_version)<>'integer')
  OR (NEW.target_version IS NOT NULL AND typeof(NEW.target_version)<>'integer')
  OR (NEW.deadline IS NOT NULL AND typeof(NEW.deadline)<>'integer')
+ OR (NEW.cursor_id IS NOT NULL AND typeof(NEW.cursor_id)<>'integer')
  OR (NEW.material_count IS NOT NULL AND typeof(NEW.material_count)<>'integer')
  OR (NEW.target_count IS NOT NULL AND typeof(NEW.target_count)<>'integer')
  OR (NEW.distinct_owner_count IS NOT NULL AND typeof(NEW.distinct_owner_count)<>'integer')
@@ -3352,6 +3481,7 @@ CREATE TRIGGER generation_two_integer_type_report_cases_update_guard BEFORE UPDA
 WHEN (NEW.material_version IS NOT NULL AND typeof(NEW.material_version)<>'integer')
  OR (NEW.target_version IS NOT NULL AND typeof(NEW.target_version)<>'integer')
  OR (NEW.deadline IS NOT NULL AND typeof(NEW.deadline)<>'integer')
+ OR (NEW.cursor_id IS NOT NULL AND typeof(NEW.cursor_id)<>'integer')
  OR (NEW.material_count IS NOT NULL AND typeof(NEW.material_count)<>'integer')
  OR (NEW.target_count IS NOT NULL AND typeof(NEW.target_count)<>'integer')
  OR (NEW.distinct_owner_count IS NOT NULL AND typeof(NEW.distinct_owner_count)<>'integer')
@@ -3405,6 +3535,7 @@ BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
 CREATE TRIGGER generation_two_integer_type_report_targets_insert_guard BEFORE INSERT ON report_targets
 WHEN (NEW.target_seq IS NOT NULL AND typeof(NEW.target_seq)<>'integer')
  OR (NEW.endpoint_key_id IS NOT NULL AND typeof(NEW.endpoint_key_id)<>'integer')
+ OR (NEW.source_endpoint_key_id IS NOT NULL AND typeof(NEW.source_endpoint_key_id)<>'integer')
  OR (NEW.owner_user_id IS NOT NULL AND typeof(NEW.owner_user_id)<>'integer')
  OR (NEW.discovered_version IS NOT NULL AND typeof(NEW.discovered_version)<>'integer')
  OR (NEW.decided_version IS NOT NULL AND typeof(NEW.decided_version)<>'integer')
@@ -3414,6 +3545,7 @@ BEGIN SELECT RAISE(ABORT,'INTEGER column has non-integer storage'); END;
 CREATE TRIGGER generation_two_integer_type_report_targets_update_guard BEFORE UPDATE ON report_targets
 WHEN (NEW.target_seq IS NOT NULL AND typeof(NEW.target_seq)<>'integer')
  OR (NEW.endpoint_key_id IS NOT NULL AND typeof(NEW.endpoint_key_id)<>'integer')
+ OR (NEW.source_endpoint_key_id IS NOT NULL AND typeof(NEW.source_endpoint_key_id)<>'integer')
  OR (NEW.owner_user_id IS NOT NULL AND typeof(NEW.owner_user_id)<>'integer')
  OR (NEW.discovered_version IS NOT NULL AND typeof(NEW.discovered_version)<>'integer')
  OR (NEW.decided_version IS NOT NULL AND typeof(NEW.decided_version)<>'integer')

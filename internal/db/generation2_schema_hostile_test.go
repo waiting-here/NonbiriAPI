@@ -344,10 +344,10 @@ func hostileInsertReportCase(t *testing.T, db *sql.DB, id string, fingerprint []
 	hostileMustExec(t, db, `
 INSERT INTO report_cases(
  id,fingerprint,connector_type,canonical_base_url,status,progress_state,
- material_version,target_version,deadline,cursor_text,material_count,target_count,
+ material_version,target_version,deadline,cursor_source,cursor_id,material_count,target_count,
  distinct_owner_count,processed_target_count,deleted_target_count,released_target_count,
  retry_attempt_count,created_at,terminal_at
-) VALUES(?,?,'openai-compatible','https://upstream.example/v1',?,?,1,1,1000,NULL,0,0,0,0,0,0,0,?,?)`,
+) VALUES(?,?,'openai-compatible','https://upstream.example/v1',?,?,1,1,1000,NULL,NULL,0,0,0,0,0,0,0,?,?)`,
 		id, fingerprint, status, progress, at, terminalAt)
 }
 
@@ -365,14 +365,23 @@ func hostileInsertDonationKey(t *testing.T, db *sql.DB, donationID int64, endpoi
 	id := hostileNextPK64(t, db, "donation_keys")
 	zero := hostileBlob16(0)
 	one := hostileBlob16(1)
+	sourceKeyID := int64(0)
+	if raw, ok := endpointKeyID.(int64); ok && raw > 0 {
+		sourceKeyID = raw
+	} else {
+		// Tombstone rows keep the original physical key identity without an FK;
+		// any positive value satisfies the NOT NULL boundary in this fixture.
+		sourceKeyID = hostileNextPK64(t, db, "endpoint_keys")
+	}
 	result := hostileMustExec(t, db, `
 INSERT INTO donation_keys(
  id,donation_id,endpoint_key_id,display_head,display_tail,canonical_base_url,connector_type,
  price_limit_mag,call_limit_mag,token_limit_mag,price_used_mag,price_reserved_mag,
  calls_used,calls_reserved,tokens_used,tokens_reserved,token_reserve,enabled,failure_disabled,
- failure_streak,streak_generation,next_claim_seq,next_fold_seq,safe_note,created_at,updated_at
-) VALUES(?,?,?,'head','tail','https://upstream.example/v1','openai-compatible',NULL,NULL,NULL,?,?,?,?,?, ?,0,1,0,?,?,?,?,'',0,0)`,
-		id, donationID, endpointKeyID, zero, zero, zero, zero, zero, zero, zero, one, one, zero)
+ failure_streak,streak_generation,next_claim_seq,next_fold_seq,safe_note,created_at,updated_at,
+ authorized_expires_at,expires_at,source_endpoint_key_id,report_fingerprint
+) VALUES(?,?,?,'head','tail','https://upstream.example/v1','openai-compatible',NULL,NULL,NULL,?,?,?,?,?, ?,0,1,0,?,?,?,?,'',0,0,NULL,NULL,?,?)`,
+		id, donationID, endpointKeyID, zero, zero, zero, zero, zero, zero, zero, one, one, zero, sourceKeyID, hostileBlob32(7))
 	return hostileMustLastID(t, result)
 }
 
@@ -429,10 +438,10 @@ func hostileInsertReportTarget(t *testing.T, db *sql.DB, caseID, id string) {
 	t.Helper()
 	hostileMustExec(t, db, `
 INSERT INTO report_targets(
- id,case_id,target_seq,key_ref,connector_type,canonical_base_url,
+ id,case_id,target_seq,endpoint_key_id,source_endpoint_key_id,key_ref,connector_type,canonical_base_url,
  key_display_head,key_display_tail,state,discovered_version,created_at,updated_at
-) VALUES(?,?,0,?,'openai-compatible','https://upstream.example/v1','head','tail','protected',1,0,0)`,
-		id, caseID, hostileBlob32(3))
+) VALUES(?,?,0,NULL,?,?,'openai-compatible','https://upstream.example/v1','head','tail','protected',1,0,0)`,
+		id, caseID, hostileNextPK64(t, db, "endpoint_keys"), hostileBlob32(3))
 }
 
 func hostileInsertReportDecision(t *testing.T, db *sql.DB, caseID string, adminID int64) int64 {
@@ -1598,11 +1607,17 @@ INSERT INTO donation_key_memberships(endpoint_key_id,donation_key_id,donation_id
 VALUES(?,?,?,0)`, keyID, donationKeyID, donationID)
 
 	// A physical key cannot be orphan-marked or deleted while the live key
-	// rail references it.  Once that rail is removed, NULL -> timestamp is the
-	// only legal marker transition; it cannot be cleared or rewritten.
+	// rail references it. Once membership is removed, the donation key must be
+	// atomically terminalized while detaching the physical key; only then can
+	// NULL -> timestamp be applied to the orphan marker.
 	hostileMustFail(t, db, `UPDATE endpoint_key_secrets SET orphaned_at=1 WHERE id=?`, secretID)
 	hostileMustFail(t, db, `DELETE FROM endpoint_key_secrets WHERE id=?`, secretID)
 	hostileMustExec(t, db, `DELETE FROM donation_key_memberships WHERE endpoint_key_id=?`, keyID)
+	hostileMustExec(t, db, `
+UPDATE donation_keys
+SET endpoint_key_id=NULL,enabled=0,ended_reason='terminated',ended_at=1,
+ report_match_until=7776001,updated_at=1
+WHERE id=?`, donationKeyID)
 	hostileMustExec(t, db, `DELETE FROM endpoint_keys WHERE id=?`, keyID)
 	hostileMustExec(t, db, `UPDATE endpoint_key_secrets SET orphaned_at=1 WHERE id=?`, secretID)
 	hostileMustFail(t, db, `UPDATE endpoint_key_secrets SET orphaned_at=NULL WHERE id=?`, secretID)
@@ -1678,8 +1693,11 @@ INSERT INTO report_targets(
 
 	// Donation usage keeps all three limit dimensions distinct.  Wrong-width
 	// U128 values and an out-of-range token reserve are both rejected.
+	usageEndpointID := hostileInsertEndpoint(t, db, uid, "https://usage-boundary.example/v1")
+	usageSecretID := hostileInsertSecret(t, db, "https://usage-boundary.example/v1", 2)
+	usageEndpointKeyID := hostileInsertEndpointKey(t, db, usageEndpointID, usageSecretID)
 	secondDonation := hostileInsertDonation(t, db, uid)
-	secondKey := hostileInsertDonationKey(t, db, secondDonation, nil)
+	secondKey := hostileInsertDonationKey(t, db, secondDonation, usageEndpointKeyID)
 	hostileMustExec(t, db, `
 UPDATE donation_keys SET price_used_mag=?,price_reserved_mag=?,calls_used=?,calls_reserved=?,
  tokens_used=?,tokens_reserved=?,failure_streak=?,streak_generation=?,next_claim_seq=?,next_fold_seq=?,token_reserve=?
@@ -1698,11 +1716,11 @@ func TestGenerationTwoHostileReportDecisionTerminalMatrix(t *testing.T) {
 		hostileMustExec(t, db, `
 INSERT INTO report_cases(
  id,fingerprint,connector_type,canonical_base_url,status,progress_state,
- material_version,target_version,deadline,cursor_text,material_count,target_count,
+ material_version,target_version,deadline,cursor_source,cursor_id,material_count,target_count,
  distinct_owner_count,processed_target_count,deleted_target_count,released_target_count,
  decision_reason,decision_actor_user_id,decision_at,retry_attempt_count,next_retry_at,
  last_error_class,created_at,terminal_at
-) VALUES(?,?,'openai-compatible','https://upstream.example/v1',?,?,1,1,1000,NULL,
+) VALUES(?,?,'openai-compatible','https://upstream.example/v1',?,?,1,1,1000,NULL,NULL,
  0,0,0,0,0,0,NULL,NULL,?,0,NULL,NULL,0,?)`,
 			id, fingerprint, status, progress, decisionAt, terminalAt)
 	}
@@ -1748,11 +1766,11 @@ INSERT INTO report_cases(
 			query := `
 INSERT INTO report_cases(
  id,fingerprint,connector_type,canonical_base_url,status,progress_state,
- material_version,target_version,deadline,cursor_text,material_count,target_count,
+ material_version,target_version,deadline,cursor_source,cursor_id,material_count,target_count,
  distinct_owner_count,processed_target_count,deleted_target_count,released_target_count,
  decision_reason,decision_actor_user_id,decision_at,retry_attempt_count,next_retry_at,
  last_error_class,created_at,terminal_at
-) VALUES(?,?,'openai-compatible','https://upstream.example/v1',?,?,1,1,1000,NULL,
+) VALUES(?,?,'openai-compatible','https://upstream.example/v1',?,?,1,1,1000,NULL,NULL,
  0,0,0,0,0,0,NULL,NULL,?,0,NULL,NULL,0,?)`
 			hostileMustFail(t, db, query, hostileOIDVariant("rpc_", byte('a'+i), 'Q'), hostileBlob32(byte(i+140)), tc.status, tc.progress, tc.decisionAt, tc.terminalAt)
 		})
@@ -3444,8 +3462,11 @@ INSERT INTO maintenance_events(
 	hostileInsertReportTarget(t, db, reportID, targetID)
 	decisionID := hostileInsertReportDecision(t, db, reportID, adminID)
 
+	legalDonationEndpointID := hostileInsertEndpoint(t, db, userID, "https://legal-hold-donation.example/v1")
+	legalDonationSecretID := hostileInsertSecret(t, db, "https://legal-hold-donation.example/v1", 0)
+	legalDonationEndpointKeyID := hostileInsertEndpointKey(t, db, legalDonationEndpointID, legalDonationSecretID)
 	donationID := hostileInsertDonation(t, db, userID)
-	donationKeyID := hostileInsertDonationKey(t, db, donationID, nil)
+	donationKeyID := hostileInsertDonationKey(t, db, donationID, legalDonationEndpointKeyID)
 	reviewID := hostileInsertDonationReview(t, db, donationID, adminID)
 
 	// Append-only review/decision rows permit only the FK-driven actor NULL
@@ -3521,11 +3542,11 @@ INSERT INTO maintenance_events(
 	hostileMustFail(t, db, `
 INSERT INTO report_cases(
  id,fingerprint,connector_type,canonical_base_url,status,progress_state,
- material_version,target_version,deadline,cursor_text,material_count,target_count,
+ material_version,target_version,deadline,cursor_source,cursor_id,material_count,target_count,
  distinct_owner_count,processed_target_count,deleted_target_count,released_target_count,
  retry_attempt_count,created_at,terminal_at,legal_hold_consumed
 ) VALUES(?,?,'openai-compatible','https://upstream.example/v1','pending_review','complete',
- 1,1,1000,NULL,0,0,0,0,0,0,0,0,NULL,1)`, hostileOIDVariant("rpc_", 'I', 'Q'), hostileBlob32(11))
+ 1,1,1000,NULL,NULL,0,0,0,0,0,0,0,0,NULL,1)`, hostileOIDVariant("rpc_", 'I', 'Q'), hostileBlob32(11))
 	hostileMustFail(t, db, `
 INSERT INTO announcement_audits(
  announcement_id_text,actor_user_id,action,from_revision,to_revision,reason,

@@ -273,7 +273,7 @@ func ValidateOpaqueID(value, prefix string) bool {
 
 func validOpaquePrefix(prefix string) bool {
 	switch prefix {
-	case "ann_", "op_", "req_", "clm_", "pol_", "thu_", "fb_", "ll_", "rpsq_", "rps_", "rpc_", "rpt_", "iss_", "lgh_", "b1e_", "sse_", "thp_", "gle_", "dbs_", "dbt_", "dbe_":
+	case "ann_", "op_", "req_", "clm_", "pol_", "thu_", "fb_", "ll_", "rpsq_", "rps_", "rpc_", "rpt_", "iss_", "lgh_", "b1e_", "sse_", "thp_", "gle_", "dbs_", "dbt_", "dbe_", "mch_":
 		return true
 	default:
 		return false
