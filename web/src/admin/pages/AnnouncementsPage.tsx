@@ -175,21 +175,21 @@ export function AnnouncementsPage() {
                 onChange={(event) => setDraft({ ...draft, expires: event.target.value })}
               />
             </label>
-            <label>
+            <label className="checkbox-label">
               <input
                 type="checkbox"
                 checked={draft.pinned}
                 onChange={(event) => setDraft({ ...draft, pinned: event.target.checked })}
-              />{' '}
-              {t('admin.announcements.pinned')}
+              />
+              <span>{t('admin.announcements.pinned')}</span>
             </label>
-            <label>
+            <label className="checkbox-label">
               <input
                 type="checkbox"
                 checked={draft.dismissible}
                 onChange={(event) => setDraft({ ...draft, dismissible: event.target.checked })}
-              />{' '}
-              {t('admin.announcements.dismissible')}
+              />
+              <span>{t('admin.announcements.dismissible')}</span>
             </label>
           </div>
           {create.error ? <ErrorState error={create.error} /> : null}

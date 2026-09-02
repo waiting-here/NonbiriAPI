@@ -19,6 +19,17 @@
   min-width: 0;
 }
 
+.economy-donation-composer > form,
+.economy-description-editor {
+  display: grid;
+  gap: var(--nb-space-4);
+}
+
+.economy-donation-composer > form > :where(.economy-key-picker, .economy-disclosure, .form-actions),
+.economy-description-editor > .form-actions {
+  margin-block: 0;
+}
+
 .economy-section-heading {
   margin-bottom: var(--nb-space-4);
 }
@@ -76,10 +87,25 @@
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--nb-space-3);
   align-items: start;
+  min-height: 2.75rem;
   margin-top: var(--nb-space-3);
   border-radius: var(--nb-radius-md);
   background: var(--nb-color-surface-alt);
   padding: var(--nb-space-3);
+  cursor: pointer;
+}
+
+.economy-key-choice:hover {
+  background: var(--nb-color-accent-quiet);
+}
+
+.economy-key-choice:has(input:disabled) {
+  cursor: not-allowed;
+}
+
+.economy-key-choice input,
+.economy-authorization input {
+  margin-top: 0.1rem;
 }
 
 .economy-disclosure,

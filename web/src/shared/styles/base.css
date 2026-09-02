@@ -27,7 +27,9 @@ body {
   background: var(--nb-color-bg);
   color: var(--nb-color-text);
   -webkit-font-smoothing: antialiased;
-  transition: background-color var(--nb-transition), color var(--nb-transition);
+  transition:
+    background-color var(--nb-transition),
+    color var(--nb-transition);
 }
 
 h1,
@@ -95,6 +97,81 @@ textarea {
   background: var(--nb-color-surface-raised);
   color: var(--nb-color-text);
   padding: 0.62rem 0.72rem;
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: 0 0 auto;
+  width: 1.25rem;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  min-height: 1.25rem;
+  margin: 0;
+  border: 1.5px solid var(--nb-color-border-strong);
+  padding: 0;
+  background: var(--nb-color-surface-raised);
+  color: var(--nb-color-accent-contrast);
+  vertical-align: middle;
+  cursor: pointer;
+  transition:
+    border-color var(--nb-motion-micro) var(--nb-motion-ease),
+    background-color var(--nb-motion-micro) var(--nb-motion-ease),
+    box-shadow var(--nb-motion-micro) var(--nb-motion-ease);
+}
+
+input[type='checkbox'] {
+  border-radius: 0.35rem;
+}
+
+input[type='checkbox']::before {
+  width: 0.66rem;
+  height: 0.38rem;
+  border-bottom: 0.14rem solid currentColor;
+  border-left: 0.14rem solid currentColor;
+  content: '';
+  transform: translateY(-0.06rem) rotate(-45deg) scale(0);
+  transform-origin: center;
+  transition: transform var(--nb-motion-micro) var(--nb-motion-ease);
+}
+
+input[type='checkbox']:checked,
+input[type='checkbox']:indeterminate,
+input[type='radio']:checked {
+  border-color: var(--nb-color-accent);
+  background: var(--nb-color-accent);
+}
+
+input[type='checkbox']:checked::before {
+  transform: translateY(-0.06rem) rotate(-45deg) scale(1);
+}
+
+input[type='checkbox']:indeterminate::before {
+  width: 0.65rem;
+  height: 0;
+  border-bottom-width: 0.14rem;
+  border-left: 0;
+  transform: scale(1);
+}
+
+input[type='radio'] {
+  border-radius: 50%;
+}
+
+input[type='radio']::before {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+  transform: scale(0);
+  transition: transform var(--nb-motion-micro) var(--nb-motion-ease);
+}
+
+input[type='radio']:checked::before {
+  transform: scale(1);
 }
 
 input::placeholder,

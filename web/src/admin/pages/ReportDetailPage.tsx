@@ -436,13 +436,13 @@ export function ReportDetailPage() {
           }}
         >
           {decision === 'approve' ? (
-            <label>
+            <label className="checkbox-label">
               <input
                 type="checkbox"
                 checked={confirmation}
                 onChange={(event) => setConfirmation(event.target.checked)}
-              />{' '}
-              {t('admin.reports.detail.confirmApprovalCheckbox')}
+              />
+              <span>{t('admin.reports.detail.confirmApprovalCheckbox')}</span>
             </label>
           ) : null}
         </ConfirmDialog>

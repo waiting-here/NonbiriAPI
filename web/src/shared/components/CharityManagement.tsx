@@ -122,7 +122,7 @@ function NullableValue({
   const unlimitedId = useId();
   const [unlimited, setUnlimited] = useState(value === null);
   return (
-    <div>
+    <div className="ops-form-field">
       <label htmlFor={valueId}>{label}</label>
       <input
         id={valueId}
@@ -130,20 +130,18 @@ function NullableValue({
         disabled={unlimited}
         onChange={(event) => onChange(event.target.value)}
       />
-      <small>
-        <label htmlFor={unlimitedId}>
-          <input
-            id={unlimitedId}
-            type="checkbox"
-            checked={unlimited}
-            onChange={(event) => {
-              setUnlimited(event.target.checked);
-              onChange(event.target.checked ? null : '0');
-            }}
-          />{' '}
-          {t('common.operations.charity.noLimit')}
-        </label>
-      </small>
+      <label className="checkbox-label" htmlFor={unlimitedId}>
+        <input
+          id={unlimitedId}
+          type="checkbox"
+          checked={unlimited}
+          onChange={(event) => {
+            setUnlimited(event.target.checked);
+            onChange(event.target.checked ? null : '0');
+          }}
+        />
+        <span>{t('common.operations.charity.noLimit')}</span>
+      </label>
     </div>
   );
 }
@@ -359,13 +357,13 @@ function DonationKeyEditor({
               </select>
             </label>
             {item.streak.failure_disabled ? (
-              <label>
+              <label className="checkbox-label">
                 <input
                   type="checkbox"
                   checked={reset}
                   onChange={(event) => setReset(event.target.checked)}
-                />{' '}
-                {t('common.operations.charity.resetFailureStreak')}
+                />
+                <span>{t('common.operations.charity.resetFailureStreak')}</span>
               </label>
             ) : null}
           </div>
@@ -568,13 +566,13 @@ function DonationDetail({
                     onChange={(event) => setExpires(event.target.value)}
                   />
                 </label>
-                <label>
+                <label className="checkbox-label">
                   <input
                     type="checkbox"
                     checked={noExpiry}
                     onChange={(event) => setNoExpiry(event.target.checked)}
-                  />{' '}
-                  {t('common.operations.charity.noExpiry')}
+                  />
+                  <span>{t('common.operations.charity.noExpiry')}</span>
                 </label>
               </>
             ) : null}
@@ -638,7 +636,7 @@ function DonationDetail({
                           }
                         />
                       </label>
-                      <label>
+                      <label className="checkbox-label">
                         <input
                           type="checkbox"
                           checked={draft.enabled}
@@ -648,8 +646,8 @@ function DonationDetail({
                               [entry.id]: { ...draft, enabled: event.target.checked },
                             })
                           }
-                        />{' '}
-                        {t('common.operations.charity.enableForCharity')}
+                        />
+                        <span>{t('common.operations.charity.enableForCharity')}</span>
                       </label>
                     </div>
                   </section>
@@ -657,13 +655,13 @@ function DonationDetail({
               })}
             </div>
           ) : null}
-          <label>
+          <label className="checkbox-label">
             <input
               type="checkbox"
               checked={confirmed}
               onChange={(event) => setConfirmed(event.target.checked)}
-            />{' '}
-            {t('common.operations.charity.confirmReview')}
+            />
+            <span>{t('common.operations.charity.confirmReview')}</span>
           </label>
           {validationError && (reason.length > 0 || confirmed) ? (
             <p className="field-error" role="alert">
@@ -1076,21 +1074,21 @@ function ModelForm({
             <option value="per_token">{t(charityCopyKey(role, 'perToken'))}</option>
           </select>
         </label>
-        <label>
+        <label className="checkbox-label">
           <input
             type="checkbox"
             checked={draft.enabled}
             onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })}
-          />{' '}
-          {t('common.operations.charity.enabledForNewClaims')}
+          />
+          <span>{t('common.operations.charity.enabledForNewClaims')}</span>
         </label>
-        <label>
+        <label className="checkbox-label">
           <input
             type="checkbox"
             checked={draft.flatten}
             onChange={(event) => setDraft({ ...draft, flatten: event.target.checked })}
-          />{' '}
-          {t(charityCopyKey(role, 'flattenExperimental'))}
+          />
+          <span>{t(charityCopyKey(role, 'flattenExperimental'))}</span>
         </label>
       </div>
       {draft.mode === 'per_request' ? (
@@ -1133,13 +1131,13 @@ function ModelForm({
         </div>
       )}
       <div className="ops-field-grid">
-        <label>
+        <label className="checkbox-label">
           <input
             type="checkbox"
             checked={draft.discountEnabled}
             onChange={(event) => setDraft({ ...draft, discountEnabled: event.target.checked })}
-          />{' '}
-          {t(charityCopyKey(role, 'discountEnabled'))}
+          />
+          <span>{t(charityCopyKey(role, 'discountEnabled'))}</span>
         </label>
         <label>
           <span>{t(charityCopyKey(role, 'discountPercent'))}</span>
@@ -1416,15 +1414,17 @@ function BindingsPanel({
           {candidates.data.data.map((entry) => {
             const key = `${entry.donation_key_id}:${entry.upstream_model_id}`;
             return (
-              <label key={key} className="ops-subcard">
+              <label key={key} className="ops-subcard checkbox-label">
                 <input
                   type="checkbox"
                   checked={Boolean(selected[key])}
                   onChange={(event) => setSelected({ ...selected, [key]: event.target.checked })}
-                />{' '}
-                {entry.source.connector_type} · {entry.source.canonical_base_url} ·{' '}
-                {entry.upstream_model_id} (
-                {entry.source_types.map((source) => t(sourceTypeKey(source))).join(' / ')})
+                />
+                <span>
+                  {entry.source.connector_type} · {entry.source.canonical_base_url} ·{' '}
+                  {entry.upstream_model_id} (
+                  {entry.source_types.map((source) => t(sourceTypeKey(source))).join(' / ')})
+                </span>
               </label>
             );
           })}

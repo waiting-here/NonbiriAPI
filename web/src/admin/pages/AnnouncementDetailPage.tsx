@@ -299,21 +299,21 @@ export function AnnouncementDetailPage() {
               onChange={(event) => update('expires_at', event.target.value)}
             />
           </label>
-          <label>
+          <label className="checkbox-label">
             <input
               type="checkbox"
               checked={draft.pinned}
               onChange={(event) => update('pinned', event.target.checked)}
-            />{' '}
-            {t('admin.announcements.pinned')}
+            />
+            <span>{t('admin.announcements.pinned')}</span>
           </label>
-          <label>
+          <label className="checkbox-label">
             <input
               type="checkbox"
               checked={draft.dismissible}
               onChange={(event) => update('dismissible', event.target.checked)}
-            />{' '}
-            {t('admin.announcements.dismissible')}
+            />
+            <span>{t('admin.announcements.dismissible')}</span>
           </label>
         </div>
         {save.error ? <ErrorState error={save.error} /> : null}

@@ -230,17 +230,17 @@ export function ActivitiesPage() {
           <>
             <p>{t('admin.activities.config.revisionHint', { revision: configDraft.revision })}</p>
             <div className="ops-field-grid">
-              <label>
+              <label className="checkbox-label">
                 <input
                   type="checkbox"
                   checked={configDraft.master_enabled}
                   onChange={(event) =>
                     editConfig({ ...configDraft, master_enabled: event.target.checked })
                   }
-                />{' '}
-                {t('admin.activities.config.masterEnabled')}
+                />
+                <span>{t('admin.activities.config.masterEnabled')}</span>
               </label>
-              <label>
+              <label className="checkbox-label">
                 <input
                   type="checkbox"
                   checked={configDraft.welfare.enabled}
@@ -250,8 +250,8 @@ export function ActivitiesPage() {
                       welfare: { ...configDraft.welfare, enabled: event.target.checked },
                     })
                   }
-                />{' '}
-                {t('admin.activities.config.welfareEnabled')}
+                />
+                <span>{t('admin.activities.config.welfareEnabled')}</span>
               </label>
               <label>
                 <span>{t('admin.activities.config.welfareThreshold')}</span>
@@ -277,15 +277,15 @@ export function ActivitiesPage() {
                   }
                 />
               </label>
-              <label>
+              <label className="checkbox-label">
                 <input
                   type="checkbox"
                   checked={configDraft.thursday.enabled}
                   onChange={(event) =>
                     editConfig({ ...configDraft, thursday: { enabled: event.target.checked } })
                   }
-                />{' '}
-                {t('admin.activities.config.thursdayEnabled')}
+                />
+                <span>{t('admin.activities.config.thursdayEnabled')}</span>
               </label>
             </div>
             {saveConfig.error ? <ErrorState error={saveConfig.error} /> : null}
@@ -597,7 +597,7 @@ export function ActivitiesPage() {
             </label>
           </div>
           {adjustment.direction === 'decrease' ? (
-            <label>
+            <label className="checkbox-label">
               <input
                 type="checkbox"
                 checked={adjustmentConfirmed}
@@ -608,8 +608,8 @@ export function ActivitiesPage() {
                     confirmed: event.target.checked,
                   })
                 }
-              />{' '}
-              {t('admin.activities.adjustment.confirmDecrease')}
+              />
+              <span>{t('admin.activities.adjustment.confirmDecrease')}</span>
             </label>
           ) : null}
           {adjust.error ? <ErrorState error={adjust.error} /> : null}

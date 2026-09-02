@@ -79,11 +79,8 @@ const RPS_PHASE_LABEL_KEYS: Record<string, string> = {
   terminal_processing: 'admin.games.rps.phases.terminalProcessing',
 };
 
-const enumLabel = (
-  t: TFunction,
-  labels: Readonly<Record<string, string>>,
-  value: string,
-) => t(labels[value] ?? 'admin.games.enums.unknown', { value });
+const enumLabel = (t: TFunction, labels: Readonly<Record<string, string>>, value: string) =>
+  t(labels[value] ?? 'admin.games.enums.unknown', { value });
 
 function amountMilli(value: string): bigint | null {
   const match = /^(0|[1-9][0-9]*)(?:\.([0-9]{1,3}))?$/.exec(value);
@@ -250,7 +247,7 @@ function GamesEditor({
       <Card>
         <h2>{t('admin.games.controls.globalGate')}</h2>
         <p>{t('admin.games.controls.revisionTerms', { revision: authority.revision })}</p>
-        <label>
+        <label className="checkbox-label">
           <input
             type="checkbox"
             checked={draft.master_enabled}
@@ -259,24 +256,26 @@ function GamesEditor({
               edit((current) => ({ ...current, master_enabled: event.target.checked }))
             }
           />
-          {t('admin.games.masterEnabled')}
+          <span>{t('admin.games.masterEnabled')}</span>
         </label>
       </Card>
       <Card>
         <h2>{t('admin.games.sections.fishing')}</h2>
-        <label>
+        <label className="checkbox-label">
           <input
             type="checkbox"
             checked={draft.fishing.enabled}
             disabled={save.isPending}
             onChange={(event) => setGameEnabled('fishing', event.target.checked)}
           />
-          {t('admin.games.fishingEnabled')}
+          <span>{t('admin.games.fishingEnabled')}</span>
         </label>
         <div className="ops-field-grid">
           {(['worm', 'lure', 'premium'] as const).map((bait) => (
             <label key={bait}>
-              <span>{t('admin.games.controls.priceCredits', { field: t(BAIT_LABEL_KEYS[bait]) })}</span>
+              <span>
+                {t('admin.games.controls.priceCredits', { field: t(BAIT_LABEL_KEYS[bait]) })}
+              </span>
               <input
                 type="number"
                 inputMode="decimal"
@@ -351,19 +350,19 @@ function GamesEditor({
       </Card>
       <Card>
         <h2>{t('admin.games.sections.linklink')}</h2>
-        <label>
+        <label className="checkbox-label">
           <input
             type="checkbox"
             checked={draft.linklink.enabled}
             disabled={save.isPending}
             onChange={(event) => setGameEnabled('linklink', event.target.checked)}
           />
-          {t('admin.games.linklink.enabled')}
+          <span>{t('admin.games.linklink.enabled')}</span>
         </label>
         <div className="ops-field-grid">
           {(['6x8', '8x8', '10x10'] as const).map((spec) => (
             <div key={spec} className="ops-subcard">
-              <label>
+              <label className="checkbox-label">
                 <input
                   type="checkbox"
                   checked={draft.linklink.specs[spec].enabled}
@@ -384,10 +383,18 @@ function GamesEditor({
                     }))
                   }
                 />
-                {t('admin.games.linklink.specEnabled', { spec: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, spec) })}
+                <span>
+                  {t('admin.games.linklink.specEnabled', {
+                    spec: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, spec),
+                  })}
+                </span>
               </label>
               <label>
-                <span>{t('admin.games.linklink.entryPrice', { spec: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, spec) })}</span>
+                <span>
+                  {t('admin.games.linklink.entryPrice', {
+                    spec: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, spec),
+                  })}
+                </span>
                 <input
                   type="number"
                   inputMode="decimal"
@@ -416,14 +423,14 @@ function GamesEditor({
       </Card>
       <Card>
         <h2>{t('admin.games.sections.rps')}</h2>
-        <label>
+        <label className="checkbox-label">
           <input
             type="checkbox"
             checked={draft.rps.enabled}
             disabled={save.isPending}
             onChange={(event) => setGameEnabled('rps', event.target.checked)}
           />
-          {t('admin.games.rps.enabled')}
+          <span>{t('admin.games.rps.enabled')}</span>
         </label>
         <div className="ops-stack">
           {RPS_MODES.map((mode) => {
@@ -431,14 +438,18 @@ function GamesEditor({
             return (
               <section key={mode} className="ops-subcard">
                 <h3>{t(RPS_MODE_LABEL_KEYS[mode])}</h3>
-                <label>
+                <label className="checkbox-label">
                   <input
                     type="checkbox"
                     checked={value.enabled}
                     disabled={save.isPending}
                     onChange={(event) => setRPSMode(mode, { enabled: event.target.checked })}
                   />
-                  {t('admin.games.rps.modeEnabled', { mode: t(RPS_MODE_LABEL_KEYS[mode]) })}
+                  <span>
+                    {t('admin.games.rps.modeEnabled', {
+                      mode: t(RPS_MODE_LABEL_KEYS[mode]),
+                    })}
+                  </span>
                 </label>
                 <div className="ops-field-grid">
                   <label>
@@ -457,7 +468,10 @@ function GamesEditor({
                   {(['platform', 'welfare', 'thursday'] as const).map((pump) => (
                     <label key={pump}>
                       <span>
-                        {t('admin.games.rps.cut', { mode: t(RPS_MODE_LABEL_KEYS[mode]), pump: t(RPS_PUMP_LABEL_KEYS[pump]) })}
+                        {t('admin.games.rps.cut', {
+                          mode: t(RPS_MODE_LABEL_KEYS[mode]),
+                          pump: t(RPS_PUMP_LABEL_KEYS[pump]),
+                        })}
                       </span>
                       <input
                         type="number"
@@ -494,7 +508,10 @@ function GamesEditor({
                     return (
                       <label key={field}>
                         <span>
-                          {t('admin.games.rps.deadline', { mode: t(RPS_MODE_LABEL_KEYS[mode]), deadline: t(RPS_DEADLINE_LABEL_KEYS[field]) })}
+                          {t('admin.games.rps.deadline', {
+                            mode: t(RPS_MODE_LABEL_KEYS[mode]),
+                            deadline: t(RPS_DEADLINE_LABEL_KEYS[field]),
+                          })}
                         </span>
                         <input
                           type="number"
@@ -510,10 +527,12 @@ function GamesEditor({
                       </label>
                     );
                   })}
-                  <div>
-                    <span>{t('admin.games.rps.queueCapacity', { mode: t(RPS_MODE_LABEL_KEYS[mode]) })}</span>
+                  <div className="ops-readonly-field">
+                    <span>
+                      {t('admin.games.rps.queueCapacity', { mode: t(RPS_MODE_LABEL_KEYS[mode]) })}
+                    </span>
                     <strong>{value.queue_capacity}</strong>
-                    <small> {t('admin.games.rps.queueCapacityHint')}</small>
+                    <small>{t('admin.games.rps.queueCapacityHint')}</small>
                   </div>
                 </div>
               </section>
@@ -582,15 +601,28 @@ export function GamesPage() {
               {counts.data.games.map((row, index) => {
                 const dimensions =
                   [
-                    row.mode ? t('admin.games.counts.mode', { value: enumLabel(t, RPS_MODE_LABEL_KEYS, row.mode) }) : null,
-                    row.spec ? t('admin.games.counts.spec', { value: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, row.spec) }) : null,
-                    row.phase ? t('admin.games.counts.phase', { value: enumLabel(t, RPS_PHASE_LABEL_KEYS, row.phase) }) : null,
+                    row.mode
+                      ? t('admin.games.counts.mode', {
+                          value: enumLabel(t, RPS_MODE_LABEL_KEYS, row.mode),
+                        })
+                      : null,
+                    row.spec
+                      ? t('admin.games.counts.spec', {
+                          value: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, row.spec),
+                        })
+                      : null,
+                    row.phase
+                      ? t('admin.games.counts.phase', {
+                          value: enumLabel(t, RPS_PHASE_LABEL_KEYS, row.phase),
+                        })
+                      : null,
                   ]
                     .filter(Boolean)
                     .join(' · ') || t('admin.games.counts.active');
                 return (
                   <p key={`${row.game}:${row.mode}:${row.spec}:${row.phase}:${index}`}>
-                    <StatusBadge active label={enumLabel(t, GAME_LABEL_KEYS, row.game)} /> {dimensions} · {row.count}
+                    <StatusBadge active label={enumLabel(t, GAME_LABEL_KEYS, row.game)} />{' '}
+                    {dimensions} · {row.count}
                   </p>
                 );
               })}

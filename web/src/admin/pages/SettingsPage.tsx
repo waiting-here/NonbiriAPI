@@ -392,20 +392,20 @@ function SettingField({
           </p>
         ) : null}
       </div>
-      <div>
+      <div className="ops-setting-control">
         <label htmlFor={inputID}>
           <span>{entry.title[locale]}</span>
         </label>
         {control}
         {entry.null_writable ? (
-          <label>
+          <label className="checkbox-label">
             <input
               type="checkbox"
               checked={explicitNull}
               disabled={busy || !writable}
               onChange={(event) => changeNull(event.target.checked)}
             />
-            {t('admin.settings.restoreFallback')}
+            <span>{t('admin.settings.restoreFallback')}</span>
           </label>
         ) : null}
         {value === null && !entry.null_writable ? (
@@ -439,9 +439,7 @@ function SettingField({
               .join(', ')}
           </p>
         ) : null}
-        {!writable ? (
-          <p className="muted">{t('admin.settings.readOnlyAuthority')}</p>
-        ) : null}
+        {!writable ? <p className="muted">{t('admin.settings.readOnlyAuthority')}</p> : null}
         {dirty && parsed.error ? (
           <p className="field-error" role="alert">
             {parsed.error}
@@ -567,10 +565,7 @@ export function SettingsPage() {
 
   return (
     <div className="page ops-page">
-      <PageHeader
-        title={t('admin.settings.title')}
-        description={t('admin.settings.description')}
-      />
+      <PageHeader title={t('admin.settings.title')} description={t('admin.settings.description')} />
       {authority.isPending ? (
         <LoadingState />
       ) : initialFailure ? (

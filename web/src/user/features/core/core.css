@@ -262,14 +262,33 @@
 }
 
 .core-checkbox {
-  display: flex;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr);
+  align-items: start;
   gap: var(--nb-space-2);
+  min-block-size: 2.75rem;
+  border-radius: var(--nb-radius-sm);
+  padding: var(--nb-space-2) var(--nb-space-3);
+  background: var(--nb-color-surface-alt);
+  cursor: pointer;
 }
 
 .core-checkbox input {
   flex: 0 0 auto;
-  margin-block-start: 0.2rem;
+  margin-block-start: 0.1rem;
+}
+
+.core-checkbox > span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.core-checkbox:hover {
+  background: var(--nb-color-accent-quiet);
+}
+
+.core-checkbox:has(input:disabled) {
+  cursor: not-allowed;
 }
 
 .core-choice-grid {
@@ -577,5 +596,10 @@
   .core-choice,
   .core-radio-group label {
     min-block-size: 2.75rem;
+  }
+
+  .core-page input[type='checkbox'],
+  .core-page input[type='radio'] {
+    min-block-size: 1.25rem;
   }
 }
