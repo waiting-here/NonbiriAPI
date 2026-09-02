@@ -182,10 +182,16 @@ func donationMutation(t *testing.T, seed byte, method, route string, ids []int64
 
 func (environment *donationTestEnv) createDonation(t *testing.T, userID int64, keyIDs ...int64) Donation {
 	t.Helper()
+	keys := make([]CreateKeyInput, len(keyIDs))
+	canonicalKeys := make([]map[string]any, len(keyIDs))
+	for index, keyID := range keyIDs {
+		keys[index] = CreateKeyInput{EndpointKeyID: keyID}
+		canonicalKeys[index] = map[string]any{"endpoint_key_id": fmt.Sprintf("%d", keyID), "expires_at": nil}
+	}
 	mutation := donationMutation(t, 'A', http.MethodPost, routeDonations, nil,
-		map[string]any{"description": "donor description", "endpoint_key_ids": keyIDs, "ownership_authorized": true})
+		map[string]any{"description": "donor description", "keys": canonicalKeys, "ownership_authorized": true})
 	result, err := environment.service.Create(context.Background(), userID, mutation,
-		CreateInput{Description: "donor description", EndpointKeyIDs: keyIDs, OwnershipAuthorized: true})
+		CreateInput{Description: "donor description", Keys: keys, OwnershipAuthorized: true})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -213,12 +219,12 @@ func TestCreateMembershipIsolationAndSequenceStartsAtOne(t *testing.T) {
 
 	duplicate := donationMutation(t, 'B', http.MethodPost, routeDonations, nil, map[string]any{"duplicate": true})
 	if _, err := environment.service.Create(context.Background(), owner, duplicate,
-		CreateInput{Description: "x", EndpointKeyIDs: []int64{keyA, keyA}, OwnershipAuthorized: true}); !errors.Is(err, ErrInvalidRequest) {
+		CreateInput{Description: "x", Keys: []CreateKeyInput{{EndpointKeyID: keyA}, {EndpointKeyID: keyA}}, OwnershipAuthorized: true}); !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("duplicate create error = %v, want invalid request", err)
 	}
 	mixed := donationMutation(t, 'C', http.MethodPost, routeDonations, nil, map[string]any{"mixed": true})
 	if _, err := environment.service.Create(context.Background(), owner, mixed,
-		CreateInput{Description: "x", EndpointKeyIDs: []int64{keyA, foreignKey}, OwnershipAuthorized: true}); !errors.Is(err, ErrNotFound) {
+		CreateInput{Description: "x", Keys: []CreateKeyInput{{EndpointKeyID: keyA}, {EndpointKeyID: foreignKey}}, OwnershipAuthorized: true}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("mixed create error = %v, want non-leaking not found", err)
 	}
 	var count int
@@ -249,6 +255,129 @@ func TestCreateMembershipIsolationAndSequenceStartsAtOne(t *testing.T) {
 	}
 	if seen != 2 {
 		t.Fatalf("sequence rows = %d, want 2", seen)
+	}
+}
+
+func TestPerKeyExpiryAuthorizationTraceAndIndependentTerminalization(t *testing.T) {
+	environment := newDonationTestEnv(t)
+	owner := environment.seedUser(t, "per-key-owner", nil, false)
+	environment.seedUser(t, "", nil, true)
+	_, endpointKeyA := environment.seedEndpointKey(t, owner, 'p')
+	_, endpointKeyB := environment.seedEndpointKey(t, owner, 'q')
+	authorizedA := donationTestNow + 10
+	authorizedB := donationTestNow + 20
+	create := donationMutation(t, 'b', http.MethodPost, routeDonations, nil, map[string]any{"per_key": true})
+	created, err := environment.service.Create(context.Background(), owner, create, CreateInput{
+		Description: "per-key expiry", OwnershipAuthorized: true,
+		Keys: []CreateKeyInput{{EndpointKeyID: endpointKeyA, ExpiresAt: &authorizedA},
+			{EndpointKeyID: endpointKeyB, ExpiresAt: &authorizedB}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	donationID := parseTestID(t, created.Value.ID)
+	keyA := parseTestID(t, created.Value.Keys[0].ID)
+	keyB := parseTestID(t, created.Value.Keys[1].ID)
+	rows, err := environment.store.DB().Query(`SELECT dk.endpoint_key_id,dk.authorized_expires_at,dk.expires_at,
+dk.source_endpoint_key_id,dk.report_fingerprint,k.secret_fingerprint
+FROM donation_keys dk JOIN endpoint_keys k ON k.id=dk.endpoint_key_id
+WHERE dk.donation_id=? ORDER BY dk.id`, donationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantExpiries := []int64{authorizedA, authorizedB}
+	index := 0
+	for rows.Next() {
+		var endpointKeyID, authorized, effective, source int64
+		var reportFingerprint, endpointFingerprint []byte
+		if err := rows.Scan(&endpointKeyID, &authorized, &effective, &source, &reportFingerprint, &endpointFingerprint); err != nil {
+			rows.Close()
+			t.Fatal(err)
+		}
+		if index >= len(wantExpiries) || authorized != wantExpiries[index] || effective != authorized ||
+			source != endpointKeyID || !bytes.Equal(reportFingerprint, endpointFingerprint) {
+			rows.Close()
+			t.Fatalf("trace row %d endpoint=%d source=%d expiry=%d/%d fingerprint=%x/%x",
+				index, endpointKeyID, source, authorized, effective, reportFingerprint, endpointFingerprint)
+		}
+		index++
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if index != 2 {
+		t.Fatalf("trace rows = %d, want 2", index)
+	}
+
+	beyondA := authorizedA + 1
+	badReview := ReviewInput{Decision: "approve", ExpectedRevision: 1, Reason: "too broad", KeySettings: []KeySetting{
+		{DonationKeyID: keyA, Enabled: true, ExpiresAt: &beyondA},
+		{DonationKeyID: keyB, Enabled: true, ExpiresAt: &authorizedB},
+	}}
+	if _, err := environment.service.ReviewAdmin(context.Background(),
+		donationMutation(t, 'c', http.MethodPost, routeAdminReview, []int64{donationID}, map[string]any{"too_broad": true}),
+		donationID, badReview); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("review above donor ceiling = %v, want invalid request", err)
+	}
+	tightenedA := donationTestNow + 5
+	approved, err := environment.service.ReviewAdmin(context.Background(),
+		donationMutation(t, 'd', http.MethodPost, routeAdminReview, []int64{donationID}, map[string]any{"approve": true}),
+		donationID, ReviewInput{Decision: "approve", ExpectedRevision: 1, Reason: "bounded", KeySettings: []KeySetting{
+			{DonationKeyID: keyA, Enabled: true, ExpiresAt: &tightenedA},
+			{DonationKeyID: keyB, Enabled: true, ExpiresAt: &authorizedB},
+		}})
+	if err != nil || approved.Value.Keys[0].AuthorizedExpiresAt == nil || *approved.Value.Keys[0].AuthorizedExpiresAt != authorizedA {
+		t.Fatalf("bounded approval = %+v, %v", approved, err)
+	}
+	restoreA := &authorizedA
+	managed, err := environment.service.ManageKeyAdmin(context.Background(), donationID, keyA,
+		donationMutation(t, 'e', http.MethodPatch, routeAdminKey, []int64{donationID, keyA}, map[string]any{"restore": true}),
+		KeyManagementInput{ExpectedRevision: 2, ExpiresAt: &restoreA})
+	if err != nil || managed.Value.Revision != "3" || managed.Value.Keys[0].ExpiresAt == nil || *managed.Value.Keys[0].ExpiresAt != authorizedA {
+		t.Fatalf("restore to donor ceiling = %+v, %v", managed, err)
+	}
+	beyondPointer := &beyondA
+	if _, err := environment.service.ManageKeyAdmin(context.Background(), donationID, keyA,
+		donationMutation(t, 'f', http.MethodPatch, routeAdminKey, []int64{donationID, keyA}, map[string]any{"expand": true}),
+		KeyManagementInput{ExpectedRevision: 3, ExpiresAt: &beyondPointer}); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("management above donor ceiling = %v, want invalid request", err)
+	}
+
+	environment.clock.Store(authorizedA)
+	partial, err := environment.service.GetOwner(context.Background(), owner, donationID)
+	if err != nil || partial.Status != "approved" || partial.Revision != "4" ||
+		partial.Keys[0].EndedReason == nil || *partial.Keys[0].EndedReason != "expired" || partial.Keys[1].EndedReason != nil {
+		t.Fatalf("partial per-key expiry = %+v, %v", partial, err)
+	}
+	var firstEnded, firstMatch int64
+	var memberships int
+	if err := environment.store.DB().QueryRow(`SELECT ended_at,report_match_until FROM donation_keys WHERE id=?`, keyA).
+		Scan(&firstEnded, &firstMatch); err != nil {
+		t.Fatal(err)
+	}
+	if err := environment.store.DB().QueryRow(`SELECT COUNT(*) FROM donation_key_memberships WHERE donation_id=?`, donationID).
+		Scan(&memberships); err != nil {
+		t.Fatal(err)
+	}
+	if firstEnded != authorizedA || firstMatch != authorizedA+reportMatchRetention || memberships != 1 {
+		t.Fatalf("partial terminal facts ended=%d match=%d memberships=%d", firstEnded, firstMatch, memberships)
+	}
+
+	environment.clock.Store(authorizedB)
+	terminal, err := environment.service.GetOwner(context.Background(), owner, donationID)
+	if err != nil || terminal.Status != "expired" || terminal.Revision != "5" || terminal.Keys[1].EndedReason == nil {
+		t.Fatalf("final per-key expiry = %+v, %v", terminal, err)
+	}
+	var secondEnded, secondMatch int64
+	if err := environment.store.DB().QueryRow(`SELECT ended_at,report_match_until FROM donation_keys WHERE id=?`, keyB).
+		Scan(&secondEnded, &secondMatch); err != nil {
+		t.Fatal(err)
+	}
+	if secondEnded != authorizedB || secondMatch != authorizedB+reportMatchRetention {
+		t.Fatalf("final terminal facts ended=%d match=%d", secondEnded, secondMatch)
 	}
 }
 
@@ -405,8 +534,12 @@ FROM donation_keys WHERE id=?`, liveKeyID).Scan(&generation, &claimSeq, &foldSeq
 func (environment *donationTestEnv) createDonationWithSeed(t *testing.T, userID int64, seed byte, keyIDs ...int64) Donation {
 	t.Helper()
 	mutation := donationMutation(t, seed, http.MethodPost, routeDonations, nil, map[string]any{"seed": string(seed)})
+	keys := make([]CreateKeyInput, len(keyIDs))
+	for index, keyID := range keyIDs {
+		keys[index] = CreateKeyInput{EndpointKeyID: keyID}
+	}
 	result, err := environment.service.Create(context.Background(), userID, mutation,
-		CreateInput{Description: "donor description", EndpointKeyIDs: keyIDs, OwnershipAuthorized: true})
+		CreateInput{Description: "donor description", Keys: keys, OwnershipAuthorized: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -434,8 +567,8 @@ func TestStewardOwnershipPrecedesDueExpiryAndMutationAcceptance(t *testing.T) {
 	donation := environment.createDonationWithSeed(t, owner, 'M', endpointKeyID)
 	donationID, donationKeyID := parseTestID(t, donation.ID), parseTestID(t, donation.Keys[0].ID)
 	expires := donationTestNow + 10
-	approval := ReviewInput{Decision: "approve", ExpectedRevision: 1, Reason: "expires soon", ExpiresAt: &expires,
-		KeySettings: []KeySetting{{DonationKeyID: donationKeyID, Enabled: true, SafeNote: "unchanged"}}}
+	approval := ReviewInput{Decision: "approve", ExpectedRevision: 1, Reason: "expires soon",
+		KeySettings: []KeySetting{{DonationKeyID: donationKeyID, Enabled: true, SafeNote: "unchanged", ExpiresAt: &expires}}}
 	if _, err := environment.service.ReviewAdmin(context.Background(),
 		donationMutation(t, 'N', http.MethodPost, routeAdminReview, []int64{donationID}, map[string]any{"expires": expires}),
 		donationID, approval); err != nil {
@@ -511,8 +644,8 @@ func TestStewardOwnershipPrecedesDueExpiryAndMutationAcceptance(t *testing.T) {
 	if err != nil || !replayed.Replayed || replayed.Status != first.Status || !bytes.Equal(replayed.Body, first.Body) {
 		t.Fatalf("owned steward replay = %+v, %v", replayed, err)
 	}
-	if _, err := environment.store.DB().Exec(`UPDATE donations SET expires_at=? WHERE id=?`,
-		environment.clock.Load(), ownDonationID); err != nil {
+	if _, err := environment.store.DB().Exec(`UPDATE donation_keys SET expires_at=? WHERE id=?`,
+		environment.clock.Load(), ownDonationKeyID); err != nil {
 		t.Fatal(err)
 	}
 	dueReplay, err := environment.service.ReviewSteward(context.Background(), foreignSteward, ownDonationID, ownMutation, ownReview)
@@ -562,8 +695,8 @@ func TestTerminateExpiryPrecedenceReplayAndAuthorization(t *testing.T) {
 		donation := environment.createDonationWithSeed(t, owner, createSeed, endpointKeyID)
 		donationID := parseTestID(t, donation.ID)
 		donationKeyID := parseTestID(t, donation.Keys[0].ID)
-		review := ReviewInput{Decision: "approve", ExpectedRevision: 1, Reason: "termination boundary", ExpiresAt: &expires,
-			KeySettings: []KeySetting{{DonationKeyID: donationKeyID, Enabled: true}}}
+		review := ReviewInput{Decision: "approve", ExpectedRevision: 1, Reason: "termination boundary",
+			KeySettings: []KeySetting{{DonationKeyID: donationKeyID, Enabled: true, ExpiresAt: &expires}}}
 		if _, err := environment.service.ReviewAdmin(context.Background(),
 			donationMutation(t, reviewSeed, http.MethodPost, routeAdminReview, []int64{donationID}, map[string]any{"expires": expires}),
 			donationID, review); err != nil {
@@ -689,8 +822,8 @@ func TestExpiryAccountDeletionAndRetention(t *testing.T) {
 	donation := environment.createDonation(t, owner, keyID)
 	donationID, donationKeyID := parseTestID(t, donation.ID), parseTestID(t, donation.Keys[0].ID)
 	expires := donationTestNow + 1
-	review := ReviewInput{Decision: "approve", ExpectedRevision: 1, Reason: "expiry", ExpiresAt: &expires,
-		KeySettings: []KeySetting{{DonationKeyID: donationKeyID, Enabled: true, SafeNote: "scrub me"}}}
+	review := ReviewInput{Decision: "approve", ExpectedRevision: 1, Reason: "expiry",
+		KeySettings: []KeySetting{{DonationKeyID: donationKeyID, Enabled: true, SafeNote: "scrub me", ExpiresAt: &expires}}}
 	if _, err := environment.service.ReviewAdmin(context.Background(),
 		donationMutation(t, 'J', http.MethodPost, routeAdminReview, []int64{donationID}, map[string]any{"expires": expires}), donationID, review); err != nil {
 		t.Fatal(err)

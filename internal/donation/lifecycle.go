@@ -272,14 +272,13 @@ func endDonationKeysTx(ctx context.Context, tx *sql.Tx, donationKeyIDs []int64, 
 	if len(donationKeyIDs) == 0 {
 		return nil
 	}
-	placeholders := strings.TrimRight(strings.Repeat("?,", len(donationKeyIDs)), ",")
-	args := []any{now, now}
-	query := `UPDATE donation_keys SET enabled=0,ended_at=?,updated_at=?`
-	if endedReason != "" {
-		query += `,ended_reason=?`
-		args = append(args, endedReason)
+	if endedReason == "" || now < 0 || now > maxUnixSecond-reportMatchRetention {
+		return ErrInvariant
 	}
-	query += ` WHERE id IN (` + placeholders + `) AND ended_at IS NULL`
+	placeholders := strings.TrimRight(strings.Repeat("?,", len(donationKeyIDs)), ",")
+	args := []any{now, endedReason, now + reportMatchRetention, now}
+	query := `UPDATE donation_keys SET enabled=0,ended_at=?,ended_reason=?,report_match_until=?,updated_at=?
+WHERE id IN (` + placeholders + `) AND ended_at IS NULL`
 	for _, id := range donationKeyIDs {
 		args = append(args, id)
 	}
@@ -297,37 +296,91 @@ func endDonationKeysTx(ctx context.Context, tx *sql.Tx, donationKeyIDs []int64, 
 	return nil
 }
 
-func materializeDonationExpiryTx(ctx context.Context, tx *sql.Tx, donationID, now int64) (bool, error) {
+type expiryMaterialization struct {
+	changed  bool
+	terminal bool
+}
+
+func materializeDonationExpiryStateTx(ctx context.Context, tx *sql.Tx, donationID, now int64) (expiryMaterialization, error) {
 	var status string
 	var revision int64
-	var expires sql.NullInt64
-	err := tx.QueryRowContext(ctx, `SELECT status,revision,expires_at FROM donations WHERE id=?`, donationID).Scan(&status, &revision, &expires)
+	err := tx.QueryRowContext(ctx, `SELECT status,revision FROM donations WHERE id=?`, donationID).Scan(&status, &revision)
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, ErrNotFound
+		return expiryMaterialization{}, ErrNotFound
 	}
 	if err != nil {
-		return false, fmt.Errorf("donation: read expiry state: %w", err)
+		return expiryMaterialization{}, fmt.Errorf("donation: read expiry state: %w", err)
 	}
-	if status != "approved" || !expires.Valid || now < expires.Int64 {
-		return false, nil
+	if status != "pending" && status != "approved" {
+		return expiryMaterialization{}, nil
 	}
-	if err := clearDonationMembershipsTx(ctx, tx, donationID, "expired", now); err != nil {
-		return false, err
-	}
-	result, err := tx.ExecContext(ctx, `UPDATE donations SET status='expired',revision=revision+1,updated_at=?,terminal_at=?
-WHERE id=? AND status='approved' AND revision=? AND expires_at IS NOT NULL AND expires_at<=?`, now, now, donationID, revision, now)
+	rows, err := tx.QueryContext(ctx, `SELECT dk.id,m.endpoint_key_id
+FROM donation_keys dk JOIN donation_key_memberships m ON m.donation_key_id=dk.id
+WHERE dk.donation_id=? AND dk.ended_at IS NULL AND dk.expires_at IS NOT NULL AND dk.expires_at<=?
+ORDER BY dk.expires_at,dk.id`, donationID, now)
 	if err != nil {
-		return false, fmt.Errorf("donation: materialize expiry: %w", err)
+		return expiryMaterialization{}, fmt.Errorf("donation: read due donation keys: %w", err)
+	}
+	donationKeyIDs := make([]int64, 0)
+	endpointKeyIDs := make([]int64, 0)
+	for rows.Next() {
+		var donationKeyID, endpointKeyID int64
+		if err := rows.Scan(&donationKeyID, &endpointKeyID); err != nil {
+			rows.Close()
+			return expiryMaterialization{}, fmt.Errorf("donation: scan due donation key: %w", err)
+		}
+		donationKeyIDs = append(donationKeyIDs, donationKeyID)
+		endpointKeyIDs = append(endpointKeyIDs, endpointKeyID)
+	}
+	if err := rows.Close(); err != nil {
+		return expiryMaterialization{}, fmt.Errorf("donation: close due donation keys: %w", err)
+	}
+	if err := rows.Err(); err != nil {
+		return expiryMaterialization{}, fmt.Errorf("donation: iterate due donation keys: %w", err)
+	}
+	if len(donationKeyIDs) == 0 {
+		return expiryMaterialization{}, nil
+	}
+	if err := detachBindingsTx(ctx, tx, donationKeyIDs, now); err != nil {
+		return expiryMaterialization{}, err
+	}
+	if err := deleteMembershipsTx(ctx, tx, endpointKeyIDs); err != nil {
+		return expiryMaterialization{}, err
+	}
+	if err := endDonationKeysTx(ctx, tx, donationKeyIDs, "expired", now); err != nil {
+		return expiryMaterialization{}, err
+	}
+	var remaining int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM donation_keys
+WHERE donation_id=? AND ended_at IS NULL`, donationID).Scan(&remaining); err != nil {
+		return expiryMaterialization{}, fmt.Errorf("donation: count live donation keys after expiry: %w", err)
+	}
+	terminal := remaining == 0
+	newStatus := status
+	var terminalAt any
+	if terminal {
+		newStatus = "expired"
+		terminalAt = now
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE donations SET status=?,revision=revision+1,updated_at=?,terminal_at=?
+WHERE id=? AND status=? AND revision=?`, newStatus, now, terminalAt, donationID, status, revision)
+	if err != nil {
+		return expiryMaterialization{}, fmt.Errorf("donation: materialize expiry: %w", err)
 	}
 	if err := requireOne(result); err != nil {
-		return false, err
+		return expiryMaterialization{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO donation_reviews(
 donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at)
 VALUES(?,?,NULL,'','expire','',?)`, donationID, revision+1, now); err != nil {
-		return false, fmt.Errorf("donation: record expiry: %w", err)
+		return expiryMaterialization{}, fmt.Errorf("donation: record expiry: %w", err)
 	}
-	return true, nil
+	return expiryMaterialization{changed: true, terminal: terminal}, nil
+}
+
+func materializeDonationExpiryTx(ctx context.Context, tx *sql.Tx, donationID, now int64) (bool, error) {
+	result, err := materializeDonationExpiryStateTx(ctx, tx, donationID, now)
+	return result.terminal, err
 }
 
 // MaterializeExpiryTx is the transaction-local expiry ownership seam used by
@@ -350,8 +403,11 @@ func (s *Service) MaterializeDueExpiriesTx(ctx context.Context, tx *sql.Tx, deci
 }
 
 func materializeDueExpiriesTx(ctx context.Context, tx *sql.Tx, now int64, limit int) error {
-	rows, err := tx.QueryContext(ctx, `SELECT id FROM donations WHERE status='approved' AND expires_at IS NOT NULL
-AND expires_at<=? ORDER BY expires_at,id LIMIT ?`, now, limit)
+	rows, err := tx.QueryContext(ctx, `SELECT dk.donation_id
+FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id
+WHERE d.status IN ('pending','approved') AND dk.ended_at IS NULL
+ AND dk.expires_at IS NOT NULL AND dk.expires_at<=?
+GROUP BY dk.donation_id ORDER BY MIN(dk.expires_at),dk.donation_id LIMIT ?`, now, limit)
 	if err != nil {
 		return fmt.Errorf("donation: read due expiries: %w", err)
 	}
@@ -378,8 +434,11 @@ func (s *Service) MaterializeExpiries(ctx context.Context, decisionNow int64, li
 		return 0, fmt.Errorf("donation: begin expiry worker: %w", err)
 	}
 	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, `SELECT id FROM donations WHERE status='approved' AND expires_at IS NOT NULL
-AND expires_at<=? ORDER BY expires_at,id LIMIT ?`, decisionNow, limit)
+	rows, err := tx.QueryContext(ctx, `SELECT dk.donation_id
+FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id
+WHERE d.status IN ('pending','approved') AND dk.ended_at IS NULL
+ AND dk.expires_at IS NOT NULL AND dk.expires_at<=?
+GROUP BY dk.donation_id ORDER BY MIN(dk.expires_at),dk.donation_id LIMIT ?`, decisionNow, limit)
 	if err != nil {
 		return 0, fmt.Errorf("donation: list expiry work: %w", err)
 	}
@@ -527,7 +586,7 @@ ORDER BY id LIMIT ?`, userID, cutoff, limit+1)
 		}
 		items = append(items, ExportDonation{
 			ID: projection.ID, Status: projection.Status, Description: projection.Description,
-			ReviewResult: projection.ReviewResult, ExpiresAt: projection.ExpiresAt, Keys: projection.Keys,
+			ReviewResult: projection.ReviewResult, Keys: projection.Keys,
 			CreatedAt: projection.CreatedAt, UpdatedAt: projection.UpdatedAt,
 		})
 	}

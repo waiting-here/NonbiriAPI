@@ -135,10 +135,12 @@ VALUES(?,'approved',1,'donation','', 'admin',?,?)`, environment.donorID, charity
 	result, err = environment.store.DB().Exec(`INSERT INTO donation_keys(
 donation_id,endpoint_key_id,display_head,display_tail,canonical_base_url,connector_type,
 price_used_mag,price_reserved_mag,calls_used,calls_reserved,tokens_used,tokens_reserved,
-token_reserve,enabled,failure_streak,streak_generation,next_claim_seq,next_fold_seq,safe_note,created_at,updated_at)
-VALUES(?,?,?,?,?,'openai-compatible',?,?,?,?,?,?,5,1,?,?,?,?,'private label',?,?)`,
+token_reserve,enabled,failure_streak,streak_generation,next_claim_seq,next_fold_seq,safe_note,created_at,updated_at,
+authorized_expires_at,expires_at,source_endpoint_key_id,report_fingerprint)
+VALUES(?,?,?,?,?,'openai-compatible',?,?,?,?,?,?,5,1,?,?,?,?,'private label',?,?,NULL,NULL,?,?)`,
 		environment.donationID, environment.endpointKey, "head", "tail", baseURL,
-		zero, zero, zero, zero, zero, zero, zero, one, one, one, charityTestNow, charityTestNow)
+		zero, zero, zero, zero, zero, zero, zero, one, one, one, charityTestNow, charityTestNow,
+		environment.endpointKey, fingerprint)
 	if err != nil {
 		t.Fatalf("seed donation key: %v", err)
 	}
@@ -770,8 +772,8 @@ func TestCapacityBoundaryExpiryAndTerminalCleanup(t *testing.T) {
 
 	environment := newCharityTestEnv(t)
 	requestID := environment.accept(t, environment.requestModel, 2400, 1)
-	if _, err := environment.store.DB().Exec(`UPDATE donations SET expires_at=? WHERE id=?`, charityTestNow,
-		environment.donationID); err != nil {
+	if _, err := environment.store.DB().Exec(`UPDATE donation_keys SET expires_at=? WHERE id=?`, charityTestNow,
+		environment.donationKey); err != nil {
 		t.Fatal(err)
 	}
 	tx := beginTestTx(t, environment.store.DB())

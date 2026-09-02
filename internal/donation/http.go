@@ -129,10 +129,15 @@ func (api *httpAPI) getOwner(writer http.ResponseWriter, request *http.Request, 
 	writeJSON(writer, value)
 }
 
+type createKeyWire struct {
+	EndpointKeyID requiredField[string] `json:"endpoint_key_id"`
+	ExpiresAt     nullableField[int64]  `json:"expires_at"`
+}
+
 type createWire struct {
-	Description         requiredField[string]   `json:"description"`
-	EndpointKeyIDs      requiredField[[]string] `json:"endpoint_key_ids"`
-	OwnershipAuthorized requiredField[bool]     `json:"ownership_authorized"`
+	Description         requiredField[string]          `json:"description"`
+	Keys                requiredField[[]createKeyWire] `json:"keys"`
+	OwnershipAuthorized requiredField[bool]            `json:"ownership_authorized"`
 }
 
 func (api *httpAPI) createOwner(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
@@ -143,27 +148,29 @@ func (api *httpAPI) createOwner(writer http.ResponseWriter, request *http.Reques
 	if !decodeStrictObject(writer, request, &wire) {
 		return
 	}
-	if !wire.Description.Set || !wire.EndpointKeyIDs.Set || !wire.OwnershipAuthorized.Set {
+	if !wire.Description.Set || !wire.Keys.Set || !wire.OwnershipAuthorized.Set {
 		writeDonationError(writer, ErrInvalidRequest)
 		return
 	}
-	ids := make([]int64, len(wire.EndpointKeyIDs.Value))
-	for index, raw := range wire.EndpointKeyIDs.Value {
-		id, err := parseCanonicalID(raw)
-		if err != nil {
+	keys := make([]CreateKeyInput, len(wire.Keys.Value))
+	canonicalKeys := make([]map[string]any, len(wire.Keys.Value))
+	for index, key := range wire.Keys.Value {
+		id, err := requiredID(key.EndpointKeyID)
+		if err != nil || !key.ExpiresAt.Set {
 			writeDonationError(writer, ErrInvalidRequest)
 			return
 		}
-		ids[index] = id
+		keys[index] = CreateKeyInput{EndpointKeyID: id, ExpiresAt: key.ExpiresAt.Value}
+		canonicalKeys[index] = map[string]any{"endpoint_key_id": key.EndpointKeyID.Value, "expires_at": key.ExpiresAt.Value}
 	}
-	canonical := map[string]any{"description": wire.Description.Value, "endpoint_key_ids": wire.EndpointKeyIDs.Value,
+	canonical := map[string]any{"description": wire.Description.Value, "keys": canonicalKeys,
 		"ownership_authorized": wire.OwnershipAuthorized.Value}
 	mutation, ok := mutationFor(writer, request, routeDonations, nil, canonical)
 	if !ok {
 		return
 	}
 	result, err := api.service.Create(request.Context(), principal.UserID, mutation, CreateInput{
-		Description: wire.Description.Value, EndpointKeyIDs: ids, OwnershipAuthorized: wire.OwnershipAuthorized.Value,
+		Description: wire.Description.Value, Keys: keys, OwnershipAuthorized: wire.OwnershipAuthorized.Value,
 	})
 	if err != nil {
 		writeDonationError(writer, err)
@@ -382,13 +389,13 @@ type reviewKeyWire struct {
 	TokenReserve  requiredField[int64]  `json:"token_reserve"`
 	Enabled       requiredField[bool]   `json:"enabled"`
 	SafeNote      requiredField[string] `json:"safe_note"`
+	ExpiresAt     nullableField[int64]  `json:"expires_at"`
 }
 
 type reviewWire struct {
 	Decision         requiredField[string]          `json:"decision"`
 	ExpectedRevision requiredField[string]          `json:"expected_revision"`
 	Reason           requiredField[string]          `json:"reason"`
-	ExpiresAt        nullableField[int64]           `json:"expires_at"`
 	KeySettings      requiredField[[]reviewKeyWire] `json:"key_settings"`
 }
 
@@ -405,30 +412,29 @@ func parseReviewWire(wire reviewWire) (ReviewInput, map[string]any, error) {
 	input := ReviewInput{Decision: wire.Decision.Value, ExpectedRevision: revision, Reason: wire.Reason.Value}
 	switch wire.Decision.Value {
 	case "reject":
-		if wire.ExpiresAt.Set || wire.KeySettings.Set {
+		if wire.KeySettings.Set {
 			return ReviewInput{}, nil, ErrInvalidRequest
 		}
 	case "approve":
-		if !wire.ExpiresAt.Set || !wire.KeySettings.Set {
+		if !wire.KeySettings.Set {
 			return ReviewInput{}, nil, ErrInvalidRequest
 		}
-		input.ExpiresAt = wire.ExpiresAt.Value
-		canonical["expires_at"] = wire.ExpiresAt.Value
 		settings := make([]KeySetting, len(wire.KeySettings.Value))
 		canonicalSettings := make([]map[string]any, len(wire.KeySettings.Value))
 		for index, setting := range wire.KeySettings.Value {
 			id, err := requiredID(setting.DonationKeyID)
 			if err != nil || !setting.PriceLimit.Set || !setting.CallsLimit.Set || !setting.TokensLimit.Set ||
-				!setting.TokenReserve.Set || !setting.Enabled.Set || !setting.SafeNote.Set {
+				!setting.TokenReserve.Set || !setting.Enabled.Set || !setting.SafeNote.Set || !setting.ExpiresAt.Set {
 				return ReviewInput{}, nil, ErrInvalidRequest
 			}
 			settings[index] = KeySetting{DonationKeyID: id, PriceLimit: setting.PriceLimit.Value,
 				CallsLimit: setting.CallsLimit.Value, TokensLimit: setting.TokensLimit.Value,
-				TokenReserve: setting.TokenReserve.Value, Enabled: setting.Enabled.Value, SafeNote: setting.SafeNote.Value}
+				TokenReserve: setting.TokenReserve.Value, Enabled: setting.Enabled.Value, SafeNote: setting.SafeNote.Value,
+				ExpiresAt: setting.ExpiresAt.Value}
 			canonicalSettings[index] = map[string]any{"donation_key_id": setting.DonationKeyID.Value,
 				"price_limit": setting.PriceLimit.Value, "calls_limit": setting.CallsLimit.Value,
 				"tokens_limit": setting.TokensLimit.Value, "token_reserve": setting.TokenReserve.Value,
-				"enabled": setting.Enabled.Value, "safe_note": setting.SafeNote.Value}
+				"enabled": setting.Enabled.Value, "safe_note": setting.SafeNote.Value, "expires_at": setting.ExpiresAt.Value}
 		}
 		input.KeySettings = settings
 		canonical["key_settings"] = canonicalSettings
@@ -493,13 +499,14 @@ type keyManagementWire struct {
 	TokensLimit        nullableField[string] `json:"tokens_limit"`
 	TokenReserve       requiredField[int64]  `json:"token_reserve"`
 	SafeNote           requiredField[string] `json:"safe_note"`
+	ExpiresAt          nullableField[int64]  `json:"expires_at"`
 	ResetFailureStreak requiredField[bool]   `json:"reset_failure_streak"`
 }
 
 func parseKeyManagementWire(wire keyManagementWire) (KeyManagementInput, map[string]any, error) {
 	revision, err := requiredRevision(wire.ExpectedRevision)
 	if err != nil || !wire.Enabled.Set && !wire.PriceLimit.Set && !wire.CallsLimit.Set && !wire.TokensLimit.Set &&
-		!wire.TokenReserve.Set && !wire.SafeNote.Set && !wire.ResetFailureStreak.Set ||
+		!wire.TokenReserve.Set && !wire.SafeNote.Set && !wire.ExpiresAt.Set && !wire.ResetFailureStreak.Set ||
 		wire.ResetFailureStreak.Set && !wire.ResetFailureStreak.Value {
 		return KeyManagementInput{}, nil, ErrInvalidRequest
 	}
@@ -531,6 +538,10 @@ func parseKeyManagementWire(wire keyManagementWire) (KeyManagementInput, map[str
 		value := wire.SafeNote.Value
 		input.SafeNote = &value
 		canonical["safe_note"] = value
+	}
+	if wire.ExpiresAt.Set {
+		input.ExpiresAt = &wire.ExpiresAt.Value
+		canonical["expires_at"] = wire.ExpiresAt.Value
 	}
 	if wire.ResetFailureStreak.Set {
 		canonical["reset_failure_streak"] = true
