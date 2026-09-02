@@ -415,6 +415,7 @@ var _ adminapi.SiteConfigFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
 var _ adminalerts.AdminFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
 var _ adminusers.AdminFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
 var _ logapi.StewardAuthorizer = (*roleFinalTxAuthorizer)(nil)
+var _ resources.AdminFinalTxAuthorizer = (*roleFinalTxAuthorizer)(nil)
 
 func (authorizer *roleFinalTxAuthorizer) AuthorizeAdminMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
 	return authorizer.authorize(ctx, tx, userID, authz.ActorAdminSession, authz.RoleAdministrator)
@@ -469,6 +470,24 @@ func (registrar siteConfigRouteRegistrar) RegisterAdminRoute(method, pattern str
 			return
 		}
 		handler(writer, request, adminapi.SiteConfigAdminPrincipal{UserID: actor.UserID})
+	}))
+}
+
+type resourceAdminRouteRegistrar struct{ runtime *auth.Runtime }
+
+var _ resources.AdminRouteRegistrar = resourceAdminRouteRegistrar{}
+
+func (registrar resourceAdminRouteRegistrar) RegisterAdminRoute(method, pattern string, handler resources.AuthorizedAdminHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterAdminRoute(method, pattern, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		actor, ok := auth.ActorFromContext(request.Context())
+		if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
+			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+			return
+		}
+		handler(writer, request, resources.AdminPrincipal{UserID: actor.UserID})
 	}))
 }
 
@@ -912,6 +931,7 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		DiscoveryWorker: discoveryWorker,
 		CursorKeys:      vault,
 		FinalAuth:       authRuntime,
+		AdminFinalAuth:  roleAuthorizer,
 	})
 	if err != nil {
 		cleanup()
@@ -1069,6 +1089,10 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err := resources.RegisterRoutes(authRuntime, resourceRepository); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("register resource routes: %w", err)
+	}
+	if err := resources.RegisterAdminRoutes(resourceAdminRouteRegistrar{runtime: authRuntime}, resourceRepository); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register resource administrator routes: %w", err)
 	}
 	if err := donation.RegisterOwnerRoutes(authRuntime, donationService); err != nil {
 		cleanup()
