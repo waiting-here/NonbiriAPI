@@ -22,7 +22,7 @@ export function moveElevatedCapabilityFromCookie(): string | undefined {
     return undefined;
   }
   const encoded = matches[0]?.slice(ELEVATION_COOKIE.length + 1) ?? '';
-  let token = '';
+  let token: string;
   try {
     token = decodeURIComponent(encoded);
   } catch {

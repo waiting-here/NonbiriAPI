@@ -10,7 +10,7 @@ const SUPPORTED = ['zh', 'en'] as const;
 export type SupportedLanguage = (typeof SUPPORTED)[number];
 
 export function detectLanguage(): SupportedLanguage {
-  let stored: string | null = null;
+  let stored: string | null;
   try {
     stored = typeof window !== 'undefined' ? window.localStorage.getItem(LANGUAGE_STORAGE_KEY) : null;
   } catch {
