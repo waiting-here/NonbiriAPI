@@ -156,6 +156,10 @@
   overflow-wrap: anywhere;
 }
 
+.economy-stat-grid .nb-amount {
+  white-space: normal;
+}
+
 .economy-limit-values {
   display: grid;
   gap: var(--nb-space-1);
