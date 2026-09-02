@@ -25,6 +25,7 @@ type LifecycleEndpoint struct {
 	ID            string
 	ConnectorType string
 	BaseURL       string
+	Origin        EndpointOrigin
 	Note          string
 	Enabled       bool
 	CreatedAt     int64
@@ -169,7 +170,7 @@ LIMIT ?`, userID, limit+1)
 		}
 		item := LifecycleEndpoint{
 			ID: endpoint.ID, ConnectorType: endpoint.ConnectorType, BaseURL: endpoint.BaseURL,
-			Note: endpoint.Note, Enabled: endpoint.Enabled, CreatedAt: endpoint.CreatedAt,
+			Origin: endpoint.Origin, Note: endpoint.Note, Enabled: endpoint.Enabled, CreatedAt: endpoint.CreatedAt,
 			UpdatedAt: endpoint.UpdatedAt, Keys: make([]LifecycleEndpointKey, 0, len(keys)),
 		}
 		for _, key := range keys {

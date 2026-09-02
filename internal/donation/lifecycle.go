@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
@@ -577,20 +578,36 @@ ORDER BY id LIMIT ?`, userID, cutoff, limit+1)
 		if _, err := materializeDonationExpiryTx(ctx, tx, id, decisionNow); err != nil {
 			return nil, err
 		}
-		projection, err := getOwnerDonationTx(ctx, tx, userID, id, decisionNow)
+		projection, err := getDonationProjectionTx(ctx, tx, id, decisionNow)
 		if err != nil {
 			return nil, err
 		}
-		for index := range projection.Keys {
-			projection.Keys[index].SafeNote = ""
+		if projection.Owner == nil || projection.Owner.UserID != strconv.FormatInt(userID, 10) {
+			return nil, ErrNotFound
 		}
 		items = append(items, ExportDonation{
 			ID: projection.ID, Status: projection.Status, Description: projection.Description,
-			ReviewResult: projection.ReviewResult, Keys: projection.Keys,
+			ReviewResult: projection.ReviewResult, Keys: exportDonationKeys(projection.Keys),
 			CreatedAt: projection.CreatedAt, UpdatedAt: projection.UpdatedAt,
 		})
 	}
 	return items, nil
+}
+
+func exportDonationKeys(values []AdminDonationKey) []ExportDonationKey {
+	out := make([]ExportDonationKey, len(values))
+	for index, value := range values {
+		owner := ownerKey(value)
+		out[index] = ExportDonationKey{
+			ID: owner.ID, EndpointKeyID: owner.EndpointKeyID,
+			DisplayHead: owner.DisplayHead, DisplayTail: owner.DisplayTail,
+			SafeSource: owner.SafeSource, PhysicalEnabled: owner.PhysicalEnabled,
+			CharityState: owner.CharityState, Limits: owner.Limits, Usage: owner.Usage,
+			TokenReserve: owner.TokenReserve, AuthorizedExpiresAt: value.AuthorizedExpiresAt,
+			ExpiresAt: owner.ExpiresAt, Streak: owner.Streak, EndedReason: owner.EndedReason,
+		}
+	}
+	return out
 }
 
 // Cleanup deletes only terminal donation aggregates whose original 400-day

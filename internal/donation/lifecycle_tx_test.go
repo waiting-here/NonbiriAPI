@@ -131,9 +131,6 @@ VALUES(?,'donation',?,'active',1,'export cutoff test',?,?,?)`, holdID, fmt.Sprin
 	if len(exported) != 1 || exported[0].ID != liveDonation.ID || len(exported[0].Keys) != 1 {
 		t.Fatalf("ordinary cutoff export = %+v", exported)
 	}
-	if exported[0].Keys[0].SafeNote != "" {
-		t.Fatalf("safe note survived owner export: %+v", exported[0].Keys[0])
-	}
 	payload, err := json.Marshal(exported)
 	if err != nil {
 		t.Fatal(err)
@@ -144,6 +141,81 @@ VALUES(?,'donation',?,'active',1,'export cutoff test',?,?,?)`, holdID, fmt.Sprin
 	var retained int
 	if err := environment.store.DB().QueryRow(`SELECT COUNT(*) FROM donations WHERE id=?`, oldID).Scan(&retained); err != nil || retained != 1 {
 		t.Fatalf("held old donation count = %d, %v", retained, err)
+	}
+}
+
+func TestExportUserTxIncludesClosedPerKeyLifecycleProjection(t *testing.T) {
+	environment := newDonationTestEnv(t)
+	owner := environment.seedUser(t, "donation-export-source", nil, false)
+	channelID := seedMainstreamChannel(t, environment, "Safe channel", "subscription")
+	baseURL := "https://channel.example.test/v1"
+	endpointKeyID := seedSourcedEndpointKey(t, environment, owner, 71, baseURL, &donationEndpointSource{
+		channelID: channelID, revision: 1, name: "Safe channel", category: "subscription",
+	})
+	authorizedExpiry := donationTestNow + 7_200
+	created, err := environment.service.Create(context.Background(), owner,
+		donationCreateMutation(t, 71, map[string]any{"export": "per-key"}),
+		CreateInput{
+			Description: "export source",
+			Keys: []CreateKeyInput{{
+				EndpointKeyID: endpointKeyID,
+				ExpiresAt:     &authorizedExpiry,
+			}},
+			OwnershipAuthorized: true,
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	donationID := parseTestID(t, created.Value.ID)
+	donationKeyID := parseTestID(t, created.Value.Keys[0].ID)
+	effectiveExpiry := authorizedExpiry - 300
+	if _, err := environment.store.DB().Exec(`UPDATE donation_keys
+SET expires_at=?,safe_note='HOSTILE_EXPORT_NOTE' WHERE id=?`, effectiveExpiry, donationKeyID); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := environment.store.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exported, err := environment.service.ExportUserTx(context.Background(), tx, owner, donationTestNow, 10)
+	if err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	if len(exported) != 1 || exported[0].ID != created.Value.ID || len(exported[0].Keys) != 1 {
+		t.Fatalf("donation export = %+v", exported)
+	}
+	key := exported[0].Keys[0]
+	if key.ID != created.Value.Keys[0].ID || key.EndpointKeyID == nil ||
+		*key.EndpointKeyID != fmt.Sprint(endpointKeyID) ||
+		key.AuthorizedExpiresAt == nil || *key.AuthorizedExpiresAt != authorizedExpiry ||
+		key.ExpiresAt == nil || *key.ExpiresAt != effectiveExpiry ||
+		key.SafeSource.Kind != "mainstream" || key.SafeSource.ConnectorType != "openai-compatible" ||
+		key.SafeSource.BaseURL != baseURL || key.SafeSource.ChannelID == nil ||
+		*key.SafeSource.ChannelID != channelID || key.SafeSource.Name == nil ||
+		*key.SafeSource.Name != "Safe channel" {
+		t.Fatalf("per-key export projection = %+v", key)
+	}
+	payload, err := json.Marshal(exported)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{
+		"safe_note", "HOSTILE_EXPORT_NOTE", "source_endpoint_key_id", "report_fingerprint",
+		"report_match_until", "channel_revision", "category", "test-envelope", "ciphertext",
+	} {
+		if bytes.Contains(payload, []byte(forbidden)) {
+			t.Fatalf("donation export leaked %q: %s", forbidden, payload)
+		}
+	}
+	var storedDonationID int64
+	if err := environment.store.DB().QueryRow(`SELECT donation_id FROM donation_keys WHERE id=?`, donationKeyID).Scan(&storedDonationID); err != nil ||
+		storedDonationID != donationID {
+		t.Fatalf("stored donation lineage = %d, %v", storedDonationID, err)
 	}
 }
 

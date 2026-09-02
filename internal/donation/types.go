@@ -249,11 +249,30 @@ type KeyManagementInput struct {
 }
 
 type ExportDonation struct {
-	ID           string        `json:"id"`
-	Status       string        `json:"status"`
-	Description  string        `json:"description"`
-	ReviewResult *ReviewResult `json:"review_result"`
-	Keys         []DonationKey `json:"keys"`
-	CreatedAt    int64         `json:"created_at"`
-	UpdatedAt    int64         `json:"updated_at"`
+	ID           string              `json:"id"`
+	Status       string              `json:"status"`
+	Description  string              `json:"description"`
+	ReviewResult *ReviewResult       `json:"review_result"`
+	Keys         []ExportDonationKey `json:"keys"`
+	CreatedAt    int64               `json:"created_at"`
+	UpdatedAt    int64               `json:"updated_at"`
+}
+
+// ExportDonationKey is deliberately independent from owner and administrator
+// projections so future role-only fields cannot widen the personal export.
+type ExportDonationKey struct {
+	ID                  string         `json:"id"`
+	EndpointKeyID       *string        `json:"endpoint_key_id"`
+	DisplayHead         string         `json:"display_head"`
+	DisplayTail         string         `json:"display_tail"`
+	SafeSource          SafeSource     `json:"safe_source"`
+	PhysicalEnabled     bool           `json:"physical_enabled"`
+	CharityState        string         `json:"charity_state"`
+	Limits              DonationLimits `json:"limits"`
+	Usage               DonationUsage  `json:"usage"`
+	TokenReserve        int64          `json:"token_reserve"`
+	AuthorizedExpiresAt *int64         `json:"authorized_expires_at"`
+	ExpiresAt           *int64         `json:"expires_at"`
+	Streak              DonationStreak `json:"streak"`
+	EndedReason         *string        `json:"ended_reason"`
 }

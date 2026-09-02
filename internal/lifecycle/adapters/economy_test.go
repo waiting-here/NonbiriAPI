@@ -157,25 +157,28 @@ func TestEconomyAdaptersMapClosedExportDTOs(t *testing.T) {
 	endpointKeyID := "endpoint-key-id"
 	priceLimit, callsLimit, tokensLimit := "10.5", "20", "3000"
 	endedReason := "expired"
-	expiresAt := int64(99)
+	channelID, channelName := "mch_safe", "Safe channel"
+	authorizedExpiresAt, expiresAt := int64(100), int64(99)
 	donationOwner := &fakeDonationOwner{export: []donation.ExportDonation{{
 		ID: "donation", Status: "approved", Description: "description",
 		ReviewResult: &donation.ReviewResult{Decision: "approve", Reason: "accepted", ReviewedAt: 80},
-		ExpiresAt:    &expiresAt,
-		Keys: []donation.DonationKey{{
+		Keys: []donation.ExportDonationKey{{
 			ID: "donation-key", EndpointKeyID: &endpointKeyID, DisplayHead: "sk-a", DisplayTail: "tail",
-			SafeSource:      donation.SafeSource{BaseURL: "https://example.invalid", ConnectorType: "openai"},
+			SafeSource: donation.SafeSource{
+				Kind: "mainstream", BaseURL: "https://example.invalid", ConnectorType: "openai-compatible",
+				ChannelID: &channelID, Name: &channelName,
+			},
 			PhysicalEnabled: true, CharityState: "enabled",
 			Limits: donation.DonationLimits{Price: &priceLimit, Calls: &callsLimit, Tokens: &tokensLimit},
 			Usage: donation.DonationUsage{
 				PriceUsed: "1", PriceInflight: "2", CallsUsed: "3", CallsInflight: "4",
 				TokensUsed: "5", TokensInflight: "6",
 			},
-			TokenReserve: 7,
+			TokenReserve: 7, AuthorizedExpiresAt: &authorizedExpiresAt, ExpiresAt: &expiresAt,
 			Streak: donation.DonationStreak{
 				Generation: "8", Count: "9", FailureDisabled: true,
 			},
-			SafeNote: "HOSTILE_SAFE_NOTE", EndedReason: &endedReason,
+			EndedReason: &endedReason,
 		}},
 		CreatedAt: 81, UpdatedAt: 82,
 	}}}
@@ -190,17 +193,20 @@ func TestEconomyAdaptersMapClosedExportDTOs(t *testing.T) {
 	wantDonations := []lifecycle.DonationExport{{
 		ID: "donation", Status: "approved", Description: "description",
 		ReviewResult: &lifecycle.DonationReviewExport{Decision: "approve", Reason: "accepted", ReviewedAt: 80},
-		ExpiresAt:    &expiresAt,
 		Keys: []lifecycle.DonationKeyExport{{
 			ID: "donation-key", EndpointKeyID: &endpointKeyID, DisplayHead: "sk-a", DisplayTail: "tail",
-			BaseURL: "https://example.invalid", ConnectorType: "openai", PhysicalEnabled: true,
-			CharityState: "enabled",
-			Limits:       lifecycle.DonationLimitsExport{Price: &priceLimit, Calls: &callsLimit, Tokens: &tokensLimit},
+			SafeSource: lifecycle.DonationSafeSourceExport{
+				Kind: "mainstream", BaseURL: "https://example.invalid", ConnectorType: "openai-compatible",
+				ChannelID: &channelID, Name: &channelName,
+			},
+			PhysicalEnabled: true,
+			CharityState:    "enabled",
+			Limits:          lifecycle.DonationLimitsExport{Price: &priceLimit, Calls: &callsLimit, Tokens: &tokensLimit},
 			Usage: lifecycle.DonationUsageExport{
 				PriceUsed: "1", PriceInflight: "2", CallsUsed: "3", CallsInflight: "4",
 				TokensUsed: "5", TokensInflight: "6",
 			},
-			TokenReserve: 7,
+			TokenReserve: 7, AuthorizedExpiresAt: &authorizedExpiresAt, ExpiresAt: &expiresAt,
 			Streak: lifecycle.DonationStreakExport{
 				Generation: "8", Count: "9", FailureDisabled: true,
 			},
@@ -215,8 +221,13 @@ func TestEconomyAdaptersMapClosedExportDTOs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(encoded), "safe_note") || strings.Contains(string(encoded), "HOSTILE_SAFE_NOTE") {
-		t.Fatalf("donation export leaked safe_note: %s", encoded)
+	for _, forbidden := range []string{
+		"safe_note", "source_endpoint_key_id", "report_fingerprint", "report_match_until",
+		"channel_revision", "category", "secret", "ciphertext",
+	} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("donation export leaked %q: %s", forbidden, encoded)
+		}
 	}
 
 	charityOwner := &fakeCharityOwner{export: charity.ConsumerExport{

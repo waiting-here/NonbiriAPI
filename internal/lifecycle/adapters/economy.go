@@ -120,7 +120,6 @@ func (adapter *DonationAdapter) ExportDonations(
 		out[index] = lifecycle.DonationExport{
 			ID: value.ID, Status: value.Status, Description: value.Description,
 			ReviewResult: mapDonationReview(value.ReviewResult),
-			ExpiresAt:    cloneInt64(value.ExpiresAt),
 			Keys:         mapDonationKeys(value.Keys),
 			CreatedAt:    value.CreatedAt,
 			UpdatedAt:    value.UpdatedAt,
@@ -220,13 +219,17 @@ func mapDonationReview(value *donation.ReviewResult) *lifecycle.DonationReviewEx
 	}
 }
 
-func mapDonationKeys(values []donation.DonationKey) []lifecycle.DonationKeyExport {
+func mapDonationKeys(values []donation.ExportDonationKey) []lifecycle.DonationKeyExport {
 	out := make([]lifecycle.DonationKeyExport, len(values))
 	for index, value := range values {
 		out[index] = lifecycle.DonationKeyExport{
 			ID: value.ID, EndpointKeyID: cloneString(value.EndpointKeyID),
 			DisplayHead: value.DisplayHead, DisplayTail: value.DisplayTail,
-			BaseURL: value.SafeSource.BaseURL, ConnectorType: value.SafeSource.ConnectorType,
+			SafeSource: lifecycle.DonationSafeSourceExport{
+				Kind: value.SafeSource.Kind, ConnectorType: value.SafeSource.ConnectorType,
+				BaseURL: value.SafeSource.BaseURL, ChannelID: cloneString(value.SafeSource.ChannelID),
+				Name: cloneString(value.SafeSource.Name),
+			},
 			PhysicalEnabled: value.PhysicalEnabled, CharityState: value.CharityState,
 			Limits: lifecycle.DonationLimitsExport{
 				Price: cloneString(value.Limits.Price), Calls: cloneString(value.Limits.Calls),
@@ -237,7 +240,9 @@ func mapDonationKeys(values []donation.DonationKey) []lifecycle.DonationKeyExpor
 				CallsUsed: value.Usage.CallsUsed, CallsInflight: value.Usage.CallsInflight,
 				TokensUsed: value.Usage.TokensUsed, TokensInflight: value.Usage.TokensInflight,
 			},
-			TokenReserve: value.TokenReserve,
+			TokenReserve:        value.TokenReserve,
+			AuthorizedExpiresAt: cloneInt64(value.AuthorizedExpiresAt),
+			ExpiresAt:           cloneInt64(value.ExpiresAt),
 			Streak: lifecycle.DonationStreakExport{
 				Generation: value.Streak.Generation, Count: value.Streak.Count,
 				FailureDisabled: value.Streak.FailureDisabled,
