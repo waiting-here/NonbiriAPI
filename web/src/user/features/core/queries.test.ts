@@ -59,6 +59,12 @@ describe('core query identity and cache projections', () => {
     expect(coreKeys.session).toEqual(['user', 'session']);
     expect(coreKeys.endpoint('account-a', '11')).not.toEqual(coreKeys.endpoint('account-b', '11'));
     expect(coreKeys.callerKey('account-a')).not.toEqual(coreKeys.callerKey('account-b'));
+    expect(coreKeys.home('account-a', 'checkin')).not.toEqual(
+      coreKeys.home('account-b', 'checkin'),
+    );
+    expect(coreKeys.home('account-a', 'games')).not.toEqual(
+      coreKeys.home('account-a', 'announcements'),
+    );
     expect(
       coreKeys.candidates('account-a', '31', canonicalCandidateFilters({ keyId: '21' })),
     ).toEqual(
@@ -247,8 +253,14 @@ describe('core query identity and cache projections', () => {
     const client = new QueryClient();
     client.setQueryData(coreKeys.me('account-a'), { marker: 'a' });
     client.setQueryData(coreKeys.me('account-b'), { marker: 'b' });
+    client.setQueryData(coreKeys.home('account-a', 'checkin'), { enabled: false });
+    client.setQueryData(coreKeys.home('account-b', 'checkin'), { enabled: false });
     clearCoreAccountQueries(client, 'account-a');
     expect(client.getQueryData(coreKeys.me('account-a'))).toBeUndefined();
     expect(client.getQueryData(coreKeys.me('account-b'))).toEqual({ marker: 'b' });
+    expect(client.getQueryData(coreKeys.home('account-a', 'checkin'))).toBeUndefined();
+    expect(client.getQueryData(coreKeys.home('account-b', 'checkin'))).toEqual({
+      enabled: false,
+    });
   });
 });

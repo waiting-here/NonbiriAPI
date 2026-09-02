@@ -8,7 +8,12 @@ import { HomeDashboard } from '../../pages/HomePage';
 import { AccountLanguageForm, AccountLifecyclePanel, AccountWorkspace } from './AccountWorkspace';
 import { coreKeys } from './queries';
 import { normalizeUserEnvelope } from './normalizers';
-import type { AccountLifecycleAdapter, HomeAdapters, UserEnvelope } from './types';
+import type {
+  AccountLifecycleAdapter,
+  HomeAdapters,
+  HomeCheckinStatus,
+  UserEnvelope,
+} from './types';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -131,6 +136,264 @@ describe('home independent capability states', () => {
       await screen.findByRole('heading', { name: 'Continue or view results' }),
     ).toBeVisible();
     expect(await screen.findByText('Could not load this section')).toBeVisible();
+  });
+
+  it('GET-reconciles an unknown check-in response without automatically resubmitting', async () => {
+    const envelope = canonicalEnvelope();
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    const reconciliation = deferred<HomeCheckinStatus>();
+    const initial: HomeCheckinStatus = {
+      enabled: true,
+      checked_in_today: false,
+      balance: '-1.5',
+      award_min: '1',
+      award_max: '2',
+      balance_cap: '340282366920938463463374607431768211.455',
+    };
+    let reads = 0;
+    const load = vi.fn(async () => {
+      reads += 1;
+      return reads === 1 ? initial : reconciliation.promise;
+    });
+    const submit = vi.fn(async () => {
+      throw new ApiError('network_error', 'The network request failed.', 0);
+    });
+    const adapters: HomeAdapters = {
+      checkin: { state: 'available', load, submit },
+      games: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => [] },
+    };
+
+    const rendered = await renderWithProviders(
+      <HomeDashboard user={envelope.user} adapters={adapters} />,
+      { station: 'user', role: 'user', locale: 'en' },
+    );
+    await rendered.user.click(await screen.findByRole('button', { name: 'Check in' }));
+
+    expect(await screen.findByText(/response was lost/i)).toBeVisible();
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(load).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      reconciliation.resolve({
+        ...initial,
+        checked_in_today: true,
+        balance: '0.5',
+      });
+      await reconciliation.promise;
+    });
+
+    expect(await screen.findByText('Checked in')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Check in' })).toBeDisabled();
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves exact check-in amounts and refreshes authority after a committed response', async () => {
+    const envelope = canonicalEnvelope();
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    const maximum = '340282366920938463463374607431768211.455';
+    const initial: HomeCheckinStatus = {
+      enabled: true,
+      checked_in_today: false,
+      balance: '-1.5',
+      award_min: maximum,
+      award_max: maximum,
+      balance_cap: maximum,
+    };
+    const load = vi
+      .fn<(signal?: AbortSignal) => Promise<HomeCheckinStatus>>()
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce({ ...initial, checked_in_today: true, balance: maximum });
+    const submit = vi.fn(async () => ({ award: maximum, balance: maximum }));
+    const adapters: HomeAdapters = {
+      checkin: { state: 'available', load, submit },
+      games: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => [] },
+    };
+
+    const rendered = await renderWithProviders(
+      <HomeDashboard user={envelope.user} adapters={adapters} />,
+      { station: 'user', role: 'user', locale: 'en' },
+    );
+    await rendered.user.click(await screen.findByRole('button', { name: 'Check in' }));
+
+    await waitFor(() => expect(document.body.textContent).toContain(maximum));
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('Checked in')).toBeVisible();
+  });
+
+  it('disables capped lower-level check-in while preserving the level-three bypass', async () => {
+    const envelope = canonicalEnvelope();
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    const load = vi.fn(async (): Promise<HomeCheckinStatus> => ({
+      enabled: true,
+      checked_in_today: false,
+      balance: '10',
+      award_min: '1',
+      award_max: '2',
+      balance_cap: '10',
+    }));
+    const submit = vi.fn(async () => ({ award: '1', balance: '11' }));
+    const adapters: HomeAdapters = {
+      checkin: { state: 'available', load, submit },
+      games: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => [] },
+    };
+    const lowerLevel = { ...envelope.user, effective_level: 2 as const };
+    const rendered = await renderWithProviders(
+      <HomeDashboard user={lowerLevel} adapters={adapters} />,
+      { station: 'user', role: 'user', locale: 'en' },
+    );
+
+    expect(await screen.findByRole('button', { name: 'Check in' })).toBeDisabled();
+    expect(screen.getByText(/threshold only gates admission/i)).toBeVisible();
+
+    rendered.rerender(
+      <HomeDashboard user={{ ...lowerLevel, effective_level: 3 as const }} adapters={adapters} />,
+    );
+    expect(screen.getByRole('button', { name: 'Check in' })).toBeEnabled();
+  });
+
+  it('keeps a committed receipt visible when its follow-up GET fails and retries only the read', async () => {
+    const envelope = canonicalEnvelope();
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    const initial: HomeCheckinStatus = {
+      enabled: true,
+      checked_in_today: false,
+      balance: '10',
+      award_min: '1',
+      award_max: '2',
+      balance_cap: '100',
+    };
+    let reads = 0;
+    const load = vi.fn(async (): Promise<HomeCheckinStatus> => {
+      reads += 1;
+      if (reads === 1) return initial;
+      if (reads === 2) throw new ApiError('network_error', 'The network request failed.', 0);
+      return { ...initial, checked_in_today: true, balance: '12' };
+    });
+    const submit = vi.fn(async () => ({ award: '2', balance: '12' }));
+    const adapters: HomeAdapters = {
+      checkin: { state: 'available', load, submit },
+      games: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => [] },
+    };
+
+    const rendered = await renderWithProviders(
+      <HomeDashboard user={envelope.user} adapters={adapters} />,
+      { station: 'user', role: 'user', locale: 'en' },
+    );
+    await rendered.user.click(await screen.findByRole('button', { name: 'Check in' }));
+
+    expect(await screen.findByText(/Checked in: awarded 2 credits/)).toBeVisible();
+    expect(
+      screen.getByText(/Check-in succeeded, but the latest status could not be refreshed/),
+    ).toBeVisible();
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(load).toHaveBeenCalledTimes(2);
+
+    await rendered.user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/Check-in succeeded, but the latest status could not be refreshed/),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByText(/Checked in: awarded 2 credits/)).toBeVisible();
+    expect(screen.getByText('Checked in')).toBeVisible();
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(load).toHaveBeenCalledTimes(3);
+  });
+
+  it('uses a successful post-midnight authority read for the next day without losing the receipt', async () => {
+    const envelope = canonicalEnvelope();
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    const initial: HomeCheckinStatus = {
+      enabled: true,
+      checked_in_today: false,
+      balance: '10',
+      award_min: '1',
+      award_max: '1',
+      balance_cap: '100',
+    };
+    const load = vi
+      .fn<(signal?: AbortSignal) => Promise<HomeCheckinStatus>>()
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce({ ...initial, balance: '11' });
+    const submit = vi.fn(async () => ({ award: '1', balance: '11' }));
+    const adapters: HomeAdapters = {
+      checkin: { state: 'available', load, submit },
+      games: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => [] },
+    };
+    const rendered = await renderWithProviders(
+      <HomeDashboard user={envelope.user} adapters={adapters} />,
+      { station: 'user', role: 'user', locale: 'en' },
+    );
+
+    await rendered.user.click(await screen.findByRole('button', { name: 'Check in' }));
+    expect(await screen.findByText(/Checked in: awarded 1 credit/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Check in' })).toBeEnabled();
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
+  it('discards a late home summary after the shared session switches accounts', async () => {
+    const first = canonicalEnvelope();
+    const second: UserEnvelope = {
+      user: { ...first.user, id: '2', username: 'second-user', guild_nick: null },
+    };
+    let current = first;
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(current)));
+    const lateGames = deferred<
+      Array<{
+        game: 'linklink';
+        route_id: 'game-linklink';
+        kind: 'continue';
+        resource_id: string;
+        state: 'active';
+      }>
+    >();
+    let gameReads = 0;
+    const loadGames = vi.fn(async () => {
+      gameReads += 1;
+      return gameReads === 1 ? lateGames.promise : [];
+    });
+    const adapters: HomeAdapters = {
+      checkin: { state: 'unavailable' },
+      games: { state: 'available', load: loadGames },
+      announcements: { state: 'available', load: async () => [] },
+    };
+    const rendered = await renderWithProviders(
+      <HomeDashboard key={first.user.id} user={first.user} adapters={adapters} />,
+      { station: 'user', role: 'user', locale: 'en' },
+    );
+    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: first.user.id } });
+    await waitFor(() => expect(loadGames).toHaveBeenCalledTimes(1));
+
+    current = second;
+    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: second.user.id } });
+    rendered.rerender(
+      <HomeDashboard key={second.user.id} user={second.user} adapters={adapters} />,
+    );
+    await waitFor(() => expect(loadGames).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      lateGames.resolve([
+        {
+          game: 'linklink',
+          route_id: 'game-linklink',
+          kind: 'continue',
+          resource_id: `ll_${'A'.repeat(22)}`,
+          state: 'active',
+        },
+      ]);
+      await lateGames.promise;
+    });
+
+    await waitFor(() =>
+      expect(rendered.queryClient.getQueryData(coreKeys.home(first.user.id, 'games'))).toBeUndefined(),
+    );
+    expect(rendered.queryClient.getQueryData(coreKeys.home(second.user.id, 'games'))).toEqual([]);
   });
 });
 

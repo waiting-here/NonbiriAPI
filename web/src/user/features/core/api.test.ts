@@ -8,11 +8,15 @@ import {
   getCatalog,
   getCallerKey,
   getEndpoint,
+  getHomeAnnouncements,
+  getHomeCheckinStatus,
+  getHomeGameSummary,
   getModel,
   listModels,
   orderBindings,
   refreshDiscovery,
   regenerateCallerKey,
+  submitHomeCheckin,
   updateManualEntry,
 } from './api';
 import { coreRequest } from './request';
@@ -35,6 +39,79 @@ function jsonResponse(body: unknown, status: number, headers: HeadersInit = {}):
 }
 
 describe('core API wire contract', () => {
+  it('uses the frozen home paths, closed DTOs, and bodyless check-in mutation', async () => {
+    const suffix = 'A'.repeat(22);
+    const announcement = {
+      epoch: `b1e_${suffix}`,
+      id: `ann_${suffix}`,
+      revision: '1',
+      severity: 'info',
+      pinned: false,
+      dismissible: true,
+      published_at: 1_700_000_000,
+      expires_at: null,
+      effective_language: 'en',
+      fallback_from: null,
+      title: 'Confirmed notice',
+      excerpt: 'A bounded excerpt.',
+    };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            enabled: true,
+            checked_in_today: false,
+            balance: '-1.5',
+            award_min: '1',
+            award_max: '2',
+            balance_cap: '340282366920938463463374607431768211.455',
+          },
+          200,
+        ),
+      )
+      .mockResolvedValueOnce(jsonResponse({ award: '2', balance: '0.5' }, 200))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            continue: [
+              {
+                game: 'linklink',
+                resource_id: `ll_${suffix}`,
+                state: 'active',
+                route_id: 'game-linklink',
+              },
+            ],
+            pending_results: [],
+          },
+          200,
+        ),
+      )
+      .mockResolvedValueOnce(jsonResponse({ data: [announcement], next_cursor: null }, 200));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(getHomeCheckinStatus()).resolves.toMatchObject({ balance: '-1.5' });
+    await expect(submitHomeCheckin()).resolves.toEqual({ award: '2', balance: '0.5' });
+    await expect(getHomeGameSummary()).resolves.toEqual([
+      expect.objectContaining({ game: 'linklink', kind: 'continue' }),
+    ]);
+    await expect(getHomeAnnouncements()).resolves.toEqual([
+      { id: announcement.id, title: announcement.title, excerpt: announcement.excerpt },
+    ]);
+
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      '/api/checkin',
+      '/api/checkin',
+      '/api/home/game-summary',
+      '/api/announcements?limit=20',
+    ]);
+    const [, post] = fetchMock.mock.calls[1] ?? [];
+    expect(post?.method).toBe('POST');
+    expect(post?.body).toBeUndefined();
+    expect(new Headers(post?.headers).has('Content-Type')).toBe(false);
+    expect(new Headers(post?.headers).has('Idempotency-Key')).toBe(false);
+  });
+
   it('sends control mutations with one idempotency identity and exact body', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () =>
       jsonResponse(fixture('internal/resources/testdata/endpoint.json'), 201),

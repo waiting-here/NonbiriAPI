@@ -218,6 +218,18 @@ test('reachable user home keeps level state but removes the implementation hint'
     path: '/api/checkin',
     body: { enabled: false },
   });
+  await mockJson(page, {
+    origin: USER_ORIGIN,
+    method: 'GET',
+    path: '/api/home/game-summary',
+    body: [],
+  });
+  await mockJson(page, {
+    origin: USER_ORIGIN,
+    method: 'GET',
+    path: '/api/announcements?limit=20',
+    body: { data: [], next_cursor: null },
+  });
 
   await page.goto(`${USER_ORIGIN}/`);
   await expect(page.getByText('Effective level')).toBeVisible();

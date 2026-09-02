@@ -29,6 +29,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	"github.com/waiting-here/NonbiriAPI/internal/charity"
 	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
+	"github.com/waiting-here/NonbiriAPI/internal/checkin"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
@@ -37,6 +38,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
+	gamehome "github.com/waiting-here/NonbiriAPI/internal/game/home"
 	"github.com/waiting-here/NonbiriAPI/internal/game/linklink"
 	"github.com/waiting-here/NonbiriAPI/internal/game/rps"
 	gameruntime "github.com/waiting-here/NonbiriAPI/internal/game/runtime"
@@ -281,6 +283,8 @@ type application struct {
 	donations       *donation.Service
 	charity         *charity.Service
 	charityRouting  *charityrouting.Service
+	checkin         *checkin.Service
+	homeGames       *gamehome.Service
 	announcements   *announcements.Service
 	issues          *issues.Service
 	reports         *reports.Repository
@@ -990,6 +994,21 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, err
 	}
+	checkinService, err := checkin.NewService(checkin.ServiceConfig{
+		Store: store, FinalAuth: authRuntime, Maintenance: maintenanceService,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create check-in service: %w", err)
+	}
+	homeGameService, err := gamehome.New(gamehome.Options{
+		Database: store.DB(), UserAuthorizer: authRuntime,
+		LinkLink: gameRuntimes.linklink, RPS: gameRuntimes.rps,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create home game summary service: %w", err)
+	}
 	if err := linklink.RegisterContinuation(registry, gameRuntimes.linklink); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("register LinkLink maintenance continuation: %w", err)
@@ -1074,6 +1093,14 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err := charityrouting.RegisterStewardRoutes(authRuntime, charityRoutingService); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("register charity steward routes: %w", err)
+	}
+	if err := checkin.RegisterRoutes(authRuntime, checkinService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register check-in routes: %w", err)
+	}
+	if err := gamehome.RegisterRoutes(authRuntime, homeGameService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register home game summary route: %w", err)
 	}
 	activityRoutes := activityRouteRegistrar{runtime: authRuntime}
 	if err := activities.RegisterRoutes(activityRoutes, activityRoutes, activityService); err != nil {
@@ -1201,6 +1228,8 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		donations:       donationService,
 		charity:         charityService,
 		charityRouting:  charityRoutingService,
+		checkin:         checkinService,
+		homeGames:       homeGameService,
 		announcements:   announcementService,
 		issues:          issueService,
 		reports:         reportRepository,

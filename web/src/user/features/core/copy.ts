@@ -66,6 +66,8 @@ const en = {
   'home.outputTokens': 'Output tokens',
   'home.unknownUsage': 'Requests with unknown usage',
   'home.checkinTitle': 'Daily check-in',
+  'home.checkinRefreshFailed':
+    'Check-in succeeded, but the latest status could not be refreshed. Refresh to retry the read; the check-in will not be submitted again.',
   'home.gamesTitle': 'Continue or view results',
   'home.announcementsTitle': 'Announcements',
   'home.quickTitle': 'Quick access',
@@ -355,6 +357,8 @@ const zh: Record<CoreCopyKey, string> = {
   'home.outputTokens': '输出 Token',
   'home.unknownUsage': '用量未知请求',
   'home.checkinTitle': '每日签到',
+  'home.checkinRefreshFailed':
+    '签到已经成功，但最新状态刷新失败。你可以重新刷新读取；页面不会再次提交签到。',
   'home.gamesTitle': '继续进行或查看结果',
   'home.announcementsTitle': '公告',
   'home.quickTitle': '快捷入口',

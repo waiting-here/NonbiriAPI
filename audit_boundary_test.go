@@ -89,6 +89,8 @@ func assertFreshSafeApplication(t *testing.T, app *application) {
 		{name: "endpoint API mounted behind maintenance", host: auditUserHost, path: "/api/endpoints", want: http.StatusServiceUnavailable},
 		{name: "donation API mounted behind maintenance", host: auditUserHost, path: "/api/donations", want: http.StatusServiceUnavailable},
 		{name: "charity capability mounted behind maintenance", host: auditUserHost, path: "/api/charity/models", want: http.StatusServiceUnavailable},
+		{name: "check-in API mounted behind maintenance", host: auditUserHost, path: "/api/checkin", want: http.StatusServiceUnavailable},
+		{name: "home game summary mounted behind maintenance", host: auditUserHost, path: "/api/home/game-summary", want: http.StatusServiceUnavailable},
 		{name: "activities API mounted behind maintenance", host: auditUserHost, path: "/api/activities", want: http.StatusServiceUnavailable},
 		{name: "announcements API mounted behind maintenance", host: auditUserHost, path: "/api/announcements", want: http.StatusServiceUnavailable},
 		{name: "issues API mounted behind maintenance", host: auditUserHost, path: "/api/issues?state=current", want: http.StatusServiceUnavailable},
@@ -258,6 +260,7 @@ func TestGenerationTwoRootAuthenticationAndMaintenanceWiring(t *testing.T) {
 
 	if app.authRuntime == nil || app.bridge == nil || app.claims == nil || app.resourceRepo == nil ||
 		app.discoveryWorker == nil || app.donations == nil || app.charity == nil || app.charityRouting == nil ||
+		app.checkin == nil || app.homeGames == nil ||
 		app.announcements == nil || app.issues == nil || app.reports == nil || app.activities == nil ||
 		app.activityRepo == nil || app.activityEvents == nil || app.adminConfig == nil || app.adminAlerts == nil ||
 		app.adminUsers == nil || app.lifecycle == nil || app.lifecycleDone == nil ||
@@ -407,7 +410,7 @@ FROM sessions s JOIN users u ON u.id=s.user_id WHERE u.is_admin=1`).Scan(&adminU
 		t.Fatalf("activity final-transaction gate after maintenance disable err=%v", gateErr)
 	}
 	_ = activityTx.Rollback()
-	for _, path := range []string{"/api/endpoints", "/api/donations", "/api/charity/models", "/api/activities", "/api/announcements", "/api/issues?state=current", "/api/games", "/api/debug/session", "/api/logs", "/api/steward/maintenance", "/api/events"} {
+	for _, path := range []string{"/api/endpoints", "/api/donations", "/api/charity/models", "/api/checkin", "/api/home/game-summary", "/api/activities", "/api/announcements", "/api/issues?state=current", "/api/games", "/api/debug/session", "/api/logs", "/api/steward/maintenance", "/api/events"} {
 		unauthenticated := testApplicationRequest(t, app.handler, http.MethodGet, auditUserHost, path, "", nil, nil)
 		if unauthenticated.Code != http.StatusUnauthorized {
 			t.Fatalf("unauthenticated mounted route %s status=%d body=%s", path, unauthenticated.Code, unauthenticated.Body.String())

@@ -13,6 +13,10 @@ import {
   normalizeEndpointKey,
   normalizeEndpointKeyPage,
   normalizeEndpointPage,
+  normalizeHomeAnnouncementPage,
+  normalizeHomeCheckinResult,
+  normalizeHomeCheckinStatus,
+  normalizeHomeGameSummary,
   normalizeManualEntriesResponse,
   normalizeManualUpdateResponse,
   normalizeModel,
@@ -48,6 +52,10 @@ import {
   type EndpointKeyPatchInput,
   type EndpointPatchInput,
   type ExplicitLanguage,
+  type HomeAnnouncementSummary,
+  type HomeCheckinResult,
+  type HomeCheckinStatus,
+  type HomeGameSummary,
   type ManualEntriesResponse,
   type ManualUpdateResponse,
   type Model,
@@ -139,6 +147,32 @@ export async function getMe(signal?: AbortSignal): Promise<UserEnvelope> {
   const response = await coreRequest('/api/me', { signal });
   expectedStatus(response.status, 200, 'profile');
   return normalizeUserEnvelope(response.payload);
+}
+
+export async function getHomeCheckinStatus(signal?: AbortSignal): Promise<HomeCheckinStatus> {
+  const response = await coreRequest('/api/checkin', { signal });
+  expectedStatus(response.status, 200, 'check-in status');
+  return normalizeHomeCheckinStatus(response.payload);
+}
+
+export async function submitHomeCheckin(signal?: AbortSignal): Promise<HomeCheckinResult> {
+  const response = await coreRequest('/api/checkin', { method: 'POST', signal });
+  expectedStatus(response.status, 200, 'check-in');
+  return normalizeHomeCheckinResult(response.payload);
+}
+
+export async function getHomeGameSummary(signal?: AbortSignal): Promise<HomeGameSummary[]> {
+  const response = await coreRequest('/api/home/game-summary', { signal });
+  expectedStatus(response.status, 200, 'home game summary');
+  return normalizeHomeGameSummary(response.payload);
+}
+
+export async function getHomeAnnouncements(
+  signal?: AbortSignal,
+): Promise<HomeAnnouncementSummary[]> {
+  const response = await coreRequest('/api/announcements?limit=20', { signal });
+  expectedStatus(response.status, 200, 'home announcements');
+  return normalizeHomeAnnouncementPage(response.payload).data;
 }
 
 export async function patchLanguage(

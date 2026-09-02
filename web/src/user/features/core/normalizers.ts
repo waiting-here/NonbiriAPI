@@ -19,6 +19,10 @@ import {
   type DiscoverySafeClass,
   type Endpoint,
   type EndpointKey,
+  type HomeAnnouncementSummary,
+  type HomeCheckinResult,
+  type HomeCheckinStatus,
+  type HomeGameSummary,
   type ManualEntriesResponse,
   type ManualUpdateResponse,
   type Model,
@@ -168,6 +172,14 @@ function creditAmount(value: unknown, label: string, signed: boolean): string {
   return value;
 }
 
+function creditMilli(value: string): bigint {
+  const negative = value.startsWith('-');
+  const unsigned = negative ? value.slice(1) : value;
+  const [integer = '', fraction = ''] = unsigned.split('.');
+  const result = BigInt(integer) * 1_000n + BigInt(fraction.padEnd(3, '0') || '0');
+  return negative ? -result : result;
+}
+
 function httpsURL(value: unknown, label: string): string {
   const candidate = scalarString(value, 2_048, label);
   let parsed: URL;
@@ -215,6 +227,33 @@ function uniqueBy<T>(values: readonly T[], key: (value: T) => string, label: str
   }
 }
 
+function opaqueID(value: unknown, prefix: string, label: string): string {
+  const expectedLength = prefix.length + 22;
+  const candidate = scalarString(value, expectedLength, label);
+  const suffix = candidate.slice(prefix.length);
+  if (
+    candidate.length !== expectedLength ||
+    !candidate.startsWith(prefix) ||
+    !/^[A-Za-z0-9_-]{22}$/.test(suffix) ||
+    !/[AQgw]$/.test(suffix)
+  ) {
+    invalid(label);
+  }
+  return candidate;
+}
+
+function wireText(
+  value: unknown,
+  maximumScalars: number,
+  maximumBytes: number,
+  label: string,
+  allowEmpty = false,
+): string {
+  const candidate = scalarString(value, maximumScalars, label, { allowEmpty });
+  if (new TextEncoder().encode(candidate).byteLength > maximumBytes) invalid(label);
+  return candidate;
+}
+
 export function normalizePage<T>(
   value: unknown,
   normalize: (item: unknown) => T,
@@ -224,6 +263,188 @@ export function normalizePage<T>(
   const data = boundedArray(record.data, normalize, label);
   uniqueBy(data, (item) => JSON.stringify(item), `${label} page`);
   return { data, next_cursor: nullableCursor(record.next_cursor) };
+}
+
+export function normalizeHomeCheckinStatus(value: unknown): HomeCheckinStatus {
+  const root = asRecord(value, 'check-in status');
+  if (root.enabled === false) {
+    exactRecord(value, ['enabled'], [], 'check-in status');
+    return { enabled: false };
+  }
+  const record = exactRecord(
+    value,
+    ['enabled', 'checked_in_today', 'balance', 'award_min', 'award_max', 'balance_cap'],
+    [],
+    'check-in status',
+  );
+  if (!exactBoolean(record.enabled, 'check-in enabled state')) invalid('check-in status');
+  const awardMin = creditAmount(record.award_min, 'check-in minimum award', false);
+  const awardMax = creditAmount(record.award_max, 'check-in maximum award', false);
+  if (creditMilli(awardMin) > creditMilli(awardMax)) invalid('check-in award range');
+  return {
+    enabled: true,
+    checked_in_today: exactBoolean(record.checked_in_today, 'check-in day state'),
+    balance: creditAmount(record.balance, 'check-in balance', true),
+    award_min: awardMin,
+    award_max: awardMax,
+    balance_cap: creditAmount(record.balance_cap, 'check-in balance cap', false),
+  };
+}
+
+export function normalizeHomeCheckinResult(value: unknown): HomeCheckinResult {
+  const record = exactRecord(value, ['award', 'balance'], [], 'check-in result');
+  return {
+    award: creditAmount(record.award, 'check-in award', false),
+    balance: creditAmount(record.balance, 'check-in balance', true),
+  };
+}
+
+function normalizeHomeContinue(value: unknown): HomeGameSummary {
+  const record = exactRecord(
+    value,
+    ['game', 'resource_id', 'state', 'route_id'],
+    [],
+    'home game continuation',
+  );
+  if (
+    record.game === 'fishing' &&
+    record.route_id === 'game-fishing' &&
+    (record.state === 'settlement_pending' || record.state === 'recovery_required')
+  ) {
+    return {
+      game: record.game,
+      route_id: record.route_id,
+      kind: 'continue',
+      resource_id: opaqueID(record.resource_id, 'fb_', 'fishing batch id'),
+      state: record.state,
+    };
+  }
+  if (
+    record.game === 'linklink' &&
+    record.route_id === 'game-linklink' &&
+    record.state === 'active'
+  ) {
+    return {
+      game: record.game,
+      route_id: record.route_id,
+      kind: 'continue',
+      resource_id: opaqueID(record.resource_id, 'll_', 'LinkLink session id'),
+      state: record.state,
+    };
+  }
+  if (
+    record.game === 'rps' &&
+    record.route_id === 'game-rps' &&
+    (record.state === 'started' || record.state === 'terminal_processing')
+  ) {
+    return {
+      game: record.game,
+      route_id: record.route_id,
+      kind: 'continue',
+      resource_id: opaqueID(record.resource_id, 'rps_', 'RPS session id'),
+      state: record.state,
+    };
+  }
+  return invalid('home game continuation');
+}
+
+function normalizeHomePendingResult(value: unknown): HomeGameSummary {
+  const record = exactRecord(
+    value,
+    ['game', 'resource_id', 'created_at', 'route_id'],
+    [],
+    'home pending game result',
+  );
+  if (record.game === 'fishing' && record.route_id === 'game-fishing') {
+    return {
+      game: record.game,
+      route_id: record.route_id,
+      kind: 'view',
+      resource_id: opaqueID(record.resource_id, 'fb_', 'fishing batch id'),
+      created_at: unixTime(record.created_at, 'pending fishing result time'),
+    };
+  }
+  if (record.game === 'rps' && record.route_id === 'game-rps') {
+    return {
+      game: record.game,
+      route_id: record.route_id,
+      kind: 'view',
+      resource_id: opaqueID(record.resource_id, 'rps_', 'RPS session id'),
+      created_at: unixTime(record.created_at, 'pending RPS result time'),
+    };
+  }
+  return invalid('home pending game result');
+}
+
+export function normalizeHomeGameSummary(value: unknown): HomeGameSummary[] {
+  const record = exactRecord(value, ['continue', 'pending_results'], [], 'home game summary');
+  const continuations = boundedArray(
+    record.continue,
+    normalizeHomeContinue,
+    'home game continuations',
+  );
+  const pending = boundedArray(
+    record.pending_results,
+    normalizeHomePendingResult,
+    'home pending game results',
+  );
+  const result = [...continuations, ...pending];
+  uniqueBy(
+    result,
+    (item) => `${item.game}:${item.resource_id}`,
+    'home game summary',
+  );
+  return result;
+}
+
+function normalizeHomeAnnouncement(value: unknown): HomeAnnouncementSummary {
+  const record = exactRecord(
+    value,
+    [
+      'epoch',
+      'id',
+      'revision',
+      'severity',
+      'pinned',
+      'dismissible',
+      'published_at',
+      'expires_at',
+      'effective_language',
+      'fallback_from',
+      'title',
+      'excerpt',
+    ],
+    [],
+    'announcement summary',
+  );
+  if (!['info', 'warning', 'important'].includes(record.severity as string))
+    invalid('announcement severity');
+  if (record.effective_language !== 'zh' && record.effective_language !== 'en')
+    invalid('announcement language');
+  if (
+    record.fallback_from !== null &&
+    record.fallback_from !== 'zh' &&
+    record.fallback_from !== 'en'
+  ) {
+    invalid('announcement fallback language');
+  }
+  opaqueID(record.epoch, 'b1e_', 'announcement epoch');
+  decimal(record.revision, 'announcement revision', true);
+  exactBoolean(record.pinned, 'announcement pinned state');
+  exactBoolean(record.dismissible, 'announcement dismissible state');
+  unixTime(record.published_at, 'announcement publish time');
+  nullableTime(record.expires_at, 'announcement expiry');
+  return {
+    id: opaqueID(record.id, 'ann_', 'announcement id'),
+    title: wireText(record.title, 160, 640, 'announcement title'),
+    excerpt: wireText(record.excerpt, 240, 960, 'announcement excerpt', true),
+  };
+}
+
+export function normalizeHomeAnnouncementPage(value: unknown): Page<HomeAnnouncementSummary> {
+  const result = normalizePage(value, normalizeHomeAnnouncement, 'announcements');
+  uniqueBy(result.data, (item) => item.id, 'announcement page');
+  return result;
 }
 
 export function normalizeUsageSummary(value: unknown): UsageSummary {

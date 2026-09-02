@@ -1,5 +1,14 @@
 import { ApiError } from '@shared/query/http';
-import { beginElevation, deleteCurrentAccount, exportAccountV4, readAccountAuthority } from './api';
+import {
+  beginElevation,
+  deleteCurrentAccount,
+  exportAccountV4,
+  getHomeAnnouncements,
+  getHomeCheckinStatus,
+  getHomeGameSummary,
+  readAccountAuthority,
+  submitHomeCheckin,
+} from './api';
 import type { AccountLifecycleAdapter, HomeAdapters } from './types';
 
 export class CapabilityUnavailableError extends ApiError {
@@ -10,9 +19,13 @@ export class CapabilityUnavailableError extends ApiError {
 }
 
 export const productionHomeAdapters: HomeAdapters = Object.freeze({
-  checkin: { state: 'unavailable' as const },
-  games: { state: 'unavailable' as const },
-  announcements: { state: 'unavailable' as const },
+  checkin: Object.freeze({
+    state: 'available' as const,
+    load: getHomeCheckinStatus,
+    submit: submitHomeCheckin,
+  }),
+  games: Object.freeze({ state: 'available' as const, load: getHomeGameSummary }),
+  announcements: Object.freeze({ state: 'available' as const, load: getHomeAnnouncements }),
 });
 
 const unavailable = async (): Promise<never> => {

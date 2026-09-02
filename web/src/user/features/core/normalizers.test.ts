@@ -10,6 +10,10 @@ import {
   normalizeDiscoveryAccepted,
   normalizeEndpoint,
   normalizeEndpointKey,
+  normalizeHomeAnnouncementPage,
+  normalizeHomeCheckinResult,
+  normalizeHomeCheckinStatus,
+  normalizeHomeGameSummary,
   normalizeManualUpdateResponse,
   normalizeUserEnvelope,
   validateEndpointSecret,
@@ -32,6 +36,151 @@ describe('core wire normalizers', () => {
     expect(endpoint).toMatchObject({ id: '11', revision: '3', key_count: '2' });
     expect(key).toMatchObject({ id: '21', endpoint_id: '11', revision: '4' });
     expect(user.user.usage.total_requests).toBe('340282366920938463463374607431768211455');
+  });
+
+  it('strictly decodes the frozen home check-in wire without numeric conversion', () => {
+    const maximum = '340282366920938463463374607431768211.455';
+    expect(normalizeHomeCheckinStatus({ enabled: false })).toEqual({ enabled: false });
+    expect(
+      normalizeHomeCheckinStatus({
+        enabled: true,
+        checked_in_today: false,
+        balance: '-1.5',
+        award_min: '0',
+        award_max: maximum,
+        balance_cap: maximum,
+      }),
+    ).toMatchObject({ award_max: maximum, balance_cap: maximum });
+    expect(normalizeHomeCheckinResult({ award: maximum, balance: '-1.5' })).toEqual({
+      award: maximum,
+      balance: '-1.5',
+    });
+
+    expect(() => normalizeHomeCheckinStatus({ enabled: false, reason: 'hidden' })).toThrow(
+      /check-in status/i,
+    );
+    expect(() =>
+      normalizeHomeCheckinStatus({
+        enabled: true,
+        checked_in_today: false,
+        credits: '1',
+        award_min_milli: '1',
+        award_max_milli: '2',
+        credits_cap_milli: '3',
+      }),
+    ).toThrow(/check-in status/i);
+    expect(() =>
+      normalizeHomeCheckinStatus({
+        enabled: true,
+        checked_in_today: false,
+        balance: '1',
+        award_min: '2',
+        award_max: '1',
+        balance_cap: '3',
+      }),
+    ).toThrow(/award range/i);
+    expect(() => normalizeHomeCheckinResult({ award: '1', balance: '2', extra: true })).toThrow(
+      /check-in result/i,
+    );
+  });
+
+  it('enforces the closed game-route-state tuples in the home summary', () => {
+    const suffix = 'A'.repeat(22);
+    const valid = {
+      continue: [
+        {
+          game: 'fishing',
+          resource_id: `fb_${suffix}`,
+          state: 'recovery_required',
+          route_id: 'game-fishing',
+        },
+        {
+          game: 'linklink',
+          resource_id: `ll_${suffix}`,
+          state: 'active',
+          route_id: 'game-linklink',
+        },
+        {
+          game: 'rps',
+          resource_id: `rps_${suffix}`,
+          state: 'terminal_processing',
+          route_id: 'game-rps',
+        },
+      ],
+      pending_results: [
+        {
+          game: 'fishing',
+          resource_id: `fb_${'B'.repeat(21)}A`,
+          created_at: 1_700_000_000,
+          route_id: 'game-fishing',
+        },
+        {
+          game: 'rps',
+          resource_id: `rps_${'C'.repeat(21)}A`,
+          created_at: 1_700_000_001,
+          route_id: 'game-rps',
+        },
+      ],
+    };
+    const result = normalizeHomeGameSummary(valid);
+    expect(result).toHaveLength(5);
+    expect(result[0]).toMatchObject({ kind: 'continue', state: 'recovery_required' });
+    expect(result[4]).toMatchObject({ kind: 'view', created_at: 1_700_000_001 });
+
+    expect(() =>
+      normalizeHomeGameSummary({
+        ...valid,
+        continue: [{ ...valid.continue[0], route_id: 'game-rps' }],
+      }),
+    ).toThrow(/home game continuation/i);
+    expect(() =>
+      normalizeHomeGameSummary({
+        ...valid,
+        pending_results: [{ ...valid.pending_results[0], state: 'committed' }],
+      }),
+    ).toThrow(/pending game result/i);
+    expect(() => normalizeHomeGameSummary({ ...valid, href: '/games' })).toThrow(
+      /home game summary/i,
+    );
+  });
+
+  it('validates the complete announcement summary before projecting the home card', () => {
+    const suffix = 'A'.repeat(22);
+    const announcement = {
+      epoch: `b1e_${suffix}`,
+      id: `ann_${suffix}`,
+      revision: '1',
+      severity: 'important',
+      pinned: true,
+      dismissible: false,
+      published_at: 1_700_000_000,
+      expires_at: null,
+      effective_language: 'en',
+      fallback_from: null,
+      title: 'Long-lived authority',
+      excerpt: 'A strict projection.',
+    };
+    expect(
+      normalizeHomeAnnouncementPage({ data: [announcement], next_cursor: 'next' }),
+    ).toEqual({
+      data: [
+        {
+          id: announcement.id,
+          title: announcement.title,
+          excerpt: announcement.excerpt,
+        },
+      ],
+      next_cursor: 'next',
+    });
+    expect(() =>
+      normalizeHomeAnnouncementPage({
+        data: [{ ...announcement, rendered_body: 'not a summary field' }],
+        next_cursor: null,
+      }),
+    ).toThrow(/announcement summary/i);
+    expect(() =>
+      normalizeHomeAnnouncementPage({ data: [announcement], next_cursor: null, extra: true }),
+    ).toThrow(/announcements page/i);
   });
 
   it('rejects unknown fields, unsafe ID widths, C1 controls, and out-of-range times', () => {

@@ -266,11 +266,66 @@ export type HomeCapability<T> =
   | { state: 'available'; load: (signal?: AbortSignal) => Promise<T> }
   | { state: 'unavailable' };
 
-export interface HomeGameSummary {
-  route_id: 'game-fishing' | 'game-linklink' | 'game-rps';
-  kind: 'continue' | 'view';
-  resource_id?: string;
+export type HomeCheckinStatus =
+  | { enabled: false }
+  | {
+      enabled: true;
+      checked_in_today: boolean;
+      balance: string;
+      award_min: string;
+      award_max: string;
+      balance_cap: string;
+    };
+
+export interface HomeCheckinResult {
+  award: string;
+  balance: string;
 }
+
+export type HomeCheckinCapability =
+  | {
+      state: 'available';
+      load: (signal?: AbortSignal) => Promise<HomeCheckinStatus>;
+      submit: (signal?: AbortSignal) => Promise<HomeCheckinResult>;
+    }
+  | { state: 'unavailable' };
+
+export type HomeGameSummary =
+  | {
+      game: 'fishing';
+      route_id: 'game-fishing';
+      kind: 'continue';
+      resource_id: string;
+      state: 'settlement_pending' | 'recovery_required';
+    }
+  | {
+      game: 'linklink';
+      route_id: 'game-linklink';
+      kind: 'continue';
+      resource_id: string;
+      state: 'active';
+    }
+  | {
+      game: 'rps';
+      route_id: 'game-rps';
+      kind: 'continue';
+      resource_id: string;
+      state: 'started' | 'terminal_processing';
+    }
+  | {
+      game: 'fishing';
+      route_id: 'game-fishing';
+      kind: 'view';
+      resource_id: string;
+      created_at: number;
+    }
+  | {
+      game: 'rps';
+      route_id: 'game-rps';
+      kind: 'view';
+      resource_id: string;
+      created_at: number;
+    };
 
 export interface HomeAnnouncementSummary {
   id: string;
@@ -279,8 +334,7 @@ export interface HomeAnnouncementSummary {
 }
 
 export interface HomeAdapters {
-  /** No production success DTO is available yet, so this capability stays unavailable. */
-  checkin: HomeCapability<never>;
+  checkin: HomeCheckinCapability;
   games: HomeCapability<HomeGameSummary[]>;
   announcements: HomeCapability<HomeAnnouncementSummary[]>;
 }
