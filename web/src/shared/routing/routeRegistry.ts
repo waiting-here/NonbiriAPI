@@ -146,13 +146,14 @@ export const USER_ROUTE_DESCRIPTORS = [
   }),
   user({ id: 'logs', path: '/logs', access: 'user', layout: 'wide', registered: true }),
   user({ id: 'issues', path: '/issues', access: 'user', layout: 'readable', registered: true }),
-  user({ id: 'credential-report', path: '/report', access: 'public', layout: 'readable' }),
-  user({ id: 'announcements', path: '/announcements', access: 'user', layout: 'wide' }),
+  user({ id: 'credential-report', path: '/report', access: 'public', layout: 'readable', registered: true }),
+  user({ id: 'announcements', path: '/announcements', access: 'user', layout: 'wide', registered: true }),
   user({
     id: 'announcement-detail',
     path: '/announcements/:announcementId',
     access: 'user',
     layout: 'readable',
+    registered: true,
   }),
   user({
     id: 'caller-key',
@@ -285,6 +286,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     access: 'admin',
     layout: 'wide',
     nav: true,
+    registered: true,
     navGroup: 'content',
     icon: 'activities',
     labelKey: 'admin.activities.nav',
@@ -307,6 +309,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     access: 'admin',
     layout: 'wide',
     nav: true,
+    registered: true,
     navGroup: 'content',
     icon: 'reports',
     labelKey: 'admin.reports.nav',
@@ -317,6 +320,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     path: '/reports/:caseId',
     access: 'admin',
     layout: 'readable',
+    registered: true,
   }),
   admin({
     id: 'admin-announcements',
@@ -324,6 +328,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     access: 'admin',
     layout: 'wide',
     nav: true,
+    registered: true,
     navGroup: 'content',
     icon: 'announcements',
     labelKey: 'admin.announcements.nav',
@@ -334,6 +339,7 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     path: '/announcements/:announcementId',
     access: 'admin',
     layout: 'readable',
+    registered: true,
   }),
 ] as const satisfies readonly RouteDescriptor[];
 

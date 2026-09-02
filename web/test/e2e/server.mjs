@@ -13,31 +13,20 @@ const MIME = new Map([
 ]);
 
 const DEBUG_LIMITS = Object.freeze({
-  max_sessions: 64,
-  hub_bytes: 128,
-  session_bytes: 4,
-  max_traces: 32,
-  max_events: 128,
-  event_bytes: 512,
-  subscriber_queue: 64,
-  max_subscribers: 2,
-  raw_request_bytes: 64,
-  messages_tools_bytes: 128,
-  parameters_bytes: 64,
-  effective_summary_bytes: 64,
-  response_bytes: 256,
-  trace_bytes: 768,
-  first_attach_seconds: 30,
-  reconnect_seconds: 30,
-  idle_seconds: 600,
-  absolute_seconds: 3_600,
-  heartbeat_seconds: 15,
-  write_deadline_seconds: 15,
-  confirmation_seconds: 60,
+  session_bytes: 4_194_304,
+  traces: 32,
+  events: 128,
+  subscribers: 2,
+  event_bytes: 524_288,
+  trace_bytes: 786_432,
 });
-const DEBUG_SESSION_ONE = 'dbg_abcdefghijklmnopqrstuv';
-const DEBUG_SESSION_TWO = 'dbg_zyxwvutsrqponmlkjihgfe';
-const DEBUG_TRACE_ID = 'debug-body-marker-abcdefghijkl';
+const DEBUG_SESSION_ONE = `dbs_${'A'.repeat(22)}`;
+const DEBUG_SESSION_TWO = `dbs_${'B'.repeat(21)}Q`;
+const DEBUG_TRACE_ID = `dbt_${'T'.repeat(21)}A`;
+const DEBUG_TRACE_MARKER = 'debug-body-marker-abcdefghijkl';
+const DEBUG_EVENT_ONE = `dbe_${'E'.repeat(21)}A`;
+const DEBUG_EVENT_TWO = `dbe_${'F'.repeat(21)}Q`;
+const DEBUG_EVENT_THREE = `dbe_${'G'.repeat(21)}g`;
 const debugReconnectCounts = new Map();
 
 function send(response, status, contentType, body) {
@@ -49,59 +38,70 @@ function send(response, status, contentType, body) {
   response.end(body);
 }
 
-function debugMetadata(id, generation, mode, lastEventId, connected = true) {
+function debugMetadata(id, generation, revision, mode, lastEventId) {
   return {
+    active: true,
     id,
-    generation,
+    generation: String(generation),
+    revision: String(revision),
     mode,
     created_at: 1,
     expires_at: 3_601,
     idle_expires_at: 601,
-    connected,
+    inflight_count: 0,
+    connected_subscribers: 1,
     last_event_id: lastEventId,
     limits: DEBUG_LIMITS,
   };
 }
 
-function debugTrace(mode = 'dry') {
+function debugTrace() {
+  const body = JSON.stringify({ marker: DEBUG_TRACE_MARKER, stream: false });
   return {
-    request_id: DEBUG_TRACE_ID,
-    model: 'fixture/model',
-    mode,
-    terminal: 'dry_completed',
-    received_at: 1,
-    route: '/v1/chat/completions',
-    raw_request: DEBUG_TRACE_ID,
+    trace_id: DEBUG_TRACE_ID,
+    revision: '1',
+    state: 'terminal',
+    request: {
+      route_kind: 'openai_chat_completions',
+      model: 'fixture/model',
+      stream: false,
+      body: {
+        media_type: 'application/json',
+        byte_count: Buffer.byteLength(body),
+        text: body,
+        base64: null,
+        truncated: false,
+      },
+    },
+    upstream_result: null,
+    caller_result: {
+      http_status: 422,
+      error_code: 'debug_dry_run_intercepted',
+      source: 'platform',
+      message: '[NonbiriAPI] Debug Dry request intercepted.',
+      completed_at: 2,
+    },
+    created_at: 1,
+    updated_at: 2,
+    truncated: false,
   };
 }
 
-function debugEnvelope({
-  id,
+function debugEvent({
+  eventId,
+  sessionId,
   generation,
-  seq,
-  type,
-  mode = 'dry',
-  payload,
-  traceId = '',
-  revision = 0,
+  kind,
+  data,
 }) {
   return {
-    version: 1,
-    seq,
-    type,
-    session_id: id,
-    trace_id: traceId,
-    revision,
-    at: seq,
-    payload: payload ?? {},
-    ...(type === 'session_snapshot'
-      ? {
-          payload: {
-            metadata: debugMetadata(id, generation, mode, seq),
-            traces: [debugTrace(mode)],
-          },
-        }
-      : {}),
+    version: 2,
+    event_id: eventId,
+    session_id: sessionId,
+    generation: String(generation),
+    kind,
+    occurred_at: 2,
+    data,
   };
 }
 
@@ -129,6 +129,10 @@ function serveDebugEvents(request, response) {
     send(response, 400, 'application/json; charset=utf-8', '{"error":"invalid_fixture_case"}');
     return;
   }
+  const mode = url.searchParams.get('mode') === 'live' ? 'live' : 'dry';
+  const revision = /^(0|[1-9][0-9]*)$/.test(url.searchParams.get('revision') ?? '')
+    ? url.searchParams.get('revision')
+    : '1';
 
   response.writeHead(200, debugSSEHeaders(request));
   const heartbeat = setInterval(() => {
@@ -141,31 +145,40 @@ function serveDebugEvents(request, response) {
   const keepOpen = () => {
     if (!response.writableEnded) response.write(': fixture-ready\n\n');
   };
-  const writeSnapshot = (id, generation, seq, mode = 'dry') => {
+  const writeSnapshot = (id, generation, eventId) => {
+    const session = debugMetadata(id, generation, revision, mode, eventId);
+    const event = debugEvent({
+      eventId,
+      sessionId: id,
+      generation,
+      kind: 'snapshot',
+      data: {
+        session,
+        traces: [debugTrace()],
+        first_event_id: eventId,
+        last_event_id: eventId,
+      },
+    });
     response.write(
-      debugSSEFrame(
-        seq,
-        'session_snapshot',
-        debugEnvelope({ id, generation, seq, type: 'session_snapshot', mode }),
-      ),
+      debugSSEFrame(eventId, 'snapshot', event),
     );
   };
 
   if (scenario.startsWith('basic-one-')) {
-    writeSnapshot(DEBUG_SESSION_ONE, 1, 1);
+    writeSnapshot(DEBUG_SESSION_ONE, 1, DEBUG_EVENT_ONE);
     keepOpen();
     return;
   }
   if (scenario.startsWith('basic-two-')) {
-    writeSnapshot(DEBUG_SESSION_TWO, 2, 1);
+    writeSnapshot(DEBUG_SESSION_TWO, 2, DEBUG_EVENT_ONE);
     keepOpen();
     return;
   }
   if (scenario.startsWith('reconnect-')) {
     const count = (debugReconnectCounts.get(scenario) ?? 0) + 1;
     debugReconnectCounts.set(scenario, count);
-    const sequence = count === 1 ? 3 : 4;
-    writeSnapshot(DEBUG_SESSION_ONE, 1, sequence);
+    const eventId = count === 1 ? DEBUG_EVENT_ONE : DEBUG_EVENT_TWO;
+    writeSnapshot(DEBUG_SESSION_ONE, 1, eventId);
     if (count === 1) {
       closeHeartbeat();
       response.end();
@@ -175,40 +188,31 @@ function serveDebugEvents(request, response) {
     return;
   }
   if (scenario.startsWith('gap-')) {
-    writeSnapshot(DEBUG_SESSION_ONE, 1, 1);
+    writeSnapshot(DEBUG_SESSION_ONE, 1, DEBUG_EVENT_ONE);
+    const gap = debugEvent({
+      eventId: DEBUG_EVENT_TWO,
+      sessionId: DEBUG_SESSION_ONE,
+      generation: 1,
+      kind: 'gap',
+      data: { reason: 'ring_evicted', first_available_event_id: DEBUG_EVENT_ONE },
+    });
     response.write(
-      debugSSEFrame(
-        2,
-        'gap',
-        debugEnvelope({
-          id: DEBUG_SESSION_ONE,
-          generation: 1,
-          seq: 2,
-          type: 'gap',
-          payload: { reason: 'resume_gap', dropped: 2 },
-        }),
-      ),
+      debugSSEFrame(DEBUG_EVENT_TWO, 'gap', gap),
     );
     keepOpen();
     return;
   }
   if (scenario.startsWith('truncated-')) {
-    writeSnapshot(DEBUG_SESSION_ONE, 1, 1);
+    writeSnapshot(DEBUG_SESSION_ONE, 1, DEBUG_EVENT_ONE);
+    const mismatched = debugEvent({
+      eventId: DEBUG_EVENT_TWO,
+      sessionId: DEBUG_SESSION_ONE,
+      generation: 1,
+      kind: 'trace_upsert',
+      data: debugTrace(),
+    });
     response.write(
-      debugSSEFrame(
-        2,
-        'not_trace',
-        debugEnvelope({
-          id: DEBUG_SESSION_ONE,
-          generation: 1,
-          seq: 2,
-          type: 'trace_upsert',
-          traceId: DEBUG_TRACE_ID,
-          revision: 1,
-          payload: {},
-        }),
-        true,
-      ),
+      debugSSEFrame(DEBUG_EVENT_THREE, 'trace_upsert', mismatched),
     );
     closeHeartbeat();
     response.end();

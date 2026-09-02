@@ -27,7 +27,23 @@
       "requests": "Requests",
       "unknownUsage": "Unknown-usage requests",
       "viewUsers": "Open users",
-      "viewEndpoints": "Open endpoints"
+      "viewEndpoints": "Open endpoints",
+      "promptTokens": "Prompt tokens",
+      "activityTitle": "Product activity",
+      "activityDisabled": "Activity aggregation disabled",
+      "activityDisabledBody": "No activity rows are retained while aggregation is disabled.",
+      "latestDay": "Latest day",
+      "productActive": "Product active",
+      "gameActive": "Game active",
+      "noActivity": "No activity rows",
+      "noActivityBody": "The authority read succeeded but no day is available.",
+      "endpointGroupsFirstPage": "{{groupCount}} groups in the first authority page.",
+      "reportsTitle": "Credential reports",
+      "nonTerminalReports": "Non-terminal total",
+      "pendingIndexing": "Indexing",
+      "pendingReview": "Review",
+      "approvedProcessing": "Processing",
+      "openReportInbox": "Open report inbox"
     },
     "users": {
       "nav": "Users",
@@ -132,7 +148,21 @@
       },
       "banCustomLabel": "{{value}} {{unit}}",
       "banInvalidDuration": "Enter a valid ban duration (a positive whole number within the server limit).",
-      "banHint": "The duration starts now; the server stores the resulting absolute deadline."
+      "banHint": "The duration starts now; the server stores the resulting absolute deadline.",
+      "banDurationDays": "Ban duration (days; blank is permanent)",
+      "banReasonMissing": "No reason supplied",
+      "deleteRefreshOnlyBody": "Fresh elevation is consumed. A conflict or unknown response refreshes authoritative state and never repeats deletion automatically.",
+      "deleteTypeConfirmation": "Type {{token}} to confirm immediate account deletion",
+      "detailIdRevision": "ID / revision",
+      "economyDecrease": "Decrease",
+      "economyDirection": "Direction",
+      "economyIncrease": "Increase",
+      "economyPositiveAmount": "Positive amount",
+      "economyPositiveHint": "The server ledger applies the selected direction to a canonical positive credit amount. A reason is required.",
+      "economyTarget": "Target",
+      "levelEffectiveTag": "effective",
+      "revisionGuard": "All writes compare revision {{revision}}.",
+      "updated": "Updated"
     },
     "logs": {
       "nav": "Logs & usage",
@@ -162,7 +192,9 @@
       "empty": "No endpoint records",
       "emptyBody": "The administrator API returned no endpoint overview records.",
       "searchPlaceholder": "Filter by base URL substring",
-      "searchAria": "Filter endpoints by base URL"
+      "searchAria": "Filter endpoints by base URL",
+      "queryTooLong": "Query must be 512 UTF-8 bytes or fewer (currently {{bytes}}).",
+      "noProbeNotice": "This surface never sends ping, HEAD, empty, paid, or background health-check requests."
     },
     "alerts": {
       "nav": "Alerts",
@@ -181,7 +213,21 @@
       "resolve": "Resolve",
       "reopen": "Reopen",
       "empty": "No alerts returned",
-      "emptyBody": "The administrator API returned no alert records."
+      "emptyBody": "The administrator API returned no alert records.",
+      "action": "Action",
+      "kindValue": {
+        "fetchFailed": "Fetch failed",
+        "forwardError": "Forward error",
+        "registrationRejected": "Registration rejected",
+        "maintenanceEnabled": "Maintenance enabled",
+        "donationFailureDisabled": "Donation disabled after failures",
+        "issueProjectionIncomplete": "Issue projection incomplete",
+        "reportRetryExhausted": "Report retries exhausted",
+        "fishingRetryExhausted": "Fishing recovery retries exhausted",
+        "rpsTerminalRetrying": "RPS terminal recovery retrying",
+        "workerCheckpointFailed": "Worker checkpoint failed",
+        "invariantViolation": "Invariant violation"
+      }
     },
     "settings": {
       "nav": "Site settings",
@@ -217,7 +263,60 @@
       "timezonePreviewInvalid": "enter a valid whole-minute offset",
       "timezoneImmutable": "After the first check-in or daily activity record, the server permanently refuses timezone changes.",
       "timezoneConflict": "The timezone is already locked. The authoritative server value has been restored.",
-      "timezoneRefreshFailed": "The timezone is already locked, but the authoritative value could not be refreshed. Reload before editing again."
+      "timezoneRefreshFailed": "The timezone is already locked, but the authoritative value could not be refreshed. Reload before editing again.",
+      "authorityRevision": "Revision {{revision}}",
+      "authorityRevisionNote": "Authority revision {{revision}}. A conflict or unknown response reloads the complete authoritative snapshot without resubmitting.",
+      "dangerousDescription": "Access, abuse, and legal changes can affect admission or published policy. Review each server description before saving.",
+      "dangerousEmpty": "No dangerous settings",
+      "dangerousEmptyBody": "No dangerous catalog entry matches the search.",
+      "dangerousTitle": "Dangerous and legal settings",
+      "enumValue": "Enumerated setting",
+      "enumValues": {
+        "disabled": "Disabled",
+        "empty": "Empty value (\"\")",
+        "en": "English",
+        "enabled": "Enabled",
+        "levelGated": "Level 3 and above",
+        "unknown": "Unknown value ({{value}})",
+        "zh": "Chinese"
+      },
+      "groupCount": "{{count}} settings",
+      "groups": {
+        "abuse": "Abuse controls",
+        "access": "Access",
+        "activities": "Activities",
+        "alerts": "Alerts",
+        "announcements": "Announcements",
+        "charity": "Charity",
+        "connector": "Connectors",
+        "economy": "Economy",
+        "games": "Games",
+        "identity": "Identity and appearance",
+        "legal": "Legal text",
+        "limits": "Limits",
+        "reports": "Reports",
+        "unknown": "Other ({{group}})"
+      },
+      "ordinaryEmpty": "No ordinary settings",
+      "ordinaryEmptyBody": "No ordinary catalog entry matches the search.",
+      "ordinaryTitle": "Ordinary settings",
+      "readOnlyAuthority": "Read-only here; this value is owned by its dedicated authority page.",
+      "reloadAuthority": "Reload authority",
+      "remoteLogoWarning": "A remote logo makes a public third-party browser request and may fail independently. Never place a secret in this URL.",
+      "restoreAuthorityValue": "Restore authority value",
+      "unknownCatalogGate": "Unknown gate ({{key}})",
+      "validation": {
+        "allowedChoice": "comes from the allowed choices",
+        "amountRangeStep": "is within {{minimum}}–{{maximum}} credits at step {{step}}",
+        "boolean": "uses true or false",
+        "canonical": "Enter a canonical {{type}} value that {{detail}}.",
+        "integerSyntax": "contains no whitespace, fractions, exponents, or leading zeroes",
+        "maxUtf8Bytes": "is no larger than {{maximum}} UTF-8 bytes",
+        "noControlCharacters": "contains no control characters",
+        "notNull": "is not null",
+        "rangeStep": "is within {{minimum}}–{{maximum}} at step {{step}}",
+        "unicodeLength": "contains {{minimum}}–{{maximum}} Unicode characters"
+      }
     },
     "games": {
       "nav": "Games",
@@ -239,21 +338,595 @@
       "shell": "Pearl shell",
       "invalid": "Enter canonical values within the server contract ranges.",
       "saved": "Game configuration updated from the authoritative server response.",
-      "save": "Save game configuration"
+      "save": "Save game configuration",
+      "controls": {
+        "globalGate": "Global gate",
+        "priceCredits": "{{field}} price (credits)",
+        "revisionTerms": "Revision {{revision}}. Saved changes govern only newly accepted games; in-flight sessions keep their frozen terms."
+      },
+      "counts": {
+        "active": "Active",
+        "empty": "No in-flight games",
+        "emptyBody": "No active session or waiting queue is currently reported.",
+        "games": "Games",
+        "mode": "Mode: {{value}}",
+        "phase": "Phase: {{value}}",
+        "rpsQueues": "RPS queues",
+        "spec": "Specification: {{value}}",
+        "title": "Live authority counts"
+      },
+      "enums": {
+        "unknown": "Unknown value ({{value}})"
+      },
+      "linklink": {
+        "enabled": "LinkLink enabled",
+        "entryPrice": "{{spec}} entry price (credits)",
+        "specEnabled": "{{spec}} enabled",
+        "specs": {
+          "10x10": "10×10",
+          "6x8": "6×8",
+          "8x8": "8×8"
+        }
+      },
+      "operationsDescription": "Configure future game acceptance while monitoring independent in-flight and queue counts.",
+      "restoreAuthorityValues": "Restore authority values",
+      "rps": {
+        "base": "{{mode}} base (credits)",
+        "cut": "{{mode}} {{pump}} cut (basis points)",
+        "deadline": "{{mode}} {{deadline}}",
+        "deadlines": {
+          "dealer": "Dealer deadline",
+          "follower": "Follower deadline",
+          "gesture": "Gesture deadline",
+          "queue": "Queue deadline"
+        },
+        "enabled": "Three-player RPS enabled",
+        "modeEnabled": "{{mode}} mode enabled",
+        "modes": {
+          "deathmatch": "Deathmatch",
+          "quick": "Quick",
+          "standard": "Standard"
+        },
+        "phases": {
+          "dealerRaise": "Dealer raise",
+          "followers": "Followers decide",
+          "freePoolGesture": "Free-pool gesture",
+          "gesture": "Gesture selection",
+          "paidPoolGesture": "Paid-pool gesture",
+          "terminalProcessing": "Finalizing",
+          "ultimateGesture": "Ultimate gesture"
+        },
+        "pumps": {
+          "platform": "Platform",
+          "thursday": "Thursday pool",
+          "welfare": "Welfare pool"
+        },
+        "queueCapacity": "{{mode}} queue capacity",
+        "queueCapacityHint": "Read-only runtime capacity; it is excluded from PATCH."
+      },
+      "sections": {
+        "fishing": "Fishing",
+        "linklink": "LinkLink",
+        "rps": "Three-player RPS"
+      },
+      "validation": {
+        "amountMinimum": "{{field}} must be a canonical credit amount of at least {{minimum}}.",
+        "amountNonNegative": "{{field}} must be a canonical non-negative credit amount.",
+        "integerRange": "{{field}} must be a whole number from {{minimum}} to {{maximum}}.",
+        "totalCuts": "{{mode}} pool cuts must total less than {{maximum}} basis points."
+      }
+    },
+    "activities": {
+      "nav": "Activities",
+      "adjustment": {
+        "amount": "Amount (credits)",
+        "apply": "Apply adjustment",
+        "cancel": "Cancel",
+        "confirmDecrease": "I understand this forcibly removes credits from the shared pool.",
+        "decrease": "Decrease",
+        "decreaseBlocked": "The current Thursday pool cannot be forcibly decreased after its natural window opens.",
+        "direction": "Direction",
+        "increase": "Increase",
+        "reason": "Reason",
+        "selected": "Selected {{poolId}} at revision {{revision}}. Increases inject credits; decreases require explicit dangerous confirmation.",
+        "title": "Pool adjustment"
+      },
+      "config": {
+        "masterEnabled": "Master enabled",
+        "revisionHint": "Revision {{revision}}. Configuration changes compile atomically; an open Thursday period keeps its frozen snapshot.",
+        "save": "Save atomic configuration",
+        "thursdayEnabled": "Thursday enabled",
+        "title": "Activity configuration",
+        "welfareCap": "Welfare cap (credits)",
+        "welfareEnabled": "Welfare enabled",
+        "welfareThreshold": "Welfare threshold (credits)"
+      },
+      "description": "Configuration, Thursday lifecycle, and balance adjustments remain separate authority surfaces.",
+      "fields": {
+        "state": "State"
+      },
+      "period": {
+        "authorityHint": "A successful write, conflict, or unknown response is followed only by a fresh authoritative GET.",
+        "createTitle": "Create next period",
+        "entry": "Entry (credits)",
+        "key": "Period key",
+        "literature": "Literature",
+        "lockedHint": "The period is open or settling; frozen/current configuration cannot be edited.",
+        "nextPoolBp": "Next-pool share (basis points)",
+        "opensAt": "Opens at",
+        "perUserLimit": "Per-user limit",
+        "platformBp": "Platform share (basis points)",
+        "save": "Save next period",
+        "updateTitle": "Update configured next period",
+        "welfareBp": "Welfare share (basis points)"
+      },
+      "pools": {
+        "adjust": "Adjust",
+        "balance": "Balance",
+        "emptyBody": "The authority read returned no pools.",
+        "emptyTitle": "No pools",
+        "period": "Period",
+        "revision": "Revision",
+        "select": "Select",
+        "singleton": "Singleton",
+        "title": "Shared pools",
+        "typeState": "Type / state"
+      },
+      "states": {
+        "period": {
+          "configurationError": "Configuration error",
+          "configured": "Configured",
+          "open": "Open",
+          "settled": "Settled",
+          "settling": "Settling"
+        },
+        "pool": {
+          "closed": "Closed",
+          "open": "Open"
+        },
+        "poolType": {
+          "thursday": "Thursday",
+          "welfare": "Welfare"
+        }
+      },
+      "thursday": {
+        "emptyBody": "Create the next 24-hour period from the current activities revision.",
+        "emptyTitle": "No configured or recoverable period",
+        "entryLimit": "Entry / limit",
+        "literature": "Literature",
+        "payoutRollover": "Payout / rollover",
+        "periodRevision": "Period / revision",
+        "processed": "Processed",
+        "resume": "Resume existing settlement checkpoint",
+        "title": "Thursday authority",
+        "window": "Window"
+      },
+      "title": "Activities and pools",
+      "units": {
+        "credits": "credits"
+      }
+    },
+    "reports": {
+      "nav": "Reports",
+      "badge": {
+        "exactCount": "Exact non-terminal count {{count}}",
+        "indexing": "Indexing",
+        "processing": "Processing",
+        "review": "Review",
+        "title": "Non-terminal badge"
+      },
+      "decisionAction": {
+        "approve": "Approved deletion",
+        "expire": "Expired",
+        "reject": "Rejected",
+        "resumeProcessing": "Resumed processing"
+      },
+      "description": "Indexing, human review, and approved processing are distinct authority states.",
+      "detail": {
+        "action": "Action",
+        "actor": "Actor",
+        "anonymous": "Anonymous",
+        "approveDeletion": "Approve deletion",
+        "authorityTitle": "Case authority",
+        "back": "Back to report inbox",
+        "canonicalUrl": "Canonical URL",
+        "confirmApprovalCheckbox": "I understand approved processing deletes matching endpoint keys.",
+        "confirmApproveBody": "This accepts irreversible deletion work for the current material and target revisions.",
+        "confirmApproveTitle": "Approve protected-key deletion?",
+        "confirmRejectBody": "This releases all protected targets and records the review reason.",
+        "confirmRejectTitle": "Reject this report?",
+        "connector": "Connector",
+        "continuationBody": "This state cannot be re-decided or released. Resume only restarts the existing checkpoint with the same target version.",
+        "continuationTitle": "Processing continuation",
+        "deadline": "Deadline",
+        "decisionBody": "Approval permanently deletes matching protected endpoint keys through the integrated lifecycle. Rejection releases protection. Both require a reason and are never auto-retried after conflict or an unknown response.",
+        "decisionTitle": "Decision",
+        "deidentified": "Deidentified",
+        "description": "Review bounded evidence and stable target snapshots before one terminal decision.",
+        "endpoint": "Endpoint",
+        "id": "ID",
+        "keySnapshot": "Key snapshot",
+        "materialTargetRevision": "Material / target revision",
+        "materialsEmptyBody": "This authority page contains no materials.",
+        "materialsEmptyTitle": "No review materials",
+        "materialsTitle": "Materials",
+        "noReporterNote": "No reporter note.",
+        "owner": "Owner",
+        "progress": "Progress",
+        "reason": "Reason",
+        "recorded": "Recorded",
+        "recordedDecision": "Recorded decision",
+        "rejectReport": "Reject report",
+        "reporter": "Reporter",
+        "resumeCheckpoint": "Resume checkpoint",
+        "retryAttempt": "Retry {{count}}",
+        "retryNext": "next",
+        "sequence": "Sequence",
+        "sourceIp": "Source IP",
+        "state": "State",
+        "status": "Status",
+        "submitted": "Submitted",
+        "targetsEmptyBody": "Indexing has not produced a target on this authority page.",
+        "targetsEmptyTitle": "No targets",
+        "targetsTitle": "Targets",
+        "title": "Report case"
+      },
+      "empty": {
+        "body": "The selected server-side status view is empty.",
+        "title": "No report cases"
+      },
+      "filter": {
+        "all": "All",
+        "status": "Status"
+      },
+      "privacy": {
+        "body": "This inbox receives case metadata, bounded review materials, and protected target snapshots. Submitted credential secrets never appear.",
+        "title": "Privacy boundary"
+      },
+      "progress": {
+        "complete": "Complete",
+        "inProgress": "In progress"
+      },
+      "retryClass": {
+        "databaseBusy": "Database busy",
+        "internalRetryable": "Retryable internal error",
+        "invariantViolation": "Invariant violation"
+      },
+      "status": {
+        "approved": "Approved",
+        "approvedProcessing": "Approved · processing",
+        "expired": "Expired",
+        "pendingIndexing": "Pending indexing",
+        "pendingReview": "Pending review",
+        "rejected": "Rejected"
+      },
+      "table": {
+        "connectorUrl": "Connector / canonical URL",
+        "counts": "Counts",
+        "deadline": "Deadline",
+        "materials": "materials {{count}}",
+        "open": "Open",
+        "processed": "processed {{count}}",
+        "progress": "Progress",
+        "retry": "retry {{count}}",
+        "review": "Review",
+        "status": "Status",
+        "targets": "targets {{count}}"
+      },
+      "targetState": {
+        "deletedByAccount": "Deleted with account",
+        "deletedByApproval": "Deleted after approval",
+        "deletedByOwner": "Deleted by owner",
+        "protected": "Protected",
+        "released": "Released"
+      },
+      "title": "Credential report inbox"
+    },
+    "announcements": {
+      "nav": "Announcements",
+      "all": "All",
+      "chineseMarkdown": "Chinese Markdown · {{bytes}} / 65,536 bytes",
+      "chineseTitle": "Chinese title",
+      "closeCreator": "Close creator",
+      "createDraft": "Create draft",
+      "createPrivateDraft": "Create private draft",
+      "description": "Draft content remains private until an explicit publish or publish-update mutation.",
+      "detail": {
+        "authorityRevision": "Authority revision {{revision}}",
+        "back": "Back to announcements",
+        "chinese": "Chinese",
+        "confirmDelete": "DELETE permanently",
+        "confirmDeleteBody": "Content is permanently removed with no recycle bin; only a minimal content-free audit remains.",
+        "confirmDeleteTitle": "Permanently delete announcement?",
+        "confirmPublishBody": "The current saved draft becomes the atomic user projection.",
+        "confirmPublishTitle": "Publish announcement?",
+        "confirmUpdateTitle": "Publish this update?",
+        "confirmWithdrawBody": "The current user projection disappears immediately.",
+        "confirmWithdrawTitle": "Withdraw announcement?",
+        "conflict": "Authority changed or the result is unknown. Your non-sensitive local draft was retained; compare it with revision {{revision}} before confirming again.",
+        "currentProjection": "Current user projection",
+        "description": "Preview uses the same bounded server renderer as publication.",
+        "discard": "Discard local edits",
+        "editorTitle": "Draft editor",
+        "english": "English",
+        "lifecycleTitle": "Publication lifecycle",
+        "loadingDescription": "Edit and publish an announcement.",
+        "loadingTitle": "Announcement",
+        "permanentlyDelete": "Permanently delete",
+        "preview": "Preview",
+        "publish": "Publish",
+        "publishUpdate": "Publish update",
+        "publishedHint": "Published {{date}}. Editing the draft does not change this projection until Publish update.",
+        "publishedRevision": "Published revision {{revision}}",
+        "reason": "Reason (required for withdraw/delete)",
+        "republish": "Republish",
+        "saveDraft": "Save private draft",
+        "serverPreview": "Server preview · {{version}}",
+        "untitled": "Untitled announcement",
+        "withdraw": "Withdraw"
+      },
+      "dismissible": "Dismissible",
+      "draftHint": "A draft may start empty. At least one language must have both a title and body before publication.",
+      "edit": "Edit",
+      "emptyBody": "The selected authority view is empty.",
+      "emptyDraft": "(empty draft)",
+      "emptyTitle": "No announcements",
+      "englishMarkdown": "English Markdown · {{bytes}} / 65,536 bytes",
+      "englishTitle": "English title",
+      "expiry": "Expiry",
+      "expiryOptional": "Expiry (optional)",
+      "neverPublished": "Never published",
+      "newDraft": "New draft",
+      "pinned": "Pinned",
+      "publicationValue": "Revision {{revision}} · {{date}}",
+      "severity": {
+        "important": "Important",
+        "info": "Info",
+        "warning": "Warning"
+      },
+      "severityLabel": "Severity",
+      "state": {
+        "draft": "Draft",
+        "expired": "Expired",
+        "published": "Published",
+        "withdrawn": "Withdrawn"
+      },
+      "stateLabel": "State",
+      "table": {
+        "draftTitle": "Draft title",
+        "open": "Open",
+        "publication": "Publication",
+        "severity": "Severity",
+        "state": "State",
+        "updated": "Updated"
+      },
+      "title": "Announcements",
+      "validation": "Each language must contain both title and body or neither; each body is limited to 65,536 UTF-8 bytes, and expiry must be valid."
     },
     "charity": {
       "nav": "Charity",
       "eyebrow": "Charity operations",
       "title": "Charity and donation management",
       "description": "Review donations, manage charity models and bindings, and configure charity safety controls. Every mutation is refetched from the server.",
-      "working": "Working…", "cancel": "Cancel", "save": "Save", "edit": "Edit", "delete": "Delete", "provider": "Provider", "model": "Model", "pricingMode": "Pricing mode", "perRequest": "Per request", "perToken": "Per token", "enabled": "Enabled", "disabled": "Disabled", "flattenToolCalls": "Tool-call response policy", "flattenExperimental": "Experimental: flatten tool calls", "flattenEnabled": "Experimental tool-call flattening", "flattenRisk": "Risk: flattening can break normal tool calls and is only suitable for special compatibility requirements. The server rejects unsupported bindings.", "storeReadOnly": "Upstream prompt storage policy (read-only)", "storeNoStore": "Require upstream not to store prompts (Experimental)", "storeDefault": "default (no upstream prompt-storage request)", "prices": "Prices and donor rewards (milli-credits)", "amountHint": "Canonical non-negative milli-credit strings are sent to the server; no floating-point conversion is used.",
-      "request_user_price_milli": "Request user price", "request_donor_reward_milli": "Request donor reward", "uncached_user_price_milli": "Uncached input user price", "cache_write_user_price_milli": "Cache-write input user price", "cache_read_user_price_milli": "Cache-read input user price", "output_user_price_milli": "Output user price", "uncached_donor_reward_milli": "Uncached input donor reward", "cache_write_donor_reward_milli": "Cache-write input donor reward", "cache_read_donor_reward_milli": "Cache-read input donor reward", "output_donor_reward_milli": "Output donor reward",
-      "discount": "Limited-time discount", "discountPercent": "Discount percentage (0–100; 100 = original)", "discountEnabled": "Discount enabled", "discountStart": "Start (optional)", "discountEnd": "End (optional)", "discountHint": "The interval is [start, end). Leaving both empty makes the enabled discount immediate with no end.", "providerInvalid": "Provider and model are required; the [公益] prefix is reserved for charity models.", "discountInvalid": "Discount percentage must be an integer from 0 through 100.", "amountInvalid": "Every price must be a canonical non-negative integer string.", "discountIntervalInvalid": "Discount dates must be valid and end after start.", "newModel": "Add charity model", "editModel": "Edit charity model", "modelsTitle": "Charity models and bindings", "noModels": "No charity models", "noModelsBody": "Create a charity model only after its donation resources are ready.", "successRate": "{{rate}}% success over {{count}} recent calls",
-      "bindings": "Bindings", "donationKey": "Donation key", "donationKeyId": "Donation key ID", "keyFragmentUnavailable": "Key fragment unavailable", "upstreamModel": "Upstream model ID", "order": "Order", "actions": "Actions", "addBinding": "Add binding", "bindingInvalid": "Enter a numeric donation key ID, upstream model ID and order.", "noBindings": "No bindings", "deleteBindingConfirm": "Delete this charity binding?",
-      "donationsTitle": "Donation review queue", "statusFilter": "Donation status", "allStatuses": "All statuses", "noDonations": "No donations", "noDonationsBody": "No donation records match this status.", "donationNumber": "Donation #{{id}}", "expires": "Expiry", "expiryHint": "Leave blank for no expiry.", "submitter": "Submitter ID", "expiresAt": "Expires {{value}}", "loadingDetails": "Refreshing key limits and review history…", "detailUnavailable": "Donation details are not available yet; editing and review actions are disabled until they can be verified.", "reviewNote": "Review note", "approve": "Approve donation", "reject": "Reject donation", "enable": "Enable donation", "disable": "Disable donation", "saveKeyLimits": "Save key limits", "reviewHistory": "Review history", "deleteDonationTitle": "Soft-delete this donation?", "deleteDonationBody": "This releases active claims and stops future charity routing while retaining review history.", "deleteModelTitle": "Delete this charity model?", "deleteModelBody": "This removes the model only when the server permits it; active bindings may cause a conflict.", "pagination": "Donation pages", "previous": "Previous", "next": "Next", "keyHidden": "Key fragment unavailable", "maxConcurrency": "Max concurrency (0 = unlimited)", "rpmLimit": "Requests per minute (0 = unlimited)", "usageCap": "Usage cap (milli-credits; 0 = unlimited)", "usageUsed": "Used: {{value}} milli-credits", "limitsInvalid": "Leave a reviewer limit blank to omit it, or enter a canonical whole number within its range.", "expiryInvalid": "Enter a valid expiry date, or leave it blank to clear the expiry.",
-      "status": { "pending": "Pending", "approved": "Approved", "rejected": "Rejected", "deleted": "Deleted", "expired": "Expired" }, "priceRequest": "Each request", "priceUncached": "Uncached input", "priceCacheWrite": "Cache write", "priceCacheRead": "Cache read", "priceOutput": "Output", "settingsTitle": "Charity site controls", "settingsDescription": "These settings are live and affect routing or admission. The token reserve is nullable: null means not configured and token pricing fails closed.", "charityEnabled": "Charity system", "donationAcceptEnabled": "Accept new donations", "tokenReserve": "Global token reserve (milli-credits)", "tokenReserveNull": "Not configured (null) is distinct from an explicit zero and cannot enable token pricing.", "notConfigured": "Not configured (null)", "on": "On", "off": "Off", "dangerConfirmTitle": "Confirm live charity setting", "dangerConfirmBody": "This changes live charity admission or routing. Confirm only if the operational change is intended.", "confirm": "Confirm",
-      "antiAbuse": { "charity_min_chars": "Minimum charity input characters", "charity_violation_deduct_milli": "Violation deduction (milli-credits)", "charity_violation_ban_seconds": "Immediate ban duration (seconds)", "charity_violation_window_seconds": "Violation window (seconds)", "charity_violation_ban_threshold": "Window ban threshold", "charity_violation_window_ban_seconds": "Window ban duration (seconds)", "charity_suspend_window_seconds": "Suspension window (seconds)", "charity_suspend_threshold": "Suspension threshold", "charity_suspend_duration_seconds": "Suspension duration (seconds)", "rpm_ban_threshold": "RPM ban threshold", "rpm_ban_window_seconds": "RPM ban window (seconds)", "rpm_ban_duration_seconds": "RPM ban duration (seconds)" }
+      "working": "Working…",
+      "cancel": "Cancel",
+      "save": "Save",
+      "edit": "Edit",
+      "delete": "Delete",
+      "provider": "Provider",
+      "model": "Model",
+      "pricingMode": "Pricing mode",
+      "perRequest": "Per request",
+      "perToken": "Per token",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "flattenToolCalls": "Tool-call response policy",
+      "flattenExperimental": "Experimental: flatten tool calls",
+      "flattenEnabled": "Experimental tool-call flattening",
+      "flattenRisk": "Risk: flattening can break normal tool calls and is only suitable for special compatibility requirements. The server rejects unsupported bindings.",
+      "storeReadOnly": "Upstream prompt storage policy (read-only)",
+      "storeNoStore": "Require upstream not to store prompts (Experimental)",
+      "storeDefault": "default (no upstream prompt-storage request)",
+      "prices": "Prices and donor rewards (milli-credits)",
+      "amountHint": "Canonical non-negative milli-credit strings are sent to the server; no floating-point conversion is used.",
+      "request_user_price_milli": "Request user price",
+      "request_donor_reward_milli": "Request donor reward",
+      "uncached_user_price_milli": "Uncached input user price",
+      "cache_write_user_price_milli": "Cache-write input user price",
+      "cache_read_user_price_milli": "Cache-read input user price",
+      "output_user_price_milli": "Output user price",
+      "uncached_donor_reward_milli": "Uncached input donor reward",
+      "cache_write_donor_reward_milli": "Cache-write input donor reward",
+      "cache_read_donor_reward_milli": "Cache-read input donor reward",
+      "output_donor_reward_milli": "Output donor reward",
+      "discount": "Limited-time discount",
+      "discountPercent": "Discount percentage (0–100; 100 = original)",
+      "discountEnabled": "Discount enabled",
+      "discountStart": "Start (optional)",
+      "discountEnd": "End (optional)",
+      "discountHint": "The interval is [start, end). Leaving both empty makes the enabled discount immediate with no end.",
+      "providerInvalid": "Provider and model are required; the [公益] prefix is reserved for charity models.",
+      "discountInvalid": "Discount percentage must be an integer from 0 through 100.",
+      "amountInvalid": "Every price must be a canonical non-negative integer string.",
+      "discountIntervalInvalid": "Discount dates must be valid and end after start.",
+      "newModel": "Add charity model",
+      "editModel": "Edit charity model",
+      "modelsTitle": "Charity models and bindings",
+      "noModels": "No charity models",
+      "noModelsBody": "Create a charity model only after its donation resources are ready.",
+      "successRate": "{{rate}}% success over {{count}} recent calls",
+      "bindings": "Bindings",
+      "donationKey": "Donation key",
+      "donationKeyId": "Donation key ID",
+      "keyFragmentUnavailable": "Key fragment unavailable",
+      "upstreamModel": "Upstream model ID",
+      "order": "Order",
+      "actions": "Actions",
+      "addBinding": "Add binding",
+      "bindingInvalid": "Enter a numeric donation key ID, upstream model ID and order.",
+      "noBindings": "No bindings",
+      "deleteBindingConfirm": "Delete this charity binding?",
+      "donationsTitle": "Donation review queue",
+      "statusFilter": "Donation status",
+      "allStatuses": "All statuses",
+      "noDonations": "No donations",
+      "noDonationsBody": "No donation records match this status.",
+      "donationNumber": "Donation #{{id}}",
+      "expires": "Expiry",
+      "expiryHint": "Leave blank for no expiry.",
+      "submitter": "Submitter ID",
+      "expiresAt": "Expires {{value}}",
+      "loadingDetails": "Refreshing key limits and review history…",
+      "detailUnavailable": "Donation details are not available yet; editing and review actions are disabled until they can be verified.",
+      "reviewNote": "Review note",
+      "approve": "Approve donation",
+      "reject": "Reject donation",
+      "enable": "Enable donation",
+      "disable": "Disable donation",
+      "saveKeyLimits": "Save key limits",
+      "reviewHistory": "Review history",
+      "deleteDonationTitle": "Soft-delete this donation?",
+      "deleteDonationBody": "This releases active claims and stops future charity routing while retaining review history.",
+      "deleteModelTitle": "Delete this charity model?",
+      "deleteModelBody": "This removes the model only when the server permits it; active bindings may cause a conflict.",
+      "pagination": "Donation pages",
+      "previous": "Previous",
+      "next": "Next",
+      "keyHidden": "Key fragment unavailable",
+      "maxConcurrency": "Max concurrency (0 = unlimited)",
+      "rpmLimit": "Requests per minute (0 = unlimited)",
+      "usageCap": "Usage cap (milli-credits; 0 = unlimited)",
+      "usageUsed": "Used: {{value}} milli-credits",
+      "limitsInvalid": "Leave a reviewer limit blank to omit it, or enter a canonical whole number within its range.",
+      "expiryInvalid": "Enter a valid expiry date, or leave it blank to clear the expiry.",
+      "status": {
+        "pending": "Pending",
+        "approved": "Approved",
+        "rejected": "Rejected",
+        "deleted": "Deleted",
+        "expired": "Expired"
+      },
+      "priceRequest": "Each request",
+      "priceUncached": "Uncached input",
+      "priceCacheWrite": "Cache write",
+      "priceCacheRead": "Cache read",
+      "priceOutput": "Output",
+      "settingsTitle": "Charity site controls",
+      "settingsDescription": "These settings are live and affect routing or admission. The token reserve is nullable: null means not configured and token pricing fails closed.",
+      "charityEnabled": "Charity system",
+      "donationAcceptEnabled": "Accept new donations",
+      "tokenReserve": "Global token reserve (milli-credits)",
+      "tokenReserveNull": "Not configured (null) is distinct from an explicit zero and cannot enable token pricing.",
+      "notConfigured": "Not configured (null)",
+      "on": "On",
+      "off": "Off",
+      "dangerConfirmTitle": "Confirm live charity setting",
+      "dangerConfirmBody": "This changes live charity admission or routing. Confirm only if the operational change is intended.",
+      "confirm": "Confirm",
+      "antiAbuse": {
+        "charity_min_chars": "Minimum charity input characters",
+        "charity_violation_deduct_milli": "Violation deduction (milli-credits)",
+        "charity_violation_ban_seconds": "Immediate ban duration (seconds)",
+        "charity_violation_window_seconds": "Violation window (seconds)",
+        "charity_violation_ban_threshold": "Window ban threshold",
+        "charity_violation_window_ban_seconds": "Window ban duration (seconds)",
+        "charity_suspend_window_seconds": "Suspension window (seconds)",
+        "charity_suspend_threshold": "Suspension threshold",
+        "charity_suspend_duration_seconds": "Suspension duration (seconds)",
+        "rpm_ban_threshold": "RPM ban threshold",
+        "rpm_ban_window_seconds": "RPM ban window (seconds)",
+        "rpm_ban_duration_seconds": "RPM ban duration (seconds)"
+      }
+    },
+    "legalHolds": {
+      "actions": {
+        "create": "Create legal hold",
+        "metadata": "Metadata",
+        "release": "Release hold"
+      },
+      "confirm": {
+        "createAction": "Create hold",
+        "createDescription": "The hold expires after {{days}} days and cannot be extended, copied, reopened, or recreated.",
+        "createTitle": "Create this legal hold?",
+        "releaseAction": "Release hold",
+        "releaseDescription": "Release is final, and ordinary cleanup may proceed immediately when the original deadline has passed.",
+        "releaseTitle": "Release this legal hold?"
+      },
+      "create": {
+        "basis": "Basis",
+        "confirmation": "I confirm this exact aggregate, expiry, and irreversible one-hold limit.",
+        "days": "Days (1–365)",
+        "objectKind": "Object kind",
+        "objectReference": "Exact object reference",
+        "password": "Administrator password",
+        "title": "Create one-time hold"
+      },
+      "description": "Metadata only. A hold may preserve one eligible aggregate for at most 365 days, once. It never pauses account revocation or deletion, business deadlines, settlement, or adjudication.",
+      "detail": {
+        "basis": "Basis",
+        "endReason": "End reason",
+        "expires": "Expires",
+        "idRevision": "ID / revision",
+        "object": "Object",
+        "state": "State",
+        "title": "Hold metadata"
+      },
+      "empty": {
+        "body": "No hold matches this filter.",
+        "title": "No legal-hold metadata"
+      },
+      "endReason": {
+        "expired": "Expired at the configured deadline",
+        "released": "Released by an administrator: {{reason}}"
+      },
+      "errors": {
+        "authorityChanged": "Administrator authority changed.",
+        "elevationRequired": "Fresh administrator elevation is required."
+      },
+      "filters": {
+        "all": "All",
+        "objectKind": "Object kind",
+        "state": "State"
+      },
+      "objectKind": {
+        "announcementAudit": "Announcement audit",
+        "donation": "Donation",
+        "maintenanceEvent": "Maintenance event",
+        "reportCase": "Report case",
+        "requestLog": "Request log"
+      },
+      "release": {
+        "confirmation": "Release is final; this object cannot receive another hold.",
+        "password": "Administrator password (fresh elevation)",
+        "reason": "Release reason"
+      },
+      "state": {
+        "active": "Active",
+        "expired": "Expired",
+        "released": "Released"
+      },
+      "table": {
+        "detail": "Detail",
+        "object": "Object",
+        "state": "State",
+        "window": "Window"
+      },
+      "title": "Legal holds"
     }
   },
-  "user": { "charity": { "priceCaption": "Charity model prices and donor rewards", "priceType": "Item", "userPrice": "User charge", "donorReward": "Donor reward", "originalPrice": "Original price", "currentPrice": "Current user price", "discountFree": "Limited-time free", "discountPercent": "Limited-time {{percent}}% off", "discountRemaining": "{{time}} remaining", "requestUnit": "Per request; final settlement is server-side.", "tokenUnit": "Per million tokens; four buckets are settled server-side." } }
+  "user": {
+    "charity": {
+      "priceCaption": "Charity model prices and donor rewards",
+      "priceType": "Item",
+      "userPrice": "User charge",
+      "donorReward": "Donor reward",
+      "originalPrice": "Original price",
+      "currentPrice": "Current user price",
+      "discountFree": "Limited-time free",
+      "discountPercent": "Limited-time {{percent}}% off",
+      "discountRemaining": "{{time}} remaining",
+      "requestUnit": "Per request; final settlement is server-side.",
+      "tokenUnit": "Per million tokens; four buckets are settled server-side."
+    }
+  }
 }

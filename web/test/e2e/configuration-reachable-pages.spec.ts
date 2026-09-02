@@ -54,11 +54,73 @@ const user = {
   },
 };
 
+const pendingKey = {
+  id: '6',
+  endpoint_key_id: '2',
+  display_head: 'sk-a',
+  display_tail: 'tail',
+  safe_source: {
+    base_url: 'https://upstream.test/v1',
+    connector_type: 'openai-compatible',
+  },
+  physical_enabled: true,
+  charity_state: 'pending',
+  limits: { price: '1', calls: '20', tokens: '1000' },
+  usage: {
+    price_used: '0.01',
+    price_inflight: '0',
+    calls_used: '1',
+    calls_inflight: '0',
+    tokens_used: '10',
+    tokens_inflight: '0',
+  },
+  token_reserve: 32,
+  streak: { generation: '1', count: '0', failure_disabled: false },
+  ended_reason: null,
+  safe_note: 'Fixture safe note',
+};
+
+const pendingAdminDonation = {
+  id: '9',
+  status: 'pending',
+  revision: '1',
+  description: 'Fixture donation',
+  review_result: null,
+  expires_at: null,
+  keys: [pendingKey],
+  owner: { user_id: '1', discord_id: '123456789', display_name: 'Fixture donor' },
+  reviewer: null,
+  created_at: 1,
+  updated_at: 2,
+};
+
+const pendingStewardDonation = {
+  ...pendingAdminDonation,
+  owner: { user_id: '1', display_name: 'Fixture donor' },
+};
+
+const currentCharityModel = {
+  id: '7',
+  provider: 'provider',
+  model: 'charity-model',
+  full_name: '[公益]provider/charity-model',
+  enabled: true,
+  pricing: { mode: 'per_request', user_price: '0', donor_reward: '0' },
+  discount: { enabled: false, percent: 100, start_at: null, end_at: null },
+  flatten_tool_calls: false,
+  revision: '1',
+  binding_revision: '0',
+  binding_count: '0',
+  rolling_success: { sample_count: '0', success_count: '0', percent: null },
+  created_at: 1,
+  updated_at: 2,
+};
+
 function catalogEntry(key: string, options: Record<string, unknown> = {}) {
   return {
     key,
-    group: 'fixture',
-    value_type: 'integer',
+    group: 'identity',
+    type: 'integer',
     title: {
       zh: `${key} 中文`,
       en:
@@ -105,6 +167,20 @@ async function prepare(
   );
   await mockPublicConfig(page, station);
   await mockRoleSession(page, station, role);
+  if (station === 'admin') {
+    await mockJson(page, {
+      origin: ADMIN_ORIGIN,
+      method: 'GET',
+      path: '/admin/api/maintenance',
+      body: { enabled: false, revision: '1' },
+    });
+    await mockJson(page, {
+      origin: ADMIN_ORIGIN,
+      method: 'GET',
+      path: '/admin/api/legal-holds?limit=50',
+      body: { data: [], next_cursor: null },
+    });
+  }
   return consoleGuard;
 }
 
@@ -271,7 +347,7 @@ test('reachable admin settings consumes the bilingual catalog and rejects a 345-
 }) => {
   const guard = await prepare(context, page, 'admin', 'admin', 'en', 'dark');
   const anthropic = catalogEntry('anthropic_default_max_tokens', {
-    value_type: 'optional_integer',
+    type: 'integer',
     nullable: true,
     null_writable: true,
     raw_default: null,
@@ -280,17 +356,16 @@ test('reachable admin settings consumes the bilingual catalog and rejects a 345-
     maximum: 2_147_483_647,
     step: 1,
     unit: { zh: 'Token', en: 'tokens' },
-    zero_semantics: null,
   });
-  const milli = catalogEntry('credits_cap_milli', {
-    value_type: 'amount',
+  const amount = catalogEntry('credits_cap', {
+    type: 'amount',
     title: { zh: '签到积分门槛', en: 'Check-in credit threshold' },
-    unit: { zh: '毫积分', en: 'milli-credits' },
+    unit: { zh: '积分', en: 'credits' },
     raw_default: '0',
     effective_fallback: '0',
     minimum: '0',
-    maximum: '9223372036854775807',
-    step: '1',
+    maximum: '9000000000000',
+    step: '0.001',
   });
   const seconds = catalogEntry('rpm_ban_duration_seconds', {
     title: { zh: 'RPM 封禁时长', en: 'RPM auto-ban duration' },
@@ -302,7 +377,7 @@ test('reachable admin settings consumes the bilingual catalog and rejects a 345-
     step: 1,
   });
   const timezone = catalogEntry('site_timezone_offset_minutes', {
-    value_type: 'optional_integer',
+    type: 'integer',
     nullable: true,
     raw_default: null,
     effective_fallback: null,
@@ -313,11 +388,14 @@ test('reachable admin settings consumes the bilingual catalog and rejects a 345-
     method: 'GET',
     path: '/admin/api/site-config',
     body: {
-      anthropic_default_max_tokens: null,
-      credits_cap_milli: '9223372036854775807',
-      rpm_ban_duration_seconds: 3_661,
-      site_name: 'Fixture Site',
-      site_timezone_offset_minutes: null,
+      revision: '1',
+      values: {
+        anthropic_default_max_tokens: null,
+        credits_cap: '9000000000000',
+        rpm_ban_duration_seconds: 3_661,
+        site_name: 'Fixture Site',
+        site_timezone_offset_minutes: null,
+      },
     },
   });
   await mockJson(page, {
@@ -325,26 +403,21 @@ test('reachable admin settings consumes the bilingual catalog and rejects a 345-
     method: 'GET',
     path: '/admin/api/site-config/catalog',
     body: {
-      data: [anthropic, milli, seconds, backendCatalogCore.data[0], timezone],
+      data: [anthropic, amount, seconds, backendCatalogCore.data[0], timezone],
     },
   });
-
   await page.goto(`${ADMIN_ORIGIN}/settings`);
+  await page.getByRole('button', { name: /Identity and appearance/ }).click();
   await expect(page.getByLabel('Default Anthropic max output tokens')).toBeVisible();
   const timezoneInput = page.getByLabel('Site timezone offset');
   await timezoneInput.fill('345');
-  await page
-    .locator('form')
-    .filter({ has: timezoneInput })
-    .getByRole('button', { name: 'Save value' })
-    .click();
-  await expect(
-    page.locator('form').filter({ has: timezoneInput }).getByRole('alert'),
-  ).toBeVisible();
-  await expect(page.getByText(/Hard range: -720 … 840 · step 30/)).toBeVisible();
+  const timezoneForm = page.locator('form').filter({ has: timezoneInput });
+  await expect(timezoneForm.getByRole('alert')).toBeVisible();
+  await expect(timezoneForm.getByRole('button', { name: 'Save value' })).toBeDisabled();
+  await expect(page.getByText(/Hard range -720–840 · step 30/)).toBeVisible();
   await expect(page.getByText('Human-readable duration: 1h 1m 1s')).toBeVisible();
-  await expect(page.getByText(/Exact milli-credits: 9223372036854775807/)).toContainText(
-    'Display credits: 9223372036854775.807',
+  await expect(page.getByText(/Exact milli-credits: 9000000000000000/)).toContainText(
+    'Display credits: 9,000,000,000,000',
   );
   await page.setViewportSize({ width: 780, height: 844 });
   await page.evaluate(() => {
@@ -362,9 +435,11 @@ test('reachable admin settings preserves CRLF legal text through untouched and e
   const key = 'legal_terms_override_en';
   const original = 'alpha\r\nbeta\r\n';
   let state = original;
+  let revision = 1;
   const patches: string[] = [];
   const legal = catalogEntry(key, {
-    value_type: 'multiline_text',
+    group: 'legal',
+    type: 'text',
     title: { zh: '服务条款覆盖（英文）', en: 'Terms override (English)' },
     unit: { zh: '无', en: 'none' },
     raw_default: '',
@@ -381,7 +456,7 @@ test('reachable admin settings preserves CRLF legal text through untouched and e
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ [key]: state }),
+        body: JSON.stringify({ revision: String(revision), values: { [key]: state } }),
       });
     }
     if (request.method() === 'GET' && url.pathname === '/admin/api/site-config/catalog') {
@@ -395,16 +470,18 @@ test('reachable admin settings preserves CRLF legal text through untouched and e
       const value = (request.postDataJSON() as { value: string }).value;
       patches.push(value);
       state = value;
+      revision += 1;
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ key, value }),
+        body: JSON.stringify({ key, value, revision: String(revision) }),
       });
     }
     return route.fallback();
   });
 
   await page.goto(`${ADMIN_ORIGIN}/settings`);
+  await page.getByText('Legal text', { exact: true }).click();
   const textarea = page.getByLabel('Terms override (English)');
   const save = page
     .locator('form')
@@ -413,17 +490,18 @@ test('reachable admin settings preserves CRLF legal text through untouched and e
   await save.click();
   await expect.poll(() => patches.length).toBe(1);
   expect(patches[0]).toBe(original);
-  await expect(page.getByRole('status')).toContainText('Configuration updated');
+  await expect(page.getByText(/^Authority revision 2\./)).toBeVisible();
   await textarea.fill('alpha\nbeta\n!');
+  await expect(textarea).toHaveValue('alpha\nbeta\n!');
   await save.click();
   await expect.poll(() => patches.length).toBe(2);
-  await expect(page.getByRole('status')).toContainText('Configuration updated');
   expect(patches[1]).toBe('alpha\r\nbeta\r\n!');
   expect(/(^|[^\r])\n/.test(patches[1] ?? '')).toBe(false);
+  await expect(page.getByText(/^Authority revision 3\./)).toBeVisible();
   await textarea.fill(original.replaceAll('\r\n', '\n'));
   await save.click();
   await expect.poll(() => patches.length).toBe(3);
-  await expect(page.getByRole('status')).toContainText('Configuration updated');
+  await expect(page.getByText(/^Authority revision 4\./)).toBeVisible();
   expect(state).toBe(original);
   await assertResponsiveAndClean(page, guard);
 });
@@ -462,78 +540,22 @@ test('reachable admin charity opens the corrected pending review query without i
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/donations?page=1&page_size=20&status=pending',
-    body: {
-      data: [
-        {
-          id: 9,
-          user_id: 1,
-          endpoint_base_url: 'https://upstream.test/v1',
-          status: 'pending',
-          enabled: false,
-          description: 'Fixture donation',
-          review_note: '',
-          created_at: 1,
-          updated_at: 2,
-        },
-      ],
-      has_more: false,
-      total: 1,
-    },
+    path: '/admin/api/donations?limit=50',
+    body: { data: [pendingAdminDonation], next_cursor: null },
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
     path: '/admin/api/donations/9',
-    body: {
-      id: 9,
-      user_id: 1,
-      endpoint_base_url: 'https://upstream.test/v1',
-      status: 'pending',
-      enabled: false,
-      description: 'Fixture donation',
-      review_note: '',
-      created_at: 1,
-      updated_at: 2,
-      keys: [
-        {
-          id: 6,
-          endpoint_key_id: 2,
-          display_head: 'sk-a',
-          display_tail: 'tail',
-          max_concurrency: 2,
-          rpm_limit: 30,
-          credits_usage_cap_milli: '1000',
-          credits_used_milli: '10',
-          credits_reserved_milli: '0',
-          enabled: true,
-          force_store_false: true,
-        },
-      ],
-      reviews: [],
-    },
-  });
-  await mockJson(page, {
-    origin: ADMIN_ORIGIN,
-    method: 'GET',
-    path: '/admin/api/charity-models?page=1&page_size=100',
-    body: { data: [], has_more: false },
-  });
-  await mockJson(page, {
-    origin: ADMIN_ORIGIN,
-    method: 'GET',
-    path: '/admin/api/site-config',
-    body: {
-      charity_enabled: false,
-      donation_accept_enabled: false,
-      charity_token_reserve_milli: null,
-    },
+    body: pendingAdminDonation,
   });
 
   await page.goto(`${ADMIN_ORIGIN}/charity`);
   await expect(page.getByRole('heading', { name: '公益与捐赠管理' })).toBeVisible();
+  await page.getByRole('button', { name: '审核' }).click();
+  await expect(page.getByRole('heading', { name: '捐赠 #9' })).toBeVisible();
   await expect(
-    page.getByText(/上游提示词存储策略（只读）.*要求上游不存储提示词（实验性）/),
+    page.getByRole('heading', { name: 'sk-a…tail · https://upstream.test/v1' }),
   ).toBeVisible();
   await expect(page.getByText(/invalid_request/i)).toHaveCount(0);
   await assertResponsiveAndClean(page, guard);
@@ -544,57 +566,29 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
   page,
 }) => {
   const guard = await prepare(context, page, 'admin', 'admin', 'en', 'dark');
-  const charityModel = {
-    id: 7,
-    provider: 'provider',
-    model: 'charity-model',
-    full_name: 'provider/charity-model',
-    enabled: true,
-    flatten_tool_calls: false,
-    pricing_mode: 'per_request',
-    prices: {
-      request_user_price_milli: '0',
-      request_donor_reward_milli: '0',
-      uncached_user_price_milli: '0',
-      cache_write_user_price_milli: '0',
-      cache_read_user_price_milli: '0',
-      output_user_price_milli: '0',
-      uncached_donor_reward_milli: '0',
-      cache_write_donor_reward_milli: '0',
-      cache_read_donor_reward_milli: '0',
-      output_donor_reward_milli: '0',
-    },
-    discount: { percent: 100, enabled: false, start_at: null, end_at: null },
-    success_samples: 0,
-    success_count: 0,
-  };
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/donations?page=1&page_size=20&status=pending',
-    body: { data: [], has_more: false, total: 0 },
+    path: '/admin/api/donations?limit=50',
+    body: { data: [], next_cursor: null },
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/charity-models?page=1&page_size=100',
-    body: { data: [charityModel], has_more: false, total: 1 },
+    path: '/admin/api/charity-models?limit=50',
+    body: { data: [currentCharityModel], next_cursor: null },
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
     path: '/admin/api/charity-models/7/bindings',
-    body: { data: [] },
+    body: { bindings: [], binding_revision: '0' },
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/site-config',
-    body: {
-      charity_enabled: true,
-      donation_accept_enabled: true,
-      charity_token_reserve_milli: null,
-    },
+    path: '/admin/api/charity-models/7/binding-candidates?limit=50',
+    body: { data: [], next_cursor: null },
   });
   let patchBody: Record<string, unknown> | undefined;
   page.on('request', (request) => {
@@ -607,18 +601,29 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
     origin: ADMIN_ORIGIN,
     method: 'PATCH',
     path: '/admin/api/charity-models/7',
-    body: { ...charityModel, flatten_tool_calls: true },
+    body: {
+      ...currentCharityModel,
+      flatten_tool_calls: true,
+      revision: '2',
+      updated_at: 3,
+    },
   });
 
   await page.goto(`${ADMIN_ORIGIN}/charity`);
-  await expect(page.getByText('provider/charity-model')).toBeVisible();
-  await page.getByRole('button', { name: 'Edit' }).click();
-  const editor = page.locator('form.charity-editor');
+  await page.getByRole('tab', { name: 'Charity models and bindings' }).click();
+  const modelRow = page.getByRole('row').filter({
+    has: page.getByText('[公益]provider/charity-model'),
+  });
+  await expect(modelRow).toBeVisible();
+  await modelRow.getByRole('button', { name: 'Manage' }).click();
+  const editor = page.locator('.card').filter({
+    has: page.getByRole('heading', { name: '[公益]provider/charity-model' }),
+  });
   const flatten = editor.getByRole('checkbox', { name: 'Experimental: flatten tool calls' });
   await flatten.focus();
   await page.keyboard.press('Space');
   await expect(flatten).toBeChecked();
-  await editor.getByRole('button', { name: 'Save' }).click();
+  await editor.getByRole('button', { name: 'Save model' }).click();
   await expect.poll(() => patchBody).toMatchObject({ flatten_tool_calls: true });
   await assertResponsiveAndClean(page, guard);
 });
@@ -631,79 +636,31 @@ test('reachable level-5 steward page keeps its bounded log projection usable', a
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/steward/logs?page=1&page_size=20',
-    body: { data: [], has_more: false },
+    path: '/api/steward/logs?limit=20',
+    body: { data: [], next_cursor: null },
   });
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/steward/donations?page=1&page_size=20&status=pending',
-    body: {
-      data: [
-        {
-          id: 9,
-          user_id: 1,
-          endpoint_base_url: 'https://upstream.test/v1',
-          status: 'pending',
-          enabled: false,
-          description: 'Fixture donation',
-          review_note: '',
-          created_at: 1,
-          updated_at: 2,
-        },
-      ],
-      has_more: false,
-      total: 1,
-    },
+    path: '/api/steward/donations?limit=50',
+    body: { data: [pendingStewardDonation], next_cursor: null },
   });
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
     path: '/api/steward/donations/9',
-    body: {
-      id: 9,
-      user_id: 1,
-      endpoint_base_url: 'https://upstream.test/v1',
-      status: 'pending',
-      enabled: false,
-      description: 'Fixture donation',
-      review_note: '',
-      created_at: 1,
-      updated_at: 2,
-      keys: [
-        {
-          id: 6,
-          endpoint_key_id: 2,
-          display_head: 'sk-a',
-          display_tail: 'tail',
-          max_concurrency: 2,
-          rpm_limit: 30,
-          credits_usage_cap_milli: '1000',
-          credits_used_milli: '10',
-          credits_reserved_milli: '0',
-          enabled: true,
-          force_store_false: true,
-        },
-      ],
-      reviews: [],
-    },
-  });
-  await mockJson(page, {
-    origin: USER_ORIGIN,
-    method: 'GET',
-    path: '/api/steward/charity-models?page=1&page_size=100',
-    body: { data: [], has_more: false },
+    body: pendingStewardDonation,
   });
 
   await page.goto(`${USER_ORIGIN}/steward`);
   await expect(page.getByRole('tab', { name: 'Request logs' })).toBeVisible();
-  await expect(page.getByText('No request logs')).toBeVisible();
+  await expect(page.getByText('No logs')).toBeVisible();
   await page.getByRole('tab', { name: 'Charity management' }).click();
-  await expect(page.getByRole('heading', { name: 'Donation review queue' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Donation review queue' })).toBeVisible();
+  await page.getByRole('button', { name: 'Review' }).click();
+  await expect(page.getByRole('heading', { name: 'Donation #9' })).toBeVisible();
   await expect(
-    page.getByText(
-      /Upstream prompt storage policy \(read-only\).*Require upstream not to store prompts \(Experimental\)/,
-    ),
+    page.getByRole('heading', { name: 'sk-a…tail · https://upstream.test/v1' }),
   ).toBeVisible();
   await expect(page.getByText(/invalid_request/i)).toHaveCount(0);
   await assertResponsiveAndClean(page, guard);

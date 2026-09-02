@@ -19,7 +19,7 @@ interface PublicShellProps {
 /** Public, anonymous-safe shell shared by maintenance, legal and auth states. */
 export function PublicShell({ siteName, siteLogoURL, children, station = 'user', footerLinks, className = '' }: PublicShellProps) {
   const { t } = useTranslation();
-  const links = footerLinks ?? (station === 'user' ? <><Link to={routePath('user', 'privacy')}>{t('user.legal.privacy.nav')}</Link><Link to={routePath('user', 'terms')}>{t('user.legal.terms.nav')}</Link></> : null);
+  const links = footerLinks ?? (station === 'user' ? <><Link to={routePath('user', 'credential-report')}>{t('user.report.nav')}</Link><Link to={routePath('user', 'privacy')}>{t('user.legal.privacy.nav')}</Link><Link to={routePath('user', 'terms')}>{t('user.legal.terms.nav')}</Link></> : null);
   return (
     <div className={`nb-public-shell${className ? ` ${className}` : ''}`}>
       <a className="skip-link" href="#main">{t('shell.skipToContent')}</a>

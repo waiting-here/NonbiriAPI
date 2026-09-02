@@ -59,7 +59,10 @@ describe('alpha.3 central route and navigation wiring', () => {
       '/alerts:admin-alerts',
       '/settings:admin-settings',
       '/charity:admin-charity',
+      '/activities:admin-activities',
       '/games:admin-games',
+      '/reports:admin-reports',
+      '/announcements:admin-announcements',
     ]);
   });
 });

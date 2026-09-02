@@ -1,5 +1,11 @@
 {
   "user": {
+    "resources": {
+      "nav": "资源"
+    },
+    "diagnostics": {
+      "nav": "诊断"
+    },
     "shell": {
       "navLabel": "主导航",
       "title": "用户中心",
@@ -36,8 +42,7 @@
       "donationCredit": "捐赠回馈积分",
       "level": "当前等级",
       "levelValue": "Lv{{level}}",
-      "levelManualSuffix": "（管理员设定）",
-      "exactMilli": "精确值：{{value}} 毫积分"
+      "levelManualSuffix": "（管理员设定）"
     },
     "checkin": {
       "title": "每日签到",
@@ -80,8 +85,6 @@
       "flattenExperimental": "实验：展平工具调用",
       "flattenEnabled": "已启用实验性工具调用展平",
       "flattenRisk": "风险：展平可能破坏正常工具调用，仅适用于特殊兼容需求；不支持的绑定会由服务端拒绝。",
-      "prices": "价格与捐赠者回馈（毫积分）",
-      "amountHint": "服务端接收规范的非负毫积分整数字符串，不经过浮点转换。",
       "request_user_price_milli": "每次用户价格",
       "request_donor_reward_milli": "每次捐赠者回馈",
       "uncached_user_price_milli": "普通输入用户价格",
@@ -155,13 +158,14 @@
       "keyHidden": "密钥片段不可用",
       "maxConcurrency": "最大并发（0=不限）",
       "rpmLimit": "每分钟请求数（0=不限）",
-      "usageCap": "用量上限（毫积分；0=不限）",
-      "usageUsed": "已用：{{value}} 毫积分",
       "limitsInvalid": "留空表示省略该审核限制；否则请输入范围内的规范非负整数。",
       "storeReadOnly": "上游提示词存储策略（只读）",
       "storeNoStore": "要求上游不存储提示词（实验性）",
       "storeDefault": "默认（未要求上游不存储提示词）",
-      "accessRevoked": "5 级权限已不再有效。敏感协管数据已清理；请离开此页面，必要时重新登录。"
+      "accessRevoked": "5 级权限已不再有效。敏感协管数据已清理；请离开此页面，必要时重新登录。",
+      "operationsDescription": "查看管理员安全日志、仅限本人资源的公益管理，以及只能单向开启的紧急维护入口。",
+      "sensitiveStateCleared": "敏感协管状态已清理。",
+      "maintenanceTab": "维护模式"
     },
     "endpoints": {
       "nav": "端点",
@@ -322,7 +326,153 @@
       "copyWarning": "剪贴板只在你明确点击后使用，页面不会保存密钥。"
     },
     "debug": {
-      "nav": "调试"
+      "nav": "调试",
+      "descriptionShort": "检查安全的请求生命周期。",
+      "description": "查看有界且仅所有者可见的请求、上游与调用方语义。",
+      "actions": {
+        "start": "开始调试"
+      },
+      "request": {
+        "title": "请求",
+        "ownerOnly": "这里只显示所有者本人提交的请求，绝不会采集请求头或凭据。",
+        "rawBody": "有界原始请求正文（{{bytes}} 字节）",
+        "rawBodyTruncated": "有界原始请求正文（{{bytes}} 字节，已截断）",
+        "base64Body": "[base64 请求正文：{{characters}} 个字符]"
+      },
+      "value": {
+        "unavailable": "[不可用]"
+      },
+      "state": {
+        "route": {
+          "openaiChatCompletions": "OpenAI-compatible 聊天补全",
+          "charityChatCompletions": "公益聊天补全"
+        },
+        "trace": {
+          "capturing": "采集中",
+          "terminal": "已终态"
+        },
+        "result": {
+          "response": "上游响应",
+          "synthetic": "合成结果"
+        },
+        "source": {
+          "platform": "平台",
+          "upstream": "上游"
+        },
+        "mode": {
+          "dry": "Dry（不出站）",
+          "live": "Live（真实出站）"
+        },
+        "observer": {
+          "connecting": "连接中",
+          "connected": "已连接",
+          "reconnecting": "重新连接中",
+          "disconnected": "已断开"
+        },
+        "gap": {
+          "cursorInvalid": "游标无效",
+          "processRestart": "进程重启",
+          "ringExpired": "事件保留期已过",
+          "ringEvicted": "事件已被淘汰",
+          "slowConsumer": "消费速度过慢"
+        },
+        "end": {
+          "stopped": "已停止",
+          "replaced": "已替换",
+          "idleExpired": "空闲超时",
+          "absoluteExpired": "绝对期限已到",
+          "authRevoked": "授权已撤销",
+          "accountBanned": "账号已封禁",
+          "accountDeleted": "账号已删除",
+          "shutdown": "服务已关闭"
+        },
+        "presence": {
+          "missing": "未提供",
+          "null": "Null",
+          "false": "False",
+          "zero": "零",
+          "emptyString": "空字符串",
+          "emptyArray": "空数组",
+          "emptyObject": "空对象",
+          "value": "有值"
+        },
+        "session": {
+          "active": "进行中",
+          "stopped": "已停止"
+        }
+      },
+      "upstream": {
+        "title": "上游",
+        "kind": "结果类型",
+        "status": "状态码",
+        "safeCode": "安全错误码",
+        "safeDiagnostic": "安全诊断",
+        "charge": "扣费",
+        "awaitingProjection": "正在等待安全结果投影。",
+        "notDispatched": "没有发生上游出站。",
+        "rawSuppressed": "这里绝不会提供原始上游请求头、正文、字节或消息。"
+      },
+      "caller": {
+        "title": "调用方",
+        "httpStatus": "HTTP 状态码",
+        "errorCode": "错误码",
+        "source": "来源",
+        "message": "消息",
+        "notTerminal": "调用方结果尚未终态。"
+      },
+      "confirm": {
+        "liveTitle": "启用 Live 采集？",
+        "liveBody": "Live 模式可能发送真实上游请求并产生上游成本；原始上游数据仍会被抑制。",
+        "liveAction": "启用 Live",
+        "stopTitle": "停止此调试会话？",
+        "stopInflightBody": "停止操作会取消正在进行的 Live 请求，调用方会收到固定的 live-cancelled 结果。",
+        "stopIdleBody": "停止操作会结束服务端会话及其有界内存轨迹。",
+        "stopAction": "停止会话",
+        "replaceTitle": "替换此调试会话？",
+        "replaceInflightBody": "替换操作会取消正在进行的 Live 请求；新会话始终从 Dry 模式开始。",
+        "replaceIdleBody": "现有有界轨迹将被丢弃；新会话始终从 Dry 模式开始。",
+        "replaceAction": "替换会话"
+      },
+      "connection": {
+        "title": "连接与模式",
+        "serverSession": "服务端会话",
+        "observer": "观察连接",
+        "mode": "模式",
+        "inFlight": "进行中",
+        "expiry": "到期时间 {{expires}} · 空闲到期 {{idleExpiry}} · 修订 {{revision}}",
+        "gap": "事件连续性出现缺口：{{reason}}。需要重新读取权威快照。",
+        "ended": "会话已结束：{{reason}}；已取消进行中请求：{{count}}。"
+      },
+      "operations": {
+        "title": "会话操作",
+        "attachObserver": "连接观察器",
+        "disconnectObserver": "断开观察器",
+        "enableLive": "启用 Live 模式",
+        "returnDry": "返回 Dry 模式",
+        "stop": "停止会话",
+        "startOver": "重新开始",
+        "observerHint": "断开当前观察器绝不会停止服务端会话；停止和重新开始均是明确的服务端写操作。"
+      },
+      "error": {
+        "sessionChanged": "会话已发生变化。请刷新权威状态并复核后再确认。",
+        "resultUnknown": "操作结果未知。同一请求身份已保留；请先刷新权威状态，再明确重试。",
+        "operationFailed": "调试操作失败。"
+      },
+      "fixedResults": {
+        "title": "固定调用方结果",
+        "dryIntercepted": "请求在 Dry 模式下被采集，且从未发送到上游。",
+        "liveCaptured": "上游尝试已经完成，但原始响应已被抑制，仅采集安全投影。",
+        "liveCancelled": "已出站的 Live 请求因会话停止或替换而被取消。",
+        "callerKeyPrefix": "示例使用",
+        "callerKeySuffix": "作为占位符；一次性 CallerKey 绝不会自动复制到调试页面。"
+      },
+      "requests": {
+        "title": "请求",
+        "noSessionTitle": "没有进行中的调试会话",
+        "noSessionBody": "启动 Dry 会话即可在不出站的情况下采集请求。",
+        "emptyTitle": "尚未采集请求",
+        "emptyBody": "请在此会话进行期间发送 OpenAI-compatible 请求。"
+      }
     },
     "issues": {
       "nav": "问题",
@@ -337,7 +487,88 @@
       "resolve": "确认问题",
       "filterResolved": "解决状态",
       "empty": "没有返回问题",
-      "emptyBody": "服务端没有返回属于此账号的问题记录。"
+      "emptyBody": "服务端没有返回属于此账号的问题记录。",
+      "eyebrow": "运维",
+      "authorityDescription": "问题由权威资源状态自动打开和关闭；这里没有手动解决或未读状态。",
+      "stateLabel": "问题状态",
+      "currentTab": "当前问题",
+      "closedTab": "已关闭历史",
+      "projectionIncomplete": "问题投影正在有界重建；权威资源状态仍然有效，列表可能暂不完整。",
+      "emptyCurrentBody": "当前没有已投影的问题。",
+      "emptyClosedBody": "没有已关闭历史。",
+      "summary": {
+        "discoveryFailed": "模型发现失败",
+        "noRoutableBinding": "没有可路由绑定",
+        "credentialInvalid": "凭据已被权威验证为无效",
+        "configurationInvalid": "配置已被权威验证为无效"
+      },
+      "state": {
+        "current": "当前",
+        "closed": "已关闭"
+      },
+      "resource": "资源类型",
+      "resourceKind": {
+        "endpoint": "端点",
+        "endpointKey": "端点密钥",
+        "model": "模型"
+      },
+      "firstSeen": "首次发现",
+      "lastSeen": "最近发现",
+      "observations": "观测次数",
+      "closedAt": "关闭时间",
+      "openResource": "查看当前资源",
+      "resourceUnavailable": "来源资源已删除或不再提供安全深链。",
+      "previous": "上一页",
+      "next": "下一页",
+      "page": "页"
+    },
+    "report": {
+      "nav": "举报泄露凭据",
+      "eyebrow": "安全",
+      "title": "举报疑似泄露凭据",
+      "description": "匿名与登录用户使用相同入口；结果不会透露是否命中本站数据。",
+      "maintenanceUnavailable": "维护期间暂不接受新举报。",
+      "acceptedTitle": "举报已受理",
+      "acceptedBody": "若存在匹配凭据，系统会临时保护并由管理员复核。",
+      "submitAnother": "提交另一份举报",
+      "connectorLabel": "连接器类型",
+      "connector": {
+        "openaiCompatible": "OpenAI-compatible",
+        "anthropicCompatible": "Anthropic-compatible"
+      },
+      "baseUrlLabel": "规范端点 URL",
+      "secretLabel": "疑似泄露的凭据",
+      "noteLabel": "补充说明（可选）",
+      "noteWarning": "请勿在补充说明中填写任何凭据。",
+      "validationError": "请检查端点 URL、凭据和补充说明的长度。",
+      "submitting": "提交中…",
+      "submit": "提交举报",
+      "cancelAndClear": "取消并清除"
+    },
+    "announcements": {
+      "nav": "公告",
+      "eyebrow": "公告",
+      "title": "公告",
+      "description": "置顶公告优先，其余按实际发布时间倒序。",
+      "empty": "暂无公告",
+      "emptyBody": "当前没有可见公告。",
+      "severity": {
+        "info": "信息",
+        "warning": "警告",
+        "important": "重要"
+      },
+      "language": {
+        "zh": "中文",
+        "en": "英文"
+      },
+      "languageFallback": "已回退语言：{{language}}",
+      "restoreHomeSummary": "恢复首页摘要",
+      "readMore": "阅读全文",
+      "previous": "上一页",
+      "next": "下一页",
+      "page": "页",
+      "backToList": "返回公告列表",
+      "fallbackNotice": "当前语言无版本，已显示{{language}}。"
     },
     "account": {
       "nav": "账号",
@@ -443,7 +674,8 @@
       "description": "查看你自己的请求元数据与 token 用量，不包含请求与响应内容。",
       "listTitle": "请求记录",
       "empty": "没有日志记录",
-      "emptyBody": "当前筛选条件下没有返回属于此账号的请求记录。"
+      "emptyBody": "当前筛选条件下没有返回属于此账号的请求记录。",
+      "eyebrow": "运维"
     },
     "charity": {
       "nav": "公益",

@@ -139,7 +139,7 @@ describe('Generation 2 charity management policy', () => {
     );
     await view.user.click(screen.getByRole('button', { name: 'Approve donation' }));
 
-    await waitFor(() => expect(screen.getAllByText('approved').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText('Approved').length).toBeGreaterThan(0));
     expect(reviewRequests).toHaveLength(1);
     const body = JSON.parse(String(reviewRequests[0].body)) as Record<string, unknown>;
     expect(body.expires_at).toBe(expiresAt);
@@ -174,7 +174,9 @@ describe('Generation 2 charity management policy', () => {
 
     await view.user.click(await screen.findByRole('button', { name: 'Review' }));
     await screen.findByRole('heading', { name: 'Review pending submission' });
-    fireEvent.change(screen.getByLabelText('Price limit'), { target: { value: '0.0000' } });
+    fireEvent.change(screen.getByLabelText('Price limit (credits)'), {
+      target: { value: '0.0000' },
+    });
     fireEvent.change(screen.getByLabelText('Call limit'), { target: { value: '01' } });
     fireEvent.change(screen.getByLabelText('Token reserve'), {
       target: { value: '2147483648' },
@@ -191,7 +193,7 @@ describe('Generation 2 charity management policy', () => {
     expect(screen.getByRole('button', { name: 'Approve donation' })).toBeDisabled();
     expect(reviewRequests).toHaveLength(0);
 
-    fireEvent.change(screen.getByLabelText('Price limit'), {
+    fireEvent.change(screen.getByLabelText('Price limit (credits)'), {
       target: { value: '9000000000000' },
     });
     fireEvent.change(screen.getByLabelText('Call limit'), {
@@ -274,13 +276,17 @@ describe('Generation 2 charity management policy', () => {
       role: 'admin',
     });
 
-    await view.user.click(screen.getByRole('tab', { name: 'Models and bindings' }));
+    await view.user.click(screen.getByRole('tab', { name: 'Charity models and bindings' }));
     await view.user.type(screen.getByLabelText('Provider'), 'provider');
     await view.user.type(screen.getByLabelText('Model'), 'model');
-    fireEvent.change(screen.getByLabelText('User price'), { target: { value: '1.0000' } });
-    expect(screen.getByRole('button', { name: 'Create model' })).toBeDisabled();
-    fireEvent.change(screen.getByLabelText('User price'), { target: { value: '1.001' } });
-    const create = screen.getByRole('button', { name: 'Create model' });
+    fireEvent.change(screen.getByLabelText('Request user price'), {
+      target: { value: '1.0000' },
+    });
+    expect(screen.getByRole('button', { name: 'Add charity model' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Request user price'), {
+      target: { value: '1.001' },
+    });
+    const create = screen.getByRole('button', { name: 'Add charity model' });
     expect(create).toBeEnabled();
     await view.user.click(create);
 

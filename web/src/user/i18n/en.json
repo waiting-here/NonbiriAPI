@@ -1,5 +1,11 @@
 {
   "user": {
+    "resources": {
+      "nav": "Resources"
+    },
+    "diagnostics": {
+      "nav": "Diagnostics"
+    },
     "shell": {
       "navLabel": "Main navigation",
       "title": "User console",
@@ -36,8 +42,7 @@
       "donationCredit": "Donor reward credits",
       "level": "Current level",
       "levelValue": "Lv{{level}}",
-      "levelManualSuffix": " (set by admin)",
-      "exactMilli": "exact value: {{value}} milli-credits"
+      "levelManualSuffix": " (set by admin)"
     },
     "checkin": {
       "title": "Daily check-in",
@@ -80,8 +85,6 @@
       "flattenExperimental": "Experimental: flatten tool calls",
       "flattenEnabled": "Experimental tool-call flattening",
       "flattenRisk": "Risk: flattening can break normal tool calls and is only suitable for special compatibility requirements. The server rejects unsupported bindings.",
-      "prices": "Prices and donor rewards (milli-credits)",
-      "amountHint": "Canonical non-negative milli-credit strings are sent to the server; no floating-point conversion is used.",
       "request_user_price_milli": "Request user price",
       "request_donor_reward_milli": "Request donor reward",
       "uncached_user_price_milli": "Uncached input user price",
@@ -155,13 +158,14 @@
       "keyHidden": "Key fragment unavailable",
       "maxConcurrency": "Max concurrency (0 = unlimited)",
       "rpmLimit": "Requests per minute (0 = unlimited)",
-      "usageCap": "Usage cap (milli-credits; 0 = unlimited)",
-      "usageUsed": "Used: {{value}} milli-credits",
       "limitsInvalid": "Leave a reviewer limit blank to omit it, or enter a canonical whole number within its range.",
       "storeReadOnly": "Upstream prompt storage policy (read-only)",
       "storeNoStore": "Require upstream not to store prompts (Experimental)",
       "storeDefault": "default (no upstream prompt-storage request)",
-      "accessRevoked": "Your level-5 capability is no longer active. Sensitive steward data was cleared; leave this page and sign in again if needed."
+      "accessRevoked": "Your level-5 capability is no longer active. Sensitive steward data was cleared; leave this page and sign in again if needed.",
+      "operationsDescription": "Admin-safe logs, owner-narrowed charity management, and the one-way maintenance emergency surface.",
+      "sensitiveStateCleared": "Sensitive steward state has been cleared.",
+      "maintenanceTab": "Maintenance"
     },
     "endpoints": {
       "nav": "Endpoints",
@@ -322,7 +326,153 @@
       "copyWarning": "Clipboard access is an explicit action and is not saved by this page."
     },
     "debug": {
-      "nav": "Debug"
+      "nav": "Debug",
+      "descriptionShort": "Inspect the safe request lifecycle.",
+      "description": "Capture a bounded, owner-only view of request, upstream, and caller semantics.",
+      "actions": {
+        "start": "Start Debug"
+      },
+      "request": {
+        "title": "Request",
+        "ownerOnly": "Owner-submitted request only. Headers and credentials are never captured.",
+        "rawBody": "Bounded raw request body ({{bytes}} bytes)",
+        "rawBodyTruncated": "Bounded raw request body ({{bytes}} bytes, truncated)",
+        "base64Body": "[base64 request body: {{characters}} characters]"
+      },
+      "value": {
+        "unavailable": "[unavailable]"
+      },
+      "state": {
+        "route": {
+          "openaiChatCompletions": "OpenAI-compatible chat completions",
+          "charityChatCompletions": "Charity chat completions"
+        },
+        "trace": {
+          "capturing": "Capturing",
+          "terminal": "Terminal"
+        },
+        "result": {
+          "response": "Response",
+          "synthetic": "Synthetic result"
+        },
+        "source": {
+          "platform": "Platform",
+          "upstream": "Upstream"
+        },
+        "mode": {
+          "dry": "Dry",
+          "live": "Live"
+        },
+        "observer": {
+          "connecting": "Connecting",
+          "connected": "Connected",
+          "reconnecting": "Reconnecting",
+          "disconnected": "Disconnected"
+        },
+        "gap": {
+          "cursorInvalid": "invalid cursor",
+          "processRestart": "process restart",
+          "ringExpired": "event retention expired",
+          "ringEvicted": "event evicted",
+          "slowConsumer": "slow consumer"
+        },
+        "end": {
+          "stopped": "stopped",
+          "replaced": "replaced",
+          "idleExpired": "idle expiry",
+          "absoluteExpired": "absolute expiry",
+          "authRevoked": "authorization revoked",
+          "accountBanned": "account banned",
+          "accountDeleted": "account deleted",
+          "shutdown": "service shutdown"
+        },
+        "presence": {
+          "missing": "Missing",
+          "null": "Null",
+          "false": "False",
+          "zero": "Zero",
+          "emptyString": "Empty string",
+          "emptyArray": "Empty array",
+          "emptyObject": "Empty object",
+          "value": "Value"
+        },
+        "session": {
+          "active": "Active",
+          "stopped": "Stopped"
+        }
+      },
+      "upstream": {
+        "title": "Upstream",
+        "kind": "Kind",
+        "status": "Status",
+        "safeCode": "Safe code",
+        "safeDiagnostic": "Safe diagnostic",
+        "charge": "Charge",
+        "awaitingProjection": "Awaiting a safe result projection.",
+        "notDispatched": "No upstream dispatch occurred.",
+        "rawSuppressed": "Raw upstream headers, bodies, bytes, and messages are never available here."
+      },
+      "caller": {
+        "title": "Caller",
+        "httpStatus": "HTTP status",
+        "errorCode": "Error code",
+        "source": "Source",
+        "message": "Message",
+        "notTerminal": "Caller result is not terminal yet."
+      },
+      "confirm": {
+        "liveTitle": "Enable live capture?",
+        "liveBody": "Live mode may dispatch a real upstream request and incur upstream cost. Raw upstream data remains suppressed.",
+        "liveAction": "Enable live",
+        "stopTitle": "Stop this Debug session?",
+        "stopInflightBody": "Stopping cancels in-flight live requests and callers receive the fixed live-cancelled result.",
+        "stopIdleBody": "Stopping ends the server session and its bounded in-memory traces.",
+        "stopAction": "Stop session",
+        "replaceTitle": "Replace this Debug session?",
+        "replaceInflightBody": "Replacing cancels in-flight live requests. The new session always starts in Dry mode.",
+        "replaceIdleBody": "Existing bounded traces are discarded. The new session always starts in Dry mode.",
+        "replaceAction": "Replace session"
+      },
+      "connection": {
+        "title": "Connection and mode",
+        "serverSession": "Server session",
+        "observer": "Observer",
+        "mode": "Mode",
+        "inFlight": "In flight",
+        "expiry": "Expires {{expires}} · idle expiry {{idleExpiry}} · revision {{revision}}",
+        "gap": "Event continuity gap: {{reason}}. A fresh authoritative snapshot is required.",
+        "ended": "Session ended: {{reason}}; cancelled in flight: {{count}}."
+      },
+      "operations": {
+        "title": "Session operations",
+        "attachObserver": "Attach observer",
+        "disconnectObserver": "Disconnect observer",
+        "enableLive": "Enable live mode",
+        "returnDry": "Return to Dry",
+        "stop": "Stop session",
+        "startOver": "Start over",
+        "observerHint": "Disconnecting this observer never stops the server session. Stop and Start over are explicit server mutations."
+      },
+      "error": {
+        "sessionChanged": "The session changed. Refresh authoritative state and review it before confirming again.",
+        "resultUnknown": "The result is unknown. The same request identity is retained; refresh authority before an explicit retry.",
+        "operationFailed": "The Debug operation failed."
+      },
+      "fixedResults": {
+        "title": "Fixed caller results",
+        "dryIntercepted": "Captured in Dry mode and never sent upstream.",
+        "liveCaptured": "An upstream attempt completed, but its raw response was suppressed and only the safe projection was captured.",
+        "liveCancelled": "A dispatched live request was cancelled because the session was stopped or replaced.",
+        "callerKeyPrefix": "Examples use",
+        "callerKeySuffix": "as a placeholder. A one-time CallerKey is never copied into Debug automatically."
+      },
+      "requests": {
+        "title": "Requests",
+        "noSessionTitle": "No active Debug session",
+        "noSessionBody": "Start a Dry session to capture requests without upstream egress.",
+        "emptyTitle": "No captured requests",
+        "emptyBody": "Send an OpenAI-compatible request while this session is active."
+      }
     },
     "issues": {
       "nav": "Issues",
@@ -337,7 +487,88 @@
       "resolve": "Acknowledge",
       "filterResolved": "Resolution status",
       "empty": "No issues returned",
-      "emptyBody": "The service has not returned any issue records for this account."
+      "emptyBody": "The service has not returned any issue records for this account.",
+      "eyebrow": "Operations",
+      "authorityDescription": "Authoritative resource state opens and closes issues automatically; there is no manual resolve or unread state.",
+      "stateLabel": "Issue state",
+      "currentTab": "Current",
+      "closedTab": "Closed history",
+      "projectionIncomplete": "The issue projection is rebuilding within bounds. Authoritative resource state remains effective, but this list may be incomplete.",
+      "emptyCurrentBody": "There are no currently projected issues.",
+      "emptyClosedBody": "There is no closed history.",
+      "summary": {
+        "discoveryFailed": "Model discovery failed",
+        "noRoutableBinding": "No routable binding",
+        "credentialInvalid": "Credential is authoritatively invalid",
+        "configurationInvalid": "Configuration is authoritatively invalid"
+      },
+      "state": {
+        "current": "Current",
+        "closed": "Closed"
+      },
+      "resource": "Resource",
+      "resourceKind": {
+        "endpoint": "Endpoint",
+        "endpointKey": "Endpoint key",
+        "model": "Model"
+      },
+      "firstSeen": "First seen",
+      "lastSeen": "Last seen",
+      "observations": "Observations",
+      "closedAt": "Closed",
+      "openResource": "Open current resource",
+      "resourceUnavailable": "The source resource was removed or no longer has a safe deep link.",
+      "previous": "Previous",
+      "next": "Next",
+      "page": "Page"
+    },
+    "report": {
+      "nav": "Report leaked credential",
+      "eyebrow": "Security",
+      "title": "Report a suspected leaked credential",
+      "description": "Anonymous and signed-in reporters use the same endpoint; the result never reveals whether a match exists.",
+      "maintenanceUnavailable": "New reports are unavailable during maintenance.",
+      "acceptedTitle": "Report accepted",
+      "acceptedBody": "If matching credentials exist, temporary protection will be applied and an administrator will review the report.",
+      "submitAnother": "Submit another report",
+      "connectorLabel": "Connector type",
+      "connector": {
+        "openaiCompatible": "OpenAI-compatible",
+        "anthropicCompatible": "Anthropic-compatible"
+      },
+      "baseUrlLabel": "Canonical endpoint URL",
+      "secretLabel": "Suspected leaked credential",
+      "noteLabel": "Additional note (optional)",
+      "noteWarning": "Do not put credentials in the additional note.",
+      "validationError": "Check the endpoint URL, credential, and note length.",
+      "submitting": "Submitting…",
+      "submit": "Submit report",
+      "cancelAndClear": "Cancel and clear"
+    },
+    "announcements": {
+      "nav": "Announcements",
+      "eyebrow": "News",
+      "title": "Announcements",
+      "description": "Pinned announcements appear first; the rest follow actual publish time.",
+      "empty": "No announcements",
+      "emptyBody": "There are no visible announcements.",
+      "severity": {
+        "info": "Info",
+        "warning": "Warning",
+        "important": "Important"
+      },
+      "language": {
+        "zh": "Chinese",
+        "en": "English"
+      },
+      "languageFallback": "Language fallback: {{language}}",
+      "restoreHomeSummary": "Restore home summary",
+      "readMore": "Read more",
+      "previous": "Previous",
+      "next": "Next",
+      "page": "Page",
+      "backToList": "Back to announcements",
+      "fallbackNotice": "No current-language version; showing {{language}}."
     },
     "account": {
       "nav": "Account",
@@ -443,7 +674,8 @@
       "description": "View metadata and token usage of your own requests. Request and response content is not shown.",
       "listTitle": "Request records",
       "empty": "No log records",
-      "emptyBody": "No requests from your account match the current filters."
+      "emptyBody": "No requests from your account match the current filters.",
+      "eyebrow": "Operations"
     },
     "charity": {
       "nav": "Charity",

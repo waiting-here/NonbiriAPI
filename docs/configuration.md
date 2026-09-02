@@ -36,7 +36,7 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | --- | --- | --- |
 | `site_name` | non-empty text, ≤256 bytes | display name; frontend falls back when unset |
 | `site_logo_url` | text, ≤2048 bytes, blank allowed | display image URL; blank uses the default mark |
-| `default_locale` | `zh` or `en` | frontend locale fallback |
+| `announcement_epoch` | read-only opaque ID | generated for each fresh database and used to isolate announcement caches |
 | `legal_privacy_override_zh`, `legal_privacy_override_en` | multiline text, ≤65536 bytes each | blank uses the embedded privacy template |
 | `legal_terms_override_zh`, `legal_terms_override_en` | multiline text, ≤65536 bytes each | blank uses the embedded terms template |
 | `legal_authoritative_locale` | `zh`, `en`, or blank | declares the controlling legal-language version |

@@ -9,6 +9,7 @@ import {
   useNarrowReducedMotion as configureNarrowReducedMotion,
 } from './support';
 import { ADMIN_ORIGIN } from './ports';
+import type { GamesConfig } from '../../src/admin/features/operations/economy';
 
 type BrowserContext = Parameters<typeof installURLPersistenceObserver>[0];
 type Page = Parameters<typeof collectConsoleViolations>[0];
@@ -17,23 +18,57 @@ type Route = Parameters<RouteHandler>[0];
 
 const EPHEMERAL_MARKER = 'admin-games-ephemeral-marker';
 
-interface GameConfig {
-  master_enabled: boolean;
-  fishing: {
-    enabled: boolean;
-    bait_prices: { worm: string; lure: string; premium: string };
-    rtp_percent: { standard: number; premium: number };
-    treasure_multipliers: { bottle: number; clover: number; shell: number };
-  };
-}
-
-const INITIAL_CONFIG: GameConfig = {
+const INITIAL_CONFIG: GamesConfig = {
+  revision: '7',
   master_enabled: true,
   fishing: {
     enabled: true,
-    bait_prices: { worm: '2500000', lure: '5000000', premium: '7500000' },
+    bait_prices: { worm: '2.5', lure: '5', premium: '7.5' },
     rtp_percent: { standard: 90, premium: 88 },
     treasure_multipliers: { bottle: 2, clover: 3, shell: 5 },
+  },
+  linklink: {
+    enabled: true,
+    specs: {
+      '6x8': { enabled: true, price: '1' },
+      '8x8': { enabled: true, price: '2' },
+      '10x10': { enabled: false, price: '3.125' },
+    },
+  },
+  rps: {
+    enabled: true,
+    modes: {
+      quick: {
+        enabled: true,
+        base: '1',
+        pumps_bp: { platform: 100, welfare: 200, thursday: 300 },
+        queue_seconds: 60,
+        gesture_seconds: 10,
+        dealer_seconds: 10,
+        follower_seconds: 10,
+        queue_capacity: 1_024,
+      },
+      standard: {
+        enabled: true,
+        base: '2',
+        pumps_bp: { platform: 200, welfare: 300, thursday: 400 },
+        queue_seconds: 90,
+        gesture_seconds: 15,
+        dealer_seconds: 12,
+        follower_seconds: 12,
+        queue_capacity: 2_048,
+      },
+      deathmatch: {
+        enabled: false,
+        base: '3',
+        pumps_bp: { platform: 300, welfare: 400, thursday: 500 },
+        queue_seconds: 120,
+        gesture_seconds: 20,
+        dealer_seconds: 15,
+        follower_seconds: 15,
+        queue_capacity: 4_096,
+      },
+    },
   },
 };
 
@@ -45,41 +80,40 @@ async function fulfillJSON(route: Route, value: unknown) {
   });
 }
 
-function applyPatch(config: GameConfig, patch: Record<string, unknown>): GameConfig {
-  const fishingPatch = (patch.fishing ?? {}) as Record<string, unknown>;
-  const prices = (fishingPatch.bait_prices ?? {}) as Record<string, unknown>;
-  const rtp = (fishingPatch.rtp_percent ?? {}) as Record<string, unknown>;
-  const multipliers = (fishingPatch.treasure_multipliers ?? {}) as Record<string, unknown>;
+type MutableRPSMode = Omit<GamesConfig['rps']['modes']['quick'], 'queue_capacity'>;
+type GamesPatch = {
+  expected_revision: string;
+  master_enabled: boolean;
+  fishing: GamesConfig['fishing'];
+  linklink: GamesConfig['linklink'];
+  rps: {
+    enabled: boolean;
+    modes: Record<'quick' | 'standard' | 'deathmatch', MutableRPSMode>;
+  };
+};
+
+function applyPatch(config: GamesConfig, rawPatch: Record<string, unknown>): GamesConfig {
+  const patch = rawPatch as GamesPatch;
   return {
-    master_enabled:
-      typeof patch.master_enabled === 'boolean' ? patch.master_enabled : config.master_enabled,
-    fishing: {
-      enabled:
-        typeof fishingPatch.enabled === 'boolean' ? fishingPatch.enabled : config.fishing.enabled,
-      bait_prices: {
-        worm: typeof prices.worm === 'string' ? prices.worm : config.fishing.bait_prices.worm,
-        lure: typeof prices.lure === 'string' ? prices.lure : config.fishing.bait_prices.lure,
-        premium:
-          typeof prices.premium === 'string' ? prices.premium : config.fishing.bait_prices.premium,
-      },
-      rtp_percent: {
-        standard:
-          typeof rtp.standard === 'number' ? rtp.standard : config.fishing.rtp_percent.standard,
-        premium: typeof rtp.premium === 'number' ? rtp.premium : config.fishing.rtp_percent.premium,
-      },
-      treasure_multipliers: {
-        bottle:
-          typeof multipliers.bottle === 'number'
-            ? multipliers.bottle
-            : config.fishing.treasure_multipliers.bottle,
-        clover:
-          typeof multipliers.clover === 'number'
-            ? multipliers.clover
-            : config.fishing.treasure_multipliers.clover,
-        shell:
-          typeof multipliers.shell === 'number'
-            ? multipliers.shell
-            : config.fishing.treasure_multipliers.shell,
+    revision: String(BigInt(config.revision) + 1n),
+    master_enabled: patch.master_enabled,
+    fishing: structuredClone(patch.fishing),
+    linklink: structuredClone(patch.linklink),
+    rps: {
+      enabled: patch.rps.enabled,
+      modes: {
+        quick: {
+          ...structuredClone(patch.rps.modes.quick),
+          queue_capacity: config.rps.modes.quick.queue_capacity,
+        },
+        standard: {
+          ...structuredClone(patch.rps.modes.standard),
+          queue_capacity: config.rps.modes.standard.queue_capacity,
+        },
+        deathmatch: {
+          ...structuredClone(patch.rps.modes.deathmatch),
+          queue_capacity: config.rps.modes.deathmatch.queue_capacity,
+        },
       },
     },
   };
@@ -88,7 +122,7 @@ function applyPatch(config: GameConfig, patch: Record<string, unknown>): GameCon
 async function prepare(
   context: BrowserContext,
   page: Page,
-  config: { current: GameConfig; patches: Record<string, unknown>[] },
+  config: { current: GamesConfig; patches: Record<string, unknown>[] },
 ) {
   const consoleGuard = collectConsoleViolations(page);
   await installURLPersistenceObserver(context, [EPHEMERAL_MARKER]);
@@ -104,6 +138,12 @@ async function prepare(
     method: 'GET',
     path: '/admin/api/games/config',
     body: INITIAL_CONFIG,
+  });
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN,
+    method: 'GET',
+    path: '/admin/api/games/active-counts',
+    body: { games: [], queues: [] },
   });
   await page.route('**/*', async (route) => {
     const request = route.request();
@@ -145,18 +185,56 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
   await page.keyboard.press('Space');
   await expect(master).not.toBeChecked();
 
-  const worm = page.getByLabel('Worm bait');
+  const worm = page.getByLabel('Worm bait price (credits)');
   await worm.focus();
   await page.keyboard.press('ControlOrMeta+A');
-  await page.keyboard.type('3000000');
+  await page.keyboard.type('3');
   const save = page.getByRole('button', { name: 'Save game configuration' });
   await save.focus();
   await page.keyboard.press('Enter');
   await expect.poll(() => config.patches.length).toBe(1);
   expect(config.patches[0]).toEqual({
+    expected_revision: '7',
     master_enabled: false,
-    fishing: { bait_prices: { worm: '3000000' } },
+    fishing: {
+      ...INITIAL_CONFIG.fishing,
+      bait_prices: { ...INITIAL_CONFIG.fishing.bait_prices, worm: '3' },
+    },
+    linklink: INITIAL_CONFIG.linklink,
+    rps: {
+      enabled: INITIAL_CONFIG.rps.enabled,
+      modes: {
+        quick: {
+          enabled: true,
+          base: '1',
+          pumps_bp: { platform: 100, welfare: 200, thursday: 300 },
+          queue_seconds: 60,
+          gesture_seconds: 10,
+          dealer_seconds: 10,
+          follower_seconds: 10,
+        },
+        standard: {
+          enabled: true,
+          base: '2',
+          pumps_bp: { platform: 200, welfare: 300, thursday: 400 },
+          queue_seconds: 90,
+          gesture_seconds: 15,
+          dealer_seconds: 12,
+          follower_seconds: 12,
+        },
+        deathmatch: {
+          enabled: false,
+          base: '3',
+          pumps_bp: { platform: 300, welfare: 400, thursday: 500 },
+          queue_seconds: 120,
+          gesture_seconds: 20,
+          dealer_seconds: 15,
+          follower_seconds: 15,
+        },
+      },
+    },
   });
+  expect(JSON.stringify(config.patches[0])).not.toContain('queue_capacity');
   await expect(page.getByRole('status')).toContainText('Game configuration updated');
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
@@ -168,7 +246,7 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
     document.documentElement.style.zoom = '200%';
   });
   await expect(save).toBeVisible();
-  await expect(page.getByLabel('Worm bait')).toBeVisible();
+  await expect(page.getByLabel('Worm bait price (credits)')).toBeVisible();
   expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(
     true,
   );

@@ -394,7 +394,7 @@ test('user announcement detail explains the Chinese-to-English authority fallbac
   });
 
   await page.goto(`${USER_ORIGIN}/announcements/${ANNOUNCEMENT_ID}`);
-  await expect(page.locator('.inline-notice')).toContainText('en');
+  await expect(page.locator('.inline-notice')).toContainText('英文');
   await expect(page.getByRole('heading', { name: 'Fallback content' })).toBeVisible();
   await expect(page.locator('.ops-announcement-body script')).toHaveCount(0);
   await assertRouteClean(page, setup, scenario);

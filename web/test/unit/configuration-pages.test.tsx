@@ -234,20 +234,20 @@ describe('authoritative site-config frontend', () => {
       locale: 'en',
       role: 'admin',
     });
-    await rendered.user.click((await screen.findByText('fixture')).closest('button')!);
+    await rendered.user.click((await screen.findByText('Other (fixture)')).closest('button')!);
 
     let anthropicInput = screen.getByLabelText('Default Anthropic max output tokens');
     let anthropicForm = anthropicInput.closest('form');
     expect(anthropicForm).not.toBeNull();
     expect(anthropicInput).toBeDisabled();
     await rendered.user.click(
-      within(anthropicForm!).getByLabelText(/Remove the explicit override/i),
+      within(anthropicForm!).getByLabelText('Remove override'),
     );
     expect(anthropicInput).toBeEnabled();
     for (const invalid of ['1e3', '0', '1.5', '01', ' 1']) {
       fireEvent.change(anthropicInput, { target: { value: invalid } });
       expect(within(anthropicForm!).getByRole('alert')).toHaveTextContent(
-        /canonical integer value/i,
+        /canonical numeric setting value/i,
       );
       expect(within(anthropicForm!).getByRole('button', { name: 'Save value' })).toBeDisabled();
     }
@@ -264,7 +264,7 @@ describe('authoritative site-config frontend', () => {
     anthropicInput = await screen.findByLabelText('Default Anthropic max output tokens');
     anthropicForm = anthropicInput.closest('form');
     await rendered.user.click(
-      within(anthropicForm!).getByLabelText(/Remove the explicit override/i),
+      within(anthropicForm!).getByLabelText('Remove override'),
     );
     await rendered.user.click(
       within(anthropicForm!).getByRole('button', { name: 'Remove override' }),
@@ -281,7 +281,7 @@ describe('authoritative site-config frontend', () => {
     const patchCount = server.patches.length;
     fireEvent.change(timezoneInput, { target: { value: '345' } });
     expect(within(timezoneForm!).getByRole('alert')).toHaveTextContent(
-      /canonical integer value/i,
+      /canonical numeric setting value/i,
     );
     expect(within(timezoneForm!).getByRole('button', { name: 'Save value' })).toBeDisabled();
     expect(server.patches).toHaveLength(patchCount);
@@ -380,7 +380,7 @@ describe('authoritative site-config frontend', () => {
       locale: 'en',
       role: 'admin',
     });
-    await rendered.user.click((await screen.findByText('legal')).closest('button')!);
+    await rendered.user.click((await screen.findByText('Legal text')).closest('button')!);
     let textarea = screen.getByLabelText('Terms override (English)');
     let form = textarea.closest('form');
     expect(form).not.toBeNull();
@@ -444,9 +444,11 @@ describe('authoritative site-config frontend', () => {
       locale: 'en',
       role: 'admin',
     });
-    await rendered.user.click((await screen.findByText('fixture')).closest('button')!);
-    expect(screen.getByText('Amount preview: 1,234,567.089 credits')).toBeVisible();
-    expect(screen.getByText('Duration preview: 1h 1m 1s')).toBeVisible();
+    await rendered.user.click((await screen.findByText('Other (fixture)')).closest('button')!);
+    expect(
+      screen.getByText('Exact milli-credits: 1234567089 · Display credits: 1,234,567.089'),
+    ).toBeVisible();
+    expect(screen.getByText('Human-readable duration: 1h 1m 1s')).toBeVisible();
 
     const amountInput = screen.getByLabelText('Check-in credit threshold');
     expect(amountInput).toHaveAttribute('min', '0');
@@ -454,13 +456,17 @@ describe('authoritative site-config frontend', () => {
     expect(amountInput).toHaveAttribute('step', '0.001');
     const amountForm = amountInput.closest('form');
     fireEvent.change(amountInput, { target: { value: '1.230' } });
-    expect(within(amountForm!).getByRole('alert')).toHaveTextContent(/canonical amount value/i);
+    expect(within(amountForm!).getByRole('alert')).toHaveTextContent(
+      /canonical numeric setting value/i,
+    );
     expect(within(amountForm!).getByRole('button', { name: 'Save value' })).toBeDisabled();
     expect(server.patches).toHaveLength(0);
 
     fireEvent.change(amountInput, { target: { value: '9000000000000' } });
     expect(
-      within(amountForm!).getByText('Amount preview: 9,000,000,000,000 credits'),
+      within(amountForm!).getByText(
+        'Exact milli-credits: 9000000000000000 · Display credits: 9,000,000,000,000',
+      ),
     ).toBeVisible();
     await rendered.user.click(within(amountForm!).getByRole('button', { name: 'Save value' }));
     await waitFor(() => expect(server.patches.at(-1)?.value).toBe('9000000000000'));
@@ -519,7 +525,7 @@ describe('authoritative site-config frontend', () => {
       locale: 'en',
       role: 'admin',
     });
-    await rendered.user.click((await screen.findByText('fixture')).closest('button')!);
+    await rendered.user.click((await screen.findByText('Other (fixture)')).closest('button')!);
     const input = screen.getByLabelText('Site timezone offset');
     fireEvent.change(input, { target: { value: '30' } });
     await rendered.user.click(
@@ -585,7 +591,7 @@ describe('authoritative site-config frontend', () => {
       locale: 'en',
       role: 'admin',
     });
-    await rendered.user.click((await screen.findByText('fixture')).closest('button')!);
+    await rendered.user.click((await screen.findByText('Other (fixture)')).closest('button')!);
     const input = screen.getByLabelText('Site name');
     const form = input.closest('form');
     fireEvent.change(input, { target: { value: 'After' } });
@@ -593,7 +599,7 @@ describe('authoritative site-config frontend', () => {
 
     expect(patchBody).toEqual({ value: 'After' });
     expect(input).toBeDisabled();
-    expect(within(form!).getByRole('button', { name: 'Saving…' })).toBeDisabled();
+    expect(within(form!).getByRole('button', { name: 'Working…' })).toBeDisabled();
     expect(within(form!).getByRole('button', { name: 'Restore authority value' })).toBeDisabled();
     expect(within(form!).getByRole('button', { name: 'Reload authority' })).toBeDisabled();
 
@@ -822,14 +828,16 @@ describe('standalone Admin Games feature', () => {
       locale: 'en',
       role: 'admin',
     });
-    const save = await screen.findByRole('button', { name: 'Save atomic game configuration' });
-    expect(screen.getByText(/phase casting · 9007199254740993/)).toBeVisible();
-    expect(screen.getByText(/spec 10x10 · phase playing · 2/)).toBeVisible();
-    expect(screen.getByText(/mode deathmatch · phase gesture · 3/)).toBeVisible();
+    const save = await screen.findByRole('button', { name: 'Save game configuration' });
+    expect(screen.getByText(/Phase: Unknown value \(casting\) · 9007199254740993/)).toBeVisible();
+    expect(
+      screen.getByText(/Specification: 10×10 · Phase: Unknown value \(playing\) · 2/),
+    ).toBeVisible();
+    expect(screen.getByText(/Mode: Deathmatch · Phase: Gesture selection · 3/)).toBeVisible();
     const queues = screen.getByRole('heading', { name: 'RPS queues' }).closest('section');
-    expect(queues).toHaveTextContent('quick: 5');
-    expect(queues).toHaveTextContent('standard: 0');
-    expect(queues).toHaveTextContent('deathmatch: 7');
+    expect(queues).toHaveTextContent('Quick: 5');
+    expect(queues).toHaveTextContent('Standard: 0');
+    expect(queues).toHaveTextContent('Deathmatch: 7');
 
     const worm = screen.getByLabelText(/worm bait price/i);
     fireEvent.change(worm, { target: { value: '3' } });
@@ -889,7 +897,7 @@ describe('standalone Admin Games feature', () => {
       locale: 'en',
       role: 'admin',
     });
-    const save = await screen.findByRole('button', { name: 'Save atomic game configuration' });
+    const save = await screen.findByRole('button', { name: 'Save game configuration' });
     const quickPlatform = screen.getByLabelText(/quick platform cut/i);
     fireEvent.change(quickPlatform, { target: { value: '9999' } });
     await rendered.user.click(save);
@@ -897,14 +905,14 @@ describe('standalone Admin Games feature', () => {
     expect(server.patches).toHaveLength(0);
 
     fireEvent.change(quickPlatform, { target: { value: '100' } });
-    const input = screen.getByLabelText(/standard Fishing RTP percent/i);
+    const input = screen.getByLabelText('Standard bait RTP');
     fireEvent.change(input, { target: { value: '100' } });
     await rendered.user.click(save);
     expect(await screen.findByText('Invalid fishing economy.')).toBeVisible();
     expect(input).toHaveValue(100);
     expect(server.state).toEqual(initialGameConfig);
     expect(server.patches).toHaveLength(1);
-    fireEvent.change(screen.getByLabelText(/clover treasure multiplier/i), {
+    fireEvent.change(screen.getByLabelText('Lucky clover'), {
       target: { value: '4' },
     });
     expect(screen.queryByText('Invalid fishing economy.')).not.toBeInTheDocument();
@@ -942,13 +950,13 @@ describe('standalone Admin Games feature', () => {
     const worm = await screen.findByLabelText(/worm bait price/i);
     fireEvent.change(worm, { target: { value: '3' } });
     await rendered.user.click(
-      screen.getByRole('button', { name: 'Save atomic game configuration' }),
+      screen.getByRole('button', { name: 'Save game configuration' }),
     );
     expect(worm).toBeDisabled();
-    expect(screen.getByLabelText('Games master enabled')).toBeDisabled();
-    expect(screen.getByLabelText(/6x8 entry price/i)).toBeDisabled();
+    expect(screen.getByLabelText('Games master switch')).toBeDisabled();
+    expect(screen.getByLabelText(/6×8 entry price/i)).toBeDisabled();
     expect(screen.getByLabelText(/quick base/i)).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Working…' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Restore authority values' })).toBeDisabled();
 
     state = {

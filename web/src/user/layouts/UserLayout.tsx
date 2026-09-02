@@ -22,6 +22,8 @@ const USER_ACCOUNT_PATH = routePath('user', 'account');
 const USER_STEWARD_PATH = routePath('user', 'steward');
 const USER_PRIVACY_PATH = routePath('user', 'privacy');
 const USER_TERMS_PATH = routePath('user', 'terms');
+const USER_REPORT_PATH = routePath('user', 'credential-report');
+const USER_ANNOUNCEMENTS_PATH = routePath('user', 'announcements');
 const USER_MAINTENANCE_PATH = routePath('user', 'maintenance');
 const USER_REGISTRATION_CLOSED_PATH = routePath('user', 'registration-closed');
 const USER_PUBLIC_SHELL_PATHS = new Set([
@@ -29,6 +31,7 @@ const USER_PUBLIC_SHELL_PATHS = new Set([
   USER_TERMS_PATH,
   USER_MAINTENANCE_PATH,
   USER_REGISTRATION_CLOSED_PATH,
+  USER_REPORT_PATH,
 ]);
 
 export function UserLayout() {
@@ -293,7 +296,7 @@ export function UserLayout() {
       <div className="site-footer nb-user-shell__footer">
         <PageFooter
           copyright={t('common.copyright', { year: new Date().getFullYear() })}
-          links={<><Link to={USER_PRIVACY_PATH}>{t('user.legal.privacy.nav')}</Link><Link to={USER_TERMS_PATH}>{t('user.legal.terms.nav')}</Link></>}
+          links={<>{signedIn ? <Link to={USER_ANNOUNCEMENTS_PATH}>{t('user.announcements.nav')}</Link> : null}<Link to={USER_REPORT_PATH}>{t('user.report.nav')}</Link><Link to={USER_PRIVACY_PATH}>{t('user.legal.privacy.nav')}</Link><Link to={USER_TERMS_PATH}>{t('user.legal.terms.nav')}</Link></>}
         />
       </div>
     </div>

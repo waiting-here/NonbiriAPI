@@ -10,6 +10,7 @@ import {
   PageHeader,
   StatusBadge,
 } from '@shared/components/States';
+import { useOptionalToast } from '@shared/components/Toast';
 import {
   adminEconomyKeys,
   gamesConfigPatch,
@@ -203,6 +204,7 @@ function GamesEditor({
   refresh: () => Promise<unknown>;
 }) {
   const { t } = useTranslation();
+  const toast = useOptionalToast();
   const [draft, setDraft] = useState(authority);
   const [validation, setValidation] = useState<string | null>(null);
   const save = useRetainedOperation<GamesConfig, GamesConfig>(
@@ -230,7 +232,12 @@ function GamesEditor({
     event.preventDefault();
     const error = validateGamesDraft(draft, t);
     setValidation(error);
-    if (error === null) save.mutate(draft);
+    if (error === null) {
+      void save
+        .mutateAsync(draft)
+        .then(() => toast?.push({ message: t('admin.games.saved'), tone: 'success' }))
+        .catch(() => undefined);
+    }
   };
   const restore = () => {
     save.reset();

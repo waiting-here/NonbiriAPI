@@ -23,6 +23,7 @@
     "test:node": "node --test src/shared/utils/formatNumber.test.js src/admin/utils/economyInput.test.js",
     "test:unit": "vitest run",
     "test:e2e": "cross-env PLAYWRIGHT_HTML_OPEN=never PLAYWRIGHT_NO_COPY_PROMPT=1 playwright test",
+    "check:copy": "node scripts/check-copy.mjs",
     "typecheck": "tsc --noEmit && tsc --project tsconfig.test.json --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

@@ -22,7 +22,7 @@ authorized to reach another station's API.
 
 `GET /healthz` is an unauthenticated liveness probe on both hosts; it never touches the database and returns `{"status":"ok"}`.
 
-`GET /api/config` on the user host and `GET /admin/api/config` on the admin host are unauthenticated, `no-store` bootstrap endpoints. They return only `site_name`, `site_logo_url`, `default_locale`, the four bounded legal override texts, `legal_authoritative_locale`, `maintenance_mode`, and `registration_open`. Operational limits, Discord gate IDs, alert preferences, and secrets are never projected. Other methods return `method_not_allowed`.
+`GET /api/config` on the user host and `GET /admin/api/config` on the admin host are unauthenticated, `no-store` bootstrap endpoints. They return only `site_name`, `site_logo_url`, the four bounded legal override texts, `legal_authoritative_locale`, `maintenance_mode`, `registration_open`, and the read-only `announcement_epoch`. Operational limits, Discord gate IDs, alert preferences, and secrets are never projected. Other methods return `method_not_allowed`.
 
 ### 1.2 Authentication schemes
 
@@ -398,7 +398,7 @@ neither an admin session nor a caller key can reach it.
 
 | Method | Path | Auth | Body | Response | Stable codes |
 |---|---|---|---|---|---|
-| `GET` | `/api/endpoints` | user session | — | `200` array of `{id, connector_type, base_url, note, enabled, model_fetch_failed, model_fetch_failed_at, created_at, updated_at}` (key secrets never appear) | `unauthorized` |
+| `GET` | `/api/endpoints` | user session | query: optional `limit`, `cursor` | `200 {data:[…],next_cursor}` where each endpoint is `{id, connector_type, base_url, note, enabled, revision, key_count, created_at, updated_at}` (key secrets never appear) | `invalid_request`, `unauthorized` |
 | `POST` | `/api/endpoints` | user session | `{base_url, connector_type?, note?, enabled?}` | `201` created endpoint; `base_url` is canonicalized (scheme/host lowercased, trailing dot removed, userinfo/query/fragment removed, redundant slashes collapsed; an explicitly typed port is preserved while an implicit default port is omitted from display/persistence but normalized in the internal origin key) | `invalid_request`, `unauthorized`, `conflict`, `resource_limit_exceeded` (explicit user endpoint cap when non-null, otherwise the site default) |
 | `GET` | `/api/endpoints/{id}` | user session | — | `200` the endpoint object | `unauthorized`, `not_found` |
 | `PATCH` | `/api/endpoints/{id}` | user session | `{base_url?, note?, enabled?}` | `200` updated endpoint; an empty or wholly unchanged patch is rejected; when any key exists, `base_url` may change only within the same canonical origin (scheme + canonical host + effective port) | `invalid_request`, `unauthorized`, `not_found`, `conflict` |
@@ -417,10 +417,10 @@ connector type is immutable after creation (a `PATCH` carrying `connector_type`
 is rejected). The closed registry supports `openai-compatible` and `anthropic-compatible`;
 unknown values never fall back. Both use a versioned API base URL, but their discovery and message paths, credentials, capability rules, and response validators remain connector-specific.
 
-`model_fetch_failed` / `model_fetch_failed_at` are the endpoint's bounded fetch
-flag: set (with a unix-seconds timestamp) whenever an upstream model fetch for
-any of its keys failed, cleared by the next successful fetch. The flag is
-state only — never a diagnostic or any upstream content.
+Model-discovery state is scoped to an endpoint key and exposed through that
+key's catalog `evidence` object. Endpoints do not carry a duplicated discovery-failure
+flag. Failed evidence contains only a closed safe class; bounded user issues are derived
+from the same authority and never contain upstream response content.
 
 **Credential/origin security behavior:** Endpoint updates enforce the credential/origin boundary in the same database
 transaction as the update and key-existence check. An endpoint with any key
@@ -445,8 +445,8 @@ fetch. A rejected update is atomic and never queues a fetch.
 | `POST` | `/api/endpoints/{id}/keys` | user session | `{secret, note?, enabled?, force_store_false?}` | `201` created key metadata in the same safe shape (`force_store_false` defaults false and true is OpenAI-only); `secret` is sealed with contextual AES-256-GCM after its uncommitted row id is allocated and before the same transaction commits; plaintext is never a SQL value or response; triggers model fetch when enabled | `invalid_request`, `unauthorized`, `not_found`, `payload_too_large`, `resource_limit_exceeded` |
 | `PATCH` | `/api/endpoints/{id}/keys/{keyId}` | user session | `{note?, enabled?, force_store_false?}` | `200` updated safe key metadata; only the owner can write the experimental boolean, and the secret remains immutable (rotation is delete + add) | `invalid_request`, `unauthorized`, `not_found` |
 | `DELETE` | `/api/endpoints/{id}/keys/{keyId}` | user session | — | `204`; cascades to its fetched-model cache and bindings | `unauthorized`, `not_found` |
-| `GET` | `/api/endpoints/{id}/keys/{keyId}/models` | user session | — | `200` array of `{upstream_model_id, provider, fetched_at, status}` for that (Endpoint, Key) combo; empty `[]` when the combo has no cache rows; a missing, cross-user, or wrong-endpoint combo is indistinguishable `not_found` | `unauthorized`, `not_found` |
-| `POST` | `/api/endpoints/{id}/keys/{keyId}/models/refresh` | user session | — | `202` (no body) once the manual fetch is queued; the fetch runs on a bounded worker pool and its outcome is never echoed back; on success the cache for that combo is replaced; on failure the cache is cleared, the endpoint is flagged, and a bounded user issue is recorded | `unauthorized`, `not_found`, `rate_limited`, `service_unavailable` |
+| `GET` | `/api/endpoints/{id}/keys/{keyId}/models` | user session | query: optional `limit`, `cursor` | `200 {evidence,automatic_entries,manual_entries,next_cursor}` for that (Endpoint, Key) combo; catalog entries use the closed `CatalogEntry` wire and `evidence` is the authoritative closed discovery state; a missing, cross-user, or wrong-endpoint combo is indistinguishable `not_found` | `invalid_request`, `unauthorized`, `not_found` |
+| `POST` | `/api/endpoints/{id}/keys/{keyId}/models/refresh` | user session | — | `202 {operation_id,evidence}` once the idempotent discovery operation is accepted; `evidence.state` is `checking`, and the authoritative catalog supplies its eventual closed result | `unauthorized`, `not_found`, `conflict`, `rate_limited`, `service_unavailable` |
 
 The per-endpoint key-count cap is `default_endpoint_key_limit` (default 20,
 administrator-adjustable at runtime; see §4.4). When the count of keys on one endpoint
@@ -469,12 +469,13 @@ The `rate_limited` code covers both the per-user manual refresh frequency limit 
 sliding window) and the bounded fetch pool being full; a refresh during shutdown is
 `service_unavailable`. Each (Endpoint, Key) combo has at most one pending/in-flight fetch
 (duplicate refreshes merge), so repeated refreshes never spawn unbounded work. Upstream and
-protocol failures (HTTP status outside 2xx, truncated or malformed JSON, duplicate/empty/
-over-long/control-containing model ids) are not successes: the combo cache is cleared, the
-endpoint's `model_fetch_failed` flag is set, and a bounded, sanitized user issue (`kind`
-`model_fetch_failed`, `ref` the endpoint id) is written atomically with the flag. Issue text
-is a stable short message plus a bounded diagnostic fragment; it never contains the key, the
-full response, or the endpoint URL. HTTP 200 alone never counts as success.
+protocol failures (HTTP status outside 2xx, truncated or malformed JSON, empty/
+over-long/control-containing model ids) are not successes. They preserve the last committed
+automatic catalog, atomically publish failed discovery evidence with a closed `safe_class`,
+and derive a bounded `model_discovery` user issue for the endpoint key. Issue text never
+contains the key, full response, or endpoint URL. HTTP 200 alone never counts as success;
+duplicate model identifiers are preserved as distinct source entries and compiled into the
+pair support count.
 
 ### 3.7 Models & bindings
 
@@ -790,7 +791,7 @@ Plaintext upstream secrets never appear in any admin overview, log, or usage res
 
 Known `site_config` keys (the authoritative key set is enforced by the handler):
 
-- `site_name`, `site_logo_url`, `default_locale`
+- `site_name`, `site_logo_url`, `announcement_epoch` (fresh-database, read-only opaque ID)
 - `legal_privacy_override_zh`, `legal_privacy_override_en`, `legal_terms_override_zh`, `legal_terms_override_en`, `legal_authoritative_locale`
 - `default_endpoint_limit` — global endpoint-count cap default
 - `default_endpoint_key_limit` — global per-endpoint key-count cap default

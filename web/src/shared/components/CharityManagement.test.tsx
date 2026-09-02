@@ -150,10 +150,10 @@ describe('CharityManagement corrective controls', () => {
     });
 
     await view.user.click(await screen.findByRole('button', { name: 'Review' }));
-    await screen.findByRole('heading', { name: 'Donation 1' });
+    await screen.findByRole('heading', { name: 'Donation #1' });
     expect(screen.getByLabelText('Charity switch change')).toHaveValue('');
     await view.user.click(screen.getByRole('checkbox', { name: 'Reset failure streak' }));
-    await view.user.click(screen.getByRole('button', { name: 'Save key controls' }));
+    await view.user.click(screen.getByRole('button', { name: 'Save key limits' }));
 
     await waitFor(() => expect(requests.keyBodies).toHaveLength(1));
     expect(requests.keyBodies[0]).toEqual({
@@ -177,9 +177,9 @@ describe('CharityManagement corrective controls', () => {
     });
 
     await view.user.click(await screen.findByRole('button', { name: 'Review' }));
-    await screen.findByRole('heading', { name: 'Donation 1' });
+    await screen.findByRole('heading', { name: 'Donation #1' });
     await view.user.selectOptions(screen.getByLabelText('Charity switch change'), 'false');
-    await view.user.click(screen.getByRole('button', { name: 'Save key controls' }));
+    await view.user.click(screen.getByRole('button', { name: 'Save key limits' }));
 
     await waitFor(() => expect(requests.keyBodies).toHaveLength(1));
     expect(requests.keyBodies[0]).toEqual({
@@ -278,14 +278,14 @@ describe('CharityManagement corrective controls', () => {
       role: 'admin',
     });
 
-    await view.user.click(screen.getByRole('tab', { name: 'Models and bindings' }));
+    await view.user.click(screen.getByRole('tab', { name: 'Charity models and bindings' }));
     await view.user.click(await screen.findByRole('button', { name: 'Manage' }));
     const heading = await screen.findByRole('heading', { name: '[公益]provider/model' });
     const card = heading.closest('.card');
     if (!(card instanceof HTMLElement)) throw new Error('Expected model editor card.');
     const editor = within(card);
-    expect(editor.getByLabelText('Discount start')).toHaveValue(`${localDateTime(start)}.000`);
-    expect(editor.getByLabelText('Discount end')).toHaveValue(`${localDateTime(end)}.000`);
+    expect(editor.getByLabelText('Start (optional)')).toHaveValue(`${localDateTime(start)}.000`);
+    expect(editor.getByLabelText('End (optional)')).toHaveValue(`${localDateTime(end)}.000`);
 
     await view.user.click(editor.getByRole('button', { name: 'Save model' }));
 
