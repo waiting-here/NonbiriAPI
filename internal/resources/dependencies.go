@@ -89,16 +89,36 @@ type FinalTxAuthorizer interface {
 	AuthorizeUserMutation(context.Context, *sql.Tx, int64) error
 }
 
+// AdminFinalTxAuthorizer revalidates the live administrator session,
+// credential generation, and role in the transaction that performs a
+// mainstream-channel read or mutation. It is called before idempotency replay
+// lookup so a replay cannot bypass a revoked administrator session.
+type AdminFinalTxAuthorizer interface {
+	AuthorizeAdminFinalTx(context.Context, *sql.Tx, int64) error
+}
+
 type UserPrincipal struct {
 	UserID int64
 }
 
 type AuthorizedUserHandler func(http.ResponseWriter, *http.Request, UserPrincipal)
 
+type AdminPrincipal struct {
+	UserID int64
+}
+
+type AuthorizedAdminHandler func(http.ResponseWriter, *http.Request, AdminPrincipal)
+
 // UserRouteRegistrar is the authorization/maintenance seam. Implementations
 // authenticate before invoking a handler, including every replay attempt.
 type UserRouteRegistrar interface {
 	RegisterUserRoute(method, pattern string, handler AuthorizedUserHandler) error
+}
+
+// AdminRouteRegistrar is the narrow production wiring seam for the
+// environment-owned mainstream channel authority.
+type AdminRouteRegistrar interface {
+	RegisterAdminRoute(method, pattern string, handler AuthorizedAdminHandler) error
 }
 
 // ContinuationUserPrincipal carries only the authenticated identity needed to

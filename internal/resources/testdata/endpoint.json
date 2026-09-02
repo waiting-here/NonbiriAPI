@@ -1,1 +1,1 @@
-{"id":"11","connector_type":"openai-compatible","base_url":"https://example.com/v1","note":"endpoint note","enabled":true,"revision":"3","key_count":"2","created_at":1700000000,"updated_at":1700000010}
+{"id":"11","connector_type":"openai-compatible","base_url":"https://example.com/v1","origin":{"kind":"custom"},"note":"endpoint note","enabled":true,"revision":"3","key_count":"2","created_at":1700000000,"updated_at":1700000010}

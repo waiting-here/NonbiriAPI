@@ -75,14 +75,18 @@ VALUES(?,'approved',1,?,?)`, userID, resourceTestNow, resourceTestNow)
 	zero := make([]byte, 16)
 	generation := make([]byte, 16)
 	generation[15] = 1
+	var reportFingerprint []byte
+	if err := environment.store.DB().QueryRow(`SELECT secret_fingerprint FROM endpoint_keys WHERE id=?`, endpointKeyID).Scan(&reportFingerprint); err != nil {
+		t.Fatalf("read deletion-test endpoint-key fingerprint: %v", err)
+	}
 	result, err = environment.store.DB().Exec(`
 INSERT INTO donation_keys(
- donation_id,endpoint_key_id,display_head,display_tail,canonical_base_url,connector_type,
- price_used_mag,price_reserved_mag,calls_used,calls_reserved,tokens_used,tokens_reserved,
- failure_streak,streak_generation,next_claim_seq,next_fold_seq,created_at,updated_at
-) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		donationID, endpointKeyID, "head", "tail", "https://example.com/v1", connectorType,
-		zero, zero, zero, zero, zero, zero, zero, generation, zero, zero, resourceTestNow, resourceTestNow)
+	 donation_id,endpoint_key_id,source_endpoint_key_id,report_fingerprint,display_head,display_tail,canonical_base_url,connector_type,
+	 price_used_mag,price_reserved_mag,calls_used,calls_reserved,tokens_used,tokens_reserved,
+	 failure_streak,streak_generation,next_claim_seq,next_fold_seq,authorized_expires_at,expires_at,created_at,updated_at
+	) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		donationID, endpointKeyID, endpointKeyID, reportFingerprint, "head", "tail", "https://example.com/v1", connectorType,
+		zero, zero, zero, zero, zero, zero, zero, generation, zero, zero, nil, nil, resourceTestNow, resourceTestNow)
 	if err != nil {
 		t.Fatalf("seed deletion-test donation key: %v", err)
 	}
@@ -113,8 +117,8 @@ func terminateDeletionTestMemberships(
 		}
 		if _, err := tx.ExecContext(ctx, `
 UPDATE donation_keys
-SET endpoint_key_id=NULL,enabled=0,ended_reason='member_removed',ended_at=?,updated_at=?
-WHERE endpoint_key_id=?`, now, now, keyID); err != nil {
+SET endpoint_key_id=NULL,enabled=0,ended_reason='member_removed',ended_at=?,report_match_until=?,updated_at=?
+WHERE endpoint_key_id=?`, now, now+90*24*60*60, now, keyID); err != nil {
 			return err
 		}
 	}
@@ -290,11 +294,11 @@ func TestDeletionHookResolvesMembershipRestrictForKeyAndEndpoint(t *testing.T) {
 			var endpointRef any
 			var enabled int
 			var endedReason string
-			var endedAt int64
+			var endedAt, reportMatchUntil int64
 			if err := environment.store.DB().QueryRow(`
-SELECT endpoint_key_id,enabled,ended_reason,ended_at FROM donation_keys WHERE id=?`, donationKeyID).
-				Scan(&endpointRef, &enabled, &endedReason, &endedAt); err != nil || endpointRef != nil || enabled != 0 || endedReason != "member_removed" || endedAt != resourceTestNow+20 {
-				t.Fatalf("terminated donation key = ref %#v enabled %d reason %q at %d, %v", endpointRef, enabled, endedReason, endedAt, err)
+SELECT endpoint_key_id,enabled,ended_reason,ended_at,report_match_until FROM donation_keys WHERE id=?`, donationKeyID).
+				Scan(&endpointRef, &enabled, &endedReason, &endedAt, &reportMatchUntil); err != nil || endpointRef != nil || enabled != 0 || endedReason != "member_removed" || endedAt != resourceTestNow+20 || reportMatchUntil != endedAt+90*24*60*60 {
+				t.Fatalf("terminated donation key = ref %#v enabled %d reason %q at %d match-until %d, %v", endpointRef, enabled, endedReason, endedAt, reportMatchUntil, err)
 			}
 		})
 	}

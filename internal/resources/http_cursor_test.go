@@ -61,8 +61,8 @@ func TestRegisterRoutesAndCallerKeyHTTPContract(t *testing.T) {
 	if err := RegisterRoutes(registrar, environment.repository); err != nil {
 		t.Fatalf("RegisterRoutes: %v", err)
 	}
-	if len(registrar.handlers) != 26 {
-		t.Fatalf("registered routes = %d, want 26", len(registrar.handlers))
+	if len(registrar.handlers) != 27 {
+		t.Fatalf("registered routes = %d, want 27", len(registrar.handlers))
 	}
 	for _, key := range []string{
 		"GET /api/endpoints", "DELETE /api/endpoints/{id}/keys/{keyId}",
@@ -110,11 +110,11 @@ func TestHTTPStrictDecodeControlReplayAndDowngrade(t *testing.T) {
 	}
 	principal := UserPrincipal{UserID: userID}
 	create := registrar.handlers["POST /api/endpoints"]
-	validBody := `{"connector_type":"openai-compatible","base_url":"https://example.com/v1","note":"note","enabled":true}`
+	validBody := `{"source":"custom","connector_type":"openai-compatible","base_url":"https://example.com/v1","note":"note","enabled":true}`
 	for index, body := range []string{
-		`{"connector_type":"openai-compatible","base_url":"https://example.com/v1","note":"note","enabled":true,"unknown":1}`,
-		`{"connector_type":"openai-compatible","connector_type":"anthropic-compatible","base_url":"https://example.com/v1","note":"note","enabled":true}`,
-		`{"connector_type":"openai-compatible","base_url":"https://example.com/v1","note":null,"enabled":true}`,
+		`{"source":"custom","connector_type":"openai-compatible","base_url":"https://example.com/v1","note":"note","enabled":true,"unknown":1}`,
+		`{"source":"custom","connector_type":"openai-compatible","connector_type":"anthropic-compatible","base_url":"https://example.com/v1","note":"note","enabled":true}`,
+		`{"source":"custom","connector_type":"openai-compatible","base_url":"https://example.com/v1","note":null,"enabled":true}`,
 		validBody + `{}`,
 	} {
 		response := resourceHTTPCall(t, create, principal, http.MethodPost, "/api/endpoints", body, resourceTestKey(byte('J'+index)), nil)

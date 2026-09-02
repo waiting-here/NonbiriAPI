@@ -5,6 +5,8 @@ import (
 )
 
 type createEndpointRequest struct {
+	Source        requestField[string] `json:"source"`
+	ChannelID     requestField[string] `json:"channel_id"`
 	ConnectorType requestField[string] `json:"connector_type"`
 	BaseURL       requestField[string] `json:"base_url"`
 	Note          requestField[string] `json:"note"`
@@ -12,8 +14,10 @@ type createEndpointRequest struct {
 }
 
 type createEndpointCanonical struct {
-	ConnectorType string `json:"connector_type"`
-	BaseURL       string `json:"base_url"`
+	Source        string `json:"source"`
+	ChannelID     string `json:"channel_id,omitempty"`
+	ConnectorType string `json:"connector_type,omitempty"`
+	BaseURL       string `json:"base_url,omitempty"`
 	Note          string `json:"note"`
 	Enabled       bool   `json:"enabled"`
 }
@@ -92,19 +96,36 @@ func (api *httpAPI) createEndpoint(writer http.ResponseWriter, request *http.Req
 	if _, ok := decodeStrictObject(writer, request, &body); !ok {
 		return
 	}
-	if !body.ConnectorType.Set || !body.BaseURL.Set || !body.Note.Set || !body.Enabled.Set {
+	if !body.Source.Set || !body.Note.Set || !body.Enabled.Set {
 		writeResourceError(writer, ErrInvalidRequest)
 		return
 	}
 	canonical := createEndpointCanonical{
+		Source: body.Source.Value, ChannelID: body.ChannelID.Value,
 		ConnectorType: body.ConnectorType.Value, BaseURL: body.BaseURL.Value,
 		Note: body.Note.Value, Enabled: body.Enabled.Value,
+	}
+	switch canonical.Source {
+	case "mainstream":
+		if !body.ChannelID.Set || body.ConnectorType.Set || body.BaseURL.Set || canonical.ChannelID == "" {
+			writeResourceError(writer, ErrInvalidRequest)
+			return
+		}
+	case "custom":
+		if !body.ConnectorType.Set || !body.BaseURL.Set || body.ChannelID.Set || canonical.ConnectorType == "" || canonical.BaseURL == "" {
+			writeResourceError(writer, ErrInvalidRequest)
+			return
+		}
+	default:
+		writeResourceError(writer, ErrInvalidRequest)
+		return
 	}
 	mutation, ok := controlMutation(writer, request, routeEndpoints, nil, canonical)
 	if !ok {
 		return
 	}
 	result, err := api.repository.CreateEndpoint(request.Context(), principal.UserID, mutation, CreateEndpointInput{
+		Source: canonical.Source, ChannelID: canonical.ChannelID,
 		ConnectorType: canonical.ConnectorType, BaseURL: canonical.BaseURL,
 		Note: canonical.Note, Enabled: canonical.Enabled,
 	})

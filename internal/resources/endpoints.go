@@ -39,15 +39,19 @@ func validateEndpointSecretPlaintext(value []byte) bool {
 }
 
 type endpointRow struct {
-	id            int64
-	connectorType string
-	baseURL       string
-	note          string
-	enabled       int
-	revision      int64
-	keyCount      int64
-	createdAt     int64
-	updatedAt     int64
+	id                        int64
+	connectorType             string
+	baseURL                   string
+	note                      string
+	enabled                   int
+	revision                  int64
+	keyCount                  int64
+	createdAt                 int64
+	updatedAt                 int64
+	mainstreamChannelID       sql.NullString
+	mainstreamChannelRevision sql.NullInt64
+	mainstreamChannelName     sql.NullString
+	mainstreamChannelCategory sql.NullString
 }
 
 func (row endpointRow) dto() (Endpoint, error) {
@@ -55,8 +59,20 @@ func (row endpointRow) dto() (Endpoint, error) {
 	if err != nil || row.enabled < 0 || row.enabled > 1 || row.revision < 1 || row.keyCount < 0 {
 		return Endpoint{}, ErrUnavailable
 	}
+	var origin EndpointOrigin
+	fields := []bool{row.mainstreamChannelID.Valid, row.mainstreamChannelRevision.Valid, row.mainstreamChannelName.Valid, row.mainstreamChannelCategory.Valid}
+	if fields[0] || fields[1] || fields[2] || fields[3] {
+		if !(fields[0] && fields[1] && fields[2] && fields[3]) || !validMainstreamChannelID(row.mainstreamChannelID.String) ||
+			row.mainstreamChannelRevision.Int64 < 1 || !validateExactText(row.mainstreamChannelName.String, 1, 128) ||
+			!validMainstreamChannelCategory(row.mainstreamChannelCategory.String) {
+			return Endpoint{}, ErrUnavailable
+		}
+		origin = EndpointOrigin{Kind: "mainstream", ChannelID: row.mainstreamChannelID.String, Name: row.mainstreamChannelName.String}
+	} else {
+		origin = EndpointOrigin{Kind: "custom"}
+	}
 	return Endpoint{
-		ID: id, ConnectorType: row.connectorType, BaseURL: row.baseURL, Note: row.note,
+		ID: id, ConnectorType: row.connectorType, BaseURL: row.baseURL, Origin: origin, Note: row.note,
 		Enabled: row.enabled == 1, Revision: strconv.FormatInt(row.revision, 10),
 		KeyCount: strconv.FormatInt(row.keyCount, 10), CreatedAt: row.createdAt, UpdatedAt: row.updatedAt,
 	}, nil
@@ -65,7 +81,8 @@ func (row endpointRow) dto() (Endpoint, error) {
 func scanEndpoint(scanner interface{ Scan(...any) error }) (Endpoint, error) {
 	var row endpointRow
 	if err := scanner.Scan(&row.id, &row.connectorType, &row.baseURL, &row.note, &row.enabled,
-		&row.revision, &row.keyCount, &row.createdAt, &row.updatedAt); err != nil {
+		&row.revision, &row.keyCount, &row.createdAt, &row.updatedAt,
+		&row.mainstreamChannelID, &row.mainstreamChannelRevision, &row.mainstreamChannelName, &row.mainstreamChannelCategory); err != nil {
 		return Endpoint{}, err
 	}
 	return row.dto()
@@ -94,7 +111,8 @@ func (r *Repository) ListEndpoints(ctx context.Context, userID int64, limit int,
 	rows, err := r.db.QueryContext(ctx, `
 SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
        (SELECT count(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id),
-       e.created_at,e.updated_at
+       e.created_at,e.updated_at,e.mainstream_channel_id,e.mainstream_channel_revision,
+       e.mainstream_channel_name,e.mainstream_channel_category
 FROM endpoints e
 WHERE e.user_id=?
   AND (?=0 OR e.updated_at<? OR (e.updated_at=? AND e.id<?))
@@ -138,7 +156,8 @@ func (r *Repository) GetEndpoint(ctx context.Context, userID, endpointID int64) 
 	item, err := scanEndpoint(r.db.QueryRowContext(ctx, `
 SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
        (SELECT count(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id),
-       e.created_at,e.updated_at
+       e.created_at,e.updated_at,e.mainstream_channel_id,e.mainstream_channel_revision,
+       e.mainstream_channel_name,e.mainstream_channel_category
 FROM endpoints e WHERE e.id=? AND e.user_id=?`, endpointID, userID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Endpoint{}, ErrNotFound
@@ -151,15 +170,24 @@ FROM endpoints e WHERE e.id=? AND e.user_id=?`, endpointID, userID))
 
 func (r *Repository) CreateEndpoint(ctx context.Context, userID int64, mutation ControlMutation, input CreateEndpointInput) (MutationResult[Endpoint], error) {
 	if r == nil || userID <= 0 || mutation.Route != routeEndpoints || mutation.Method != http.MethodPost || !mutationPathIDs(mutation) || mutation.Query != "" ||
-		!validateNote(input.Note) || input.ConnectorType == "" {
+		!validateNote(input.Note) || (input.Source != "custom" && input.Source != "mainstream") {
 		return MutationResult[Endpoint]{}, ErrInvalidRequest
 	}
-	validatedType, err := r.connectors.MustValidate(connectorcontract.Type(input.ConnectorType))
-	if err != nil || string(validatedType) != input.ConnectorType {
-		return MutationResult[Endpoint]{}, ErrInvalidRequest
-	}
-	canonicalURL, err := r.baseURLs.ValidateBaseURL(input.BaseURL)
-	if err != nil {
+	canonicalURL := ""
+	connectorType := input.ConnectorType
+	if input.Source == "custom" {
+		if input.ChannelID != "" || input.ConnectorType == "" || input.BaseURL == "" {
+			return MutationResult[Endpoint]{}, ErrInvalidRequest
+		}
+		validatedType, err := r.connectors.MustValidate(connectorcontract.Type(input.ConnectorType))
+		if err != nil || string(validatedType) != input.ConnectorType {
+			return MutationResult[Endpoint]{}, ErrInvalidRequest
+		}
+		canonicalURL, err = r.baseURLs.ValidateBaseURL(input.BaseURL)
+		if err != nil || canonicalURL == "" || len(canonicalURL) > 4096 {
+			return MutationResult[Endpoint]{}, ErrInvalidRequest
+		}
+	} else if input.ChannelID == "" || input.ConnectorType != "" || input.BaseURL != "" || !validMainstreamChannelID(input.ChannelID) {
 		return MutationResult[Endpoint]{}, ErrInvalidRequest
 	}
 	now, err := r.nowUnix()
@@ -178,6 +206,29 @@ func (r *Repository) CreateEndpoint(ctx context.Context, userID int64, mutation 
 	}
 	if decision.Kind == idempotency.Replay {
 		return replayMutation[Endpoint](decision)
+	}
+	var channelID any
+	var channelRevision any
+	var channelName any
+	var channelCategory any
+	if input.Source == "mainstream" {
+		row, err := getMainstreamChannelSnapshotTx(ctx, tx, input.ChannelID)
+		if err != nil {
+			return MutationResult[Endpoint]{}, err
+		}
+		item, err := row.dto()
+		if err != nil {
+			return MutationResult[Endpoint]{}, ErrUnavailable
+		}
+		if err := r.validateMainstreamChannelDTO(item); err != nil {
+			return MutationResult[Endpoint]{}, err
+		}
+		if item.State != mainstreamChannelStateActive || !item.Enabled {
+			return MutationResult[Endpoint]{}, ErrConflict
+		}
+		canonicalURL = item.BaseURL
+		connectorType = item.ConnectorType
+		channelID, channelRevision, channelName, channelCategory = item.ID, row.revision, item.Name, item.Category
 	}
 	var endpointLimit sql.NullInt64
 	if err := tx.QueryRowContext(ctx, `SELECT endpoint_limit FROM users WHERE id=? AND is_admin=0`, userID).Scan(&endpointLimit); errors.Is(err, sql.ErrNoRows) {
@@ -201,8 +252,8 @@ func (r *Repository) CreateEndpoint(ctx context.Context, userID int64, mutation 
 		return MutationResult[Endpoint]{}, ErrResourceLimit
 	}
 	result, err := tx.ExecContext(ctx, `
-INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
-VALUES(?,?,?,?,?,1,?,?)`, userID, input.ConnectorType, canonicalURL, input.Note, boolInt(input.Enabled), now, now)
+INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category,created_at,updated_at)
+VALUES(?,?,?,?,?,1,?,?,?,?,?,?)`, userID, connectorType, canonicalURL, input.Note, boolInt(input.Enabled), channelID, channelRevision, channelName, channelCategory, now, now)
 	if err != nil {
 		return MutationResult[Endpoint]{}, fmt.Errorf("resources: create endpoint: %w", err)
 	}
@@ -405,7 +456,8 @@ func getEndpointTx(ctx context.Context, tx *sql.Tx, userID, endpointID int64) (E
 	item, err := scanEndpoint(tx.QueryRowContext(ctx, `
 SELECT e.id,e.connector_type,e.base_url,e.note,e.enabled,e.revision,
        (SELECT count(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id),
-       e.created_at,e.updated_at
+       e.created_at,e.updated_at,e.mainstream_channel_id,e.mainstream_channel_revision,
+       e.mainstream_channel_name,e.mainstream_channel_category
 FROM endpoints e WHERE e.id=? AND e.user_id=?`, endpointID, userID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Endpoint{}, ErrNotFound

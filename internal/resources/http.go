@@ -32,6 +32,7 @@ func RegisterRoutes(registrar UserRouteRegistrar, repository *Repository) error 
 	}{
 		{http.MethodGet, routeEndpoints, api.listEndpoints},
 		{http.MethodPost, routeEndpoints, api.createEndpoint},
+		{http.MethodGet, routeEndpointCreateOptions, api.endpointCreateOptions},
 		{http.MethodGet, routeEndpoint, api.getEndpoint},
 		{http.MethodPatch, routeEndpoint, api.patchEndpoint},
 		{http.MethodDelete, routeEndpoint, api.deleteEndpoint},

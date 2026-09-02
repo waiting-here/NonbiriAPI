@@ -33,37 +33,41 @@ const (
 )
 
 type Config struct {
-	Store           *db.Store
-	Connectors      *connector.Registry
-	BaseURLs        BaseURLValidator
-	Secrets         SecretWriter
-	KeyDeletion     EndpointKeyDeletionHook
-	KeyCreation     EndpointKeyCreationHook
-	Projection      ResourceProjectionHook
-	DiscoveryRail   DiscoveryClaimRail
-	DiscoveryWorker DiscoveryWorker
-	CursorKeys      CursorKeyDeriver
-	FinalAuth       FinalTxAuthorizer
-	Random          io.Reader
-	Now             func() time.Time
-	OperationID     func() (string, error)
+	Store               *db.Store
+	Connectors          *connector.Registry
+	BaseURLs            BaseURLValidator
+	Secrets             SecretWriter
+	KeyDeletion         EndpointKeyDeletionHook
+	KeyCreation         EndpointKeyCreationHook
+	Projection          ResourceProjectionHook
+	DiscoveryRail       DiscoveryClaimRail
+	DiscoveryWorker     DiscoveryWorker
+	CursorKeys          CursorKeyDeriver
+	FinalAuth           FinalTxAuthorizer
+	AdminFinalAuth      AdminFinalTxAuthorizer
+	Random              io.Reader
+	Now                 func() time.Time
+	OperationID         func() (string, error)
+	MainstreamChannelID func() (string, error)
 }
 
 type Repository struct {
-	db              *sql.DB
-	connectors      *connector.Registry
-	baseURLs        BaseURLValidator
-	secrets         SecretWriter
-	keyDeletion     EndpointKeyDeletionHook
-	keyCreation     EndpointKeyCreationHook
-	projection      ResourceProjectionHook
-	discoveryRail   DiscoveryClaimRail
-	discoveryWorker DiscoveryWorker
-	finalAuth       FinalTxAuthorizer
-	cursors         cursorCodec
-	random          io.Reader
-	now             func() time.Time
-	operationID     func() (string, error)
+	db                  *sql.DB
+	connectors          *connector.Registry
+	baseURLs            BaseURLValidator
+	secrets             SecretWriter
+	keyDeletion         EndpointKeyDeletionHook
+	keyCreation         EndpointKeyCreationHook
+	projection          ResourceProjectionHook
+	discoveryRail       DiscoveryClaimRail
+	discoveryWorker     DiscoveryWorker
+	finalAuth           FinalTxAuthorizer
+	adminFinalAuth      AdminFinalTxAuthorizer
+	cursors             cursorCodec
+	random              io.Reader
+	now                 func() time.Time
+	operationID         func() (string, error)
+	mainstreamChannelID func() (string, error)
 }
 
 func New(config Config) (*Repository, error) {
@@ -85,14 +89,18 @@ func New(config Config) (*Repository, error) {
 	if config.OperationID == nil {
 		config.OperationID = func() (string, error) { return db.GenerateOpaqueID("op_") }
 	}
+	if config.MainstreamChannelID == nil {
+		config.MainstreamChannelID = func() (string, error) { return db.GenerateOpaqueID("mch_") }
+	}
 	return &Repository{
 		db: config.Store.DB(), connectors: config.Connectors, baseURLs: config.BaseURLs,
 		secrets: config.Secrets, keyDeletion: config.KeyDeletion, keyCreation: config.KeyCreation,
 		projection: config.Projection, discoveryRail: config.DiscoveryRail,
 		discoveryWorker: config.DiscoveryWorker,
 		finalAuth:       config.FinalAuth,
+		adminFinalAuth:  config.AdminFinalAuth,
 		cursors:         cursorCodec{keys: config.CursorKeys}, random: config.Random,
-		now: config.Now, operationID: config.OperationID,
+		now: config.Now, operationID: config.OperationID, mainstreamChannelID: config.MainstreamChannelID,
 	}, nil
 }
 
@@ -146,6 +154,25 @@ func (r *Repository) beginAuthorizedTx(ctx context.Context, userID int64) (*sql.
 	return tx, nil
 }
 
+func (r *Repository) beginAuthorizedAdminTx(ctx context.Context, adminID int64) (*sql.Tx, int64, error) {
+	if r == nil || adminID <= 0 || isNilInterface(r.adminFinalAuth) {
+		return nil, 0, ErrInvalidRequest
+	}
+	now, err := r.nowUnix()
+	if err != nil {
+		return nil, 0, err
+	}
+	tx, err := beginTx(ctx, r.db)
+	if err != nil {
+		return nil, 0, err
+	}
+	if err := r.adminFinalAuth.AuthorizeAdminFinalTx(ctx, tx, adminID); err != nil {
+		_ = tx.Rollback()
+		return nil, 0, fmt.Errorf("resources: final administrator authorization: %w", err)
+	}
+	return tx, now, nil
+}
+
 func finishTx(tx *sql.Tx, committed *bool) {
 	if tx != nil && committed != nil && !*committed {
 		_ = tx.Rollback()
@@ -195,6 +222,34 @@ func beginControlMutation(ctx context.Context, tx *sql.Tx, userID int64, input C
 	}
 	if err != nil {
 		return idempotency.Decision{}, fmt.Errorf("resources: accept control mutation: %w", err)
+	}
+	return decision, nil
+}
+
+func beginAdminControlMutation(ctx context.Context, tx *sql.Tx, adminID int64, input ControlMutation, now int64) (idempotency.Decision, error) {
+	actor, err := idempotency.ActorScopeHash("admin", strconv.FormatInt(adminID, 10))
+	if err != nil {
+		return idempotency.Decision{}, ErrInvalidRequest
+	}
+	if len(input.CanonicalBody) > idempotency.MaxControlBodyBytes {
+		return idempotency.Decision{}, ErrInvalidRequest
+	}
+	digest, err := idempotency.RequestDigest(idempotency.DigestInput{
+		ActorScopeHash: actor, Method: input.Method, Route: input.Route,
+		PathResourceIDs: input.PathIDs, Query: input.Query, Body: input.CanonicalBody,
+	})
+	if err != nil {
+		return idempotency.Decision{}, ErrInvalidRequest
+	}
+	decision, err := idempotency.Begin(ctx, tx, idempotency.BeginInput{
+		Scope: idempotency.ScopeControlMutation, ActorHash: actor,
+		Key: input.IdempotencyKey, RequestHash: digest, DecisionNow: now,
+	})
+	if errors.Is(err, idempotency.ErrConflict) || errors.Is(err, idempotency.ErrInProgress) {
+		return idempotency.Decision{}, ErrConflict
+	}
+	if err != nil {
+		return idempotency.Decision{}, fmt.Errorf("resources: accept administrator control mutation: %w", err)
 	}
 	return decision, nil
 }

@@ -18,15 +18,50 @@ type MutationResult[T any] struct {
 }
 
 type Endpoint struct {
+	ID            string         `json:"id"`
+	ConnectorType string         `json:"connector_type"`
+	BaseURL       string         `json:"base_url"`
+	Origin        EndpointOrigin `json:"origin"`
+	Note          string         `json:"note"`
+	Enabled       bool           `json:"enabled"`
+	Revision      string         `json:"revision"`
+	KeyCount      string         `json:"key_count"`
+	CreatedAt     int64          `json:"created_at"`
+	UpdatedAt     int64          `json:"updated_at"`
+}
+
+// EndpointOrigin is deliberately a small, closed public projection. Internal
+// channel category and revision remain administrator-only provenance.
+type EndpointOrigin struct {
+	Kind      string `json:"kind"`
+	ChannelID string `json:"channel_id,omitempty"`
+	Name      string `json:"name,omitempty"`
+}
+
+type MainstreamChannel struct {
 	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Category      string `json:"category"`
 	ConnectorType string `json:"connector_type"`
 	BaseURL       string `json:"base_url"`
-	Note          string `json:"note"`
 	Enabled       bool   `json:"enabled"`
+	State         string `json:"state"`
 	Revision      string `json:"revision"`
-	KeyCount      string `json:"key_count"`
 	CreatedAt     int64  `json:"created_at"`
 	UpdatedAt     int64  `json:"updated_at"`
+	RetiredAt     *int64 `json:"retired_at"`
+}
+
+type MainstreamChannelOption struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	ConnectorType string `json:"connector_type"`
+	BaseURL       string `json:"base_url"`
+}
+
+type EndpointCreateOptions struct {
+	BaseConnectorTypes []string                  `json:"base_connector_types"`
+	MainstreamChannels []MainstreamChannelOption `json:"mainstream_channels"`
 }
 
 type EndpointKey struct {
@@ -152,10 +187,29 @@ type DiscoveryAccepted struct {
 }
 
 type CreateEndpointInput struct {
+	Source        string
+	ChannelID     string
 	ConnectorType string
 	BaseURL       string
 	Note          string
 	Enabled       bool
+}
+
+type CreateMainstreamChannelInput struct {
+	Name          string
+	Category      string
+	ConnectorType string
+	BaseURL       string
+	Enabled       bool
+}
+
+type PatchMainstreamChannelInput struct {
+	Name             *string
+	Category         *string
+	ConnectorType    *string
+	BaseURL          *string
+	Enabled          *bool
+	ExpectedRevision int64
 }
 
 type PatchEndpointInput struct {

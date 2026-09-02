@@ -76,7 +76,7 @@ func TestResourcesRegisterRoutesAcceptsServeMuxVariablesAndPassesPathValue(t *te
 		t.Fatal("duplicate resources routes unexpectedly accepted")
 	}
 	cookie := loginUser(t, f, "resources", "")
-	create := request(t, f.runtime.UserHandler(), host.StationUser, http.MethodPost, "https://user.example/api/endpoints", `{"connector_type":"openai-compatible","base_url":"https://upstream.example/v1","note":"path-value","enabled":true}`, []*http.Cookie{cookie}, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "ABCDEFGHIJKLMNOPQRSTUV"})
+	create := request(t, f.runtime.UserHandler(), host.StationUser, http.MethodPost, "https://user.example/api/endpoints", `{"source":"custom","connector_type":"openai-compatible","base_url":"https://upstream.example/v1","note":"path-value","enabled":true}`, []*http.Cookie{cookie}, map[string]string{"Content-Type": "application/json", "Idempotency-Key": "ABCDEFGHIJKLMNOPQRSTUV"})
 	if create.Code != http.StatusCreated {
 		t.Fatalf("create status=%d body=%s", create.Code, create.Body.String())
 	}
