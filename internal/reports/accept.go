@@ -305,7 +305,9 @@ FROM idempotency_records WHERE scope='credential_report' AND actor_scope_hash=? 
 		workerNeeded = true
 	}
 	if !found {
-		matched, err := liveFingerprintMatchTx(ctx, tx, submission.ConnectorType, submission.CanonicalBaseURL, fingerprint)
+		matched, err := reportableFingerprintMatchTx(
+			ctx, tx, submission.ConnectorType, submission.CanonicalBaseURL, fingerprint, now,
+		)
 		if err != nil {
 			return err
 		}
@@ -381,12 +383,41 @@ FROM report_cases WHERE fingerprint=? AND status IN ('pending_indexing','pending
 	return row, true, nil
 }
 
-func liveFingerprintMatchTx(ctx context.Context, tx *sql.Tx, connector, baseURL string, fingerprint [32]byte) (bool, error) {
+// reportableFingerprintMatchTx keeps the public hit/miss rail opaque while
+// admitting either a live endpoint key or a still-matchable donation-key
+// tombstone. Ordinary donation retention remains authoritative: a legal hold
+// may preserve an old aggregate, but it never makes that aggregate discoverable
+// to a new report.
+func reportableFingerprintMatchTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	connector string,
+	baseURL string,
+	fingerprint [32]byte,
+	now int64,
+) (bool, error) {
+	if ctx == nil || tx == nil || connector == "" || baseURL == "" || now < 0 || now > maxUnixSecond {
+		return false, ErrInvalidRequest
+	}
 	var matched int
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
+	if err := tx.QueryRowContext(ctx, `SELECT
+CASE WHEN EXISTS(
 SELECT 1 FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id
-WHERE k.secret_fingerprint=? AND e.connector_type=? AND e.base_url=?)`, fingerprint[:], connector, baseURL).Scan(&matched); err != nil {
+WHERE k.secret_fingerprint=? AND e.connector_type=? AND e.base_url=?) THEN 1
+WHEN EXISTS(
+ SELECT 1 FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id
+ WHERE dk.report_fingerprint=? AND dk.connector_type=? AND dk.canonical_base_url=?
+  AND dk.ended_at IS NOT NULL AND dk.report_match_until>?
+  AND (d.status IN ('pending','approved') OR
+       (d.status IN ('rejected','deleted','expired') AND d.terminal_at IS NOT NULL AND d.terminal_at>?))
+) THEN 1 ELSE 0 END`,
+		fingerprint[:], connector, baseURL,
+		fingerprint[:], connector, baseURL, now, now-donationRetentionSeconds,
+	).Scan(&matched); err != nil {
 		return false, fmt.Errorf("reports: query credential fingerprint: %w", err)
+	}
+	if matched != 0 && matched != 1 {
+		return false, ErrInvariant
 	}
 	return matched == 1, nil
 }
@@ -411,9 +442,9 @@ func (repository *Repository) createCaseTx(ctx context.Context, tx *sql.Tx, subm
 	deadline := now + ttl
 	if _, err := tx.ExecContext(ctx, `INSERT INTO report_cases(
  id,fingerprint,connector_type,canonical_base_url,status,progress_state,material_version,target_version,
- deadline,cursor_text,material_count,target_count,distinct_owner_count,processed_target_count,
+ deadline,cursor_source,cursor_id,material_count,target_count,distinct_owner_count,processed_target_count,
  deleted_target_count,released_target_count,retry_attempt_count,created_at,legal_hold_consumed)
-VALUES(?,?,?,?,'pending_indexing','in_progress',1,1,?,NULL,1,0,0,0,0,0,0,?,0)`,
+VALUES(?,?,?,?,'pending_indexing','in_progress',1,1,?,NULL,NULL,1,0,0,0,0,0,0,?,0)`,
 		caseID, fingerprint[:], submission.ConnectorType, submission.CanonicalBaseURL, deadline, now); err != nil {
 		return activeCase{}, fmt.Errorf("reports: create case: %w", err)
 	}

@@ -59,6 +59,7 @@ func (repository *Repository) RegisterRoutes(registrar RouteRegistrar) error {
 		{http.MethodGet, adminCasesRoute, repository.casesHTTP},
 		{http.MethodGet, adminCaseRoute, repository.caseDetailHTTP},
 		{http.MethodGet, adminTargetsRoute, repository.targetsHTTP},
+		{http.MethodGet, adminTargetDonationsRoute, repository.targetDonationsHTTP},
 		{http.MethodPost, adminApproveRoute, repository.approveHTTP},
 		{http.MethodPost, adminRejectRoute, repository.rejectHTTP},
 		{http.MethodPost, adminResumeRoute, repository.resumeHTTP},
@@ -270,6 +271,55 @@ func reportCaseID(request *http.Request) (string, error) {
 		return "", ErrInvalidRequest
 	}
 	return id, nil
+}
+
+func reportTargetID(request *http.Request) (string, error) {
+	if request == nil {
+		return "", ErrInvalidRequest
+	}
+	id := request.PathValue("targetId")
+	if !db.ValidateOpaqueID(id, "rpt_") {
+		return "", ErrInvalidRequest
+	}
+	return id, nil
+}
+
+func (repository *Repository) targetDonationsHTTP(writer http.ResponseWriter, request *http.Request) {
+	if !requireNoBody(request) {
+		writeReportError(writer, ErrInvalidRequest)
+		return
+	}
+	id, err := reportCaseID(request)
+	if err != nil {
+		writeReportError(writer, err)
+		return
+	}
+	targetID, err := reportTargetID(request)
+	if err != nil {
+		writeReportError(writer, err)
+		return
+	}
+	values, err := parseReportQuery(request, "cursor", "limit")
+	if err != nil {
+		writeReportError(writer, err)
+		return
+	}
+	limit, err := queryLimit(values, "limit")
+	if err != nil {
+		writeReportError(writer, err)
+		return
+	}
+	actor, err := adminActor(request)
+	if err != nil {
+		writeReportError(writer, err)
+		return
+	}
+	response, err := repository.TargetDonations(request.Context(), actor, id, targetID, values.Get("cursor"), limit)
+	if err != nil {
+		writeReportError(writer, err)
+		return
+	}
+	writeReportJSON(writer, http.StatusOK, response)
 }
 
 func (repository *Repository) badgeHTTP(writer http.ResponseWriter, request *http.Request) {

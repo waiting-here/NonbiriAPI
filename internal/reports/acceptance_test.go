@@ -846,6 +846,7 @@ func TestReportRouteRegistrationUsesOptionalUserAndAdminOnlySurfaces(t *testing.
 		{http.MethodGet, adminCasesRoute},
 		{http.MethodGet, adminCaseRoute},
 		{http.MethodGet, adminTargetsRoute},
+		{http.MethodGet, adminTargetDonationsRoute},
 		{http.MethodPost, adminApproveRoute},
 		{http.MethodPost, adminRejectRoute},
 		{http.MethodPost, adminResumeRoute},

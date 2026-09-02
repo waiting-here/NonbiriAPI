@@ -63,8 +63,30 @@ func TestWorkerCheckpointsIndexingAndApprovalAtOneHundredRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.More || second.CasesProcessed != 1 {
+	if !second.More || second.CasesProcessed != 1 {
 		t.Fatalf("second indexing result=%+v", second)
+	}
+	status, progress, _, _ = environment.caseState(t, caseID)
+	if status != "pending_indexing" || progress != "in_progress" {
+		t.Fatalf("phase-switch indexing state=%s/%s", status, progress)
+	}
+	var cursorSource string
+	var cursorID int64
+	if err := environment.store.DB().QueryRow(`SELECT cursor_source,cursor_id FROM report_cases WHERE id=?`, caseID).Scan(
+		&cursorSource, &cursorID,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if cursorSource != indexPhaseDonation || cursorID != 0 {
+		t.Fatalf("phase-switch cursor=%s/%d", cursorSource, cursorID)
+	}
+
+	third, err := environment.repository.RunWorkerOnce(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if third.More || third.CasesProcessed != 1 {
+		t.Fatalf("third indexing result=%+v", third)
 	}
 	status, progress, _, _ = environment.caseState(t, caseID)
 	if status != "pending_review" || progress != "complete" {
@@ -75,12 +97,12 @@ func TestWorkerCheckpointsIndexingAndApprovalAtOneHundredRows(t *testing.T) {
 	}
 
 	_, _ = approvePreparedCase(t, environment, caseID, 2001)
-	third, err := environment.repository.RunWorkerOnce(context.Background())
+	fourth, err := environment.repository.RunWorkerOnce(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !third.More || third.CasesProcessed != 1 {
-		t.Fatalf("first approval result=%+v", third)
+	if !fourth.More || fourth.CasesProcessed != 1 {
+		t.Fatalf("first approval result=%+v", fourth)
 	}
 	status, progress, _, _ = environment.caseState(t, caseID)
 	if status != "approved_processing" || progress != "in_progress" {
@@ -90,12 +112,12 @@ func TestWorkerCheckpointsIndexingAndApprovalAtOneHundredRows(t *testing.T) {
 		t.Fatalf("first approval processed=%d", got)
 	}
 
-	fourth, err := environment.repository.RunWorkerOnce(context.Background())
+	fifth, err := environment.repository.RunWorkerOnce(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fourth.More || fourth.CasesProcessed != 1 {
-		t.Fatalf("second approval result=%+v", fourth)
+	if fifth.More || fifth.CasesProcessed != 1 {
+		t.Fatalf("second approval result=%+v", fifth)
 	}
 	status, progress, _, _ = environment.caseState(t, caseID)
 	if status != "approved" || progress != "complete" {
@@ -315,6 +337,27 @@ WHERE kind='report_indexing' AND checkpoint=?`, caseID); err != nil {
 			t.Fatalf("recovery result=%+v", result)
 		}
 		status, progress, _, _ := environment.caseState(t, caseID)
+		if status != "pending_indexing" || progress != "in_progress" {
+			t.Fatalf("phase-switch recovery state=%s/%s", status, progress)
+		}
+		var cursorSource string
+		var cursorID int64
+		if err := environment.store.DB().QueryRow(`SELECT cursor_source,cursor_id FROM report_cases WHERE id=?`, caseID).Scan(
+			&cursorSource, &cursorID,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if cursorSource != indexPhaseDonation || cursorID != 0 {
+			t.Fatalf("phase-switch recovery cursor=%s/%d", cursorSource, cursorID)
+		}
+		result, err = environment.repository.RecoverBeforeListener(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.CasesProcessed != 1 {
+			t.Fatalf("terminal recovery result=%+v", result)
+		}
+		status, progress, _, _ = environment.caseState(t, caseID)
 		if status != "pending_review" || progress != "complete" {
 			t.Fatalf("recovered indexing state=%s/%s", status, progress)
 		}

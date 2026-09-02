@@ -81,6 +81,12 @@ WHERE o.kind IN ('report_indexing','report_approved_processing')
 ORDER BY c.created_at,c.id,o.id LIMIT ?)`, caseRetentionSeconds, now); err != nil {
 		return 0, err
 	}
+	if err := deleteBatch("clear expired report fingerprints", `UPDATE donation_keys SET report_fingerprint=NULL,updated_at=?
+WHERE id IN (SELECT id FROM donation_keys
+WHERE report_fingerprint IS NOT NULL AND report_match_until IS NOT NULL AND report_match_until<=?
+ORDER BY report_match_until,id LIMIT ?)`, now, now); err != nil {
+		return 0, err
+	}
 	if err := deleteBatch("clean retained report cases", `DELETE FROM report_cases WHERE id IN (
 SELECT c.id FROM report_cases c
 WHERE c.status IN ('approved','rejected','expired') AND c.created_at+?<=?
