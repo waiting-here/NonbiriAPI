@@ -8,6 +8,7 @@ import {
   getCatalog,
   getCallerKey,
   getEndpoint,
+  getEndpointCreateOptions,
   getHomeAnnouncements,
   getHomeCheckinStatus,
   getHomeGameSummary,
@@ -120,6 +121,7 @@ describe('core API wire contract', () => {
 
     await createEndpoint(
       {
+        source: 'custom',
         connector_type: 'openai-compatible',
         base_url: 'https://example.com/v1',
         note: 'endpoint note',
@@ -133,6 +135,7 @@ describe('core API wire contract', () => {
     expect(init?.method).toBe('POST');
     expect(new Headers(init?.headers).get('Idempotency-Key')).toBe(operation.idempotencyKey);
     expect(JSON.parse(String(init?.body))).toEqual({
+      source: 'custom',
       connector_type: 'openai-compatible',
       base_url: 'https://example.com/v1',
       note: 'endpoint note',
@@ -144,6 +147,7 @@ describe('core API wire contract', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const input = {
+      source: 'custom' as const,
       connector_type: 'openai-compatible' as const,
       base_url: 'https://example.com/v1',
       note: 'endpoint note',
@@ -155,6 +159,78 @@ describe('core API wire contract', () => {
       code: 'invalid_request',
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sends the mainstream union without client connector or URL fields', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      jsonResponse(fixture('internal/resources/testdata/endpoint.json'), 201),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const channelID = `mch_${'A'.repeat(22)}`;
+
+    await createEndpoint(
+      { source: 'mainstream', channel_id: channelID, note: 'channel note', enabled: true },
+      operation,
+    );
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      source: 'mainstream',
+      channel_id: channelID,
+      note: 'channel note',
+      enabled: true,
+    });
+  });
+
+  it('normalizes endpoint creation options and rejects extra option fields', async () => {
+    const channelID = `mch_${'B'.repeat(21)}A`;
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      jsonResponse(
+        {
+          base_connector_types: ['openai-compatible', 'anthropic-compatible'],
+          mainstream_channels: [
+            {
+              id: channelID,
+              name: 'Main channel',
+              connector_type: 'openai-compatible',
+              base_url: 'https://example.com/v1',
+            },
+          ],
+        },
+        200,
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(getEndpointCreateOptions()).resolves.toEqual({
+      base_connector_types: ['openai-compatible', 'anthropic-compatible'],
+      mainstream_channels: [
+        {
+          id: channelID,
+          name: 'Main channel',
+          connector_type: 'openai-compatible',
+          base_url: 'https://example.com/v1',
+        },
+      ],
+    });
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        {
+          base_connector_types: ['openai-compatible'],
+          mainstream_channels: [
+            {
+              id: channelID,
+              name: 'Main channel',
+              connector_type: 'openai-compatible',
+              base_url: 'https://example.com/v1',
+              revision: '1',
+            },
+          ],
+        },
+        200,
+      ),
+    );
+    await expect(getEndpointCreateOptions()).rejects.toMatchObject({ code: 'invalid_response' });
   });
 
   it('requires CallerKey generation evidence and never adds an idempotency header to plaintext generation', async () => {
@@ -309,9 +385,10 @@ describe('core API wire contract', () => {
   });
 
   it('requires a monotonic manual pair revision and every requested binding replacement', async () => {
-    const canonical = fixture(
-      'internal/resources/testdata/manual_update.json',
-    ) as Record<string, unknown>;
+    const canonical = fixture('internal/resources/testdata/manual_update.json') as Record<
+      string,
+      unknown
+    >;
     const entries = canonical.entries as Array<Record<string, unknown>>;
     const accepted = {
       ...canonical,
@@ -332,14 +409,10 @@ describe('core API wire contract', () => {
       upstream_model_id: 'Vendor/New',
       provider: 'Vendor',
       expected_pair_revision: '2',
-      replacements: [
-        { binding_id: '51', replacement_upstream_model_id: 'Vendor/New' },
-      ],
+      replacements: [{ binding_id: '51', replacement_upstream_model_id: 'Vendor/New' }],
     };
 
-    await expect(updateManualEntry('11', '21', '31', input, operation)).resolves.toEqual(
-      accepted,
-    );
+    await expect(updateManualEntry('11', '21', '31', input, operation)).resolves.toEqual(accepted);
     await expect(updateManualEntry('11', '21', '31', input, operation)).rejects.toMatchObject({
       code: 'invalid_response',
     });

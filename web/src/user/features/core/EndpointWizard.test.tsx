@@ -19,6 +19,13 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function endpointOptionsResponse(): Response {
+  return jsonResponse({
+    base_connector_types: ['openai-compatible', 'anthropic-compatible'],
+    mainstream_channels: [],
+  });
+}
+
 function storageValues(storage: Storage): string {
   return [...Array(storage.length)]
     .map((_, index) => storage.getItem(storage.key(index) ?? '') ?? '')
@@ -26,14 +33,65 @@ function storageValues(storage: Storage): string {
 }
 
 async function reachEndpointForm(user: Awaited<ReturnType<typeof renderWithProviders>>['user']) {
-  await user.click(screen.getByRole('button', { name: 'Next' }));
+  await user.click(await screen.findByRole('button', { name: 'Next' }));
   await user.type(screen.getByLabelText('Canonical base URL'), 'https://example.com/v1');
 }
 
 describe('EndpointWizard secret and exact-replay boundaries', () => {
+  it('defaults to a mainstream channel and submits only its strict union fields', async () => {
+    const channelID = `mch_${'C'.repeat(21)}A`;
+    const onCreated = vi.fn();
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input) === '/api/endpoint-create-options') {
+        return jsonResponse({
+          base_connector_types: ['openai-compatible', 'anthropic-compatible'],
+          mainstream_channels: [
+            {
+              id: channelID,
+              name: 'Hosted channel',
+              connector_type: 'openai-compatible',
+              base_url: 'https://example.com/v1',
+            },
+          ],
+        });
+      }
+      if (String(input) === '/api/endpoints' && init?.method === 'POST') {
+        return jsonResponse(endpointFixture(), 201);
+      }
+      throw new Error(`Unexpected request: ${init?.method ?? 'GET'} ${String(input)}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const rendered = await renderWithProviders(
+      <EndpointWizard accountId="1" onClose={vi.fn()} onCreated={onCreated} />,
+      { station: 'user', role: 'user', locale: 'en' },
+    );
+    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+
+    expect(await screen.findByRole('button', { name: 'Mainstream channel' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await rendered.user.click(screen.getByRole('button', { name: 'Next' }));
+    const url = screen.getByLabelText('Canonical base URL');
+    expect(url).toHaveAttribute('readonly');
+    expect(url).toHaveValue('https://example.com/v1');
+    await rendered.user.type(screen.getByLabelText('Note'), 'channel note');
+    await rendered.user.click(screen.getByRole('button', { name: 'Create endpoint' }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+
+    const post = fetchMock.mock.calls.find(([, request]) => request?.method === 'POST');
+    expect(JSON.parse(String(post?.[1]?.body))).toEqual({
+      source: 'mainstream',
+      channel_id: channelID,
+      note: 'channel note',
+      enabled: true,
+    });
+  });
+
   it('keeps a locally invalid secret only in the mounted component and clears it on cancel', async () => {
     const syntheticSecret = 'bad\u0001secret-marker';
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input) === '/api/endpoint-create-options') return endpointOptionsResponse();
       if (String(input) === '/api/endpoints' && init?.method === 'POST') {
         return jsonResponse(endpointFixture(), 201);
       }
@@ -57,7 +115,7 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
     expect(await screen.findByText(/Other fields were kept/)).toBeVisible();
     expect(screen.getByLabelText('Upstream secret')).toHaveValue(syntheticSecret);
     expect(screen.getByLabelText('Key note')).toHaveValue('note remains');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(
       assertNoSensitiveQueryCache(rendered.queryClient, [syntheticSecret]).hitSurfaces,
     ).toEqual([]);
@@ -72,6 +130,7 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
     const onCreated = vi.fn();
     let endpointPosts = 0;
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input) === '/api/endpoint-create-options') return endpointOptionsResponse();
       if (String(input) === '/api/endpoints' && init?.method === 'POST') {
         endpointPosts += 1;
         return endpointPosts === 1
@@ -106,15 +165,22 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
     expect(secondHeaders.get('Idempotency-Key')).toBe(firstHeaders.get('Idempotency-Key'));
     expect(
       fetchMock.mock.calls.map(([input, init]) => `${init?.method ?? 'GET'} ${String(input)}`),
-    ).toEqual(['POST /api/endpoints', 'GET /api/endpoints?limit=50', 'POST /api/endpoints']);
+    ).toEqual([
+      'GET /api/endpoint-create-options',
+      'POST /api/endpoints',
+      'GET /api/endpoints?limit=50',
+      'POST /api/endpoints',
+    ]);
     expect(posts.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
       {
+        source: 'custom',
         connector_type: 'openai-compatible',
         base_url: 'https://example.com/v1',
         note: 'endpoint note',
         enabled: true,
       },
       {
+        source: 'custom',
         connector_type: 'openai-compatible',
         base_url: 'https://example.com/v1',
         note: 'endpoint note',

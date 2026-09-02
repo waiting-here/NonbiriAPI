@@ -1097,8 +1097,7 @@ function EndpointKeyCard({
       const nextOutcome = actionOutcome(error);
       setReplayAttempt(nextOutcome === 'unknown' ? attempt : null);
       setOutcome(nextOutcome);
-      if (isConflict(error) || isOutcomeUnknown(error))
-        await reconcile(attempt.kind === 'delete');
+      if (isConflict(error) || isOutcomeUnknown(error)) await reconcile(attempt.kind === 'delete');
     } finally {
       setBusy(false);
     }
@@ -1132,9 +1131,7 @@ function EndpointKeyCard({
   const availableRoutes = projectedRoutes.filter(
     (projection) => projection.status === 'available',
   ).length;
-  const hasUnknownRoute = projectedRoutes.some(
-    (projection) => projection.status === 'unknown',
-  );
+  const hasUnknownRoute = projectedRoutes.some((projection) => projection.status === 'unknown');
 
   return (
     <li className="core-key-card">
@@ -1494,9 +1491,7 @@ export function EndpointDetail({
       queryClient.invalidateQueries({ queryKey: coreKeys.endpointsRoot(accountId) }),
       invalidateResourceDependents(queryClient, accountId, {
         endpointId,
-        ...(attempt?.kind === 'delete'
-          ? { modelIds: 'all' as const, charity: true }
-          : {}),
+        ...(attempt?.kind === 'delete' ? { modelIds: 'all' as const, charity: true } : {}),
       }),
     ]);
     if (!coreSessionMatchesAccount(queryClient, accountId)) {
@@ -1664,6 +1659,14 @@ export function EndpointDetail({
             <dt>{t('endpoints.baseUrl')}</dt>
             <dd>
               <SafeCopyValue value={endpoint.data.base_url} label={t('endpoints.baseUrl')} />
+            </dd>
+          </div>
+          <div>
+            <dt>{t('endpoints.origin')}</dt>
+            <dd>
+              {endpoint.data.origin.kind === 'mainstream'
+                ? t('endpoints.originMainstream', { name: endpoint.data.origin.name })
+                : t('endpoints.originCustom')}
             </dd>
           </div>
           <div>

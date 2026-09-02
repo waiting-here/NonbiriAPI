@@ -10,6 +10,7 @@ import {
   normalizeCatalogView,
   normalizeDiscoveryAccepted,
   normalizeEndpoint,
+  normalizeEndpointCreateOptions,
   normalizeEndpointKey,
   normalizeEndpointKeyPage,
   normalizeEndpointPage,
@@ -25,6 +26,7 @@ import {
   validateEndpointSecret,
   validateLogicalName,
   validateManualValue,
+  validateMainstreamChannelID,
   validatePaginationCursor,
   validatePersonalProviderName,
   validateResourceId,
@@ -47,6 +49,7 @@ import {
   type DiscoveryAccepted,
   type Endpoint,
   type EndpointCreateInput,
+  type EndpointCreateOptions,
   type EndpointKey,
   type EndpointKeyCreateInput,
   type EndpointKeyPatchInput,
@@ -63,6 +66,7 @@ import {
   type ModelPatchInput,
   type OperationIdentity,
   type Page,
+  type ConnectorType,
   type UserEnvelope,
 } from './types';
 
@@ -109,14 +113,11 @@ function revisionField(value: unknown, label: string, positive = false): string 
   return validateRevisionInput(value, label, positive);
 }
 
-function connectorInput(value: unknown): EndpointCreateInput['connector_type'] {
-  if (
-    typeof value !== 'string' ||
-    !CONNECTOR_TYPES.includes(value as EndpointCreateInput['connector_type'])
-  ) {
+function connectorInput(value: unknown): ConnectorType {
+  if (typeof value !== 'string' || !CONNECTOR_TYPES.includes(value as ConnectorType)) {
     throw new ApiError('invalid_request', 'Invalid connector type.', 400);
   }
-  return value as EndpointCreateInput['connector_type'];
+  return value as ConnectorType;
 }
 
 function canonicalEndpointURLInput(value: unknown): string {
@@ -375,23 +376,62 @@ export async function getEndpoint(endpointId: string, signal?: AbortSignal): Pro
   return endpoint;
 }
 
+export async function getEndpointCreateOptions(
+  signal?: AbortSignal,
+): Promise<EndpointCreateOptions> {
+  const response = await coreRequest('/api/endpoint-create-options', { signal });
+  expectedStatus(response.status, 200, 'endpoint creation options');
+  return normalizeEndpointCreateOptions(response.payload);
+}
+
+function endpointCreatePayload(input: EndpointCreateInput): EndpointCreateInput {
+  const root = exactInput(
+    input,
+    ['source'],
+    ['channel_id', 'connector_type', 'base_url', 'note', 'enabled'],
+    'endpoint creation input',
+  );
+  if (root.source === 'mainstream') {
+    const record = exactInput(
+      input,
+      ['source', 'channel_id', 'note', 'enabled'],
+      [],
+      'mainstream endpoint creation input',
+    );
+    if (typeof record.channel_id !== 'string') {
+      throw new ApiError('invalid_request', 'Invalid mainstream channel id.', 400);
+    }
+    return {
+      source: 'mainstream',
+      channel_id: validateMainstreamChannelID(record.channel_id),
+      note: validateScalarInput(record.note, 1_024, 'endpoint note'),
+      enabled: exactBooleanInput(record.enabled, 'endpoint enabled state'),
+    };
+  }
+  if (root.source === 'custom') {
+    const record = exactInput(
+      input,
+      ['source', 'connector_type', 'base_url', 'note', 'enabled'],
+      [],
+      'custom endpoint creation input',
+    );
+    return {
+      source: 'custom',
+      connector_type: connectorInput(record.connector_type),
+      base_url: canonicalEndpointURLInput(record.base_url),
+      note: validateScalarInput(record.note, 1_024, 'endpoint note'),
+      enabled: exactBooleanInput(record.enabled, 'endpoint enabled state'),
+    };
+  }
+  throw new ApiError('invalid_request', 'Invalid endpoint creation source.', 400);
+}
+
 export async function createEndpoint(
   input: EndpointCreateInput,
   operation: OperationIdentity,
   signal?: AbortSignal,
 ): Promise<Endpoint> {
-  const record = exactInput(
-    input,
-    ['connector_type', 'base_url', 'note', 'enabled'],
-    [],
-    'endpoint creation input',
-  );
-  const payload: EndpointCreateInput = {
-    connector_type: connectorInput(record.connector_type),
-    base_url: canonicalEndpointURLInput(record.base_url),
-    note: validateScalarInput(record.note, 1_024, 'endpoint note'),
-    enabled: exactBooleanInput(record.enabled, 'endpoint enabled state'),
-  };
+  const payload = endpointCreatePayload(input);
   const response = await coreRequest('/api/endpoints', {
     method: 'POST',
     headers: operationHeaders(operation),

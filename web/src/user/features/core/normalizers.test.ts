@@ -9,6 +9,8 @@ import {
   normalizeCatalogView,
   normalizeDiscoveryAccepted,
   normalizeEndpoint,
+  normalizeEndpointCreateOptions,
+  normalizeEndpointOrigin,
   normalizeEndpointKey,
   normalizeHomeAnnouncementPage,
   normalizeHomeCheckinResult,
@@ -34,6 +36,7 @@ describe('core wire normalizers', () => {
     const user = normalizeUserEnvelope(jsonFixture('internal/auth/testdata/user_envelope.json'));
 
     expect(endpoint).toMatchObject({ id: '11', revision: '3', key_count: '2' });
+    expect(endpoint.origin).toEqual({ kind: 'custom' });
     expect(key).toMatchObject({ id: '21', endpoint_id: '11', revision: '4' });
     expect(user.user.usage.total_requests).toBe('340282366920938463463374607431768211455');
   });
@@ -160,9 +163,7 @@ describe('core wire normalizers', () => {
       title: 'Long-lived authority',
       excerpt: 'A strict projection.',
     };
-    expect(
-      normalizeHomeAnnouncementPage({ data: [announcement], next_cursor: 'next' }),
-    ).toEqual({
+    expect(normalizeHomeAnnouncementPage({ data: [announcement], next_cursor: 'next' })).toEqual({
       data: [
         {
           id: announcement.id,
@@ -195,6 +196,9 @@ describe('core wire normalizers', () => {
     expect(() => normalizeEndpoint({ ...endpoint, note: 'bad\u0085note' })).toThrow(
       /endpoint note/i,
     );
+    expect(() =>
+      normalizeEndpoint({ ...endpoint, origin: { kind: 'custom', name: 'leak' } }),
+    ).toThrow(/endpoint origin/i);
     expect(() => normalizeEndpoint({ ...endpoint, updated_at: 253_402_300_800 })).toThrow(
       /update time/i,
     );
@@ -210,6 +214,57 @@ describe('core wire normalizers', () => {
         user: { ...user.user, usage: { ...user.user.usage, total_prompt_tokens: '3703' } },
       }),
     ).toThrow(/usage summary projection/i);
+  });
+
+  it('keeps mainstream provenance closed and normalizes only safe creation options', () => {
+    const channelID = `mch_${'A'.repeat(22)}`;
+    expect(
+      normalizeEndpointOrigin({ kind: 'mainstream', channel_id: channelID, name: 'Main channel' }),
+    ).toEqual({ kind: 'mainstream', channel_id: channelID, name: 'Main channel' });
+    expect(() =>
+      normalizeEndpointOrigin({
+        kind: 'mainstream',
+        channel_id: channelID,
+        name: ' '.repeat(128),
+      }),
+    ).toThrow(/channel name/i);
+    expect(() =>
+      normalizeEndpointOrigin({
+        kind: 'mainstream',
+        channel_id: channelID,
+        name: 'Main channel',
+        category: 'subscription',
+      }),
+    ).toThrow(/endpoint origin/i);
+
+    expect(
+      normalizeEndpointCreateOptions({
+        base_connector_types: ['openai-compatible', 'anthropic-compatible'],
+        mainstream_channels: [],
+      }),
+    ).toEqual({
+      base_connector_types: ['openai-compatible', 'anthropic-compatible'],
+      mainstream_channels: [],
+    });
+    expect(() =>
+      normalizeEndpointCreateOptions({
+        base_connector_types: ['anthropic-compatible', 'openai-compatible'],
+        mainstream_channels: [],
+      }),
+    ).toThrow(/connector type order/i);
+    expect(() =>
+      normalizeEndpointCreateOptions({
+        base_connector_types: ['openai-compatible'],
+        mainstream_channels: [
+          {
+            id: channelID,
+            name: 'x'.repeat(129),
+            connector_type: 'openai-compatible',
+            base_url: 'https://example.com/v1',
+          },
+        ],
+      }),
+    ).toThrow(/channel option name/i);
   });
 
   it('enforces the complete discovery evidence matrix', () => {
