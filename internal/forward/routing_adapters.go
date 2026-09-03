@@ -143,11 +143,11 @@ func (adapter *CharityRoutingAdapter) Preflight(ctx context.Context, userID int6
 	}, nil
 }
 
-func (adapter *CharityRoutingAdapter) Snapshot(ctx context.Context, modelID, now int64) (CharitySnapshot, error) {
+func (adapter *CharityRoutingAdapter) Snapshot(ctx context.Context, modelID, now int64, connectorTypes []connectorcontract.Type) (CharitySnapshot, error) {
 	if adapter == nil || adapter.service == nil {
 		return CharitySnapshot{}, ErrInternal
 	}
-	value, err := adapter.service.Snapshot(ctx, modelID, now)
+	value, err := adapter.service.Snapshot(ctx, modelID, now, connectorTypes)
 	if err != nil {
 		return CharitySnapshot{}, err
 	}

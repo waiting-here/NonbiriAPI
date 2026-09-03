@@ -307,9 +307,7 @@ func TestLedgerAccountingCharityAttemptLifecycleAtMaximum(t *testing.T) {
 	fixture.requireRealLedgerState(request.ID, 98, 98, 3, 6)
 
 	deletedHandle := claimAndDispatch(3)
-	if _, err := fixture.db.Exec(`DELETE FROM users WHERE id=?`, donorIDs[3]); err != nil {
-		t.Fatalf("delete donor reward receiver: %v", err)
-	}
+	fixture.deleteUserWithDonationTombstones(donorIDs[3])
 	fixture.validateRealLedger()
 	fixture.clock.Add(1)
 	deleted, err := fixture.service.CompleteAttempt(context.Background(), deletedHandle, AttemptOutcome{

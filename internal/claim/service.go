@@ -62,9 +62,14 @@ func (s *Service) Accept(ctx context.Context, input AcceptInput) (Request, error
 	if err != nil {
 		return Request{}, fmt.Errorf("claim: generate request identity: %w", err)
 	}
-	at, err := s.nowUnix()
-	if err != nil {
-		return Request{}, err
+	var at int64
+	if input.CharityDecisionNow != nil {
+		at = *input.CharityDecisionNow
+	} else {
+		at, err = s.nowUnix()
+		if err != nil {
+			return Request{}, err
+		}
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -530,9 +535,10 @@ func validAcceptInput(input AcceptInput) bool {
 	}
 	switch input.Route {
 	case RouteOpenAIChat:
-		return input.CharityModelID == 0
+		return input.CharityModelID == 0 && input.CharityDecisionNow == nil
 	case RouteCharityChat:
-		return input.CharityModelID > 0
+		return input.CharityModelID > 0 && input.CharityDecisionNow != nil &&
+			*input.CharityDecisionNow >= 0 && *input.CharityDecisionNow <= maxUnixSecond
 	default:
 		return false
 	}

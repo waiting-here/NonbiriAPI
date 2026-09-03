@@ -24,6 +24,7 @@ var (
 	ErrConflict            = errors.New("charity routing: conflict")
 	ErrResourceLimit       = errors.New("charity routing: resource limit exceeded")
 	ErrUnavailable         = errors.New("charity routing: unavailable")
+	ErrEntropyUnavailable  = errors.New("charity routing: candidate ordering entropy unavailable")
 	ErrInvariant           = errors.New("charity routing: invariant violation")
 	ErrFeatureDisabled     = errors.New("charity routing: feature disabled")
 	ErrCharitySuspended    = errors.New("charity routing: caller suspended")

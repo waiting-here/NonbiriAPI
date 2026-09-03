@@ -735,18 +735,43 @@ func (f *claimFixture) acceptSelf(userID int64, attemptLimit int) Request {
 
 func (f *claimFixture) acceptCharity(userID int64, attemptLimit int) Request {
 	f.t.Helper()
+	decisionNow := f.clock.Load()
 	request, err := f.service.Accept(context.Background(), AcceptInput{
-		UserID:         userID,
-		Route:          RouteCharityChat,
-		ModelSnapshot:  "[公益]provider/model",
-		AttemptLimit:   attemptLimit,
-		ReservedMilli:  200,
-		CharityModelID: 1,
+		UserID:             userID,
+		Route:              RouteCharityChat,
+		ModelSnapshot:      "[公益]provider/model",
+		AttemptLimit:       attemptLimit,
+		ReservedMilli:      200,
+		CharityModelID:     1,
+		CharityDecisionNow: &decisionNow,
 	})
 	if err != nil {
 		f.t.Fatalf("accept charity request: %v", err)
 	}
 	return request
+}
+
+func (f *claimFixture) deleteUserWithDonationTombstones(userID int64) {
+	f.t.Helper()
+	at := f.clock.Load()
+	tx, err := f.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		f.t.Fatalf("begin receiver deletion: %v", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`UPDATE donation_keys
+SET enabled=0,ended_at=?,ended_reason='account_deleted',report_match_until=?,updated_at=?
+WHERE ended_at IS NULL AND endpoint_key_id IN (
+ SELECT k.id FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id WHERE e.user_id=?
+)`, at, at+90*24*60*60, at, userID); err != nil {
+		f.t.Fatalf("terminalize receiver donation keys: %v", err)
+	}
+	if _, err := tx.Exec(`DELETE FROM users WHERE id=?`, userID); err != nil {
+		f.t.Fatalf("delete reward receiver: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		f.t.Fatalf("commit reward receiver deletion: %v", err)
+	}
 }
 
 func (f *claimFixture) requireCapacity(requestID string, requestRows, globalRows uint64, ledgerRows int64) {

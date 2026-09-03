@@ -83,6 +83,9 @@ func TestDispatchMarkerPrecedesCredentialAndConnectorAndTerminalizes(t *testing.
 		t.Fatalf("success response=%d %q", recorder.Code, recorder.Body.String())
 	}
 	requireEvents(t, fixture.claims.events, "accept", "claim", "dispatch", "connector", "attempt_terminal", "request_terminal")
+	if len(fixture.claims.accepts) != 1 || fixture.claims.accepts[0].CharityDecisionNow != nil {
+		t.Fatalf("personal acceptance carried charity decision time: %+v", fixture.claims.accepts)
+	}
 	if _, _, ok := credential.Take(); ok {
 		t.Fatal("credential remained usable after connector return")
 	}
@@ -858,7 +861,7 @@ func TestCharityPreflightAndSnapshotShareOneDecisionTime(t *testing.T) {
 		Success: true, Committed: true, Failure: connectorcontract.FailureNone,
 		UpstreamStatus: http.StatusOK, ClientStatus: http.StatusOK,
 	}}
-	request := decodeChatForTest(t, `{"model":"[公益]care/model","messages":[]}`)
+	request := decodeChatForTest(t, `{"model":"[公益]care/model","messages":[],"n":1}`)
 	recorder := httptest.NewRecorder()
 
 	fixture.service.Chat(context.Background(), recorder, 1, request, []byte(`{}`), "application/json", "en")
@@ -866,6 +869,14 @@ func TestCharityPreflightAndSnapshotShareOneDecisionTime(t *testing.T) {
 	if len(fixture.charity.preTimes) != 1 || len(fixture.charity.snapTimes) != 1 ||
 		fixture.charity.preTimes[0] != fixture.charity.snapTimes[0] {
 		t.Fatalf("charity decision times preflight=%v snapshot=%v", fixture.charity.preTimes, fixture.charity.snapTimes)
+	}
+	if len(fixture.charity.snapTypes) != 1 || len(fixture.charity.snapTypes[0]) != 1 ||
+		fixture.charity.snapTypes[0][0] != connectorcontract.TypeOpenAICompatible {
+		t.Fatalf("charity snapshot connector capabilities=%v, want OpenAI only", fixture.charity.snapTypes)
+	}
+	if len(fixture.claims.accepts) != 1 || fixture.claims.accepts[0].CharityDecisionNow == nil ||
+		*fixture.claims.accepts[0].CharityDecisionNow != fixture.charity.preTimes[0] {
+		t.Fatalf("charity acceptance decision time=%+v, want %d", fixture.claims.accepts, fixture.charity.preTimes[0])
 	}
 	if clockCalls != 1 {
 		t.Fatalf("forward sampled the request clock %d times, want 1", clockCalls)
@@ -942,13 +953,14 @@ func TestCharityPreflightRevocationKeepsUnauthorizedMappingThroughWrapping(t *te
 
 func TestPreAcceptanceErrorClosedSet(t *testing.T) {
 	tests := []struct {
-		name      string
-		charity   bool
-		err       error
-		wantHTTP  int
-		wantCode  string
-		wantText  string
-		acceptErr bool
+		name        string
+		charity     bool
+		err         error
+		wantHTTP    int
+		wantCode    string
+		wantText    string
+		acceptErr   bool
+		snapshotErr bool
 	}{
 		{name: "model not found", err: routing.ErrNotFound, wantHTTP: http.StatusNotFound, wantCode: httperr.CodeNotFound},
 		{name: "ambiguous model", err: routing.ErrAmbiguousIdentity, wantHTTP: http.StatusBadRequest, wantCode: httperr.CodeInvalidRequest},
@@ -964,6 +976,11 @@ func TestPreAcceptanceErrorClosedSet(t *testing.T) {
 		},
 		{name: "charity unavailable", charity: true, err: charityrouting.ErrUnavailable, wantHTTP: http.StatusServiceUnavailable, wantCode: httperr.CodeUnboundModel},
 		{
+			name: "charity ordering entropy unavailable", charity: true,
+			err:      fmt.Errorf("snapshot: %w", charityrouting.ErrEntropyUnavailable),
+			wantHTTP: http.StatusServiceUnavailable, wantCode: httperr.CodeServiceUnavailable, snapshotErr: true,
+		},
+		{
 			name: "maintenance final transaction", err: fmt.Errorf("accept gate: %w", maintenance.ErrMaintenanceOn),
 			wantHTTP: http.StatusServiceUnavailable, wantCode: httperr.CodeMaintenance, acceptErr: true,
 		},
@@ -978,7 +995,11 @@ func TestPreAcceptanceErrorClosedSet(t *testing.T) {
 			model := "provider/model"
 			if test.charity {
 				model = "[公益]care/model"
-				fixture.charity.preErr = test.err
+				if test.snapshotErr {
+					fixture.charity.snapErr = test.err
+				} else {
+					fixture.charity.preErr = test.err
+				}
 			} else if test.acceptErr {
 				fixture.claims.acceptError = test.err
 			} else {

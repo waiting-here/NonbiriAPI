@@ -135,6 +135,9 @@ type AcceptInput struct {
 	AttemptLimit   int
 	ReservedMilli  int64
 	CharityModelID int64
+	// CharityDecisionNow is required only for charity and carries the single
+	// request decision time already used to freeze its candidate order.
+	CharityDecisionNow *int64
 }
 
 type Request struct {

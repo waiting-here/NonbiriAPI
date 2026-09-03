@@ -2,10 +2,12 @@ package charityrouting
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -51,6 +53,7 @@ type Config struct {
 	RoleAuth      RoleFinalTxAuthorizer
 	DonationState DonationStateOwner
 	CursorKeys    resources.CursorKeyDeriver
+	Entropy       io.Reader
 	Now           func() time.Time
 }
 
@@ -59,6 +62,7 @@ type Service struct {
 	roleAuth      RoleFinalTxAuthorizer
 	donationState DonationStateOwner
 	cursorKeys    resources.CursorKeyDeriver
+	entropy       io.Reader
 	now           func() time.Time
 }
 
@@ -69,8 +73,11 @@ func New(config Config) (*Service, error) {
 	if config.Now == nil {
 		config.Now = time.Now
 	}
+	if nilDependency(config.Entropy) {
+		config.Entropy = cryptorand.Reader
+	}
 	return &Service{db: config.Store.DB(), roleAuth: config.RoleAuth, donationState: config.DonationState,
-		cursorKeys: config.CursorKeys, now: config.Now}, nil
+		cursorKeys: config.CursorKeys, entropy: config.Entropy, now: config.Now}, nil
 }
 
 func (s *Service) CreateAdmin(ctx context.Context, mutation resources.ControlMutation, input ModelCreate) (resources.MutationResult[AdminCharityModel], error) {
