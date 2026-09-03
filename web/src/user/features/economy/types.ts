@@ -45,21 +45,47 @@ export interface DonationStreak {
   failureDisabled: boolean;
 }
 
+export interface DonationCustomSource {
+  kind: 'custom';
+  connectorType: string;
+  baseUrl: string;
+}
+
+export interface DonationMainstreamSource {
+  kind: 'mainstream';
+  channelId: string;
+  name: string;
+  connectorType: string;
+  baseUrl: string;
+}
+
+export type DonationKeySource = DonationCustomSource | DonationMainstreamSource;
+
+export interface EndpointOriginCustom {
+  kind: 'custom';
+}
+
+export interface EndpointOriginMainstream {
+  kind: 'mainstream';
+  channelId: string;
+  name: string;
+}
+
+export type EndpointOrigin = EndpointOriginCustom | EndpointOriginMainstream;
+
 export interface DonationKey {
   id: string;
   endpointKeyId: string | null;
   displayHead: string;
   displayTail: string;
-  source: {
-    baseUrl: string;
-    connectorType: string;
-  };
+  source: DonationKeySource;
   physicalEnabled: boolean;
   charityState: DonationKeyState;
   limits: DonationLimits;
   usage: DonationUsage;
   tokenReserve: number;
   streak: DonationStreak;
+  expiresAt: number | null;
   endedReason: DonationKeyEndedReason | null;
 }
 
@@ -75,7 +101,6 @@ export interface Donation {
   revision: string;
   description: string;
   reviewResult: DonationReviewResult | null;
-  expiresAt: number | null;
   keys: DonationKey[];
   createdAt: number;
   updatedAt: number;
@@ -90,6 +115,7 @@ export interface EndpointSummary {
   id: string;
   connectorType: string;
   baseUrl: string;
+  origin: EndpointOrigin;
   note: string;
   enabled: boolean;
   revision: string;

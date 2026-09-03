@@ -102,7 +102,6 @@ const DONATION: Donation = {
   revision: '9',
   description: 'same authority value',
   reviewResult: null,
-  expiresAt: null,
   keys: [],
   createdAt: 1_788_100_000,
   updatedAt: 1_788_100_010,
@@ -253,7 +252,7 @@ describe('activity query authority recovery', () => {
         await expect(
           rendered.result.current.mutateAsync({
             description: 'one intent',
-            endpointKeyIds: ['61'],
+            keys: [{ endpointKeyId: '61', expiresAt: null }],
             ownershipAuthorized: true,
           }),
         ).rejects.toBe(rejected);
@@ -327,7 +326,7 @@ describe('activity query authority recovery', () => {
       await expect(
         rendered.result.current.mutateAsync({
           description: 'one intent',
-          endpointKeyIds: ['61'],
+          keys: [{ endpointKeyId: '61', expiresAt: null }],
           ownershipAuthorized: true,
         }),
       ).rejects.toBe(rejected);
@@ -369,7 +368,7 @@ describe('activity query authority recovery', () => {
       await expect(
         rendered.result.current.create.mutateAsync({
           description: 'one intent',
-          endpointKeyIds: ['61'],
+          keys: [{ endpointKeyId: '61', expiresAt: null }],
           ownershipAuthorized: true,
         }),
       ).rejects.toBe(rejected);

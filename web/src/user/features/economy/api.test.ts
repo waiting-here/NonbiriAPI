@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@shared/query/http';
-import { createDonation, contributeThursday, getDonations, isResponseUnknown } from './api';
+import {
+  createDonation,
+  contributeThursday,
+  getDonations,
+  isDonationCollectionIncomplete,
+  isResponseUnknown,
+} from './api';
 
 const DONATION_RESPONSE = {
   id: '41',
@@ -8,7 +14,6 @@ const DONATION_RESPONSE = {
   revision: '1',
   description: 'Existing resources only',
   review_result: null,
-  expires_at: null,
   keys: [
     {
       id: '51',
@@ -16,6 +21,7 @@ const DONATION_RESPONSE = {
       display_head: 'sk-head',
       display_tail: 'tail',
       safe_source: {
+        kind: 'custom',
         base_url: 'https://api.example.test/v1',
         connector_type: 'openai-compatible',
       },
@@ -31,6 +37,7 @@ const DONATION_RESPONSE = {
         tokens_inflight: '0',
       },
       token_reserve: 0,
+      expires_at: null,
       streak: { generation: '1', count: '0', failure_disabled: false },
       ended_reason: null,
     },
@@ -59,7 +66,10 @@ describe('economy mutation boundary', () => {
     vi.stubGlobal('fetch', fetchMock);
     await createDonation({
       description: 'Existing resources only',
-      endpointKeyIds: ['61', '62'],
+      keys: [
+        { endpointKeyId: '61', expiresAt: null },
+        { endpointKeyId: '62', expiresAt: 1_900_000_000 },
+      ],
       ownershipAuthorized: true,
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -68,7 +78,10 @@ describe('economy mutation boundary', () => {
     expect(init?.method).toBe('POST');
     expect(JSON.parse(String(init?.body))).toEqual({
       description: 'Existing resources only',
-      endpoint_key_ids: ['61', '62'],
+      keys: [
+        { endpoint_key_id: '61', expires_at: null },
+        { endpoint_key_id: '62', expires_at: 1_900_000_000 },
+      ],
       ownership_authorized: true,
     });
     expect(String(init?.body)).not.toMatch(/secret|base_url|connector_type/i);
@@ -83,7 +96,7 @@ describe('economy mutation boundary', () => {
     await expect(
       createDonation({
         description: 'One intent',
-        endpointKeyIds: ['61'],
+        keys: [{ endpointKeyId: '61', expiresAt: null }],
         ownershipAuthorized: true,
       }),
     ).rejects.toMatchObject({ code: 'network_error', status: 0 });
@@ -100,13 +113,29 @@ describe('economy mutation boundary', () => {
     await expect(
       createDonation({
         description: 'Duplicate intent',
-        endpointKeyIds: ['61', '61'],
+        keys: [
+          { endpointKeyId: '61', expiresAt: null },
+          { endpointKeyId: '61', expiresAt: null },
+        ],
         ownershipAuthorized: true,
       }),
     ).rejects.toMatchObject({ code: 'invalid_request', status: 400 });
     expect(fetchMock).not.toHaveBeenCalled();
     await expect(getDonations()).rejects.toMatchObject({ code: 'invalid_response', status: 200 });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed when a later donation cursor page cannot be read', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ data: [DONATION_RESPONSE], next_cursor: 'cursor-1' }))
+      .mockRejectedValueOnce(new TypeError('network lost'));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = getDonations();
+    await expect(result).rejects.toMatchObject({ code: 'invalid_response', status: 200 });
+    await expect(result).rejects.toSatisfy(isDonationCollectionIncomplete);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[1][0])).toContain('cursor=');
   });
 
   it('sends one fixed Thursday contribution without a client-side quantity', async () => {

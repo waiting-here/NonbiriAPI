@@ -9,8 +9,11 @@ import {
   CharitySafetyNotice,
   DonationCard,
   DonationComposer,
+  DonationKeyOverview,
+  DonationOverviewPartialError,
   DonationIntakePanel,
 } from '../features/economy/CharityPanels';
+import { isDonationCollectionIncomplete } from '../features/economy/api';
 import {
   useCharityCapability,
   useDonation,
@@ -119,18 +122,29 @@ function CharityContent() {
         {donations.isPending ? (
           <LoadingState />
         ) : donations.error ? (
-          <ErrorState error={donations.error} onRetry={() => void donations.refetch()} />
-        ) : donations.data.length === 0 ? (
-          <EmptyState
-            title={t('user.charity.noDonations')}
-            body={t('user.charity.noDonationsBody')}
-          />
+          isDonationCollectionIncomplete(donations.error) ? (
+            <DonationOverviewPartialError onRetry={() => void donations.refetch()} />
+          ) : (
+            <ErrorState error={donations.error} onRetry={() => void donations.refetch()} />
+          )
+        ) : !donations.data ? (
+          <LoadingState />
         ) : (
-          <div className="item-list economy-donation-list">
-            {donations.data.map((donation) => (
-              <DonationCard key={donation.id} donation={donation} />
-            ))}
-          </div>
+          <>
+            <DonationKeyOverview donations={donations.data} />
+            {donations.data.length === 0 ? (
+              <EmptyState
+                title={t('user.charity.noDonations')}
+                body={t('user.charity.noDonationsBody')}
+              />
+            ) : (
+              <div className="item-list economy-donation-list">
+                {donations.data.map((donation) => (
+                  <DonationCard key={donation.id} donation={donation} />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </section>
 

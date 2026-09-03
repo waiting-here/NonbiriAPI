@@ -1,4 +1,4 @@
-import { ApiError, apiFetch, isApiError } from '@shared/query/http';
+import { ApiError, apiFetch, isApiError, isForbidden, isUnauthorized } from '@shared/query/http';
 import {
   normalizeActivitiesSnapshot,
   normalizeCharityCapability,
@@ -27,6 +27,7 @@ const MAX_PAGE_REQUESTS = 64;
 const MAX_INT64 = 9_223_372_036_854_775_807n;
 const DECIMAL_ID = /^[1-9][0-9]{0,18}$/;
 const PERIOD_ID = /^thu_[A-Za-z0-9_-]{21}[AQgw]$/;
+const MAX_UNIX_SECONDS = 253_402_300_799;
 
 function invalidRequest(message: string): never {
   throw new ApiError('invalid_request', message, 400);
@@ -52,6 +53,30 @@ function requireDonationDescription(value: string): void {
       invalidRequest('Invalid donation description.');
     }
   }
+}
+
+function requireDonationExpiry(value: number | null): void {
+  if (value !== null && (!Number.isSafeInteger(value) || value < 0 || value > MAX_UNIX_SECONDS)) {
+    invalidRequest('Invalid donation key expiry.');
+  }
+}
+
+/**
+ * A cursor collection must be all-or-nothing for the account-level overview.
+ * This typed error lets the page distinguish an incomplete authority read from
+ * a normal API failure without exposing the bounded transport detail.
+ */
+export class DonationCollectionIncompleteError extends ApiError {
+  readonly incomplete = true;
+
+  constructor() {
+    super('invalid_response', 'The donation overview could not be loaded completely.', 200);
+    this.name = 'DonationCollectionIncompleteError';
+  }
+}
+
+export function isDonationCollectionIncomplete(error: unknown): boolean {
+  return error instanceof DonationCollectionIncompleteError;
 }
 
 function createMutationIdentity(): string {
@@ -153,13 +178,24 @@ export async function getCharityCapability(signal?: AbortSignal): Promise<Charit
 }
 
 export async function getDonations(signal?: AbortSignal): Promise<Donation[]> {
-  return collectPages(
-    '/api/donations',
-    'donations',
-    normalizeDonation,
-    (value) => value.id,
-    signal,
-  );
+  try {
+    return await collectPages(
+      '/api/donations',
+      'donations',
+      normalizeDonation,
+      (value) => value.id,
+      signal,
+    );
+  } catch (error) {
+    // Any failed page, malformed cursor, duplicate identity or collection
+    // bound is an incomplete overview and must be retried as one collection.
+    // Authentication/authorization errors are station-boundary signals rather
+    // than a partial collection; preserve them so the session gate can react.
+    if (!isUnauthorized(error) && !isForbidden(error)) {
+      throw new DonationCollectionIncompleteError();
+    }
+    throw error;
+  }
 }
 
 export async function getDonation(id: string, signal?: AbortSignal): Promise<Donation> {
@@ -235,7 +271,7 @@ export async function getEndpointChoices(
 
 export interface CreateDonationInput {
   description: string;
-  endpointKeyIds: string[];
+  keys: { endpointKeyId: string; expiresAt: number | null }[];
   ownershipAuthorized: true;
 }
 
@@ -243,21 +279,28 @@ export async function createDonation(input: CreateDonationInput): Promise<Donati
   requireDonationDescription(input.description);
   if (
     input.ownershipAuthorized !== true ||
-    !Array.isArray(input.endpointKeyIds) ||
-    input.endpointKeyIds.length < 1 ||
-    input.endpointKeyIds.length > 100 ||
-    new Set(input.endpointKeyIds).size !== input.endpointKeyIds.length
+    !Array.isArray(input.keys) ||
+    input.keys.length < 1 ||
+    input.keys.length > 100 ||
+    new Set(input.keys.map((key) => key?.endpointKeyId)).size !== input.keys.length
   ) {
     invalidRequest('Invalid donation submission.');
   }
-  input.endpointKeyIds.forEach((id) => requireDecimalID(id, 'endpoint key id'));
+  input.keys.forEach((key) => {
+    if (key === null || typeof key !== 'object') invalidRequest('Invalid donation key.');
+    requireDecimalID(key.endpointKeyId, 'endpoint key id');
+    requireDonationExpiry(key.expiresAt);
+  });
   return normalizeDonation(
     await apiFetch<unknown>('/api/donations', {
       method: 'POST',
       headers: mutationHeaders(),
       json: {
         description: input.description,
-        endpoint_key_ids: input.endpointKeyIds,
+        keys: input.keys.map((key) => ({
+          endpoint_key_id: key.endpointKeyId,
+          expires_at: key.expiresAt,
+        })),
         ownership_authorized: input.ownershipAuthorized,
       },
     }),

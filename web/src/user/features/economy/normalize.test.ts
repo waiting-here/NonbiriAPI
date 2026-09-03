@@ -6,6 +6,7 @@ import {
   normalizeCharityCapability,
   normalizeDonation,
   normalizeDonationKey,
+  normalizeEndpoint,
   normalizeWelfareClaimResult,
 } from './normalize';
 
@@ -47,14 +48,17 @@ const DONATION_FIXTURE = {
   revision: '9',
   description: 'Existing resources only',
   review_result: { decision: 'approve', reason: 'Accepted', reviewed_at: 1_788_100_010 },
-  expires_at: null,
   keys: [
     {
       id: '51',
       endpoint_key_id: '61',
       display_head: 'sk-head',
       display_tail: 'tail',
-      safe_source: { base_url: 'https://api.example.test/v1', connector_type: 'openai-compatible' },
+      safe_source: {
+        kind: 'custom',
+        base_url: 'https://api.example.test/v1',
+        connector_type: 'openai-compatible',
+      },
       physical_enabled: true,
       charity_state: 'available',
       limits: { price: '9000000000000', calls: null, tokens: '9000000000000000' },
@@ -67,6 +71,7 @@ const DONATION_FIXTURE = {
         tokens_inflight: '0',
       },
       token_reserve: 4096,
+      expires_at: null,
       streak: { generation: '2', count: '0', failure_disabled: false },
       ended_reason: null,
     },
@@ -329,7 +334,6 @@ describe('economy closed-wire normalizers', () => {
         ...DONATION_FIXTURE,
         status: 'pending',
         review_result: null,
-        expires_at: null,
         keys: [
           {
             ...DONATION_FIXTURE.keys[0],
@@ -353,21 +357,35 @@ describe('economy closed-wire normalizers', () => {
         ...DONATION_FIXTURE,
         status: 'rejected',
         review_result: { ...DONATION_FIXTURE.review_result, decision: 'reject' },
-        expires_at: null,
         keys: [{ ...terminalKey, ended_reason: null }],
       },
       {
         ...DONATION_FIXTURE,
         status: 'deleted',
         review_result: null,
-        expires_at: null,
         keys: [terminalKey],
       },
       {
         ...DONATION_FIXTURE,
         status: 'expired',
-        expires_at: 1,
-        keys: [{ ...terminalKey, charity_state: 'expired', ended_reason: 'expired' }],
+        keys: [
+          { ...terminalKey, charity_state: 'expired', expires_at: 1, ended_reason: 'expired' },
+        ],
+      },
+      {
+        ...DONATION_FIXTURE,
+        status: 'expired',
+        keys: [
+          { ...terminalKey, charity_state: 'ended', ended_reason: 'withdrawn' },
+          {
+            ...terminalKey,
+            id: '52',
+            endpoint_key_id: '62',
+            charity_state: 'expired',
+            expires_at: 1,
+            ended_reason: 'expired',
+          },
+        ],
       },
     ] as const;
     expect(cases.map((value) => normalizeDonation(value).status)).toEqual([
@@ -375,6 +393,7 @@ describe('economy closed-wire normalizers', () => {
       'approved',
       'rejected',
       'deleted',
+      'expired',
       'expired',
     ]);
 
@@ -399,19 +418,17 @@ describe('economy closed-wire normalizers', () => {
     expect(exhausted.keys[0].limits).toEqual({ price: '0', calls: '0', tokens: null });
     expect(exhausted.keys[0].usage.tokensUsed).toBe('340282366920938463463374607431768211455');
 
-    // The read projection can observe the exclusive expiry before the
-    // lifecycle worker materializes the donation's terminal status.
-    const overdue = normalizeDonation({
-      ...DONATION_FIXTURE,
-      review_result: { ...DONATION_FIXTURE.review_result, reviewed_at: 0 },
-      expires_at: 0,
-      keys: [{ ...terminalKey, charity_state: 'expired', ended_reason: 'expired' }],
-      created_at: 0,
-      updated_at: 0,
-    });
-    expect(overdue.status).toBe('approved');
-    expect(overdue.expiresAt).toBe(0);
-    expect(overdue.keys[0].charityState).toBe('expired');
+    expect(() =>
+      normalizeDonation({
+        ...DONATION_FIXTURE,
+        review_result: { ...DONATION_FIXTURE.review_result, reviewed_at: 0 },
+        keys: [
+          { ...terminalKey, charity_state: 'expired', expires_at: 0, ended_reason: 'expired' },
+        ],
+        created_at: 0,
+        updated_at: 0,
+      }),
+    ).toThrow();
     expect(() =>
       normalizeDonation({
         ...DONATION_FIXTURE,
@@ -463,6 +480,55 @@ describe('economy closed-wire normalizers', () => {
     });
     expect(final.status).toBe('deleted');
     expect(final.keys.every((key) => key.charityState === 'ended')).toBe(true);
+  });
+
+  it('keeps mainstream and custom source projections closed and category-free', () => {
+    const mainstream = normalizeDonationKey({
+      ...DONATION_FIXTURE.keys[0],
+      safe_source: {
+        kind: 'mainstream',
+        channel_id: 'mch_abcdefghijklmnopqrstuA',
+        name: 'Main channel',
+        connector_type: 'openai-compatible',
+        base_url: 'https://main.example.test/v1',
+      },
+      expires_at: 1_900_000_000,
+    });
+    expect(mainstream.source).toEqual({
+      kind: 'mainstream',
+      channelId: 'mch_abcdefghijklmnopqrstuA',
+      name: 'Main channel',
+      connectorType: 'openai-compatible',
+      baseUrl: 'https://main.example.test/v1',
+    });
+    expect(mainstream.expiresAt).toBe(1_900_000_000);
+    expect(() =>
+      normalizeDonationKey({
+        ...DONATION_FIXTURE.keys[0],
+        safe_source: {
+          kind: 'mainstream',
+          channel_id: 'mch_abcdefghijklmnopqrstuA',
+          name: 'Main channel',
+          connector_type: 'openai-compatible',
+          base_url: 'https://main.example.test/v1',
+          category: 'internal-only',
+        },
+      }),
+    ).toThrow();
+    expect(
+      normalizeEndpoint({
+        id: '11',
+        connector_type: 'openai-compatible',
+        base_url: 'https://main.example.test/v1',
+        origin: { kind: 'mainstream', channel_id: 'mch_abcdefghijklmnopqrstuA', name: 'Main' },
+        note: '',
+        enabled: true,
+        revision: '1',
+        key_count: '1',
+        created_at: 1_788_100_000,
+        updated_at: 1_788_100_000,
+      }).origin,
+    ).toEqual({ kind: 'mainstream', channelId: 'mch_abcdefghijklmnopqrstuA', name: 'Main' });
   });
 
   it('rejects duplicate identities, impossible state matrices, and values beyond U128', () => {
