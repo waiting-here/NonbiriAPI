@@ -1,17 +1,46 @@
 export type CharityCapabilityState =
   'feature_disabled' | 'no_models' | 'no_candidates' | 'available';
 
+export interface CharityCapabilityTokenPrices {
+  uncachedInput: string;
+  cacheWriteInput: string;
+  cacheReadInput: string;
+  output: string;
+}
+
+export type CharityCapabilityPricing =
+  | {
+      mode: 'per_request';
+      userPriceMilli: string;
+      discountedUserPriceMilli: string;
+    }
+  | {
+      mode: 'per_token';
+      userPricesMilli: CharityCapabilityTokenPrices;
+      discountedUserPricesMilli: CharityCapabilityTokenPrices;
+    };
+
+export interface CharityCapabilityDiscount {
+  enabled: boolean;
+  percent: number;
+  startAt: number | null;
+  endAt: number | null;
+}
+
 export interface CharityCapabilityModel {
   id: string;
   provider: string;
   model: string;
   fullName: string;
+  pricing: CharityCapabilityPricing;
+  discount: CharityCapabilityDiscount;
 }
 
 export interface CharityCapability {
   state: CharityCapabilityState;
   models: CharityCapabilityModel[];
   donationIntake: DonationIntakeState;
+  serverNow: number;
 }
 
 export type DonationIntakeState = 'open' | 'closed';

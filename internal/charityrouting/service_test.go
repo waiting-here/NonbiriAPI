@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -618,14 +619,49 @@ func TestCapabilityModelStatesAndCandidatePrivacy(t *testing.T) {
 	}
 	capability, err = environment.service.Capability(context.Background(), routingTestNow)
 	if err != nil || capability.State != "available" || capability.DonationIntake != "open" ||
-		len(capability.Models) != 1 || capability.Models[0].ID != model.ID {
+		capability.ServerNow != routingTestNow || len(capability.Models) != 1 || capability.Models[0].ID != model.ID {
 		t.Fatalf("available Capability = %+v, %v", capability, err)
 	}
-	body := fmt.Sprintf("%+v", capability)
-	for _, private := range []string{"private-upstream", "private key note", "https://z.routing.test/v1"} {
+	publicModel := capability.Models[0]
+	if publicModel.Pricing.Mode != "per_request" || publicModel.Pricing.UserPriceMilli == nil ||
+		*publicModel.Pricing.UserPriceMilli != "3000" || publicModel.Pricing.DiscountedUserPriceMilli == nil ||
+		*publicModel.Pricing.DiscountedUserPriceMilli != "2400" || publicModel.Pricing.UserPricesMilli != nil ||
+		publicModel.Pricing.DiscountedUserPricesMilli != nil || !publicModel.Discount.Enabled ||
+		publicModel.Discount.Percent != 80 || publicModel.Discount.StartAt == nil ||
+		*publicModel.Discount.StartAt != routingTestNow-1 || publicModel.Discount.EndAt == nil ||
+		*publicModel.Discount.EndAt != routingTestNow+100 {
+		t.Fatalf("public request pricing = %+v, discount = %+v", publicModel.Pricing, publicModel.Discount)
+	}
+	bodyBytes, err := json.Marshal(capability)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(bodyBytes)
+	for _, private := range []string{"private-upstream", "private key note", "https://z.routing.test/v1", "donor", "rolling_success", "binding"} {
 		if strings.Contains(body, private) {
 			t.Fatalf("Capability leaks private candidate value %q: %s", private, body)
 		}
+	}
+
+	if _, err := environment.store.DB().Exec(`INSERT INTO site_config(key,value,updated_at)
+VALUES('charity_token_reserve_milli','5',?)`, routingTestNow); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := environment.store.DB().Exec(`UPDATE charity_models SET pricing_mode='per_token',
+uncached_user_price=1,cache_write_user_price=2000,cache_read_user_price=3001,output_user_price=0,
+discount_percent=33 WHERE id=?`, modelID); err != nil {
+		t.Fatal(err)
+	}
+	capability, err = environment.service.Capability(context.Background(), routingTestNow)
+	if err != nil || len(capability.Models) != 1 {
+		t.Fatalf("token Capability = %+v, %v", capability, err)
+	}
+	pricing := capability.Models[0].Pricing
+	if pricing.Mode != "per_token" || pricing.UserPriceMilli != nil || pricing.DiscountedUserPriceMilli != nil ||
+		pricing.UserPricesMilli == nil || pricing.DiscountedUserPricesMilli == nil ||
+		*pricing.UserPricesMilli != (CapabilityTokenPrices{UncachedInput: "1", CacheWriteInput: "2000", CacheReadInput: "3001", Output: "0"}) ||
+		*pricing.DiscountedUserPricesMilli != (CapabilityTokenPrices{UncachedInput: "1", CacheWriteInput: "660", CacheReadInput: "991", Output: "0"}) {
+		t.Fatalf("public token pricing = %+v", pricing)
 	}
 }
 
@@ -671,9 +707,9 @@ func TestCapabilityHTTPJSONGolden(t *testing.T) {
 		donation string
 		want     string
 	}{
-		{name: "both closed", charity: "0", donation: "0", want: `{"state":"feature_disabled","models":[],"donation_intake":"closed"}` + "\n"},
-		{name: "charity only", charity: "1", donation: "0", want: `{"state":"no_models","models":[],"donation_intake":"closed"}` + "\n"},
-		{name: "both open", charity: "1", donation: "1", want: `{"state":"no_models","models":[],"donation_intake":"open"}` + "\n"},
+		{name: "both closed", charity: "0", donation: "0", want: `{"state":"feature_disabled","models":[],"donation_intake":"closed","server_now":1700000000}` + "\n"},
+		{name: "charity only", charity: "1", donation: "0", want: `{"state":"no_models","models":[],"donation_intake":"closed","server_now":1700000000}` + "\n"},
+		{name: "both open", charity: "1", donation: "1", want: `{"state":"no_models","models":[],"donation_intake":"open","server_now":1700000000}` + "\n"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

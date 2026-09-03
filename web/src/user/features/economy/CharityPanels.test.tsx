@@ -1,10 +1,11 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@shared/query/http';
 import { renderWithProviders } from '../../../../test/unit/support';
 import userEn from '../../i18n/en.json';
 import { CharityPage } from '../../pages/CharityPage';
 import {
+  CharityCapabilityPanel,
   DonationCard,
   DonationComposer,
   DonationIntakePanel,
@@ -101,8 +102,27 @@ const otherMainstreamChoice: EndpointKeyChoice = {
 
 const CHARITY_OPEN: CharityCapability = {
   state: 'available',
-  models: [],
+  models: [
+    {
+      id: '7',
+      provider: 'provider',
+      model: 'charity-model',
+      fullName: '[公益]provider/charity-model',
+      pricing: {
+        mode: 'per_request',
+        userPriceMilli: '3000',
+        discountedUserPriceMilli: '2400',
+      },
+      discount: {
+        enabled: true,
+        percent: 80,
+        startAt: 1_788_099_000,
+        endAt: 1_788_101_000,
+      },
+    },
+  ],
   donationIntake: 'open',
+  serverNow: 1_788_100_000,
 };
 
 const charityCopy = userEn.user.charity;
@@ -148,6 +168,59 @@ describe('donation intake authority', () => {
       expect(rendered.container).not.toHaveTextContent('unknown');
     },
   );
+});
+
+describe('public charity pricing', () => {
+  it('shows the server-projected current offer without donor economics', async () => {
+    await renderWithProviders(<CharityCapabilityPanel capability={CHARITY_OPEN} />, {
+      station: 'user',
+      role: 'user',
+    });
+    const table = screen.getByRole('table', { name: charityCopy.priceCaption });
+    expect(within(table).getByLabelText(`${charityCopy.originalPrice}: 3`)).toBeVisible();
+    expect(within(table).getByLabelText(`${charityCopy.currentPrice}: 2.4`)).toBeVisible();
+    expect(screen.getByText(charityCopy.discountPercent.replace('{{percent}}', '20'))).toBeVisible();
+    expect(screen.queryByText(charityCopy.donorReward)).toBeNull();
+  });
+
+  it('announces a scheduled token offer while showing base prices', async () => {
+    const scheduled: CharityCapability = {
+      ...CHARITY_OPEN,
+      models: [
+        {
+          ...CHARITY_OPEN.models[0],
+          pricing: {
+            mode: 'per_token',
+            userPricesMilli: {
+              uncachedInput: '1000',
+              cacheWriteInput: '2000',
+              cacheReadInput: '500',
+              output: '3000',
+            },
+            discountedUserPricesMilli: {
+              uncachedInput: '500',
+              cacheWriteInput: '1000',
+              cacheReadInput: '250',
+              output: '1500',
+            },
+          },
+          discount: {
+            enabled: true,
+            percent: 50,
+            startAt: CHARITY_OPEN.serverNow + 600,
+            endAt: CHARITY_OPEN.serverNow + 1200,
+          },
+        },
+      ],
+    };
+    await renderWithProviders(<CharityCapabilityPanel capability={scheduled} />, {
+      station: 'user',
+      role: 'user',
+    });
+    expect(screen.getByText(charityCopy.discountUpcoming)).toBeVisible();
+    expect(screen.getByLabelText(`${charityCopy.userPrice}: 0.5`)).toBeVisible();
+    expect(screen.queryByLabelText(`${charityCopy.currentPrice}: 0.25`)).toBeNull();
+  });
 });
 
 describe('donation composer recovery', () => {

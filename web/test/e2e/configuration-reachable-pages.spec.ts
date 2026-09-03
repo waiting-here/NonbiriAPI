@@ -252,7 +252,12 @@ test('reachable user charity shows the neutral upstream warning without the stat
     origin: USER_ORIGIN,
     method: 'GET',
     path: '/api/charity/models',
-    body: { state: 'no_models', models: [], donation_intake: 'closed' },
+    body: {
+      state: 'no_models',
+      models: [],
+      donation_intake: 'closed',
+      server_now: 1_788_100_000,
+    },
   });
   await mockJson(page, {
     origin: USER_ORIGIN,

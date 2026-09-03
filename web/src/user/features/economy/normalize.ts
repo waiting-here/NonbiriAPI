@@ -4,6 +4,7 @@ import type {
   ActivitiesSnapshot,
   CharityCapability,
   CharityCapabilityModel,
+  CharityCapabilityTokenPrices,
   CursorPage,
   Donation,
   DonationKeySource,
@@ -298,22 +299,142 @@ function charityModelName(value: unknown, field: string): string {
   return candidate;
 }
 
+function capabilityMilli(value: unknown, field: string): string {
+  return decimal(value, field, MAX_MONEY_MILLI);
+}
+
+function normalizeCapabilityTokenPrices(value: unknown, field: string): CharityCapabilityTokenPrices {
+  const prices = record(value, field, [
+    'uncached_input',
+    'cache_write_input',
+    'cache_read_input',
+    'output',
+  ]);
+  return {
+    uncachedInput: capabilityMilli(prices.uncached_input, `${field} uncached input`),
+    cacheWriteInput: capabilityMilli(prices.cache_write_input, `${field} cache write input`),
+    cacheReadInput: capabilityMilli(prices.cache_read_input, `${field} cache read input`),
+    output: capabilityMilli(prices.output, `${field} output`),
+  };
+}
+
+function requireDiscountProjection(
+  base: string,
+  discounted: string,
+  percent: number,
+  field: string,
+): void {
+  const expected = ((BigInt(base) * BigInt(percent) + 99n) / 100n).toString();
+  if (discounted !== expected) invalid(field);
+}
+
 export function normalizeCharityCapabilityModel(value: unknown): CharityCapabilityModel {
-  const item = record(value, 'charity model', ['id', 'provider', 'model', 'full_name']);
+  const item = record(value, 'charity model', [
+    'id',
+    'provider',
+    'model',
+    'full_name',
+    'pricing',
+    'discount',
+  ]);
   const provider = charityModelName(item.provider, 'charity model provider');
   const model = charityModelName(item.model, 'charity model name');
   const fullName = text(item.full_name, 'charity model full name', 133, false);
   if (fullName !== `[公益]${provider}/${model}`) invalid('charity model full name');
+
+  const discount = record(item.discount, 'charity model discount', [
+    'enabled',
+    'percent',
+    'start_at',
+    'end_at',
+  ]);
+  const discountEnabled = bool(discount.enabled, 'charity model discount enabled');
+  const discountPercent = integer(
+    discount.percent,
+    'charity model discount percent',
+    0,
+    100,
+  );
+  const startAt = nullableTimestamp(discount.start_at, 'charity model discount start');
+  const endAt = nullableTimestamp(discount.end_at, 'charity model discount end');
+  if (startAt !== null && endAt !== null && endAt < startAt) {
+    invalid('charity model discount window');
+  }
+
+  const pricing = record(item.pricing, 'charity model pricing', [
+    'mode',
+    'user_price_milli',
+    'discounted_user_price_milli',
+    'user_prices_milli',
+    'discounted_user_prices_milli',
+  ]);
+  let normalizedPricing: CharityCapabilityModel['pricing'];
+  if (pricing.mode === 'per_request') {
+    if (pricing.user_prices_milli !== null || pricing.discounted_user_prices_milli !== null) {
+      invalid('charity model request pricing');
+    }
+    const userPriceMilli = capabilityMilli(
+      pricing.user_price_milli,
+      'charity model request price',
+    );
+    const discountedUserPriceMilli = capabilityMilli(
+      pricing.discounted_user_price_milli,
+      'charity model discounted request price',
+    );
+    requireDiscountProjection(
+      userPriceMilli,
+      discountedUserPriceMilli,
+      discountPercent,
+      'charity model discounted request price',
+    );
+    normalizedPricing = { mode: 'per_request', userPriceMilli, discountedUserPriceMilli };
+  } else if (pricing.mode === 'per_token') {
+    if (pricing.user_price_milli !== null || pricing.discounted_user_price_milli !== null) {
+      invalid('charity model token pricing');
+    }
+    const userPricesMilli = normalizeCapabilityTokenPrices(
+      pricing.user_prices_milli,
+      'charity model token prices',
+    );
+    const discountedUserPricesMilli = normalizeCapabilityTokenPrices(
+      pricing.discounted_user_prices_milli,
+      'charity model discounted token prices',
+    );
+    for (const key of ['uncachedInput', 'cacheWriteInput', 'cacheReadInput', 'output'] as const) {
+      requireDiscountProjection(
+        userPricesMilli[key],
+        discountedUserPricesMilli[key],
+        discountPercent,
+        `charity model discounted ${key} price`,
+      );
+    }
+    normalizedPricing = { mode: 'per_token', userPricesMilli, discountedUserPricesMilli };
+  } else {
+    invalid('charity model pricing mode');
+  }
+
   return {
     id: decimalID(item.id, 'charity model id'),
     provider,
     model,
     fullName,
+    pricing: normalizedPricing,
+    discount: {
+      enabled: discountEnabled,
+      percent: discountPercent,
+      startAt,
+      endAt,
+    },
   };
 }
 
 export function normalizeCharityCapability(value: unknown): CharityCapability {
-  const root = record(value, 'charity capability', ['state', 'models', 'donation_intake']);
+  const root = record(value, 'charity capability', [
+    'state',
+    'models',
+    'donation_intake',
+    'server_now',
+  ]);
   const state = root.state;
   if (
     state !== 'feature_disabled' &&
@@ -336,7 +457,12 @@ export function normalizeCharityCapability(value: unknown): CharityCapability {
   if ((state === 'available') !== models.length > 0) invalid('charity capability models');
   requireUnique(models, (model) => model.id, 'charity model identities');
   requireUnique(models, (model) => model.fullName, 'charity model names');
-  return { state, models, donationIntake };
+  return {
+    state,
+    models,
+    donationIntake,
+    serverNow: timestamp(root.server_now, 'charity capability server time'),
+  };
 }
 
 function normalizeReviewResult(value: unknown): DonationReviewResult | null {

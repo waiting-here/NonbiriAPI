@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { CharityPriceTable, type CharityPriceRow } from '@shared/components/CharityPriceTable';
 import { Card, EmptyState, ErrorState, StatusBadge } from '@shared/components/States';
 import { formatDateTime } from '@shared/utils/datetime';
 import { isConflictError, isResponseUnknown, type CreateDonationInput } from './api';
@@ -122,14 +123,65 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
       <p>{t(`user.charity.capabilityBody.${capability.state}`)}</p>
       {available ? (
         <ul className="economy-model-list" aria-label={t('user.charity.availableModels')}>
-          {capability.models.map((model) => (
-            <li key={model.id}>
-              <strong>{model.fullName}</strong>
-              <span className="muted">
-                {model.provider} · {model.model}
-              </span>
-            </li>
-          ))}
+          {capability.models.map((model) => {
+            const rows: CharityPriceRow[] =
+              model.pricing.mode === 'per_request'
+                ? [
+                    {
+                      label: t('user.charity.requestPrice'),
+                      userMilli: model.pricing.userPriceMilli,
+                      discountedUserMilli: model.pricing.discountedUserPriceMilli,
+                    },
+                  ]
+                : [
+                    {
+                      label: t('user.charity.uncachedInputPrice'),
+                      userMilli: model.pricing.userPricesMilli.uncachedInput,
+                      discountedUserMilli:
+                        model.pricing.discountedUserPricesMilli.uncachedInput,
+                    },
+                    {
+                      label: t('user.charity.cacheWriteInputPrice'),
+                      userMilli: model.pricing.userPricesMilli.cacheWriteInput,
+                      discountedUserMilli:
+                        model.pricing.discountedUserPricesMilli.cacheWriteInput,
+                    },
+                    {
+                      label: t('user.charity.cacheReadInputPrice'),
+                      userMilli: model.pricing.userPricesMilli.cacheReadInput,
+                      discountedUserMilli:
+                        model.pricing.discountedUserPricesMilli.cacheReadInput,
+                    },
+                    {
+                      label: t('user.charity.outputPrice'),
+                      userMilli: model.pricing.userPricesMilli.output,
+                      discountedUserMilli: model.pricing.discountedUserPricesMilli.output,
+                    },
+                  ];
+            return (
+              <li key={model.id}>
+                <div className="economy-model-heading">
+                  <strong>{model.fullName}</strong>
+                  <span className="muted">
+                    {model.provider} · {model.model}
+                  </span>
+                </div>
+                <CharityPriceTable
+                  mode={model.pricing.mode}
+                  rows={rows}
+                  serverNow={capability.serverNow}
+                  discount={{
+                    enabled: model.discount.enabled,
+                    percent: model.discount.percent,
+                    ...(model.discount.startAt !== null
+                      ? { startAt: model.discount.startAt }
+                      : {}),
+                    ...(model.discount.endAt !== null ? { endAt: model.discount.endAt } : {}),
+                  }}
+                />
+              </li>
+            );
+          })}
         </ul>
       ) : null}
     </Card>

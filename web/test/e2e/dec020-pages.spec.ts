@@ -419,9 +419,28 @@ test('user charity overview loads all cursor pages, filters each key state, and 
     body: {
       state: 'available',
       models: [
-        { id: '7', provider: 'provider', model: 'charity', full_name: '[公益]provider/charity' },
+        {
+          id: '7',
+          provider: 'provider',
+          model: 'charity',
+          full_name: '[公益]provider/charity',
+          pricing: {
+            mode: 'per_request',
+            user_price_milli: '3000',
+            discounted_user_price_milli: '2400',
+            user_prices_milli: null,
+            discounted_user_prices_milli: null,
+          },
+          discount: {
+            enabled: true,
+            percent: 80,
+            start_at: 1_799_999_000,
+            end_at: 1_800_003_600,
+          },
+        },
       ],
       donation_intake: 'open',
+      server_now: 1_800_000_000,
     },
   });
   await mockJson(page, {
@@ -471,6 +490,12 @@ test('user charity overview loads all cursor pages, filters each key state, and 
   });
 
   await page.goto(`${USER_ORIGIN}/charity`);
+  const priceTable = page.getByRole('table', { name: 'Charity model prices' });
+  await expect(priceTable).toBeVisible();
+  await expect(page.getByLabel('Original price: 3')).toBeVisible();
+  await expect(page.getByLabel('Offer price: 2.4')).toBeVisible();
+  await expect(page.getByText('Limited-time 20% off')).toBeVisible();
+  await expect(priceTable.getByText('Donor reward')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'My donated keys' })).toBeVisible();
   await expect(page.getByText('Showing 3 of 3 keys')).toBeVisible();
   const filter = page.getByLabel('Key status');
@@ -517,7 +542,12 @@ test('user charity overview fails closed on a cursor page and privacy states exp
     origin: USER_ORIGIN,
     method: 'GET',
     path: '/api/charity/models',
-    body: { state: 'no_models', models: [], donation_intake: 'closed' },
+    body: {
+      state: 'no_models',
+      models: [],
+      donation_intake: 'closed',
+      server_now: 1_800_000_000,
+    },
   });
   await mockJson(page, {
     origin: USER_ORIGIN,

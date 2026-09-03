@@ -382,6 +382,10 @@
   font-size: 0.9rem;
 }
 
+.charity-price-table--compact {
+  min-width: 22rem;
+}
+
 .charity-price-table th,
 .charity-price-table td {
   padding: 0.55rem 0.7rem;
