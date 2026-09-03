@@ -13,7 +13,6 @@ const common = {
   revision: '1',
   description: 'Donor-safe description',
   review_result: null,
-  expires_at: null,
   keys: [],
   reviewer: null,
   created_at: 1,
@@ -37,6 +36,37 @@ const model = {
   updated_at: 1,
 };
 
+const managedKey = {
+  id: '11',
+  endpoint_key_id: '21',
+  display_head: 'A'.repeat(16),
+  display_tail: 'Z'.repeat(16),
+  safe_source: {
+    kind: 'mainstream',
+    channel_id: `mch_${'A'.repeat(22)}`,
+    name: 'Frozen channel',
+    connector_type: 'openai-compatible',
+    base_url: 'https://example.test/v1',
+  },
+  physical_enabled: true,
+  charity_state: 'available',
+  limits: { price: null, calls: null, tokens: null },
+  usage: {
+    price_used: '0',
+    price_inflight: '0',
+    calls_used: '0',
+    calls_inflight: '0',
+    tokens_used: '0',
+    tokens_inflight: '0',
+  },
+  token_reserve: 0,
+  authorized_expires_at: null,
+  expires_at: 100,
+  streak: { generation: '1', count: '0', failure_disabled: false },
+  ended_reason: null,
+  safe_note: '',
+};
+
 describe('role-safe charity wire', () => {
   it('accepts a deidentified administrator owner but requires a steward owner', () => {
     expect(normalizeAdminDonation({ ...common, owner: null }).owner).toBeNull();
@@ -48,6 +78,91 @@ describe('role-safe charity wire', () => {
     expect(() => normalizeAdminDonation({ ...common, owner: null, secret: 'sk-never-project' })).toThrow(/invalid administrator donation/i);
     expect(() => normalizeStewardDonation({ ...common, owner: { user_id: '2', display_name: 'Owner', discord_id: 'private' } })).toThrow(/invalid steward donation owner/i);
     expect(() => normalizeAdminDonation({ ...common, owner: { user_id: '2', display_name: 'Owner' } })).toThrow(/invalid administrator donation owner/i);
+    expect(() => normalizeAdminDonation({ ...common, owner: null, expires_at: null })).toThrow(
+      /invalid administrator donation/i,
+    );
+  });
+
+  it('keeps provenance role-specific and enforces the donor expiry ceiling', () => {
+    const adminSource = {
+      ...managedKey.safe_source,
+      channel_revision: '3',
+      category: 'subscription',
+    };
+    const admin = normalizeAdminDonation({
+      ...common,
+      keys: [{ ...managedKey, safe_source: adminSource }],
+      owner: null,
+    });
+    expect(admin.keys[0]).toMatchObject({
+      display_head: 'A'.repeat(16),
+      authorized_expires_at: null,
+      expires_at: 100,
+      safe_source: { kind: 'mainstream', channel_revision: '3', category: 'subscription' },
+    });
+
+    const stewardOwner = { user_id: '2', display_name: 'Owner' };
+    expect(
+      normalizeStewardDonation({ ...common, keys: [managedKey], owner: stewardOwner }).keys[0]
+        .safe_source,
+    ).not.toHaveProperty('category');
+    expect(() =>
+      normalizeStewardDonation({
+        ...common,
+        keys: [{ ...managedKey, safe_source: adminSource }],
+        owner: stewardOwner,
+      }),
+    ).toThrow(/source/i);
+    expect(() =>
+      normalizeAdminDonation({
+        ...common,
+        keys: [
+          {
+            ...managedKey,
+            safe_source: adminSource,
+            authorized_expires_at: 99,
+            expires_at: 100,
+          },
+        ],
+        owner: null,
+      }),
+    ).toThrow(/expiry authorization/i);
+    expect(() =>
+      normalizeAdminDonation({
+        ...common,
+        keys: [{ ...managedKey, safe_source: adminSource, ended_reason: 'unknown' }],
+        owner: null,
+      }),
+    ).toThrow(/ended reason/i);
+  });
+
+  it('accepts an automatic mainstream approval with an empty system review reason', () => {
+    const adminSource = {
+      ...managedKey.safe_source,
+      channel_revision: '3',
+      category: 'subscription',
+    };
+    const result = normalizeAdminDonation({
+      ...common,
+      status: 'approved',
+      review_result: { decision: 'approve', reason: '', reviewed_at: 1 },
+      reviewer: null,
+      keys: [{ ...managedKey, safe_source: adminSource }],
+      owner: null,
+    });
+    expect(result.review_result).toEqual({ decision: 'approve', reason: '', reviewed_at: 1 });
+  });
+
+  it('accepts a clock-expired key before lifecycle cleanup records its terminal reason', () => {
+    const result = normalizeStewardDonation({
+      ...common,
+      status: 'approved',
+      review_result: { decision: 'approve', reason: 'accepted', reviewed_at: 1 },
+      reviewer: { user_id: '9', role: 'admin' },
+      keys: [{ ...managedKey, charity_state: 'expired', ended_reason: null }],
+      owner: { user_id: '2', display_name: 'Owner' },
+    });
+    expect(result.keys[0]).toMatchObject({ charity_state: 'expired', ended_reason: null });
   });
 });
 

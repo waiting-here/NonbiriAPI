@@ -1,6 +1,6 @@
 import { decoded, idempotentOptions, queryPath } from '@shared/operations/api';
 import {
-  decimal, decimalID, invalidResponse, nullableDecimalID, nullableUnixSecond,
+  cursor, decimal, decimalID, invalidResponse, nullableDecimalID, nullableUnixSecond,
   oneOf, opaqueID, page, record, string, unixSecond, type CursorPage,
 } from '@shared/operations/wire';
 
@@ -117,10 +117,10 @@ export interface ReportTarget {
   endpoint_key_id: string | null; key_ref: string;
   owner: { user_id: string; discord_id: string; display_name: string } | null;
   endpoint: { connector_type: 'openai-compatible' | 'anthropic-compatible'; canonical_base_url: string; display_head: string; display_tail: string };
-  discovered_version: string; decided_version: string | null; created_at: number; updated_at: number;
+  discovered_version: string; decided_version: string | null; donation_match_count: string; created_at: number; updated_at: number;
 }
 export function normalizeReportTarget(value: unknown): ReportTarget {
-  const root = record(value, ['id', 'target_seq', 'state', 'endpoint_key_id', 'key_ref', 'owner', 'endpoint', 'discovered_version', 'decided_version', 'created_at', 'updated_at'], 'report target');
+  const root = record(value, ['id', 'target_seq', 'state', 'endpoint_key_id', 'key_ref', 'owner', 'endpoint', 'discovered_version', 'decided_version', 'donation_match_count', 'created_at', 'updated_at'], 'report target');
   let owner: ReportTarget['owner'] = null;
   if (root.owner !== null) {
     const item = record(root.owner, ['user_id', 'discord_id', 'display_name'], 'report target owner');
@@ -142,7 +142,61 @@ export function normalizeReportTarget(value: unknown): ReportTarget {
       display_tail: string(endpoint.display_tail, 'target key tail', { max: 16, bytes: 16, ascii: true }),
     },
     discovered_version: decimal(root.discovered_version, 'target discovered version', { positive: true }), decided_version: decided,
+    donation_match_count: decimal(root.donation_match_count, 'target donation match count'),
     created_at: unixSecond(root.created_at, 'target creation time'), updated_at: unixSecond(root.updated_at, 'target update time'),
+  };
+}
+
+export type ReportDonationStatus = 'pending' | 'approved' | 'rejected' | 'deleted' | 'expired';
+export type ReportDonationKeyState = 'pending' | 'available' | 'disabled' | 'suspended' | 'exhausted' | 'expired' | 'ended';
+export const REPORT_DONATION_ENDED_REASONS = [
+  'withdrawn',
+  'terminated',
+  'expired',
+  'member_removed',
+  'account_deleted',
+] as const;
+export type ReportDonationEndedReason = (typeof REPORT_DONATION_ENDED_REASONS)[number];
+
+export interface ReportDonationMatch {
+  donation_id: string;
+  donation_key_id: string;
+  donation_status: ReportDonationStatus;
+  key_state: ReportDonationKeyState;
+  expires_at: number | null;
+  ended_reason: ReportDonationEndedReason | null;
+  ended_at: number | null;
+}
+
+export function normalizeReportDonationMatch(value: unknown): ReportDonationMatch {
+  const root = record(
+    value,
+    ['donation_id', 'donation_key_id', 'donation_status', 'key_state', 'expires_at', 'ended_reason', 'ended_at'],
+    'report donation match',
+  );
+  const endedReason = root.ended_reason === null
+    ? null
+    : oneOf(root.ended_reason, REPORT_DONATION_ENDED_REASONS, 'report donation ended reason');
+  const endedAt = nullableUnixSecond(root.ended_at, 'report donation end time');
+  if ((endedReason === null) !== (endedAt === null)) {
+    invalidResponse('report donation lineage terminal state');
+  }
+  return {
+    donation_id: decimalID(root.donation_id, 'report donation id'),
+    donation_key_id: decimalID(root.donation_key_id, 'report donation key id'),
+    donation_status: oneOf(
+      root.donation_status,
+      ['pending', 'approved', 'rejected', 'deleted', 'expired'] as const,
+      'report donation status',
+    ),
+    key_state: oneOf(
+      root.key_state,
+      ['pending', 'available', 'disabled', 'suspended', 'exhausted', 'expired', 'ended'] as const,
+      'report donation key state',
+    ),
+    expires_at: nullableUnixSecond(root.expires_at, 'report donation expiry'),
+    ended_reason: endedReason,
+    ended_at: endedAt,
   };
 }
 
@@ -151,11 +205,29 @@ export const adminReportKeys = {
   list: (status: string, cursor: string | null) => ['admin', 'operations', 'reports', 'list', status, cursor] as const,
   detail: (id: string, cursor: string | null) => ['admin', 'operations', 'reports', 'detail', id, cursor] as const,
   targets: (id: string, cursor: string | null) => ['admin', 'operations', 'reports', 'targets', id, cursor] as const,
+  targetDonations: (id: string, targetId: string, cursor: string | null) => ['admin', 'operations', 'reports', 'target-donations', id, targetId, cursor] as const,
 };
 export const getReportBadge = () => decoded('/admin/api/reports/badge', normalizeReportBadge);
 export const getReports = (status: string, cursor: string | null) => decoded(queryPath('/admin/api/reports', { status: status || undefined, cursor, limit: 50 }), (value) => page(value, 'report case page', normalizeReportSummary));
 export const getReportDetail = (id: string, cursor: string | null) => decoded(queryPath(`/admin/api/reports/${encodeURIComponent(opaqueID(id, 'rpc_', 'report case id'))}`, { materials_cursor: cursor, materials_limit: 50 }), normalizeReportDetail);
 export const getReportTargets = (id: string, cursor: string | null) => decoded(queryPath(`/admin/api/reports/${encodeURIComponent(opaqueID(id, 'rpc_', 'report case id'))}/targets`, { cursor, limit: 50 }), (value) => page(value, 'report target page', normalizeReportTarget));
+export const getReportTargetDonations = (id: string, targetId: string, cursorValue: string | null, signal?: AbortSignal) => {
+  const caseID = opaqueID(id, 'rpc_', 'report case id');
+  const target = opaqueID(targetId, 'rpt_', 'report target id');
+  if (cursorValue !== null) cursor(cursorValue, 'report donation cursor');
+  return decoded(
+    queryPath(`/admin/api/reports/${encodeURIComponent(caseID)}/targets/${encodeURIComponent(target)}/donations`, {
+      cursor: cursorValue,
+      limit: 50,
+    }),
+    (value) => {
+      const result = page(value, 'report donation lineage page', normalizeReportDonationMatch);
+      if (result.data.length > 100) invalidResponse('report donation lineage page size');
+      return result;
+    },
+    { signal },
+  );
+};
 
 export interface ReportDecisionReceipt {
   id: string;

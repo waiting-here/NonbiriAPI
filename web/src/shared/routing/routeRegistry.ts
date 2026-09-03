@@ -270,6 +270,17 @@ export const ADMIN_ROUTE_DESCRIPTORS = [
     labelKey: 'admin.settings.nav',
   }),
   admin({
+    id: 'admin-mainstream-channels',
+    path: '/mainstream-channels',
+    access: 'admin',
+    layout: 'wide',
+    nav: true,
+    registered: true,
+    navGroup: 'content',
+    icon: 'endpoints',
+    labelKey: 'admin.mainstreamChannels.nav',
+  }),
+  admin({
     id: 'admin-charity',
     path: '/charity',
     access: 'admin',

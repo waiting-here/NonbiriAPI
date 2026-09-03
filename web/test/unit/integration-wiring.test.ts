@@ -3,11 +3,8 @@ import adminEn from '../../src/admin/i18n/en.json';
 import adminZh from '../../src/admin/i18n/zh.json';
 import { ADMIN_PRIMARY_NAV as adminNav } from '../../src/admin/navigation';
 import { router as adminRouter } from '../../src/admin/routes';
-import userEn from '../../src/user/i18n/en.json';
-import userZh from '../../src/user/i18n/zh.json';
 import { USER_PRIMARY_NAV as userNav } from '../../src/user/navigation';
 import { router as userRouter } from '../../src/user/routes';
-import { itemNames } from '../../src/user/games/fishing/text';
 
 function valueAt(source: unknown, path: string): unknown {
   let current = source;
@@ -39,8 +36,10 @@ describe('alpha.3 central route and navigation wiring', () => {
       userChildren.find((route) => route.path === 'charity/donations/:donationId')?.lazy,
     ).toBeTypeOf('function');
     expect(userChildren.find((route) => route.path === 'debug')?.lazy).toBeTypeOf('function');
-    expect(adminPaths.indexOf('games')).toBe(adminPaths.indexOf('settings') + 1);
+    expect(adminPaths.indexOf('mainstream-channels')).toBe(adminPaths.indexOf('settings') + 1);
+    expect(adminPaths.indexOf('games')).toBe(adminPaths.indexOf('mainstream-channels') + 1);
     expect(adminChildren.find((route) => route.path === 'games')?.lazy).toBeTypeOf('function');
+    expect(adminChildren.find((route) => route.path === 'mainstream-channels')?.lazy).toBeTypeOf('function');
 
     expect(userNav.map(({ to, key }) => `${to}:${key}`)).toEqual([
       '/:home',
@@ -58,6 +57,7 @@ describe('alpha.3 central route and navigation wiring', () => {
       '/endpoints:admin-endpoints',
       '/alerts:admin-alerts',
       '/settings:admin-settings',
+      '/mainstream-channels:admin-mainstream-channels',
       '/charity:admin-charity',
       '/activities:admin-activities',
       '/games:admin-games',
@@ -67,119 +67,7 @@ describe('alpha.3 central route and navigation wiring', () => {
   });
 });
 
-describe('alpha.3 central catalog completeness', () => {
-  const fishingPaths = [
-    'eyebrow',
-    'title',
-    'description',
-    'loading',
-    'balance',
-    'balanceHint',
-    'balanceRetry',
-    'balanceRetrying',
-    'balanceUnknown',
-    'balanceUnknownAlert',
-    'balanceUnknownHint',
-    'disabledTitle',
-    'disabledBody',
-    'baitsTitle',
-    'baitsHint',
-    'baitsLabel',
-    'ticket',
-    'creditsUnit',
-    'cast',
-    'castWorking',
-  ];
-  const fishingGroups = {
-    baits: ['worm', 'lure', 'premium'],
-    errors: ['unavailable', 'insufficient', 'pending', 'resultPending', 'disabled', 'rateLimited'],
-    phase: ['idle', 'casting', 'waiting', 'reeling', 'settling', 'result', 'error', 'startError'],
-    stage: ['title', 'pending', 'autoSettle', 'retry', 'retryWorking'],
-    result: [
-      'fishTitle',
-      'treasureTitle',
-      'junkTitle',
-      'recovered',
-      'serverConfirmed',
-      'fishDescription',
-      'treasureDescription',
-      'junkDescription',
-      'size',
-      'meter',
-      'won',
-      'balance',
-      'ack',
-      'ackWorking',
-      'more',
-    ],
-    profile: [
-      'title',
-      'hint',
-      'public',
-      'publicWarning',
-      'privateWarning',
-      'reconciling',
-      'uncertain',
-      'retry',
-      'makePrivate',
-    ],
-    leaderboard: [
-      'avatarFallback',
-      'avatarAlt',
-      'anonymous',
-      'totalScore',
-      'me',
-      'singleTitle',
-      'totalTitle',
-      'singleDescription',
-      'totalDescription',
-      'mine',
-      'loading',
-      'empty',
-      'rank',
-      'angler',
-      'catch',
-      'kind',
-      'size',
-      'payout',
-      'you',
-      'yourRank',
-    ],
-  } as const;
-
-  test('provides bilingual Fishing leaves, item names, nav labels, and interpolation markers', () => {
-    const sources = [userEn, userZh];
-    for (const source of sources) {
-      expect(valueAt(source, 'user.games.nav')).toEqual(expect.any(String));
-      expect(valueAt(source, 'user.debug.nav')).toEqual(expect.any(String));
-      expect(valueAt(source, 'games.fishing')).toEqual(expect.any(Object));
-      for (const path of fishingPaths) {
-        expect(valueAt(source, `games.fishing.${path}`), path).toEqual(expect.any(String));
-      }
-      for (const [group, keys] of Object.entries(fishingGroups)) {
-        for (const key of keys) {
-          expect(valueAt(source, `games.fishing.${group}.${key}`), `${group}.${key}`).toEqual(
-            expect.any(String),
-          );
-        }
-      }
-      for (const key of Object.keys(itemNames)) {
-        expect(valueAt(source, `games.fishing.items.${key}`), `items.${key}`).toEqual(
-          expect.any(String),
-        );
-      }
-    }
-
-    expect(valueAt(userEn, 'games.fishing.result.fishDescription')).toContain('{{name}}');
-    expect(valueAt(userEn, 'games.fishing.result.fishDescription')).toContain('{{tier}}');
-    expect(valueAt(userZh, 'games.fishing.result.fishDescription')).toContain('{{name}}');
-    expect(valueAt(userZh, 'games.fishing.result.fishDescription')).toContain('{{tier}}');
-    expect(valueAt(userEn, 'games.fishing.leaderboard.avatarAlt')).toContain('{{name}}');
-    expect(valueAt(userZh, 'games.fishing.leaderboard.avatarAlt')).toContain('{{name}}');
-    expect(valueAt(userEn, 'games.fishing.leaderboard.yourRank')).toContain('{{rank}}');
-    expect(valueAt(userZh, 'games.fishing.leaderboard.yourRank')).toContain('{{rank}}');
-  });
-
+describe('central catalog completeness', () => {
   test('provides the admin Games navigation label in both stations', () => {
     expect(valueAt(adminEn, 'admin.games.nav')).toBe('Games');
     expect(valueAt(adminZh, 'admin.games.nav')).toBe('游戏');

@@ -16,7 +16,11 @@ const managedKey = (overrides: Partial<ManagedDonationKey> = {}): ManagedDonatio
   endpoint_key_id: '21',
   display_head: 'head',
   display_tail: 'tail',
-  safe_source: { base_url: 'https://example.test/v1', connector_type: 'openai' },
+  safe_source: {
+    kind: 'custom',
+    base_url: 'https://example.test/v1',
+    connector_type: 'openai-compatible',
+  },
   physical_enabled: true,
   charity_state: 'available',
   limits: { price: null, calls: null, tokens: null },
@@ -29,6 +33,8 @@ const managedKey = (overrides: Partial<ManagedDonationKey> = {}): ManagedDonatio
     tokens_inflight: '0',
   },
   token_reserve: 32,
+  authorized_expires_at: null,
+  expires_at: null,
   streak: { generation: '1', count: '0', failure_disabled: false },
   ended_reason: null,
   safe_note: 'safe note',
@@ -42,7 +48,6 @@ function approvedDonation(key = managedKey()): AdminDonation {
     revision: '1',
     description: 'Donation description',
     review_result: { decision: 'approve', reason: 'accepted', reviewed_at: 10 },
-    expires_at: null,
     keys: [key],
     owner: { user_id: '7', discord_id: null, display_name: 'Donor' },
     reviewer: { user_id: '9', role: 'admin' },
@@ -94,11 +99,13 @@ function installDonationFetch(initial: AdminDonation) {
           reason: String(body.reason),
           reviewed_at: 11,
         },
-        expires_at: approved ? (body.expires_at as number | null) : null,
         reviewer: { user_id: '9', role: 'admin' },
         keys: current.keys.map((key) => ({
           ...key,
           charity_state: approved ? 'available' : key.charity_state,
+          expires_at: approved
+            ? ((body.key_settings as { expires_at: number | null }[])[0]?.expires_at ?? null)
+            : key.expires_at,
         })),
         updated_at: 11,
       };
@@ -163,6 +170,7 @@ describe('CharityManagement corrective controls', () => {
       tokens_limit: null,
       token_reserve: 32,
       safe_note: 'safe note',
+      expires_at: null,
       reset_failure_streak: true,
     });
     expect(requests.keyBodies[0]).not.toHaveProperty('enabled');
@@ -190,11 +198,12 @@ describe('CharityManagement corrective controls', () => {
       tokens_limit: null,
       token_reserve: 32,
       safe_note: 'safe note',
+      expires_at: null,
     });
     expect(requests.idempotencyKeys).toEqual([expect.stringMatching(operationKeyPattern)]);
   });
 
-  it('submits an explicit null expiry for a pending donation', async () => {
+  it('submits an explicit per-key null expiry for a pending donation', async () => {
     const requests = installDonationFetch(pendingDonation());
     const view = await renderWithProviders(<CharityManagement frame="admin" />, {
       station: 'admin',
@@ -204,11 +213,11 @@ describe('CharityManagement corrective controls', () => {
     await view.user.click(await screen.findByRole('button', { name: 'Review' }));
     await screen.findByRole('heading', { name: 'Review pending submission' });
     expect(screen.getByRole('checkbox', { name: 'No expiry' })).toBeChecked();
-    expect(screen.getByLabelText('Whole-donation expiry')).toBeDisabled();
+    expect(screen.getByLabelText('Effective expiry')).toBeDisabled();
     await view.user.type(screen.getByLabelText('Reason'), 'approved without expiry');
     await view.user.click(
       screen.getByRole('checkbox', {
-        name: 'I confirm this review result and its whole-donation consequences.',
+        name: 'I confirm this review result and its per-key consequences.',
       }),
     );
     await view.user.click(screen.getByRole('button', { name: 'Approve donation' }));
@@ -218,7 +227,6 @@ describe('CharityManagement corrective controls', () => {
       decision: 'approve',
       expected_revision: '1',
       reason: 'approved without expiry',
-      expires_at: null,
       key_settings: [
         {
           donation_key_id: '11',
@@ -228,6 +236,7 @@ describe('CharityManagement corrective controls', () => {
           token_reserve: 32,
           enabled: true,
           safe_note: 'safe note',
+          expires_at: null,
         },
       ],
     });

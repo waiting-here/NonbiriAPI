@@ -20,6 +20,7 @@ export const router = createBrowserRouter([
       { path: pathFor('admin-endpoints'), lazy: async () => ({ Component: (await import('./pages/EndpointsPage')).EndpointsPage }) },
       { path: pathFor('admin-alerts'), lazy: async () => ({ Component: (await import('./pages/AlertsPage')).AlertsPage }) },
       { path: pathFor('admin-settings'), lazy: async () => ({ Component: (await import('./pages/SettingsPage')).SettingsPage }) },
+      { path: pathFor('admin-mainstream-channels'), lazy: async () => ({ Component: (await import('./features/operations/MainstreamChannels')).MainstreamChannelsPage }) },
       { path: pathFor('admin-games'), lazy: async () => ({ Component: (await import('./pages/GamesPage')).GamesPage }) },
       { path: pathFor('admin-charity'), lazy: async () => ({ Component: (await import('./pages/CharityPage')).CharityPage }) },
       { path: pathFor('admin-activities'), lazy: async () => ({ Component: (await import('./pages/ActivitiesPage')).ActivitiesPage }) },

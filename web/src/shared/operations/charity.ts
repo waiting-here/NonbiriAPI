@@ -12,6 +12,7 @@ import {
   nullableDecimalID,
   nullableString,
   nullableUnixSecond,
+  opaqueID,
   oneOf,
   page,
   record,
@@ -23,20 +24,46 @@ import {
 export type CharityRole = 'admin' | 'steward';
 export type DonationStatus = 'pending' | 'approved' | 'rejected' | 'deleted' | 'expired';
 export type CharityState = 'pending' | 'available' | 'disabled' | 'suspended' | 'exhausted' | 'expired' | 'ended';
+export type DonationEndedReason =
+  | 'withdrawn'
+  | 'terminated'
+  | 'expired'
+  | 'member_removed'
+  | 'account_deleted';
+
+type CharityConnectorType = 'openai-compatible' | 'anthropic-compatible';
+
+export type ManagedSafeSource =
+  | {
+      kind: 'custom';
+      connector_type: CharityConnectorType;
+      base_url: string;
+    }
+  | {
+      kind: 'mainstream';
+      connector_type: CharityConnectorType;
+      base_url: string;
+      channel_id: string;
+      name: string;
+      channel_revision?: string;
+      category?: 'subscription' | 'api_platform';
+    };
 
 export interface ManagedDonationKey {
   id: string;
   endpoint_key_id: string | null;
   display_head: string;
   display_tail: string;
-  safe_source: { base_url: string; connector_type: string };
+  safe_source: ManagedSafeSource;
   physical_enabled: boolean;
   charity_state: CharityState;
   limits: { price: string | null; calls: string | null; tokens: string | null };
   usage: { price_used: string; price_inflight: string; calls_used: string; calls_inflight: string; tokens_used: string; tokens_inflight: string };
   token_reserve: number;
+  authorized_expires_at: number | null;
+  expires_at: number | null;
   streak: { generation: string; count: string; failure_disabled: boolean };
-  ended_reason: string | null;
+  ended_reason: DonationEndedReason | null;
   safe_note: string;
 }
 
@@ -46,7 +73,6 @@ interface DonationCommon {
   revision: string;
   description: string;
   review_result: { decision: 'approve' | 'reject'; reason: string; reviewed_at: number } | null;
-  expires_at: number | null;
   keys: ManagedDonationKey[];
   reviewer: { user_id: string | null; role: 'admin' | 'steward' } | null;
   created_at: number;
@@ -61,24 +87,103 @@ export interface StewardDonation extends DonationCommon {
   owner: { user_id: string; display_name: string };
 }
 
-function normalizeManagedKey(value: unknown, label: string): ManagedDonationKey {
-  const root = record(value, ['id', 'endpoint_key_id', 'display_head', 'display_tail', 'safe_source', 'physical_enabled', 'charity_state', 'limits', 'usage', 'token_reserve', 'streak', 'ended_reason', 'safe_note'], label);
-  const source = record(root.safe_source, ['base_url', 'connector_type'], `${label} source`);
+function containsForbiddenControl(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const point = character.codePointAt(0) ?? 0;
+    return point < 0x20 || (point >= 0x7f && point <= 0x9f);
+  });
+}
+
+function sourceText(value: unknown, label: string, maximum: number, bytes: number): string {
+  const result = string(value, label, { min: 1, max: maximum, bytes });
+  if (containsForbiddenControl(result)) invalidResponse(label);
+  return result;
+}
+
+function normalizeManagedSource(
+  value: unknown,
+  label: string,
+  role: CharityRole,
+): ManagedSafeSource {
+  const discriminator = record(
+    value,
+    ['kind', 'connector_type', 'base_url', 'channel_id', 'name', 'channel_revision', 'category'],
+    label,
+    ['kind', 'connector_type', 'base_url'],
+  );
+  const kind = oneOf(discriminator.kind, ['custom', 'mainstream'] as const, `${label} kind`);
+  const connectorType = oneOf(
+    discriminator.connector_type,
+    ['openai-compatible', 'anthropic-compatible'] as const,
+    `${label} connector`,
+  );
+  const baseURL = sourceText(discriminator.base_url, `${label} canonical base URL`, 4_096, 4_096);
+  if (kind === 'custom') {
+    record(value, ['kind', 'connector_type', 'base_url'], label);
+    return { kind, connector_type: connectorType, base_url: baseURL };
+  }
+  const fields = role === 'admin'
+    ? ['kind', 'connector_type', 'base_url', 'channel_id', 'name', 'channel_revision', 'category'] as const
+    : ['kind', 'connector_type', 'base_url', 'channel_id', 'name'] as const;
+  const source = record(value, fields, label);
+  const name = sourceText(source.name, `${label} channel name`, 128, 512);
+  if (name.trim() !== name) invalidResponse(`${label} channel name`);
+  const mainstream: Extract<ManagedSafeSource, { kind: 'mainstream' }> = {
+    kind,
+    connector_type: connectorType,
+    base_url: baseURL,
+    channel_id: opaqueID(source.channel_id, 'mch_', `${label} channel id`),
+    name,
+  };
+  if (role === 'admin') {
+    mainstream.channel_revision = decimal(source.channel_revision, `${label} channel revision`, {
+      positive: true,
+    });
+    mainstream.category = oneOf(
+      source.category,
+      ['subscription', 'api_platform'] as const,
+      `${label} channel category`,
+    );
+  }
+  return mainstream;
+}
+
+function normalizeManagedKey(value: unknown, label: string, role: CharityRole): ManagedDonationKey {
+  const root = record(value, ['id', 'endpoint_key_id', 'display_head', 'display_tail', 'safe_source', 'physical_enabled', 'charity_state', 'limits', 'usage', 'token_reserve', 'expires_at', 'streak', 'ended_reason', 'authorized_expires_at', 'safe_note'], label);
   const limits = record(root.limits, ['price', 'calls', 'tokens'], `${label} limits`);
   const usage = record(root.usage, ['price_used', 'price_inflight', 'calls_used', 'calls_inflight', 'tokens_used', 'tokens_inflight'], `${label} usage`);
   const streak = record(root.streak, ['generation', 'count', 'failure_disabled'], `${label} streak`);
   const state = oneOf(root.charity_state, ['pending', 'available', 'disabled', 'suspended', 'exhausted', 'expired', 'ended'] as const, `${label} state`);
-  const endedReason = nullableString(root.ended_reason, `${label} ended reason`, { min: 1, max: 128, bytes: 512 });
-  if ((state === 'ended' || state === 'expired') !== (endedReason !== null)) invalidResponse(`${label} terminal state`);
+  const endedReason = root.ended_reason === null
+    ? null
+    : oneOf(
+        root.ended_reason,
+        ['withdrawn', 'terminated', 'expired', 'member_removed', 'account_deleted'] as const,
+        `${label} ended reason`,
+      );
+  if (
+    (endedReason !== null && state !== 'ended' && state !== 'expired') ||
+    (state === 'ended' && endedReason === null)
+  ) {
+    invalidResponse(`${label} terminal state`);
+  }
+  const authorizedExpiresAt = nullableUnixSecond(
+    root.authorized_expires_at,
+    `${label} authorized expiry`,
+  );
+  const expiresAt = nullableUnixSecond(root.expires_at, `${label} effective expiry`);
+  if (
+    authorizedExpiresAt !== null &&
+    (expiresAt === null || expiresAt > authorizedExpiresAt)
+  ) {
+    invalidResponse(`${label} expiry authorization`);
+  }
   return {
     id: decimalID(root.id, `${label} id`),
     endpoint_key_id: nullableDecimalID(root.endpoint_key_id, `${label} endpoint key id`),
-    display_head: string(root.display_head, `${label} display head`, { max: 8, bytes: 32 }),
-    display_tail: string(root.display_tail, `${label} display tail`, { max: 8, bytes: 32 }),
-    safe_source: {
-      base_url: string(source.base_url, `${label} canonical base URL`, { min: 1, max: 4_096, bytes: 4_096 }),
-      connector_type: string(source.connector_type, `${label} connector`, { min: 1, max: 64, bytes: 64, ascii: true }),
-    },
+    display_head: string(root.display_head, `${label} display head`, { max: 16, bytes: 16, ascii: true }),
+    display_tail: string(root.display_tail, `${label} display tail`, { max: 16, bytes: 16, ascii: true }),
+    safe_source: normalizeManagedSource(root.safe_source, `${label} source`, role),
     physical_enabled: boolean(root.physical_enabled, `${label} physical switch`),
     charity_state: state,
     limits: {
@@ -95,13 +200,15 @@ function normalizeManagedKey(value: unknown, label: string): ManagedDonationKey 
       tokens_inflight: decimal(usage.tokens_inflight, `${label} tokens inflight`),
     },
     token_reserve: integer(root.token_reserve, `${label} token reserve`, 0),
+    authorized_expires_at: authorizedExpiresAt,
+    expires_at: expiresAt,
     streak: {
       generation: decimal(streak.generation, `${label} streak generation`),
       count: decimal(streak.count, `${label} streak count`),
       failure_disabled: boolean(streak.failure_disabled, `${label} failure-disabled marker`),
     },
     ended_reason: endedReason,
-    safe_note: string(root.safe_note, `${label} safe note`, { max: 1_024, bytes: 4_096, multiline: true }),
+    safe_note: string(root.safe_note, `${label} safe note`, { max: 256, bytes: 1_024, multiline: true }),
   };
 }
 
@@ -109,16 +216,35 @@ function nullableAmount(value: unknown, label: string): string | null {
   return value === null ? null : amount(value, label, false);
 }
 
-function normalizeDonationCommon(root: ReturnType<typeof record>, label: string): DonationCommon {
+function normalizeDonationCommon(
+  root: ReturnType<typeof record>,
+  label: string,
+  role: CharityRole,
+): DonationCommon {
   const status = oneOf(root.status, ['pending', 'approved', 'rejected', 'deleted', 'expired'] as const, `${label} status`);
+  const reviewer = root.reviewer === null
+    ? null
+    : (() => {
+        const value = record(root.reviewer, ['user_id', 'role'], `${label} reviewer`);
+        return {
+          user_id: nullableDecimalID(value.user_id, `${label} reviewer user id`),
+          role: oneOf(value.role, ['admin', 'steward'] as const, `${label} reviewer role`),
+        };
+      })();
   let review: DonationCommon['review_result'] = null;
   if (root.review_result !== null) {
     const value = record(root.review_result, ['decision', 'reason', 'reviewed_at'], `${label} review`);
     review = {
       decision: oneOf(value.decision, ['approve', 'reject'] as const, `${label} review decision`),
-      reason: string(value.reason, `${label} review reason`, { min: 1, max: 1_024, bytes: 4_096, multiline: true }),
+      reason: string(value.reason, `${label} review reason`, { max: 1_024, bytes: 4_096, multiline: true }),
       reviewed_at: unixSecond(value.reviewed_at, `${label} review time`),
     };
+  }
+  if (reviewer === null && review !== null && (review.decision !== 'approve' || review.reason !== '')) {
+    invalidResponse(`${label} automatic review`);
+  }
+  if (reviewer !== null && (review === null || review.reason.length === 0)) {
+    invalidResponse(`${label} attributed review`);
   }
   if (status === 'pending' && review !== null) invalidResponse(`${label} pending review`);
   if ((status === 'approved' || status === 'expired') && review?.decision !== 'approve') invalidResponse(`${label} approved review`);
@@ -126,20 +252,21 @@ function normalizeDonationCommon(root: ReturnType<typeof record>, label: string)
   return {
     id: decimalID(root.id, `${label} id`), status,
     revision: decimal(root.revision, `${label} revision`, { positive: true }),
-    description: string(root.description, `${label} donor description`, { max: 4_096, bytes: 16_384, multiline: true }),
+    description: string(root.description, `${label} donor description`, { max: 1_024, bytes: 4_096, multiline: true }),
     review_result: review,
-    expires_at: nullableUnixSecond(root.expires_at, `${label} expiry`),
-    keys: array(root.keys, `${label} keys`, 100).map((item) => normalizeManagedKey(item, `${label} key`)),
-    reviewer: root.reviewer === null ? null : (() => { const reviewer = record(root.reviewer, ['user_id', 'role'], `${label} reviewer`); return { user_id: nullableDecimalID(reviewer.user_id, `${label} reviewer user id`), role: oneOf(reviewer.role, ['admin', 'steward'] as const, `${label} reviewer role`) }; })(),
+    keys: array(root.keys, `${label} keys`, 100).map((item) =>
+      normalizeManagedKey(item, `${label} key`, role),
+    ),
+    reviewer,
     created_at: unixSecond(root.created_at, `${label} creation time`),
     updated_at: unixSecond(root.updated_at, `${label} update time`),
   };
 }
 
 export function normalizeAdminDonation(value: unknown): AdminDonation {
-  const fields = ['id', 'status', 'revision', 'description', 'review_result', 'expires_at', 'keys', 'owner', 'reviewer', 'created_at', 'updated_at'] as const;
+  const fields = ['id', 'status', 'revision', 'description', 'review_result', 'keys', 'owner', 'reviewer', 'created_at', 'updated_at'] as const;
   const root = record(value, fields, 'administrator donation');
-  const common = normalizeDonationCommon(root, 'administrator donation');
+  const common = normalizeDonationCommon(root, 'administrator donation', 'admin');
   let owner: AdminDonation['owner'] = null;
   if (root.owner !== null) {
     const item = record(root.owner, ['user_id', 'discord_id', 'display_name'], 'administrator donation owner');
@@ -149,9 +276,9 @@ export function normalizeAdminDonation(value: unknown): AdminDonation {
 }
 
 export function normalizeStewardDonation(value: unknown): StewardDonation {
-  const fields = ['id', 'status', 'revision', 'description', 'review_result', 'expires_at', 'keys', 'owner', 'reviewer', 'created_at', 'updated_at'] as const;
+  const fields = ['id', 'status', 'revision', 'description', 'review_result', 'keys', 'owner', 'reviewer', 'created_at', 'updated_at'] as const;
   const root = record(value, fields, 'steward donation');
-  const common = normalizeDonationCommon(root, 'steward donation');
+  const common = normalizeDonationCommon(root, 'steward donation', 'steward');
   const item = record(root.owner, ['user_id', 'display_name'], 'steward donation owner');
   return { ...common, owner: { user_id: decimalID(item.user_id, 'steward owner id'), display_name: string(item.display_name, 'steward owner display', { min: 1, max: 128, bytes: 512 }) } };
 }
@@ -171,7 +298,7 @@ export interface CharityBinding {
   ord: number;
   donation_key_id: string;
   donation_id: string;
-  source: { connector_type: string; canonical_base_url: string; display_head: string; display_tail: string };
+  source: { connector_type: CharityConnectorType; canonical_base_url: string; display_head: string; display_tail: string };
   upstream_model_id: string;
   source_types: ('automatic' | 'manual')[];
 }
@@ -228,10 +355,14 @@ export const normalizeStewardCharityModel = (value: unknown) => normalizeModel(v
 function normalizeSource(value: unknown, label: string): CharityBinding['source'] {
   const root = record(value, ['connector_type', 'canonical_base_url', 'display_head', 'display_tail'], label);
   return {
-    connector_type: string(root.connector_type, `${label} connector`, { min: 1, max: 64, bytes: 64, ascii: true }),
+    connector_type: oneOf(
+      root.connector_type,
+      ['openai-compatible', 'anthropic-compatible'] as const,
+      `${label} connector`,
+    ),
     canonical_base_url: string(root.canonical_base_url, `${label} base URL`, { min: 1, max: 4_096, bytes: 4_096 }),
-    display_head: string(root.display_head, `${label} display head`, { max: 8, bytes: 32 }),
-    display_tail: string(root.display_tail, `${label} display tail`, { max: 8, bytes: 32 }),
+    display_head: string(root.display_head, `${label} display head`, { max: 16, bytes: 16, ascii: true }),
+    display_tail: string(root.display_tail, `${label} display tail`, { max: 16, bytes: 16, ascii: true }),
   };
 }
 
