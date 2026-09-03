@@ -66,6 +66,18 @@ const en = {
   'home.outputTokens': 'Output tokens',
   'home.unknownUsage': 'Requests with unknown usage',
   'home.checkinTitle': 'Daily check-in',
+  'home.checkin.unavailable': 'Check-in is not available',
+  'home.checkin.today': 'Today',
+  'home.checkin.checkedIn': 'Checked in',
+  'home.checkin.notCheckedIn': 'Not checked in yet',
+  'home.checkin.awardRange': 'Award range (credits)',
+  'home.checkin.threshold': 'Check-in threshold (credits)',
+  'home.checkin.thresholdNone': 'No limit',
+  'home.checkin.thresholdHint':
+    'The threshold only gates admission: once reached the server refuses new check-ins; an admitted award is never truncated.',
+  'home.checkin.submit': 'Check in',
+  'home.checkin.done':
+    'Checked in: awarded {{award}} credits; the Nonbiri credits balance is now {{credits}}.',
   'home.checkinRefreshFailed':
     'Check-in succeeded, but the latest status could not be refreshed. Refresh to retry the read; the check-in will not be submitted again.',
   'home.gamesTitle': 'Continue or view results',
@@ -363,6 +375,17 @@ const zh: Record<CoreCopyKey, string> = {
   'home.outputTokens': '输出 Token',
   'home.unknownUsage': '用量未知请求',
   'home.checkinTitle': '每日签到',
+  'home.checkin.unavailable': '签到未启用',
+  'home.checkin.today': '今日状态',
+  'home.checkin.checkedIn': '已签到',
+  'home.checkin.notCheckedIn': '未签到',
+  'home.checkin.awardRange': '奖励范围（积分）',
+  'home.checkin.threshold': '签到门槛（积分）',
+  'home.checkin.thresholdNone': '无上限',
+  'home.checkin.thresholdHint':
+    '门槛只影响能否签到：达到后服务端会拒绝新签到，不会截断已发放的奖励。',
+  'home.checkin.submit': '立即签到',
+  'home.checkin.done': '签到成功：获得 {{award}} 积分，当前悠哉积分 {{credits}}。',
   'home.checkinRefreshFailed':
     '签到已经成功，但最新状态刷新失败。你可以重新刷新读取；页面不会再次提交签到。',
   'home.gamesTitle': '继续进行或查看结果',

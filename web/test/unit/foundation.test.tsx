@@ -40,7 +40,7 @@ function FoundationProbe({ station }: { station: TestStation }) {
       <p data-testid="role">{role}</p>
       <p data-testid="shared-catalog">{t('common.save')}</p>
       <p data-testid="station-catalog">
-        {t(station === 'admin' ? 'admin.dashboard.title' : 'user.home.title')}
+        {t(station === 'admin' ? 'admin.dashboard.title' : 'user.home.nav')}
       </p>
       <button type="button" onClick={() => void load()}>
         Load fixture API
@@ -69,7 +69,7 @@ describe('React test foundation', () => {
       route: '/models',
       title: 'user 测试站',
       sharedCatalog: '保存',
-      stationCatalog: '你的工作区',
+      stationCatalog: '首页',
     },
     {
       station: 'admin',
@@ -185,7 +185,7 @@ describe('React test foundation', () => {
     expect(admin.i18n.t('common.save')).toBe('Save');
     expect(admin.i18n.t('admin.dashboard.title')).toBe('Operations overview');
     expect(user.i18n.t('common.save')).toBe('Save');
-    expect(user.i18n.t('user.home.title')).toBe('Your workspace');
+    expect(user.i18n.t('user.home.nav')).toBe('Home');
     expect(user.i18n.exists('admin.dashboard.title')).toBe(false);
   });
 

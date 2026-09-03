@@ -6,7 +6,6 @@ import {
   type QueryClient,
 } from '@tanstack/react-query';
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { PageHeader } from '@shared/components/States';
 import { isNotFoundError, isUnauthorized } from '@shared/query/http';
@@ -235,7 +234,6 @@ function CheckinCard({
   capability: HomeAdapters['checkin'];
 }) {
   const { t } = useCoreCopy();
-  const { t: translate } = useTranslation();
   const queryClient = useQueryClient();
   const [committed, setCommitted] = useState<CommittedCheckin | null>(null);
   const [outcomeUnknown, setOutcomeUnknown] = useState(false);
@@ -341,16 +339,16 @@ function CheckinCard({
       ) : status.error && !displayedAuthority ? (
         <CoreErrorPanel error={status.error} compact onRetry={() => void status.refetch()} />
       ) : !displayedAuthority ? (
-        <p className="core-muted">{translate('user.checkin.unavailable')}</p>
+        <p className="core-muted">{t('home.checkin.unavailable')}</p>
       ) : (
         <>
           <div className="core-metrics">
             <div className="core-metric">
-              <span>{translate('user.checkin.today')}</span>
+              <span>{t('home.checkin.today')}</span>
               <strong>
                 {checkedIn
-                  ? translate('user.checkin.checkedIn')
-                  : translate('user.checkin.notCheckedIn')}
+                  ? t('home.checkin.checkedIn')
+                  : t('home.checkin.notCheckedIn')}
               </strong>
             </div>
             <div className="core-metric">
@@ -360,17 +358,17 @@ function CheckinCard({
               </strong>
             </div>
             <div className="core-metric">
-              <span>{translate('user.checkin.awardRange')}</span>
+              <span>{t('home.checkin.awardRange')}</span>
               <strong>
                 <ExactCredits value={displayedAuthority.award_min} />–
                 <ExactCredits value={displayedAuthority.award_max} />
               </strong>
             </div>
             <div className="core-metric">
-              <span>{translate('user.checkin.threshold')}</span>
+              <span>{t('home.checkin.threshold')}</span>
               <strong>
                 {displayedAuthority.balance_cap === '0' ? (
-                  translate('user.checkin.thresholdNone')
+                  t('home.checkin.thresholdNone')
                 ) : (
                   <ExactCredits value={displayedAuthority.balance_cap} />
                 )}
@@ -378,11 +376,11 @@ function CheckinCard({
             </div>
           </div>
           {effectiveLevel < 3 && displayedAuthority.balance_cap !== '0' ? (
-            <p className="core-muted">{translate('user.checkin.thresholdHint')}</p>
+            <p className="core-muted">{t('home.checkin.thresholdHint')}</p>
           ) : null}
           {committed ? (
             <p className="core-status-message" role="status">
-              {translate('user.checkin.done', {
+              {t('home.checkin.done', {
                 award: committed.result.award,
                 credits: committed.result.balance,
               })}
@@ -422,7 +420,7 @@ function CheckinCard({
             }
             onClick={() => void submit()}
           >
-            {mutation.isPending ? t('common.working') : translate('user.checkin.submit')}
+            {mutation.isPending ? t('common.working') : t('home.checkin.submit')}
           </button>
         </>
       )}
