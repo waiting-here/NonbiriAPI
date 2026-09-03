@@ -91,10 +91,7 @@ FROM charity_models WHERE full_name=?`, fullName).Scan(&preflight.ModelID, &pref
 	if enabled != 1 {
 		return RuntimePreflight{}, ErrNotFound
 	}
-	activeDiscount := discount
-	if discountEnabled != 1 || discountStart.Valid && decisionNow < discountStart.Int64 || discountEnd.Valid && decisionNow >= discountEnd.Int64 {
-		activeDiscount = 100
-	}
+	activeDiscount := discountPercentAt(discount, discountEnabled, discountStart, discountEnd, decisionNow)
 	if pricingMode == "per_request" {
 		preflight.ReservedMilli, err = credits.ApplyDiscountPercent(requestPrice, activeDiscount)
 		if err != nil {
@@ -255,10 +252,7 @@ FROM charity_models WHERE id=?`, modelID).Scan(&snapshot.ModelID, &snapshot.Prov
 	if enabled != 1 {
 		return RuntimeSnapshot{}, ErrNotFound
 	}
-	activeDiscount := discount
-	if discountEnabled != 1 || discountStart.Valid && decisionNow < discountStart.Int64 || discountEnd.Valid && decisionNow >= discountEnd.Int64 {
-		activeDiscount = 100
-	}
+	activeDiscount := discountPercentAt(discount, discountEnabled, discountStart, discountEnd, decisionNow)
 	if pricingMode == "per_request" {
 		snapshot.ReservedMilli, err = credits.ApplyDiscountPercent(requestPrice, activeDiscount)
 		if err != nil {
@@ -441,7 +435,9 @@ func (s *Service) Capability(ctx context.Context, decisionNow int64) (Capability
 	if charityGate == "0" && donationGate == "1" {
 		return Capability{}, ErrInvariant
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT id,provider,model,full_name FROM charity_models
+	rows, err := tx.QueryContext(ctx, `SELECT id,provider,model,full_name,pricing_mode,
+request_user_price,uncached_user_price,cache_write_user_price,cache_read_user_price,output_user_price,
+discount_enabled,discount_percent,discount_start_at,discount_end_at FROM charity_models
 WHERE enabled=1 ORDER BY id`)
 	if err != nil {
 		return Capability{}, fmt.Errorf("charity routing: read capability models: %w", err)
@@ -451,11 +447,32 @@ WHERE enabled=1 ORDER BY id`)
 	for rows.Next() {
 		var model CapabilityModel
 		var id int64
-		if err := rows.Scan(&id, &model.Provider, &model.Model, &model.FullName); err != nil {
+		var mode string
+		var requestPrice int64
+		var tokenPrices [4]int64
+		var discountEnabled int
+		var discountStart, discountEnd sql.NullInt64
+		if err := rows.Scan(&id, &model.Provider, &model.Model, &model.FullName, &mode,
+			&requestPrice, &tokenPrices[0], &tokenPrices[1], &tokenPrices[2], &tokenPrices[3],
+			&discountEnabled, &model.Discount.Percent, &discountStart, &discountEnd); err != nil {
 			_ = rows.Close()
 			return Capability{}, fmt.Errorf("charity routing: scan capability model: %w", err)
 		}
 		model.ID = strconv.FormatInt(id, 10)
+		model.Discount.Enabled = discountEnabled == 1
+		if discountStart.Valid {
+			value := discountStart.Int64
+			model.Discount.StartAt = &value
+		}
+		if discountEnd.Valid {
+			value := discountEnd.Int64
+			model.Discount.EndAt = &value
+		}
+		model.Pricing, err = capabilityPricing(mode, requestPrice, tokenPrices, model.Discount.Percent)
+		if err != nil {
+			_ = rows.Close()
+			return Capability{}, err
+		}
 		models = append(models, model)
 		modelIDs = append(modelIDs, id)
 	}
@@ -478,10 +495,10 @@ WHERE enabled=1 ORDER BY id`)
 		donationIntake = "open"
 	}
 	if charityGate == "0" {
-		return Capability{State: "feature_disabled", Models: []CapabilityModel{}, DonationIntake: donationIntake}, nil
+		return Capability{State: "feature_disabled", Models: []CapabilityModel{}, DonationIntake: donationIntake, ServerNow: decisionNow}, nil
 	}
 	if len(models) == 0 {
-		return Capability{State: "no_models", Models: []CapabilityModel{}, DonationIntake: donationIntake}, nil
+		return Capability{State: "no_models", Models: []CapabilityModel{}, DonationIntake: donationIntake, ServerNow: decisionNow}, nil
 	}
 	available := make([]CapabilityModel, 0, len(models))
 	for index, id := range modelIDs {
@@ -492,9 +509,53 @@ WHERE enabled=1 ORDER BY id`)
 		}
 	}
 	if len(available) == 0 {
-		return Capability{State: "no_candidates", Models: []CapabilityModel{}, DonationIntake: donationIntake}, nil
+		return Capability{State: "no_candidates", Models: []CapabilityModel{}, DonationIntake: donationIntake, ServerNow: decisionNow}, nil
 	}
-	return Capability{State: "available", Models: available, DonationIntake: donationIntake}, nil
+	return Capability{State: "available", Models: available, DonationIntake: donationIntake, ServerNow: decisionNow}, nil
+}
+
+func discountPercentAt(percent, enabled int, start, end sql.NullInt64, decisionNow int64) int {
+	if enabled != 1 || start.Valid && decisionNow < start.Int64 || end.Valid && decisionNow >= end.Int64 {
+		return 100
+	}
+	return percent
+}
+
+func capabilityPricing(mode string, requestPrice int64, tokenPrices [4]int64, discountPercent int) (CapabilityPricing, error) {
+	pricing := CapabilityPricing{Mode: mode}
+	if mode == "per_request" {
+		discounted, err := credits.ApplyDiscountPercent(requestPrice, discountPercent)
+		if err != nil {
+			return CapabilityPricing{}, ErrInvariant
+		}
+		baseText, discountedText := strconv.FormatInt(requestPrice, 10), strconv.FormatInt(discounted, 10)
+		pricing.UserPriceMilli = &baseText
+		pricing.DiscountedUserPriceMilli = &discountedText
+		return pricing, nil
+	}
+	if mode != "per_token" {
+		return CapabilityPricing{}, ErrInvariant
+	}
+	discounted := [4]int64{}
+	for index, value := range tokenPrices {
+		projected, err := credits.ApplyDiscountPercent(value, discountPercent)
+		if err != nil {
+			return CapabilityPricing{}, ErrInvariant
+		}
+		discounted[index] = projected
+	}
+	pricing.UserPricesMilli = capabilityTokenPrices(tokenPrices)
+	pricing.DiscountedUserPricesMilli = capabilityTokenPrices(discounted)
+	return pricing, nil
+}
+
+func capabilityTokenPrices(values [4]int64) *CapabilityTokenPrices {
+	return &CapabilityTokenPrices{
+		UncachedInput:   strconv.FormatInt(values[0], 10),
+		CacheWriteInput: strconv.FormatInt(values[1], 10),
+		CacheReadInput:  strconv.FormatInt(values[2], 10),
+		Output:          strconv.FormatInt(values[3], 10),
+	}
 }
 
 func runtimeConnectorSet(connectorTypes []connectorcontract.Type) (map[connectorcontract.Type]struct{}, error) {

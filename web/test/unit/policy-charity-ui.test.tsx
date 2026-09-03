@@ -1079,12 +1079,26 @@ describe('experimental policy and charity controls', () => {
     const capability = {
       state: 'available',
       donation_intake: 'open',
+      server_now: 1_788_100_000,
       models: [
         {
           id: '7',
           provider: 'provider',
           model: 'charity-model',
           full_name: '[公益]provider/charity-model',
+          pricing: {
+            mode: 'per_request',
+            user_price_milli: '3000',
+            discounted_user_price_milli: '2400',
+            user_prices_milli: null,
+            discounted_user_prices_milli: null,
+          },
+          discount: {
+            enabled: true,
+            percent: 80,
+            start_at: 1_788_099_000,
+            end_at: 1_788_101_000,
+          },
         },
       ],
     };

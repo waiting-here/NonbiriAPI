@@ -62,17 +62,42 @@ type Page[T any] struct {
 	NextCursor *string `json:"next_cursor"`
 }
 
+type CapabilityTokenPrices struct {
+	UncachedInput   string `json:"uncached_input"`
+	CacheWriteInput string `json:"cache_write_input"`
+	CacheReadInput  string `json:"cache_read_input"`
+	Output          string `json:"output"`
+}
+
+type CapabilityPricing struct {
+	Mode                      string                 `json:"mode"`
+	UserPriceMilli            *string                `json:"user_price_milli"`
+	DiscountedUserPriceMilli  *string                `json:"discounted_user_price_milli"`
+	UserPricesMilli           *CapabilityTokenPrices `json:"user_prices_milli"`
+	DiscountedUserPricesMilli *CapabilityTokenPrices `json:"discounted_user_prices_milli"`
+}
+
+type CapabilityDiscount struct {
+	Enabled bool   `json:"enabled"`
+	Percent int    `json:"percent"`
+	StartAt *int64 `json:"start_at"`
+	EndAt   *int64 `json:"end_at"`
+}
+
 type CapabilityModel struct {
-	ID       string `json:"id"`
-	Provider string `json:"provider"`
-	Model    string `json:"model"`
-	FullName string `json:"full_name"`
+	ID       string             `json:"id"`
+	Provider string             `json:"provider"`
+	Model    string             `json:"model"`
+	FullName string             `json:"full_name"`
+	Pricing  CapabilityPricing  `json:"pricing"`
+	Discount CapabilityDiscount `json:"discount"`
 }
 
 type Capability struct {
 	State          string            `json:"state"`
 	Models         []CapabilityModel `json:"models"`
 	DonationIntake string            `json:"donation_intake"`
+	ServerNow      int64             `json:"server_now"`
 }
 
 type AdminTokenPrices struct {

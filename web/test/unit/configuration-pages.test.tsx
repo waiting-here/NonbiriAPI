@@ -186,7 +186,16 @@ describe('screenshot-facing configuration pages', () => {
   test('U2 replaces the large call-status guide with a persistent neutral upstream warning', async () => {
     installJsonFetchFixtures([
       { method: 'GET', path: '/api/session', body: { user: coreBaseUser } },
-      { method: 'GET', path: '/api/charity/models', body: { data: [] } },
+      {
+        method: 'GET',
+        path: '/api/charity/models',
+        body: {
+          state: 'no_models',
+          models: [],
+          donation_intake: 'closed',
+          server_now: 1_788_100_000,
+        },
+      },
       { method: 'GET', path: '/api/donations', body: [] },
       { method: 'GET', path: '/api/endpoints', body: [] },
     ]);

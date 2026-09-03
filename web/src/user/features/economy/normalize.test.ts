@@ -80,6 +80,30 @@ const DONATION_FIXTURE = {
   updated_at: 1_788_100_010,
 } as const;
 
+const CAPABILITY_SERVER_NOW = 1_788_100_000;
+
+function capabilityModel(provider = 'provider', model = 'model') {
+  return {
+    id: '1',
+    provider,
+    model,
+    full_name: `[公益]${provider}/${model}`,
+    pricing: {
+      mode: 'per_request',
+      user_price_milli: '3000',
+      discounted_user_price_milli: '2400',
+      user_prices_milli: null,
+      discounted_user_prices_milli: null,
+    },
+    discount: {
+      enabled: true,
+      percent: 80,
+      start_at: CAPABILITY_SERVER_NOW - 10,
+      end_at: CAPABILITY_SERVER_NOW + 100,
+    },
+  } as const;
+}
+
 describe('economy closed-wire normalizers', () => {
   it('accepts the canonical disabled D2 snapshot including its zero server clock', () => {
     expect(
@@ -108,33 +132,52 @@ describe('economy closed-wire normalizers', () => {
 
   it('keeps all charity capability states distinct and validates model identity', () => {
     for (const state of ['feature_disabled', 'no_models', 'no_candidates'] as const) {
-      expect(normalizeCharityCapability({ state, models: [], donation_intake: 'closed' })).toEqual({
-        state,
-        models: [],
-        donationIntake: 'closed',
-      });
+      expect(
+        normalizeCharityCapability({
+          state,
+          models: [],
+          donation_intake: 'closed',
+          server_now: CAPABILITY_SERVER_NOW,
+        }),
+      ).toEqual({ state, models: [], donationIntake: 'closed', serverNow: CAPABILITY_SERVER_NOW });
     }
     expect(
-      normalizeCharityCapability({ state: 'no_models', models: [], donation_intake: 'open' })
-        .donationIntake,
+      normalizeCharityCapability({
+        state: 'no_models',
+        models: [],
+        donation_intake: 'open',
+        server_now: CAPABILITY_SERVER_NOW,
+      }).donationIntake,
     ).toBe('open');
-    expect(
+    const available = normalizeCharityCapability({
+      state: 'available',
+      donation_intake: 'open',
+      server_now: CAPABILITY_SERVER_NOW,
+      models: [capabilityModel()],
+    });
+    expect(available.models[0]).toMatchObject({
+      fullName: '[公益]provider/model',
+      pricing: {
+        mode: 'per_request',
+        userPriceMilli: '3000',
+        discountedUserPriceMilli: '2400',
+      },
+      discount: { enabled: true, percent: 80 },
+    });
+    expect(() =>
       normalizeCharityCapability({
         state: 'available',
+        models: [],
         donation_intake: 'open',
-        models: [
-          { id: '1', provider: 'provider', model: 'model', full_name: '[公益]provider/model' },
-        ],
-      }).models[0].fullName,
-    ).toBe('[公益]provider/model');
-    expect(() =>
-      normalizeCharityCapability({ state: 'available', models: [], donation_intake: 'open' }),
+        server_now: CAPABILITY_SERVER_NOW,
+      }),
     ).toThrow();
     expect(() =>
       normalizeCharityCapability({
         state: 'available',
         donation_intake: 'open',
-        models: [{ id: '1', provider: 'provider', model: 'model', full_name: 'provider/model' }],
+        server_now: CAPABILITY_SERVER_NOW,
+        models: [{ ...capabilityModel(), full_name: 'provider/model' }],
       }),
     ).toThrow();
     expect(() => normalizeCharityCapability({ state: 'no_models', models: [] })).toThrow();
@@ -143,6 +186,7 @@ describe('economy closed-wire normalizers', () => {
         state: 'no_models',
         models: [],
         donation_intake: 'unknown',
+        server_now: CAPABILITY_SERVER_NOW,
       }),
     ).toThrow();
     expect(() =>
@@ -150,6 +194,80 @@ describe('economy closed-wire normalizers', () => {
         state: 'feature_disabled',
         models: [],
         donation_intake: 'open',
+        server_now: CAPABILITY_SERVER_NOW,
+      }),
+    ).toThrow();
+  });
+
+  it('accepts exact token pricing and rejects altered or expanded public projections', () => {
+    const model = {
+      ...capabilityModel(),
+      pricing: {
+        mode: 'per_token',
+        user_price_milli: null,
+        discounted_user_price_milli: null,
+        user_prices_milli: {
+          uncached_input: '1',
+          cache_write_input: '2000',
+          cache_read_input: '3001',
+          output: '0',
+        },
+        discounted_user_prices_milli: {
+          uncached_input: '1',
+          cache_write_input: '660',
+          cache_read_input: '991',
+          output: '0',
+        },
+      },
+      discount: {
+        enabled: true,
+        percent: 33,
+        start_at: null,
+        end_at: null,
+      },
+    } as const;
+    const payload = {
+      state: 'available',
+      donation_intake: 'open',
+      server_now: CAPABILITY_SERVER_NOW,
+      models: [model],
+    } as const;
+    expect(normalizeCharityCapability(payload).models[0].pricing).toEqual({
+      mode: 'per_token',
+      userPricesMilli: {
+        uncachedInput: '1',
+        cacheWriteInput: '2000',
+        cacheReadInput: '3001',
+        output: '0',
+      },
+      discountedUserPricesMilli: {
+        uncachedInput: '1',
+        cacheWriteInput: '660',
+        cacheReadInput: '991',
+        output: '0',
+      },
+    });
+    expect(() =>
+      normalizeCharityCapability({
+        ...payload,
+        models: [
+          {
+            ...model,
+            pricing: {
+              ...model.pricing,
+              discounted_user_prices_milli: {
+                ...model.pricing.discounted_user_prices_milli,
+                cache_read_input: '990',
+              },
+            },
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      normalizeCharityCapability({
+        ...payload,
+        models: [{ ...model, donor_reward_milli: '1' }],
       }),
     ).toThrow();
   });
@@ -536,9 +654,10 @@ describe('economy closed-wire normalizers', () => {
       normalizeCharityCapability({
         state: 'available',
         donation_intake: 'open',
+        server_now: CAPABILITY_SERVER_NOW,
         models: [
-          { id: '1', provider: 'a', model: 'one', full_name: '[公益]a/one' },
-          { id: '1', provider: 'a', model: 'two', full_name: '[公益]a/two' },
+          capabilityModel('a', 'one'),
+          { ...capabilityModel('a', 'two'), id: '1' },
         ],
       }),
     ).toThrow();
@@ -595,7 +714,8 @@ describe('economy closed-wire normalizers', () => {
       normalizeCharityCapability({
         state: 'available',
         donation_intake: 'open',
-        models: [{ id: '1', provider, model, full_name: `[公益]${provider}/${model}` }],
+        server_now: CAPABILITY_SERVER_NOW,
+        models: [capabilityModel(provider, model)],
       }).models[0].fullName,
     ).toBe(`[公益]${provider}/${model}`);
     expect(

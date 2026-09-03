@@ -55,16 +55,33 @@
 .economy-model-list,
 .economy-disclosure ul {
   margin: var(--nb-space-4) 0 0;
+}
+
+.economy-model-list {
+  padding: 0;
+}
+
+.economy-disclosure ul {
   padding-left: 1.25rem;
 }
 
 .economy-model-list li {
-  margin-block: var(--nb-space-2);
+  display: grid;
+  gap: var(--nb-space-3);
+  margin-block: var(--nb-space-3);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-md);
+  padding: var(--nb-space-4);
+  list-style: none;
 }
 
-.economy-model-list span {
+.economy-model-heading > span {
   display: block;
   overflow-wrap: anywhere;
+}
+
+.economy-model-heading {
+  min-width: 0;
 }
 
 .economy-long-text,

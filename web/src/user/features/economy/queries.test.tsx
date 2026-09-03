@@ -94,6 +94,7 @@ const CHARITY_CAPABILITY = {
   state: 'available' as const,
   models: [],
   donationIntake: 'open' as const,
+  serverNow: 1_788_100_000,
 };
 
 const DONATION: Donation = {
