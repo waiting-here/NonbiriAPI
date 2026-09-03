@@ -21,10 +21,11 @@ const (
 	generationTwoAnnouncementEpochKey = "announcement_epoch"
 	generationTwoAlertPrefsPrefix     = "alert_prefs_"
 
-	generationTwoMaxConfigKeyBytes = 128
-	generationTwoMaxAlertPrefBytes = 512
-	generationTwoMaxLegalBytes     = 65536
-	generationTwoMaxBanSeconds     = uint64(10 * 366 * 24 * 60 * 60)
+	generationTwoMaxConfigKeyBytes      = 128
+	generationTwoMaxAlertPrefBytes      = 512
+	generationTwoMaxLegalBytes          = 65536
+	generationTwoMaxDonationNoticeBytes = 8192
+	generationTwoMaxBanSeconds          = uint64(10 * 366 * 24 * 60 * 60)
 )
 
 // These exported defaults are the inherited alpha.3 site-config contract.
@@ -110,18 +111,20 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 	textSpec := func(raw string, maxBytes int, allowEmpty bool) generationTwoConfigSpec {
 		return generationTwoConfigSpec{kind: generationTwoConfigText, seed: generationTwoSeed(raw), maxBytes: maxBytes, allowEmpty: allowEmpty}
 	}
-	multilineSpec := func(raw string) generationTwoConfigSpec {
-		return generationTwoConfigSpec{kind: generationTwoConfigMultiline, seed: generationTwoSeed(raw), maxBytes: generationTwoMaxLegalBytes, allowEmpty: true}
+	multilineSpec := func(raw string, maxBytes int) generationTwoConfigSpec {
+		return generationTwoConfigSpec{kind: generationTwoConfigMultiline, seed: generationTwoSeed(raw), maxBytes: maxBytes, allowEmpty: true}
 	}
 
 	catalog := map[string]generationTwoConfigSpec{
 		"site_name":                        textSpec("", 256, true),
 		"site_logo_url":                    textSpec("", 2048, true),
-		"legal_privacy_override_zh":        multilineSpec(""),
-		"legal_privacy_override_en":        multilineSpec(""),
-		"legal_terms_override_zh":          multilineSpec(""),
-		"legal_terms_override_en":          multilineSpec(""),
+		"legal_privacy_override_zh":        multilineSpec("", generationTwoMaxLegalBytes),
+		"legal_privacy_override_en":        multilineSpec("", generationTwoMaxLegalBytes),
+		"legal_terms_override_zh":          multilineSpec("", generationTwoMaxLegalBytes),
+		"legal_terms_override_en":          multilineSpec("", generationTwoMaxLegalBytes),
 		"legal_authoritative_locale":       {kind: generationTwoConfigOptionalLocale, seed: generationTwoSeed("")},
+		"charity_donation_notice_zh":       multilineSpec("", generationTwoMaxDonationNoticeBytes),
+		"charity_donation_notice_en":       multilineSpec("", generationTwoMaxDonationNoticeBytes),
 		"default_endpoint_limit":           uintSpec(formatGenerationTwoUint(uint64(DefaultEndpointLimit)), 0, 10000),
 		"default_endpoint_key_limit":       uintSpec(formatGenerationTwoUint(uint64(DefaultEndpointKeyLimit)), 1, 10000),
 		"default_model_limit":              uintSpec(formatGenerationTwoUint(uint64(DefaultModelLimit)), 1, 10000),

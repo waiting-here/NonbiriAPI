@@ -247,7 +247,7 @@ describe('home independent capability states', () => {
     );
 
     expect(await screen.findByRole('button', { name: 'Check in' })).toBeDisabled();
-    expect(screen.getByText(/threshold only gates admission/i)).toBeVisible();
+    expect(screen.getByText(/limit only decides whether you can check in/i)).toBeVisible();
 
     rendered.rerender(
       <HomeDashboard user={{ ...lowerLevel, effective_level: 3 as const }} adapters={adapters} />,
@@ -754,7 +754,7 @@ describe('account deletion confirmation', () => {
     const dialog = await screen.findByRole('alertdialog');
     await rendered.user.click(within(dialog).getByRole('button', { name: 'Create export' }));
 
-    expect(await screen.findByText(/request fresh authorization to generate a new export/i)).toBeVisible();
+    expect(await screen.findByText(/verify your Discord identity again to create a new export/i)).toBeVisible();
     expect(exportV4).toHaveBeenCalledTimes(1);
     expect(exportV4).toHaveBeenCalledWith({
       accountId: '1',

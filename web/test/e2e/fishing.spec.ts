@@ -291,7 +291,7 @@ test('Fishing pending survives reload, settles from authority, auto-ACKs, and pe
   await page.goto(`${USER_ORIGIN}/games/fishing`);
 
   await expect(
-    page.getByRole('heading', { name: 'A quiet cast, an authoritative catch' }),
+    page.getByRole('heading', { name: 'A quiet cast, a surprise catch' }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Start this batch' }).click();
   await expect(page.locator('[data-phase="pending"]')).toBeVisible();
@@ -341,7 +341,7 @@ test('Fishing renders every frozen outcome with non-zero local artwork on the re
     };
     await page.goto(`${USER_ORIGIN}/games/fishing`);
     await expect(
-      page.getByRole('heading', { name: 'A quiet cast, an authoritative catch' }),
+      page.getByRole('heading', { name: 'A quiet cast, a surprise catch' }),
     ).toBeVisible();
     const artwork = page.locator('.fishing-result .fishing-art');
     await expect(artwork).toHaveAttribute('data-art-key', result.outcomes[0].species_key);
@@ -397,9 +397,9 @@ test('Fishing recovery is identical across a second page and leaderboard identit
       'data-art-key',
       'koi',
     );
-    await expect(secondPage.getByRole('button', { name: 'Retry result ACK' })).toBeVisible();
+    await expect(secondPage.getByRole('button', { name: 'Retry marking as viewed' })).toBeVisible();
     fixture.failACK = false;
-    await secondPage.getByRole('button', { name: 'Retry result ACK' }).click();
+    await secondPage.getByRole('button', { name: 'Retry marking as viewed' }).click();
     await expect(
       secondPage.getByRole('heading', { name: 'Total catch', exact: true }),
     ).toHaveCount(0);
@@ -424,7 +424,7 @@ test('Fishing remains keyboard usable in Chinese at 390px, 200% zoom, both theme
   const fixture = fixtureWith();
   await installFishingRoutes(page, fixture);
   await page.goto(`${USER_ORIGIN}/games/fishing`);
-  await expect(page.getByRole('heading', { name: '悠闲抛竿，权威收获' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '悠闲抛竿，看看收获' })).toBeVisible();
   await expect(page.getByRole('button', { name: /高级鱼饵/ })).toBeVisible();
   expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(
     true,

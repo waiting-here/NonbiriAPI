@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
 import { useGameCopy } from '../copy';
+import { GameRulesButton, GameRulesDialog, type GameRulesSection } from '../common/GameRulesDialog';
 import {
   createIdempotencyKey,
   createOpaqueID,
@@ -64,6 +65,73 @@ function Money({ value }: { readonly value: string }) {
     <span className="game-money">
       {formatCredits(value)} <span className="game-money__unit">{text('common.credits')}</span>
     </span>
+  );
+}
+
+function RPSRules({ open, onClose }: { readonly open: boolean; readonly onClose: () => void }) {
+  const { text } = useGameCopy();
+  const sections: readonly GameRulesSection[] = [
+    {
+      title: text('rps.rules.goalTitle'),
+      paragraphs: [text('rps.rules.goalBody')],
+    },
+    {
+      title: text('rps.rules.roundTitle'),
+      paragraphs: [text('rps.rules.roundBody')],
+    },
+    {
+      title: text('rps.rules.scoreTitle'),
+      items: [
+        text('rps.rules.score.same'),
+        text('rps.rules.score.oneWinner'),
+        text('rps.rules.score.twoWinners'),
+      ],
+    },
+    {
+      title: text('rps.rules.modesTitle'),
+      items: [
+        text('rps.rules.mode.quick'),
+        text('rps.rules.mode.standard'),
+        text('rps.rules.mode.deathmatch'),
+      ],
+    },
+    {
+      title: text('rps.rules.feesTitle'),
+      paragraphs: [text('rps.rules.feesBody')],
+    },
+    {
+      title: text('rps.rules.dealerTitle'),
+      paragraphs: [text('rps.rules.dealerBody'), text('rps.rules.surrenderBody')],
+    },
+    {
+      title: text('rps.rules.poolTitle'),
+      paragraphs: [text('rps.rules.poolBody')],
+    },
+    {
+      title: text('rps.rules.ultimateTitle'),
+      paragraphs: [text('rps.rules.ultimateBody')],
+    },
+    {
+      title: text('rps.rules.queueTitle'),
+      paragraphs: [text('rps.rules.queueBody')],
+    },
+    {
+      title: text('rps.rules.statsTitle'),
+      paragraphs: [text('rps.rules.statsBody')],
+    },
+    {
+      title: text('rps.rules.resultTitle'),
+      paragraphs: [text('rps.rules.resultBody')],
+    },
+  ];
+  return (
+    <GameRulesDialog
+      open={open}
+      title={text('rps.rules.title')}
+      closeLabel={text('common.closeRules')}
+      sections={sections}
+      onClose={onClose}
+    />
   );
 }
 
@@ -616,6 +684,7 @@ export function RPSGame() {
   const authoritativeMode =
     home?.kind === 'session' ? home.session.mode : home?.kind === 'queue' ? home.queue.mode : null;
   const [selectedMode, setSelectedMode] = useState<RPSMode>('quick');
+  const [rulesOpen, setRulesOpen] = useState(false);
   const displayedMode = authoritativeMode ?? selectedMode;
   const [tutorialPage, setTutorialPage] = useState(0);
   const [tutorialVisibility, setTutorialVisibility] = useState<'auto' | 'open' | 'closed'>('auto');
@@ -859,9 +928,47 @@ export function RPSGame() {
   );
   const canQueueDeathmatch =
     deathmatchGateOpen && deathmatchAffordable && homeQuery.isSuccess && !homeQuery.error;
-  if (snapshot.isPending) return <LoadingState label={text('common.loading')} />;
+  const closeRules = useCallback(() => setRulesOpen(false), []);
+  const rulesButton = (
+    <GameRulesButton label={text('common.rulesButton')} onClick={() => setRulesOpen(true)} />
+  );
+  const rulesDialog = <RPSRules open={rulesOpen} onClose={closeRules} />;
+  if (snapshot.isPending)
+    return (
+      <main className="game-page rps-page">
+        <PageHeader
+          back={
+            <Link className="game-back-link" to="/games">
+              {text('common.back')}
+            </Link>
+          }
+          eyebrow={text('rps.eyebrow')}
+          title={text('rps.title')}
+          description={text('rps.description')}
+          actions={rulesButton}
+        />
+        <LoadingState label={text('common.loading')} />
+        {rulesDialog}
+      </main>
+    );
   if (snapshot.error && !maintenance)
-    return <ErrorState error={snapshot.error} onRetry={() => void snapshot.refetch()} />;
+    return (
+      <main className="game-page rps-page">
+        <PageHeader
+          back={
+            <Link className="game-back-link" to="/games">
+              {text('common.back')}
+            </Link>
+          }
+          eyebrow={text('rps.eyebrow')}
+          title={text('rps.title')}
+          description={text('rps.description')}
+          actions={rulesButton}
+        />
+        <ErrorState error={snapshot.error} onRetry={() => void snapshot.refetch()} />
+        {rulesDialog}
+      </main>
+    );
   if ((!snapshot.data || maintenance) && !session && !showPendingResult)
     return (
       <main className="game-page rps-page">
@@ -874,10 +981,12 @@ export function RPSGame() {
           eyebrow={text('rps.eyebrow')}
           title={text('rps.title')}
           description={text('rps.description')}
+          actions={rulesButton}
         />
         <p className="game-inline-notice game-inline-notice--warning">
           {text('common.maintenance')}
         </p>
+        {rulesDialog}
       </main>
     );
   return (
@@ -892,16 +1001,19 @@ export function RPSGame() {
         title={text('rps.title')}
         description={text('rps.description')}
         actions={
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => {
-              setTutorialPage(0);
-              setTutorialVisibility('open');
-            }}
-          >
-            {text('rps.tutorial.replay')}
-          </button>
+          <>
+            {rulesButton}
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setTutorialPage(0);
+                setTutorialVisibility('open');
+              }}
+            >
+              {text('rps.tutorial.replay')}
+            </button>
+          </>
         }
       />
       {maintenance ? (
@@ -1143,6 +1255,7 @@ export function RPSGame() {
         <ErrorState error={operationError} onRetry={reconcile} />
       ) : null}
       <p className="game-footnote">{text('common.noHistory')}</p>
+      {rulesDialog}
     </main>
   );
 }

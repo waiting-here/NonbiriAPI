@@ -3,8 +3,8 @@ import { ApiError, apiFetch } from './http';
 import { asRecord, type UnknownRecord } from './normalize';
 
 // Display-only public site configuration. The backend /api/config endpoint
-// projects a strict allowlist (site_name, site_logo_url, legal overrides, and
-// station state) and
+// projects a strict allowlist (site identity, donation guidance, legal
+// overrides, and station state) and
 // never carries secrets. The browser treats the response as a closed DTO:
 // missing/unknown fields and wrong types fail closed instead of silently
 // turning a malformed response into permissive maintenance=false state. The
@@ -16,6 +16,8 @@ import { asRecord, type UnknownRecord } from './normalize';
 export interface PublicConfig {
   siteName: string;
   siteLogoURL: string;
+  charityDonationNoticeZh: string;
+  charityDonationNoticeEn: string;
   legalPrivacyOverrideZh: string;
   legalPrivacyOverrideEn: string;
   legalTermsOverrideZh: string;
@@ -27,11 +29,14 @@ export interface PublicConfig {
 }
 
 const MAX_LEGAL_OVERRIDE = 65536;
+const MAX_DONATION_NOTICE = 8192;
 const MAX_SITE_NAME = 256;
 const MAX_LOGO_URL = 2048;
 const PUBLIC_CONFIG_KEYS = new Set([
   'site_name',
   'site_logo_url',
+  'charity_donation_notice_zh',
+  'charity_donation_notice_en',
   'legal_privacy_override_zh',
   'legal_privacy_override_en',
   'legal_terms_override_zh',
@@ -62,7 +67,7 @@ function requiredText(record: UnknownRecord, key: string, maxBytes: number, mult
   for (const character of value) {
     const codePoint = character.codePointAt(0) ?? 0;
     const allowedWhitespace = multiline && (codePoint === 9 || codePoint === 10 || codePoint === 13);
-    if (codePoint < 32 || codePoint === 127) {
+    if (codePoint < 32 || (codePoint >= 127 && codePoint <= 159)) {
       if (!allowedWhitespace) invalidPublicConfig();
     }
   }
@@ -111,6 +116,18 @@ export function normalizePublicConfig(payload: unknown): PublicConfig {
   return {
     siteName: requiredText(record, 'site_name', MAX_SITE_NAME),
     siteLogoURL,
+    charityDonationNoticeZh: requiredText(
+      record,
+      'charity_donation_notice_zh',
+      MAX_DONATION_NOTICE,
+      true,
+    ),
+    charityDonationNoticeEn: requiredText(
+      record,
+      'charity_donation_notice_en',
+      MAX_DONATION_NOTICE,
+      true,
+    ),
     legalPrivacyOverrideZh: requiredText(record, 'legal_privacy_override_zh', MAX_LEGAL_OVERRIDE, true),
     legalPrivacyOverrideEn: requiredText(record, 'legal_privacy_override_en', MAX_LEGAL_OVERRIDE, true),
     legalTermsOverrideZh: requiredText(record, 'legal_terms_override_zh', MAX_LEGAL_OVERRIDE, true),

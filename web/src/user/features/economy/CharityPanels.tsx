@@ -194,11 +194,14 @@ function eligibilityLabel(choice: EndpointKeyChoice, t: (key: string) => string)
 export function DonationComposer({
   choices,
   draftNamespace,
+  notice,
 }: {
   choices: readonly EndpointKeyChoice[];
   draftNamespace: string;
+  notice?: string;
 }) {
   const { t } = useTranslation();
+  const donationNotice = notice?.trim() ? notice : t('user.charity.donationNoticeDefault');
   const mutation = useCreateDonation();
   const [description, setDescription] = useState(() => parseDraft(draftNamespace));
   const [selection, setSelection] = useState<{ signature: string; ids: Set<string> }>(() => ({
@@ -304,6 +307,10 @@ export function DonationComposer({
           <h2>{t('user.charity.submitDonation')}</h2>
         </div>
       </div>
+      <section className="economy-donation-notice" aria-labelledby="donation-notice-title">
+        <h3 id="donation-notice-title">{t('user.charity.donationNoticeTitle')}</h3>
+        <p>{donationNotice}</p>
+      </section>
       <form onSubmit={submit} noValidate>
         <label className="full-width">
           <span>{t('user.charity.donationDescription')}</span>

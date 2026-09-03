@@ -122,7 +122,7 @@ func TestSiteConfigReadDTOsAreClosedAndCatalogComplete(t *testing.T) {
 		t.Fatalf("decode administrator bootstrap: %v", err)
 	}
 	wantBootstrapKeys := []string{
-		"announcement_epoch", "legal_authoritative_locale", "legal_privacy_override_en", "legal_privacy_override_zh",
+		"announcement_epoch", "charity_donation_notice_en", "charity_donation_notice_zh", "legal_authoritative_locale", "legal_privacy_override_en", "legal_privacy_override_zh",
 		"legal_terms_override_en", "legal_terms_override_zh", "maintenance_mode", "registration_open", "site_logo_url", "site_name",
 	}
 	gotBootstrapKeys := make([]string, 0, len(bootstrapWire))

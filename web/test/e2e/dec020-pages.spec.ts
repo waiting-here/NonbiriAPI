@@ -373,13 +373,13 @@ test('user endpoint source wizard submits an immutable mainstream channel select
     'true',
   );
   await wizard.getByRole('button', { name: 'Next' }).click();
-  await expect(wizard.getByLabel('Canonical base URL')).toHaveValue(
+  await expect(wizard.getByLabel('Service address')).toHaveValue(
     'https://channel.example.test/v1',
   );
-  await expect(wizard.getByLabel('Canonical base URL')).toHaveAttribute('readonly');
+  await expect(wizard.getByLabel('Service address')).toHaveAttribute('readonly');
   await wizard.getByLabel('Note').fill('Selected channel endpoint');
   await wizard.getByRole('button', { name: 'Create endpoint' }).click();
-  await expect(page.getByLabel('Upstream secret')).toBeVisible();
+  await expect(page.getByLabel('Service key')).toBeVisible();
   expect(postBody).toEqual({
     source: 'mainstream',
     channel_id: MAINSTREAM_CHANNEL_ID,
@@ -539,7 +539,7 @@ test('user charity overview fails closed on a cursor page and privacy states exp
   await page.goto(`${USER_ORIGIN}/privacy`);
   await expect(page.getByRole('heading', { name: 'Privacy policy' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Retention and deletion' })).toBeVisible();
-  await expect(page.locator('body')).toContainText('Export schema version 4');
+  await expect(page.locator('body')).toContainText('Export version 4');
   await expect(page.locator('body')).toContainText('up to 90 days');
   await assertClean(page, guard);
 });

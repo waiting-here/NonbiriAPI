@@ -102,6 +102,8 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 
 	KeyCharityEnabled:           {"charity", catalogText("公益资源总开关", "Charity master switch"), catalogText("控制公益资源发现与调用是否开放。", "Controls whether charity discovery and calls are available."), unitNone, nil},
 	KeyDonationAcceptEnabled:    {"charity", catalogText("接受公益捐赠", "Donation intake"), catalogText("只控制新捐赠提交，不影响既有资源管理。", "Controls new donation submissions only; existing resources remain manageable."), unitNone, nil},
+	KeyCharityDonationNoticeZh:  {"charity", catalogText("捐赠说明（中文）", "Donation notice (Chinese)"), catalogText("显示在用户提交捐赠的位置；留空使用内置中文说明。", "Shown where users submit donations; empty uses the built-in Chinese notice."), unitNone, nil},
+	KeyCharityDonationNoticeEn:  {"charity", catalogText("捐赠说明（英文）", "Donation notice (English)"), catalogText("显示在用户提交捐赠的位置；留空使用内置英文说明。", "Shown where users submit donations; empty uses the built-in English notice."), unitNone, nil},
 	KeyCharityTokenReserveMilli: {"charity", catalogText("公益 Token 预留单价", "Charity token reserve price"), catalogText("按 Token 公益模型用于保守预留的可选毫积分单价。", "Optional milli-credit price used for conservative reservation by per-token charity models."), unitMilli, []string{"charity_model_pricing"}},
 
 	KeyRPMBanThreshold:                  {"abuse", catalogText("RPM 自动封禁阈值", "RPM auto-ban threshold"), catalogText("违规窗口内达到该次拒绝数后触发自动封禁。", "Number of denials in the violation window that triggers an automatic ban."), unitCount, nil},
@@ -361,6 +363,8 @@ func catalogSemantics(key string, spec keySpec) (zero *localizedCatalogText, nul
 		empty = catalogTextPtr("暂停 Discord 身份组门。", "Pauses the Discord role gate.")
 	case KeyLegalPrivacyOverrideZh, KeyLegalPrivacyOverrideEn, KeyLegalTermsOverrideZh, KeyLegalTermsOverrideEn:
 		empty = catalogTextPtr("恢复使用对应语言的内置法律模板。", "Restores the corresponding built-in legal template.")
+	case KeyCharityDonationNoticeZh, KeyCharityDonationNoticeEn:
+		empty = catalogTextPtr("恢复使用对应语言的内置捐赠说明。", "Restores the corresponding built-in donation notice.")
 	case KeyLegalAuthoritativeLocale:
 		empty = catalogTextPtr("不声明中英文冲突时的权威语言；PATCH null 仍被拒绝。", "Declares no authoritative language for bilingual conflicts; PATCH null remains rejected.")
 	case KeyLevelDisplayName1, KeyLevelDisplayName2, KeyLevelDisplayName3, KeyLevelDisplayName4, KeyLevelDisplayName5:

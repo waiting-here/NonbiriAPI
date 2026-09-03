@@ -202,7 +202,7 @@ export function useDebugV2() {
 }
 
 export function debugMutationMessage(error: unknown): string {
-  if (error instanceof ApiError && error.status === 409) return 'The session changed. Refresh authoritative state and review it before confirming again.';
-  if (error instanceof ApiError && error.status === 0) return 'The result is unknown. The same request identity is retained; refresh authority before an explicit retry.';
+  if (error instanceof ApiError && error.status === 409) return 'The session changed. Refresh the latest status and review it before confirming again.';
+  if (error instanceof ApiError && error.status === 0) return 'The result is unknown. The same request identity is retained; refresh the latest status before an explicit retry.';
   return error instanceof Error ? error.message : 'The Debug operation failed.';
 }

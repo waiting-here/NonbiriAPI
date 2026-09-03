@@ -526,12 +526,12 @@ describe('experimental policy and charity controls', () => {
     );
     await screen.findByRole('button', { name: 'Stop requiring store=false' });
 
-    await rendered.user.click(screen.getByRole('button', { name: 'Add EndpointKey' }));
-    await rendered.user.type(screen.getByLabelText('Upstream secret'), marker);
+    await rendered.user.click(screen.getByRole('button', { name: 'Add key' }));
+    await rendered.user.type(screen.getByLabelText('Service key'), marker);
     await rendered.user.type(screen.getByLabelText('Key note'), 'created key');
     await rendered.user.click(screen.getByLabelText(/I own this credential/));
-    await rendered.user.click(screen.getByLabelText('Force store=false'));
-    await rendered.user.click(screen.getByRole('button', { name: 'Add key' }));
+    await rendered.user.click(screen.getByLabelText('Do not save requests (store=false)'));
+    await rendered.user.click(screen.getAllByRole('button', { name: 'Add key' })[1]);
     await waitFor(() =>
       expect(lastBody(fetchMock, 'POST', '/api/endpoints/1/keys')).toEqual({
         secret: marker,
@@ -562,8 +562,8 @@ describe('experimental policy and charity controls', () => {
     });
     await screen.findByRole('heading', { name: 'Endpoint details' });
     expect(screen.queryByRole('button', { name: 'Require store=false' })).toBeNull();
-    await rendered.user.click(screen.getByRole('button', { name: 'Add EndpointKey' }));
-    expect(screen.queryByLabelText('Force store=false')).toBeNull();
+    await rendered.user.click(screen.getAllByRole('button', { name: 'Add key' })[1]);
+    expect(screen.queryByLabelText('Do not save requests (store=false)')).toBeNull();
     expect(fetchMock).toHaveBeenCalled();
   });
 
@@ -604,20 +604,20 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.click(within(entryRow).getByRole('button', { name: 'Edit' }));
 
     expect(await within(entryRow).findByRole('alert')).toHaveTextContent(
-      /Binding impact could not be confirmed/,
+      /affected model connections could not be checked/i,
     );
     const deleteButton = within(entryRow).getByRole('button', {
-      name: 'Delete entry atomically',
+      name: 'Delete entry',
     });
     const updateButton = within(entryRow).getByRole('button', {
-      name: 'Update entry atomically',
+      name: 'Update entry',
     });
     expect(deleteButton).toBeDisabled();
     expect(updateButton).toBeEnabled();
 
-    await rendered.user.clear(within(entryRow).getByLabelText('Exact upstream model ID'));
+    await rendered.user.clear(within(entryRow).getByLabelText('Exact service model ID'));
     await rendered.user.type(
-      within(entryRow).getByLabelText('Exact upstream model ID'),
+      within(entryRow).getByLabelText('Exact service model ID'),
       'Vendor/Changed',
     );
     expect(updateButton).toBeDisabled();
@@ -657,9 +657,9 @@ describe('experimental policy and charity controls', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Logical models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
-    await rendered.user.click(await screen.findByRole('button', { name: 'Edit logical model' }));
+    await screen.findByRole('heading', { name: 'Platform models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
+    await rendered.user.click(await screen.findByRole('button', { name: 'Edit platform model' }));
     await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await expect(screen.findByText(/This resource changed/)).resolves.toBeVisible();
@@ -710,9 +710,9 @@ describe('experimental policy and charity controls', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Logical models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
-    await rendered.user.click(await screen.findByRole('button', { name: 'Edit logical model' }));
+    await screen.findByRole('heading', { name: 'Platform models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
+    await rendered.user.click(await screen.findByRole('button', { name: 'Edit platform model' }));
     await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(modelReads).toBeGreaterThan(1));
@@ -790,9 +790,9 @@ describe('experimental policy and charity controls', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Logical models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
-    await rendered.user.click(await screen.findByRole('button', { name: 'Edit logical model' }));
+    await screen.findByRole('heading', { name: 'Platform models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
+    await rendered.user.click(await screen.findByRole('button', { name: 'Edit platform model' }));
     await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await expect(screen.findByText(/The response was lost/)).resolves.toBeVisible();
@@ -847,11 +847,11 @@ describe('experimental policy and charity controls', () => {
       route: '/endpoints/1',
     });
     await screen.findByText('sk-a…tail');
-    await rendered.user.click(screen.getByRole('button', { name: 'Add EndpointKey' }));
-    await rendered.user.type(screen.getByLabelText('Upstream secret'), marker);
+    await rendered.user.click(screen.getByRole('button', { name: 'Add key' }));
+    await rendered.user.type(screen.getByLabelText('Service key'), marker);
     await rendered.user.type(screen.getByLabelText('Key note'), 'created key');
     await rendered.user.click(screen.getByLabelText(/I own this credential/));
-    await rendered.user.click(screen.getByRole('button', { name: 'Add key' }));
+    await rendered.user.click(screen.getAllByRole('button', { name: 'Add key' })[1]);
     await screen.findByText('sk-new…tail2');
     await waitFor(() => expect(keyReads).toBeGreaterThan(1));
     expect(screen.getByRole('button', { name: 'Retry the same operation' })).toBeVisible();
@@ -893,10 +893,10 @@ describe('experimental policy and charity controls', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Logical models' });
-    await rendered.user.click(screen.getByRole('button', { name: 'Create logical model' }));
-    await rendered.user.type(screen.getByLabelText('Provider'), 'created-provider');
-    await rendered.user.type(screen.getByLabelText('Model'), 'created-model');
+    await screen.findByRole('heading', { name: 'Platform models' });
+    await rendered.user.click(screen.getByRole('button', { name: 'Create platform model' }));
+    await rendered.user.type(screen.getByLabelText('Service provider'), 'created-provider');
+    await rendered.user.type(screen.getByLabelText('Model name'), 'created-model');
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await screen.findByText('created-provider/created-model');
     await waitFor(() => expect(modelReads).toBeGreaterThan(1));
@@ -956,14 +956,14 @@ describe('experimental policy and charity controls', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Logical models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
+    await screen.findByRole('heading', { name: 'Platform models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
     await rendered.user.click(
       await screen.findByRole('button', { name: /Anthropic-compatible.*upstream\.test/ }),
     );
     await rendered.user.click(await screen.findByRole('button', { name: /sk-a…tail/ }));
     await rendered.user.click(await screen.findByRole('button', { name: /claude-3/ }));
-    await rendered.user.click(screen.getByRole('button', { name: 'Add 1 selected binding(s)' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Add 1 selected connection(s)' }));
     await waitFor(() =>
       expect(lastBody(fetchMock, 'POST', '/api/models/3/bindings/batch')).toEqual({
         expected_binding_revision: '0',
@@ -971,7 +971,7 @@ describe('experimental policy and charity controls', () => {
       }),
     );
     await waitFor(() => expect(bindingReads).toBeGreaterThan(1));
-    expect(screen.getByRole('button', { name: 'Add 1 selected binding(s)' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Add 1 selected connection(s)' })).toBeEnabled();
     expect(
       fetchMock.mock.calls.filter(
         (call) =>
@@ -1015,8 +1015,8 @@ describe('experimental policy and charity controls', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Logical models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
+    await screen.findByRole('heading', { name: 'Platform models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
     await rendered.user.click((await screen.findAllByRole('button', { name: 'Move down' }))[0]);
     await rendered.user.click(screen.getByRole('button', { name: 'Save complete order' }));
     await waitFor(() =>
@@ -1025,7 +1025,7 @@ describe('experimental policy and charity controls', () => {
         order: ['11', '10'],
       }),
     );
-    await rendered.user.click(screen.getByRole('button', { name: 'Edit logical model' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Edit platform model' }));
     await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() =>
@@ -1060,13 +1060,13 @@ describe('experimental policy and charity controls', () => {
       },
     ]);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Logical models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
-    const remove = await screen.findByRole('button', { name: 'Remove binding' });
+    await screen.findByRole('heading', { name: 'Platform models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
+    const remove = await screen.findByRole('button', { name: 'Remove connection' });
     expect(remove).toBeEnabled();
     await rendered.user.click(remove);
     const dialog = screen.getByRole('alertdialog');
-    await rendered.user.click(within(dialog).getByRole('button', { name: 'Remove binding' }));
+    await rendered.user.click(within(dialog).getByRole('button', { name: 'Remove connection' }));
     await waitFor(() =>
       expect(lastBody(fetchMock, 'DELETE', '/api/models/3/bindings/10')).toEqual({
         expected_binding_revision: '2',
@@ -1238,8 +1238,8 @@ describe('experimental policy and charity controls', () => {
       { method: 'GET', path: '/api/endpoints?limit=50', body: corePage([]) },
     ]);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Logical models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
+    await screen.findByRole('heading', { name: 'Platform models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
     await expect(screen.findByRole('alert')).resolves.toBeVisible();
   });
 
@@ -1412,7 +1412,12 @@ describe('experimental policy and charity controls', () => {
           ? 'Experimental: flatten tool calls'
           : '[Experimental] Flatten tool calls';
       await rendered.user.click(
-        screen.getByRole('tab', { name: 'Charity models and bindings' }),
+        screen.getByRole('tab', {
+          name:
+            frame === 'admin'
+              ? 'Charity models and bindings'
+              : 'Charity models and service connections',
+        }),
       );
       await screen.findByText('[公益]provider/charity-model');
       await rendered.user.click(screen.getByRole('button', { name: 'Manage' }));
@@ -1492,7 +1497,7 @@ describe('experimental policy and charity controls', () => {
       role: 'level5',
     });
     await rendered.user.click(
-      screen.getByRole('tab', { name: 'Charity models and bindings' }),
+      screen.getByRole('tab', { name: 'Charity models and service connections' }),
     );
     await screen.findByText('[公益]provider/charity-model');
     await rendered.user.click(screen.getByRole('button', { name: 'Manage' }));
@@ -1574,7 +1579,7 @@ describe('experimental policy and charity controls', () => {
       await screen.findByText('review fixture');
       await rendered.user.click(screen.getByRole('button', { name: 'Review' }));
       await screen.findByRole('heading', { name: /sk-a…tail.*upstream\.test\/v1/i });
-      expect(screen.getByText(/physical enabled/i)).toBeVisible();
+      expect(screen.getByText(/Original key status: enabled/i)).toBeVisible();
       await rendered.user.type(screen.getByLabelText('Reason'), 'approved');
       await rendered.user.click(screen.getByRole('checkbox', {
         name: 'I confirm this review result and its per-key consequences.',
@@ -1635,7 +1640,7 @@ describe('experimental policy and charity controls', () => {
     revoke = true;
     await rendered.queryClient.invalidateQueries({ queryKey: roleLogKeys.root('steward') });
     await expect(
-      screen.findByText(/requires the server-resolved level 5 capability/i),
+      screen.findByText(/does not have confirmed level-5 steward access/i),
     ).resolves.toBeVisible();
     expect(sessionCalls).toBeGreaterThanOrEqual(2);
     expect(
@@ -1697,7 +1702,7 @@ describe('experimental policy and charity controls', () => {
     releaseRefresh();
     await waitFor(() =>
       expect(
-        screen.queryByText(/requires the server-resolved level 5 capability/i),
+        screen.queryByText(/does not have confirmed level-5 steward access/i),
       ).toBeNull(),
     );
     await expect(screen.findByText('No logs')).resolves.toBeVisible();
@@ -1757,7 +1762,7 @@ describe('experimental policy and charity controls', () => {
     await screen.findByText('No logs');
     await rendered.user.click(screen.getByRole('tab', { name: 'Charity management' }));
     await rendered.user.click(
-      screen.getByRole('tab', { name: 'Charity models and bindings' }),
+      screen.getByRole('tab', { name: 'Charity models and service connections' }),
     );
     await screen.findByText('[公益]provider/charity-model');
     expect(
@@ -1766,7 +1771,7 @@ describe('experimental policy and charity controls', () => {
 
     demote = true;
     await rendered.queryClient.invalidateQueries({ queryKey: operationsKeys.session });
-    await screen.findByText(/requires the server-resolved level 5 capability/i);
+    await screen.findByText(/does not have confirmed level-5 steward access/i);
     expect(
       rendered.queryClient.getQueryData(charityKeys.models('steward', '', '', null)),
     ).toBeUndefined();
@@ -2080,6 +2085,8 @@ describe('experimental policy and charity controls', () => {
         body: {
           site_name: 'NonbiriAPI',
           site_logo_url: '',
+          charity_donation_notice_zh: '',
+          charity_donation_notice_en: '',
           legal_privacy_override_zh: '',
           legal_privacy_override_en: '',
           legal_terms_override_zh: '',
@@ -2186,8 +2193,8 @@ describe('experimental policy and charity controls', () => {
       locale: 'en',
     });
     rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
-    await screen.findByText('No CallerKey exists');
-    await rendered.user.click(screen.getByRole('button', { name: 'Generate CallerKey' }));
+    await screen.findByText('No account API key');
+    await rendered.user.click(screen.getByRole('button', { name: 'Create API key' }));
     await waitFor(() =>
       expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true),
     );
@@ -2277,6 +2284,8 @@ describe('experimental policy and charity controls', () => {
         return jsonResponse({
           site_name: 'NonbiriAPI',
           site_logo_url: '',
+          charity_donation_notice_zh: '',
+          charity_donation_notice_en: '',
           legal_privacy_override_zh: '',
           legal_privacy_override_en: '',
           legal_terms_override_zh: '',
@@ -2617,7 +2626,7 @@ describe('experimental policy and charity controls', () => {
 
     expect(await screen.findByText(/The response was lost/)).toBeVisible();
     await rendered.user.click(screen.getByRole('button', { name: 'Cancel' }));
-    await rendered.user.click(screen.getByRole('button', { name: 'Check authoritative state' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Check latest status' }));
 
     expect(await screen.findByText('No endpoints yet')).toBeVisible();
     expect(deleteCalls).toBe(1);
@@ -2650,12 +2659,12 @@ describe('experimental policy and charity controls', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
-    await screen.findByRole('heading', { name: 'Logical models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
-    await rendered.user.click(await screen.findByRole('button', { name: 'Delete logical model' }));
+    await screen.findByRole('heading', { name: 'Platform models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
+    await rendered.user.click(await screen.findByRole('button', { name: 'Delete platform model' }));
     const dialog = screen.getByRole('alertdialog');
-    await rendered.user.click(within(dialog).getByRole('button', { name: 'Delete logical model' }));
-    await screen.findByText('No logical models');
+    await rendered.user.click(within(dialog).getByRole('button', { name: 'Delete platform model' }));
+    await screen.findByText('No platform models');
     expect(lastBody(fetchMock, 'DELETE', '/api/models/3')).toEqual({ expected_revision: '1' });
   });
 
@@ -2692,16 +2701,16 @@ describe('experimental policy and charity controls', () => {
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
     rendered.queryClient.setQueryDefaults(coreKeys.modelsRoot('1'), { staleTime: Infinity });
-    await screen.findByRole('heading', { name: 'Logical models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
-    await rendered.user.click(await screen.findByRole('button', { name: 'Delete logical model' }));
+    await screen.findByRole('heading', { name: 'Platform models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
+    await rendered.user.click(await screen.findByRole('button', { name: 'Delete platform model' }));
     await rendered.user.click(
       within(screen.getByRole('alertdialog')).getByRole('button', {
-        name: 'Delete logical model',
+        name: 'Delete platform model',
       }),
     );
 
-    expect(await screen.findByText('No logical models')).toBeVisible();
+    expect(await screen.findByText('No platform models')).toBeVisible();
     expect(deleteCalls).toBe(1);
     expect(detailReads).toBe(2);
   });
@@ -2744,20 +2753,20 @@ describe('experimental policy and charity controls', () => {
     vi.stubGlobal('fetch', fetchMock);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
     rendered.queryClient.setQueryDefaults(coreKeys.modelsRoot('1'), { staleTime: Infinity });
-    await screen.findByRole('heading', { name: 'Logical models' });
-    await rendered.user.click(await screen.findByRole('button', { name: 'Manage bindings' }));
-    await rendered.user.click(await screen.findByRole('button', { name: 'Delete logical model' }));
+    await screen.findByRole('heading', { name: 'Platform models' });
+    await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
+    await rendered.user.click(await screen.findByRole('button', { name: 'Delete platform model' }));
     await rendered.user.click(
       within(screen.getByRole('alertdialog')).getByRole('button', {
-        name: 'Delete logical model',
+        name: 'Delete platform model',
       }),
     );
 
     expect(await screen.findByText(/The response was lost/)).toBeVisible();
     await rendered.user.click(screen.getByRole('button', { name: 'Cancel' }));
-    await rendered.user.click(screen.getByRole('button', { name: 'Check authoritative state' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Check latest status' }));
 
-    expect(await screen.findByText('No logical models')).toBeVisible();
+    expect(await screen.findByText('No platform models')).toBeVisible();
     expect(deleteCalls).toBe(1);
     expect(detailReads).toBe(3);
   });

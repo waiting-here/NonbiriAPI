@@ -192,7 +192,7 @@ describe('Generation 2 charity management policy', () => {
     fireEvent.change(screen.getByLabelText('Token reserve'), {
       target: { value: '2147483648' },
     });
-    fireEvent.change(screen.getByLabelText('Reviewer-safe note'), {
+    fireEvent.change(screen.getByLabelText('Review note'), {
       target: { value: '🫶'.repeat(257) },
     });
     await view.user.type(screen.getByLabelText('Reason'), 'exact boundary review');
@@ -216,7 +216,7 @@ describe('Generation 2 charity management policy', () => {
     fireEvent.change(screen.getByLabelText('Token reserve'), {
       target: { value: '2147483647' },
     });
-    fireEvent.change(screen.getByLabelText('Reviewer-safe note'), {
+    fireEvent.change(screen.getByLabelText('Review note'), {
       target: { value: '🫶'.repeat(256) },
     });
     const approveButton = screen.getByRole('button', { name: 'Approve donation' });

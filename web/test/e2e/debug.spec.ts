@@ -245,8 +245,8 @@ test('Debug route starts dry, replaces, confirms live, and stops without retaini
     has: page.getByRole('heading', { name: 'Connection and mode' }),
   });
   await expect(connection.getByText('Connected', { exact: true })).toBeVisible();
-  await expect(connection.getByText('Dry', { exact: true })).toBeVisible();
-  await revealTraceMarker(page, /Bounded raw request body/);
+  await expect(connection.getByText('Preview (Dry, not sent)', { exact: true })).toBeVisible();
+  await revealTraceMarker(page, /Raw request body/);
   await expect(page.getByText(SESSION_ONE)).toHaveCount(0);
   expect(fixture.modeWrites).toEqual([]);
 
@@ -263,7 +263,7 @@ test('Debug route starts dry, replaces, confirms live, and stops without retaini
   await expect(page.getByText(SESSION_ONE)).toHaveCount(0);
   await expect.poll(() => fixture.eventConnections).toBe(2);
   await expect(connection.getByText('Connected', { exact: true })).toBeVisible();
-  await expect(connection.getByText('Dry', { exact: true })).toBeVisible();
+  await expect(connection.getByText('Preview (Dry, not sent)', { exact: true })).toBeVisible();
 
   const live = page.getByRole('button', { name: 'Enable live mode' });
   await live.focus();
@@ -273,7 +273,7 @@ test('Debug route starts dry, replaces, confirms live, and stops without retaini
   const confirm = dialog.getByRole('button', { name: 'Enable live' });
   await confirm.focus();
   await page.keyboard.press('Enter');
-  await expect(connection.getByText('Live', { exact: true })).toBeVisible();
+  await expect(connection.getByText('Real send (Live)', { exact: true })).toBeVisible();
   expect(fixture.modeWrites).toContainEqual({
     mode: 'live',
     expected_revision: '1',
@@ -314,10 +314,10 @@ test('Debug reconnect accepts a fresh bounded snapshot after stream closure', as
     has: page.getByRole('heading', { name: 'Connection and mode' }),
   });
   await expect(connection.getByText('Connected', { exact: true })).toBeVisible();
-  await revealTraceMarker(page, /Bounded raw request body/);
+  await revealTraceMarker(page, /Raw request body/);
   await expect.poll(() => fixture.eventLastIDs.length).toBeGreaterThanOrEqual(2);
   expect(fixture.eventLastIDs[0]).toBe('');
-  await expect(connection.getByText('Dry', { exact: true })).toBeVisible();
+  await expect(connection.getByText('Preview (Dry, not sent)', { exact: true })).toBeVisible();
 
   await confirmSessionAction(page, 'Stop session', 'Stop session');
   await expect(page.getByRole('heading', { name: 'No active Debug session' })).toBeVisible();
@@ -353,8 +353,8 @@ test('Debug gap and truncated-event recovery stays visibly safe in Chinese dark 
     has: page.getByRole('heading', { name: '连接与模式' }),
   });
   await expect(connection.getByText('已连接', { exact: true })).toBeVisible();
-  await expect(connection.getByText(/事件连续性出现缺口：事件已被淘汰/)).toBeVisible();
-  await expect(connection.getByText('Dry（不出站）', { exact: true })).toBeVisible();
+  await expect(connection.getByText(/实时更新出现中断：更新记录已清除/)).toBeVisible();
+  await expect(connection.getByText('预览（Dry，不发送）', { exact: true })).toBeVisible();
   expect(await page.locator('html').getAttribute('lang')).toBe('zh-CN');
   expect(await page.locator('html').getAttribute('data-theme')).toBe('dark');
 
@@ -398,7 +398,7 @@ test('Debug mismatched SSE event requires explicit safe recovery without browser
     has: page.getByRole('heading', { name: 'Connection and mode' }),
   });
   await expect(connection.getByText('Connected', { exact: true })).toBeVisible();
-  await expect(connection.getByText('Dry', { exact: true })).toBeVisible();
+  await expect(connection.getByText('Preview (Dry, not sent)', { exact: true })).toBeVisible();
   await expect.poll(() => fixture.eventConnections).toBeGreaterThanOrEqual(2);
   await confirmSessionAction(page, 'Stop session', 'Stop session');
   await expect(page.getByRole('heading', { name: 'No active Debug session' })).toBeVisible();

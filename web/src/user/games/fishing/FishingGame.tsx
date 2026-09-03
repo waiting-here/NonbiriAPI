@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { useUserSession } from '../../data';
 import { useGameCopy } from '../copy';
+import { GameRulesButton, GameRulesDialog, type GameRulesSection } from '../common/GameRulesDialog';
 import {
   createIdempotencyKey,
   isConflict,
@@ -55,6 +56,45 @@ function Money({ value }: { readonly value: string }) {
     <span className="game-money">
       {formatCredits(value)} <span className="game-money__unit">{text('common.credits')}</span>
     </span>
+  );
+}
+
+function FishingRules({ open, onClose }: { readonly open: boolean; readonly onClose: () => void }) {
+  const { text } = useGameCopy();
+  const sections: readonly GameRulesSection[] = [
+    {
+      title: text('fishing.rules.chooseTitle'),
+      paragraphs: [text('fishing.rules.chooseBody')],
+    },
+    {
+      title: text('fishing.rules.batchTitle'),
+      paragraphs: [text('fishing.rules.batchBody')],
+    },
+    {
+      title: text('fishing.rules.resultTitle'),
+      paragraphs: [text('fishing.rules.resultBody')],
+    },
+    {
+      title: text('fishing.rules.recoveryTitle'),
+      paragraphs: [text('fishing.rules.recoveryBody')],
+    },
+    {
+      title: text('fishing.rules.scoresTitle'),
+      paragraphs: [text('fishing.rules.scoresBody')],
+    },
+    {
+      title: text('fishing.rules.startTitle'),
+      paragraphs: [text('fishing.rules.startBody')],
+    },
+  ];
+  return (
+    <GameRulesDialog
+      open={open}
+      title={text('fishing.rules.title')}
+      closeLabel={text('common.closeRules')}
+      sections={sections}
+      onClose={onClose}
+    />
   );
 }
 
@@ -316,6 +356,7 @@ export function FishingGame() {
     readonly state: 'sending' | 'failed';
   } | null>(null);
   const [sound, setSound] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const audioRef = useRef<AudioContext | null>(null);
   const resultRef = useRef<HTMLElement | null>(null);
   const ackAttempted = useRef<string | null>(null);
@@ -514,10 +555,48 @@ export function FishingGame() {
     result,
     revealed,
   });
+  const closeRules = useCallback(() => setRulesOpen(false), []);
+  const rulesButton = (
+    <GameRulesButton label={text('common.rulesButton')} onClick={() => setRulesOpen(true)} />
+  );
+  const rulesDialog = <FishingRules open={rulesOpen} onClose={closeRules} />;
 
-  if (snapshot.isPending) return <LoadingState label={text('common.loading')} />;
+  if (snapshot.isPending)
+    return (
+      <main className="game-page fishing-page">
+        <PageHeader
+          back={
+            <Link className="game-back-link" to="/games">
+              {text('common.back')}
+            </Link>
+          }
+          eyebrow={text('fishing.eyebrow')}
+          title={text('fishing.title')}
+          description={text('fishing.description')}
+          actions={rulesButton}
+        />
+        <LoadingState label={text('common.loading')} />
+        {rulesDialog}
+      </main>
+    );
   if (snapshot.error && !maintenance)
-    return <ErrorState error={snapshot.error} onRetry={() => void snapshot.refetch()} />;
+    return (
+      <main className="game-page fishing-page">
+        <PageHeader
+          back={
+            <Link className="game-back-link" to="/games">
+              {text('common.back')}
+            </Link>
+          }
+          eyebrow={text('fishing.eyebrow')}
+          title={text('fishing.title')}
+          description={text('fishing.description')}
+          actions={rulesButton}
+        />
+        <ErrorState error={snapshot.error} onRetry={() => void snapshot.refetch()} />
+        {rulesDialog}
+      </main>
+    );
   if (runtimeMaintenance || !snapshot.data)
     return (
       <main className="game-page fishing-page">
@@ -530,10 +609,12 @@ export function FishingGame() {
           eyebrow={text('fishing.eyebrow')}
           title={text('fishing.title')}
           description={text('fishing.description')}
+          actions={rulesButton}
         />
         <p className="game-inline-notice game-inline-notice--warning" role="status">
           {text('common.maintenance')}
         </p>
+        {rulesDialog}
       </main>
     );
 
@@ -549,14 +630,17 @@ export function FishingGame() {
         title={text('fishing.title')}
         description={text('fishing.description')}
         actions={
-          <button
-            type="button"
-            className="btn btn-secondary"
-            aria-pressed={sound}
-            onClick={toggleSound}
-          >
-            {text(sound ? 'fishing.sound.on' : 'fishing.sound.off')}
-          </button>
+          <>
+            {rulesButton}
+            <button
+              type="button"
+              className="btn btn-secondary"
+              aria-pressed={sound}
+              onClick={toggleSound}
+            >
+              {text(sound ? 'fishing.sound.on' : 'fishing.sound.off')}
+            </button>
+          </>
         }
       />
       <span className="sr-only">{text('fishing.sound.hint')}</span>
@@ -746,6 +830,7 @@ export function FishingGame() {
         <LeaderboardCard board="total" query={total} />
       </section>
       <p className="game-footnote">{text('common.noHistory')}</p>
+      {rulesDialog}
     </main>
   );
 }

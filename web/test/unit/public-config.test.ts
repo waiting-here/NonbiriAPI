@@ -4,6 +4,8 @@ import { isPublicLogoURL, normalizePublicConfig } from '../../src/shared/query/p
 const VALID_CONFIG = {
   site_name: 'NonbiriAPI',
   site_logo_url: '',
+  charity_donation_notice_zh: '',
+  charity_donation_notice_en: '',
   legal_privacy_override_zh: '',
   legal_privacy_override_en: '',
   legal_terms_override_zh: '',
@@ -19,6 +21,8 @@ describe('public bootstrap contract', () => {
     expect(normalizePublicConfig(VALID_CONFIG)).toEqual({
       siteName: 'NonbiriAPI',
       siteLogoURL: '',
+      charityDonationNoticeZh: '',
+      charityDonationNoticeEn: '',
       legalPrivacyOverrideZh: '',
       legalPrivacyOverrideEn: '',
       legalTermsOverrideZh: '',
@@ -46,7 +50,9 @@ describe('public bootstrap contract', () => {
 
   test('rejects control characters and overlong bounded text', () => {
     expect(() => normalizePublicConfig({ ...VALID_CONFIG, site_name: 'bad\u0001name' })).toThrow();
+    expect(() => normalizePublicConfig({ ...VALID_CONFIG, charity_donation_notice_zh: 'bad\u0085notice' })).toThrow();
     expect(() => normalizePublicConfig({ ...VALID_CONFIG, legal_terms_override_en: 'x'.repeat(65537) })).toThrow();
+    expect(() => normalizePublicConfig({ ...VALID_CONFIG, charity_donation_notice_en: 'x'.repeat(8193) })).toThrow();
   });
 });
 

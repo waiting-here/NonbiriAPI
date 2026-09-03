@@ -16,8 +16,8 @@
     "steward": {
       "nav": "Steward",
       "title": "Steward center",
-      "description": "The level-5 co-management entry. Whether steward capabilities apply is always decided server-side.",
-      "accessDenied": "This co-management surface requires the server-resolved level 5 capability.",
+      "description": "This area is for level-5 stewards. Available features follow the current account permissions.",
+      "accessDenied": "The current account does not have confirmed level-5 steward access.",
       "sectionsLabel": "Steward sections",
       "logsTab": "Request logs",
       "charityTab": "Charity management",
@@ -44,15 +44,15 @@
       "discountStart": "Start (optional)",
       "discountEnd": "End (optional)",
       "newModel": "Add charity model",
-      "modelsTitle": "Charity models and bindings",
+      "modelsTitle": "Charity models and service connections",
       "noModels": "No charity models",
       "noModelsBody": "Create a charity model only after its donation resources are ready.",
       "successRate": "{{rate}}% success over {{count}} recent calls",
-      "bindings": "Bindings",
-      "upstreamModel": "Upstream model ID",
+      "bindings": "Service connections",
+      "upstreamModel": "Service model ID",
       "order": "Order",
       "actions": "Actions",
-      "noBindings": "No bindings",
+      "noBindings": "No service connections",
       "status": {
         "pending": "Pending",
         "approved": "Approved",
@@ -72,8 +72,8 @@
       "deleteModelTitle": "Delete this charity model?",
       "previous": "Previous",
       "next": "Next",
-      "operationsDescription": "Admin-safe logs, owner-narrowed charity management, and the one-way maintenance emergency surface.",
-      "sensitiveStateCleared": "Sensitive steward state has been cleared.",
+      "operationsDescription": "View limited request records, manage charity resources available to you, and enable maintenance in an emergency.",
+      "sensitiveStateCleared": "Sensitive information on this page has been cleared.",
       "maintenanceTab": "Maintenance"
     },
     "endpoints": {
@@ -87,16 +87,16 @@
     },
     "debug": {
       "nav": "Debug",
-      "descriptionShort": "Inspect the safe request lifecycle.",
-      "description": "Capture a bounded, owner-only view of request, upstream, and caller semantics.",
+      "descriptionShort": "See what happened from request to result.",
+      "description": "Inspect requests, connected services, and call results visible only to you.",
       "actions": {
         "start": "Start Debug"
       },
       "request": {
         "title": "Request",
         "ownerOnly": "Only requests submitted by the owner are shown here.",
-        "rawBody": "Bounded raw request body ({{bytes}} bytes)",
-        "rawBodyTruncated": "Bounded raw request body ({{bytes}} bytes, truncated)",
+        "rawBody": "Raw request body ({{bytes}} bytes)",
+        "rawBodyTruncated": "Raw request body ({{bytes}} bytes, shortened because it is too long)",
         "base64Body": "[base64 request body: {{characters}} characters]"
       },
       "value": {
@@ -109,7 +109,7 @@
         },
         "trace": {
           "capturing": "Capturing",
-          "terminal": "Terminal"
+          "terminal": "Complete"
         },
         "result": {
           "response": "Response",
@@ -117,11 +117,11 @@
         },
         "source": {
           "platform": "Platform",
-          "upstream": "Upstream"
+          "upstream": "Connected service"
         },
         "mode": {
-          "dry": "Dry",
-          "live": "Live"
+          "dry": "Preview (Dry, not sent)",
+          "live": "Real send (Live)"
         },
         "observer": {
           "connecting": "Connecting",
@@ -130,11 +130,11 @@
           "disconnected": "Disconnected"
         },
         "gap": {
-          "cursorInvalid": "invalid cursor",
+          "cursorInvalid": "last position is invalid",
           "processRestart": "process restart",
-          "ringExpired": "event retention expired",
-          "ringEvicted": "event evicted",
-          "slowConsumer": "slow consumer"
+          "ringExpired": "update history expired",
+          "ringEvicted": "update history was cleared",
+          "slowConsumer": "the page received updates too slowly"
         },
         "end": {
           "stopped": "stopped",
@@ -162,15 +162,15 @@
         }
       },
       "upstream": {
-        "title": "Upstream",
+        "title": "Connected service",
         "kind": "Kind",
         "status": "Status",
         "safeCode": "Safe code",
         "safeDiagnostic": "Safe diagnostic",
         "charge": "Charge",
-        "awaitingProjection": "Awaiting a safe result projection.",
-        "notDispatched": "No upstream dispatch occurred.",
-        "rawSuppressed": "Raw upstream headers, bodies, bytes, and messages are not available here."
+        "awaitingProjection": "Waiting for a result summary with sensitive content removed.",
+        "notDispatched": "The request was not sent outside this site.",
+        "rawSuppressed": "Raw third-party headers, bodies, bytes, and messages are not shown here."
       },
       "caller": {
         "title": "Caller",
@@ -178,58 +178,58 @@
         "errorCode": "Error code",
         "source": "Source",
         "message": "Message",
-        "notTerminal": "Caller result is not terminal yet."
+        "notTerminal": "The call result is not complete yet."
       },
       "confirm": {
         "liveTitle": "Enable live capture?",
-        "liveBody": "Live mode may dispatch a real upstream request and incur upstream cost.",
+        "liveBody": "Real-send mode sends a request to the connected service and may incur a charge.",
         "liveAction": "Enable live",
         "stopTitle": "Stop this Debug session?",
         "stopInflightBody": "Stopping cancels in-flight requests and callers receive the fixed live-cancelled result.",
-        "stopIdleBody": "Stopping ends the server session and its bounded in-memory traces.",
+        "stopIdleBody": "Stopping ends the Debug session and clears its in-memory records.",
         "stopAction": "Stop session",
         "replaceTitle": "Replace this Debug session?",
         "replaceInflightBody": "Replacing cancels in-flight requests. The new session always starts in Dry mode.",
-        "replaceIdleBody": "Existing bounded traces are discarded. The new session always starts in Dry mode.",
+        "replaceIdleBody": "Existing Debug records are cleared. The new session always starts in preview mode.",
         "replaceAction": "Replace session"
       },
       "connection": {
         "title": "Connection and mode",
-        "serverSession": "Server session",
-        "observer": "Observer",
+        "serverSession": "Debug session",
+        "observer": "Page connection",
         "mode": "Mode",
         "inFlight": "In flight",
-        "expiry": "Expires {{expires}} · idle expiry {{idleExpiry}} · revision {{revision}}",
-        "gap": "Event continuity gap: {{reason}}. A fresh authoritative snapshot is required.",
+        "expiry": "Expires {{expires}} · idle expiry {{idleExpiry}} · version {{revision}}",
+        "gap": "Live updates were interrupted: {{reason}}. The latest status is being loaded again.",
         "ended": "Session ended: {{reason}}; cancelled in flight: {{count}}."
       },
       "operations": {
         "title": "Session operations",
-        "attachObserver": "Attach observer",
-        "disconnectObserver": "Disconnect observer",
+        "attachObserver": "Connect page updates",
+        "disconnectObserver": "Disconnect page updates",
         "enableLive": "Enable live mode",
         "returnDry": "Return to Dry",
         "stop": "Stop session",
         "startOver": "Start over",
-        "observerHint": "Disconnecting this observer does not stop the server session."
+        "observerHint": "Disconnecting page updates does not stop the Debug session."
       },
       "error": {
-        "sessionChanged": "The session changed. Refresh authoritative state and review it before confirming again.",
-        "resultUnknown": "The result is unknown. The same request identity is retained; refresh authority before an explicit retry.",
+        "sessionChanged": "The session changed. Refresh the latest status and review it before confirming again.",
+        "resultUnknown": "The result could not be confirmed. Refresh the latest status before deciding whether to retry the same request.",
         "operationFailed": "The Debug operation failed."
       },
       "fixedResults": {
         "title": "Fixed caller results",
-        "dryIntercepted": "Captured in Dry mode and never sent upstream.",
-        "liveCaptured": "An upstream attempt completed, but its raw response was suppressed and only the safe projection was captured.",
-        "liveCancelled": "A dispatched live request was cancelled because the session was stopped or replaced.",
+        "dryIntercepted": "Recorded in preview mode and never sent outside this site.",
+        "liveCaptured": "The third-party service call completed. Only a result summary with sensitive content removed is recorded here.",
+        "liveCancelled": "A real-send request was cancelled because the session was stopped or replaced.",
         "callerKeyPrefix": "Examples use",
-        "callerKeySuffix": "as a placeholder. A one-time CallerKey is never copied into Debug automatically."
+        "callerKeySuffix": "as a placeholder. A complete account API key is never copied into Debug automatically."
       },
       "requests": {
         "title": "Requests",
         "noSessionTitle": "No active Debug session",
-        "noSessionBody": "Start a Dry session to capture requests without upstream egress.",
+        "noSessionBody": "Start a preview session to inspect requests without sending content outside this site.",
         "emptyTitle": "No captured requests",
         "emptyBody": "Send an OpenAI-compatible request while this session is active."
       }
@@ -246,8 +246,8 @@
       "emptyCurrentBody": "There are no known unresolved issues.",
       "emptyClosedBody": "There is no closed history.",
       "summary": {
-        "discoveryFailed": "Model discovery failed",
-        "noRoutableBinding": "No routable binding",
+        "discoveryFailed": "Could not load the model list",
+        "noRoutableBinding": "No usable model connection",
         "credentialInvalid": "Credential is invalid",
         "configurationInvalid": "Configuration is invalid"
       },
@@ -266,7 +266,7 @@
       "observations": "Observations",
       "closedAt": "Closed",
       "openResource": "Open current resource",
-      "resourceUnavailable": "The source resource was removed or no longer has a safe deep link.",
+      "resourceUnavailable": "The linked resource was removed or is no longer available.",
       "previous": "Previous",
       "next": "Next",
       "page": "Page"
@@ -280,13 +280,13 @@
       "acceptedTitle": "Report accepted",
       "acceptedBody": "If matching credentials exist, temporary protection will be applied and an administrator will review the report.",
       "submitAnother": "Submit another report",
-      "connectorLabel": "Connector type",
+      "connectorLabel": "Service type",
       "connector": {
         "openaiCompatible": "OpenAI-Compatible",
         "anthropicCompatible": "Anthropic-Compatible"
       },
-      "baseUrlLabel": "Canonical endpoint URL",
-      "secretLabel": "Suspected leaked credential",
+      "baseUrlLabel": "Service address (URL)",
+      "secretLabel": "Suspected leaked key or credential",
       "noteLabel": "Additional note (optional)",
       "noteWarning": "Do not put credentials in the additional note.",
       "validationError": "Check the endpoint URL, credential, and note length.",
@@ -334,25 +334,25 @@
         "intro": "This policy describes the data used to operate a NonbiriAPI alpha.3 instance.",
         "notice": "Deployment template: before accepting real users, the instance operator must replace the operator identity, contact channel, effective date, retention details and governing-law statements as required by the deployment and applicable law. This text is not legal advice.",
         "operatorTitle": "Operator and scope",
-        "operatorBody": "NonbiriAPI is open-source software. Each deployed instance is operated independently by the person or organization that controls that instance. This policy applies to data processed by that operator, not to the public source repository or to Discord and upstream providers acting under their own policies.",
+        "operatorBody": "NonbiriAPI is open-source software. Each deployed instance is operated independently by the person or organization that controls it. This policy applies to data processed by that operator, not to the public source repository or to Discord and third-party AI services acting under their own policies.",
         "identityTitle": "Identity and sessions",
-        "identityBody": "The user station uses Discord OAuth for registration and sign-in. The service receives a Discord identifier, username, avatar metadata and the membership information needed for a configured server-and-role registration gate. OAuth access tokens are used during the exchange and are not stored as account data. The service stores bounded account, session and preference metadata. Session cookies are HttpOnly, Secure and SameSite according to the deployment configuration.",
+        "identityBody": "The user station uses Discord for registration and sign-in. The service receives a Discord identifier, username, avatar information, and the membership information needed to check server and role eligibility. Sign-in tokens are used only during sign-in and are not stored as account data. The service keeps limited account, sign-in, and preference information and protects sign-in cookies according to the deployment configuration.",
         "dataTitle": "Account and configuration data",
-        "dataBody": "The service stores account-owned endpoint metadata, canonical upstream URLs, notes, enabled flags, connector types, fetched model identifiers, platform model names, routing choices and bindings. An OpenAI-compatible physical key may store the force_store_false policy, and a personal OpenAI-compatible logical model may store the flatten_tool_calls policy; these are booleans, not request content. Upstream credentials are encrypted at rest. A caller key is shown once and only irreversible lookup material and display fragments remain. The service also stores check-in, donation/charity, daily activity, ban, limit, game-profile visibility, server-generated game settlement/outcome/best, and bounded anti-abuse/accounting metadata. Export schema version 4 adds safe endpoint origin and donated-key authorized/effective expiry and safe source fields. It includes only allowlisted account metadata and excludes secrets, ciphertext, report fingerprints, source key identities, administrator notes, OAuth tokens, caller-key plaintext, Debug content, random entropy and other users' identities.",
+        "dataBody": "The service stores addresses, notes, enabled status, service types, discovered models, platform model names, and model connections for endpoints owned by your account. Some OpenAI-compatible resources can also save settings such as “do not store requests” and “convert tool calls to text”; these settings do not contain request content. Service keys are encrypted. An account API key is shown in full only once; afterward, only information needed to verify and identify it remains. The service also stores check-ins, donations and charity use, daily activities, account restrictions, usage limits, game-profile visibility, game results and best scores, plus limited information needed to prevent abuse and calculate charges. Export version 4 includes safe endpoint source information, donated-key permission and active end times, and safe source details. Exports exclude full keys, encrypted key content, report-matching data, source-key identities, administrator notes, sign-in tokens, Debug content, random data, and other users' identities.",
         "economyTitle": "Credits and accounting data",
-        "economyBody": "The service stores your single spendable Nonbiri credit balance, which may be negative, together with check-in awards, game payouts and charity-routing summaries. Check-in awards, donor rewards and game payouts add to the same spendable balance; charity routing and game entry costs debit it. donation_credit is a cumulative donor-reward statistic used for donor summaries and level thresholds; it is not a second wallet. Ordinary spending, check-ins and natural game events do not change that statistic. Every balance change has an append-only ledger row. Fishing prices, cryptographic random outcomes, reserves, recovery and settlement are server-authoritative; no catch or economic return is guaranteed, and level 4 provides no game-economy advantage. Leaderboard rows are anonymous by default; an explicit public preference publishes the current nickname/username and a static 64px Discord CDN avatar URL together. The service does not proxy/cache that avatar or copy profile identity into historical game rows.",
+        "economyBody": "The service stores your single spendable Nonbiri credit balance, which may be negative, together with check-in awards, game rewards, and charity-use summaries. Check-in awards, donor rewards, and game rewards add to the same balance; charity calls and game costs subtract from it. The cumulative donor-reward total is used only for donation summaries and level requirements; it is not a second wallet, and ordinary spending, check-ins, and normal game events do not change it. Every balance change is recorded. Fishing prices, random results, funds set aside for a play, recovery, and settlement are handled consistently by the game system. No catch or economic return is guaranteed, and level 4 provides no game-economy advantage. Leaderboards are anonymous by default. If you choose to make your profile public, your current server nickname or username and Discord avatar URL are shown together. The service does not keep a copy of that avatar or copy profile identity into historical game records.",
         "credentialsTitle": "Secrets and browser handling",
-        "credentialsBody": "Upstream secrets are never returned in ordinary lists, logs, alerts, errors, exports or URLs. The browser receives key metadata only and does not persist upstream secrets or caller-key plaintext in storage or the query cache. Key or account deletion revokes callable authority in the final transaction, and orphaned encrypted credential material is cleared within at most one hour. An OpenAI-compatible key may force the outbound store field to false, but an upstream may ignore or reject it; this is not a zero-retention guarantee and does not control provider abuse monitoring. Operators must still protect the server, complete snapshots and master-key file.",
+        "credentialsBody": "Service keys are never returned in ordinary lists, logs, alerts, errors, exports, or URLs. The browser receives only the information needed to describe a key and does not save the full service key or account API key. Deleting a key or account immediately stops future calls through it. Encrypted key content that no longer belongs to any resource is cleared within one hour. An OpenAI-compatible key can ask the connected service not to store requests (store=false), but that service may ignore or reject the request. This is not a promise of zero retention and does not control the provider's abuse monitoring. Operators must still protect the server, complete backups, and master-key file.",
         "trafficTitle": "Requests and diagnostics",
-        "trafficBody": "Forwarded requests produce bounded metadata such as account, model, upstream endpoint, timestamps, status, duration and available token usage; ordinary request and response content is not persisted. Debug always starts as a dry run that does not select a candidate, access a credential, perform DNS/egress, reserve charity credits, or write usage/activity. Actual send is a separate switch requiring a fresh in-site confirmation and may incur provider usage or charity accounting. Redacted, bounded request/response projections exist only in process and current-page memory and are never written to the database, ordinary logs, alerts, exports, backups, URLs or browser storage; session close, replacement, expiry, logout, ban, deletion or restart clears them. A Debug page/SSE disconnect does not cancel the original CallerKey request. Administrators and live level-5 stewards see bounded metadata only, with donated resources hidden from the steward projection.",
+        "trafficBody": "Forwarded requests create limited records such as the account, model, service used, time, status, duration, and available token usage. Ordinary request and response content is not stored long term. Debug starts in preview mode: it does not access a key, send a request outside the site, set aside charity credits, or record usage. Each real send requires separate confirmation and may use provider quota or charity credits. Request and response summaries with sensitive content removed exist only in the current process and page memory. They are not written to the database, ordinary logs, alerts, exports, backups, URLs, or browser storage, and are cleared when the session closes, is replaced, or expires, and on sign-out, restriction, account deletion, or service restart. Disconnecting the Debug page does not cancel an original request made with an account API key. Administrators and active level-5 stewards see only limited request details, and stewards cannot see donated resources.",
         "sharingTitle": "Providers and disclosures",
-        "sharingBody": "Request content may be sent to OpenAI-compatible or Anthropic-compatible endpoints selected by the account owner, including donor-provided charity resources operated by OpenAI, Anthropic or another independent third party. The provider may process or retain content, account logs or abuse-monitoring data under its own policy; the instance operator cannot control third-party retention. A charity donor, as controller of the corresponding upstream account or key, may be able to see the full request content in the provider's backend logs; the instance UI itself does not disclose the consumer's identity or request body to the donor. Each forwarded request also carries a server-generated safety pseudonym that is linkable only within the same user, deployment key and canonical upstream origin, so it is pseudonymous rather than anonymous. Discord processes OAuth activity under Discord's policy. The operator may disclose data as required by law or to protect the service, users or public safety and must document other processors, hosting and support access.",
+        "sharingBody": "Request content may be sent to OpenAI-compatible or Anthropic-compatible services selected by the account owner, including donor-provided charity resources operated by OpenAI, Anthropic, or another independent third party. A third party may process or retain request content, account logs, or abuse-monitoring data under its own policy, which the instance operator cannot control. A charity donor controls the related third-party account or key and may therefore see full request content in that service's account logs. This site's interface does not show the user's identity or request content to the donor. Each forwarded request also includes a system-generated safety code that can be linked only for the same user, deployment, and third-party service. It hides direct identity but is not fully anonymous. Discord processes sign-in activity under its own policy. The operator may disclose data when required by law or needed to protect the service, users, or public safety, and must describe access by other data processors, hosting providers, and support staff.",
         "retentionTitle": "Retention and deletion",
-        "retentionBody": "Request logs are cleaned after up to 30 days; terminal donation/review facts, daily activity summaries and terminal charity reservations after 400 days. An irreversible fingerprint used only to match newly submitted abuse reports may remain for up to 90 days after a donated key ends or its physical key is deleted; it cannot authorize an upstream call. Minimal target and donation-lineage facts already established for a report case follow that case's own 90-day or active legal-hold lifecycle. Reads do not refresh these deadlines, and legal hold does not extend the fingerprint matching window. Terminal game round, settlement and outcome rows are cleaned 30 days after settlement, while a paid pending round is retained until settlement. Game best, game ledger and profile-visibility preference remain for the account lifetime. Debug content has no persistent retention. Sessions expire by idle and absolute TTL. Resolved administrator alerts are cleaned 30 days after resolution; pending alerts are bounded by total and per-kind caps plus deduplication. Export schema version 4 caps every collection at 10,000 rows and the complete JSON at 8 MiB and fails closed instead of truncating. Account deletion invalidates sessions and CallerKeys, clears private linked data, and leaves only lifecycle-governed deidentified facts; late callbacks cannot recreate the account. Complete operator snapshots and upstream providers may retain copies under their respective policies.",
+        "retentionBody": "Request logs are kept for up to 30 days. Records of completed donations and reviews, daily activity summaries, and completed charity payment holds are kept for 400 days. After a donated key ends or its service key is deleted, non-reversible information used only to match new abuse reports may remain for up to 90 days and cannot be used to make a call. The minimum target and donation-source relationship already saved for a report follows that case's own 90-day period or an active legal preservation requirement. Viewing a record does not extend these periods, and legal preservation does not extend the new-report matching period. Game rounds, settlements, and results are kept for 30 days after settlement; a paid but unfinished round remains until settlement. Game best scores, credit changes, and profile-visibility preferences remain for the life of the account. Debug content is not stored long term. Sign-in sessions expire after inactivity or their maximum lifetime. Resolved administrator alerts are cleared after 30 days; unresolved alerts are subject to number limits and duplicate merging. Export version 4 allows up to 10,000 rows in each collection and 8 MiB for the complete JSON. An oversized export fails clearly and is not shortened. Account deletion invalidates sign-in sessions and account API keys, clears linked private data, and keeps only necessary facts without personal identity for the periods described above. Late callbacks cannot recreate the account. Complete operator backups and third-party services may retain copies under their own policies.",
         "rightsTitle": "Your controls and rights",
         "rightsBody": "Subject to applicable law and the instance operator's process, you can update supported account settings, request an export and delete your account through the elevated self-service flow. Deletion is destructive. Contact the instance operator for access, correction, restriction or other privacy requests; the operator must publish the appropriate contact channel before production use.",
         "securityTitle": "Security boundaries",
-        "securityBody": "The service applies ownership checks, encrypted secret storage, outbound SSRF and redirect protections, bounded resources, cancellation propagation and no-store responses to sensitive APIs. The OpenAI-only flatten_tool_calls experiment changes structured calls into text, restores only complete real call/result pairs, never executes tools or fabricates results, and may break normal tool workflows; Anthropic bindings are incompatible with it. No system is completely secure. Do not place secrets in notes, model names, URLs, tool data, issue reports or support messages.",
+        "securityBody": "The service checks resource ownership, encrypts stored keys, prevents requests from reaching protected network locations or following dangerous redirects, limits resource use, and stops later work when a request is cancelled. Sensitive responses ask browsers and intermediate services not to cache them. The OpenAI-only “convert tool calls to text” experiment converts only complete real calls and results. It never runs tools or invents results and may affect normal tool workflows; Anthropic connections cannot use it. No system is completely secure. Do not place keys in notes, model names, URLs, tool data, issue reports, or support messages.",
         "contactTitle": "Contact and policy changes",
         "contactBody": "The instance operator must publish a privacy contact, effective date and applicable jurisdiction in this page before production use. Material changes to data collection, sharing or retention should be announced and handled according to applicable law."
       },
@@ -362,32 +362,32 @@
         "intro": "By using a NonbiriAPI instance, you agree to use it lawfully and protect your own credentials.",
         "notice": "Deployment template: the instance operator must replace the operator identity, contact channel, effective date, governing law and complaint process before accepting real users. This text is not legal advice.",
         "operatorTitle": "Service and operator",
-        "operatorBody": "NonbiriAPI is open-source gateway software, not an AI model provider. The operator of the particular instance controls its access policy, configured upstreams, limits, maintenance and user support. The public source project and its copyright holder do not automatically operate every deployment.",
+        "operatorBody": "NonbiriAPI is open-source gateway software, not an AI model provider. The operator of a particular instance controls its access rules, connected third-party services, limits, maintenance, and user support. The public source project and its copyright holder do not automatically operate every deployment.",
         "accessTitle": "Accounts and access",
         "accessBody": "An account may require Discord OAuth and membership of a configured server and role. You are responsible for activity performed through your account and must provide information that is accurate enough for the operator's access and support process. The operator may pause new registration or suspend access for security, maintenance, legal compliance or a breach of these terms.",
         "useTitle": "Acceptable use",
         "useBody": "Use only endpoints, credentials and models that you are authorized to access. Do not use the service for unlawful activity, fraud, abuse, unauthorized access, credential theft, malware, harassment, privacy violations, sexual exploitation of minors, non-consensual intimate imagery, attacks against providers or other users, denial of service, rate-limit bypassing or attempts to defeat ownership and security controls.",
-        "upstreamTitle": "Upstream provider rules",
-        "upstreamBody": "Requests may be processed by account-selected OpenAI-compatible or Anthropic-compatible providers, including a donor-provided charity resource. You must comply with each provider's terms, usage policies, licensing conditions and content restrictions. Providers may retain request content, account logs or abuse-monitoring data under their own policies. A requested store:false field may be ignored or rejected and is not a promise of zero retention. The operator does not guarantee provider acceptance, content preservation or account availability.",
+        "upstreamTitle": "Third-party service rules",
+        "upstreamBody": "Requests may be processed by OpenAI-compatible or Anthropic-compatible services selected by the account owner, including donor-provided charity resources. You must follow each service provider's terms, usage policies, licensing conditions, and content restrictions. A provider may keep request content, account logs, or abuse-monitoring data under its own policy. A request not to store content (store:false) may be ignored or rejected and is not a promise of zero retention. The operator does not guarantee that a third party will accept a request, preserve content, or keep an account available.",
         "credentialsTitle": "Credentials and content",
-        "credentialsBody": "Keep upstream credentials, caller keys, OAuth links and recovery information confidential. Rotate a credential immediately if it may have been exposed. Do not put secrets in notes, URLs, model names, tools, issue reports or support messages. You are responsible for submitted content and the rights needed to send it to the selected provider. Experimental tool-call flattening only changes representation: it does not execute a tool, create a result or prove success, and it may break an ordinary structured-tool client.",
+        "credentialsBody": "Keep service keys, account API keys, sign-in links, and recovery information confidential. Replace a key immediately if it may have been exposed. Do not put keys in notes, URLs, model names, tools, issue reports, or support messages. You are responsible for submitted content and must have the right to send it to the selected provider. The experimental “convert tool calls to text” feature changes only how calls are displayed and sent. It does not run a tool, create a result, or prove success, and it may affect programs that expect structured tool calls.",
         "availabilityTitle": "Limits and availability",
-        "availabilityBody": "Requests may be limited, rejected, retried or unavailable because of quotas, ownership checks, safety controls, upstream failures, maintenance or authorization. A complete protocol response, not HTTP status alone, determines success. Debug dry-run sends nothing upstream; a separately confirmed live mode may consume provider quota or charity credits. Game prices, random outcomes, recovery and settlement are server-controlled and offer no guaranteed result or return. The operator may change limits or discontinue an alpha service.",
+        "availabilityBody": "Requests may be rate-limited, rejected, retried, or temporarily unavailable because of quotas, resource ownership, safety checks, third-party failures, maintenance, or permissions. A complete response is required for success; an HTTP status alone does not guarantee the result. Debug preview sends nothing outside the site, while a separately confirmed real send may consume provider quota or charity credits. Game prices, random results, recovery, and settlement are handled consistently by the game system and offer no guaranteed result or return. The operator may change limits or discontinue an alpha service.",
         "dataTitle": "Privacy and deletion",
-        "dataBody": "The privacy policy describes metadata, Debug handling, export and deletion controls. Account deletion is destructive and removes linked donation, charity, check-in, ledger and game data after elevated confirmation. Alpha.3 uses a fresh-only database generation: old, unknown or corrupt databases are rejected before startup writes. A separately confirmed destructive fresh deployment deletes the active database, including accounts, business data, site configuration and legal overrides, and does not merge old data; a protected operator snapshot may retain the previous database, release, environment and master key for rollback. The fresh target must remain in maintenance with registration closed until approved legal text, required configuration and initialization have been reapplied and read back. Snapshot restore/inventory actions and upstream retention follow their own operator/provider policies.",
+        "dataBody": "The privacy policy describes information stored by the service, Debug handling, exports, and account deletion. After identity verification, deleting an account removes linked donation, charity, check-in, credit-change, and game data. Alpha.3 supports only a database created for that version; old, unrecognized, or damaged databases will not start. A separately confirmed new installation deletes the current database, including accounts, business data, site settings, and custom legal text, and does not merge old data. A protected operator backup may keep the previous database, program version, environment, and master key for rollback. The new environment must remain in maintenance with registration closed until legal text, required settings, and initial data have been restored and checked. Backup recovery and third-party data retention follow the operator's and provider's respective policies.",
         "suspensionTitle": "Suspension and termination",
         "suspensionBody": "The operator may suspend or terminate access when reasonably necessary to protect the service or users, comply with law or investigate a suspected breach. Where safe and lawful, the operator may provide notice. You may stop using the service and request account deletion through the supported flow.",
         "liabilityTitle": "Disclaimer",
-        "liabilityBody": "To the extent permitted by applicable law, the service is provided on an as-is and as-available basis without a promise of uninterrupted operation, error-free routing, model accuracy, data availability or fitness for a particular purpose. The operator is not responsible for upstream provider decisions or content generated by upstream systems. Nothing in these terms excludes liability that cannot lawfully be excluded.",
+        "liabilityBody": "To the extent permitted by applicable law, the service is provided as-is and as available, without a promise of uninterrupted operation, that every request reaches the expected service, model accuracy, data availability, or fitness for a particular purpose. The operator is not responsible for third-party provider decisions or content generated by third-party systems. Nothing in these terms excludes liability that cannot lawfully be excluded.",
         "ipTitle": "Open source and intellectual property",
-        "ipBody": "The NonbiriAPI source code is available under the GNU Affero General Public License v3.0. NonbiriAPI, Discord, OpenAI and other names may be trademarks of their respective owners; this project is not automatically affiliated with or endorsed by upstream providers. Rights in submitted or generated content depend on your rights, applicable law and upstream terms.",
+        "ipBody": "The NonbiriAPI source code is available under the GNU Affero General Public License v3.0. NonbiriAPI, Discord, OpenAI, and other names may be trademarks of their respective owners; this project is not automatically affiliated with or endorsed by third-party providers. Rights in submitted or generated content depend on your rights, applicable law, and third-party service terms.",
         "changesTitle": "Changes and contact",
         "changesBody": "The operator may update these terms for a new release or operational change. Material changes should state an effective date and be communicated as required by applicable law. Continued use after the effective date constitutes acceptance where legally valid; otherwise stop using the service and contact the operator. The operator must publish a contact channel and governing-law statement before production use."
       }
     },
     "logs": {
       "title": "Request logs",
-      "description": "View metadata and token usage of your own requests. Request and response content is not shown.",
+      "description": "View basic details and token usage for your own requests. Request and response content is not shown.",
       "empty": "No log records",
       "emptyBody": "No requests from your account match the current filters.",
       "eyebrow": "Operations"
@@ -398,25 +398,25 @@
       "title": "Charity resources & donations",
       "description": "See the current charity calling and donation-intake status, then manage resources you have submitted.",
       "donationDetailTitle": "Donation details",
-      "donationDetailDescription": "Review the donation, review and resource state returned by the server.",
+      "donationDetailDescription": "Review the current donation, review, and resource status.",
       "backToDonations": "Back to charity",
       "donationNotFound": "Donation not found",
       "donationNotFoundBody": "This donation does not exist or is not owned by your account.",
-      "capabilities": "Current charity capabilities",
+      "capabilities": "Current charity status",
       "yourResources": "Your resources",
-      "callCapabilityEyebrow": "Calling capability",
+      "callCapabilityEyebrow": "Availability",
       "callCapabilityTitle": "Charity model access",
       "capabilityState": {
         "feature_disabled": "Closed",
         "no_models": "No models",
-        "no_candidates": "No candidates",
+        "no_candidates": "No available resources",
         "available": "Available"
       },
       "capabilityBody": {
         "feature_disabled": "Charity calling is disabled by the service configuration.",
         "no_models": "No charity model is enabled right now.",
-        "no_candidates": "Models are configured, but no resource is currently eligible to route a call.",
-        "available": "At least one charity model has an eligible candidate."
+        "no_candidates": "Models are configured, but no resource is currently available.",
+        "available": "At least one charity model is currently available."
       },
       "availableModels": "Available charity models",
       "intakeEyebrow": "Donation intake",
@@ -430,8 +430,8 @@
         "closed": "Donation intake is closed. Existing donation records remain available to review and manage."
       },
       "donationsTitle": "My donations",
-      "requestUnit": "Each request crossing dispatch; final settlement is server-side.",
-      "tokenUnit": "Per million tokens; four buckets are priced separately and settled server-side.",
+      "requestUnit": "Each request actually sent; charges are settled by the system.",
+      "tokenUnit": "Per million tokens; input, cache writes, cache reads, and output are priced separately.",
       "priceCaption": "Charity model prices and donor rewards",
       "priceType": "Item",
       "userPrice": "User charge",
@@ -445,7 +445,9 @@
       "noDonationsBody": "When intake is open, select one or more eligible keys already owned by this account and submit them for review.",
       "submitDonation": "Submit a charity donation",
       "existingResourcesOnly": "Existing resources only",
-      "mutationResponseUnknown": "The server may have completed this action, but the response was not confirmed.",
+      "donationNoticeTitle": "Donation notice",
+      "donationNoticeDefault": "Thank you for sharing spare API resources. Before submitting, confirm that you own these keys or have permission to share them; the connected service may charge you while they are shared. You can set a separate end time for each key and review or stop sharing here at any time.",
+      "mutationResponseUnknown": "The action may have completed, but its result could not be confirmed yet.",
       "mutationConflictRefreshed": "The resource changed before this action completed.",
       "mutationReconciled": "The latest state has been loaded. Review it before deciding whether to act again.",
       "submitted": "Donation submitted for review.",
@@ -455,15 +457,15 @@
       "splitDonationSources": "Submit custom resources separately from mainstream resources, and use only one mainstream channel per donation.",
       "reselectAfterConflict": "The available resources changed. Review the refreshed list and select the keys again.",
       "noEligibleKeys": "No eligible keys",
-      "noEligibleKeysBody": "Create and enable a key in Endpoints first, or wait until a key leaves security processing. Keys already in a donation cannot be selected again.",
+      "noEligibleKeysBody": "Create and enable a key in Endpoints first, or wait for its security check to finish. Keys already in a donation cannot be selected again.",
       "manageEndpoints": "Manage endpoints",
       "selectExistingKeys": "Select existing endpoint keys",
       "disclosureTitle": "Before you submit",
       "disclosureMasked": "The page displays only masked key fragments; it never asks you to enter a new key here.",
-      "disclosureThirdParty": "Charity traffic may be sent through the selected third-party upstream account.",
-      "disclosureCost": "Provider costs, platform charges, donor rewards and limits are applied by the server.",
+      "disclosureThirdParty": "Charity requests may be sent through the selected third-party AI service.",
+      "disclosureCost": "Service costs, platform charges, donor rewards, and limits are applied by the system.",
       "disclosureResponsibility": "You must own each selected resource or be authorized to share its capacity. Submitting resources you do not own or are not authorized to share is strictly prohibited; you are responsible for the consequences.",
-      "disclosureDeletion": "Withdrawal, termination or account deletion can stop future charity use, subject to in-flight settlement and required retention.",
+      "disclosureDeletion": "Withdrawal, termination, or account deletion can stop future charity use. Requests already in progress will still be settled, and required records follow the retention policy.",
       "ownershipAuthorization": "I own every selected resource or have authorization to contribute its capacity.",
       "expiryInvalid": "Enter a valid UTC expiry, or leave it blank for permanent authorization.",
       "keyExpiry": "Authorized expiry",
@@ -503,20 +505,20 @@
         "available": "Available"
       },
       "customSource": "Custom endpoint",
-      "physicalEnabled": "Physical key enabled",
-      "physicalDisabled": "Physical key disabled",
+      "physicalEnabled": "Service key enabled",
+      "physicalDisabled": "Service key disabled",
       "blockingReasons": "Current blocking reasons",
       "noBlockingReason": "None",
       "effectiveExpiry": "Effective expiry",
       "limit": "Limit",
       "used": "Used",
-      "inflight": "In flight",
+      "inflight": "In progress",
       "priceQuota": "Credit quota",
       "callQuota": "Call quota",
       "tokenQuota": "Token quota",
       "tokensUnit": "tokens",
-      "failureGeneration": "Failure generation",
-      "tokenReserve": "Per-call token reserve",
+      "failureGeneration": "Failure counter group",
+      "tokenReserve": "Tokens reserved per request",
       "tokensPerRequest": "tokens / request",
       "failureStreak": "Failure streak",
       "failureDisabled": "Automatic failure lock",
@@ -545,8 +547,8 @@
       "donationOverviewNoMatches": "No keys match this filter",
       "donationOverviewNoMatchesBody": "Choose another status to review the donated keys currently retained for this account.",
       "donationOverviewPartialTitle": "The donated-key overview is incomplete",
-      "donationOverviewPartialBody": "A page could not be verified or the bounded collection limit was reached. Retry to load one complete authoritative overview.",
-      "pendingDescriptionOnly": "While review is pending, only the description can be changed. Selected resources and authority must be submitted again as a new donation if needed.",
+      "donationOverviewPartialBody": "Some content did not load, or the display limit was reached. Retry to see the complete overview.",
+      "pendingDescriptionOnly": "While review is pending, only the description can be changed. Submit a new donation if you need to change the selected resources or sharing permission.",
       "updatedAt": "Last updated",
       "reviewResult": "Review result",
       "resourceDetails": "Resources ({{count}})",
@@ -562,13 +564,13 @@
       "terminateTitle": "Terminate this approved donation?",
       "terminateBody": "This stops future charity admission for its resources. Calls already in progress will continue and be settled.",
       "donationDescription": "Donation description",
-      "upstreamPrivacyTitle": "Third-party upstream privacy:",
-      "upstreamPrivacyWarning": "Charity requests are sent to donor-provided third-party upstream providers. The third-party upstream and its account logs may see the full request content; its storage and privacy practices are outside this site's control.",
-      "dispatchedFailureWarning": "After a request begins, even a timeout or failed response may consume upstream quota and be settled normally."
+      "upstreamPrivacyTitle": "Third-party service privacy:",
+      "upstreamPrivacyWarning": "Charity requests are sent to donor-provided third-party AI services. That service and its account logs may see the full request content; its storage and privacy practices are outside this site's control.",
+      "dispatchedFailureWarning": "After a request begins, even a timeout or failed response may consume the service provider's quota and be settled normally."
     },
     "activities": {
       "nav": "Activities",
-      "eyebrow": "Activities · Live server state",
+      "eyebrow": "Activities · Live updates",
       "title": "Welfare & Thursday activity",
       "description": "View activity status, join activities, and earn more Nonbiri credits.",
       "cardsLabel": "Available activities",
@@ -592,8 +594,8 @@
       "stream": {
         "connecting": "Connecting to live activity updates…",
         "connected": "Live activity updates connected.",
-        "disconnected": "Live updates disconnected; reconnecting with the last confirmed cursor.",
-        "reconciled": "Live state reconciled with the server.",
+        "disconnected": "Live updates disconnected; reconnecting from the last position.",
+        "reconciled": "Live activity status updated.",
         "recoveryFailed": "Live recovery could not refresh the state. Retry the page read before acting."
       },
       "poolBalance": "Pool balance",

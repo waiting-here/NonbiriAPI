@@ -193,7 +193,7 @@ describe('screenshot-facing configuration pages', () => {
     await renderWithProviders(<CharityPage />, { station: 'user', locale: 'en', role: 'user' });
 
     const warning = await screen.findByRole('note');
-    expect(warning).toHaveTextContent('Third-party upstream privacy:');
+    expect(warning).toHaveTextContent('Third-party service privacy:');
     expect(warning).toHaveTextContent(/account logs may see the full request content/i);
     expect(warning).toHaveTextContent(/outside this site's control/i);
     expect(screen.queryByText('Call status guide')).not.toBeInTheDocument();

@@ -164,6 +164,27 @@ describe('donation composer recovery', () => {
     });
   });
 
+  it('shows the configured donation notice and falls back to the built-in copy', async () => {
+    vi.mocked(economyQueries.useCreateDonation).mockReturnValue(successfulMutation() as never);
+    const rendered = await renderWithProviders(
+      <DonationComposer
+        choices={choices}
+        draftNamespace="account-notice"
+        notice={'Operator guidance\nCheck costs before sharing.'}
+      />,
+      { station: 'user', role: 'user' },
+    );
+    expect(screen.getByRole('heading', { name: charityCopy.donationNoticeTitle })).toBeVisible();
+    expect(screen.getByText(/Operator guidance/)).toHaveTextContent(
+      'Operator guidance Check costs before sharing.',
+    );
+
+    rendered.rerender(
+      <DonationComposer choices={choices} draftNamespace="account-notice" notice="" />,
+    );
+    expect(screen.getByText(charityCopy.donationNoticeDefault)).toBeVisible();
+  });
+
   it('keeps the actual page draft namespace and unknown lock independent of announcement epoch', async () => {
     const unknown = createMutation(new ApiError('network_error', 'response lost', 0));
     vi.mocked(economyQueries.useCreateDonation).mockReturnValue(unknown as never);

@@ -313,8 +313,8 @@ test('anonymous credential report keeps its secret request-only and accepts the 
   await anonymousSession;
   await page.waitForTimeout(50);
   setup.consoleGuard = collectConsoleViolations(page);
-  await page.getByLabel('Canonical endpoint URL').fill('https://reported.example.test/v1');
-  await page.getByLabel('Suspected leaked credential').fill(REPORT_SECRET);
+  await page.getByLabel('Service address (URL)').fill('https://reported.example.test/v1');
+  await page.getByLabel('Suspected leaked key or credential').fill(REPORT_SECRET);
   await page
     .getByLabel('Additional note (optional)')
     .fill('Synthetic reporter context without credentials.');
