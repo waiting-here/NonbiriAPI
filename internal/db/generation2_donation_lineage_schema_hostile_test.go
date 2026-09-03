@@ -413,9 +413,11 @@ INSERT INTO donation_keys(`+hostileDonationKeyColumns()+`,
 	terminalID := hostileNextPK64(t, db, "donation_keys") - 1
 	hostileMustFail(t, db, `UPDATE donation_keys SET report_fingerprint=? WHERE id=?`, hostileBlob32(8), terminalID)
 	hostileMustFail(t, db, `UPDATE donation_keys SET report_fingerprint=NULL WHERE id=?`, terminalID)
-	// A forged row timestamp cannot clear the fingerprint before SQLite's
-	// authoritative clock reaches the deadline.
-	hostileMustFail(t, db, `UPDATE donation_keys SET report_fingerprint=NULL,updated_at=? WHERE id=?`, futureMatchUntil, terminalID)
+	hostileMustFail(t, db, `UPDATE donation_keys SET report_fingerprint=NULL,updated_at=? WHERE id=?`, futureMatchUntil-1, terminalID)
+	// The lifecycle coordinator's frozen decision time authorizes cleanup at
+	// the exact deadline. The one-way transition can never be reversed.
+	hostileMustExec(t, db, `UPDATE donation_keys SET report_fingerprint=NULL,updated_at=? WHERE id=?`, futureMatchUntil, terminalID)
+	hostileMustFail(t, db, `UPDATE donation_keys SET report_fingerprint=? WHERE id=?`, hostileBlob32(8), terminalID)
 	hostileMustFail(t, db, `UPDATE donation_keys SET report_match_until=999999 WHERE id=?`, terminalID)
 	hostileMustFail(t, db, `UPDATE donation_keys SET ended_at=ended_at+1,report_match_until=report_match_until+1 WHERE id=?`, terminalID)
 	hostileMustFail(t, db, `UPDATE donation_keys SET ended_reason='withdrawn' WHERE id=?`, terminalID)

@@ -486,7 +486,7 @@ CREATE TRIGGER donation_key_report_fingerprint_update_guard BEFORE UPDATE OF rep
 WHEN NEW.report_fingerprint IS NOT OLD.report_fingerprint AND NOT (
  OLD.report_fingerprint IS NOT NULL AND NEW.report_fingerprint IS NULL
  AND OLD.ended_at IS NOT NULL AND OLD.report_match_until IS NOT NULL
- AND NEW.updated_at>=OLD.report_match_until AND unixepoch()>=OLD.report_match_until)
+ AND NEW.updated_at>=OLD.report_match_until)
 BEGIN SELECT RAISE(ABORT,'donation key report fingerprint mutation is not allowed'); END;
 
 CREATE TABLE charity_model_bindings (
