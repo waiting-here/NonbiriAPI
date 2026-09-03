@@ -92,7 +92,7 @@ export function UserLayout() {
   // elevated capability is now present, resume on /account where the
   // AccountPage picks the intent back up.
   useEffect(() => {
-    let pending = '';
+    let pending: string;
     try {
       pending = window.sessionStorage.getItem('nb.pending.elevation') ?? '';
     } catch {

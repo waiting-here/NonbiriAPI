@@ -75,14 +75,21 @@ type LogSummaryExport struct {
 }
 
 type EndpointExport struct {
-	ID            string              `json:"id"`
-	ConnectorType string              `json:"connector_type"`
-	BaseURL       string              `json:"base_url"`
-	Note          string              `json:"note"`
-	Enabled       bool                `json:"enabled"`
-	CreatedAt     int64               `json:"created_at"`
-	UpdatedAt     int64               `json:"updated_at"`
-	Keys          []EndpointKeyExport `json:"keys"`
+	ID            string               `json:"id"`
+	ConnectorType string               `json:"connector_type"`
+	BaseURL       string               `json:"base_url"`
+	Origin        EndpointOriginExport `json:"origin"`
+	Note          string               `json:"note"`
+	Enabled       bool                 `json:"enabled"`
+	CreatedAt     int64                `json:"created_at"`
+	UpdatedAt     int64                `json:"updated_at"`
+	Keys          []EndpointKeyExport  `json:"keys"`
+}
+
+type EndpointOriginExport struct {
+	Kind      string `json:"kind"`
+	ChannelID string `json:"channel_id,omitempty"`
+	Name      string `json:"name,omitempty"`
 }
 
 type EndpointKeyExport struct {
@@ -209,7 +216,6 @@ type DonationExport struct {
 	Status       string                `json:"status"`
 	Description  string                `json:"description"`
 	ReviewResult *DonationReviewExport `json:"review_result"`
-	ExpiresAt    *int64                `json:"expires_at"`
 	Keys         []DonationKeyExport   `json:"keys"`
 	CreatedAt    int64                 `json:"created_at"`
 	UpdatedAt    int64                 `json:"updated_at"`
@@ -222,19 +228,28 @@ type DonationReviewExport struct {
 }
 
 type DonationKeyExport struct {
-	ID              string               `json:"id"`
-	EndpointKeyID   *string              `json:"endpoint_key_id"`
-	DisplayHead     string               `json:"display_head"`
-	DisplayTail     string               `json:"display_tail"`
-	BaseURL         string               `json:"base_url"`
-	ConnectorType   string               `json:"connector_type"`
-	PhysicalEnabled bool                 `json:"physical_enabled"`
-	CharityState    string               `json:"charity_state"`
-	Limits          DonationLimitsExport `json:"limits"`
-	Usage           DonationUsageExport  `json:"usage"`
-	TokenReserve    int64                `json:"token_reserve"`
-	Streak          DonationStreakExport `json:"streak"`
-	EndedReason     *string              `json:"ended_reason"`
+	ID                  string                   `json:"id"`
+	EndpointKeyID       *string                  `json:"endpoint_key_id"`
+	DisplayHead         string                   `json:"display_head"`
+	DisplayTail         string                   `json:"display_tail"`
+	SafeSource          DonationSafeSourceExport `json:"safe_source"`
+	PhysicalEnabled     bool                     `json:"physical_enabled"`
+	CharityState        string                   `json:"charity_state"`
+	Limits              DonationLimitsExport     `json:"limits"`
+	Usage               DonationUsageExport      `json:"usage"`
+	TokenReserve        int64                    `json:"token_reserve"`
+	AuthorizedExpiresAt *int64                   `json:"authorized_expires_at"`
+	ExpiresAt           *int64                   `json:"expires_at"`
+	Streak              DonationStreakExport     `json:"streak"`
+	EndedReason         *string                  `json:"ended_reason"`
+}
+
+type DonationSafeSourceExport struct {
+	Kind          string  `json:"kind"`
+	ConnectorType string  `json:"connector_type"`
+	BaseURL       string  `json:"base_url"`
+	ChannelID     *string `json:"channel_id,omitempty"`
+	Name          *string `json:"name,omitempty"`
 }
 
 type DonationStreakExport struct {

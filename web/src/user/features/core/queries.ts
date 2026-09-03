@@ -9,6 +9,7 @@ import {
   getCallerKey,
   getCatalog,
   getEndpoint,
+  getEndpointCreateOptions,
   getMe,
   getModel,
   getSession,
@@ -30,6 +31,7 @@ import type {
   Model,
   Page,
   UserProfile,
+  EndpointCreateOptions,
 } from './types';
 
 export const coreKeys = {
@@ -41,6 +43,8 @@ export const coreKeys = {
     ['user', 'core', 'account', accountId, 'endpoints'] as const,
   endpoints: (accountId: string, cursor?: string) =>
     ['user', 'core', 'account', accountId, 'endpoints', cursor ?? 'first'] as const,
+  endpointCreateOptions: (accountId: string) =>
+    ['user', 'core', 'account', accountId, 'endpoint-create-options'] as const,
   endpoint: (accountId: string, endpointId: string) =>
     ['user', 'core', 'account', accountId, 'endpoint', endpointId] as const,
   endpointKeysRoot: (accountId: string, endpointId: string) =>
@@ -250,6 +254,16 @@ export function useEndpointsPage(accountId: string, cursor?: string, enabled = t
     queryKey: coreKeys.endpoints(accountId, cursor),
     queryFn: ({ signal }) => listEndpoints(cursor, signal),
     enabled,
+  });
+}
+
+export function useEndpointCreateOptions(accountId: string, enabled = true) {
+  return useQuery<EndpointCreateOptions>({
+    queryKey: coreKeys.endpointCreateOptions(accountId),
+    queryFn: ({ signal }) => getEndpointCreateOptions(signal),
+    enabled,
+    staleTime: 60_000,
+    retry: false,
   });
 }
 

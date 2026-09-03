@@ -3,6 +3,7 @@ package charityrouting
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
@@ -231,19 +233,25 @@ func TestModelRevisionNestedDiscountAndRoleAuthorization(t *testing.T) {
 }
 
 func (environment *routingTestEnv) seedCandidate(t *testing.T, ownerID int64, suffix byte, upstream string) (int64, int64, int64) {
+	return environment.seedCandidateWithConnector(t, ownerID, string(rune(suffix)), upstream,
+		connectorcontract.TypeOpenAICompatible)
+}
+
+func (environment *routingTestEnv) seedCandidateWithConnector(t *testing.T, ownerID int64, identity, upstream string, connectorType connectorcontract.Type) (int64, int64, int64) {
 	t.Helper()
 	now := environment.clock.Load()
-	baseURL := fmt.Sprintf("https://%c.routing.test/v1", suffix)
+	baseURL := fmt.Sprintf("https://%s.routing.test/v1", identity)
 	result, err := environment.store.DB().Exec(`INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
-VALUES(?,'openai-compatible',?,'private',1,1,?,?)`, ownerID, baseURL, now, now)
+VALUES(?,?,?,'private',1,1,?,?)`, ownerID, string(connectorType), baseURL, now, now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	endpointID, _ := result.LastInsertId()
-	contextID, fingerprint := make([]byte, 16), make([]byte, 32)
-	contextID[15], fingerprint[31] = suffix, suffix
+	digest := sha256.Sum256([]byte(identity))
+	contextID := append([]byte(nil), digest[:16]...)
+	fingerprint := append([]byte(nil), digest[:]...)
 	result, err = environment.store.DB().Exec(`INSERT INTO endpoint_key_secrets(
-context_id,canonical_base_url,connector_type,encrypted_secret,created_at) VALUES(?,?,'openai-compatible','envelope',?)`, contextID, baseURL, now)
+context_id,canonical_base_url,connector_type,encrypted_secret,created_at) VALUES(?,?,?,'envelope',?)`, contextID, baseURL, string(connectorType), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,9 +274,12 @@ VALUES(?,'approved',1,'description','','admin',?,?)`, ownerID, now, now)
 	result, err = environment.store.DB().Exec(`INSERT INTO donation_keys(
 donation_id,endpoint_key_id,display_head,display_tail,canonical_base_url,connector_type,
 price_used_mag,price_reserved_mag,calls_used,calls_reserved,tokens_used,tokens_reserved,
-failure_streak,streak_generation,next_claim_seq,next_fold_seq,enabled,token_reserve,safe_note,created_at,updated_at)
-VALUES(?,?,?,?,?,'openai-compatible',?,?,?,?,?,?,?,?,?,?,1,10,'safe label',?,?)`, donationID, endpointKeyID,
-		"head", "tail", baseURL, zero, zero, zero, zero, zero, zero, zero, one, one, one, now, now)
+failure_streak,streak_generation,next_claim_seq,next_fold_seq,enabled,token_reserve,safe_note,created_at,updated_at,
+authorized_expires_at,expires_at,source_endpoint_key_id,report_fingerprint)
+VALUES(?,?,?,?,?,?,
+?,?,?,?,?,?,?,?,?,?,1,10,'safe label',?,?,NULL,NULL,?,?)`, donationID, endpointKeyID,
+		"head", "tail", baseURL, string(connectorType), zero, zero, zero, zero, zero, zero, zero, one, one, one, now, now,
+		endpointKeyID, fingerprint)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +317,8 @@ func TestBindingCandidateRuntimeCapacityAndSignedCursor(t *testing.T) {
 	if err != nil || len(bindings.Value.Bindings) != 1 || bindings.Value.BindingRevision != "1" {
 		t.Fatalf("add bindings = %+v err=%v", bindings.Value, err)
 	}
-	snapshot, err := environment.service.Snapshot(context.Background(), modelID, routingTestNow)
+	snapshot, err := environment.service.Snapshot(context.Background(), modelID, routingTestNow,
+		[]connectorcontract.Type{connectorcontract.TypeOpenAICompatible})
 	if err != nil || len(snapshot.Candidates()) != 1 || snapshot.Candidates()[0].DonationKeyID != donationKeyID || snapshot.ReservedMilli != 2400 {
 		t.Fatalf("snapshot = %+v candidates=%+v err=%v", snapshot, snapshot.Candidates(), err)
 	}
@@ -314,7 +326,8 @@ func TestBindingCandidateRuntimeCapacityAndSignedCursor(t *testing.T) {
 	if _, err := environment.store.DB().Exec(`UPDATE donation_keys SET call_limit_mag=? WHERE id=?`, zero, donationKeyID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := environment.service.Snapshot(context.Background(), modelID, routingTestNow); !errors.Is(err, ErrUnavailable) {
+	if _, err := environment.service.Snapshot(context.Background(), modelID, routingTestNow,
+		[]connectorcontract.Type{connectorcontract.TypeOpenAICompatible}); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("zero call cap snapshot error = %v, want unavailable", err)
 	}
 	if _, err := environment.store.DB().Exec(`UPDATE donation_keys SET call_limit_mag=NULL WHERE id=?`, donationKeyID); err != nil {
@@ -364,7 +377,8 @@ func TestRuntimePreflightIsCandidateFreeAndEnforcesCallerPolicy(t *testing.T) {
 	if environment.state.dueCalls.Load() != 0 {
 		t.Fatalf("candidate-free preflight materialized donation state %d times", environment.state.dueCalls.Load())
 	}
-	if _, err := environment.service.Snapshot(context.Background(), modelID, routingTestNow); !errors.Is(err, ErrUnavailable) {
+	if _, err := environment.service.Snapshot(context.Background(), modelID, routingTestNow,
+		[]connectorcontract.Type{connectorcontract.TypeOpenAICompatible}); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("candidate-free model snapshot error=%v", err)
 	}
 	if environment.state.dueCalls.Load() != 1 {

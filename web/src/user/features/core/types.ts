@@ -54,10 +54,28 @@ export interface UserEnvelope {
   user: UserProfile;
 }
 
+export type EndpointSource = 'mainstream' | 'custom';
+
+export type EndpointOrigin =
+  { kind: 'custom' } | { kind: 'mainstream'; channel_id: string; name: string };
+
+export interface MainstreamChannelOption {
+  id: string;
+  name: string;
+  connector_type: ConnectorType;
+  base_url: string;
+}
+
+export interface EndpointCreateOptions {
+  base_connector_types: ConnectorType[];
+  mainstream_channels: MainstreamChannelOption[];
+}
+
 export interface Endpoint {
   id: string;
   connector_type: ConnectorType;
   base_url: string;
+  origin: EndpointOrigin;
   note: string;
   enabled: boolean;
   revision: string;
@@ -198,12 +216,20 @@ export interface OperationIdentity {
   actionId: string;
 }
 
-export interface EndpointCreateInput {
-  connector_type: ConnectorType;
-  base_url: string;
-  note: string;
-  enabled: boolean;
-}
+export type EndpointCreateInput =
+  | {
+      source: 'mainstream';
+      channel_id: string;
+      note: string;
+      enabled: boolean;
+    }
+  | {
+      source: 'custom';
+      connector_type: ConnectorType;
+      base_url: string;
+      note: string;
+      enabled: boolean;
+    };
 
 export interface EndpointPatchInput {
   note?: string;
@@ -263,8 +289,7 @@ export interface CandidateFilters {
 }
 
 export type HomeCapability<T> =
-  | { state: 'available'; load: (signal?: AbortSignal) => Promise<T> }
-  | { state: 'unavailable' };
+  { state: 'available'; load: (signal?: AbortSignal) => Promise<T> } | { state: 'unavailable' };
 
 export type HomeCheckinStatus =
   | { enabled: false }
@@ -351,10 +376,7 @@ export type AccountAuthority = 'active' | 'deleted';
 export interface AccountLifecycleAdapter {
   capabilities: Readonly<{ exportV4: boolean; deleteAccount: boolean }>;
   beginElevation(intent: LifecycleIntent, accountId: string): Promise<string>;
-  exportV4(input: {
-    accountId: string;
-    elevatedToken: string;
-  }): Promise<AccountExportAttachment>;
+  exportV4(input: { accountId: string; elevatedToken: string }): Promise<AccountExportAttachment>;
   deleteAccount(input: {
     accountId: string;
     elevatedToken: string;

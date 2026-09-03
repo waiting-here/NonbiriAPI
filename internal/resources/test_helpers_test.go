@@ -77,7 +77,7 @@ func newResourceTestEnvironmentWithDiscoveryPool(
 		KeyDeletion: deletions,
 		KeyCreation: lifecycle, Projection: lifecycle,
 		DiscoveryRail: discovery, DiscoveryWorker: worker,
-		CursorKeys: vault, FinalAuth: authorizer,
+		CursorKeys: vault, FinalAuth: authorizer, AdminFinalAuth: authorizer,
 		Now: func() time.Time { return time.Unix(clock.Load(), 0) },
 	})
 	if err != nil {
@@ -159,11 +159,12 @@ func (environment *resourceTestEnvironment) createEndpoint(t *testing.T, userID 
 func (environment *resourceTestEnvironment) createEndpointWithConnector(t *testing.T, userID int64, key, connectorType string, enabled bool) Endpoint {
 	t.Helper()
 	input := CreateEndpointInput{
+		Source:        "custom",
 		ConnectorType: connectorType, BaseURL: "https://example.com/v1",
 		Note: "endpoint note", Enabled: enabled,
 	}
 	mutation := resourceTestMutation(t, key, "POST", routeEndpoints, nil, createEndpointCanonical{
-		ConnectorType: input.ConnectorType, BaseURL: input.BaseURL, Note: input.Note, Enabled: input.Enabled,
+		Source: input.Source, ConnectorType: input.ConnectorType, BaseURL: input.BaseURL, Note: input.Note, Enabled: input.Enabled,
 	})
 	result, err := environment.repository.CreateEndpoint(context.Background(), userID, mutation, input)
 	if err != nil {
@@ -254,6 +255,22 @@ func (authorizer *resourceTestAuthorizer) AuthorizeUserMutation(ctx context.Cont
 		return err
 	}
 	if isAdmin != 0 || (isBanned != 0 && (!bannedUntil.Valid || bannedUntil.Int64 > resourceTestNow)) {
+		return ErrForbidden
+	}
+	return nil
+}
+
+func (authorizer *resourceTestAuthorizer) AuthorizeAdminFinalTx(ctx context.Context, tx *sql.Tx, adminID int64) error {
+	authorizer.calls.Add(1)
+	if authorizer.deny.Load() {
+		return ErrForbidden
+	}
+	var isAdmin int
+	if err := tx.QueryRowContext(ctx, `SELECT is_admin FROM users WHERE id=?`, adminID).Scan(&isAdmin); errors.Is(err, sql.ErrNoRows) {
+		return ErrUnauthorized
+	} else if err != nil {
+		return err
+	} else if isAdmin != 1 {
 		return ErrForbidden
 	}
 	return nil

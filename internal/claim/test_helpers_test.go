@@ -515,10 +515,11 @@ type claimFixture struct {
 }
 
 type testKey struct {
-	endpointID int64
-	keyID      int64
-	secretID   int64
-	candidate  Candidate
+	endpointID  int64
+	keyID       int64
+	secretID    int64
+	fingerprint []byte
+	candidate   Candidate
 }
 
 type allowAcceptanceGate struct{}
@@ -636,9 +637,10 @@ VALUES(?,?,?,'head','tail','',1,0,1,?,?)`, endpointID, secretID, fingerprint,
 		f.t.Fatalf("read endpoint key id: %v", err)
 	}
 	return testKey{
-		endpointID: endpointID,
-		keyID:      keyID,
-		secretID:   secretID,
+		endpointID:  endpointID,
+		keyID:       keyID,
+		secretID:    secretID,
+		fingerprint: append([]byte(nil), fingerprint...),
 		candidate: Candidate{
 			EndpointID:       endpointID,
 			EndpointKeyID:    keyID,
@@ -652,9 +654,9 @@ VALUES(?,?,?,'head','tail','',1,0,1,?,?)`, endpointID, secretID, fingerprint,
 func (f *claimFixture) seedDonationKey(ownerUserID int64, key testKey, label string, reward int64) int64 {
 	f.t.Helper()
 	result, err := f.db.Exec(`INSERT INTO donations(
-user_id,status,revision,description,review_note,reviewed_by_role,expires_at,reviewed_at,
+user_id,status,revision,description,review_note,reviewed_by_role,reviewed_at,
 created_at,updated_at)
-VALUES(?,'approved',1,'','','admin',?,?,?,?)`, ownerUserID, f.clock.Load()+86_400,
+VALUES(?,'approved',1,'','','admin',?,?,?)`, ownerUserID,
 		f.clock.Load(), f.clock.Load(), f.clock.Load())
 	if err != nil {
 		f.t.Fatalf("seed donation %q: %v", label, err)
@@ -666,13 +668,16 @@ VALUES(?,'approved',1,'','','admin',?,?,?,?)`, ownerUserID, f.clock.Load()+86_40
 	zero := make([]byte, 16)
 	one := make([]byte, 16)
 	one[15] = 1
+	expiresAt := f.clock.Load() + 86_400
 	result, err = f.db.Exec(`INSERT INTO donation_keys(
 donation_id,endpoint_key_id,display_head,display_tail,canonical_base_url,connector_type,
 price_used_mag,price_reserved_mag,calls_used,calls_reserved,tokens_used,tokens_reserved,
-failure_streak,streak_generation,next_claim_seq,next_fold_seq,created_at,updated_at)
-VALUES(?,?,'head','tail',?,'openai-compatible',?,?,?,?,?,?,?,?,?,?,?,?)`,
+failure_streak,streak_generation,next_claim_seq,next_fold_seq,created_at,updated_at,
+authorized_expires_at,expires_at,source_endpoint_key_id,report_fingerprint)
+VALUES(?,?,'head','tail',?,'openai-compatible',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		donationID, key.keyID, key.candidate.CanonicalBaseURL,
-		zero, zero, zero, zero, zero, zero, zero, one, one, one, f.clock.Load(), f.clock.Load())
+		zero, zero, zero, zero, zero, zero, zero, one, one, one, f.clock.Load(), f.clock.Load(),
+		expiresAt, expiresAt, key.keyID, key.fingerprint)
 	if err != nil {
 		f.t.Fatalf("seed donation key %q: %v", label, err)
 	}
@@ -730,18 +735,43 @@ func (f *claimFixture) acceptSelf(userID int64, attemptLimit int) Request {
 
 func (f *claimFixture) acceptCharity(userID int64, attemptLimit int) Request {
 	f.t.Helper()
+	decisionNow := f.clock.Load()
 	request, err := f.service.Accept(context.Background(), AcceptInput{
-		UserID:         userID,
-		Route:          RouteCharityChat,
-		ModelSnapshot:  "[公益]provider/model",
-		AttemptLimit:   attemptLimit,
-		ReservedMilli:  200,
-		CharityModelID: 1,
+		UserID:             userID,
+		Route:              RouteCharityChat,
+		ModelSnapshot:      "[公益]provider/model",
+		AttemptLimit:       attemptLimit,
+		ReservedMilli:      200,
+		CharityModelID:     1,
+		CharityDecisionNow: &decisionNow,
 	})
 	if err != nil {
 		f.t.Fatalf("accept charity request: %v", err)
 	}
 	return request
+}
+
+func (f *claimFixture) deleteUserWithDonationTombstones(userID int64) {
+	f.t.Helper()
+	at := f.clock.Load()
+	tx, err := f.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		f.t.Fatalf("begin receiver deletion: %v", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`UPDATE donation_keys
+SET enabled=0,ended_at=?,ended_reason='account_deleted',report_match_until=?,updated_at=?
+WHERE ended_at IS NULL AND endpoint_key_id IN (
+ SELECT k.id FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id WHERE e.user_id=?
+)`, at, at+90*24*60*60, at, userID); err != nil {
+		f.t.Fatalf("terminalize receiver donation keys: %v", err)
+	}
+	if _, err := tx.Exec(`DELETE FROM users WHERE id=?`, userID); err != nil {
+		f.t.Fatalf("delete reward receiver: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		f.t.Fatalf("commit reward receiver deletion: %v", err)
+	}
 }
 
 func (f *claimFixture) requireCapacity(requestID string, requestRows, globalRows uint64, ledgerRows int64) {

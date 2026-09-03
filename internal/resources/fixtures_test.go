@@ -26,7 +26,7 @@ func TestCanonicalResourceDTOFixtures(t *testing.T) {
 		value any
 	}{
 		{"endpoint.json", Endpoint{
-			ID: "11", ConnectorType: "openai-compatible", BaseURL: "https://example.com/v1", Note: "endpoint note",
+			ID: "11", ConnectorType: "openai-compatible", BaseURL: "https://example.com/v1", Origin: EndpointOrigin{Kind: "custom"}, Note: "endpoint note",
 			Enabled: true, Revision: "3", KeyCount: "2", CreatedAt: 1_700_000_000, UpdatedAt: 1_700_000_010,
 		}},
 		{"endpoint_key.json", EndpointKey{

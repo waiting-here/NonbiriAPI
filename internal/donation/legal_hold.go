@@ -57,7 +57,7 @@ func (s *Service) InspectForCreate(
 	if !state.Exists {
 		return state.HeldDonationState, nil
 	}
-	if state.status == "approved" && state.expiresAt.Valid && decisionNow >= state.expiresAt.Int64 {
+	if state.status == "pending" || state.status == "approved" {
 		if _, err := materializeDonationExpiryTx(ctx, tx, id, decisionNow); err != nil {
 			return HeldDonationState{}, err
 		}
@@ -81,15 +81,14 @@ func (s *Service) InspectForCreate(
 type heldDonationRow struct {
 	HeldDonationState
 	status     string
-	expiresAt  sql.NullInt64
 	terminalAt sql.NullInt64
 	consumed   int
 }
 
 func inspectHeldDonationState(ctx context.Context, tx *sql.Tx, id int64) (heldDonationRow, error) {
 	var state heldDonationRow
-	err := tx.QueryRowContext(ctx, `SELECT status,expires_at,terminal_at,legal_hold_consumed
-FROM donations WHERE id=?`, id).Scan(&state.status, &state.expiresAt, &state.terminalAt, &state.consumed)
+	err := tx.QueryRowContext(ctx, `SELECT status,terminal_at,legal_hold_consumed
+FROM donations WHERE id=?`, id).Scan(&state.status, &state.terminalAt, &state.consumed)
 	if errors.Is(err, sql.ErrNoRows) {
 		return heldDonationRow{}, nil
 	}

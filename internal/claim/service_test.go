@@ -8,18 +8,22 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
 type inspectingAcceptanceGate struct {
 	calls int
 	err   error
+	times []int64
 }
 
 func (gate *inspectingAcceptanceGate) AuthorizeChatAcceptance(ctx context.Context, tx *sql.Tx, userID, decisionNow int64) error {
 	gate.calls++
+	gate.times = append(gate.times, decisionNow)
 	if userID <= 0 || decisionNow < 0 {
 		return ErrInvalidInput
 	}
@@ -94,6 +98,106 @@ func TestAcceptMissingGateFailsClosedAndBannedUserWinsBeforeGate(t *testing.T) {
 	if gate.calls != 0 {
 		t.Fatalf("gate ran before user revalidation: %d", gate.calls)
 	}
+}
+
+func TestAcceptDecisionTimeIsRequiredOnlyForCharity(t *testing.T) {
+	fixture := newClaimFixture(t)
+	userID := fixture.seedUser("acceptance-decision-shape", false)
+	decisionNow := fixture.clock.Load()
+
+	if _, err := fixture.service.Accept(context.Background(), AcceptInput{
+		UserID: userID, Route: RouteOpenAIChat, ModelSnapshot: "public/model", AttemptLimit: 1,
+		CharityDecisionNow: &decisionNow,
+	}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("personal acceptance with charity decision time error = %v", err)
+	}
+	if _, err := fixture.service.Accept(context.Background(), AcceptInput{
+		UserID: userID, Route: RouteCharityChat, ModelSnapshot: "[公益]provider/model", AttemptLimit: 1,
+		CharityModelID: 1,
+	}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("charity acceptance without decision time error = %v", err)
+	}
+	var requests int
+	if err := fixture.db.QueryRow(`SELECT COUNT(*) FROM logical_requests`).Scan(&requests); err != nil || requests != 0 {
+		t.Fatalf("invalid decision-time shapes wrote %d requests: %v", requests, err)
+	}
+}
+
+func TestAcceptCharityUsesExplicitDecisionTimeAcrossClockSecond(t *testing.T) {
+	t.Run("account authorization", func(t *testing.T) {
+		fixture := newClaimFixture(t)
+		userID := fixture.seedUser("acceptance-explicit-auth-time", false)
+		decisionNow := fixture.clock.Load()
+		if _, err := fixture.db.Exec(`UPDATE users SET charity_suspended_until=? WHERE id=?`, decisionNow+1, userID); err != nil {
+			t.Fatal(err)
+		}
+		clockCalls := 0
+		fixture.service.now = func() time.Time {
+			clockCalls++
+			return time.Unix(decisionNow+2, 0)
+		}
+		gate := &inspectingAcceptanceGate{}
+		fixture.service.acceptance = gate
+
+		_, err := fixture.service.Accept(context.Background(), AcceptInput{
+			UserID: userID, Route: RouteCharityChat, ModelSnapshot: "[公益]provider/model", AttemptLimit: 1,
+			CharityModelID: 1, CharityDecisionNow: &decisionNow,
+		})
+		if !errors.Is(err, ErrNotFound) {
+			t.Fatalf("charity authorization at explicit second error = %v, want not found", err)
+		}
+		if clockCalls != 0 || gate.calls != 0 {
+			t.Fatalf("authorization used later clock or crossed gate: clock=%d gate=%d", clockCalls, gate.calls)
+		}
+	})
+
+	t.Run("gate reservation and persisted facts", func(t *testing.T) {
+		fixture := newClaimFixture(t)
+		userID := fixture.seedUser("acceptance-explicit-persist-time", false)
+		fixture.seedLedgerUser(userID, 1_000)
+		fixture.useLedgerAccounting()
+		decisionNow := fixture.clock.Load()
+		clockCalls := 0
+		fixture.service.now = func() time.Time {
+			clockCalls++
+			return time.Unix(decisionNow+int64(clockCalls), 0)
+		}
+		gate := &inspectingAcceptanceGate{}
+		fixture.service.acceptance = gate
+
+		request, err := fixture.service.Accept(context.Background(), AcceptInput{
+			UserID: userID, Route: RouteCharityChat, ModelSnapshot: "[公益]provider/model", AttemptLimit: 2,
+			ReservedMilli: 200, CharityModelID: 1, CharityDecisionNow: &decisionNow,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if clockCalls != 0 {
+			t.Fatalf("charity acceptance sampled its clock %d times", clockCalls)
+		}
+		if gate.calls != 1 || len(gate.times) != 1 || gate.times[0] != decisionNow {
+			t.Fatalf("acceptance gate times = %v calls=%d, want %d", gate.times, gate.calls, decisionNow)
+		}
+		if request.CreatedAt != decisionNow {
+			t.Fatalf("returned request created_at = %d, want %d", request.CreatedAt, decisionNow)
+		}
+		var requestCreatedAt, logStartedAt int64
+		if err := fixture.db.QueryRow(`SELECT r.created_at,l.started_at
+		FROM logical_requests r JOIN request_logs l ON l.logical_request_id=r.id WHERE r.id=?`, request.ID).
+			Scan(&requestCreatedAt, &logStartedAt); err != nil {
+			t.Fatal(err)
+		}
+		if requestCreatedAt != decisionNow || logStartedAt != decisionNow {
+			t.Fatalf("persisted request/log times = %d/%d, want %d", requestCreatedAt, logStartedAt, decisionNow)
+		}
+		fixture.requireOperationTime(ledger.KindCharityReserve, request.ID, decisionNow)
+		fixture.charity.mu.Lock()
+		accepts := append([]CharityAcceptance(nil), fixture.charity.accepts...)
+		fixture.charity.mu.Unlock()
+		if len(accepts) != 1 || accepts[0].AcceptedAt != decisionNow {
+			t.Fatalf("charity acceptance facts = %+v, want accepted_at %d", accepts, decisionNow)
+		}
+	})
 }
 
 func TestDispatchRailPersistsBeforeCredentialAndSeparatesAttemptFromCaller(t *testing.T) {

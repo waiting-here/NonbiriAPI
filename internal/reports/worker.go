@@ -156,7 +156,10 @@ func (repository *Repository) workerLoop(ctx context.Context, done chan struct{}
 	for {
 		now, err := repository.nowUnix()
 		if err == nil {
-			_, _ = repository.runWorkerOnce(ctx, now)
+			result, workErr := repository.runWorkerOnce(ctx, now)
+			if workErr == nil && result.More {
+				continue
+			}
 		}
 		select {
 		case <-ctx.Done():

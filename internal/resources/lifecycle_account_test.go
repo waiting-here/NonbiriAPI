@@ -74,6 +74,9 @@ WHERE user_id=?`, callerHash, resourceTestNow, resourceTestNow, userID); err != 
 		len(exported.Models) != 1 || len(exported.Models[0].Bindings) != 1 || exported.CallerKey == nil {
 		t.Fatalf("unexpected lifecycle resource shape: %+v", exported)
 	}
+	if exported.Endpoints[0].Origin != (EndpointOrigin{Kind: "custom"}) {
+		t.Fatalf("lifecycle endpoint origin = %+v, want custom", exported.Endpoints[0].Origin)
+	}
 	encoded, err := json.Marshal(exported)
 	if err != nil {
 		t.Fatal(err)

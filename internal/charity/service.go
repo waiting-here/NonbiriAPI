@@ -326,7 +326,7 @@ func readClaimKey(ctx context.Context, tx *sql.Tx, input claim.CharityClaimInput
 	var reservationState, requestState, requestRoute string
 	var suspended int
 	err := tx.QueryRowContext(ctx, `SELECT
-d.id,d.status,d.expires_at,COALESCE(d.user_id,0),dk.id,COALESCE(dk.endpoint_key_id,0),e.id,
+d.id,d.status,dk.expires_at,COALESCE(d.user_id,0),dk.id,COALESCE(dk.endpoint_key_id,0),e.id,
 dk.enabled,dk.failure_disabled,COALESCE(dk.ended_reason,''),dk.price_limit_mag,dk.call_limit_mag,dk.token_limit_mag,
 dk.price_used_mag,dk.price_reserved_mag,dk.calls_used,dk.calls_reserved,dk.tokens_used,dk.tokens_reserved,
 dk.streak_generation,dk.next_claim_seq,dk.token_reserve,e.enabled,k.enabled,

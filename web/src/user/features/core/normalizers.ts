@@ -18,11 +18,14 @@ import {
   type DiscoveryEvidence,
   type DiscoverySafeClass,
   type Endpoint,
+  type EndpointCreateOptions,
+  type EndpointOrigin,
   type EndpointKey,
   type HomeAnnouncementSummary,
   type HomeCheckinResult,
   type HomeCheckinStatus,
   type HomeGameSummary,
+  type MainstreamChannelOption,
   type ManualEntriesResponse,
   type ManualUpdateResponse,
   type Model,
@@ -389,11 +392,7 @@ export function normalizeHomeGameSummary(value: unknown): HomeGameSummary[] {
     'home pending game results',
   );
   const result = [...continuations, ...pending];
-  uniqueBy(
-    result,
-    (item) => `${item.game}:${item.resource_id}`,
-    'home game summary',
-  );
+  uniqueBy(result, (item) => `${item.game}:${item.resource_id}`, 'home game summary');
   return result;
 }
 
@@ -575,6 +574,77 @@ export function normalizeUserEnvelope(value: unknown): UserEnvelope {
   return { user: normalizeUserProfile(record.user) };
 }
 
+export function normalizeEndpointOrigin(value: unknown): EndpointOrigin {
+  const root = asRecord(value, 'endpoint origin');
+  if (root.kind === 'custom') {
+    exactRecord(value, ['kind'], [], 'endpoint origin');
+    return { kind: 'custom' };
+  }
+  if (root.kind === 'mainstream') {
+    const record = exactRecord(value, ['kind', 'channel_id', 'name'], [], 'endpoint origin');
+    return {
+      kind: 'mainstream',
+      channel_id: opaqueID(record.channel_id, 'mch_', 'endpoint origin channel id'),
+      name: scalarString(record.name, 128, 'endpoint origin channel name', {
+        rejectEdgeWhitespace: true,
+      }),
+    };
+  }
+  invalid('endpoint origin');
+}
+
+export function normalizeMainstreamChannelOption(value: unknown): MainstreamChannelOption {
+  const record = exactRecord(
+    value,
+    ['id', 'name', 'connector_type', 'base_url'],
+    [],
+    'mainstream channel option',
+  );
+  return {
+    id: opaqueID(record.id, 'mch_', 'mainstream channel option id'),
+    name: scalarString(record.name, 128, 'mainstream channel option name', {
+      rejectEdgeWhitespace: true,
+    }),
+    connector_type: connectorType(record.connector_type),
+    base_url: normalizeBaseURL(record.base_url, 'mainstream channel option base URL'),
+  };
+}
+
+export function normalizeEndpointCreateOptions(value: unknown): EndpointCreateOptions {
+  const record = exactRecord(
+    value,
+    ['base_connector_types', 'mainstream_channels'],
+    [],
+    'endpoint creation options',
+  );
+  const baseConnectorTypes = boundedArray(
+    record.base_connector_types,
+    (item) => connectorType(item),
+    'base connector types',
+    CONNECTOR_TYPES.length,
+  );
+  uniqueBy(baseConnectorTypes, (item) => item, 'base connector types');
+  let previousIndex = -1;
+  for (const item of baseConnectorTypes) {
+    const index = CONNECTOR_TYPES.indexOf(item);
+    if (index <= previousIndex) invalid('base connector type order');
+    previousIndex = index;
+  }
+  const mainstreamChannels = boundedArray(
+    record.mainstream_channels,
+    normalizeMainstreamChannelOption,
+    'mainstream channel options',
+  );
+  uniqueBy(mainstreamChannels, (item) => item.id, 'mainstream channel option ids');
+  if (mainstreamChannels.some((item) => !baseConnectorTypes.includes(item.connector_type))) {
+    invalid('mainstream channel option connector type');
+  }
+  return {
+    base_connector_types: baseConnectorTypes,
+    mainstream_channels: mainstreamChannels,
+  };
+}
+
 export function normalizeEndpoint(value: unknown): Endpoint {
   const record = exactRecord(
     value,
@@ -582,6 +652,7 @@ export function normalizeEndpoint(value: unknown): Endpoint {
       'id',
       'connector_type',
       'base_url',
+      'origin',
       'note',
       'enabled',
       'revision',
@@ -599,6 +670,7 @@ export function normalizeEndpoint(value: unknown): Endpoint {
     id: id(record.id, 'endpoint id'),
     connector_type: connectorType(record.connector_type),
     base_url: normalizeBaseURL(record.base_url, 'endpoint base URL'),
+    origin: normalizeEndpointOrigin(record.origin),
     note: scalarString(record.note, 1_024, 'endpoint note', { allowEmpty: true }),
     enabled: exactBoolean(record.enabled, 'endpoint enabled state'),
     revision: decimal(record.revision, 'endpoint revision', true),
@@ -1239,6 +1311,14 @@ export function validateResourceId(value: string, label: string): string {
     return id(value, label);
   } catch {
     throw new ApiError('invalid_request', `Invalid ${label}.`, 400);
+  }
+}
+
+export function validateMainstreamChannelID(value: string): string {
+  try {
+    return opaqueID(value, 'mch_', 'mainstream channel id');
+  } catch {
+    throw new ApiError('invalid_request', 'Invalid mainstream channel id.', 400);
   }
 }
 

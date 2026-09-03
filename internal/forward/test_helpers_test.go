@@ -62,6 +62,7 @@ type fakeCharityRouter struct {
 	listCalls int
 	preTimes  []int64
 	snapTimes []int64
+	snapTypes [][]connectorcontract.Type
 }
 
 func (router *fakeCharityRouter) Preflight(_ context.Context, _ int64, _ string, _ *openai.ChatRequest, now int64) (CharityPreflight, error) {
@@ -70,9 +71,10 @@ func (router *fakeCharityRouter) Preflight(_ context.Context, _ int64, _ string,
 	return router.preflight, router.preErr
 }
 
-func (router *fakeCharityRouter) Snapshot(_ context.Context, _ int64, now int64) (CharitySnapshot, error) {
+func (router *fakeCharityRouter) Snapshot(_ context.Context, _ int64, now int64, connectorTypes []connectorcontract.Type) (CharitySnapshot, error) {
 	router.snapCalls++
 	router.snapTimes = append(router.snapTimes, now)
+	router.snapTypes = append(router.snapTypes, append([]connectorcontract.Type(nil), connectorTypes...))
 	return router.snapshot, router.snapErr
 }
 

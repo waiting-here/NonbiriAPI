@@ -26,6 +26,7 @@ const (
 	maxDonationTextRunes  = 1024
 	maxSafeNoteRunes      = 256
 	terminalRetention     = int64(400 * 24 * 60 * 60)
+	reportMatchRetention  = int64(90 * 24 * 60 * 60)
 )
 
 const (
@@ -90,12 +91,8 @@ func (s *Service) Create(
 ) (resources.MutationResult[Donation], error) {
 	if s == nil || ctx == nil || userID <= 0 || mutation.Method != http.MethodPost || mutation.Route != routeDonations ||
 		len(mutation.PathIDs) != 0 || mutation.Query != "" || !validDonationText(input.Description) ||
-		!input.OwnershipAuthorized || !validUniqueIDs(input.EndpointKeyIDs, 1, maxDonationKeys) {
+		!input.OwnershipAuthorized || !validCreateKeys(input.Keys) {
 		return resources.MutationResult[Donation]{}, ErrInvalidRequest
-	}
-	now, err := s.nowUnix()
-	if err != nil {
-		return resources.MutationResult[Donation]{}, err
 	}
 	tx, err := s.beginOwnerTx(ctx, userID)
 	if err != nil {
@@ -103,6 +100,10 @@ func (s *Service) Create(
 	}
 	committed := false
 	defer finishTx(tx, &committed)
+	now, err := s.nowUnix()
+	if err != nil {
+		return resources.MutationResult[Donation]{}, err
+	}
 	decision, err := beginMutation(ctx, tx, "user", userID, idempotency.ScopeDonation, mutation, now)
 	if err != nil {
 		return resources.MutationResult[Donation]{}, err
@@ -110,13 +111,22 @@ func (s *Service) Create(
 	if decision.Kind == idempotency.Replay {
 		return replay[Donation](decision)
 	}
+	for _, key := range input.Keys {
+		if key.ExpiresAt != nil && (*key.ExpiresAt <= now || *key.ExpiresAt > maxUnixSecond) {
+			return resources.MutationResult[Donation]{}, ErrInvalidRequest
+		}
+	}
 	if enabled, err := configBool(ctx, tx, "donation_accept_enabled"); err != nil {
 		return resources.MutationResult[Donation]{}, err
 	} else if !enabled {
 		return resources.MutationResult[Donation]{}, ErrFeatureDisabled
 	}
 
-	keys, err := validateSubmissionKeys(ctx, tx, userID, input.EndpointKeyIDs)
+	keys, err := validateSubmissionKeys(ctx, tx, userID, input.Keys)
+	if err != nil {
+		return resources.MutationResult[Donation]{}, err
+	}
+	autoApprove, err := submissionAutoApproval(keys)
 	if err != nil {
 		return resources.MutationResult[Donation]{}, err
 	}
@@ -133,14 +143,19 @@ VALUES(?,'pending',1,?,'','',?,?)`, userID, input.Description, now, now)
 	zero := db.EncodeU128(db.U128{})
 	one := db.U128{}
 	one[15] = 1
+	defaultSettings := make([]KeySetting, 0, len(keys))
 	for _, key := range keys {
 		result, err = tx.ExecContext(ctx, `INSERT INTO donation_keys(
 donation_id,endpoint_key_id,display_head,display_tail,canonical_base_url,connector_type,
 price_used_mag,price_reserved_mag,calls_used,calls_reserved,tokens_used,tokens_reserved,
-failure_streak,streak_generation,next_claim_seq,next_fold_seq,created_at,updated_at)
-VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+failure_streak,streak_generation,next_claim_seq,next_fold_seq,created_at,updated_at,
+authorized_expires_at,expires_at,mainstream_channel_id,mainstream_channel_revision,
+mainstream_channel_name,mainstream_channel_category,source_endpoint_key_id,report_fingerprint)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			donationID, key.id, key.head, key.tail, key.baseURL, key.connector,
-			zero, zero, zero, zero, zero, zero, zero, db.EncodeU128(one), db.EncodeU128(one), db.EncodeU128(one), now, now)
+			zero, zero, zero, zero, zero, zero, zero, db.EncodeU128(one), db.EncodeU128(one), db.EncodeU128(one), now, now,
+			key.expiresAt, key.expiresAt, key.channelID, key.channelRevision, key.channelName, key.channelCategory,
+			key.id, key.reportFingerprint)
 		if err != nil {
 			return resources.MutationResult[Donation]{}, classifyWrite("create donation key", err)
 		}
@@ -148,10 +163,34 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		if err != nil || donationKeyID <= 0 {
 			return resources.MutationResult[Donation]{}, ErrInvariant
 		}
+		defaultSettings = append(defaultSettings, KeySetting{
+			DonationKeyID: donationKeyID,
+			Enabled:       true,
+			ExpiresAt:     key.expiresAt,
+		})
 		if _, err := tx.ExecContext(ctx, `INSERT INTO donation_key_memberships(
 endpoint_key_id,donation_key_id,donation_id,created_at) VALUES(?,?,?,?)`,
 			key.id, donationKeyID, donationID, now); err != nil {
 			return resources.MutationResult[Donation]{}, classifyWrite("create membership", err)
+		}
+	}
+	if autoApprove {
+		if err := applyApprovalKeySettingsTx(ctx, tx, donationID, defaultSettings, now); err != nil {
+			return resources.MutationResult[Donation]{}, err
+		}
+		result, err := tx.ExecContext(ctx, `UPDATE donations SET status='approved',review_note='',
+reviewed_by_user_id=NULL,reviewed_by_role='',reviewed_at=?,updated_at=?
+WHERE id=? AND status='pending' AND revision=1`, now, now, donationID)
+		if err != nil {
+			return resources.MutationResult[Donation]{}, fmt.Errorf("donation: auto-approve submission: %w", err)
+		}
+		if err := requireOne(result); err != nil {
+			return resources.MutationResult[Donation]{}, err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO donation_reviews(
+donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at)
+VALUES(?,1,NULL,'','approve','',?)`, donationID, now); err != nil {
+			return resources.MutationResult[Donation]{}, fmt.Errorf("donation: record automatic approval: %w", err)
 		}
 	}
 	value, err := getOwnerDonationTx(ctx, tx, userID, donationID, now)
@@ -214,39 +253,37 @@ func (s *Service) Terminate(
 		strings.TrimSpace(input.Confirmation) == "" || !validMutation(mutation, http.MethodPost, routeTerminate, donationID) {
 		return resources.MutationResult[Donation]{}, ErrInvalidRequest
 	}
-	now, err := s.nowUnix()
-	if err != nil {
-		return resources.MutationResult[Donation]{}, err
-	}
 	tx, err := s.beginOwnerTx(ctx, userID)
 	if err != nil {
 		return resources.MutationResult[Donation]{}, err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
+	now, err := s.nowUnix()
+	if err != nil {
+		return resources.MutationResult[Donation]{}, err
+	}
 
 	var status string
-	var expires sql.NullInt64
-	err = tx.QueryRowContext(ctx, `SELECT status,expires_at FROM donations WHERE id=? AND user_id=?`,
-		donationID, userID).Scan(&status, &expires)
+	err = tx.QueryRowContext(ctx, `SELECT status FROM donations WHERE id=? AND user_id=?`,
+		donationID, userID).Scan(&status)
 	if errors.Is(err, sql.ErrNoRows) {
 		return resources.MutationResult[Donation]{}, ErrNotFound
 	}
 	if err != nil {
 		return resources.MutationResult[Donation]{}, fmt.Errorf("donation: read termination state: %w", err)
 	}
-	if status == "approved" && expires.Valid && now >= expires.Int64 {
-		expired, err := materializeDonationExpiryTx(ctx, tx, donationID, now)
+	if status == "approved" {
+		expiry, err := materializeDonationExpiryStateTx(ctx, tx, donationID, now)
 		if err != nil {
 			return resources.MutationResult[Donation]{}, err
 		}
-		if !expired {
-			return resources.MutationResult[Donation]{}, ErrInvariant
+		if expiry.changed {
+			if err := commitTx(tx, &committed); err != nil {
+				return resources.MutationResult[Donation]{}, err
+			}
+			return resources.MutationResult[Donation]{}, ErrConflict
 		}
-		if err := commitTx(tx, &committed); err != nil {
-			return resources.MutationResult[Donation]{}, err
-		}
-		return resources.MutationResult[Donation]{}, ErrConflict
 	}
 
 	decision, err := beginMutation(ctx, tx, "user", userID, idempotency.ScopeDonation, mutation, now)
@@ -280,16 +317,16 @@ func (s *Service) ownerDonationMutation(
 	mutation resources.ControlMutation,
 	apply func(context.Context, *sql.Tx, int64) error,
 ) (resources.MutationResult[Donation], error) {
-	now, err := s.nowUnix()
-	if err != nil {
-		return resources.MutationResult[Donation]{}, err
-	}
 	tx, err := s.beginOwnerTx(ctx, userID)
 	if err != nil {
 		return resources.MutationResult[Donation]{}, err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
+	now, err := s.nowUnix()
+	if err != nil {
+		return resources.MutationResult[Donation]{}, err
+	}
 	decision, err := beginMutation(ctx, tx, "user", userID, idempotency.ScopeDonation, mutation, now)
 	if err != nil {
 		return resources.MutationResult[Donation]{}, err
@@ -375,16 +412,16 @@ func (s *Service) review(
 	if s == nil || ctx == nil || donationID <= 0 || !validReviewInput(input) {
 		return roleDonationMutation{}, ErrInvalidRequest
 	}
-	now, err := s.nowUnix()
-	if err != nil {
-		return roleDonationMutation{}, err
-	}
 	tx, actorID, err := s.beginRoleTx(ctx, role, actorUserID)
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
+	now, err := s.nowUnix()
+	if err != nil {
+		return roleDonationMutation{}, err
+	}
 	if role == reviewerSteward {
 		if err := requireStewardDonationOwnershipTx(ctx, tx, donationID, actorID); err != nil {
 			return roleDonationMutation{}, err
@@ -397,11 +434,11 @@ func (s *Service) review(
 	if decision.Kind == idempotency.Replay {
 		return replayRoleDonation(decision, role)
 	}
-	expired, err := materializeDonationExpiryTx(ctx, tx, donationID, now)
+	expiry, err := materializeDonationExpiryStateTx(ctx, tx, donationID, now)
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
-	if expired {
+	if expiry.changed {
 		if err := tx.Rollback(); err != nil {
 			return roleDonationMutation{}, fmt.Errorf("donation: roll back expired review intent: %w", err)
 		}
@@ -443,7 +480,7 @@ func reviewDonationTx(ctx context.Context, tx *sql.Tx, donationID, actorID int64
 		if status != "pending" {
 			return ErrConflict
 		}
-		if err := clearDonationMembershipsTx(ctx, tx, donationID, "", now); err != nil {
+		if err := clearDonationMembershipsTx(ctx, tx, donationID, "terminated", now); err != nil {
 			return err
 		}
 		result, err := tx.ExecContext(ctx, `UPDATE donations SET status='rejected',revision=revision+1,
@@ -461,30 +498,12 @@ VALUES(?,?,?,?, 'reject',?,?)`, donationID, revision+1, actorID, role, input.Rea
 		return err
 	}
 
-	settings, err := validateReviewSettings(ctx, tx, donationID, input.KeySettings)
-	if err != nil {
+	if err := applyApprovalKeySettingsTx(ctx, tx, donationID, input.KeySettings, now); err != nil {
 		return err
 	}
-	var suspended int
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
-SELECT 1 FROM donation_key_memberships m JOIN endpoint_key_suspensions s ON s.endpoint_key_id=m.endpoint_key_id
-WHERE m.donation_id=?)`, donationID).Scan(&suspended); err != nil {
-		return fmt.Errorf("donation: inspect review suspension: %w", err)
-	}
-	if suspended != 0 {
-		return ErrConflict
-	}
-	for _, setting := range settings {
-		if _, err := tx.ExecContext(ctx, `UPDATE donation_keys SET
-price_limit_mag=?,call_limit_mag=?,token_limit_mag=?,token_reserve=?,enabled=?,safe_note=?,updated_at=?
-WHERE id=? AND donation_id=? AND ended_at IS NULL`, setting.priceLimit, setting.callLimit, setting.tokenLimit,
-			setting.tokenReserve, boolInt(setting.enabled), setting.safeNote, now, setting.id, donationID); err != nil {
-			return fmt.Errorf("donation: apply review key settings: %w", err)
-		}
-	}
 	result, err := tx.ExecContext(ctx, `UPDATE donations SET status='approved',revision=revision+1,
-review_note=?,reviewed_by_user_id=?,reviewed_by_role=?,expires_at=?,reviewed_at=?,updated_at=?,terminal_at=NULL
-WHERE id=? AND status=? AND revision=?`, input.Reason, actorID, role, input.ExpiresAt, now, now, donationID, status, revision)
+review_note=?,reviewed_by_user_id=?,reviewed_by_role=?,reviewed_at=?,updated_at=?,terminal_at=NULL
+WHERE id=? AND status=? AND revision=?`, input.Reason, actorID, role, now, now, donationID, status, revision)
 	if err != nil {
 		return fmt.Errorf("donation: approve submission: %w", err)
 	}
@@ -500,9 +519,41 @@ donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,creat
 VALUES(?,?,?,?,?,?,?)`, donationID, revision+1, actorID, role, action, input.Reason, now); err != nil {
 		return fmt.Errorf("donation: record approval: %w", err)
 	}
-	if input.ExpiresAt != nil && now >= *input.ExpiresAt {
-		_, err := materializeDonationExpiryTx(ctx, tx, donationID, now)
+	_, err = materializeDonationExpiryTx(ctx, tx, donationID, now)
+	return err
+}
+
+func applyApprovalKeySettingsTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	donationID int64,
+	keySettings []KeySetting,
+	now int64,
+) error {
+	settings, err := validateReviewSettings(ctx, tx, donationID, keySettings)
+	if err != nil {
 		return err
+	}
+	var suspended int
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
+SELECT 1 FROM donation_key_memberships m JOIN endpoint_key_suspensions s ON s.endpoint_key_id=m.endpoint_key_id
+WHERE m.donation_id=?)`, donationID).Scan(&suspended); err != nil {
+		return fmt.Errorf("donation: inspect approval suspension: %w", err)
+	}
+	if suspended != 0 {
+		return ErrConflict
+	}
+	for _, setting := range settings {
+		result, err := tx.ExecContext(ctx, `UPDATE donation_keys SET
+price_limit_mag=?,call_limit_mag=?,token_limit_mag=?,token_reserve=?,enabled=?,safe_note=?,expires_at=?,updated_at=?
+WHERE id=? AND donation_id=? AND ended_at IS NULL`, setting.priceLimit, setting.callLimit, setting.tokenLimit,
+			setting.tokenReserve, boolInt(setting.enabled), setting.safeNote, setting.expiresAt, now, setting.id, donationID)
+		if err != nil {
+			return fmt.Errorf("donation: apply approval key settings: %w", err)
+		}
+		if err := requireOne(result); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -513,6 +564,7 @@ type validatedKeySetting struct {
 	tokenReserve                      int64
 	enabled                           bool
 	safeNote                          string
+	expiresAt                         any
 }
 
 func validateReviewSettings(ctx context.Context, tx *sql.Tx, donationID int64, settings []KeySetting) ([]validatedKeySetting, error) {
@@ -523,7 +575,7 @@ func validateReviewSettings(ctx context.Context, tx *sql.Tx, donationID int64, s
 	validated := make([]validatedKeySetting, 0, len(settings))
 	for _, setting := range settings {
 		if setting.DonationKeyID <= 0 || setting.TokenReserve < 0 || setting.TokenReserve > 2147483647 ||
-			!validSafeNote(setting.SafeNote) {
+			!validSafeNote(setting.SafeNote) || !validExpiryValue(setting.ExpiresAt) {
 			return nil, ErrInvalidRequest
 		}
 		if _, exists := seen[setting.DonationKeyID]; exists {
@@ -545,9 +597,10 @@ func validateReviewSettings(ctx context.Context, tx *sql.Tx, donationID int64, s
 		validated = append(validated, validatedKeySetting{
 			id: setting.DonationKeyID, priceLimit: price, callLimit: calls, tokenLimit: tokens,
 			tokenReserve: setting.TokenReserve, enabled: setting.Enabled, safeNote: setting.SafeNote,
+			expiresAt: nullableInt64Argument(setting.ExpiresAt),
 		})
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT id FROM donation_keys WHERE donation_id=? AND ended_at IS NULL ORDER BY id`, donationID)
+	rows, err := tx.QueryContext(ctx, `SELECT id,authorized_expires_at FROM donation_keys WHERE donation_id=? AND ended_at IS NULL ORDER BY id`, donationID)
 	if err != nil {
 		return nil, fmt.Errorf("donation: read review key set: %w", err)
 	}
@@ -555,8 +608,19 @@ func validateReviewSettings(ctx context.Context, tx *sql.Tx, donationID int64, s
 	current := make([]int64, 0, len(settings))
 	for rows.Next() {
 		var id int64
-		if err := rows.Scan(&id); err != nil {
+		var authorized sql.NullInt64
+		if err := rows.Scan(&id, &authorized); err != nil {
 			return nil, fmt.Errorf("donation: scan review key set: %w", err)
+		}
+		var requested *int64
+		for _, setting := range settings {
+			if setting.DonationKeyID == id {
+				requested = setting.ExpiresAt
+				break
+			}
+		}
+		if !effectiveExpiryWithinAuthorization(requested, authorized) {
+			return nil, ErrInvalidRequest
 		}
 		current = append(current, id)
 	}
@@ -610,16 +674,16 @@ func (s *Service) manageKey(
 	if s == nil || ctx == nil || donationID <= 0 || keyID <= 0 || !validKeyManagement(input) {
 		return roleDonationMutation{}, ErrInvalidRequest
 	}
-	now, err := s.nowUnix()
-	if err != nil {
-		return roleDonationMutation{}, err
-	}
 	tx, actorID, err := s.beginRoleTx(ctx, role, actorUserID)
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
+	now, err := s.nowUnix()
+	if err != nil {
+		return roleDonationMutation{}, err
+	}
 	if role == reviewerSteward {
 		if err := requireStewardDonationOwnershipTx(ctx, tx, donationID, actorID); err != nil {
 			return roleDonationMutation{}, err
@@ -632,11 +696,11 @@ func (s *Service) manageKey(
 	if decision.Kind == idempotency.Replay {
 		return replayRoleDonation(decision, role)
 	}
-	expired, err := materializeDonationExpiryTx(ctx, tx, donationID, now)
+	expiry, err := materializeDonationExpiryStateTx(ctx, tx, donationID, now)
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
-	if expired {
+	if expiry.changed {
 		if err := tx.Rollback(); err != nil {
 			return roleDonationMutation{}, fmt.Errorf("donation: roll back expired key intent: %w", err)
 		}
@@ -706,9 +770,10 @@ func finishRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.De
 func manageDonationKeyTx(ctx context.Context, tx *sql.Tx, donationID, keyID, actorID int64, role string, input KeyManagementInput, now int64) error {
 	var currentEnabled, failureDisabled int
 	var generationBlob []byte
-	if err := tx.QueryRowContext(ctx, `SELECT enabled,failure_disabled,streak_generation FROM donation_keys
+	var authorizedExpiry sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT enabled,failure_disabled,streak_generation,authorized_expires_at FROM donation_keys
 WHERE id=? AND donation_id=? AND ended_at IS NULL
-AND EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=donation_keys.id)`, keyID, donationID).Scan(&currentEnabled, &failureDisabled, &generationBlob); errors.Is(err, sql.ErrNoRows) {
+AND EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=donation_keys.id)`, keyID, donationID).Scan(&currentEnabled, &failureDisabled, &generationBlob, &authorizedExpiry); errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	} else if err != nil {
 		return fmt.Errorf("donation: read managed key: %w", err)
@@ -761,6 +826,13 @@ AND EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dona
 		args = append(args, *input.SafeNote)
 		action = "note_update"
 	}
+	if input.ExpiresAt != nil {
+		if !effectiveExpiryWithinAuthorization(*input.ExpiresAt, authorizedExpiry) {
+			return ErrInvalidRequest
+		}
+		updates = append(updates, "expires_at=?")
+		args = append(args, nullableInt64Argument(*input.ExpiresAt))
+	}
 	newGeneration := input.ResetFailureStreak || input.Enabled != nil && *input.Enabled && (currentEnabled == 0 || failureDisabled == 1)
 	if newGeneration {
 		generation, err := db.DecodeU128(generationBlob)
@@ -800,7 +872,8 @@ VALUES(?,?,?,?,?,?,?)`, donationID, input.ExpectedRevision+1, actorID, role, act
 	if err != nil {
 		return fmt.Errorf("donation: record key management: %w", err)
 	}
-	return nil
+	_, err = materializeDonationExpiryTx(ctx, tx, donationID, now)
+	return err
 }
 
 func (s *Service) beginOwnerTx(ctx context.Context, userID int64) (*sql.Tx, error) {
@@ -893,16 +966,51 @@ func (s *Service) materializeRoleExpiryStandalone(
 type submissionKey struct {
 	id                             int64
 	head, tail, baseURL, connector string
+	expiresAt                      *int64
+	channelID, channelName         sql.NullString
+	channelRevision                sql.NullInt64
+	channelCategory                sql.NullString
+	reportFingerprint              []byte
 }
 
-func validateSubmissionKeys(ctx context.Context, tx *sql.Tx, userID int64, ids []int64) ([]submissionKey, error) {
+func submissionAutoApproval(keys []submissionKey) (bool, error) {
+	if len(keys) == 0 {
+		return false, ErrInvalidRequest
+	}
+	mainstream := keys[0].channelID.Valid
+	channelID := keys[0].channelID.String
+	for _, key := range keys {
+		completeSnapshot := key.channelID.Valid && key.channelRevision.Valid && key.channelName.Valid && key.channelCategory.Valid
+		customSnapshot := !key.channelID.Valid && !key.channelRevision.Valid && !key.channelName.Valid && !key.channelCategory.Valid
+		if !completeSnapshot && !customSnapshot {
+			return false, ErrInvariant
+		}
+		if key.channelID.Valid != mainstream {
+			return false, ErrInvalidRequest
+		}
+		if mainstream && key.channelID.String != channelID {
+			return false, ErrInvalidRequest
+		}
+	}
+	return mainstream, nil
+}
+
+func validateSubmissionKeys(ctx context.Context, tx *sql.Tx, userID int64, inputs []CreateKeyInput) ([]submissionKey, error) {
+	ids := make([]int64, len(inputs))
+	expiries := make(map[int64]*int64, len(inputs))
+	for index, input := range inputs {
+		ids[index] = input.EndpointKeyID
+		expiries[input.EndpointKeyID] = input.ExpiresAt
+	}
 	placeholders := strings.TrimRight(strings.Repeat("?,", len(ids)), ",")
 	args := make([]any, 0, len(ids)+1)
 	args = append(args, userID)
 	for _, id := range ids {
 		args = append(args, id)
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT k.id,k.display_head,k.display_tail,e.base_url,e.connector_type
+	rows, err := tx.QueryContext(ctx, `SELECT k.id,k.display_head,k.display_tail,e.base_url,e.connector_type,
+k.secret_fingerprint,e.mainstream_channel_id,e.mainstream_channel_revision,
+e.mainstream_channel_name,e.mainstream_channel_category
 FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id
 WHERE e.user_id=? AND k.id IN (`+placeholders+`)
 AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id)
@@ -915,9 +1023,12 @@ ORDER BY k.id`, args...)
 	keys := make([]submissionKey, 0, len(ids))
 	for rows.Next() {
 		var key submissionKey
-		if err := rows.Scan(&key.id, &key.head, &key.tail, &key.baseURL, &key.connector); err != nil {
+		if err := rows.Scan(&key.id, &key.head, &key.tail, &key.baseURL, &key.connector,
+			&key.reportFingerprint, &key.channelID, &key.channelRevision, &key.channelName, &key.channelCategory); err != nil {
 			return nil, fmt.Errorf("donation: scan submission key: %w", err)
 		}
+		key.expiresAt = expiries[key.id]
+		key.reportFingerprint = append([]byte(nil), key.reportFingerprint...)
 		keys = append(keys, key)
 	}
 	if err := rows.Err(); err != nil {
@@ -992,21 +1103,43 @@ func validReviewInput(input ReviewInput) bool {
 		return false
 	}
 	if input.Decision == "reject" {
-		return input.ExpiresAt == nil && len(input.KeySettings) == 0
+		return len(input.KeySettings) == 0
 	}
-	return input.ExpiresAt == nil || *input.ExpiresAt >= 0 && *input.ExpiresAt <= maxUnixSecond
+	return len(input.KeySettings) >= 1 && len(input.KeySettings) <= maxDonationKeys
 }
 
 func validKeyManagement(input KeyManagementInput) bool {
 	if input.ExpectedRevision <= 0 || input.Enabled == nil && input.PriceLimit == nil && input.CallsLimit == nil &&
-		input.TokensLimit == nil && input.TokenReserve == nil && input.SafeNote == nil && !input.ResetFailureStreak {
+		input.TokensLimit == nil && input.TokenReserve == nil && input.SafeNote == nil && input.ExpiresAt == nil && !input.ResetFailureStreak {
 		return false
 	}
 	if input.TokenReserve != nil && (*input.TokenReserve < 0 || *input.TokenReserve > 2147483647) ||
-		input.SafeNote != nil && !validSafeNote(*input.SafeNote) {
+		input.SafeNote != nil && !validSafeNote(*input.SafeNote) ||
+		input.ExpiresAt != nil && !validExpiryValue(*input.ExpiresAt) {
 		return false
 	}
 	return true
+}
+
+func validExpiryValue(value *int64) bool {
+	return value == nil || *value >= 0 && *value <= maxUnixSecond
+}
+
+func effectiveExpiryWithinAuthorization(value *int64, authorized sql.NullInt64) bool {
+	if !validExpiryValue(value) {
+		return false
+	}
+	if !authorized.Valid {
+		return true
+	}
+	return value != nil && *value <= authorized.Int64
+}
+
+func nullableInt64Argument(value *int64) any {
+	if value == nil {
+		return nil
+	}
+	return *value
 }
 
 func validUniqueIDs(ids []int64, minimum, maximum int) bool {
@@ -1022,6 +1155,23 @@ func validUniqueIDs(ids []int64, minimum, maximum int) bool {
 			return false
 		}
 		seen[id] = struct{}{}
+	}
+	return true
+}
+
+func validCreateKeys(keys []CreateKeyInput) bool {
+	if len(keys) < 1 || len(keys) > maxDonationKeys {
+		return false
+	}
+	seen := make(map[int64]struct{}, len(keys))
+	for _, key := range keys {
+		if key.EndpointKeyID <= 0 {
+			return false
+		}
+		if _, exists := seen[key.EndpointKeyID]; exists {
+			return false
+		}
+		seen[key.EndpointKeyID] = struct{}{}
 	}
 	return true
 }

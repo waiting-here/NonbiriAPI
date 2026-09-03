@@ -63,8 +63,8 @@ func TestEndpointOwnershipIdentityCASAndSuspension(t *testing.T) {
 	if _, err := environment.store.DB().Exec(`
 INSERT INTO report_cases(
  id,fingerprint,connector_type,canonical_base_url,status,progress_state,material_version,target_version,
- deadline,cursor_text,material_count,target_count,distinct_owner_count,created_at
-) VALUES(?,?,? ,?,'pending_review','complete',1,1,?,NULL,0,0,0,?)`,
+ deadline,cursor_source,cursor_id,material_count,target_count,distinct_owner_count,created_at
+) VALUES(?,?,? ,?,'pending_review','complete',1,1,?,NULL,NULL,0,0,0,?)`,
 		reportCaseID, make([]byte, 32), "openai-compatible", endpoint.BaseURL,
 		resourceTestNow+3600, resourceTestNow); err != nil {
 		t.Fatalf("seed report case: %v", err)
@@ -547,9 +547,10 @@ WHERE key IN ('default_endpoint_limit','default_endpoint_key_limit','default_mod
 	endpoint := environment.createEndpoint(t, userID, resourceTestKey('1'))
 	endpointID := resourceTestID(t, endpoint.ID)
 	secondEndpoint := resourceTestMutation(t, resourceTestKey('2'), "POST", routeEndpoints, nil, createEndpointCanonical{
-		ConnectorType: "openai-compatible", BaseURL: "https://other.example/v1", Note: "", Enabled: true,
+		Source: "custom", ConnectorType: "openai-compatible", BaseURL: "https://other.example/v1", Note: "", Enabled: true,
 	})
 	if _, err := environment.repository.CreateEndpoint(context.Background(), userID, secondEndpoint, CreateEndpointInput{
+		Source:        "custom",
 		ConnectorType: "openai-compatible", BaseURL: "https://other.example/v1", Enabled: true,
 	}); !errors.Is(err, ErrResourceLimit) {
 		t.Fatalf("endpoint cap error = %v, want resource limit", err)
@@ -613,11 +614,12 @@ WHERE key='default_endpoint_limit'`, resourceTestNow); err != nil {
 	create := func(t *testing.T, userID int64, seed byte) error {
 		t.Helper()
 		input := CreateEndpointInput{
+			Source:        "custom",
 			ConnectorType: "openai-compatible", BaseURL: "https://example.com/v1",
 			Note: "endpoint limit test", Enabled: true,
 		}
 		mutation := resourceTestMutation(t, resourceTestKey(seed), "POST", routeEndpoints, nil, createEndpointCanonical{
-			ConnectorType: input.ConnectorType, BaseURL: input.BaseURL, Note: input.Note, Enabled: input.Enabled,
+			Source: input.Source, ConnectorType: input.ConnectorType, BaseURL: input.BaseURL, Note: input.Note, Enabled: input.Enabled,
 		})
 		_, err := environment.repository.CreateEndpoint(context.Background(), userID, mutation, input)
 		return err

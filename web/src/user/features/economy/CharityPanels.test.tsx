@@ -8,6 +8,7 @@ import {
   DonationCard,
   DonationComposer,
   DonationIntakePanel,
+  DonationKeyOverview,
   DonationKeyPanel,
 } from './CharityPanels';
 import * as economyQueries from './queries';
@@ -45,6 +46,7 @@ const choices: EndpointKeyChoice[] = [
       id: '11',
       connectorType: 'openai-compatible',
       baseUrl: 'https://api.example.test/v1',
+      origin: { kind: 'custom' },
       note: '',
       enabled: false,
       revision: '1',
@@ -68,6 +70,34 @@ const choices: EndpointKeyChoice[] = [
     eligibility: 'eligible',
   },
 ];
+
+const mainstreamChoice: EndpointKeyChoice = {
+  endpoint: {
+    ...choices[0].endpoint,
+    id: '12',
+    origin: {
+      kind: 'mainstream',
+      channelId: 'mch_abcdefghijklmnopqrstuA',
+      name: 'Main channel',
+    },
+  },
+  key: { ...choices[0].key, id: '62', endpointId: '12' },
+  eligibility: 'eligible',
+};
+
+const otherMainstreamChoice: EndpointKeyChoice = {
+  ...mainstreamChoice,
+  endpoint: {
+    ...mainstreamChoice.endpoint,
+    id: '13',
+    origin: {
+      kind: 'mainstream',
+      channelId: 'mch_abcdefghijklmnopqrstvA',
+      name: 'Other channel',
+    },
+  },
+  key: { ...mainstreamChoice.key, id: '63', endpointId: '13' },
+};
 
 const CHARITY_OPEN: CharityCapability = {
   state: 'available',
@@ -283,7 +313,7 @@ describe('donation composer recovery', () => {
     await waitFor(() =>
       expect(mutation.mutateAsync).toHaveBeenCalledWith({
         description: '',
-        endpointKeyIds: ['61'],
+        keys: [{ endpointKeyId: '61', expiresAt: null }],
         ownershipAuthorized: true,
       }),
     );
@@ -312,13 +342,148 @@ describe('donation composer recovery', () => {
     expect(rendered.container.querySelector('input[type="password"]')).toBeNull();
   });
 
+  it('requires a pure mainstream channel or a custom-only selection', async () => {
+    const mutation = successfulMutation();
+    vi.mocked(economyQueries.useCreateDonation).mockReturnValue(mutation as never);
+    const rendered = await renderWithProviders(
+      <DonationComposer
+        choices={[choices[0], mainstreamChoice]}
+        draftNamespace="account-mainstream-mixed"
+      />,
+      { station: 'user', role: 'user' },
+    );
+    const checkboxes = screen.getAllByRole('checkbox');
+    await rendered.user.click(checkboxes[0]);
+    await rendered.user.click(checkboxes[1]);
+    await rendered.user.click(checkboxes[2]);
+    await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
+    expect(mutation.mutateAsync).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+  });
+
+  it('blocks a cross-channel mainstream selection before submission', async () => {
+    const mutation = successfulMutation();
+    vi.mocked(economyQueries.useCreateDonation).mockReturnValue(mutation as never);
+    const rendered = await renderWithProviders(
+      <DonationComposer
+        choices={[mainstreamChoice, otherMainstreamChoice]}
+        draftNamespace="account-mainstream-cross-channel"
+      />,
+      { station: 'user', role: 'user' },
+    );
+    const checkboxes = screen.getAllByRole('checkbox');
+    await rendered.user.click(checkboxes[0]);
+    await rendered.user.click(checkboxes[1]);
+    await rendered.user.click(checkboxes[2]);
+    await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
+    expect(mutation.mutateAsync).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+  });
+
+  it('submits one expiry per selected key as UTC Unix seconds', async () => {
+    const mutation = successfulMutation();
+    vi.mocked(economyQueries.useCreateDonation).mockReturnValue(mutation as never);
+    const rendered = await renderWithProviders(
+      <DonationComposer choices={[choices[0]]} draftNamespace="account-key-expiry" />,
+      { station: 'user', role: 'user' },
+    );
+    const checkboxes = screen.getAllByRole('checkbox');
+    await rendered.user.click(checkboxes[0]);
+    const expiry = rendered.container.querySelector('input[type="datetime-local"]');
+    if (!expiry) throw new Error('expiry control not rendered');
+    await rendered.user.type(expiry, '2030-01-01T00:00');
+    expect(checkboxes[0]).toBeChecked();
+    await rendered.user.click(checkboxes[1]);
+    await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
+    await waitFor(() =>
+      expect(mutation.mutateAsync).toHaveBeenCalledWith({
+        description: '',
+        keys: [{ endpointKeyId: '61', expiresAt: 1_893_456_000 }],
+        ownershipAuthorized: true,
+      }),
+    );
+  });
+
+  it('shows the account-level key overview with local blocked and ended filters', async () => {
+    const key = {
+      id: '51',
+      endpointKeyId: '61',
+      displayHead: 'sk-head',
+      displayTail: 'available-tail',
+      source: {
+        kind: 'custom' as const,
+        baseUrl: 'https://safe.example.test/v1',
+        connectorType: 'openai-compatible',
+      },
+      physicalEnabled: true,
+      charityState: 'available' as const,
+      limits: { price: '5', calls: '6', tokens: '7' },
+      usage: {
+        priceUsed: '1',
+        priceInflight: '2',
+        callsUsed: '3',
+        callsInflight: '4',
+        tokensUsed: '5',
+        tokensInflight: '6',
+      },
+      tokenReserve: 8,
+      expiresAt: 1_900_000_000,
+      streak: { generation: '2', count: '3', failureDisabled: false },
+      endedReason: null,
+    } satisfies DonationKey;
+    const blocked = {
+      ...key,
+      id: '52',
+      displayTail: 'blocked-tail',
+      physicalEnabled: false,
+      charityState: 'disabled' as const,
+      streak: { ...key.streak, failureDisabled: true },
+    };
+    const ended = {
+      ...key,
+      id: '53',
+      displayTail: 'ended-tail',
+      charityState: 'ended' as const,
+      expiresAt: null,
+      endedReason: 'withdrawn' as const,
+    };
+    const donation: Donation = {
+      id: '41',
+      status: 'approved',
+      revision: '9',
+      description: 'overview donation',
+      reviewResult: { decision: 'approve', reason: 'ok', reviewedAt: 1_788_100_005 },
+      keys: [key, blocked, ended],
+      createdAt: 1_788_100_000,
+      updatedAt: 1_788_100_010,
+    };
+    const rendered = await renderWithProviders(<DonationKeyOverview donations={[donation]} />, {
+      station: 'user',
+      role: 'user',
+    });
+    expect(rendered.container.innerHTML).not.toContain('61');
+    expect(screen.getByText('sk-head…available-tail')).toBeInTheDocument();
+    expect(screen.getByText('sk-head…blocked-tail')).toBeInTheDocument();
+    expect(screen.getByText('sk-head…ended-tail')).toBeInTheDocument();
+    await rendered.user.selectOptions(screen.getByRole('combobox'), 'blocked');
+    expect(screen.queryByText('sk-head…available-tail')).not.toBeInTheDocument();
+    expect(screen.getByText('sk-head…blocked-tail')).toBeInTheDocument();
+    await rendered.user.selectOptions(screen.getByRole('combobox'), 'ended');
+    expect(screen.queryByText('sk-head…blocked-tail')).not.toBeInTheDocument();
+    expect(screen.getByText('sk-head…ended-tail')).toBeInTheDocument();
+  });
+
   it('keeps physical, failure, and each exhausted dimension visibly separate', async () => {
     const key: DonationKey = {
       id: '51',
       endpointKeyId: '61',
       displayHead: 'sk-head',
       displayTail: 'tail',
-      source: { baseUrl: 'https://api.example.test/v1', connectorType: 'openai-compatible' },
+      source: {
+        kind: 'custom',
+        baseUrl: 'https://api.example.test/v1',
+        connectorType: 'openai-compatible',
+      },
       physicalEnabled: false,
       charityState: 'disabled',
       limits: { price: null, calls: null, tokens: null },
@@ -331,6 +496,7 @@ describe('donation composer recovery', () => {
         tokensInflight: '0',
       },
       tokenReserve: 0,
+      expiresAt: null,
       streak: { generation: '1', count: '10', failureDisabled: true },
       endedReason: null,
     };
@@ -373,7 +539,6 @@ describe('donation composer recovery', () => {
         revision: '9',
         description: 'original draft',
         reviewResult: null,
-        expiresAt: null,
         keys: [],
         createdAt: 1_788_100_000,
         updatedAt: 1_788_100_010,
@@ -426,7 +591,6 @@ describe('donation composer recovery', () => {
         revision: '9',
         description: 'unchanged authority',
         reviewResult: null,
-        expiresAt: null,
         keys: [],
         createdAt: 1_788_100_000,
         updatedAt: 1_788_100_010,

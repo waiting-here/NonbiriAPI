@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
@@ -62,11 +61,12 @@ ORDER BY COALESCE(next_retry_at,0),created_at,id LIMIT ?2`, now, limit)
 
 func readApprovalCaseTx(ctx context.Context, tx *sql.Tx, caseID string) (approvalCase, error) {
 	var row approvalCase
-	var cursor sql.NullString
+	var cursorSource sql.NullString
+	var cursorID sql.NullInt64
 	err := tx.QueryRowContext(ctx, `SELECT id,target_version,target_count,processed_target_count,
-deleted_target_count,created_at,cursor_text FROM report_cases
+deleted_target_count,created_at,cursor_source,cursor_id FROM report_cases
 WHERE id=? AND status='approved_processing' AND progress_state='in_progress'`, caseID).Scan(
-		&row.id, &row.targetVersion, &row.targetCount, &row.processed, &row.deleted, &row.createdAt, &cursor)
+		&row.id, &row.targetVersion, &row.targetCount, &row.processed, &row.deleted, &row.createdAt, &cursorSource, &cursorID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return approvalCase{}, ErrNotFound
 	}
@@ -77,12 +77,20 @@ WHERE id=? AND status='approved_processing' AND progress_state='in_progress'`, c
 		row.processed < 0 || row.processed > row.targetCount || row.deleted < 0 || row.deleted > row.targetCount {
 		return approvalCase{}, ErrInvariant
 	}
-	if cursor.Valid && cursor.String != "" {
-		row.cursor, err = strconv.ParseInt(cursor.String, 10, 64)
-		if err != nil || row.cursor < 0 || strconv.FormatInt(row.cursor, 10) != cursor.String {
+	// The approval pass walks protected targets by target sequence. A NULL
+	// pair is the initial pass; an advanced cursor must be the endpoint-phase
+	// pair with a strictly positive last sequence.
+	if !cursorSource.Valid || cursorSource.String == "" {
+		if cursorID.Valid {
 			return approvalCase{}, ErrInvariant
 		}
+		row.cursor = 0
+		return row, nil
 	}
+	if cursorSource.String != indexPhaseEndpoint || !cursorID.Valid || cursorID.Int64 <= 0 {
+		return approvalCase{}, ErrInvariant
+	}
+	row.cursor = cursorID.Int64
 	return row, nil
 }
 
@@ -137,50 +145,74 @@ func (repository *Repository) processApprovalCase(ctx context.Context, caseID st
 		return false, false, err
 	}
 	lastCursor := row.cursor
+	deletedIncrement := int64(0)
+	releasedIncrement := int64(0)
 	for _, target := range targets {
-		if !target.endpointKeyID.Valid || target.endpointKeyID.Int64 <= 0 ||
-			!target.ownerUserID.Valid || target.ownerUserID.Int64 <= 0 {
-			return false, false, ErrInvariant
+		physicalMissing := !target.endpointKeyID.Valid
+		if target.endpointKeyID.Valid {
+			if target.endpointKeyID.Int64 <= 0 || !target.ownerUserID.Valid || target.ownerUserID.Int64 <= 0 {
+				return false, false, ErrInvariant
+			}
+			var physicalOwner int64
+			err := tx.QueryRowContext(ctx, `SELECT e.user_id FROM endpoint_keys k
+JOIN endpoints e ON e.id=k.endpoint_id WHERE k.id=?`, target.endpointKeyID.Int64).Scan(&physicalOwner)
+			if errors.Is(err, sql.ErrNoRows) {
+				physicalMissing = true
+			} else if err != nil {
+				return false, false, fmt.Errorf("reports: verify approval target: %w", err)
+			} else if physicalOwner != target.ownerUserID.Int64 {
+				return false, false, ErrInvariant
+			}
 		}
-		var owned int
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM endpoint_keys k
-JOIN endpoints e ON e.id=k.endpoint_id WHERE k.id=? AND e.user_id=?)`,
-			target.endpointKeyID.Int64, target.ownerUserID.Int64).Scan(&owned); err != nil {
-			return false, false, fmt.Errorf("reports: verify approval target: %w", err)
-		}
-		if owned != 1 {
-			return false, false, ErrInvariant
-		}
-		if err := repository.deleteKey(ctx, tx, target.ownerUserID.Int64, target.endpointKeyID.Int64, now); err != nil {
-			return false, false, fmt.Errorf("reports: delete approved endpoint key: %w", err)
-		}
-		var remains int
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM endpoint_keys WHERE id=?)`,
-			target.endpointKeyID.Int64).Scan(&remains); err != nil {
-			return false, false, fmt.Errorf("reports: verify approved deletion: %w", err)
-		}
-		if remains != 0 {
-			return false, false, ErrInvariant
-		}
-		result, err := tx.ExecContext(ctx, `UPDATE report_targets SET
+		if physicalMissing {
+			// The source identity and donation lineage remain immutable report
+			// facts, but there is no longer a callable key to delete. Adjudicate
+			// the target as released without invoking the deletion capability.
+			result, err := tx.ExecContext(ctx, `UPDATE report_targets SET
+state='released',endpoint_key_id=NULL,decided_version=?,updated_at=?
+WHERE id=? AND case_id=? AND state='protected'`, row.targetVersion, now, target.id, caseID)
+			if err != nil {
+				return false, false, fmt.Errorf("reports: release missing approval target: %w", err)
+			}
+			changed, _ := result.RowsAffected()
+			if changed != 1 {
+				return false, false, ErrInvariant
+			}
+			releasedIncrement++
+		} else {
+			if err := repository.deleteKey(ctx, tx, target.ownerUserID.Int64, target.endpointKeyID.Int64, now); err != nil {
+				return false, false, fmt.Errorf("reports: delete approved endpoint key: %w", err)
+			}
+			var remains int
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM endpoint_keys WHERE id=?)`,
+				target.endpointKeyID.Int64).Scan(&remains); err != nil {
+				return false, false, fmt.Errorf("reports: verify approved deletion: %w", err)
+			}
+			if remains != 0 {
+				return false, false, ErrInvariant
+			}
+			result, err := tx.ExecContext(ctx, `UPDATE report_targets SET
 state='deleted_by_approval',endpoint_key_id=NULL,decided_version=?,updated_at=?
 WHERE id=? AND case_id=? AND state='protected'`, row.targetVersion, now, target.id, caseID)
-		if err != nil {
-			return false, false, fmt.Errorf("reports: complete approved target: %w", err)
-		}
-		changed, _ := result.RowsAffected()
-		if changed != 1 {
-			return false, false, ErrInvariant
+			if err != nil {
+				return false, false, fmt.Errorf("reports: complete approved target: %w", err)
+			}
+			changed, _ := result.RowsAffected()
+			if changed != 1 {
+				return false, false, ErrInvariant
+			}
+			deletedIncrement++
 		}
 		lastCursor = target.sequence
 	}
 	processedIncrement := int64(len(targets))
 	if more {
 		result, err := tx.ExecContext(ctx, `UPDATE report_cases SET
-cursor_text=?,processed_target_count=processed_target_count+?,deleted_target_count=deleted_target_count+?,
+cursor_source=?,cursor_id=?,processed_target_count=processed_target_count+?,deleted_target_count=deleted_target_count+?,
+released_target_count=released_target_count+?,
 retry_attempt_count=0,next_retry_at=NULL,last_error_class=NULL
 WHERE id=? AND status='approved_processing' AND target_version=?`,
-			strconv.FormatInt(lastCursor, 10), processedIncrement, processedIncrement, caseID, row.targetVersion)
+			indexPhaseEndpoint, lastCursor, processedIncrement, deletedIncrement, releasedIncrement, caseID, row.targetVersion)
 		if err != nil {
 			return false, false, fmt.Errorf("reports: advance approval cursor: %w", err)
 		}
@@ -198,12 +230,13 @@ WHERE case_id=? AND state='protected'`, caseID).Scan(&stranded); err != nil {
 			return false, false, ErrInvariant
 		}
 		result, err := tx.ExecContext(ctx, `UPDATE report_cases SET
-status='approved',progress_state='complete',cursor_text=NULL,
+status='approved',progress_state='complete',cursor_source=NULL,cursor_id=NULL,
 processed_target_count=processed_target_count+?,deleted_target_count=deleted_target_count+?,
+released_target_count=released_target_count+?,
 retry_attempt_count=0,next_retry_at=NULL,last_error_class=NULL,terminal_at=?
 WHERE id=? AND status='approved_processing' AND target_version=?
  AND processed_target_count+?=target_count`,
-			processedIncrement, processedIncrement, now, caseID, row.targetVersion, processedIncrement)
+			processedIncrement, deletedIncrement, releasedIncrement, now, caseID, row.targetVersion, processedIncrement)
 		if err != nil {
 			return false, false, fmt.Errorf("reports: complete approval: %w", err)
 		}

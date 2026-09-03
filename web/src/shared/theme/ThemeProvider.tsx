@@ -23,7 +23,7 @@ function resolveTheme(theme: Theme): 'light' | 'dark' {
 }
 
 function getInitialTheme(): Theme {
-  let stored: string | null = null;
+  let stored: string | null;
   try {
     stored = typeof window !== 'undefined' ? window.localStorage.getItem(THEME_STORAGE_KEY) : null;
   } catch {

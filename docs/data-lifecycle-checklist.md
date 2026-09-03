@@ -5,7 +5,7 @@
 > report.
 >
 > Canonical DDL: `internal/db/schema.go`; manifest: `internal/db/schema_manifest.go`;
-> current `GenerationTwoSchemaHash`: `a65481bb13045d1d1eea71a7212b0595b366b96828a85b1bb0a54e9484881b9d`.
+> current `GenerationTwoSchemaHash`: `34fc2bcb44be4a3ff230fd71ba84f21c566d8343490039657ca33eb47201288c`.
 > Normative lifecycle values come from the frozen beta.1 data-lifecycle contract.
 
 The table cells below describe the required contract for each exact Generation 2 table

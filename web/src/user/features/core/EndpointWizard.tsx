@@ -17,11 +17,11 @@ import {
   coreKeys,
   coreSessionMatchesAccount,
   invalidateResourceDependents,
+  useEndpointCreateOptions,
 } from './queries';
 import { createOperationIdentity, isConflict, isOutcomeUnknown } from './request';
 import { endpointSecretDraftReducer, initialEndpointSecretDraftState } from './stateMachines';
 import {
-  CONNECTOR_TYPES,
   type CatalogView,
   type ConnectorType,
   type DiscoveryAccepted,
@@ -29,6 +29,7 @@ import {
   type EndpointCreateInput,
   type EndpointKey,
   type EndpointKeyCreateInput,
+  type EndpointSource,
   type OperationIdentity,
 } from './types';
 
@@ -49,6 +50,7 @@ export function EndpointWizard({
 }) {
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
+  const endpointOptionsQuery = useEndpointCreateOptions(accountId);
   const [pageInstanceId] = useState(instanceId);
   const abortRef = useRef<AbortController | null>(null);
   const endpointAttemptRef = useRef<{
@@ -69,6 +71,8 @@ export function EndpointWizard({
   const [hasKeyAttempt, setHasKeyAttempt] = useState(false);
   const [hasDiscoveryAttempt, setHasDiscoveryAttempt] = useState(false);
   const [step, setStep] = useState<Step>(0);
+  const [source, setSource] = useState<EndpointSource | null>(null);
+  const [channelId, setChannelId] = useState('');
   const [connector, setConnector] = useState<ConnectorType>('openai-compatible');
   const [baseURL, setBaseURL] = useState('');
   const [endpointNote, setEndpointNote] = useState('');
@@ -116,6 +120,8 @@ export function EndpointWizard({
       setHasKeyAttempt(false);
       setHasDiscoveryAttempt(false);
       setStep(0);
+      setSource(null);
+      setChannelId('');
       setConnector('openai-compatible');
       setBaseURL('');
       setEndpointNote('');
@@ -148,11 +154,22 @@ export function EndpointWizard({
     onClose();
   };
 
+  const availableConnectors = endpointOptionsQuery.data?.base_connector_types ?? [];
+  const mainstreamChannels = endpointOptionsQuery.data?.mainstream_channels ?? [];
+  const selectedSource: EndpointSource =
+    source ?? (mainstreamChannels.length > 0 ? 'mainstream' : 'custom');
+  const selectedChannel =
+    mainstreamChannels.find((channel) => channel.id === channelId) ?? mainstreamChannels[0];
+  const selectedConnector = availableConnectors.includes(connector)
+    ? connector
+    : (availableConnectors[0] ?? connector);
+  const formBaseURL = selectedSource === 'mainstream' ? (selectedChannel?.base_url ?? '') : baseURL;
+
   let preview = '';
   let previewError = false;
-  if (baseURL) {
+  if (formBaseURL) {
     try {
-      preview = canonicalBaseURLPreview(baseURL);
+      preview = canonicalBaseURLPreview(formBaseURL);
     } catch {
       previewError = true;
     }
@@ -161,7 +178,12 @@ export function EndpointWizard({
   const createEndpointStep = async () => {
     setError(null);
     setOutcome(null);
-    if (!preview || previewError) {
+    if (
+      !preview ||
+      previewError ||
+      (selectedSource === 'mainstream' && !selectedChannel) ||
+      (selectedSource === 'custom' && !availableConnectors.includes(selectedConnector))
+    ) {
       setError(new Error(t('common.errorBody')));
       return;
     }
@@ -170,12 +192,21 @@ export function EndpointWizard({
       return;
     }
     const attempt = endpointAttemptRef.current ?? {
-      input: {
-        connector_type: connector,
-        base_url: preview,
-        note: endpointNote,
-        enabled: true,
-      },
+      input:
+        selectedSource === 'mainstream'
+          ? {
+              source: 'mainstream',
+              channel_id: selectedChannel!.id,
+              note: endpointNote,
+              enabled: true,
+            }
+          : {
+              source: 'custom',
+              connector_type: selectedConnector,
+              base_url: preview,
+              note: endpointNote,
+              enabled: true,
+            },
       operation: createOperationIdentity(),
     };
     endpointAttemptRef.current = attempt;
@@ -561,6 +592,37 @@ export function EndpointWizard({
     t('endpoints.wizardBinding'),
   ];
 
+  if (!endpointOptionsQuery.data && endpointOptionsQuery.isPending) {
+    return (
+      <section className="core-card core-wizard" aria-labelledby="endpoint-wizard-title">
+        <div className="core-card__header">
+          <h2 id="endpoint-wizard-title">{t('endpoints.wizardTitle')}</h2>
+          <button type="button" className="btn btn-secondary" onClick={close}>
+            {t('common.cancel')}
+          </button>
+        </div>
+        <CoreLoading />
+      </section>
+    );
+  }
+
+  if (!endpointOptionsQuery.data && endpointOptionsQuery.error) {
+    return (
+      <section className="core-card core-wizard" aria-labelledby="endpoint-wizard-title">
+        <div className="core-card__header">
+          <h2 id="endpoint-wizard-title">{t('endpoints.wizardTitle')}</h2>
+          <button type="button" className="btn btn-secondary" onClick={close}>
+            {t('common.cancel')}
+          </button>
+        </div>
+        <CoreErrorPanel
+          error={endpointOptionsQuery.error}
+          onRetry={() => void endpointOptionsQuery.refetch()}
+        />
+      </section>
+    );
+  }
+
   return (
     <section className="core-card core-wizard" aria-labelledby="endpoint-wizard-title">
       <div className="core-card__header">
@@ -580,22 +642,89 @@ export function EndpointWizard({
       {step === 0 ? (
         <div className="core-form">
           <div className="core-choice-grid">
-            {CONNECTOR_TYPES.map((value) => (
-              <button
-                key={value}
-                type="button"
-                className={`core-choice${connector === value ? ' is-selected' : ''}`}
-                onClick={() => setConnector(value)}
-              >
-                <strong>
-                  <ConnectorLabel value={value} />
-                </strong>
-              </button>
-            ))}
+            <button
+              type="button"
+              className={`core-choice${selectedSource === 'mainstream' ? ' is-selected' : ''}`}
+              aria-pressed={selectedSource === 'mainstream'}
+              disabled={mainstreamChannels.length === 0 || hasEndpointAttempt}
+              onClick={() => {
+                setSource('mainstream');
+                if (!selectedChannel) setChannelId(mainstreamChannels[0]?.id ?? '');
+              }}
+            >
+              <strong>{t('endpoints.mainstream')}</strong>
+            </button>
+            <button
+              type="button"
+              className={`core-choice${selectedSource === 'custom' ? ' is-selected' : ''}`}
+              aria-pressed={selectedSource === 'custom'}
+              disabled={hasEndpointAttempt}
+              onClick={() => setSource('custom')}
+            >
+              <strong>{t('endpoints.custom')}</strong>
+            </button>
           </div>
+
+          {selectedSource === 'mainstream' ? (
+            <div className="core-field-grid">
+              <label>
+                <span>{t('endpoints.channel')}</span>
+                <select
+                  aria-label={t('endpoints.channel')}
+                  value={selectedChannel?.id ?? ''}
+                  disabled={hasEndpointAttempt || mainstreamChannels.length === 0}
+                  onChange={(event) => setChannelId(event.target.value)}
+                >
+                  {mainstreamChannels.map((channel) => (
+                    <option key={channel.id} value={channel.id}>
+                      {channel.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>{t('endpoints.baseUrl')}</span>
+                <input
+                  aria-label={t('endpoints.baseUrl')}
+                  value={selectedChannel?.base_url ?? ''}
+                  readOnly
+                  aria-readonly="true"
+                  disabled={hasEndpointAttempt}
+                />
+              </label>
+            </div>
+          ) : (
+            <div className="core-choice-grid">
+              {availableConnectors.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={`core-choice${selectedConnector === value ? ' is-selected' : ''}`}
+                  aria-pressed={selectedConnector === value}
+                  disabled={hasEndpointAttempt}
+                  onClick={() => setConnector(value)}
+                >
+                  <strong>
+                    <ConnectorLabel value={value} />
+                  </strong>
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="core-form-actions">
             <span />
-            <button type="button" className="btn btn-primary" onClick={() => setStep(1)}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={
+                hasEndpointAttempt ||
+                (selectedSource === 'mainstream'
+                  ? !selectedChannel
+                  : !availableConnectors.includes(selectedConnector))
+              }
+              onClick={() => setStep(1)}
+            >
               {t('common.next')}
             </button>
           </div>
@@ -614,10 +743,14 @@ export function EndpointWizard({
             <label>
               <span>{t('endpoints.baseUrl')}</span>
               <input
-                value={baseURL}
+                value={formBaseURL}
                 maxLength={4096}
                 disabled={hasEndpointAttempt}
-                onChange={(event) => setBaseURL(event.target.value)}
+                readOnly={selectedSource === 'mainstream'}
+                aria-readonly={selectedSource === 'mainstream' ? 'true' : undefined}
+                onChange={(event) => {
+                  if (selectedSource === 'custom') setBaseURL(event.target.value);
+                }}
                 required
               />
             </label>
@@ -631,7 +764,7 @@ export function EndpointWizard({
               />
             </label>
           </div>
-          {baseURL ? (
+          {formBaseURL ? (
             <div className={previewError ? 'core-inline-error' : 'core-inline-success'}>
               <strong>{t('endpoints.preview')}</strong>
               <div className="core-mono">{previewError ? t('common.errorBody') : preview}</div>

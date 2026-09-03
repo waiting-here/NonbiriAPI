@@ -114,7 +114,7 @@ type PersonalRouter interface {
 // caller/content/credit policy but not candidate health or quota inspection.
 type CharityRouter interface {
 	Preflight(context.Context, int64, string, *openai.ChatRequest, int64) (CharityPreflight, error)
-	Snapshot(context.Context, int64, int64) (CharitySnapshot, error)
+	Snapshot(context.Context, int64, int64, []connectorcontract.Type) (CharitySnapshot, error)
 	ListAvailableModels(context.Context, int64, int) ([]ListedModel, error)
 }
 

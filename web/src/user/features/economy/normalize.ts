@@ -6,12 +6,14 @@ import type {
   CharityCapabilityModel,
   CursorPage,
   Donation,
+  DonationKeySource,
   DonationKey,
   DonationKeyEndedReason,
   DonationKeyState,
   DonationReviewResult,
   DonationStatus,
   EndpointKeySummary,
+  EndpointOrigin,
   EndpointSummary,
   ThursdayContributionResult,
   ThursdayCurrent,
@@ -194,6 +196,76 @@ function connectorType(value: unknown, field: string): string {
   return candidate;
 }
 
+const MAINSTREAM_CHANNEL_ID = new RegExp(`^mch_${OPAQUE_BODY}$`);
+
+function mainstreamChannelID(value: unknown, field: string): string {
+  const candidate = text(value, field, 26, false, 26);
+  if (!MAINSTREAM_CHANNEL_ID.test(candidate)) invalid(field);
+  return candidate;
+}
+
+function mainstreamChannelName(value: unknown, field: string): string {
+  const candidate = text(value, field, 128, false);
+  if (candidate.trim() !== candidate) invalid(field);
+  return candidate;
+}
+
+function normalizeEndpointOrigin(value: unknown): EndpointOrigin {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    invalid('endpoint origin');
+  }
+  const candidate = value as UnknownRecord;
+  if (candidate.kind === 'custom') {
+    record(candidate, 'endpoint custom origin', ['kind']);
+    return { kind: 'custom' };
+  }
+  if (candidate.kind === 'mainstream') {
+    const origin = record(candidate, 'endpoint mainstream origin', ['kind', 'channel_id', 'name']);
+    return {
+      kind: 'mainstream',
+      channelId: mainstreamChannelID(origin.channel_id, 'endpoint origin channel id'),
+      name: mainstreamChannelName(origin.name, 'endpoint origin channel name'),
+    };
+  }
+  invalid('endpoint origin kind');
+}
+
+function normalizeDonationSafeSource(value: unknown): DonationKeySource {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    invalid('donation key safe source');
+  }
+  const candidate = value as UnknownRecord;
+  if (candidate.kind === 'custom') {
+    const source = record(candidate, 'donation custom safe source', [
+      'kind',
+      'connector_type',
+      'base_url',
+    ]);
+    return {
+      kind: 'custom',
+      connectorType: connectorType(source.connector_type, 'donation key connector type'),
+      baseUrl: text(source.base_url, 'donation key base URL', 4096, false, 4096),
+    };
+  }
+  if (candidate.kind === 'mainstream') {
+    const source = record(candidate, 'donation mainstream safe source', [
+      'kind',
+      'connector_type',
+      'base_url',
+      'channel_id',
+      'name',
+    ]);
+    return {
+      kind: 'mainstream',
+      connectorType: connectorType(source.connector_type, 'donation key connector type'),
+      baseUrl: text(source.base_url, 'donation key base URL', 4096, false, 4096),
+      channelId: mainstreamChannelID(source.channel_id, 'donation key channel id'),
+      name: mainstreamChannelName(source.name, 'donation key channel name'),
+    };
+  }
+  invalid('donation key safe source kind');
+}
+
 function opaquePeriodID(value: unknown, field: string): string {
   const candidate = text(value, field, 26, false);
   if (!PERIOD_ID.test(candidate)) invalid(field);
@@ -349,13 +421,11 @@ export function normalizeDonationKey(value: unknown): DonationKey {
     'limits',
     'usage',
     'token_reserve',
+    'expires_at',
     'streak',
     'ended_reason',
   ]);
-  const source = record(item.safe_source, 'donation key safe source', [
-    'base_url',
-    'connector_type',
-  ]);
+  const source = normalizeDonationSafeSource(item.safe_source);
   const limits = record(item.limits, 'donation key limits', ['price', 'calls', 'tokens']);
   const usage = record(item.usage, 'donation key usage', [
     'price_used',
@@ -380,10 +450,7 @@ export function normalizeDonationKey(value: unknown): DonationKey {
       item.endpoint_key_id === null ? null : decimalID(item.endpoint_key_id, 'endpoint key id'),
     displayHead: asciiText(item.display_head, 'donation key display head', 16),
     displayTail: asciiText(item.display_tail, 'donation key display tail', 16),
-    source: {
-      baseUrl: text(source.base_url, 'donation key base URL', 4096, false, 4096),
-      connectorType: connectorType(source.connector_type, 'donation key connector type'),
-    },
+    source,
     physicalEnabled: bool(item.physical_enabled, 'donation key physical state'),
     charityState: enumValue(item.charity_state, 'donation key charity state', DONATION_KEY_STATES),
     limits: {
@@ -400,6 +467,7 @@ export function normalizeDonationKey(value: unknown): DonationKey {
       tokensInflight: decimal(usage.tokens_inflight, 'donation tokens inflight'),
     },
     tokenReserve: integer(item.token_reserve, 'donation token reserve', 0, 2_147_483_647),
+    expiresAt: nullableTimestamp(item.expires_at, 'donation key expiry'),
     streak: {
       generation: positiveDecimal(streak.generation, 'donation streak generation', MAX_U128),
       count: decimal(streak.count, 'donation streak count'),
@@ -502,7 +570,6 @@ export function normalizeDonation(value: unknown): Donation {
     'revision',
     'description',
     'review_result',
-    'expires_at',
     'keys',
     'created_at',
     'updated_at',
@@ -519,7 +586,6 @@ export function normalizeDonation(value: unknown): Donation {
   requireUnique(keys, (key) => key.id, 'donation key identities');
   const createdAt = timestamp(item.created_at, 'donation created timestamp');
   const updatedAt = timestamp(item.updated_at, 'donation updated timestamp');
-  const expiresAt = nullableTimestamp(item.expires_at, 'donation expiry');
   requireOrderedTimestamps(createdAt, updatedAt, 'donation timestamps');
   if (
     reviewResult &&
@@ -529,7 +595,6 @@ export function normalizeDonation(value: unknown): Donation {
   }
   if (status === 'pending') {
     if (
-      expiresAt !== null ||
       keys.some(
         (key) =>
           key.charityState !== 'pending' ||
@@ -556,13 +621,12 @@ export function normalizeDonation(value: unknown): Donation {
   }
   if (
     status === 'approved' &&
-    keys.every((key) => key.charityState === 'ended' || key.charityState === 'expired') &&
-    (expiresAt === null || keys.every((key) => key.charityState === 'ended'))
+    keys.every((key) => key.charityState === 'ended' || key.charityState === 'expired')
   ) {
     invalid('approved donation keys');
   }
   if (status === 'rejected') {
-    if (expiresAt !== null || keys.some((key) => key.charityState !== 'ended')) {
+    if (keys.some((key) => key.charityState !== 'ended')) {
       invalid('rejected donation state');
     }
   }
@@ -575,9 +639,9 @@ export function normalizeDonation(value: unknown): Donation {
   }
   if (
     status === 'expired' &&
-    (expiresAt === null ||
-      reviewResult?.decision !== 'approve' ||
-      keys.some((key) => key.charityState !== 'expired'))
+    (reviewResult?.decision !== 'approve' ||
+      keys.some((key) => key.charityState !== 'ended' && key.charityState !== 'expired') ||
+      !keys.some((key) => key.charityState === 'expired'))
   ) {
     invalid('expired donation state');
   }
@@ -587,7 +651,6 @@ export function normalizeDonation(value: unknown): Donation {
     revision: positiveDecimal(item.revision, 'donation revision'),
     description: text(item.description, 'donation description', 1024),
     reviewResult,
-    expiresAt,
     keys,
     createdAt,
     updatedAt,
@@ -599,6 +662,7 @@ export function normalizeEndpoint(value: unknown): EndpointSummary {
     'id',
     'connector_type',
     'base_url',
+    'origin',
     'note',
     'enabled',
     'revision',
@@ -613,6 +677,7 @@ export function normalizeEndpoint(value: unknown): EndpointSummary {
     id: decimalID(item.id, 'endpoint id'),
     connectorType: connectorType(item.connector_type, 'endpoint connector type'),
     baseUrl: text(item.base_url, 'endpoint base URL', 4096, false, 4096),
+    origin: normalizeEndpointOrigin(item.origin),
     note: text(item.note, 'endpoint note', 1024),
     enabled: bool(item.enabled, 'endpoint enabled state'),
     revision: positiveDecimal(item.revision, 'endpoint revision'),

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"net/netip"
 	"strconv"
 
@@ -18,6 +19,9 @@ const (
 	caseCursorScope     = "report-cases/v1"
 	materialCursorScope = "report-materials/v1"
 	targetCursorScope   = "report-targets/v1"
+	// donationRetentionSeconds mirrors the donation aggregate's ordinary
+	// 400-day terminal retention. Tombstone matching never reaches beyond it.
+	donationRetentionSeconds int64 = 400 * 24 * 60 * 60
 )
 
 func validCaseStatus(status string, allowEmpty bool) bool {
@@ -539,15 +543,19 @@ func (repository *Repository) Targets(
 		}
 		return Page[Target]{}, ErrNotFound
 	}
-	query := `SELECT id,target_seq,state,endpoint_key_id,key_ref,owner_user_id,owner_discord_id,owner_display_name,
-connector_type,canonical_base_url,key_display_head,key_display_tail,discovered_version,decided_version,created_at,updated_at
-FROM report_targets WHERE case_id=?`
-	args := []any{caseID}
+	query := `SELECT t.id,t.target_seq,t.state,t.endpoint_key_id,t.key_ref,t.owner_user_id,t.owner_discord_id,t.owner_display_name,
+t.connector_type,t.canonical_base_url,t.key_display_head,t.key_display_tail,t.discovered_version,t.decided_version,t.created_at,t.updated_at,
+(SELECT COUNT(*) FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id
+  WHERE dk.source_endpoint_key_id=t.source_endpoint_key_id
+   AND (d.status IN ('pending','approved') OR
+        (d.status IN ('rejected','deleted','expired') AND d.terminal_at IS NOT NULL AND d.terminal_at>?)))
+FROM report_targets t WHERE t.case_id=?`
+	args := []any{now - donationRetentionSeconds, caseID}
 	if cursor != "" {
-		query += ` AND (target_seq>? OR (target_seq=? AND id>?))`
+		query += ` AND (t.target_seq>? OR (t.target_seq=? AND t.id>?))`
 		args = append(args, cursorSequence, cursorSequence, cursorID)
 	}
-	query += ` ORDER BY target_seq,id LIMIT ?`
+	query += ` ORDER BY t.target_seq,t.id LIMIT ?`
 	args = append(args, limit+1)
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -558,7 +566,7 @@ FROM report_targets WHERE case_id=?`
 	for rows.Next() {
 		var (
 			target                              Target
-			sequence, discovered                int64
+			sequence, discovered, matchCount    int64
 			endpointKeyID, ownerUserID, decided sql.NullInt64
 			ownerDiscord, ownerDisplay          sql.NullString
 			keyRef                              []byte
@@ -566,10 +574,11 @@ FROM report_targets WHERE case_id=?`
 		if err := rows.Scan(
 			&target.ID, &sequence, &target.State, &endpointKeyID, &keyRef, &ownerUserID, &ownerDiscord, &ownerDisplay,
 			&target.Endpoint.ConnectorType, &target.Endpoint.CanonicalBaseURL, &target.Endpoint.DisplayHead,
-			&target.Endpoint.DisplayTail, &discovered, &decided, &target.CreatedAt, &target.UpdatedAt); err != nil {
+			&target.Endpoint.DisplayTail, &discovered, &decided, &target.CreatedAt, &target.UpdatedAt,
+			&matchCount); err != nil {
 			return Page[Target]{}, fmt.Errorf("reports: scan target: %w", err)
 		}
-		if !db.ValidateOpaqueID(target.ID, "rpt_") || sequence < 1 || discovered < 1 || len(keyRef) != 32 {
+		if !db.ValidateOpaqueID(target.ID, "rpt_") || sequence < 1 || discovered < 1 || len(keyRef) != 32 || matchCount < 0 {
 			clear(keyRef)
 			return Page[Target]{}, ErrInvariant
 		}
@@ -577,6 +586,7 @@ FROM report_targets WHERE case_id=?`
 		target.KeyRef = base64.RawURLEncoding.EncodeToString(keyRef)
 		clear(keyRef)
 		target.DiscoveredVersion = strconv.FormatInt(discovered, 10)
+		target.DonationMatchCount = strconv.FormatInt(matchCount, 10)
 		if endpointKeyID.Valid {
 			value := strconv.FormatInt(endpointKeyID.Int64, 10)
 			target.EndpointKeyID = &value
@@ -637,4 +647,224 @@ VALUES('invariant_violation',?,?,?,0)`, code, ref, now); err != nil {
 		return fmt.Errorf("reports: write invariant alert: %w", err)
 	}
 	return nil
+}
+
+const targetDonationCursorScope = "report-target-donations/v1"
+
+// TargetDonations pages the donation lineage of one report target inside the
+// final admin transaction. Rows are the still-retained donation keys whose
+// immutable source identity equals the target's original physical key; the
+// 90-day fingerprint window does not gate this read, and no secret,
+// fingerprint, safe note, or donor identity is ever projected.
+func (repository *Repository) TargetDonations(
+	ctx context.Context,
+	actor authz.Actor,
+	caseID string,
+	targetID string,
+	cursor string,
+	limit int,
+) (Page[ReportDonationMatch], error) {
+	if err := repository.admit(); err != nil {
+		return Page[ReportDonationMatch]{}, err
+	}
+	defer repository.release()
+	if !db.ValidateOpaqueID(caseID, "rpc_") || !db.ValidateOpaqueID(targetID, "rpt_") || !validPageLimit(limit) {
+		return Page[ReportDonationMatch]{}, ErrInvalidRequest
+	}
+	now, err := repository.nowUnix()
+	if err != nil {
+		return Page[ReportDonationMatch]{}, err
+	}
+	var cursorID int64
+	if cursor != "" {
+		var decodedTarget string
+		cursorID, decodedTarget, err = repository.cursors.decode(cursor, targetDonationCursorScope, caseID, now)
+		if err != nil || decodedTarget != targetID || cursorID <= 0 {
+			return Page[ReportDonationMatch]{}, ErrInvalidRequest
+		}
+	}
+	tx, committed, err := repository.beginAdminRead(ctx, actor)
+	if err != nil {
+		return Page[ReportDonationMatch]{}, err
+	}
+	defer rollbackUnlessCommitted(tx, committed)
+	var caseStatus string
+	var caseCreatedAt int64
+	err = tx.QueryRowContext(ctx, `SELECT status,created_at FROM report_cases WHERE id=?`, caseID).Scan(
+		&caseStatus, &caseCreatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Page[ReportDonationMatch]{}, ErrNotFound
+	}
+	if err != nil {
+		return Page[ReportDonationMatch]{}, fmt.Errorf("reports: inspect lineage case: %w", err)
+	}
+	ordinaryVisible, err := reportCaseOrdinarilyVisible(caseStatus, caseCreatedAt, now)
+	if err != nil {
+		return Page[ReportDonationMatch]{}, err
+	}
+	heldVisible, err := prepareReportObjectReadTx(ctx, tx, caseID, actor.UserID, now)
+	if err != nil {
+		return Page[ReportDonationMatch]{}, err
+	}
+	if !ordinaryVisible && !heldVisible {
+		if err := commit(tx, committed); err != nil {
+			return Page[ReportDonationMatch]{}, err
+		}
+		return Page[ReportDonationMatch]{}, ErrNotFound
+	}
+	var sourceKeyID int64
+	err = tx.QueryRowContext(ctx, `SELECT source_endpoint_key_id FROM report_targets
+WHERE id=? AND case_id=?`, targetID, caseID).Scan(&sourceKeyID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Page[ReportDonationMatch]{}, ErrNotFound
+	}
+	if err != nil {
+		return Page[ReportDonationMatch]{}, fmt.Errorf("reports: read lineage target: %w", err)
+	}
+	if sourceKeyID <= 0 {
+		return Page[ReportDonationMatch]{}, ErrInvariant
+	}
+	query := `SELECT dk.id,d.id,d.status,dk.enabled,dk.failure_disabled,dk.expires_at,dk.ended_reason,dk.ended_at,
+COALESCE(e.enabled,0),COALESCE(k.enabled,0),
+EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=dk.endpoint_key_id),
+EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id),
+dk.price_limit_mag,dk.price_used_mag,dk.price_reserved_mag,
+dk.call_limit_mag,dk.calls_used,dk.calls_reserved,
+dk.token_limit_mag,dk.tokens_used,dk.tokens_reserved
+FROM donation_keys dk
+JOIN donations d ON d.id=dk.donation_id
+LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id
+LEFT JOIN endpoints e ON e.id=k.endpoint_id
+WHERE dk.source_endpoint_key_id=? AND dk.id>?
+ AND (d.status IN ('pending','approved') OR
+      (d.status IN ('rejected','deleted','expired') AND d.terminal_at IS NOT NULL AND d.terminal_at>?))
+ORDER BY dk.id LIMIT ?`
+	args := []any{sourceKeyID, cursorID, now - donationRetentionSeconds, limit + 1}
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return Page[ReportDonationMatch]{}, fmt.Errorf("reports: list target donations: %w", err)
+	}
+	defer rows.Close()
+	items := make([]ReportDonationMatch, 0, limit+1)
+	for rows.Next() {
+		var (
+			match                                       ReportDonationMatch
+			donationKeyID, donationID                   int64
+			keyEnabled, failureDisabled                 int
+			expiresAt, endedAt                          sql.NullInt64
+			endedReason                                 sql.NullString
+			physicalEndpointEnabled, physicalKeyEnabled int
+			suspended, member                           int
+			priceLimit, priceUsed, priceReserved        []byte
+			callLimit, callsUsed, callsReserved         []byte
+			tokenLimit, tokensUsed, tokensReserved      []byte
+			donationStatus                              string
+		)
+		if err := rows.Scan(&donationKeyID, &donationID, &donationStatus, &keyEnabled, &failureDisabled,
+			&expiresAt, &endedReason, &endedAt,
+			&physicalEndpointEnabled, &physicalKeyEnabled, &suspended, &member,
+			&priceLimit, &priceUsed, &priceReserved,
+			&callLimit, &callsUsed, &callsReserved,
+			&tokenLimit, &tokensUsed, &tokensReserved); err != nil {
+			return Page[ReportDonationMatch]{}, fmt.Errorf("reports: scan target donation: %w", err)
+		}
+		if donationKeyID <= 0 || donationID <= 0 || keyEnabled < 0 || keyEnabled > 1 ||
+			failureDisabled < 0 || failureDisabled > 1 || member < 0 || member > 1 ||
+			suspended < 0 || suspended > 1 || physicalEndpointEnabled < 0 || physicalEndpointEnabled > 1 ||
+			physicalKeyEnabled < 0 || physicalKeyEnabled > 1 {
+			return Page[ReportDonationMatch]{}, ErrInvariant
+		}
+		exhausted, err := donationKeyCapsExhausted(
+			priceLimit, priceUsed, priceReserved,
+			callLimit, callsUsed, callsReserved,
+			tokenLimit, tokensUsed, tokensReserved,
+		)
+		if err != nil {
+			return Page[ReportDonationMatch]{}, err
+		}
+		physicalEnabled := physicalEndpointEnabled == 1 && physicalKeyEnabled == 1
+		match.DonationID = strconv.FormatInt(donationID, 10)
+		match.DonationKeyID = strconv.FormatInt(donationKeyID, 10)
+		match.DonationStatus = donationStatus
+		switch {
+		case endedReason.Valid || member == 0:
+			if (endedReason.Valid && endedReason.String == "expired") || donationStatus == "expired" {
+				match.KeyState = "expired"
+			} else {
+				match.KeyState = "ended"
+			}
+		case expiresAt.Valid && now >= expiresAt.Int64 || donationStatus == "expired":
+			match.KeyState = "expired"
+		case donationStatus == "pending":
+			match.KeyState = "pending"
+		case !physicalEnabled || keyEnabled == 0 || failureDisabled == 1:
+			match.KeyState = "disabled"
+		case suspended == 1:
+			match.KeyState = "suspended"
+		case exhausted:
+			match.KeyState = "exhausted"
+		default:
+			match.KeyState = "available"
+		}
+		if expiresAt.Valid {
+			value := expiresAt.Int64
+			match.ExpiresAt = &value
+		}
+		if endedReason.Valid {
+			value := endedReason.String
+			match.EndedReason = &value
+		}
+		if endedAt.Valid {
+			value := endedAt.Int64
+			match.EndedAt = &value
+		}
+		items = append(items, match)
+	}
+	if err := rows.Err(); err != nil {
+		return Page[ReportDonationMatch]{}, fmt.Errorf("reports: iterate target donations: %w", err)
+	}
+	page := Page[ReportDonationMatch]{Data: items}
+	if len(items) > limit {
+		last := items[limit-1]
+		sequence, err := strconv.ParseInt(last.DonationKeyID, 10, 64)
+		if err != nil || sequence <= 0 {
+			return Page[ReportDonationMatch]{}, ErrInvariant
+		}
+		token, err := repository.cursors.encode(targetDonationCursorScope, caseID, sequence, targetID, now)
+		if err != nil {
+			return Page[ReportDonationMatch]{}, err
+		}
+		page.Data = items[:limit]
+		page.NextCursor = &token
+	}
+	if err := commit(tx, committed); err != nil {
+		return Page[ReportDonationMatch]{}, err
+	}
+	return page, nil
+}
+
+func donationKeyCapsExhausted(blobs ...[]byte) (bool, error) {
+	for index := 0; index+2 < len(blobs); index += 3 {
+		limit := blobs[index]
+		if limit == nil {
+			continue
+		}
+		l, err := db.DecodeU128(limit)
+		if err != nil {
+			return false, ErrInvariant
+		}
+		used, err := db.DecodeU128(blobs[index+1])
+		if err != nil {
+			return false, ErrInvariant
+		}
+		reserved, err := db.DecodeU128(blobs[index+2])
+		if err != nil {
+			return false, ErrInvariant
+		}
+		if new(big.Int).Add(used.Big(), reserved.Big()).Cmp(l.Big()) >= 0 {
+			return true, nil
+		}
+	}
+	return false, nil
 }

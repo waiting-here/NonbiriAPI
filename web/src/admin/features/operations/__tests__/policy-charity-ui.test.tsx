@@ -25,7 +25,11 @@ const managedKey = (overrides: Partial<ManagedDonationKey> = {}): ManagedDonatio
   endpoint_key_id: '21',
   display_head: 'head',
   display_tail: 'tail',
-  safe_source: { base_url: 'https://example.test/v1', connector_type: 'openai' },
+  safe_source: {
+    kind: 'custom',
+    base_url: 'https://example.test/v1',
+    connector_type: 'openai-compatible',
+  },
   physical_enabled: true,
   charity_state: 'pending',
   limits: { price: '0', calls: '0', tokens: '0' },
@@ -38,6 +42,8 @@ const managedKey = (overrides: Partial<ManagedDonationKey> = {}): ManagedDonatio
     tokens_inflight: '0',
   },
   token_reserve: 0,
+  authorized_expires_at: null,
+  expires_at: null,
   streak: { generation: '1', count: '0', failure_disabled: false },
   ended_reason: null,
   safe_note: '',
@@ -51,8 +57,7 @@ function pendingAdminDonation(expiresAt: number | null = null): AdminDonation {
     revision: '7',
     description: 'Generation 2 donor submission',
     review_result: null,
-    expires_at: expiresAt,
-    keys: [managedKey()],
+    keys: [managedKey({ authorized_expires_at: expiresAt, expires_at: expiresAt })],
     owner: { user_id: '7', discord_id: 'discord-7', display_name: 'Admin-visible donor' },
     reviewer: null,
     created_at: 1_735_689_600,
@@ -67,7 +72,6 @@ function stewardDonation(): StewardDonation {
     revision: '3',
     description: 'My donation',
     review_result: null,
-    expires_at: null,
     keys: [managedKey({ id: '12', endpoint_key_id: '22' })],
     owner: { user_id: '8', display_name: 'Current steward' },
     reviewer: null,
@@ -83,6 +87,7 @@ function localDateTime(epoch: number): string {
 }
 
 function approve(current: AdminDonation, body: Record<string, unknown>): AdminDonation {
+  const settings = body.key_settings as { donation_key_id: string; expires_at: number | null }[];
   return {
     ...current,
     status: 'approved',
@@ -92,8 +97,11 @@ function approve(current: AdminDonation, body: Record<string, unknown>): AdminDo
       reason: String(body.reason),
       reviewed_at: 1_735_689_700,
     },
-    expires_at: body.expires_at as number | null,
-    keys: current.keys.map((key) => ({ ...key, charity_state: 'available' })),
+    keys: current.keys.map((key) => ({
+      ...key,
+      charity_state: 'available',
+      expires_at: settings.find((setting) => setting.donation_key_id === key.id)?.expires_at ?? null,
+    })),
     reviewer: { user_id: '9', role: 'admin' },
     updated_at: 1_735_689_700,
   };
@@ -128,13 +136,13 @@ describe('Generation 2 charity management policy', () => {
     });
 
     await view.user.click(await screen.findByRole('button', { name: 'Review' }));
-    expect(await screen.findByLabelText('Whole-donation expiry')).toHaveValue(
+    expect(await screen.findByLabelText('Effective expiry')).toHaveValue(
       `${localDateTime(expiresAt)}.000`,
     );
     await view.user.type(screen.getByLabelText('Reason'), 'approved with retained expiry');
     await view.user.click(
       screen.getByRole('checkbox', {
-        name: 'I confirm this review result and its whole-donation consequences.',
+        name: 'I confirm this review result and its per-key consequences.',
       }),
     );
     await view.user.click(screen.getByRole('button', { name: 'Approve donation' }));
@@ -142,7 +150,10 @@ describe('Generation 2 charity management policy', () => {
     await waitFor(() => expect(screen.getAllByText('Approved').length).toBeGreaterThan(0));
     expect(reviewRequests).toHaveLength(1);
     const body = JSON.parse(String(reviewRequests[0].body)) as Record<string, unknown>;
-    expect(body.expires_at).toBe(expiresAt);
+    expect(body).not.toHaveProperty('expires_at');
+    expect(
+      (body.key_settings as { expires_at: number | null }[])[0]?.expires_at,
+    ).toBe(expiresAt);
     expect(new Headers(reviewRequests[0].headers).get('Idempotency-Key')).toMatch(
       operationKeyPattern,
     );
@@ -187,7 +198,7 @@ describe('Generation 2 charity management policy', () => {
     await view.user.type(screen.getByLabelText('Reason'), 'exact boundary review');
     await view.user.click(
       screen.getByRole('checkbox', {
-        name: 'I confirm this review result and its whole-donation consequences.',
+        name: 'I confirm this review result and its per-key consequences.',
       }),
     );
     expect(screen.getByRole('button', { name: 'Approve donation' })).toBeDisabled();
@@ -227,6 +238,7 @@ describe('Generation 2 charity management policy', () => {
         token_reserve: 2_147_483_647,
         enabled: true,
         safe_note: '🫶'.repeat(256),
+        expires_at: null,
       },
     ]);
     expect(new Headers(reviewRequests[0].headers).get('Idempotency-Key')).toMatch(

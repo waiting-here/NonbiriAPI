@@ -82,9 +82,7 @@ func TestCharityClaimsSettleIndependently(t *testing.T) {
 	fixture.requireCapacity(request.ID, 4, 4, 2)
 
 	deletedHandle := claimAndDispatch(2)
-	if _, err := fixture.db.Exec(`DELETE FROM users WHERE id=?`, donorIDs[2]); err != nil {
-		t.Fatalf("delete reward receiver: %v", err)
-	}
+	fixture.deleteUserWithDonationTombstones(donorIDs[2])
 	deleted, err := fixture.service.CompleteAttempt(context.Background(), deletedHandle, AttemptOutcome{
 		Kind: ResultResponse, UpstreamStatus: 200, ProtocolSuccess: true, ResponseStarted: true,
 		Usage: connectorcontract.Usage{Present: true},
@@ -188,13 +186,15 @@ func TestCapacityCallbacksRollbackTheirDomainMutations(t *testing.T) {
 		fixture := newClaimFixture(t)
 		consumerID := fixture.seedUser("rollback-accept", false)
 		fixture.accounting.setFailPoint("reserve_after_persistence")
+		decisionNow := fixture.clock.Load()
 		_, err := fixture.service.Accept(context.Background(), AcceptInput{
-			UserID:         consumerID,
-			Route:          RouteCharityChat,
-			ModelSnapshot:  "[公益]rollback/model",
-			AttemptLimit:   2,
-			ReservedMilli:  20,
-			CharityModelID: 1,
+			UserID:             consumerID,
+			Route:              RouteCharityChat,
+			ModelSnapshot:      "[公益]rollback/model",
+			AttemptLimit:       2,
+			ReservedMilli:      20,
+			CharityModelID:     1,
+			CharityDecisionNow: &decisionNow,
 		})
 		requireErrorIs(t, err, errTestAccounting)
 		var requests, logs, charityFacts, last int

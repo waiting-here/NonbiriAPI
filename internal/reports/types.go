@@ -19,6 +19,7 @@ const (
 	adminCasesRoute                 = "/admin/api/reports"
 	adminCaseRoute                  = "/admin/api/reports/{id}"
 	adminTargetsRoute               = "/admin/api/reports/{id}/targets"
+	adminTargetDonationsRoute       = "/admin/api/reports/{id}/targets/{targetId}/donations"
 	adminApproveRoute               = "/admin/api/reports/{id}/approve"
 	adminRejectRoute                = "/admin/api/reports/{id}/reject"
 	adminResumeRoute                = "/admin/api/reports/{id}/resume"
@@ -198,17 +199,31 @@ type TargetEndpoint struct {
 }
 
 type Target struct {
-	ID                string         `json:"id"`
-	TargetSequence    string         `json:"target_seq"`
-	State             string         `json:"state"`
-	EndpointKeyID     *string        `json:"endpoint_key_id"`
-	KeyRef            string         `json:"key_ref"`
-	Owner             *TargetOwner   `json:"owner"`
-	Endpoint          TargetEndpoint `json:"endpoint"`
-	DiscoveredVersion string         `json:"discovered_version"`
-	DecidedVersion    *string        `json:"decided_version"`
-	CreatedAt         int64          `json:"created_at"`
-	UpdatedAt         int64          `json:"updated_at"`
+	ID                 string         `json:"id"`
+	TargetSequence     string         `json:"target_seq"`
+	State              string         `json:"state"`
+	EndpointKeyID      *string        `json:"endpoint_key_id"`
+	KeyRef             string         `json:"key_ref"`
+	Owner              *TargetOwner   `json:"owner"`
+	Endpoint           TargetEndpoint `json:"endpoint"`
+	DonationMatchCount string         `json:"donation_match_count"`
+	DiscoveredVersion  string         `json:"discovered_version"`
+	DecidedVersion     *string        `json:"decided_version"`
+	CreatedAt          int64          `json:"created_at"`
+	UpdatedAt          int64          `json:"updated_at"`
+}
+
+// ReportDonationMatch is one closed lineage row for an admin investigation:
+// it exposes the donation-key trail of a matched physical key without ever
+// revealing secret, fingerprint, safe note, or donor text/identity.
+type ReportDonationMatch struct {
+	DonationID     string  `json:"donation_id"`
+	DonationKeyID  string  `json:"donation_key_id"`
+	DonationStatus string  `json:"donation_status"`
+	KeyState       string  `json:"key_state"`
+	ExpiresAt      *int64  `json:"expires_at"`
+	EndedReason    *string `json:"ended_reason"`
+	EndedAt        *int64  `json:"ended_at"`
 }
 
 type DecisionResponse struct {

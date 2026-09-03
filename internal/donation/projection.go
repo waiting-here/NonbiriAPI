@@ -148,7 +148,7 @@ func (s *Service) ListOwner(ctx context.Context, userID, afterID int64, limit in
 		return nil, 0, fmt.Errorf("donation: begin owner list: %w", err)
 	}
 	defer tx.Rollback()
-	if err := materializeDueExpiriesTx(ctx, tx, now, 100); err != nil {
+	if err := materializeProjectionExpiriesTx(ctx, tx, now); err != nil {
 		return nil, 0, err
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT id FROM donations
@@ -219,7 +219,7 @@ func (s *Service) listRole(ctx context.Context, userID int64, status string, aft
 			return nil, 0, mapAuthorization(err)
 		}
 	}
-	if err := materializeDueExpiriesTx(ctx, tx, now, 100); err != nil {
+	if err := materializeProjectionExpiriesTx(ctx, tx, now); err != nil {
 		return nil, 0, err
 	}
 	query := `SELECT id FROM donations WHERE id>?
@@ -260,6 +260,23 @@ func (s *Service) listRole(ctx context.Context, userID int64, status string, aft
 		return nil, 0, fmt.Errorf("donation: commit role list: %w", err)
 	}
 	return items, next, nil
+}
+
+func materializeProjectionExpiriesTx(ctx context.Context, tx *sql.Tx, now int64) error {
+	if err := materializeDueExpiriesTx(ctx, tx, now, 100); err != nil {
+		return err
+	}
+	var remains int
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
+SELECT 1 FROM donation_keys dk JOIN donations d ON d.id=dk.donation_id
+WHERE d.status IN ('pending','approved') AND dk.ended_at IS NULL
+ AND dk.expires_at IS NOT NULL AND dk.expires_at<=?)`, now).Scan(&remains); err != nil {
+		return fmt.Errorf("donation: verify projection expiry catch-up: %w", err)
+	}
+	if remains != 0 {
+		return ErrUnavailable
+	}
+	return nil
 }
 
 func scanIDs(rows *sql.Rows) ([]int64, error) {
@@ -319,7 +336,7 @@ func getOwnerDonationTx(ctx context.Context, tx *sql.Tx, userID, donationID, now
 	}
 	return Donation{
 		ID: admin.ID, Status: admin.Status, Revision: admin.Revision, Description: admin.Description,
-		ReviewResult: admin.ReviewResult, ExpiresAt: admin.ExpiresAt, Keys: ownerKeys(admin.Keys),
+		ReviewResult: admin.ReviewResult, Keys: ownerKeys(admin.Keys),
 		CreatedAt: admin.CreatedAt, UpdatedAt: admin.UpdatedAt,
 	}, nil
 }
@@ -334,14 +351,14 @@ func getDonationProjectionTx(ctx context.Context, tx *sql.Tx, donationID, now in
 	var userID, reviewedBy sql.NullInt64
 	var discordID sql.NullString
 	var username, guildNick string
-	var expires, reviewedAt sql.NullInt64
+	var reviewedAt sql.NullInt64
 	var reviewRole, reviewNote string
 	err := tx.QueryRowContext(ctx, `SELECT d.id,d.status,d.revision,d.description,d.review_note,
-d.reviewed_by_user_id,d.reviewed_by_role,d.expires_at,d.reviewed_at,d.created_at,d.updated_at,
+d.reviewed_by_user_id,d.reviewed_by_role,d.reviewed_at,d.created_at,d.updated_at,
 d.user_id,u.discord_id,COALESCE(u.username,''),COALESCE(u.guild_nick,'')
 FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, donationID).Scan(
 		&id, &out.Status, &revision, &out.Description, &reviewNote, &reviewedBy, &reviewRole,
-		&expires, &reviewedAt, &out.CreatedAt, &out.UpdatedAt, &userID, &discordID, &username, &guildNick)
+		&reviewedAt, &out.CreatedAt, &out.UpdatedAt, &userID, &discordID, &username, &guildNick)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AdminDonation{}, ErrNotFound
 	}
@@ -350,10 +367,6 @@ FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, donationID).
 	}
 	out.ID = strconv.FormatInt(id, 10)
 	out.Revision = strconv.FormatInt(revision, 10)
-	if expires.Valid {
-		value := expires.Int64
-		out.ExpiresAt = &value
-	}
 	if reviewedAt.Valid && (out.Status == "approved" || out.Status == "rejected" || reviewRole != "") {
 		decision := "approve"
 		if out.Status == "rejected" {
@@ -381,7 +394,7 @@ FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, donationID).
 		}
 		out.Reviewer = &reviewer
 	}
-	keys, err := readDonationKeysTx(ctx, tx, donationID, out.Status, expires, now)
+	keys, err := readDonationKeysTx(ctx, tx, donationID, out.Status, now)
 	if err != nil {
 		return AdminDonation{}, err
 	}
@@ -389,12 +402,14 @@ FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, donationID).
 	return out, nil
 }
 
-func readDonationKeysTx(ctx context.Context, tx *sql.Tx, donationID int64, donationStatus string, expires sql.NullInt64, now int64) ([]AdminDonationKey, error) {
+func readDonationKeysTx(ctx context.Context, tx *sql.Tx, donationID int64, donationStatus string, now int64) ([]AdminDonationKey, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT dk.id,dk.endpoint_key_id,dk.display_head,dk.display_tail,
-dk.canonical_base_url,dk.connector_type,COALESCE(e.enabled,0),COALESCE(k.enabled,0),
+dk.canonical_base_url,dk.connector_type,dk.mainstream_channel_id,dk.mainstream_channel_revision,
+dk.mainstream_channel_name,dk.mainstream_channel_category,COALESCE(e.enabled,0),COALESCE(k.enabled,0),
 dk.price_limit_mag,dk.call_limit_mag,dk.token_limit_mag,
 dk.price_used_mag,dk.price_reserved_mag,dk.calls_used,dk.calls_reserved,dk.tokens_used,dk.tokens_reserved,
-dk.token_reserve,dk.enabled,dk.failure_disabled,dk.failure_streak,dk.streak_generation,dk.safe_note,dk.ended_reason,
+dk.token_reserve,dk.enabled,dk.failure_disabled,dk.failure_streak,dk.streak_generation,dk.safe_note,
+dk.authorized_expires_at,dk.expires_at,dk.ended_reason,
 EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=dk.endpoint_key_id),
 EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id)
 FROM donation_keys dk
@@ -415,17 +430,46 @@ WHERE dk.donation_id=? ORDER BY dk.id`, donationID)
 		var priceUsed, priceReserved, callsUsed, callsReserved, tokensUsed, tokensReserved []byte
 		var streak, generation []byte
 		var ended sql.NullString
+		var authorizedExpires, expires sql.NullInt64
+		var channelID, channelName, channelCategory sql.NullString
+		var channelRevision sql.NullInt64
 		if err := rows.Scan(&id, &endpointKeyID, &item.DisplayHead, &item.DisplayTail,
-			&item.SafeSource.BaseURL, &item.SafeSource.ConnectorType, &endpointEnabled, &keyPhysicalEnabled,
+			&item.SafeSource.BaseURL, &item.SafeSource.ConnectorType, &channelID, &channelRevision,
+			&channelName, &channelCategory, &endpointEnabled, &keyPhysicalEnabled,
 			&priceLimit, &callLimit, &tokenLimit, &priceUsed, &priceReserved, &callsUsed, &callsReserved,
 			&tokensUsed, &tokensReserved, &item.TokenReserve, &enabled, &failureDisabled, &streak,
-			&generation, &item.SafeNote, &ended, &suspended, &member); err != nil {
+			&generation, &item.SafeNote, &authorizedExpires, &expires, &ended, &suspended, &member); err != nil {
 			return nil, fmt.Errorf("donation: scan key projection: %w", err)
 		}
 		item.ID = strconv.FormatInt(id, 10)
 		if endpointKeyID.Valid {
 			value := strconv.FormatInt(endpointKeyID.Int64, 10)
 			item.EndpointKeyID = &value
+		}
+		if authorizedExpires.Valid {
+			value := authorizedExpires.Int64
+			item.AuthorizedExpiresAt = &value
+		}
+		if expires.Valid {
+			value := expires.Int64
+			item.ExpiresAt = &value
+		}
+		item.SafeSource.Kind = "custom"
+		completeMainstream := channelID.Valid && channelRevision.Valid && channelName.Valid && channelCategory.Valid
+		completeCustom := !channelID.Valid && !channelRevision.Valid && !channelName.Valid && !channelCategory.Valid
+		if !completeMainstream && !completeCustom {
+			return nil, ErrInvariant
+		}
+		if completeMainstream {
+			item.SafeSource.Kind = "mainstream"
+			channelIDValue := channelID.String
+			channelNameValue := channelName.String
+			channelRevisionValue := strconv.FormatInt(channelRevision.Int64, 10)
+			channelCategoryValue := channelCategory.String
+			item.SafeSource.ChannelID = &channelIDValue
+			item.SafeSource.Name = &channelNameValue
+			item.SafeSource.ChannelRevision = &channelRevisionValue
+			item.SafeSource.Category = &channelCategoryValue
 		}
 		item.PhysicalEnabled = endpointEnabled == 1 && keyPhysicalEnabled == 1
 		item.Limits.Price, err = nullableAmountFromBlob(priceLimit)
@@ -508,7 +552,7 @@ func stewardFromAdmin(value AdminDonation) StewardDonation {
 	}
 	return StewardDonation{
 		ID: value.ID, Status: value.Status, Revision: value.Revision, Description: value.Description,
-		ReviewResult: value.ReviewResult, ExpiresAt: value.ExpiresAt, Keys: stewardKeys(value.Keys),
+		ReviewResult: value.ReviewResult, Keys: stewardKeys(value.Keys),
 		Owner: owner, Reviewer: value.Reviewer, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt,
 	}
 }
@@ -516,8 +560,7 @@ func stewardFromAdmin(value AdminDonation) StewardDonation {
 func ownerKeys(values []AdminDonationKey) []DonationKey {
 	out := make([]DonationKey, len(values))
 	for index := range values {
-		out[index] = values[index].DonationKey
-		out[index].SafeNote = ""
+		out[index] = ownerKey(values[index])
 	}
 	return out
 }
@@ -525,10 +568,27 @@ func ownerKeys(values []AdminDonationKey) []DonationKey {
 func stewardKeys(values []AdminDonationKey) []StewardDonationKey {
 	out := make([]StewardDonationKey, len(values))
 	for index := range values {
-		out[index] = StewardDonationKey{DonationKey: values[index].DonationKey, SafeNote: values[index].SafeNote}
-		out[index].DonationKey.SafeNote = ""
+		out[index] = StewardDonationKey{DonationKey: ownerKey(values[index]),
+			AuthorizedExpiresAt: values[index].AuthorizedExpiresAt, SafeNote: values[index].SafeNote}
 	}
 	return out
+}
+
+func ownerKey(value AdminDonationKey) DonationKey {
+	source := SafeSource{
+		Kind:          value.SafeSource.Kind,
+		ConnectorType: value.SafeSource.ConnectorType,
+		BaseURL:       value.SafeSource.BaseURL,
+		ChannelID:     value.SafeSource.ChannelID,
+		Name:          value.SafeSource.Name,
+	}
+	return DonationKey{
+		ID: value.ID, EndpointKeyID: value.EndpointKeyID, DisplayHead: value.DisplayHead,
+		DisplayTail: value.DisplayTail, SafeSource: source, PhysicalEnabled: value.PhysicalEnabled,
+		CharityState: value.CharityState, Limits: value.Limits, Usage: value.Usage,
+		TokenReserve: value.TokenReserve, ExpiresAt: value.ExpiresAt, Streak: value.Streak,
+		EndedReason: value.EndedReason,
+	}
 }
 
 func nullableAmountFromBlob(blob []byte) (*string, error) {

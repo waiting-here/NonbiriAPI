@@ -138,8 +138,9 @@ WHERE kind='user' AND user_id=?`, userID).Scan(&balanceSign, &balanceMagnitude);
 }
 
 // ListAvailableModels returns the bounded safe model projection used by the
-// public OpenAI list. Availability is evaluated through Snapshot, but neither
-// donation/key identities nor candidate counts leave this method.
+// public OpenAI list. Availability uses the same runtime eligibility checks,
+// but neither ordering entropy, donation/key identities, nor candidate counts
+// leave this method.
 func (s *Service) ListAvailableModels(ctx context.Context, decisionNow int64, limit int) ([]AvailableModel, error) {
 	if s == nil || s.db == nil || ctx == nil || decisionNow < 0 || decisionNow > maxUnixSecond || limit < 1 || limit > MaxAvailableModels {
 		return nil, ErrInvalidRequest
@@ -189,7 +190,7 @@ WHERE enabled=1 ORDER BY full_name,id LIMIT ?`, limit+1)
 	}
 	available := make([]AvailableModel, 0, len(models))
 	for _, model := range models {
-		if _, err := s.Snapshot(ctx, model.ModelID, decisionNow); err == nil {
+		if _, err := s.snapshot(ctx, model.ModelID, decisionNow, false, nil); err == nil {
 			available = append(available, model)
 		} else if !errors.Is(err, ErrUnavailable) && !errors.Is(err, ErrNotFound) {
 			return nil, err
@@ -207,7 +208,15 @@ WHERE enabled=1 ORDER BY full_name,id LIMIT ?`, limit+1)
 // Snapshot returns the current credential-free candidate set. Every candidate
 // passes the same physical, membership, expiry, suspension, catalog, binding,
 // switch, and three-dimensional admission checks that claim repeats.
-func (s *Service) Snapshot(ctx context.Context, modelID int64, decisionNow int64) (RuntimeSnapshot, error) {
+func (s *Service) Snapshot(ctx context.Context, modelID int64, decisionNow int64, connectorTypes []connectorcontract.Type) (RuntimeSnapshot, error) {
+	connectorSet, err := runtimeConnectorSet(connectorTypes)
+	if err != nil {
+		return RuntimeSnapshot{}, err
+	}
+	return s.snapshot(ctx, modelID, decisionNow, true, connectorSet)
+}
+
+func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64, freezeOrder bool, connectorSet map[connectorcontract.Type]struct{}) (RuntimeSnapshot, error) {
 	if s == nil || s.db == nil || ctx == nil || modelID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond {
 		return RuntimeSnapshot{}, ErrInvalidRequest
 	}
@@ -222,9 +231,6 @@ func (s *Service) Snapshot(ctx context.Context, modelID int64, decisionNow int64
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: begin runtime snapshot: %w", err)
 	}
 	defer tx.Rollback()
-	if err := s.donationState.MaterializeDueExpiriesTx(ctx, tx, decisionNow, 100); err != nil {
-		return RuntimeSnapshot{}, fmt.Errorf("charity routing: materialize runtime expiry: %w", err)
-	}
 	var gate string
 	if err := tx.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key='charity_enabled'`).Scan(&gate); err != nil {
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: read runtime feature gate: %w", err)
@@ -272,7 +278,7 @@ FROM charity_models WHERE id=?`, modelID).Scan(&snapshot.ModelID, &snapshot.Prov
 	}
 
 	rows, err := tx.QueryContext(ctx, `SELECT b.donation_key_id,e.id,k.id,e.connector_type,e.base_url,b.upstream_model_id,
-k.force_store_false,dk.token_reserve,
+k.force_store_false,dk.token_reserve,dk.expires_at,
 dk.price_limit_mag,dk.call_limit_mag,dk.token_limit_mag,
 dk.price_used_mag,dk.price_reserved_mag,dk.calls_used,dk.calls_reserved,dk.tokens_used,dk.tokens_reserved
 FROM charity_model_bindings b
@@ -282,25 +288,28 @@ JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id
 JOIN endpoint_keys k ON k.id=m.endpoint_key_id
 JOIN endpoints e ON e.id=k.endpoint_id
 JOIN model_pair_catalog pc ON pc.endpoint_key_id=b.endpoint_key_id AND pc.normalized_model_id=b.upstream_model_id
-WHERE b.charity_model_id=? AND d.status='approved' AND (d.expires_at IS NULL OR d.expires_at>?)
+WHERE b.charity_model_id=? AND d.status='approved'
 AND d.user_id IS NOT NULL AND dk.ended_at IS NULL AND dk.enabled=1 AND dk.failure_disabled=0
 AND k.enabled=1 AND e.enabled=1 AND (pc.automatic_supports>0 OR pc.manual_supports>0)
 AND NOT EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id)
-ORDER BY b.ord,b.id LIMIT ?`, modelID, decisionNow, MaxRuntimeCandidates+1)
+ORDER BY b.ord,b.id LIMIT ?`, modelID, maxBindingBatch+1)
 	if err != nil {
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: read runtime candidates: %w", err)
 	}
 	defer rows.Close()
-	snapshot.candidates = make([]RuntimeCandidate, 0)
+	weighted := make([]weightedRuntimeCandidate, 0, MaxRuntimeCandidates)
+	sawRuntimeCandidate := false
+	sawSupportedCandidate := false
 	for rows.Next() {
 		var candidate RuntimeCandidate
 		var connector string
 		var forceStore int
 		var tokenReserve int64
+		var expiresAt sql.NullInt64
 		var priceLimit, callLimit, tokenLimit []byte
 		var priceUsed, priceInflight, callsUsed, callsInflight, tokensUsed, tokensInflight []byte
 		if err := rows.Scan(&candidate.DonationKeyID, &candidate.EndpointID, &candidate.EndpointKeyID,
-			&connector, &candidate.CanonicalBaseURL, &candidate.UpstreamModelID, &forceStore, &tokenReserve,
+			&connector, &candidate.CanonicalBaseURL, &candidate.UpstreamModelID, &forceStore, &tokenReserve, &expiresAt,
 			&priceLimit, &callLimit, &tokenLimit, &priceUsed, &priceInflight, &callsUsed, &callsInflight,
 			&tokensUsed, &tokensInflight); err != nil {
 			return RuntimeSnapshot{}, fmt.Errorf("charity routing: scan runtime candidate: %w", err)
@@ -309,11 +318,25 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, decisionNow, MaxRuntimeCandidates+1)
 		if candidate.ConnectorType != connectorcontract.TypeOpenAICompatible && candidate.ConnectorType != connectorcontract.TypeAnthropicCompatible {
 			return RuntimeSnapshot{}, ErrInvariant
 		}
+		sawRuntimeCandidate = true
+		if connectorSet != nil {
+			if _, allowed := connectorSet[candidate.ConnectorType]; !allowed {
+				continue
+			}
+		}
+		sawSupportedCandidate = true
+		weight, eligible, err := runtimeCandidateWeight(decisionNow, expiresAt)
+		if err != nil {
+			return RuntimeSnapshot{}, err
+		}
+		if !eligible {
+			continue
+		}
 		priceReserve := snapshot.ReservedMilli
 		if pricingMode == "per_request" {
 			priceReserve = requestPrice
 		}
-		eligible, err := capacityAllows(priceLimit, priceUsed, priceInflight, big.NewInt(priceReserve))
+		eligible, err = capacityAllows(priceLimit, priceUsed, priceInflight, big.NewInt(priceReserve))
 		if err == nil && eligible {
 			eligible, err = capacityAllows(callLimit, callsUsed, callsInflight, big.NewInt(1))
 		}
@@ -328,19 +351,46 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, decisionNow, MaxRuntimeCandidates+1)
 		}
 		candidate.Policy.ForceStoreFalse = forceStore == 1
 		candidate.Policy.FlattenToolCalls = snapshot.FlattenToolCalls
-		snapshot.candidates = append(snapshot.candidates, candidate)
-		if len(snapshot.candidates) > MaxRuntimeCandidates {
+		weighted = append(weighted, weightedRuntimeCandidate{candidate: candidate, weight: weight})
+		if len(weighted) > MaxRuntimeCandidates {
 			return RuntimeSnapshot{}, ErrResourceLimit
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: iterate runtime candidates: %w", err)
 	}
-	if len(snapshot.candidates) == 0 {
+	if err := rows.Close(); err != nil {
+		return RuntimeSnapshot{}, fmt.Errorf("charity routing: close runtime candidates: %w", err)
+	}
+	// A request whose otherwise-routable bindings all use unsupported connector
+	// types is still an invalid request, as it was when forward performed this
+	// filter. Stop before expiry materialization or ordering entropy so the
+	// rejected request has no side effects.
+	if freezeOrder && sawRuntimeCandidate && !sawSupportedCandidate {
+		return RuntimeSnapshot{}, ErrInvalidRequest
+	}
+	if len(weighted) == 0 {
+		if err := s.donationState.MaterializeDueExpiriesTx(ctx, tx, decisionNow, 100); err != nil {
+			return RuntimeSnapshot{}, fmt.Errorf("charity routing: materialize runtime expiry: %w", err)
+		}
 		if err := tx.Commit(); err != nil {
 			return RuntimeSnapshot{}, fmt.Errorf("charity routing: commit empty runtime snapshot: %w", err)
 		}
 		return RuntimeSnapshot{}, ErrUnavailable
+	}
+	if freezeOrder {
+		snapshot.candidates, err = orderWeightedRuntimeCandidates(s.entropy, weighted)
+		if err != nil {
+			return RuntimeSnapshot{}, err
+		}
+	} else {
+		snapshot.candidates = make([]RuntimeCandidate, len(weighted))
+		for index := range weighted {
+			snapshot.candidates[index] = weighted[index].candidate
+		}
+	}
+	if err := s.donationState.MaterializeDueExpiriesTx(ctx, tx, decisionNow, 100); err != nil {
+		return RuntimeSnapshot{}, fmt.Errorf("charity routing: materialize runtime expiry: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: commit runtime snapshot: %w", err)
@@ -435,7 +485,7 @@ WHERE enabled=1 ORDER BY id`)
 	}
 	available := make([]CapabilityModel, 0, len(models))
 	for index, id := range modelIDs {
-		if _, err := s.Snapshot(ctx, id, decisionNow); err == nil {
+		if _, err := s.snapshot(ctx, id, decisionNow, false, nil); err == nil {
 			available = append(available, models[index])
 		} else if !errors.Is(err, ErrUnavailable) && !errors.Is(err, ErrNotFound) {
 			return Capability{}, err
@@ -445,6 +495,23 @@ WHERE enabled=1 ORDER BY id`)
 		return Capability{State: "no_candidates", Models: []CapabilityModel{}, DonationIntake: donationIntake}, nil
 	}
 	return Capability{State: "available", Models: available, DonationIntake: donationIntake}, nil
+}
+
+func runtimeConnectorSet(connectorTypes []connectorcontract.Type) (map[connectorcontract.Type]struct{}, error) {
+	if len(connectorTypes) < 1 || len(connectorTypes) > 2 {
+		return nil, ErrInvalidRequest
+	}
+	connectorSet := make(map[connectorcontract.Type]struct{}, len(connectorTypes))
+	for _, connectorType := range connectorTypes {
+		if connectorType != connectorcontract.TypeOpenAICompatible && connectorType != connectorcontract.TypeAnthropicCompatible {
+			return nil, ErrInvalidRequest
+		}
+		if _, duplicate := connectorSet[connectorType]; duplicate {
+			return nil, ErrInvalidRequest
+		}
+		connectorSet[connectorType] = struct{}{}
+	}
+	return connectorSet, nil
 }
 
 func capabilityGateTx(ctx context.Context, tx *sql.Tx, key string) (string, error) {

@@ -68,7 +68,7 @@ JOIN donations d ON d.id=dk.donation_id
 JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id
 JOIN endpoint_keys k ON k.id=m.endpoint_key_id
 JOIN model_pair_catalog pc ON pc.endpoint_key_id=k.id
-WHERE cm.id=? AND d.status='approved' AND (d.expires_at IS NULL OR d.expires_at>?)
+WHERE cm.id=? AND d.status='approved' AND (dk.expires_at IS NULL OR dk.expires_at>?)
 AND dk.ended_at IS NULL AND (dk.id>? OR (dk.id=? AND pc.normalized_model_id>?))
 AND NOT EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.charity_model_id=cm.id
  AND b.donation_key_id=dk.id AND b.upstream_model_id=pc.normalized_model_id)`
@@ -222,7 +222,7 @@ FROM donation_keys dk
 JOIN donations d ON d.id=dk.donation_id
 JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id
 JOIN model_pair_catalog pc ON pc.endpoint_key_id=m.endpoint_key_id AND pc.normalized_model_id=?
-WHERE dk.id=? AND d.status='approved' AND (d.expires_at IS NULL OR d.expires_at>?)
+WHERE dk.id=? AND d.status='approved' AND (dk.expires_at IS NULL OR dk.expires_at>?)
 AND dk.ended_at IS NULL AND (pc.automatic_supports>0 OR pc.manual_supports>0)`,
 			selection.upstreamModelID, selection.donationKeyID, now).Scan(&endpointKeyID)
 		if errors.Is(err, sql.ErrNoRows) {

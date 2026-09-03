@@ -20,10 +20,49 @@ import type {
   DonationIntakeState,
   DonationKey,
   EndpointKeyChoice,
+  EndpointOriginMainstream,
 } from './types';
 
 const DRAFT_STORAGE_PREFIX = 'nonbiri:charity-donation-draft:v1';
 const EMPTY_SELECTION = new Set<string>();
+
+export type DonationOverviewFilter = 'all' | 'available' | 'blocked' | 'ended';
+
+type DonationSelectionMode =
+  | { kind: 'custom' }
+  | { kind: 'mainstream'; channelId: string; channelName: string }
+  | { kind: 'mixed' | 'cross_channel' };
+
+function classifyDonationSelection(choices: readonly EndpointKeyChoice[]): DonationSelectionMode {
+  if (choices.length === 0) return { kind: 'custom' };
+  const mainstream = choices
+    .map((choice) => choice.endpoint.origin)
+    .filter((origin): origin is EndpointOriginMainstream => origin.kind === 'mainstream');
+  if (mainstream.length === 0) return { kind: 'custom' };
+  if (mainstream.length !== choices.length) return { kind: 'mixed' };
+  const first = mainstream[0];
+  if (mainstream.some((origin) => origin.channelId !== first.channelId)) {
+    return { kind: 'cross_channel' };
+  }
+  return { kind: 'mainstream', channelId: first.channelId, channelName: first.name };
+}
+
+function expiryInputValue(value: number | null): string {
+  if (value === null) return '';
+  return new Date(value * 1000).toISOString().slice(0, 16);
+}
+
+function parseExpiryInput(value: string): number | null | undefined {
+  if (value === '') return null;
+  // datetime-local has no timezone. Treat the rendered value as UTC so the
+  // request remains an explicit UTC Unix-seconds deadline across locales.
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return undefined;
+  const timestamp = Date.parse(`${value}:00Z`);
+  if (!Number.isFinite(timestamp) || timestamp < 0 || timestamp % 1000 !== 0) return undefined;
+  const seconds = timestamp / 1000;
+  if (!Number.isSafeInteger(seconds) || expiryInputValue(seconds) !== value) return undefined;
+  return seconds;
+}
 
 function validDonationDescription(value: string): boolean {
   if (Array.from(value).length > 1024) return false;
@@ -166,6 +205,7 @@ export function DonationComposer({
     signature: '',
     ids: new Set(),
   }));
+  const [expiryByKey, setExpiryByKey] = useState<Record<string, string>>({});
   const [authorized, setAuthorized] = useState(false);
   const [validation, setValidation] = useState('');
   const [success, setSuccess] = useState(false);
@@ -178,6 +218,8 @@ export function DonationComposer({
   const eligible = choices.filter((choice) => choice.eligibility === 'eligible');
   const eligibleSignature = eligible.map((choice) => choice.key.id).join('|');
   const selected = selection.signature === eligibleSignature ? selection.ids : EMPTY_SELECTION;
+  const selectedChoices = eligible.filter((choice) => selected.has(choice.key.id));
+  const selectionMode = classifyDonationSelection(selectedChoices);
 
   useEffect(() => {
     storeDraft(draftNamespace, description);
@@ -214,9 +256,23 @@ export function DonationComposer({
       setValidation(t('user.charity.authorizationRequired'));
       return;
     }
+    if (selectionMode.kind === 'mixed' || selectionMode.kind === 'cross_channel') {
+      setValidation(t('user.charity.splitDonationSources'));
+      return;
+    }
+    const keys = [...selected].map((endpointKeyId) => {
+      const rawExpiry = expiryByKey[endpointKeyId] ?? '';
+      const expiresAt = parseExpiryInput(rawExpiry);
+      if (expiresAt === undefined) return undefined;
+      return { endpointKeyId, expiresAt };
+    });
+    if (keys.some((key) => key === undefined)) {
+      setValidation(t('user.charity.expiryInvalid'));
+      return;
+    }
     const input: CreateDonationInput = {
       description,
-      endpointKeyIds: [...selected],
+      keys: keys as { endpointKeyId: string; expiresAt: number | null }[],
       ownershipAuthorized: true,
     };
     const baselineGeneration = mutation.reconcileGeneration;
@@ -224,12 +280,14 @@ export function DonationComposer({
       await mutation.mutateAsync(input);
       setDescription('');
       setSelection({ signature: eligibleSignature, ids: new Set() });
+      setExpiryByKey({});
       setAuthorized(false);
       storeDraft(draftNamespace, '');
       setSuccess(true);
     } catch (error) {
       if (isConflictError(error) || isResponseUnknown(error)) {
         setSelection({ signature: eligibleSignature, ids: new Set() });
+        setExpiryByKey({});
         setAuthorized(false);
         setBlockedAuthority({ baselineGeneration });
       }
@@ -272,16 +330,21 @@ export function DonationComposer({
             {grouped.map((group) => (
               <section className="economy-key-group" key={group.endpoint.id}>
                 <div>
-                  <strong>{group.endpoint.baseUrl}</strong>
+                  <strong>
+                    {group.endpoint.origin.kind === 'mainstream'
+                      ? group.endpoint.origin.name
+                      : group.endpoint.baseUrl}
+                  </strong>
                   <span className="muted">{group.endpoint.connectorType}</span>
                 </div>
                 {group.choices.map((choice) => {
                   const disabled = choice.eligibility !== 'eligible';
+                  const selectedChoice = selected.has(choice.key.id);
                   return (
                     <label className="economy-key-choice" key={choice.key.id}>
                       <input
                         type="checkbox"
-                        checked={selected.has(choice.key.id)}
+                        checked={selectedChoice}
                         disabled={disabled}
                         onChange={(event) =>
                           setSelection((current) => {
@@ -300,6 +363,27 @@ export function DonationComposer({
                         </span>
                         {choice.key.note ? <span> · {choice.key.note}</span> : null}
                         <small className="muted">{eligibilityLabel(choice, t)}</small>
+                        {selectedChoice ? (
+                          <span className="economy-key-expiry">
+                            <span>{t('user.charity.keyExpiry')}</span>
+                            <input
+                              type="datetime-local"
+                              step={60}
+                              value={expiryByKey[choice.key.id] ?? ''}
+                              onChange={(event) =>
+                                setExpiryByKey((current) => ({
+                                  ...current,
+                                  [choice.key.id]: event.target.value,
+                                }))
+                              }
+                              onClick={(event) => event.stopPropagation()}
+                              aria-label={t('user.charity.keyExpiryFor', {
+                                key: maskedKey(choice.key.displayHead, choice.key.displayTail),
+                              })}
+                            />
+                            <small className="muted">{t('user.charity.expiryHintUtc')}</small>
+                          </span>
+                        ) : null}
                       </span>
                     </label>
                   );
@@ -308,6 +392,16 @@ export function DonationComposer({
             ))}
           </fieldset>
         )}
+
+        {selectedChoices.length > 0 ? (
+          <p className="inline-notice" role="status">
+            {selectionMode.kind === 'mainstream'
+              ? t('user.charity.selectedMainstreamChannel', { name: selectionMode.channelName })
+              : selectionMode.kind === 'custom'
+                ? t('user.charity.selectedCustomSources')
+                : t('user.charity.splitDonationSources')}
+          </p>
+        ) : null}
 
         <section className="economy-disclosure" aria-labelledby="donation-disclosure-title">
           <h3 id="donation-disclosure-title">{t('user.charity.disclosureTitle')}</h3>
@@ -399,6 +493,11 @@ function keyStateKeys(key: DonationKey): string[] {
   return states.length > 0 ? states : [key.charityState];
 }
 
+function keyBlockingReasons(key: DonationKey): string[] {
+  if (key.charityState === 'ended' || key.charityState === 'expired') return [];
+  return keyStateKeys(key).filter((state) => state !== 'available');
+}
+
 function LimitValue({
   limit,
   used,
@@ -430,29 +529,88 @@ function LimitValue({
   );
 }
 
-export function DonationKeyPanel({ donationKey }: { donationKey: DonationKey }) {
+export function DonationKeyPanel({
+  donationKey,
+  donationId,
+  donationStatus,
+}: {
+  donationKey: DonationKey;
+  donationId?: string;
+  donationStatus?: Donation['status'];
+}) {
   const { t } = useTranslation();
   const states = keyStateKeys(donationKey);
+  const blockingReasons = keyBlockingReasons(donationKey);
   return (
     <article className="economy-donation-key">
       <div className="item-header">
         <div>
+          {donationId ? (
+            <Link className="eyebrow" to={`/charity/donations/${donationId}`}>
+              {t('user.charity.donationNumber', { id: donationId })}
+            </Link>
+          ) : null}
           <h4 className="mono">{maskedKey(donationKey.displayHead, donationKey.displayTail)}</h4>
           <p className="item-meta">
-            {donationKey.source.baseUrl} · {donationKey.source.connectorType}
+            {donationKey.source.kind === 'mainstream'
+              ? `${donationKey.source.name} · ${donationKey.source.baseUrl} · ${donationKey.source.connectorType}`
+              : `${t('user.charity.customSource')} · ${donationKey.source.baseUrl} · ${donationKey.source.connectorType}`}
           </p>
         </div>
         <div className="economy-status-stack">
-          {states.map((state) => (
+          {donationStatus ? (
             <StatusBadge
-              key={state}
-              active={state === 'available'}
-              danger={state.includes('expired') || state === 'ended' || state.includes('disabled')}
-              label={t(`user.charity.keyState.${state}`)}
+              active={donationStatus === 'approved'}
+              danger={statusDanger(donationStatus)}
+              label={t(`user.charity.status.${donationStatus}`)}
             />
-          ))}
+          ) : null}
+          <StatusBadge
+            active={donationKey.physicalEnabled}
+            danger={!donationKey.physicalEnabled}
+            label={
+              donationKey.physicalEnabled
+                ? t('user.charity.physicalEnabled')
+                : t('user.charity.physicalDisabled')
+            }
+          />
+          <StatusBadge
+            active={donationKey.charityState === 'available'}
+            danger={donationKey.charityState === 'ended' || donationKey.charityState === 'expired'}
+            label={t(`user.charity.keyState.${donationKey.charityState}`)}
+          />
+          {states
+            .filter((state) => state !== donationKey.charityState)
+            .map((state) => (
+              <StatusBadge
+                key={state}
+                active={state === 'available'}
+                danger={
+                  state.includes('expired') || state === 'ended' || state.includes('disabled')
+                }
+                label={t(`user.charity.keyState.${state}`)}
+              />
+            ))}
         </div>
       </div>
+      <dl className="detail-grid economy-key-status-details">
+        <div className="detail-row">
+          <dt>{t('user.charity.blockingReasons')}</dt>
+          <dd>
+            {blockingReasons.length === 0
+              ? t('user.charity.noBlockingReason')
+              : blockingReasons.map((state) => t(`user.charity.keyState.${state}`)).join(' · ')}
+          </dd>
+        </div>
+        <div className="detail-row">
+          <dt>{t('user.charity.effectiveExpiry')}</dt>
+          <dd>
+            {donationKey.expiresAt === null
+              ? t('user.charity.never')
+              : formatDateTime(donationKey.expiresAt)}
+          </dd>
+        </div>
+      </dl>
       <div className="economy-limit-grid">
         <section>
           <h5>{t('user.charity.priceQuota')}</h5>
@@ -503,12 +661,22 @@ export function DonationKeyPanel({ donationKey }: { donationKey: DonationKey }) 
             <ExactCount value={donationKey.streak.count} />
           </dd>
         </div>
-        {donationKey.endedReason ? (
-          <div className="detail-row">
-            <dt>{t('user.charity.endedReason')}</dt>
-            <dd>{t(`user.charity.endedReasonValue.${donationKey.endedReason}`)}</dd>
-          </div>
-        ) : null}
+        <div className="detail-row">
+          <dt>{t('user.charity.failureDisabled')}</dt>
+          <dd>
+            {donationKey.streak.failureDisabled
+              ? t('user.charity.failureDisabledYes')
+              : t('user.charity.failureDisabledNo')}
+          </dd>
+        </div>
+        <div className="detail-row">
+          <dt>{t('user.charity.endedReason')}</dt>
+          <dd>
+            {donationKey.endedReason
+              ? t(`user.charity.endedReasonValue.${donationKey.endedReason}`)
+              : t('user.charity.notEnded')}
+          </dd>
+        </div>
       </dl>
     </article>
   );
@@ -660,14 +828,6 @@ export function DonationCard({
 
       <dl className="detail-grid">
         <div className="detail-row">
-          <dt>{t('user.charity.expires')}</dt>
-          <dd>
-            {donation.expiresAt === null
-              ? t('user.charity.never')
-              : formatDateTime(donation.expiresAt)}
-          </dd>
-        </div>
-        <div className="detail-row">
           <dt>{t('user.charity.updatedAt')}</dt>
           <dd>{formatDateTime(donation.updatedAt)}</dd>
         </div>
@@ -764,6 +924,110 @@ export function DonationCard({
         onConfirm={() => void confirm()}
       />
     </Card>
+  );
+}
+
+function matchesDonationOverviewFilter(key: DonationKey, filter: DonationOverviewFilter): boolean {
+  if (filter === 'all') return true;
+  if (filter === 'available') return key.charityState === 'available';
+  if (filter === 'ended') return key.charityState === 'ended' || key.charityState === 'expired';
+  return (
+    key.charityState !== 'available' &&
+    key.charityState !== 'ended' &&
+    key.charityState !== 'expired'
+  );
+}
+
+export function DonationKeyOverview({ donations }: { donations: readonly Donation[] }) {
+  const { t } = useTranslation();
+  const [filter, setFilter] = useState<DonationOverviewFilter>('all');
+  const totalKeys = donations.reduce((total, donation) => total + donation.keys.length, 0);
+  const groups = donations
+    .map((donation) => ({
+      donation,
+      keys: donation.keys.filter((key) => matchesDonationOverviewFilter(key, filter)),
+    }))
+    .filter((group) => group.keys.length > 0);
+  const visibleKeys = groups.reduce((total, group) => total + group.keys.length, 0);
+
+  return (
+    <section className="economy-donation-overview" aria-labelledby="donation-key-overview-title">
+      <div className="card-title-row economy-section-heading">
+        <div>
+          <p className="eyebrow">{t('user.charity.donationOverviewEyebrow')}</p>
+          <h2 id="donation-key-overview-title">{t('user.charity.donationOverviewTitle')}</h2>
+          <p className="muted">
+            {t('user.charity.donationOverviewCount', { visible: visibleKeys, total: totalKeys })}
+          </p>
+        </div>
+        <label>
+          <span>{t('user.charity.donationOverviewFilter')}</span>
+          <select
+            value={filter}
+            onChange={(event) => setFilter(event.target.value as DonationOverviewFilter)}
+            aria-label={t('user.charity.donationOverviewFilter')}
+          >
+            <option value="all">{t('user.charity.donationOverviewFilters.all')}</option>
+            <option value="available">{t('user.charity.donationOverviewFilters.available')}</option>
+            <option value="blocked">{t('user.charity.donationOverviewFilters.blocked')}</option>
+            <option value="ended">{t('user.charity.donationOverviewFilters.ended')}</option>
+          </select>
+        </label>
+      </div>
+      {groups.length === 0 ? (
+        <EmptyState
+          title={t('user.charity.donationOverviewNoMatches')}
+          body={t('user.charity.donationOverviewNoMatchesBody')}
+        />
+      ) : (
+        <div className="item-list economy-donation-overview-list">
+          {groups.map(({ donation, keys }) => (
+            <article className="economy-donation-overview-group" key={donation.id}>
+              <div className="item-header">
+                <div>
+                  <p className="eyebrow">{t('user.charity.donationLabel')}</p>
+                  <h3>
+                    <Link to={`/charity/donations/${donation.id}`}>
+                      {t('user.charity.donationNumber', { id: donation.id })}
+                    </Link>
+                  </h3>
+                </div>
+                <StatusBadge
+                  active={donation.status === 'approved'}
+                  danger={statusDanger(donation.status)}
+                  label={t(`user.charity.status.${donation.status}`)}
+                />
+              </div>
+              <div className="economy-donation-key-list">
+                {keys.map((key) => (
+                  <DonationKeyPanel
+                    key={key.id}
+                    donationKey={key}
+                    donationId={donation.id}
+                    donationStatus={donation.status}
+                  />
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function DonationOverviewPartialError({ onRetry }: { onRetry: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="state-panel error-state nb-state nb-state--error" role="alert">
+      <div>
+        <h2>{t('user.charity.donationOverviewPartialTitle')}</h2>
+        <p>{t('user.charity.donationOverviewPartialBody')}</p>
+        <button type="button" className="btn btn-secondary" onClick={onRetry}>
+          {t('common.retry')}
+        </button>
+      </div>
+    </div>
   );
 }
 

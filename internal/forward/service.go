@@ -290,11 +290,16 @@ func (service *Service) Chat(
 		service.writePreAcceptanceFailure(parent, writer, suppressor, decision.Trace, err, admission.charity, language)
 		return
 	}
-	accepted, err := service.claims.Accept(executionContext, claim.AcceptInput{
+	acceptInput := claim.AcceptInput{
 		UserID: userID, Route: plan.route, ModelSnapshot: plan.fullName,
 		AttemptLimit: len(plan.candidates), ReservedMilli: plan.reservedMilli,
 		CharityModelID: charityModelID(plan),
-	})
+	}
+	if plan.charity {
+		decisionNow := plan.decisionNow
+		acceptInput.CharityDecisionNow = &decisionNow
+	}
+	accepted, err := service.claims.Accept(executionContext, acceptInput)
 	if err != nil {
 		service.writePreAcceptanceFailure(parent, writer, suppressor, decision.Trace, err, admission.charity, language)
 		return
@@ -406,7 +411,11 @@ func (service *Service) snapshot(
 ) (executionPlan, error) {
 	plan := executionPlan{logicalAdmission: admission}
 	if admission.charity {
-		value, err := service.charity.Snapshot(ctx, admission.modelID, admission.decisionNow)
+		connectorTypes := service.supportedCharityConnectorTypes(request, admission.flatten)
+		if len(connectorTypes) == 0 {
+			return executionPlan{}, openai.ErrInvalidRequest
+		}
+		value, err := service.charity.Snapshot(ctx, admission.modelID, admission.decisionNow, connectorTypes)
 		if err != nil {
 			return executionPlan{}, err
 		}
@@ -465,6 +474,23 @@ func (service *Service) snapshot(
 	}
 	plan.candidates = ordered
 	return plan, nil
+}
+
+func (service *Service) supportedCharityConnectorTypes(request *openai.ChatRequest, flatten bool) []connectorcontract.Type {
+	if service == nil || service.registry == nil || request == nil {
+		return nil
+	}
+	connectorTypes := make([]connectorcontract.Type, 0, len(service.connectors))
+	for connectorType, instance := range service.connectors {
+		if instance == nil || flatten && connectorType != connectorcontract.TypeOpenAICompatible {
+			continue
+		}
+		if service.registry.SupportsRequest(connectorType, request) {
+			connectorTypes = append(connectorTypes, connectorType)
+		}
+	}
+	sort.Slice(connectorTypes, func(left, right int) bool { return connectorTypes[left] < connectorTypes[right] })
+	return connectorTypes
 }
 
 func (service *Service) runAttempts(
@@ -996,6 +1022,8 @@ func failureForError(err error, charity bool) wireFailure {
 	case errors.Is(err, routing.ErrAmbiguousIdentity), errors.Is(err, routing.ErrInvalidIdentity),
 		errors.Is(err, openai.ErrInvalidRequest), errors.Is(err, charityrouting.ErrInvalidRequest):
 		return platformFailure(httperr.CodeInvalidRequest, "invalid request")
+	case errors.Is(err, charityrouting.ErrEntropyUnavailable):
+		return platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
 	case errors.Is(err, routing.ErrUnbound), errors.Is(err, charityrouting.ErrUnavailable):
 		return platformFailure(httperr.CodeUnboundModel, "model has no usable binding")
 	case errors.Is(err, routing.ErrResourceLimit), errors.Is(err, charityrouting.ErrResourceLimit):

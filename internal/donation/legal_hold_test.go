@@ -210,7 +210,7 @@ func TestHeldDonationInspectionConvergesDueApprovalInCallerTransaction(t *testin
 		map[string]any{"decision": "approve"})
 	if _, err := environment.service.ReviewAdmin(context.Background(), mutation, donationID, ReviewInput{
 		Decision: "approve", ExpectedRevision: 1, Reason: "approved for expiry",
-		ExpiresAt: &expiresAt, KeySettings: []KeySetting{{DonationKeyID: donationKeyID, Enabled: true}},
+		KeySettings: []KeySetting{{DonationKeyID: donationKeyID, Enabled: true, ExpiresAt: &expiresAt}},
 	}); err != nil {
 		t.Fatalf("approve donation: %v", err)
 	}

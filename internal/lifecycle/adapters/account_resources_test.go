@@ -112,7 +112,11 @@ func (source adapterTestResources) ExportLifecycleResources(
 		err = source.state.resourceExportErr
 	}
 	return resources.LifecycleResourceExport{
-		Endpoints:    []resources.LifecycleEndpoint{{ID: "2", Note: value, Keys: []resources.LifecycleEndpointKey{}}},
+		Endpoints: []resources.LifecycleEndpoint{{
+			ID: "2", Note: value,
+			Origin: resources.EndpointOrigin{Kind: "mainstream", ChannelID: "mch_safe", Name: "Safe channel"},
+			Keys:   []resources.LifecycleEndpointKey{},
+		}},
 		CatalogPairs: []resources.LifecycleCatalogPair{}, Models: []resources.LifecycleModel{},
 	}, err
 }
@@ -238,6 +242,9 @@ func TestAccountResourcesUsesOneFrozenSnapshot(t *testing.T) {
 	}
 	if user.Username != "shared-snapshot" || usage.TotalRequests != "shared-snapshot" ||
 		logs.TotalLogs != "shared-snapshot" || len(endpoints) != 1 || endpoints[0].Note != "shared-snapshot" ||
+		endpoints[0].Origin != (lifecycle.EndpointOriginExport{
+			Kind: "mainstream", ChannelID: "mch_safe", Name: "Safe channel",
+		}) ||
 		len(exportedIssues) != 1 || exportedIssues[0].SafeDetail != "shared-snapshot" {
 		t.Fatalf("snapshot outputs user=%+v usage=%+v logs=%+v endpoints=%+v issues=%+v",
 			user, usage, logs, endpoints, exportedIssues)

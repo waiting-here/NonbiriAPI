@@ -229,7 +229,7 @@ func (repository *Repository) Approve(
 	}
 	updated, err := tx.ExecContext(ctx, `UPDATE report_cases SET
  status='approved_processing',progress_state='in_progress',decision_reason=?,decision_actor_user_id=?,decision_at=?,
- cursor_text=NULL,processed_target_count=(SELECT COUNT(*) FROM report_targets WHERE case_id=? AND state<>'protected'),
+ cursor_source=NULL,cursor_id=NULL,processed_target_count=(SELECT COUNT(*) FROM report_targets WHERE case_id=? AND state<>'protected'),
  retry_attempt_count=0,next_retry_at=NULL,last_error_class=NULL
 WHERE id=? AND status='pending_review' AND deadline>? AND material_version=? AND target_version=?`,
 		command.Reason, principal.UserID, now, caseID, caseID, now, command.ExpectedMaterialVersion, command.ExpectedTargetVersion)
@@ -323,7 +323,7 @@ func (repository *Repository) Reject(
 	}
 	updated, err := tx.ExecContext(ctx, `UPDATE report_cases SET
  status='rejected',progress_state='complete',decision_reason=?,decision_actor_user_id=?,decision_at=?,terminal_at=?,
- cursor_text=NULL,released_target_count=released_target_count+?,retry_attempt_count=0,next_retry_at=NULL,last_error_class=NULL
+ cursor_source=NULL,cursor_id=NULL,released_target_count=released_target_count+?,retry_attempt_count=0,next_retry_at=NULL,last_error_class=NULL
 WHERE id=? AND status='pending_review' AND deadline>? AND material_version=? AND target_version=?`,
 		command.Reason, principal.UserID, now, now, protectedCount, caseID, now, row.materialVersion, row.targetVersion)
 	if err != nil {

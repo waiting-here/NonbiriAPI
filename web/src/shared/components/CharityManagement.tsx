@@ -26,7 +26,9 @@ import {
   type CharityModel,
   type CharityRole,
   type CharityState,
+  type DonationEndedReason,
   type DonationStatus,
+  type ManagedSafeSource,
   type ManagedDonationKey,
   type StewardDonation,
   type TokenPrices,
@@ -153,6 +155,8 @@ interface KeySettingsDraft {
   token_reserve: number;
   enabled: boolean;
   safe_note: string;
+  expiry: DateTimeDraft;
+  no_expiry: boolean;
 }
 interface KeyManagementDraft extends Omit<KeySettingsDraft, 'enabled'> {
   enabled: boolean | null;
@@ -168,6 +172,8 @@ const keySettingsDraft = (key: ManagedDonationKey): KeySettingsDraft => ({
     key.charity_state !== 'ended' &&
     key.charity_state !== 'expired',
   safe_note: key.safe_note,
+  expiry: dateTimeDraft(key.expires_at),
+  no_expiry: key.expires_at === null,
 });
 
 const keyManagementDraft = (key: ManagedDonationKey): KeyManagementDraft => ({
@@ -175,9 +181,22 @@ const keyManagementDraft = (key: ManagedDonationKey): KeyManagementDraft => ({
   enabled: null,
 });
 
-type KeySettingsValidation = 'priceLimit' | 'countLimits' | 'tokenReserve' | 'safeNote';
+type KeySettingsValidation =
+  | 'priceLimit'
+  | 'countLimits'
+  | 'tokenReserve'
+  | 'safeNote'
+  | 'expiry'
+  | 'expiryAuthorization';
 
-function keySettingsError(value: Omit<KeySettingsDraft, 'enabled'>): KeySettingsValidation | null {
+function effectiveExpiry(value: Omit<KeySettingsDraft, 'enabled'>): number | null {
+  return value.no_expiry ? null : dateTimeEpoch(value.expiry);
+}
+
+function keySettingsError(
+  value: Omit<KeySettingsDraft, 'enabled'>,
+  authorizedExpiresAt: number | null,
+): KeySettingsValidation | null {
   if (!validAmount(value.price_limit)) {
     return 'priceLimit';
   }
@@ -190,7 +209,110 @@ function keySettingsError(value: Omit<KeySettingsDraft, 'enabled'>): KeySettings
   if (!validText(value.safe_note, 256)) {
     return 'safeNote';
   }
+  const expiry = effectiveExpiry(value);
+  if (
+    (!value.no_expiry &&
+      (expiry === null ||
+        !Number.isSafeInteger(expiry) ||
+        expiry < 0 ||
+        expiry > MAX_UNIX_SECOND))
+  ) {
+    return 'expiry';
+  }
+  if (
+    authorizedExpiresAt !== null &&
+    (expiry === null || expiry > authorizedExpiresAt)
+  ) {
+    return 'expiryAuthorization';
+  }
   return null;
+}
+
+function keySettingsBody(value: KeySettingsDraft) {
+  return {
+    price_limit: value.price_limit,
+    calls_limit: value.calls_limit,
+    tokens_limit: value.tokens_limit,
+    token_reserve: value.token_reserve,
+    enabled: value.enabled,
+    safe_note: value.safe_note,
+    expires_at: effectiveExpiry(value),
+  };
+}
+
+const endedReasonKey: Record<DonationEndedReason, string> = {
+  withdrawn: 'withdrawn',
+  terminated: 'terminated',
+  expired: 'expired',
+  member_removed: 'memberRemoved',
+  account_deleted: 'accountDeleted',
+};
+
+function safeSourceLabel(
+  source: ManagedSafeSource,
+  role: CharityRole,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  if (source.kind === 'custom') {
+    return t('common.operations.charity.customSource', {
+      connector: source.connector_type,
+      baseUrl: source.base_url,
+    });
+  }
+  if (role === 'admin' && source.category === 'subscription') {
+    return t('common.operations.charity.mainstreamSubscription', { name: source.name });
+  }
+  if (role === 'admin' && source.category === 'api_platform') {
+    return t('common.operations.charity.mainstreamApiPlatform', { name: source.name });
+  }
+  return t('common.operations.charity.mainstreamSource', { name: source.name });
+}
+
+function KeyExpiryEditor({
+  draft,
+  authorizedExpiresAt,
+  onChange,
+}: {
+  draft: Pick<KeySettingsDraft, 'expiry' | 'no_expiry'>;
+  authorizedExpiresAt: number | null;
+  onChange: (value: Pick<KeySettingsDraft, 'expiry' | 'no_expiry'>) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="ops-form-field">
+      <label>
+        <span>{t('common.operations.charity.effectiveExpiry')}</span>
+        <input
+          type="datetime-local"
+          step="1"
+          value={draft.expiry.value}
+          disabled={draft.no_expiry}
+          onChange={(event) =>
+            onChange({
+              ...draft,
+              expiry: { ...draft.expiry, value: event.target.value, dirty: true },
+            })
+          }
+        />
+      </label>
+      <label className="checkbox-label">
+        <input
+          type="checkbox"
+          checked={draft.no_expiry}
+          disabled={authorizedExpiresAt !== null}
+          onChange={(event) => onChange({ ...draft, no_expiry: event.target.checked })}
+        />
+        <span>{t('common.operations.charity.noExpiry')}</span>
+      </label>
+      <small className="muted">
+        {authorizedExpiresAt === null
+          ? t('common.operations.charity.permanentAuthorizationHint')
+          : t('common.operations.charity.authorizedExpiryHint', {
+              value: formatDateTime(authorizedExpiresAt),
+            })}
+      </small>
+    </div>
+  );
 }
 
 function DonationKeyEditor({
@@ -226,6 +348,7 @@ function DonationKeyEditor({
           tokens_limit: input.tokens_limit,
           token_reserve: input.token_reserve,
           safe_note: input.safe_note,
+          expires_at: effectiveExpiry(input),
           ...(input.reset_failure_streak ? { reset_failure_streak: true } : {}),
         },
         key,
@@ -233,7 +356,8 @@ function DonationKeyEditor({
     refresh,
     charityKeys.root(role),
   );
-  const validationError = keySettingsError(draft);
+  const validationError = keySettingsError(draft, item.authorized_expires_at);
+  const terminal = item.charity_state === 'ended' || item.charity_state === 'expired';
   const capabilityLost = isUnauthorized(save.error) || isForbidden(save.error);
   useEffect(() => {
     if (capabilityLost) onCapabilityLoss?.();
@@ -254,7 +378,8 @@ function DonationKeyEditor({
           tail: item.display_tail,
         })}
       </h4>
-      <p>
+      <p>{safeSourceLabel(item.safe_source, role, t)}</p>
+      <p className="muted">
         {item.safe_source.connector_type} · {item.safe_source.base_url}
       </p>
       <div className="ops-toolbar">
@@ -295,14 +420,30 @@ function DonationKeyEditor({
             limit: item.limits.tokens ?? t('common.operations.charity.unlimited'),
           })}
         </dd>
+        <dt>{t('common.operations.charity.effectiveExpiry')}</dt>
+        <dd>
+          {item.expires_at === null
+            ? t('common.operations.charity.noExpiry')
+            : formatDateTime(item.expires_at)}
+        </dd>
+        <dt>{t('common.operations.charity.authorizedExpiry')}</dt>
+        <dd>
+          {item.authorized_expires_at === null
+            ? t('common.operations.charity.noExpiry')
+            : formatDateTime(item.authorized_expires_at)}
+        </dd>
         {item.ended_reason ? (
           <>
             <dt>{t('common.operations.charity.endedReason')}</dt>
-            <dd>{item.ended_reason}</dd>
+            <dd>
+              {t(
+                `common.operations.charity.endedReasonValue.${endedReasonKey[item.ended_reason]}`,
+              )}
+            </dd>
           </>
         ) : null}
       </dl>
-      {donation.status === 'approved' ? (
+      {donation.status === 'approved' && !terminal ? (
         <>
           <div className="ops-field-grid">
             <NullableValue
@@ -356,6 +497,11 @@ function DonationKeyEditor({
                 <option value="false">{t('common.operations.charity.disableForCharity')}</option>
               </select>
             </label>
+            <KeyExpiryEditor
+              draft={draft}
+              authorizedExpiresAt={item.authorized_expires_at}
+              onChange={(value) => setDraft({ ...draft, ...value })}
+            />
             {item.streak.failure_disabled ? (
               <label className="checkbox-label">
                 <input
@@ -383,7 +529,13 @@ function DonationKeyEditor({
           </button>
         </>
       ) : (
-        <p className="muted">{t('common.operations.charity.keyEditableAfterApproval')}</p>
+        <p className="muted">
+          {t(
+            terminal
+              ? 'common.operations.charity.terminalKeyImmutable'
+              : 'common.operations.charity.keyEditableAfterApproval',
+          )}
+        </p>
       )}
     </section>
   );
@@ -403,8 +555,6 @@ function DonationDetail({
   const { t } = useTranslation();
   const [decision, setDecision] = useState<'approve' | 'reject'>('approve');
   const [reason, setReason] = useState('');
-  const [expires, setExpires] = useState(() => dateTimeDraft(item.expires_at).value);
-  const [noExpiry, setNoExpiry] = useState(item.expires_at === null);
   const [confirmed, setConfirmed] = useState(false);
   const [keys, setKeys] = useState<Record<string, KeySettingsDraft>>(() =>
     Object.fromEntries(item.keys.map((key) => [key.id, keySettingsDraft(key)])),
@@ -413,7 +563,6 @@ function DonationDetail({
     {
       decision: 'approve' | 'reject';
       reason: string;
-      expires_at: number | null;
       settings: Record<string, KeySettingsDraft>;
     },
     ManagedDonation
@@ -422,7 +571,6 @@ function DonationDetail({
       input: {
         decision: 'approve' | 'reject';
         reason: string;
-        expires_at: number | null;
         settings: Record<string, KeySettingsDraft>;
       },
       key,
@@ -436,10 +584,9 @@ function DonationDetail({
               decision: 'approve',
               expected_revision: item.revision,
               reason: input.reason,
-              expires_at: input.expires_at,
               key_settings: item.keys.map((entry) => ({
                 donation_key_id: entry.id,
-                ...input.settings[entry.id],
+                ...keySettingsBody(input.settings[entry.id]),
               })),
             },
         key,
@@ -451,20 +598,17 @@ function DonationDetail({
     user_id: t('common.operations.charity.deidentified'),
     display_name: t('common.operations.charity.deidentified'),
   };
-  const expiry = expires ? Math.floor(Date.parse(expires) / 1_000) : NaN;
   let validationError:
-    KeySettingsValidation | 'reviewReason' | 'expiry' | 'completeSettings' | null = null;
+    KeySettingsValidation | 'reviewReason' | 'completeSettings' | null = null;
   if (!validText(reason.trim(), 1_024, true)) {
     validationError = 'reviewReason';
   } else if (decision === 'approve') {
-    if (!noExpiry && (!Number.isSafeInteger(expiry) || expiry < 0 || expiry > MAX_UNIX_SECOND)) {
-      validationError = 'expiry';
-    } else if (item.keys.length === 0 || item.keys.some((entry) => !keys[entry.id])) {
+    if (item.keys.length === 0 || item.keys.some((entry) => !keys[entry.id])) {
       validationError = 'completeSettings';
     } else {
       validationError =
         item.keys
-          .map((entry) => keySettingsError(keys[entry.id]))
+          .map((entry) => keySettingsError(keys[entry.id], entry.authorized_expires_at))
           .find((error): error is KeySettingsValidation => error !== null) ?? null;
     }
   }
@@ -509,12 +653,6 @@ function DonationDetail({
           <dd>
             {formatDateTime(item.created_at)} / {formatDateTime(item.updated_at)}
           </dd>
-          {item.expires_at !== null ? (
-            <>
-              <dt>{t(charityCopyKey(role, 'expires'))}</dt>
-              <dd>{formatDateTime(item.expires_at)}</dd>
-            </>
-          ) : null}
           {item.review_result ? (
             <>
               <dt>{t('common.operations.charity.review')}</dt>
@@ -554,28 +692,6 @@ function DonationDetail({
               <span>{t('common.operations.charity.reason')}</span>
               <input value={reason} onChange={(event) => setReason(event.target.value)} />
             </label>
-            {decision === 'approve' ? (
-              <>
-                <label>
-                  <span>{t('common.operations.charity.wholeDonationExpiry')}</span>
-                  <input
-                    type="datetime-local"
-                    step="1"
-                    value={expires}
-                    disabled={noExpiry}
-                    onChange={(event) => setExpires(event.target.value)}
-                  />
-                </label>
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={noExpiry}
-                    onChange={(event) => setNoExpiry(event.target.checked)}
-                  />
-                  <span>{t('common.operations.charity.noExpiry')}</span>
-                </label>
-              </>
-            ) : null}
           </div>
           {decision === 'approve' ? (
             <div className="ops-stack">
@@ -636,6 +752,13 @@ function DonationDetail({
                           }
                         />
                       </label>
+                      <KeyExpiryEditor
+                        draft={draft}
+                        authorizedExpiresAt={entry.authorized_expires_at}
+                        onChange={(value) =>
+                          setKeys({ ...keys, [entry.id]: { ...draft, ...value } })
+                        }
+                      />
                       <label className="checkbox-label">
                         <input
                           type="checkbox"
@@ -677,7 +800,6 @@ function DonationDetail({
               review.mutate({
                 decision,
                 reason: reason.trim(),
-                expires_at: decision === 'approve' && !noExpiry ? expiry : null,
                 settings: keys,
               })
             }

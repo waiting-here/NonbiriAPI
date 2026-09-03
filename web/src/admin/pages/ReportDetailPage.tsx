@@ -20,11 +20,14 @@ import {
   adminReportKeys,
   approveReport,
   getReportDetail,
+  getReportTargetDonations,
   getReportTargets,
+  REPORT_DONATION_ENDED_REASONS,
   rejectReport,
   resumeReport,
   type ReportCaseDetail,
   type ReportCaseSummary,
+  type ReportDonationMatch,
   type ReportStatus,
   type ReportTarget,
 } from '../features/operations/reports';
@@ -39,9 +42,18 @@ export function ReportDetailPage() {
   const client = useQueryClient();
   const materials = useCursorPager();
   const targets = useCursorPager();
+  const lineage = useCursorPager();
+  const {
+    page: lineagePage,
+    cursor: lineageCursor,
+    reset: resetLineage,
+    previous: previousLineage,
+    next: nextLineage,
+  } = lineage;
   const [reason, setReason] = useState('');
   const [confirmation, setConfirmation] = useState(false);
   const [decision, setDecision] = useState<Decision>(null);
+  const [lineageTarget, setLineageTarget] = useState<ReportTarget | null>(null);
   const detail = useQuery({
     queryKey: adminReportKeys.detail(caseId, materials.cursor),
     queryFn: () => getReportDetail(caseId, materials.cursor),
@@ -54,10 +66,20 @@ export function ReportDetailPage() {
     retry: false,
     enabled: Boolean(caseId),
   });
+  const targetDonations = useQuery({
+    queryKey: lineageTarget
+      ? adminReportKeys.targetDonations(caseId, lineageTarget.id, lineageCursor)
+      : (['admin', 'operations', 'reports', 'target-donations', 'none'] as const),
+    queryFn: ({ signal }) =>
+      getReportTargetDonations(caseId, lineageTarget?.id ?? '', lineageCursor, signal),
+    retry: false,
+    enabled: Boolean(caseId && lineageTarget),
+  });
   const reconcile = async () => {
     await Promise.all([
       detail.refetch(),
       targetList.refetch(),
+      lineageTarget ? targetDonations.refetch() : Promise.resolve(),
       client.invalidateQueries({ queryKey: adminReportKeys.badge }),
     ]);
   };
@@ -107,7 +129,7 @@ export function ReportDetailPage() {
   const resetResume = resume.reset;
 
   useEffect(() => {
-    const error = detail.error ?? targetList.error;
+    const error = detail.error ?? targetList.error ?? targetDonations.error;
     if (error) {
       // A retained cache entry is not authority after a failed refresh.
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -119,12 +141,22 @@ export function ReportDetailPage() {
       setReason('');
       resetDecision();
       resetResume();
+      setLineageTarget(null);
+      resetLineage();
     } else if (isNotFoundError(error)) {
       setReason('');
       resetDecision();
       resetResume();
+      setLineageTarget(null);
+      resetLineage();
       client.removeQueries({
         queryKey: adminReportKeys.detail(caseId, materials.cursor),
+        exact: true,
+      });
+      client.removeQueries({
+        queryKey: lineageTarget
+          ? adminReportKeys.targetDonations(caseId, lineageTarget.id, lineageCursor)
+          : (['admin', 'operations', 'reports', 'target-donations', 'none'] as const),
         exact: true,
       });
       client.removeQueries({
@@ -140,10 +172,15 @@ export function ReportDetailPage() {
     resetDecision,
     resetResume,
     targetList.error,
+    targetDonations.error,
+    lineageCursor,
+    resetLineage,
+    lineageTarget,
     targets.cursor,
   ]);
 
-  const authorityBlocked = Boolean(detail.error || targetList.error);
+  const lineageAuthorityBlocked = isUnauthorized(targetDonations.error) || isForbidden(targetDonations.error);
+  const authorityBlocked = Boolean(detail.error || targetList.error || lineageAuthorityBlocked);
   const statusLabels: Record<ReportStatus, string> = {
     pending_indexing: t('admin.reports.status.pendingIndexing'),
     pending_review: t('admin.reports.status.pendingReview'),
@@ -177,6 +214,29 @@ export function ReportDetailPage() {
     deleted_by_account: t('admin.reports.targetState.deletedByAccount'),
     deleted_by_approval: t('admin.reports.targetState.deletedByApproval'),
     released: t('admin.reports.targetState.released'),
+  };
+  const donationStatusLabels: Record<ReportDonationMatch['donation_status'], string> = {
+    pending: t('admin.reports.detail.lineage.status.pending'),
+    approved: t('admin.reports.detail.lineage.status.approved'),
+    rejected: t('admin.reports.detail.lineage.status.rejected'),
+    deleted: t('admin.reports.detail.lineage.status.deleted'),
+    expired: t('admin.reports.detail.lineage.status.expired'),
+  };
+  const donationKeyStateLabels: Record<ReportDonationMatch['key_state'], string> = {
+    pending: t('admin.reports.detail.lineage.keyState.pending'),
+    available: t('admin.reports.detail.lineage.keyState.available'),
+    disabled: t('admin.reports.detail.lineage.keyState.disabled'),
+    suspended: t('admin.reports.detail.lineage.keyState.suspended'),
+    exhausted: t('admin.reports.detail.lineage.keyState.exhausted'),
+    expired: t('admin.reports.detail.lineage.keyState.expired'),
+    ended: t('admin.reports.detail.lineage.keyState.ended'),
+  };
+  const donationEndedReasonLabels: Record<(typeof REPORT_DONATION_ENDED_REASONS)[number], string> = {
+    withdrawn: t('admin.reports.detail.lineage.endedReason.withdrawn'),
+    terminated: t('admin.reports.detail.lineage.endedReason.terminated'),
+    expired: t('admin.reports.detail.lineage.endedReason.expired'),
+    member_removed: t('admin.reports.detail.lineage.endedReason.memberRemoved'),
+    account_deleted: t('admin.reports.detail.lineage.endedReason.accountDeleted'),
   };
 
   return (
@@ -305,6 +365,8 @@ export function ReportDetailPage() {
                     <th>{t('admin.reports.detail.owner')}</th>
                     <th>{t('admin.reports.detail.endpoint')}</th>
                     <th>{t('admin.reports.detail.keySnapshot')}</th>
+                    <th>{t('admin.reports.detail.donationMatches')}</th>
+                    <th>{t('admin.reports.detail.lineageAction')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -327,6 +389,19 @@ export function ReportDetailPage() {
                         <br />
                         <small>{target.key_ref}</small>
                       </td>
+                      <td>{target.donation_match_count}</td>
+                      <td>
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          onClick={() => {
+                            resetLineage();
+                            setLineageTarget(target);
+                          }}
+                        >
+                          {t('admin.reports.detail.openLineage')}
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -341,6 +416,81 @@ export function ReportDetailPage() {
           </>
         )}
       </Card>
+      {lineageTarget ? (
+        <Card>
+          <div className="ops-toolbar">
+            <h2>{t('admin.reports.detail.lineageTitle')}</h2>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => {
+                setLineageTarget(null);
+                resetLineage();
+              }}
+            >
+              {t('common.close')}
+            </button>
+          </div>
+          <p>
+            {t('admin.reports.detail.lineageTarget', {
+              sequence: lineageTarget.target_seq,
+            })}
+          </p>
+          {targetDonations.isPending ? (
+            <LoadingState />
+          ) : targetDonations.error ? (
+            <ErrorState error={targetDonations.error} onRetry={() => void targetDonations.refetch()} />
+          ) : targetDonations.data.data.length === 0 ? (
+            <EmptyState
+              title={t('admin.reports.detail.lineageEmptyTitle')}
+              body={t('admin.reports.detail.lineageEmptyBody')}
+            />
+          ) : (
+            <>
+              <div className="ops-table-scroll">
+                <table className="ops-table">
+                  <thead>
+                    <tr>
+                      <th>{t('admin.reports.detail.lineage.donation')}</th>
+                      <th>{t('admin.reports.detail.lineage.key')}</th>
+                      <th>{t('admin.reports.detail.lineage.donationStatus')}</th>
+                      <th>{t('admin.reports.detail.lineage.keyStatus')}</th>
+                      <th>{t('admin.reports.detail.lineage.expires')}</th>
+                      <th>{t('admin.reports.detail.lineage.ended')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {targetDonations.data.data.map((match) => (
+                      <tr key={match.donation_key_id}>
+                        <td>{match.donation_id}</td>
+                        <td>{match.donation_key_id}</td>
+                        <td>{donationStatusLabels[match.donation_status]}</td>
+                        <td>{donationKeyStateLabels[match.key_state]}</td>
+                        <td>
+                          {match.expires_at === null
+                            ? t('admin.reports.detail.lineage.never')
+                            : formatDateTime(match.expires_at)}
+                        </td>
+                        <td>
+                          {match.ended_at === null
+                            ? t('admin.reports.detail.lineage.notEnded')
+                            : `${formatDateTime(match.ended_at)}${match.ended_reason ? ` · ${donationEndedReasonLabels[match.ended_reason]}` : ''}`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <CursorPagination
+                page={lineagePage}
+                nextCursor={targetDonations.data.next_cursor}
+                onPrevious={previousLineage}
+                onNext={nextLineage}
+              />
+            </>
+          )}
+        </Card>
+      ) : null}
       {!authorityBlocked && detail.data?.status === 'pending_review' ? (
         <Card className="ops-danger">
           <h2>{t('admin.reports.detail.decisionTitle')}</h2>
