@@ -476,13 +476,13 @@ INSERT INTO report_cases(
 ) VALUES(?,?,'openai-compatible','https://upstream.example/v1','approved','complete',
  1,1,1000,'endpoint',0,0,0,0,0,0,0,0,1)`, hostileOID("rpc_"), hostileBlob32(3))
 
-	// Valid shapes: initial/complete null, donation phase zero, positive ids.
+	// Complete cases must not retain a scan cursor.
 	for i, shape := range []struct {
 		source, id any
 	}{
-		{nil, nil}, {"donation", int64(0)}, {"endpoint", int64(5)}, {"donation", int64(9)},
+		{"donation", int64(0)}, {"endpoint", int64(5)},
 	} {
-		hostileMustExec(t, db, `
+		hostileMustFail(t, db, `
 INSERT INTO report_cases(
  id,fingerprint,connector_type,canonical_base_url,status,progress_state,
  material_version,target_version,deadline,cursor_source,cursor_id,material_count,target_count,
@@ -490,7 +490,37 @@ INSERT INTO report_cases(
  retry_attempt_count,created_at,decision_at,terminal_at
 ) VALUES(?,?,'openai-compatible','https://upstream.example/v1','approved','complete',
  1,1,1000,?,?,0,0,0,0,0,0,0,0,0,1)`,
-			hostileOIDVariant("rpc_", byte('A'+i), 'Q'), hostileBlob32(byte(20+i)), shape.source, shape.id)
+			hostileOIDVariant("rpc_", byte('A'+i), 'g'), hostileBlob32(byte(10+i)), shape.source, shape.id)
+	}
+
+	// Valid shapes: complete null, in-progress initial, donation phase zero,
+	// and positive in-progress ids.
+	for i, shape := range []struct {
+		progress   string
+		source, id any
+	}{
+		{"complete", nil, nil},
+		{"in_progress", nil, nil},
+		{"in_progress", "donation", int64(0)},
+		{"in_progress", "endpoint", int64(5)},
+		{"in_progress", "donation", int64(9)},
+	} {
+		status := "pending_indexing"
+		var decisionAt, terminalAt any
+		if shape.progress == "complete" {
+			status = "approved"
+			decisionAt, terminalAt = int64(0), int64(1)
+		}
+		hostileMustExec(t, db, `
+INSERT INTO report_cases(
+ id,fingerprint,connector_type,canonical_base_url,status,progress_state,
+ material_version,target_version,deadline,cursor_source,cursor_id,material_count,target_count,
+ distinct_owner_count,processed_target_count,deleted_target_count,released_target_count,
+ retry_attempt_count,created_at,decision_at,terminal_at
+) VALUES(?,?,'openai-compatible','https://upstream.example/v1',?,?,
+ 1,1,1000,?,?,0,0,0,0,0,0,0,0,?,?)`,
+			hostileOIDVariant("rpc_", byte('A'+i), 'Q'), hostileBlob32(byte(20+i)),
+			status, shape.progress, shape.source, shape.id, decisionAt, terminalAt)
 	}
 
 	// Target source identity is mandatory and integer-typed.

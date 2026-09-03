@@ -18,10 +18,10 @@ func TestGenerationTwoManifestUsesIndependentFixture(t *testing.T) {
 	manifestHash := generationManifestDigest(manifest)
 	t.Logf("generation-two schema sha256=%s", schemaHash)
 	t.Logf("generation-two manifest sha256=%s", manifestHash)
-	const previousSchemaHash = "579e3e3f1cd1d101d9853e220548da8449587d59d4fb86300e718d5ccf5e7352"
-	const previousManifestHash = "34ce1f7341e83062efa76d9cc203af957aa0940714d96d47c8bd767201be533e"
+	const previousSchemaHash = "505393f4d5399bf70737f83ce81cba69b1fc8085c6488686bafe395479174cef"
+	const previousManifestHash = "8d987f56ec5fef0e6c5ea5c3cd352b56d1e174e49df4292160ed99ceb254c53b"
 	if schemaHash == previousSchemaHash || manifestHash == previousManifestHash {
-		t.Fatal("previous report fingerprint cleanup contract hash remained canonical")
+		t.Fatal("previous report cursor contract hash remained canonical")
 	}
 
 	if err := validateGenerationTwoManifest(context.Background(), db); err != nil {
