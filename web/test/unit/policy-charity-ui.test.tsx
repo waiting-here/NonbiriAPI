@@ -108,6 +108,7 @@ const coreEndpoint = {
   id: '1',
   connector_type: 'openai-compatible',
   base_url: 'https://upstream.test/v1',
+  origin: { kind: 'custom' },
   note: 'primary',
   enabled: true,
   revision: '1',
@@ -260,7 +261,11 @@ const managedKeyFixture = {
   endpoint_key_id: '2',
   display_head: 'sk-a',
   display_tail: 'tail',
-  safe_source: { base_url: endpoint.base_url, connector_type: 'openai-compatible' },
+  safe_source: {
+    kind: 'custom',
+    base_url: endpoint.base_url,
+    connector_type: 'openai-compatible',
+  },
   physical_enabled: true,
   charity_state: 'pending',
   limits: { price: null, calls: null, tokens: null },
@@ -273,6 +278,8 @@ const managedKeyFixture = {
     tokens_inflight: '0',
   },
   token_reserve: 32,
+  authorized_expires_at: null,
+  expires_at: null,
   streak: { generation: '1', count: '0', failure_disabled: false },
   ended_reason: null,
   safe_note: 'reviewer-safe',
@@ -285,7 +292,6 @@ function pendingDonationFixture(frame: 'admin' | 'steward', id: string, descript
     revision: '1',
     description,
     review_result: null,
-    expires_at: null,
     keys: [managedKeyFixture],
     owner: frame === 'admin'
       ? { user_id: '1', discord_id: null, display_name: 'fixture-user' }
@@ -1162,7 +1168,7 @@ describe('experimental policy and charity controls', () => {
     await waitFor(() =>
       expect(lastBody(fetchMock, 'POST', '/api/donations')).toEqual({
         description: 'fixture donation',
-        endpoint_key_ids: ['2'],
+        keys: [{ endpoint_key_id: '2', expires_at: null }],
         ownership_authorized: true,
       }),
     );
@@ -1238,10 +1244,7 @@ describe('experimental policy and charity controls', () => {
   });
 
   test('rejects a non-empty invalid reviewer expiry and sends no PATCH', async () => {
-    const detailDonation = {
-      ...pendingDonationFixture('admin', '20', 'review expiry fixture'),
-      expires_at: 1_700_000_000,
-    };
+    const detailDonation = pendingDonationFixture('admin', '20', 'review expiry fixture');
     const fetchMock = installJsonFetchFixtures([
       {
         method: 'GET',
@@ -1261,8 +1264,9 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.click(screen.getByRole('button', { name: 'Review' }));
     await screen.findByRole('heading', { name: 'Review pending submission' });
     await rendered.user.type(screen.getByLabelText('Reason'), 'expiry validation');
+    await rendered.user.click(screen.getByRole('checkbox', { name: 'No expiry' }));
     await rendered.user.click(screen.getByRole('checkbox', {
-      name: 'I confirm this review result and its whole-donation consequences.',
+      name: 'I confirm this review result and its per-key consequences.',
     }));
     const expiry = document.querySelector<HTMLInputElement>('input[type="datetime-local"]');
     if (!expiry) throw new Error('review expiry control not found');
@@ -1273,7 +1277,7 @@ describe('experimental policy and charity controls', () => {
     });
     fireEvent.change(expiry);
     await expect(
-      screen.findByText('Whole-donation expiry must be a valid supported date.'),
+      screen.findByText('Each effective expiry must be a valid supported date or permanent where authorized.'),
     ).resolves.toBeVisible();
     expect(
       fetchMock.mock.calls.filter((call) => {
@@ -1287,7 +1291,7 @@ describe('experimental policy and charity controls', () => {
     await waitFor(() =>
       expect(lastBody(fetchMock, 'POST', '/admin/api/donations/20/review')).toMatchObject({
         decision: 'approve',
-        expires_at: null,
+        key_settings: [{ expires_at: null }],
       }),
     );
   });
@@ -1334,7 +1338,7 @@ describe('experimental policy and charity controls', () => {
     await waitFor(() => expect(detailReads).toBe(2));
     await rendered.user.type(screen.getByLabelText('Reason'), 'detail recovered');
     await rendered.user.click(screen.getByRole('checkbox', {
-      name: 'I confirm this review result and its whole-donation consequences.',
+      name: 'I confirm this review result and its per-key consequences.',
     }));
     await rendered.user.click(screen.getByRole('button', { name: 'Approve donation' }));
     await waitFor(() =>
@@ -1573,7 +1577,7 @@ describe('experimental policy and charity controls', () => {
       expect(screen.getByText(/physical enabled/i)).toBeVisible();
       await rendered.user.type(screen.getByLabelText('Reason'), 'approved');
       await rendered.user.click(screen.getByRole('checkbox', {
-        name: 'I confirm this review result and its whole-donation consequences.',
+        name: 'I confirm this review result and its per-key consequences.',
       }));
       await rendered.user.click(screen.getByRole('button', { name: 'Approve donation' }));
       await waitFor(() => expect(lastBody(fetchMock, 'POST', `${basePath}/donations/9/review`)).toBeDefined());
