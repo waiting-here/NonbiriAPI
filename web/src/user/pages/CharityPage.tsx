@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { isNotFoundError } from '@shared/query/http';
+import { usePublicConfig } from '@shared/query/publicConfig';
 import { UserPageGate } from '../components/UserPageGate';
 import { useUserSession } from '../data';
 import {
@@ -75,8 +76,9 @@ function DonationDetailContent({ donationID }: { donationID: string }) {
 }
 
 function CharityContent() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const session = useUserSession();
+  const publicConfig = usePublicConfig();
   const capability = useCharityCapability();
   const donations = useDonations();
   const accountID = session.data?.user.id;
@@ -85,6 +87,9 @@ function CharityContent() {
     donations.data ?? [],
     intake === 'open' && donations.isSuccess,
   );
+  const configuredDonationNotice = (i18n.resolvedLanguage ?? i18n.language).startsWith('zh')
+    ? publicConfig.data?.charityDonationNoticeZh
+    : publicConfig.data?.charityDonationNoticeEn;
 
   return (
     <div className="page economy-page economy-charity-page">
@@ -158,7 +163,12 @@ function CharityContent() {
           ) : choices.error ? (
             <ErrorState error={choices.error} onRetry={() => void choices.refetch()} />
           ) : (
-            <DonationComposer key={accountID} choices={choices.data} draftNamespace={accountID} />
+            <DonationComposer
+              key={accountID}
+              choices={choices.data}
+              draftNamespace={accountID}
+              notice={configuredDonationNotice}
+            />
           )}
         </section>
       ) : null}

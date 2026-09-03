@@ -34,7 +34,7 @@ function storageValues(storage: Storage): string {
 
 async function reachEndpointForm(user: Awaited<ReturnType<typeof renderWithProviders>>['user']) {
   await user.click(await screen.findByRole('button', { name: 'Next' }));
-  await user.type(screen.getByLabelText('Canonical base URL'), 'https://example.com/v1');
+  await user.type(screen.getByLabelText('Service address'), 'https://example.com/v1');
 }
 
 describe('EndpointWizard secret and exact-replay boundaries', () => {
@@ -72,7 +72,7 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
       'true',
     );
     await rendered.user.click(screen.getByRole('button', { name: 'Next' }));
-    const url = screen.getByLabelText('Canonical base URL');
+    const url = screen.getByLabelText('Service address');
     expect(url).toHaveAttribute('readonly');
     expect(url).toHaveValue('https://example.com/v1');
     await rendered.user.type(screen.getByLabelText('Note'), 'channel note');
@@ -106,14 +106,14 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
     await reachEndpointForm(rendered.user);
     await rendered.user.click(screen.getByRole('button', { name: 'Create endpoint' }));
 
-    const secret = await screen.findByLabelText('Upstream secret');
+    const secret = await screen.findByLabelText('Service key');
     fireEvent.change(secret, { target: { value: syntheticSecret } });
     await rendered.user.type(screen.getByLabelText('Key note'), 'note remains');
     await rendered.user.click(screen.getByLabelText(/I own this credential/));
     await rendered.user.click(screen.getByRole('button', { name: 'Add key' }));
 
     expect(await screen.findByText(/Other fields were kept/)).toBeVisible();
-    expect(screen.getByLabelText('Upstream secret')).toHaveValue(syntheticSecret);
+    expect(screen.getByLabelText('Service key')).toHaveValue(syntheticSecret);
     expect(screen.getByLabelText('Key note')).toHaveValue('note remains');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(
@@ -123,7 +123,7 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
     expect(storageValues(window.sessionStorage)).not.toContain(syntheticSecret);
 
     await rendered.user.click(screen.getByRole('button', { name: 'Cancel' }));
-    await waitFor(() => expect(screen.getByLabelText('Upstream secret')).toHaveValue(''));
+    await waitFor(() => expect(screen.getByLabelText('Service key')).toHaveValue(''));
   });
 
   it('GET-reconciles first and reuses one request body and Idempotency-Key after response loss', async () => {
@@ -153,7 +153,7 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
     await rendered.user.click(screen.getByRole('button', { name: 'Create endpoint' }));
 
     const replay = await screen.findByRole('button', { name: 'Retry the same operation' });
-    expect(screen.getByLabelText('Canonical base URL')).toBeDisabled();
+    expect(screen.getByLabelText('Service address')).toBeDisabled();
     await rendered.user.click(replay);
     await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
 

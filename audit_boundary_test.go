@@ -160,6 +160,8 @@ func assertFreshSafeApplication(t *testing.T, app *application) {
 	sort.Strings(gotKeys)
 	wantKeys := []string{
 		"announcement_epoch",
+		"charity_donation_notice_en",
+		"charity_donation_notice_zh",
 		"legal_authoritative_locale",
 		"legal_privacy_override_en",
 		"legal_privacy_override_zh",

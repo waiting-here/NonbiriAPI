@@ -856,7 +856,7 @@ function ManualCatalog({
       ) : !catalog.data ? (
         <CoreErrorPanel
           compact
-          error={catalog.error ?? new Error('manual catalog authority is unavailable')}
+          error={catalog.error ?? new Error('The manually added model list is unavailable.')}
           onRetry={() => void catalog.refetch()}
         />
       ) : (
@@ -1550,7 +1550,7 @@ export function EndpointDetail({
     return (
       <div className="page core-page">
         <CoreErrorPanel
-          error={endpoint.error ?? new Error('endpoint authority is unavailable')}
+          error={endpoint.error ?? new Error('The endpoint details are unavailable.')}
           onRetry={() => void endpoint.refetch()}
         />
       </div>
@@ -1798,7 +1798,7 @@ export function EndpointDetail({
           <CoreLoading />
         ) : !keys.data ? (
           <CoreErrorPanel
-            error={keys.error ?? new Error('endpoint key authority is unavailable')}
+            error={keys.error ?? new Error('The key details are unavailable.')}
             onRetry={() => void keys.refetch()}
           />
         ) : keys.data.data.length === 0 ? (

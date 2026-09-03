@@ -47,6 +47,7 @@ function sameValues(left, right) {
 
 function visibleValueChecks(catalog, language, entries) {
   const forbidden = /model_fetch_failed|default_locale|_milli/i;
+  const userJargon = language === 'zh' ? /权威|门禁/u : /\bauthoritative\b|\bauthority gate\b/iu;
   for (const [key, value] of entries) {
     if (forbidden.test(value)) {
       throw new Error(`${catalog}/${language} ${key} exposes a forbidden internal identifier.`);
@@ -59,6 +60,9 @@ function visibleValueChecks(catalog, language, entries) {
     }
     if (catalog === 'user' && /milli-credits?|毫积分/i.test(value)) {
       throw new Error(`${catalog}/${language} ${key} exposes an internal accounting unit.`);
+    }
+    if (catalog !== 'admin' && userJargon.test(value)) {
+      throw new Error(`${catalog}/${language} ${key} exposes internal status jargon.`);
     }
   }
 }
@@ -294,6 +298,17 @@ const files = await sourceFiles(resolve(webRoot, 'src'));
 const sourceTextByRelativePath = new Map();
 for (const file of files) {
   sourceTextByRelativePath.set(normalizedSourcePath(file.slice(webRoot.length + 1)), await readFile(file, 'utf8'));
+}
+
+for (const [relativePath, source] of sourceTextByRelativePath) {
+  if (!relativePath.startsWith('src/user/')) continue;
+  for (const value of stringLiteralValues(source)) {
+    // Internal state-machine event name; it is never rendered as copy.
+    if (value === 'authoritative') continue;
+    if (/权威|门禁|\bauthoritative\b|\bauthority gate\b/iu.test(value)) {
+      rememberFailure(failures, `${relativePath} exposes internal status jargon: ${value}`);
+    }
+  }
 }
 
 const usedByCatalog = new Map([...catalogsByName.keys()].map((name) => [name, new Set()]));

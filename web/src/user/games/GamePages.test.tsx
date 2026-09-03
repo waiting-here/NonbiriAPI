@@ -115,6 +115,83 @@ describe('beta.1 game pages', () => {
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 
+  it('keeps each game’s rules entry available during maintenance', async () => {
+    for (const [element, route] of [
+      [<FishingGame />, '/games/fishing'],
+      [<LinkLinkGame />, '/games/linklink'],
+      [<RPSGame />, '/games/rps'],
+    ] as const) {
+      installJsonFetchFixtures([
+        {
+          method: 'GET',
+          path: '/api/games',
+          status: 503,
+          body: { error: { code: 'maintenance', message: 'maintenance' } },
+        },
+      ]);
+      const rendered = await renderWithProviders(element, {
+        station: 'user',
+        route,
+        role: 'user',
+      });
+      await rendered.user.click(await screen.findByRole('button', { name: 'How to play' }));
+      const dialog = screen.getByRole('dialog');
+      await rendered.user.click(within(dialog).getByRole('button', { name: 'Close rules' }));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      rendered.unmount();
+    }
+  });
+
+  it('keeps each game’s rules entry available while the snapshot is loading', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise<Response>(() => undefined)),
+    );
+    for (const [element, route] of [
+      [<FishingGame />, '/games/fishing'],
+      [<LinkLinkGame />, '/games/linklink'],
+      [<RPSGame />, '/games/rps'],
+    ] as const) {
+      const rendered = await renderWithProviders(element, {
+        station: 'user',
+        route,
+        role: 'user',
+      });
+      await rendered.user.click(screen.getByRole('button', { name: 'How to play' }));
+      const dialog = screen.getByRole('dialog');
+      await rendered.user.click(within(dialog).getByRole('button', { name: 'Close rules' }));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      rendered.unmount();
+    }
+  });
+
+  it('keeps each game’s rules openable and closable after a snapshot error', async () => {
+    for (const [element, route] of [
+      [<FishingGame />, '/games/fishing'],
+      [<LinkLinkGame />, '/games/linklink'],
+      [<RPSGame />, '/games/rps'],
+    ] as const) {
+      installJsonFetchFixtures([
+        {
+          method: 'GET',
+          path: '/api/games',
+          status: 500,
+          body: { error: { code: 'internal', message: 'synthetic failure' } },
+        },
+      ]);
+      const rendered = await renderWithProviders(element, {
+        station: 'user',
+        route,
+        role: 'user',
+      });
+      await rendered.user.click(await screen.findByRole('button', { name: 'How to play' }));
+      const dialog = screen.getByRole('dialog');
+      await rendered.user.click(within(dialog).getByRole('button', { name: 'Close rules' }));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      rendered.unmount();
+    }
+  });
+
   it('renders Fishing single/atomic-ten controls and exact large authoritative money', async () => {
     installJsonFetchFixtures([
       { method: 'GET', path: '/api/games', body: gamesSnapshotWire() },
@@ -139,19 +216,27 @@ describe('beta.1 game pages', () => {
       route: '/games/fishing',
       role: 'level5',
     });
+    expect(await screen.findByRole('button', { name: /Ten-catch batch/i })).toBeInTheDocument();
     expect(
-      await screen.findByRole('heading', { name: 'A quiet cast, an authoritative catch' }),
+      screen.getByRole('heading', { name: 'A quiet cast, a surprise catch' }),
     ).toBeInTheDocument();
     act(() => {
       rendered.queryClient.setQueryData(userKeys.session, { user: { effective_level: 5 } });
     });
-    expect(screen.getByRole('button', { name: /Atomic ten-catch/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Ten-catch batch/i })).toBeInTheDocument();
     await waitFor(() =>
       expect(document.querySelector('.fishing-stage')).toHaveClass('fishing-stage--l4'),
     );
     expect(screen.getAllByText(/12,345,678,901,234,567,890\.125/).length).toBeGreaterThan(0);
-    await rendered.user.click(screen.getByRole('button', { name: /Atomic ten-catch/i }));
-    expect(screen.getByText('Frozen batch total').parentElement).toHaveTextContent('10 credits');
+    await rendered.user.click(screen.getByRole('button', { name: /Ten-catch batch/i }));
+    expect(screen.getByText('Batch total').parentElement).toHaveTextContent('10 credits');
+    await rendered.user.click(screen.getByRole('button', { name: 'How to play' }));
+    const rules = screen.getByRole('dialog', { name: 'How pond fishing works' });
+    expect(rules).toHaveTextContent('Choose your bait');
+    await rendered.user.click(within(rules).getByRole('button', { name: 'Close rules' }));
+    expect(
+      screen.queryByRole('dialog', { name: 'How pond fishing works' }),
+    ).not.toBeInTheDocument();
   });
 
   it('locks Fishing after an unknown start response and replays the exact operation identity', async () => {
@@ -187,9 +272,9 @@ describe('beta.1 game pages', () => {
     });
     const start = await screen.findByRole('button', { name: 'Start this batch' });
     await rendered.user.click(start);
-    expect(await screen.findByText(/response is unknown/i)).toBeInTheDocument();
+    expect(await screen.findByText(/result could not be confirmed/i)).toBeInTheDocument();
     expect(start).toBeDisabled();
-    await rendered.user.click(screen.getByRole('button', { name: /same operation identity/i }));
+    await rendered.user.click(screen.getByRole('button', { name: /retry the same action/i }));
     await waitFor(() => {
       const calls = fetchMock.mock.calls.filter(
         ([input, init]) =>
@@ -243,12 +328,17 @@ describe('beta.1 game pages', () => {
         body: undefined,
       },
     ]);
-    await renderWithProviders(<FishingGame />, {
+    const rendered = await renderWithProviders(<FishingGame />, {
       station: 'user',
       route: '/games/fishing',
       locale: 'zh',
       role: 'user',
     });
+    await rendered.user.click(await screen.findByRole('button', { name: '玩法说明' }));
+    const rules = screen.getByRole('dialog', { name: '池塘垂钓怎么玩' });
+    expect(rules).toHaveTextContent('先选鱼饵');
+    await rendered.user.click(within(rules).getByRole('button', { name: '关闭玩法说明' }));
+    expect(screen.queryByRole('dialog', { name: '池塘垂钓怎么玩' })).not.toBeInTheDocument();
     expect(await screen.findAllByText('银鱼')).toHaveLength(2);
     expect(screen.getByText('12 厘米')).toBeInTheDocument();
     await waitFor(() =>
@@ -332,8 +422,8 @@ describe('beta.1 game pages', () => {
       role: 'user',
     });
     expect(await screen.findAllByText('Whitebait')).toHaveLength(2);
-    const retry = await screen.findByRole('button', { name: 'Retry result ACK' });
-    expect(screen.getByText(/exact result remains visible/i)).toBeInTheDocument();
+    const retry = await screen.findByRole('button', { name: 'Retry marking as viewed' });
+    expect(screen.getByText(/result could not be marked viewed/i)).toBeInTheDocument();
     expect(screen.getAllByText('Whitebait')).toHaveLength(2);
     expect(screen.getByRole('button', { name: 'Start this batch' })).toBeEnabled();
     await rendered.user.click(retry);
@@ -406,7 +496,7 @@ describe('beta.1 game pages', () => {
     await rendered.user.click(
       await screen.findByRole('button', { name: 'Recover this same batch' }),
     );
-    expect(await screen.findByText(/response is unknown/i)).toBeInTheDocument();
+    expect(await screen.findByText(/result could not be confirmed/i)).toBeInTheDocument();
     const replay = screen
       .getAllByRole('button', { name: 'Recover this same batch' })
       .find((button) => !(button as HTMLButtonElement).disabled);
@@ -444,7 +534,12 @@ describe('beta.1 game pages', () => {
     expect(cells[0]).toHaveTextContent('1');
     await waitFor(() => expect(cells[0]).toBeEnabled());
     await rendered.user.click(cells[0]);
-    expect(screen.getByText(/server alone decides whether a path exists/i)).toBeInTheDocument();
+    expect(screen.getByText(/game will check whether they can connect/i)).toBeInTheDocument();
+    await rendered.user.click(screen.getByRole('button', { name: 'How to play' }));
+    const rules = screen.getByRole('dialog', { name: 'How LinkLink works' });
+    expect(rules).toHaveTextContent('Clear every pair');
+    await rendered.user.click(within(rules).getByRole('button', { name: 'Close rules' }));
+    expect(screen.queryByRole('dialog', { name: 'How LinkLink works' })).not.toBeInTheDocument();
     cells[0].focus();
     fireEvent.keyDown(cells[0], { key: 'ArrowRight' });
     expect(cells[1]).toHaveFocus();
@@ -511,17 +606,21 @@ describe('beta.1 game pages', () => {
         },
       },
     ]);
-    await renderWithProviders(<LinkLinkGame />, {
+    const rendered = await renderWithProviders(<LinkLinkGame />, {
       station: 'user',
       route: '/games/linklink',
+      locale: 'zh',
       role: 'user',
     });
-    expect(await screen.findByText('Board completed')).toBeInTheDocument();
-    expect(screen.getByText('Elapsed play time').parentElement).toHaveTextContent('140 seconds');
-    expect(screen.getByText('Time left at terminal state').parentElement).toHaveTextContent(
-      '10 seconds',
-    );
-    expect(screen.getByText('Performance score').parentElement).toHaveTextContent('2,410');
+    expect(await screen.findByText('棋盘已完成')).toBeInTheDocument();
+    expect(screen.getByText('本局用时').parentElement).toHaveTextContent('140 秒');
+    expect(screen.getByText('结束时剩余时间').parentElement).toHaveTextContent('10 秒');
+    expect(screen.getByText('表现分').parentElement).toHaveTextContent('2,410');
+    await rendered.user.click(screen.getByRole('button', { name: '玩法说明' }));
+    const rules = screen.getByRole('dialog', { name: '连连看怎么玩' });
+    expect(rules).toHaveTextContent('消除所有配对');
+    await rendered.user.click(within(rules).getByRole('button', { name: '关闭玩法说明' }));
+    expect(screen.queryByRole('dialog', { name: '连连看怎么玩' })).not.toBeInTheDocument();
   });
 
   it('renders three viewer-aware RPS seats and only the current gesture action', async () => {
@@ -569,14 +668,20 @@ describe('beta.1 game pages', () => {
         body: emptyRPSBoard('standard', 'net_profit'),
       },
     ]);
-    await renderWithProviders(<RPSGame />, { station: 'user', route: '/games/rps', role: 'user' });
+    const rendered = await renderWithProviders(<RPSGame />, {
+      station: 'user',
+      route: '/games/rps',
+      role: 'user',
+    });
     expect(await screen.findByText('Live match')).toBeInTheDocument();
     expect(screen.getAllByText('Hidden until reveal')).toHaveLength(3);
     expect(screen.getByText(/A very long opponent name/)).toBeInTheDocument();
     expect(screen.getByText('Rock 4 · 40%')).toBeInTheDocument();
-    expect(screen.getByText(/server-managed timeout gestures/i)).toBeInTheDocument();
-    expect(screen.getByText('Server-managed defaults: 2')).toBeInTheDocument();
-    expect(screen.getByText('Frozen base').parentElement).toHaveTextContent('1 credits');
+    expect(
+      screen.getByText(/choices made automatically after a timeout/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Automatic actions: 2')).toBeInTheDocument();
+    expect(screen.getByText('Current base stake').parentElement).toHaveTextContent('1 credits');
     expect(screen.getByText('Completed base rounds').parentElement).toHaveTextContent('1');
     expect(screen.getByText('Paid-pool ties').parentElement).toHaveTextContent('0');
     expect(screen.getByText('Free-pool ties (limit 6)').parentElement).toHaveTextContent('0');
@@ -586,6 +691,24 @@ describe('beta.1 game pages', () => {
     expect(screen.getByText('Welfare carry: 0.125 credits')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Rock' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Raise' })).not.toBeInTheDocument();
+    await rendered.user.click(screen.getByRole('button', { name: 'How to play' }));
+    const rules = screen.getByRole('dialog', { name: 'How three-player RPS works' });
+    expect(rules).toHaveTextContent('Three players, three gestures');
+    expect(rules).toHaveTextContent('20-second limit');
+    expect(rules).toHaveTextContent('first nine ordinary stakes');
+    expect(rules).toHaveTextContent('latest 30 days');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(
+      screen.queryByRole('dialog', { name: 'How three-player RPS works' }),
+    ).not.toBeInTheDocument();
+    await act(async () => {
+      await rendered.i18n.changeLanguage('zh');
+    });
+    await rendered.user.click(screen.getByRole('button', { name: '玩法说明' }));
+    const chineseRules = screen.getByRole('dialog', { name: '三人猜拳怎么玩' });
+    expect(chineseRules).toHaveTextContent('三名玩家，三种手势');
+    await rendered.user.click(within(chineseRules).getByRole('button', { name: '关闭玩法说明' }));
+    expect(screen.queryByRole('dialog', { name: '三人猜拳怎么玩' })).not.toBeInTheDocument();
   });
 
   it('locks new RPS queue intent after an unknown response and replays the same identity', async () => {
@@ -624,10 +747,10 @@ describe('beta.1 game pages', () => {
     });
     const join = await screen.findByRole('button', { name: 'Join Quick queue' });
     await rendered.user.click(join);
-    expect(await screen.findByText(/response is unknown/i)).toBeInTheDocument();
+    expect(await screen.findByText(/result could not be confirmed/i)).toBeInTheDocument();
     expect(join).toBeDisabled();
 
-    await rendered.user.click(screen.getByRole('button', { name: /Retry the same operation/i }));
+    await rendered.user.click(screen.getByRole('button', { name: /Retry the same action/i }));
     await waitFor(() => {
       const queueCalls = fetchMock.mock.calls.filter(
         ([input, init]) =>
@@ -813,19 +936,19 @@ describe('beta.1 game pages', () => {
       role: 'user',
     });
     const standard = await screen.findByRole('button', { name: /Standard/ });
-    expect(standard).toHaveTextContent('Entry commitment: 10 credits');
+    expect(standard).toHaveTextContent('Entry amount: 10 credits');
     await rendered.user.click(standard);
     expect(screen.getByRole('button', { name: 'Join Standard queue' })).toBeDisabled();
-    expect(screen.getByText(/cannot cover this mode’s entry commitment/i)).toBeInTheDocument();
+    expect(screen.getByText(/cannot cover this mode’s entry amount/i)).toBeInTheDocument();
 
     const deathmatch = screen.getByRole('button', { name: /Deathmatch/ });
-    expect(deathmatch).toHaveTextContent('Entry commitment: 4 credits');
+    expect(deathmatch).toHaveTextContent('Entry amount: 4 credits');
     await rendered.user.click(deathmatch);
     await rendered.user.click(screen.getByRole('button', { name: 'Join Deathmatch queue' }));
     const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveTextContent('Entry commitment: 4 credits');
+    expect(dialog).toHaveTextContent('Entry amount: 4 credits');
     await rendered.user.click(standard);
-    expect(dialog).toHaveTextContent('Entry commitment: 4 credits');
+    expect(dialog).toHaveTextContent('Entry amount: 4 credits');
     expect(within(dialog).getByRole('button', { name: /join deathmatch/i })).toBeEnabled();
   });
 
@@ -861,7 +984,7 @@ describe('beta.1 game pages', () => {
     ]);
     await renderWithProviders(<RPSGame />, { station: 'user', route: '/games/rps', role: 'user' });
     expect(await screen.findByRole('heading', { name: 'Quick' })).toBeInTheDocument();
-    expect(screen.getByText('Deidentified seat')).toBeInTheDocument();
+    expect(screen.getByText('Identity-hidden seat')).toBeInTheDocument();
     await waitFor(() =>
       expect(
         fetchMock.mock.calls.some(

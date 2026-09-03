@@ -30,6 +30,24 @@
   margin-block: 0;
 }
 
+.economy-donation-notice {
+  margin-block: var(--nb-space-4);
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-alt);
+  padding: var(--nb-space-4);
+}
+
+.economy-donation-notice h3 {
+  margin: 0 0 var(--nb-space-2);
+}
+
+.economy-donation-notice p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .economy-section-heading {
   margin-bottom: var(--nb-space-4);
 }

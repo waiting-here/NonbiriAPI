@@ -45,6 +45,8 @@ const levelFiveSession = {
 const publicConfig = {
   site_name: 'Fixture Site',
   site_logo_url: '',
+  charity_donation_notice_zh: '',
+  charity_donation_notice_en: '',
   legal_privacy_override_zh: '',
   legal_privacy_override_en: '',
   legal_terms_override_zh: '',

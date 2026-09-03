@@ -149,8 +149,8 @@ func TestSiteConfigHTTPReadContracts(t *testing.T) {
 	if err := json.Unmarshal(bootstrap.Body.Bytes(), &bootstrapWire); err != nil {
 		t.Fatal(err)
 	}
-	if len(bootstrapWire) != 10 {
-		t.Fatalf("bootstrap field count=%d, want 10: %v", len(bootstrapWire), bootstrapWire)
+	if len(bootstrapWire) != 12 {
+		t.Fatalf("bootstrap field count=%d, want 12: %v", len(bootstrapWire), bootstrapWire)
 	}
 	if _, stale := bootstrapWire["default_locale"]; stale {
 		t.Fatal("stale default_locale leaked into administrator bootstrap")
@@ -275,5 +275,26 @@ func TestSiteConfigHTTPPatchStrictnessReplayAndErrors(t *testing.T) {
 
 	if revision, ok := response["revision"].(string); !ok || revision == "" {
 		t.Fatalf("patch response revision=%#v, want non-empty string", response["revision"])
+	}
+}
+
+func TestSiteConfigHTTPDonationNoticeRoundTrip(t *testing.T) {
+	store, registrar := newSiteConfigHTTPFixture(t)
+	headers := map[string][]string{"Idempotency-Key": {"site-config-donation-notice-01"}}
+	const notice = "Welcome donors.\nPlease review costs before sharing."
+	body, err := json.Marshal(map[string]string{"value": notice})
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := siteConfigHTTPRequest(t, registrar.mux, http.MethodPatch, "/admin/api/site-config/"+KeyCharityDonationNoticeEn, body, headers)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("patch status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	public, err := ReadPublicConfig(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if public.CharityDonationNoticeEn != notice {
+		t.Fatalf("public donation notice=%q want %q", public.CharityDonationNoticeEn, notice)
 	}
 }

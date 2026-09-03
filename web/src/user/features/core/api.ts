@@ -787,7 +787,7 @@ export async function updateManualEntry(
     ) {
       throw new ApiError(
         'invalid_response',
-        'The server omitted an authoritative binding replacement.',
+        'The server omitted a required model connection replacement.',
         200,
       );
     }

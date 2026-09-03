@@ -36,6 +36,8 @@ const (
 	KeyLegalTermsOverrideZh      = "legal_terms_override_zh"
 	KeyLegalTermsOverrideEn      = "legal_terms_override_en"
 	KeyLegalAuthoritativeLocale  = "legal_authoritative_locale"
+	KeyCharityDonationNoticeZh   = "charity_donation_notice_zh"
+	KeyCharityDonationNoticeEn   = "charity_donation_notice_en"
 	KeyDefaultEndpointLimit      = "default_endpoint_limit"
 	KeyDefaultEndpointKeyLimit   = "default_endpoint_key_limit"
 	KeyDefaultModelLimit         = "default_model_limit"
@@ -161,6 +163,7 @@ const (
 	maxAntiAbuseThreshold        = 4096
 	maxCharityMinChars           = antiabuse.MaxCharityContentRuneCount
 	maxTokenLimit                = 2147483647
+	maxDonationNoticeBytes       = 8192
 )
 
 type valueKind int
@@ -241,6 +244,8 @@ var knownSiteConfig = func() map[string]keySpec {
 		KeyLegalPrivacyOverrideEn:    {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
 		KeyLegalTermsOverrideZh:      {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
 		KeyLegalTermsOverrideEn:      {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
+		KeyCharityDonationNoticeZh:   {kind: kindMultilineText, allowEmpty: true, max: maxDonationNoticeBytes},
+		KeyCharityDonationNoticeEn:   {kind: kindMultilineText, allowEmpty: true, max: maxDonationNoticeBytes},
 		KeyLegalAuthoritativeLocale:  {kind: kindLocaleOpt},
 		KeyDefaultEndpointLimit:      {kind: kindInt, min: 0, max: maxResourceLimitValue, def: db.DefaultEndpointLimit},
 		KeyDefaultEndpointKeyLimit:   {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultEndpointKeyLimit},
@@ -786,10 +791,12 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 // PublicConfig is the closed, display-safe bootstrap DTO shared by the public
 // and administrator stations. A concrete struct, rather than a generic map,
 // makes adding an operational site-config key to the public wire an explicit
-// contract change. It intentionally has exactly ten JSON fields.
+// contract change. It intentionally has exactly twelve JSON fields.
 type PublicConfig struct {
 	SiteName                 string `json:"site_name"`
 	SiteLogoURL              string `json:"site_logo_url"`
+	CharityDonationNoticeZh  string `json:"charity_donation_notice_zh"`
+	CharityDonationNoticeEn  string `json:"charity_donation_notice_en"`
 	LegalPrivacyOverrideZh   string `json:"legal_privacy_override_zh"`
 	LegalPrivacyOverrideEn   string `json:"legal_privacy_override_en"`
 	LegalTermsOverrideZh     string `json:"legal_terms_override_zh"`
@@ -817,6 +824,8 @@ func buildPublicConfig(values map[string]string) PublicConfig {
 	return PublicConfig{
 		SiteName:                 publicConfigString(values, KeySiteName),
 		SiteLogoURL:              publicConfigString(values, KeySiteLogoURL),
+		CharityDonationNoticeZh:  publicConfigString(values, KeyCharityDonationNoticeZh),
+		CharityDonationNoticeEn:  publicConfigString(values, KeyCharityDonationNoticeEn),
 		LegalPrivacyOverrideZh:   publicConfigString(values, KeyLegalPrivacyOverrideZh),
 		LegalPrivacyOverrideEn:   publicConfigString(values, KeyLegalPrivacyOverrideEn),
 		LegalTermsOverrideZh:     publicConfigString(values, KeyLegalTermsOverrideZh),

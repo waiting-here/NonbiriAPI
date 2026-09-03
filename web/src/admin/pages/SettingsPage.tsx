@@ -23,13 +23,14 @@ import { humanReadableSeconds } from '../utils/catalogDisplay';
 import '@shared/operations/operations.css';
 
 const DANGEROUS_GROUPS = new Set(['access', 'abuse', 'legal']);
-const LEGAL_KEYS = new Set([
+const MULTILINE_KEYS = new Set([
   'legal_privacy_override_zh',
   'legal_privacy_override_en',
   'legal_terms_override_zh',
   'legal_terms_override_en',
+  'charity_donation_notice_zh',
+  'charity_donation_notice_en',
 ]);
-const LEGAL_MAX_BYTES = 65_536;
 const MAX_AMOUNT_MILLI = 9_000_000_000_000_000n;
 
 type CatalogValue = string | number | boolean | null;
@@ -203,10 +204,11 @@ function parseSetting(
       : invalid(t('admin.settings.validation.allowedChoice'));
   if (hasForbiddenControl(draft, entry.type === 'text'))
     return invalid(t('admin.settings.validation.noControlCharacters'));
-  if (LEGAL_KEYS.has(entry.key)) {
-    return utf8Bytes(draft) <= LEGAL_MAX_BYTES
+  if (entry.type === 'text') {
+    const maximum = catalogInteger(entry.maximum);
+    return maximum !== null && utf8Bytes(draft) <= maximum
       ? { value: draft, error: null }
-      : invalid(t('admin.settings.validation.maxUtf8Bytes', { maximum: LEGAL_MAX_BYTES }));
+      : invalid(t('admin.settings.validation.maxUtf8Bytes', { maximum: String(entry.maximum) }));
   }
   const min = catalogInteger(entry.minimum);
   const max = catalogInteger(entry.maximum);
@@ -259,7 +261,7 @@ function SettingField({
     { value: CatalogValue },
     { key: string; value: unknown; revision: string }
   >((input, key) => patchSiteSetting(entry, input.value, key), reload);
-  const submissionDraft = LEGAL_KEYS.has(entry.key)
+  const submissionDraft = entry.type === 'text'
     ? restoreLineEndings(draft, endingStyle)
     : draft;
   const parsed = parseSetting(entry, submissionDraft, explicitNull, t);
@@ -341,7 +343,7 @@ function SettingField({
     ) : entry.type === 'text' ? (
       <textarea
         id={inputID}
-        rows={LEGAL_KEYS.has(entry.key) ? 12 : 5}
+        rows={MULTILINE_KEYS.has(entry.key) ? 12 : 5}
         spellCheck={false}
         value={draft}
         disabled={busy || explicitNull || !writable}
@@ -411,11 +413,11 @@ function SettingField({
         {value === null && !entry.null_writable ? (
           <p className="muted">{t('admin.settings.notConfigured')}</p>
         ) : null}
-        {LEGAL_KEYS.has(entry.key) ? (
+        {entry.type === 'text' ? (
           <p className="muted">
             {t('admin.settings.legalBytes', {
               count: utf8Bytes(submissionDraft),
-              max: LEGAL_MAX_BYTES,
+              max: entry.maximum,
             })}
           </p>
         ) : null}

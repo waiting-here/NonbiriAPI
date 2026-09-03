@@ -1,7 +1,7 @@
 package adminapi
 
 // ReadPublicConfig allowlist tests: the unauthenticated /api/config
-// bootstrap must project only the frozen ten fields and never operational,
+// bootstrap must project only the frozen twelve fields and never operational,
 // rate-limit or Discord secrets — even when those are stored. Adding a key
 // to knownSiteConfig does not expose it; the concrete DTO is the boundary.
 
@@ -85,6 +85,9 @@ func TestReadPublicConfigProjectsOnlyAllowlist(t *testing.T) {
 	if err := store.SetSiteConfigValue("site_logo_url", "https://cdn.example/logo.png"); err != nil {
 		t.Fatalf("set site_logo_url: %v", err)
 	}
+	if err := store.SetSiteConfigValue(KeyCharityDonationNoticeZh, "欢迎捐赠\n请确认你有权分享这些密钥。"); err != nil {
+		t.Fatalf("set charity donation notice: %v", err)
+	}
 	for _, kv := range []struct{ k, v string }{
 		{"legal_authoritative_locale", "zh"},
 		{"default_rpm_per_user", "999"},
@@ -125,6 +128,8 @@ func TestReadPublicConfigProjectsOnlyAllowlist(t *testing.T) {
 	sort.Strings(keys)
 	want := []string{
 		"announcement_epoch",
+		"charity_donation_notice_en",
+		"charity_donation_notice_zh",
 		"legal_authoritative_locale",
 		"legal_privacy_override_en",
 		"legal_privacy_override_zh",
@@ -149,6 +154,12 @@ func TestReadPublicConfigProjectsOnlyAllowlist(t *testing.T) {
 	}
 	if out.SiteLogoURL != "https://cdn.example/logo.png" {
 		t.Fatalf("site_logo_url=%v", out.SiteLogoURL)
+	}
+	if out.CharityDonationNoticeZh != "欢迎捐赠\n请确认你有权分享这些密钥。" {
+		t.Fatalf("charity_donation_notice_zh=%q", out.CharityDonationNoticeZh)
+	}
+	if out.CharityDonationNoticeEn != "" {
+		t.Fatalf("charity_donation_notice_en=%q want empty", out.CharityDonationNoticeEn)
 	}
 	if !db.ValidateOpaqueID(out.AnnouncementEpoch, "b1e_") {
 		t.Fatalf("announcement_epoch=%v", out.AnnouncementEpoch)
@@ -196,10 +207,12 @@ func TestReadPublicConfigFreshStoreYieldsDefaults(t *testing.T) {
 	// Legal overrides default to blank (fallback to built-in template);
 	// the authoritative locale defaults to blank (no authoritative notice).
 	for key, value := range map[string]string{
-		"legal_privacy_override_zh": out.LegalPrivacyOverrideZh,
-		"legal_privacy_override_en": out.LegalPrivacyOverrideEn,
-		"legal_terms_override_zh":   out.LegalTermsOverrideZh,
-		"legal_terms_override_en":   out.LegalTermsOverrideEn,
+		"charity_donation_notice_zh": out.CharityDonationNoticeZh,
+		"charity_donation_notice_en": out.CharityDonationNoticeEn,
+		"legal_privacy_override_zh":  out.LegalPrivacyOverrideZh,
+		"legal_privacy_override_en":  out.LegalPrivacyOverrideEn,
+		"legal_terms_override_zh":    out.LegalTermsOverrideZh,
+		"legal_terms_override_en":    out.LegalTermsOverrideEn,
 	} {
 		if value != "" {
 			t.Fatalf("%s=%v want empty", key, value)
@@ -283,10 +296,10 @@ func TestReadPublicConfigNilStoreYieldsDefaults(t *testing.T) {
 // Legal override text preserves newlines and tabs (operators author
 // multi-paragraph documents) but a stored value with disallowed control
 // characters falls back to blank rather than leaking them.
-func TestReadPublicConfigLegalOverridePreservesNewlines(t *testing.T) {
+func TestReadPublicConfigMultilineCopyPreservesNewlines(t *testing.T) {
 	store := openGenerationTwoPublicConfigStore(t)
 	const doc = "## Operator\n\nAcme Corp.\n\t- item one\n- item two"
-	for _, k := range []string{"legal_privacy_override_zh", "legal_terms_override_en"} {
+	for _, k := range []string{KeyLegalPrivacyOverrideZh, KeyLegalTermsOverrideEn, KeyCharityDonationNoticeZh} {
 		if err := store.SetSiteConfigValue(k, doc); err != nil {
 			t.Fatalf("set %s: %v", k, err)
 		}
@@ -303,6 +316,9 @@ func TestReadPublicConfigLegalOverridePreservesNewlines(t *testing.T) {
 	}
 	if out.LegalTermsOverrideEn != doc {
 		t.Fatalf("terms en=%q want %q", out.LegalTermsOverrideEn, doc)
+	}
+	if out.CharityDonationNoticeZh != doc {
+		t.Fatalf("charity donation notice zh=%q want %q", out.CharityDonationNoticeZh, doc)
 	}
 	if out.LegalAuthoritativeLocale != "zh" {
 		t.Fatalf("authoritative=%v want zh", out.LegalAuthoritativeLocale)

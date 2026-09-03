@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
 import { useGameCopy } from '../copy';
+import { GameRulesButton, GameRulesDialog, type GameRulesSection } from '../common/GameRulesDialog';
 import {
   createIdempotencyKey,
   createOpaqueID,
@@ -59,6 +60,59 @@ function Money({ value }: { readonly value: string }) {
     <span className="game-money">
       {formatCredits(value)} <span className="game-money__unit">{text('common.credits')}</span>
     </span>
+  );
+}
+
+function LinkLinkRules({
+  open,
+  onClose,
+}: {
+  readonly open: boolean;
+  readonly onClose: () => void;
+}) {
+  const { text } = useGameCopy();
+  const sections: readonly GameRulesSection[] = [
+    {
+      title: text('linklink.rules.goalTitle'),
+      paragraphs: [text('linklink.rules.goalBody')],
+    },
+    {
+      title: text('linklink.rules.boardTitle'),
+      paragraphs: [text('linklink.rules.boardBody')],
+    },
+    {
+      title: text('linklink.rules.pathTitle'),
+      paragraphs: [text('linklink.rules.pathBody')],
+    },
+    {
+      title: text('linklink.rules.scoreTitle'),
+      paragraphs: [text('linklink.rules.scoreBody')],
+    },
+    {
+      title: text('linklink.rules.shuffleTitle'),
+      paragraphs: [text('linklink.rules.shuffleBody')],
+    },
+    {
+      title: text('linklink.rules.clockTitle'),
+      paragraphs: [text('linklink.rules.clockBody')],
+    },
+    {
+      title: text('linklink.rules.recoveryTitle'),
+      paragraphs: [text('linklink.rules.recoveryBody')],
+    },
+    {
+      title: text('linklink.rules.abandonTitle'),
+      paragraphs: [text('linklink.rules.abandonBody')],
+    },
+  ];
+  return (
+    <GameRulesDialog
+      open={open}
+      title={text('linklink.rules.title')}
+      closeLabel={text('common.closeRules')}
+      sections={sections}
+      onClose={onClose}
+    />
   );
 }
 
@@ -209,6 +263,7 @@ export function LinkLinkGame() {
   const maintenance = isMaintenance(snapshot.error);
   const current = useLinkLinkCurrent(Boolean(snapshot.data));
   const [selectedSpec, setSelectedSpec] = useState<LinkLinkSpec>('6x8');
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [review, setReview] = useState(false);
   const [abandonReview, setAbandonReview] = useState(false);
   const [selection, setSelection] = useState<{
@@ -376,10 +431,48 @@ export function LinkLinkGame() {
     creditsToMilli(snapshot.data.balance, true) >= creditsToMilli(spec.price),
   );
   const canStart = current.isSuccess && gateOpen && affordable;
+  const closeRules = useCallback(() => setRulesOpen(false), []);
+  const rulesButton = (
+    <GameRulesButton label={text('common.rulesButton')} onClick={() => setRulesOpen(true)} />
+  );
+  const rulesDialog = <LinkLinkRules open={rulesOpen} onClose={closeRules} />;
 
-  if (snapshot.isPending) return <LoadingState label={text('common.loading')} />;
+  if (snapshot.isPending)
+    return (
+      <main className="game-page linklink-page">
+        <PageHeader
+          back={
+            <Link className="game-back-link" to="/games">
+              {text('common.back')}
+            </Link>
+          }
+          eyebrow={text('linklink.eyebrow')}
+          title={text('linklink.title')}
+          description={text('linklink.description')}
+          actions={rulesButton}
+        />
+        <LoadingState label={text('common.loading')} />
+        {rulesDialog}
+      </main>
+    );
   if (snapshot.error && !maintenance)
-    return <ErrorState error={snapshot.error} onRetry={() => void snapshot.refetch()} />;
+    return (
+      <main className="game-page linklink-page">
+        <PageHeader
+          back={
+            <Link className="game-back-link" to="/games">
+              {text('common.back')}
+            </Link>
+          }
+          eyebrow={text('linklink.eyebrow')}
+          title={text('linklink.title')}
+          description={text('linklink.description')}
+          actions={rulesButton}
+        />
+        <ErrorState error={snapshot.error} onRetry={() => void snapshot.refetch()} />
+        {rulesDialog}
+      </main>
+    );
   if ((!snapshot.data || maintenance) && !state)
     return (
       <main className="game-page linklink-page">
@@ -392,10 +485,12 @@ export function LinkLinkGame() {
           eyebrow={text('linklink.eyebrow')}
           title={text('linklink.title')}
           description={text('linklink.description')}
+          actions={rulesButton}
         />
         <p className="game-inline-notice game-inline-notice--warning">
           {text('common.maintenance')}
         </p>
+        {rulesDialog}
       </main>
     );
 
@@ -410,6 +505,7 @@ export function LinkLinkGame() {
         eyebrow={text('linklink.eyebrow')}
         title={text('linklink.title')}
         description={text('linklink.description')}
+        actions={rulesButton}
       />
       {maintenance ? (
         <p className="game-inline-notice game-inline-notice--warning">
@@ -645,6 +741,7 @@ export function LinkLinkGame() {
         <ErrorState error={mutationError} onRetry={() => void reconcile()} />
       ) : null}
       <p className="game-footnote">{text('common.noHistory')}</p>
+      {rulesDialog}
     </main>
   );
 }

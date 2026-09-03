@@ -16,8 +16,8 @@
     "steward": {
       "nav": "协管",
       "title": "协管中心",
-      "description": "等级 5 的协管入口。能否使用协管能力始终由服务端决定。",
-      "accessDenied": "该协管页面需要服务端解析的 5 级权限。",
+      "description": "这是 5 级协管入口；页面会按当前账号权限开放可用功能。",
+      "accessDenied": "当前账号没有已确认的 5 级协管权限。",
       "sectionsLabel": "协管功能区",
       "logsTab": "请求日志",
       "charityTab": "公益管理",
@@ -44,15 +44,15 @@
       "discountStart": "开始时间（可选）",
       "discountEnd": "结束时间（可选）",
       "newModel": "新增公益模型",
-      "modelsTitle": "公益模型与绑定",
+      "modelsTitle": "公益模型与服务连接",
       "noModels": "暂无公益模型",
       "noModelsBody": "请在捐赠资源准备好后创建公益模型。",
       "successRate": "最近 {{count}} 次成功率 {{rate}}%",
-      "bindings": "绑定",
-      "upstreamModel": "上游模型 ID",
+      "bindings": "服务连接",
+      "upstreamModel": "服务模型 ID",
       "order": "顺序",
       "actions": "操作",
-      "noBindings": "暂无绑定",
+      "noBindings": "暂无服务连接",
       "status": {
         "pending": "待审核",
         "approved": "已通过",
@@ -72,8 +72,8 @@
       "deleteModelTitle": "删除这个公益模型？",
       "previous": "上一页",
       "next": "下一页",
-      "operationsDescription": "查看管理员安全日志、仅限本人资源的公益管理，以及只能单向开启的紧急维护入口。",
-      "sensitiveStateCleared": "敏感协管状态已清理。",
+      "operationsDescription": "查看有限的请求记录、管理本人可处理的公益资源，并在紧急时开启维护模式。",
+      "sensitiveStateCleared": "本页敏感信息已清除。",
       "maintenanceTab": "维护模式"
     },
     "endpoints": {
@@ -87,16 +87,16 @@
     },
     "debug": {
       "nav": "调试",
-      "descriptionShort": "检查安全的请求生命周期。",
-      "description": "查看有界且仅所有者可见的请求、上游与调用方语义。",
+      "descriptionShort": "查看请求从发出到完成的情况。",
+      "description": "查看仅自己可见的请求、所连接服务和调用结果。",
       "actions": {
         "start": "开始调试"
       },
       "request": {
         "title": "请求",
         "ownerOnly": "这里只显示所有者本人提交的请求。",
-        "rawBody": "有界原始请求正文（{{bytes}} 字节）",
-        "rawBodyTruncated": "有界原始请求正文（{{bytes}} 字节，已截断）",
+        "rawBody": "原始请求正文（{{bytes}} 字节）",
+        "rawBodyTruncated": "原始请求正文（{{bytes}} 字节，内容过长已截断）",
         "base64Body": "[base64 请求正文：{{characters}} 个字符]"
       },
       "value": {
@@ -109,19 +109,19 @@
         },
         "trace": {
           "capturing": "采集中",
-          "terminal": "已终态"
+          "terminal": "已完成"
         },
         "result": {
-          "response": "上游响应",
+          "response": "第三方服务响应",
           "synthetic": "合成结果"
         },
         "source": {
           "platform": "平台",
-          "upstream": "上游"
+          "upstream": "所连接服务"
         },
         "mode": {
-          "dry": "Dry（不出站）",
-          "live": "Live（真实出站）"
+          "dry": "预览（Dry，不发送）",
+          "live": "真实发送（Live）"
         },
         "observer": {
           "connecting": "连接中",
@@ -130,11 +130,11 @@
           "disconnected": "已断开"
         },
         "gap": {
-          "cursorInvalid": "游标无效",
+          "cursorInvalid": "上次位置无效",
           "processRestart": "进程重启",
-          "ringExpired": "事件保留期已过",
-          "ringEvicted": "事件已被淘汰",
-          "slowConsumer": "消费速度过慢"
+          "ringExpired": "更新记录已过期",
+          "ringEvicted": "更新记录已清除",
+          "slowConsumer": "页面接收更新过慢"
         },
         "end": {
           "stopped": "已停止",
@@ -162,15 +162,15 @@
         }
       },
       "upstream": {
-        "title": "上游",
+        "title": "所连接服务",
         "kind": "结果类型",
         "status": "状态码",
         "safeCode": "安全错误码",
         "safeDiagnostic": "安全诊断",
         "charge": "扣费",
-        "awaitingProjection": "正在等待安全结果投影。",
-        "notDispatched": "没有发生上游出站。",
-        "rawSuppressed": "这里不提供原始上游请求头、正文、字节或消息。"
+        "awaitingProjection": "正在等待隐藏敏感内容后的结果摘要。",
+        "notDispatched": "请求没有发送到站外服务。",
+        "rawSuppressed": "这里不显示第三方服务的原始请求头、正文、字节或消息。"
       },
       "caller": {
         "title": "调用方",
@@ -178,58 +178,58 @@
         "errorCode": "错误码",
         "source": "来源",
         "message": "消息",
-        "notTerminal": "调用方结果尚未终态。"
+        "notTerminal": "调用结果尚未完成。"
       },
       "confirm": {
         "liveTitle": "启用 Live 采集？",
-        "liveBody": "Live 模式可能发送真实上游请求并产生上游成本。",
+        "liveBody": "真实发送模式会向所连接服务发送请求，并可能产生费用。",
         "liveAction": "启用 Live",
         "stopTitle": "停止此调试会话？",
         "stopInflightBody": "停止操作会取消正在进行的请求，调用方会收到固定的 live-cancelled 结果。",
-        "stopIdleBody": "停止操作会结束服务端会话及其有界内存轨迹。",
+        "stopIdleBody": "停止操作会结束调试会话并清除本次保存在内存中的记录。",
         "stopAction": "停止会话",
         "replaceTitle": "替换此调试会话？",
         "replaceInflightBody": "替换操作会取消正在进行的请求；新会话始终从 Dry 模式开始。",
-        "replaceIdleBody": "现有有界轨迹将被丢弃；新会话始终从 Dry 模式开始。",
+        "replaceIdleBody": "现有调试记录将被清除；新会话始终从预览模式开始。",
         "replaceAction": "替换会话"
       },
       "connection": {
         "title": "连接与模式",
-        "serverSession": "服务端会话",
-        "observer": "观察连接",
+        "serverSession": "调试会话",
+        "observer": "页面连接",
         "mode": "模式",
         "inFlight": "进行中",
-        "expiry": "到期时间 {{expires}} · 空闲到期 {{idleExpiry}} · 修订 {{revision}}",
-        "gap": "事件连续性出现缺口：{{reason}}。需要重新读取权威快照。",
+        "expiry": "到期时间 {{expires}} · 空闲到期 {{idleExpiry}} · 版本 {{revision}}",
+        "gap": "实时更新出现中断：{{reason}}。正在重新读取最新状态。",
         "ended": "会话已结束：{{reason}}；已取消进行中请求：{{count}}。"
       },
       "operations": {
         "title": "会话操作",
-        "attachObserver": "连接观察器",
-        "disconnectObserver": "断开观察器",
+        "attachObserver": "连接页面更新",
+        "disconnectObserver": "断开页面更新",
         "enableLive": "启用 Live 模式",
         "returnDry": "返回 Dry 模式",
         "stop": "停止会话",
         "startOver": "重新开始",
-        "observerHint": "断开当前观察器不会停止服务端会话。"
+        "observerHint": "断开页面更新不会停止调试会话。"
       },
       "error": {
-        "sessionChanged": "会话已发生变化。请刷新权威状态并复核后再确认。",
-        "resultUnknown": "操作结果未知。同一请求身份已保留；请先刷新权威状态，再明确重试。",
+        "sessionChanged": "会话已发生变化。请刷新最新状态并复核后再确认。",
+        "resultUnknown": "暂时无法确认操作结果。请先刷新最新状态，再决定是否重试同一请求。",
         "operationFailed": "调试操作失败。"
       },
       "fixedResults": {
         "title": "固定调用方结果",
-        "dryIntercepted": "请求在 Dry 模式下被采集，且从未发送到上游。",
-        "liveCaptured": "上游尝试已经完成，但原始响应已被抑制，仅采集安全投影。",
-        "liveCancelled": "已出站的 Live 请求因会话停止或替换而被取消。",
+        "dryIntercepted": "请求在预览模式下被记录，没有发送到站外服务。",
+        "liveCaptured": "第三方服务调用已经完成；这里只记录隐藏敏感内容后的结果摘要。",
+        "liveCancelled": "真实发送的请求因会话停止或替换而被取消。",
         "callerKeyPrefix": "示例使用",
-        "callerKeySuffix": "作为占位符；一次性 CallerKey 绝不会自动复制到调试页面。"
+        "callerKeySuffix": "作为占位符；账户 API 密钥的完整内容绝不会自动复制到调试页面。"
       },
       "requests": {
         "title": "请求",
         "noSessionTitle": "没有进行中的调试会话",
-        "noSessionBody": "启动 Dry 会话即可在不出站的情况下采集请求。",
+        "noSessionBody": "启动预览会话，即可在不向站外服务发送内容的情况下检查请求。",
         "emptyTitle": "尚未采集请求",
         "emptyBody": "请在此会话进行期间发送 OpenAI-compatible 请求。"
       }
@@ -246,8 +246,8 @@
       "emptyCurrentBody": "当前没有已知待解决的问题。",
       "emptyClosedBody": "没有已关闭历史。",
       "summary": {
-        "discoveryFailed": "模型发现失败",
-        "noRoutableBinding": "没有可路由绑定",
+        "discoveryFailed": "未能获取模型列表",
+        "noRoutableBinding": "没有可用的模型连接",
         "credentialInvalid": "凭据无效",
         "configurationInvalid": "配置无效"
       },
@@ -266,7 +266,7 @@
       "observations": "观测次数",
       "closedAt": "关闭时间",
       "openResource": "查看当前资源",
-      "resourceUnavailable": "来源资源已删除或不再提供安全深链。",
+      "resourceUnavailable": "来源资源已删除或已不可用。",
       "previous": "上一页",
       "next": "下一页",
       "page": "页"
@@ -280,13 +280,13 @@
       "acceptedTitle": "举报已受理",
       "acceptedBody": "若存在匹配凭据，系统会临时保护并由管理员复核。",
       "submitAnother": "提交另一份举报",
-      "connectorLabel": "连接器类型",
+      "connectorLabel": "服务类型",
       "connector": {
         "openaiCompatible": "OpenAI-Compatible",
         "anthropicCompatible": "Anthropic-Compatible"
       },
-      "baseUrlLabel": "规范端点 URL",
-      "secretLabel": "疑似泄露的凭据",
+      "baseUrlLabel": "服务地址（URL）",
+      "secretLabel": "疑似泄露的密钥或凭据",
       "noteLabel": "补充说明（可选）",
       "noteWarning": "请勿在补充说明中填写任何凭据。",
       "validationError": "请检查端点 URL、凭据和补充说明的长度。",
@@ -334,25 +334,25 @@
         "intro": "本政策说明 NonbiriAPI alpha.3 实例运行所需处理的数据。",
         "notice": "部署模板：在接受真实用户前，实例运营方必须按实际部署和适用法律补充运营主体、联系方式、生效日期、留存期限及司法辖区声明。本页面不是法律意见。",
         "operatorTitle": "运营方与适用范围",
-        "operatorBody": "NonbiriAPI 是开源软件。每个部署实例由控制该实例的个人或组织独立运营。本政策适用于该运营方通过实例处理的数据，不适用于公共源码仓库，也不替代 Discord 或上游提供方各自的隐私政策。",
+        "operatorBody": "NonbiriAPI 是开源软件。每个部署实例由控制该实例的个人或组织独立运营。本政策适用于该运营方通过实例处理的数据，不适用于公共源码仓库，也不替代 Discord 或第三方 AI 服务各自的隐私政策。",
         "identityTitle": "身份与会话",
-        "identityBody": "用户站使用 Discord OAuth 注册和登录。服务会接收 Discord 用户标识、用户名、头像元数据，以及服务器与身份组注册门禁所需的成员信息。OAuth 访问令牌仅用于交换流程，不作为账号数据保存。服务会保存有界的账号、会话和偏好元数据。会话 Cookie 根据部署配置使用 HttpOnly、Secure 与 SameSite 属性。",
+        "identityBody": "用户站使用 Discord 注册和登录。服务会接收 Discord 用户标识、用户名、头像信息，以及确认服务器和身份组成员资格所需的信息。登录授权令牌仅在登录过程中使用，不作为账号数据保存。服务会保存有限的账号、登录状态和偏好信息，并按部署配置保护登录 Cookie。",
         "dataTitle": "账号与配置数据",
-        "dataBody": "服务会保存账号自有端点的元数据、规范化上游地址、备注、启用状态、连接器类型、拉取到的模型标识、平台模型名称、路由选择和绑定。OpenAI-compatible 物理密钥可保存 force_store_false 策略，个人 OpenAI-compatible 逻辑模型可保存 flatten_tool_calls 策略；二者都是布尔元数据，不是请求正文。上游凭据会加密存储；调用密钥只展示一次，服务端只保留不可逆查询材料和显示片段。服务还会保存签到、捐赠/公益、每日活跃、封禁、限额、游戏资料公开偏好、服务端生成的游戏结算/结果/最佳成绩，以及有界反滥用和账务元数据。Schema version 4 导出增加安全的端点来源、捐赠密钥授权/生效到期时间和安全来源字段。导出只含白名单账号元数据，不含密钥、密文、举报指纹、来源密钥身份、管理员备注、OAuth token、调用密钥明文、Debug 正文、随机熵或其他用户身份。",
+        "dataBody": "服务会保存账号自有端点的地址、备注、启用状态、服务类型、已找到的模型、平台模型名称和模型连接。部分 OpenAI 兼容资源还可保存“不保存请求”和“将工具调用转为文本”等开关；这些开关不包含请求正文。服务密钥会加密保存；账户 API 密钥只完整显示一次，之后仅保留用于验证和辨认的安全信息。服务还会保存签到、捐赠与公益、每日活动、账号限制、用量上限、游戏资料公开偏好、游戏结果和最佳成绩，以及防止滥用和计算费用所需的有限信息。第 4 版导出会包含安全的端点来源、捐赠密钥授权期限、实际期限和安全来源信息。导出不包含任何完整密钥、加密密钥内容、举报匹配信息、来源密钥身份、管理员备注、登录令牌、调试正文、随机数据或其他用户身份。",
         "economyTitle": "积分与账务数据",
-        "economyBody": "服务会保存唯一的可消费悠哉积分余额（可为负）、签到奖励、游戏派彩和公益路由摘要。签到奖励、捐赠回馈与游戏派彩进入同一个可消费余额；公益路由和游戏入场费用从该余额扣除。donation_credit 是累计捐赠者回馈统计，用于捐赠摘要和等级门槛；它不是第二个钱包。普通消费、签到和自然游戏事件都不会改变该统计。每次余额变化都会写入追加式积分流水。《池塘垂钓》的价格、密码学随机结果、预留、恢复与结算均由服务器权威决定，不保证任何渔获或经济回报，4 级也没有游戏经济优势。排行榜默认匿名；只有显式公开后才会一起展示当前服务器昵称/用户名和静态 64px Discord CDN 头像地址。服务不代理或缓存该头像，也不把资料身份复制进历史游戏记录。",
+        "economyBody": "服务会保存唯一的可消费悠哉积分余额（余额可能为负）、签到奖励、游戏奖励和公益使用摘要。签到奖励、捐赠者回馈与游戏奖励进入同一个余额；公益调用和游戏费用从该余额扣除。累计捐赠者回馈只用于捐赠摘要和等级条件，不是第二个钱包；普通消费、签到和一般游戏事件不会改变它。每次余额变化都会留下记录。《池塘垂钓》的价格、随机结果、扣款准备、恢复和结算由游戏系统统一处理，不保证任何渔获或经济回报，4 级也没有游戏经济优势。排行榜默认匿名；只有主动选择公开后，才会同时展示当前服务器昵称或用户名及 Discord 头像地址。服务不会保存头像副本，也不会把个人资料复制进历史游戏记录。",
         "credentialsTitle": "密钥与浏览器处理",
-        "credentialsBody": "上游密钥不会出现在普通列表、日志、告警、错误、导出或 URL 中。浏览器只接收密钥元数据，不会将上游明文密钥或调用密钥明文保存到存储或查询缓存。删除密钥或账号会在最终事务中立即撤销调用权限，成为孤儿的加密凭据材料最迟在一小时内清除。OpenAI-compatible 密钥可强制 outbound 的 store 字段为 false，但上游可能忽略或拒绝该字段；这不构成零留存保证，也不控制提供方的滥用监测。运营方仍必须保护服务器、完整快照和主密钥文件。",
+        "credentialsBody": "服务密钥不会出现在普通列表、日志、告警、错误、导出或 URL 中。浏览器只接收密钥的必要信息，不会保存服务密钥或账户 API 密钥的完整内容。删除密钥或账号会立即停止其后续调用；不再属于任何资源的加密密钥内容会在一小时内清除。OpenAI 兼容密钥可以要求所连接服务不保存请求（store=false），但对方可能忽略或拒绝该要求，因此这不是零留存保证，也不能控制对方的滥用监测。运营方仍须保护服务器、完整备份和主密钥文件。",
         "trafficTitle": "请求与诊断",
-        "trafficBody": "转发请求会产生账号、模型、上游端点、时间、状态、耗时和 token 用量等有界元数据；普通请求与响应正文不会持久化。Debug 始终从 dry run 开始：不会选候选、访问密钥、执行 DNS/出站、预留公益积分或写入用量/活跃。Actual send 是独立开关，每次开启都需要新的站内确认，并可能产生提供方用量或公益账务。经脱敏的有限请求/响应投影只存在于进程和当前页面内存，不写入数据库、普通日志、告警、导出、备份、URL 或浏览器存储；会话关闭、替换、过期、登出、封禁、删号或重启时清除。Debug 页面或 SSE 断开不会取消原始 CallerKey 请求。管理员和实时 5 级协管只能看到有界元数据，协管投影隐藏捐赠资源。",
+        "trafficBody": "转发请求会产生账号、模型、所用服务、时间、状态、耗时和 Token 用量等有限记录；普通请求与响应正文不会长期保存。调试功能默认只做预览，不会访问密钥、向外发送请求、占用公益积分或写入用量；每次真实发送都需要另行确认，并可能产生服务方用量或公益费用。隐藏敏感内容后的请求与响应摘要只存在于当前进程和页面内存，不会写入数据库、普通日志、告警、导出、备份、URL 或浏览器存储；关闭、替换或过期会话，以及登出、封禁、删号或服务重启时都会清除。调试页面断开不会取消原本由账户 API 密钥发起的请求。管理员和实时 5 级协管只能看到有限的请求信息，且协管看不到捐赠资源。",
         "sharingTitle": "提供方与披露",
-        "sharingBody": "请求内容可能发送到账号所有者选择的 OpenAI-compatible 或 Anthropic-compatible 上游，包括由捐赠者提供、可能由 OpenAI、Anthropic 或其他独立第三方运营的公益资源。提供方可能依据自身政策处理或留存正文、账户日志或滥用监测数据；实例运营方无法控制第三方留存。公益路由的捐赠者作为相应上游账号或密钥的控制者，可能通过上游后台日志看到完整请求内容；实例界面本身不向捐赠者披露消费者身份或正文。每个转发请求还携带服务端安全伪名，只在同一用户、部署主密钥和规范化上游 origin 范围内可关联，因此属于伪名化而非匿名数据。Discord 按自身政策处理 OAuth。法律要求或保护服务、用户和公共安全所必需时，运营方可能披露数据，并应说明其他处理方、主机商和支持访问。",
+        "sharingBody": "请求内容可能发送到账号所有者选择的 OpenAI 兼容或 Anthropic 兼容服务，包括由捐赠者提供、可能由 OpenAI、Anthropic 或其他独立第三方运营的公益资源。第三方可能依据自身政策处理或保留请求正文、账号日志或滥用监测数据，实例运营方无法控制。公益资源的捐赠者控制相应第三方账号或密钥，因此可能在第三方后台日志中看到完整请求；本站界面不会向捐赠者显示使用者身份或请求正文。每个转发请求还带有一个由系统生成的安全代号，它只能在同一用户、同一部署和同一第三方服务范围内关联，因此属于隐藏身份后的数据，并非完全匿名。Discord 按自身政策处理登录活动。法律要求或保护服务、用户和公共安全所必需时，运营方可能披露数据，并应说明其他数据处理方、主机商和支持人员的访问。",
         "retentionTitle": "留存与删除",
-        "retentionBody": "请求日志最多保留 30 天；已终结的捐赠/审核事实、每日活动摘要和已终结公益预留保留 400 天。捐赠密钥终结或物理密钥删除后，仅用于匹配新举报的不可逆指纹最多保留 90 天，且不能用于调用上游。举报案件已经建立的最小 target 与捐赠 lineage 事实按该案件自身的 90 天或有效 legal hold 生命周期保留；读取不会刷新这些期限，legal hold 也不会延长指纹匹配窗口。游戏局、结算和结果从 settled_at 起保留 30 天，已付费 pending 局保留至完成结算；游戏最佳成绩、游戏积分流水和资料公开偏好随账号保留。Debug 正文没有持久化留存。会话按空闲和绝对 TTL 过期。已处理的管理员告警在处理 30 天后清理；未处理告警受全局与分类数量上限及去重约束。Schema version 4 导出每个集合最多 10000 行、完整 JSON 最多 8 MiB，超限明确失败而不截断。删号会使 session 和 CallerKey 失效、清除关联私密数据，并只保留受生命周期约束的去身份事实；迟到回调不能重新创建账号。运营方完整快照和上游提供方可能按各自政策保留副本。",
+        "retentionBody": "请求日志最多保留 30 天；已经结束的捐赠和审核记录、每日活动摘要及公益费用准备记录保留 400 天。捐赠密钥结束或服务密钥删除后，仅用于匹配新举报且无法还原原密钥的信息最多保留 90 天，不能用于发起调用。举报案件已保存的最少目标信息和捐赠来源关系，按案件自身的 90 天期限或有效的法律保留要求保存；查看记录不会延长期限，法律保留也不会延长新举报的密钥匹配期。游戏对局、结算和结果在结算后保留 30 天；已付费但未结算的对局保留到结算完成。游戏最佳成绩、积分变动和资料公开偏好随账号保留。调试正文不会长期保存。登录状态会在空闲或达到最长时间后过期。已处理的管理员告警在 30 天后清理，未处理告警受数量上限和重复合并规则约束。第 4 版导出的每类数据最多 10,000 行，完整 JSON 最多 8 MiB；超过限制会明确失败，不会截断。删号会使登录状态和账户 API 密钥失效、清除关联私密数据，并只保留按上述期限管理且不含个人身份的必要事实；迟到的回调不能重新创建账号。运营方的完整备份和第三方服务可能按各自政策保留副本。",
         "rightsTitle": "你的控制权与权利",
         "rightsBody": "在适用法律和实例运营方流程允许的范围内，你可以修改支持的账号设置，通过需要二次认证的自助流程申请导出或删除账号。删号具有破坏性。如需访问、更正、限制处理或行使其他隐私权利，请联系实例运营方；运营方必须在正式运行前公布适当的联系方式。",
         "securityTitle": "安全边界",
-        "securityBody": "服务端执行所有权检查、凭据加密存储、出站 SSRF 与重定向保护、有界资源、取消传播和敏感 API 的 no-store 响应。仅适用于 OpenAI 的 flatten_tool_calls 实验会把结构化调用变成文本，只恢复完整真实的调用/结果对，不执行工具、不伪造结果，并可能破坏普通工具流程；Anthropic 绑定与其不兼容。没有任何系统绝对安全。不要把密钥放入备注、模型名、URL、工具数据、问题反馈或支持消息。",
+        "securityBody": "服务会检查资源所有权、加密保存密钥、防止请求访问受保护的网络位置或跳转到危险地址、限制资源占用，并确保取消请求时停止后续处理。敏感接口会要求浏览器和中间服务不要缓存响应。仅适用于 OpenAI 的“将工具调用转为文本”实验功能只会转换完整真实的调用和结果，不会执行工具或伪造结果，并可能影响普通工具流程；Anthropic 连接不能使用此功能。没有任何系统绝对安全。不要把密钥放入备注、模型名、URL、工具数据、问题反馈或支持消息。",
         "contactTitle": "联系方式与政策变更",
         "contactBody": "实例运营方必须在正式运行前在本页面公布隐私联系渠道、生效日期和适用司法辖区。涉及数据收集、共享或留存的重大变更，应按适用法律公告并处理。"
       },
@@ -362,32 +362,32 @@
         "intro": "使用 NonbiriAPI 实例即表示你同意合法使用服务并保护自己的凭据。",
         "notice": "部署模板：在接受真实用户前，实例运营方必须补充运营主体、联系方式、生效日期、适用法律和投诉处理流程。本页面不是法律意见。",
         "operatorTitle": "服务与运营方",
-        "operatorBody": "NonbiriAPI 是开源网关软件，不是 AI 模型提供方。具体实例的运营方负责访问策略、配置的上游、限制、维护和用户支持。公共源码项目及其版权持有人并不自动运营每个部署实例。",
+        "operatorBody": "NonbiriAPI 是开源网关软件，不是 AI 模型提供方。具体实例的运营方负责访问规则、所连接的第三方服务、使用限制、维护和用户支持。公共源码项目及其版权持有人并不自动运营每个部署实例。",
         "accessTitle": "账号与访问",
         "accessBody": "账号可能需要 Discord OAuth，以及配置的服务器和身份组成员资格。你对账号产生的活动负责，并应为运营方的访问和支持流程提供足够准确的信息。运营方可因安全、维护、法律合规或违反本条款而暂停新注册或暂停访问。",
         "useTitle": "可接受的使用方式",
         "useBody": "只能使用你有权访问的端点、凭据和模型。不得利用服务从事违法活动、诈骗、滥用、未授权访问、窃取凭据、传播恶意软件、骚扰、侵犯隐私、涉及未成年人的性剥削内容、真人非自愿私密影像、攻击提供方或其他用户、拒绝服务、绕过限流，或试图破坏所有权和安全控制。",
-        "upstreamTitle": "上游提供方规则",
-        "upstreamBody": "请求可能由账号所有者选择的 OpenAI-compatible 或 Anthropic-compatible 提供方处理，包括捐赠者提供的公益资源。你必须遵守各提供方的服务条款、使用政策、许可条件和内容限制。提供方可能按自身政策留存请求正文、账户日志或滥用监测数据；请求 store:false 可能被忽略或拒绝，并不承诺零留存。运营方不保证提供方接受请求、保存内容或持续提供账号。",
+        "upstreamTitle": "第三方服务规则",
+        "upstreamBody": "请求可能由账号所有者选择的 OpenAI 兼容或 Anthropic 兼容服务处理，包括捐赠者提供的公益资源。你必须遵守各服务方的条款、使用政策、许可条件和内容限制。服务方可能按自身政策保留请求正文、账号日志或滥用监测数据；“不保存请求”（store:false）可能被忽略或拒绝，并不承诺零留存。运营方不保证第三方接受请求、保存内容或持续提供账号。",
         "credentialsTitle": "凭据与内容",
-        "credentialsBody": "请保护上游凭据、调用密钥、OAuth 链接和恢复信息；疑似泄露时立即轮换。不要把密钥放入备注、URL、模型名、工具、问题反馈或支持消息。你对提交内容及向所选提供方发送它所需的权利负责。实验性工具调用展平只改变表示，不执行工具、不创建结果或证明成功，并可能破坏普通结构化工具客户端。",
+        "credentialsBody": "请保护服务密钥、账户 API 密钥、登录链接和恢复信息；疑似泄露时立即更换。不要把密钥放入备注、URL、模型名、工具、问题反馈或支持消息。你对提交的内容负责，也须拥有把内容发送给所选服务方的权利。实验性的“将工具调用转为文本”功能只改变显示和传输方式，不会执行工具、创建结果或证明成功，并可能影响依赖结构化工具调用的程序。",
         "availabilityTitle": "限制与可用性",
-        "availabilityBody": "服务可能因配额、所有权检查、安全控制、上游故障、维护或授权而限流、拒绝、重试或暂时不可用。只有协议响应完整才算成功，HTTP 状态本身不作保证。Debug dry run 不向上游发送；经单独确认的 live 模式可能消耗提供方额度或公益积分。游戏价格、随机结果、恢复和结算均由服务端控制，不保证结果或回报。运营方可以调整限制或停止 alpha 服务。",
+        "availabilityBody": "服务可能因额度、资源所有权、安全检查、第三方服务故障、维护或权限原因而限制频率、拒绝、重试或暂时不可用。只有收到完整响应才算成功，单独的 HTTP 状态不能保证结果。调试预览不会向外发送请求；另行确认的真实发送可能消耗服务方额度或公益积分。游戏价格、随机结果、恢复和结算由游戏系统统一处理，不保证结果或回报。运营方可以调整限制或停止 alpha 服务。",
         "dataTitle": "隐私与删除",
-        "dataBody": "隐私政策说明元数据、Debug 处理、导出和删号控制。完成二次认证后删号具有破坏性，会删除关联捐赠、公益、签到、积分流水和游戏数据。Alpha.3 使用 fresh-only 数据库代际：旧代、未知或损坏数据库会在启动写入前拒绝。另行确认的破坏性 fresh 部署会删除活动数据库中的账号、业务数据、站点配置和法律覆盖且不合并旧数据；受保护运营方快照可保留旧数据库、发布产物、环境和主密钥以供回退。fresh 目标必须保持维护开启和注册关闭，直至已核定法律文本、必要配置与初始化重新应用并读回验证。快照恢复/清单操作和上游留存分别受运营方或提供方政策控制。",
+        "dataBody": "隐私政策说明服务保存的信息、调试处理、导出和删号。重新验证身份后删除账号，会删除关联的捐赠、公益、签到、积分变动和游戏数据。Alpha.3 只支持为该版本新建的数据库；旧版、无法识别或损坏的数据库不会启动。经运营方另行确认的全新部署会删除当前数据库中的账号、业务数据、站点设置和自定义法律文本，也不会合并旧数据；受保护的运营方备份可保留旧数据库、程序版本、运行环境和主密钥以便回退。新环境须保持维护状态并关闭注册，直到法律文本、必要设置和初始化数据已经重新应用并核对。备份恢复及第三方服务的数据留存分别遵循运营方或服务方政策。",
         "suspensionTitle": "暂停与终止",
         "suspensionBody": "运营方可在保护服务或用户、遵守法律或调查疑似违规所必需时暂停或终止访问。在安全且合法的情况下，运营方可能提供通知。你可以停止使用服务，并通过支持的流程申请删除账号。",
         "liabilityTitle": "免责声明",
-        "liabilityBody": "在适用法律允许的范围内，服务按现状和可用状态提供，不保证持续运行、无错误路由、模型准确性、数据可用性或适用于特定目的。运营方不对上游提供方的决定或上游系统生成的内容负责。本条款不排除法律不允许排除的责任。",
+        "liabilityBody": "在适用法律允许的范围内，服务按现状和可用状态提供，不保证持续运行、请求始终发送到预期服务、模型准确性、数据可用性或适用于特定目的。运营方不对第三方服务的决定或其生成内容负责。本条款不排除法律不允许排除的责任。",
         "ipTitle": "开源与知识产权",
-        "ipBody": "NonbiriAPI 源码以 GNU Affero General Public License v3.0 发布。NonbiriAPI、Discord、OpenAI 等名称可能是其各自所有者的商标；本项目不因此与上游提供方存在隶属或背书关系。提交或生成内容的权利取决于你的权利、适用法律和上游条款。",
+        "ipBody": "NonbiriAPI 源码以 GNU Affero General Public License v3.0 发布。NonbiriAPI、Discord、OpenAI 等名称可能是其各自所有者的商标；本项目不因此与第三方服务方存在隶属或背书关系。提交或生成内容的权利取决于你的权利、适用法律和第三方服务条款。",
         "changesTitle": "变更与联系方式",
         "changesBody": "运营方可能因新版本或运营变化更新本条款。重大变更应注明生效日期，并按适用法律进行通知。法律允许时，生效日期后继续使用表示接受；否则请停止使用并联系运营方。运营方必须在正式运行前公布联系方式和适用法律声明。"
       }
     },
     "logs": {
       "title": "调用日志",
-      "description": "查看你自己的请求元数据与 token 用量，不包含请求与响应内容。",
+      "description": "查看你自己的请求基本信息与 Token 用量，不包含请求与响应内容。",
       "empty": "没有日志记录",
       "emptyBody": "当前筛选条件下没有返回属于此账号的请求记录。",
       "eyebrow": "运维"
@@ -398,25 +398,25 @@
       "title": "公益资源与捐赠",
       "description": "查看当前公益调用与捐赠接收状态，并管理你已经提交的资源。",
       "donationDetailTitle": "捐赠详情",
-      "donationDetailDescription": "查看服务端返回的捐赠、审核与资源状态。",
+      "donationDetailDescription": "查看捐赠、审核和资源的当前状态。",
       "backToDonations": "返回公益页面",
       "donationNotFound": "未找到捐赠",
       "donationNotFoundBody": "这条捐赠不存在，或不属于当前账号。",
-      "capabilities": "当前公益能力",
+      "capabilities": "当前公益状态",
       "yourResources": "你的资源",
-      "callCapabilityEyebrow": "调用能力",
+      "callCapabilityEyebrow": "可用情况",
       "callCapabilityTitle": "公益模型访问",
       "capabilityState": {
         "feature_disabled": "已关闭",
         "no_models": "没有模型",
-        "no_candidates": "没有候选资源",
+        "no_candidates": "没有可用资源",
         "available": "可用"
       },
       "capabilityBody": {
         "feature_disabled": "服务配置已关闭公益调用。",
         "no_models": "当前没有启用的公益模型。",
-        "no_candidates": "已经配置模型，但当前没有符合路由条件的资源。",
-        "available": "至少一个公益模型存在符合条件的候选资源。"
+        "no_candidates": "已经配置模型，但当前没有可用资源。",
+        "available": "至少有一个公益模型当前可用。"
       },
       "availableModels": "可用公益模型",
       "intakeEyebrow": "捐赠接收",
@@ -430,8 +430,8 @@
         "closed": "当前暂停接受捐赠；仍可查看和管理既有捐赠记录。"
       },
       "donationsTitle": "我的捐赠",
-      "requestUnit": "每次跨过 dispatch 边界的请求；实际结算由服务端完成。",
-      "tokenUnit": "每百万 token；四档分别计价，实际结算由服务端完成。",
+      "requestUnit": "每次实际发送的请求；费用由系统结算。",
+      "tokenUnit": "每百万 Token；输入、缓存写入、缓存读取和输出分别计价。",
       "priceCaption": "公益模型价格与捐赠者回馈",
       "priceType": "项目",
       "userPrice": "用户实付",
@@ -445,7 +445,9 @@
       "noDonationsBody": "接收开放时，可选择本账号已有且符合条件的一把或多把密钥并提交审核。",
       "submitDonation": "提交公益捐赠",
       "existingResourcesOnly": "仅限已有资源",
-      "mutationResponseUnknown": "服务端可能已完成此操作，但响应结果未能确认。",
+      "donationNoticeTitle": "捐赠说明",
+      "donationNoticeDefault": "感谢你愿意分享闲置的 API 资源。提交前请确认这些密钥由你合法持有并获准共享；共享期间，所连接的服务可能产生费用。你可以为每把密钥分别设置截止时间，并随时在此查看或停止共享。",
+      "mutationResponseUnknown": "操作可能已经完成，但暂时无法确认结果。",
       "mutationConflictRefreshed": "操作完成前资源已发生变化。",
       "mutationReconciled": "已载入最新状态；请检查后再决定是否继续操作。",
       "submitted": "捐赠已提交审核。",
@@ -455,15 +457,15 @@
       "splitDonationSources": "请将自定义资源与主流渠道资源分开提交；每条捐赠只能包含同一个主流渠道。",
       "reselectAfterConflict": "可用资源已变化，请检查刷新后的列表并重新选择密钥。",
       "noEligibleKeys": "没有符合条件的密钥",
-      "noEligibleKeysBody": "请先在端点页面创建并启用密钥，或等待密钥结束安全处理中状态。已经属于其他捐赠的密钥不能再次选择。",
+      "noEligibleKeysBody": "请先在端点页面创建并启用密钥，或等待安全检查完成。已经属于其他捐赠的密钥不能再次选择。",
       "manageEndpoints": "管理端点",
       "selectExistingKeys": "选择已有端点密钥",
       "disclosureTitle": "提交前请确认",
       "disclosureMasked": "此页面只显示掩码后的密钥片段，不会要求你在这里输入新的密钥。",
-      "disclosureThirdParty": "公益流量可能通过所选资源对应的第三方上游账号发送。",
-      "disclosureCost": "提供方成本、平台扣费、捐赠者回馈与额度均由服务端处理。",
+      "disclosureThirdParty": "公益请求可能通过所选资源对应的第三方 AI 服务发送。",
+      "disclosureCost": "服务方费用、平台扣费、捐赠者回馈和额度均由系统处理。",
       "disclosureResponsibility": "你必须拥有每项所选资源，或获准共享其容量。严禁提交非自有或未经授权的资源，违者后果自负。",
-      "disclosureDeletion": "撤回、终止或删除账号可停止后续公益使用，但仍受在途结算与必要留存约束。",
+      "disclosureDeletion": "撤回、终止或删除账号可停止后续公益使用；进行中的请求仍需完成结算，必要记录会按政策保留。",
       "ownershipAuthorization": "我对所有已选资源拥有所有权，或已获准贡献这些资源的容量。",
       "expiryInvalid": "请输入有效的 UTC 过期时间；留空表示永久授权。",
       "keyExpiry": "授权有效期",
@@ -503,20 +505,20 @@
         "available": "可用"
       },
       "customSource": "自定义端点",
-      "physicalEnabled": "物理密钥已启用",
-      "physicalDisabled": "物理密钥已停用",
+      "physicalEnabled": "服务密钥已启用",
+      "physicalDisabled": "服务密钥已停用",
       "blockingReasons": "当前阻断原因",
       "noBlockingReason": "无",
       "effectiveExpiry": "当前有效期",
       "limit": "上限",
       "used": "已用",
-      "inflight": "在途",
+      "inflight": "处理中",
       "priceQuota": "积分额度",
       "callQuota": "调用额度",
       "tokenQuota": "Token 额度",
       "tokensUnit": "tokens",
-      "failureGeneration": "失败代次",
-      "tokenReserve": "单次 Token 预留",
+      "failureGeneration": "失败计数批次",
+      "tokenReserve": "每次请求预留的 Token",
       "tokensPerRequest": "tokens / 次",
       "failureStreak": "连续失败次数",
       "failureDisabled": "连续失败自动锁定",
@@ -545,7 +547,7 @@
       "donationOverviewNoMatches": "此筛选下没有密钥",
       "donationOverviewNoMatchesBody": "请选择其他状态，查看当前账号留存窗口内的捐赠密钥。",
       "donationOverviewPartialTitle": "捐赠密钥总览未完整加载",
-      "donationOverviewPartialBody": "部分分页未能验证，或已达到有界收集上限。请重试以载入一份完整的权威总览。",
+      "donationOverviewPartialBody": "部分内容未加载，或显示数量已达上限。请重试以查看完整总览。",
       "pendingDescriptionOnly": "等待审核期间只能修改说明；如需变更所选资源或授权，请按需重新提交一条捐赠。",
       "updatedAt": "最后更新",
       "reviewResult": "审核结果",
@@ -562,13 +564,13 @@
       "terminateTitle": "终止这条已通过捐赠？",
       "terminateBody": "终止后，其资源不再接受新的公益调用；进行中的调用仍会继续并完成结算。",
       "donationDescription": "捐赠说明",
-      "upstreamPrivacyTitle": "第三方上游隐私提示：",
-      "upstreamPrivacyWarning": "公益请求会发送给捐赠者提供的第三方上游提供商；第三方上游及其账户日志可能看到完整请求内容，其存储与隐私做法不受本站控制。",
-      "dispatchedFailureWarning": "请求开始后，即使超时或返回失败，也可能消耗上游额度并正常结算。"
+      "upstreamPrivacyTitle": "第三方服务隐私提示：",
+      "upstreamPrivacyWarning": "公益请求会发送给捐赠者提供的第三方 AI 服务；该服务及其账户日志可能看到完整请求内容，其存储与隐私做法不受本站控制。",
+      "dispatchedFailureWarning": "请求开始后，即使超时或返回失败，也可能消耗服务方额度并正常结算。"
     },
     "activities": {
       "nav": "活动",
-      "eyebrow": "活动 · 服务端实时状态",
+      "eyebrow": "活动 · 实时更新",
       "title": "低保与疯狂星期四",
       "description": "查看活动状态，参加活动，赚取更多悠哉积分。",
       "cardsLabel": "可用活动",
@@ -592,8 +594,8 @@
       "stream": {
         "connecting": "正在连接活动实时更新…",
         "connected": "活动实时更新已连接。",
-        "disconnected": "实时更新已断开，正使用最后确认的游标重连。",
-        "reconciled": "实时状态已与服务端核对。",
+        "disconnected": "实时更新已断开，正从上次位置重连。",
+        "reconciled": "实时状态已更新。",
         "recoveryFailed": "实时恢复未能刷新状态，请先重试页面读取再操作。"
       },
       "poolBalance": "池余额",
@@ -640,7 +642,7 @@
           "unavailable": "当前活动状态下不能参加星期四活动。",
           "not_open": "活动尚未开始。",
           "open": "每次操作投入固定金额，有次数上限。",
-          "settling": "投入已经关闭，服务端正在结算中。",
+          "settling": "投入已经关闭，正在结算。",
           "ended": "活动已结束，结果将在下方显示。",
           "configuration_error": "配置错误。"
         },

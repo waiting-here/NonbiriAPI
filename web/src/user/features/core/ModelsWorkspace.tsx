@@ -1125,7 +1125,7 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
         <CoreLoading />
       ) : !bindings.data ? (
         <CoreErrorPanel
-          error={bindings.error ?? new Error('binding authority is unavailable')}
+          error={bindings.error ?? new Error('The model connections are unavailable.')}
           onRetry={() => void bindings.refetch()}
         />
       ) : bindings.data.bindings.length === 0 ? (
@@ -1291,7 +1291,7 @@ function ModelDetail({
     return (
       <div className="page core-page">
         <CoreErrorPanel
-          error={model.error ?? new Error('model authority is unavailable')}
+          error={model.error ?? new Error('The model details are unavailable.')}
           onRetry={() => void model.refetch()}
         />
       </div>

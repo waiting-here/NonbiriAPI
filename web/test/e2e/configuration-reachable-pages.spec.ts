@@ -262,8 +262,9 @@ test('reachable user charity shows the neutral upstream warning without the stat
   });
 
   await page.goto(`${USER_ORIGIN}/charity`);
-  await expect(page.getByRole('note')).toContainText('第三方上游隐私提示');
-  await expect(page.getByRole('note')).toContainText('第三方上游及其账户日志可能看到完整请求内容');
+  await expect(page.getByRole('note')).toContainText('第三方服务隐私提示');
+  await expect(page.getByRole('note')).toContainText('第三方 AI 服务');
+  await expect(page.getByRole('note')).toContainText('账户日志可能看到完整请求内容');
   await expect(page.getByText('调用状态说明')).toHaveCount(0);
   await expect(page.getByText('当前没有启用的公益模型。')).toBeVisible();
   await expect(page.getByText('还没有捐赠记录')).toBeVisible();
@@ -351,7 +352,7 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
   await expect(page.getByRole('heading', { name: 'Resources' })).toBeVisible();
   await page.getByRole('link', { name: 'Manage endpoint' }).click();
   await expect(page.getByRole('heading', { name: 'Endpoint details' })).toBeVisible();
-  await expect(page.getByText('Force store=false')).toBeVisible();
+  await expect(page.getByText('Do not save requests (store=false)')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Stop requiring store=false' })).toBeVisible();
   await assertResponsiveAndClean(page, guard);
 });

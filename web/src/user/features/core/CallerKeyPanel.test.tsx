@@ -60,10 +60,10 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
     rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
 
     expect(screen.getByText('Loading…')).toBeInTheDocument();
-    await screen.findByText('No CallerKey exists');
-    await rendered.user.click(screen.getByRole('button', { name: 'Generate CallerKey' }));
+    await screen.findByText('No account API key');
+    await rendered.user.click(screen.getByRole('button', { name: 'Create API key' }));
     expect(await screen.findByText(secret)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Rotate CallerKey' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Replace API key' })).toBeDisabled();
     expect(assertNoSensitiveQueryCache(rendered.queryClient, [secret]).hitSurfaces).toEqual([]);
     expect(
       [...Array(window.localStorage.length)]
@@ -99,8 +99,8 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
       locale: 'en',
     });
     rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
-    await screen.findByText('No CallerKey exists');
-    await rendered.user.click(screen.getByRole('button', { name: 'Generate CallerKey' }));
+    await screen.findByText('No account API key');
+    await rendered.user.click(screen.getByRole('button', { name: 'Create API key' }));
     await waitFor(() =>
       expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true),
     );
@@ -160,11 +160,11 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
     });
     rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
 
-    await screen.findByText('No CallerKey exists');
-    await rendered.user.click(screen.getByRole('button', { name: 'Generate CallerKey' }));
+    await screen.findByText('No account API key');
+    await rendered.user.click(screen.getByRole('button', { name: 'Create API key' }));
 
     expect(await screen.findByText(secret)).toBeVisible();
-    expect(await screen.findByText(/Metadata refresh failed/)).toBeVisible();
+    expect(await screen.findByText(/Key details could not be refreshed/)).toBeVisible();
     expect(screen.getByText(secret)).toBeVisible();
   });
 
@@ -187,8 +187,8 @@ describe('CallerKeyPanel one-time plaintext boundary', () => {
       locale: 'en',
     });
     rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
-    await screen.findByText('No CallerKey exists');
-    await rendered.user.click(screen.getByRole('button', { name: 'Generate CallerKey' }));
+    await screen.findByText('No account API key');
+    await rendered.user.click(screen.getByRole('button', { name: 'Create API key' }));
     await waitFor(() =>
       expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true),
     );
