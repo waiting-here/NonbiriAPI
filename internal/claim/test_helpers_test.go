@@ -14,6 +14,7 @@ import (
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -531,7 +532,9 @@ func (allowAcceptanceGate) AuthorizeChatAcceptance(context.Context, *sql.Tx, int
 func newClaimFixture(t *testing.T) *claimFixture {
 	t.Helper()
 	codec := newTestCodec()
-	store, err := db.Open(filepath.Join(t.TempDir(), "claim.sqlite"), codec)
+	path := filepath.Join(t.TempDir(), "claim.sqlite")
+	dbtest.EnsureOwnerOnlyParent(t, path)
+	store, err := db.Open(path, codec)
 	if err != nil {
 		t.Fatalf("open Generation 2 fixture: %v", err)
 	}

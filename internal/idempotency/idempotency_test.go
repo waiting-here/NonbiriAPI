@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -21,7 +22,9 @@ func openStore(t *testing.T) *db.Store {
 		t.Fatalf("new vault: %v", err)
 	}
 	t.Cleanup(func() { _ = vault.Close() })
-	store, err := db.Open(filepath.Join(t.TempDir(), "idempotency.db"), vault)
+	path := filepath.Join(t.TempDir(), "idempotency.db")
+	dbtest.EnsureOwnerOnlyParent(t, path)
+	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatalf("open generation two store: %v", err)
 	}

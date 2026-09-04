@@ -124,9 +124,7 @@ function randomToken(): string {
   }
   if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
     const bytes = crypto.getRandomValues(new Uint8Array(24));
-    let output = '';
-    for (const byte of bytes) output += (byte % 36).toString(36);
-    return output;
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
   }
   throw new ApiError(
     'operation_identity_unavailable',
