@@ -1,6 +1,6 @@
 # Data Lifecycle Checklist (Generation 2 export / delete / retention / privacy)
 
-> Status: **candidate** — this checklist describes the implemented beta.1
+> Status: **v1.0.0-beta.1** — this checklist describes the implemented
 > Generation 2 export, deletion, retention, and privacy boundary. It replaces
 > the alpha.3 coverage list.
 >
@@ -8,7 +8,7 @@
 > current `GenerationTwoSchemaHash`: `34fc2bcb44be4a3ff230fd71ba84f21c566d8343490039657ca33eb47201288c`.
 > Normative lifecycle values come from the frozen beta.1 data-lifecycle contract.
 
-The table cells below describe the candidate contract for each exact Generation 2 table
+The table cells below describe the version contract for each exact Generation 2 table
 family. The registered routes, export builder, deletion coordinator, retention workers,
 and bilingual privacy text are covered by their implementation and contract tests.
 Schema presence alone never creates a route or expands a response.
@@ -64,7 +64,7 @@ state is cleared immediately on 401/403, demotion, ban, logout, or session repla
 | `game_linklink_sessions`; `game_linklink_summaries`; `game_online_leases` | Export only the user's safe in-flight/30-day LinkLink summary. Leases and full board/path/random material are excluded. `game_online_leases` is shared by LinkLink and RPS. | Active sessions converge at the absolute deadline; terminal handling removes board/path/lease material. Account deletion removes sessions and leases; no shared tombstone or late action can recreate a game. | In-flight sessions are deadline-bound and not age-purged before convergence. Terminal summaries are retained 30 days. Leases are process/game control only: client renewal is 5 seconds and server TTL is 15 seconds, and a lease never extends business retention. | No board entropy, device/IP, or cross-user identity in export/logs. Components: LinkLink, shared game leases, and lifecycle coordinator. |
 | `game_rps_queue`; `game_rps_sessions`; `game_rps_seats`; `game_rps_user_slots`; `game_rps_pending_results`; `game_rps_summaries`; `game_rps_summary_seats`; `game_rps_fun_stats`; `game_rps_rank_facts`; `game_rps_rank_aggregates` | Export private pending results, the user's 30-day summary slice, and account-lifetime fun aggregate. Do not export queue/slot/session internals, hidden gestures, other seats, or complete rank data. | Queue reservations release atomically. During deletion a seat becomes the prescribed de-identified state; terminal processing first writes all economic/shared/private projections in one transaction and then removes in-flight session/seat/slot rows. ACK, matcher, and late actions are CAS no-ops. | Queue is bounded by the 30–120 second mode deadline. Pending results remain until a real ACK or account deletion. Shared summaries and rank facts are retained 30 days; fun aggregates remain for account lifetime. Summary seats lose identity on account deletion; aggregate/rank rows are removed from public eligibility. | Hidden gesture envelopes and device/IP comparison values never leave the game service; public ranks are per mode with no cross-mode aggregate. Components: RPS, ledger, shared lease/SSE primitives, and lifecycle coordinator. |
 
-The table is the candidate coverage statement. New fields remain excluded from every
+The table is the version coverage statement. New fields remain excluded from every
 wire/export until they are deliberately added to the relevant whitelist and tests.
 
 ## Linearization and lifecycle acceptance
