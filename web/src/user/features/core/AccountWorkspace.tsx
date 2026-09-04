@@ -57,6 +57,8 @@ export function AccountLanguageForm({ user }: { user: UserProfile }) {
   const [hasAttempt, setHasAttempt] = useState(false);
   const original = currentExplicitLanguage(user, i18n.resolvedLanguage);
   const [language, setLanguage] = useState<ExplicitLanguage>(original);
+  const languageMatchesAuthority = (user.lang === 'zh' || user.lang === 'en')
+    && language === original;
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [outcome, setOutcome] = useState<'conflict' | 'unknown' | 'error' | null>(null);
@@ -131,7 +133,7 @@ export function AccountLanguageForm({ user }: { user: UserProfile }) {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (busy || (!attemptRef.current && language === original)) return;
+    if (busy || (!attemptRef.current && languageMatchesAuthority)) return;
     setBusy(true);
     setSaved(false);
     setOutcome(null);
@@ -258,7 +260,7 @@ export function AccountLanguageForm({ user }: { user: UserProfile }) {
         <button
           type="submit"
           className="btn btn-primary"
-          disabled={busy || (!hasAttempt && language === original)}
+          disabled={busy || (!hasAttempt && languageMatchesAuthority)}
         >
           {busy ? t('common.working') : hasAttempt ? t('common.retrySame') : t('common.save')}
         </button>

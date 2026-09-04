@@ -21,7 +21,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 function endpointOptionsResponse(): Response {
   return jsonResponse({
-    base_connector_types: ['openai-compatible', 'anthropic-compatible'],
+    base_connector_types: ['anthropic-compatible', 'openai-compatible'],
     mainstream_channels: [],
   });
 }
@@ -44,7 +44,7 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       if (String(input) === '/api/endpoint-create-options') {
         return jsonResponse({
-          base_connector_types: ['openai-compatible', 'anthropic-compatible'],
+          base_connector_types: ['anthropic-compatible', 'openai-compatible'],
           mainstream_channels: [
             {
               id: channelID,

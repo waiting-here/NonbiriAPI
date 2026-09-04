@@ -400,7 +400,91 @@ test('user announcement detail explains the Chinese-to-English authority fallbac
   await assertRouteClean(page, setup, scenario);
 });
 
-test('administrator activities route reads the frozen singleton and empty pool pages', async ({
+test('administrator dashboard accepts the runtime activity day contract', async ({
+  context,
+  page,
+}) => {
+  const scenario: Scenario = {
+    station: 'admin',
+    role: 'admin',
+    locale: 'zh',
+    theme: 'light',
+    viewport: 'desktop',
+  };
+  const setup = await prepare(context, page, scenario);
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN,
+    method: 'GET',
+    path: '/admin/api/usage?group_by=site',
+    body: {
+      total_requests: '0',
+      total_uncached_input_tokens: '0',
+      total_cache_write_input_tokens: '0',
+      total_cache_read_input_tokens: '0',
+      total_output_tokens: '0',
+      total_prompt_tokens: '0',
+      total_completion_tokens: '0',
+      total_unknown_usage_requests: '0',
+    },
+  });
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN,
+    method: 'GET',
+    path: '/admin/api/activity?limit=50',
+    body: {
+      enabled: true,
+      data: [{
+        day: 1_788_451_200,
+        product_active: true,
+        api_requests: '0',
+        uncached_input_tokens: '0',
+        cache_write_input_tokens: '0',
+        cache_read_input_tokens: '0',
+        output_tokens: '0',
+        checkins: '1',
+        console_writes: '0',
+        game_active: false,
+        game_rounds: '0',
+        distinct_product_users: null,
+      }],
+      next_cursor: null,
+    },
+  });
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN,
+    method: 'GET',
+    path: '/admin/api/site-config',
+    body: {
+      revision: '32',
+      values: { site_timezone_offset_minutes: 480, unrelated_setting: true },
+    },
+  });
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN,
+    method: 'GET',
+    path: '/admin/api/overview/endpoints?limit=50',
+    body: { data: [], next_cursor: null },
+  });
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN,
+    method: 'GET',
+    path: '/admin/api/reports/badge',
+    body: {
+      total: '0',
+      by_status: { pending_indexing: '0', pending_review: '0', approved_processing: '0' },
+    },
+  });
+
+  await page.goto(`${ADMIN_ORIGIN}/`);
+  await expect(page.getByRole('heading', { name: '产品活动' })).toBeVisible();
+  await expect(page.getByText('2026-09-04')).toBeVisible();
+  await expect(page.getByText('有活动')).toBeVisible();
+  await expect(page.getByText('无活动')).toBeVisible();
+  await expect(page.getByText('出了点问题')).toHaveCount(0);
+  await assertRouteClean(page, setup, scenario);
+});
+
+test('administrator activities route reads the singleton and unbound Thursday pools', async ({
   context,
   page,
 }) => {
@@ -433,12 +517,26 @@ test('administrator activities route reads the frozen singleton and empty pool p
     origin: ADMIN_ORIGIN,
     method: 'GET',
     path: '/admin/api/pools?limit=50',
-    body: { data: [], next_cursor: null },
+    body: {
+      data: [{
+        id: `pol_${'P'.repeat(21)}A`,
+        pool_type: 'thursday',
+        period_id: null,
+        state: 'open',
+        revision: '1',
+        balance: '0',
+        created_at: 1_800_000_000,
+        closed_at: null,
+      }],
+      next_cursor: null,
+    },
   });
 
   await page.goto(`${ADMIN_ORIGIN}/activities`);
   await expect(page.locator('input[value="12345678901234567890"]')).toBeVisible();
-  await expect(page.locator('.empty-state')).toHaveCount(2);
+  await expect(page.getByText('星期四活动池 / 已开放')).toBeVisible();
+  await expect(page.getByText('尚未绑定周期')).toBeVisible();
+  await expect(page.locator('.empty-state')).toHaveCount(1);
   await assertRouteClean(page, setup, scenario);
 });
 

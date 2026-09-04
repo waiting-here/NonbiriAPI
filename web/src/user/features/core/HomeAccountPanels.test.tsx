@@ -398,6 +398,39 @@ describe('home independent capability states', () => {
 });
 
 describe('account language commit boundary', () => {
+  it('allows an unset account language to commit the visible fallback directly', async () => {
+    const envelope = canonicalEnvelope();
+    const legacy: UserEnvelope = {
+      user: { ...envelope.user, lang: '' },
+    };
+    const updated: UserEnvelope = {
+      user: { ...legacy.user, lang: 'zh', updated_at: legacy.user.updated_at + 1 },
+    };
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      if (String(input) === '/api/me' && method === 'GET') return jsonResponse(legacy);
+      if (String(input) === '/api/me' && method === 'PATCH') return jsonResponse(updated);
+      throw new Error(`Unexpected request: ${method} ${String(input)}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const rendered = await renderWithProviders(<AccountWorkspace user={legacy.user} />, {
+      station: 'user',
+      role: 'user',
+      locale: 'zh',
+    });
+    rendered.queryClient.setQueryData(coreKeys.session, sharedSession(legacy.user));
+
+    const save = await screen.findByRole('button', { name: '保存' });
+    expect(screen.getByLabelText('语言')).toHaveValue('zh');
+    expect(save).toBeEnabled();
+    await rendered.user.click(save);
+
+    expect(await screen.findByText('语言已保存。')).toBeVisible();
+    const patchCall = fetchMock.mock.calls.find(([, init]) => init?.method === 'PATCH');
+    expect(JSON.parse(String(patchCall?.[1]?.body))).toEqual({ lang: 'zh' });
+    expect(screen.getByRole('button', { name: '保存' })).toBeDisabled();
+  });
+
   it('switches UI, document language, storage, and account-scoped cache only after PATCH succeeds', async () => {
     const envelope = canonicalEnvelope();
     const updated: UserEnvelope = {

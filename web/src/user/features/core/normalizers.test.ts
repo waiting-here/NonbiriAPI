@@ -239,6 +239,15 @@ describe('core wire normalizers', () => {
 
     expect(
       normalizeEndpointCreateOptions({
+        base_connector_types: ['anthropic-compatible', 'openai-compatible'],
+        mainstream_channels: [],
+      }),
+    ).toEqual({
+      base_connector_types: ['anthropic-compatible', 'openai-compatible'],
+      mainstream_channels: [],
+    });
+    expect(
+      normalizeEndpointCreateOptions({
         base_connector_types: ['openai-compatible', 'anthropic-compatible'],
         mainstream_channels: [],
       }),
@@ -248,10 +257,10 @@ describe('core wire normalizers', () => {
     });
     expect(() =>
       normalizeEndpointCreateOptions({
-        base_connector_types: ['anthropic-compatible', 'openai-compatible'],
+        base_connector_types: ['openai-compatible', 'openai-compatible'],
         mainstream_channels: [],
       }),
-    ).toThrow(/connector type order/i);
+    ).toThrow(/base connector types/i);
     expect(() =>
       normalizeEndpointCreateOptions({
         base_connector_types: ['openai-compatible'],

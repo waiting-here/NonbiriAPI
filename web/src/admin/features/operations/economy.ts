@@ -40,7 +40,7 @@ export function normalizePool(value: unknown): Pool {
   const state = oneOf(root.state, ['open', 'closed'] as const, 'pool state');
   const period = root.period_id === null ? null : opaqueID(root.period_id, 'thu_', 'pool period id');
   const closed = nullableUnixSecond(root.closed_at, 'pool close time');
-  if ((type === 'welfare') !== (period === null) || (state === 'open') !== (closed === null)) invalidResponse('pool state');
+  if ((type === 'welfare' && period !== null) || (state === 'open') !== (closed === null)) invalidResponse('pool state');
   return {
     id: opaqueID(root.id, 'pol_', 'pool id'), pool_type: type, period_id: period, state,
     revision: decimal(root.revision, 'pool revision', { positive: true }),
