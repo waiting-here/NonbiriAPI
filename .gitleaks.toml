@@ -17,3 +17,19 @@ targetRules = ["generic-api-key"]
 condition = "AND"
 paths = ['''^internal[\\/]endpoint[\\/]handler_test\.go$''']
 regexes = ['''^(sk-x-1234567890|sk-1234567890|sk-bob-inject-12345)$''']
+
+[[allowlists]]
+description = "Deterministic administrator replay request key"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "line"
+paths = ['''^internal[\\/]adminusers[\\/]runtime_test\.go$''']
+regexes = ['''economyKey\s*:=\s*"[^"]+"''']
+
+[[allowlists]]
+description = "Derived report-crypto golden reference"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "line"
+paths = ['''^internal[\\/]reports[\\/]testdata[\\/]crypto_golden\.json$''']
+regexes = ['''"key_ref"\s*:\s*"[0-9a-f]{64}"''']
