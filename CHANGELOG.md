@@ -2,9 +2,43 @@
 
 All notable changes to NonbiriAPI are documented here.
 
-The project is currently in alpha. The latest published prerelease is `v1.0.0-alpha.3`; alpha releases are intended for controlled self-hosted trials.
+The latest published prerelease is `v1.0.0-alpha.3`. The beta.1 entry below describes an unreleased candidate and is not an upgrade authorization.
 
 ## [Unreleased]
+
+## [1.0.0-beta.1] - Unreleased
+
+### Added
+
+- Database Generation 2 with a fresh-only, manifest-validated schema; a central double-entry credit ledger and shared pools; crash-recoverable worker checkpoints; strict mutation replay; and bounded legal holds.
+- Bilingual announcements, daily welfare, the Thursday pooled activity, account activity summaries, and shared user-station SSE updates with replay/gap recovery.
+- LinkLink and server-authoritative three-player Rock Paper Scissors alongside batched Pond Fishing, with persistent recovery, privacy-aware leaderboards, pending-result acknowledgement, and account-lifetime aggregate fun statistics.
+- Public credential-theft reporting with indistinguishable accepted responses, live-key plus time-bounded donation-tombstone matching, resumable administrator review, and safe donation lineage inspection.
+- Administrator-managed mainstream channel templates, strict mainstream/custom endpoint creation, immutable endpoint provenance snapshots, and a user-facing endpoint creation guide.
+- Per-donation-key authorization and effective expiry, same-channel mainstream auto-approval, account-wide key status views, and administrator-controlled bilingual donation guidance.
+- Public charity-model capability views showing current availability, exact base pricing, effective promotional pricing, promotion windows, and the last 100 calls' success rate without revealing donated resources.
+- Bilingual React pages for the new activities, announcements, games, reports, legal holds, mainstream channels, donation-key overview, and recovery states. The game center now ships three original local illustrations created with ChatGPT assistance.
+
+### Changed
+
+- Account export is schema version 4. It adds safe endpoint origin, authorized/effective donation-key expiry and source provenance, activity/game state, while retaining hard collection and total-size bounds and excluding secrets, reports, other users, internal fingerprints, and administrative material.
+- Donation routing filters eligibility and connector capability before freezing a cryptographically random, expiry-weighted, without-replacement candidate order. Entropy failure returns `service_unavailable` before any request, reservation, claim, or ledger write.
+- Debug Hub uses a version-2 bounded SSE protocol with explicit dry/live outcomes, safe stop/replace cancellation, and no persisted request or response content.
+- The API uses cursor pagination, strict closed JSON objects, explicit revisions, and idempotency keys for state-changing operations. Removed alpha routes have no compatibility shim.
+- Frontend dependencies include `@eslint/js` 10.0.1, Vite 8.2.2, jsdom 30.0.1, and Testing Library React 16.3.3; TypeScript remains on 5.9.3.
+- GitHub Actions dependencies are pinned to immutable commits for their documented release tags.
+
+### Compatibility and deployment
+
+- Beta.1 accepts only a completely absent database set or a validated Generation 2 database with SQLite `application_id=0x4E425249` and `user_version=2`. Alpha and Generation 1 databases are not migrated or imported.
+- Upgrading from an earlier prerelease requires a deliberate fresh cutover after a verified complete snapshot. Rollback requires restoring the matching database/sidecars, release, environment, master key, unit, manifest, and checksums together.
+- The candidate is source-first and targets Linux/amd64. A `-tags dist -trimpath` build is required after building both embedded web stations.
+
+### Security and privacy
+
+- Endpoint-key deletion is claim-first, report-locked resources fail closed, and donated credentials are removed after claim settlement; an irreversible report fingerprint is retained for at most 90 days after a donation key ends so later theft reports can still match.
+- Donation provenance, authorized expiry, terminal state, report-match deadline, and report fingerprint follow one-way database invariants. Missing physical keys make report approval a safe no-op while preserving the case decision and lineage.
+- Maintenance, administrator, and live level-5 permissions are rechecked in the final transaction. Cross-station, owner, secret, diagnostic, stream, resource, and account-deletion boundaries remain enforced.
 
 ## [1.0.0-alpha.3] - 2026-08-28
 
@@ -128,6 +162,7 @@ The project is currently in alpha. The latest published prerelease is `v1.0.0-al
 - Purge expired sessions at startup and during the existing six-hour maintenance sweep.
 - Create missing database directories owner-only and align the systemd/key-file guidance with the runtime's strict permission checks.
 
+[1.0.0-beta.1]: https://github.com/waiting-here/NonbiriAPI/compare/v1.0.0-alpha.3...dev/v1.0.0-beta.1
 [1.0.0-alpha.3]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.3
 [1.0.0-alpha.2]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.2
 [1.0.0-alpha.1]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.1

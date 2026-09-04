@@ -4,6 +4,8 @@ NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网
 
 > **最新已发布预发布版本：** [`v1.0.0-alpha.3`](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.3)。Alpha 仅适合受控的自托管试运行；发布 prerelease 不等于授权任何特定部署者直接升级或上线。正式开放给用户前，请先阅读部署、备份、隐私和安全文档。
 >
+> **当前分支：** 尚未发布的 `v1.0.0-beta.1` 候选版。它采用数据库 Generation 2，只支持全新部署，目前以 Linux/amd64 源码构建为发布边界；它不是已发布版本，也不能在 alpha 数据库上原地升级。
+>
 > 源码仓库：[github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
 ## 主要功能
@@ -17,11 +19,11 @@ NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网
 - 悠哉积分、签到、基于捐赠密钥的公益路由，以及实时鉴权的 level-5 协管视图；全站日志不会暴露捐赠资源。
 - 默认关闭并明确标注风险的两项 OpenAI-only 实验策略：物理密钥级 `store:false` 和逻辑模型级工具调用展平。
 - 只驻留内存的调试中心：新会话始终 dry run，观察真实上游调用前必须重新取得 challenge 并二次确认。
-- 服务端权威的小游戏框架；首个游戏为《池塘垂钓》，含幂等账务、自动恢复、隐私榜单和本地 SVG/CSS 图形。
-- 服务端生成的上游安全伪名只在“同一用户 + 同一规范化上游 origin”范围内稳定；轮换与隐私边界见 [API 契约](docs/api-contract.md#21-post-v1chatcompletions)。
+- 服务端负责结果和账务的游戏中心，包含《池塘垂钓》《连连看》和《三人猜拳》，支持幂等处理、自动恢复、隐私榜单和随程序打包的本地图像。
+- 服务端生成的上游安全伪名只在“同一用户 + 同一规范化上游 origin”范围内稳定；轮换与隐私边界见 [API 契约](docs/api-contract.md#22-post-v1chatcompletions)。
 - React 用户/管理员站点嵌入一个 Go 单二进制。
 
-已发布的 alpha.3 契约仍只暴露上述两个 OpenAI-compatible 入站接口。`anthropic-compatible` 端点在网关内部完成转换，NonbiriAPI 不暴露 Anthropic 原生公共入口。其他 OpenAI API 家族和连接器类型仍留待后续版本；严格的 Anthropic 子集与 token 上限规则见 [API 契约](docs/api-contract.md)。
+beta.1 候选版仍只暴露上述两个 OpenAI-compatible 入站接口。`anthropic-compatible` 端点在网关内部完成转换，NonbiriAPI 不暴露 Anthropic 原生公共入口。其他 OpenAI API 家族和连接器类型仍留待后续版本；严格的 Anthropic 子集与 token 上限规则见[候选版 API 契约](docs/api-contract.md)。
 
 ## 站点结构
 
@@ -83,9 +85,9 @@ set +a
 - [环境变量示例](admin.env.example)
 - [systemd 单元示例](deploy/nonbiriapi.service.example)
 
-Alpha.3 明确采用 fresh-only 数据库 generation：不会原地迁移 alpha.1/alpha.2 数据库；发现旧库、空文件、未知 generation、损坏或结构异常的数据库时会在零写入前提下拒绝启动。普通的 binary-only 降级同样不安全。必须停止服务并保留经过恢复验证的完整快照（数据库/sidecar、release、配置、主密钥和 unit），再按[部署指南](docs/deployment.md)操作。现有部署切换到 alpha.3 必须显式执行 fresh cutover；新库默认维护开启、注册关闭、游戏关闭。
+beta.1 候选版明确采用 fresh-only 数据库 Generation 2（`user_version=2`）：不会原地迁移 alpha 数据库或 Generation 1；发现旧库、空文件、未知 generation、损坏或结构异常的数据库时会在零写入前提下拒绝启动。普通的仅替换二进制降级同样不安全。必须停止服务并保留经过恢复验证的完整快照（数据库/sidecar、release、配置、主密钥和 unit），再按[部署指南](docs/deployment.md)操作。现有部署切换到 beta.1 必须显式执行全新切换；新库默认维护开启，注册、活动和游戏关闭。
 
-当前 alpha 采用源码优先方式发布，不要求提供预编译二进制。运营方可以在目标平台自行编译源码，或使用自己的构建流水线。以后若提供二进制，它只是便利产物，不构成兼容性边界。
+beta.1 候选版采用源码优先方式，发布目标为 Linux/amd64。运营方应在该目标上从精确源码提交构建，或使用等价的受控构建流水线。以后若提供预编译二进制，它只是便利产物，不构成兼容性边界。
 
 ## GitHub 自动化
 
@@ -140,3 +142,5 @@ npm --prefix web run build
 ## 许可证
 
 版权所有 © 2026 `waiting-here`。项目代码采用 GNU Affero General Public License v3.0；请参阅 [`LICENSE`](LICENSE)、[`NOTICE`](NOTICE) 和 [`web/THIRD_PARTY_NOTICES.md`](web/THIRD_PARTY_NOTICES.md)。
+
+游戏中心插画是由 ChatGPT 协助创作的项目原创素材，与项目一同按 AGPL-3.0 分发。视觉调研参考了 [DeepSeek Whale-chan](https://github.com/Neko3000/deepseek-whalechan) 和 [Token姬·抽卡计划](https://github.com/guihui2538/Every-token-you-spend-comes-back-as-a-waifu.)；仓库未嵌入这两个参考项目的源图片。

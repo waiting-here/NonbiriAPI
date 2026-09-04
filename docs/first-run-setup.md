@@ -148,10 +148,10 @@ caller forge its apparent IP and defeat the per-IP OAuth admission throttle. If
 the proxy runs on the same host, the loopback default is correct; if it is on a
 separate private address, put that address here.
 
-### SMTP (reserved, leave off in alpha)
+### SMTP (reserved, leave off in the current prerelease)
 
 The `NONBIRI_SMTP_*` variables are parsed and validated only when
-`NONBIRI_SMTP_HOST` is set; alpha does not send alert email. Leave them all
+`NONBIRI_SMTP_HOST` is set; the current prereleases do not send alert email. Leave them all
 commented out for a first run. If you set them later: `NONBIRI_SMTP_PORT` is an
 integer in `[1,65535]` (default 587), `NONBIRI_SMTP_TLS` is `starttls` or
 `implicit` (or unset), and `NONBIRI_SMTP_FROM` defaults to `NONBIRI_SMTP_USER`.
@@ -184,20 +184,20 @@ The loader collects the validation problems below and reports them together. Res
 The error message names each offending variable; it never prints secret
 material.
 
-## 6. Prepare a fresh alpha.3 database path
+## 6. Prepare a fresh beta.1 database path
 
-Alpha.3 is a fresh-only database generation, not an in-place migration from alpha.1 or alpha.2. Before the first alpha.3 boot, the configured database path and its exact `-wal` and `-shm` sidecar paths must all be absent. An empty file is not a fresh database and is rejected.
+Beta.1 is fresh-only Generation 2, not an in-place migration from an alpha database or Generation 1. Before the first beta.1 boot, the configured database path and its exact `-wal` and `-shm` sidecar paths must all be absent. An empty file is not a fresh database and is rejected.
 
-On a true fresh start the process creates a generation-1 SQLite database with `application_id=0x4E425249` and `user_version=1`, validates the complete schema, and seeds these safe states:
+On a true fresh start the process creates a Generation 2 SQLite database with `application_id=0x4E425249` and `user_version=2`, validates the complete schema, and seeds these safe states:
 
 - maintenance mode on;
 - new registration off;
-- the game master switch off;
-- Pond Fishing off.
+- activities, charity, and donation intake off;
+- the game master switch and every game-specific switch off.
 
-If a main file or sidecar already exists, the process first validates file identity, the raw SQLite header, schema, foreign keys, indexes, and contextual credential envelopes through a protected read-only snapshot. An alpha.1/alpha.2 database, an empty or corrupt file, an unknown generation, an unexpected schema object, or an anomalous sidecar is rejected without modifying the source files or creating new source-side sidecars. Do not create a placeholder with `touch`, run hand-written DDL, or point alpha.3 at an alpha.2 production path.
+If a main file or sidecar already exists, the process first validates file identity, the raw SQLite header, schema, foreign keys, indexes, and contextual credential envelopes through a protected read-only snapshot. An alpha or Generation 1 database, an empty or corrupt file, an unknown generation, an unexpected schema object, or an anomalous sidecar is rejected without modifying the source files or creating new source-side sidecars. Do not create a placeholder with `touch`, run hand-written DDL, or point beta.1 at an earlier production path.
 
-For a cutover, stop the old service and retain a verified complete source snapshot before moving the old database set out of the configured path. The complete snapshot must keep the database/sidecars, matching release, environment/configuration, master key, and systemd unit together. See [deployment.md](deployment.md#alpha3-fresh-only-database-and-version-changes); deleting or replacing an existing database requires a separate explicit destructive operation and is never an ordinary first-boot step.
+For a cutover, stop the old service and retain a verified complete source snapshot before moving the old database set out of the configured path. The complete snapshot must keep the database/sidecars, matching release, environment/configuration, master key, and systemd unit together. See [deployment.md](deployment.md#beta1-fresh-only-database-and-version-changes); deleting or replacing an existing database requires a separate explicit destructive operation and is never an ordinary first-boot step.
 
 ## 7. First-boot smoke test
 
@@ -219,17 +219,19 @@ Then through the reverse proxy, confirm:
    configured username/password signs in.
 4. After signing in to the admin station, set the Discord guild and role used by
    the registration gate (see [configuration.md](configuration.md)), review and
-   apply the instance-specific legal text, verify all necessary limits and
-   upstream settings, and prepare and restore-test a complete snapshot before
-   inviting the first user.
-5. Only after those checks pass, turn maintenance off. Keep games off and keep
-   registration closed unless a controlled registration test or onboarding
-   window is intended.
+   apply the instance-specific legal text and donation guidance, configure any
+   mainstream channel templates, verify all necessary limits and upstream
+   settings, and prepare and restore-test a complete snapshot before inviting
+   the first user.
+5. Only after those checks pass, turn maintenance off. Keep registration,
+   activities, charity, donation intake, and games closed unless a controlled
+   acceptance test or onboarding window is intended.
 6. For a disposable new-user OAuth test, deliberately open registration, confirm
    that Discord sign-in reaches the callback and creates the expected account,
    then complete an end-to-end call. Close registration again if onboarding is
-   not yet intended. Enable games only after their configuration and accounting
-   behavior have also been verified. Fresh defaults never opt the site in.
+   not yet intended. Enable activities, charity, donation intake, and games only
+   after their configuration, recovery, and accounting behavior have also been
+   verified. Fresh defaults never opt the site in.
 
 Do not treat a running process alone as a successful deployment. A clean
 journal with both stations reachable and the login boundary enforced is the
@@ -242,8 +244,8 @@ minimum acceptance bar.
 - Do not widen `NONBIRI_TRUSTED_PROXY_CIDRS` beyond the reverse proxy.
 - Do not bind the listener to a public interface when a reverse proxy is in
   front.
-- Do not reuse, rename into place, or open an alpha.1/alpha.2 database as an
-  alpha.3 database. Preserve it as a complete protected snapshot instead.
+- Do not reuse, rename into place, or open an earlier database as a Generation 2
+  database. Preserve it as a complete protected snapshot instead.
 - Do not weaken the authentication, ownership, egress, secret, stream, or
   no-store boundaries to customize a deployment; customize via source and
   rebuild instead.
