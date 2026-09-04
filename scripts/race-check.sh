@@ -11,10 +11,14 @@
 # go.mod; `go ./...` would otherwise absorb them — see check-go.sh comment).
 #
 # Exit codes preserved: set -e + pipefail propagate go's real status.
+# SQLite-heavy packages can legitimately take more than Go's default 10-minute
+# per-package deadline under race instrumentation on shared CI runners, so keep
+# an explicit bounded deadline with an override for diagnosis.
 
 set -euo pipefail
 
 GO="${GO:-go}"
+RACE_TIMEOUT="${RACE_TIMEOUT:-30m}"
 
 cd "$(dirname "$0")/.."
 
@@ -24,8 +28,8 @@ if [ -z "${CC:-}" ]; then
 fi
 
 if [ $# -gt 0 ]; then
-  "$GO" test -race "$@"
+  "$GO" test -race -timeout="$RACE_TIMEOUT" "$@"
 else
   pkgs="$("$GO" list ./... | grep -v '/node_modules/')"
-  "$GO" test -race $pkgs
+  "$GO" test -race -timeout="$RACE_TIMEOUT" $pkgs
 fi
