@@ -17,14 +17,16 @@
 
 .game-center-card {
   display: grid;
-  grid-template-rows: 11.5rem 1fr;
+  grid-template-rows: auto 1fr;
   padding: 0;
   overflow: hidden;
   border-radius: 1rem;
 }
 
 .game-center-card__hero {
+  aspect-ratio: 2 / 1;
   min-width: 0;
+  overflow: hidden;
   color: var(--nb-color-accent);
   background:
     radial-gradient(
@@ -50,6 +52,7 @@
   display: block;
   width: 100%;
   height: 100%;
+  object-fit: cover;
 }
 
 .game-center-card__body {
@@ -204,23 +207,9 @@
   .game-center-grid {
     grid-template-columns: 1fr;
   }
-  .game-center-card {
-    grid-template-columns: minmax(10rem, 38%) 1fr;
-    grid-template-rows: auto;
-  }
-  .game-center-card__hero {
-    min-height: 12rem;
-  }
 }
 
 @media (max-width: 540px) {
-  .game-center-card {
-    grid-template-columns: 1fr;
-    grid-template-rows: 10.5rem 1fr;
-  }
-  .game-center-card__hero {
-    min-height: 0;
-  }
   .game-center-card__body .btn {
     width: 100%;
     justify-content: center;

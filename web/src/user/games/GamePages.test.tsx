@@ -93,12 +93,32 @@ describe('beta.1 game pages', () => {
     snapshot.fishing.enabled = false;
     snapshot.rps.modes.standard.enabled = false;
     installJsonFetchFixtures([{ method: 'GET', path: '/api/games', body: snapshot }]);
-    await renderWithProviders(<GameCenter />, { station: 'user', route: '/games', role: 'user' });
+    const rendered = await renderWithProviders(<GameCenter />, {
+      station: 'user',
+      route: '/games',
+      role: 'user',
+    });
     expect(await screen.findByRole('heading', { name: 'Choose your pace' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Pond fishing' })).toBeInTheDocument();
     expect(screen.getAllByText('Partly open')).toHaveLength(2);
     expect(screen.getByText('Closed')).toBeInTheDocument();
     expect(screen.getAllByRole('link')).toHaveLength(3);
+    const heroes = Array.from(
+      rendered.container.querySelectorAll<HTMLImageElement>('.game-center-card__hero img.game-hero'),
+    );
+    expect(heroes.map((hero) => hero.getAttribute('src'))).toEqual([
+      expect.stringMatching(/fishing\.webp$/),
+      expect.stringMatching(/linklink\.webp$/),
+      expect.stringMatching(/rps\.webp$/),
+    ]);
+    expect(heroes.map(({ width, height }) => [width, height])).toEqual([
+      [960, 480],
+      [960, 480],
+      [960, 480],
+    ]);
+    expect(heroes.map((hero) => hero.getAttribute('loading'))).toEqual(['eager', 'lazy', 'lazy']);
+    expect(heroes.every((hero) => hero.getAttribute('alt') === '')).toBe(true);
+    expect(rendered.container.querySelector('.game-center-card__hero svg')).not.toBeInTheDocument();
   });
 
   it('shows maintenance as a state and exposes no game entry links', async () => {

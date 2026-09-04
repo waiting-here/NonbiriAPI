@@ -91,6 +91,10 @@ i18n.json
 !web/src/shared/assets/
 !web/src/shared/assets/*.svg
 !web/src/shared/assets/NOTICE.md
+!web/src/shared/assets/game-heroes/
+!web/src/shared/assets/game-heroes/fishing.webp
+!web/src/shared/assets/game-heroes/linklink.webp
+!web/src/shared/assets/game-heroes/rps.webp
 
 # ===== Go =====
 
