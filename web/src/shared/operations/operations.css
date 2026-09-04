@@ -1,0 +1,237 @@
+.ops-toolbar,
+.ops-tabs,
+.ops-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3, 0.75rem);
+}
+
+form.ops-toolbar {
+  align-items: flex-end;
+}
+
+form.ops-toolbar > label {
+  flex: 1 1 18rem;
+  min-width: min(100%, 14rem);
+}
+
+.ops-stack {
+  display: grid;
+  gap: var(--space-4, 1rem);
+}
+
+.ops-page .card,
+.ops-subcard {
+  display: grid;
+  gap: var(--space-4, 1rem);
+}
+
+.ops-page .card > :where(h2, h3, h4, p, dl),
+.ops-subcard > :where(h2, h3, h4, p, dl) {
+  margin-block: 0;
+}
+
+.ops-page .card > .card-title-row,
+.ops-subcard > .card-title-row {
+  margin-bottom: 0;
+}
+
+.ops-page .card > .btn,
+.ops-subcard > .btn {
+  justify-self: start;
+}
+
+.ops-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: var(--space-4, 1rem);
+}
+
+.ops-field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: var(--space-3, 0.75rem);
+}
+
+.ops-field-grid label,
+.ops-form-field {
+  display: grid;
+  gap: var(--space-2, 0.5rem);
+}
+
+.ops-field-grid > .checkbox-label {
+  align-self: stretch;
+  width: 100%;
+  border: 1px solid var(--border-subtle, var(--nb-color-border));
+  background: var(--nb-color-surface-alt);
+}
+
+.ops-readonly-field {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2, 0.5rem);
+  min-width: 0;
+}
+
+.ops-readonly-field > span {
+  font-size: 0.9rem;
+  font-weight: 620;
+}
+
+.ops-readonly-field > strong {
+  display: flex;
+  min-height: 2.7rem;
+  align-items: center;
+  border: 1px solid var(--border-subtle, var(--nb-color-border));
+  border-radius: var(--nb-radius-sm);
+  padding: 0.62rem 0.72rem;
+  background: var(--nb-color-surface-alt);
+}
+
+.ops-readonly-field > small {
+  color: var(--nb-color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.ops-table-scroll {
+  overflow-x: auto;
+}
+
+.ops-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ops-table th,
+.ops-table td {
+  padding: 0.7rem;
+  border-bottom: 1px solid var(--border-subtle, currentColor);
+  text-align: left;
+  vertical-align: top;
+}
+
+.ops-kv {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.4fr) minmax(0, 1fr);
+  gap: 0.55rem 1rem;
+  margin: 0;
+}
+
+.ops-kv dt {
+  color: var(--text-muted, inherit);
+}
+
+.ops-kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.ops-danger,
+.ops-danger-zone {
+  border-color: var(--danger, #b42318);
+}
+
+.ops-danger-copy {
+  color: var(--danger, #b42318);
+}
+
+.ops-safe-json,
+.ops-code {
+  max-height: 24rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ops-announcement-body a {
+  overflow-wrap: anywhere;
+}
+
+.ops-announcement-body pre {
+  overflow: auto;
+}
+
+.ops-secret {
+  font-family: inherit;
+}
+
+.ops-subcard {
+  padding: var(--space-3, 0.75rem);
+  border: 1px solid var(--border-subtle, currentColor);
+  border-radius: 0.75rem;
+}
+
+.ops-settings-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-5, 1.25rem);
+  align-items: start;
+}
+
+.ops-setting {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.8fr) minmax(14rem, 1.2fr);
+  gap: var(--space-4, 1rem);
+  padding-block: var(--space-3, 0.75rem);
+  border-top: 1px solid var(--border-subtle, currentColor);
+}
+
+.ops-setting > div,
+.ops-setting input:not([type='checkbox']),
+.ops-setting select,
+.ops-setting textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ops-setting-control {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3, 0.75rem);
+}
+
+.ops-disclosure {
+  width: 100%;
+  justify-content: space-between;
+}
+
+@media (max-width: 40rem) {
+  form.ops-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  form.ops-toolbar > label,
+  form.ops-toolbar > .btn {
+    width: 100%;
+    max-width: none;
+  }
+
+  form.ops-toolbar > label {
+    flex: 0 1 auto;
+  }
+
+  .ops-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .ops-actions > .btn,
+  .ops-page .card > .btn {
+    width: 100%;
+  }
+
+  .ops-page .card > .btn,
+  .ops-subcard > .btn {
+    justify-self: stretch;
+  }
+
+  .ops-kv,
+  .ops-setting,
+  .ops-settings-columns {
+    grid-template-columns: 1fr;
+  }
+}

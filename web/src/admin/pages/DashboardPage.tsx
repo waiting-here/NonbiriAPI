@@ -1,112 +1,80 @@
-import { Link } from 'react-router';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  Card,
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  PageHeader,
-} from '@shared/components/States';
-import { CompactNumber } from '@shared/components/CompactNumber';
-import { formatCompact, formatCount, type FormattedNumber } from '@shared/utils/formatNumber';
-import { useAdminEndpointOverview, useAdminUsage } from '../data';
+import { Link } from 'react-router';
+import { useQuery } from '@tanstack/react-query';
+import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { adminCoreKeys, getAdminActivity, getAdminEndpoints, getAdminUsage } from '../features/operations/core';
+import { adminReportKeys, getReportBadge } from '../features/operations/reports';
+import '@shared/operations/operations.css';
 
-function UsageMetric({ label, value }: { label: string; value: FormattedNumber }) {
-  return (
-    <div className="metric-card">
-      <p>{label}</p>
-      <strong className="metric-value">
-        <CompactNumber value={value} />
-      </strong>
-    </div>
-  );
-}
-
-function OverviewCard({
-  title,
-  count,
-  loading,
-  error,
-  emptyTitle,
-  emptyBody,
-  link,
-  linkLabel,
-}: {
-  title: string;
-  count: number | undefined;
-  loading: boolean;
-  error: unknown;
-  emptyTitle: string;
-  emptyBody: string;
-  link: string;
-  linkLabel: string;
-}) {
-  return (
-    <Card>
-      <div className="card-title-row">
-        <h2>{title}</h2>
-        {count !== undefined ? (
-          <strong className="metric-inline">{formatCount(count).display}</strong>
-        ) : null}
-      </div>
-      {loading ? <LoadingState /> : error ? <ErrorState error={error} /> : count === 0 ? <EmptyState title={emptyTitle} body={emptyBody} /> : null}
-      <div className="form-actions">
-        <Link className="btn btn-secondary" to={link}>
-          {linkLabel}
-        </Link>
-      </div>
-    </Card>
-  );
+function QueryCard({ title, query, children }: { title: string; query: { isPending: boolean; error: unknown; refetch: () => unknown }; children: ReactNode }) {
+  return <Card><h2>{title}</h2>{query.isPending ? <LoadingState /> : query.error ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : children}</Card>;
 }
 
 export function DashboardPage() {
   const { t } = useTranslation();
-  const usage = useAdminUsage();
-  const endpoints = useAdminEndpointOverview(1, 1);
-
+  const usage = useQuery({ queryKey: adminCoreKeys.usage, queryFn: getAdminUsage, retry: false });
+  const activity = useQuery({ queryKey: adminCoreKeys.activity(null), queryFn: () => getAdminActivity(null), retry: false });
+  const endpoints = useQuery({ queryKey: adminCoreKeys.endpoints('', null), queryFn: () => getAdminEndpoints('', null), retry: false });
+  const reports = useQuery({ queryKey: adminReportKeys.badge, queryFn: getReportBadge, retry: false });
   return (
-    <div className="page">
-      <PageHeader
-        eyebrow={t('app.name')}
-        title={t('admin.dashboard.title')}
-        description={t('admin.dashboard.description')}
-      />
-
-      <section aria-labelledby="dashboard-usage-title">
-        <h2 id="dashboard-usage-title" className="section-title">
-          {t('admin.dashboard.usageTitle')}
-        </h2>
-        {usage.isPending ? (
-          <LoadingState />
-        ) : usage.error ? (
-          <ErrorState error={usage.error} onRetry={() => void usage.refetch()} />
-        ) : (
-          <div className="metric-grid">
-            <UsageMetric label={t('admin.dashboard.requests')} value={formatCount(usage.data.total_requests)} />
-            <UsageMetric label={t('common.tokens.input')} value={formatCompact(usage.data.total_prompt_tokens)} />
-            <UsageMetric
-              label={t('common.tokens.output')}
-              value={formatCompact(usage.data.total_completion_tokens)}
+    <div className="page ops-page">
+      <PageHeader title={t('admin.dashboard.title')} description={t('admin.dashboard.description')} />
+      <div className="ops-grid">
+        <QueryCard title={t('admin.dashboard.usageTitle')} query={usage}>
+          {usage.data ? (
+            <dl className="ops-kv">
+              <dt>{t('admin.dashboard.requests')}</dt><dd>{usage.data.total_requests}</dd>
+              <dt>{t('admin.dashboard.promptTokens')}</dt><dd>{usage.data.total_prompt_tokens}</dd>
+              <dt>{t('common.tokens.output')}</dt><dd>{usage.data.total_output_tokens}</dd>
+              <dt>{t('admin.dashboard.unknownUsage')}</dt><dd>{usage.data.total_unknown_usage_requests}</dd>
+            </dl>
+          ) : null}
+        </QueryCard>
+        <QueryCard title={t('admin.dashboard.activityTitle')} query={activity}>
+          {activity.data?.enabled === false ? (
+            <EmptyState
+              title={t('admin.dashboard.activityDisabled')}
+              body={t('admin.dashboard.activityDisabledBody')}
             />
-            <UsageMetric
-              label={t('admin.dashboard.unknownUsage')}
-              value={formatCount(usage.data.total_unknown_usage_requests)}
+          ) : activity.data?.data.length ? (
+            <dl className="ops-kv">
+              <dt>{t('admin.dashboard.latestDay')}</dt><dd>{activity.data.data[0]?.day}</dd>
+              <dt>{t('admin.dashboard.productActive')}</dt><dd>{activity.data.data[0]?.product_active}</dd>
+              <dt>{t('admin.dashboard.gameActive')}</dt><dd>{activity.data.data[0]?.game_active}</dd>
+            </dl>
+          ) : (
+            <EmptyState
+              title={t('admin.dashboard.noActivity')}
+              body={t('admin.dashboard.noActivityBody')}
             />
-          </div>
-        )}
-      </section>
-
-      <div className="split-grid">
-        <OverviewCard
-          title={t('admin.dashboard.endpointsTitle')}
-          count={undefined}
-          loading={endpoints.isPending}
-          error={endpoints.error}
-          emptyTitle={t('admin.endpoints.empty')}
-          emptyBody={t('admin.endpoints.emptyBody')}
-          link="/endpoints"
-          linkLabel={t('admin.dashboard.viewEndpoints')}
-        />
+          )}
+        </QueryCard>
+        <QueryCard title={t('admin.dashboard.endpointsTitle')} query={endpoints}>
+          {endpoints.data?.data.length ? (
+            <>
+              <p>{t('admin.dashboard.endpointGroupsFirstPage', { groupCount: endpoints.data.data.length })}</p>
+              <Link className="btn btn-secondary" to="/endpoints">{t('admin.dashboard.viewEndpoints')}</Link>
+            </>
+          ) : (
+            <EmptyState title={t('admin.endpoints.empty')} body={t('admin.endpoints.emptyBody')} />
+          )}
+        </QueryCard>
+        <QueryCard title={t('admin.dashboard.reportsTitle')} query={reports}>
+          {reports.data ? (
+            <>
+              <dl className="ops-kv">
+                <dt>{t('admin.dashboard.nonTerminalReports')}</dt><dd>{reports.data.total}</dd>
+                <dt>{t('admin.dashboard.pendingIndexing')}</dt><dd>{reports.data.by_status.pending_indexing}</dd>
+                <dt>{t('admin.dashboard.pendingReview')}</dt><dd>{reports.data.by_status.pending_review}</dd>
+                <dt>{t('admin.dashboard.approvedProcessing')}</dt><dd>{reports.data.by_status.approved_processing}</dd>
+              </dl>
+              <Link className="btn btn-secondary" to="/reports">
+                {t('admin.dashboard.openReportInbox')}
+              </Link>
+            </>
+          ) : null}
+        </QueryCard>
       </div>
     </div>
   );

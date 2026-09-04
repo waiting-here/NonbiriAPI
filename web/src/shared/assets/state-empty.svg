@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" role="img" aria-labelledby="title desc">
+  <title id="title">Empty state</title>
+  <desc id="desc">A quiet stack of empty cards</desc>
+  <rect x="22" y="27" width="100" height="68" rx="10" fill="#e7efff"/>
+  <rect x="34" y="15" width="100" height="68" rx="10" fill="#fff" stroke="#b9c9d9" stroke-width="4"/>
+  <path d="M52 37h54M52 51h35M52 65h45" stroke="#2563eb" stroke-linecap="round" stroke-width="6"/>
+  <circle cx="122" cy="88" r="15" fill="#7c3aed"/>
+  <path d="M116 88h12" stroke="#fff" stroke-linecap="round" stroke-width="4"/>
+</svg>

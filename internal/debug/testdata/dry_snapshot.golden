@@ -1,0 +1,63 @@
+{
+  "version": 2,
+  "event_id": "dbe_bm9uYmlyaSEAAAAAAAAABQ",
+  "session_id": "dbs_bm9uYmlyaSEAAAAAAAAAAQ",
+  "generation": "1",
+  "kind": "snapshot",
+  "occurred_at": 1000,
+  "data": {
+    "session": {
+      "active": true,
+      "id": "dbs_bm9uYmlyaSEAAAAAAAAAAQ",
+      "generation": "1",
+      "revision": "1",
+      "mode": "dry",
+      "created_at": 1000,
+      "expires_at": 4600,
+      "idle_expires_at": 1600,
+      "inflight_count": 0,
+      "connected_subscribers": 1,
+      "last_event_id": "dbe_bm9uYmlyaSEAAAAAAAAABA",
+      "limits": {
+        "session_bytes": 4194304,
+        "traces": 32,
+        "events": 128,
+        "subscribers": 2,
+        "event_bytes": 524288,
+        "trace_bytes": 786432
+      }
+    },
+    "traces": [
+      {
+        "trace_id": "dbt_bm9uYmlyaSEAAAAAAAAAAg",
+        "revision": "2",
+        "state": "terminal",
+        "request": {
+          "route_kind": "openai_chat_completions",
+          "model": "provider/model",
+          "stream": true,
+          "body": {
+            "media_type": "application/json",
+            "byte_count": 30,
+            "text": "{\"messages\":[null,false,0,\"\"]}",
+            "base64": null,
+            "truncated": false
+          }
+        },
+        "upstream_result": null,
+        "caller_result": {
+          "http_status": 422,
+          "error_code": "debug_dry_run_intercepted",
+          "source": "platform",
+          "message": "[NonbiriAPI] Debug dry run intercepted this request. It was captured on the Debug page and was not sent upstream.",
+          "completed_at": 1000
+        },
+        "created_at": 1000,
+        "updated_at": 1000,
+        "truncated": false
+      }
+    ],
+    "first_event_id": "dbe_bm9uYmlyaSEAAAAAAAAAAw",
+    "last_event_id": "dbe_bm9uYmlyaSEAAAAAAAAABA"
+  }
+}

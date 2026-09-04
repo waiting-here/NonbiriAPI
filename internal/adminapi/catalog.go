@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
 )
 
@@ -15,25 +16,25 @@ type localizedCatalogText struct {
 }
 
 type siteConfigCatalogEntry struct {
-	Key               string                 `json:"key"`
-	Group             string                 `json:"group"`
-	ValueType         string                 `json:"value_type"`
-	Title             localizedCatalogText   `json:"title"`
-	Description       localizedCatalogText   `json:"description"`
-	Unit              localizedCatalogText   `json:"unit"`
-	Nullable          bool                   `json:"nullable"`
-	NullWritable      bool                   `json:"null_writable,omitempty"`
-	RawDefault        any                    `json:"raw_default"`
-	EffectiveFallback any                    `json:"effective_fallback"`
-	Minimum           any                    `json:"minimum"`
-	Maximum           any                    `json:"maximum"`
-	Step              any                    `json:"step,omitempty"`
-	AllowedValues     []string               `json:"allowed_values"`
-	ZeroSemantics     *localizedCatalogText  `json:"zero_semantics"`
-	NullSemantics     localizedCatalogText   `json:"null_semantics"`
-	EmptySemantics    *localizedCatalogText  `json:"empty_semantics,omitempty"`
-	IndependentGates  []localizedCatalogText `json:"independent_gates"`
-	WriteEndpoint     string                 `json:"write_endpoint"`
+	Key               string                `json:"key"`
+	Group             string                `json:"group"`
+	ValueType         string                `json:"type"`
+	Title             localizedCatalogText  `json:"title"`
+	Description       localizedCatalogText  `json:"description"`
+	Unit              *localizedCatalogText `json:"unit"`
+	Nullable          bool                  `json:"nullable"`
+	NullWritable      bool                  `json:"null_writable"`
+	RawDefault        any                   `json:"raw_default"`
+	EffectiveFallback any                   `json:"effective_fallback"`
+	Minimum           any                   `json:"minimum"`
+	Maximum           any                   `json:"maximum"`
+	Step              any                   `json:"step"`
+	AllowedValues     []string              `json:"allowed_values"`
+	ZeroSemantics     localizedCatalogText  `json:"zero_semantics"`
+	NullSemantics     localizedCatalogText  `json:"null_semantics"`
+	EmptySemantics    localizedCatalogText  `json:"empty_semantics"`
+	IndependentGates  []string              `json:"independent_gates"`
+	WriteEndpoint     string                `json:"write_endpoint"`
 }
 
 type catalogMetadata struct {
@@ -41,7 +42,7 @@ type catalogMetadata struct {
 	title       localizedCatalogText
 	description localizedCatalogText
 	unit        localizedCatalogText
-	gates       []localizedCatalogText
+	gates       []string
 }
 
 func catalogText(zh, en string) localizedCatalogText {
@@ -57,6 +58,7 @@ var (
 	unitMilli   = catalogText("毫积分", "milli-credits")
 	unitToken   = catalogText("Token", "tokens")
 	unitPercent = catalogText("百分比", "percent")
+	unitBP      = catalogText("基点", "basis points")
 	unitTimes   = catalogText("倍", "multiplier")
 )
 
@@ -66,7 +68,6 @@ var (
 var catalogMetadataByKey = map[string]catalogMetadata{
 	KeySiteName:                 {"identity", catalogText("站点名称", "Site name"), catalogText("显示在双站标题与公共配置中的实例名称。", "Instance name shown in both stations and public configuration."), unitNone, nil},
 	KeySiteLogoURL:              {"identity", catalogText("站点标志地址", "Site logo URL"), catalogText("可选的公开站点标志地址；留空不显示远端标志。", "Optional public logo URL; leave empty to show no remote logo."), unitNone, nil},
-	KeyDefaultLocale:            {"identity", catalogText("默认语言", "Default language"), catalogText("用户尚未保存偏好时使用的界面语言。", "Interface language used before a user saves a preference."), unitNone, nil},
 	KeyLegalPrivacyOverrideZh:   {"legal", catalogText("隐私政策覆盖（中文）", "Privacy override (Chinese)"), catalogText("逐字节覆盖内置中文隐私政策，保留换行与制表符。", "Byte-preserving override for the built-in Chinese privacy policy."), unitNone, nil},
 	KeyLegalPrivacyOverrideEn:   {"legal", catalogText("隐私政策覆盖（英文）", "Privacy override (English)"), catalogText("逐字节覆盖内置英文隐私政策，保留换行与制表符。", "Byte-preserving override for the built-in English privacy policy."), unitNone, nil},
 	KeyLegalTermsOverrideZh:     {"legal", catalogText("服务条款覆盖（中文）", "Terms override (Chinese)"), catalogText("逐字节覆盖内置中文服务条款，保留换行与制表符。", "Byte-preserving override for the built-in Chinese terms."), unitNone, nil},
@@ -77,10 +78,10 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 	KeyDefaultEndpointKeyLimit: {"limits", catalogText("默认端点密钥上限", "Default endpoint-key limit"), catalogText("每个端点可保存的物理密钥数量上限。", "Maximum physical keys stored for one endpoint."), unitCount, nil},
 	KeyDefaultModelLimit:       {"limits", catalogText("默认个人模型上限", "Default personal-model limit"), catalogText("每个用户可创建的个人逻辑模型数量上限。", "Maximum personal logical models a user may create."), unitCount, nil},
 	KeyDefaultBindingLimit:     {"limits", catalogText("默认模型绑定上限", "Default binding limit"), catalogText("每个个人逻辑模型可配置的上游绑定数量上限。", "Maximum upstream bindings for one personal logical model."), unitCount, nil},
-	KeyDefaultRPMPerUser:       {"limits", catalogText("默认单用户 RPM", "Default per-user RPM"), catalogText("用户没有显式 RPM 时的回退门；仍与全站 RPM 独立叠加。", "Fallback when a user has no explicit RPM; the global RPM gate still applies independently."), unitRPM, []localizedCatalogText{catalogText("全站 RPM", "Global RPM")}},
-	KeyGlobalRPM:               {"limits", catalogText("全站 RPM", "Global RPM"), catalogText("所有公开模型调用共享的每分钟请求门。", "Per-minute request gate shared by all public model calls."), unitRPM, []localizedCatalogText{catalogText("单用户 RPM", "Per-user RPM")}},
-	KeyDefaultPerEndpointConc:  {"limits", catalogText("默认端点并发", "Default endpoint concurrency"), catalogText("每个规范化上游端点的默认在途出站请求门。", "Default in-flight egress gate for each canonical upstream endpoint."), unitCount, []localizedCatalogText{catalogText("全站出站并发", "Global egress concurrency")}},
-	KeyEgressGlobalConc:        {"limits", catalogText("全站出站并发", "Global egress concurrency"), catalogText("所有上游请求共享的在途出站请求门。", "In-flight egress gate shared by all upstream requests."), unitCount, []localizedCatalogText{catalogText("单端点出站并发", "Per-endpoint egress concurrency")}},
+	KeyDefaultRPMPerUser:       {"limits", catalogText("默认单用户 RPM", "Default per-user RPM"), catalogText("用户没有显式 RPM 时的回退门；仍与全站 RPM 独立叠加。", "Fallback when a user has no explicit RPM; the global RPM gate still applies independently."), unitRPM, []string{KeyGlobalRPM}},
+	KeyGlobalRPM:               {"limits", catalogText("全站 RPM", "Global RPM"), catalogText("所有公开模型调用共享的每分钟请求门。", "Per-minute request gate shared by all public model calls."), unitRPM, []string{KeyDefaultRPMPerUser}},
+	KeyDefaultPerEndpointConc:  {"limits", catalogText("默认端点并发", "Default endpoint concurrency"), catalogText("每个规范化上游端点的默认在途出站请求门。", "Default in-flight egress gate for each canonical upstream endpoint."), unitCount, []string{KeyEgressGlobalConc}},
+	KeyEgressGlobalConc:        {"limits", catalogText("全站出站并发", "Global egress concurrency"), catalogText("所有上游请求共享的在途出站请求门。", "In-flight egress gate shared by all upstream requests."), unitCount, []string{KeyDefaultPerEndpointConc}},
 
 	KeyDiscordGuildID:            {"access", catalogText("Discord 服务器 ID", "Discord guild ID"), catalogText("新注册所需的 Discord 服务器；留空暂停成员门。", "Discord guild required for new registration; empty pauses the membership gate."), unitNone, nil},
 	KeyDiscordRoleID:             {"access", catalogText("Discord 身份组 ID", "Discord role ID"), catalogText("新注册所需的 Discord 身份组；留空暂停成员门。", "Discord role required for new registration; empty pauses the membership gate."), unitNone, nil},
@@ -91,17 +92,19 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 	KeyRegistrationOpen:          {"access", catalogText("开放注册", "Registration open"), catalogText("控制新的 Discord 身份是否可以创建账号。", "Controls whether a new Discord identity may create an account."), unitNone, nil},
 	KeySiteTimezoneOffsetMinutes: {"economy", catalogText("站点时区偏移", "Site timezone offset"), catalogText("签到与按日活跃使用的 UTC 有符号分钟偏移；产生数据后不可修改。", "Signed minutes from UTC used by check-in and daily activity; immutable after data exists."), unitMinute, nil},
 
-	KeyLevelThreshold2Milli: {"economy", catalogText("Lv2 自动晋级阈值", "Lv2 auto-promotion threshold"), catalogText("累计捐赠者回馈达到该毫积分值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this milli-credit value."), unitMilli, []localizedCatalogText{catalogText("已启用阈值必须按 Lv2→Lv4 严格递增", "Enabled thresholds must strictly increase from Lv2 through Lv4")}},
-	KeyLevelThreshold3Milli: {"economy", catalogText("Lv3 自动晋级阈值", "Lv3 auto-promotion threshold"), catalogText("累计捐赠者回馈达到该毫积分值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this milli-credit value."), unitMilli, []localizedCatalogText{catalogText("已启用阈值必须按 Lv2→Lv4 严格递增", "Enabled thresholds must strictly increase from Lv2 through Lv4")}},
-	KeyLevelThreshold4Milli: {"economy", catalogText("Lv4 自动晋级阈值", "Lv4 auto-promotion threshold"), catalogText("累计捐赠者回馈达到该毫积分值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this milli-credit value."), unitMilli, []localizedCatalogText{catalogText("已启用阈值必须按 Lv2→Lv4 严格递增", "Enabled thresholds must strictly increase from Lv2 through Lv4")}},
+	KeyLevelThreshold2Milli: {"economy", catalogText("Lv2 自动晋级阈值", "Lv2 auto-promotion threshold"), catalogText("累计捐赠者回馈达到该毫积分值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this milli-credit value."), unitMilli, []string{KeyLevelThreshold3Milli, KeyLevelThreshold4Milli}},
+	KeyLevelThreshold3Milli: {"economy", catalogText("Lv3 自动晋级阈值", "Lv3 auto-promotion threshold"), catalogText("累计捐赠者回馈达到该毫积分值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this milli-credit value."), unitMilli, []string{KeyLevelThreshold2Milli, KeyLevelThreshold4Milli}},
+	KeyLevelThreshold4Milli: {"economy", catalogText("Lv4 自动晋级阈值", "Lv4 auto-promotion threshold"), catalogText("累计捐赠者回馈达到该毫积分值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this milli-credit value."), unitMilli, []string{KeyLevelThreshold2Milli, KeyLevelThreshold3Milli}},
 	KeyCheckinMode:          {"economy", catalogText("签到模式", "Check-in mode"), catalogText("控制签到关闭、全部开放或仅 Lv3 及以上开放。", "Selects disabled, open-to-all, or level-3-and-above check-in."), unitNone, nil},
-	KeyCheckinAwardMinMilli: {"economy", catalogText("签到奖励下限", "Minimum check-in award"), catalogText("服务端抽取签到奖励时使用的闭区间下限。", "Inclusive lower bound used when the server draws a check-in award."), unitMilli, []localizedCatalogText{catalogText("奖励上限（下限不得大于上限）", "Award maximum (minimum must not exceed maximum)")}},
-	KeyCheckinAwardMaxMilli: {"economy", catalogText("签到奖励上限", "Maximum check-in award"), catalogText("服务端抽取签到奖励时使用的闭区间上限。", "Inclusive upper bound used when the server draws a check-in award."), unitMilli, []localizedCatalogText{catalogText("奖励下限（上限不得小于下限）", "Award minimum (maximum must not be below minimum)")}},
+	KeyCheckinAwardMinMilli: {"economy", catalogText("签到奖励下限", "Minimum check-in award"), catalogText("服务端抽取签到奖励时使用的闭区间下限。", "Inclusive lower bound used when the server draws a check-in award."), unitMilli, []string{KeyCheckinAwardMaxMilli}},
+	KeyCheckinAwardMaxMilli: {"economy", catalogText("签到奖励上限", "Maximum check-in award"), catalogText("服务端抽取签到奖励时使用的闭区间上限。", "Inclusive upper bound used when the server draws a check-in award."), unitMilli, []string{KeyCheckinAwardMinMilli}},
 	KeyCreditsCapMilli:      {"economy", catalogText("签到积分门槛", "Check-in credit threshold"), catalogText("可用积分达到该值后拒绝新的签到，不截断已准入奖励。", "Refuses new check-ins once spendable credits reach this value; admitted awards are not truncated."), unitMilli, nil},
 
 	KeyCharityEnabled:           {"charity", catalogText("公益资源总开关", "Charity master switch"), catalogText("控制公益资源发现与调用是否开放。", "Controls whether charity discovery and calls are available."), unitNone, nil},
 	KeyDonationAcceptEnabled:    {"charity", catalogText("接受公益捐赠", "Donation intake"), catalogText("只控制新捐赠提交，不影响既有资源管理。", "Controls new donation submissions only; existing resources remain manageable."), unitNone, nil},
-	KeyCharityTokenReserveMilli: {"charity", catalogText("公益 Token 预留单价", "Charity token reserve price"), catalogText("按 Token 公益模型用于保守预留的可选毫积分单价。", "Optional milli-credit price used for conservative reservation by per-token charity models."), unitMilli, []localizedCatalogText{catalogText("模型四桶定价与账户可用积分预留", "Model four-bucket pricing and account spendable-credit reservation")}},
+	KeyCharityDonationNoticeZh:  {"charity", catalogText("捐赠说明（中文）", "Donation notice (Chinese)"), catalogText("显示在用户提交捐赠的位置；留空使用内置中文说明。", "Shown where users submit donations; empty uses the built-in Chinese notice."), unitNone, nil},
+	KeyCharityDonationNoticeEn:  {"charity", catalogText("捐赠说明（英文）", "Donation notice (English)"), catalogText("显示在用户提交捐赠的位置；留空使用内置英文说明。", "Shown where users submit donations; empty uses the built-in English notice."), unitNone, nil},
+	KeyCharityTokenReserveMilli: {"charity", catalogText("公益 Token 预留单价", "Charity token reserve price"), catalogText("按 Token 公益模型用于保守预留的可选毫积分单价。", "Optional milli-credit price used for conservative reservation by per-token charity models."), unitMilli, []string{"charity_model_pricing"}},
 
 	KeyRPMBanThreshold:                  {"abuse", catalogText("RPM 自动封禁阈值", "RPM auto-ban threshold"), catalogText("违规窗口内达到该次拒绝数后触发自动封禁。", "Number of denials in the violation window that triggers an automatic ban."), unitCount, nil},
 	KeyRPMBanWindowSeconds:              {"abuse", catalogText("RPM 违规窗口", "RPM violation window"), catalogText("统计单用户 RPM 拒绝的滚动窗口。", "Rolling window used to count per-user RPM denials."), unitSecond, nil},
@@ -130,32 +133,78 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 	KeyGameFishingTreasureShell:    {"games", catalogText("贝壳宝物倍率", "Shell treasure multiplier"), catalogText("钓到贝壳时按门票计算的整数倍率。", "Integer entry-price multiplier paid for a shell treasure."), unitTimes, nil},
 }
 
+func init() {
+	add := func(key, group, titleZh, titleEn, descriptionZh, descriptionEn string, unit localizedCatalogText, gates ...string) {
+		catalogMetadataByKey[key] = catalogMetadata{
+			group: group, title: catalogText(titleZh, titleEn),
+			description: catalogText(descriptionZh, descriptionEn), unit: unit,
+			gates: append([]string(nil), gates...),
+		}
+	}
+	add(KeyAnnouncementEpoch, "announcements", "公告代次", "Announcement epoch", "fresh 数据库生成的只读公告代次，用于客户端缓存隔离。", "Read-only epoch generated for a fresh database and used to isolate announcement caches.", unitNone)
+	for level, key := range []string{KeyLevelDisplayName1, KeyLevelDisplayName2, KeyLevelDisplayName3, KeyLevelDisplayName4, KeyLevelDisplayName5} {
+		label := strconv.Itoa(level + 1)
+		add(key, "economy", "等级 "+label+" 显示名", "Level "+label+" display name", "覆盖该等级的纯文本显示名；留空使用内置名称。", "Plain-text display override for this level; empty uses the built-in name.", unitNone)
+	}
+	add(KeyActivitiesEnabled, "activities", "活动总开关", "Activities master switch", "控制是否允许开始新的活动操作。", "Controls whether new activity operations may start.", unitNone, KeySiteTimezoneOffsetMinutes)
+	add(KeyActivityWelfareEnabled, "activities", "福利活动开关", "Welfare activity switch", "控制每日福利领取；开启时要求阈值和上限完整。", "Controls daily welfare claims; enabling requires complete threshold and cap values.", unitNone, KeyActivitiesEnabled, KeySiteTimezoneOffsetMinutes, KeyActivityWelfareThreshold, KeyActivityWelfareCap)
+	add(KeyActivityWelfareThreshold, "activities", "福利余额阈值", "Welfare balance threshold", "可用积分低于该值时才可能领取福利。", "Welfare may be claimed only while spendable credits are below this value.", unitMilli, KeyActivityWelfareEnabled)
+	add(KeyActivityWelfareCap, "activities", "福利单次上限", "Welfare award cap", "单次福利领取的毫积分上限；零保持 fail closed。", "Maximum milli-credit welfare award per claim; zero remains fail-closed.", unitMilli, KeyActivityWelfareEnabled)
+	add(KeyActivityThursdayEnabled, "activities", "星期四活动开关", "Thursday activity switch", "控制疯狂星期四新投入；开启要求完整的下一期配置。", "Controls new Thursday contributions; enabling requires a complete next-period configuration.", unitNone, KeyActivitiesEnabled, KeySiteTimezoneOffsetMinutes, "thursday_next_period")
+
+	add(KeyGameLinkLinkEnabled, "games", "连连看总开关", "LinkLink master switch", "控制是否允许开始新的连连看对局。", "Controls whether new LinkLink sessions may start.", unitNone, KeyGamesEnabled)
+	for _, spec := range []struct {
+		name, enabled, price string
+	}{
+		{"6×8", KeyGameLinkLink6x8Enabled, KeyGameLinkLink6x8Price},
+		{"8×8", KeyGameLinkLink8x8Enabled, KeyGameLinkLink8x8Price},
+		{"10×10", KeyGameLinkLink10x10Enabled, KeyGameLinkLink10x10Price},
+	} {
+		add(spec.enabled, "games", "连连看 "+spec.name+" 开关", "LinkLink "+spec.name+" switch", "控制该棋盘规格的新对局。", "Controls new sessions for this board specification.", unitNone, KeyGamesEnabled, KeyGameLinkLinkEnabled, spec.price)
+		add(spec.price, "games", "连连看 "+spec.name+" 价格", "LinkLink "+spec.name+" price", "该棋盘规格每局的精确毫积分价格。", "Exact milli-credit entry price for this board specification.", unitMilli, spec.enabled)
+	}
+
+	add(KeyGameRPSEnabled, "games", "三人猜拳总开关", "Three-player RPS master switch", "控制是否允许进入新的三人猜拳队列。", "Controls whether players may enter new three-player RPS queues.", unitNone, KeyGamesEnabled)
+	modes := []struct{ key, zh, en string }{{"quick", "快速", "Quick"}, {"standard", "标准", "Standard"}, {"deathmatch", "生死斗", "Deathmatch"}}
+	cuts := []struct{ key, zh, en string }{{"platform", "平台", "platform"}, {"welfare", "福利池", "welfare-pool"}, {"thursday", "星期四池", "Thursday-pool"}}
+	for _, mode := range modes {
+		prefix := "game_rps_" + mode.key + "_"
+		enabled := prefix + "enabled"
+		base := prefix + "b_milli"
+		add(enabled, "games", mode.zh+"猜拳开关", mode.en+" RPS switch", "控制该模式的新排队。", "Controls new queue entries for this mode.", unitNone, KeyGamesEnabled, KeyGameRPSEnabled, base, "rps_central_health")
+		add(base, "games", mode.zh+"猜拳基础 B", mode.en+" RPS base B", "该模式冻结到队列和对局的基础毫积分。", "Base milli-credit amount frozen into queues and sessions for this mode.", unitMilli, enabled)
+		for _, cut := range cuts {
+			key := prefix + cut.key + "_bp"
+			add(key, "games", mode.zh+"猜拳"+cut.zh+"抽成", mode.en+" RPS "+cut.en+" cut", "该模式每次真实抽成的基点比例。", "Basis-point share for each real cut in this mode.", unitBP, enabled, prefix+"platform_bp", prefix+"welfare_bp", prefix+"thursday_bp")
+		}
+		for _, timer := range []struct {
+			key, zh, en string
+		}{{"queue_seconds", "排队时限", "queue deadline"}, {"gesture_seconds", "出招时限", "gesture deadline"}, {"dealer_seconds", "庄家时限", "dealer deadline"}, {"follower_seconds", "闲家时限", "follower deadline"}} {
+			key := prefix + timer.key
+			add(key, "games", mode.zh+"猜拳"+timer.zh, mode.en+" RPS "+timer.en, "冻结到该模式队列或阶段的秒数。", "Seconds frozen into the queue or phase for this mode.", unitSecond, enabled)
+		}
+	}
+	add(KeyReportPendingTTLSeconds, "reports", "待受理举报时限", "Pending report TTL", "待受理举报在过期前保留的秒数。", "Seconds a pending report remains before expiry.", unitSecond)
+}
+
 func catalogValueType(kind valueKind) string {
 	switch kind {
 	case kindText:
-		return "text"
-	case kindLocale:
-		return "locale"
-	case kindLocaleOpt:
-		return "optional_locale"
-	case kindInt:
+		return "string"
+	case kindLocale, kindLocaleOpt, kindEnum:
+		return "enum"
+	case kindInt, kindOptionalInt, kindTimezoneOffset:
 		return "integer"
 	case kindBool:
 		return "boolean"
 	case kindMultilineText:
-		return "multiline_text"
-	case kindTimezoneOffset:
-		return "optional_integer"
-	case kindAmount:
+		return "text"
+	case kindAmount, kindOptionalAmount:
 		return "amount"
-	case kindEnum:
-		return "enum"
-	case kindOptionalAmount:
-		return "optional_amount"
-	case kindOptionalInt:
-		return "optional_integer"
+	case kindOpaqueID:
+		return "string"
 	default:
-		return "unknown"
+		panic("unknown site configuration catalog kind")
 	}
 }
 
@@ -166,19 +215,39 @@ func catalogDefaults(key string, spec keySpec) (raw, effective, minimum, maximum
 	case kindTimezoneOffset:
 		return nil, nil, -720, 840, true
 	case kindOptionalAmount:
-		return nil, nil, "1", "9223372036854775807", true
+		return nil, nil, formatAdminWireAmount(1), formatAdminWireAmount(db.MaxMoneyMilli), true
 	case kindAmount:
-		minimum = "0"
+		minimum = formatAdminWireAmount(0)
 		if isFishingBaitPriceKey(key) {
-			minimum = strconv.FormatInt(fishing.MinimumBaitPriceMilli, 10)
+			minimum = formatAdminWireAmount(fishing.MinimumBaitPriceMilli)
 		}
-		return typedSiteConfigValue(key, ""), typedSiteConfigValue(key, ""), minimum, "9223372036854775807", false
+		return typedSiteConfigValue(key, ""), typedSiteConfigValue(key, ""), minimum, formatAdminWireAmount(db.MaxMoneyMilli), false
 	case kindInt:
 		return spec.def, spec.def, spec.min, spec.max, false
 	case kindBool:
 		fallback := spec.def != 0
-		return fallback, fallback, nil, nil, false
-	case kindText, kindMultilineText:
+		rawDefault := fallback
+		// Generation 2 deliberately starts fail-closed while preserving the
+		// inherited effective fallback used when a row is absent. Keep the two
+		// catalog fields distinct.
+		switch key {
+		case KeyMaintenanceMode:
+			rawDefault = true
+		case KeyRegistrationOpen:
+			rawDefault = false
+		}
+		return rawDefault, fallback, nil, nil, false
+	case kindText:
+		effective := any("")
+		if spec.defStr != "" {
+			effective = spec.defStr
+		}
+		maximum := spec.max
+		if spec.maxRunes > 0 {
+			maximum = spec.maxRunes
+		}
+		return "", effective, 0, maximum, false
+	case kindMultilineText:
 		return "", "", 0, spec.max, false
 	case kindLocale:
 		return "", "", nil, nil, false
@@ -186,6 +255,8 @@ func catalogDefaults(key string, spec keySpec) (raw, effective, minimum, maximum
 		return "", "", nil, nil, false
 	case kindEnum:
 		return spec.defStr, spec.defStr, nil, nil, false
+	case kindOpaqueID:
+		return nil, nil, nil, nil, false
 	default:
 		return nil, nil, nil, nil, false
 	}
@@ -251,6 +322,20 @@ func catalogSemantics(key string, spec keySpec) (zero *localizedCatalogText, nul
 		zero = catalogTextPtr("鱼饵价格必须至少为 1 毫积分；0 被硬下限拒绝。", "Bait prices must be at least one milli-credit; the hard minimum rejects zero.")
 	case KeyGameFishingRTP, KeyGameFishingRTPPremium:
 		zero = catalogTextPtr("0% 在字段范围内，但整体 Fishing 经济编译仍可拒绝不可行组合。", "Zero percent is within the field range, but full Fishing economy compilation may still reject an infeasible combination.")
+	case KeyAnnouncementEpoch:
+		zero = catalogTextPtr("此字段是只读 OID，不接受数值。", "This field is a read-only OID and does not accept numbers.")
+		nullValue = catalogText("此字段由 fresh 数据库创建且不可删除。", "This field is created by a fresh database and cannot be deleted.")
+		empty = catalogTextPtr("空值不是有效公告代次。", "An empty value is not a valid announcement epoch.")
+	case KeyActivityWelfareThreshold, KeyActivityWelfareCap:
+		zero = catalogTextPtr("关闭状态可保留 0；开启福利活动前两项都必须为正数。", "Zero may be stored while disabled; both values must be positive before welfare is enabled.")
+	case KeyGameLinkLink6x8Price, KeyGameLinkLink8x8Price, KeyGameLinkLink10x10Price:
+		zero = catalogTextPtr("0 使对应规格保持 fail closed；开启该规格要求正数价格。", "Zero keeps the specification fail-closed; enabling it requires a positive price.")
+	case KeyGameRPSQuickB, KeyGameRPSStandardB, KeyGameRPSDeathmatchB:
+		zero = catalogTextPtr("0 使对应模式保持 fail closed；开启该模式要求正数 B。", "Zero keeps the mode fail-closed; enabling it requires a positive B.")
+	case KeyActivitiesEnabled, KeyActivityWelfareEnabled, KeyActivityThursdayEnabled,
+		KeyGameLinkLinkEnabled, KeyGameLinkLink6x8Enabled, KeyGameLinkLink8x8Enabled, KeyGameLinkLink10x10Enabled,
+		KeyGameRPSEnabled, KeyGameRPSQuickEnabled, KeyGameRPSStandardEnabled, KeyGameRPSDeathmatchEnabled:
+		zero = catalogTextPtr("关闭对应功能，不改变已经接受的在途工作。", "Disables the feature without changing already accepted work.")
 	case KeyRPMBanThreshold:
 		zero = catalogTextPtr("关闭由单用户 RPM 拒绝触发的自动封禁。", "Disables automatic bans triggered by per-user RPM denials.")
 	case KeyCharityMinChars:
@@ -278,8 +363,15 @@ func catalogSemantics(key string, spec keySpec) (zero *localizedCatalogText, nul
 		empty = catalogTextPtr("暂停 Discord 身份组门。", "Pauses the Discord role gate.")
 	case KeyLegalPrivacyOverrideZh, KeyLegalPrivacyOverrideEn, KeyLegalTermsOverrideZh, KeyLegalTermsOverrideEn:
 		empty = catalogTextPtr("恢复使用对应语言的内置法律模板。", "Restores the corresponding built-in legal template.")
+	case KeyCharityDonationNoticeZh, KeyCharityDonationNoticeEn:
+		empty = catalogTextPtr("恢复使用对应语言的内置捐赠说明。", "Restores the corresponding built-in donation notice.")
 	case KeyLegalAuthoritativeLocale:
 		empty = catalogTextPtr("不声明中英文冲突时的权威语言；PATCH null 仍被拒绝。", "Declares no authoritative language for bilingual conflicts; PATCH null remains rejected.")
+	case KeyLevelDisplayName1, KeyLevelDisplayName2, KeyLevelDisplayName3, KeyLevelDisplayName4, KeyLevelDisplayName5:
+		empty = catalogTextPtr("使用对应等级的内置显示名。", "Uses the built-in display name for this level.")
+	}
+	if strings.HasSuffix(key, "_bp") {
+		zero = catalogTextPtr("该目标池不接收此模式的抽成；同模式三项之和仍须小于 10000。", "This target receives no cut for the mode; the three values must still sum to less than 10000.")
 	}
 	if strings.HasPrefix(key, alertPrefsPrefix) {
 		empty = catalogTextPtr("保存一个有界的空告警偏好值。", "Stores a bounded empty alert-preference value.")
@@ -294,7 +386,7 @@ func catalogStep(spec keySpec) any {
 	case kindInt, kindOptionalInt:
 		return 1
 	case kindAmount, kindOptionalAmount:
-		return "1"
+		return formatAdminWireAmount(1)
 	default:
 		return nil
 	}
@@ -306,13 +398,16 @@ func siteConfigCatalogEntryFor(key string, spec keySpec, metadata catalogMetadat
 	writeEndpoint := "/admin/api/site-config/" + key
 	if isGameConfigKey(key) {
 		writeEndpoint = "/admin/api/games/config"
+	} else if isActivityConfigKey(key) {
+		writeEndpoint = "/admin/api/activities/config"
+	} else if key == KeyMaintenanceMode || isReadOnlyConfigKey(key) {
+		writeEndpoint = ""
 	}
-	gates := append([]localizedCatalogText{}, metadata.gates...)
+	gates := append([]string{}, metadata.gates...)
 	if isGameConfigKey(key) {
-		gates = append(gates, catalogText(
-			"整个 Fishing 快照的概率、RTP、倍率与 int64 经济编译",
-			"Whole-snapshot Fishing probability, RTP, multiplier, and int64 economy compilation",
-		))
+		gates = append(gates, "complete_game_config_snapshot")
+	} else if isActivityConfigKey(key) {
+		gates = append(gates, "complete_activity_config_snapshot")
 	}
 	allowed := append([]string{}, spec.allowed...)
 	if spec.kind == kindLocale {
@@ -320,13 +415,26 @@ func siteConfigCatalogEntryFor(key string, spec keySpec, metadata catalogMetadat
 	} else if spec.kind == kindLocaleOpt {
 		allowed = []string{"", "zh", "en"}
 	}
+	zeroValue := catalogText("不适用于此字段。", "Not applicable to this field.")
+	if zero != nil {
+		zeroValue = *zero
+	}
+	emptyValue := catalogText("空字符串不适用于此字段。", "An empty string is not applicable to this field.")
+	if empty != nil {
+		emptyValue = *empty
+	}
+	var unit *localizedCatalogText
+	if metadata.unit != unitNone {
+		value := metadata.unit
+		unit = &value
+	}
 	return siteConfigCatalogEntry{
 		Key: key, Group: metadata.group, ValueType: catalogValueType(spec.kind),
-		Title: metadata.title, Description: metadata.description, Unit: metadata.unit,
+		Title: metadata.title, Description: metadata.description, Unit: unit,
 		Nullable: nullable, NullWritable: key == KeyAnthropicDefaultMaxTokens,
 		RawDefault: raw, EffectiveFallback: effective,
 		Minimum: minimum, Maximum: maximum, Step: catalogStep(spec), AllowedValues: allowed,
-		ZeroSemantics: zero, NullSemantics: nullValue, EmptySemantics: empty,
+		ZeroSemantics: zeroValue, NullSemantics: nullValue, EmptySemantics: emptyValue,
 		IndependentGates: gates,
 		WriteEndpoint:    writeEndpoint,
 	}
@@ -355,12 +463,17 @@ func buildSiteConfigCatalog(stored map[string]string) ([]siteConfigCatalogEntry,
 		entries = append(entries, siteConfigCatalogEntryFor(key, spec, metadata))
 	}
 	for key := range stored {
-		if strings.HasPrefix(key, alertPrefsPrefix) {
+		if knownSiteConfigKey(key) && strings.HasPrefix(key, alertPrefsPrefix) {
 			if _, exact := knownSiteConfig[key]; !exact {
 				entries = append(entries, dynamicAlertCatalogEntry(key))
 			}
 		}
 	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Key < entries[j].Key })
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].Group != entries[j].Group {
+			return entries[i].Group < entries[j].Group
+		}
+		return entries[i].Key < entries[j].Key
+	})
 	return entries, nil
 }

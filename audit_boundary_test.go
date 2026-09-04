@@ -1,25 +1,24 @@
-// Independent audit: full application wiring through the real handler chain.
-//
-// These tests build the production application (buildApplication) over a
-// temporary database and drive it with a real HTTP server and client, so the
-// host/station boundary, session/elevation replay, caller-key ban/delete
-// invalidation, RPM metering, and admin runtime controls are verified through
-// the same singletons and dispatch used in production.
 package main
 
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
-	"io"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
 	"path/filepath"
-	"strconv"
+	"sort"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/activities"
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
@@ -33,582 +32,488 @@ const (
 
 func auditConfig() *config.Config {
 	return &config.Config{
-		ListenAddr: "127.0.0.1:18999", UserHost: auditUserHost, AdminHost: auditAdminHost,
-		SiteBaseURL: "https://" + auditUserHost, TrustedProxyCIDRs: []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")},
-		AdminUsername: "root", AdminPassword: "correct-horse-battery", DiscordClientID: "client-id", DiscordClientSecret: "client-secret",
+		ListenAddr:          "127.0.0.1:18999",
+		UserHost:            auditUserHost,
+		AdminHost:           auditAdminHost,
+		SiteBaseURL:         "https://" + auditUserHost,
+		AdminUsername:       "operator",
+		AdminPassword:       "correct horse battery staple",
+		DiscordClientID:     "test-client",
+		DiscordClientSecret: "test-secret",
+		TrustedProxyCIDRs:   []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")},
 	}
 }
 
-func auditApp(t *testing.T) (*application, *db.Store, *secret.Vault) {
+func testApplicationRequest(t *testing.T, handler http.Handler, method, hostName, path, body string, cookies []*http.Cookie, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
+	var request *http.Request
+	if body == "" {
+		request = httptest.NewRequest(method, "http://wire.invalid"+path, nil)
+	} else {
+		request = httptest.NewRequest(method, "http://wire.invalid"+path, strings.NewReader(body))
+	}
+	request.Host = hostName
+	request.RemoteAddr = "198.51.100.20:4242"
+	for _, cookie := range cookies {
+		request.AddCookie(cookie)
+	}
+	for name, value := range headers {
+		request.Header.Set(name, value)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	return response
+}
+
+func responseCookieNamed(t *testing.T, response *httptest.ResponseRecorder, name string) *http.Cookie {
+	t.Helper()
+	for _, cookie := range response.Result().Cookies() {
+		if cookie.Name == name && cookie.Value != "" {
+			return cookie
+		}
+	}
+	t.Fatalf("response did not set %s: status=%d body=%s", name, response.Code, response.Body.String())
+	return nil
+}
+
+func assertFreshSafeApplication(t *testing.T, app *application) {
+	t.Helper()
+	for _, tc := range []struct {
+		name, host, path string
+		want             int
+	}{
+		{name: "user health", host: auditUserHost, path: "/healthz", want: http.StatusOK},
+		{name: "admin health", host: auditAdminHost, path: "/healthz", want: http.StatusOK},
+		{name: "public bootstrap", host: auditUserHost, path: "/api/config", want: http.StatusOK},
+		{name: "public bootstrap rejects query", host: auditUserHost, path: "/api/config?unexpected=1", want: http.StatusBadRequest},
+		{name: "endpoint API mounted behind maintenance", host: auditUserHost, path: "/api/endpoints", want: http.StatusServiceUnavailable},
+		{name: "donation API mounted behind maintenance", host: auditUserHost, path: "/api/donations", want: http.StatusServiceUnavailable},
+		{name: "charity capability mounted behind maintenance", host: auditUserHost, path: "/api/charity/models", want: http.StatusServiceUnavailable},
+		{name: "check-in API mounted behind maintenance", host: auditUserHost, path: "/api/checkin", want: http.StatusServiceUnavailable},
+		{name: "home game summary mounted behind maintenance", host: auditUserHost, path: "/api/home/game-summary", want: http.StatusServiceUnavailable},
+		{name: "activities API mounted behind maintenance", host: auditUserHost, path: "/api/activities", want: http.StatusServiceUnavailable},
+		{name: "announcements API mounted behind maintenance", host: auditUserHost, path: "/api/announcements", want: http.StatusServiceUnavailable},
+		{name: "issues API mounted behind maintenance", host: auditUserHost, path: "/api/issues?state=current", want: http.StatusServiceUnavailable},
+		{name: "game API mounted behind maintenance", host: auditUserHost, path: "/api/games", want: http.StatusServiceUnavailable},
+		{name: "Debug API mounted behind maintenance", host: auditUserHost, path: "/api/debug/session", want: http.StatusServiceUnavailable},
+		{name: "log API mounted behind maintenance", host: auditUserHost, path: "/api/logs", want: http.StatusServiceUnavailable},
+		{name: "steward maintenance mounted behind maintenance", host: auditUserHost, path: "/api/steward/maintenance", want: http.StatusServiceUnavailable},
+		{name: "account events require a session before continuation", host: auditUserHost, path: "/api/events", want: http.StatusUnauthorized},
+		{name: "export rejects wrong method", host: auditUserHost, path: "/api/account/export", want: http.StatusMethodNotAllowed},
+		{name: "caller models mounted behind maintenance", host: auditUserHost, path: "/v1/models", want: http.StatusServiceUnavailable},
+		{name: "caller chat mounted behind maintenance", host: auditUserHost, path: "/v1/chat/completions", want: http.StatusServiceUnavailable},
+		{name: "admin bootstrap requires session", host: auditAdminHost, path: "/admin/api/config", want: http.StatusUnauthorized},
+		{name: "admin catalog requires session", host: auditAdminHost, path: "/admin/api/site-config", want: http.StatusUnauthorized},
+		{name: "admin users require session", host: auditAdminHost, path: "/admin/api/users", want: http.StatusUnauthorized},
+		{name: "admin alerts require session", host: auditAdminHost, path: "/admin/api/alerts", want: http.StatusUnauthorized},
+		{name: "admin donation requires session", host: auditAdminHost, path: "/admin/api/donations", want: http.StatusUnauthorized},
+		{name: "admin charity models require session", host: auditAdminHost, path: "/admin/api/charity-models", want: http.StatusUnauthorized},
+		{name: "admin activities require session", host: auditAdminHost, path: "/admin/api/activities/thursday", want: http.StatusUnauthorized},
+		{name: "admin announcements require session", host: auditAdminHost, path: "/admin/api/announcements", want: http.StatusUnauthorized},
+		{name: "admin reports require session", host: auditAdminHost, path: "/admin/api/reports/badge", want: http.StatusUnauthorized},
+		{name: "admin logs require session", host: auditAdminHost, path: "/admin/api/logs", want: http.StatusUnauthorized},
+		{name: "admin maintenance requires session", host: auditAdminHost, path: "/admin/api/maintenance", want: http.StatusUnauthorized},
+		{name: "admin games require session", host: auditAdminHost, path: "/admin/api/games/config", want: http.StatusUnauthorized},
+		{name: "admin cannot reach user bootstrap", host: auditAdminHost, path: "/api/config", want: http.StatusNotFound},
+		{name: "user cannot reach admin API", host: auditUserHost, path: "/admin/api/config", want: http.StatusNotFound},
+		{name: "unknown host rejected", host: "198.51.100.10", path: "/", want: http.StatusBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := testHTTPResponse(t, app.handler, http.MethodGet, tc.host, tc.path)
+			if rec.Code != tc.want {
+				t.Fatalf("status=%d want=%d body=%s", rec.Code, tc.want, rec.Body.String())
+			}
+		})
+	}
+	publicReport := testApplicationRequest(t, app.handler, http.MethodPost, auditUserHost, "/api/reports/credential-theft", `{}`, nil, map[string]string{
+		"Content-Type": "application/json",
+		"Origin":       "http://" + auditUserHost,
+	})
+	if publicReport.Code != http.StatusServiceUnavailable {
+		t.Fatalf("public report during maintenance status=%d body=%s", publicReport.Code, publicReport.Body.String())
+	}
+
+	for _, tc := range []struct {
+		host, path string
+	}{
+		{host: auditUserHost, path: "/"},
+		{host: auditAdminHost, path: "/settings/profile"},
+	} {
+		rec := testHTTPResponse(t, app.handler, http.MethodGet, tc.host, tc.path)
+		if rec.Code != http.StatusOK || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") {
+			t.Fatalf("SPA %s%s status=%d content-type=%q", tc.host, tc.path, rec.Code, rec.Header().Get("Content-Type"))
+		}
+		if rec.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("SPA cache-control=%q", rec.Header().Get("Cache-Control"))
+		}
+	}
+
+	rec := testHTTPResponse(t, app.handler, http.MethodGet, auditUserHost, "/api/config")
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("public config body=%s err=%v", rec.Body.String(), err)
+	}
+	gotKeys := make([]string, 0, len(body))
+	for key := range body {
+		gotKeys = append(gotKeys, key)
+	}
+	sort.Strings(gotKeys)
+	wantKeys := []string{
+		"announcement_epoch",
+		"charity_donation_notice_en",
+		"charity_donation_notice_zh",
+		"legal_authoritative_locale",
+		"legal_privacy_override_en",
+		"legal_privacy_override_zh",
+		"legal_terms_override_en",
+		"legal_terms_override_zh",
+		"maintenance_mode",
+		"registration_open",
+		"site_logo_url",
+		"site_name",
+	}
+	if strings.Join(gotKeys, ",") != strings.Join(wantKeys, ",") {
+		t.Fatalf("public config keys=%v want=%v body=%s", gotKeys, wantKeys, rec.Body.String())
+	}
+	if _, ok := body["default_locale"]; ok {
+		t.Fatal("public config exposed deleted default_locale")
+	}
+	epoch, ok := body["announcement_epoch"].(string)
+	if !ok || !strings.HasPrefix(epoch, "b1e_") || len(epoch) != 26 {
+		t.Fatalf("announcement_epoch=%v", body["announcement_epoch"])
+	}
+	if _, ok := body["maintenance_mode"].(bool); !ok {
+		t.Fatalf("maintenance_mode=%T", body["maintenance_mode"])
+	}
+	if _, ok := body["registration_open"].(bool); !ok {
+		t.Fatalf("registration_open=%T", body["registration_open"])
+	}
+
+	bodyRequest := httptest.NewRequest(http.MethodGet, "http://wire.invalid/api/config", strings.NewReader("{}"))
+	bodyRequest.Host = auditUserHost
+	bodyRequest.RemoteAddr = "198.51.100.20:4242"
+	bodyResponse := httptest.NewRecorder()
+	app.handler.ServeHTTP(bodyResponse, bodyRequest)
+	if bodyResponse.Code != http.StatusBadRequest {
+		t.Fatalf("public config body status=%d want=%d body=%s", bodyResponse.Code, http.StatusBadRequest, bodyResponse.Body.String())
+	}
+}
+
+func TestGenerationTwoFreshAndCurrentApplicationBoot(t *testing.T) {
 	key := bytes.Repeat([]byte{0x5a}, secret.MasterKeyBytes)
 	vault, err := secret.New(key)
 	clear(key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	dbPath := filepath.Join(t.TempDir(), "audit.db")
+	defer func() { _ = vault.Close() }()
+
+	dbPath := filepath.Join(t.TempDir(), "generation-two.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	for pass := 0; pass < 2; pass++ {
+		store, err := db.Open(dbPath, vault)
+		if err != nil {
+			t.Fatalf("pass %d db.Open: %v", pass, err)
+		}
+		app, err := buildApplication(auditConfig(), store, vault)
+		if err != nil {
+			_ = store.Close()
+			t.Fatalf("pass %d buildApplication: %v", pass, err)
+		}
+		assertFreshSafeApplication(t, app)
+
+		closed := make(chan error, 1)
+		go func() { closed <- app.Close() }()
+		select {
+		case closeErr := <-closed:
+			if closeErr != nil {
+				t.Fatalf("pass %d app.Close: %v", pass, closeErr)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("pass %d app.Close blocked while stopping the idle discovery worker", pass)
+		}
+		if err := store.Close(); err != nil {
+			t.Fatalf("pass %d store.Close: %v", pass, err)
+		}
+	}
+}
+
+func TestGenerationTwoRootAuthenticationAndMaintenanceWiring(t *testing.T) {
+	key := bytes.Repeat([]byte{0x69}, secret.MasterKeyBytes)
+	vault, err := secret.New(key)
+	clear(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = vault.Close() }()
+
+	dbPath := filepath.Join(t.TempDir(), "root-auth.db")
 	dbtest.EnsureOwnerOnlyParent(t, dbPath)
 	store, err := db.Open(dbPath, vault)
 	if err != nil {
-		_ = vault.Close()
 		t.Fatal(err)
 	}
-	if err := store.SetSiteConfigValue("maintenance_mode", "0"); err != nil {
-		t.Fatal(err)
-	}
+	defer func() { _ = store.Close() }()
 	app, err := buildApplication(auditConfig(), store, vault)
 	if err != nil {
-		_ = store.Close()
-		_ = vault.Close()
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		_ = app.Close()
-		_ = store.Close()
-		_ = vault.Close()
+	defer func() { _ = app.Close() }()
+
+	if app.authRuntime == nil || app.bridge == nil || app.claims == nil || app.resourceRepo == nil ||
+		app.discoveryWorker == nil || app.donations == nil || app.charity == nil || app.charityRouting == nil ||
+		app.checkin == nil || app.homeGames == nil ||
+		app.announcements == nil || app.issues == nil || app.reports == nil || app.activities == nil ||
+		app.activityRepo == nil || app.activityEvents == nil || app.adminConfig == nil || app.adminAlerts == nil ||
+		app.adminUsers == nil || app.lifecycle == nil || app.lifecycleDone == nil ||
+		app.debug == nil || app.logs == nil || app.accountEvents == nil || app.forward == nil || app.games == nil ||
+		app.failures == nil || app.authorizer == nil ||
+		app.elevation == nil || app.gate == nil || app.maintenance == nil || app.egress == nil {
+		t.Fatal("root runtime omitted a required Generation 2 owner")
+	}
+	state, ready := app.gate.State()
+	if !ready || !state.Enabled || app.registry == nil || !app.registry.Frozen() {
+		t.Fatalf("maintenance startup state=%+v ready=%v registry=%v", state, ready, app.registry != nil && app.registry.Frozen())
+	}
+	maintenanceTx, err := store.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gateErr := (activityMutationGate{}).AuthorizeUserActivity(context.Background(), maintenanceTx, 1); !errors.Is(gateErr, activities.ErrMaintenance) {
+		_ = maintenanceTx.Rollback()
+		t.Fatalf("activity final-transaction maintenance gate err=%v", gateErr)
+	}
+	_ = maintenanceTx.Rollback()
+
+	userSession := testApplicationRequest(t, app.handler, http.MethodGet, auditUserHost, "/api/session", "", nil, nil)
+	if userSession.Code != http.StatusServiceUnavailable || !strings.Contains(userSession.Body.String(), `"code":"maintenance"`) {
+		t.Fatalf("user session during maintenance status=%d body=%s", userSession.Code, userSession.Body.String())
+	}
+	oauthStart := testApplicationRequest(t, app.handler, http.MethodGet, auditUserHost, "/api/auth/discord/start", "", nil, nil)
+	if oauthStart.Code != http.StatusServiceUnavailable || !strings.Contains(oauthStart.Body.String(), `"code":"maintenance"`) {
+		t.Fatalf("OAuth start during maintenance status=%d body=%s", oauthStart.Code, oauthStart.Body.String())
+	}
+	export := testApplicationRequest(t, app.handler, http.MethodPost, auditUserHost, "/api/account/export", "", nil, nil)
+	if export.Code != http.StatusServiceUnavailable || !strings.Contains(export.Body.String(), `"code":"maintenance"`) {
+		t.Fatalf("account export during maintenance status=%d body=%s", export.Code, export.Body.String())
+	}
+	legalHolds := testApplicationRequest(t, app.handler, http.MethodGet, auditAdminHost, "/admin/api/legal-holds", "", nil, nil)
+	if legalHolds.Code != http.StatusUnauthorized {
+		t.Fatalf("legal hold route without admin authentication status=%d body=%s", legalHolds.Code, legalHolds.Body.String())
+	}
+	caller := testApplicationRequest(t, app.handler, http.MethodGet, auditUserHost, "/v1/models", "", nil, nil)
+	if caller.Code != http.StatusServiceUnavailable || !strings.Contains(caller.Body.String(), `"code":"maintenance"`) {
+		t.Fatalf("caller route during maintenance status=%d body=%s", caller.Code, caller.Body.String())
+	}
+
+	wrongLogin := testApplicationRequest(t, app.handler, http.MethodPost, auditAdminHost, "/admin/api/login",
+		`{"username":"operator","password":"wrong password"}`, nil, map[string]string{"Content-Type": "application/json"})
+	if wrongLogin.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong admin password status=%d body=%s", wrongLogin.Code, wrongLogin.Body.String())
+	}
+	login := testApplicationRequest(t, app.handler, http.MethodPost, auditAdminHost, "/admin/api/login",
+		`{"username":"operator","password":"correct horse battery staple"}`, nil, map[string]string{"Content-Type": "application/json"})
+	if login.Code != http.StatusOK {
+		t.Fatalf("admin login during maintenance status=%d body=%s", login.Code, login.Body.String())
+	}
+	adminCookie := responseCookieNamed(t, login, auth.AdminSessionCookieName)
+	adminSession := testApplicationRequest(t, app.handler, http.MethodGet, auditAdminHost, "/admin/api/session", "", []*http.Cookie{adminCookie}, nil)
+	if adminSession.Code != http.StatusOK {
+		t.Fatalf("admin session during maintenance status=%d body=%s", adminSession.Code, adminSession.Body.String())
+	}
+	adminThursday := testApplicationRequest(t, app.handler, http.MethodGet, auditAdminHost, "/admin/api/activities/thursday", "", []*http.Cookie{adminCookie}, nil)
+	if adminThursday.Code != http.StatusOK || strings.TrimSpace(adminThursday.Body.String()) != `{"period":null}` {
+		t.Fatalf("admin activities during maintenance status=%d body=%s", adminThursday.Code, adminThursday.Body.String())
+	}
+	adminMaintenance := testApplicationRequest(t, app.handler, http.MethodGet, auditAdminHost, "/admin/api/maintenance", "", []*http.Cookie{adminCookie}, nil)
+	if adminMaintenance.Code != http.StatusOK || strings.TrimSpace(adminMaintenance.Body.String()) != `{"enabled":true,"revision":"1"}` {
+		t.Fatalf("admin maintenance during maintenance status=%d body=%s", adminMaintenance.Code, adminMaintenance.Body.String())
+	}
+	for _, path := range []string{
+		"/admin/api/config", "/admin/api/site-config", "/admin/api/site-config/catalog",
+		"/admin/api/users", "/admin/api/usage?group_by=site", "/admin/api/activity",
+		"/admin/api/overview/endpoints", "/admin/api/alerts",
+	} {
+		response := testApplicationRequest(t, app.handler, http.MethodGet, auditAdminHost, path, "", []*http.Cookie{adminCookie}, nil)
+		if response.Code != http.StatusOK {
+			t.Fatalf("administrator route during maintenance %s status=%d body=%s", path, response.Code, response.Body.String())
+		}
+	}
+
+	elevated := testApplicationRequest(t, app.handler, http.MethodPost, auditAdminHost, "/admin/api/auth/elevate",
+		`{"password":"correct horse battery staple"}`, []*http.Cookie{adminCookie}, map[string]string{
+			"Content-Type": "application/json",
+			"Origin":       "http://" + auditAdminHost,
+		})
+	if elevated.Code != http.StatusOK {
+		t.Fatalf("admin elevation during maintenance status=%d body=%s", elevated.Code, elevated.Body.String())
+	}
+	var elevationResponse auth.ElevationResponse
+	if err := json.Unmarshal(elevated.Body.Bytes(), &elevationResponse); err != nil || elevationResponse.Token == "" {
+		t.Fatalf("admin elevation body=%s err=%v", elevated.Body.String(), err)
+	}
+
+	var adminUserID int64
+	var tokenHash, credentialGeneration string
+	if err := store.DB().QueryRow(`SELECT s.user_id,s.token_hash,s.cred_gen
+FROM sessions s JOIN users u ON u.id=s.user_id WHERE u.is_admin=1`).Scan(&adminUserID, &tokenHash, &credentialGeneration); err != nil {
+		t.Fatal(err)
+	}
+	actor := authz.Actor{
+		Kind:              authz.ActorAdminSession,
+		UserID:            adminUserID,
+		SessionTokenHash:  tokenHash,
+		SessionGeneration: credentialGeneration,
+		ElevationToken:    elevationResponse.Token,
+	}
+	tx, err := store.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	principal, authorizeErr := app.authorizer.Authorize(context.Background(), tx, actor, authz.Requirement{
+		Role:           authz.RoleAdministrator,
+		FreshElevation: true,
 	})
-	return app, store, vault
-}
-
-func auditRequest(method, host, path, body string) *http.Request {
-	req := httptest.NewRequest(method, "https://wire.invalid"+path, strings.NewReader(body))
-	req.Host = host
-	req.RemoteAddr = "198.51.100.9:4242"
-	if method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions &&
-		(path == "/api" || strings.HasPrefix(path, "/api/") || path == "/admin/api" || strings.HasPrefix(path, "/admin/api/")) {
-		req.Header.Set("Origin", "https://"+host)
-		req.Header.Set("Sec-Fetch-Site", "same-origin")
+	_ = tx.Rollback()
+	if authorizeErr != nil || principal.UserID != adminUserID || principal.Role != authz.RoleAdministrator {
+		t.Fatalf("shared final authorization principal=%+v err=%v", principal, authorizeErr)
 	}
-	return req
-}
-
-func auditDo(t *testing.T, app *application, req *http.Request) *httptest.ResponseRecorder {
-	t.Helper()
-	rec := httptest.NewRecorder()
-	app.handler.ServeHTTP(rec, req)
-	return rec
-}
-
-func auditJSON(t *testing.T, rec *httptest.ResponseRecorder, into any) {
-	t.Helper()
-	if err := json.Unmarshal(rec.Body.Bytes(), into); err != nil {
-		t.Fatalf("decode JSON: %v body=%q", err, rec.Body.String())
+	replayTx, err := store.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-}
-
-func auditErrorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
-	t.Helper()
-	var envelope struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
-	auditJSON(t, rec, &envelope)
-	if envelope.Error.Code == "" {
-		t.Fatalf("no error code in body=%q", rec.Body.String())
-	}
-	return envelope.Error.Code
-}
-
-func auditSetCookie(cookies []*http.Cookie, name string) string {
-	for _, c := range cookies {
-		if c.Name == name {
-			return c.Value
-		}
-	}
-	return ""
-}
-
-func TestAuditAppHostStationIsolationRealHTTP(t *testing.T) {
-	app, _, _ := auditApp(t)
-	srv := httptest.NewServer(app.handler)
-	defer srv.Close()
-	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-
-	do := func(method, host, path, body string) *http.Response {
-		t.Helper()
-		req, err := http.NewRequest(method, srv.URL+path, strings.NewReader(body))
-		if err != nil {
-			t.Fatal(err)
-		}
-		req.Host = host // dial the test server, present a different Host
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return resp
+	_, replayErr := app.authorizer.Authorize(context.Background(), replayTx, actor, authz.Requirement{
+		Role:           authz.RoleAdministrator,
+		FreshElevation: true,
+	})
+	_ = replayTx.Rollback()
+	if !errors.Is(replayErr, authz.ErrElevatedRequired) {
+		t.Fatalf("elevation replay err=%v", replayErr)
 	}
 
-	cases := []struct {
-		name   string
-		host   string
-		path   string
-		want   int
-		method string
-	}{
-		{"user health", auditUserHost, "/healthz", 200, http.MethodGet},
-		{"admin health", auditAdminHost, "/healthz", 200, http.MethodGet},
-		{"user spa", auditUserHost, "/some/deep/link", 200, http.MethodGet},
-		{"admin spa", auditAdminHost, "/settings", 200, http.MethodGet},
-		{"admin on user host blocked", auditUserHost, "/admin/api/session", 404, http.MethodGet},
-		{"user api on admin host blocked", auditAdminHost, "/api/endpoints", 404, http.MethodGet},
-		{"v1 on admin host blocked", auditAdminHost, "/v1/models", 404, http.MethodGet},
-		{"unknown host refused", "evil.test", "/", 400, http.MethodGet},
-		{"unknown host health refused", "evil.test", "/healthz", 400, http.MethodGet},
-		{"unknown host api refused", "evil.test", "/api/me", 400, http.MethodGet},
-		{"admin api needs session", auditAdminHost, "/admin/api/session", 401, http.MethodGet},
-		{"user api needs session", auditUserHost, "/api/endpoints", 401, http.MethodGet},
-		{"v1 needs bearer", auditUserHost, "/v1/models", 401, http.MethodGet},
-		{"method not allowed on api", auditUserHost, "/api/me", 405, http.MethodDelete},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			resp := do(tc.method, tc.host, tc.path, "")
-			defer resp.Body.Close()
-			if resp.StatusCode != tc.want {
-				t.Fatalf("status=%d want=%d", resp.StatusCode, tc.want)
-			}
-			if cc := resp.Header.Get("Cache-Control"); cc != "no-store" {
-				t.Fatalf("cache-control=%q", cc)
-			}
-			if xcto := resp.Header.Get("X-Content-Type-Options"); xcto != "nosniff" {
-				t.Fatalf("x-content-type-options=%q", xcto)
-			}
-			body, _ := io.ReadAll(resp.Body)
-			if tc.want == 400 && strings.Contains(string(body), auditUserHost) {
-				t.Fatalf("unknown-host response leaks station config: %q", body)
-			}
+	disable := testApplicationRequest(t, app.handler, http.MethodPost, auditAdminHost, "/admin/api/maintenance/disable",
+		`{"expected_revision":"1","reason":"root route authorization verification"}`, []*http.Cookie{adminCookie}, map[string]string{
+			"Content-Type":    "application/json",
+			"Origin":          "http://" + auditAdminHost,
+			"Idempotency-Key": strings.Repeat("M", 22),
 		})
+	if disable.Code != http.StatusOK || strings.TrimSpace(disable.Body.String()) != `{"enabled":false,"revision":"2"}` {
+		t.Fatalf("disable maintenance route=%d %s", disable.Code, disable.Body.String())
 	}
-
-	// Host matching is deliberately port-insensitive (documented host
-	// package contract): a different port of the user host still selects the
-	// user station. Same-host-different-port station separation is rejected
-	// at configuration load, so this cannot create an ambiguity.
-	resp := do(http.MethodGet, auditUserHost+":8080", "/healthz", "")
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		t.Fatalf("host with port status=%d want=200 (port-insensitive match)", resp.StatusCode)
+	if app.gate.Enabled() {
+		t.Fatal("maintenance gate remained enabled")
 	}
-}
-
-func TestAuditAppGameAndDebugRoutesUseProductionIdentityBoundaries(t *testing.T) {
-	app, store, _ := auditApp(t)
-	user, err := store.CreateUser("discord-integrated-routes", "integrated-routes", "")
+	activityTx, err := store.DB().BeginTx(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.CreateModel(context.Background(), user.ID, "personal", "dry", "ordered", false, 1); err != nil {
-		t.Fatal(err)
+	if gateErr := (activityMutationGate{}).AuthorizeUserActivity(context.Background(), activityTx, 1); gateErr != nil {
+		_ = activityTx.Rollback()
+		t.Fatalf("activity final-transaction gate after maintenance disable err=%v", gateErr)
 	}
-	callerKey, err := store.SetCallerKey(user.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	firstSession, _, err := store.CreateUserSession(user.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	secondSession, _, err := store.CreateUserSession(user.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	userRequest := func(method, path, session, body string) *httptest.ResponseRecorder {
-		req := auditRequest(method, auditUserHost, path, body)
-		if session != "" {
-			req.AddCookie(&http.Cookie{Name: "nb_user_session", Value: session, Path: "/api"})
-		}
-		return auditDo(t, app, req)
-	}
-	if rec := userRequest(http.MethodPost, "/api/debug/session", firstSession, ""); rec.Code != http.StatusCreated {
-		t.Fatalf("first debug start status=%d body=%q", rec.Code, rec.Body.String())
-	}
-	if rec := userRequest(http.MethodPost, "/api/debug/session", secondSession, ""); rec.Code != http.StatusCreated {
-		t.Fatalf("replacement debug start status=%d body=%q", rec.Code, rec.Body.String())
-	}
-	// Logging out the older browser session must not terminate the newer
-	// process-local Debug session for the same account.
-	if rec := userRequest(http.MethodPost, "/api/auth/logout", firstSession, ""); rec.Code != http.StatusNoContent {
-		t.Fatalf("old-session logout status=%d body=%q", rec.Code, rec.Body.String())
-	}
-	active := userRequest(http.MethodGet, "/api/debug/session", secondSession, "")
-	if active.Code != http.StatusOK || !strings.Contains(active.Body.String(), `"mode":"dry"`) || !strings.Contains(active.Body.String(), `"id":"dbg_`) {
-		t.Fatalf("replacement debug session status=%d body=%q", active.Code, active.Body.String())
-	}
-	games := userRequest(http.MethodGet, "/api/games", secondSession, "")
-	if games.Code != http.StatusOK || !strings.Contains(games.Body.String(), `"id":"fishing"`) || !strings.Contains(games.Body.String(), `"master_enabled":false`) {
-		t.Fatalf("games status=%d body=%q", games.Code, games.Body.String())
-	}
-	chat := auditRequest(http.MethodPost, auditUserHost, "/v1/chat/completions", `{"model":"personal/dry","messages":[]}`)
-	chat.Header.Set("Authorization", "Bearer "+callerKey)
-	chat.Header.Set("Content-Type", "application/json")
-	dry := auditDo(t, app, chat)
-	if dry.Code != http.StatusOK || dry.Header().Get("X-Nonbiri-Debug-Mode") != "dry-run" {
-		t.Fatalf("debug dry call status=%d mode=%q body=%q", dry.Code, dry.Header().Get("X-Nonbiri-Debug-Mode"), dry.Body.String())
-	}
-	var requestLogs int
-	if err := store.DB().QueryRow(`SELECT COUNT(*) FROM request_logs WHERE user_id=?`, user.ID).Scan(&requestLogs); err != nil || requestLogs != 0 {
-		t.Fatalf("dry call persisted request log rows=%d err=%v", requestLogs, err)
-	}
-	if rec := userRequest(http.MethodPost, "/api/auth/logout", secondSession, ""); rec.Code != http.StatusNoContent {
-		t.Fatalf("current-session logout status=%d body=%q", rec.Code, rec.Body.String())
-	}
-	if rec := userRequest(http.MethodGet, "/api/debug/session", secondSession, ""); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("logged-out debug control status=%d body=%q", rec.Code, rec.Body.String())
-	}
-
-	login := auditRequest(http.MethodPost, auditAdminHost, "/admin/api/login", `{"username":"root","password":"correct-horse-battery"}`)
-	loginResponse := auditDo(t, app, login)
-	adminSession := auditSetCookie(loginResponse.Result().Cookies(), "nb_admin_session")
-	if loginResponse.Code != http.StatusOK || adminSession == "" {
-		t.Fatalf("admin login status=%d body=%q", loginResponse.Code, loginResponse.Body.String())
-	}
-	adminGames := auditRequest(http.MethodGet, auditAdminHost, "/admin/api/games/config", "")
-	adminGames.AddCookie(&http.Cookie{Name: "nb_admin_session", Value: adminSession, Path: "/admin"})
-	adminGamesResponse := auditDo(t, app, adminGames)
-	if adminGamesResponse.Code != http.StatusOK || !strings.Contains(adminGamesResponse.Body.String(), `"master_enabled":false`) {
-		t.Fatalf("admin games status=%d body=%q", adminGamesResponse.Code, adminGamesResponse.Body.String())
-	}
-}
-
-func TestAuditAppCallerKeyBanRegenerateDelete(t *testing.T) {
-	app, store, _ := auditApp(t)
-	user, err := store.CreateUser("discord-audit-1", "audit-user", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	key, err := store.SetCallerKey(user.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(key, "nbk_") {
-		t.Fatalf("caller key prefix=%q", key[:4])
-	}
-	models := func(keyValue string) *httptest.ResponseRecorder {
-		req := auditRequest(http.MethodGet, auditUserHost, "/v1/models", "")
-		if keyValue != "" {
-			req.Header.Set("Authorization", "Bearer "+keyValue)
-		}
-		return auditDo(t, app, req)
-	}
-	chat := func(keyValue string) *httptest.ResponseRecorder {
-		req := auditRequest(http.MethodPost, auditUserHost, "/v1/chat/completions",
-			`{"model":"p/m","messages":[]}`)
-		if keyValue != "" {
-			req.Header.Set("Authorization", "Bearer "+keyValue)
-		}
-		req.Header.Set("Content-Type", "application/json")
-		return auditDo(t, app, req)
-	}
-
-	if rec := models(""); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("no bearer status=%d", rec.Code)
-	}
-	// A user session cookie must never authenticate the caller exit.
-	sessionToken, _, err := store.CreateUserSession(user.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := auditRequest(http.MethodGet, auditUserHost, "/v1/models", "")
-	req.AddCookie(&http.Cookie{Name: "nb_user_session", Value: sessionToken, Path: "/api"})
-	if rec := auditDo(t, app, req); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("session cookie on v1 status=%d", rec.Code)
-	}
-	// Valid key: models listing succeeds (empty list).
-	if rec := models(key); rec.Code != http.StatusOK {
-		t.Fatalf("models with key status=%d body=%q", rec.Code, rec.Body.String())
-	}
-	// Chat completion without a bound model: authenticated path fails with
-	// the stable not_found code, proving the caller key passed auth + flow
-	// control.
-	if rec := chat(key); rec.Code != http.StatusNotFound || auditErrorCode(t, rec) != "not_found" {
-		t.Fatalf("chat status=%d body=%q", rec.Code, rec.Body.String())
-	}
-
-	// Ban invalidates the key immediately (ban also revokes the stored
-	// credential, so unban cannot resurrect the old key).
-	if err := store.BanUser(user.ID, "audit test ban"); err != nil {
-		t.Fatal(err)
-	}
-	if rec := models(key); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("banned key status=%d", rec.Code)
-	}
-	if err := store.UnbanUser(user.ID); err != nil {
-		t.Fatal(err)
-	}
-	if rec := models(key); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("key after unban status=%d (ban revokes the stored key)", rec.Code)
-	}
-	freshKey, err := store.SetCallerKey(user.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rec := models(freshKey); rec.Code != http.StatusOK {
-		t.Fatalf("fresh key after unban status=%d", rec.Code)
-	}
-	key = freshKey
-
-	// Regenerate invalidates the old key.
-	generation, err := store.RegenerateCallerKey(user.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if generation.Secret == key {
-		t.Fatal("regenerated key equals the old key")
-	}
-	if rec := models(key); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("old key after regenerate status=%d", rec.Code)
-	}
-	if rec := models(generation.Secret); rec.Code != http.StatusOK {
-		t.Fatalf("new key status=%d", rec.Code)
-	}
-
-	// Account deletion invalidates the key.
-	if err := store.DeleteUserAccount(context.Background(), user.ID); err != nil {
-		t.Fatal(err)
-	}
-	if rec := models(generation.Secret); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("deleted user key status=%d", rec.Code)
-	}
-	// The deleted user's session is gone too.
-	req = auditRequest(http.MethodGet, auditUserHost, "/api/me", "")
-	req.AddCookie(&http.Cookie{Name: "nb_user_session", Value: sessionToken, Path: "/api"})
-	if rec := auditDo(t, app, req); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("deleted user session status=%d", rec.Code)
-	}
-}
-
-func TestAuditAppAdminElevationReplay(t *testing.T) {
-	app, store, _ := auditApp(t)
-	target, err := store.CreateUser("discord-audit-2", "victim", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	login := auditRequest(http.MethodPost, auditAdminHost, "/admin/api/login", `{"username":"root","password":"correct-horse-battery"}`)
-	rec := auditDo(t, app, login)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("admin login status=%d body=%q", rec.Code, rec.Body.String())
-	}
-	adminSession := auditSetCookie(rec.Result().Cookies(), "nb_admin_session")
-	if adminSession == "" {
-		t.Fatal("admin session cookie missing")
-	}
-	adminReq := func(method, path, body string) *httptest.ResponseRecorder {
-		req := auditRequest(method, auditAdminHost, path, body)
-		req.AddCookie(&http.Cookie{Name: "nb_admin_session", Value: adminSession, Path: "/admin"})
-		return auditDo(t, app, req)
-	}
-
-	// Wrong password must not issue a capability.
-	bad := adminReq(http.MethodPost, "/admin/api/auth/elevate", `{"password":"wrong"}`)
-	if bad.Code != http.StatusForbidden {
-		t.Fatalf("wrong-password elevate status=%d body=%q", bad.Code, bad.Body.String())
-	}
-	// Elevate with the correct second factor.
-	elev := adminReq(http.MethodPost, "/admin/api/auth/elevate", `{"password":"correct-horse-battery"}`)
-	if elev.Code != http.StatusOK {
-		t.Fatalf("elevate status=%d body=%q", elev.Code, elev.Body.String())
-	}
-	var elevation struct {
-		Token string `json:"token"`
-	}
-	auditJSON(t, elev, &elevation)
-	if len(elevation.Token) < 16 {
-		t.Fatalf("elevation token suspiciously short: %q", elevation.Token)
-	}
-	if strings.Contains(elev.Body.String(), "correct-horse-battery") {
-		t.Fatal("elevation response echoes the password")
-	}
-
-	// Use the capability exactly once. The application dispatch must preserve
-	// the path parameter for the lifecycle handler.
-	del := auditRequest(http.MethodDelete, auditAdminHost, "/admin/api/users/"+itoa(target.ID), "")
-	del.AddCookie(&http.Cookie{Name: "nb_admin_session", Value: adminSession, Path: "/admin"})
-	del.Header.Set("X-Elevated-Token", elevation.Token)
-	delRec := auditDo(t, app, del)
-	if delRec.Code != http.StatusNoContent {
-		t.Fatalf("delete with elevation status=%d body=%q", delRec.Code, delRec.Body.String())
-	}
-	if user, err := store.GetUserByID(target.ID); err != nil || user != nil {
-		t.Fatalf("user survived the delete path: %v", err)
-	}
-	// Replay: the capability was consumed by the successful delete and cannot
-	// authorize a second destructive call.
-	replay := auditRequest(http.MethodDelete, auditAdminHost, "/admin/api/users/"+itoa(target.ID), "")
-	replay.AddCookie(&http.Cookie{Name: "nb_admin_session", Value: adminSession, Path: "/admin"})
-	replay.Header.Set("X-Elevated-Token", elevation.Token)
-	replayRec := auditDo(t, app, replay)
-	if replayRec.Code != http.StatusForbidden {
-		t.Fatalf("token replay status=%d body=%q", replayRec.Code, replayRec.Body.String())
-	}
-	// A destructive call without any token fails closed too.
-	noToken := adminReq(http.MethodDelete, "/admin/api/users/1", "")
-	if noToken.Code != http.StatusForbidden {
-		t.Fatalf("delete without token status=%d", noToken.Code)
-	}
-}
-
-func TestAuditAppRPMMetering(t *testing.T) {
-	// Phase A: the per-user ceiling is enforced by the site default.
-	app, store, _ := auditApp(t)
-	user, err := store.CreateUser("discord-audit-3", "rpm-user", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	key, err := store.SetCallerKey(user.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	login := auditRequest(http.MethodPost, auditAdminHost, "/admin/api/login", `{"username":"root","password":"correct-horse-battery"}`)
-	rec := auditDo(t, app, login)
-	adminSession := auditSetCookie(rec.Result().Cookies(), "nb_admin_session")
-	adminPatch := func(keyName, value string) *httptest.ResponseRecorder {
-		req := auditRequest(http.MethodPatch, auditAdminHost, "/admin/api/site-config/"+keyName, `{"value":`+value+`}`)
-		req.AddCookie(&http.Cookie{Name: "nb_admin_session", Value: adminSession, Path: "/admin"})
-		return auditDo(t, app, req)
-	}
-	if rec := adminPatch("default_rpm_per_user", "2"); rec.Code != http.StatusOK {
-		t.Fatalf("patch per-user rpm status=%d body=%q", rec.Code, rec.Body.String())
-	}
-	chat := func() *httptest.ResponseRecorder {
-		req := auditRequest(http.MethodPost, auditUserHost, "/v1/chat/completions", `{"model":"p/m","messages":[]}`)
-		req.Header.Set("Authorization", "Bearer "+key)
-		req.Header.Set("Content-Type", "application/json")
-		return auditDo(t, app, req)
-	}
-	// The user's own rpm_limit is unset, so the site default (2) applies.
-	for i := 0; i < 2; i++ {
-		if rec := chat(); rec.Code != http.StatusNotFound {
-			t.Fatalf("request %d status=%d (expected model_not_found, not throttled)", i+1, rec.Code)
+	_ = activityTx.Rollback()
+	for _, path := range []string{"/api/endpoints", "/api/donations", "/api/charity/models", "/api/checkin", "/api/home/game-summary", "/api/activities", "/api/announcements", "/api/issues?state=current", "/api/games", "/api/debug/session", "/api/logs", "/api/steward/maintenance", "/api/events"} {
+		unauthenticated := testApplicationRequest(t, app.handler, http.MethodGet, auditUserHost, path, "", nil, nil)
+		if unauthenticated.Code != http.StatusUnauthorized {
+			t.Fatalf("unauthenticated mounted route %s status=%d body=%s", path, unauthenticated.Code, unauthenticated.Body.String())
 		}
 	}
-	third := chat()
-	if third.Code != http.StatusTooManyRequests || auditErrorCode(t, third) != "rate_limited" {
-		t.Fatalf("third request status=%d body=%q", third.Code, third.Body.String())
+	unauthenticatedModels := testApplicationRequest(t, app.handler, http.MethodGet, auditUserHost, "/v1/models", "", nil, nil)
+	if unauthenticatedModels.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated caller models status=%d body=%s", unauthenticatedModels.Code, unauthenticatedModels.Body.String())
 	}
-	if retryAfter := third.Header().Get("Retry-After"); retryAfter == "" {
-		t.Fatal("429 without Retry-After")
+	unauthenticatedChat := testApplicationRequest(t, app.handler, http.MethodPost, auditUserHost, "/v1/chat/completions", `{}`, nil, map[string]string{"Content-Type": "application/json"})
+	if unauthenticatedChat.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated caller chat status=%d body=%s", unauthenticatedChat.Code, unauthenticatedChat.Body.String())
+	}
+	callerKey := seedRootCallerIdentity(t, store)
+	authorizedModels := testApplicationRequest(t, app.handler, http.MethodGet, auditUserHost, "/v1/models", "", nil, map[string]string{
+		"Authorization": "Bearer " + callerKey,
+	})
+	if authorizedModels.Code != http.StatusOK || !strings.Contains(authorizedModels.Body.String(), `"object":"list"`) {
+		t.Fatalf("authorized caller models status=%d body=%s", authorizedModels.Code, authorizedModels.Body.String())
+	}
+	for _, path := range []string{"/admin/api/donations", "/admin/api/charity-models", "/admin/api/activities/thursday", "/admin/api/announcements", "/admin/api/reports/badge", "/admin/api/logs", "/admin/api/games/config"} {
+		authorized := testApplicationRequest(t, app.handler, http.MethodGet, auditAdminHost, path, "", []*http.Cookie{adminCookie}, nil)
+		if authorized.Code != http.StatusOK {
+			t.Fatalf("authenticated administrator route %s status=%d body=%s", path, authorized.Code, authorized.Body.String())
+		}
+	}
+	invalidPublicReport := testApplicationRequest(t, app.handler, http.MethodPost, auditUserHost, "/api/reports/credential-theft", `{}`, nil, map[string]string{
+		"Content-Type": "application/json",
+		"Origin":       "http://" + auditUserHost,
+	})
+	if invalidPublicReport.Code != http.StatusBadRequest {
+		t.Fatalf("invalid public report after maintenance status=%d body=%s", invalidPublicReport.Code, invalidPublicReport.Body.String())
 	}
 
-	// Phase B: the global ceiling is enforced independently by a fresh app
-	// (a clean limiter window) with global_rpm=1.
-	app2, store2, _ := auditApp(t)
-	user2, err := store2.CreateUser("discord-audit-3b", "rpm-user2", "")
-	if err != nil {
-		t.Fatal(err)
+	logout := testApplicationRequest(t, app.handler, http.MethodPost, auditAdminHost, "/admin/api/logout", "", []*http.Cookie{adminCookie}, map[string]string{
+		"Origin": "http://" + auditAdminHost,
+	})
+	if logout.Code != http.StatusNoContent {
+		t.Fatalf("admin logout during maintenance status=%d body=%s", logout.Code, logout.Body.String())
 	}
-	key2, err := store2.SetCallerKey(user2.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	login2 := auditRequest(http.MethodPost, auditAdminHost, "/admin/api/login", `{"username":"root","password":"correct-horse-battery"}`)
-	rec2 := auditDo(t, app2, login2)
-	adminSession2 := auditSetCookie(rec2.Result().Cookies(), "nb_admin_session")
-	patchGlobal := auditRequest(http.MethodPatch, auditAdminHost, "/admin/api/site-config/global_rpm", `{"value":1}`)
-	patchGlobal.AddCookie(&http.Cookie{Name: "nb_admin_session", Value: adminSession2, Path: "/admin"})
-	if rec := auditDo(t, app2, patchGlobal); rec.Code != http.StatusOK {
-		t.Fatalf("patch global rpm status=%d body=%q", rec.Code, rec.Body.String())
-	}
-	chat2 := func() *httptest.ResponseRecorder {
-		req := auditRequest(http.MethodPost, auditUserHost, "/v1/chat/completions", `{"model":"p/m","messages":[]}`)
-		req.Header.Set("Authorization", "Bearer "+key2)
-		req.Header.Set("Content-Type", "application/json")
-		return auditDo(t, app2, req)
-	}
-	if rec := chat2(); rec.Code != http.StatusNotFound {
-		t.Fatalf("first global-window request status=%d", rec.Code)
-	}
-	if rec := chat2(); rec.Code != http.StatusTooManyRequests {
-		t.Fatalf("second global-window request status=%d body=%q", rec.Code, rec.Body.String())
+	stale := testApplicationRequest(t, app.handler, http.MethodGet, auditAdminHost, "/admin/api/session", "", []*http.Cookie{adminCookie}, nil)
+	if stale.Code != http.StatusUnauthorized {
+		t.Fatalf("logged-out admin session status=%d body=%s", stale.Code, stale.Body.String())
 	}
 }
 
-func TestAuditAppSiteConfigValidation(t *testing.T) {
-	app, _, _ := auditApp(t)
-	login := auditRequest(http.MethodPost, auditAdminHost, "/admin/api/login", `{"username":"root","password":"correct-horse-battery"}`)
-	rec := auditDo(t, app, login)
-	adminSession := auditSetCookie(rec.Result().Cookies(), "nb_admin_session")
-	patch := func(keyName, body string) *httptest.ResponseRecorder {
-		req := auditRequest(http.MethodPatch, auditAdminHost, "/admin/api/site-config/"+keyName, body)
-		req.AddCookie(&http.Cookie{Name: "nb_admin_session", Value: adminSession, Path: "/admin"})
-		return auditDo(t, app, req)
+func seedRootCallerIdentity(t *testing.T, store *db.Store) string {
+	t.Helper()
+	zero := make([]byte, 16)
+	result, err := store.DB().Exec(`
+INSERT INTO users(
+ discord_id,username,donation_credit_mag,total_requests,total_uncached_input_tokens,
+ total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,
+ total_unknown_usage_requests,revision,created_at,updated_at
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"root-caller", "root caller", zero, zero, zero, zero, zero, zero, zero, zero, 1, 1)
+	if err != nil {
+		t.Fatalf("seed root caller user: %v", err)
 	}
-	cases := []struct {
-		name string
-		key  string
-		body string
-		want int
-	}{
-		{"unknown key", "made_up_key", `{"value":1}`, 404},
-		{"null value", "global_rpm", `{"value":null}`, 400},
-		{"non-integer", "global_rpm", `{"value":"fast"}`, 400},
-		{"negative", "global_rpm", `{"value":-1}`, 400},
-		{"zero", "global_rpm", `{"value":0}`, 400},
-		{"above cap", "global_rpm", `{"value":999999}`, 400},
-		{"leading zeros", "global_rpm", `{"value":007}`, 400},
-		{"float", "global_rpm", `{"value":1.5}`, 400},
-		{"unknown field", "global_rpm", `{"value":5,"extra":1}`, 400},
-		{"trailing token", "global_rpm", `{"value":5} {}`, 400},
-		{"valid", "global_rpm", `{"value":64}`, 200},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if rec := patch(tc.key, tc.body); rec.Code != tc.want {
-				t.Fatalf("status=%d want=%d body=%q", rec.Code, tc.want, rec.Body.String())
-			}
-		})
-	}
-	// A non-admin (or no session) can never patch configuration.
-	req := auditRequest(http.MethodPatch, auditAdminHost, "/admin/api/site-config/global_rpm", `{"value":1}`)
-	if rec := auditDo(t, app, req); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("unauthenticated patch status=%d", rec.Code)
-	}
-}
-
-func TestAuditAppExportDeleteRequireElevation(t *testing.T) {
-	app, store, _ := auditApp(t)
-	user, err := store.CreateUser("discord-audit-4", "export-user", "")
+	userID, err := result.LastInsertId()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SetCallerKey(user.ID); err != nil {
-		t.Fatal(err)
+	body := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{0x4a}, 32))
+	callerKey := "nbk_" + body
+	digest := sha256.Sum256([]byte(callerKey))
+	if _, err := store.DB().Exec(`
+INSERT INTO caller_keys(user_id,generation,key_hash,display_head,display_tail,key_created_at,updated_at)
+VALUES(?,1,?,?,?,?,?)`, userID, digest[:], body[:4], body[len(body)-4:], 1, 1); err != nil {
+		t.Fatalf("seed root caller key: %v", err)
 	}
-	sessionToken, _, err := store.CreateUserSession(user.ID)
+	return callerKey
+}
+
+func TestApplicationCloseIsIdempotent(t *testing.T) {
+	key := bytes.Repeat([]byte{0x7a}, secret.MasterKeyBytes)
+	vault, err := secret.New(key)
+	clear(key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	withSession := func(method, path, body string) *httptest.ResponseRecorder {
-		req := auditRequest(method, auditUserHost, path, body)
-		req.AddCookie(&http.Cookie{Name: "nb_user_session", Value: sessionToken, Path: "/api"})
-		return auditDo(t, app, req)
+	defer func() { _ = vault.Close() }()
+	dbPath := filepath.Join(t.TempDir(), "close.db")
+	dbtest.EnsureOwnerOnlyParent(t, dbPath)
+	store, err := db.Open(dbPath, vault)
+	if err != nil {
+		t.Fatal(err)
 	}
-	// Export and delete are second-factor gated even with a valid session.
-	exp := withSession(http.MethodPost, "/api/account/export", "")
-	if exp.Code != http.StatusForbidden || auditErrorCode(t, exp) != "elevated_required" {
-		t.Fatalf("export without elevation status=%d body=%q", exp.Code, exp.Body.String())
+	defer func() { _ = store.Close() }()
+	app, err := buildApplication(auditConfig(), store, vault)
+	if err != nil {
+		t.Fatal(err)
 	}
-	del := withSession(http.MethodPost, "/api/account/delete", `{"confirm":"DELETE"}`)
-	if del.Code != http.StatusForbidden || auditErrorCode(t, del) != "elevated_required" {
-		t.Fatalf("delete without elevation status=%d body=%q", del.Code, del.Body.String())
+	if err := app.Close(); err != nil {
+		t.Fatal(err)
 	}
-	// Wrong confirm text fails even with a token present (the token is not
-	// consumed on a bad confirmation).
-	delWrong := auditRequest(http.MethodPost, auditUserHost, "/api/account/delete", `{"confirm":"NOPE"}`)
-	delWrong.AddCookie(&http.Cookie{Name: "nb_user_session", Value: sessionToken, Path: "/api"})
-	delWrong.Header.Set("X-Elevated-Token", "garbage-token")
-	rec := auditDo(t, app, delWrong)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("delete with wrong confirm status=%d body=%q", rec.Code, rec.Body.String())
+	if err := app.Close(); err != nil {
+		t.Fatal(err)
 	}
-	// The account still exists and its key still authenticates.
-	if _, err := store.GetUserByID(user.ID); err != nil {
-		t.Fatalf("user vanished after failed delete: %v", err)
+	closed := testApplicationRequest(t, app.handler, http.MethodGet, auditAdminHost, "/admin/api/session", "", nil, nil)
+	if closed.Code != http.StatusServiceUnavailable {
+		t.Fatalf("closed authentication runtime status=%d body=%s", closed.Code, closed.Body.String())
 	}
-}
-
-func itoa(n int64) string {
-	return strconv.FormatInt(n, 10)
 }

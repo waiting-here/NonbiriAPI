@@ -31,12 +31,13 @@ import (
 const (
 	KeySiteName                  = "site_name"
 	KeySiteLogoURL               = "site_logo_url"
-	KeyDefaultLocale             = "default_locale"
 	KeyLegalPrivacyOverrideZh    = "legal_privacy_override_zh"
 	KeyLegalPrivacyOverrideEn    = "legal_privacy_override_en"
 	KeyLegalTermsOverrideZh      = "legal_terms_override_zh"
 	KeyLegalTermsOverrideEn      = "legal_terms_override_en"
 	KeyLegalAuthoritativeLocale  = "legal_authoritative_locale"
+	KeyCharityDonationNoticeZh   = "charity_donation_notice_zh"
+	KeyCharityDonationNoticeEn   = "charity_donation_notice_en"
 	KeyDefaultEndpointLimit      = "default_endpoint_limit"
 	KeyDefaultEndpointKeyLimit   = "default_endpoint_key_limit"
 	KeyDefaultModelLimit         = "default_model_limit"
@@ -57,10 +58,10 @@ const (
 	// an explicit UTC (0). It is frozen once any checkin/activity data exists.
 	KeySiteTimezoneOffsetMinutes = "site_timezone_offset_minutes"
 	// Level promotion thresholds (implementation contract §4.1): canonical
-	// non-negative decimal milli-credit strings; "0" (the default, also shown
-	// while unset) disables that level's automatic promotion. The enabled
-	// chain must be strictly increasing in level order; the cross-validation
-	// and the write share one repository transaction.
+	// non-negative decimal credit strings; "0" (the default, also shown while
+	// unset) disables that level's automatic promotion. The enabled chain must
+	// be strictly increasing in level order; the cross-validation and the write
+	// share one repository transaction.
 	KeyLevelThreshold2Milli = "level_threshold_2_milli"
 	KeyLevelThreshold3Milli = "level_threshold_3_milli"
 	KeyLevelThreshold4Milli = "level_threshold_4_milli"
@@ -85,6 +86,32 @@ const (
 	// mistaken for an explicit 0.
 	KeyCharityTokenReserveMilli    = "charity_token_reserve_milli"
 	KeyAnthropicDefaultMaxTokens   = "anthropic_default_max_tokens"
+	KeyAnnouncementEpoch           = "announcement_epoch"
+	KeyLevelDisplayName1           = "level_display_name_1"
+	KeyLevelDisplayName2           = "level_display_name_2"
+	KeyLevelDisplayName3           = "level_display_name_3"
+	KeyLevelDisplayName4           = "level_display_name_4"
+	KeyLevelDisplayName5           = "level_display_name_5"
+	KeyActivitiesEnabled           = "activities_enabled"
+	KeyActivityWelfareEnabled      = "activity_welfare_enabled"
+	KeyActivityWelfareThreshold    = "activity_welfare_threshold_milli"
+	KeyActivityWelfareCap          = "activity_welfare_cap_milli"
+	KeyActivityThursdayEnabled     = "activity_thursday_enabled"
+	KeyGameLinkLinkEnabled         = "game_linklink_enabled"
+	KeyGameLinkLink6x8Enabled      = "game_linklink_6x8_enabled"
+	KeyGameLinkLink8x8Enabled      = "game_linklink_8x8_enabled"
+	KeyGameLinkLink10x10Enabled    = "game_linklink_10x10_enabled"
+	KeyGameLinkLink6x8Price        = "game_linklink_6x8_price_milli"
+	KeyGameLinkLink8x8Price        = "game_linklink_8x8_price_milli"
+	KeyGameLinkLink10x10Price      = "game_linklink_10x10_price_milli"
+	KeyGameRPSEnabled              = "game_rps_enabled"
+	KeyGameRPSQuickEnabled         = "game_rps_quick_enabled"
+	KeyGameRPSStandardEnabled      = "game_rps_standard_enabled"
+	KeyGameRPSDeathmatchEnabled    = "game_rps_deathmatch_enabled"
+	KeyGameRPSQuickB               = "game_rps_quick_b_milli"
+	KeyGameRPSStandardB            = "game_rps_standard_b_milli"
+	KeyGameRPSDeathmatchB          = "game_rps_deathmatch_b_milli"
+	KeyReportPendingTTLSeconds     = "report_pending_ttl_seconds"
 	KeyGamesEnabled                = game.GamesEnabledKey
 	KeyGameFishingEnabled          = game.FishingEnabledKey
 	KeyGameFishingBaitWormPrice    = game.FishingWormPriceMilliKey
@@ -136,6 +163,7 @@ const (
 	maxAntiAbuseThreshold        = 4096
 	maxCharityMinChars           = antiabuse.MaxCharityContentRuneCount
 	maxTokenLimit                = 2147483647
+	maxDonationNoticeBytes       = 8192
 )
 
 type valueKind int
@@ -151,17 +179,17 @@ const (
 	// of 30 in [-720,+840]) and an atomic immutability guard; GET returns
 	// JSON null while unset.
 	kindTimezoneOffset
-	// kindAmount is a canonical non-negative decimal milli-credit string (the
-	// economy wire form). GET projects a JSON string (the key's documented
-	// default while unset or when a stored row is corrupt); PATCH accepts only
-	// the canonical form.
+	// kindAmount is a canonical non-negative decimal credit string (the economy
+	// wire form). GET projects a JSON string (the key's documented default
+	// while unset or when a stored row is corrupt); PATCH accepts only the
+	// canonical form and converts it to raw milli-credits for storage.
 	kindAmount
 	// kindEnum is a closed string enumeration (see keySpec.allowed). GET
 	// projects the stored value when it is a member and the documented default
 	// otherwise; PATCH accepts exactly the member strings.
 	kindEnum
-	// kindOptionalAmount is a nullable canonical non-negative decimal
-	// milli-credit string (the economy wire form) with no documented default:
+	// kindOptionalAmount is a nullable canonical non-negative decimal credit
+	// string (the economy wire form) with no documented default:
 	// GET projects JSON null while unset or corrupt, and PATCH accepts only a
 	// canonical positive string, so an explicit zero can never blur into the
 	// unset state (and vice versa).
@@ -169,6 +197,8 @@ const (
 	// kindOptionalInt is absent on the raw wire when no row exists. PATCH
 	// accepts a canonical JSON integer or null; null removes the override.
 	kindOptionalInt
+	// kindOpaqueID is a read-only canonical 128-bit OID projected as text.
+	kindOpaqueID
 )
 
 type keySpec struct {
@@ -176,6 +206,7 @@ type keySpec struct {
 	min, max   int
 	def        int  // int keys: effective default when unset
 	allowEmpty bool // text keys: "" is a valid value (blank pauses the gate)
+	maxRunes   int  // optional Unicode-scalar bound in addition to max bytes
 	// defAmount is the amount keys' documented default in milli-credits,
 	// projected while unset or when a stored row is corrupt.
 	defAmount int64
@@ -205,67 +236,106 @@ func mustDefaultFishingMultiplier(species string) int {
 }
 
 // knownSiteConfig maps every exact known key to its typed spec.
-var knownSiteConfig = map[string]keySpec{
-	KeySiteName:                  {kind: kindText, allowEmpty: false, max: maxSiteNameBytes},
-	KeySiteLogoURL:               {kind: kindText, allowEmpty: true, max: maxSiteLogoURLBytes},
-	KeyDefaultLocale:             {kind: kindLocale},
-	KeyLegalPrivacyOverrideZh:    {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
-	KeyLegalPrivacyOverrideEn:    {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
-	KeyLegalTermsOverrideZh:      {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
-	KeyLegalTermsOverrideEn:      {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
-	KeyLegalAuthoritativeLocale:  {kind: kindLocaleOpt},
-	KeyDefaultEndpointLimit:      {kind: kindInt, min: 0, max: maxResourceLimitValue, def: db.DefaultEndpointLimit},
-	KeyDefaultEndpointKeyLimit:   {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultEndpointKeyLimit},
-	KeyDefaultModelLimit:         {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultModelLimit},
-	KeyDefaultBindingLimit:       {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultBindingLimit},
-	KeyDefaultRPMPerUser:         {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMPerUserLimit},
-	KeyGlobalRPM:                 {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMGlobalLimit},
-	KeyDefaultPerEndpointConc:    {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultPerEndpointConcurrency},
-	KeyEgressGlobalConc:          {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultGlobalConcurrency},
-	KeyDiscordGuildID:            {kind: kindText, allowEmpty: true, max: maxDiscordGateBytes},
-	KeyDiscordRoleID:             {kind: kindText, allowEmpty: true, max: maxDiscordGateBytes},
-	KeyOAuthStartRateLimit:       {kind: kindInt, min: 0, max: maxOAuthStartRateLimit, def: ratelimit.DefaultOAuthStartRateLimit},
-	KeyOAuthStartRateWindowSecs:  {kind: kindInt, min: 1, max: maxOAuthStartRateWindowSecs, def: ratelimit.DefaultOAuthStartRateWindowSeconds},
-	KeyOAuthStartRatePenaltySecs: {kind: kindInt, min: 0, max: maxOAuthStartRatePenaltySecs, def: ratelimit.DefaultOAuthStartRatePenaltySeconds},
-	KeyMaintenanceMode:           {kind: kindBool, def: 0},
-	KeyRegistrationOpen:          {kind: kindBool, def: 1},
-	KeySiteTimezoneOffsetMinutes: {kind: kindTimezoneOffset},
-	KeyLevelThreshold2Milli:      {kind: kindAmount},
-	KeyLevelThreshold3Milli:      {kind: kindAmount},
-	KeyLevelThreshold4Milli:      {kind: kindAmount},
-	KeyCheckinMode: {kind: kindEnum,
-		allowed: []string{db.CheckinModeEnabled, db.CheckinModeLevelGated, db.CheckinModeDisabled},
-		defStr:  db.CheckinModeDisabled},
-	KeyCheckinAwardMinMilli:             {kind: kindAmount, defAmount: db.DefaultCheckinAwardMinMilli},
-	KeyCheckinAwardMaxMilli:             {kind: kindAmount, defAmount: db.DefaultCheckinAwardMaxMilli},
-	KeyCreditsCapMilli:                  {kind: kindAmount, defAmount: db.DefaultCreditsCapMilli},
-	KeyCharityEnabled:                   {kind: kindBool, def: 0},
-	KeyDonationAcceptEnabled:            {kind: kindBool, def: 0},
-	KeyCharityTokenReserveMilli:         {kind: kindOptionalAmount},
-	KeyAnthropicDefaultMaxTokens:        {kind: kindOptionalInt, min: 1, max: maxTokenLimit, def: 65536},
-	KeyGamesEnabled:                     {kind: kindBool, def: 0},
-	KeyGameFishingEnabled:               {kind: kindBool, def: 0},
-	KeyGameFishingBaitWormPrice:         {kind: kindAmount, defAmount: mustDefaultFishingAmount(fishing.BaitWorm)},
-	KeyGameFishingBaitLurePrice:         {kind: kindAmount, defAmount: mustDefaultFishingAmount(fishing.BaitLure)},
-	KeyGameFishingBaitPremiumPrice:      {kind: kindAmount, defAmount: mustDefaultFishingAmount(fishing.BaitPremium)},
-	KeyGameFishingRTP:                   {kind: kindInt, min: fishing.MinimumRTPPercent, max: fishing.MaximumRTPPercent, def: defaultFishingConfig.StandardRTPPercent},
-	KeyGameFishingRTPPremium:            {kind: kindInt, min: fishing.MinimumRTPPercent, max: fishing.MaximumRTPPercent, def: defaultFishingConfig.PremiumRTPPercent},
-	KeyGameFishingTreasureBottle:        {kind: kindInt, min: fishing.MinimumTreasureMultiplier, max: fishing.MaximumTreasureMultiplier, def: mustDefaultFishingMultiplier("bottle")},
-	KeyGameFishingTreasureClover:        {kind: kindInt, min: fishing.MinimumTreasureMultiplier, max: fishing.MaximumTreasureMultiplier, def: mustDefaultFishingMultiplier("clover")},
-	KeyGameFishingTreasureShell:         {kind: kindInt, min: fishing.MinimumTreasureMultiplier, max: fishing.MaximumTreasureMultiplier, def: mustDefaultFishingMultiplier("shell")},
-	KeyRPMBanThreshold:                  {kind: kindInt, min: 0, max: maxAntiAbuseThreshold, def: antiabuse.DefaultRPMBanThreshold},
-	KeyRPMBanWindowSeconds:              {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultViolationWindow.Seconds())},
-	KeyRPMBanDurationSeconds:            {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultViolationWindow.Seconds())},
-	KeyCharityMinChars:                  {kind: kindInt, min: 0, max: maxCharityMinChars, def: antiabuse.DefaultCharityMinChars},
-	KeyCharityViolationDeductMilli:      {kind: kindAmount, defAmount: 0},
-	KeyCharityViolationBanSeconds:       {kind: kindInt, min: 0, max: maxAntiAbuseSeconds, def: 0},
-	KeyCharityViolationWindowSeconds:    {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultViolationWindow.Seconds())},
-	KeyCharityViolationBanThreshold:     {kind: kindInt, min: 0, max: maxAntiAbuseThreshold, def: 0},
-	KeyCharityViolationWindowBanSeconds: {kind: kindInt, min: 0, max: maxAntiAbuseSeconds, def: 0},
-	KeyCharitySuspendWindowSeconds:      {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultSuspendWindow.Seconds())},
-	KeyCharitySuspendThreshold:          {kind: kindInt, min: 0, max: maxAntiAbuseThreshold, def: 0},
-	KeyCharitySuspendDurationSeconds:    {kind: kindInt, min: 0, max: maxAntiAbuseSeconds, def: 0},
-}
+var knownSiteConfig = func() map[string]keySpec {
+	known := map[string]keySpec{
+		KeySiteName:                  {kind: kindText, allowEmpty: false, max: maxSiteNameBytes},
+		KeySiteLogoURL:               {kind: kindText, allowEmpty: true, max: maxSiteLogoURLBytes},
+		KeyLegalPrivacyOverrideZh:    {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
+		KeyLegalPrivacyOverrideEn:    {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
+		KeyLegalTermsOverrideZh:      {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
+		KeyLegalTermsOverrideEn:      {kind: kindMultilineText, allowEmpty: true, max: maxLegalOverrideBytes},
+		KeyCharityDonationNoticeZh:   {kind: kindMultilineText, allowEmpty: true, max: maxDonationNoticeBytes},
+		KeyCharityDonationNoticeEn:   {kind: kindMultilineText, allowEmpty: true, max: maxDonationNoticeBytes},
+		KeyLegalAuthoritativeLocale:  {kind: kindLocaleOpt},
+		KeyDefaultEndpointLimit:      {kind: kindInt, min: 0, max: maxResourceLimitValue, def: db.DefaultEndpointLimit},
+		KeyDefaultEndpointKeyLimit:   {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultEndpointKeyLimit},
+		KeyDefaultModelLimit:         {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultModelLimit},
+		KeyDefaultBindingLimit:       {kind: kindInt, min: 1, max: maxResourceLimitValue, def: db.DefaultBindingLimit},
+		KeyDefaultRPMPerUser:         {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMPerUserLimit},
+		KeyGlobalRPM:                 {kind: kindInt, min: 1, max: maxRPMValue, def: ratelimit.DefaultRPMGlobalLimit},
+		KeyDefaultPerEndpointConc:    {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultPerEndpointConcurrency},
+		KeyEgressGlobalConc:          {kind: kindInt, min: 1, max: maxConcurrencyValue, def: egress.DefaultGlobalConcurrency},
+		KeyDiscordGuildID:            {kind: kindText, allowEmpty: true, max: maxDiscordGateBytes},
+		KeyDiscordRoleID:             {kind: kindText, allowEmpty: true, max: maxDiscordGateBytes},
+		KeyOAuthStartRateLimit:       {kind: kindInt, min: 0, max: maxOAuthStartRateLimit, def: ratelimit.DefaultOAuthStartRateLimit},
+		KeyOAuthStartRateWindowSecs:  {kind: kindInt, min: 1, max: maxOAuthStartRateWindowSecs, def: ratelimit.DefaultOAuthStartRateWindowSeconds},
+		KeyOAuthStartRatePenaltySecs: {kind: kindInt, min: 0, max: maxOAuthStartRatePenaltySecs, def: ratelimit.DefaultOAuthStartRatePenaltySeconds},
+		KeyMaintenanceMode:           {kind: kindBool, def: 0},
+		KeyRegistrationOpen:          {kind: kindBool, def: 1},
+		KeySiteTimezoneOffsetMinutes: {kind: kindTimezoneOffset},
+		KeyLevelThreshold2Milli:      {kind: kindAmount},
+		KeyLevelThreshold3Milli:      {kind: kindAmount},
+		KeyLevelThreshold4Milli:      {kind: kindAmount},
+		KeyCheckinMode: {kind: kindEnum,
+			allowed: []string{db.CheckinModeEnabled, db.CheckinModeLevelGated, db.CheckinModeDisabled},
+			defStr:  db.CheckinModeDisabled},
+		KeyCheckinAwardMinMilli:             {kind: kindAmount, defAmount: db.DefaultCheckinAwardMinMilli},
+		KeyCheckinAwardMaxMilli:             {kind: kindAmount, defAmount: db.DefaultCheckinAwardMaxMilli},
+		KeyCreditsCapMilli:                  {kind: kindAmount, defAmount: db.DefaultCreditsCapMilli},
+		KeyCharityEnabled:                   {kind: kindBool, def: 0},
+		KeyDonationAcceptEnabled:            {kind: kindBool, def: 0},
+		KeyCharityTokenReserveMilli:         {kind: kindOptionalAmount},
+		KeyAnthropicDefaultMaxTokens:        {kind: kindOptionalInt, min: 1, max: maxTokenLimit, def: 65536},
+		KeyAnnouncementEpoch:                {kind: kindOpaqueID},
+		KeyLevelDisplayName1:                {kind: kindText, allowEmpty: true, maxRunes: 64, defStr: "Lv. 1"},
+		KeyLevelDisplayName2:                {kind: kindText, allowEmpty: true, maxRunes: 64, defStr: "Lv. 2"},
+		KeyLevelDisplayName3:                {kind: kindText, allowEmpty: true, maxRunes: 64, defStr: "Lv. 3"},
+		KeyLevelDisplayName4:                {kind: kindText, allowEmpty: true, maxRunes: 64, defStr: "Lv. 4"},
+		KeyLevelDisplayName5:                {kind: kindText, allowEmpty: true, maxRunes: 64, defStr: "Lv. 5"},
+		KeyActivitiesEnabled:                {kind: kindBool},
+		KeyActivityWelfareEnabled:           {kind: kindBool},
+		KeyActivityWelfareThreshold:         {kind: kindAmount},
+		KeyActivityWelfareCap:               {kind: kindAmount},
+		KeyActivityThursdayEnabled:          {kind: kindBool},
+		KeyGameLinkLinkEnabled:              {kind: kindBool},
+		KeyGameLinkLink6x8Enabled:           {kind: kindBool},
+		KeyGameLinkLink8x8Enabled:           {kind: kindBool},
+		KeyGameLinkLink10x10Enabled:         {kind: kindBool},
+		KeyGameLinkLink6x8Price:             {kind: kindAmount},
+		KeyGameLinkLink8x8Price:             {kind: kindAmount},
+		KeyGameLinkLink10x10Price:           {kind: kindAmount},
+		KeyGameRPSEnabled:                   {kind: kindBool},
+		KeyGameRPSQuickEnabled:              {kind: kindBool},
+		KeyGameRPSStandardEnabled:           {kind: kindBool},
+		KeyGameRPSDeathmatchEnabled:         {kind: kindBool},
+		KeyGameRPSQuickB:                    {kind: kindAmount},
+		KeyGameRPSStandardB:                 {kind: kindAmount},
+		KeyGameRPSDeathmatchB:               {kind: kindAmount},
+		KeyReportPendingTTLSeconds:          {kind: kindInt, min: 1, max: 259200, def: 86400},
+		KeyGamesEnabled:                     {kind: kindBool, def: 0},
+		KeyGameFishingEnabled:               {kind: kindBool, def: 0},
+		KeyGameFishingBaitWormPrice:         {kind: kindAmount, defAmount: mustDefaultFishingAmount(fishing.BaitWorm)},
+		KeyGameFishingBaitLurePrice:         {kind: kindAmount, defAmount: mustDefaultFishingAmount(fishing.BaitLure)},
+		KeyGameFishingBaitPremiumPrice:      {kind: kindAmount, defAmount: mustDefaultFishingAmount(fishing.BaitPremium)},
+		KeyGameFishingRTP:                   {kind: kindInt, min: fishing.MinimumRTPPercent, max: fishing.MaximumRTPPercent, def: defaultFishingConfig.StandardRTPPercent},
+		KeyGameFishingRTPPremium:            {kind: kindInt, min: fishing.MinimumRTPPercent, max: fishing.MaximumRTPPercent, def: defaultFishingConfig.PremiumRTPPercent},
+		KeyGameFishingTreasureBottle:        {kind: kindInt, min: fishing.MinimumTreasureMultiplier, max: fishing.MaximumTreasureMultiplier, def: mustDefaultFishingMultiplier("bottle")},
+		KeyGameFishingTreasureClover:        {kind: kindInt, min: fishing.MinimumTreasureMultiplier, max: fishing.MaximumTreasureMultiplier, def: mustDefaultFishingMultiplier("clover")},
+		KeyGameFishingTreasureShell:         {kind: kindInt, min: fishing.MinimumTreasureMultiplier, max: fishing.MaximumTreasureMultiplier, def: mustDefaultFishingMultiplier("shell")},
+		KeyRPMBanThreshold:                  {kind: kindInt, min: 0, max: maxAntiAbuseThreshold, def: antiabuse.DefaultRPMBanThreshold},
+		KeyRPMBanWindowSeconds:              {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultViolationWindow.Seconds())},
+		KeyRPMBanDurationSeconds:            {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultRPMBanDuration.Seconds())},
+		KeyCharityMinChars:                  {kind: kindInt, min: 0, max: maxCharityMinChars, def: antiabuse.DefaultCharityMinChars},
+		KeyCharityViolationDeductMilli:      {kind: kindAmount, defAmount: 0},
+		KeyCharityViolationBanSeconds:       {kind: kindInt, min: 0, max: maxAntiAbuseSeconds, def: 0},
+		KeyCharityViolationWindowSeconds:    {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultViolationWindow.Seconds())},
+		KeyCharityViolationBanThreshold:     {kind: kindInt, min: 0, max: maxAntiAbuseThreshold, def: 0},
+		KeyCharityViolationWindowBanSeconds: {kind: kindInt, min: 0, max: maxAntiAbuseSeconds, def: 0},
+		KeyCharitySuspendWindowSeconds:      {kind: kindInt, min: 1, max: maxAntiAbuseSeconds, def: int(antiabuse.DefaultSuspendWindow.Seconds())},
+		KeyCharitySuspendThreshold:          {kind: kindInt, min: 0, max: maxAntiAbuseThreshold, def: 0},
+		KeyCharitySuspendDurationSeconds:    {kind: kindInt, min: 0, max: maxAntiAbuseSeconds, def: 0},
+	}
+	for _, mode := range []string{"quick", "standard", "deathmatch"} {
+		for _, cut := range []string{"platform", "welfare", "thursday"} {
+			known["game_rps_"+mode+"_"+cut+"_bp"] = keySpec{kind: kindInt, min: 0, max: 9999, def: 100}
+		}
+		known["game_rps_"+mode+"_queue_seconds"] = keySpec{kind: kindInt, min: 30, max: 120, def: 120}
+		known["game_rps_"+mode+"_gesture_seconds"] = keySpec{kind: kindInt, min: 5, max: 20, def: 20}
+		known["game_rps_"+mode+"_dealer_seconds"] = keySpec{kind: kindInt, min: 5, max: 15, def: 15}
+		known["game_rps_"+mode+"_follower_seconds"] = keySpec{kind: kindInt, min: 5, max: 15, def: 15}
+	}
+	return known
+}()
 
 // knownSiteConfigKey reports whether key is in the authoritative set
 // (including the alert_prefs_* namespace). Keys longer than the repository
@@ -277,7 +347,7 @@ func knownSiteConfigKey(key string) bool {
 	if _, ok := knownSiteConfig[key]; ok {
 		return true
 	}
-	return strings.HasPrefix(key, alertPrefsPrefix)
+	return strings.HasPrefix(key, alertPrefsPrefix) && len(key) > len(alertPrefsPrefix)
 }
 
 func isLegalOverrideKey(key string) bool {
@@ -290,15 +360,19 @@ func isLegalOverrideKey(key string) bool {
 }
 
 func isGameConfigKey(key string) bool {
-	switch key {
-	case KeyGamesEnabled, KeyGameFishingEnabled,
-		KeyGameFishingBaitWormPrice, KeyGameFishingBaitLurePrice, KeyGameFishingBaitPremiumPrice,
-		KeyGameFishingRTP, KeyGameFishingRTPPremium,
-		KeyGameFishingTreasureBottle, KeyGameFishingTreasureClover, KeyGameFishingTreasureShell:
-		return true
-	default:
-		return false
-	}
+	return key == KeyGamesEnabled || strings.HasPrefix(key, "game_")
+}
+
+func isActivityConfigKey(key string) bool {
+	return key == KeyActivitiesEnabled || strings.HasPrefix(key, "activity_")
+}
+
+func isReadOnlyConfigKey(key string) bool {
+	return key == KeyAnnouncementEpoch
+}
+
+func isSpecializedConfigKey(key string) bool {
+	return key == KeyMaintenanceMode || isReadOnlyConfigKey(key) || isGameConfigKey(key) || isActivityConfigKey(key)
 }
 
 // textMaxFor returns the byte bound for a text key.
@@ -314,8 +388,16 @@ func textMaxFor(key string) int {
 	return maxSiteNameBytes
 }
 
-func validConfigText(value string, maxBytes int) bool {
-	if len(value) > maxBytes || !utf8.ValidString(value) {
+func textMaxRunesFor(key string) int {
+	if spec, ok := knownSiteConfig[key]; ok {
+		return spec.maxRunes
+	}
+	return 0
+}
+
+func validConfigTextWithRunes(value string, maxBytes, maxRunes int) bool {
+	if (maxBytes > 0 && len(value) > maxBytes) || !utf8.ValidString(value) ||
+		(maxRunes > 0 && utf8.RuneCountInString(value) > maxRunes) {
 		return false
 	}
 	for _, r := range value {
@@ -324,6 +406,10 @@ func validConfigText(value string, maxBytes int) bool {
 		}
 	}
 	return true
+}
+
+func validConfigText(value string, maxBytes int) bool {
+	return validConfigTextWithRunes(value, maxBytes, 0)
 }
 
 // validMultilineText is like validConfigText but permits newlines and tabs so
@@ -344,7 +430,6 @@ func validMultilineText(value string, maxBytes int) bool {
 // parseCanonicalInt accepts exactly the canonical decimal form of an integer
 // (no sign, no leading zeros, no surrounding whitespace).
 func parseCanonicalInt(raw string) (int, error) {
-	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return 0, errors.New("configuration value is empty")
 	}
@@ -356,6 +441,82 @@ func parseCanonicalInt(raw string) (int, error) {
 		return 0, errors.New("configuration value is not a canonical integer")
 	}
 	return n, nil
+}
+
+const (
+	// adminAmountScale is the fixed conversion between the administrator's
+	// display-credit wire value and the raw milli-credit storage value.
+	adminAmountScale   int64 = 1000
+	maxAdminAmountText       = 32
+)
+
+// parseAdminWireAmount parses the administrator/API credit representation and
+// returns raw milli-credits. The wire grammar is deliberately narrower than
+// a general number: 0 or a non-zero integer, optionally followed by one to
+// three fractional decimal digits. It rejects signs, exponents, leading
+// zeros, a trailing decimal point, and values above the raw M bound.
+func parseAdminWireAmount(raw string) (int64, error) {
+	if raw == "" || len(raw) > maxAdminAmountText {
+		return 0, errors.New("amount is not canonical")
+	}
+
+	wholeText, fractionText := raw, ""
+	if dot := strings.IndexByte(raw, '.'); dot >= 0 {
+		if strings.IndexByte(raw[dot+1:], '.') >= 0 {
+			return 0, errors.New("amount is not canonical")
+		}
+		wholeText, fractionText = raw[:dot], raw[dot+1:]
+		if fractionText == "" || len(fractionText) > 3 {
+			return 0, errors.New("amount is not canonical")
+		}
+	}
+	if wholeText == "" || (len(wholeText) > 1 && wholeText[0] == '0') {
+		return 0, errors.New("amount is not canonical")
+	}
+	for i := 0; i < len(wholeText); i++ {
+		if wholeText[i] < '0' || wholeText[i] > '9' {
+			return 0, errors.New("amount is not canonical")
+		}
+	}
+	for i := 0; i < len(fractionText); i++ {
+		if fractionText[i] < '0' || fractionText[i] > '9' {
+			return 0, errors.New("amount is not canonical")
+		}
+	}
+
+	whole, err := strconv.ParseInt(wholeText, 10, 64)
+	if err != nil || whole < 0 {
+		return 0, errors.New("amount is not canonical")
+	}
+	fraction := int64(0)
+	for i := 0; i < len(fractionText); i++ {
+		fraction = fraction*10 + int64(fractionText[i]-'0')
+	}
+	for len(fractionText) < 3 {
+		fraction *= 10
+		fractionText += "0"
+	}
+	if whole > (db.MaxMoneyMilli-fraction)/adminAmountScale {
+		return 0, errors.New("amount is out of range")
+	}
+	return whole*adminAmountScale + fraction, nil
+}
+
+// formatAdminWireAmount renders raw milli-credits as a display-credit string,
+// trimming only insignificant trailing fractional zeroes. The caller passes
+// values already bounded by the storage contract.
+func formatAdminWireAmount(raw int64) string {
+	if raw < 0 {
+		return ""
+	}
+	whole := raw / adminAmountScale
+	fraction := raw % adminAmountScale
+	if fraction == 0 {
+		return strconv.FormatInt(whole, 10)
+	}
+	text := strconv.FormatInt(whole, 10) + "." + strconv.FormatInt(fraction+adminAmountScale, 10)[1:]
+	text = strings.TrimRight(text, "0")
+	return text
 }
 
 // parseCanonicalBool accepts exactly the canonical stored form of a toggle:
@@ -418,10 +579,10 @@ func typedSiteConfigValue(key, stored string) any {
 			// (level thresholds read "0" = that promotion is disabled; the
 			// check-in keys read their frozen defaults). A stored negative
 			// value can never pass the write path.
-			if v, err := credits.ParseAmount(stored); err == nil && v >= 0 {
-				return credits.FormatAmount(v)
+			if v, err := credits.ParseAmount(stored); err == nil && v >= 0 && v <= db.MaxMoneyMilli {
+				return formatAdminWireAmount(v)
 			}
-			return credits.FormatAmount(spec.defAmount)
+			return formatAdminWireAmount(spec.defAmount)
 		case kindEnum:
 			// Unset or a non-member row projects as the documented default:
 			// fail closed, never an implicit enabled state.
@@ -436,8 +597,8 @@ func typedSiteConfigValue(key, stored string) any {
 			// Unset or a corrupt row projects as null: the admin station must
 			// see "not configured" (which keeps every per-token charity model
 			// disabled), never a fabricated default or an implicit zero.
-			if v, perr := credits.ParseAmount(stored); perr == nil && v > 0 {
-				return credits.FormatAmount(v)
+			if v, perr := credits.ParseAmount(stored); perr == nil && v > 0 && v <= db.MaxMoneyMilli {
+				return formatAdminWireAmount(v)
 			}
 			return nil
 		case kindOptionalInt:
@@ -445,13 +606,18 @@ func typedSiteConfigValue(key, stored string) any {
 				return n
 			}
 			return nil
+		case kindOpaqueID:
+			if db.ValidateOpaqueID(stored, "b1e_") {
+				return stored
+			}
+			return ""
 		case kindMultilineText:
 			if validMultilineText(stored, textMaxFor(key)) {
 				return stored
 			}
 			return ""
 		default:
-			if validConfigText(stored, textMaxFor(key)) {
+			if validConfigTextWithRunes(stored, textMaxFor(key), textMaxRunesFor(key)) {
 				return stored
 			}
 			return ""
@@ -541,14 +707,15 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 			if err := json.Unmarshal(raw, &value); err != nil {
 				return "", invalid
 			}
-			// Canonical non-negative decimal string only: no exponent, "+",
-			// leading zeros, whitespace or "-0" (credits.ParseAmount), and
-			// no negative amount.
-			n, err := credits.ParseAmount(value)
-			if err != nil || n < 0 || (isFishingBaitPriceKey(key) && n < fishing.MinimumBaitPriceMilli) {
+			// Canonical non-negative decimal credit string only: no exponent,
+			// "+", leading zeros, whitespace or negative amount. Convert the
+			// display value to raw milli-credits exactly once at this boundary.
+			n, err := parseAdminWireAmount(value)
+			if err != nil || n < 0 || n > db.MaxMoneyMilli ||
+				(isFishingBaitPriceKey(key) && n < fishing.MinimumBaitPriceMilli) {
 				return "", invalid
 			}
-			return credits.FormatAmount(n), httperr.Error{}
+			return strconv.FormatInt(n, 10), httperr.Error{}
 		case kindEnum:
 			var value string
 			if err := json.Unmarshal(raw, &value); err != nil {
@@ -569,11 +736,11 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 				// Canonical positive decimal string only: null is rejected (the
 				// unset state is expressed by never writing the key), and zero is
 				// rejected so it can never masquerade as a configured reserve.
-				n, perr := credits.ParseAmount(value)
-				if perr != nil || n <= 0 {
+				n, perr := parseAdminWireAmount(value)
+				if perr != nil || n <= 0 || n > db.MaxMoneyMilli {
 					return "", invalid
 				}
-				return credits.FormatAmount(n), httperr.Error{}
+				return strconv.FormatInt(n, 10), httperr.Error{}
 			}
 		case kindOptionalInt:
 			dec := json.NewDecoder(bytes.NewReader(raw))
@@ -591,6 +758,8 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 				return "", invalid
 			}
 			return num.String(), httperr.Error{}
+		case kindOpaqueID:
+			return "", httperr.New(httperr.CodeConflict, "configuration key is read-only")
 		case kindMultilineText:
 			var value string
 			if err := json.Unmarshal(raw, &value); err != nil || !validMultilineText(value, textMaxFor(key)) {
@@ -599,7 +768,8 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 			return value, httperr.Error{}
 		default:
 			var value string
-			if err := json.Unmarshal(raw, &value); err != nil || !validConfigText(value, textMaxFor(key)) {
+			if err := json.Unmarshal(raw, &value); err != nil ||
+				!validConfigTextWithRunes(value, textMaxFor(key), textMaxRunesFor(key)) {
 				return "", invalid
 			}
 			if !spec.allowEmpty && value == "" {
@@ -618,45 +788,67 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 	return "", httperr.New(httperr.CodeNotFound, "configuration key not found")
 }
 
-// publicSiteConfigKeys is the strict allowlist projected by ReadPublicConfig.
-// Display-oriented keys plus the two public site-state toggles
-// (maintenance_mode, registration_open) are exposed to unauthenticated
-// callers: their state is inherently public, because a closed registration or
-// maintenance notice is shown to every visitor before login. Operational,
-// rate-limit and Discord-gate keys never appear here. Adding a key to
-// knownSiteConfig does NOT expose it publicly — it must be listed here.
-var publicSiteConfigKeys = []string{
-	KeySiteName,
-	KeySiteLogoURL,
-	KeyDefaultLocale,
-	KeyLegalPrivacyOverrideZh,
-	KeyLegalPrivacyOverrideEn,
-	KeyLegalTermsOverrideZh,
-	KeyLegalTermsOverrideEn,
-	KeyLegalAuthoritativeLocale,
-	KeyMaintenanceMode,
-	KeyRegistrationOpen,
+// PublicConfig is the closed, display-safe bootstrap DTO shared by the public
+// and administrator stations. A concrete struct, rather than a generic map,
+// makes adding an operational site-config key to the public wire an explicit
+// contract change. It intentionally has exactly twelve JSON fields.
+type PublicConfig struct {
+	SiteName                 string `json:"site_name"`
+	SiteLogoURL              string `json:"site_logo_url"`
+	CharityDonationNoticeZh  string `json:"charity_donation_notice_zh"`
+	CharityDonationNoticeEn  string `json:"charity_donation_notice_en"`
+	LegalPrivacyOverrideZh   string `json:"legal_privacy_override_zh"`
+	LegalPrivacyOverrideEn   string `json:"legal_privacy_override_en"`
+	LegalTermsOverrideZh     string `json:"legal_terms_override_zh"`
+	LegalTermsOverrideEn     string `json:"legal_terms_override_en"`
+	LegalAuthoritativeLocale string `json:"legal_authoritative_locale"`
+	MaintenanceMode          bool   `json:"maintenance_mode"`
+	RegistrationOpen         bool   `json:"registration_open"`
+	AnnouncementEpoch        string `json:"announcement_epoch"`
+}
+
+func publicConfigString(values map[string]string, key string) string {
+	value, _ := typedSiteConfigValue(key, values[key]).(string)
+	return value
+}
+
+func publicConfigBool(values map[string]string, key string) bool {
+	value, _ := typedSiteConfigValue(key, values[key]).(bool)
+	return value
+}
+
+func buildPublicConfig(values map[string]string) PublicConfig {
+	if values == nil {
+		values = map[string]string{}
+	}
+	return PublicConfig{
+		SiteName:                 publicConfigString(values, KeySiteName),
+		SiteLogoURL:              publicConfigString(values, KeySiteLogoURL),
+		CharityDonationNoticeZh:  publicConfigString(values, KeyCharityDonationNoticeZh),
+		CharityDonationNoticeEn:  publicConfigString(values, KeyCharityDonationNoticeEn),
+		LegalPrivacyOverrideZh:   publicConfigString(values, KeyLegalPrivacyOverrideZh),
+		LegalPrivacyOverrideEn:   publicConfigString(values, KeyLegalPrivacyOverrideEn),
+		LegalTermsOverrideZh:     publicConfigString(values, KeyLegalTermsOverrideZh),
+		LegalTermsOverrideEn:     publicConfigString(values, KeyLegalTermsOverrideEn),
+		LegalAuthoritativeLocale: publicConfigString(values, KeyLegalAuthoritativeLocale),
+		MaintenanceMode:          publicConfigBool(values, KeyMaintenanceMode),
+		RegistrationOpen:         publicConfigBool(values, KeyRegistrationOpen),
+		AnnouncementEpoch:        publicConfigString(values, KeyAnnouncementEpoch),
+	}
 }
 
 // ReadPublicConfig returns the display-only site_config subset for
 // unauthenticated callers (the user station bootstrap). It reads every
-// stored row but projects only the allowlist above through the same typed
-// helper as the admin read path, so a manually corrupted or unknown row
-// can never leak. A missing store yields an empty map rather than panicking.
-func ReadPublicConfig(store *db.Store) (map[string]any, error) {
-	out := make(map[string]any, len(publicSiteConfigKeys))
+// stored row but projects only the concrete DTO above through the same typed
+// helper as the admin read path, so a manually corrupted or unknown row can
+// never leak. A missing store yields the inherited effective fallbacks.
+func ReadPublicConfig(store *db.Store) (PublicConfig, error) {
 	if store == nil {
-		for _, key := range publicSiteConfigKeys {
-			out[key] = typedSiteConfigValue(key, "")
-		}
-		return out, nil
+		return buildPublicConfig(nil), nil
 	}
 	values, err := store.GetAllSiteConfigValues()
 	if err != nil {
-		return nil, err
+		return PublicConfig{}, err
 	}
-	for _, key := range publicSiteConfigKeys {
-		out[key] = typedSiteConfigValue(key, values[key])
-	}
-	return out, nil
+	return buildPublicConfig(values), nil
 }

@@ -216,9 +216,43 @@ type DiscoveryInput struct {
 	Credential *ShortLivedSecret
 }
 
+// DiscoveryFailureKind is the closed connector-neutral classification for a
+// model-discovery failure. The string values are the safe evidence classes
+// consumed by the discovery state rail; arbitrary upstream values must never
+// be converted into this type.
+type DiscoveryFailureKind string
+
+const (
+	DiscoveryFailureNone        DiscoveryFailureKind = "none"
+	DiscoveryFailureAuth        DiscoveryFailureKind = "auth"
+	DiscoveryFailureRateLimit   DiscoveryFailureKind = "rate_limit"
+	DiscoveryFailureTimeout     DiscoveryFailureKind = "timeout"
+	DiscoveryFailureProtocol    DiscoveryFailureKind = "protocol"
+	DiscoveryFailureTransport   DiscoveryFailureKind = "transport"
+	DiscoveryFailureInterrupted DiscoveryFailureKind = "interrupted"
+)
+
+// DiscoveryResult contains only bounded catalog rows and typed attempt facts.
+// UpstreamStatus is the real status of the response that determined the
+// result, or zero when no response was received. Diagnostic is always a local
+// connector-safe string and never contains an upstream body, URL, header,
+// credential, or raw transport error.
 type DiscoveryResult struct {
-	Models     []DiscoveredModel
-	Diagnostic string
+	Models           []DiscoveredModel
+	Failure          DiscoveryFailureKind
+	UpstreamStatus   int
+	ResponseReceived bool
+	Diagnostic       string
+}
+
+// Succeeded is the complete fail-closed success predicate. In particular, a
+// zero value or an unknown failure kind cannot be mistaken for a successful
+// empty discovery result.
+func (r DiscoveryResult) Succeeded() bool {
+	return r.Failure == DiscoveryFailureNone &&
+		r.ResponseReceived &&
+		r.UpstreamStatus >= 200 && r.UpstreamStatus <= 299 &&
+		r.Diagnostic == ""
 }
 
 // AnthropicDefaultMaxTokensProvider exposes the nullable raw site override to

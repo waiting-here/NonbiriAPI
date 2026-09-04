@@ -1,6 +1,5 @@
-// Package auth implements the server-side identity boundary for the user and
-// administrator stations. It deliberately keeps provider credentials and
-// bearer/session plaintext out of persistence and logging surfaces.
+// Package auth owns the Generation 2 browser authentication and session
+// boundary for the user and administrator stations.
 package auth
 
 import (
@@ -9,20 +8,22 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/waiting-here/NonbiriAPI/internal/credits"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
-	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/elevation"
+	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
 
 const (
-	StationUser      = "user"
-	StationAdmin     = "admin"
-	OAuthIntentLogin = "login"
-	// OAuthIntentElevate is the distinct OAuth intent for a fresh identity
-	// re-authorization. Elevation states are session-bound and can never be
-	// exchanged for login states (and vice versa).
+	StationUser        = "user"
+	StationAdmin       = "admin"
+	OAuthIntentLogin   = "login"
 	OAuthIntentElevate = "elevate"
+
+	DefaultOAuthStateTTL      = 10 * time.Minute
+	DefaultSessionIdleTTL     = 7 * 24 * time.Hour
+	DefaultSessionAbsoluteTTL = 30 * 24 * time.Hour
 )
 
 var (
@@ -36,14 +37,12 @@ var (
 	ErrGuildRoleMismatch    = errors.New("identity does not satisfy registration gate")
 	ErrInvalidIdentity      = errors.New("identity provider returned invalid identity")
 	ErrStationMismatch      = errors.New("request station is not authorized")
-	// ErrElevationRequired is the stable boundary failure reported when an
-	// account self-service request lacks a valid, unexpired, unconsumed
-	// elevated capability. It never carries the capability token.
-	ErrElevationRequired = errors.New("elevated capability required")
+	ErrClosed               = errors.New("authentication runtime is closed")
+	ErrFrozen               = errors.New("authentication routes are frozen")
+	ErrDuplicateRoute       = errors.New("authentication route already registered")
+	ErrInvalidRoute         = errors.New("authentication route is invalid")
 )
 
-// DiscordAuthorizeRequest contains only fixed server configuration and the
-// signed state. The provider must not log or persist State.
 type DiscordAuthorizeRequest struct {
 	ClientID    string
 	RedirectURI string
@@ -51,226 +50,152 @@ type DiscordAuthorizeRequest struct {
 	Intent      string
 }
 
-// DiscordIdentity is provider-supplied metadata. Values are bounded before
-// they enter the users table. GuildID/RoleIDs are optional because the narrow
-// provider interface can perform membership lookup lazily.
 type DiscordIdentity struct {
 	ID         string
 	Username   string
 	GlobalName string
 	Avatar     string
-	GuildID    string
-	RoleIDs    []string
 }
 
-// GuildMember is the server-scoped profile fetched from the registration
-// guild: the member's server nickname (empty when they have none), their
-// server-specific avatar hash (empty when they use the global avatar), and
-// the role ids needed for the registration-gate role check. It is captured
-// alongside the role check so the same authorized call also refreshes the
-// displayed nickname and avatar snapshot.
 type GuildMember struct {
 	Nick   string
 	Avatar string
 	Roles  []string
 }
 
-// DiscordLogin carries an identity and a transient membership capability. The
-// HTTP implementation closes over an in-memory access token only for the
-// duration of the callback; it never returns that token to callers or stores
-// it. Tests and alternate providers may populate GuildID/RoleIDs instead.
+// DiscordLogin keeps the provider access token inside the callback-owned
+// closure. Neither this value nor the context actor contains that token.
 type DiscordLogin struct {
 	Identity    DiscordIdentity
 	GuildMember func(context.Context, string) (GuildMember, error)
 }
 
-// DiscordProvider is deliberately narrow so provider-specific credentials and
-// token handling cannot leak into the core user repository.
 type DiscordProvider interface {
 	AuthorizationURL(context.Context, DiscordAuthorizeRequest) (string, error)
-	Exchange(ctx context.Context, code, redirectURI string) (DiscordLogin, error)
+	Exchange(context.Context, string, string) (DiscordLogin, error)
 }
 
-// RegistrationGate is read at callback time from runtime site_config. Both
-// values must be non-empty for a new registration.
-type RegistrationGate struct {
-	GuildID string
-	RoleID  string
+type GenerationTwoSubkeyDeriver interface {
+	DeriveGenerationTwoSubkey([]byte) ([]byte, error)
 }
 
-type RegistrationGateFunc func(context.Context) (RegistrationGate, error)
-
-// UserRequestGate admits an already authenticated browser request under a
-// process-local user lifecycle lease. The returned context is canceled when
-// the account is banned or deleted; the release function is idempotent.
-type UserRequestGate func(context.Context, int64, string) (context.Context, func(), error)
-
-// LoginThrottle is the login-failure hook. It receives the already-derived
-// client IP from httpmw.ClientIP rather than parsing headers.
 type LoginThrottle interface {
 	Check(identity, username string) (ratelimit.LoginDecision, error)
 	Failure(identity, username string) (ratelimit.LoginDecision, error)
 	Success(identity, username string) error
 }
 
-// PrincipalKind separates user sessions, admin sessions, and caller keys.
-type PrincipalKind uint8
-
-const (
-	PrincipalUserSession PrincipalKind = iota + 1
-	PrincipalAdminSession
-	PrincipalCallerKey
-)
-
-// Principal is safe context metadata. It contains no raw session/caller token.
-type Principal struct {
-	User *db.User
-	Kind PrincipalKind
+type MaintenanceGate interface {
+	State() (maintenance.State, bool)
 }
 
-type principalContextKey struct{}
-
-func withPrincipal(ctx context.Context, principal Principal) context.Context {
-	return context.WithValue(ctx, principalContextKey{}, principal)
+type RuntimeConfig struct {
+	Store                *db.Store
+	Provider             DiscordProvider
+	DiscordClientID      string
+	DiscordRedirectURI   string
+	UserSiteBaseURL      string
+	AdminUsername        string
+	AdminPassword        string
+	CredentialKeyDeriver GenerationTwoSubkeyDeriver
+	Authorizer           *authz.Authorizer
+	Maintenance          MaintenanceGate
+	OAuthStates          *StateManager
+	Elevation            *elevation.Manager
+	AdminLoginThrottle   LoginThrottle
+	Now                  func() time.Time
+	SessionIdleTTL       time.Duration
+	SessionAbsoluteTTL   time.Duration
 }
 
-// PrincipalFromContext returns an identity established by one of the auth
-// middlewares. A missing value is never treated as anonymous success.
-func PrincipalFromContext(ctx context.Context) (Principal, bool) {
+// ActorFromContext returns the request-bound, non-secret authorization actor.
+// It contains only irreversible session lookup material and the live session
+// generation observed at the entry boundary.
+func ActorFromContext(ctx context.Context) (authz.Actor, bool) {
 	if ctx == nil {
-		return Principal{}, false
+		return authz.Actor{}, false
 	}
-	principal, ok := ctx.Value(principalContextKey{}).(Principal)
-	return principal, ok && principal.User != nil
+	actor, ok := ctx.Value(actorContextKey{}).(authz.Actor)
+	return actor, ok && actor.UserID > 0 && actor.SessionTokenHash != "" && actor.SessionGeneration != ""
 }
 
-// UserFromContext returns only a browser user-session principal. Keeping caller
-// keys out of this default helper prevents a user-management handler from
-// accidentally accepting the platform bearer credential; forwarding code must
-// opt into CallerUserFromContext explicitly.
-func UserFromContext(ctx context.Context) (*db.User, bool) {
-	principal, ok := PrincipalFromContext(ctx)
-	if !ok || principal.Kind != PrincipalUserSession {
-		return nil, false
-	}
-	return principal.User, true
+type actorContextKey struct{}
+
+func withActor(ctx context.Context, actor authz.Actor) context.Context {
+	return context.WithValue(ctx, actorContextKey{}, actor)
 }
 
-// CallerUserFromContext returns the user authenticated by the platform caller
-// key. It is intentionally separate from UserFromContext so session-only APIs
-// cannot silently accept an Authorization bearer key.
-func CallerUserFromContext(ctx context.Context) (*db.User, bool) {
-	principal, ok := PrincipalFromContext(ctx)
-	if !ok || principal.Kind != PrincipalCallerKey {
-		return nil, false
-	}
-	return principal.User, true
+// UserEnvelope is the exact Generation 2 shape shared by GET /api/session and
+// GET/PATCH /api/me.
+type UserEnvelope struct {
+	User User `json:"user"`
 }
 
-func AdminFromContext(ctx context.Context) (*db.User, bool) {
-	principal, ok := PrincipalFromContext(ctx)
-	if !ok || principal.Kind != PrincipalAdminSession || !principal.User.IsAdmin {
-		return nil, false
-	}
-	return principal.User, true
+type User struct {
+	ID                        string       `json:"id"`
+	Username                  string       `json:"username"`
+	Avatar                    *string      `json:"avatar"`
+	AvatarURL                 *string      `json:"avatar_url"`
+	GuildNick                 *string      `json:"guild_nick"`
+	GuildAvatarURL            *string      `json:"guild_avatar_url"`
+	Lang                      string       `json:"lang"`
+	IsBanned                  bool         `json:"is_banned"`
+	BannedUntil               *int64       `json:"banned_until"`
+	CharitySuspendedUntil     *int64       `json:"charity_suspended_until"`
+	EndpointLimit             *string      `json:"endpoint_limit"`
+	EffectiveEndpointLimit    string       `json:"effective_endpoint_limit"`
+	RPMLimit                  *string      `json:"rpm_limit"`
+	EffectiveRPMLimit         string       `json:"effective_rpm_limit"`
+	ConcurrencyLimit          *string      `json:"concurrency_limit"`
+	EffectiveConcurrencyLimit string       `json:"effective_concurrency_limit"`
+	Balance                   string       `json:"balance"`
+	DonationCredit            string       `json:"donation_credit"`
+	EffectiveLevel            int          `json:"effective_level"`
+	LevelDisplayName          string       `json:"level_display_name"`
+	GameProfilePublic         bool         `json:"game_profile_public"`
+	CreatedAt                 int64        `json:"created_at"`
+	UpdatedAt                 int64        `json:"updated_at"`
+	Usage                     UsageSummary `json:"usage"`
 }
 
-// UserResponse is the bounded public user shape used by /api/session and
-// /api/me. No Discord access token, session token, or caller key is included.
-// banned_until / charity_suspended_until are nullable unix seconds; an
-// authenticated caller is never actively banned (a ban deletes its sessions),
-// but a charity-eligibility suspension can be in force while the account
-// itself remains usable.
-//
-// Additive level/economy projection (implementation contract §6.2): credits
-// and donation_credit are canonical decimal milli-credit strings;
-// effective_level is the server-authoritative resolved level for THIS request
-// (read paths may lazily persist an auto-level promotion); manual_level is
-// the nullable manual override (null = automatic). Level is display/state
-// data only — capability decisions are made server-side per use.
-type UserResponse struct {
-	ID                        int64     `json:"id"`
-	Username                  string    `json:"username"`
-	Avatar                    string    `json:"avatar"`
-	AvatarURL                 string    `json:"avatar_url"`
-	GuildNick                 string    `json:"guild_nick"`
-	GuildAvatarURL            string    `json:"guild_avatar_url"`
-	Lang                      string    `json:"lang"`
-	IsBanned                  bool      `json:"is_banned"`
-	BlockedReason             string    `json:"blocked_reason,omitempty"`
-	BannedUntil               *int64    `json:"banned_until"`
-	CharitySuspendedUntil     *int64    `json:"charity_suspended_until"`
-	EndpointLimit             *int      `json:"endpoint_limit"`
-	EffectiveEndpointLimit    int       `json:"effective_endpoint_limit"`
-	RPMLimit                  *int      `json:"rpm_limit"`
-	EffectiveRPMLimit         int       `json:"effective_rpm_limit"`
-	ConcurrencyLimit          *int      `json:"concurrency_limit"`
-	EffectiveConcurrencyLimit int       `json:"effective_concurrency_limit"`
-	GameProfilePublic         bool      `json:"game_profile_public"`
-	Credits                   string    `json:"credits"`
-	DonationCredit            string    `json:"donation_credit"`
-	EffectiveLevel            int       `json:"effective_level"`
-	ManualLevel               *int      `json:"manual_level"`
-	CreatedAt                 time.Time `json:"created_at"`
+type UsageSummary struct {
+	TotalRequests              string `json:"total_requests"`
+	TotalUncachedInputTokens   string `json:"total_uncached_input_tokens"`
+	TotalCacheWriteInputTokens string `json:"total_cache_write_input_tokens"`
+	TotalCacheReadInputTokens  string `json:"total_cache_read_input_tokens"`
+	TotalOutputTokens          string `json:"total_output_tokens"`
+	TotalPromptTokens          string `json:"total_prompt_tokens"`
+	TotalCompletionTokens      string `json:"total_completion_tokens"`
+	TotalUnknownUsageRequests  string `json:"total_unknown_usage_requests"`
 }
 
-// unixSecondsPtr projects a nullable deadline as a JSON number pointer.
-func unixSecondsPtr(t *time.Time) *int64 {
-	if t == nil {
-		return nil
-	}
-	v := t.Unix()
-	return &v
-}
-
-// publicUser projects the user row with the effective level resolved for this
-// request by the authoritative resolver. effectiveLevel must come from
-// db.Store.ResolveEffectiveLevel (it may have lazily persisted a promotion);
-// callers never recompute a level from thresholds themselves.
-func publicUser(user *db.User, effectiveLevel int, defaults db.UserLimitDefaults) UserResponse {
-	if user == nil {
-		return UserResponse{}
-	}
-	limits := db.ProjectUserLimits(user, defaults)
-	return UserResponse{
-		ID: user.ID, Username: user.Username, Avatar: user.Avatar, Lang: user.Lang,
-		AvatarURL: discordAvatarURL(user.DiscordID, user.Avatar),
-		GuildNick: user.GuildNick, GuildAvatarURL: user.GuildAvatarURL,
-		IsBanned: user.IsBanned, BlockedReason: user.BannedReason,
-		BannedUntil:               unixSecondsPtr(user.BannedUntil),
-		CharitySuspendedUntil:     unixSecondsPtr(user.CharitySuspendedUntil),
-		EndpointLimit:             limits.EndpointLimit,
-		EffectiveEndpointLimit:    limits.EffectiveEndpointLimit,
-		RPMLimit:                  limits.RPMLimit,
-		EffectiveRPMLimit:         limits.EffectiveRPMLimit,
-		ConcurrencyLimit:          limits.ConcurrencyLimit,
-		EffectiveConcurrencyLimit: limits.EffectiveConcurrencyLimit,
-		GameProfilePublic:         user.GameProfilePublic,
-		CreatedAt:                 user.CreatedAt,
-		Credits:                   credits.FormatAmount(user.Credits),
-		DonationCredit:            credits.FormatAmount(user.DonationCredit),
-		EffectiveLevel:            effectiveLevel,
-		ManualLevel:               user.Level,
-	}
-}
-
-// AdminResponse is the only admin identity shape returned to the browser.
 type AdminResponse struct {
 	Username string `json:"username"`
 }
 
-type adminEnvelope struct {
+type AdminEnvelope struct {
 	Admin AdminResponse `json:"admin"`
 }
 
-type userEnvelope struct {
-	User UserResponse `json:"user"`
+type ElevationResponse struct {
+	Token     string `json:"token"`
+	ExpiresAt int64  `json:"expires_at"`
 }
 
-func requireMethod(w http.ResponseWriter, r *http.Request, method string) bool {
-	if r != nil && r.Method == method {
-		return true
-	}
-	writeStableError(w, httperr.CodeMethodNotAllowed, "method not allowed")
-	return false
+type AuthorizationURLResponse struct {
+	AuthorizationURL string `json:"authorization_url"`
 }
+
+// AnonymousUserHandler is the registration type for routes that deliberately
+// run without a user session, such as OAuth start and callback.
+type AnonymousUserHandler func(http.ResponseWriter, *http.Request)
+
+// OptionalUserPrincipal is nil for a genuinely anonymous request and present
+// only after the normal user session boundary has authenticated the request.
+type OptionalUserPrincipal struct {
+	UserID int64
+}
+
+// OptionalUserHandler supports the small route class that accepts either an
+// anonymous caller or a fully authenticated user caller.
+type OptionalUserHandler func(http.ResponseWriter, *http.Request, *OptionalUserPrincipal)

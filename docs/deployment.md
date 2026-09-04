@@ -1,6 +1,6 @@
 # VPS deployment with systemd
 
-This guide describes the supported single-instance operating model for the unreleased `v1.0.0-alpha.3`: one compiled binary, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS. The latest published release remains alpha.2; do not treat development-branch instructions as production deployment authorization. See [configuration.md](configuration.md) for the full environment and runtime-settings reference.
+This guide describes the supported single-instance operating model for the unreleased `v1.0.0-beta.1` candidate: one Linux/amd64 binary built from the exact source commit, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS. The latest published prerelease remains `v1.0.0-alpha.3`. Verify the fresh-only boundary, backups, configuration, legal text, and smoke tests before opening any candidate deployment. See [configuration.md](configuration.md) for the full environment and runtime-settings reference.
 
 The commands are examples. Replace paths, hostnames, users, and package-manager commands for the target VPS. Do not copy real secrets into a Git checkout.
 
@@ -54,7 +54,7 @@ For a manual launch outside the example systemd unit, the application enforces o
 
 ## Build a release binary
 
-Build on a controlled build host or in a clean checkout. The race gate requires a working C compiler for Go's race detector; the final production build remains `CGO_ENABLED=0`.
+Build on a controlled Linux/amd64 host or in a clean checkout that produces that exact target. The race gate requires a working C compiler for Go's race detector; the final production build remains `CGO_ENABLED=0`.
 
 ```sh
 npm --prefix web ci
@@ -71,7 +71,7 @@ The `dist` build tag is required for the real frontend. An untagged binary conta
 Install into a versioned directory and publish the symlink with a same-filesystem rename. Set `version` to the release being installed:
 
 ```sh
-version=1.0.0-alpha.3
+version=1.0.0-beta.1
 release=/opt/nonbiriapi/releases/$version
 sudo install -d -o root -g root -m 0755 "$release"
 sudo install -o root -g root -m 0755 nonbiriapi "$release/nonbiriapi"
@@ -149,32 +149,32 @@ location / {
 
 Use separate `server` blocks/certificates for user and administrator hosts so the administrator host can have stricter network or identity controls. Adjust the upstream port and timeouts to the actual deployment; test SSE through the complete Cloudflare → Nginx → application path.
 
-## Alpha.3 fresh-only database and version changes
+## Beta.1 fresh-only database and version changes
 
-Alpha.3 accepts only a completely absent database set or a validated generation-1 database whose SQLite header contains `application_id=0x4E425249` and `user_version=1`. It does not run `ALTER`, schema repair, or the alpha.2 credential migration. Before a writable source open, an existing database is copied through no-follow read-only handles to a private validation directory; header, schema, foreign keys, indexes, sidecars, and contextual v2 credential envelopes are checked there. An alpha.1/alpha.2 file, empty file, unknown generation, corrupt or unexpected schema, unsafe file shape, rollback journal, or anomalous sidecar is refused without modifying the source set or creating a new source-side WAL/SHM.
+Beta.1 accepts only a completely absent database set or a validated Generation 2 database whose SQLite header contains `application_id=0x4E425249` and `user_version=2`. It does not run `ALTER`, schema repair, migration, or data import. Before a writable source open, an existing database is copied through no-follow read-only handles to a private validation directory; header, schema, foreign keys, indexes, sidecars, and contextual credential envelopes are checked there. An alpha or Generation 1 file, empty file, unknown generation, corrupt or unexpected schema, unsafe file shape, rollback journal, or anomalous sidecar is refused without modifying the source set or creating a new source-side WAL/SHM.
 
 Therefore:
 
-- installing an alpha.3 binary over an alpha.2 database does not upgrade it;
+- installing a beta.1 binary over an alpha or Generation 1 database does not upgrade it;
 - switching only the binary to an older version is never a supported downgrade;
 - a stateful rollback must restore a complete compatible snapshot, not combine an old binary with the current database;
-- a cutover from alpha.2 to alpha.3 deliberately starts with an empty alpha.3 database and loses active application state unless the operator later re-enters it manually;
-- a fresh alpha.3 database starts with maintenance on, registration off, and games off. Keep those gates closed until instance legal text, required configuration, initialization, and smoke tests pass.
+- a cutover from an earlier prerelease deliberately starts with an empty Generation 2 database and loses active application state unless the operator later re-enters it manually;
+- a fresh beta.1 database starts with maintenance on and registration, activities, charity, donation intake, and games off. Keep those gates closed until instance legal text, required configuration, initialization, and smoke tests pass.
 
-The alpha.3 companion deployment helper is maintained separately and is **not shipped by this repository**. Any helper used for this cutover must expose exactly four operator entry classes:
+The companion deployment helper is maintained separately and is **not shipped by this repository**. Any helper used for this cutover must expose exactly four operator entry classes:
 
 1. default interactive normal deployment to a trusted `origin` annotated tag or remote branch, fixed immediately to an immutable commit;
 2. `--restore-snapshot`, which accepts only a complete snapshot whose checksum, release, schema, configuration, master key, and unit match;
 3. `--destructive-fresh-deploy`, a permanent high-risk upgrade/downgrade escape hatch that first preserves a complete source snapshot, then removes only the revalidated active database/WAL/SHM paths and creates a fresh target-generation deployment;
 4. `snapshot inventory`, `snapshot import`, and `snapshot delete` management.
 
-The helper must present tags in version order and branches by name, identify branches as non-release targets, pin the selected commit, and allow `q` to exit before any destructive action. After the source snapshot has been verified, destructive fresh requires an interactive `/dev/tty` and one complete confirmation phrase bound to the operation, source and target refs/commits, revalidated absolute database path, and snapshot id; there is no `--yes`, `--no-backup`, or non-interactive bypass. A failure before the local commit point must restore the complete source state while retaining both the source snapshot and old release. Once local health has passed and the target is committed, a later public proxy/DNS/TLS check failure keeps the new service and source snapshot in place for diagnosis instead of automatically rolling back. If you do not have a separately reviewed compatible helper, use the manual procedure below only for a same-generation disposable/staging deployment or a verified compatible alpha.3 database; it is not a substitute for a destructive fresh cutover.
+The helper must present tags in version order and branches by name, identify branches as non-release targets, pin the selected commit, and allow `q` to exit before any destructive action. After the source snapshot has been verified, destructive fresh requires an interactive `/dev/tty` and one complete confirmation phrase bound to the operation, source and target refs/commits, revalidated absolute database path, and snapshot id; there is no `--yes`, `--no-backup`, or non-interactive bypass. A failure before the local commit point must restore the complete source state while retaining both the source snapshot and old release. Once local health has passed and the target is committed, a later public proxy/DNS/TLS check failure keeps the new service and source snapshot in place for diagnosis instead of automatically rolling back. If you do not have a separately reviewed compatible helper, use the manual procedure below only for a same-generation disposable/staging deployment or a verified compatible Generation 2 database; it is not a substitute for a destructive fresh cutover.
 
 A destructive fresh cutover deletes the active database set and therefore removes users, sessions, OAuth state, CallerKeys; endpoints, upstream secrets, physical keys, models and bindings; charity resources, donations, reviews and routing state; spendable `credits`, cumulative `donation_credit`, levels, check-ins, usage totals and per-user limits; request/usage logs, audits, alerts, activity and lifecycle records; display, OAuth-gate, anti-abuse, charity, economy, timezone, maintenance, registration and legal settings in `site_config`; Debug session state; and game data from the new active instance. The protected source snapshot remains sensitive and may still contain all of that data. It is not an account export and must be protected together with the original release, environment/configuration, master key, unit, manifest, and checksums.
 
 ## Manual same-generation deployment procedure
 
-1. Verify the release source and build on a separate build host. Confirm that the target binary and current database generation are compatible; this procedure does not convert alpha.2 to alpha.3.
+1. Verify the release source and build on a separate Linux/amd64 build host. Confirm that the target binary and current database are both Generation 2; this procedure never converts an earlier database.
 2. Run the Go, race, frontend, and release-like embed gates.
 3. Copy the new binary to a new versioned release directory; do not overwrite the active binary in place.
 4. Stop the service before backing up or replacing the database-adjacent files:
@@ -200,7 +200,7 @@ A destructive fresh cutover deletes the active database set and therefore remove
 6. Point `/opt/nonbiriapi/current` at the new compatible release and start the service:
 
    ```sh
-   version=1.0.0-alpha.3  # replace with the compatible release being installed
+   version=1.0.0-beta.1  # replace with the compatible release being installed
    sudo ln -sfn "/opt/nonbiriapi/releases/$version" /opt/nonbiriapi/current.next
    sudo mv -Tf /opt/nonbiriapi/current.next /opt/nonbiriapi/current
    sudo systemctl start nonbiriapi.service
@@ -215,15 +215,16 @@ If the binary fails to start, stop it. Reverting only the release symlink is all
 
 A backup is not complete until it has been restored in an isolated directory with the same master key and opened by a test instance. Test this before onboarding users and periodically thereafter. Never test restoration against the production database path.
 
-## Cutting over from alpha.1 or alpha.2
+## Cutting over from an earlier prerelease
 
-There is no in-place path. With a separately reviewed compatible helper and explicit authorization for the destructive operation, use its destructive-fresh flow: select and pin the trusted target; stop the service; create and verify a complete source snapshot; enter the complete target-bound confirmation phrase from `/dev/tty`; remove only the exact revalidated active database/WAL/SHM; start the target against an absent database path; verify the fresh safety gates; then reapply approved instance legal text and required configuration. Do not copy tables, rows, encrypted credentials, site configuration, or legal overrides into generation 1 by hand.
+There is no in-place path. With a separately reviewed compatible helper and explicit authorization for the destructive operation, use its destructive-fresh flow: select and pin the trusted target; stop the service; create and verify a complete source snapshot; enter the complete target-bound confirmation phrase from `/dev/tty`; remove only the exact revalidated active database/WAL/SHM; start the target against an absent database path; verify the fresh safety gates; then reapply approved instance legal text and required configuration. Do not copy tables, rows, encrypted credentials, site configuration, or legal overrides into Generation 2 by hand.
 
 If the cutover fails before the target passes local health and reaches its recorded commit point, restore the complete source snapshot and old release. After that commit point, a failure limited to public proxy, DNS, or TLS checks keeps the new service and source snapshot in place and reports the external fault; it does not automatically roll back the database. If the source snapshot is missing, corrupt, incompatible, or has been cleaned up, stateful rollback is unavailable: the safe choices are to keep the current compatible deployment, repair/restore from another verified complete snapshot, or perform a separately confirmed destructive fresh deployment. The helper must never offer a binary-only downgrade or fabricate a database for the old version.
 
-## Alpha limitations
+## Candidate limitations
 
-- Alpha.3 is fresh-only generation 1. A current database is validated, not bootstrapped or migrated; a completely absent main/WAL/SHM path set permits fresh creation, while every unsupported existing state is rejected without repair.
-- SMTP settings are reserved and do not send alert email in the alpha releases.
+- Beta.1 is fresh-only Generation 2. A current database is validated, not bootstrapped or migrated; a completely absent main/WAL/SHM path set permits fresh creation, while every unsupported existing state is rejected without repair.
+- The release target is Linux/amd64 and the release process is source-first.
+- SMTP settings are reserved and do not send alert email in the current prereleases.
 - Real Discord OAuth and upstream success flows must be tested with disposable staging credentials before public operation.
 - Choose a maintenance window for every update and keep a known-good binary, environment backup, and database backup together.

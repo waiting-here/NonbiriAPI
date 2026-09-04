@@ -1,747 +1,1088 @@
-// Package forward provides the mountable CallerKey-only OpenAI-compatible
-// platform exit. It resolves caller-owned routes, orchestrates the candidate
-// dispatch loop (ordered / random) with the silent-retry boundary and bounded
-// backoff, and exposes narrow selector/attempt/usage/failover hooks for later
-// accounting, logging, and rate-control layers. Each attempt re-validates
-// ownership through the single-attempt runner; no retry crosses the commit
-// boundary or touches another connector's algorithm.
 package forward
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base32"
 	"errors"
 	"log/slog"
+	"math/big"
 	"net/http"
+	"reflect"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
+	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
-	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/credits"
+	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/routing"
 )
 
 const (
-	MaxCallerModels    = 1000
-	MaxRouteCandidates = 256
-	// DefaultForwardTimeout is one aggregate wall-clock budget shared by route
-	// resolution, every silent-retry attempt, and retry backoff. It matches the
-	// default single-attempt egress ceiling without multiplying that ceiling by
-	// the candidate count.
-	DefaultForwardTimeout = 5 * time.Minute
-	maxRouteOrd           = 1_000_000
+	charityModelPrefix = "[公益]"
+	maxPersonalRunes   = 129
+	maxCharityRunes    = 133
+	maxProviderRunes   = 64
+	maxUnixSecond      = int64(253402300799)
 )
 
-var (
-	ErrModelNotFound           = errors.New("forward: model not found")
-	ErrUnboundModel            = errors.New("forward: model has no usable binding")
-	ErrInternal                = errors.New("forward: internal failure")
-	ErrSelector                = errors.New("forward: selector failed")
-	ErrUnsupportedCapabilities = errors.New("forward: model does not support request capabilities")
-)
-
-type observerTraceContextKey struct{}
-type observerContextKey struct{}
-
-// WithObserverTraceID carries an opaque, server-generated logical trace id to
-// the connector observer without changing the independent accounting
-// AttemptID. Invalid or unbounded values are ignored by ObserverTraceID.
-func WithObserverTraceID(ctx context.Context, traceID string) context.Context {
-	if ctx == nil || !validObserverTraceID(traceID) {
-		return ctx
-	}
-	return context.WithValue(ctx, observerTraceContextKey{}, traceID)
-}
-
-func ObserverTraceID(ctx context.Context) string {
-	if ctx == nil {
-		return ""
-	}
-	traceID, _ := ctx.Value(observerTraceContextKey{}).(string)
-	if !validObserverTraceID(traceID) {
-		return ""
-	}
-	return traceID
-}
-
-func validObserverTraceID(value string) bool {
-	if value == "" || len(value) > 128 {
-		return false
-	}
-	for index := 0; index < len(value); index++ {
-		char := value[index]
-		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
-			(char >= '0' && char <= '9') || char == '_' || char == '-' {
-			continue
-		}
-		return false
-	}
-	return true
-}
-
-// WithObserver carries a request-scoped connector SafeObserver through the
-// existing runner context. It is an internal integration seam; callers cannot
-// set it through HTTP input.
-func WithObserver(ctx context.Context, observer *connector.SafeObserver) context.Context {
-	if ctx == nil || observer == nil {
-		return ctx
-	}
-	return context.WithValue(ctx, observerContextKey{}, observer)
-}
-
-func ObserverFromContext(ctx context.Context) *connector.SafeObserver {
-	if ctx == nil {
-		return nil
-	}
-	observer, _ := ctx.Value(observerContextKey{}).(*connector.SafeObserver)
-	return observer
-}
-
-// RouteRepository returns only caller-owned model and candidate projections.
-type RouteRepository interface {
-	ListCallerModels(context.Context, int64, int) ([]db.CallerModel, error)
-	ResolveForwardRoute(context.Context, int64, string, int) (db.ForwardRoute, error)
-}
-
-// LogicalRouteRepository is the narrow dry-run seam.  It must query only the
-// owner-scoped logical model row; implementations must not materialize
-// physical bindings/candidates or touch endpoint/key/cache state.
-type LogicalRouteRepository interface {
-	ResolveLogicalForwardRoute(context.Context, int64, string) (db.LogicalForwardRoute, error)
-}
-
-// Selection is the complete, finite caller-owned candidate set. A selector
-// chooses an ordered sequence of binding ids from this projection but cannot
-// add a globally addressed or cross-user binding.
-type Selection struct {
-	UserID        int64
-	ModelID       int64
-	FullName      string
-	RouteStrategy string
-	SilentRetry   bool
-	Candidates    []db.ForwardCandidate
-}
-
-// Selector is the route-order interface: it returns the binding ids of one
-// caller-owned projection in the dispatch order. The service re-validates each
-// returned id against the projection before every attempt, so a selector can
-// never dispatch an unprojected or cross-user binding. It performs no network
-// I/O and owns no retry policy; the service drives the attempt loop and the
-// retry boundary.
-type Selector interface {
-	Select(context.Context, Selection) ([]int64, error)
-}
-
-// Model is the public GET /v1/models projection.
-type Model struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	OwnedBy string `json:"owned_by"`
-}
-
-// ModelList is the OpenAI list envelope.
-type ModelList struct {
-	Object string  `json:"object"`
-	Data   []Model `json:"data"`
-}
-
-// AttemptRecord is metadata-only. It deliberately contains no ciphertext,
-// credential, request JSON, response JSON, or raw error. EndpointBaseURL is
-// the bounded canonical base URL actually dialed, required by the frozen log
-// contract's dispatch-time snapshot; it is the owner-visible endpoint value,
-// never credential material.
-// AttemptID is a random opaque correlation id generated per Forward
-// invocation and shared with the UsageRecord of the same attempt; consumers
-// use it for at-most-once accounting and must never treat client input as an
-// idempotency key.
-type AttemptRecord struct {
-	AttemptID       string
-	AttemptIndex    int
-	UserID          int64
-	ModelID         int64
-	FullName        string
-	BindingID       int64
-	EndpointID      int64
-	EndpointKeyID   int64
-	UpstreamModelID string
-	Stream          bool
-	StartedAt       time.Time
-	Duration        time.Duration
-	UpstreamStatus  int
-	ClientStatus    int
-	Committed       bool
-	Success         bool
-	StableErrorCode string
-	SafeDiagnostic  string
-	EndpointBaseURL string
-}
-
-// UsageRecord is a future accounting input. Usage carries the connector's
-// normalized four-bucket token metadata (uncached input / cache write /
-// cache read / output, all non-negative) and is passed through unchanged;
-// UsageUnknown is set only for a committed failed stream/response where no
-// valid usage was available; token values are never fabricated. AttemptID
-// correlates with the AttemptRecord of the same Forward invocation; it is
-// shared by the successful attempt that committed the response.
-type UsageRecord struct {
-	AttemptID       string
-	UserID          int64
-	ModelID         int64
-	FullName        string
-	BindingID       int64
-	EndpointKeyID   int64
-	UpstreamModelID string
-	Stream          bool
-	Usage           connectorcontract.Usage
-	UsageUnknown    bool
-	// EndpointBaseURL is the bounded dispatch-time canonical base-URL
-	// snapshot required by the frozen log contract; owner-visible endpoint
-	// metadata, never credential material.
-	EndpointBaseURL string
-}
-
-// FailoverRecord is bounded metadata emitted on each actual failover (one
-// retryable pre-commit upstream failure that advances to the next candidate).
-// It deliberately carries no base URL, endpoint URL, request content, raw
-// upstream body, credential, or diagnostic text -- only the stable failure
-// code and the identifying ids needed by later accounting/log/alert rails.
-type FailoverRecord struct {
-	AttemptID       string
-	UserID          int64
-	ModelID         int64
-	FullName        string
-	BindingID       int64
-	StableErrorCode string
-	AttemptIndex    int
-}
-
-// Hooks are synchronous integration boundaries. Inputs are bounded metadata
-// only. Each Forward invocation generates one random opaque AttemptID shared
-// by the Attempt, Usage, and Failover records of that invocation; consumers
-// use it for at-most-once accounting and must never treat client input as an
-// idempotency key. The Attempt hook fires once per actual upstream attempt
-// (each dial); the Usage hook fires at most once per invocation, only for a
-// committed response (at least one body byte written), success or failure:
-// a committed-but-failed stream still counts as a request with usage_unknown
-// when no valid usage was captured; the Failover hook fires on each actual
-// failover (one retryable pre-commit upstream failure that advances to the
-// next candidate) and carries only bounded non-sensitive metadata.
-type Hooks struct {
-	Attempt  func(AttemptRecord)
-	Usage    func(UsageRecord)
-	Failover func(FailoverRecord)
-}
-
-// ServiceConfig wires the ownership repository, an optional selector
-// override, the single-attempt runner, hooks, and bounded retry backoff.
-// Safety identifiers are generated by the shared
-// SecureRunner factory only after each final target is revalidated.
-// A nil Selector makes the service choose OrderedSelector or RandomSelector
-// per call from the projected route_strategy; a non-nil Selector is used for
-// every call (test injection) and its returned ids are still re-validated
-// against the projection. A zero BackoffConfig selects the system-default
-// exponential backoff; a Base <= 0 disables waiting (tests). A zero
-// ForwardTimeout selects DefaultForwardTimeout; negative values are invalid.
-type ServiceConfig struct {
-	Repository     RouteRepository
-	Selector       Selector
-	Runner         AttemptRunner
-	Hooks          Hooks
-	Backoff        BackoffConfig
-	ForwardTimeout time.Duration
-	Now            func() time.Time
-	Registry       *connector.Registry
-}
-
-// String keeps routine formatting of service configuration bounded.
-func (ServiceConfig) String() string { return "[forward service config]" }
-
-// GoString prevents detailed formatting from exposing injected key material.
-func (ServiceConfig) GoString() string { return "[forward service config]" }
-
-// LogValue prevents structured logging from exposing injected key material.
-func (ServiceConfig) LogValue() slog.Value { return slog.StringValue("[forward service config]") }
-
-// Service resolves one platform model and orchestrates the candidate dispatch
-// loop: it asks the selector for the route order, re-validates each selected
-// binding against the projection, invokes the single-attempt runner per
-// candidate, and applies the silent-retry boundary with bounded backoff.
+// Service owns one complete Generation 2 logical request. Its read lock is
+// held for the whole operation so Close waits for every credential-bearing
+// attempt and no new attempt can race safety-key zeroization.
 type Service struct {
-	lifecycle  sync.RWMutex
-	closed     bool
-	repository RouteRepository
-	selector   Selector
-	runner     AttemptRunner
-	hooks      Hooks
-	backoff    BackoffConfig
-	timeout    time.Duration
-	now        func() time.Time
-	registry   *connector.Registry
+	lifecycle sync.RWMutex
+	closed    bool
+
+	personal       PersonalRouter
+	charity        CharityRouter
+	claims         ClaimRail
+	charityCharges CharityChargeCalculator
+	debug          DebugCapture
+	registry       *connector.Registry
+	connectors     map[connectorcontract.Type]connector.Connector
+	safety         *SafetyIdentifierFactory
+	observer       *connector.SafeObserver
+	now            func() time.Time
+	timeout        time.Duration
+	settlement     time.Duration
+	backoff        BackoffConfig
 }
 
-// DryRunRoute is the logical-only projection returned by ValidateDryRun.  It
-// deliberately contains no candidate, endpoint, binding, origin, or secret
-// material.  Debug callers may use it to render model-level policy while the
-// physical routing rail remains completely untouched.
-type DryRunRoute struct {
-	ModelID         int64
-	FullName        string
-	RouteStrategy   string
-	FlattenToolCall bool
+type logicalAdmission struct {
+	charity       bool
+	modelID       int64
+	fullName      string
+	strategy      string
+	silentRetry   bool
+	flatten       bool
+	reservedMilli int64
+	decisionNow   int64
 }
 
-func NewService(config ServiceConfig) (*Service, error) {
-	if config.Repository == nil {
-		return nil, errors.New("forward: route repository is required")
+type executionPlan struct {
+	logicalAdmission
+	candidates []RouteCandidate
+	purpose    claim.Purpose
+	route      claim.RouteKind
+}
+
+type attemptRun struct {
+	dispatched      bool
+	result          connectorcontract.AttemptResult
+	hasResult       bool
+	failure         *wireFailure
+	err             error
+	terminalBlocked bool
+}
+
+func NewService(config Config) (*Service, error) {
+	if nilInterfaceValue(config.Personal) || nilInterfaceValue(config.Charity) ||
+		nilInterfaceValue(config.Claims) || nilInterfaceValue(config.CharityCharges) ||
+		nilInterfaceValue(config.Debug) || config.Registry == nil || config.Safety == nil {
+		return nil, ErrInvalidConfiguration
 	}
-	if config.Runner == nil {
-		return nil, errors.New("forward: attempt runner is required")
-	}
-	if config.ForwardTimeout < 0 {
-		return nil, errors.New("forward: invocation timeout must not be negative")
+	if config.ForwardTimeout < 0 || config.ForwardTimeout > DefaultForwardTimeout ||
+		config.Settlement < 0 || config.Settlement > DefaultSettlementLimit ||
+		config.Backoff.Base < 0 || config.Backoff.Max < 0 ||
+		(config.Backoff.Max != 0 && config.Backoff.Max < config.Backoff.Base) {
+		return nil, ErrInvalidConfiguration
 	}
 	if config.ForwardTimeout == 0 {
 		config.ForwardTimeout = DefaultForwardTimeout
 	}
+	if config.Settlement == 0 {
+		config.Settlement = DefaultSettlementLimit
+	}
+	if config.Backoff.Base == 0 && config.Backoff.Max == 0 {
+		config.Backoff = BackoffConfig{Base: DefaultBackoffBase, Max: DefaultBackoffMax}
+	}
 	if config.Now == nil {
 		config.Now = time.Now
 	}
-	if config.Registry == nil {
-		config.Registry = connector.NewDefaultRegistry()
+
+	instances := make(map[connectorcontract.Type]connector.Connector, len(config.Connectors))
+	for _, instance := range config.Connectors {
+		if nilInterfaceValue(instance) {
+			return nil, ErrInvalidConfiguration
+		}
+		descriptor, ok := config.Registry.Descriptor(instance.Type())
+		if !ok || descriptor.Capabilities != instance.Capabilities() {
+			return nil, ErrInvalidConfiguration
+		}
+		if _, duplicate := instances[instance.Type()]; duplicate {
+			return nil, ErrInvalidConfiguration
+		}
+		instances[instance.Type()] = instance
 	}
-	backoff := config.Backoff
-	if backoff.Base == 0 && backoff.Max == 0 {
-		backoff = BackoffConfig{Base: DefaultBackoffBase, Max: DefaultBackoffMax}
+	for _, connectorType := range config.Registry.Types() {
+		if instances[connectorType] == nil {
+			return nil, ErrInvalidConfiguration
+		}
 	}
+
 	return &Service{
-		repository: config.Repository,
-		selector:   config.Selector,
-		runner:     config.Runner,
-		hooks:      config.Hooks,
-		backoff:    backoff,
-		timeout:    config.ForwardTimeout,
-		now:        config.Now,
-		registry:   config.Registry,
+		personal: config.Personal, charity: config.Charity, claims: config.Claims,
+		charityCharges: config.CharityCharges, debug: config.Debug, registry: config.Registry,
+		connectors: instances, safety: config.Safety, observer: config.Observer,
+		now: config.Now, timeout: config.ForwardTimeout, settlement: config.Settlement,
+		backoff: config.Backoff.normalized(),
 	}, nil
 }
 
-// Close prevents new operations, waits for in-flight service calls, and
-// leaves key lifecycle to the shared factory owned by SecureRunner.
-func (s *Service) Close() error {
-	if s == nil {
+func (service *Service) Close() error {
+	if service == nil {
 		return nil
 	}
-	s.lifecycle.Lock()
-	defer s.lifecycle.Unlock()
-	if s.closed {
+	service.lifecycle.Lock()
+	defer service.lifecycle.Unlock()
+	if service.closed {
 		return nil
 	}
-	s.closed = true
+	service.closed = true
+	if service.safety != nil {
+		return service.safety.Close()
+	}
 	return nil
 }
 
-// String prevents routine formatting from traversing into key-bearing state.
-func (*Service) String() string { return "[forward service]" }
-
-// GoString prevents detailed formatting from traversing into key-bearing state.
+func (*Service) String() string   { return "[forward service]" }
 func (*Service) GoString() string { return "[forward service]" }
+func (*Service) LogValue() slog.Value {
+	return slog.StringValue("[forward service]")
+}
 
-// LogValue prevents structured logging from traversing into key-bearing state.
-func (*Service) LogValue() slog.Value { return slog.StringValue("[forward service]") }
-
-// ListModels returns only userID's platform models. It never reads a binding,
-// fetched upstream model, endpoint key, ciphertext, or Vault.
-func (s *Service) ListModels(ctx context.Context, userID int64) (ModelList, error) {
-	if s == nil || ctx == nil || userID <= 0 {
+// ListModels returns only currently routable personal models and currently
+// available charity models. The two repositories return safe logical values;
+// this layer deduplicates, stably sorts, and enforces the complete wire bound.
+func (service *Service) ListModels(ctx context.Context, userID int64) (ModelList, error) {
+	if service == nil || ctx == nil || userID <= 0 {
 		return ModelList{}, ErrInternal
 	}
-	s.lifecycle.RLock()
-	defer s.lifecycle.RUnlock()
-	if s.closed || s.repository == nil {
-		return ModelList{}, ErrInternal
+	service.lifecycle.RLock()
+	defer service.lifecycle.RUnlock()
+	if service.closed || service.personal == nil || service.charity == nil {
+		return ModelList{}, ErrClosed
 	}
-	models, err := s.repository.ListCallerModels(ctx, userID, MaxCallerModels)
+	now, err := service.nowUnix()
 	if err != nil {
-		return ModelList{}, ErrInternal
+		return ModelList{}, err
 	}
-	response := ModelList{Object: "list", Data: make([]Model, 0, len(models))}
-	for _, model := range models {
-		if !validStoredModel(model) {
+	personalModels, err := service.personal.ListRoutableModels(ctx, userID, MaxCallerModels)
+	if err != nil {
+		return ModelList{}, err
+	}
+	charityModels, err := service.charity.ListAvailableModels(ctx, now, MaxCallerModels)
+	if err != nil {
+		return ModelList{}, err
+	}
+	if len(personalModels)+len(charityModels) > MaxCallerModels {
+		return ModelList{}, routing.ErrResourceLimit
+	}
+
+	byID := make(map[string]Model, len(personalModels)+len(charityModels))
+	for _, value := range personalModels {
+		if !validListedModel(value, false) {
 			return ModelList{}, ErrInternal
 		}
-		response.Data = append(response.Data, Model{
-			ID:      model.FullName,
-			Object:  "model",
-			Created: model.CreatedAt,
-			OwnedBy: model.Provider,
-		})
+		byID[value.FullName] = Model{ID: value.FullName, Object: "model", Created: value.CreatedAt, OwnedBy: value.Provider}
+	}
+	for _, value := range charityModels {
+		if !validListedModel(value, true) {
+			return ModelList{}, ErrInternal
+		}
+		if _, duplicate := byID[value.FullName]; duplicate {
+			return ModelList{}, ErrInternal
+		}
+		byID[value.FullName] = Model{ID: value.FullName, Object: "model", Created: value.CreatedAt, OwnedBy: value.Provider}
+	}
+	models := make([]Model, 0, len(byID))
+	for _, value := range byID {
+		models = append(models, value)
+	}
+	sort.Slice(models, func(left, right int) bool { return models[left].ID < models[right].ID })
+	response := ModelList{Object: "list", Data: models}
+	if !modelListWithinLimit(response) {
+		return ModelList{}, routing.ErrResourceLimit
 	}
 	return response, nil
 }
 
-// ValidateDryRun performs the request stages that are safe and required
-// before physical candidate selection: caller-owned logical model lookup,
-// route shape validation, and model-level flatten validation.  It never calls
-// a selector, capability filter, runner, connector, secret vault, egress
-// client, accounting hook, or activity/usage writer.  The caller may therefore
-// use it immediately before emitting the fixed in-memory dry response.
-func (s *Service) ValidateDryRun(ctx context.Context, userID int64, request *openai.ChatRequest) (DryRunRoute, error) {
-	if s == nil || ctx == nil || userID <= 0 || request == nil {
-		return DryRunRoute{}, ErrInternal
+// Chat performs the complete request rail and owns all terminal wire writes.
+// The caller has already passed CallerKey and process-wide flow admission.
+func (service *Service) Chat(
+	ctx context.Context,
+	writer http.ResponseWriter,
+	userID int64,
+	request *openai.ChatRequest,
+	body []byte,
+	mediaType string,
+	language string,
+) {
+	if service == nil || ctx == nil || writer == nil || userID <= 0 || request == nil {
+		writeFailure(writer, platformFailure(httperr.CodeInternal, "internal error"))
+		return
 	}
-	s.lifecycle.RLock()
-	defer s.lifecycle.RUnlock()
-	if s.closed || s.repository == nil {
-		return DryRunRoute{}, ErrInternal
+	service.lifecycle.RLock()
+	defer service.lifecycle.RUnlock()
+	if service.closed {
+		writeFailure(writer, platformFailure(httperr.CodeServiceUnavailable, "service unavailable"))
+		return
 	}
-	logicalRepository, ok := s.repository.(LogicalRouteRepository)
-	if !ok {
-		return DryRunRoute{}, ErrInternal
+
+	parent := ctx
+	bounded, cancel := context.WithTimeout(parent, service.timeout)
+	defer cancel()
+
+	admission, attemptRequest, clearAttempt, err := service.preflight(bounded, userID, request)
+	if clearAttempt != nil {
+		defer clearAttempt()
 	}
-	route, err := logicalRepository.ResolveLogicalForwardRoute(ctx, userID, request.Model)
 	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			return DryRunRoute{}, ErrModelNotFound
+		service.writePreAcceptanceFailure(parent, writer, nil, nil, err, admission.charity, language)
+		return
+	}
+	routeKind := debug.RouteOpenAIChat
+	if admission.charity {
+		routeKind = debug.RouteCharityChat
+	}
+	decision, err := service.debug.DecideAfterAdmission(bounded, debug.CaptureInput{
+		UserID: userID, RouteKind: routeKind, Model: request.Model, Stream: request.Stream,
+		MediaType: mediaType, Body: body, Charity: admission.charity,
+		IdentityCertain: true, Language: language,
+	})
+	if err != nil {
+		service.writePreAcceptanceFailure(parent, writer, nil, nil, err, admission.charity, language)
+		return
+	}
+	if decision.DryIntercepted() {
+		decision.WriteDryResult(writer)
+		return
+	}
+
+	executionContext := bounded
+	var suppressor *debug.CallerSuppressor
+	if decision.Active {
+		if decision.Mode != debug.ModeLive || decision.Trace == nil {
+			service.writePreAcceptanceFailure(parent, writer, nil, decision.Trace, ErrInternal, admission.charity, language)
+			return
 		}
-		return DryRunRoute{}, ErrInternal
-	}
-	if route.UserID != userID || route.FullName != request.Model || route.ModelID <= 0 ||
-		(route.RouteStrategy != "ordered" && route.RouteStrategy != "random") {
-		return DryRunRoute{}, ErrInternal
-	}
-	if route.FlattenToolCall {
-		// ReverseFlatten is the same model-level transformation used by the
-		// actual route.  It works on a private clone and performs no I/O.
-		flattened, flattenErr := request.ReverseFlatten()
-		if flattenErr != nil || flattened == nil {
-			return DryRunRoute{}, ErrInternal
+		executionContext = decision.Trace.Context()
+		suppressor, err = debug.NewCallerSuppressor(parent, writer, decision.Language)
+		if err != nil {
+			service.writePreAcceptanceFailure(parent, writer, nil, decision.Trace, err, admission.charity, language)
+			return
 		}
-		flattened.Clear()
 	}
-	return DryRunRoute{
-		ModelID: route.ModelID, FullName: route.FullName, RouteStrategy: route.RouteStrategy,
-		FlattenToolCall: route.FlattenToolCall,
-	}, nil
+
+	plan, err := service.snapshot(executionContext, userID, request.Model, attemptRequest, admission, decision)
+	if err != nil {
+		service.writePreAcceptanceFailure(parent, writer, suppressor, decision.Trace, err, admission.charity, language)
+		return
+	}
+	acceptInput := claim.AcceptInput{
+		UserID: userID, Route: plan.route, ModelSnapshot: plan.fullName,
+		AttemptLimit: len(plan.candidates), ReservedMilli: plan.reservedMilli,
+		CharityModelID: charityModelID(plan),
+	}
+	if plan.charity {
+		decisionNow := plan.decisionNow
+		acceptInput.CharityDecisionNow = &decisionNow
+	}
+	accepted, err := service.claims.Accept(executionContext, acceptInput)
+	if err != nil {
+		service.writePreAcceptanceFailure(parent, writer, suppressor, decision.Trace, err, admission.charity, language)
+		return
+	}
+
+	run := service.runAttempts(parent, executionContext, writer, suppressor, decision.Trace, userID, attemptRequest, plan, accepted)
+	disposition := claim.AccountingRelease
+	if run.dispatched {
+		disposition = claim.AccountingCommit
+	}
+	actualCharge := int64(0)
+	settleContext, settleCancel := context.WithTimeout(context.WithoutCancel(parent), service.settlement)
+	defer settleCancel()
+	if plan.charity && disposition == claim.AccountingCommit {
+		actualCharge, err = service.charityCharges.CalculateRequestCharge(settleContext, accepted.ID, disposition)
+		if err != nil {
+			run.err = err
+			run.terminalBlocked = true
+		}
+	}
+
+	caller, failure := service.classifyCaller(parent, executionContext, plan, run)
+	if decision.Active && run.dispatched {
+		caller, failure = service.completeDebugTrace(parent, decision, plan.route, run, actualCharge, caller, failure)
+	} else if decision.Active {
+		caller, failure = service.completeUndispatchedDebug(parent, executionContext, decision, caller, failure)
+	}
+	if run.err != nil && caller.Class != claim.ResultCancelled && !(decision.Active && run.dispatched) {
+		caller = claim.CallerResult{Class: claim.ResultFailed, Status: http.StatusInternalServerError, ErrorCode: httperr.CodeInternal}
+		value := platformFailure(httperr.CodeInternal, "internal error")
+		failure = &value
+	}
+
+	if !run.terminalBlocked {
+		_, completionErr := service.claims.CompleteRequest(settleContext, claim.CompleteRequestInput{
+			RequestID: accepted.ID, Caller: caller, Disposition: disposition, ActualChargeMilli: actualCharge,
+		})
+		if completionErr != nil {
+			run.err = completionErr
+			run.terminalBlocked = true
+		}
+	}
+
+	if decision.Active {
+		service.writeDebugTerminal(parent, suppressor, decision, run, caller, failure)
+		return
+	}
+	if parent.Err() != nil || caller.Class == claim.ResultCancelled || run.hasResult && run.result.Committed {
+		return
+	}
+	if run.err != nil {
+		writeFailure(writer, platformFailure(httperr.CodeInternal, "internal error"))
+		return
+	}
+	if failure != nil {
+		writeFailure(writer, *failure)
+	}
 }
 
-// Forward resolves one opaque full name, asks the selector for the candidate
-// dispatch order, re-validates each selected binding against the projection,
-// and orchestrates the single-attempt runner over that order. The silent-retry
-// boundary is exactly "no response-body byte committed yet": only a pre-commit
-// upstream failure (connection / DNS / upstream error status / protocol
-// pre-body failure, or a target that vanished between selection and dispatch)
-// is retried, and only when the model's silent_retry switch is on. A committed
-// byte, a sink write failure, a client cancellation, or an internal error
-// short-circuits to the final result. The default (silent_retry off) runs
-// exactly one attempt, preserving fail-fast behavior. Each actual failover
-// emits a bounded metadata hook; the Usage hook fires at most once per
-// invocation, only for a committed response (success or failure — a
-// committed-but-failed stream still counts as a request with usage_unknown
-// when no valid usage was captured). Before every attempt the runner
-// re-validates ownership, so a binding deleted/disabled/cache-cleared between
-// selection and dispatch fails closed without dialing.
-func (s *Service) Forward(ctx context.Context, writer http.ResponseWriter, userID int64, request *openai.ChatRequest) (connectorcontract.AttemptResult, error) {
-	if s == nil || ctx == nil || writer == nil || userID <= 0 || request == nil {
-		return connectorcontract.AttemptResult{}, ErrInternal
-	}
-	s.lifecycle.RLock()
-	defer s.lifecycle.RUnlock()
-	if s.closed || s.repository == nil || s.runner == nil {
-		return connectorcontract.AttemptResult{}, ErrInternal
-	}
-	parentCtx := ctx
-	ctx, cancel := context.WithTimeout(parentCtx, s.timeout)
-	defer cancel()
-	route, err := s.repository.ResolveForwardRoute(ctx, userID, request.Model, MaxRouteCandidates)
-	if err != nil {
-		if ctx.Err() != nil {
-			return endedContextResult(parentCtx, ctx), nil
-		}
-		switch {
-		case errors.Is(err, db.ErrNotFound):
-			return connectorcontract.AttemptResult{}, ErrModelNotFound
-		default:
-			return connectorcontract.AttemptResult{}, ErrInternal
-		}
-	}
-	if route.UserID != userID || route.FullName != request.Model || route.ModelID <= 0 || (route.RouteStrategy != "ordered" && route.RouteStrategy != "random") {
-		return connectorcontract.AttemptResult{}, ErrInternal
-	}
-	if len(route.Candidates) == 0 {
-		return connectorcontract.AttemptResult{}, ErrUnboundModel
-	}
-	attemptRequest := request
-	if route.FlattenToolCalls {
-		var reverseErr error
-		attemptRequest, reverseErr = request.ReverseFlatten()
-		if reverseErr != nil || attemptRequest == nil {
-			return connectorcontract.AttemptResult{}, ErrInternal
-		}
-		defer attemptRequest.Clear()
-	}
-	capable := make([]db.ForwardCandidate, 0, len(route.Candidates))
-	allOpenAI := true
-	capabilityByType := make(map[connectorcontract.Type]bool)
-	for _, candidate := range route.Candidates {
-		if candidate.BindingID <= 0 || candidate.ModelID != route.ModelID || candidate.EndpointID <= 0 || candidate.EndpointKeyID <= 0 || candidate.Ord < 0 || candidate.Ord > maxRouteOrd || !validStoredText(candidate.UpstreamModelID, 512) {
-			return connectorcontract.AttemptResult{}, ErrInternal
-		}
-		connectorType, err := s.registry.MustValidate(connectorcontract.Type(candidate.ConnectorType))
+func (service *Service) preflight(ctx context.Context, userID int64, request *openai.ChatRequest) (logicalAdmission, *openai.ChatRequest, func(), error) {
+	if strings.HasPrefix(request.Model, charityModelPrefix) {
+		now, err := service.nowUnix()
 		if err != nil {
-			return connectorcontract.AttemptResult{}, ErrInternal
+			return logicalAdmission{charity: true}, request, nil, err
 		}
-		allOpenAI = allOpenAI && connectorType == connectorcontract.TypeOpenAICompatible
-		if route.FlattenToolCalls && connectorType != connectorcontract.TypeOpenAICompatible {
-			// Flatten's all-OpenAI binding invariant is a stored-state
-			// invariant, not a capability filter. A mixed candidate projection
-			// means the state is damaged; do not silently route around it.
-			return connectorcontract.AttemptResult{}, ErrInternal
+		value, err := service.charity.Preflight(ctx, userID, request.Model, request, now)
+		if err != nil {
+			return logicalAdmission{charity: true}, request, nil, err
 		}
-		supported, evaluated := capabilityByType[connectorType]
+		admission := logicalAdmission{
+			charity: true, modelID: value.ModelID, fullName: value.FullName, strategy: "ordered",
+			silentRetry: true, flatten: value.FlattenToolCalls, reservedMilli: value.ReservedMilli,
+			decisionNow: now,
+		}
+		return prepareModelPolicy(request, admission)
+	}
+	value, err := service.personal.Preflight(ctx, userID, request.Model)
+	if err != nil {
+		return logicalAdmission{}, request, nil, err
+	}
+	admission := logicalAdmission{
+		modelID: value.ModelID, fullName: value.FullName, strategy: value.RouteStrategy,
+		silentRetry: value.SilentRetry, flatten: value.FlattenToolCalls,
+	}
+	return prepareModelPolicy(request, admission)
+}
+
+func prepareModelPolicy(request *openai.ChatRequest, admission logicalAdmission) (logicalAdmission, *openai.ChatRequest, func(), error) {
+	if !validAdmission(admission) {
+		return admission, request, nil, ErrInternal
+	}
+	if !admission.flatten {
+		return admission, request, nil, nil
+	}
+	transformed, err := request.ReverseFlatten()
+	if err != nil || transformed == nil {
+		return admission, request, nil, openai.ErrInvalidRequest
+	}
+	return admission, transformed, transformed.Clear, nil
+}
+
+func (service *Service) snapshot(
+	ctx context.Context,
+	userID int64,
+	identifier string,
+	request *openai.ChatRequest,
+	admission logicalAdmission,
+	decision debug.CaptureDecision,
+) (executionPlan, error) {
+	plan := executionPlan{logicalAdmission: admission}
+	if admission.charity {
+		connectorTypes := service.supportedCharityConnectorTypes(request, admission.flatten)
+		if len(connectorTypes) == 0 {
+			return executionPlan{}, openai.ErrInvalidRequest
+		}
+		value, err := service.charity.Snapshot(ctx, admission.modelID, admission.decisionNow, connectorTypes)
+		if err != nil {
+			return executionPlan{}, err
+		}
+		if !sameCharitySnapshot(admission, value) {
+			return executionPlan{}, ErrInternal
+		}
+		plan.candidates = append([]RouteCandidate(nil), value.Candidates...)
+		plan.route = claim.RouteCharityChat
+		plan.purpose = claim.PurposeCharity
+	} else {
+		value, err := service.personal.Snapshot(ctx, userID, identifier)
+		if err != nil {
+			return executionPlan{}, err
+		}
+		if !samePersonalSnapshot(admission, value, userID) {
+			return executionPlan{}, ErrInternal
+		}
+		plan.candidates = append([]RouteCandidate(nil), value.Candidates...)
+		plan.route = claim.RouteOpenAIChat
+		plan.purpose = claim.PurposeSelf
+		if decision.Active {
+			plan.purpose = claim.PurposeDebugLive
+		}
+	}
+	if decision.Active && decision.ClaimPurpose != plan.purpose {
+		return executionPlan{}, ErrInternal
+	}
+
+	capable := make([]RouteCandidate, 0, len(plan.candidates))
+	capabilityByType := make(map[connectorcontract.Type]bool, len(service.connectors))
+	for _, candidate := range plan.candidates {
+		if !service.validCandidate(candidate, admission.charity) {
+			return executionPlan{}, ErrInternal
+		}
+		if admission.flatten && candidate.ConnectorType != connectorcontract.TypeOpenAICompatible {
+			return executionPlan{}, ErrInternal
+		}
+		supported, evaluated := capabilityByType[candidate.ConnectorType]
 		if !evaluated {
-			supported = s.registry.SupportsRequest(connectorType, attemptRequest)
-			capabilityByType[connectorType] = supported
+			supported = service.registry.SupportsRequest(candidate.ConnectorType, request)
+			capabilityByType[candidate.ConnectorType] = supported
 		}
 		if supported {
+			candidate.Policy.FlattenToolCalls = admission.flatten
 			capable = append(capable, candidate)
 		}
 	}
+	clear(plan.candidates)
 	if len(capable) == 0 {
-		if allOpenAI {
-			return connectorcontract.AttemptResult{}, openai.ErrInvalidRequest
-		}
-		return connectorcontract.AttemptResult{}, ErrUnsupportedCapabilities
+		return executionPlan{}, openai.ErrInvalidRequest
 	}
-
-	selection := Selection{
-		UserID:        userID,
-		ModelID:       route.ModelID,
-		FullName:      route.FullName,
-		RouteStrategy: route.RouteStrategy,
-		SilentRetry:   route.SilentRetry,
-		Candidates:    append([]db.ForwardCandidate(nil), capable...),
-	}
-	selector := s.selector
-	if selector == nil {
-		selector = strategySelector(route.RouteStrategy)
-	}
-	order, err := selector.Select(ctx, selection)
-	clear(selection.Candidates)
+	ordered, err := orderCandidates(plan.strategy, capable)
+	clear(capable)
 	if err != nil {
-		if ctx.Err() != nil {
-			return endedContextResult(parentCtx, ctx), nil
-		}
-		if errors.Is(err, ErrUnboundModel) {
-			return connectorcontract.AttemptResult{}, ErrUnboundModel
-		}
-		return connectorcontract.AttemptResult{}, ErrSelector
+		return executionPlan{}, err
 	}
-	if len(order) == 0 {
-		return connectorcontract.AttemptResult{}, ErrUnboundModel
-	}
-	if len(order) > MaxRouteAttempts {
-		return connectorcontract.AttemptResult{}, ErrSelector
-	}
-	candidates := make(map[int64]db.ForwardCandidate, len(capable))
-	for _, candidate := range capable {
-		candidates[candidate.BindingID] = candidate
-	}
-	seenOrder := make(map[int64]struct{}, len(order))
-	for _, bindingID := range order {
-		if _, duplicate := seenOrder[bindingID]; duplicate {
-			return connectorcontract.AttemptResult{}, ErrSelector
-		}
-		if _, ok := candidates[bindingID]; !ok {
-			return connectorcontract.AttemptResult{}, ErrSelector
-		}
-		seenOrder[bindingID] = struct{}{}
-	}
+	plan.candidates = ordered
+	return plan, nil
+}
 
-	attemptID, err := newAttemptID()
-	if err != nil {
-		return connectorcontract.AttemptResult{}, ErrInternal
+func (service *Service) supportedCharityConnectorTypes(request *openai.ChatRequest, flatten bool) []connectorcontract.Type {
+	if service == nil || service.registry == nil || request == nil {
+		return nil
 	}
-	observerTraceID := ObserverTraceID(ctx)
-	policyCache := make(map[int64]bool)
-
-	var lastResult connectorcontract.AttemptResult
-	for index, bindingID := range order {
-		if ctx.Err() != nil {
-			return endedContextResult(parentCtx, ctx), nil
+	connectorTypes := make([]connectorcontract.Type, 0, len(service.connectors))
+	for connectorType, instance := range service.connectors {
+		if instance == nil || flatten && connectorType != connectorcontract.TypeOpenAICompatible {
+			continue
 		}
-		candidate := candidates[bindingID]
-		started := s.now().UTC()
-		result := s.runner.Run(ctx, writer, AttemptInput{
-			UserID:                userID,
-			FullName:              route.FullName,
-			BindingID:             candidate.BindingID,
-			ExpectedConnectorType: connectorcontract.Type(candidate.ConnectorType),
-			Request:               attemptRequest,
-			TraceID:               attemptID,
-			ObserverTraceID:       observerTraceID,
-			AttemptIndex:          index,
-			FlattenToolCalls:      route.FlattenToolCalls,
-			PolicyCache:           policyCache,
+		if service.registry.SupportsRequest(connectorType, request) {
+			connectorTypes = append(connectorTypes, connectorType)
+		}
+	}
+	sort.Slice(connectorTypes, func(left, right int) bool { return connectorTypes[left] < connectorTypes[right] })
+	return connectorTypes
+}
+
+func (service *Service) runAttempts(
+	parent context.Context,
+	executionContext context.Context,
+	writer http.ResponseWriter,
+	suppressor *debug.CallerSuppressor,
+	trace *debug.TraceHandle,
+	userID int64,
+	request *openai.ChatRequest,
+	plan executionPlan,
+	accepted claim.Request,
+) attemptRun {
+	var run attemptRun
+	for index, candidate := range plan.candidates {
+		if executionContext.Err() != nil {
+			break
+		}
+		origin, err := canonicalOrigin(candidate.CanonicalBaseURL)
+		if err != nil {
+			run.err = err
+			break
+		}
+		safety, err := service.safety.Generate(userID, origin)
+		origin = ""
+		if err != nil {
+			run.err = err
+			break
+		}
+
+		handle, err := service.claims.Claim(executionContext, claim.ClaimInput{
+			RequestID: accepted.ID, ActorUserID: userID, AttemptSeq: index + 1, Purpose: plan.purpose,
+			Candidate: claim.Candidate{
+				EndpointID: candidate.EndpointID, EndpointKeyID: candidate.EndpointKeyID,
+				ConnectorType: candidate.ConnectorType, CanonicalBaseURL: candidate.CanonicalBaseURL,
+				UpstreamModelID: candidate.UpstreamModelID, Policy: candidate.Policy,
+			},
+			DonationKeyID: candidate.DonationKeyID,
 		})
-		if ctx.Err() != nil && !result.Success && !result.Committed {
-			result = endedContextResult(parentCtx, ctx)
+		if err != nil {
+			if errors.Is(err, claim.ErrNotFound) {
+				continue
+			}
+			run.err = err
+			break
 		}
-		result.Diagnostic = diagnostic.BoundTo(result.Diagnostic, 512)
-		finished := s.now().UTC()
-		if finished.Before(started) {
-			finished = started
+
+		dispatch, err := service.claims.TakeForDispatch(executionContext, handle)
+		if err != nil {
+			run.handleDispatchFailure(parent, service, handle, err)
+			break
 		}
-		stableCode, clientStatus := classifyAttemptResult(result)
-		if result.ClientStatus == 0 {
-			result.ClientStatus = clientStatus
+		if dispatch == nil {
+			run.handleDispatchFailure(parent, service, handle, claim.ErrCredentialUnavailable)
+			break
 		}
-		if s.hooks.Attempt != nil {
-			s.hooks.Attempt(AttemptRecord{
-				AttemptID:       attemptID,
-				AttemptIndex:    index,
-				UserID:          userID,
-				ModelID:         route.ModelID,
-				FullName:        route.FullName,
-				BindingID:       candidate.BindingID,
-				EndpointID:      candidate.EndpointID,
-				EndpointKeyID:   candidate.EndpointKeyID,
-				UpstreamModelID: candidate.UpstreamModelID,
-				Stream:          attemptRequest.Stream,
-				StartedAt:       started,
-				Duration:        finished.Sub(started),
-				UpstreamStatus:  result.UpstreamStatus,
-				ClientStatus:    result.ClientStatus,
-				Committed:       result.Committed,
-				Success:         result.Success,
-				StableErrorCode: stableCode,
-				SafeDiagnostic:  result.Diagnostic,
-				EndpointBaseURL: result.EndpointBaseURL,
-			})
+		run.dispatched = true
+		attemptRequest := request.CloneForAttempt()
+		if attemptRequest == nil {
+			dispatch.Clear()
+			run.completeSynthetic(parent, service, handle, "request snapshot unavailable")
+			break
 		}
-		if result.Committed && s.hooks.Usage != nil {
-			s.hooks.Usage(UsageRecord{
-				AttemptID:       attemptID,
-				UserID:          userID,
-				ModelID:         route.ModelID,
-				FullName:        route.FullName,
-				BindingID:       candidate.BindingID,
-				EndpointKeyID:   candidate.EndpointKeyID,
-				UpstreamModelID: candidate.UpstreamModelID,
-				Stream:          attemptRequest.Stream,
-				Usage:           result.Usage,
-				UsageUnknown:    !result.Success && !result.Usage.Present,
-				EndpointBaseURL: result.EndpointBaseURL,
-			})
+		policy := dispatch.Policy()
+		policy.SafetyIdentifier = safety
+		if suppressor != nil {
+			if err := suppressor.MarkDispatched(); err != nil {
+				attemptRequest.Clear()
+				dispatch.Clear()
+				run.completeSynthetic(parent, service, handle, "debug capture canceled")
+				break
+			}
+			if trace == nil || trace.MarkDispatched() != nil {
+				attemptRequest.Clear()
+				dispatch.Clear()
+				run.completeSynthetic(parent, service, handle, "debug capture canceled")
+				break
+			}
 		}
-		if result.Success {
-			return result, nil
+		credential, ok := dispatch.TakeCredential()
+		dispatch.Clear()
+		if !ok || credential == nil {
+			attemptRequest.Clear()
+			if credential != nil {
+				credential.Clear()
+			}
+			run.completeSynthetic(parent, service, handle, "credential unavailable")
+			break
 		}
-		lastResult = result
-		if !isRetryable(result, route.SilentRetry) || index == len(order)-1 {
-			return result, nil
+		sink := writer
+		if suppressor != nil {
+			sink = suppressor.UpstreamWriter()
 		}
-		// An actual failover advances to the next candidate. The bounded
-		// backoff runs first; if the caller cancels during the wait, no further
-		// attempt is made and no failover is recorded for this transition.
-		if !s.backoff.wait(ctx, index) {
-			return endedContextResult(parentCtx, ctx), nil
+		protocolConnector := service.connectors[candidate.ConnectorType]
+		if protocolConnector == nil {
+			credential.Clear()
+			attemptRequest.Clear()
+			run.completeSynthetic(parent, service, handle, "connector unavailable")
+			break
 		}
-		if s.hooks.Failover != nil {
-			s.hooks.Failover(FailoverRecord{
-				AttemptID:       attemptID,
-				UserID:          userID,
-				ModelID:         route.ModelID,
-				FullName:        route.FullName,
-				BindingID:       candidate.BindingID,
-				StableErrorCode: stableCode,
-				AttemptIndex:    index,
-			})
+		result := protocolConnector.Attempt(executionContext, connector.AttemptInput{
+			Target: dispatch.Target(), Credential: credential, Ingress: attemptRequest,
+			Policy: policy, Sink: sink, Observer: service.observer,
+			TraceID: traceID(trace, accepted.ID), AttemptIndex: index,
+		})
+		credential.Clear()
+		attemptRequest.Clear()
+		result.Diagnostic = diagnostic.Bound(result.Diagnostic)
+		if executionContext.Err() != nil && !result.Success && !result.Committed {
+			result = endedExecutionResult(parent, executionContext)
+		}
+		if !validAttemptResult(result) {
+			result = connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "invalid connector result"}
+		}
+		run.result, run.hasResult = result, true
+		settleContext, cancel := context.WithTimeout(context.WithoutCancel(parent), service.settlement)
+		_, completionErr := service.claims.CompleteAttempt(settleContext, handle, attemptOutcome(result))
+		cancel()
+		if completionErr != nil {
+			run.err = completionErr
+			run.terminalBlocked = true
+			break
+		}
+		if result.Success || !retryable(result, plan.silentRetry) || index == len(plan.candidates)-1 {
+			break
+		}
+		if !service.backoff.wait(executionContext, index) {
+			run.result = endedExecutionResult(parent, executionContext)
+			run.hasResult = true
+			break
 		}
 	}
-	return lastResult, nil
-}
-
-// newAttemptID returns a random opaque correlation id for one Forward
-// invocation. It is never derived from client input and never exposed to
-// clients or upstreams; the same id is shared by the Attempt and Usage hook
-// records of that invocation.
-func newAttemptID() (string, error) {
-	var raw [16]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return "", err
+	if !run.dispatched && run.err == nil {
+		if executionContext.Err() != nil {
+			if errors.Is(executionContext.Err(), context.DeadlineExceeded) {
+				value := platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
+				run.failure = &value
+			}
+		} else {
+			value := platformFailure(httperr.CodeUnboundModel, "model has no usable binding")
+			if plan.charity {
+				value = platformFailure(httperr.CodeRateLimited, "charity candidates are temporarily unavailable")
+			}
+			run.failure = &value
+		}
 	}
-	encoded := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw[:])
-	clear(raw[:])
-	return encoded, nil
+	return run
 }
 
-// strategySelector returns the default route-order selector for a strategy.
-// ordered yields the projected (ord, id) order; random yields a fresh
-// stateless permutation per call.
-func strategySelector(strategy string) Selector {
-	if strategy == "random" {
-		return RandomSelector{}
+func (run *attemptRun) handleDispatchFailure(parent context.Context, service *Service, handle claim.Handle, dispatchErr error) {
+	settleContext, cancel := context.WithTimeout(context.WithoutCancel(parent), service.settlement)
+	defer cancel()
+	_, releaseErr := service.claims.ReleaseUndispatched(settleContext, handle)
+	if releaseErr == nil {
+		run.err = dispatchErr
+		return
 	}
-	return OrderedSelector{}
+	if errors.Is(releaseErr, claim.ErrAlreadyDispatched) {
+		run.dispatched = true
+		result := connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "credential unavailable"}
+		run.result, run.hasResult = result, true
+		_, completionErr := service.claims.CompleteAttempt(settleContext, handle, attemptOutcome(result))
+		if completionErr != nil {
+			run.err = completionErr
+			run.terminalBlocked = true
+		} else {
+			run.err = dispatchErr
+		}
+		return
+	}
+	run.err = releaseErr
+	run.terminalBlocked = true
 }
 
-// canceledAttemptResult is the final result returned when the caller context
-// is canceled before an attempt or during backoff. No further attempt is made
-// and no body byte is committed.
-func canceledAttemptResult() connectorcontract.AttemptResult {
+func (run *attemptRun) completeSynthetic(parent context.Context, service *Service, handle claim.Handle, diagnosticText string) {
+	result := connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: diagnosticText}
+	run.result, run.hasResult, run.dispatched = result, true, true
+	settleContext, cancel := context.WithTimeout(context.WithoutCancel(parent), service.settlement)
+	defer cancel()
+	_, run.err = service.claims.CompleteAttempt(settleContext, handle, attemptOutcome(result))
+	run.terminalBlocked = run.err != nil
+}
+
+func (service *Service) classifyCaller(parent, executionContext context.Context, plan executionPlan, run attemptRun) (claim.CallerResult, *wireFailure) {
+	if parent.Err() != nil || executionCancelled(parent, executionContext) {
+		return claim.CallerResult{Class: claim.ResultCancelled}, nil
+	}
+	if run.failure != nil {
+		return callerFromFailure(*run.failure), run.failure
+	}
+	if run.err != nil && !run.hasResult {
+		value := platformFailure(httperr.CodeInternal, "internal error")
+		return callerFromFailure(value), &value
+	}
+	if !run.hasResult {
+		value := platformFailure(httperr.CodeUnboundModel, "model has no usable binding")
+		return callerFromFailure(value), &value
+	}
+	if run.result.Success {
+		return claim.CallerResult{Class: claim.ResultSuccess, Status: http.StatusOK}, nil
+	}
+	if run.result.Failure == connectorcontract.FailureCanceled || run.result.Failure == connectorcontract.FailureSink {
+		return claim.CallerResult{Class: claim.ResultCancelled}, nil
+	}
+	value := failureForAttempt(run.result, plan.charity)
+	return callerFromFailure(value), &value
+}
+
+func (service *Service) completeDebugTrace(
+	parent context.Context,
+	decision debug.CaptureDecision,
+	route claim.RouteKind,
+	run attemptRun,
+	actualCharge int64,
+	caller claim.CallerResult,
+	failure *wireFailure,
+) (claim.CallerResult, *wireFailure) {
+	if decision.Trace == nil {
+		value := platformFailure(httperr.CodeInternal, "internal error")
+		return callerFromFailure(value), &value
+	}
+	if parent != nil && parent.Err() != nil {
+		_ = decision.Trace.CompleteCancelled(decision.Language)
+		return claim.CallerResult{Class: claim.ResultCancelled}, nil
+	}
+	if executionCancelled(parent, decision.Trace.Context()) {
+		_ = decision.Trace.CompleteCancelled(decision.Language)
+		value := platformFailure(httperr.CodeDebugLiveCancelled, "Debug live request was cancelled")
+		return callerFromFailure(value), &value
+	}
+	if run.hasResult {
+		projected := debugUpstreamResult(run.result, route, actualCharge, service.mustNowUnix())
+		if err := decision.Trace.RecordUpstream(projected); err != nil {
+			value := platformFailure(httperr.CodeDebugLiveCancelled, "Debug live request was cancelled")
+			return callerFromFailure(value), &value
+		}
+	}
+	if err := decision.Trace.CompleteLiveCaptured(decision.Language); err != nil {
+		value := platformFailure(httperr.CodeDebugLiveCancelled, "Debug live request was cancelled")
+		return callerFromFailure(value), &value
+	}
+	value := platformFailure(httperr.CodeDebugLiveResultCaptured, "The upstream response was captured by the Debug page")
+	return callerFromFailure(value), &value
+}
+
+func (service *Service) completeUndispatchedDebug(
+	parent, executionContext context.Context,
+	decision debug.CaptureDecision,
+	caller claim.CallerResult,
+	failure *wireFailure,
+) (claim.CallerResult, *wireFailure) {
+	if parent != nil && parent.Err() != nil {
+		return claim.CallerResult{Class: claim.ResultCancelled}, nil
+	}
+	if executionContext != nil && executionContext.Err() != nil && !errors.Is(executionContext.Err(), context.DeadlineExceeded) {
+		value := platformFailure(httperr.CodeDebugLiveCancelled, "Debug live request was cancelled")
+		return callerFromFailure(value), &value
+	}
+	if failure == nil || failure.code == httperr.CodeUpstream {
+		value := platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
+		failure = &value
+		caller = callerFromFailure(value)
+	}
+	if decision.Trace == nil {
+		value := platformFailure(httperr.CodeInternal, "internal error")
+		return callerFromFailure(value), &value
+	}
+	if err := decision.Trace.CompleteCaller(debugCallerResult(*failure, service.mustNowUnix())); err != nil {
+		value := platformFailure(httperr.CodeDebugLiveCancelled, "Debug live request was cancelled")
+		return callerFromFailure(value), &value
+	}
+	return caller, failure
+}
+
+func (service *Service) writeDebugTerminal(parent context.Context, suppressor *debug.CallerSuppressor, decision debug.CaptureDecision, run attemptRun, caller claim.CallerResult, failure *wireFailure) {
+	if parent.Err() != nil || suppressor == nil {
+		return
+	}
+	if !run.dispatched {
+		_ = suppressor.WritePlatformBeforeDispatch(func(writer http.ResponseWriter) {
+			if caller.ErrorCode == httperr.CodeDebugLiveCancelled {
+				debug.WriteLiveCancelled(writer, decision.Language, false)
+				return
+			}
+			if failure == nil {
+				writeFailure(writer, platformFailure(httperr.CodeInternal, "internal error"))
+				return
+			}
+			writeFailure(writer, *failure)
+		})
+		return
+	}
+	if run.terminalBlocked {
+		// A persisted dispatch still has to converge through recovery. The live
+		// caller remains on the fixed capture wire and never receives internals.
+		if caller.ErrorCode == httperr.CodeDebugLiveCancelled {
+			_ = suppressor.WriteCancelled()
+		} else {
+			_ = suppressor.WriteCaptured()
+		}
+		return
+	}
+	if caller.ErrorCode == httperr.CodeDebugLiveCancelled {
+		_ = suppressor.WriteCancelled()
+		return
+	}
+	_ = suppressor.WriteCaptured()
+}
+
+func (service *Service) writePreAcceptanceFailure(
+	parent context.Context,
+	writer http.ResponseWriter,
+	suppressor *debug.CallerSuppressor,
+	trace *debug.TraceHandle,
+	err error,
+	charity bool,
+	language string,
+) {
+	if parent != nil && parent.Err() != nil {
+		return
+	}
+	if trace != nil && executionCancelled(parent, trace.Context()) {
+		debug.WriteLiveCancelled(writer, language, false)
+		return
+	}
+	failure := failureForError(err, charity)
+	if trace != nil {
+		result := debugCallerResult(failure, service.mustNowUnix())
+		if completeErr := trace.CompleteCaller(result); completeErr != nil {
+			debug.WriteLiveCancelled(writer, language, false)
+			return
+		}
+	}
+	if suppressor != nil {
+		_ = suppressor.WritePlatformBeforeDispatch(func(target http.ResponseWriter) { writeFailure(target, failure) })
+		return
+	}
+	writeFailure(writer, failure)
+}
+
+func (service *Service) validCandidate(candidate RouteCandidate, charity bool) bool {
+	if candidate.EndpointID <= 0 || candidate.EndpointKeyID <= 0 ||
+		(charity != (candidate.DonationKeyID > 0)) ||
+		!validBoundedText(candidate.CanonicalBaseURL, 4096, 4096) ||
+		!validBoundedText(candidate.UpstreamModelID, 512, 4096) {
+		return false
+	}
+	descriptor, ok := service.registry.Descriptor(candidate.ConnectorType)
+	return ok && service.connectors[candidate.ConnectorType] != nil && descriptor.Capabilities == service.connectors[candidate.ConnectorType].Capabilities()
+}
+
+func (service *Service) nowUnix() (int64, error) {
+	if service == nil || service.now == nil {
+		return 0, ErrInternal
+	}
+	value := service.now().Unix()
+	if value < 0 || value > maxUnixSecond {
+		return 0, ErrInternal
+	}
+	return value, nil
+}
+
+func (service *Service) mustNowUnix() int64 {
+	value, err := service.nowUnix()
+	if err != nil {
+		return 0
+	}
+	return value
+}
+
+func validAdmission(value logicalAdmission) bool {
+	maxRunes := maxPersonalRunes
+	if value.charity {
+		maxRunes = maxCharityRunes
+	}
+	return value.modelID > 0 && validBoundedText(value.fullName, maxRunes, 4096) &&
+		(value.strategy == "ordered" || value.strategy == "random") &&
+		value.reservedMilli >= 0 && value.reservedMilli <= claim.MaxMoneyMilli &&
+		(!value.charity || value.decisionNow >= 0 && value.decisionNow <= maxUnixSecond) &&
+		(value.charity == strings.HasPrefix(value.fullName, charityModelPrefix))
+}
+
+func samePersonalSnapshot(preflight logicalAdmission, snapshot PersonalSnapshot, userID int64) bool {
+	return !preflight.charity && snapshot.ModelID == preflight.modelID && snapshot.OwnerUserID == userID &&
+		snapshot.FullName == preflight.fullName && snapshot.RouteStrategy == preflight.strategy &&
+		snapshot.SilentRetry == preflight.silentRetry && snapshot.FlattenToolCalls == preflight.flatten
+}
+
+func sameCharitySnapshot(preflight logicalAdmission, snapshot CharitySnapshot) bool {
+	return preflight.charity && snapshot.ModelID == preflight.modelID && snapshot.FullName == preflight.fullName &&
+		snapshot.FlattenToolCalls == preflight.flatten && snapshot.ReservedMilli == preflight.reservedMilli
+}
+
+func charityModelID(plan executionPlan) int64 {
+	if plan.charity {
+		return plan.modelID
+	}
+	return 0
+}
+
+func attemptOutcome(result connectorcontract.AttemptResult) claim.AttemptOutcome {
+	kind := claim.ResultSynthetic
+	if result.UpstreamStatus != 0 {
+		kind = claim.ResultResponse
+	}
+	return claim.AttemptOutcome{
+		Kind: kind, UpstreamStatus: result.UpstreamStatus, Diagnostic: result.Diagnostic,
+		Usage: result.Usage, ProtocolSuccess: result.Success, ResponseStarted: result.Committed,
+	}
+}
+
+func endedExecutionResult(parent, executionContext context.Context) connectorcontract.AttemptResult {
+	if parent != nil && parent.Err() == nil && executionContext != nil && errors.Is(executionContext.Err(), context.DeadlineExceeded) {
+		return connectorcontract.AttemptResult{
+			Failure: connectorcontract.FailureUpstream, ClientStatus: http.StatusGatewayTimeout,
+			Diagnostic: "forward request timed out",
+		}
+	}
 	return connectorcontract.AttemptResult{Failure: connectorcontract.FailureCanceled, Diagnostic: "request canceled"}
 }
 
-// endedContextResult distinguishes caller cancellation from the service-owned
-// aggregate deadline. Before commit, the latter is a stable upstream failure
-// so the handler emits 502 instead of returning an empty response. After
-// commit, callers retain the runner's committed result and no fresh envelope
-// is attempted.
-func endedContextResult(parent, bounded context.Context) connectorcontract.AttemptResult {
-	if parent != nil && parent.Err() == nil && bounded != nil && errors.Is(bounded.Err(), context.DeadlineExceeded) {
-		return connectorcontract.AttemptResult{
-			Failure:      connectorcontract.FailureUpstream,
-			ClientStatus: http.StatusBadGateway,
-			Diagnostic:   "forward request timed out",
+func executionCancelled(parent, executionContext context.Context) bool {
+	if parent != nil && parent.Err() != nil {
+		return true
+	}
+	if executionContext == nil || executionContext.Err() == nil {
+		return false
+	}
+	return !errors.Is(executionContext.Err(), context.DeadlineExceeded)
+}
+
+func traceID(trace *debug.TraceHandle, fallback string) string {
+	if trace != nil && trace.TraceID() != "" {
+		return trace.TraceID()
+	}
+	return fallback
+}
+
+func debugUpstreamResult(result connectorcontract.AttemptResult, route claim.RouteKind, chargeMilli, completedAt int64) debug.DebugUpstreamResult {
+	kind := debug.ResultSynthetic
+	var status *int
+	if result.UpstreamStatus != 0 {
+		kind = debug.ResultResponse
+		value := result.UpstreamStatus
+		status = &value
+	}
+	usage := result.Usage
+	total := new(big.Int)
+	for _, value := range []int64{usage.UncachedInputTokens, usage.CacheWriteInputTokens, usage.CacheReadInputTokens, usage.OutputTokens} {
+		total.Add(total, big.NewInt(value))
+	}
+	projection := debug.DebugUpstreamResult{
+		ResultKind: kind, StatusCode: status,
+		Usage: debug.LogUsage{
+			UncachedInputTokens:   strconv.FormatInt(usage.UncachedInputTokens, 10),
+			CacheWriteInputTokens: strconv.FormatInt(usage.CacheWriteInputTokens, 10),
+			CacheReadInputTokens:  strconv.FormatInt(usage.CacheReadInputTokens, 10),
+			OutputTokens:          strconv.FormatInt(usage.OutputTokens, 10), TotalTokens: total.String(),
+			UsageUnknown: !usage.Present, Charge: credits.FormatAmount(chargeMilli),
+		},
+		CompletedAt: completedAt,
+	}
+	if route == claim.RouteCharityChat {
+		status := http.StatusBadGateway
+		if result.Success {
+			status = http.StatusOK
 		}
+		projection.ResultKind = debug.ResultSynthetic
+		projection.StatusCode = &status
+		return projection
 	}
-	return canceledAttemptResult()
+	if result.Diagnostic != "" {
+		value := diagnostic.Bound(result.Diagnostic)
+		projection.Diag = &value
+	}
+	return projection
 }
 
-func classifyAttemptResult(result connectorcontract.AttemptResult) (string, int) {
-	if result.Success {
-		return "", http.StatusOK
+func validListedModel(value ListedModel, charity bool) bool {
+	maxRunes := maxPersonalRunes
+	if charity {
+		maxRunes = maxCharityRunes
 	}
-	switch result.Failure {
-	case connectorcontract.FailureUpstream:
-		return "upstream", http.StatusBadGateway
-	case connectorcontract.FailureCanceled, connectorcontract.FailureSink:
-		return "", 499
-	default:
-		return "internal", http.StatusInternalServerError
-	}
+	return value.ModelID > 0 && value.CreatedAt >= 0 &&
+		validBoundedText(value.Provider, maxProviderRunes, 4096) &&
+		validBoundedText(value.FullName, maxRunes, 4096) &&
+		(charity == strings.HasPrefix(value.FullName, charityModelPrefix))
 }
 
-func validStoredModel(model db.CallerModel) bool {
-	return model.CreatedAt >= 0 && validStoredText(model.Provider, 64) && validStoredText(model.FullName, 129)
-}
-
-func validStoredText(value string, maxRunes int) bool {
-	if value == "" || !utf8.ValidString(value) || utf8.RuneCountInString(value) > maxRunes {
+func validBoundedText(value string, maxRunes, maxBytes int) bool {
+	if value == "" || !utf8.ValidString(value) || utf8.RuneCountInString(value) > maxRunes || len(value) > maxBytes {
 		return false
 	}
 	for _, r := range value {
-		if r < 0x20 || r == 0x7f {
+		if unicode.IsControl(r) || r == 0x7f {
 			return false
 		}
 	}
 	first, _ := utf8.DecodeRuneInString(value)
 	last, _ := utf8.DecodeLastRuneInString(value)
 	return !unicode.IsSpace(first) && !unicode.IsSpace(last)
+}
+
+func nilInterfaceValue(value any) bool {
+	if value == nil {
+		return true
+	}
+	reflected := reflect.ValueOf(value)
+	switch reflected.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return reflected.IsNil()
+	default:
+		return false
+	}
+}
+
+func failureForError(err error, charity bool) wireFailure {
+	switch {
+	case err == nil:
+		return platformFailure(httperr.CodeInternal, "internal error")
+	case errors.Is(err, context.Canceled):
+		return platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
+	case errors.Is(err, context.DeadlineExceeded):
+		return platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
+	case errors.Is(err, maintenance.ErrMaintenanceOn):
+		return platformFailure(httperr.CodeMaintenance, "maintenance mode is active")
+	case errors.Is(err, routing.ErrNotFound), errors.Is(err, charityrouting.ErrNotFound):
+		return platformFailure(httperr.CodeNotFound, "model not found")
+	case errors.Is(err, routing.ErrAmbiguousIdentity), errors.Is(err, routing.ErrInvalidIdentity),
+		errors.Is(err, openai.ErrInvalidRequest), errors.Is(err, charityrouting.ErrInvalidRequest):
+		return platformFailure(httperr.CodeInvalidRequest, "invalid request")
+	case errors.Is(err, charityrouting.ErrEntropyUnavailable):
+		return platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
+	case errors.Is(err, routing.ErrUnbound), errors.Is(err, charityrouting.ErrUnavailable):
+		return platformFailure(httperr.CodeUnboundModel, "model has no usable binding")
+	case errors.Is(err, routing.ErrResourceLimit), errors.Is(err, charityrouting.ErrResourceLimit):
+		return platformFailure(httperr.CodeResourceLimitExceeded, "resource limit exceeded")
+	case errors.Is(err, charityrouting.ErrFeatureDisabled):
+		return platformFailure(httperr.CodeFeatureDisabled, "charity is disabled")
+	case errors.Is(err, charityrouting.ErrCharitySuspended):
+		return platformFailure(httperr.CodeCharitySuspended, "charity eligibility is suspended")
+	case errors.Is(err, charityrouting.ErrInsufficientCredits):
+		return platformFailure(httperr.CodeInsufficientCredits, "insufficient credits")
+	case errors.Is(err, ledger.ErrInsufficientBalance):
+		return platformFailure(httperr.CodeInsufficientCredits, "insufficient credits")
+	case errors.Is(err, ledger.ErrCapacityExhausted), errors.Is(err, ledger.ErrRetryable):
+		return platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
+	case errors.Is(err, charityrouting.ErrContentTooShort):
+		message := "charity content is too short"
+		var tooShort *charityrouting.ContentTooShortError
+		if errors.As(err, &tooShort) && tooShort != nil && tooShort.Actual >= 0 && tooShort.Minimum >= 0 {
+			message += ": " + strconv.Itoa(tooShort.Actual) + " < " + strconv.Itoa(tooShort.Minimum)
+		}
+		return platformFailure(httperr.CodeContentTooShort, message)
+	case errors.Is(err, claim.ErrNotFound):
+		return platformFailure(httperr.CodeUnauthorized, "authentication required")
+	case errors.Is(err, charityrouting.ErrUnauthorized):
+		return platformFailure(httperr.CodeUnauthorized, "authentication required")
+	case errors.Is(err, claim.ErrDependencyUnavailable), errors.Is(err, debug.ErrClosed), errors.Is(err, debug.ErrCapacity):
+		return platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
+	case errors.Is(err, ErrClosed):
+		return platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
+	default:
+		_ = charity
+		return platformFailure(httperr.CodeInternal, "internal error")
+	}
+}
+
+func failureForAttempt(result connectorcontract.AttemptResult, charity bool) wireFailure {
+	if charity {
+		return upstreamWireFailure(http.StatusBadGateway, "upstream request failed", "", false)
+	}
+	if result.Failure == connectorcontract.FailureInternal {
+		return platformFailure(httperr.CodeInternal, "internal error")
+	}
+	status := http.StatusBadGateway
+	if result.UpstreamStatus >= http.StatusBadRequest && result.UpstreamStatus <= 499 {
+		status = result.UpstreamStatus
+	} else if result.ClientStatus == http.StatusGatewayTimeout || isTimeoutResult(result) {
+		status = http.StatusGatewayTimeout
+	}
+	return upstreamWireFailure(status, "upstream request failed", result.Diagnostic, true)
+}
+
+func callerFromFailure(failure wireFailure) claim.CallerResult {
+	return claim.CallerResult{Class: claim.ResultFailed, Status: failure.status, ErrorCode: failure.code}
+}
+
+func debugCallerResult(failure wireFailure, completedAt int64) debug.DebugCallerResult {
+	code := failure.code
+	return debug.DebugCallerResult{
+		HTTPStatus: failure.status, ErrorCode: &code, Source: debug.SourcePlatform,
+		Message: "[NonbiriAPI] " + strings.ReplaceAll(failure.message, "[NonbiriAPI] ", ""), CompletedAt: completedAt,
+	}
 }

@@ -9,10 +9,19 @@ export const LANGUAGE_STORAGE_KEY = 'nb.lang';
 const SUPPORTED = ['zh', 'en'] as const;
 export type SupportedLanguage = (typeof SUPPORTED)[number];
 
-function detectLanguage(): SupportedLanguage {
-  const stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+export function detectLanguage(): SupportedLanguage {
+  let stored: string | null;
+  try {
+    stored = typeof window !== 'undefined' ? window.localStorage.getItem(LANGUAGE_STORAGE_KEY) : null;
+  } catch {
+    stored = null;
+  }
   if (stored === 'zh' || stored === 'en') return stored;
-  return (navigator.language ?? '').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+  const browserLanguages =
+    typeof navigator !== 'undefined' && Array.isArray(navigator.languages) && navigator.languages.length > 0
+      ? navigator.languages
+      : [typeof navigator !== 'undefined' ? navigator.language : ''];
+  return browserLanguages.some((language) => language.toLowerCase().startsWith('zh')) ? 'zh' : 'en';
 }
 
 function syncDocumentLang(lng: string): void {

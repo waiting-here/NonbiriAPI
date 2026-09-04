@@ -78,7 +78,7 @@ type Config struct {
 	TreasureMultipliers map[string]int
 }
 
-// DefaultConfig returns a fresh copy of the frozen alpha.3 defaults.
+// DefaultConfig returns a fresh copy of the frozen fishing defaults.
 func DefaultConfig() Config {
 	return Config{
 		BaitPricesMilli: map[Bait]string{
@@ -185,6 +185,44 @@ type Ruleset struct {
 	junk          []string
 }
 
+// EntryMilli returns the frozen entry price for one bait.
+func (rules *Ruleset) EntryMilli(bait Bait) (int64, error) {
+	if rules == nil {
+		return 0, fmt.Errorf("%w: nil ruleset", ErrInvalidConfig)
+	}
+	compiled, ok := rules.baits[bait]
+	if !ok {
+		return 0, ErrUnknownBait
+	}
+	return compiled.entry, nil
+}
+
+// MaximumPayoutMilli returns the largest possible payout for one draw. It is
+// used by the complete configuration compiler to prove the ten-draw bound.
+func (rules *Ruleset) MaximumPayoutMilli(bait Bait) (int64, error) {
+	if rules == nil {
+		return 0, fmt.Errorf("%w: nil ruleset", ErrInvalidConfig)
+	}
+	compiled, ok := rules.baits[bait]
+	if !ok {
+		return 0, ErrUnknownBait
+	}
+	var maximum int64
+	for _, payouts := range compiled.fishPayoutByTierCM {
+		for _, payout := range payouts {
+			if payout > maximum {
+				maximum = payout
+			}
+		}
+	}
+	for _, payout := range compiled.treasurePayout {
+		if payout > maximum {
+			maximum = payout
+		}
+	}
+	return maximum, nil
+}
+
 // Compile validates the complete candidate and returns it only if every bait,
 // outcome, payout, and exact-RTP calculation is valid.
 func Compile(config Config) (*Ruleset, error) {
@@ -266,6 +304,24 @@ func (rules *Ruleset) Roll(bait Bait, source IntSource) (Result, error) {
 // RollCrypto is the production convenience path backed by crypto/rand.Reader.
 func (rules *Ruleset) RollCrypto(bait Bait) (Result, error) {
 	return rules.Roll(bait, CryptoSource{})
+}
+
+// RollBatch draws exactly count independent ordered outcomes. Only the frozen
+// public batch sizes are accepted. Any source failure discards the whole
+// in-memory batch; callers persist only after this function succeeds.
+func (rules *Ruleset) RollBatch(bait Bait, count int, source IntSource) ([]Result, error) {
+	if count != 1 && count != 10 {
+		return nil, fmt.Errorf("%w: count must be 1 or 10", ErrInvalidConfig)
+	}
+	results := make([]Result, count)
+	for ordinal := range results {
+		result, err := rules.Roll(bait, source)
+		if err != nil {
+			return nil, err
+		}
+		results[ordinal] = result
+	}
+	return results, nil
 }
 
 // Evidence returns exact calculation evidence for one bait.

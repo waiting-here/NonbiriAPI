@@ -1,0 +1,13 @@
+Algorithmic test provenance
+
+Source project: Dify2API
+Source commit: f261b3526ddc70327e08a5dec43baaf146d092eb
+Reviewed paths: db/game_match.go, db/game_match_test.go, handler/game_match.go
+License: GNU Affero General Public License v3.0 (AGPL-3.0)
+
+Adaptation: only general LinkLink algorithm and test-case ideas were reviewed. The
+runtime was rewritten for the NonbiriAPI frozen server-authoritative contract,
+including three board sizes, a one-cell virtual perimeter, transactional
+idempotency, absolute deadlines, bounded reshuffling, lifecycle cleanup, and
+the current ledger/maintenance boundaries. No image or other media asset was
+copied.

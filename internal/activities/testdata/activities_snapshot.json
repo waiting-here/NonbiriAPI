@@ -1,0 +1,20 @@
+{
+  "master": {"enabled": false, "available": false, "reason": "disabled"},
+  "welfare": {
+    "enabled": false,
+    "state": "unavailable",
+    "site_day": "",
+    "threshold": "0",
+    "cap": "0",
+    "pool_balance": "0",
+    "claimed_today": false
+  },
+  "thursday": {
+    "enabled": false,
+    "state": "unavailable",
+    "server_now": 0,
+    "current": null,
+    "next": null,
+    "last_result": null
+  }
+}

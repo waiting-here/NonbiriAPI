@@ -1,0 +1,1 @@
+{"bindings":[{"id":"51","endpoint_key_id":"21","endpoint_base_url":"https://example.com/v1","connector_type":"openai-compatible","endpoint_note":"endpoint note","endpoint_key_display_head":"head","endpoint_key_display_tail":"tail","endpoint_key_note":"key note","upstream_model_id":"Vendor/Exact","ord":0}],"binding_revision":"6"}

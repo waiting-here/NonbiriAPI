@@ -1,57 +1,57 @@
-// Command nonbiriapi loads the security-rooted configuration, wires the shared
-// database/egress/identity/forwarding boundaries, and serves the two isolated
-// stations from one embedded binary.
+// Command nonbiriapi opens a validated Generation 2 database and serves the
+// two host-isolated station shells. Domain APIs are registered by their
+// Generation 2 owners only after their persistence and lifecycle contracts
+// are complete.
 package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
+	"github.com/waiting-here/NonbiriAPI/internal/activities"
+	"github.com/waiting-here/NonbiriAPI/internal/adminalerts"
 	"github.com/waiting-here/NonbiriAPI/internal/adminapi"
-	"github.com/waiting-here/NonbiriAPI/internal/alertapi"
-	"github.com/waiting-here/NonbiriAPI/internal/antiabuse"
+	"github.com/waiting-here/NonbiriAPI/internal/adminusers"
+	"github.com/waiting-here/NonbiriAPI/internal/announcements"
 	"github.com/waiting-here/NonbiriAPI/internal/applog"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
 	"github.com/waiting-here/NonbiriAPI/internal/charity"
 	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	"github.com/waiting-here/NonbiriAPI/internal/checkin"
+	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
-	"github.com/waiting-here/NonbiriAPI/internal/connector/anthropic"
-	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
-	"github.com/waiting-here/NonbiriAPI/internal/endpoint"
-	"github.com/waiting-here/NonbiriAPI/internal/fetch"
-	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
-	"github.com/waiting-here/NonbiriAPI/internal/forward"
+	gamehome "github.com/waiting-here/NonbiriAPI/internal/game/home"
+	"github.com/waiting-here/NonbiriAPI/internal/game/linklink"
+	"github.com/waiting-here/NonbiriAPI/internal/game/rps"
 	gameruntime "github.com/waiting-here/NonbiriAPI/internal/game/runtime"
-	"github.com/waiting-here/NonbiriAPI/internal/gameapi"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 	"github.com/waiting-here/NonbiriAPI/internal/issues"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
-	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 	"github.com/waiting-here/NonbiriAPI/internal/logapi"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
-	"github.com/waiting-here/NonbiriAPI/internal/model"
-	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/reports"
+	"github.com/waiting-here/NonbiriAPI/internal/resourcebridge"
+	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
-	"github.com/waiting-here/NonbiriAPI/internal/steward"
-	"github.com/waiting-here/NonbiriAPI/internal/usage"
 	"github.com/waiting-here/NonbiriAPI/web"
 )
 
@@ -59,8 +59,9 @@ func main() {
 	os.Exit(run())
 }
 
-// run owns every startup resource so database-gate failures return through
-// deferred cleanup before main converts the status to a non-zero process exit.
+// run owns every startup resource. The listener is created only after db.Open
+// has completed the Generation 2 snapshot, manifest, seed, credential and
+// pre-listener recovery checks.
 func run() int {
 	cfg, err := config.Load()
 	if err != nil {
@@ -110,736 +111,82 @@ func run() int {
 		Addr:        cfg.ListenAddr,
 		Handler:     app.handler,
 		ReadTimeout: 15 * time.Second,
-		// WriteTimeout remains zero: the forwarding exit owns bounded stream
-		// write deadlines while the server permits long-lived SSE connections.
+		// Streaming owners install their own bounded write deadlines when their
+		// routes are registered. A zero server WriteTimeout remains intentional.
 		IdleTimeout: 60 * time.Second,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-
+	serveErr := make(chan error, 1)
 	go func() {
 		slog.Info("http server listening", "addr", cfg.ListenAddr)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("http server stopped with error", "err", err)
-			stop()
-		}
+		serveErr <- srv.ListenAndServe()
 	}()
 
-	<-ctx.Done()
+	exitCode := 0
+	serverRunning := true
+	select {
+	case <-ctx.Done():
+	case err := <-serveErr:
+		serverRunning = false
+		if !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("http server stopped with error", "err", err)
+		} else {
+			slog.Error("http server stopped before shutdown completed")
+		}
+		exitCode = 1
+	case err := <-app.failures:
+		slog.Error("application background worker failed", "err", err)
+		exitCode = 1
+	}
 	slog.Info("shutdown initiated")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		slog.Error("http shutdown error", "err", err)
+	app.BeginShutdown()
+	if serverRunning {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			slog.Error("http shutdown error", "err", err)
+			return 1
+		}
 	}
 	slog.Info("shutdown complete")
-	return 0
+	return exitCode
 }
 
-// healthz is unauthenticated but still runs behind the validated host edge.
 func healthz(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		httperr.WriteError(w, httperr.New(httperr.CodeMethodNotAllowed, "method not allowed"))
 		return
 	}
+	if requestHasQuery(r) || requestCarriesBody(r) {
+		httperr.WriteError(w, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
+		return
+	}
 	httperr.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func requestCarriesBody(r *http.Request) bool {
+	return r != nil && (r.ContentLength != 0 || len(r.TransferEncoding) != 0)
+}
+
+func requestHasQuery(r *http.Request) bool {
+	return r == nil || r.URL == nil || r.URL.ForceQuery || r.URL.RawQuery != ""
 }
 
 func apiNotFound(w http.ResponseWriter, _ *http.Request) {
 	httperr.WriteError(w, httperr.New(httperr.CodeNotFound, "not found"))
 }
 
-// newHTTPHandler remains the small boundary-only constructor used by unit
-// tests and by callers that only need the embedded station shell. Production
-// main uses buildApplication below so all business services share one set of
-// singletons.
-func newHTTPHandler(cfg *config.Config) (http.Handler, error) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", healthz)
-	userAPI := httpmw.API(http.HandlerFunc(apiNotFound))
-	adminAPI := httpmw.API(http.HandlerFunc(apiNotFound))
-	mux.Handle("/api", userAPI)
-	mux.Handle("/api/", userAPI)
-	mux.Handle("/v1", userAPI)
-	mux.Handle("/v1/", userAPI)
-	mux.Handle("/admin/api", adminAPI)
-	mux.Handle("/admin/api/", adminAPI)
-	mux.Handle("/", web.NewMultiHandler(cfg.UserHost, cfg.AdminHost))
-	return httpmw.New(httpmw.Config{
-		UserHost:          cfg.UserHost,
-		AdminHost:         cfg.AdminHost,
-		SiteBaseURL:       cfg.SiteBaseURL,
-		TrustedProxyCIDRs: cfg.TrustedProxyCIDRs,
-	}, mux)
-}
-
-type application struct {
-	handler http.Handler
-	stop    context.CancelFunc
-	wg      sync.WaitGroup
-	close   []func() error
-	once    sync.Once
-}
-
-type anthropicDefaultMaxTokensProvider struct {
-	store *db.Store
-}
-
-func (p anthropicDefaultMaxTokensProvider) RawAnthropicDefaultMaxTokens(ctx context.Context) (*int64, error) {
-	if p.store == nil || ctx == nil {
-		return nil, errors.New("anthropic max-tokens configuration is unavailable")
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	raw, err := p.store.GetSiteConfigValueContext(ctx, adminapi.KeyAnthropicDefaultMaxTokens)
-	if err != nil {
-		return nil, err
-	}
-	if raw == "" {
-		return nil, nil
-	}
-	value, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || value < 1 || value > anthropic.MaxMaxTokens {
-		return nil, errors.New("anthropic max-tokens configuration is invalid")
-	}
-	return &value, nil
-}
-
-type userDeletionBoundary func(userID int64) (commit func() bool, abort func() bool, err error)
-
-func combineUserDeletionBoundaries(afterCommit func(int64), boundaries ...userDeletionBoundary) userDeletionBoundary {
-	return func(userID int64) (func() bool, func() bool, error) {
-		commits := make([]func() bool, 0, len(boundaries))
-		aborts := make([]func() bool, 0, len(boundaries))
-		for _, begin := range boundaries {
-			if begin == nil {
-				continue
-			}
-			commit, abort, err := begin(userID)
-			if err != nil || commit == nil || abort == nil {
-				if abort != nil {
-					abort()
-				}
-				for index := len(aborts) - 1; index >= 0; index-- {
-					aborts[index]()
-				}
-				if err == nil {
-					err = errors.New("user deletion boundary is invalid")
-				}
-				return nil, nil, err
-			}
-			commits = append(commits, commit)
-			aborts = append(aborts, abort)
-		}
-		var terminal sync.Once
-		commit := func() bool {
-			won := false
-			terminal.Do(func() {
-				for _, finish := range commits {
-					finish()
-				}
-				if afterCommit != nil {
-					afterCommit(userID)
-				}
-				won = true
-			})
-			return won
-		}
-		abort := func() bool {
-			won := false
-			terminal.Do(func() {
-				for index := len(aborts) - 1; index >= 0; index-- {
-					aborts[index]()
-				}
-				won = true
-			})
-			return won
-		}
-		return commit, abort, nil
-	}
-}
-
-func (a *application) Close() error {
-	if a == nil {
-		return nil
-	}
-	var first error
-	a.once.Do(func() {
-		if a.stop != nil {
-			a.stop()
-		}
-		a.wg.Wait()
-		for i := len(a.close) - 1; i >= 0; i-- {
-			if err := a.close[i](); err != nil && first == nil {
-				first = err
-			}
-		}
-	})
-	return first
-}
-
-func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) (app *application, err error) {
-	if cfg == nil || store == nil || vault == nil {
-		return nil, errors.New("application dependencies are required")
-	}
-	cleanup := make([]func() error, 0, 10)
-	defer func() {
-		if err != nil {
-			for i := len(cleanup) - 1; i >= 0; i-- {
-				_ = cleanup[i]()
-			}
-		}
-	}()
-
-	stack, err := egress.NewStack(egress.StackOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("egress stack: %w", err)
-	}
-	cleanup = append(cleanup, func() error { stack.CloseIdleConnections(); return nil })
-	if err := stack.AddSelfOrigins(context.Background(), cfg); err != nil {
-		return nil, fmt.Errorf("egress self origins: %w", err)
-	}
-	// The single outbound execution boundary: every connector and the model
-	// fetcher open their clients through this one wrapper of the one Stack.
-	localBackend, err := backend.NewLocal(stack)
-	if err != nil {
-		return nil, fmt.Errorf("egress backend: %w", err)
-	}
-
-	registry := endpoint.NewRegistry()
-	var flowController *flowcontrol.Controller
-	var debugHub *debug.Hub
-	userGate, err := lifecyclegate.New(lifecyclegate.Config{})
-	if err != nil {
-		return nil, fmt.Errorf("user lifecycle gate: %w", err)
-	}
-	cleanup = append(cleanup, userGate.Close)
-	beginUserRetirementContext := func(ctx context.Context, userID int64) (func() bool, func() bool, error) {
-		if flowController == nil || userGate == nil {
-			return nil, nil, flowcontrol.ErrClosed
-		}
-		gateRetirement, err := userGate.BeginUserRetirementContext(ctx, userID)
-		if err != nil {
-			return nil, nil, err
-		}
-		flowRetirement, err := flowController.BeginUserRetirement(userID)
-		if err != nil {
-			gateRetirement.Abort()
-			return nil, nil, err
-		}
-		var terminal sync.Once
-		commit := func() bool {
-			won := false
-			terminal.Do(func() {
-				gateRetirement.Commit()
-				flowRetirement.Commit()
-				won = true
-			})
-			return won
-		}
-		abort := func() bool {
-			won := false
-			terminal.Do(func() {
-				flowRetirement.Abort()
-				gateRetirement.Abort()
-				won = true
-			})
-			return won
-		}
-		return commit, abort, nil
-	}
-	beginUserRetirement := func(userID int64) (func() bool, func() bool, error) {
-		return beginUserRetirementContext(context.Background(), userID)
-	}
-	sharedElevation, err := elevation.NewManager()
-	if err != nil {
-		return nil, fmt.Errorf("elevation manager: %w", err)
-	}
-	cleanup = append(cleanup, sharedElevation.Close)
-
-	provider, err := auth.NewHTTPDiscordProvider(auth.HTTPDiscordProviderConfig{
-		ClientID: cfg.DiscordClientID, ClientSecret: cfg.DiscordClientSecret,
-		Scopes: cfg.DiscordOAuthScopes,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("discord provider: %w", err)
-	}
-	oauthStartThrottle, err := ratelimit.NewIPThrottle(ratelimit.IPThrottleConfig{
-		Limit:   ratelimit.DefaultOAuthStartRateLimit,
-		Window:  time.Duration(ratelimit.DefaultOAuthStartRateWindowSeconds) * time.Second,
-		Penalty: time.Duration(ratelimit.DefaultOAuthStartRatePenaltySeconds) * time.Second,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("oauth start throttle: %w", err)
-	}
-	cleanup = append(cleanup, oauthStartThrottle.Close)
-	userAuth, err := auth.NewUserAuth(auth.UserAuthConfig{
-		Store: store, Provider: provider, ClientID: cfg.DiscordClientID,
-		SiteBaseURL: cfg.SiteBaseURL, Elevation: sharedElevation,
-		OAuthStartThrottle: oauthStartThrottle,
-		OnLogout: func(userID int64, sessionBinding string) {
-			if debugHub != nil {
-				debugHub.ForgetBindingReason(userID, sessionBinding, debug.EndLogout)
-			}
-		},
-		UserRequestGate: func(ctx context.Context, userID int64, binding string) (context.Context, func(), error) {
-			return userGate.Admit(ctx, userID, binding, store.ValidateUserSessionBinding)
-		},
-		UserRequestGateExempt: func(r *http.Request) bool {
-			return r != nil && r.URL != nil && r.URL.Path == "/api/account/delete"
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("user auth: %w", err)
-	}
-	cleanup = append(cleanup, userAuth.Close)
-	credGenSubkey, err := vault.DeriveSubkey([]byte("admin-cred-gen-v1"))
-	if err != nil {
-		return nil, fmt.Errorf("admin credential subkey: %w", err)
-	}
-	adminAuth, err := auth.NewAdminAuth(auth.AdminAuthConfig{
-		Store: store, Username: cfg.AdminUsername, Password: cfg.AdminPassword,
-		CredGenSubkey: credGenSubkey, SiteBaseURL: cfg.SiteBaseURL,
-	})
-	clear(credGenSubkey)
-	if err != nil {
-		return nil, fmt.Errorf("admin auth: %w", err)
-	}
-	cleanup = append(cleanup, adminAuth.Close)
-
-	modelFetcher, err := fetch.NewFetcher(fetch.FetcherConfig{
-		Store: store, Backend: localBackend, Secrets: vault, Registry: registry,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("model fetcher: %w", err)
-	}
-	cleanup = append(cleanup, modelFetcher.Close)
-
-	endpointService := endpoint.NewService(endpoint.ServiceDeps{
-		Repo: store, URLs: stack, Connectors: registry, Hook: modelFetcher,
-	})
-	modelService := model.NewService(store)
-	safetyIdentifierKey, err := vault.DeriveSubkey([]byte(forward.SafetyIdentifierSubkeyInfo))
-	if err != nil {
-		return nil, fmt.Errorf("safety identifier subkey: %w", err)
-	}
-	safetyIdentifierFactory, err := forward.NewSafetyIdentifierFactory(safetyIdentifierKey)
-	clear(safetyIdentifierKey)
-	if err != nil {
-		return nil, fmt.Errorf("safety identifier factory: %w", err)
-	}
-	// Register the shared factory before either service so reverse cleanup
-	// stops the services first and clears the subkey last.
-	cleanup = append(cleanup, safetyIdentifierFactory.Close)
-	secureRunner, err := forward.NewSecureRunner(forward.SecureRunnerConfig{
-		Repository:                store,
-		CharityTargets:            store,
-		Secrets:                   vault,
-		Registry:                  registry,
-		Backend:                   localBackend,
-		SafetyIdentifiers:         safetyIdentifierFactory,
-		AnthropicDefaultMaxTokens: anthropicDefaultMaxTokensProvider{store: store},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("secure runner: %w", err)
-	}
-	usageService, err := usage.NewService(usage.Config{Store: store})
-	if err != nil {
-		return nil, fmt.Errorf("usage service: %w", err)
-	}
-	forwardService, err := forward.NewService(forward.ServiceConfig{
-		Repository: store,
-		Runner:     secureRunner,
-		Hooks:      forward.Hooks{Attempt: usageService.HandleAttempt, Usage: usageService.HandleUsage},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("forward service: %w", err)
-	}
-	cleanup = append(cleanup, forwardService.Close)
-	antiAbuseService, err := antiabuse.NewService(antiabuse.ServiceConfig{
-		Store: store, BeginUserRetirement: beginUserRetirement,
-		BeginUserRetirementContext: beginUserRetirementContext,
-		BeforeUserBan: func(userID int64) {
-			if debugHub != nil {
-				debugHub.ForgetUserReason(userID, debug.EndBanned)
-			}
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("anti-abuse service: %w", err)
-	}
-	charityService, err := charityrouting.NewService(charityrouting.ServiceConfig{
-		Store:         store,
-		Runner:        secureRunner,
-		PreflightHook: antiAbuseService.Preflight,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("charity routing service: %w", err)
-	}
-	cleanup = append(cleanup, charityService.Close)
-	// Startup recovery converges stalled reservations from a previous process
-	// before any request can be in flight (frozen §5.4). The periodic sweep
-	// re-runs recovery at the start of every 6h maintenance round.
-	charityService.RecoverAll(context.Background(), true)
-	flowController, err = flowcontrol.New(flowcontrol.Config{
-		RPM:        ratelimit.DefaultRPMConfig(),
-		UserLimits: flowcontrol.DBUserLimitResolver(store),
-		OnDenied: func(ctx context.Context, userID int64, reason ratelimit.RPMReason) {
-			user, lookupErr := store.GetUserByID(userID)
-			if lookupErr != nil || user == nil {
-				return
-			}
-			antiAbuseService.RPMDenied(ctx, userID, user.IsAdmin, reason)
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("flow controller: %w", err)
-	}
-	cleanup = append(cleanup, flowController.Close)
-	maintenanceGate := maintenance.New()
-	runtimeApplier := adminapi.NewRuntimeApplier(flowController, stack, oauthStartThrottle, maintenanceGate)
-	if err := applyPersistedRuntimeConfig(store, runtimeApplier); err != nil {
-		return nil, fmt.Errorf("apply persisted runtime configuration: %w", err)
-	}
-	flowMiddleware, err := flowcontrol.NewMiddleware(flowController, forward.CallerIdentity)
-	if err != nil {
-		return nil, fmt.Errorf("flow middleware: %w", err)
-	}
-
-	gameSettlement, err := db.NewGameSettlementService(db.GameSettlementServiceConfig{Store: store})
-	if err != nil {
-		return nil, fmt.Errorf("game settlement service: %w", err)
-	}
-	cleanup = append(cleanup, gameSettlement.Close)
-	gameWorker, err := gameruntime.NewRecoveryWorker(gameruntime.RecoveryWorkerConfig{
-		Settlement: gameSettlement,
-		Store:      store,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("game recovery worker: %w", err)
-	}
-	if _, err := gameWorker.RecoverDue(context.Background()); err != nil {
-		return nil, fmt.Errorf("game startup recovery: %w", err)
-	}
-
-	personalDryRun := func(ctx context.Context, userID int64, request *openai.ChatRequest) (debug.DryRunResult, error) {
-		route, err := forwardService.ValidateDryRun(ctx, userID, request)
-		if err != nil {
-			return debug.DryRunResult{Personal: true}, err
-		}
-		return debug.DryRunResult{
-			Model: route.FullName, Personal: true, FlattenApplied: route.FlattenToolCall,
-			Effective: map[string]any{"route_strategy": route.RouteStrategy},
-		}, nil
-	}
-	charityDryRun := func(ctx context.Context, userID int64, request *openai.ChatRequest) (debug.DryRunResult, error) {
-		route, err := charityService.ValidateLogicalDryRun(ctx, userID, request)
-		if err != nil {
-			return debug.DryRunResult{Charity: true}, err
-		}
-		return debug.DryRunResult{
-			Model: route.FullName, Charity: true, FlattenApplied: route.FlattenToolCall,
-			Effective: map[string]any{"route_strategy": route.RouteStrategy},
-		}, nil
-	}
-	debugHub, err = debug.NewHub(debug.Config{
-		DryRunValidator:         personalDryRun,
-		CharityDryRunValidator:  charityDryRun,
-		SessionBindingValidator: store.ValidateUserSessionBinding,
-		MapDryRunError: func(err error) (string, string) {
-			switch {
-			case errors.Is(err, forward.ErrModelNotFound), errors.Is(err, charityrouting.ErrModelNotFound):
-				return httperr.CodeNotFound, "model not found"
-			case errors.Is(err, charityrouting.ErrCharityDisabled):
-				return httperr.CodeFeatureDisabled, "charity is disabled"
-			case errors.Is(err, charityrouting.ErrCharitySuspended):
-				return httperr.CodeCharitySuspended, "charity eligibility is suspended"
-			case errors.Is(err, openai.ErrInvalidRequest):
-				return httperr.CodeInvalidRequest, "invalid request"
-			default:
-				return httperr.CodeInternal, "request could not be validated"
-			}
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("debug hub: %w", err)
-	}
-	cleanup = append(cleanup, debugHub.Close)
-
-	lifecycleService, err := lifecycle.NewService(lifecycle.Config{
-		Store: store, Elevation: sharedElevation, AdminVerifier: adminAuth,
-		BeginUserRetirement:        beginUserRetirement,
-		BeginUserRetirementContext: beginUserRetirementContext,
-		BeginUserDeletion:          combineUserDeletionBoundaries(nil, antiAbuseService.BeginUserDeletion, gameSettlement.BeginUserDeletion),
-		BeforeDeleteUser: func(userID int64) {
-			if debugHub != nil {
-				debugHub.ForgetUserReason(userID, debug.EndDeleted)
-			}
-		},
-		PreDeleteUser: func(userID int64) {
-			charityService.CancelUserContexts(userID)
-			gameWorker.ForgetUser(userID)
-			if keyIDs, err := store.ListDonationKeyIDsByDonor(context.Background(), userID); err == nil && len(keyIDs) > 0 {
-				charityService.ForgetDonationKeys(keyIDs...)
-			}
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("lifecycle service: %w", err)
-	}
-	cleanup = append(cleanup, lifecycleService.Close)
-	exportHandler := lifecycle.NewHandler(lifecycle.HandlerDeps{
-		Store: store,
-		Resolve: func(r *http.Request) (*db.User, error) {
-			user, ok := auth.UserFromContext(r.Context())
-			if !ok {
-				return nil, errors.New("user session required")
-			}
-			return user, nil
-		},
-		Elevation: userAuth,
-	})
-
-	adminControls := adminapi.NewHandler(adminapi.HandlerDeps{
-		Store:                      store,
-		Runtime:                    runtimeApplier,
-		BeginUserRetirement:        beginUserRetirement,
-		BeginUserRetirementContext: beginUserRetirementContext,
-		BeforeUserBan: func(userID int64) {
-			if debugHub != nil {
-				debugHub.ForgetUserReason(userID, debug.EndBanned)
-			}
-		},
-	})
-	// The level-5 co-management frame: user-station session middleware plus a
-	// per-request live level>=5 gate. Business routes (donation reviews,
-	// charity model management, full-site logs) attach below through
-	// steward.Handler.Handle; an unregistered sub-path still answers with the
-	// stable 403/404 envelopes behind the gate.
-	stewardAPI := steward.New(steward.Deps{UserAuth: userAuth, Store: store})
-	checkinAPI := checkin.New(checkin.Deps{UserAuth: userAuth, Store: store})
-
-	// Charity donation rail (user submissions, admin/steward reviews) and the
-	// charity model management rail share one service layer per surface; each
-	// mounting frame resolves its own identity.
-	charitySvc := charity.NewService(store)
-	donationSvc := donation.NewService(donation.ServiceDeps{Store: store, URLs: stack, Connectors: registry, Limiter: charityService})
-	adminReviewIdentity := func(r *http.Request) (donation.ReviewerIdentity, error) {
-		admin, ok := auth.AdminFromContext(r.Context())
-		if !ok || admin == nil || admin.ID <= 0 {
-			return donation.ReviewerIdentity{}, errors.New("admin session required")
-		}
-		return donation.ReviewerIdentity{UserID: admin.ID, Role: db.ReviewRoleAdmin}, nil
-	}
-	adminManagerIdentity := func(r *http.Request) (int64, error) {
-		admin, ok := auth.AdminFromContext(r.Context())
-		if !ok || admin == nil || admin.ID <= 0 {
-			return 0, errors.New("admin session required")
-		}
-		return admin.ID, nil
-	}
-	adminDonationReview := donation.NewReviewHandler("/admin/api", donationSvc, adminReviewIdentity)
-	adminCharity := charity.NewHandler("/admin/api", charitySvc, adminManagerIdentity)
-
-	// Steward mounts go through the level-5 frame so every request re-resolves
-	// the effective level live; the subs receive only the opaque principal.
-	stewardReview := donation.NewReviewHandler("/api/steward", donationSvc, nil)
-	stewardCharity := charity.NewHandler("/api/steward", charitySvc, nil)
-	registerSteward := func(method, suffix string, sub func(w http.ResponseWriter, r *http.Request, p steward.Principal)) {
-		stewardAPI.Handle(method, "/api/steward"+suffix, sub)
-	}
-	// Level-5 full-site log co-management (frozen §G, clarification §1.8): the
-	// user-station steward projection, never the administrator host/session.
-	registerSteward("GET", "/logs", logapi.StewardLogsSub(store))
-	registerSteward("GET", "/donations", func(w http.ResponseWriter, r *http.Request, p steward.Principal) {
-		stewardReview.ListSub(w, r, donation.ReviewerIdentity{UserID: p.UserID, Role: p.Role})
-	})
-	registerSteward("GET", "/donations/{id}", func(w http.ResponseWriter, r *http.Request, p steward.Principal) {
-		stewardReview.GetSub(w, r, donation.ReviewerIdentity{UserID: p.UserID, Role: p.Role})
-	})
-	registerSteward("PATCH", "/donations/{id}", func(w http.ResponseWriter, r *http.Request, p steward.Principal) {
-		stewardReview.ReviewSub(w, r, donation.ReviewerIdentity{UserID: p.UserID, Role: p.Role})
-	})
-	registerSteward("DELETE", "/donations/{id}", func(w http.ResponseWriter, r *http.Request, p steward.Principal) {
-		stewardReview.DeleteSub(w, r, donation.ReviewerIdentity{UserID: p.UserID, Role: p.Role})
-	})
-	stewardCharityMounts := []struct {
-		method, suffix string
-		sub            func(http.ResponseWriter, *http.Request, int64)
-	}{
-		{"GET", "/charity-models", stewardCharity.ListSub},
-		{"POST", "/charity-models", stewardCharity.CreateSub},
-		{"GET", "/charity-models/{id}", stewardCharity.GetSub},
-		{"PATCH", "/charity-models/{id}", stewardCharity.UpdateSub},
-		{"DELETE", "/charity-models/{id}", stewardCharity.DeleteSub},
-		{"GET", "/charity-models/{id}/bindings", stewardCharity.ListBindingsSub},
-		{"POST", "/charity-models/{id}/bindings", stewardCharity.CreateBindingSub},
-		{"PATCH", "/charity-models/{id}/bindings/{bindingId}", stewardCharity.UpdateBindingSub},
-		{"DELETE", "/charity-models/{id}/bindings/{bindingId}", stewardCharity.DeleteBindingSub},
-	}
-	for _, m := range stewardCharityMounts {
-		method, suffix, sub := m.method, m.suffix, m.sub
-		stewardAPI.Handle(method, "/api/steward"+suffix, func(w http.ResponseWriter, r *http.Request, p steward.Principal) {
-			sub(w, r, p.UserID)
-		})
-	}
-	gameAPI := gameapi.NewHandler(gameapi.HandlerDeps{Store: store, Settlement: gameSettlement})
-	debugAPI := debug.NewControlHandler(debugHub, debug.HandlerConfig{})
-	api := buildUserAPI(userAuth, adminAuth, endpointService, modelFetcher, modelService,
-		logapi.NewHandler(logapi.HandlerDeps{Store: store}),
-		issues.NewHandler(issues.HandlerDeps{Store: store}),
-		checkinAPI.Handler(),
-		userAuth.Middleware(httpmw.API(donation.NewHandler(donationSvc, sessionIdentity))),
-		exportHandler, lifecycleService, forwardService, charityService, flowMiddleware, store,
-		stewardAPI.Handler(), gameAPI, debugAPI, debugHub,
-		func(ctx context.Context, userID int64, binding string) (context.Context, func(), error) {
-			return userGate.Admit(ctx, userID, binding, store.ValidateCallerKeyBinding)
-		})
-	// The maintenance gate sits after the host/station edge (which only lets
-	// /api/* and /v1/* reach the user station) and before any auth or business
-	// handler. It is live-applied from site_config and loaded from the DB at
-	// startup, so a toggle takes effect immediately for already-issued
-	// sessions and caller keys; the admin station is never routed through it.
-	gatedAPI := maintenance.GateMiddleware(maintenanceGate, api)
-	appHandler := buildAdminAndRootAPI(cfg, userAuth, adminAuth, gatedAPI, adminControls, alertapi.NewHandler(alertapi.HandlerDeps{Store: store}), logapi.NewHandler(logapi.HandlerDeps{Store: store}), lifecycleService, store, forwardService, flowMiddleware,
-		adminDonationReview.Handler(), adminCharity.Handler(), gameAPI)
-
-	maintenanceCtx, stopMaintenance := context.WithCancel(context.Background())
-	app = &application{handler: appHandler, stop: stopMaintenance, close: cleanup}
-	app.wg.Add(1)
-	go func() {
-		defer app.wg.Done()
-		if workerErr := gameWorker.RunTicker(maintenanceCtx); workerErr != nil && maintenanceCtx.Err() == nil {
-			slog.Error("game recovery worker stopped", "err", workerErr)
-		}
-	}()
-	app.wg.Add(1)
-	go func() {
-		defer app.wg.Done()
-		ticker := time.NewTicker(6 * time.Hour)
-		defer ticker.Stop()
-		runMaintenanceSweep(maintenanceCtx, store, usageService, charityService, gameWorker, antiAbuseService)
-		for {
-			select {
-			case <-maintenanceCtx.Done():
-				return
-			case <-ticker.C:
-				runMaintenanceSweep(maintenanceCtx, store, usageService, charityService, gameWorker, antiAbuseService)
-			}
-		}
-	}()
-	return app, nil
-}
-
-func runMaintenanceSweep(ctx context.Context, store *db.Store, usageService *usage.Service, charityService *charityrouting.Service, gameWorker *gameruntime.RecoveryWorker, antiAbuseServices ...*antiabuse.Service) {
-	if ctx == nil || ctx.Err() != nil {
-		return
-	}
-	now := time.Now().UTC()
-	// Recovery runs FIRST (frozen §5.4): converge stalled charity reservations
-	// before any retention sweep so a crashed in-flight call is settled
-	// before its log row could be aged out.
-	if charityService != nil && ctx.Err() == nil {
-		charityService.RecoverAll(ctx, false)
-	}
-	if gameWorker != nil && ctx.Err() == nil {
-		if _, recoveryErr := gameWorker.RecoverDue(ctx); recoveryErr != nil && ctx.Err() == nil {
-			slog.Error("game recovery failed", "err", recoveryErr)
-		} else if _, early, cleanupErr := gameWorker.SweepRetention(ctx, now); cleanupErr != nil && ctx.Err() == nil {
-			slog.Error("game retention failed", "err", cleanupErr)
-		} else if early && ctx.Err() == nil {
-			slog.Info("game retention stopped early; resuming next sweep")
-		}
-	}
-	for _, service := range antiAbuseServices {
-		if service != nil && ctx.Err() == nil {
-			service.Cleanup()
-		}
-	}
-	if store != nil {
-		if _, purgeErr := store.PurgeExpiredSessions(); purgeErr != nil && ctx.Err() == nil {
-			slog.Error("session retention failed", "err", purgeErr)
-		}
-	}
-	if usageService != nil && ctx.Err() == nil {
-		if _, cleanupErr := usageService.CleanupRequestLogs(ctx); cleanupErr != nil && ctx.Err() == nil {
-			slog.Error("request log retention failed", "err", cleanupErr)
-		}
-	}
-	if store != nil && ctx.Err() == nil {
-		if _, alertErr := store.CleanupResolvedAlerts(ctx, db.ResolvedAlertRetention); alertErr != nil && ctx.Err() == nil {
-			slog.Error("resolved alert retention failed", "err", alertErr)
-		}
-	}
-	if store != nil && ctx.Err() == nil {
-		// Activity retention: day keys older than the frozen 400-day window are
-		// removed in bounded batches. An unset site timezone skips the sweep —
-		// no activity row can exist without a configured offset.
-		cutoff, cutoffErr := store.ActivityRetentionCutoffDay(now.Unix())
-		switch {
-		case errors.Is(cutoffErr, db.ErrTimezoneUnavailable):
-			// Activity disabled: nothing to sweep.
-		case cutoffErr != nil:
-			slog.Error("activity retention cutoff failed", "err", cutoffErr)
-		default:
-			if _, early, actErr := store.CleanupActivityBefore(ctx, cutoff); actErr != nil && ctx.Err() == nil {
-				slog.Error("activity retention failed", "err", actErr)
-			} else if early && ctx.Err() == nil {
-				slog.Info("activity retention stopped early; resuming next sweep")
-			}
-		}
-	}
-	if store != nil && ctx.Err() == nil {
-		// Terminal charity reservations share the frozen 400-day retention
-		// window. Recovery above must run first so in-flight rows are settled;
-		// the cleanup itself never removes in-flight reservations.
-		cutoff := now.Unix() - 400*24*60*60
-		if _, early, cleanupErr := store.CleanupTerminalCharityReservations(ctx, cutoff); cleanupErr != nil && ctx.Err() == nil {
-			slog.Error("charity reservation retention failed", "err", cleanupErr)
-		} else if early && ctx.Err() == nil {
-			slog.Info("charity reservation retention stopped early; resuming next sweep")
-		}
-	}
-}
-
-func applyPersistedRuntimeConfig(store *db.Store, runtime adminapi.RuntimeApplier) error {
-	if store == nil || runtime == nil {
-		return errors.New("runtime configuration dependencies are required")
-	}
-	values, err := store.GetAllSiteConfigValues()
-	if err != nil {
-		return err
-	}
-	for _, key := range []string{
-		adminapi.KeyGlobalRPM,
-		adminapi.KeyDefaultRPMPerUser,
-		adminapi.KeyEgressGlobalConc,
-		adminapi.KeyDefaultPerEndpointConc,
-		adminapi.KeyOAuthStartRateLimit,
-		adminapi.KeyOAuthStartRateWindowSecs,
-		adminapi.KeyOAuthStartRatePenaltySecs,
-		adminapi.KeyMaintenanceMode,
-	} {
-		if value, ok := values[key]; ok {
-			if err := runtime.ApplySiteConfig(context.Background(), key, value); err != nil {
-				return fmt.Errorf("%s: %w", key, err)
-			}
-		}
-	}
-	return nil
-}
-
-// servePublicConfig handles GET /api/config: an unauthenticated,
-// display/legal subset of site_config plus the public maintenance and
-// registration toggles. The allowlist lives in adminapi.ReadPublicConfig so the
-// admin registry is the single source of truth and operational keys can
-// never leak here. The response is no-store so an operator's change takes
-// effect on the next page load instead of from a stale cache.
+// servePublicConfig is the anonymous Generation 2 bootstrap projection. All
+// other production APIs are mounted by their authenticated domain owners.
 func servePublicConfig(store *db.Store, w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		httperr.WriteError(w, httperr.New(httperr.CodeMethodNotAllowed, "method not allowed"))
+		return
+	}
+	if requestHasQuery(r) || requestCarriesBody(r) {
+		httperr.WriteError(w, httperr.New(httperr.CodeInvalidRequest, "invalid request"))
 		return
 	}
 	out, err := adminapi.ReadPublicConfig(store)
@@ -851,177 +198,1113 @@ func servePublicConfig(store *db.Store, w http.ResponseWriter, r *http.Request) 
 	httperr.WriteJSON(w, http.StatusOK, out)
 }
 
-// sessionIdentity is the shared user-session resolver for rails mounted with
-// their own middleware but a plain identity function.
-func sessionIdentity(r *http.Request) (int64, error) {
-	user, ok := auth.UserFromContext(r.Context())
-	if !ok || user == nil || !user.IsActive() {
-		return 0, errors.New("user session required")
-	}
-	return user.ID, nil
-}
+func freshSafeMux(cfg *config.Config, store *db.Store) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", healthz)
 
-func isProtectedUserAuthMethod(path, method string) bool {
-	switch path {
-	case "/api/auth/elevate", "/api/auth/logout", "/api/caller-key/regenerate":
-		return method == http.MethodPost
-	case "/api/session", "/api/caller-key":
-		return method == http.MethodGet
-	case "/api/me":
-		return method == http.MethodGet || method == http.MethodPatch
-	default:
-		return false
-	}
-}
-
-func buildUserAPI(userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, endpointService *endpoint.Service, fetcher *fetch.Fetcher, modelService *model.Service, logs http.Handler, issueHandler http.Handler, checkinHandler http.Handler, donationsHandler http.Handler, exportHandler http.Handler, lifecycleService *lifecycle.Service, forwardService *forward.Service, charityService *charityrouting.Service, flowMiddleware *flowcontrol.Middleware, store *db.Store, stewardHandler http.Handler, gamesHandler http.Handler, debugHandler http.Handler, debugHub *debug.Hub, callerGate auth.UserRequestGate) http.Handler {
-	userAuthHandler := userAuth.Handler()
-	userAuthProtected := userAuth.Middleware(userAuthHandler)
-	identity := func(r *http.Request) (int64, error) {
-		user, ok := auth.UserFromContext(r.Context())
-		if !ok || user == nil || !user.IsActive() {
-			return 0, errors.New("user session required")
-		}
-		return user.ID, nil
-	}
-	endpointHandler := userAuth.Middleware(endpoint.NewHandler(endpoint.HandlerDeps{Service: endpointService, Identity: identity}))
-	fetchHandler := userAuth.Middleware(fetch.NewHandler(fetch.HandlerDeps{Fetcher: fetcher, Store: store, Identity: identity}))
-	modelHandler := userAuth.Middleware(model.NewHandler(model.HandlerDeps{Service: modelService, Identity: model.SessionIdentity}))
-	userLogs := userAuth.Middleware(logs)
-	userIssues := userAuth.Middleware(issueHandler)
-	// The check-in tree wires its own user-session middleware (steward-style):
-	// its handlers still re-check the station and the session principal.
-	userCheckin := checkinHandler
-	userExport := userAuth.Middleware(exportHandler)
-	userDelete := userAuth.Middleware(httpmw.API(http.HandlerFunc(lifecycleService.DeleteOwnAccountHandler)))
-	userCharityModels := userAuth.Middleware(httpmw.API(charity.NewUserModelsHandler(charity.UserModelsDeps{Store: store})))
-	userGames := userAuth.Middleware(gamesHandler)
-	userDebug := userAuth.Middleware(httpmw.API(debugHandler))
-	var callerExit http.Handler = forward.NewHandler(forward.HandlerDeps{Service: forwardService, Charity: charityService, Identity: forward.CallerIdentity})
-	if debugHub != nil {
-		callerExit = debugHub.WrapCaller(callerExit)
-	}
-	forwardHandler := auth.CallerKeyMiddlewareWithGate(store, flowMiddleware.Wrap(callerExit), callerGate)
-
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		switch {
-		case path == "/api/config":
+	userAPI := httpmw.API(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if store != nil && r.URL.Path == "/api/config" {
 			servePublicConfig(store, w, r)
-		case path == "/api/auth/discord/start" || path == "/api/auth/discord/callback":
-			userAuthHandler.ServeHTTP(w, r)
-		case path == "/api/auth/elevate" || path == "/api/session" || path == "/api/me" || path == "/api/auth/logout" || path == "/api/caller-key" || path == "/api/caller-key/regenerate":
-			if isProtectedUserAuthMethod(path, r.Method) {
-				userAuthProtected.ServeHTTP(w, r)
-			} else {
-				userAuthHandler.ServeHTTP(w, r)
-			}
-		case path == "/api/me/usage" || path == "/api/logs" || path == "/api/logs/options":
-			userLogs.ServeHTTP(w, r)
-		case path == "/api/issues" || strings.HasPrefix(path, "/api/issues/"):
-			userIssues.ServeHTTP(w, r)
-		case path == "/api/checkin":
-			// Daily check-in (user station only; the shared user-session
-			// middleware enforces the station and the session).
-			userCheckin.ServeHTTP(w, r)
-		case path == "/api/charity/models":
-			// Charity price table (user station only; the shared user-session
-			// middleware enforces the station and the session).
-			userCharityModels.ServeHTTP(w, r)
-		case path == "/api/donations" || strings.HasPrefix(path, "/api/donations/"):
-			// Charity donation self-service (user station only).
-			donationsHandler.ServeHTTP(w, r)
-		case path == "/api/games" || strings.HasPrefix(path, "/api/games/"):
-			userGames.ServeHTTP(w, r)
-		case path == "/api/debug/session" || strings.HasPrefix(path, "/api/debug/session/") || path == "/api/debug/events":
-			userDebug.ServeHTTP(w, r)
-		case strings.HasPrefix(path, "/api/steward/"):
-			// Level-5 co-management prefix (user station only; the frame
-			// itself re-checks the station, the session, and the live level).
-			stewardHandler.ServeHTTP(w, r)
-		case path == "/api/account/export" || path == "/api/account/delete":
-			if path == "/api/account/export" {
-				userExport.ServeHTTP(w, r)
-			} else {
-				userDelete.ServeHTTP(w, r)
-			}
-		case path == "/api/endpoints" || strings.HasPrefix(path, "/api/endpoints/"):
-			if strings.HasSuffix(path, "/models") || strings.HasSuffix(path, "/models/refresh") {
-				fetchHandler.ServeHTTP(w, r)
-			} else {
-				endpointHandler.ServeHTTP(w, r)
-			}
-		case path == "/api/models" || strings.HasPrefix(path, "/api/models/"):
-			modelHandler.ServeHTTP(w, r)
-		case path == "/v1/models" || path == "/v1/chat/completions":
-			forwardHandler.ServeHTTP(w, r)
-		default:
-			apiNotFound(w, r)
+			return
+		}
+		apiNotFound(w, r)
+	}))
+	adminAPI := httpmw.API(http.HandlerFunc(apiNotFound))
+	mux.Handle("/api", userAPI)
+	mux.Handle("/api/", userAPI)
+	mux.Handle("/v1", userAPI)
+	mux.Handle("/v1/", userAPI)
+	mux.Handle("/admin/api", adminAPI)
+	mux.Handle("/admin/api/", adminAPI)
+	mux.Handle("/", web.NewMultiHandler(cfg.UserHost, cfg.AdminHost))
+	return mux
+}
+
+func generationTwoMux(cfg *config.Config, store *db.Store, authRuntime *auth.Runtime, callerHandler http.Handler) (*http.ServeMux, error) {
+	if cfg == nil || store == nil || authRuntime == nil || callerHandler == nil {
+		return nil, errors.New("Generation 2 HTTP dependencies are required")
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", healthz)
+
+	publicConfig := httpmw.API(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		servePublicConfig(store, w, r)
+	}))
+	mux.Handle("/api/config", publicConfig)
+
+	userAuth := authRuntime.UserHandler()
+	mux.Handle("/api", userAuth)
+	mux.Handle("/api/", userAuth)
+
+	callerAPI := httpmw.API(callerHandler)
+	mux.Handle("/v1", callerAPI)
+	mux.Handle("/v1/", callerAPI)
+
+	// Administrator routes deliberately bypass the maintenance admission gate.
+	// The authentication runtime still enforces the admin host, password,
+	// credential generation, live session and final-transaction authorization.
+	adminAuth := authRuntime.AdminHandler()
+	mux.Handle("/admin/api", adminAuth)
+	mux.Handle("/admin/api/", adminAuth)
+
+	mux.Handle("/", web.NewMultiHandler(cfg.UserHost, cfg.AdminHost))
+	return mux, nil
+}
+
+func stationBoundary(cfg *config.Config, next http.Handler) (http.Handler, error) {
+	if cfg == nil || next == nil {
+		return nil, errors.New("HTTP boundary dependencies are required")
+	}
+	return httpmw.New(httpmw.Config{
+		UserHost:          cfg.UserHost,
+		AdminHost:         cfg.AdminHost,
+		SiteBaseURL:       cfg.SiteBaseURL,
+		TrustedProxyCIDRs: cfg.TrustedProxyCIDRs,
+	}, next)
+}
+
+// newHTTPHandler remains the boundary-only constructor used by tests and
+// embedded-shell callers. Without a validated store it deliberately exposes
+// no API other than healthz.
+func newHTTPHandler(cfg *config.Config) (http.Handler, error) {
+	if cfg == nil {
+		return nil, errors.New("configuration is required")
+	}
+	return stationBoundary(cfg, freshSafeMux(cfg, nil))
+}
+
+type application struct {
+	handler         http.Handler
+	authRuntime     *auth.Runtime
+	bridge          *resourcebridge.Runtime
+	claims          *claim.Service
+	resourceRepo    *resources.Repository
+	discoveryWorker *resources.DiscoveryWorkerPool
+	donations       *donation.Service
+	charity         *charity.Service
+	charityRouting  *charityrouting.Service
+	checkin         *checkin.Service
+	homeGames       *gamehome.Service
+	announcements   *announcements.Service
+	issues          *issues.Service
+	reports         *reports.Repository
+	activities      *activities.Service
+	activityRepo    *activities.Repository
+	activityEvents  *accountstream.Hub
+	adminConfig     *adminapi.SiteConfigRuntime
+	adminAlerts     *adminalerts.Repository
+	adminUsers      *adminusers.Service
+	lifecycle       *lifecycle.Coordinator
+	lifecycleCancel context.CancelFunc
+	lifecycleDone   <-chan struct{}
+	debug           *debug.Hub
+	logs            *logapi.Repository
+	accountEvents   *accountEventConnections
+	forward         *publicForwardRuntime
+	games           *gameRuntimeBundle
+	failures        <-chan error
+	authorizer      *authz.Authorizer
+	elevation       *elevation.Manager
+	gate            *maintenance.Gate
+	registry        *maintenance.Registry
+	maintenance     *maintenance.Service
+	egress          *egress.Stack
+
+	shutdownOnce sync.Once
+	closeOnce    sync.Once
+	closeErr     error
+}
+
+// BeginShutdown closes process-local streaming and caller admission before
+// http.Server.Shutdown starts waiting for active connections. Durable workers
+// remain owned by Close and leave unfinished work at their checkpoints.
+func (a *application) BeginShutdown() {
+	if a == nil {
+		return
+	}
+	a.shutdownOnce.Do(func() {
+		if a.accountEvents != nil {
+			_ = a.accountEvents.Close()
+		}
+		if a.forward != nil {
+			a.forward.BeginShutdown()
+		}
+		if a.debug != nil {
+			_ = a.debug.Close()
 		}
 	})
 }
 
-func buildAdminAndRootAPI(cfg *config.Config, userAuth *auth.UserAuth, adminAuth *auth.AdminAuth, userAPI http.Handler, adminControls http.Handler, alerts http.Handler, logs http.Handler, lifecycleService *lifecycle.Service, store *db.Store, _ *forward.Service, _ *flowcontrol.Middleware, adminDonations http.Handler, adminCharityModels http.Handler, adminGames http.Handler) http.Handler {
-	adminLogs := adminAuth.Middleware(logs)
-	adminDonationsWrapped := adminAuth.Middleware(httpmw.API(adminDonations))
-	adminCharityWrapped := adminAuth.Middleware(httpmw.API(adminCharityModels))
-	adminGamesWrapped := adminAuth.Middleware(adminGames)
-	adminControlsHandler := adminAuth.Middleware(adminControls)
-	adminAlerts := adminAuth.Middleware(alerts)
-	adminElevate := adminAuth.Middleware(httpmw.API(http.HandlerFunc(lifecycleService.ElevateAdminHandler)))
-	adminDelete := adminAuth.Middleware(httpmw.API(http.HandlerFunc(lifecycleService.DeleteUserHandler)))
-	adminAuthHandler := adminAuth.Handler()
-	adminBoundary := httpmw.API(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/admin/api/config":
-			servePublicConfig(store, w, r)
-		case r.URL.Path == "/admin/api/login" || r.URL.Path == "/admin/api/logout" || r.URL.Path == "/admin/api/session":
-			adminAuthHandler.ServeHTTP(w, r)
-		case r.URL.Path == "/admin/api/auth/elevate":
-			adminElevate.ServeHTTP(w, r)
-		case r.URL.Path == "/admin/api/users" || strings.HasPrefix(r.URL.Path, "/admin/api/users/"):
-			if r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/admin/api/users/") {
-				request := r.Clone(r.Context())
-				request.SetPathValue("id", strings.TrimPrefix(r.URL.Path, "/admin/api/users/"))
-				adminDelete.ServeHTTP(w, request)
-			} else {
-				adminControlsHandler.ServeHTTP(w, r)
-			}
-		case r.URL.Path == "/admin/api/site-config" || strings.HasPrefix(r.URL.Path, "/admin/api/site-config/"):
-			adminControlsHandler.ServeHTTP(w, r)
-		case r.URL.Path == "/admin/api/logs" || strings.HasPrefix(r.URL.Path, "/admin/api/logs/") || r.URL.Path == "/admin/api/usage" || strings.HasPrefix(r.URL.Path, "/admin/api/overview/"):
-			adminLogs.ServeHTTP(w, r)
-		case strings.HasPrefix(r.URL.Path, "/admin/api/donations"):
-			adminDonationsWrapped.ServeHTTP(w, r)
-		case strings.HasPrefix(r.URL.Path, "/admin/api/charity-models"):
-			adminCharityWrapped.ServeHTTP(w, r)
-		case r.URL.Path == "/admin/api/games/config":
-			adminGamesWrapped.ServeHTTP(w, r)
-		case r.URL.Path == "/admin/api/alerts" || strings.HasPrefix(r.URL.Path, "/admin/api/alerts/"):
-			adminAlerts.ServeHTTP(w, r)
-		default:
-			apiNotFound(w, r)
+func (a *application) Close() error {
+	if a == nil {
+		return nil
+	}
+	a.closeOnce.Do(func() {
+		a.BeginShutdown()
+		var closeErrors []error
+		if a.lifecycleCancel != nil {
+			a.lifecycleCancel()
 		}
-	}))
-	rootMux := http.NewServeMux()
-	rootMux.HandleFunc("/healthz", healthz)
-	rootMux.Handle("/api", httpmw.API(userAPI))
-	rootMux.Handle("/api/", httpmw.API(userAPI))
-	rootMux.Handle("/v1", httpmw.API(userAPI))
-	rootMux.Handle("/v1/", httpmw.API(userAPI))
-	rootMux.Handle("/admin/api", adminBoundary)
-	rootMux.Handle("/admin/api/", adminBoundary)
-	rootMux.Handle("/", web.NewMultiHandler(cfg.UserHost, cfg.AdminHost))
-	return mustHTTPBoundary(cfg, rootMux)
+		if a.lifecycleDone != nil {
+			<-a.lifecycleDone
+		}
+		if a.lifecycle != nil {
+			if err := a.lifecycle.Close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
+		}
+		if a.reports != nil {
+			if err := a.reports.Close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
+		}
+		if a.games != nil {
+			if err := a.games.Close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
+		}
+		if a.forward != nil {
+			if err := a.forward.Close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
+		}
+		if a.activityEvents != nil {
+			if err := a.activityEvents.Close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
+		}
+		if a.authRuntime != nil {
+			if err := a.authRuntime.Close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
+		}
+		if a.discoveryWorker != nil {
+			a.discoveryWorker.Close()
+		}
+		if a.bridge != nil {
+			if err := a.bridge.Close(); err != nil {
+				closeErrors = append(closeErrors, err)
+			}
+		}
+		if a.egress != nil {
+			a.egress.CloseIdleConnections()
+		}
+		a.closeErr = errors.Join(closeErrors...)
+	})
+	return a.closeErr
 }
 
-func mustHTTPBoundary(cfg *config.Config, next http.Handler) http.Handler {
-	wrapped, err := httpmw.New(httpmw.Config{
-		UserHost: cfg.UserHost, AdminHost: cfg.AdminHost, SiteBaseURL: cfg.SiteBaseURL,
-		TrustedProxyCIDRs: cfg.TrustedProxyCIDRs,
-	}, next)
-	if err != nil {
-		panic(err)
+const (
+	discoveryWorkerMaxConcurrent = 4
+	discoveryWorkerMaxAdmitted   = 32
+	discoveryWorkerTimeout       = egress.DefaultRequestTimeout
+)
+
+// roleFinalTxAuthorizer adapts the request actor established by auth.Runtime
+// to the exact live role checks owned by authz.Authorizer. It carries no
+// cached authorization result: every domain call supplies its own final
+// transaction and revalidates the session, account and role in that tx.
+type roleFinalTxAuthorizer struct {
+	authorizer *authz.Authorizer
+}
+
+var _ donation.RoleFinalTxAuthorizer = (*roleFinalTxAuthorizer)(nil)
+var _ activities.AdminFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
+var _ announcements.AdminFinalTxAuthorizer = (*roleFinalTxAuthorizer)(nil)
+var _ adminapi.SiteConfigFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
+var _ adminalerts.AdminFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
+var _ adminusers.AdminFinalAuthorizer = (*roleFinalTxAuthorizer)(nil)
+var _ logapi.StewardAuthorizer = (*roleFinalTxAuthorizer)(nil)
+var _ resources.AdminFinalTxAuthorizer = (*roleFinalTxAuthorizer)(nil)
+
+func (authorizer *roleFinalTxAuthorizer) AuthorizeAdminMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
+	return authorizer.authorize(ctx, tx, userID, authz.ActorAdminSession, authz.RoleAdministrator)
+}
+
+func (authorizer *roleFinalTxAuthorizer) AuthorizeAdmin(ctx context.Context, tx *sql.Tx, userID int64) error {
+	return authorizer.authorize(ctx, tx, userID, authz.ActorAdminSession, authz.RoleAdministrator)
+}
+
+func (authorizer *roleFinalTxAuthorizer) AuthorizeAdminFinalTx(ctx context.Context, tx *sql.Tx, userID int64) error {
+	return authorizer.authorize(ctx, tx, userID, authz.ActorAdminSession, authz.RoleAdministrator)
+}
+
+func (authorizer *roleFinalTxAuthorizer) AuthorizeStewardMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
+	return authorizer.authorize(ctx, tx, userID, authz.ActorUserSession, authz.RoleSteward)
+}
+
+func (authorizer *roleFinalTxAuthorizer) AuthorizeStewardRead(ctx context.Context, tx *sql.Tx, userID int64) error {
+	return authorizer.authorize(ctx, tx, userID, authz.ActorUserSession, authz.RoleSteward)
+}
+
+func (authorizer *roleFinalTxAuthorizer) authorize(
+	ctx context.Context,
+	tx *sql.Tx,
+	userID int64,
+	kind authz.ActorKind,
+	role authz.Role,
+) error {
+	if authorizer == nil || authorizer.authorizer == nil || ctx == nil || tx == nil {
+		return errors.New("role final-transaction authorization unavailable")
 	}
-	return wrapped
+	actor, ok := auth.ActorFromContext(ctx)
+	if !ok || actor.Kind != kind || actor.UserID != userID {
+		return authz.ErrUnauthorized
+	}
+	_, err := authorizer.authorizer.Authorize(ctx, tx, actor, authz.Requirement{Role: role})
+	return err
+}
+
+type siteConfigRouteRegistrar struct{ runtime *auth.Runtime }
+
+var _ adminapi.SiteConfigRouteRegistrar = siteConfigRouteRegistrar{}
+
+func (registrar siteConfigRouteRegistrar) RegisterAdminRoute(method, pattern string, handler adminapi.SiteConfigAuthorizedAdminHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterAdminRoute(method, pattern, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		actor, ok := auth.ActorFromContext(request.Context())
+		if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
+			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+			return
+		}
+		handler(writer, request, adminapi.SiteConfigAdminPrincipal{UserID: actor.UserID})
+	}))
+}
+
+type resourceAdminRouteRegistrar struct{ runtime *auth.Runtime }
+
+var _ resources.AdminRouteRegistrar = resourceAdminRouteRegistrar{}
+
+func (registrar resourceAdminRouteRegistrar) RegisterAdminRoute(method, pattern string, handler resources.AuthorizedAdminHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterAdminRoute(method, pattern, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		actor, ok := auth.ActorFromContext(request.Context())
+		if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
+			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+			return
+		}
+		handler(writer, request, resources.AdminPrincipal{UserID: actor.UserID})
+	}))
+}
+
+type adminAlertRouteRegistrar struct{ runtime *auth.Runtime }
+
+var _ adminalerts.AdminRouteRegistrar = adminAlertRouteRegistrar{}
+
+func (registrar adminAlertRouteRegistrar) RegisterAdminRoute(method, pattern string, handler adminalerts.AuthorizedAdminHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterAdminRoute(method, pattern, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		actor, ok := auth.ActorFromContext(request.Context())
+		if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
+			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+			return
+		}
+		handler(writer, request, adminalerts.AdminPrincipal{UserID: actor.UserID})
+	}))
+}
+
+type adminUserRouteRegistrar struct{ runtime *auth.Runtime }
+
+var _ adminusers.AdminRouteRegistrar = adminUserRouteRegistrar{}
+
+func (registrar adminUserRouteRegistrar) RegisterAdminRoute(method, pattern string, handler adminusers.AuthorizedAdminHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterAdminRoute(method, pattern, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		actor, ok := auth.ActorFromContext(request.Context())
+		if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
+			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+			return
+		}
+		handler(writer, request, adminusers.AdminPrincipal{UserID: actor.UserID})
+	}))
+}
+
+type activityRouteRegistrar struct{ runtime *auth.Runtime }
+
+var _ activities.UserRouteRegistrar = activityRouteRegistrar{}
+var _ activities.AdminRouteRegistrar = activityRouteRegistrar{}
+
+func (registrar activityRouteRegistrar) RegisterUserRoute(method, pattern string, handler activities.AuthorizedUserHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterUserRoute(method, pattern, func(writer http.ResponseWriter, request *http.Request, principal resources.UserPrincipal) {
+		handler(writer, request, activities.UserPrincipal{UserID: principal.UserID})
+	})
+}
+
+func (registrar activityRouteRegistrar) RegisterAdminRoute(method, pattern string, handler activities.AuthorizedAdminHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterAdminRoute(method, pattern, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		actor, ok := auth.ActorFromContext(request.Context())
+		if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
+			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+			return
+		}
+		handler(writer, request, activities.AdminPrincipal{UserID: actor.UserID})
+	}))
+}
+
+type announcementRouteRegistrar struct{ runtime *auth.Runtime }
+
+var _ announcements.UserRouteRegistrar = announcementRouteRegistrar{}
+var _ announcements.AdminRouteRegistrar = announcementRouteRegistrar{}
+
+func (registrar announcementRouteRegistrar) RegisterUserRoute(method, pattern string, handler announcements.AuthorizedUserHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterUserRoute(method, pattern, func(writer http.ResponseWriter, request *http.Request, principal resources.UserPrincipal) {
+		handler(writer, request, announcements.UserPrincipal{UserID: principal.UserID})
+	})
+}
+
+func (registrar announcementRouteRegistrar) RegisterAdminRoute(method, pattern string, handler announcements.AuthorizedAdminHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterAdminRoute(method, pattern, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		actor, ok := auth.ActorFromContext(request.Context())
+		if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
+			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+			return
+		}
+		handler(writer, request, announcements.AdminPrincipal{UserID: actor.UserID})
+	}))
+}
+
+type issueRouteRegistrar struct{ runtime *auth.Runtime }
+
+var _ issues.UserRouteRegistrar = issueRouteRegistrar{}
+
+func (registrar issueRouteRegistrar) RegisterUserRoute(method, pattern string, handler issues.AuthorizedUserHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterUserRoute(method, pattern, func(writer http.ResponseWriter, request *http.Request, principal resources.UserPrincipal) {
+		handler(writer, request, issues.UserPrincipal{UserID: principal.UserID})
+	})
+}
+
+type maintenanceRouteRegistrar struct{ runtime *auth.Runtime }
+
+var _ maintenance.StewardRouteRegistrar = maintenanceRouteRegistrar{}
+var _ maintenance.AdminRouteRegistrar = maintenanceRouteRegistrar{}
+
+func (registrar maintenanceRouteRegistrar) RegisterStewardRoute(method, pattern string, handler maintenance.AuthorizedHTTPHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterUserRoute(method, pattern, func(writer http.ResponseWriter, request *http.Request, _ resources.UserPrincipal) {
+		actor, ok := auth.ActorFromContext(request.Context())
+		if !ok || actor.Kind != authz.ActorUserSession || actor.UserID <= 0 {
+			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+			return
+		}
+		handler(writer, request, maintenance.HTTPPrincipal{Actor: actor})
+	})
+}
+
+func (registrar maintenanceRouteRegistrar) RegisterAdminRoute(method, pattern string, handler maintenance.AuthorizedHTTPHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterAdminRoute(method, pattern, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		actor, ok := auth.ActorFromContext(request.Context())
+		if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
+			httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+			return
+		}
+		handler(writer, request, maintenance.HTTPPrincipal{Actor: actor})
+	}))
+}
+
+// emptyResourceValidationAuthority is the production authority when no
+// explicit endpoint validator feed is configured. Discovery and routing
+// remain live authorities; this closed provider contributes no synthetic
+// credential/configuration evidence.
+type emptyResourceValidationAuthority struct{}
+
+var _ issues.ResourceValidationAuthority = emptyResourceValidationAuthority{}
+
+func (emptyResourceValidationAuthority) Current(
+	ctx context.Context,
+	tx *sql.Tx,
+	userID int64,
+	kind issues.ResourceKind,
+	resourceID int64,
+	root issues.RootCause,
+) (issues.ResourceValidationState, error) {
+	if ctx == nil || tx == nil || userID <= 0 || resourceID <= 0 || kind == "" || root == "" {
+		return issues.ResourceValidationState{}, errors.New("resource validation authority received an invalid target")
+	}
+	return issues.ResourceValidationState{ObservedAt: 0}, nil
+}
+
+func (emptyResourceValidationAuthority) Scan(
+	ctx context.Context,
+	tx *sql.Tx,
+	userID int64,
+	cursor string,
+	limit int,
+) (issues.ResourceValidationBatch, error) {
+	if ctx == nil || tx == nil || userID <= 0 || cursor != "" || limit < 1 || limit > 100 {
+		return issues.ResourceValidationBatch{}, errors.New("resource validation authority received an invalid scan")
+	}
+	return issues.ResourceValidationBatch{Items: []issues.ResourceValidationTarget{}, Done: true}, nil
+}
+
+type activityMutationGate struct{}
+
+var _ activities.UserMutationGate = activityMutationGate{}
+
+func (activityMutationGate) AuthorizeUserActivity(ctx context.Context, tx *sql.Tx, userID int64) error {
+	if ctx == nil || tx == nil || userID <= 0 {
+		return activities.ErrUnauthorized
+	}
+	var enabled int
+	if err := tx.QueryRowContext(ctx, `SELECT enabled FROM maintenance_state WHERE id=1`).Scan(&enabled); err != nil {
+		return fmt.Errorf("read maintenance state: %w", err)
+	}
+	switch enabled {
+	case 0:
+		return nil
+	case 1:
+		return activities.ErrMaintenance
+	default:
+		return activities.ErrInvariant
+	}
+}
+
+type activityPublishReporter struct{}
+
+func (activityPublishReporter) ReportActivitiesPublishError(err error) {
+	if err != nil {
+		slog.Error("activity account event publication failed", "err", err)
+	}
+}
+
+func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) (*application, error) {
+	if cfg == nil || store == nil || vault == nil {
+		return nil, errors.New("application dependencies are required")
+	}
+
+	elevationManager, err := elevation.NewManager()
+	if err != nil {
+		return nil, fmt.Errorf("create elevation manager: %w", err)
+	}
+	authorizer := authz.New(authz.Options{Elevation: elevationManager})
+	gate := maintenance.NewGate()
+	registry := maintenance.NewRegistry()
+	maintenanceService, err := maintenance.NewService(maintenance.ServiceOptions{
+		Authorizer: authorizer,
+		Gate:       gate,
+		Registry:   registry,
+	})
+	if err != nil {
+		_ = elevationManager.Close()
+		return nil, fmt.Errorf("create maintenance service: %w", err)
+	}
+
+	outbound, err := egress.NewStack(egress.StackOptions{})
+	if err != nil {
+		_ = elevationManager.Close()
+		return nil, fmt.Errorf("create egress stack: %w", err)
+	}
+	var bridgeRuntime *resourcebridge.Runtime
+	var discoveryWorker *resources.DiscoveryWorkerPool
+	var resourceRepository *resources.Repository
+	var reportRepository *reports.Repository
+	var authRuntime *auth.Runtime
+	var activityEvents *accountstream.Hub
+	var lifecycleCoordinator *lifecycle.Coordinator
+	var debugHub *debug.Hub
+	var accountConnections *accountEventConnections
+	var forwardRuntime *publicForwardRuntime
+	var gameRuntimes *gameRuntimeBundle
+	cleanup := func() {
+		if accountConnections != nil {
+			_ = accountConnections.Close()
+		}
+		if debugHub != nil {
+			_ = debugHub.Close()
+		}
+		if reportRepository != nil {
+			_ = reportRepository.Close()
+		}
+		if lifecycleCoordinator != nil {
+			_ = lifecycleCoordinator.Close()
+		}
+		if gameRuntimes != nil {
+			_ = gameRuntimes.Close()
+		}
+		if forwardRuntime != nil {
+			_ = forwardRuntime.Close()
+		}
+		if activityEvents != nil {
+			_ = activityEvents.Close()
+		}
+		if authRuntime != nil {
+			_ = authRuntime.Close()
+		} else {
+			_ = elevationManager.Close()
+		}
+		if discoveryWorker != nil {
+			discoveryWorker.Close()
+		}
+		if bridgeRuntime != nil {
+			_ = bridgeRuntime.Close()
+		}
+		outbound.CloseIdleConnections()
+	}
+
+	startupContext := context.Background()
+	if err := outbound.AddSelfOrigins(startupContext, cfg); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register egress self origins: %w", err)
+	}
+	rpmLimits, concurrencyLimits, err := loadRuntimeLimits(store)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("load runtime limits: %w", err)
+	}
+	if err := outbound.SetConcurrencyLimits(concurrencyLimits); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("apply egress concurrency limits: %w", err)
+	}
+	localBackend, err := backend.NewLocal(outbound)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create local backend: %w", err)
+	}
+	discordProvider, err := auth.NewHTTPDiscordProvider(auth.HTTPDiscordProviderConfig{
+		ClientID:     cfg.DiscordClientID,
+		ClientSecret: cfg.DiscordClientSecret,
+		Scopes:       cfg.DiscordOAuthScopes,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create Discord authentication provider: %w", err)
+	}
+	authRuntime, err = auth.NewRuntime(auth.RuntimeConfig{
+		Store:                store,
+		Provider:             discordProvider,
+		DiscordClientID:      cfg.DiscordClientID,
+		UserSiteBaseURL:      cfg.SiteBaseURL,
+		AdminUsername:        cfg.AdminUsername,
+		AdminPassword:        cfg.AdminPassword,
+		CredentialKeyDeriver: vault,
+		Authorizer:           authorizer,
+		Maintenance:          gate,
+		Elevation:            elevationManager,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create authentication runtime: %w", err)
+	}
+	roleAuthorizer := &roleFinalTxAuthorizer{authorizer: authorizer}
+	adminConfigRepository, err := adminapi.NewSiteConfigRepository(adminapi.SiteConfigRepositoryOptions{
+		Store: store, FinalAuthorizer: roleAuthorizer,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create administrator site configuration repository: %w", err)
+	}
+	adminConfigRuntime, err := adminapi.NewSiteConfigRuntime(adminConfigRepository)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create administrator site configuration runtime: %w", err)
+	}
+	adminAlertRepository, err := adminalerts.NewRepository(adminalerts.Config{
+		Store: store, CursorKeys: vault, FinalAuth: roleAuthorizer,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create administrator alert repository: %w", err)
+	}
+	donationService, err := donation.New(donation.Config{
+		Store:      store,
+		OwnerAuth:  authRuntime,
+		RoleAuth:   roleAuthorizer,
+		CursorKeys: vault,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create donation service: %w", err)
+	}
+	charityService, err := charity.New(charity.Config{
+		Store:       store,
+		KeyDeletion: donationService,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create charity service: %w", err)
+	}
+	claimService, err := claim.New(claim.Dependencies{
+		DB:         store.DB(),
+		Secrets:    vault,
+		Accounting: claim.NewLedgerAccounting(),
+		Charity:    charityService,
+		Acceptance: maintenanceService,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create claim service: %w", err)
+	}
+	bridgeRuntime, err = resourcebridge.New(resourcebridge.Config{
+		Store:   store,
+		Vault:   vault,
+		Claims:  claimService,
+		Backend: localBackend,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create resource bridge: %w", err)
+	}
+	discoveryWorker, err = resources.NewDiscoveryWorkerPool(
+		discoveryWorkerMaxConcurrent,
+		discoveryWorkerMaxAdmitted,
+		discoveryWorkerTimeout,
+	)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create discovery worker: %w", err)
+	}
+	connectorRegistry := connector.NewDefaultRegistry()
+	announcementRepository, err := announcements.NewRepository(announcements.Config{
+		Store: store, CursorKeys: vault, FinalAuth: roleAuthorizer,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create announcement repository: %w", err)
+	}
+	announcementService, err := announcements.NewService(announcementRepository)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create announcement service: %w", err)
+	}
+	issueRepository, err := issues.NewRepository(issues.Config{
+		Store: store, CursorKeys: vault, ResourceValidation: emptyResourceValidationAuthority{},
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create issue repository: %w", err)
+	}
+	issueService, err := issues.NewService(issueRepository)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create issue service: %w", err)
+	}
+	reportRepository, err = reports.New(reports.Config{
+		Store: store, Connectors: connectorRegistry, BaseURLs: outbound,
+		KeyDeriver: vault, Authorizer: authorizer, IssueProjection: issueService.Sources(),
+		DeleteKey: func(ctx context.Context, tx *sql.Tx, ownerUserID, endpointKeyID, decisionNow int64) error {
+			if resourceRepository == nil {
+				return errors.New("resource deletion capability unavailable")
+			}
+			return resourceRepository.DeleteEndpointKeyForReport(ctx, tx, ownerUserID, endpointKeyID, decisionNow)
+		},
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create report repository: %w", err)
+	}
+	resourceRepository, err = resources.New(resources.Config{
+		Store:           store,
+		Connectors:      connectorRegistry,
+		BaseURLs:        outbound,
+		Secrets:         bridgeRuntime,
+		KeyDeletion:     charityService,
+		KeyCreation:     reportRepository,
+		Projection:      issueService.Sources(),
+		DiscoveryRail:   bridgeRuntime,
+		DiscoveryWorker: discoveryWorker,
+		CursorKeys:      vault,
+		FinalAuth:       authRuntime,
+		AdminFinalAuth:  roleAuthorizer,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create resource repository: %w", err)
+	}
+	charityRoutingService, err := charityrouting.New(charityrouting.Config{
+		Store:         store,
+		RoleAuth:      roleAuthorizer,
+		DonationState: donationService,
+		CursorKeys:    vault,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create charity routing service: %w", err)
+	}
+	activityRepository, err := activities.NewRepository(activities.RepositoryConfig{
+		Store:          store,
+		UserFinalAuth:  authRuntime,
+		AdminFinalAuth: roleAuthorizer,
+		UserGate:       activityMutationGate{},
+		CursorKeys:     vault,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create activities repository: %w", err)
+	}
+	accountSources, err := newAccountEventSources(activityRepository)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create account event sources: %w", err)
+	}
+	activityEvents, err = accountstream.New(accountSources, accountSources)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create account event hub: %w", err)
+	}
+	accountConnections = newAccountEventConnections()
+	activityPublisher, err := activities.NewAccountstreamPublisher(activityRepository, activityEvents)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create activities publisher: %w", err)
+	}
+	activityService, err := activities.NewService(activities.ServiceConfig{
+		Repository: activityRepository,
+		Publisher:  activityPublisher,
+		Reporter:   activityPublishReporter{},
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create activities service: %w", err)
+	}
+	if err := recoverAnnouncementsBeforeListener(startupContext, announcementService); err != nil {
+		cleanup()
+		return nil, err
+	}
+	if err := recoverIssuesBeforeListener(startupContext, issueService); err != nil {
+		cleanup()
+		return nil, err
+	}
+	debugHub, err = debug.NewHub(debugIdentityAuthority{runtime: authRuntime})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create Debug hub: %w", err)
+	}
+	debugMutations, err := debug.NewMutationRepository(store.DB())
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create Debug mutation repository: %w", err)
+	}
+	logRepository, err := logapi.NewRepository(store.DB(), vault)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create log repository: %w", err)
+	}
+	gameRuntimes, err = newGameRuntimeBundle(
+		store, vault, authRuntime, roleAuthorizer, maintenanceService, activityRepository,
+		activityPublisher, activityEvents, accountSources,
+	)
+	if err != nil {
+		cleanup()
+		return nil, err
+	}
+	checkinService, err := checkin.NewService(checkin.ServiceConfig{
+		Store: store, FinalAuth: authRuntime, Maintenance: maintenanceService,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create check-in service: %w", err)
+	}
+	homeGameService, err := gamehome.New(gamehome.Options{
+		Database: store.DB(), UserAuthorizer: authRuntime,
+		LinkLink: gameRuntimes.linklink, RPS: gameRuntimes.rps,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create home game summary service: %w", err)
+	}
+	if err := linklink.RegisterContinuation(registry, gameRuntimes.linklink); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register LinkLink maintenance continuation: %w", err)
+	}
+	if err := rps.RegisterContinuation(registry, gameRuntimes.rps); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register RPS maintenance continuation: %w", err)
+	}
+	userInvalidations := &userSessionInvalidationFanout{
+		debug: debugHub, connections: accountConnections,
+	}
+	if err := authRuntime.AttachUserSessionInvalidationObserver(userInvalidations); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("attach user-session invalidation observer: %w", err)
+	}
+	adminUserService, err := adminusers.NewService(adminusers.ServiceConfig{
+		Database: store.DB(), CursorKeys: vault, FinalAuth: roleAuthorizer, Invalidator: userInvalidations,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create administrator user service: %w", err)
+	}
+	forwardRuntime, err = newPublicForwardRuntime(
+		store, vault, claimService, charityService, charityRoutingService, resourceRepository,
+		connectorRegistry, localBackend, debugHub, gate, rpmLimits,
+	)
+	if err != nil {
+		cleanup()
+		return nil, err
+	}
+	if err := authRuntime.AttachUserLifecycleGate(forwardRuntime.lifecycle); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("attach shared user lifecycle gate: %w", err)
+	}
+	lifecycleCoordinator, err = newLifecycleCoordinator(
+		store, vault, authRuntime, roleAuthorizer, forwardRuntime, gameRuntimes,
+		claimService, resourceRepository, issueService, logRepository,
+		activityService, activityRepository, donationService, charityService,
+		reportRepository, announcementRepository, maintenanceService,
+		activityEvents, debugHub,
+	)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create account lifecycle coordinator: %w", err)
+	}
+	if err := adminapi.RegisterSiteConfigRoutes(siteConfigRouteRegistrar{runtime: authRuntime}, adminConfigRuntime); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register administrator site configuration routes: %w", err)
+	}
+	if err := adminusers.RegisterRoutes(adminUserRouteRegistrar{runtime: authRuntime}, adminUserService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register administrator user routes: %w", err)
+	}
+	if err := adminalerts.RegisterRoutes(adminAlertRouteRegistrar{runtime: authRuntime}, adminAlertRepository); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register administrator alert routes: %w", err)
+	}
+	if err := resources.RegisterRoutes(authRuntime, resourceRepository); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register resource routes: %w", err)
+	}
+	if err := resources.RegisterAdminRoutes(resourceAdminRouteRegistrar{runtime: authRuntime}, resourceRepository); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register resource administrator routes: %w", err)
+	}
+	if err := donation.RegisterOwnerRoutes(authRuntime, donationService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register donation owner routes: %w", err)
+	}
+	if err := donation.RegisterAdminRoutes(authRuntime, donationService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register donation administrator routes: %w", err)
+	}
+	if err := donation.RegisterStewardRoutes(authRuntime, donationService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register donation steward routes: %w", err)
+	}
+	if err := charityrouting.RegisterOwnerRoutes(authRuntime, charityRoutingService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register charity capability routes: %w", err)
+	}
+	if err := charityrouting.RegisterAdminRoutes(authRuntime, charityRoutingService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register charity administrator routes: %w", err)
+	}
+	if err := charityrouting.RegisterStewardRoutes(authRuntime, charityRoutingService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register charity steward routes: %w", err)
+	}
+	if err := checkin.RegisterRoutes(authRuntime, checkinService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register check-in routes: %w", err)
+	}
+	if err := gamehome.RegisterRoutes(authRuntime, homeGameService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register home game summary route: %w", err)
+	}
+	activityRoutes := activityRouteRegistrar{runtime: authRuntime}
+	if err := activities.RegisterRoutes(activityRoutes, activityRoutes, activityService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register activities routes: %w", err)
+	}
+	announcementRoutes := announcementRouteRegistrar{runtime: authRuntime}
+	if err := announcements.RegisterRoutes(announcementRoutes, announcementRoutes, announcementService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register announcement routes: %w", err)
+	}
+	if err := issues.RegisterRoutes(issueRouteRegistrar{runtime: authRuntime}, issueService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register issue routes: %w", err)
+	}
+	if err := reportRepository.RegisterRoutes(authRuntime); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register report routes: %w", err)
+	}
+	maintenanceRoutes := maintenanceRouteRegistrar{runtime: authRuntime}
+	if err := maintenance.RegisterRoutes(maintenanceRoutes, maintenanceRoutes, maintenance.HTTPOptions{
+		Database: store.DB(), Service: maintenanceService,
+	}); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register maintenance routes: %w", err)
+	}
+	if err := debug.RegisterRoutes(debugRouteRegistrar{runtime: authRuntime}, debugHub, debugMutations); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register Debug routes: %w", err)
+	}
+	if err := logapi.RegisterUserRoutes(authRuntime, logRepository); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register user log routes: %w", err)
+	}
+	if err := logapi.RegisterStewardRoutes(authRuntime, logRepository, roleAuthorizer); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register steward log routes: %w", err)
+	}
+	if err := logapi.RegisterAdminRoutes(authRuntime, logRepository); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register administrator log routes: %w", err)
+	}
+	if err := gameruntime.RegisterUserRoutes(authRuntime, gameRuntimes.fishing); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register Fishing routes: %w", err)
+	}
+	if err := gameruntime.RegisterAdminRoutes(authRuntime, gameRuntimes.fishing); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register game administrator routes: %w", err)
+	}
+	if err := linklink.RegisterRoutes(authRuntime, authRuntime, gameRuntimes.linklink); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register LinkLink routes: %w", err)
+	}
+	if err := rps.RegisterRoutes(authRuntime, authRuntime, gameRuntimes.rps); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register RPS routes: %w", err)
+	}
+	lifecycleRoutes := lifecycleRouteRegistrar{runtime: authRuntime}
+	if err := lifecycle.RegisterRoutes(lifecycleRoutes, lifecycleRoutes, lifecycleCoordinator); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register account lifecycle routes: %w", err)
+	}
+	if err := registerAccountEventRoute(authRuntime, gate, gameRuntimes.rps, activityEvents, accountConnections); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register account event route: %w", err)
+	}
+	if _, err := maintenanceService.PrepareListener(startupContext, store.DB()); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("prepare maintenance state: %w", err)
+	}
+	if err := gameRuntimes.linklink.ValidatePersistedState(startupContext); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("validate LinkLink persisted state: %w", err)
+	}
+	if err := gameRuntimes.rps.ValidatePersistedState(startupContext); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("validate RPS persisted state: %w", err)
+	}
+	if err := gameRuntimes.fishing.ValidatePersistedState(startupContext); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("validate Fishing persisted state: %w", err)
+	}
+	if err := lifecycleCoordinator.RecoverBeforeListener(startupContext); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("recover account lifecycle before listener: %w", err)
+	}
+
+	mux, err := generationTwoMux(cfg, store, authRuntime, forwardRuntime.handler)
+	if err != nil {
+		cleanup()
+		return nil, err
+	}
+	handler, err := stationBoundary(cfg, mux)
+	if err != nil {
+		cleanup()
+		return nil, err
+	}
+	gameWorkerContext := context.Background()
+	if err := gameRuntimes.linklink.StartWorker(gameWorkerContext); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("start LinkLink worker: %w", err)
+	}
+	if err := gameRuntimes.rps.StartWorker(gameWorkerContext); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("start RPS worker: %w", err)
+	}
+	if err := gameRuntimes.fishing.StartWorker(gameWorkerContext); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("start Fishing worker: %w", err)
+	}
+	lifecycleCancel, lifecycleDone, err := startLifecycleWorker(context.Background(), lifecycleCoordinator)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("start account lifecycle worker: %w", err)
+	}
+	failures := make(chan error, 1)
+	return &application{
+		handler:         handler,
+		authRuntime:     authRuntime,
+		bridge:          bridgeRuntime,
+		claims:          claimService,
+		resourceRepo:    resourceRepository,
+		discoveryWorker: discoveryWorker,
+		donations:       donationService,
+		charity:         charityService,
+		charityRouting:  charityRoutingService,
+		checkin:         checkinService,
+		homeGames:       homeGameService,
+		announcements:   announcementService,
+		issues:          issueService,
+		reports:         reportRepository,
+		activities:      activityService,
+		activityRepo:    activityRepository,
+		activityEvents:  activityEvents,
+		adminConfig:     adminConfigRuntime,
+		adminAlerts:     adminAlertRepository,
+		adminUsers:      adminUserService,
+		lifecycle:       lifecycleCoordinator,
+		lifecycleCancel: lifecycleCancel,
+		lifecycleDone:   lifecycleDone,
+		debug:           debugHub,
+		logs:            logRepository,
+		accountEvents:   accountConnections,
+		forward:         forwardRuntime,
+		games:           gameRuntimes,
+		failures:        failures,
+		authorizer:      authorizer,
+		elevation:       elevationManager,
+		gate:            gate,
+		registry:        registry,
+		maintenance:     maintenanceService,
+		egress:          outbound,
+	}, nil
+}
+
+const lifecycleRecoveryBatch = 100
+
+func recoverAnnouncementsBeforeListener(ctx context.Context, service *announcements.Service) error {
+	if ctx == nil || service == nil {
+		return errors.New("announcement recovery dependencies are required")
+	}
+	for {
+		result, err := service.RecoverBeforeListener(ctx, lifecycleRecoveryBatch)
+		if err != nil {
+			return fmt.Errorf("recover announcements before listener: %w", err)
+		}
+		if result.Expired < lifecycleRecoveryBatch && result.ActorsDeidentified < lifecycleRecoveryBatch &&
+			result.AuditsDeleted < lifecycleRecoveryBatch {
+			return nil
+		}
+	}
+}
+
+func recoverIssuesBeforeListener(ctx context.Context, service *issues.Service) error {
+	if ctx == nil || service == nil {
+		return errors.New("issue recovery dependencies are required")
+	}
+	if _, _, err := service.RecoverBeforeListener(ctx, lifecycleRecoveryBatch); err != nil {
+		return fmt.Errorf("recover issues before listener: %w", err)
+	}
+	return nil
 }

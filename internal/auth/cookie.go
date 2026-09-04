@@ -2,6 +2,7 @@ package auth
 
 import (
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -10,9 +11,6 @@ const (
 	AdminSessionCookieName = "nb_admin_session"
 	OAuthStateCookieName   = "nb_oauth_state"
 	ElevatedCookieName     = "nb_elevated"
-)
-
-const (
 	userSessionCookiePath  = "/api"
 	adminSessionCookiePath = "/admin"
 	oauthStateCookiePath   = "/api/auth/discord"
@@ -20,134 +18,91 @@ const (
 )
 
 func sessionCookie(name, value, path string, secure bool, maxAge int, expires time.Time) *http.Cookie {
-	// #nosec G124 -- HttpOnly and SameSite are fixed here. Secure is derived from
-	// the trusted HTTPS edge/configured origin so explicit local HTTP development
-	// remains possible while production HTTPS cookies are always Secure.
-	cookie := &http.Cookie{
-		Name:     name,
-		Value:    value,
-		Path:     path,
-		HttpOnly: true,
-		Secure:   secure,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   maxAge,
-	}
+	c := &http.Cookie{Name: name, Value: value, Path: path, HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode, MaxAge: maxAge}
 	if !expires.IsZero() {
-		cookie.Expires = expires.UTC()
+		c.Expires = expires.UTC()
 	}
-	return cookie
+	return c
 }
 
-// SetUserSessionCookie writes the normal-user station cookie. The opaque token
-// is only present in the response cookie and is never written by this package
-// to logs or persistence.
-func SetUserSessionCookie(w http.ResponseWriter, token string, expiry time.Time, secure bool) {
+func setUserSessionCookie(w http.ResponseWriter, token string, expiry, now time.Time, secure bool) {
 	w.Header().Set("Cache-Control", "no-store")
-	maxAge := maxAgeUntil(expiry, time.Now())
-	http.SetCookie(w, sessionCookie(UserSessionCookieName, token, userSessionCookiePath, secure, maxAge, expiry))
+	http.SetCookie(w, sessionCookie(UserSessionCookieName, token, userSessionCookiePath, secure, maxAgeUntil(expiry, now), expiry))
 }
-
-func SetAdminSessionCookie(w http.ResponseWriter, token string, expiry time.Time, secure bool) {
+func setAdminSessionCookie(w http.ResponseWriter, token string, expiry, now time.Time, secure bool) {
 	w.Header().Set("Cache-Control", "no-store")
-	maxAge := maxAgeUntil(expiry, time.Now())
-	http.SetCookie(w, sessionCookie(AdminSessionCookieName, token, adminSessionCookiePath, secure, maxAge, expiry))
+	http.SetCookie(w, sessionCookie(AdminSessionCookieName, token, adminSessionCookiePath, secure, maxAgeUntil(expiry, now), expiry))
 }
-
-func ClearUserSessionCookie(w http.ResponseWriter, secure bool) {
-	w.Header().Set("Cache-Control", "no-store")
+func clearUserSessionCookie(w http.ResponseWriter, secure bool) {
 	http.SetCookie(w, sessionCookie(UserSessionCookieName, "", userSessionCookiePath, secure, -1, time.Unix(1, 0)))
 }
-
-func ClearAdminSessionCookie(w http.ResponseWriter, secure bool) {
-	w.Header().Set("Cache-Control", "no-store")
+func clearAdminSessionCookie(w http.ResponseWriter, secure bool) {
 	http.SetCookie(w, sessionCookie(AdminSessionCookieName, "", adminSessionCookiePath, secure, -1, time.Unix(1, 0)))
 }
-
-// SetOAuthStateCookie binds the signed OAuth state to the initiating browser.
-func SetOAuthStateCookie(w http.ResponseWriter, state string, secure bool, ttl time.Duration) {
-	w.Header().Set("Cache-Control", "no-store")
-	seconds := int(ttl / time.Second)
-	if seconds < 1 {
-		seconds = 1
-	}
-	expires := time.Now().Add(ttl)
-	http.SetCookie(w, sessionCookie(OAuthStateCookieName, state, oauthStateCookiePath, secure, seconds, expires))
+func setOAuthStateCookie(w http.ResponseWriter, state string, secure bool, ttl time.Duration, now time.Time) {
+	http.SetCookie(w, sessionCookie(OAuthStateCookieName, state, oauthStateCookiePath, secure, maxAgeUntil(now.Add(ttl), now), now.Add(ttl)))
 }
-
-func ClearOAuthStateCookie(w http.ResponseWriter, secure bool) {
-	w.Header().Set("Cache-Control", "no-store")
+func clearOAuthStateCookie(w http.ResponseWriter, secure bool) {
 	http.SetCookie(w, sessionCookie(OAuthStateCookieName, "", oauthStateCookiePath, secure, -1, time.Unix(1, 0)))
 }
 
-// SetElevatedCookie hands the single-use elevated capability to the SPA. It is
-// deliberately not HttpOnly: the SPA must move the value into the
-// X-Elevated-Token header for the account self-service endpoints. The cookie
-// is short-lived (the capability TTL), SameSite Lax, and never written to any
-// server-side persistence or log.
-func SetElevatedCookie(w http.ResponseWriter, token string, secure bool, ttl time.Duration) {
-	w.Header().Set("Cache-Control", "no-store")
-	seconds := int(ttl / time.Second)
-	if seconds < 1 {
-		seconds = 1
-	}
-	// #nosec G124 -- this short-lived, single-use capability must be readable by
-	// the SPA so it can move the value into X-Elevated-Token. Secure is derived
-	// from the trusted HTTPS edge and SameSite remains fixed below.
-	cookie := &http.Cookie{
-		Name:     ElevatedCookieName,
-		Value:    token,
-		Path:     elevatedCookiePath,
-		HttpOnly: false,
-		Secure:   secure,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   seconds,
-		Expires:  time.Now().Add(ttl).UTC(),
-	}
-	http.SetCookie(w, cookie)
+func setElevatedCookie(w http.ResponseWriter, token string, secure bool, expiry, now time.Time) {
+	c := sessionCookie(ElevatedCookieName, token, elevatedCookiePath, secure, maxAgeUntil(expiry, now), expiry)
+	c.HttpOnly = false
+	http.SetCookie(w, c)
 }
 
-// ClearElevatedCookie removes the browser-side elevated capability. It is
-// called after any consume attempt so a single-use token never lingers.
-func ClearElevatedCookie(w http.ResponseWriter, secure bool) {
+func clearElevatedCookie(w http.ResponseWriter, secure bool) {
 	w.Header().Set("Cache-Control", "no-store")
 	http.SetCookie(w, sessionCookie(ElevatedCookieName, "", elevatedCookiePath, secure, -1, time.Unix(1, 0)))
 }
 
-func UserSessionToken(r *http.Request) string {
-	return cookieValue(r, UserSessionCookieName)
+func cookieValue(r *http.Request, name string) (string, bool) {
+	value, present, valid := uniqueCookieValue(r, name)
+	return value, present && valid
 }
 
-func AdminSessionToken(r *http.Request) string {
-	return cookieValue(r, AdminSessionCookieName)
-}
-
-func OAuthStateFromRequest(r *http.Request) string {
-	return cookieValue(r, OAuthStateCookieName)
-}
-
-func cookieValue(r *http.Request, name string) string {
-	if r == nil || name == "" {
-		return ""
+func uniqueCookieValue(r *http.Request, name string) (string, bool, bool) {
+	if r == nil {
+		return "", false, false
 	}
-	var value string
 	found := false
-	for _, cookie := range r.Cookies() {
-		if cookie.Name != name {
+	value := ""
+	for _, c := range r.Cookies() {
+		if c.Name != name {
 			continue
 		}
-		if found {
-			// Duplicate same-name cookies can be produced by overlapping paths.
-			// Refuse the ambiguous request instead of choosing attacker-controlled
-			// ordering.
-			return ""
+		if found || c.Value == "" || len(c.Value) > 4096 {
+			return "", true, false
 		}
 		found = true
-		value = cookie.Value
+		value = c.Value
 	}
-	if !found {
-		return ""
+	rawCount := rawCookieNameCount(r, name)
+	if rawCount > 1 || (rawCount == 1 && !found) {
+		return "", true, false
 	}
-	return value
+	return value, found, true
+}
+
+func rawCookieNameCount(r *http.Request, name string) int {
+	if r == nil || name == "" {
+		return 0
+	}
+	count := 0
+	for _, line := range r.Header.Values("Cookie") {
+		for _, part := range strings.Split(line, ";") {
+			part = strings.TrimSpace(part)
+			candidate := part
+			if index := strings.IndexByte(candidate, '='); index >= 0 {
+				candidate = candidate[:index]
+			}
+			if strings.TrimSpace(candidate) == name {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 func maxAgeUntil(expiry, now time.Time) int {

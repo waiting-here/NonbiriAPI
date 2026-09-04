@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -109,9 +110,13 @@ func TestDecodeChatRequestRejectsAmbiguityAndBounds(t *testing.T) {
 		{"empty", ""},
 		{"array root", `[{"model":"p/m"}]`},
 		{"missing model", `{"messages":[]}`},
+		{"empty model", `{"model":""}`},
 		{"model null", `{"model":null}`},
 		{"model control", "{\"model\":\"p/m\\u000a\"}"},
+		{"model DEL", "{\"model\":\"p/m\\u007f\"}"},
 		{"model edge whitespace", `{"model":" p/m"}`},
+		{"model leading Unicode whitespace", `{"model":"\u2003p/m"}`},
+		{"model trailing Unicode whitespace", `{"model":"p/m\u3000"}`},
 		{"stream string", `{"model":"p/m","stream":"true"}`},
 		{"duplicate model", `{"model":"p/one","model":"p/two"}`},
 		{"escaped duplicate model", `{"model":"p/one","\u006dodel":"p/two"}`},
@@ -146,6 +151,44 @@ func TestDecodeChatRequestRejectsAmbiguityAndBounds(t *testing.T) {
 	over := bytes.Repeat([]byte{'x'}, int(MaxRequestBodyBytes)+1)
 	if _, err := DecodeChatRequest(bytes.NewReader(over), MaxRequestBodyBytes); !errors.Is(err, ErrPayloadTooLarge) {
 		t.Fatalf("oversize error=%v", err)
+	}
+}
+
+func TestDecodeChatRequestAcceptsPersonalAndCharityModelBounds(t *testing.T) {
+	personal := strings.Repeat("供", 64) + "/" + strings.Repeat("模", 64)
+	charity := "[公益]" + personal
+	if got := len([]rune(personal)); got != 129 {
+		t.Fatalf("personal fixture has %d runes, want 129", got)
+	}
+	if got := len([]rune(charity)); got != MaxPlatformModelRunes {
+		t.Fatalf("charity fixture has %d runes, want %d", got, MaxPlatformModelRunes)
+	}
+	tests := []struct {
+		name  string
+		model string
+	}{
+		{name: "personal 129 runes", model: personal},
+		{name: "generic 133 runes", model: strings.Repeat("界", MaxPlatformModelRunes)},
+		{name: "maximum charity external identifier", model: charity},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			body := `{"model":` + strconv.Quote(test.model) + `}`
+			request, err := DecodeChatRequest(strings.NewReader(body), MaxRequestBodyBytes)
+			if err != nil {
+				t.Fatalf("DecodeChatRequest: %v", err)
+			}
+			defer request.Clear()
+			if request.Model != test.model {
+				t.Fatalf("model changed: got %q want %q", request.Model, test.model)
+			}
+		})
+	}
+
+	tooLong := strings.Repeat("界", MaxPlatformModelRunes+1)
+	body := `{"model":` + strconv.Quote(tooLong) + `}`
+	if _, err := DecodeChatRequest(strings.NewReader(body), MaxRequestBodyBytes); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("134-rune model error=%v, want ErrInvalidRequest", err)
 	}
 }
 

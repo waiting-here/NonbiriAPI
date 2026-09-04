@@ -1,0 +1,8 @@
+{
+  "board": "total",
+  "window_start": 1997408000,
+  "entries": [
+    {"rank": "1", "total_credits": "12500", "identity": {"kind": "anonymous"}, "is_me": false}
+  ],
+  "me": {"rank": "21", "total_credits": "0", "identity": {"kind": "anonymous"}, "is_me": true}
+}

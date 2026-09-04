@@ -1,114 +1,87 @@
-import type { ApiError } from '@shared/query/http';
+import type { PublicIdentity } from '../common/strict';
+import type { Bait } from '../common/types';
 
-export const BAIT_IDS = ['worm', 'lure', 'premium'] as const;
-export type BaitId = (typeof BAIT_IDS)[number];
+export const FISHING_TIERS = [
+  'small',
+  'regular',
+  'big',
+  'giant',
+  'legend',
+  'junk',
+  'treasure',
+] as const;
+export type FishingTier = (typeof FISHING_TIERS)[number];
 
-export type FishingPhase =
-  | 'idle'
-  | 'casting'
-  | 'waiting'
-  | 'reeling'
-  | 'settling'
-  | 'result'
-  | 'error';
-
-export interface FishingBait {
-  readonly id: BaitId;
-  /** Canonical milli-credit amount from the server. */
-  readonly price: string;
+export interface FishingOutcome {
+  readonly ordinal: number;
+  readonly speciesKey: string;
+  readonly tier: FishingTier;
+  readonly sizeCM: number;
+  readonly reward: string;
 }
 
-export interface FishingGameParams {
-  readonly baits: readonly FishingBait[];
-  readonly rtpPercent: { readonly standard: number; readonly premium: number };
-  readonly treasureMultipliers: { readonly bottle: number; readonly clover: number; readonly shell: number };
-}
-
-export interface GameSummary {
-  readonly id: string;
-  readonly version: number;
-  readonly enabled: boolean;
-}
-
-export interface FishingGameSummary extends GameSummary {
-  readonly id: 'fishing';
-  readonly version: 1;
-  readonly params: FishingGameParams;
-}
-
-export interface GamesConfig {
-  readonly masterEnabled: boolean;
-  /** Canonical milli-credit string; never converted to a JS number. */
-  readonly credits: string;
-  readonly gameProfilePublic: boolean;
-  readonly games: readonly GameSummary[];
-}
-
-export interface PendingRound {
-  readonly roundId: string;
-  readonly bait: BaitId;
-  readonly price: string;
-  readonly createdAt: number;
-  readonly autoSettleAt: number;
-}
-
-export interface StartRoundResponse extends PendingRound {
-  readonly gameId: 'fishing';
-  readonly gameVersion: 1;
-  readonly credits: string;
-  readonly state: 'pending' | 'committed' | 'released';
+export interface FishingBatchResult {
+  readonly batchID: string;
+  readonly bait: Bait;
+  readonly count: 1 | 10;
+  readonly unitPrice: string;
+  readonly entryTotal: string;
+  readonly outcomes: readonly FishingOutcome[];
+  readonly payoutTotal: string;
+  readonly balance: string;
+  readonly settledAt: number;
   readonly idempotentReplay: boolean;
 }
 
-export interface FishingResult {
-  readonly roundId: string;
-  readonly gameId: 'fishing';
-  readonly gameVersion: 1;
-  readonly bait: BaitId;
-  readonly price: string;
-  readonly speciesKey: string;
-  readonly tier: string;
-  readonly sizeCm: number;
-  readonly isJunk: boolean;
-  readonly isTreasure: boolean;
-  readonly meter: boolean;
-  readonly creditsWon: string;
-  readonly credits: string;
-  readonly settledAt: number;
-  readonly idempotentReplay?: boolean;
+export interface FishingSettlementPending {
+  readonly batchID: string;
+  readonly bait: Bait;
+  readonly count: 1 | 10;
+  readonly entryTotal: string;
+  readonly state: 'settlement_pending' | 'recovery_required';
+  readonly nextAttemptAt: number | null;
+  readonly retryExhausted: boolean;
 }
 
 export interface FishingState {
-  readonly pendingRound: PendingRound | null;
-  readonly unrevealedResult: FishingResult | null;
+  readonly settlementPending: FishingSettlementPending | null;
+  readonly unrevealed: FishingBatchResult | null;
   readonly hasMoreUnrevealed: boolean;
 }
 
-export interface LeaderboardEntry {
-  readonly rank: number;
-  readonly speciesKey?: string;
-  readonly sizeCm?: number;
-  readonly totalCredits?: string;
-  /** Omitted by the server for anonymous rows. */
-  readonly displayName?: string;
-  /** Omitted by the server for anonymous rows. */
-  readonly avatarUrl?: string;
-  /** Only meaningful when displayName is present. */
-  readonly level4Badge?: boolean;
+interface FishingLeaderboardBase {
+  readonly rank: string;
+  readonly identity: PublicIdentity;
   readonly isMe: boolean;
 }
 
-export interface Leaderboard {
-  readonly board: 'single' | 'total';
-  readonly windowStart: number | null;
-  readonly entries: readonly LeaderboardEntry[];
-  readonly me: LeaderboardEntry | null;
+export interface FishingSingleRow extends FishingLeaderboardBase {
+  readonly speciesKey: string;
+  readonly sizeCM: number;
 }
 
-export interface FishingFlowState {
-  readonly phase: FishingPhase;
-  readonly roundId: string | null;
-  readonly result: FishingResult | null;
-  readonly error: ApiError | Error | null;
-  readonly resultSource: 'settled' | 'recovered' | null;
+export interface FishingTotalRow extends FishingLeaderboardBase {
+  readonly totalCredits: string;
 }
+
+export type FishingLeaderboard =
+  | {
+      readonly board: 'single';
+      readonly windowStart: null;
+      readonly entries: readonly FishingSingleRow[];
+      readonly me: FishingSingleRow | null;
+    }
+  | {
+      readonly board: 'total';
+      readonly windowStart: number;
+      readonly entries: readonly FishingTotalRow[];
+      readonly me: FishingTotalRow | null;
+    };
+
+export interface FishingStartIntent {
+  readonly bait: Bait;
+  readonly count: 1 | 10;
+  readonly idempotencyKey: string;
+}
+
+export type FishingStartResult = FishingBatchResult | FishingSettlementPending;

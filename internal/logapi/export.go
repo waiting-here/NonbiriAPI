@@ -1,217 +1,199 @@
 package logapi
 
-// Administrator log export: unpaginated CSV/JSON selections over the same
-// frozen filter set as /admin/api/logs, with hard fail-closed bounds.
-//
-// Bounds and failure semantics:
-//   - the row selection is capped at db.MaxLogExportRows; a larger selection is
-//     refused (payload_too_large) instead of silently truncated;
-//   - the rendered payload is capped at MaxLogExportBytes; crossing the bound
-//     mid-render aborts the response before any body byte is written.
-//
-// CSV formula-injection defense: every cell — regardless of source — is
-// sanitized before rendering. A cell whose first rune is one of = + - @, TAB,
-// CR, LF, a BOM, or any Unicode whitespace is prefixed with a single quote so
-// a spreadsheet application never interprets it as a formula or control
-// sequence; encoding/csv then quotes and escapes the remainder. Upstream- or
-// user-derived text (model names, diagnostics, base URLs) can therefore never
-// execute as a formula in a downstream spreadsheet.
-
 import (
 	"bytes"
+	"context"
+	"database/sql"
 	"encoding/csv"
 	"encoding/json"
-	"errors"
-	"fmt"
-	"net/http"
 	"strconv"
-	"time"
-	"unicode"
-	"unicode/utf8"
-
-	"github.com/waiting-here/NonbiriAPI/internal/db"
-	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"strings"
 )
 
-// MaxLogExportBytes bounds one rendered export payload (final byte-level
-// backstop behind db.MaxLogExportRows).
-const MaxLogExportBytes = 16 << 20
+const maxExportBytes = 16 * 1024 * 1024
 
-// adminLogExportColumns is the frozen CSV column order.
-var adminLogExportColumns = []string{
-	"id", "started_at", "completed_at", "user_id", "route_kind",
-	"endpoint_base_url", "endpoint_key_id", "upstream_model_id",
-	"status_code", "duration_ms",
-	"uncached_input_tokens", "cache_write_input_tokens", "cache_read_input_tokens", "output_tokens",
-	"prompt_tokens", "completion_tokens", "total_tokens",
-	"usage_unknown", "error_code", "error_source", "error_diag", "attempt_id",
+type AdminLogExport struct {
+	Data []AdminLogRow `json:"data"`
 }
 
-func adminLogExportRow(l db.AdminRequestLog) []string {
-	return []string{
-		strconv.FormatInt(l.ID, 10),
-		strconv.FormatInt(l.StartedAt.Unix(), 10),
-		strconv.FormatInt(l.CompletedAt.Unix(), 10),
-		strconv.FormatInt(l.UserID, 10),
-		l.RouteKind,
-		l.EndpointBaseURL,
-		strconv.FormatInt(l.EndpointKeyID, 10),
-		l.UpstreamModelID,
-		strconv.Itoa(l.StatusCode),
-		strconv.FormatInt(l.DurationMs, 10),
-		strconv.FormatInt(l.UncachedInputTokens, 10),
-		strconv.FormatInt(l.CacheWriteInputTokens, 10),
-		strconv.FormatInt(l.CacheReadInputTokens, 10),
-		strconv.FormatInt(l.OutputTokens, 10),
-		strconv.FormatInt(l.PromptTokens, 10),
-		strconv.FormatInt(l.CompletionTokens, 10),
-		strconv.FormatInt(l.TotalTokens, 10),
-		strconv.FormatBool(l.UsageUnknown),
-		l.ErrorCode,
-		l.ErrorSource,
-		l.ErrorDiag,
-		l.AttemptID,
+// ExportAdmin returns the fixed Admin row projection in ascending
+// (started_at,id) order. Cursor/limit are rejected; exceeding either export
+// bound fails the whole operation without truncating a seemingly complete file.
+func (repository *Repository) ExportAdmin(ctx context.Context, filter ListFilter) ([]AdminLogRow, error) {
+	if repository == nil || ctx == nil || filter.Cursor != "" || filter.Limit != 0 || filter.Model != nil {
+		return nil, ErrInvalid
 	}
-}
-
-// sanitizeCSVCell neutralizes spreadsheet formula injection for one cell. A
-// leading rune from the dangerous set (= + - @ TAB CR LF BOM) or any Unicode
-// whitespace gets a single-quote prefix, which spreadsheet applications treat
-// as "literal text". The check decodes runes, not bytes, so multi-byte
-// whitespace (U+00A0, U+2000.., U+FEFF) cannot smuggle a formula past it.
-func sanitizeCSVCell(s string) string {
-	if s == "" {
-		return s
-	}
-	first, _ := utf8.DecodeRuneInString(s)
-	switch first {
-	case '=', '+', '-', '@', '\t', '\r', '\n', 0xFEFF:
-		return "'" + s
-	}
-	if unicode.IsSpace(first) {
-		return "'" + s
-	}
-	return s
-}
-
-// renderAdminLogCSV renders the full export payload. It returns an error when
-// the payload would exceed MaxLogExportBytes; no partial output escapes.
-func renderAdminLogCSV(logs []db.AdminRequestLog) ([]byte, bool, error) {
-	var buf bytes.Buffer
-	w := csv.NewWriter(&buf)
-	if err := w.Write(applyCSVSanitize(adminLogExportColumns)); err != nil {
-		return nil, false, fmt.Errorf("render log csv header: %w", err)
-	}
-	for i := range logs {
-		if err := w.Write(applyCSVSanitize(adminLogExportRow(logs[i]))); err != nil {
-			return nil, false, fmt.Errorf("render log csv row: %w", err)
-		}
-		if buf.Len() > MaxLogExportBytes {
-			return nil, true, nil
-		}
-	}
-	w.Flush()
-	if err := w.Error(); err != nil {
-		return nil, false, fmt.Errorf("render log csv: %w", err)
-	}
-	if buf.Len() > MaxLogExportBytes {
-		return nil, true, nil
-	}
-	payload := buf.Bytes()
-	// Copy out of the buffer so the returned slice owns its storage.
-	out := make([]byte, len(payload))
-	copy(out, payload)
-	return out, false, nil
-}
-
-func applyCSVSanitize(row []string) []string {
-	out := make([]string, len(row))
-	for i, cell := range row {
-		out[i] = sanitizeCSVCell(cell)
-	}
-	return out
-}
-
-// renderAdminLogJSON renders the JSON export payload (same frozen row shape as
-// the list endpoint). The second return value reports an over-bound payload.
-func renderAdminLogJSON(logs []db.AdminRequestLog) ([]byte, bool, error) {
-	body := struct {
-		Data []logRowResp `json:"data"`
-	}{Data: make([]logRowResp, 0, len(logs))}
-	for _, l := range logs {
-		body.Data = append(body.Data, adminLogRowResponse(l))
-	}
-	payload, err := json.Marshal(body)
+	normalized, err := normalizeListFilter(ListFilter{
+		UserID: filter.UserID, EndpointBaseURL: filter.EndpointBaseURL,
+		UpstreamModel: filter.UpstreamModel, ErrorCode: filter.ErrorCode,
+		Status: filter.Status, From: filter.From, To: filter.To, Limit: maximumLimit,
+	}, "admin")
 	if err != nil {
-		return nil, false, fmt.Errorf("render log json export: %w", err)
+		return nil, err
 	}
-	if len(payload) > MaxLogExportBytes {
-		return nil, true, nil
-	}
-	return payload, false, nil
-}
-
-// adminExport handles GET /admin/api/logs/export.csv and
-// /admin/api/logs/export.json: an unpaginated, bounded, metadata-only export
-// of the administrator-filtered log rows. The whole selection is materialized
-// and bounds-checked before any response byte is written, so an over-bound
-// export fails closed as payload_too_large with no truncated file.
-func (h *Handler) adminExport(w http.ResponseWriter, r *http.Request, format string) {
-	if h.store == nil {
-		writeErr(w, httperr.New(httperr.CodeServiceUnavailable, "log service unavailable"))
-		return
-	}
-	if _, ok := h.requireAdminSession(w, r); !ok {
-		return
-	}
-	query, derr := parseLogExportQuery(r)
-	if derr.Code != "" {
-		writeErr(w, derr)
-		return
-	}
-	logs, err := h.store.ExportAdminRequestLogs(r.Context(), query)
+	now, err := repository.decisionNow()
 	if err != nil {
-		if errors.Is(err, db.ErrLogExportTooLarge) {
-			writeErr(w, httperr.New(httperr.CodePayloadTooLarge, "log export too large"))
-			return
+		return nil, err
+	}
+	query := `SELECT ` + commonListColumns + `,l.user_id FROM request_logs l
+WHERE (l.completed_at IS NULL OR l.completed_at>?)`
+	args := make([]any, 0, 16)
+	args = append(args, now-requestLogRetentionSeconds)
+	if normalized.UserID != nil {
+		query += ` AND l.user_id=?`
+		args = append(args, *normalized.UserID)
+	}
+	if normalized.EndpointBaseURL != nil {
+		query += ` AND EXISTS(SELECT 1 FROM request_attempts ea WHERE ea.request_log_id=l.id AND ea.canonical_base_url=?)`
+		args = append(args, *normalized.EndpointBaseURL)
+	}
+	if normalized.UpstreamModel != nil {
+		query += ` AND EXISTS(SELECT 1 FROM request_attempts em WHERE em.request_log_id=l.id AND em.upstream_model_id=?)`
+		args = append(args, *normalized.UpstreamModel)
+	}
+	if normalized.ErrorCode != nil {
+		query += ` AND l.caller_error_code=?`
+		args = append(args, *normalized.ErrorCode)
+	}
+	if normalized.Status != nil {
+		query += ` AND l.caller_status=?`
+		args = append(args, *normalized.Status)
+	}
+	if normalized.From != nil {
+		query += ` AND l.started_at>=?`
+		args = append(args, *normalized.From)
+	}
+	if normalized.To != nil {
+		query += ` AND l.started_at<?`
+		args = append(args, *normalized.To)
+	}
+	query += ` ORDER BY l.started_at ASC,l.id ASC LIMIT ?`
+	args = append(args, maxExportRows+1)
+	rows, err := repository.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, translateSQLError(err)
+	}
+	defer rows.Close()
+	result := make([]AdminLogRow, 0, 256)
+	for rows.Next() {
+		var userID sql.NullInt64
+		record, scanErr := scanCommon(rows, &userID)
+		if scanErr != nil {
+			return nil, translateSQLError(scanErr)
 		}
-		writeRepoErr(w, err)
-		return
+		if len(result) >= maxExportRows {
+			return nil, ErrCapacity
+		}
+		usage, usageErr := usageFromRecord(record)
+		if usageErr != nil {
+			return nil, usageErr
+		}
+		result = append(result, AdminLogRow{
+			ID: record.id, RouteKind: RouteKind(record.routeKind),
+			CallerResultClass: resultClassPointer(record.callerResultClass),
+			CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
+			StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
+			UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10),
+		})
 	}
-	var payload []byte
-	var tooLarge bool
-	contentType, ext := "text/csv; charset=utf-8", "csv"
-	switch format {
-	case "csv":
-		payload, tooLarge, err = renderAdminLogCSV(logs)
-	case "json":
-		payload, tooLarge, err = renderAdminLogJSON(logs)
-		contentType, ext = "application/json; charset=utf-8", "json"
-	default:
-		writeErr(w, httperr.New(httperr.CodeInternal, "internal error"))
-		return
+	if err := rows.Err(); err != nil {
+		return nil, translateSQLError(err)
 	}
+	return result, nil
+}
+
+// MarshalAdminJSON applies the 16 MiB all-or-error boundary.
+func MarshalAdminJSON(rows []AdminLogRow) ([]byte, error) {
+	if len(rows) > maxExportRows {
+		return nil, ErrCapacity
+	}
+	encoded, err := json.Marshal(AdminLogExport{Data: rows})
 	if err != nil {
-		writeRepoErr(w, err)
-		return
+		return nil, ErrInvariant
 	}
-	if tooLarge {
-		writeErr(w, httperr.New(httperr.CodePayloadTooLarge, "log export too large"))
-		return
+	// The trailing newline is part of the response body and therefore part of
+	// the frozen 16 MiB all-or-error boundary.
+	if len(encoded)+1 > maxExportBytes {
+		return nil, ErrCapacity
 	}
-	filename := fmt.Sprintf("nonbiri-admin-logs-%d.%s", time.Now().Unix(), ext)
-	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
-	w.Header().Set("Content-Length", strconv.Itoa(len(payload)))
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(payload)
+	return append(encoded, '\n'), nil
 }
 
-func (h *Handler) adminExportCSV(w http.ResponseWriter, r *http.Request) {
-	h.adminExport(w, r, "csv")
+func MarshalAdminCSV(rows []AdminLogRow) ([]byte, error) {
+	if len(rows) > maxExportRows {
+		return nil, ErrCapacity
+	}
+	var buffer bytes.Buffer
+	writer := csv.NewWriter(&buffer)
+	header := []string{
+		"id", "route_kind", "caller_result_class", "caller_status", "caller_error_code",
+		"started_at", "completed_at", "user_id", "attempt_count",
+		"uncached_input_tokens", "cache_write_input_tokens", "cache_read_input_tokens",
+		"output_tokens", "total_tokens", "usage_unknown", "charge",
+	}
+	if err := writer.Write(header); err != nil {
+		return nil, ErrUnavailable
+	}
+	for _, row := range rows {
+		record := []string{
+			csvSafe(row.ID), csvSafe(string(row.RouteKind)), csvResultClass(row.CallerResultClass),
+			csvInt(row.CallerStatus), csvString(row.CallerErrorCode), strconv.FormatInt(row.StartedAt, 10),
+			csvInt64(row.CompletedAt), csvString(row.UserID), row.AttemptCount,
+			row.Usage.UncachedInputTokens, row.Usage.CacheWriteInputTokens, row.Usage.CacheReadInputTokens,
+			row.Usage.OutputTokens, row.Usage.TotalTokens, strconv.FormatBool(row.Usage.UsageUnknown), row.Usage.Charge,
+		}
+		if err := writer.Write(record); err != nil {
+			return nil, ErrUnavailable
+		}
+		writer.Flush()
+		if writer.Error() != nil {
+			return nil, ErrUnavailable
+		}
+		if buffer.Len() > maxExportBytes {
+			return nil, ErrCapacity
+		}
+	}
+	writer.Flush()
+	if writer.Error() != nil {
+		return nil, ErrUnavailable
+	}
+	return buffer.Bytes(), nil
 }
 
-func (h *Handler) adminExportJSON(w http.ResponseWriter, r *http.Request) {
-	h.adminExport(w, r, "json")
+func csvSafe(value string) string {
+	if value == "" {
+		return value
+	}
+	if strings.ContainsAny(value[:1], "=+-@\t\r\n") {
+		return "'" + value
+	}
+	return value
+}
+
+func csvString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return csvSafe(*value)
+}
+
+func csvResultClass(value *ResultClass) string {
+	if value == nil {
+		return ""
+	}
+	return csvSafe(string(*value))
+}
+
+func csvInt(value *int) string {
+	if value == nil {
+		return ""
+	}
+	return strconv.Itoa(*value)
+}
+
+func csvInt64(value *int64) string {
+	if value == nil {
+		return ""
+	}
+	return strconv.FormatInt(*value, 10)
 }

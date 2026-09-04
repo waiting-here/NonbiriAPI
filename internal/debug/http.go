@@ -1,503 +1,521 @@
 package debug
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
-	"time"
 
-	"github.com/waiting-here/NonbiriAPI/internal/auth"
-	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
-var errMethodNotAllowed = errors.New("debug: method not allowed")
+const maxControlBody = 64 * 1024
 
-type handler struct {
-	hub      *Hub
-	identity func(*http.Request) (int64, string, error)
+type UserPrincipal struct {
+	UserID         int64
+	SessionBinding string
 }
 
-// NewHandler returns the fixed control-plane handler.  Mount it beneath the
-// existing user-session middleware; the handler repeats the principal check so
-// a caller/admin context can never become a Debug control identity.
-func NewHandler(hub *Hub, configs ...HandlerConfig) http.Handler {
-	var config HandlerConfig
-	if len(configs) != 0 {
-		config = configs[0]
-	}
-	identity := config.Identity
-	if identity == nil {
-		identity = defaultIdentity
-	}
-	return &handler{hub: hub, identity: identity}
+type AuthorizedUserHandler func(http.ResponseWriter, *http.Request, UserPrincipal)
+
+// UserRouteRegistrar is intentionally narrower than auth.Runtime. The root
+// adapter must supply irreversible session binding material on every request;
+// Debug never accepts the raw browser cookie.
+type UserRouteRegistrar interface {
+	RegisterDebugUserRoute(method, pattern string, handler AuthorizedUserHandler) error
 }
 
-// NewControlHandler is an explicit alias for callers that want to make the
-// control-plane-only role obvious at a mount site.
-func NewControlHandler(hub *Hub, config HandlerConfig) http.Handler {
-	return NewHandler(hub, config)
+type HTTPAPI struct {
+	hub       *Hub
+	mutations *MutationRepository
 }
 
-func defaultIdentity(r *http.Request) (int64, string, error) {
-	if r == nil {
-		return 0, "", ErrUnauthorized
+func NewHTTPAPI(hub *Hub, mutations *MutationRepository) (*HTTPAPI, error) {
+	if hub == nil || mutations == nil {
+		return nil, ErrInvalid
 	}
-	user, ok := auth.UserFromContext(r.Context())
-	if !ok || user == nil || user.ID <= 0 || user.IsAdmin || user.IsBanned || !user.IsActive() {
-		return 0, "", ErrUnauthorized
-	}
-	token := auth.UserSessionToken(r)
-	if token == "" {
-		return 0, "", ErrUnauthorized
-	}
-	return user.ID, db.SessionHash(token), nil
+	return &HTTPAPI{hub: hub, mutations: mutations}, nil
 }
 
-func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	setNoStore(w)
-	if h == nil || h.hub == nil || r == nil {
-		writeDebugError(w, ErrClosed)
+func RegisterRoutes(registrar UserRouteRegistrar, hub *Hub, mutations *MutationRepository) error {
+	if registrar == nil {
+		return ErrInvalid
+	}
+	api, err := NewHTTPAPI(hub, mutations)
+	if err != nil {
+		return err
+	}
+	routes := []struct {
+		method  string
+		pattern string
+		handler AuthorizedUserHandler
+	}{
+		{http.MethodGet, "/api/debug/session", api.getSession},
+		{http.MethodPost, "/api/debug/session", api.createSession},
+		{http.MethodPut, "/api/debug/session/mode", api.changeMode},
+		{http.MethodPost, "/api/debug/session/stop", api.stopSession},
+		{http.MethodPost, "/api/debug/session/replace", api.replaceSession},
+		{http.MethodGet, "/api/debug/events", api.events},
+	}
+	for _, route := range routes {
+		if err := registrar.RegisterDebugUserRoute(route.method, route.pattern, route.handler); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (api *HTTPAPI) getSession(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
+	if !api.authorizePrincipal(writer, request, principal) || !requireNoQuery(writer, request) ||
+		!requireNoRequestBody(writer, request) {
 		return
 	}
-	if r.URL != nil && r.URL.RawQuery != "" {
-		// The control surface is intentionally path-bound; in particular, an
-		// SSE session id may never be supplied as a query parameter.
-		writeDebugError(w, ErrInvalid)
+	api.reconcileBinding(principal)
+	metadata, err := api.hub.Metadata(principal.UserID)
+	if err != nil {
+		api.writeDomainError(writer, err)
 		return
 	}
-	switch r.URL.Path {
-	case "/api/debug/session":
-		h.session(w, r)
-	case "/api/debug/session/live-challenge":
-		h.liveChallenge(w, r)
-	case "/api/debug/session/mode":
-		h.mode(w, r)
-	case "/api/debug/events":
-		h.events(w, r)
-	default:
-		writeDebugError(w, ErrNotFound)
+	if err := writeJSONValue(writer, http.StatusOK, metadata); err != nil {
+		api.writeDomainError(writer, err)
 	}
 }
 
-func (h *handler) identityFor(w http.ResponseWriter, r *http.Request) (int64, string, bool) {
-	if h.identity == nil {
-		writeDebugError(w, ErrUnauthorized)
-		return 0, "", false
-	}
-	userID, binding, err := h.identity(r)
-	if err != nil || userID <= 0 || binding == "" {
-		writeDebugError(w, ErrUnauthorized)
-		return 0, "", false
-	}
-	return userID, binding, true
-}
-
-func (h *handler) session(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		if !requireEmptyBody(w, r) {
-			return
-		}
-		userID, binding, ok := h.identityFor(w, r)
-		if !ok {
-			return
-		}
-		metadata, found := h.hub.Metadata(userID, binding)
-		if !found {
-			writeJSON(w, http.StatusOK, map[string]any{"active": false})
-			return
-		}
-		writeJSON(w, http.StatusOK, metadata)
+func (api *HTTPAPI) createSession(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
+	if !api.authorizePrincipal(writer, request, principal) || !requireNoQuery(writer, request) {
 		return
 	}
-	if r.Method == http.MethodPost {
-		if !requireEmptyBody(w, r) {
-			return
-		}
-		userID, binding, ok := h.identityFor(w, r)
-		if !ok {
-			return
-		}
-		metadata, err := h.hub.Start(userID, binding)
+	_, err := readNoBody(request)
+	if err != nil {
+		writeInvalid(writer, err)
+		return
+	}
+	api.runIdempotent(writer, request, principal, "/api/debug/session", nil, func() (int, []byte, error) {
+		api.reconcileBinding(principal)
+		metadata, created, err := api.hub.Start(principal.UserID, principal.SessionBinding)
 		if err != nil {
-			writeDebugError(w, err)
-			return
+			return 0, nil, err
 		}
-		writeJSON(w, http.StatusCreated, metadata)
-		return
-	}
-	if r.Method == http.MethodDelete {
-		if !requireEmptyBody(w, r) {
-			return
+		status := http.StatusOK
+		if created {
+			status = http.StatusCreated
 		}
-		userID, binding, ok := h.identityFor(w, r)
-		if !ok {
-			return
-		}
-		// Binding comparison and close are one Hub operation.  A stale browser
-		// request must not close a newer session that replaced its own session
-		// between separate Metadata and Forget calls.
-		h.hub.Stop(userID, binding)
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	writeDebugError(w, errMethodNotAllowed)
+		encoded, err := marshalResponse(metadata)
+		return status, encoded, err
+	})
 }
 
-func (h *handler) liveChallenge(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeMethodNotAllowed(w)
+type modeMutation struct {
+	Mode             Mode   `json:"mode"`
+	ExpectedRevision string `json:"expected_revision"`
+	LiveConfirmation bool   `json:"live_confirmation"`
+}
+
+func (api *HTTPAPI) changeMode(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
+	if !api.authorizePrincipal(writer, request, principal) || !requireNoQuery(writer, request) {
 		return
 	}
-	if !requireEmptyBody(w, r) {
-		return
-	}
-	userID, binding, ok := h.identityFor(w, r)
-	if !ok {
-		return
-	}
-	confirmationID, err := h.hub.IssueChallenge(userID, binding)
+	body, err := readStrictBody(request, maxControlBody)
 	if err != nil {
-		writeDebugError(w, err)
+		writeInvalid(writer, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"confirmation_id": confirmationID})
-}
-
-func (h *handler) mode(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPut {
-		writeMethodNotAllowed(w)
+	var mutation modeMutation
+	if err := requireObjectFields(body, "mode", "expected_revision", "live_confirmation"); err != nil {
+		writeInvalid(writer, err)
 		return
 	}
-	body, ok := readControlBody(w, r, false)
-	if !ok {
+	if err := decodeExact(body, &mutation); err != nil {
+		writeInvalid(writer, err)
 		return
 	}
-	if err := strictjson.ValidateObject(body); err != nil {
-		writeDebugError(w, ErrInvalid)
-		return
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(body, &fields); err != nil {
-		writeDebugError(w, ErrInvalid)
-		return
-	}
-	for key := range fields {
-		if key != "mode" && key != "confirmation_id" {
-			writeDebugError(w, ErrInvalid)
-			return
-		}
-	}
-	modeRaw, found := fields["mode"]
-	if !found {
-		writeDebugError(w, ErrInvalid)
-		return
-	}
-	var mode Mode
-	if err := json.Unmarshal(modeRaw, &mode); err != nil || (mode != ModeDry && mode != ModeLive) {
-		writeDebugError(w, ErrInvalid)
-		return
-	}
-	confirmation := ""
-	rawConfirmation, hasConfirmation := fields["confirmation_id"]
-	if mode == ModeDry {
-		// The frozen dry body is exactly {"mode":"dry"}; even null or an
-		// empty confirmation member is an invalid shape, not an omitted value.
-		if hasConfirmation {
-			writeDebugError(w, ErrInvalid)
-			return
-		}
-	} else {
-		// Live mode must carry one non-empty string confirmation.  In
-		// particular, JSON null must not collapse into Go's empty string and
-		// accidentally become an omitted field.
-		if !hasConfirmation || json.Unmarshal(rawConfirmation, &confirmation) != nil || confirmation == "" || len(confirmation) > MaxControlBodyBytes {
-			writeDebugError(w, ErrInvalid)
-			return
-		}
-	}
-	userID, binding, ok := h.identityFor(w, r)
-	if !ok {
-		return
-	}
-	metadata, err := h.hub.SetMode(userID, binding, mode, confirmation)
+	canonical, err := idempotency.CanonicalJSON(mutation)
 	if err != nil {
-		writeDebugError(w, err)
+		writeInvalid(writer, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, metadata)
+	api.runIdempotent(writer, request, principal, "/api/debug/session/mode", canonical, func() (int, []byte, error) {
+		if err := api.requireBinding(principal); err != nil {
+			return 0, nil, err
+		}
+		metadata, err := api.hub.ChangeMode(principal.UserID, mutation.ExpectedRevision, mutation.Mode, mutation.LiveConfirmation)
+		if err != nil {
+			return 0, nil, err
+		}
+		encoded, err := marshalResponse(metadata)
+		return http.StatusOK, encoded, err
+	})
 }
 
-func (h *handler) events(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeMethodNotAllowed(w)
+type stopMutation struct {
+	ExpectedRevision string `json:"expected_revision"`
+	ConfirmInflight  bool   `json:"confirm_inflight"`
+}
+
+func (api *HTTPAPI) stopSession(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
+	if !api.authorizePrincipal(writer, request, principal) || !requireNoQuery(writer, request) {
 		return
 	}
-	// SSE is still a fixed control request: an empty body is required and the
-	// same 1 KiB hard gate applies before authentication/subscription work.
-	if !requireEmptyBody(w, r) {
-		return
-	}
-	if !acceptsEventStream(r) {
-		writeDebugError(w, ErrInvalid)
-		return
-	}
-	lastID, hasLastID, ok := lastEventID(r)
-	if !ok {
-		writeDebugError(w, ErrInvalid)
-		return
-	}
-	userID, binding, ok := h.identityFor(w, r)
-	if !ok {
-		return
-	}
-	if _, ok := w.(http.Flusher); !ok {
-		writeDebugError(w, ErrNoStream)
-		return
-	}
-	subscription, err := h.hub.Subscribe(userID, binding, lastID, hasLastID)
+	body, err := readStrictBody(request, maxControlBody)
 	if err != nil {
-		writeDebugError(w, err)
+		writeInvalid(writer, err)
 		return
 	}
-	defer subscription.Close()
-	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-	initialController := http.NewResponseController(w)
-	if err := setWriteDeadline(initialController); err != nil {
-		writeDebugError(w, err)
+	var mutation stopMutation
+	if err := requireObjectFields(body, "expected_revision", "confirm_inflight"); err != nil {
+		writeInvalid(writer, err)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
-	if err := initialController.Flush(); err != nil {
-		clearWriteDeadline(initialController)
+	if err := decodeExact(body, &mutation); err != nil {
+		writeInvalid(writer, err)
 		return
 	}
-	clearWriteDeadline(initialController)
-	flusher := w.(http.Flusher)
-	ticker := time.NewTicker(HeartbeatInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case envelope, open := <-subscription.Events():
-			if !open {
-				return
-			}
-			err := writeEvent(w, flusher, envelope)
-			envelope.Release()
-			if err != nil {
-				return
-			}
-		case <-ticker.C:
-			// Heartbeats do not refresh idle.  Re-run the identity callback so
-			// logout/ban/session deletion fails closed while a stream is open.
-			currentUser, currentBinding, identityErr := h.identity(r)
-			if identityErr != nil || currentUser != userID || currentBinding != binding {
-				h.hub.ForgetUserReason(userID, EndSessionInvalid)
-				return
-			}
-			if active, _ := h.hub.RevalidateBinding(r.Context(), userID, binding); !active {
-				return
-			}
-			if err := writeHeartbeat(w, flusher); err != nil {
-				return
-			}
-		case <-r.Context().Done():
+	canonical, err := idempotency.CanonicalJSON(mutation)
+	if err != nil {
+		writeInvalid(writer, err)
+		return
+	}
+	api.runIdempotent(writer, request, principal, "/api/debug/session/stop", canonical, func() (int, []byte, error) {
+		if err := api.requireBinding(principal); err != nil {
+			return 0, nil, err
+		}
+		if err := api.hub.Stop(principal.UserID, mutation.ExpectedRevision, mutation.ConfirmInflight); err != nil {
+			return 0, nil, err
+		}
+		return http.StatusNoContent, nil, nil
+	})
+}
+
+func (api *HTTPAPI) replaceSession(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
+	if !api.authorizePrincipal(writer, request, principal) || !requireNoQuery(writer, request) {
+		return
+	}
+	body, err := readStrictBody(request, maxControlBody)
+	if err != nil {
+		writeInvalid(writer, err)
+		return
+	}
+	var mutation stopMutation
+	if err := requireObjectFields(body, "expected_revision", "confirm_inflight"); err != nil {
+		writeInvalid(writer, err)
+		return
+	}
+	if err := decodeExact(body, &mutation); err != nil {
+		writeInvalid(writer, err)
+		return
+	}
+	canonical, err := idempotency.CanonicalJSON(mutation)
+	if err != nil {
+		writeInvalid(writer, err)
+		return
+	}
+	api.runIdempotent(writer, request, principal, "/api/debug/session/replace", canonical, func() (int, []byte, error) {
+		if err := api.requireBinding(principal); err != nil {
+			return 0, nil, err
+		}
+		metadata, err := api.hub.Replace(principal.UserID, principal.SessionBinding, mutation.ExpectedRevision, mutation.ConfirmInflight)
+		if err != nil {
+			return 0, nil, err
+		}
+		encoded, err := marshalResponse(metadata)
+		return http.StatusCreated, encoded, err
+	})
+}
+
+func (api *HTTPAPI) events(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
+	if !api.authorizePrincipal(writer, request, principal) || !requireNoQuery(writer, request) ||
+		!requireNoRequestBody(writer, request) {
+		return
+	}
+	if !acceptsEventStream(request.Header.Values("Accept")) {
+		writeInvalid(writer, errors.New("Accept must include text/event-stream"))
+		return
+	}
+	values := request.Header.Values("Last-Event-ID")
+	if len(values) > 1 {
+		writeInvalid(writer, errors.New("Last-Event-ID must be singular"))
+		return
+	}
+	lastEventID := ""
+	if len(values) == 1 {
+		lastEventID = values[0]
+		if strings.TrimSpace(lastEventID) != lastEventID {
+			writeInvalid(writer, errors.New("Last-Event-ID is not canonical"))
 			return
 		}
 	}
-}
-
-func writeEvent(w http.ResponseWriter, flusher http.Flusher, envelope EventEnvelope) error {
-	controller := http.NewResponseController(w)
-	if err := setWriteDeadline(controller); err != nil {
-		return err
+	if err := api.requireBinding(principal); err != nil {
+		api.writeDomainError(writer, err)
+		return
 	}
-	defer clearWriteDeadline(controller)
-	data, err := json.Marshal(envelope)
-	if err != nil || len(data) > MaxEventBytes {
-		return ErrTooLarge
-	}
-	if err := writeSSEString(w, "id: "+strconv.FormatUint(envelope.Seq, 10)+"\n"); err != nil {
-		return err
-	}
-	if err := writeSSEString(w, "event: "+string(envelope.Type)+"\n"); err != nil {
-		return err
-	}
-	if err := writeSSEString(w, "data: "); err != nil {
-		return err
-	}
-	if n, err := w.Write(data); err != nil {
-		return err
-	} else if n != len(data) {
-		return io.ErrShortWrite
-	}
-	if err := writeSSEString(w, "\n\n"); err != nil {
-		return err
-	}
-	_ = flusher
-	return controller.Flush()
-}
-
-func writeHeartbeat(w http.ResponseWriter, flusher http.Flusher) error {
-	controller := http.NewResponseController(w)
-	if err := setWriteDeadline(controller); err != nil {
-		return err
-	}
-	defer clearWriteDeadline(controller)
-	if err := writeSSEString(w, ": heartbeat\n\n"); err != nil {
-		return err
-	}
-	_ = flusher
-	return controller.Flush()
-}
-
-func writeSSEString(w io.Writer, value string) error {
-	if w == nil {
-		return io.ErrClosedPipe
-	}
-	n, err := io.WriteString(w, value)
+	subscription, err := api.hub.Subscribe(request.Context(), principal.UserID, principal.SessionBinding, lastEventID)
 	if err != nil {
-		return err
+		api.writeDomainError(writer, err)
+		return
 	}
-	if n != len(value) {
-		return io.ErrShortWrite
-	}
-	return nil
+	_ = subscription.Stream(request.Context(), writer)
 }
 
-func setWriteDeadline(controller *http.ResponseController) error {
-	if controller == nil {
-		return http.ErrNotSupported
-	}
-	if err := controller.SetWriteDeadline(time.Now().Add(WriteDeadline)); err != nil && !errors.Is(err, http.ErrNotSupported) {
-		return err
-	}
-	return nil
-}
-
-func clearWriteDeadline(controller *http.ResponseController) {
-	if controller != nil {
-		_ = controller.SetWriteDeadline(time.Time{})
-	}
-}
-
-func acceptsEventStream(r *http.Request) bool {
-	if r == nil {
+func acceptsEventStream(values []string) bool {
+	if len(values) == 0 {
 		return false
 	}
-	values := r.Header.Values("Accept")
-	if len(values) != 1 {
-		return false
-	}
-	for _, item := range strings.Split(values[0], ",") {
-		if strings.EqualFold(strings.TrimSpace(strings.SplitN(item, ";", 2)[0]), "text/event-stream") {
-			return true
+	for _, value := range values {
+		for _, token := range strings.Split(value, ",") {
+			media := strings.TrimSpace(strings.SplitN(token, ";", 2)[0])
+			if strings.EqualFold(media, "text/event-stream") {
+				return true
+			}
 		}
 	}
 	return false
 }
 
-func lastEventID(r *http.Request) (uint64, bool, bool) {
-	if r == nil {
-		return 0, false, false
+func (api *HTTPAPI) authorizePrincipal(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) bool {
+	if principal.UserID <= 0 || principal.SessionBinding == "" || request == nil {
+		httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+		return false
 	}
-	values := r.Header.Values("Last-Event-ID")
-	if len(values) == 0 {
-		return 0, false, true
-	}
-	if len(values) != 1 || strings.TrimSpace(values[0]) != values[0] || values[0] == "" {
-		return 0, false, false
-	}
-	value, err := strconv.ParseUint(values[0], 10, 64)
-	return value, true, err == nil
-}
-
-func requireEmptyBody(w http.ResponseWriter, r *http.Request) bool {
-	if r == nil || r.Body == nil {
+	if api.hub.config.verifier == nil {
 		return true
 	}
-	data, err := io.ReadAll(io.LimitReader(r.Body, MaxControlBodyBytes+1))
-	clear(data)
-	if err != nil || len(data) != 0 {
-		writeDebugError(w, ErrInvalid)
+	state, err := api.hub.config.verifier.VerifyDebugIdentity(request.Context(), principal.UserID, principal.SessionBinding)
+	if err != nil || state == IdentityUncertain {
+		httperr.WriteError(writer, httperr.New(httperr.CodeServiceUnavailable, "debug identity could not be verified"))
+		return false
+	}
+	switch state {
+	case IdentityActive:
+		return true
+	case IdentityBanned:
+		_ = api.hub.TerminateUser(principal.UserID, EndAccountBanned)
+		httperr.WriteError(writer, httperr.New(httperr.CodeForbidden, "account is unavailable"))
+	case IdentityDeleted:
+		_ = api.hub.TerminateUser(principal.UserID, EndAccountDeleted)
+		httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+	case IdentityRevoked:
+		_ = api.hub.TerminateUser(principal.UserID, EndAuthRevoked)
+		httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+	default:
+		httperr.WriteError(writer, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+	}
+	return false
+}
+
+func (api *HTTPAPI) reconcileBinding(principal UserPrincipal) {
+	api.hub.mu.Lock()
+	defer api.hub.mu.Unlock()
+	current := api.hub.activeByUser[principal.UserID]
+	if current != nil && !current.ended && current.identityBinding != principal.SessionBinding {
+		api.hub.endSessionLocked(current, EndAuthRevoked)
+	}
+}
+
+func (api *HTTPAPI) requireBinding(principal UserPrincipal) error {
+	api.hub.mu.Lock()
+	defer api.hub.mu.Unlock()
+	if api.hub.closed {
+		return ErrClosed
+	}
+	current := api.hub.activeByUser[principal.UserID]
+	if current == nil || current.ended {
+		return ErrNoActiveSession
+	}
+	if current.identityBinding != principal.SessionBinding {
+		api.hub.endSessionLocked(current, EndAuthRevoked)
+		return ErrNoActiveSession
+	}
+	return nil
+}
+
+func (api *HTTPAPI) runIdempotent(
+	writer http.ResponseWriter,
+	request *http.Request,
+	principal UserPrincipal,
+	route string,
+	canonicalBody []byte,
+	operation func() (int, []byte, error),
+) {
+	key, err := singularIdempotencyKey(request.Header.Values("Idempotency-Key"))
+	if err != nil {
+		writeInvalid(writer, err)
+		return
+	}
+	status, response, _, err := api.mutations.Execute(request.Context(), principal.UserID, resources.ControlMutation{
+		IdempotencyKey: key, Method: request.Method, Route: route,
+		CanonicalBody: append([]byte(nil), canonicalBody...),
+	}, operation)
+	if err != nil {
+		api.writeDomainError(writer, err)
+		return
+	}
+	writeJSONBytes(writer, status, response)
+}
+
+func singularIdempotencyKey(values []string) (string, error) {
+	if len(values) != 1 {
+		return "", errors.New("Idempotency-Key is required exactly once")
+	}
+	value := values[0]
+	if len(value) < 22 || len(value) > 128 {
+		return "", errors.New("Idempotency-Key length is invalid")
+	}
+	for i := range value {
+		c := value[i]
+		if (c < 'A' || c > 'Z') && (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' && c != '_' {
+			return "", errors.New("Idempotency-Key is not URL-safe ASCII")
+		}
+	}
+	return value, nil
+}
+
+func readNoBody(request *http.Request) ([]byte, error) {
+	if request == nil || request.Body == nil {
+		return nil, nil
+	}
+	data, err := io.ReadAll(io.LimitReader(request.Body, 2))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) != 0 {
+		return nil, errors.New("request body must be empty")
+	}
+	return nil, nil
+}
+
+func noRequestBody(request *http.Request) bool {
+	if request == nil {
+		return false
+	}
+	if request.Body == nil || request.Body == http.NoBody {
+		return true
+	}
+	data, err := io.ReadAll(io.LimitReader(request.Body, 1))
+	return err == nil && len(data) == 0
+}
+
+func readStrictBody(request *http.Request, limit int64) ([]byte, error) {
+	if request == nil || request.Body == nil {
+		return nil, errors.New("request body is required")
+	}
+	data, err := io.ReadAll(io.LimitReader(request.Body, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("request body exceeds %d bytes", limit)
+	}
+	if err := strictjson.ValidateObject(data); err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func decodeExact(data []byte, target any) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	if decoder.Decode(&struct{}{}) != io.EOF {
+		return errors.New("trailing JSON value")
+	}
+	return nil
+}
+
+func requireObjectFields(data []byte, names ...string) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for _, name := range names {
+		value, exists := fields[name]
+		if !exists || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			return fmt.Errorf("field %q is required", name)
+		}
+	}
+	return nil
+}
+
+func noQuery(request *http.Request) bool {
+	if request == nil || request.URL == nil || request.URL.RawQuery != "" {
 		return false
 	}
 	return true
 }
 
-func readControlBody(w http.ResponseWriter, r *http.Request, allowEmpty bool) ([]byte, bool) {
-	if r == nil || r.Body == nil {
-		if allowEmpty {
-			return nil, true
-		}
-		writeDebugError(w, ErrInvalid)
-		return nil, false
+func requireNoQuery(writer http.ResponseWriter, request *http.Request) bool {
+	if noQuery(request) {
+		return true
 	}
-	data, err := io.ReadAll(io.LimitReader(r.Body, MaxControlBodyBytes+1))
+	writeInvalid(writer, errors.New("query is not allowed"))
+	return false
+}
+
+func requireNoRequestBody(writer http.ResponseWriter, request *http.Request) bool {
+	if noRequestBody(request) {
+		return true
+	}
+	writeInvalid(writer, errors.New("request body must be empty"))
+	return false
+}
+
+func marshalResponse(value any) ([]byte, error) {
+	encoded, err := json.Marshal(value)
 	if err != nil {
-		clear(data)
-		writeDebugError(w, ErrInvalid)
-		return nil, false
+		return nil, ErrInvalid
 	}
-	if len(data) > MaxControlBodyBytes {
-		clear(data)
-		writeDebugError(w, ErrTooLarge)
-		return nil, false
+	return append(encoded, '\n'), nil
+}
+
+func writeJSONValue(writer http.ResponseWriter, status int, value any) error {
+	body, err := marshalResponse(value)
+	if err != nil {
+		return err
 	}
-	if len(data) == 0 && !allowEmpty {
-		writeDebugError(w, ErrInvalid)
-		return nil, false
+	writeJSONBytes(writer, status, body)
+	return nil
+}
+
+func writeJSONBytes(writer http.ResponseWriter, status int, body []byte) {
+	writer.Header().Set("Cache-Control", "no-store")
+	if len(body) > 0 {
+		writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	}
-	return data, true
+	writer.WriteHeader(status)
+	if len(body) > 0 {
+		_, _ = writer.Write(body)
+	}
 }
 
-func setNoStore(w http.ResponseWriter) {
-	w.Header().Set("Cache-Control", "no-store")
+func writeInvalid(writer http.ResponseWriter, err error) {
+	message := "invalid request"
+	if err != nil && strings.Contains(err.Error(), "exceeds") {
+		httperr.WriteError(writer, httperr.New(httperr.CodePayloadTooLarge, message))
+		return
+	}
+	httperr.WriteError(writer, httperr.New(httperr.CodeInvalidRequest, message))
 }
 
-func writeJSON(w http.ResponseWriter, status int, value any) {
-	setNoStore(w)
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(value)
-}
-
-func writeMethodNotAllowed(w http.ResponseWriter) {
-	setNoStore(w)
-	httperr.WriteError(w, httperr.New(httperr.CodeMethodNotAllowed, "method not allowed"))
-}
-
-func writeDebugError(w http.ResponseWriter, err error) {
-	setNoStore(w)
-	code := httperr.CodeInternal
-	message := "debug service unavailable"
-	statusErr := err
+func (api *HTTPAPI) writeDomainError(writer http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(statusErr, ErrInvalid):
-		code, message = httperr.CodeInvalidRequest, "invalid request"
-	case errors.Is(statusErr, ErrUnauthorized):
-		code, message = httperr.CodeUnauthorized, "authentication required"
-	case errors.Is(statusErr, ErrNotFound):
-		code, message = httperr.CodeNotFound, "debug session not found"
-	case errors.Is(statusErr, ErrCapacity):
-		code, message = httperr.CodeServiceUnavailable, "debug capacity unavailable"
-	case errors.Is(statusErr, ErrTooLarge):
-		code, message = httperr.CodeResourceLimitExceeded, "debug resource limit exceeded"
-	case errors.Is(statusErr, ErrConfirmation):
-		code, message = httperr.CodeForbidden, "live confirmation required"
-	case errors.Is(statusErr, ErrNoStream):
-		code, message = httperr.CodeServiceUnavailable, "streaming unavailable"
-	case errors.Is(statusErr, ErrClosed):
-		code, message = httperr.CodeServiceUnavailable, "debug service unavailable"
-	case errors.Is(statusErr, errMethodNotAllowed):
-		code, message = httperr.CodeMethodNotAllowed, "method not allowed"
+	case errors.Is(err, ErrInvalid):
+		writeInvalid(writer, err)
+	case errors.Is(err, ErrNoActiveSession):
+		httperr.WriteError(writer, httperr.New(httperr.CodeNotFound, "debug session was not found"))
+	case errors.Is(err, ErrConflict), errors.Is(err, ErrTraceTerminal):
+		httperr.WriteError(writer, httperr.New(httperr.CodeConflict, "debug state changed"))
+	case errors.Is(err, ErrCapacity):
+		httperr.WriteError(writer, httperr.New(httperr.CodeResourceLimitExceeded, "debug capacity is exhausted"))
+	case errors.Is(err, ErrClosed):
+		httperr.WriteError(writer, httperr.New(httperr.CodeServiceUnavailable, "debug is unavailable"))
+	default:
+		httperr.WriteError(writer, httperr.New(httperr.CodeInternal, "debug operation failed"))
 	}
-	httperr.WriteError(w, httperr.New(code, message))
 }

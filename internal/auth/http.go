@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -12,23 +13,24 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 )
 
 const (
-	maxOAuthStateBytes = 4096
-	maxOAuthCodeBytes  = 2048
-	maxFormBodyBytes   = 16 * 1024
-	maxUsernameBytes   = 256
-	maxPasswordBytes   = 4096
-	maxIntentBytes     = 64
-	// Strict JSON is bounded independently of the byte limit so a small,
-	// adversarial value cannot consume unbounded recursion or map entries.
-	maxStrictJSONDepth  = 32
-	maxStrictJSONFields = 256
+	maxOAuthStateBytes      = 4096
+	maxOAuthCodeBytes       = 2048
+	maxJSONBodyBytes        = 16 * 1024
+	maxUsernameBytes        = 256
+	maxPasswordBytes        = 4096
+	maxIntentBytes          = 64
+	maxStrictJSONDepth      = 32
+	maxStrictJSONFields     = 256
+	maxResourceIDBytes      = 512
+	maxElevationHeaderBytes = 4096
+	maxReturnQueryBytes     = 4 * 1024
+	maxCallbackQueryBytes   = 16 * 1024
 )
 
 func writeStableError(w http.ResponseWriter, code, message string) {
@@ -37,12 +39,10 @@ func writeStableError(w http.ResponseWriter, code, message string) {
 
 func writeAuthFailure(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, ErrProviderUnavailable), errors.Is(err, ErrRegistrationPaused):
+	case errors.Is(err, ErrProviderUnavailable), errors.Is(err, ErrRegistrationPaused), errors.Is(err, ErrStateCapacity):
 		writeStableError(w, httperr.CodeServiceUnavailable, "authentication service unavailable")
-	case errors.Is(err, ErrProviderUnauthorized), errors.Is(err, ErrGuildRoleMismatch), errors.Is(err, ErrInvalidIdentity), errors.Is(err, db.ErrBanned), errors.Is(err, ErrStateInvalid), errors.Is(err, ErrStateExpired), errors.Is(err, ErrStateReplay):
+	case errors.Is(err, ErrProviderUnauthorized), errors.Is(err, ErrGuildRoleMismatch), errors.Is(err, ErrInvalidIdentity), errors.Is(err, ErrStateInvalid), errors.Is(err, ErrStateExpired), errors.Is(err, ErrStateReplay):
 		writeStableError(w, httperr.CodeUnauthorized, "authentication failed")
-	case errors.Is(err, db.ErrConflict):
-		writeStableError(w, httperr.CodeConflict, "authentication conflict")
 	case errors.Is(err, ErrStationMismatch):
 		writeStableError(w, httperr.CodeForbidden, "station authorization required")
 	default:
@@ -50,12 +50,8 @@ func writeAuthFailure(w http.ResponseWriter, err error) {
 	}
 }
 
-func stationIs(r *http.Request, expected host.Station) bool {
-	return r != nil && httpmw.StationOf(r) == expected
-}
-
 func requireStation(w http.ResponseWriter, r *http.Request, expected host.Station) bool {
-	if stationIs(r, expected) {
+	if r != nil && httpmw.StationOf(r) == expected {
 		return true
 	}
 	writeStableError(w, httperr.CodeForbidden, "station authorization required")
@@ -63,10 +59,7 @@ func requireStation(w http.ResponseWriter, r *http.Request, expected host.Statio
 }
 
 func secureCookieForRequest(r *http.Request, siteBaseURL string) bool {
-	// RequestIsHTTPS is set by the trusted edge context. The fixed configured
-	// origin is a safe fallback for direct handler tests and does not consult
-	// Host or X-Forwarded-*.
-	return httpmw.RequestIsHTTPS(r) || strings.HasPrefix(strings.ToLower(strings.TrimSpace(siteBaseURL)), "https://")
+	return httpmw.RequestIsHTTPS(r) || strings.HasPrefix(strings.ToLower(siteBaseURL), "https://")
 }
 
 func fixedOrigin(raw string) (string, error) {
@@ -86,10 +79,7 @@ func fixedOrigin(raw string) (string, error) {
 }
 
 func validateBoundedText(value string, maxBytes int, allowEmpty bool) bool {
-	if !allowEmpty && value == "" {
-		return false
-	}
-	if len(value) > maxBytes || !utf8.ValidString(value) {
+	if (!allowEmpty && value == "") || len(value) > maxBytes || !utf8.ValidString(value) {
 		return false
 	}
 	for _, r := range value {
@@ -98,14 +88,6 @@ func validateBoundedText(value string, maxBytes int, allowEmpty bool) bool {
 		}
 	}
 	return true
-}
-
-func validateOAuthStateText(value string) bool {
-	return validateBoundedText(value, maxOAuthStateBytes, false)
-}
-
-func validateOAuthCode(value string) bool {
-	return validateBoundedText(value, maxOAuthCodeBytes, false)
 }
 
 func validateIntent(value string) bool {
@@ -120,60 +102,26 @@ func validateIntent(value string) bool {
 	return true
 }
 
-func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
-	if r == nil || r.Body == nil {
-		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
-		return false
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxFormBodyBytes)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(dst); err != nil {
-		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-			writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
-		} else if isMaxBytesError(err) {
-			writeStableError(w, httperr.CodePayloadTooLarge, "request body too large")
-		} else {
-			writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
-		}
-		return false
-	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		if isMaxBytesError(err) {
-			writeStableError(w, httperr.CodePayloadTooLarge, "request body too large")
-		} else {
-			writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
-		}
-		return false
-	}
-	return true
-}
+func validateOAuthStateText(v string) bool { return validateBoundedText(v, maxOAuthStateBytes, false) }
+func validateOAuthCode(v string) bool      { return validateBoundedText(v, maxOAuthCodeBytes, false) }
 
-// decodeStrictJSONBody is used by the profile patch boundary where duplicate
-// JSON members must not silently select the last value. It keeps the existing
-// 16 KiB auth form bound and reuses the same stable error sink as the legacy
-// decoder.
-func decodeStrictJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
-	if r == nil || r.Body == nil {
+func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, strict bool) bool {
+	if r == nil || r.Body == nil || !jsonContentType(r.Header.Get("Content-Type")) {
 		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
 		return false
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxFormBodyBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		if isMaxBytesError(err) {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
 			writeStableError(w, httperr.CodePayloadTooLarge, "request body too large")
 		} else {
 			writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
 		}
 		return false
 	}
-	if len(body) == 0 {
-		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
-		return false
-	}
-	if err := scanStrictJSON(bytes.NewReader(body)); err != nil {
+	if len(body) == 0 || !utf8.Valid(body) || (strict && scanStrictJSON(bytes.NewReader(body)) != nil) {
 		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
 		return false
 	}
@@ -191,6 +139,13 @@ func decodeStrictJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool 
 	return true
 }
 
+func jsonContentType(value string) bool {
+	mediaType, _, err := mime.ParseMediaType(value)
+	return err == nil && strings.EqualFold(mediaType, "application/json")
+}
+
+type strictJSONScanState struct{ fields int }
+
 func scanStrictJSON(reader io.Reader) error {
 	decoder := json.NewDecoder(reader)
 	state := strictJSONScanState{}
@@ -206,80 +161,92 @@ func scanStrictJSON(reader io.Reader) error {
 	return nil
 }
 
-type strictJSONScanState struct {
-	depth  int
-	fields int
-}
-
 func scanStrictJSONValue(decoder *json.Decoder, state *strictJSONScanState, depth int) error {
 	token, err := decoder.Token()
 	if err != nil {
 		return err
 	}
-	if delimiter, ok := token.(json.Delim); ok {
-		if depth >= maxStrictJSONDepth {
-			return errors.New("json nesting limit")
+	delim, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+	if depth >= maxStrictJSONDepth {
+		return errors.New("json nesting limit")
+	}
+	switch delim {
+	case '{':
+		seen := map[string]struct{}{}
+		for decoder.More() {
+			keyToken, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			key, ok := keyToken.(string)
+			if !ok {
+				return errors.New("object key required")
+			}
+			if _, exists := seen[key]; exists {
+				return errors.New("duplicate json member")
+			}
+			seen[key] = struct{}{}
+			state.fields++
+			if state.fields > maxStrictJSONFields {
+				return errors.New("json field limit")
+			}
+			if err := scanStrictJSONValue(decoder, state, depth+1); err != nil {
+				return err
+			}
 		}
-		switch delimiter {
-		case '{':
-			seen := make(map[string]struct{})
-			for decoder.More() {
-				keyToken, err := decoder.Token()
-				if err != nil {
-					return err
-				}
-				key, ok := keyToken.(string)
-				if !ok {
-					return errors.New("object key required")
-				}
-				if _, exists := seen[key]; exists {
-					return errors.New("duplicate json member")
-				}
-				seen[key] = struct{}{}
-				state.fields++
-				if state.fields > maxStrictJSONFields {
-					return errors.New("json field limit")
-				}
-				if err := scanStrictJSONValue(decoder, state, depth+1); err != nil {
-					return err
-				}
-			}
-			end, err := decoder.Token()
-			if err != nil || end != json.Delim('}') {
-				return errors.New("object terminator required")
-			}
-		case '[':
-			for decoder.More() {
-				if err := scanStrictJSONValue(decoder, state, depth+1); err != nil {
-					return err
-				}
-			}
-			end, err := decoder.Token()
-			if err != nil || end != json.Delim(']') {
-				return errors.New("array terminator required")
-			}
-		default:
-			return errors.New("invalid json delimiter")
+		end, err := decoder.Token()
+		if err != nil || end != json.Delim('}') {
+			return errors.New("object terminator required")
 		}
+	case '[':
+		for decoder.More() {
+			if err := scanStrictJSONValue(decoder, state, depth+1); err != nil {
+				return err
+			}
+		}
+		end, err := decoder.Token()
+		if err != nil || end != json.Delim(']') {
+			return errors.New("array terminator required")
+		}
+	default:
+		return errors.New("invalid json delimiter")
 	}
 	return nil
 }
 
-func isMaxBytesError(err error) bool {
-	var maxBytesErr *http.MaxBytesError
-	return errors.As(err, &maxBytesErr)
+func requireEmptyQuery(w http.ResponseWriter, r *http.Request) bool {
+	if r != nil && r.URL != nil && r.URL.RawQuery == "" && !r.URL.ForceQuery {
+		return true
+	}
+	writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+	return false
 }
 
-func singleQueryValue(r *http.Request, key string) (string, bool) {
-	if r == nil || r.URL == nil || key == "" {
+func requireEmptyBody(w http.ResponseWriter, r *http.Request) bool {
+	if r == nil || r.Body == nil {
+		return true
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1)
+	data, err := io.ReadAll(r.Body)
+	if err != nil || len(data) != 0 {
+		writeStableError(w, httperr.CodeInvalidRequest, "invalid request")
+		return false
+	}
+	return true
+}
+
+func singleHeader(r *http.Request, name string, required bool) (string, bool) {
+	values := r.Header.Values(name)
+	if len(values) == 0 {
+		return "", !required
+	}
+	if len(values) != 1 || !validateBoundedText(values[0], maxElevationHeaderBytes, false) {
 		return "", false
 	}
-	values, ok := r.URL.Query()[key]
-	returnValue := ""
-	if len(values) == 1 {
-		returnValue = values[0]
-	}
-	return returnValue, ok && len(values) == 1
+	return values[0], true
 }
 
 func noStoreRedirect(w http.ResponseWriter, r *http.Request, location string) {
@@ -291,4 +258,11 @@ func setRetryAfter(w http.ResponseWriter, seconds int) {
 	if seconds > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(seconds))
 	}
+}
+
+func writeJSONBytes(w http.ResponseWriter, status int, body []byte) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	_, _ = w.Write(body)
 }

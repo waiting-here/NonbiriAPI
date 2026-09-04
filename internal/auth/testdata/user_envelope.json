@@ -1,0 +1,37 @@
+{
+  "user": {
+    "id": "1",
+    "username": "Alice",
+    "avatar": "avatar-hash",
+    "avatar_url": "https://cdn.discordapp.com/avatars/discord-1/avatar-hash.png?size=64",
+    "guild_nick": "Guild Alice",
+    "guild_avatar_url": "https://cdn.discordapp.com/guilds/guild-1/users/discord-1/avatars/guild-avatar.png?size=64",
+    "lang": "en",
+    "is_banned": false,
+    "banned_until": null,
+    "charity_suspended_until": 1700000600,
+    "endpoint_limit": "0",
+    "effective_endpoint_limit": "0",
+    "rpm_limit": null,
+    "effective_rpm_limit": "60",
+    "concurrency_limit": "17",
+    "effective_concurrency_limit": "17",
+    "balance": "-1.5",
+    "donation_credit": "1.234",
+    "effective_level": 5,
+    "level_display_name": "Steward",
+    "game_profile_public": false,
+    "created_at": 1700000000,
+    "updated_at": 1700000001,
+    "usage": {
+      "total_requests": "340282366920938463463374607431768211455",
+      "total_uncached_input_tokens": "1234",
+      "total_cache_write_input_tokens": "1234",
+      "total_cache_read_input_tokens": "1234",
+      "total_output_tokens": "1234",
+      "total_prompt_tokens": "3702",
+      "total_completion_tokens": "1234",
+      "total_unknown_usage_requests": "1234"
+    }
+  }
+}

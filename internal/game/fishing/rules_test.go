@@ -431,6 +431,65 @@ func TestRandomFailuresFailClosed(t *testing.T) {
 	}
 }
 
+func TestRollBatchPreservesOrderAndFailsAtomically(t *testing.T) {
+	t.Parallel()
+
+	rules, err := Compile(DefaultConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	values := make([]uint64, 0, 20)
+	wantKeys := make([]string, 10)
+	junk := JunkRoster()
+	for ordinal := range wantKeys {
+		index := ordinal % len(junk)
+		values = append(values, 0, uint64(index))
+		wantKeys[ordinal] = junk[index]
+	}
+	source := &sequenceSource{values: values}
+	results, err := rules.RollBatch(BaitWorm, 10, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 10 {
+		t.Fatalf("result count = %d, want 10", len(results))
+	}
+	for ordinal, result := range results {
+		if result.Outcome.Key != wantKeys[ordinal] || result.Outcome.Tier != TierJunk {
+			t.Errorf("result[%d] = %#v, want ordered junk %q", ordinal, result.Outcome, wantKeys[ordinal])
+		}
+		if result.Settlement.EntryMilli != 2500000 || result.Settlement.PayoutMilli != 0 {
+			t.Errorf("result[%d] settlement = %#v", ordinal, result.Settlement)
+		}
+	}
+	if source.index != len(values) {
+		t.Fatalf("random draws = %d, want %d", source.index, len(values))
+	}
+
+	one, err := rules.RollBatch(BaitWorm, 1, &sequenceSource{values: []uint64{0, 0}})
+	if err != nil || len(one) != 1 {
+		t.Fatalf("one-result batch = %#v, %v", one, err)
+	}
+
+	for _, count := range []int{-1, 0, 2, 9, 11} {
+		invalidSource := &sequenceSource{}
+		got, err := rules.RollBatch(BaitWorm, count, invalidSource)
+		if !errors.Is(err, ErrInvalidConfig) || got != nil {
+			t.Errorf("count %d = %#v, %v; want nil ErrInvalidConfig", count, got, err)
+		}
+		if invalidSource.index != 0 {
+			t.Errorf("count %d consumed random input", count)
+		}
+	}
+
+	failing := &failAtSource{failAt: 3}
+	got, err := rules.RollBatch(BaitWorm, 10, failing)
+	if !errors.Is(err, io.ErrUnexpectedEOF) || got != nil {
+		t.Fatalf("partial batch = %#v, %v; want nil source error", got, err)
+	}
+}
+
 func TestRoundHalfUpDoesNotUseBankersRounding(t *testing.T) {
 	t.Parallel()
 
@@ -473,6 +532,19 @@ func (source *sequenceSource) Uint64n(upperExclusive uint64) (uint64, error) {
 type errorSource struct{}
 
 func (errorSource) Uint64n(uint64) (uint64, error) { return 0, io.ErrUnexpectedEOF }
+
+type failAtSource struct {
+	calls  int
+	failAt int
+}
+
+func (source *failAtSource) Uint64n(uint64) (uint64, error) {
+	source.calls++
+	if source.calls == source.failAt {
+		return 0, io.ErrUnexpectedEOF
+	}
+	return 0, nil
+}
 
 type outOfRangeSource struct{}
 

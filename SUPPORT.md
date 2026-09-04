@@ -1,6 +1,6 @@
 # Support
 
-NonbiriAPI is an alpha self-hosted project. Before asking for help:
+NonbiriAPI is a prerelease self-hosted project. Before asking for help:
 
 1. Read [README.md](README.md) and [docs/deployment.md](docs/deployment.md).
 2. Check the service journal and the bounded application diagnostic, removing secrets before sharing anything.

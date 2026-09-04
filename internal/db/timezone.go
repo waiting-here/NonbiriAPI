@@ -167,6 +167,13 @@ func (s *Store) SetSiteTimezoneOffsetMinutes(minutes int) error {
 		return fmt.Errorf("set site timezone: %w", err)
 	}
 	defer tx.Rollback()
+	values, err := readGenerationTwoSiteConfigSnapshot(context.Background(), tx)
+	if err != nil {
+		return fmt.Errorf("set site timezone: read configuration: %w", err)
+	}
+	if err := validateGenerationTwoSiteConfigSnapshot(context.Background(), tx, values); err != nil {
+		return fmt.Errorf("set site timezone: validate configuration: %w", err)
+	}
 
 	locked, err := timezoneLockExistsTx(tx)
 	if err != nil {
@@ -182,9 +189,13 @@ func (s *Store) SetSiteTimezoneOffsetMinutes(minutes int) error {
 	if hasData {
 		// Freeze permanently before refusing, so later retention cleanup
 		// cannot make the key editable again.
+		at := time.Now().Unix()
 		if _, err := tx.Exec(`INSERT INTO site_config (key, value, updated_at) VALUES (?, '1', ?)
 			ON CONFLICT(key) DO UPDATE SET value='1', updated_at=excluded.updated_at`,
-			timezoneLockKey, time.Now().Unix()); err != nil {
+			timezoneLockKey, at); err != nil {
+			return fmt.Errorf("set site timezone: %w", err)
+		}
+		if err := bumpGenerationTwoConfigRevisionTx(context.Background(), tx, "site", at); err != nil {
 			return fmt.Errorf("set site timezone: %w", err)
 		}
 		if err := tx.Commit(); err != nil {
@@ -192,9 +203,13 @@ func (s *Store) SetSiteTimezoneOffsetMinutes(minutes int) error {
 		}
 		return ErrConflict
 	}
+	at := time.Now().Unix()
 	if _, err := tx.Exec(`INSERT INTO site_config (key, value, updated_at) VALUES (?, ?, ?)
 		ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`,
-		SiteTimezoneKey, strconv.Itoa(minutes), time.Now().Unix()); err != nil {
+		SiteTimezoneKey, strconv.Itoa(minutes), at); err != nil {
+		return fmt.Errorf("set site timezone: %w", err)
+	}
+	if err := bumpGenerationTwoConfigRevisionTx(context.Background(), tx, "site", at); err != nil {
 		return fmt.Errorf("set site timezone: %w", err)
 	}
 	if err := tx.Commit(); err != nil {

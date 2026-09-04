@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,129 +12,95 @@ import (
 )
 
 const (
-	// DefaultDiscordOAuthScopes is an operational default only. Deployments can
-	// override it through startup configuration while the public scope policy
-	// remains outside the users schema.
 	DefaultDiscordOAuthScopes = "identify guilds.members.read"
 	defaultDiscordAPIBase     = "https://discord.com/api"
 	defaultDiscordAuthorize   = "https://discord.com/oauth2/authorize"
 	maxDiscordResponseBytes   = 64 * 1024
 	maxDiscordTokenBytes      = 4096
 	maxDiscordRoleIDs         = 512
+	discordCDNBase            = "https://cdn.discordapp.com"
 )
 
-// HTTPDiscordProvider is a bounded Discord OAuth implementation behind the
-// narrow DiscordProvider interface. Access tokens live only in the callback
-// stack and transient membership closure.
 type HTTPDiscordProvider struct {
-	client            *http.Client
-	clientID          string
-	clientSecret      string
-	scopes            string
-	apiBase           string
-	authorizeEndpoint string
-	tokenEndpoint     string
+	client                                                                    *http.Client
+	clientID, clientSecret, scopes, apiBase, authorizeEndpoint, tokenEndpoint string
 }
-
-// HTTPDiscordProviderConfig contains fixed provider endpoints and startup
-// credentials. BaseURL is useful for a local fake server in tests; production
-// should use Discord's HTTPS endpoints.
 type HTTPDiscordProviderConfig struct {
-	ClientID          string
-	ClientSecret      string
-	Scopes            string
-	APIBaseURL        string
-	AuthorizeEndpoint string
-	TokenEndpoint     string
-	HTTPClient        *http.Client
+	ClientID, ClientSecret, Scopes, APIBaseURL, AuthorizeEndpoint, TokenEndpoint string
+	HTTPClient                                                                   *http.Client
 }
 
-// NewHTTPDiscordProvider validates provider endpoints and returns an adapter.
-// It never stores a user access/refresh token.
-func NewHTTPDiscordProvider(config HTTPDiscordProviderConfig) (*HTTPDiscordProvider, error) {
-	if !validateBoundedText(config.ClientID, 512, false) || !validateBoundedText(config.ClientSecret, 4096, false) {
+func NewHTTPDiscordProvider(c HTTPDiscordProviderConfig) (*HTTPDiscordProvider, error) {
+	if !validateBoundedText(c.ClientID, 512, false) || !validateBoundedText(c.ClientSecret, 4096, false) {
 		return nil, ErrProviderUnavailable
 	}
-	if strings.TrimSpace(config.Scopes) == "" {
-		config.Scopes = DefaultDiscordOAuthScopes
+	if strings.TrimSpace(c.Scopes) == "" {
+		c.Scopes = DefaultDiscordOAuthScopes
 	}
-	if !validateBoundedText(config.Scopes, 256, false) {
+	if !validateBoundedText(c.Scopes, 256, false) {
 		return nil, ErrProviderUnavailable
 	}
-	apiBase := strings.TrimRight(strings.TrimSpace(config.APIBaseURL), "/")
-	if apiBase == "" {
-		apiBase = defaultDiscordAPIBase
+	api := strings.TrimRight(strings.TrimSpace(c.APIBaseURL), "/")
+	if api == "" {
+		api = defaultDiscordAPIBase
 	}
-	authorizeEndpoint := strings.TrimSpace(config.AuthorizeEndpoint)
-	if authorizeEndpoint == "" {
-		authorizeEndpoint = defaultDiscordAuthorize
+	authEP := strings.TrimSpace(c.AuthorizeEndpoint)
+	if authEP == "" {
+		authEP = defaultDiscordAuthorize
 	}
-	tokenEndpoint := strings.TrimSpace(config.TokenEndpoint)
-	if tokenEndpoint == "" {
-		tokenEndpoint = apiBase + "/oauth2/token"
+	tokenEP := strings.TrimSpace(c.TokenEndpoint)
+	if tokenEP == "" {
+		tokenEP = api + "/oauth2/token"
 	}
-	for _, endpoint := range []string{apiBase, authorizeEndpoint, tokenEndpoint} {
-		if err := validateProviderEndpoint(endpoint); err != nil {
+	for _, ep := range []string{api, authEP, tokenEP} {
+		if validateProviderEndpoint(ep) != nil {
 			return nil, ErrProviderUnavailable
 		}
 	}
-	client := config.HTTPClient
+	client := c.HTTPClient
 	if client == nil {
 		client = &http.Client{Timeout: 15 * time.Second}
 	}
-	// Never follow a provider redirect with an OAuth bearer token in the
-	// request. A caller-supplied client is copied so its transport and timeout
-	// remain useful while its redirect policy is fail-closed.
 	copyClient := *client
 	if copyClient.Timeout <= 0 || copyClient.Timeout > 30*time.Second {
 		copyClient.Timeout = 15 * time.Second
 	}
-	copyClient.CheckRedirect = func(*http.Request, []*http.Request) error {
-		return http.ErrUseLastResponse
-	}
-	client = &copyClient
-	return &HTTPDiscordProvider{
-		client: client, clientID: config.ClientID, clientSecret: config.ClientSecret,
-		scopes: config.Scopes, apiBase: apiBase, authorizeEndpoint: authorizeEndpoint,
-		tokenEndpoint: tokenEndpoint,
-	}, nil
+	copyClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &HTTPDiscordProvider{client: &copyClient, clientID: c.ClientID, clientSecret: c.ClientSecret, scopes: c.Scopes, apiBase: api, authorizeEndpoint: authEP, tokenEndpoint: tokenEP}, nil
 }
 
 func validateProviderEndpoint(raw string) error {
-	if !validateBoundedText(raw, 4096, false) {
-		return ErrProviderUnavailable
-	}
 	u, err := url.Parse(raw)
-	if err != nil || !strings.EqualFold(u.Scheme, "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+	if err != nil || !validateBoundedText(raw, 4096, false) || !strings.EqualFold(u.Scheme, "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return ErrProviderUnavailable
 	}
 	return nil
 }
 
-func (p *HTTPDiscordProvider) AuthorizationURL(_ context.Context, request DiscordAuthorizeRequest) (string, error) {
-	if p == nil || !validateOAuthStateText(request.State) || !validateBoundedText(request.RedirectURI, 2048, false) || !validateIntent(request.Intent) {
+func (p *HTTPDiscordProvider) AuthorizationURL(_ context.Context, r DiscordAuthorizeRequest) (string, error) {
+	if p == nil || !validateOAuthStateText(r.State) || !validateBoundedText(r.RedirectURI, 2048, false) || !validateIntent(r.Intent) {
 		return "", ErrProviderUnavailable
 	}
-	values := url.Values{}
-	values.Set("client_id", p.clientID)
-	values.Set("redirect_uri", request.RedirectURI)
-	values.Set("response_type", "code")
-	values.Set("scope", p.scopes)
-	values.Set("state", request.State)
-	return p.authorizeEndpoint + "?" + values.Encode(), nil
+	v := url.Values{}
+	v.Set("client_id", p.clientID)
+	v.Set("redirect_uri", r.RedirectURI)
+	v.Set("response_type", "code")
+	v.Set("scope", p.scopes)
+	v.Set("state", r.State)
+	return p.authorizeEndpoint + "?" + v.Encode(), nil
 }
 
 func (p *HTTPDiscordProvider) Exchange(ctx context.Context, code, redirectURI string) (DiscordLogin, error) {
 	if p == nil || p.client == nil || ctx == nil || !validateOAuthCode(code) || !validateBoundedText(redirectURI, 2048, false) {
 		return DiscordLogin{}, ErrProviderUnauthorized
 	}
-	form := url.Values{}
-	form.Set("client_id", p.clientID)
-	form.Set("client_secret", p.clientSecret)
-	form.Set("grant_type", "authorization_code")
-	form.Set("code", code)
-	form.Set("redirect_uri", redirectURI)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.tokenEndpoint, strings.NewReader(form.Encode()))
+	v := url.Values{}
+	v.Set("client_id", p.clientID)
+	v.Set("client_secret", p.clientSecret)
+	v.Set("grant_type", "authorization_code")
+	v.Set("code", code)
+	v.Set("redirect_uri", redirectURI)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.tokenEndpoint, strings.NewReader(v.Encode()))
 	if err != nil {
 		return DiscordLogin{}, ErrProviderUnavailable
 	}
@@ -144,145 +109,101 @@ func (p *HTTPDiscordProvider) Exchange(ctx context.Context, code, redirectURI st
 	if err != nil || resp == nil {
 		return DiscordLogin{}, ErrProviderUnavailable
 	}
-	var tokenResponse struct {
+	var token struct {
 		AccessToken string `json:"access_token"`
 	}
-	decodeErr := decodeDiscordJSON(resp, &tokenResponse)
+	decodeErr := decodeDiscordJSON(resp, &token)
 	if decodeErr != nil {
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusBadRequest {
 			return DiscordLogin{}, ErrProviderUnauthorized
 		}
 		return DiscordLogin{}, ErrProviderUnavailable
 	}
-	if resp.StatusCode != http.StatusOK || !validateBoundedText(tokenResponse.AccessToken, maxDiscordTokenBytes, false) {
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusBadRequest {
 		return DiscordLogin{}, ErrProviderUnauthorized
 	}
-	accessToken := tokenResponse.AccessToken
-	identity, err := p.fetchIdentity(ctx, accessToken)
-	if err != nil {
-		if errors.Is(err, ErrProviderUnauthorized) {
-			return DiscordLogin{}, err
-		}
+	if resp.StatusCode != http.StatusOK {
 		return DiscordLogin{}, ErrProviderUnavailable
 	}
-	return DiscordLogin{
-		Identity: identity,
-		GuildMember: func(memberCtx context.Context, guildID string) (GuildMember, error) {
-			return p.fetchGuildMember(memberCtx, accessToken, guildID)
-		},
-	}, nil
+	if !validateBoundedText(token.AccessToken, maxDiscordTokenBytes, false) {
+		return DiscordLogin{}, ErrProviderUnauthorized
+	}
+	identity, err := p.fetchIdentity(ctx, token.AccessToken)
+	if err != nil {
+		return DiscordLogin{}, err
+	}
+	access := token.AccessToken
+	return DiscordLogin{Identity: identity, GuildMember: func(c context.Context, g string) (GuildMember, error) { return p.fetchGuildMember(c, access, g) }}, nil
 }
 
-func (p *HTTPDiscordProvider) fetchIdentity(ctx context.Context, accessToken string) (DiscordIdentity, error) {
-	var response struct {
-		ID         string `json:"id"`
-		Username   string `json:"username"`
-		GlobalName string `json:"global_name"`
-		Avatar     string `json:"avatar"`
+func (p *HTTPDiscordProvider) fetchIdentity(ctx context.Context, token string) (DiscordIdentity, error) {
+	var out struct {
+		ID, Username string
+		GlobalName   string `json:"global_name"`
+		Avatar       string `json:"avatar"`
 	}
-	status, err := p.getJSON(ctx, "/users/@me", accessToken, &response)
+	status, err := p.getJSON(ctx, "/users/@me", token, &out)
 	if err != nil {
 		return DiscordIdentity{}, ErrProviderUnavailable
 	}
-	if status == http.StatusUnauthorized || status == http.StatusForbidden {
+	if status == 401 || status == 403 {
 		return DiscordIdentity{}, ErrProviderUnauthorized
 	}
-	if status != http.StatusOK || !validateBoundedText(response.ID, 128, false) {
+	if status != 200 {
+		return DiscordIdentity{}, ErrProviderUnavailable
+	}
+	if !validateBoundedText(out.ID, 128, false) {
 		return DiscordIdentity{}, ErrProviderUnauthorized
 	}
-	username := response.GlobalName
-	if username == "" {
-		username = response.Username
+	name := out.GlobalName
+	if name == "" {
+		name = out.Username
 	}
-	if !validateBoundedText(username, maxUsernameBytes, false) || !validateBoundedText(response.Avatar, 1024, true) {
+	if !validateBoundedText(name, maxUsernameBytes, false) || !validateBoundedText(out.Avatar, 1024, true) {
 		return DiscordIdentity{}, ErrInvalidIdentity
 	}
-	return DiscordIdentity{ID: response.ID, Username: username, GlobalName: response.GlobalName, Avatar: response.Avatar}, nil
+	return DiscordIdentity{ID: out.ID, Username: name, GlobalName: out.GlobalName, Avatar: out.Avatar}, nil
 }
 
-func (p *HTTPDiscordProvider) fetchGuildMember(ctx context.Context, accessToken, guildID string) (GuildMember, error) {
-	if !validateBoundedText(guildID, 128, false) {
+func (p *HTTPDiscordProvider) fetchGuildMember(ctx context.Context, token, guild string) (GuildMember, error) {
+	if !validateBoundedText(guild, 128, false) {
 		return GuildMember{}, ErrGuildRoleMismatch
 	}
-	var response struct {
+	var out struct {
 		Roles  []string `json:"roles"`
 		Nick   string   `json:"nick"`
 		Avatar string   `json:"avatar"`
 	}
-	path := "/users/@me/guilds/" + url.PathEscape(guildID) + "/member"
-	status, err := p.getJSON(ctx, path, accessToken, &response)
+	status, err := p.getJSON(ctx, "/users/@me/guilds/"+url.PathEscape(guild)+"/member", token, &out)
 	if err != nil {
 		return GuildMember{}, ErrProviderUnavailable
 	}
-	// 404/403/401 means the member is not in the guild (or the token lost
-	// access). That is a definitive non-membership, not a transport failure:
-	// registration treats it as a role mismatch and login lets the empty
-	// member clear the snapshot so the chip falls back to the global profile.
-	if status == http.StatusNotFound || status == http.StatusForbidden || status == http.StatusUnauthorized {
+	if status == 401 || status == 403 || status == 404 {
 		return GuildMember{}, nil
 	}
-	if status != http.StatusOK {
+	if status != 200 {
 		return GuildMember{}, ErrProviderUnavailable
 	}
-	if len(response.Roles) > maxDiscordRoleIDs {
+	if len(out.Roles) > maxDiscordRoleIDs || !validateBoundedText(out.Nick, maxUsernameBytes, true) || !validateBoundedText(out.Avatar, 1024, true) {
 		return GuildMember{}, ErrInvalidIdentity
 	}
-	for _, role := range response.Roles {
-		if !validateBoundedText(role, 128, false) {
+	for _, r := range out.Roles {
+		if !validateBoundedText(r, 128, false) {
 			return GuildMember{}, ErrInvalidIdentity
 		}
 	}
-	if !validateBoundedText(response.Nick, maxUsernameBytes, true) || !validateBoundedText(response.Avatar, 1024, true) {
-		return GuildMember{}, ErrInvalidIdentity
-	}
-	return GuildMember{Nick: response.Nick, Avatar: response.Avatar, Roles: response.Roles}, nil
+	return GuildMember{Nick: out.Nick, Avatar: out.Avatar, Roles: out.Roles}, nil
 }
 
-const discordCDNBase = "https://cdn.discordapp.com"
-
-// discordAvatarURL builds the global avatar CDN URL for a Discord user. The
-// avatar value stored on the user is the raw hash from /users/@me; the CDN URL
-// needs the user id and the right extension (animated avatars have a hash
-// beginning with "a_" and use gif). An empty id or hash means no avatar.
-func discordAvatarURL(discordID, hash string) string {
-	if discordID == "" || hash == "" {
-		return ""
-	}
-	ext := ".png"
-	if strings.HasPrefix(hash, "a_") {
-		ext = ".gif"
-	}
-	return discordCDNBase + "/avatars/" + discordID + "/" + hash + ext + "?size=64"
-}
-
-// discordGuildAvatarURL builds the server-specific avatar CDN URL. A guild
-// member avatar overrides the global one inside that server; an empty hash
-// means the member uses their global avatar and the caller falls back.
-func discordGuildAvatarURL(guildID, discordID, hash string) string {
-	if guildID == "" || discordID == "" || hash == "" {
-		return ""
-	}
-	ext := ".png"
-	if strings.HasPrefix(hash, "a_") {
-		ext = ".gif"
-	}
-	return discordCDNBase + "/guilds/" + guildID + "/users/" + discordID + "/avatars/" + hash + ext + "?size=64"
-}
-
-func (p *HTTPDiscordProvider) getJSON(ctx context.Context, path, accessToken string, dst any) (int, error) {
-	if p == nil || p.client == nil || ctx == nil || !validateBoundedText(path, 512, false) || !validateBoundedText(accessToken, maxDiscordTokenBytes, false) {
+func (p *HTTPDiscordProvider) getJSON(ctx context.Context, path, token string, dst any) (int, error) {
+	if p == nil || ctx == nil || !validateBoundedText(path, 512, false) || !validateBoundedText(token, maxDiscordTokenBytes, false) {
 		return 0, ErrProviderUnauthorized
 	}
-	// #nosec G704 -- apiBase is startup-validated HTTPS (and production uses the
-	// hard-coded Discord origin); every path is an internal constant plus
-	// PathEscape output, never an arbitrary request URL.
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.apiBase+path, nil)
 	if err != nil {
 		return 0, ErrProviderUnavailable
 	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	// #nosec G704 -- the validated fixed provider origin above is the only
-	// destination and the provider client rejects every redirect.
+	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := p.client.Do(req)
 	if err != nil || resp == nil {
 		return 0, ErrProviderUnavailable
@@ -293,18 +214,14 @@ func (p *HTTPDiscordProvider) getJSON(ctx context.Context, path, accessToken str
 	defer resp.Body.Close()
 	data, err := readDiscordBody(resp.Body)
 	if err != nil {
-		return resp.StatusCode, ErrProviderUnavailable
+		return resp.StatusCode, err
 	}
 	defer clear(data)
-	if len(data) == 0 {
-		return resp.StatusCode, nil
-	}
-	if err := json.Unmarshal(data, dst); err != nil {
+	if len(data) > 0 && json.Unmarshal(data, dst) != nil {
 		return resp.StatusCode, ErrProviderUnavailable
 	}
 	return resp.StatusCode, nil
 }
-
 func decodeDiscordJSON(resp *http.Response, dst any) error {
 	if resp == nil || resp.Body == nil {
 		return ErrProviderUnavailable
@@ -312,29 +229,48 @@ func decodeDiscordJSON(resp *http.Response, dst any) error {
 	defer resp.Body.Close()
 	data, err := readDiscordBody(resp.Body)
 	if err != nil {
-		return ErrProviderUnavailable
+		return err
 	}
 	defer clear(data)
 	if len(data) == 0 {
 		return fmt.Errorf("empty provider response")
 	}
-	if err := json.Unmarshal(data, dst); err != nil {
+	if json.Unmarshal(data, dst) != nil {
 		return ErrProviderUnavailable
 	}
 	return nil
 }
+func readDiscordBody(r io.Reader) ([]byte, error) {
+	if r == nil {
+		return nil, ErrProviderUnavailable
+	}
+	b, err := io.ReadAll(io.LimitReader(r, maxDiscordResponseBytes+1))
+	if err != nil || len(b) > maxDiscordResponseBytes {
+		clear(b)
+		return nil, ErrProviderUnavailable
+	}
+	return b, nil
+}
 
-func readDiscordBody(body io.Reader) ([]byte, error) {
-	if body == nil {
-		return nil, ErrProviderUnavailable
+func discordAvatarURL(id, hash string) *string {
+	if id == "" || hash == "" {
+		return nil
 	}
-	data, err := io.ReadAll(io.LimitReader(body, maxDiscordResponseBytes+1))
-	if err != nil {
-		return nil, ErrProviderUnavailable
+	ext := ".png"
+	if strings.HasPrefix(hash, "a_") {
+		ext = ".gif"
 	}
-	if len(data) > maxDiscordResponseBytes {
-		clear(data)
-		return nil, ErrProviderUnavailable
+	v := discordCDNBase + "/avatars/" + id + "/" + hash + ext + "?size=64"
+	return &v
+}
+func discordGuildAvatarURL(guild, id, hash string) *string {
+	if guild == "" || id == "" || hash == "" {
+		return nil
 	}
-	return data, nil
+	ext := ".png"
+	if strings.HasPrefix(hash, "a_") {
+		ext = ".gif"
+	}
+	v := discordCDNBase + "/guilds/" + guild + "/users/" + id + "/avatars/" + hash + ext + "?size=64"
+	return &v
 }

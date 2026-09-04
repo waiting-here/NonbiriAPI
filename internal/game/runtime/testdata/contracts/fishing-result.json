@@ -1,0 +1,12 @@
+{
+  "batch_id": "fb_AAAAAAAAAAAAAAAAAAAAAA",
+  "bait": "worm",
+  "count": 1,
+  "unit_price": "2500",
+  "entry_total": "2500",
+  "outcomes": [{"ordinal": 0, "species_key": "boot", "tier": "junk", "size_cm": 0, "reward": "0"}],
+  "payout_total": "0",
+  "balance": "997500",
+  "settled_at": 2000000000,
+  "idempotent_replay": false
+}

@@ -15,33 +15,18 @@ type Page = Parameters<typeof collectConsoleViolations>[0];
 type RouteHandler = NonNullable<Parameters<Page['route']>[1]>;
 type Route = Parameters<RouteHandler>[0];
 
-const SESSION_ONE = 'dbg_abcdefghijklmnopqrstuv';
-const SESSION_TWO = 'dbg_zyxwvutsrqponmlkjihgfe';
+const SESSION_ONE = `dbs_${'A'.repeat(22)}`;
+const SESSION_TWO = `dbs_${'B'.repeat(21)}Q`;
 const TRACE_MARKER = 'debug-body-marker-abcdefghijkl';
-const CONFIRMATION_ID = 'confirm_abcdefghijklmnopqrstuv';
+const EVENT_ONE = `dbe_${'E'.repeat(21)}A`;
 
 const LIMITS = {
-  max_sessions: 64,
-  hub_bytes: 128,
-  session_bytes: 4,
-  max_traces: 32,
-  max_events: 128,
-  event_bytes: 512,
-  subscriber_queue: 64,
-  max_subscribers: 2,
-  raw_request_bytes: 64,
-  messages_tools_bytes: 128,
-  parameters_bytes: 64,
-  effective_summary_bytes: 64,
-  response_bytes: 256,
-  trace_bytes: 768,
-  first_attach_seconds: 30,
-  reconnect_seconds: 30,
-  idle_seconds: 600,
-  absolute_seconds: 3_600,
-  heartbeat_seconds: 15,
-  write_deadline_seconds: 15,
-  confirmation_seconds: 60,
+  session_bytes: 4_194_304,
+  traces: 32,
+  events: 128,
+  subscribers: 2,
+  event_bytes: 524_288,
+  trace_bytes: 786_432,
 };
 
 type DebugMode = 'dry' | 'live';
@@ -50,13 +35,12 @@ interface DebugFixture {
   scenario: string;
   active: boolean;
   id: string;
-  generation: number;
+  generation: string;
+  revision: string;
   mode: DebugMode;
-  connected: boolean;
-  lastEventId: number;
+  lastEventId: string | null;
   startCalls: number;
   deleteCalls: number;
-  challengeCalls: number;
   modeWrites: Array<Record<string, unknown>>;
   eventLastIDs: string[];
   requestURLs: string[];
@@ -65,13 +49,16 @@ interface DebugFixture {
 
 function metadata(fixture: DebugFixture) {
   return {
+    active: true,
     id: fixture.id,
     generation: fixture.generation,
+    revision: fixture.revision,
     mode: fixture.mode,
     created_at: 1,
     expires_at: 3_601,
     idle_expires_at: 601,
-    connected: fixture.connected,
+    inflight_count: 0,
+    connected_subscribers: 0,
     last_event_id: fixture.lastEventId,
     limits: LIMITS,
   };
@@ -82,13 +69,12 @@ function makeFixture(scenario: string, active = false): DebugFixture {
     scenario,
     active,
     id: SESSION_ONE,
-    generation: 1,
+    generation: '1',
+    revision: '1',
     mode: 'dry',
-    connected: active,
-    lastEventId: active ? 2 : 0,
+    lastEventId: active ? EVENT_ONE : null,
     startCalls: 0,
     deleteCalls: 0,
-    challengeCalls: 0,
     modeWrites: [],
     eventLastIDs: [],
     requestURLs: [],
@@ -124,7 +110,7 @@ async function installDebugFixture(page: Page, fixture: DebugFixture) {
         fixture.scenario = 'basic-one-stream';
       }
       await route.continue({
-        url: `${FIXTURE_ORIGIN}/fixture/debug-events?case=${scenario}`,
+        url: `${FIXTURE_ORIGIN}/fixture/debug-events?case=${scenario}&mode=${fixture.mode}&revision=${fixture.revision}`,
       });
       return;
     }
@@ -138,10 +124,10 @@ async function installDebugFixture(page: Page, fixture: DebugFixture) {
       fixture.startCalls += 1;
       fixture.active = true;
       fixture.id = fixture.startCalls === 1 ? SESSION_ONE : SESSION_TWO;
-      fixture.generation = fixture.startCalls;
+      fixture.generation = String(fixture.startCalls);
+      fixture.revision = '1';
       fixture.mode = 'dry';
-      fixture.connected = false;
-      fixture.lastEventId = 0;
+      fixture.lastEventId = null;
       if (
         fixture.scenario.startsWith('basic-auto-') ||
         fixture.scenario.startsWith('basic-one-') ||
@@ -153,29 +139,34 @@ async function installDebugFixture(page: Page, fixture: DebugFixture) {
       return;
     }
 
-    if (request.method() === 'DELETE' && url.pathname === '/api/debug/session') {
+    if (request.method() === 'POST' && url.pathname === '/api/debug/session/stop') {
       fixture.deleteCalls += 1;
       fixture.active = false;
-      fixture.connected = false;
       await route.fulfill({ status: 204, headers: { 'cache-control': 'no-store' } });
       return;
     }
 
-    if (request.method() === 'POST' && url.pathname === '/api/debug/session/live-challenge') {
-      fixture.challengeCalls += 1;
-      await fulfillJSON(route, { confirmation_id: CONFIRMATION_ID });
+    if (request.method() === 'POST' && url.pathname === '/api/debug/session/replace') {
+      fixture.startCalls += 1;
+      fixture.active = true;
+      fixture.id = SESSION_TWO;
+      fixture.generation = String(fixture.startCalls);
+      fixture.revision = '1';
+      fixture.mode = 'dry';
+      fixture.lastEventId = null;
+      fixture.scenario = 'basic-two-stream';
+      await fulfillJSON(route, metadata(fixture));
       return;
     }
 
     if (request.method() === 'PUT' && url.pathname === '/api/debug/session/mode') {
       const body = (request.postDataJSON() ?? {}) as Record<string, unknown>;
       fixture.modeWrites.push(body);
+      fixture.revision = String(BigInt(fixture.revision) + 1n);
       if (body.mode === 'live') {
         fixture.mode = 'live';
-        fixture.connected = true;
       } else {
         fixture.mode = 'dry';
-        fixture.connected = false;
       }
       await fulfillJSON(route, metadata(fixture));
       return;
@@ -197,7 +188,6 @@ async function prepareDebug(
     SESSION_ONE,
     SESSION_TWO,
     TRACE_MARKER,
-    CONFIRMATION_ID,
   ]);
   await configureNarrowReducedMotion(page);
   await page.addInitScript(
@@ -222,6 +212,20 @@ async function assertViewportContract(page: Page) {
   );
 }
 
+async function confirmSessionAction(page: Page, trigger: string, confirm: string) {
+  await page.getByRole('button', { name: trigger }).first().click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: confirm }).click();
+}
+
+async function revealTraceMarker(page: Page, summary: RegExp) {
+  const trace = page.locator('.ops-debug-trace').first();
+  await trace.locator('details').first().locator('summary').first().click();
+  await trace.getByText(summary).click();
+  await expect(trace.locator('pre.ops-debug-json')).toContainText(TRACE_MARKER);
+}
+
 test('Debug route starts dry, replaces, confirms live, and stops without retaining secrets', async ({
   context,
   page,
@@ -230,51 +234,60 @@ test('Debug route starts dry, replaces, confirms live, and stops without retaini
   const consoleGuard = await prepareDebug(context, page, 'en', 'light', fixture);
 
   await page.goto(`${USER_ORIGIN}/debug`);
-  await expect(page.getByRole('heading', { name: 'Request debugger' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'No active debug session' })).toBeVisible();
-  const start = page.getByRole('button', { name: 'Start debug session' }).first();
+  await expect(page.getByRole('heading', { name: 'Debug', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'No active Debug session' })).toBeVisible();
+  const start = page.getByRole('button', { name: 'Start Debug' }).first();
   await tabTo(page, start);
   await expect(start).toBeFocused();
   await start.press('Enter');
 
-  await expect(page.locator('.debug-connection[data-state="connected"]')).toBeVisible();
-  await expect(page.getByText('Dry run active').first()).toBeVisible();
-  await expect(page.getByText(TRACE_MARKER).first()).toBeVisible();
-  await expect(page.getByText(SESSION_ONE).first()).toBeVisible();
+  const connection = page.locator('.card').filter({
+    has: page.getByRole('heading', { name: 'Connection and mode' }),
+  });
+  await expect(connection.getByText('Connected', { exact: true })).toBeVisible();
+  await expect(connection.getByText('Preview (Dry, not sent)', { exact: true })).toBeVisible();
+  await revealTraceMarker(page, /Raw request body/);
+  await expect(page.getByText(SESSION_ONE)).toHaveCount(0);
   expect(fixture.modeWrites).toEqual([]);
 
-  const stop = page.getByRole('button', { name: 'Stop and clear session' });
+  const stop = page.getByRole('button', { name: 'Stop session' }).first();
   await tabTo(page, stop);
   await expect(stop).toBeFocused();
 
-  await page.getByRole('button', { name: 'Replace session' }).press('Enter');
-  await expect(page.getByText(SESSION_TWO).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Start over' }).press('Enter');
+  const replaceDialog = page.getByRole('alertdialog');
+  await expect(replaceDialog).toBeVisible();
+  await replaceDialog.getByRole('button', { name: 'Replace session' }).press('Enter');
+  await expect(page.getByRole('heading', { name: 'Connection and mode' })).toBeVisible();
+  await expect(page.getByText(SESSION_TWO)).toHaveCount(0);
   await expect(page.getByText(SESSION_ONE)).toHaveCount(0);
   await expect.poll(() => fixture.eventConnections).toBe(2);
-  await expect(page.locator('.debug-connection[data-state="connected"]')).toBeVisible();
-  await expect(page.getByText('Dry run active').first()).toBeVisible();
+  await expect(connection.getByText('Connected', { exact: true })).toBeVisible();
+  await expect(connection.getByText('Preview (Dry, not sent)', { exact: true })).toBeVisible();
 
-  const liveSwitch = page.getByRole('switch');
-  await liveSwitch.focus();
+  const live = page.getByRole('button', { name: 'Enable live mode' });
+  await live.focus();
   await page.keyboard.press('Space');
   const dialog = page.getByRole('alertdialog');
   await expect(dialog).toBeVisible();
-  const confirm = dialog.getByRole('button', { name: 'Enable actual sending' });
+  const confirm = dialog.getByRole('button', { name: 'Enable live' });
   await confirm.focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByText('Actual sending is enabled').first()).toBeVisible();
-  await expect(liveSwitch).toHaveAttribute('aria-checked', 'true');
-  expect(fixture.challengeCalls).toBe(1);
-  expect(fixture.modeWrites).toContainEqual({ mode: 'live', confirmation_id: CONFIRMATION_ID });
+  await expect(connection.getByText('Real send (Live)', { exact: true })).toBeVisible();
+  expect(fixture.modeWrites).toContainEqual({
+    mode: 'live',
+    expected_revision: '1',
+    live_confirmation: true,
+  });
 
-  await page.getByRole('button', { name: 'Stop and clear session' }).click();
-  await expect(page.getByRole('heading', { name: 'No active debug session' })).toBeVisible();
+  await confirmSessionAction(page, 'Stop session', 'Stop session');
+  await expect(page.getByRole('heading', { name: 'No active Debug session' })).toBeVisible();
   expect(fixture.startCalls).toBe(2);
   expect(fixture.deleteCalls).toBe(1);
   expect(
     fixture.requestURLs.every(
       (url) =>
-        ![SESSION_ONE, SESSION_TWO, TRACE_MARKER, CONFIRMATION_ID].some((token) =>
+        ![SESSION_ONE, SESSION_TWO, TRACE_MARKER].some((token) =>
           url.includes(token),
         ),
     ),
@@ -284,12 +297,11 @@ test('Debug route starts dry, replaces, confirms live, and stops without retaini
     SESSION_ONE,
     SESSION_TWO,
     TRACE_MARKER,
-    CONFIRMATION_ID,
   ]);
   consoleGuard.assertNone();
 });
 
-test('Debug reconnect sends Last-Event-ID, then a fresh bounded cursor after stream truncation', async ({
+test('Debug reconnect accepts a fresh bounded snapshot after stream closure', async ({
   context,
   page,
 }) => {
@@ -297,22 +309,23 @@ test('Debug reconnect sends Last-Event-ID, then a fresh bounded cursor after str
   const consoleGuard = await prepareDebug(context, page, 'en', 'dark', fixture);
 
   await page.goto(`${USER_ORIGIN}/debug`);
-  await expect(page.getByRole('heading', { name: 'Request debugger' })).toBeVisible();
-  await expect(page.locator('.debug-connection[data-state="connected"]')).toBeVisible();
-  await expect(page.getByText(TRACE_MARKER).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Debug', exact: true })).toBeVisible();
+  const connection = page.locator('.card').filter({
+    has: page.getByRole('heading', { name: 'Connection and mode' }),
+  });
+  await expect(connection.getByText('Connected', { exact: true })).toBeVisible();
+  await revealTraceMarker(page, /Raw request body/);
   await expect.poll(() => fixture.eventLastIDs.length).toBeGreaterThanOrEqual(2);
-  // Initial attachment has no cursor; recovery deliberately reopens from a
-  // bounded fresh-snapshot cursor after the server-authoritative dry readback.
-  expect(fixture.eventLastIDs.slice(0, 2)).toEqual(['', '9007199254740991']);
-  await expect(page.getByText('Dry run active').first()).toBeVisible();
+  expect(fixture.eventLastIDs[0]).toBe('');
+  await expect(connection.getByText('Preview (Dry, not sent)', { exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Stop and clear session' }).click();
-  await expect(page.getByRole('heading', { name: 'No active debug session' })).toBeVisible();
+  await confirmSessionAction(page, 'Stop session', 'Stop session');
+  await expect(page.getByRole('heading', { name: 'No active Debug session' })).toBeVisible();
   expect(fixture.deleteCalls).toBe(1);
   expect(
     fixture.requestURLs.every(
       (url) =>
-        ![SESSION_ONE, SESSION_TWO, TRACE_MARKER, CONFIRMATION_ID].some((token) =>
+        ![SESSION_ONE, SESSION_TWO, TRACE_MARKER].some((token) =>
           url.includes(token),
         ),
     ),
@@ -322,7 +335,6 @@ test('Debug reconnect sends Last-Event-ID, then a fresh bounded cursor after str
     SESSION_ONE,
     SESSION_TWO,
     TRACE_MARKER,
-    CONFIRMATION_ID,
   ]);
   consoleGuard.assertNone();
 });
@@ -335,28 +347,30 @@ test('Debug gap and truncated-event recovery stays visibly safe in Chinese dark 
   const consoleGuard = await prepareDebug(context, page, 'zh', 'dark', fixture);
 
   await page.goto(`${USER_ORIGIN}/debug`);
-  await expect(page.getByRole('heading', { name: '请求调试器' })).toBeVisible();
-  await page.getByRole('button', { name: '启动调试会话' }).first().click();
-  await expect(page.locator('.debug-connection[data-state="connected"]')).toBeVisible();
-  await expect(page.getByText('恢复缺口').first()).toBeVisible();
-  await expect(page.getByText('已丢弃 2 个调试副本').first()).toBeVisible();
-  await expect(page.getByText('Dry run 已启用').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: '调试', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '开始调试' }).first().click();
+  const connection = page.locator('.card').filter({
+    has: page.getByRole('heading', { name: '连接与模式' }),
+  });
+  await expect(connection.getByText('已连接', { exact: true })).toBeVisible();
+  await expect(connection.getByText(/实时更新出现中断：更新记录已清除/)).toBeVisible();
+  await expect(connection.getByText('预览（Dry，不发送）', { exact: true })).toBeVisible();
   expect(await page.locator('html').getAttribute('lang')).toBe('zh-CN');
   expect(await page.locator('html').getAttribute('data-theme')).toBe('dark');
 
-  await page.getByRole('button', { name: '停止并清空会话' }).click();
-  await expect(page.getByText('没有活动调试会话')).toBeVisible();
+  await confirmSessionAction(page, '停止会话', '停止会话');
+  await expect(page.getByText('没有进行中的调试会话')).toBeVisible();
   await assertViewportContract(page);
   await page.setViewportSize({ width: 780, height: 844 });
   await page.evaluate(() => {
     document.documentElement.style.zoom = '200%';
   });
-  await expect(page.getByRole('heading', { name: '请求调试器' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '调试', exact: true })).toBeVisible();
   expect(fixture.eventConnections).toBe(1);
   expect(
     fixture.requestURLs.every(
       (url) =>
-        ![SESSION_ONE, SESSION_TWO, TRACE_MARKER, CONFIRMATION_ID].some((token) =>
+        ![SESSION_ONE, SESSION_TWO, TRACE_MARKER].some((token) =>
           url.includes(token),
         ),
     ),
@@ -365,12 +379,11 @@ test('Debug gap and truncated-event recovery stays visibly safe in Chinese dark 
     SESSION_ONE,
     SESSION_TWO,
     TRACE_MARKER,
-    CONFIRMATION_ID,
   ]);
   consoleGuard.assertNone();
 });
 
-test('Debug truncated and mismatched SSE event enters safe recovery without browser persistence', async ({
+test('Debug mismatched SSE event requires explicit safe recovery without browser persistence', async ({
   context,
   page,
 }) => {
@@ -378,18 +391,22 @@ test('Debug truncated and mismatched SSE event enters safe recovery without brow
   const consoleGuard = await prepareDebug(context, page, 'en', 'light', fixture);
 
   await page.goto(`${USER_ORIGIN}/debug`);
-  await page.getByRole('button', { name: 'Start debug session' }).first().click();
-  await expect(page.getByText('Recovery gap').first()).toBeVisible();
-  await expect(page.getByText('Dry run active').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Start Debug' }).first().click();
+  await expect(page.getByRole('alert')).toContainText('The service returned an invalid response.');
+  await page.getByRole('button', { name: 'Retry' }).click();
+  const connection = page.locator('.card').filter({
+    has: page.getByRole('heading', { name: 'Connection and mode' }),
+  });
+  await expect(connection.getByText('Connected', { exact: true })).toBeVisible();
+  await expect(connection.getByText('Preview (Dry, not sent)', { exact: true })).toBeVisible();
   await expect.poll(() => fixture.eventConnections).toBeGreaterThanOrEqual(2);
-  await page.getByRole('button', { name: 'Stop and clear session' }).click();
-  await expect(page.getByRole('heading', { name: 'No active debug session' })).toBeVisible();
+  await confirmSessionAction(page, 'Stop session', 'Stop session');
+  await expect(page.getByRole('heading', { name: 'No active Debug session' })).toBeVisible();
   expect(fixture.eventLastIDs[0]).toBe('');
-  expect(fixture.eventLastIDs[1]).toBe('9007199254740991');
   expect(
     fixture.requestURLs.every(
       (url) =>
-        ![SESSION_ONE, SESSION_TWO, TRACE_MARKER, CONFIRMATION_ID].some((token) =>
+        ![SESSION_ONE, SESSION_TWO, TRACE_MARKER].some((token) =>
           url.includes(token),
         ),
     ),
@@ -398,7 +415,6 @@ test('Debug truncated and mismatched SSE event enters safe recovery without brow
     SESSION_ONE,
     SESSION_TWO,
     TRACE_MARKER,
-    CONFIRMATION_ID,
   ]);
   consoleGuard.assertNone();
 });

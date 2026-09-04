@@ -1,0 +1,13 @@
+{
+  "settlement_pending": {
+    "batch_id": "fb_AAAAAAAAAAAAAAAAAAAAAA",
+    "bait": "worm",
+    "count": 10,
+    "entry_total": "25000",
+    "state": "recovery_required",
+    "next_attempt_at": null,
+    "retry_exhausted": true
+  },
+  "unrevealed": null,
+  "has_more_unrevealed": false
+}

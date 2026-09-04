@@ -1,16 +1,16 @@
-//go:build !unix
+//go:build !unix && !windows
 
 package db
 
-// secureDBParentDir is a no-op on non-Unix targets. Windows file security is
-// ACL-based; the application does not synthesize POSIX permission bits and does
-// not claim an automatic owner-only guarantee. Deployment documentation
-// requires a dedicated service account and an ACL that grants access only to
-// that account and administrators.
-func secureDBParentDir(dir string) error { return nil }
+import "errors"
 
-// secureDBFiles is a no-op on non-Unix targets for the same reason: Windows
-// ACLs are the authoritative access-control mechanism and are configured by
-// the operator, not inferred from POSIX mode bits. The shared path-shape check
-// (rejecting a symlink or non-regular file at the database path) still applies.
-func secureDBFiles(path string) error { return nil }
+// The beta.1 database security contract is implemented only for the intended
+// Linux/amd64 target. An unsupported OS has no equivalent permission check;
+// fail closed before a writable SQLite handle can be returned.
+func secureDBParentDir(string) error {
+	return errors.New("database path security is unsupported on this target")
+}
+
+func secureDBFiles(string) error {
+	return errors.New("database file security is unsupported on this target")
+}
