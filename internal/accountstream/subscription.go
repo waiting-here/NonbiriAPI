@@ -283,8 +283,11 @@ func (subscription *Subscription) closeLocked(state *accountState) {
 		subscription.hub.unregisterActivitySubscription(subscription.accountID)
 		subscription.activityRegistered = false
 	}
-	close(subscription.queue)
+	// Release capacity before closing the queue. A reader can observe a closed
+	// channel immediately, so publishing the close first would let Next return
+	// ErrClosed while a replacement subscription still sees stale capacity.
 	subscription.hub.releaseConnection()
+	close(subscription.queue)
 }
 
 // discardLocked is the identity-discarding variant of closeLocked. The caller
@@ -310,8 +313,8 @@ drained:
 		subscription.hub.unregisterActivitySubscription(subscription.accountID)
 		subscription.activityRegistered = false
 	}
-	close(subscription.queue)
 	subscription.hub.releaseConnection()
+	close(subscription.queue)
 	subscription.deliveryMu.Unlock()
 }
 
