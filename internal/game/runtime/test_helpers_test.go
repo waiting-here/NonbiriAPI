@@ -13,6 +13,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -128,7 +129,9 @@ func newGameFixture(t *testing.T, source *scriptedSource) *gameFixture {
 	if err != nil {
 		t.Fatalf("new vault: %v", err)
 	}
-	store, err := db.Open(filepath.Join(t.TempDir(), "game.db"), vault)
+	path := filepath.Join(t.TempDir(), "game.db")
+	dbtest.EnsureOwnerOnlyParent(t, path)
+	store, err := db.Open(path, vault)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatalf("open game store: %v", err)

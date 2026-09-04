@@ -17,6 +17,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
@@ -231,7 +232,9 @@ func newRPSFixture(t *testing.T) *rpsFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := db.Open(filepath.Join(t.TempDir(), "rps.db"), vault)
+	path := filepath.Join(t.TempDir(), "rps.db")
+	dbtest.EnsureOwnerOnlyParent(t, path)
+	store, err := db.Open(path, vault)
 	if err != nil {
 		_ = vault.Close()
 		t.Fatal(err)

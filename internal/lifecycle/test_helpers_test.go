@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -298,7 +299,9 @@ func newLifecycleTestFixture(t *testing.T, now int64) *lifecycleTestFixture {
 		t.Fatalf("secret.New: %v", err)
 	}
 	t.Cleanup(func() { _ = vault.Close() })
-	store, err := db.Open(filepath.Join(t.TempDir(), "lifecycle.sqlite"), vault)
+	path := filepath.Join(t.TempDir(), "lifecycle.sqlite")
+	dbtest.EnsureOwnerOnlyParent(t, path)
+	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatalf("db.Open: %v", err)
 	}
