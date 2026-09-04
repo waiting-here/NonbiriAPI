@@ -13,7 +13,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
-	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
+	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
@@ -130,7 +130,7 @@ func newGameFixture(t *testing.T, source *scriptedSource) *gameFixture {
 		t.Fatalf("new vault: %v", err)
 	}
 	path := filepath.Join(t.TempDir(), "game.db")
-	dbtest.EnsureOwnerOnlyParent(t, path)
+	dbfixture.Materialize(t, path)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		_ = vault.Close()

@@ -19,7 +19,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
-	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
+	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
@@ -90,7 +90,7 @@ func newRoutingTestEnv(t *testing.T) *routingTestEnv {
 	}
 	t.Cleanup(func() { _ = vault.Close() })
 	path := filepath.Join(t.TempDir(), "routing.sqlite")
-	dbtest.EnsureOwnerOnlyParent(t, path)
+	dbfixture.Materialize(t, path)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatal(err)

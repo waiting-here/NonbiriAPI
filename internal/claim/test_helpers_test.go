@@ -14,7 +14,7 @@ import (
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
-	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
+	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -533,7 +533,7 @@ func newClaimFixture(t *testing.T) *claimFixture {
 	t.Helper()
 	codec := newTestCodec()
 	path := filepath.Join(t.TempDir(), "claim.sqlite")
-	dbtest.EnsureOwnerOnlyParent(t, path)
+	dbfixture.Materialize(t, path)
 	store, err := db.Open(path, codec)
 	if err != nil {
 		t.Fatalf("open Generation 2 fixture: %v", err)

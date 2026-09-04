@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
-	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
+	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
@@ -138,7 +138,7 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatal(err)
 	}
 	path := filepath.Join(t.TempDir(), "linklink.db")
-	dbtest.EnsureOwnerOnlyParent(t, path)
+	dbfixture.Materialize(t, path)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		vault.Close()

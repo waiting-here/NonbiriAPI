@@ -18,7 +18,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
-	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
+	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
@@ -106,7 +106,7 @@ func newSiteConfigAuthFixture(t *testing.T) *siteConfigAuthFixture {
 		t.Fatalf("create auth integration vault: %v", err)
 	}
 	path := filepath.Join(t.TempDir(), "site-config-auth.db")
-	dbtest.EnsureOwnerOnlyParent(t, path)
+	dbfixture.Materialize(t, path)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		_ = vault.Close()

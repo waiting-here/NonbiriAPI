@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
-	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
+	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -31,7 +31,7 @@ func newLifecycleLogDatabase(t *testing.T) *lifecycleLogDatabase {
 		t.Fatal(err)
 	}
 	path := filepath.Join(t.TempDir(), "log-lifecycle.sqlite")
-	dbtest.EnsureOwnerOnlyParent(t, path)
+	dbfixture.Materialize(t, path)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		_ = vault.Close()

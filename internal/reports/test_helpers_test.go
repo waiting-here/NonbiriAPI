@@ -19,7 +19,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
-	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
+	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -141,7 +141,7 @@ func newReportTestEnvironmentWith(t *testing.T, options reportTestOptions) *repo
 		t.Fatalf("secret.New: %v", err)
 	}
 	path := filepath.Join(t.TempDir(), "reports.sqlite")
-	dbtest.EnsureOwnerOnlyParent(t, path)
+	dbfixture.Materialize(t, path)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		_ = vault.Close()
