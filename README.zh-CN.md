@@ -85,7 +85,7 @@ set +a
 - [环境变量示例](admin.env.example)
 - [systemd 单元示例](deploy/nonbiriapi.service.example)
 
-beta.1 候选版明确采用 fresh-only 数据库 Generation 2（`user_version=2`）：不会原地迁移 alpha 数据库或 Generation 1；发现旧库、空文件、未知 generation、损坏或结构异常的数据库时会在零写入前提下拒绝启动。普通的仅替换二进制降级同样不安全。必须停止服务并保留经过恢复验证的完整快照（数据库/sidecar、release、配置、主密钥和 unit），再按[部署指南](docs/deployment.md)操作。现有部署切换到 beta.1 必须显式执行全新切换；新库默认维护开启，注册、活动和游戏关闭。
+beta.1 候选版明确采用 fresh-only 数据库 Generation 2（`user_version=2`）：不会原地迁移 alpha 数据库或 Generation 1；发现旧库、空文件、未知 generation、损坏或结构异常的数据库时会在零写入前提下拒绝启动。普通的仅替换二进制降级同样不安全。必须停止服务并保留经过恢复验证的完整快照（数据库/sidecar、release、配置、主密钥和 unit），再按[部署指南](docs/deployment.md)操作。现有部署切换到 beta.1 必须显式执行全新切换；新库默认维护开启，注册、活动、公益、捐赠入口和游戏关闭。
 
 beta.1 候选版采用源码优先方式，发布目标为 Linux/amd64。运营方应在该目标上从精确源码提交构建，或使用等价的受控构建流水线。以后若提供预编译二进制，它只是便利产物，不构成兼容性边界。
 

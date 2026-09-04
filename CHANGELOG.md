@@ -16,7 +16,7 @@ The latest published prerelease is `v1.0.0-alpha.3`. The beta.1 entry below desc
 - Public credential-theft reporting with indistinguishable accepted responses, live-key plus time-bounded donation-tombstone matching, resumable administrator review, and safe donation lineage inspection.
 - Administrator-managed mainstream channel templates, strict mainstream/custom endpoint creation, immutable endpoint provenance snapshots, and a user-facing endpoint creation guide.
 - Per-donation-key authorization and effective expiry, same-channel mainstream auto-approval, account-wide key status views, and administrator-controlled bilingual donation guidance.
-- Public charity-model capability views showing current availability, exact base pricing, effective promotional pricing, promotion windows, and the last 100 calls' success rate without revealing donated resources.
+- Public charity capability lists currently routable enabled models with exact base pricing, effective promotional pricing and promotion windows, without revealing donated resources. Administrator and level-5 management views retain the rolling success count and rate for the most recent 100 completed calls.
 - Bilingual React pages for the new activities, announcements, games, reports, legal holds, mainstream channels, donation-key overview, and recovery states. The game center now ships three original local illustrations created with ChatGPT assistance.
 
 ### Changed
