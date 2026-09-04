@@ -22,6 +22,7 @@ import (
 const (
 	bootstrapTestCredentialOrigin = "https://api.example.com:443"
 	bootstrapTestConnector        = "openai-compatible"
+	bootstrapHookWait             = 60 * time.Second
 )
 
 // bootstrapTestFileImage is intentionally limited to the four source paths.
@@ -147,16 +148,19 @@ func preserveBootstrapHooks(t *testing.T) {
 	t.Helper()
 	oldBefore := beforeWritableOpenHook
 	oldAfterCopy := afterSnapshotCopyHook
+	oldBeforeFreshCreate := beforeFreshExclusiveCreateHook
 	oldFreshFailure := freshSchemaFailureHook
 	oldRecovery := writableRecoveryPhaseHook
 	t.Cleanup(func() {
 		beforeWritableOpenHook = oldBefore
 		afterSnapshotCopyHook = oldAfterCopy
+		beforeFreshExclusiveCreateHook = oldBeforeFreshCreate
 		freshSchemaFailureHook = oldFreshFailure
 		writableRecoveryPhaseHook = oldRecovery
 	})
 	beforeWritableOpenHook = nil
 	afterSnapshotCopyHook = nil
+	beforeFreshExclusiveCreateHook = nil
 	freshSchemaFailureHook = nil
 	writableRecoveryPhaseHook = nil
 }
@@ -525,12 +529,14 @@ func TestGenerationTwoFreshFailureIsAtomicAndCleansOnlyOwnedFile(t *testing.T) {
 func TestGenerationTwoFreshConcurrentSingleOEXCLWinnerDoesNotDeleteWinner(t *testing.T) {
 	preserveBootstrapHooks(t)
 	path := bootstrapTestPath(t, "concurrent.db")
-	entered := make(chan struct{})
+	const contenderCount = 9
+	entered := make(chan struct{}, contenderCount)
 	release := make(chan struct{})
-	freshSchemaFailureHook = func() error {
-		close(entered)
+	var releaseOnce sync.Once
+	releaseContenders := func() { releaseOnce.Do(func() { close(release) }) }
+	beforeFreshExclusiveCreateHook = func() {
+		entered <- struct{}{}
 		<-release
-		return nil
 	}
 
 	type result struct {
@@ -538,57 +544,89 @@ func TestGenerationTwoFreshConcurrentSingleOEXCLWinnerDoesNotDeleteWinner(t *tes
 		err   error
 		vault *secret.Vault
 	}
-	firstDone := make(chan result, 1)
-	firstVault := bootstrapTestVaultNoCleanup()
-	go func() {
-		store, err := Open(path, firstVault)
-		firstDone <- result{store: store, err: err, vault: firstVault}
-	}()
-	select {
-	case <-entered:
-	case <-time.After(5 * time.Second):
-		close(release)
-		t.Fatal("fresh O_EXCL winner did not reach the transaction seam")
-	}
-
-	const loserCount = 8
-	losers := make(chan result, loserCount)
+	results := make(chan result, contenderCount)
 	var wg sync.WaitGroup
-	for i := 0; i < loserCount; i++ {
+	for i := 0; i < contenderCount; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			vault := bootstrapTestVaultNoCleanup()
 			store, err := Open(path, vault)
-			losers <- result{store: store, err: err, vault: vault}
+			results <- result{store: store, err: err, vault: vault}
 		}()
 	}
+
+	timer := time.NewTimer(bootstrapHookWait)
+	arrivals := 0
+	var early *result
+	for arrivals < contenderCount && early == nil {
+		select {
+		case <-entered:
+			arrivals++
+		case outcome := <-results:
+			early = &outcome
+		case <-timer.C:
+			releaseContenders()
+			wg.Wait()
+			close(results)
+			for outcome := range results {
+				if outcome.store != nil {
+					_ = outcome.store.Close()
+				}
+				_ = outcome.vault.Close()
+			}
+			t.Fatalf("only %d/%d fresh contenders reached the pre-O_EXCL seam within %s", arrivals, contenderCount, bootstrapHookWait)
+		}
+	}
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
+	}
+	releaseContenders()
 	wg.Wait()
-	close(losers)
-	for loser := range losers {
-		if loser.store != nil {
-			_ = loser.store.Close()
+	close(results)
+
+	outcomes := make([]result, 0, contenderCount)
+	if early != nil {
+		outcomes = append(outcomes, *early)
+	}
+	for outcome := range results {
+		outcomes = append(outcomes, outcome)
+	}
+	for _, outcome := range outcomes {
+		if outcome.store != nil {
+			if err := outcome.store.Close(); err != nil {
+				t.Errorf("close fresh contender store: %v", err)
+			}
 		}
-		_ = loser.vault.Close()
-		if loser.err == nil {
-			t.Fatal("concurrent fresh loser unexpectedly became a second creator")
+		if err := outcome.vault.Close(); err != nil {
+			t.Errorf("close fresh contender vault: %v", err)
 		}
+	}
+	if early != nil {
+		t.Fatalf("fresh contender returned before all callers reached the pre-O_EXCL seam: %v", early.err)
+	}
+	if len(outcomes) != contenderCount {
+		t.Fatalf("fresh contender outcomes=%d, want %d", len(outcomes), contenderCount)
+	}
+	winners := 0
+	for _, outcome := range outcomes {
+		if outcome.err == nil && outcome.store != nil {
+			winners++
+			continue
+		}
+		if outcome.store != nil {
+			t.Fatalf("failed fresh contender returned a store: %v", outcome.err)
+		}
+		assertBootstrapStartupKind(t, outcome.err, StartupInitialization)
+	}
+	if winners != 1 {
+		t.Fatalf("fresh O_EXCL winners=%d, want 1", winners)
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("winner source disappeared while losers failed: %v", err)
-	}
-
-	close(release)
-	winner := <-firstDone
-	if winner.err != nil || winner.store == nil {
-		_ = winner.vault.Close()
-		t.Fatalf("fresh O_EXCL winner failed: %v", winner.err)
-	}
-	if err := winner.store.Close(); err != nil {
-		t.Fatalf("close fresh O_EXCL winner: %v", err)
-	}
-	if err := winner.vault.Close(); err != nil {
-		t.Fatalf("close winner vault: %v", err)
 	}
 
 	reopened := bootstrapTestVault(t)
@@ -819,11 +857,30 @@ func TestGenerationTwoBootstrapRecoveryRunsAfterCheckpointBeforeStoreReturn(t *t
 		store, err := Open(path, vault)
 		done <- result{store: store, err: err, vault: vault}
 	}()
+	timer := time.NewTimer(bootstrapHookWait)
 	select {
 	case <-entered:
-	case <-time.After(5 * time.Second):
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+	case early := <-done:
 		close(release)
-		t.Fatal("recovery hook was not reached")
+		if early.store != nil {
+			_ = early.store.Close()
+		}
+		_ = early.vault.Close()
+		t.Fatalf("Open returned before reaching the recovery hook: %v", early.err)
+	case <-timer.C:
+		close(release)
+		outcome := <-done
+		if outcome.store != nil {
+			_ = outcome.store.Close()
+		}
+		_ = outcome.vault.Close()
+		t.Fatalf("recovery hook was not reached within %s; Open result: %v", bootstrapHookWait, outcome.err)
 	}
 	select {
 	case early := <-done:

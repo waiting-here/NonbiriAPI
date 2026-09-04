@@ -18,7 +18,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
-	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
+	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -435,7 +435,7 @@ func openSharedSiteConfigStores(t *testing.T) (*db.Store, *db.Store) {
 	if err != nil {
 		t.Fatalf("create shared test vault: %v", err)
 	}
-	dbtest.EnsureOwnerOnlyParent(t, path)
+	dbfixture.Materialize(t, path)
 	first, err := db.Open(path, vault)
 	if err != nil {
 		_ = vault.Close()

@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  go:
-    name: Go checks
+  go_build:
+    name: Go build, vet, and test
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -26,8 +26,39 @@ jobs:
           cache: true
       - name: Build, vet, and test
         run: bash scripts/check-go.sh
-      - name: Race tests
-        run: bash scripts/race-check.sh
+
+  race:
+    name: Race tests (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        shard: ["1/6", "2/6", "3/6", "4/6", "5/6", "6/6"]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run complete race shard
+        run: bash scripts/race-check.sh --shard "${{ matrix.shard }}"
+
+  go:
+    name: Go checks
+    if: ${{ always() }}
+    needs: [go_build, race]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all Go checks
+        env:
+          GO_BUILD_RESULT: ${{ needs.go_build.result }}
+          RACE_RESULT: ${{ needs.race.result }}
+        run: |
+          test "$GO_BUILD_RESULT" = success
+          test "$RACE_RESULT" = success
 
   web:
     name: Web checks

@@ -14,11 +14,22 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
 func openGenerationTwoPublicConfigStore(t *testing.T) *db.Store {
+	t.Helper()
+	return openPublicConfigStore(t, true)
+}
+
+func openFreshGenerationTwoPublicConfigStore(t *testing.T) *db.Store {
+	t.Helper()
+	return openPublicConfigStore(t, false)
+}
+
+func openPublicConfigStore(t *testing.T, useTemplate bool) *db.Store {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "public-config.db")
 	masterKey := bytes.Repeat([]byte{0x29}, secret.MasterKeyBytes)
@@ -32,7 +43,11 @@ func openGenerationTwoPublicConfigStore(t *testing.T) *db.Store {
 			t.Errorf("close Generation 2 test secret codec: %v", err)
 		}
 	})
-	dbtest.EnsureOwnerOnlyParent(t, path)
+	if useTemplate {
+		dbfixture.Materialize(t, path)
+	} else {
+		dbtest.EnsureOwnerOnlyParent(t, path)
+	}
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatalf("open Generation 2 test store: %v", err)
@@ -188,7 +203,7 @@ func TestReadPublicConfigProjectsOnlyAllowlist(t *testing.T) {
 }
 
 func TestReadPublicConfigFreshStoreYieldsDefaults(t *testing.T) {
-	store := openGenerationTwoPublicConfigStore(t)
+	store := openFreshGenerationTwoPublicConfigStore(t)
 	out, err := ReadPublicConfig(store)
 	if err != nil {
 		t.Fatalf("ReadPublicConfig: %v", err)

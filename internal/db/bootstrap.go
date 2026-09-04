@@ -895,6 +895,7 @@ func validateWritableGenerationTwoState(ctx context.Context, d *sql.DB, secrets 
 
 var beforeWritableOpenHook func()
 var afterSnapshotCopyHook func()
+var beforeFreshExclusiveCreateHook func()
 var freshSchemaFailureHook func() error
 
 // writableRecoveryPhaseHook is a bounded, pre-listener recovery seam. The
@@ -1137,6 +1138,9 @@ func createFreshGenerationTwo(path string, secrets secret.GenerationTwoContextCo
 		return nil, startupError(StartupSourceChanged)
 	}
 	check.close()
+	if beforeFreshExclusiveCreateHook != nil {
+		beforeFreshExclusiveCreateHook()
+	}
 	created, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return nil, startupError(StartupInitialization)

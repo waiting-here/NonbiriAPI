@@ -12,7 +12,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
-	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
+	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -33,7 +33,7 @@ func openMaintenanceStore(t *testing.T) *db.Store {
 		t.Fatalf("new vault: %v", err)
 	}
 	t.Cleanup(func() { _ = vault.Close() })
-	dbtest.EnsureOwnerOnlyParent(t, path)
+	dbfixture.Materialize(t, path)
 	store, err := db.Open(path, vault)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
