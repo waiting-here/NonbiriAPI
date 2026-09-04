@@ -121,6 +121,7 @@ All routes in this section require a user session unless marked anonymous.
 | `GET /api/logs` | Filters `model,error_code,status,from,to,cursor,limit`; returns owner rows. |
 | `GET /api/logs/{id}` | `attempt_cursor,attempt_limit`; returns owner detail. |
 | `GET /api/logs/options` | Closed query; returns retained owner model-name options. |
+| `GET /api/issues` | Required `state=current|closed`, plus `cursor,limit`; returns the owner's bounded issue page. |
 | `POST /api/account/export` | Fresh elevation; bounded schema-v4 JSON attachment. |
 | `POST /api/account/delete` | Fresh elevation and confirmation; synchronous coordinated deletion; 204. |
 
@@ -163,7 +164,7 @@ All routes in this section require a user session unless marked anonymous.
 | `GET /api/models/{id}/bindings` | Complete bindings plus `binding_revision`. |
 | `POST /api/models/{id}/bindings/batch` | Expected binding revision and selections; all-or-nothing 201. |
 | `PUT /api/models/{id}/bindings/order` | Exact current ID permutation and expected binding revision. |
-| `DELETE /api/models/{id}/bindings/{bindingId}` | Expected binding revision; returns the complete new binding set. |
+| `DELETE /api/models/{id}/bindings/{bId}` | Expected binding revision; returns the complete new binding set. |
 
 Provider/model parts are bounded opaque strings and form the external `provider/model` name. `[公益]` is reserved. Binding DTOs contain only owner-safe endpoint/key display data, Connector type, upstream model ID, and order.
 
@@ -280,9 +281,22 @@ Level-5 steward routes are user-host routes and require a currently effective L5
 | Logs | `GET /api/steward/logs`, `GET /api/steward/logs/{id}` |
 | Maintenance | `GET /api/steward/maintenance`, `POST /api/steward/maintenance/enable` |
 | Own donations | `GET /api/steward/donations`, `GET /api/steward/donations/{id}`, `POST /api/steward/donations/{id}/review`, `PATCH /api/steward/donations/{id}/keys/{keyId}` |
-| Charity models | CRUD on `/api/steward/charity-models[/{id}]`; candidate, binding list/batch/order/delete routes below each model |
+| Charity models | Exact route family in the table below |
 
 Stewards can review only their own donations, and can enable but cannot disable maintenance. They have no report route, legal-hold route, user-account mutation route, or administrator audit identity.
+
+| Method and path | Request / response |
+| --- | --- |
+| `GET /api/steward/charity-models` | `q,enabled,cursor,limit`; steward-safe model page. |
+| `POST /api/steward/charity-models` | Complete provider/model, enabled, tagged pricing, discount and flatten policy; 201. |
+| `GET /api/steward/charity-models/{id}` | Steward-safe model detail. |
+| `PATCH /api/steward/charity-models/{id}` | `expected_revision` plus a non-empty partial business-field patch. |
+| `DELETE /api/steward/charity-models/{id}` | `{expected_revision,confirmation}`. |
+| `GET /api/steward/charity-models/{id}/binding-candidates` | `donation_id,donation_key_id,source=automatic|manual,q,cursor,limit`; safe candidate page. |
+| `GET /api/steward/charity-models/{id}/bindings` | Complete ordered bindings and `binding_revision`. |
+| `POST /api/steward/charity-models/{id}/bindings/batch` | `{expected_binding_revision,selections:[{donation_key_id,upstream_model_id}]}`. |
+| `PUT /api/steward/charity-models/{id}/bindings/order` | `{expected_binding_revision,order}` with the exact current binding-ID permutation. |
+| `DELETE /api/steward/charity-models/{id}/bindings/{bindingId}` | `{expected_binding_revision}`. |
 
 ## 7. Administrator API
 
@@ -318,21 +332,45 @@ Category is `subscription|api_platform`. At most 100 active channels may be enab
 
 | Surface | Routes |
 | --- | --- |
-| Announcements | list/create at `GET|POST /admin/api/announcements`; get/edit/delete at `GET|PATCH|DELETE /admin/api/announcements/{id}`; preview, publish, and withdraw subroutes |
+| Announcements | Exact route family in the table below |
 | Pools | `GET /admin/api/pools`; `POST /admin/api/pools/{poolId}/adjustments` |
 | Activities | `GET|PATCH /admin/api/activities/config`; `GET /admin/api/activities/thursday`; `PUT /admin/api/activities/thursday/next`; `POST /admin/api/activities/thursday/{periodId}/resume` |
 | Games | `GET /admin/api/games/active-counts`; `GET|PATCH /admin/api/games/config` |
 
 Announcement mutations return a bounded receipt and the detail is fetched separately. Published content and drafts are isolated. Activity/game configuration reads a complete typed snapshot, merges a strict patch, validates all dependent values and checked arithmetic, then commits atomically. Existing accepted work retains its frozen configuration.
 
+| Method and path | Request / response |
+| --- | --- |
+| `GET /admin/api/announcements` | `state,severity,cursor,limit`; administrator page. |
+| `POST /admin/api/announcements` | Complete bilingual draft fields, severity, pin/dismiss policy and nullable expiry; 201 receipt. |
+| `GET /admin/api/announcements/{id}` | Administrator draft/published detail. |
+| `PATCH /admin/api/announcements/{id}` | `expected_revision` plus a non-empty partial draft patch. |
+| `POST /admin/api/announcements/{id}/preview` | `expected_revision` plus an optional bilingual title/body patch; safe rendered preview. |
+| `POST /admin/api/announcements/{id}/publish` | `{expected_revision}`. |
+| `POST /admin/api/announcements/{id}/withdraw` | `{expected_revision,reason}`. |
+| `DELETE /admin/api/announcements/{id}` | `{expected_revision,confirmation:"DELETE",reason}`; permanent delete. |
+
 ### 7.4 Donations and charity models
 
 | Surface | Routes |
 | --- | --- |
 | Donations | `GET /admin/api/donations`; `GET /admin/api/donations/{id}`; `POST /admin/api/donations/{id}/review`; `PATCH /admin/api/donations/{id}/keys/{keyId}` |
-| Charity models | CRUD on `/admin/api/charity-models[/{id}]`; candidate, binding list/batch/order/delete routes below each model |
+| Charity models | Exact route family in the table below |
 
 Review and key-management requests include expected revisions and the complete effective limits/expiry needed for that decision. Administrator donation keys add authorized expiry and an administrator-safe provenance snapshot. Charity candidates and bindings omit donor identity, private notes, endpoint-key IDs, and secrets. A model supports per-request or four-bucket per-token prices, donor rewards, a bounded promotion interval, visibility, flattening, rolling success over the most recent 100 completed calls, and ordered bindings.
+
+| Method and path | Request / response |
+| --- | --- |
+| `GET /admin/api/charity-models` | `q,enabled,cursor,limit`; administrator model page. |
+| `POST /admin/api/charity-models` | Complete provider/model, enabled, tagged pricing, discount and flatten policy; 201. |
+| `GET /admin/api/charity-models/{id}` | Administrator model detail. |
+| `PATCH /admin/api/charity-models/{id}` | `expected_revision` plus a non-empty partial business-field patch. |
+| `DELETE /admin/api/charity-models/{id}` | `{expected_revision,confirmation}`. |
+| `GET /admin/api/charity-models/{id}/binding-candidates` | `donation_id,donation_key_id,source=automatic|manual,q,cursor,limit`; safe candidate page. |
+| `GET /admin/api/charity-models/{id}/bindings` | Complete ordered bindings and `binding_revision`. |
+| `POST /admin/api/charity-models/{id}/bindings/batch` | `{expected_binding_revision,selections:[{donation_key_id,upstream_model_id}]}`. |
+| `PUT /admin/api/charity-models/{id}/bindings/order` | `{expected_binding_revision,order}` with the exact current binding-ID permutation. |
+| `DELETE /admin/api/charity-models/{id}/bindings/{bindingId}` | `{expected_binding_revision}`. |
 
 ### 7.5 Reports and legal holds
 
