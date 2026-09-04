@@ -1,8 +1,8 @@
 # NonbiriAPI HTTP API Contract (`v1.0.0-beta.1`)
 
-- Status: **unreleased release candidate**. The latest published prerelease remains `v1.0.0-alpha.3`.
+- Status: **v1.0.0-beta.1 release contract**.
 - Scope: the only OpenAI-compatible ingress routes are `GET /v1/models` and `POST /v1/chat/completions`. OpenAI-compatible and Anthropic-compatible upstream connectors sit behind that ingress; there is no public Anthropic-native API.
-- Authority: this document reflects the production route registry, strict request/response types, stable error catalog, and candidate tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically.
+- Authority: this document reflects the production route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically.
 
 ## 1. Shared wire rules
 

@@ -660,54 +660,28 @@ WHERE scope='credential_report' AND key_hash=?`, keyHash[:]); got != 0 {
 	}
 }
 
-type blockingReportDelay struct {
-	entered chan struct{}
-	release chan struct{}
-}
-
-func (delay *blockingReportDelay) wait(ctx context.Context, _ time.Duration) error {
-	select {
-	case delay.entered <- struct{}{}:
-	case <-ctx.Done():
-		return context.Cause(ctx)
-	}
-	select {
-	case <-delay.release:
-		return nil
-	case <-ctx.Done():
-		return context.Cause(ctx)
-	}
-}
-
 func TestPublicReportConcurrencyGateAndSameFingerprintConvergence(t *testing.T) {
 	t.Run("concurrency gate", func(t *testing.T) {
-		delay := &blockingReportDelay{entered: make(chan struct{}, publicConcurrency), release: make(chan struct{})}
-		environment := newReportTestEnvironmentWith(t, reportTestOptions{delay: delay.wait})
-		results := make(chan error, publicConcurrency)
-		for index := 0; index < publicConcurrency; index++ {
-			index := index
-			go func() {
-				results <- environment.repository.AcceptCredentialTheft(context.Background(),
-					environment.submission(fmt.Sprintf("slot-secret-%d", index), "", 500+index, index, nil))
-			}()
-		}
-		for index := 0; index < publicConcurrency; index++ {
+		environment := newReportTestEnvironment(t)
+		filled := 0
+		defer func() {
+			for ; filled > 0; filled-- {
+				<-environment.repository.publicSlots
+			}
+		}()
+		for filled < publicConcurrency {
 			select {
-			case <-delay.entered:
-			case <-time.After(5 * time.Second):
-				t.Fatal("timed out filling public report slots")
+			case environment.repository.publicSlots <- struct{}{}:
+				filled++
+			default:
+				t.Fatalf("public report gate filled after %d slots, want %d", filled, publicConcurrency)
 			}
 		}
 		if err := environment.repository.AcceptCredentialTheft(context.Background(),
 			environment.submission("slot-overflow", "", 599, 99, nil)); !errors.Is(err, ErrRateLimited) {
 			t.Fatalf("overflow error=%v", err)
 		}
-		close(delay.release)
-		for index := 0; index < publicConcurrency; index++ {
-			if err := <-results; err != nil {
-				t.Fatalf("admitted call %d: %v", index, err)
-			}
-		}
+		assertNoAcceptanceKey(t, environment, 599)
 	})
 
 	t.Run("same fingerprint", func(t *testing.T) {

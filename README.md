@@ -4,9 +4,9 @@
 
 NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible ingress gateway. It lets each user manage their own upstream endpoints and credentials, discover upstream models, define user-owned platform model names, and call those models through a single `CallerKey`.
 
-> **Latest published prerelease:** [`v1.0.0-alpha.3`](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.3). Alpha builds are intended only for controlled self-hosted trials; publishing a prerelease is not an authorization for any particular operator deployment. Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
+> **Source version:** `v1.0.0-beta.1`. Release tags identify published snapshots; publishing a prerelease is not an authorization for any particular operator deployment. Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
 >
-> **Current branch:** unreleased `v1.0.0-beta.1` candidate. It uses database Generation 2, supports fresh deployment only, and currently targets source builds for Linux/amd64. It is not a published release or an in-place upgrade for an alpha database.
+> **Compatibility boundary:** beta.1 uses database Generation 2, supports fresh deployment only, and targets source builds for Linux/amd64. It is not an in-place upgrade for an alpha database.
 >
 > Source repository: [github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
@@ -25,7 +25,7 @@ NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible ingress g
 - Server-generated upstream safety pseudonyms scoped to one user and one canonical upstream origin; see the [API contract](docs/api-contract.md#22-post-v1chatcompletions) for their rotation and privacy boundary.
 - React user/admin stations embedded into a single Go binary.
 
-The beta.1 candidate still exposes only the two OpenAI-compatible ingress routes listed above. An `anthropic-compatible` endpoint is translated behind that ingress; NonbiriAPI does not expose an Anthropic-native public endpoint. Other OpenAI API families and connector types remain deferred. See the [candidate API contract](docs/api-contract.md) for the strict Anthropic subset and token-limit rules.
+Beta.1 exposes only the two OpenAI-compatible ingress routes listed above. An `anthropic-compatible` endpoint is translated behind that ingress; NonbiriAPI does not expose an Anthropic-native public endpoint. Other OpenAI API families and connector types remain deferred. See the [API contract](docs/api-contract.md) for the strict Anthropic subset and token-limit rules.
 
 ## Architecture
 
@@ -87,9 +87,9 @@ The intended first deployment model is a manually updated systemd service. See:
 - [Example environment file](admin.env.example)
 - [Example systemd unit](deploy/nonbiriapi.service.example)
 
-The beta.1 candidate deliberately uses fresh-only database Generation 2 (`user_version=2`). It does not migrate an alpha database or Generation 1 in place and refuses an old, empty, unknown, malformed, or unexpected database without writing to it. A normal binary-only downgrade is also unsafe. Stop the service, preserve a verified complete snapshot (database/sidecars, release, configuration, master key and unit), and follow the [deployment guide](docs/deployment.md). Starting beta.1 from an existing deployment requires an explicit fresh cutover; the new database starts with maintenance on and registration, activities, charity, donation intake, and games off.
+Beta.1 deliberately uses fresh-only database Generation 2 (`user_version=2`). It does not migrate an alpha database or Generation 1 in place and refuses an old, empty, unknown, malformed, or unexpected database without writing to it. A normal binary-only downgrade is also unsafe. Stop the service, preserve a verified complete snapshot (database/sidecars, release, configuration, master key and unit), and follow the [deployment guide](docs/deployment.md). Starting beta.1 from an existing deployment requires an explicit fresh cutover; the new database starts with maintenance on and registration, activities, charity, donation intake, and games off.
 
-The beta.1 candidate is source-first and supports Linux/amd64 as its release target. Operators compile the exact source commit on that target or use an equivalent controlled build pipeline. A prebuilt binary, if added later, is a convenience artifact rather than the compatibility boundary.
+Beta.1 is source-first and supports Linux/amd64 as its release target. Operators compile the exact source commit on that target or use an equivalent controlled build pipeline. A prebuilt binary, if added later, is a convenience artifact rather than the compatibility boundary.
 
 ## GitHub automation
 

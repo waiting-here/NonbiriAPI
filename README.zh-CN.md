@@ -2,9 +2,9 @@
 
 NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网关。用户可以管理自己持有的上游端点和凭据，拉取上游模型，创建用户自己的平台模型名称，并通过一个 `CallerKey` 调用这些模型。
 
-> **最新已发布预发布版本：** [`v1.0.0-alpha.3`](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.3)。Alpha 仅适合受控的自托管试运行；发布 prerelease 不等于授权任何特定部署者直接升级或上线。正式开放给用户前，请先阅读部署、备份、隐私和安全文档。
+> **源码版本：** `v1.0.0-beta.1`。发布 tag 用于标识已经发布的源码快照；发布 prerelease 不等于授权任何特定部署者直接升级或上线。正式开放给用户前，请先阅读部署、备份、隐私和安全文档。
 >
-> **当前分支：** 尚未发布的 `v1.0.0-beta.1` 候选版。它采用数据库 Generation 2，只支持全新部署，目前以 Linux/amd64 源码构建为发布边界；它不是已发布版本，也不能在 alpha 数据库上原地升级。
+> **兼容边界：** beta.1 采用数据库 Generation 2，只支持全新部署，并以 Linux/amd64 源码构建为发布边界；它不能在 alpha 数据库上原地升级。
 >
 > 源码仓库：[github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
@@ -23,7 +23,7 @@ NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网
 - 服务端生成的上游安全伪名只在“同一用户 + 同一规范化上游 origin”范围内稳定；轮换与隐私边界见 [API 契约](docs/api-contract.md#22-post-v1chatcompletions)。
 - React 用户/管理员站点嵌入一个 Go 单二进制。
 
-beta.1 候选版仍只暴露上述两个 OpenAI-compatible 入站接口。`anthropic-compatible` 端点在网关内部完成转换，NonbiriAPI 不暴露 Anthropic 原生公共入口。其他 OpenAI API 家族和连接器类型仍留待后续版本；严格的 Anthropic 子集与 token 上限规则见[候选版 API 契约](docs/api-contract.md)。
+Beta.1 只暴露上述两个 OpenAI-compatible 入站接口。`anthropic-compatible` 端点在网关内部完成转换，NonbiriAPI 不暴露 Anthropic 原生公共入口。其他 OpenAI API 家族和连接器类型仍留待后续版本；严格的 Anthropic 子集与 token 上限规则见 [API 契约](docs/api-contract.md)。
 
 ## 站点结构
 
@@ -85,9 +85,9 @@ set +a
 - [环境变量示例](admin.env.example)
 - [systemd 单元示例](deploy/nonbiriapi.service.example)
 
-beta.1 候选版明确采用 fresh-only 数据库 Generation 2（`user_version=2`）：不会原地迁移 alpha 数据库或 Generation 1；发现旧库、空文件、未知 generation、损坏或结构异常的数据库时会在零写入前提下拒绝启动。普通的仅替换二进制降级同样不安全。必须停止服务并保留经过恢复验证的完整快照（数据库/sidecar、release、配置、主密钥和 unit），再按[部署指南](docs/deployment.md)操作。现有部署切换到 beta.1 必须显式执行全新切换；新库默认维护开启，注册、活动、公益、捐赠入口和游戏关闭。
+Beta.1 明确采用 fresh-only 数据库 Generation 2（`user_version=2`）：不会原地迁移 alpha 数据库或 Generation 1；发现旧库、空文件、未知 generation、损坏或结构异常的数据库时会在零写入前提下拒绝启动。普通的仅替换二进制降级同样不安全。必须停止服务并保留经过恢复验证的完整快照（数据库/sidecar、release、配置、主密钥和 unit），再按[部署指南](docs/deployment.md)操作。现有部署切换到 beta.1 必须显式执行全新切换；新库默认维护开启，注册、活动、公益、捐赠入口和游戏关闭。
 
-beta.1 候选版采用源码优先方式，发布目标为 Linux/amd64。运营方应在该目标上从精确源码提交构建，或使用等价的受控构建流水线。以后若提供预编译二进制，它只是便利产物，不构成兼容性边界。
+Beta.1 采用源码优先方式，发布目标为 Linux/amd64。运营方应在该目标上从精确源码提交构建，或使用等价的受控构建流水线。以后若提供预编译二进制，它只是便利产物，不构成兼容性边界。
 
 ## GitHub 自动化
 

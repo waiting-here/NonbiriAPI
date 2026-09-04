@@ -2,11 +2,11 @@
 
 All notable changes to NonbiriAPI are documented here.
 
-The latest published prerelease is `v1.0.0-alpha.3`. The beta.1 entry below describes an unreleased candidate and is not an upgrade authorization.
+Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
 ## [Unreleased]
 
-## [1.0.0-beta.1] - Unreleased
+## [1.0.0-beta.1]
 
 ### Added
 
@@ -32,7 +32,8 @@ The latest published prerelease is `v1.0.0-alpha.3`. The beta.1 entry below desc
 
 - Beta.1 accepts only a completely absent database set or a validated Generation 2 database with SQLite `application_id=0x4E425249` and `user_version=2`. Alpha and Generation 1 databases are not migrated or imported.
 - Upgrading from an earlier prerelease requires a deliberate fresh cutover after a verified complete snapshot. Rollback requires restoring the matching database/sidecars, release, environment, master key, unit, manifest, and checksums together.
-- The candidate is source-first and targets Linux/amd64. A `-tags dist -trimpath` build is required after building both embedded web stations.
+- Startup environment-variable names are unchanged from alpha.3, but a fresh cutover resets every database-backed runtime setting and requires operator review or re-entry before opening the instance.
+- The release is source-first and targets Linux/amd64. A `-tags dist -trimpath` build is required after building both embedded web stations.
 
 ### Security and privacy
 
@@ -162,7 +163,7 @@ The latest published prerelease is `v1.0.0-alpha.3`. The beta.1 entry below desc
 - Purge expired sessions at startup and during the existing six-hour maintenance sweep.
 - Create missing database directories owner-only and align the systemd/key-file guidance with the runtime's strict permission checks.
 
-[1.0.0-beta.1]: https://github.com/waiting-here/NonbiriAPI/compare/v1.0.0-alpha.3...dev/v1.0.0-beta.1
+[1.0.0-beta.1]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-beta.1
 [1.0.0-alpha.3]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.3
 [1.0.0-alpha.2]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.2
 [1.0.0-alpha.1]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.1
