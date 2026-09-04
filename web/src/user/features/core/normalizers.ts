@@ -624,12 +624,6 @@ export function normalizeEndpointCreateOptions(value: unknown): EndpointCreateOp
     CONNECTOR_TYPES.length,
   );
   uniqueBy(baseConnectorTypes, (item) => item, 'base connector types');
-  let previousIndex = -1;
-  for (const item of baseConnectorTypes) {
-    const index = CONNECTOR_TYPES.indexOf(item);
-    if (index <= previousIndex) invalid('base connector type order');
-    previousIndex = index;
-  }
   const mainstreamChannels = boundedArray(
     record.mainstream_channels,
     normalizeMainstreamChannelOption,

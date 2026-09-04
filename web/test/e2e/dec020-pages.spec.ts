@@ -339,7 +339,7 @@ test('user endpoint source wizard submits an immutable mainstream channel select
     method: 'GET',
     path: '/api/endpoint-create-options',
     body: {
-      base_connector_types: ['openai-compatible', 'anthropic-compatible'],
+      base_connector_types: ['anthropic-compatible', 'openai-compatible'],
       mainstream_channels: [
         {
           id: MAINSTREAM_CHANNEL_ID,
