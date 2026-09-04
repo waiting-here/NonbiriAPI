@@ -32,6 +32,8 @@
       "latestDay": "最新日期",
       "productActive": "产品活跃",
       "gameActive": "游戏活跃",
+      "activeValue": "有活动",
+      "inactiveValue": "无活动",
       "noActivity": "暂无活动记录",
       "noActivityBody": "权威读取成功，但暂无可显示的日期。",
       "endpointGroupsFirstPage": "首个权威分页包含 {{groupCount}} 个端点组。",
@@ -389,6 +391,7 @@
         "revision": "修订",
         "select": "选择",
         "singleton": "单例池",
+        "unboundPeriod": "尚未绑定周期",
         "title": "共享池",
         "typeState": "类型 / 状态"
       },

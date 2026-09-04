@@ -48,8 +48,8 @@ export function normalizeUsageSummary(value: unknown): UsageSummary {
 }
 
 export interface ActivityDay {
-  day: string;
-  product_active: string;
+  day: number;
+  product_active: boolean;
   api_requests: string;
   uncached_input_tokens: string;
   cache_write_input_tokens: string;
@@ -57,7 +57,7 @@ export interface ActivityDay {
   output_tokens: string;
   checkins: string;
   console_writes: string;
-  game_active: string;
+  game_active: boolean;
   game_rounds: string;
   distinct_product_users: string | null;
 }
@@ -67,11 +67,9 @@ export interface ActivityPage extends CursorPage<ActivityDay> { enabled: boolean
 function normalizeActivityDay(value: unknown): ActivityDay {
   const fields = ['day', 'product_active', 'api_requests', 'uncached_input_tokens', 'cache_write_input_tokens', 'cache_read_input_tokens', 'output_tokens', 'checkins', 'console_writes', 'game_active', 'game_rounds', 'distinct_product_users'] as const;
   const root = record(value, fields, 'activity day');
-  const day = string(root.day, 'activity day key', { min: 10, max: 10, ascii: true });
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) invalidResponse('activity day key');
   return {
-    day,
-    product_active: decimal(root.product_active, 'product active count'),
+    day: unixSecond(root.day, 'activity day key'),
+    product_active: boolean(root.product_active, 'product active state'),
     api_requests: decimal(root.api_requests, 'API request count'),
     uncached_input_tokens: decimal(root.uncached_input_tokens, 'uncached input count'),
     cache_write_input_tokens: decimal(root.cache_write_input_tokens, 'cache-write count'),
@@ -79,7 +77,7 @@ function normalizeActivityDay(value: unknown): ActivityDay {
     output_tokens: decimal(root.output_tokens, 'output count'),
     checkins: decimal(root.checkins, 'check-in count'),
     console_writes: decimal(root.console_writes, 'console write count'),
-    game_active: decimal(root.game_active, 'game active count'),
+    game_active: boolean(root.game_active, 'game active state'),
     game_rounds: decimal(root.game_rounds, 'game round count'),
     distinct_product_users: nullableDecimal(root.distinct_product_users, 'distinct product user count'),
   };
@@ -91,6 +89,22 @@ export function normalizeActivityPage(value: unknown): ActivityPage {
   const enabled = boolean(root.enabled, 'activity enabled');
   if (!enabled && (result.data.length !== 0 || result.next_cursor !== null)) invalidResponse('disabled activity page');
   return { enabled, ...result };
+}
+
+export function normalizeSiteTimezoneOffset(value: unknown): number {
+  const root = record(value, ['revision', 'values'], 'site configuration snapshot');
+  decimal(root.revision, 'site configuration revision', { positive: true });
+  if (root.values === null || typeof root.values !== 'object' || Array.isArray(root.values)) {
+    invalidResponse('site configuration values');
+  }
+  const offset = integer(
+    (root.values as Record<string, unknown>).site_timezone_offset_minutes,
+    'site timezone offset',
+    -720,
+    840,
+  );
+  if (offset % 30 !== 0) invalidResponse('site timezone offset');
+  return offset;
 }
 
 export interface EndpointOverviewUser {
@@ -375,6 +389,7 @@ export function normalizeLegalHoldDetail(value: unknown): LegalHoldDetail {
 export const adminCoreKeys = {
   usage: ['admin', 'operations', 'usage'] as const,
   activity: (cursor: string | null) => ['admin', 'operations', 'activity', cursor] as const,
+  siteTimezone: ['admin', 'operations', 'site-timezone'] as const,
   endpoints: (query: string, cursor: string | null) => ['admin', 'operations', 'endpoints', query, cursor] as const,
   alerts: (resolved: string, cursor: string | null) => ['admin', 'operations', 'alerts', resolved, cursor] as const,
   users: (banned: string, query: string, cursor: string | null) => ['admin', 'operations', 'users', banned, query, cursor] as const,
@@ -386,6 +401,7 @@ export const adminCoreKeys = {
 
 export const getAdminUsage = () => decoded('/admin/api/usage?group_by=site', normalizeUsageSummary);
 export const getAdminActivity = (cursor: string | null) => decoded(queryPath('/admin/api/activity', { cursor, limit: 50 }), normalizeActivityPage);
+export const getAdminSiteTimezoneOffset = () => decoded('/admin/api/site-config', normalizeSiteTimezoneOffset);
 export const getAdminEndpoints = (query: string, cursor: string | null) => decoded(queryPath('/admin/api/overview/endpoints', { q: query || undefined, cursor, limit: 50 }), (value) => page(value, 'endpoint overview page', normalizeEndpointOverview));
 export const getAdminAlerts = (resolved: '' | 'true' | 'false', cursor: string | null) => decoded(queryPath('/admin/api/alerts', { resolved: resolved || undefined, cursor, limit: 50 }), (value) => page(value, 'alert page', normalizeAdminAlert));
 export const setAdminAlertResolved = (id: string, resolved: boolean) => decoded(`/admin/api/alerts/${encodeURIComponent(decimalID(id, 'alert id'))}/resolve`, normalizeAdminAlert, { method: 'POST', json: { resolved } });

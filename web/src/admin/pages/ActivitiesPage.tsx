@@ -501,7 +501,12 @@ export function ActivitiesPage() {
                       <td>
                         {poolTypeLabels[pool.pool_type]} / {poolStateLabels[pool.state]}
                       </td>
-                      <td>{pool.period_id ?? t('admin.activities.pools.singleton')}</td>
+                      <td>
+                        {pool.period_id
+                          ?? t(pool.pool_type === 'welfare'
+                            ? 'admin.activities.pools.singleton'
+                            : 'admin.activities.pools.unboundPeriod')}
+                      </td>
                       <td>
                         {pool.balance} {t('admin.activities.units.credits')}
                       </td>

@@ -32,6 +32,8 @@
       "latestDay": "Latest day",
       "productActive": "Product active",
       "gameActive": "Game active",
+      "activeValue": "Activity recorded",
+      "inactiveValue": "No activity",
       "noActivity": "No activity rows",
       "noActivityBody": "The authority read succeeded but no day is available.",
       "endpointGroupsFirstPage": "{{groupCount}} groups in the first authority page.",
@@ -389,6 +391,7 @@
         "revision": "Revision",
         "select": "Select",
         "singleton": "Singleton",
+        "unboundPeriod": "Not yet bound to a period",
         "title": "Shared pools",
         "typeState": "Type / state"
       },
