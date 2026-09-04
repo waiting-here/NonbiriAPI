@@ -151,10 +151,15 @@ func validateGenerationTwoSeedManifest(ctx context.Context, q queryer) error {
 	// the complete key slice here would turn an allowed optional edit into a
 	// schema mismatch; unknown/deleted keys are still rejected by the config
 	// validator and by this closed known-key check.
-	known := make(map[string]struct{}, len(generationTwoKnownConfigKeys()))
+	known := make(map[string]struct{}, len(generationTwoKnownConfigKeys())+1)
 	for _, key := range generationTwoKnownConfigKeys() {
 		known[key] = struct{}{}
 	}
+	// The timezone lock is internal lifecycle metadata, not an administrator-
+	// editable catalog entry. Temporal-data writers add it after fresh seed,
+	// so current-database validation must recognize it without exposing it as
+	// a public configuration key.
+	known[timezoneLockKey] = struct{}{}
 	for _, key := range actual.ConfigKeys {
 		if _, ok := known[key]; !ok {
 			return fmt.Errorf("generation-two seed contains unknown site configuration %q", key)

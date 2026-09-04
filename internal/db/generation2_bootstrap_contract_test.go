@@ -389,6 +389,49 @@ func TestGenerationTwoCurrentFreshEpochAndIdentityAreStableAcrossRestart(t *test
 	}
 }
 
+func TestGenerationTwoCurrentTimezoneLockMarkerIsStableAcrossRestart(t *testing.T) {
+	path := bootstrapTestPath(t, "restart-timezone-lock.db")
+	vault := bootstrapTestVault(t)
+	first, err := Open(path, vault)
+	if err != nil {
+		t.Fatalf("fresh Generation Two open: %v", err)
+	}
+	tx, err := first.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		_ = first.Close()
+		t.Fatalf("begin timezone lock transaction: %v", err)
+	}
+	if err := freezeTimezoneTx(context.Background(), tx, 1); err != nil {
+		_ = tx.Rollback()
+		_ = first.Close()
+		t.Fatalf("write timezone lock marker: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		_ = first.Close()
+		t.Fatalf("commit timezone lock marker: %v", err)
+	}
+	if err := validateGenerationTwoSeedManifest(context.Background(), first.DB()); err != nil {
+		_ = first.Close()
+		t.Fatalf("current seed rejected timezone lock marker: %v", err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close timezone-locked Generation Two store: %v", err)
+	}
+
+	second, err := Open(path, vault)
+	if err != nil {
+		t.Fatalf("reopen timezone-locked Generation Two store: %v", err)
+	}
+	t.Cleanup(func() { _ = second.Close() })
+	var marker string
+	if err := second.DB().QueryRow(`SELECT value FROM site_config WHERE key=?`, timezoneLockKey).Scan(&marker); err != nil {
+		t.Fatalf("read timezone lock marker after restart: %v", err)
+	}
+	if marker != "1" {
+		t.Fatalf("timezone lock marker after restart = %q, want 1", marker)
+	}
+}
+
 func TestGenerationTwoCurrentEnabledRPSSnapshotReopensWithSameVault(t *testing.T) {
 	path := bootstrapTestPath(t, "restart-enabled-rps.db")
 	vault := bootstrapTestVault(t)
