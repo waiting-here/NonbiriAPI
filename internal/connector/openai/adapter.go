@@ -239,6 +239,11 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 
 	guard := newResponseGuard(target.credential.bearer, target.credential.ciphertext)
 	defer guard.Clear()
+	var sourceGuard *responseGuard
+	if request.Stream && policy.FlattenToolCalls {
+		sourceGuard = newResponseGuard(target.credential.bearer, target.credential.ciphertext)
+		defer sourceGuard.Clear()
+	}
 	httpRequest.Header.Set("Authorization", "Bearer "+string(target.credential.bearer))
 	// The guard has irreversibly fingerprinted both values and the request
 	// header now owns the transient wire copy. Clear caller-owned byte slices
@@ -270,7 +275,7 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 			return upstreamFailure("upstream stream content type was invalid", response.StatusCode)
 		}
 		if policy.FlattenToolCalls {
-			return a.flattenStream(ctx, writer, response, guard)
+			return a.flattenStream(ctx, writer, response, guard, sourceGuard)
 		}
 		return a.stream(ctx, writer, response, guard)
 	}
@@ -365,13 +370,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 	committed := false
 	seenChunk := false
 	usage := Usage{}
-	// usageCaptured records that a valid usage chunk was seen; usagePoisoned
-	// records that the upstream contradicted itself (a malformed usage object
-	// or two different usage values). Once poisoned, the whole request's
-	// usage stays unknown: no token value is ever fabricated from
-	// contradictory data, and a later valid-looking chunk cannot resurrect it.
-	usageCaptured := false
-	usagePoisoned := false
+	usageState := cumulativeUsage{}
 
 	for {
 		event, ok, nextErr := nextSSEEvent(streamCtx, events, errs)
@@ -434,40 +433,23 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 			return sinkFailureWithCommit(committed, usage)
 		}
 		seenChunk = true
-		switch {
-		case chunkUsageMalformed:
-			usagePoisoned = true
-			usage = Usage{}
-		case chunkUsage.Present && !usagePoisoned:
-			if usageCaptured {
-				if chunkUsage != usage {
-					// Contradictory repeated usage: degrade to unknown.
-					usagePoisoned = true
-					usage = Usage{}
-				}
-			} else {
-				usage = chunkUsage
-				usageCaptured = true
-			}
-		}
+		usage = usageState.observe(chunkUsage, chunkUsageMalformed)
 	}
 }
 
 // flattenStream forwards ordinary content as soon as it has passed the
 // protocol and leak guards, while retaining only tool deltas until a valid
 // terminal marker proves that the whole call set is complete.
-func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard *responseGuard) AttemptResult {
+func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard, sourceGuard *responseGuard) AttemptResult {
 	streamCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
 	events, errs := egress.StreamSSE(streamCtx, response.Body, egress.SSEOptions{
 		MaxBytes: a.maxStreamBytes, MaxLineBytes: a.maxSSELineBytes, MaxEventBytes: a.maxSSEEventBytes,
 		ReadBuffer: min(a.maxSSELineBytes, 64<<10), EventBuffer: 1,
 	})
-	usageFrames := make([][]byte, 0, 2)
+	var usageFrame []byte
 	defer func() {
-		for _, frame := range usageFrames {
-			clear(frame)
-		}
+		clear(usageFrame)
 	}()
 	states := make(map[int]*streamChoiceState)
 	defer clearStreamStates(states)
@@ -478,7 +460,7 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 		}
 	}()
 	var usage Usage
-	usageCaptured, usagePoisoned := false, false
+	usageState := cumulativeUsage{}
 	seenChunk := false
 	hasToolsSeen := false
 	controller := http.NewResponseController(writer)
@@ -562,8 +544,8 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 				clear(finishFrame)
 				clear(finish)
 			}
-			for _, frame := range usageFrames {
-				if _, writeErr := writeFrame(frame, streamFramePayload(frame)); writeErr != nil {
+			if len(usageFrame) > 0 {
+				if _, writeErr := writeFrame(usageFrame, streamFramePayload(usageFrame)); writeErr != nil {
 					if errors.Is(writeErr, errFlattenStreamRejected) {
 						return failure("upstream stream was rejected")
 					}
@@ -586,6 +568,12 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 		compact, chunkUsage, chunkMalformed, err := validateChunk([]byte(event.Data))
 		if err != nil {
 			return failure("upstream stream chunk was invalid")
+		}
+		// Inspect every source frame before replacing a cumulative snapshot.
+		// Only the last usage frame is retained for the terminal rewrite.
+		if sourceGuard.ContainsJSON(compact, compact) {
+			clear(compact)
+			return failure("upstream stream was rejected")
 		}
 		var root map[string]json.RawMessage
 		if json.Unmarshal(compact, &root) != nil {
@@ -610,10 +598,10 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 				clear(usagePayload)
 				return failure("upstream stream chunk exceeded protocol bounds")
 			}
-			usageFrame := append([]byte("data: "), usagePayload...)
+			clear(usageFrame)
+			usageFrame = append([]byte("data: "), usagePayload...)
 			usageFrame = append(usageFrame, '\n', '\n')
 			clear(usagePayload)
-			usageFrames = append(usageFrames, usageFrame)
 
 			delete(root, "usage")
 			withoutUsage, marshalErr := json.Marshal(root)
@@ -635,23 +623,17 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 			clear(frame)
 			return failure("upstream stream chunk was invalid")
 		}
-		if chunkMalformed {
-			usagePoisoned = true
-			usage = Usage{}
-		} else if chunkUsage.Present && !usagePoisoned {
-			if usageCaptured && chunkUsage != usage {
-				usagePoisoned = true
-				usage = Usage{}
-			} else if !usageCaptured {
-				usage = chunkUsage
-				usageCaptured = true
-			}
-		}
+		usage = usageState.observe(chunkUsage, chunkMalformed)
 		seenChunk = true
 		if len(choices) == 0 {
-			// Usage/empty-choice chunks are held until the terminal rewrite so
-			// tool streams preserve the required finish -> usage -> DONE order.
-			usageFrames = append(usageFrames, frame)
+			// Hold the latest usage until finish -> usage -> DONE. Empty
+			// keepalive chunks must not erase a previously received snapshot.
+			if raw, present := root["usage"]; present && !isJSONNull(raw) {
+				clear(usageFrame)
+				usageFrame = frame
+			} else {
+				clear(frame)
+			}
 			continue
 		}
 		if !toolsSeen && !hasToolsSeen {
