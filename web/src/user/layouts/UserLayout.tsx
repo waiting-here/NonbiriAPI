@@ -77,7 +77,7 @@ export function UserLayout() {
     if (typeof window !== 'undefined'
       && typeof window.matchMedia === 'function'
       && window.matchMedia(SHELL_DRAWER_MEDIA_QUERY.user).matches) {
-      menuButtonRef.current?.focus();
+      menuButtonRef.current?.focus({ preventScroll: true });
     }
   }, []);
   const closeMenu = useCallback(() => {
@@ -110,10 +110,14 @@ export function UserLayout() {
 
   useEffect(() => {
     if (!menuOpen) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    // Lock the root scroller. Making body a scroll container disconnects the
+    // sticky header from the viewport when the document is already scrolled.
+    const scrollRoot = document.documentElement;
+    const previousOverflow = scrollRoot.style.overflow;
+    scrollRoot.style.overflow = 'hidden';
+    if (navRef.current) navRef.current.scrollTop = 0;
     const firstLink = navRef.current?.querySelector<HTMLElement>('a[href], button:not([disabled])');
-    firstLink?.focus();
+    firstLink?.focus({ preventScroll: true });
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -135,7 +139,7 @@ export function UserLayout() {
     };
     document.addEventListener('keydown', onKeyDown);
     return () => {
-      document.body.style.overflow = previousOverflow;
+      scrollRoot.style.overflow = previousOverflow;
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [closeMenu, menuOpen]);
