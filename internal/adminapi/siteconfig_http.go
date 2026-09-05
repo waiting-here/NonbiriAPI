@@ -33,7 +33,7 @@ type SiteConfigRouteRegistrar interface {
 	RegisterAdminRoute(method, pattern string, handler SiteConfigAuthorizedAdminHandler) error
 }
 
-// SiteConfigRuntime owns only the four frozen bootstrap/site-config routes.
+// SiteConfigRuntime owns the bootstrap and site-configuration routes.
 // It has no route mux or process-global state and can be composed independently
 // from other administrator route owners.
 type SiteConfigRuntime struct {
@@ -59,6 +59,7 @@ func RegisterSiteConfigRoutes(registrar SiteConfigRouteRegistrar, runtime *SiteC
 		{http.MethodGet, RouteAdminSiteConfig, runtime.getSiteConfig},
 		{http.MethodGet, RouteAdminSiteConfigCatalog, runtime.getCatalog},
 		{http.MethodPatch, RouteAdminSiteConfigKey, runtime.patchSiteConfig},
+		{http.MethodPatch, RouteAdminSiteConfig, runtime.patchSiteConfigBatch},
 	}
 	for _, route := range routes {
 		if err := registrar.RegisterAdminRoute(route.method, route.pattern, route.handler); err != nil {
@@ -126,6 +127,31 @@ func (runtime *SiteConfigRuntime) patchSiteConfig(writer http.ResponseWriter, re
 	writeSiteConfigMutation(writer, result)
 }
 
+func (runtime *SiteConfigRuntime) patchSiteConfigBatch(writer http.ResponseWriter, request *http.Request, principal SiteConfigAdminPrincipal) {
+	if !requireSiteConfigMethod(writer, request, http.MethodPatch) || !requireSiteConfigNoQuery(writer, request) {
+		return
+	}
+	key, ok := requireSiteConfigIdempotencyKey(writer, request)
+	if !ok {
+		return
+	}
+	object, ok := decodeSiteConfigObject(writer, request)
+	if !ok {
+		return
+	}
+	input := SiteConfigBatchInput{AdminID: principal.UserID, IdempotencyKey: key}
+	if len(object) != 2 || json.Unmarshal(object["expected_revision"], &input.ExpectedRevision) != nil || json.Unmarshal(object["values"], &input.Values) != nil || len(input.Values) == 0 || len(input.Values) > maxSiteConfigBatchKeys {
+		writeSiteConfigError(writer, ErrSiteConfigInvalid)
+		return
+	}
+	result, err := runtime.repository.PatchSiteConfigBatch(request.Context(), input)
+	if err != nil {
+		writeSiteConfigError(writer, err)
+		return
+	}
+	writeSiteConfigMutation(writer, result)
+}
+
 func requireSiteConfigMethod(writer http.ResponseWriter, request *http.Request, method string) bool {
 	if request == nil {
 		writeSiteConfigError(writer, ErrSiteConfigInvalid)
@@ -184,7 +210,7 @@ func requireSiteConfigIdempotencyKey(writer http.ResponseWriter, request *http.R
 	return values[0], true
 }
 
-func decodeSiteConfigPatch(writer http.ResponseWriter, request *http.Request) (json.RawMessage, bool) {
+func decodeSiteConfigObject(writer http.ResponseWriter, request *http.Request) (map[string]json.RawMessage, bool) {
 	if request == nil || request.Body == nil {
 		writeSiteConfigError(writer, ErrSiteConfigInvalid)
 		return nil, false
@@ -205,7 +231,19 @@ func decodeSiteConfigPatch(writer http.ResponseWriter, request *http.Request) (j
 		return nil, false
 	}
 	var object map[string]json.RawMessage
-	if err := json.Unmarshal(body, &object); err != nil || len(object) != 1 {
+	if err := json.Unmarshal(body, &object); err != nil {
+		writeSiteConfigError(writer, ErrSiteConfigInvalid)
+		return nil, false
+	}
+	return object, true
+}
+
+func decodeSiteConfigPatch(writer http.ResponseWriter, request *http.Request) (json.RawMessage, bool) {
+	object, ok := decodeSiteConfigObject(writer, request)
+	if !ok {
+		return nil, false
+	}
+	if len(object) != 1 {
 		writeSiteConfigError(writer, ErrSiteConfigInvalid)
 		return nil, false
 	}
@@ -241,6 +279,11 @@ func writeSiteConfigJSON(writer http.ResponseWriter, status int, value any) {
 }
 
 func writeSiteConfigError(writer http.ResponseWriter, err error) {
+	var validation *siteConfigValidationError
+	if errors.As(err, &validation) {
+		httperr.WriteError(writer, httperr.New(httperr.CodeConflict, validation.message))
+		return
+	}
 	code, message := httperr.CodeInternal, "internal error"
 	switch {
 	case errors.Is(err, ErrSiteConfigInvalid):

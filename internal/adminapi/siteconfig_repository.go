@@ -252,7 +252,7 @@ func (repository *SiteConfigRepository) PatchSiteConfig(ctx context.Context, inp
 		stored[input.Key] = patch.stored
 	}
 	if err := db.ValidateGenerationTwoConfigSnapshot(stored); err != nil {
-		return SiteConfigMutationResult{}, ErrSiteConfigConflict
+		return SiteConfigMutationResult{}, siteConfigCombinationError(err)
 	}
 	if input.Key == KeySiteTimezoneOffsetMinutes {
 		if err := ensureSiteTimezoneMutable(ctx, tx); err != nil {

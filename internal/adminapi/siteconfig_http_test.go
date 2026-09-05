@@ -115,6 +115,7 @@ func TestRegisterSiteConfigRoutesIsIndependentAndExact(t *testing.T) {
 		"GET " + RouteAdminSiteConfig,
 		"GET " + RouteAdminSiteConfigCatalog,
 		"PATCH " + RouteAdminSiteConfigKey,
+		"PATCH " + RouteAdminSiteConfig,
 	}
 	if !reflect.DeepEqual(registrar.routes, want) {
 		t.Fatalf("routes=%v, want %v", registrar.routes, want)
@@ -276,6 +277,41 @@ func TestSiteConfigHTTPPatchStrictnessReplayAndErrors(t *testing.T) {
 	if revision, ok := response["revision"].(string); !ok || revision == "" {
 		t.Fatalf("patch response revision=%#v, want non-empty string", response["revision"])
 	}
+}
+
+func TestSiteConfigHTTPBatchRejectsAmbiguousBodiesWithoutWrites(t *testing.T) {
+	store, registrar := newSiteConfigHTTPFixture(t)
+	headers := map[string][]string{"Idempotency-Key": {"site-config-batch-http-key-01"}}
+	for _, body := range []string{
+		`{}`, `null`, `[]`,
+		`{"expected_revision":0,"values":{"site_name":"x"}}`,
+		`{"expected_revision":"00","values":{"site_name":"x"}}`,
+		`{"expected_revision":"0","values":null}`,
+		`{"expected_revision":"0","values":{}}`,
+		`{"expected_revision":"0","values":{"site_name":"x"},"extra":true}`,
+		`{"expected_revision":"0","expected_revision":"1","values":{"site_name":"x"}}`,
+		`{"expected_revision":"0","values":{"site_name":"x","site_name":"y"}}`,
+		`{"expected_revision":"0","values":{"site_name":"x","\u0073ite_name":"y"}}`,
+		`{"expected_revision":"0","values":{"site_name":{"nested":true}}}`,
+		`{"expected_revision":"0","values":{"site_name":"x"}} {}`,
+		`{"expected_revision":"0","values":{"site_name":"` + strings.Repeat("x", idempotency.MaxControlBodyBytes) + `"}}`,
+	} {
+		beforeRevision, beforeRecords := siteConfigRevision(t, store), siteConfigIdempotencyCount(t, store)
+		recorder := siteConfigHTTPRequest(t, registrar.mux, http.MethodPatch, RouteAdminSiteConfig, []byte(body), headers)
+		if len(body) > idempotency.MaxControlBodyBytes {
+			assertSiteConfigHTTPError(t, recorder, http.StatusRequestEntityTooLarge, httperr.CodePayloadTooLarge)
+		} else {
+			assertSiteConfigHTTPError(t, recorder, http.StatusBadRequest, httperr.CodeInvalidRequest)
+		}
+		if siteConfigRevision(t, store) != beforeRevision || siteConfigIdempotencyCount(t, store) != beforeRecords {
+			t.Fatal("rejected batch changed configuration or receipts")
+		}
+	}
+	valid := []byte(`{"expected_revision":"0","values":{"site_name":"Batch Site"}}`)
+	for _, requestHeaders := range []map[string][]string{nil, {"Idempotency-Key": {"site-config-batch-header-a", "site-config-batch-header-b"}}} {
+		assertSiteConfigHTTPError(t, siteConfigHTTPRequest(t, registrar.mux, http.MethodPatch, RouteAdminSiteConfig, valid, requestHeaders), http.StatusBadRequest, httperr.CodeInvalidRequest)
+	}
+	assertSiteConfigHTTPError(t, siteConfigHTTPRequest(t, registrar.mux, http.MethodPatch, RouteAdminSiteConfig+"?x=1", valid, headers), http.StatusBadRequest, httperr.CodeInvalidRequest)
 }
 
 func TestSiteConfigHTTPDonationNoticeRoundTrip(t *testing.T) {
