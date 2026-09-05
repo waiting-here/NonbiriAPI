@@ -14,9 +14,24 @@ import (
 )
 
 type matchBody struct {
-	ExpectedRevision string     `json:"expected_revision"`
-	First            Coordinate `json:"first"`
-	Second           Coordinate `json:"second"`
+	ExpectedRevision string              `json:"expected_revision"`
+	First            Coordinate          `json:"first"`
+	Second           Coordinate          `json:"second"`
+	IncludePath      matchPathPreference `json:"include_path,omitempty"`
+}
+
+type matchPathPreference bool
+
+func (value *matchPathPreference) UnmarshalJSON(raw []byte) error {
+	switch string(raw) {
+	case "true":
+		*value = true
+	case "false":
+		*value = false
+	default:
+		return ErrInvalidRequest
+	}
+	return nil
 }
 
 type abandonBody struct {
@@ -128,7 +143,7 @@ func (service *Service) Match(ctx context.Context, input MatchInput) (Result, er
 	if _, err := idempotency.KeyHash(input.IdempotencyKey); err != nil {
 		return Result{}, ErrInvalidRequest
 	}
-	body := matchBody{ExpectedRevision: input.ExpectedRevision, First: input.First, Second: input.Second}
+	body := matchBody{ExpectedRevision: input.ExpectedRevision, First: input.First, Second: input.Second, IncludePath: matchPathPreference(input.IncludePath)}
 	canonical, err := idempotency.CanonicalJSON(body)
 	if err != nil {
 		return Result{}, ErrInvalidRequest
@@ -233,8 +248,15 @@ func (service *Service) Match(ctx context.Context, input MatchInput) (Result, er
 			return Result{}, err
 		}
 	}
-	if record.Revision != expected || !record.Board.canMatch(input.First, input.Second) {
+	if record.Revision != expected {
 		return Result{}, ErrConflict
+	}
+	path := record.Board.matchPath(input.First, input.Second)
+	if len(path) == 0 {
+		return Result{}, ErrConflict
+	}
+	if !input.IncludePath {
+		path = nil
 	}
 	firstIndex, _ := record.Board.index(input.First)
 	secondIndex, _ := record.Board.index(input.Second)
@@ -265,6 +287,7 @@ func (service *Service) Match(ctx context.Context, input MatchInput) (Result, er
 			return Result{}, err
 		}
 		result := summaryResult(summary, false)
+		result.MatchPath = path
 		if err := completeResult(ctx, tx, decision, result); err != nil {
 			return Result{}, err
 		}
@@ -291,6 +314,7 @@ WHERE id=? AND user_id=? AND revision=?`, db.EncodeU128(next), record.Board.tile
 	}
 	record.Revision, record.UpdatedAt = next, now
 	result := stateResult(stateFromRecord(record, now), http.StatusOK, false)
+	result.MatchPath = path
 	if err := completeResult(ctx, tx, decision, result); err != nil {
 		return Result{}, err
 	}

@@ -145,7 +145,7 @@ func TestMatchRevisionOwnershipAndIdempotency(t *testing.T) {
 		First: first, Second: second, IdempotencyKey: fixture.key(21),
 	}
 	matched, err := fixture.service.Match(context.Background(), input)
-	if err != nil || matched.State == nil || matched.State.Revision != "2" || matched.State.PairsRemoved != 1 {
+	if err != nil || matched.State == nil || matched.State.Revision != "2" || matched.State.PairsRemoved != 1 || matched.MatchPath != nil {
 		t.Fatalf("match = (%+v,%v)", matched, err)
 	}
 	replay, err := fixture.service.Match(context.Background(), input)
@@ -207,7 +207,7 @@ func TestCompletedTerminalIsAtomicAndPreservesAllExactReplays(t *testing.T) {
 	revision := fixture.replaceBoard(started.State.SessionID, nearComplete, definition.totalPairs()-1)
 	finalInput := MatchInput{
 		UserID: userID, SessionBinding: binding, SessionID: started.State.SessionID, ExpectedRevision: revision.Decimal(),
-		First: Coordinate{Row: 0, Col: 0}, Second: Coordinate{Row: 0, Col: 1}, IdempotencyKey: fixture.key(32),
+		First: Coordinate{Row: 0, Col: 0}, Second: Coordinate{Row: 0, Col: 1}, IdempotencyKey: fixture.key(32), IncludePath: true,
 	}
 	completed, err := fixture.service.Match(context.Background(), finalInput)
 	if err != nil || completed.Summary == nil || completed.Summary.TerminalReason != TerminalCompleted || completed.Summary.PairsRemoved != 24 || completed.Summary.Score == nil || *completed.Summary.Score != "2550" {
@@ -233,7 +233,7 @@ func TestCompletedTerminalIsAtomicAndPreservesAllExactReplays(t *testing.T) {
 		t.Fatalf("terminal replay body retained board or lost summary: %s", replayBody)
 	}
 	finalReplay, err := fixture.service.Match(context.Background(), finalInput)
-	if err != nil || finalReplay.Summary == nil || !finalReplay.IdempotentReplay || finalReplay.HTTPStatus != completed.HTTPStatus || !reflect.DeepEqual(finalReplay.Summary, completed.Summary) {
+	if err != nil || finalReplay.Summary == nil || !finalReplay.IdempotentReplay || finalReplay.HTTPStatus != completed.HTTPStatus || !reflect.DeepEqual(finalReplay.Summary, completed.Summary) || !reflect.DeepEqual(finalReplay.MatchPath, []Coordinate{{0, 0}, {0, 1}}) {
 		t.Fatalf("terminal match replay = (%+v,%v)", finalReplay, err)
 	}
 	earlyReplay, err := fixture.service.Match(context.Background(), earlyInput)

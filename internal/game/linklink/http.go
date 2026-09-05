@@ -85,6 +85,7 @@ func (api *httpAPI) match(w http.ResponseWriter, request *http.Request, principa
 	result, err := api.service.Match(request.Context(), MatchInput{
 		UserID: principal.UserID, SessionBinding: principal.SessionBinding, SessionID: request.PathValue("id"),
 		ExpectedRevision: body.ExpectedRevision, First: body.First, Second: body.Second, IdempotencyKey: key,
+		IncludePath: bool(body.IncludePath),
 	})
 	writeResult(w, result, err)
 }
@@ -141,11 +142,12 @@ func writeResult(w http.ResponseWriter, result Result, err error) {
 		writeError(w, ErrInvariant)
 		return
 	}
-	if result.State != nil {
-		writeJSON(w, result.HTTPStatus, result.State)
-	} else {
-		writeJSON(w, result.HTTPStatus, result.Summary)
+	body, err := marshalResult(result)
+	if err != nil {
+		writeError(w, ErrInvariant)
+		return
 	}
+	writeJSON(w, result.HTTPStatus, json.RawMessage(body))
 }
 
 func readBody(w http.ResponseWriter, request *http.Request) ([]byte, bool) {

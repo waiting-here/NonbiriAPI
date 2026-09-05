@@ -5,29 +5,33 @@ export function GestureArt({ gesture }: { readonly gesture: Gesture }) {
     <svg className="rps-gesture-art" viewBox="0 0 96 96" aria-hidden="true" focusable="false">
       <circle cx="48" cy="48" r="43" fill="currentColor" opacity=".1" />
       {gesture === 'rock' ? (
-        <path d="M24 55 29 37l10-8 12 2 8 8 10 3 4 14-9 16-28 2Z" fill="currentColor" />
+        <>
+          <path
+            d="M24 53V37q0-10 10-10 7 0 9 5 4-9 12-5 5 1 6 7 9-4 13 4 9 0 10 9v13q-1 12-13 19H36Q23 70 24 53Z"
+            fill="currentColor"
+          />
+          <path
+            d="M34 36v14m10-14v12m11-12v13m10-8v11M26 54q3-7 10-4l15 7q4 6-3 9l-9-4"
+            fill="none"
+            stroke="var(--nb-color-surface)"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+          <path d="M35 75h34v8H35Z" fill="currentColor" opacity=".55" />
+        </>
       ) : null}
       {gesture === 'scissors' ? (
         <>
           <path
-            d="m23 66 28-20 21-27c4-5 11 1 7 6L61 51l15 8c7 4 2 12-4 9L53 58 34 76Z"
+            d="M28 65q-7-14 3-18l7 4-7-29q-2-10 7-11 6-1 8 8l5 25 8-28q3-9 10-5 5 3 2 12l-6 25q10-1 11 9 7 11-4 23H38Z"
             fill="currentColor"
           />
-          <circle
-            cx="32"
-            cy="51"
-            r="9"
+          <path
+            d="m36 53 13 10q5 7-3 9l-10-6m16-18q-6 11 2 14l7 1m3-12q-5 9 3 13"
             fill="none"
             stroke="var(--nb-color-surface)"
-            strokeWidth="5"
-          />
-          <circle
-            cx="42"
-            cy="68"
-            r="9"
-            fill="none"
-            stroke="var(--nb-color-surface)"
-            strokeWidth="5"
+            strokeWidth="3"
+            strokeLinecap="round"
           />
         </>
       ) : null}

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   boardWasRearranged,
   normalizeLinkLinkCurrent,
+  normalizeLinkLinkMatch,
   normalizeLinkLinkState,
   normalizeLinkLinkSummary,
   shouldApplyLinkLinkReplacement,
@@ -171,5 +172,58 @@ describe('LinkLink authoritative projection', () => {
     expect(shouldApplyLinkLinkReplacement(summary, normalizeLinkLinkState(active('99')))).toBe(
       false,
     );
+  });
+});
+
+describe('server-confirmed match paths', () => {
+  const intent = {
+    sessionID: id,
+    expectedRevision: '1',
+    first: { row: 0, col: 0 },
+    second: { row: 0, col: 1 },
+    idempotencyKey: 'request-key',
+  };
+  it('accepts a direct or perimeter path without adding it to current state', () => {
+    const path = [intent.first, { row: -1, col: 0 }, { row: -1, col: 1 }, intent.second];
+    expect(normalizeLinkLinkMatch({ ...active(), match_path: path }, intent).path).toEqual(path);
+    expect(normalizeLinkLinkMatch(active(), intent).path).toBeNull();
+    expect(() => normalizeLinkLinkCurrent({ ...active(), match_path: path })).toThrow();
+  });
+  it.each([
+    null,
+    [],
+    [{ row: 0, col: 0 }],
+    [
+      { row: 0, col: 0 },
+      { row: 0, col: 2 },
+    ],
+    [
+      { row: 0, col: 0 },
+      { row: -2, col: 0 },
+      { row: -2, col: 1 },
+      { row: 0, col: 1 },
+    ],
+    [
+      { row: 0, col: 0 },
+      { row: 1, col: 1 },
+      { row: 0, col: 1 },
+    ],
+    [
+      { row: 0, col: 0 },
+      { row: 0, col: 0 },
+      { row: 0, col: 1 },
+    ],
+    [
+      { row: 0, col: 0 },
+      { row: -0.5, col: 0 },
+      { row: -0.5, col: 1 },
+      { row: 0, col: 1 },
+    ],
+    [
+      { row: 0, col: 0, command: 'x' },
+      { row: 0, col: 1 },
+    ],
+  ])('rejects malformed geometry %j', (path) => {
+    expect(() => normalizeLinkLinkMatch({ ...active(), match_path: path }, intent)).toThrow();
   });
 });

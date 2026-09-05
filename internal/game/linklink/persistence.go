@@ -241,9 +241,15 @@ func marshalResult(result Result) ([]byte, error) {
 		return nil, ErrInvariant
 	}
 	if result.State != nil {
-		return json.Marshal(result.State)
+		return json.Marshal(struct {
+			*State
+			MatchPath []Coordinate `json:"match_path,omitempty"`
+		}{result.State, result.MatchPath})
 	}
-	return json.Marshal(result.Summary)
+	return json.Marshal(struct {
+		*Summary
+		MatchPath []Coordinate `json:"match_path,omitempty"`
+	}{result.Summary, result.MatchPath})
 }
 
 func replayResult(decision idempotency.Decision) (Result, error) {
@@ -251,7 +257,8 @@ func replayResult(decision idempotency.Decision) (Result, error) {
 		return Result{}, ErrInvariant
 	}
 	var probe struct {
-		TerminalReason string `json:"terminal_reason"`
+		TerminalReason string       `json:"terminal_reason"`
+		MatchPath      []Coordinate `json:"match_path"`
 	}
 	if json.Unmarshal(decision.ResponseBody, &probe) != nil {
 		return Result{}, ErrInvariant
@@ -261,13 +268,17 @@ func replayResult(decision idempotency.Decision) (Result, error) {
 		if json.Unmarshal(decision.ResponseBody, &summary) != nil || summary.SessionID == "" {
 			return Result{}, ErrInvariant
 		}
-		return summaryResult(summary, true), nil
+		result := summaryResult(summary, true)
+		result.MatchPath = probe.MatchPath
+		return result, nil
 	}
 	var state State
 	if json.Unmarshal(decision.ResponseBody, &state) != nil || state.SessionID == "" {
 		return Result{}, ErrInvariant
 	}
-	return stateResult(state, decision.HTTPStatus, true), nil
+	result := stateResult(state, decision.HTTPStatus, true)
+	result.MatchPath = probe.MatchPath
+	return result, nil
 }
 
 // existingReplay checks only an unexpired, already accepted identity. It is
