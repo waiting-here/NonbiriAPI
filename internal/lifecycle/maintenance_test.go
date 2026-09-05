@@ -115,8 +115,16 @@ func TestConcurrentDueTriggerAndMaintenanceShareOneCoveringPass(t *testing.T) {
 	result := make(chan error, 1)
 	go func() { result <- coordinator.RunDue(context.Background()) }()
 	<-entered
+	// Capture the second caller's arrival while the first pass is blocked.
+	// Starting a goroutine alone does not prove that it observed this generation
+	// before release; a later arrival correctly starts a separate maintenance pass.
+	coordinator.runMu.Lock()
+	observedGeneration := coordinator.runGeneration
+	coordinator.runMu.Unlock()
 	maintenanceResult := make(chan error, 1)
-	go func() { maintenanceResult <- coordinator.RunMaintenance(context.Background()) }()
+	go func() {
+		maintenanceResult <- coordinator.runObservedSchedule(context.Background(), true, observedGeneration)
+	}()
 	close(release)
 	if err := <-result; err != nil {
 		t.Fatalf("RunDue: %v", err)
@@ -129,6 +137,12 @@ func TestConcurrentDueTriggerAndMaintenanceShareOneCoveringPass(t *testing.T) {
 	}
 	if retentionCalls.Load() != 1 {
 		t.Fatalf("retention calls = %d, want 1", retentionCalls.Load())
+	}
+	if err := coordinator.RunMaintenance(context.Background()); err != nil {
+		t.Fatalf("later RunMaintenance: %v", err)
+	}
+	if recoveryCalls.Load() != 2 || retentionCalls.Load() != 2 {
+		t.Fatalf("later arrival calls recovery=%d retention=%d, want two each", recoveryCalls.Load(), retentionCalls.Load())
 	}
 }
 

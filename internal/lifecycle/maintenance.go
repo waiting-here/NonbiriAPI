@@ -44,6 +44,12 @@ func (coordinator *Coordinator) runScheduled(ctx context.Context, retention bool
 	observedGeneration := coordinator.runGeneration
 	coordinator.runMu.Unlock()
 
+	return coordinator.runObservedSchedule(ctx, retention, observedGeneration)
+}
+
+// runObservedSchedule covers a caller that arrived at observedGeneration.
+// Gate acquisition can happen after that generation has already completed.
+func (coordinator *Coordinator) runObservedSchedule(ctx context.Context, retention bool, observedGeneration uint64) error {
 	coordinator.runGate.Lock()
 	defer coordinator.runGate.Unlock()
 	if err := ctx.Err(); err != nil {
