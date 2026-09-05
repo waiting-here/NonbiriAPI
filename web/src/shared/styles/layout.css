@@ -381,7 +381,8 @@
 }
 
 .charity-price-table--compact {
-  min-width: 22rem;
+  min-width: 0;
+  table-layout: fixed;
 }
 
 .charity-price-table th,
@@ -400,6 +401,23 @@
 .charity-price-table thead th {
   color: var(--nb-color-text-muted);
   font-size: 0.78rem;
+}
+
+.charity-price-table--compact th,
+.charity-price-table--compact td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.charity-price-table--compact th:first-child {
+  width: 45%;
+}
+
+.charity-price-table--compact .charity-amount {
+  display: inline-block;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .charity-original {
