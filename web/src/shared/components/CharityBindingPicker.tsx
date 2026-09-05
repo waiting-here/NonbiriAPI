@@ -13,6 +13,8 @@ import {
 } from '@shared/operations/charity';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { EmptyState, ErrorState, LoadingState } from './States';
+import { ChoiceList } from './ChoiceList';
+import { KeyLimitSummary } from './KeyRoutingLimits';
 
 export type CharitySelection = CharityBindingCandidate & { note: string };
 const charitySelectionKey = (entry: CharityBindingCandidate) =>
@@ -127,8 +129,14 @@ export function CharityBindingPicker({
                   body={t('common.operations.charity.noApprovedDonationsBody')}
                 />
               ) : (
-                <div className="ops-picker-grid">
-                  {donations.data.data.map((entry) => (
+                <ChoiceList
+                  key={donationPager.cursor ?? 'first'}
+                  items={donations.data.data}
+                  getKey={(entry) => entry.id}
+                  getSearchText={(entry) => `${entry.id} ${entry.description}`}
+                  label={t('common.operations.charity.chooseDonation')}
+                >
+                  {(entry) => (
                     <button
                       type="button"
                       className="ops-picker-choice"
@@ -145,8 +153,8 @@ export function CharityBindingPicker({
                         {t('common.operations.charity.keyCount', { count: entry.key_count })}
                       </small>
                     </button>
-                  ))}
-                </div>
+                  )}
+                </ChoiceList>
               )}
               <CursorPagination
                 page={donationPager.page}
@@ -175,8 +183,16 @@ export function CharityBindingPicker({
                   body={t('common.operations.charity.noCandidatesBody')}
                 />
               ) : (
-                <div className="ops-picker-grid">
-                  {donation.data.data.map((entry) => (
+                <ChoiceList
+                  key={`${donationId}:${keyPager.cursor ?? 'first'}`}
+                  items={donation.data.data}
+                  getKey={(entry) => entry.donation_key_id}
+                  getSearchText={(entry) =>
+                    `${entry.note} ${entry.source.canonical_base_url} ${entry.source.display_head} ${entry.source.display_tail}`
+                  }
+                  label={t('common.operations.charity.chooseKey')}
+                >
+                  {(entry) => (
                     <button
                       key={entry.donation_key_id}
                       type="button"
@@ -190,9 +206,14 @@ export function CharityBindingPicker({
                         {entry.source.display_head}…{entry.source.display_tail}
                       </code>
                       <span>{entry.source.canonical_base_url}</span>
+                      <KeyLimitSummary
+                        concurrency={entry.source.max_concurrency}
+                        rpm={entry.source.max_rpm}
+                        readOnly
+                      />
                     </button>
-                  ))}
-                </div>
+                  )}
+                </ChoiceList>
               )}
               <CursorPagination
                 page={keyPager.page}
@@ -239,8 +260,15 @@ export function CharityBindingPicker({
                       body={t('common.operations.charity.noCandidatesBody')}
                     />
                   ) : (
-                    <div className="ops-picker-grid">
-                      {candidates.data.data.map((entry) => {
+                    <ChoiceList
+                      key={`${keyId}:${query}:${modelPager.cursor ?? 'first'}`}
+                      items={candidates.data.data}
+                      getKey={charitySelectionKey}
+                      getSearchText={(entry) => entry.upstream_model_id}
+                      label={t('common.operations.charity.chooseModels')}
+                      searchable={false}
+                    >
+                      {(entry) => {
                         const key = charitySelectionKey(entry);
                         return (
                           <label key={key} className="ops-picker-choice checkbox-label">
@@ -268,8 +296,8 @@ export function CharityBindingPicker({
                             </span>
                           </label>
                         );
-                      })}
-                    </div>
+                      }}
+                    </ChoiceList>
                   )}
                   <CursorPagination
                     page={modelPager.page}

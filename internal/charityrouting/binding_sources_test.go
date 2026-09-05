@@ -37,6 +37,9 @@ func TestSharedBindingSourcesPreserveStewardBoundaryAndPagination(t *testing.T) 
 	if _, err := env.store.DB().Exec(`UPDATE endpoints SET note='private-endpoint-label'; UPDATE endpoint_keys SET note='private-key-label'`); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := env.store.DB().Exec(`INSERT INTO endpoint_key_limits(endpoint_key_id,max_concurrency,max_rpm) SELECT id,3,45 FROM endpoint_keys`); err != nil {
+		t.Fatal(err)
+	}
 	api := httpAPI{service: env.service}
 	request := func(modelID, donationID, cursor string, keys bool) *httptest.ResponseRecorder {
 		t.Helper()
@@ -78,6 +81,9 @@ func TestSharedBindingSourcesPreserveStewardBoundaryAndPagination(t *testing.T) 
 	}
 	if keyPage.Code != 200 || len(keyData.Data) != 1 || keyData.Data[0].Note != "safe label" {
 		t.Fatal("reviewed key projection missing")
+	}
+	if keyData.Data[0].Source.MaxConcurrency != 3 || keyData.Data[0].Source.MaxRPM != 45 {
+		t.Fatal("steward did not receive current owner limits")
 	}
 	for _, body := range []string{first.Body.String(), keyPage.Body.String()} {
 		for _, forbidden := range []string{"private-endpoint-label", "private-key-label", `"owner"`, `"discord_id"`, `"endpoint_key_id"`, `"encrypted_secret"`, `"reviewer"`} {

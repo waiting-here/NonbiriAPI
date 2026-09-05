@@ -1,1 +1,1 @@
-{"id":"21","endpoint_id":"11","display_head":"head","display_tail":"tail","note":"key note","enabled":true,"force_store_false":false,"suspension_state":"none","revision":"4","created_at":1700000001,"updated_at":1700000011}
+{"id":"21","endpoint_id":"11","display_head":"head","display_tail":"tail","note":"key note","enabled":true,"force_store_false":false,"max_concurrency":0,"max_rpm":0,"suspension_state":"none","revision":"4","created_at":1700000001,"updated_at":1700000011}

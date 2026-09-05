@@ -90,7 +90,7 @@ export function EndpointsPage() {
         ) : (
           <>
             <div className="ops-table-scroll">
-              <table className="ops-table">
+              <table className="ops-table ops-table--responsive">
                 <thead>
                   <tr>
                     <th>{t('admin.endpoints.baseUrl')}</th>
@@ -106,11 +106,18 @@ export function EndpointsPage() {
                     return (
                       <Fragment key={group.base_url}>
                         <tr>
-                          <td className="ops-wrap">{group.base_url}</td>
-                          <td>{group.user_count}</td>
-                          <td>{group.endpoint_count}</td>
-                          <td>{group.key_count}</td>
-                          <td>
+                          <td
+                            className="ops-cell-wide ops-wrap"
+                            data-label={t('admin.endpoints.baseUrl')}
+                          >
+                            {group.base_url}
+                          </td>
+                          <td data-label={t('admin.endpoints.users')}>{group.user_count}</td>
+                          <td data-label={t('admin.endpoints.endpointCount')}>
+                            {group.endpoint_count}
+                          </td>
+                          <td data-label={t('admin.endpoints.keys')}>{group.key_count}</td>
+                          <td className="ops-cell-wide" data-label={t('admin.endpoints.expand')}>
                             <button
                               className="btn btn-secondary"
                               type="button"
@@ -133,7 +140,7 @@ export function EndpointsPage() {
                         {open ? (
                           <tr>
                             <td colSpan={5}>
-                              <table className="ops-table">
+                              <table className="ops-table ops-table--responsive">
                                 <thead>
                                   <tr>
                                     <th>{t('common.userId')}</th>
@@ -145,10 +152,16 @@ export function EndpointsPage() {
                                 <tbody>
                                   {group.users.map((user) => (
                                     <tr key={user.user_id}>
-                                      <td>{user.user_id}</td>
-                                      <td>{user.endpoint_count}</td>
-                                      <td>{user.key_count}</td>
-                                      <td>{user.enabled_count}</td>
+                                      <td data-label={t('common.userId')}>{user.user_id}</td>
+                                      <td data-label={t('admin.endpoints.endpointCount')}>
+                                        {user.endpoint_count}
+                                      </td>
+                                      <td data-label={t('admin.endpoints.keys')}>
+                                        {user.key_count}
+                                      </td>
+                                      <td data-label={t('admin.endpoints.enabledCount')}>
+                                        {user.enabled_count}
+                                      </td>
                                     </tr>
                                   ))}
                                 </tbody>

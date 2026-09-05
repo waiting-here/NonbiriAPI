@@ -254,7 +254,7 @@ export function AnnouncementsPage() {
         ) : (
           <>
             <div className="ops-table-scroll">
-              <table className="ops-table">
+              <table className="ops-table ops-table--responsive">
                 <thead>
                   <tr>
                     <th>{t('admin.announcements.table.state')}</th>
@@ -268,22 +268,25 @@ export function AnnouncementsPage() {
                 <tbody>
                   {list.data.data.map((item) => (
                     <tr key={item.id}>
-                      <td>
+                      <td data-label={t('admin.announcements.table.state')}>
                         <StatusBadge
                           active={item.state === 'published'}
                           label={stateLabels[item.state]}
                         />
                       </td>
-                      <td>
+                      <td
+                        className="ops-cell-wide"
+                        data-label={t('admin.announcements.table.draftTitle')}
+                      >
                         {item.draft.en?.title ??
                           item.draft.zh?.title ??
                           t('admin.announcements.emptyDraft')}
                       </td>
-                      <td>
+                      <td data-label={t('admin.announcements.table.severity')}>
                         {severityLabels[item.severity]}
                         {item.pinned ? ` · ${t('admin.announcements.pinned')}` : ''}
                       </td>
-                      <td>
+                      <td data-label={t('admin.announcements.table.publication')}>
                         {item.published
                           ? t('admin.announcements.publicationValue', {
                               revision: item.published.revision,
@@ -291,8 +294,13 @@ export function AnnouncementsPage() {
                             })
                           : t('admin.announcements.neverPublished')}
                       </td>
-                      <td>{formatDateTime(item.updated_at)}</td>
-                      <td>
+                      <td data-label={t('admin.announcements.table.updated')}>
+                        {formatDateTime(item.updated_at)}
+                      </td>
+                      <td
+                        className="ops-cell-wide"
+                        data-label={t('admin.announcements.table.open')}
+                      >
                         <button
                           className="btn btn-secondary"
                           type="button"

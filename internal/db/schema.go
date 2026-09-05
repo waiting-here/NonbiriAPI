@@ -10,7 +10,17 @@ package db
 // generationTwoSchema is deliberately non-idempotent. Keep all scalar
 // constraints in this source so that the startup manifest is an exact lock,
 // rather than a best-effort list of tables.
-const generationTwoSchema = generationTwoBaseSchema + charityModelRoutingSchema
+const generationTwoSchema = generationTwoBaseSchema + charityModelRoutingSchema + endpointKeyLimitsSchema
+
+const endpointKeyLimitsSchema = `
+CREATE TABLE endpoint_key_limits (
+ endpoint_key_id INTEGER PRIMARY KEY REFERENCES endpoint_keys(id) ON DELETE CASCADE,
+ max_concurrency INTEGER NOT NULL DEFAULT 0 CHECK(typeof(max_concurrency)='integer' AND max_concurrency BETWEEN 0 AND 2147483647),
+ max_rpm INTEGER NOT NULL DEFAULT 0 CHECK(typeof(max_rpm)='integer' AND max_rpm BETWEEN 0 AND 2147483647)
+);
+CREATE INDEX idx_dispatch_claims_key_active ON dispatch_claims(endpoint_key_id,state) WHERE purpose<>'discovery' AND state IN ('claimed','dispatched');
+CREATE INDEX idx_dispatch_claims_key_rpm ON dispatch_claims(endpoint_key_id,dispatched_at) WHERE purpose<>'discovery' AND dispatched_at IS NOT NULL;
+`
 
 const charityModelRoutingSchema = `
 CREATE TABLE charity_model_routing (

@@ -179,7 +179,8 @@ export function ReportDetailPage() {
     targets.cursor,
   ]);
 
-  const lineageAuthorityBlocked = isUnauthorized(targetDonations.error) || isForbidden(targetDonations.error);
+  const lineageAuthorityBlocked =
+    isUnauthorized(targetDonations.error) || isForbidden(targetDonations.error);
   const authorityBlocked = Boolean(detail.error || targetList.error || lineageAuthorityBlocked);
   const statusLabels: Record<ReportStatus, string> = {
     pending_indexing: t('admin.reports.status.pendingIndexing'),
@@ -231,13 +232,14 @@ export function ReportDetailPage() {
     expired: t('admin.reports.detail.lineage.keyState.expired'),
     ended: t('admin.reports.detail.lineage.keyState.ended'),
   };
-  const donationEndedReasonLabels: Record<(typeof REPORT_DONATION_ENDED_REASONS)[number], string> = {
-    withdrawn: t('admin.reports.detail.lineage.endedReason.withdrawn'),
-    terminated: t('admin.reports.detail.lineage.endedReason.terminated'),
-    expired: t('admin.reports.detail.lineage.endedReason.expired'),
-    member_removed: t('admin.reports.detail.lineage.endedReason.memberRemoved'),
-    account_deleted: t('admin.reports.detail.lineage.endedReason.accountDeleted'),
-  };
+  const donationEndedReasonLabels: Record<(typeof REPORT_DONATION_ENDED_REASONS)[number], string> =
+    {
+      withdrawn: t('admin.reports.detail.lineage.endedReason.withdrawn'),
+      terminated: t('admin.reports.detail.lineage.endedReason.terminated'),
+      expired: t('admin.reports.detail.lineage.endedReason.expired'),
+      member_removed: t('admin.reports.detail.lineage.endedReason.memberRemoved'),
+      account_deleted: t('admin.reports.detail.lineage.endedReason.accountDeleted'),
+    };
 
   return (
     <div className="page ops-page">
@@ -357,14 +359,16 @@ export function ReportDetailPage() {
         ) : (
           <>
             <div className="ops-table-scroll">
-              <table className="ops-table">
+              <table className="ops-table ops-table--responsive">
                 <thead>
                   <tr>
                     <th>{t('admin.reports.detail.sequence')}</th>
                     <th>{t('admin.reports.detail.state')}</th>
                     <th>{t('admin.reports.detail.owner')}</th>
+                    <th>{t('common.userId')}</th>
                     <th>{t('admin.reports.detail.endpoint')}</th>
                     <th>{t('admin.reports.detail.keySnapshot')}</th>
+                    <th>{t('admin.reports.detail.keyReference')}</th>
                     <th>{t('admin.reports.detail.donationMatches')}</th>
                     <th>{t('admin.reports.detail.lineageAction')}</th>
                   </tr>
@@ -372,25 +376,36 @@ export function ReportDetailPage() {
                 <tbody>
                   {targetList.data.data.map((target) => (
                     <tr key={target.id}>
-                      <td>{target.target_seq}</td>
-                      <td>{targetStateLabels[target.state]}</td>
-                      <td>
+                      <td data-label={t('admin.reports.detail.sequence')}>{target.target_seq}</td>
+                      <td data-label={t('admin.reports.detail.state')}>
+                        {targetStateLabels[target.state]}
+                      </td>
+                      <td className="ops-cell-wide" data-label={t('admin.reports.detail.owner')}>
                         {target.owner
-                          ? `${target.owner.display_name} (${target.owner.user_id})`
+                          ? target.owner.display_name
                           : t('admin.reports.detail.deidentified')}
                       </td>
-                      <td>
+                      <td className="ops-id" data-label={t('common.userId')}>
+                        {target.owner?.user_id ?? '—'}
+                      </td>
+                      <td className="ops-cell-wide" data-label={t('admin.reports.detail.endpoint')}>
                         {target.endpoint.connector_type}
                         <br />
                         {target.endpoint.canonical_base_url}
                       </td>
-                      <td>
+                      <td data-label={t('admin.reports.detail.keySnapshot')}>
                         {target.endpoint.display_head}…{target.endpoint.display_tail}
-                        <br />
-                        <small>{target.key_ref}</small>
                       </td>
-                      <td>{target.donation_match_count}</td>
-                      <td>
+                      <td className="ops-id" data-label={t('admin.reports.detail.keyReference')}>
+                        {target.key_ref}
+                      </td>
+                      <td data-label={t('admin.reports.detail.donationMatches')}>
+                        {target.donation_match_count}
+                      </td>
+                      <td
+                        className="ops-cell-wide"
+                        data-label={t('admin.reports.detail.lineageAction')}
+                      >
                         <button
                           className="btn btn-secondary"
                           type="button"
@@ -439,7 +454,10 @@ export function ReportDetailPage() {
           {targetDonations.isPending ? (
             <LoadingState />
           ) : targetDonations.error ? (
-            <ErrorState error={targetDonations.error} onRetry={() => void targetDonations.refetch()} />
+            <ErrorState
+              error={targetDonations.error}
+              onRetry={() => void targetDonations.refetch()}
+            />
           ) : targetDonations.data.data.length === 0 ? (
             <EmptyState
               title={t('admin.reports.detail.lineageEmptyTitle')}
@@ -448,7 +466,7 @@ export function ReportDetailPage() {
           ) : (
             <>
               <div className="ops-table-scroll">
-                <table className="ops-table">
+                <table className="ops-table ops-table--responsive">
                   <thead>
                     <tr>
                       <th>{t('admin.reports.detail.lineage.donation')}</th>
@@ -462,16 +480,24 @@ export function ReportDetailPage() {
                   <tbody>
                     {targetDonations.data.data.map((match) => (
                       <tr key={match.donation_key_id}>
-                        <td>{match.donation_id}</td>
-                        <td>{match.donation_key_id}</td>
-                        <td>{donationStatusLabels[match.donation_status]}</td>
-                        <td>{donationKeyStateLabels[match.key_state]}</td>
-                        <td>
+                        <td data-label={t('admin.reports.detail.lineage.donation')}>
+                          {match.donation_id}
+                        </td>
+                        <td data-label={t('admin.reports.detail.lineage.key')}>
+                          {match.donation_key_id}
+                        </td>
+                        <td data-label={t('admin.reports.detail.lineage.donationStatus')}>
+                          {donationStatusLabels[match.donation_status]}
+                        </td>
+                        <td data-label={t('admin.reports.detail.lineage.keyStatus')}>
+                          {donationKeyStateLabels[match.key_state]}
+                        </td>
+                        <td data-label={t('admin.reports.detail.lineage.expires')}>
                           {match.expires_at === null
                             ? t('admin.reports.detail.lineage.never')
                             : formatDateTime(match.expires_at)}
                         </td>
-                        <td>
+                        <td data-label={t('admin.reports.detail.lineage.ended')}>
                           {match.ended_at === null
                             ? t('admin.reports.detail.lineage.notEnded')
                             : `${formatDateTime(match.ended_at)}${match.ended_reason ? ` · ${donationEndedReasonLabels[match.ended_reason]}` : ''}`}

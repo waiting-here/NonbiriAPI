@@ -8,6 +8,59 @@ const ALLOWED_WEBSOCKET_ORIGINS = new Set(
   [...ALLOWED_BROWSER_ORIGINS].map((origin) => origin.replace(/^http:/, 'ws:')),
 );
 const URL_OBSERVER_BINDING = '__NONBIRI_REPORT_URL_HIT__';
+
+export async function assertResponsiveOperationTables(page: Page): Promise<void> {
+  if (!(await page.locator('.ops-table--responsive tbody tr').count())) return;
+  const original = page.viewportSize();
+  try {
+    for (const width of [320, 390, 768, 959, 960, 961, 1935]) {
+      await page.setViewportSize({ width, height: 1000 });
+      const problems = await page.locator('.ops-table--responsive').evaluateAll((tables) =>
+        tables.flatMap((table) => {
+          if (!table.getClientRects().length) return [];
+          const result: string[] = [];
+          if (table.scrollWidth > table.clientWidth + 1)
+            result.push(
+              `table content overflows (${table.clientWidth}/${table.scrollWidth}): ${table.querySelector('thead')?.textContent}`,
+            );
+          for (const cell of table.querySelectorAll('td')) {
+            if (!cell.getClientRects().length) continue;
+            if (cell.scrollWidth > cell.clientWidth + 1)
+              result.push(`cell overflow: ${cell.getAttribute('data-label')}`);
+            if (!cell.hasAttribute('colspan') && !cell.hasAttribute('data-label'))
+              result.push('missing mobile field label');
+          }
+          return result;
+        }),
+      );
+      expect(problems, `table layout at ${width}px on ${page.url()}`).toEqual([]);
+      const layout = await page.evaluate(() => ({
+        fits: document.documentElement.scrollWidth <= innerWidth,
+        width: innerWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+        overflowing: [...document.querySelectorAll('body *')]
+          .filter(
+            (element) =>
+              element.getClientRects().length &&
+              element.getBoundingClientRect().right > innerWidth + 1,
+          )
+          .slice(-15)
+          .map((element) => ({
+            tag: element.tagName,
+            class: element.className,
+            text: element.textContent?.slice(0, 100),
+            right: element.getBoundingClientRect().right,
+          })),
+      }));
+      expect(
+        layout.fits,
+        `page layout at ${width}px on ${page.url()}: ${JSON.stringify(layout)}`,
+      ).toBe(true);
+    }
+  } finally {
+    if (original) await page.setViewportSize(original);
+  }
+}
 const URL_OBSERVER_SURFACES = new Set([
   'document',
   'history.pushState',

@@ -162,15 +162,16 @@ func (s *Service) Claim(ctx context.Context, input ClaimInput) (Handle, error) {
 	if err != nil {
 		return Handle{}, fmt.Errorf("claim: generate claim identity: %w", err)
 	}
-	at, err := s.nowUnix()
-	if err != nil {
-		return Handle{}, err
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Handle{}, fmt.Errorf("claim: begin claim: %w", err)
 	}
 	defer tx.Rollback()
+	// Use the clock after acquiring the connection for the rolling window.
+	at, err := s.nowUnix()
+	if err != nil {
+		return Handle{}, err
+	}
 	handle, err := s.claimTx(ctx, tx, claimID, at, input)
 	if err != nil {
 		return Handle{}, err
@@ -342,6 +343,9 @@ WHERE k.id=?`, input.Candidate.EndpointKeyID).Scan(
 		streakGeneration = reservation.StreakGeneration
 		donorState = RewardPending
 	}
+	if err := checkKeyLimitsTx(ctx, tx, input.Candidate.EndpointKeyID, at, input.Purpose); err != nil {
+		return Handle{}, err
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO dispatch_claims(
 id,logical_request_id,attempt_seq,purpose,endpoint_key_id,secret_ref_id,donation_key_id,
 streak_generation,claim_now,state,frozen_price_milli,frozen_reward_milli,receiver_user_id,
@@ -384,15 +388,15 @@ func (s *Service) TakeForDispatch(ctx context.Context, handle Handle) (*Dispatch
 	if s == nil || s.db == nil || ctx == nil || !validHandle(handle) {
 		return nil, ErrInvalidInput
 	}
-	at, err := s.nowUnix()
-	if err != nil {
-		return nil, err
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("claim: begin dispatch: %w", err)
 	}
 	defer tx.Rollback()
+	at, err := s.nowUnix()
+	if err != nil {
+		return nil, err
+	}
 	var (
 		stateText     string
 		requestID     string

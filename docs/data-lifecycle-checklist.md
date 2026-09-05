@@ -5,7 +5,7 @@
 > the alpha.3 coverage list.
 >
 > Canonical DDL: `internal/db/schema.go`; manifest: `internal/db/schema_manifest.go`;
-> current `GenerationTwoSchemaHash`: `4607c838fa048562a41dbe3850a58b7a5f4fea740a696f409871274008a22557`.
+> current `GenerationTwoSchemaHash`: `3ea8a9523ba99375e3f4d6adb39883e8b887b042a81d64fc0d14031ce6c8a6cc`.
 > Normative lifecycle values come from the frozen beta.1 data-lifecycle contract.
 
 The table cells below describe the version contract for each exact Generation 2 table
@@ -27,6 +27,8 @@ or a stopped process. They contain no request bodies and are excluded from expor
 Every user-associated table or column MUST be checked in the same task that introduces
 it. This includes direct `users(id)` links, transitive foreign keys, and no-FK user
 references used for late-callback suppression.
+
+`endpoint_key_limits` stores only owner-selected concurrency and RPM values. The owner resource export includes both; the endpoint-key foreign key cascades their deletion with the key/account. They have the same lifetime as the resource. Administrator/steward views disclose only the limits on resources already authorized for those views and cannot edit them. Deleted donation source keys show no current configuration. Admission reuses existing dispatch metadata and adds no counters, request content, retention period or late-writing worker. Recovery and request/account deletion continue through the existing claim state machine; in-flight donor keys and their secret retention rules are unchanged.
 
 ## The four checks
 

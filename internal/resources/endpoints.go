@@ -625,6 +625,7 @@ WHERE id=? AND user_id=? AND binding_revision=?`, now, target.modelID, userID, t
 
 type endpointKeyRow struct {
 	id, endpointID, revision, createdAt, updatedAt int64
+	maxConcurrency, maxRPM                         int64
 	displayHead, displayTail, note                 string
 	enabled, forceStoreFalse, suspended            int
 }
@@ -645,6 +646,7 @@ func (row endpointKeyRow) dto() (EndpointKey, error) {
 	return EndpointKey{
 		ID: id, EndpointID: endpointID, DisplayHead: row.displayHead, DisplayTail: row.displayTail,
 		Note: row.note, Enabled: row.enabled == 1, ForceStoreFalse: row.forceStoreFalse == 1,
+		MaxConcurrency: row.maxConcurrency, MaxRPM: row.maxRPM,
 		SuspensionState: state, Revision: strconv.FormatInt(row.revision, 10),
 		CreatedAt: row.createdAt, UpdatedAt: row.updatedAt,
 	}, nil
@@ -653,7 +655,7 @@ func (row endpointKeyRow) dto() (EndpointKey, error) {
 func scanEndpointKey(scanner interface{ Scan(...any) error }) (EndpointKey, error) {
 	var row endpointKeyRow
 	if err := scanner.Scan(&row.id, &row.endpointID, &row.displayHead, &row.displayTail, &row.note,
-		&row.enabled, &row.forceStoreFalse, &row.suspended, &row.revision, &row.createdAt, &row.updatedAt); err != nil {
+		&row.enabled, &row.forceStoreFalse, &row.suspended, &row.revision, &row.createdAt, &row.updatedAt, &row.maxConcurrency, &row.maxRPM); err != nil {
 		return EndpointKey{}, err
 	}
 	return row.dto()
@@ -662,8 +664,9 @@ func scanEndpointKey(scanner interface{ Scan(...any) error }) (EndpointKey, erro
 const endpointKeySelect = `
 SELECT k.id,k.endpoint_id,k.display_head,k.display_tail,k.note,k.enabled,k.force_store_false,
        EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=k.id),
-       k.revision,k.created_at,k.updated_at
-FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id`
+       k.revision,k.created_at,k.updated_at,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)
+FROM endpoint_keys k JOIN endpoints e ON e.id=k.endpoint_id
+LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id`
 
 func (r *Repository) ListEndpointKeys(ctx context.Context, userID, endpointID int64, limit int, cursor string) (Page[EndpointKey], error) {
 	limit = normalizePageLimit(limit)
@@ -741,7 +744,8 @@ func (r *Repository) GetEndpointKey(ctx context.Context, userID, endpointID, key
 
 func (r *Repository) CreateEndpointKey(ctx context.Context, userID, endpointID int64, mutation ControlMutation, input CreateEndpointKeyInput) (MutationResult[EndpointKey], error) {
 	if r == nil || userID <= 0 || endpointID <= 0 || mutation.Route != routeEndpointKeys || mutation.Method != http.MethodPost || !mutationPathIDs(mutation, endpointID) || mutation.Query != "" ||
-		!input.OwnershipConfirmed || !validateEndpointSecretPlaintext(input.Secret) || !validateNote(input.Note) {
+		!input.OwnershipConfirmed || !validateEndpointSecretPlaintext(input.Secret) || !validateNote(input.Note) ||
+		!validKeyLimit(input.MaxConcurrency) || !validKeyLimit(input.MaxRPM) {
 		return MutationResult[EndpointKey]{}, ErrInvalidRequest
 	}
 	plaintext := append([]byte(nil), input.Secret...)
@@ -809,6 +813,9 @@ VALUES(?,?,?,?,?,?,?,?,1,?,?)`, endpointID, stored.RefID, stored.Fingerprint[:],
 	if err != nil {
 		return MutationResult[EndpointKey]{}, fmt.Errorf("resources: create endpoint key identity: %w", err)
 	}
+	if err := writeKeyLimitsTx(ctx, tx, keyID, input.MaxConcurrency, input.MaxRPM); err != nil {
+		return MutationResult[EndpointKey]{}, err
+	}
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO model_discovery_evidence(endpoint_key_id,state,revision,safe_class,safe_diag,fetched_count)
 VALUES(?,'unknown',1,'none','',0)`, keyID); err != nil {
@@ -841,7 +848,8 @@ VALUES(?,'unknown',1,'none','',0)`, keyID); err != nil {
 
 func (r *Repository) PatchEndpointKey(ctx context.Context, userID, endpointID, keyID int64, mutation ControlMutation, input PatchEndpointKeyInput) (MutationResult[EndpointKey], error) {
 	if r == nil || userID <= 0 || endpointID <= 0 || keyID <= 0 || mutation.Route != routeEndpointKey || mutation.Method != http.MethodPatch || !mutationPathIDs(mutation, endpointID, keyID) || mutation.Query != "" ||
-		(input.Note == nil && input.Enabled == nil && input.ForceStoreFalse == nil) || input.ExpectedRevision < 1 || (input.Note != nil && !validateNote(*input.Note)) {
+		(input.Note == nil && input.Enabled == nil && input.ForceStoreFalse == nil && input.MaxConcurrency == nil && input.MaxRPM == nil) || input.ExpectedRevision < 1 || (input.Note != nil && !validateNote(*input.Note)) ||
+		(input.MaxConcurrency != nil && !validKeyLimit(*input.MaxConcurrency)) || (input.MaxRPM != nil && !validKeyLimit(*input.MaxRPM)) {
 		return MutationResult[EndpointKey]{}, ErrInvalidRequest
 	}
 	now, err := r.nowUnix()
@@ -880,6 +888,13 @@ func (r *Repository) PatchEndpointKey(ctx context.Context, userID, endpointID, k
 		return MutationResult[EndpointKey]{}, ErrResourceLocked
 	}
 	note, enabled, forceStore := current.Note, current.Enabled, current.ForceStoreFalse
+	maxConcurrency, maxRPM := current.MaxConcurrency, current.MaxRPM
+	if input.MaxConcurrency != nil {
+		maxConcurrency = *input.MaxConcurrency
+	}
+	if input.MaxRPM != nil {
+		maxRPM = *input.MaxRPM
+	}
 	if input.Note != nil {
 		note = *input.Note
 	}
@@ -919,6 +934,9 @@ WHERE id=? AND endpoint_id=? AND revision=?`, note, boolInt(enabled), boolInt(fo
 		if err := writePolicyAudit(ctx, tx, userID, "endpoint_key", keyID, "force_store_false", current.ForceStoreFalse, forceStore, now); err != nil {
 			return MutationResult[EndpointKey]{}, err
 		}
+	}
+	if err := writeKeyLimitsTx(ctx, tx, keyID, maxConcurrency, maxRPM); err != nil {
+		return MutationResult[EndpointKey]{}, err
 	}
 	if err := r.reconcileRoutingTargetsTx(ctx, tx, userID, affectedModels); err != nil {
 		return MutationResult[EndpointKey]{}, err

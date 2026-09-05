@@ -14,6 +14,20 @@
     "accountMenu": "Account actions"
   },
   "common": {
+    "keyLimits": {
+      "title": "Key request limits",
+      "concurrency": "Maximum concurrency",
+      "rpm": "Maximum RPM",
+      "unlimited": "Unlimited",
+      "readOnly": "Owner's limits (read only)",
+      "hint": "0 means unlimited. Personal and charity model calls share these limits. RPM counts requests dispatched in the last 60 seconds; streaming occupies concurrency until it ends. When full, the next available connection is tried."
+    },
+    "itemId": "Item ID",
+    "choices": {
+      "filterPage": "Filter this page",
+      "count": "{{count}} / {{total}} shown",
+      "noPageMatches": "No matches on this page. Clear the filter or try another page."
+    },
     "loading": "Loading…",
     "error": "Something went wrong",
     "errorBody": "The service could not complete this request. Try again later.",
@@ -156,6 +170,7 @@
         "noApprovedDonations": "No approved donations",
         "noApprovedDonationsBody": "Approve a donation before adding its service connections.",
         "donationNumber": "Donation #{{id}}",
+        "description": "Donation description",
         "keyCount": "{{count}} key(s)",
         "searchModels": "Search upstream models",
         "selectedModels": "Selected models",
@@ -189,7 +204,6 @@
         "deleteModelConfirm": "DELETE model",
         "disableForCharity": "Disable for charity",
         "discordDetached": "Discord detached",
-        "donation": "Donation",
         "donationKeys": "Donation keys",
         "donorDescription": "Donor description",
         "donorRewards": "Donor rewards",

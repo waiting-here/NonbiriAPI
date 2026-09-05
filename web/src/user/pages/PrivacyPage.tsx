@@ -6,7 +6,8 @@ export function PrivacyPage() {
   const { t, i18n } = useTranslation();
   const config = usePublicConfig();
   const locale = i18n.language.startsWith('en') ? 'en' : 'zh';
-  const override = locale === 'en' ? config.data?.legalPrivacyOverrideEn : config.data?.legalPrivacyOverrideZh;
+  const override =
+    locale === 'en' ? config.data?.legalPrivacyOverrideEn : config.data?.legalPrivacyOverrideZh;
   const hasOverride = Boolean(override);
   const authoritative = config.data?.legalAuthoritativeLocale ?? '';
   const authoritativeName = authoritative ? t(`user.legal.localeName.${authoritative}`) : '';
@@ -58,6 +59,7 @@ export function PrivacyPage() {
           <section>
             <h2>{t('user.legal.privacy.sharingTitle')}</h2>
             <p>{t('user.legal.privacy.sharingBody')}</p>
+            <p>{t('user.legal.privacy.keyLimitsBody')}</p>
           </section>
           <section>
             <h2>{t('user.legal.privacy.retentionTitle')}</h2>

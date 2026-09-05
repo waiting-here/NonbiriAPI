@@ -1,6 +1,7 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
+import { KeyLimitFields } from '@shared/components/KeyRoutingLimits';
 import {
   createEndpoint,
   createEndpointKey,
@@ -79,6 +80,8 @@ export function EndpointWizard({
   const [endpointNote, setEndpointNote] = useState('');
   const [keyNote, setKeyNote] = useState('');
   const [forceStoreFalse, setForceStoreFalse] = useState(false);
+  const [maxConcurrency, setMaxConcurrency] = useState('0');
+  const [maxRPM, setMaxRPM] = useState('0');
   const [endpoint, setEndpoint] = useState<Endpoint | null>(null);
   const [endpointKey, setEndpointKey] = useState<EndpointKey | null>(null);
   const [accepted, setAccepted] = useState<DiscoveryAccepted | null>(null);
@@ -131,6 +134,8 @@ export function EndpointWizard({
       setEndpointNote('');
       setKeyNote('');
       setForceStoreFalse(false);
+      setMaxConcurrency('0');
+      setMaxRPM('0');
       setEndpoint(null);
       setEndpointKey(null);
       setAddedKeys([]);
@@ -335,6 +340,8 @@ export function EndpointWizard({
         enabled: true,
         force_store_false: endpoint.connector_type === 'openai-compatible' && forceStoreFalse,
         ownership_confirmed: true,
+        max_concurrency: Number(maxConcurrency),
+        max_rpm: Number(maxRPM),
       },
       operation: createOperationIdentity(),
     };
@@ -832,6 +839,8 @@ export function EndpointWizard({
                 onClick={() => {
                   dispatchSecret({ type: 'boundary', accountId, pageInstanceId });
                   setKeyNote('');
+                  setMaxConcurrency('0');
+                  setMaxRPM('0');
                   setEndpointKey(null);
                   setCatalog(null);
                   setAccepted(null);
@@ -898,6 +907,13 @@ export function EndpointWizard({
               />
             </label>
           </div>
+          <KeyLimitFields
+            concurrency={maxConcurrency}
+            rpm={maxRPM}
+            onConcurrency={setMaxConcurrency}
+            onRPM={setMaxRPM}
+            disabled={hasKeyAttempt}
+          />
           <label className="core-checkbox">
             <input
               type="checkbox"

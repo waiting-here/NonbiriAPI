@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { CopyValue } from '@shared/components/CopyValue';
+import { KeyLimitSummary } from '@shared/components/KeyRoutingLimits';
 import { CharityPriceTable, type CharityPriceRow } from '@shared/components/CharityPriceTable';
 import { Card, EmptyState, ErrorState, StatusBadge } from '@shared/components/States';
 import { formatDateTime } from '@shared/utils/datetime';
@@ -107,7 +108,14 @@ function MutationNotice({ error, successKey }: { error: unknown; successKey?: st
 
 export function CharityCapabilityPanel({ capability }: { capability: CharityCapability }) {
   const { t } = useTranslation();
+  const [modelQuery, setModelQuery] = useState('');
+  const [pricingMode, setPricingMode] = useState('');
   const available = capability.state === 'available';
+  const models = capability.models.filter(
+    (model) =>
+      (!pricingMode || model.pricing.mode === pricingMode) &&
+      model.fullName.toLocaleLowerCase().includes(modelQuery.trim().toLocaleLowerCase()),
+  );
   return (
     <Card className="economy-capability-card">
       <div className="card-title-row">
@@ -121,9 +129,38 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
         />
       </div>
       <p>{t(`user.charity.capabilityBody.${capability.state}`)}</p>
+      {available && (capability.models.length > 1 || modelQuery || pricingMode) ? (
+        <div className="economy-model-filters">
+          <label>
+            <span>{t('user.charity.searchModels')}</span>
+            <input
+              type="search"
+              value={modelQuery}
+              maxLength={133}
+              onChange={(event) => setModelQuery(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>{t('user.charity.pricingFilter')}</span>
+            <select
+              aria-label={t('user.charity.pricingFilter')}
+              value={pricingMode}
+              onChange={(event) => setPricingMode(event.target.value)}
+            >
+              <option value="">{t('user.charity.allPricing')}</option>
+              <option value="per_request">{t('user.charity.requestPrice')}</option>
+              <option value="per_token">{t('user.charity.tokenPricing')}</option>
+            </select>
+          </label>
+          <span className="muted">
+            {t('common.choices.count', { count: models.length, total: capability.models.length })}
+          </span>
+        </div>
+      ) : null}
+      {available && models.length === 0 ? <p>{t('common.noResultsBody')}</p> : null}
       {available ? (
         <ul className="economy-model-list" aria-label={t('user.charity.availableModels')}>
-          {capability.models.map((model) => {
+          {models.map((model) => {
             const rows: CharityPriceRow[] =
               model.pricing.mode === 'per_request'
                 ? [
@@ -252,6 +289,7 @@ export function DonationComposer({
     ids: new Set(),
   }));
   const [expiryByKey, setExpiryByKey] = useState<Record<string, string>>({});
+  const [resourceQuery, setResourceQuery] = useState('');
   const [authorized, setAuthorized] = useState(false);
   const [validation, setValidation] = useState('');
   const [success, setSuccess] = useState(false);
@@ -283,6 +321,26 @@ export function DonationComposer({
     }
     return [...groups.values()];
   }, [choices]);
+
+  const resourceFilter = resourceQuery.trim().toLocaleLowerCase();
+  const visibleGroups = grouped
+    .map((group) => {
+      const endpointMatches =
+        `${group.endpoint.note} ${group.endpoint.baseUrl} ${group.endpoint.origin.kind === 'mainstream' ? group.endpoint.origin.name : ''}`
+          .toLocaleLowerCase()
+          .includes(resourceFilter);
+      return {
+        ...group,
+        choices: endpointMatches
+          ? group.choices
+          : group.choices.filter((choice) =>
+              `${choice.key.note} ${choice.key.displayHead} ${choice.key.displayTail}`
+                .toLocaleLowerCase()
+                .includes(resourceFilter),
+            ),
+      };
+    })
+    .filter((group) => group.choices.length > 0);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -377,69 +435,103 @@ export function DonationComposer({
         ) : (
           <fieldset className="economy-key-picker">
             <legend>{t('user.charity.selectExistingKeys')}</legend>
-            {grouped.map((group) => (
-              <section className="economy-key-group" key={group.endpoint.id}>
-                <div>
-                  <strong>
-                    {group.endpoint.origin.kind === 'mainstream'
-                      ? group.endpoint.origin.name
-                      : group.endpoint.baseUrl}
-                  </strong>
-                  <span className="muted">{group.endpoint.connectorType}</span>
-                </div>
-                {group.choices.map((choice) => {
-                  const disabled = choice.eligibility !== 'eligible';
-                  const selectedChoice = selected.has(choice.key.id);
-                  return (
-                    <label className="economy-key-choice" key={choice.key.id}>
-                      <input
-                        type="checkbox"
-                        checked={selectedChoice}
-                        disabled={disabled}
-                        onChange={(event) =>
-                          setSelection((current) => {
-                            const next = new Set(
-                              current.signature === eligibleSignature ? current.ids : [],
-                            );
-                            if (event.target.checked) next.add(choice.key.id);
-                            else next.delete(choice.key.id);
-                            return { signature: eligibleSignature, ids: next };
-                          })
-                        }
-                      />
-                      <span>
-                        <span className="mono">
-                          {maskedKey(choice.key.displayHead, choice.key.displayTail)}
+            {choices.length > 8 || resourceQuery ? (
+              <label className="economy-resource-search">
+                <span>{t('user.charity.searchResources')}</span>
+                <input
+                  type="search"
+                  maxLength={512}
+                  value={resourceQuery}
+                  onChange={(event) => setResourceQuery(event.target.value)}
+                />
+              </label>
+            ) : null}
+            {visibleGroups.length === 0 ? <p>{t('common.noResultsBody')}</p> : null}
+            <div className="economy-resource-groups">
+              {visibleGroups.map((group) => (
+                <details
+                  className="economy-key-group"
+                  key={group.endpoint.id}
+                  open={grouped.length === 1 || Boolean(resourceFilter)}
+                >
+                  <summary>
+                    <strong>
+                      {group.endpoint.note ||
+                        (group.endpoint.origin.kind === 'mainstream'
+                          ? group.endpoint.origin.name
+                          : group.endpoint.baseUrl)}
+                    </strong>
+                    <span className="muted">
+                      {t('user.charity.groupSelected', {
+                        count: group.choices.filter((choice) => selected.has(choice.key.id)).length,
+                        total: group.choices.length,
+                      })}
+                    </span>
+                  </summary>
+                  <p className="muted">
+                    {group.endpoint.connectorType} · {group.endpoint.baseUrl}
+                  </p>
+                  {group.choices.map((choice) => {
+                    const disabled = choice.eligibility !== 'eligible';
+                    const selectedChoice = selected.has(choice.key.id);
+                    return (
+                      <div className="economy-key-choice" key={choice.key.id}>
+                        <input
+                          type="checkbox"
+                          id={`donation-key-${choice.key.id}`}
+                          checked={selectedChoice}
+                          disabled={disabled}
+                          onChange={(event) =>
+                            setSelection((current) => {
+                              const next = new Set(
+                                current.signature === eligibleSignature ? current.ids : [],
+                              );
+                              if (event.target.checked) next.add(choice.key.id);
+                              else next.delete(choice.key.id);
+                              return { signature: eligibleSignature, ids: next };
+                            })
+                          }
+                        />
+                        <span>
+                          <label htmlFor={`donation-key-${choice.key.id}`}>
+                            <span className="mono">
+                              {maskedKey(choice.key.displayHead, choice.key.displayTail)}
+                            </span>
+                            {choice.key.note ? <span>{choice.key.note}</span> : null}
+                          </label>
+                          <small className="muted">{eligibilityLabel(choice, t)}</small>
+                          <KeyLimitSummary
+                            concurrency={choice.key.maxConcurrency}
+                            rpm={choice.key.maxRPM}
+                          />
+                          {selectedChoice ? (
+                            <span className="economy-key-expiry">
+                              <span>{t('user.charity.keyExpiry')}</span>
+                              <input
+                                type="datetime-local"
+                                step={60}
+                                value={expiryByKey[choice.key.id] ?? ''}
+                                onChange={(event) =>
+                                  setExpiryByKey((current) => ({
+                                    ...current,
+                                    [choice.key.id]: event.target.value,
+                                  }))
+                                }
+                                onClick={(event) => event.stopPropagation()}
+                                aria-label={t('user.charity.keyExpiryFor', {
+                                  key: maskedKey(choice.key.displayHead, choice.key.displayTail),
+                                })}
+                              />
+                              <small className="muted">{t('user.charity.expiryHintUtc')}</small>
+                            </span>
+                          ) : null}
                         </span>
-                        {choice.key.note ? <span> · {choice.key.note}</span> : null}
-                        <small className="muted">{eligibilityLabel(choice, t)}</small>
-                        {selectedChoice ? (
-                          <span className="economy-key-expiry">
-                            <span>{t('user.charity.keyExpiry')}</span>
-                            <input
-                              type="datetime-local"
-                              step={60}
-                              value={expiryByKey[choice.key.id] ?? ''}
-                              onChange={(event) =>
-                                setExpiryByKey((current) => ({
-                                  ...current,
-                                  [choice.key.id]: event.target.value,
-                                }))
-                              }
-                              onClick={(event) => event.stopPropagation()}
-                              aria-label={t('user.charity.keyExpiryFor', {
-                                key: maskedKey(choice.key.displayHead, choice.key.displayTail),
-                              })}
-                            />
-                            <small className="muted">{t('user.charity.expiryHintUtc')}</small>
-                          </span>
-                        ) : null}
-                      </span>
-                    </label>
-                  );
-                })}
-              </section>
-            ))}
+                      </div>
+                    );
+                  })}
+                </details>
+              ))}
+            </div>
           </fieldset>
         )}
 

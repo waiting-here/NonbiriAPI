@@ -330,6 +330,7 @@
         "en": "English"
       },
       "privacy": {
+        "keyLimitsBody": "The concurrency and RPM limits you set for a service key apply to both personal and charity model calls. Your account export includes these settings. Administrators and level-5 stewards can read them on resources they are authorized to manage, but cannot change them. The settings are deleted with the key.",
         "nav": "Privacy",
         "title": "Privacy policy",
         "intro": "This policy describes the data used to operate a NonbiriAPI instance.",
@@ -427,6 +428,10 @@
         "available": "At least one charity model is currently available."
       },
       "availableModels": "Available charity models",
+      "searchModels": "Search model names",
+      "pricingFilter": "Pricing method",
+      "allPricing": "All pricing methods",
+      "tokenPricing": "Per million tokens",
       "intakeTitle": "Submit existing resources",
       "intakeState": {
         "open": "Open",
@@ -474,6 +479,8 @@
       "noEligibleKeysBody": "Create and enable a key in Endpoints first, or wait for its security check to finish. Keys already in a donation cannot be selected again.",
       "manageEndpoints": "Manage endpoints",
       "selectExistingKeys": "Select existing endpoint keys",
+      "searchResources": "Find endpoints or key notes",
+      "groupSelected": "{{count}} / {{total}} keys selected",
       "disclosureTitle": "Before you submit",
       "disclosureMasked": "The page displays only masked key fragments; it never asks you to enter a new key here.",
       "disclosureThirdParty": "Charity requests may be sent through the selected third-party AI service.",

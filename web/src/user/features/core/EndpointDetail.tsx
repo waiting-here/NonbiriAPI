@@ -2,6 +2,7 @@ import { useEffect, useReducer, useRef, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { KeyLimitFields, KeyLimitSummary } from '@shared/components/KeyRoutingLimits';
 import { PageHeader } from '@shared/components/States';
 import { isNotFoundError } from '@shared/query/http';
 import {
@@ -95,6 +96,8 @@ function AddEndpointKeyForm({
   );
   const [note, setNote] = useState('');
   const [forceStoreFalse, setForceStoreFalse] = useState(false);
+  const [maxConcurrency, setMaxConcurrency] = useState('0');
+  const [maxRPM, setMaxRPM] = useState('0');
   const [outcome, setOutcome] = useState<ActionOutcome>(null);
 
   const discardStaleMutation = () => {
@@ -142,6 +145,8 @@ function AddEndpointKeyForm({
         enabled: true,
         force_store_false: endpoint.connector_type === 'openai-compatible' && forceStoreFalse,
         ownership_confirmed: true,
+        max_concurrency: Number(maxConcurrency),
+        max_rpm: Number(maxRPM),
       },
       operation: createOperationIdentity(),
     };
@@ -264,6 +269,13 @@ function AddEndpointKeyForm({
           />
         </label>
       </div>
+      <KeyLimitFields
+        concurrency={maxConcurrency}
+        rpm={maxRPM}
+        onConcurrency={setMaxConcurrency}
+        onRPM={setMaxRPM}
+        disabled={hasAttempt}
+      />
       <label className="core-checkbox">
         <input
           type="checkbox"
@@ -948,6 +960,9 @@ function EndpointKeyCard({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState(keyData.note);
+  const [editRevision, setEditRevision] = useState(keyData.revision);
+  const [maxConcurrency, setMaxConcurrency] = useState(String(keyData.max_concurrency));
+  const [maxRPM, setMaxRPM] = useState(String(keyData.max_rpm));
   const [reconciliationRequired, setReconciliationRequired] = useState(false);
   const [replayAttempt, setReplayAttempt] = useState<
     | { kind: 'refresh'; evidenceRevision: string; operation: OperationIdentity }
@@ -997,7 +1012,11 @@ function EndpointKeyCard({
               (replayAttempt.input.enabled === undefined ||
                 keyData.enabled === replayAttempt.input.enabled) &&
               (replayAttempt.input.force_store_false === undefined ||
-                keyData.force_store_false === replayAttempt.input.force_store_false)
+                keyData.force_store_false === replayAttempt.input.force_store_false) &&
+              (replayAttempt.input.max_concurrency === undefined ||
+                keyData.max_concurrency === replayAttempt.input.max_concurrency) &&
+              (replayAttempt.input.max_rpm === undefined ||
+                keyData.max_rpm === replayAttempt.input.max_rpm)
             : false;
       if (!confirmed) return;
       setReplayAttempt(null);
@@ -1012,6 +1031,8 @@ function EndpointKeyCard({
     catalog.data,
     keyData.enabled,
     keyData.force_store_false,
+    keyData.max_concurrency,
+    keyData.max_rpm,
     keyData.note,
     keyData.revision,
     accountId,
@@ -1150,6 +1171,7 @@ function EndpointKeyCard({
           </StatusPill>
         )}
       </div>
+      <KeyLimitSummary concurrency={keyData.max_concurrency} rpm={keyData.max_rpm} />
       <dl className="core-detail-list">
         <div>
           <dt>{t('endpoints.storePolicy')}</dt>
@@ -1295,7 +1317,12 @@ function EndpointKeyCard({
             event.preventDefault();
             void run({
               kind: 'patch',
-              input: { note, expected_revision: keyData.revision },
+              input: {
+                note,
+                max_concurrency: Number(maxConcurrency),
+                max_rpm: Number(maxRPM),
+                expected_revision: editRevision,
+              },
               operation: createOperationIdentity(),
             });
           }}
@@ -1311,6 +1338,13 @@ function EndpointKeyCard({
               />
             </label>
           </div>
+          <KeyLimitFields
+            concurrency={maxConcurrency}
+            rpm={maxRPM}
+            onConcurrency={setMaxConcurrency}
+            onRPM={setMaxRPM}
+            disabled={busy || Boolean(replayAttempt)}
+          />
           <div className="core-form-actions">
             <button
               type="button"
@@ -1327,7 +1361,12 @@ function EndpointKeyCard({
               type="submit"
               className="btn btn-primary"
               disabled={
-                busy || reconciliationRequired || Boolean(replayAttempt) || note === keyData.note
+                busy ||
+                reconciliationRequired ||
+                Boolean(replayAttempt) ||
+                (note === keyData.note &&
+                  Number(maxConcurrency) === keyData.max_concurrency &&
+                  Number(maxRPM) === keyData.max_rpm)
               }
             >
               {t('common.save')}
@@ -1345,7 +1384,13 @@ function EndpointKeyCard({
             Boolean(replayAttempt) ||
             keyData.suspension_state !== 'none'
           }
-          onClick={() => setEditing((value) => !value)}
+          onClick={() => {
+            setNote(keyData.note);
+            setEditRevision(keyData.revision);
+            setMaxConcurrency(String(keyData.max_concurrency));
+            setMaxRPM(String(keyData.max_rpm));
+            setEditing((value) => !value);
+          }}
         >
           {t('common.edit')}
         </button>

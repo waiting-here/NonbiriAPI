@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
+  assertResponsiveOperationTables,
   assertNoSensitiveBrowserPersistence,
   collectConsoleViolations,
   installURLPersistenceObserver,
@@ -190,6 +191,7 @@ async function assertResponsiveAndClean(
   page: Parameters<typeof collectConsoleViolations>[0],
   consoleGuard: ReturnType<typeof collectConsoleViolations>,
 ) {
+  await assertResponsiveOperationTables(page);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );

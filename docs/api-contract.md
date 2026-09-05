@@ -140,8 +140,8 @@ All routes in this section require a user session unless marked anonymous.
 | `PATCH /api/endpoints/{id}` | `{note?,enabled?,expected_revision}`; origin and Connector are immutable. |
 | `DELETE /api/endpoints/{id}` | `{expected_revision}`; 204. Report locks return `resource_locked`. |
 | `GET /api/endpoints/{id}/keys` | `cursor,limit`; page of safe `EndpointKey`. |
-| `POST /api/endpoints/{id}/keys` | `{secret,note,enabled,force_store_false,ownership_confirmed:true}`; returns 201 safe metadata. |
-| `PATCH /api/endpoints/{id}/keys/{keyId}` | `{note?,enabled?,force_store_false?,expected_revision}`. |
+| `POST /api/endpoints/{id}/keys` | `{secret,note,enabled,force_store_false,ownership_confirmed:true,max_concurrency?,max_rpm?}`; returns 201 safe metadata. |
+| `PATCH /api/endpoints/{id}/keys/{keyId}` | `{note?,enabled?,force_store_false?,max_concurrency?,max_rpm?,expected_revision}`. |
 | `DELETE /api/endpoints/{id}/keys/{keyId}` | `{expected_revision}`; claim-first deletion; 204. |
 | `GET /api/endpoints/{id}/keys/{keyId}/models` | Cursor page with discovery `evidence`, automatic and manual entries. |
 | `POST /api/endpoints/{id}/keys/{keyId}/models/refresh` | Idempotency key; 202 accepted operation and evidence. |
@@ -152,6 +152,14 @@ All routes in this section require a user session unless marked anonymous.
 `Endpoint` includes `id,connector_type,base_url,note,enabled,revision,key_count,origin,created_at,updated_at`. `origin` is `{kind:"custom"}` or `{kind:"mainstream",channel_id,name}`. Channel category/revision are administrator-only. A mainstream create re-reads the active enabled channel and copies its immutable snapshot in the final transaction; later channel edits never rewrite an endpoint. A custom URL is never guessed to be mainstream.
 
 `EndpointKey` exposes display fragments, note, enabled state, `force_store_false`, safe suspension state, revision, and times; never plaintext/ciphertext/fingerprint. Discovery evidence is the closed `unknown|checking|succeeded|failed` union with a safe failure class. Successful empty discovery is explicit and distinct from failure.
+
+`EndpointKey` also returns numeric `max_concurrency` and `max_rpm`. Both accept whole numbers from 0 to 2147483647; 0 disables that key's additional limit. Omitted creation values default to 0; omitted patch values remain unchanged. Null, strings, negative numbers, fractions and out-of-range values are rejected. Only the owner can edit them, using the existing revision and idempotency contract. Existing site and endpoint safeguards still apply.
+
+All personal, charity and live diagnostic model calls using the same EndpointKey share these limits across bindings. Discovery requests use their separate safeguards. Concurrency includes admitted work until its attempt finishes or is canceled, including the full streaming lifetime. RPM uses a rolling 60-second window with server-second precision. Undispatched claims reserve a slot until dispatch or release; a released undispatched attempt returns the slot. A dispatch consumes one slot even on failure, and each retry counts separately. Pending work cannot age out of its reservation. Lowering limits affects new admissions without canceling already admitted work. Recent dispatch counts survive process restarts.
+
+A limited key is skipped without contacting the upstream, charging for that attempt, or recording an upstream failure. Selection continues in the configured order even when silent retry is off. If no attempt dispatched and at least one candidate was key-limited, exhaustion returns HTTP 429 `rate_limited` and releases the request reservation. If an earlier attempt dispatched, its actual result and ordinary settlement remain authoritative.
+
+Administrator and level-5 steward donation-key projections include read-only `max_concurrency`/`max_rpm`; both are null after the physical key is gone. Their shared binding menu/candidate/binding `source` includes the current integer limits. These fields do not expand donation ownership or expose private owner notes, and management mutation bodies reject them. Ordinary charity callers do not receive underlying key configuration. Owner resource exports include the values; key deletion cascades to its configuration. Historical idempotent responses may omit these additive fields; an authoritative read returns current values.
 
 ### 3.2 Personal models and bindings
 

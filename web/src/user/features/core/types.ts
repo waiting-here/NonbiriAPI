@@ -92,6 +92,8 @@ export interface EndpointKey {
   note: string;
   enabled: boolean;
   force_store_false: boolean;
+  max_concurrency: number;
+  max_rpm: number;
   suspension_state: SuspensionState;
   revision: string;
   created_at: number;
@@ -243,6 +245,8 @@ export interface EndpointKeyCreateInput {
   enabled: boolean;
   force_store_false: boolean;
   ownership_confirmed: true;
+  max_concurrency?: number;
+  max_rpm?: number;
 }
 
 export interface EndpointKeyPatchInput {
@@ -250,6 +254,8 @@ export interface EndpointKeyPatchInput {
   enabled?: boolean;
   force_store_false?: boolean;
   expected_revision: string;
+  max_concurrency?: number;
+  max_rpm?: number;
 }
 
 export interface ModelCreateInput {

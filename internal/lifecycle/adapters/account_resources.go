@@ -136,6 +136,7 @@ func (adapter *AccountResources) ExportResources(
 			item.Keys = append(item.Keys, lifecycle.EndpointKeyExport{
 				ID: key.ID, DisplayHead: key.DisplayHead, DisplayTail: key.DisplayTail, Note: key.Note,
 				Enabled: key.Enabled, ForceStoreFalse: key.ForceStoreFalse,
+				MaxConcurrency: key.MaxConcurrency, MaxRPM: key.MaxRPM,
 				SuspensionState: key.SuspensionState, CreatedAt: key.CreatedAt, UpdatedAt: key.UpdatedAt,
 			})
 		}

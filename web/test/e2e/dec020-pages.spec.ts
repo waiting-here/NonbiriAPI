@@ -1,5 +1,6 @@
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
+  assertResponsiveOperationTables,
   assertNoSensitiveBrowserPersistence,
   collectConsoleViolations,
   installURLPersistenceObserver,
@@ -43,6 +44,7 @@ async function prepare(
 }
 
 async function assertClean(page: Page, consoleGuard: ReturnType<typeof collectConsoleViolations>) {
+  await assertResponsiveOperationTables(page);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );

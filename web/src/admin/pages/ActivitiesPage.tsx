@@ -518,7 +518,7 @@ export function ActivitiesPage() {
         ) : (
           <>
             <div className="ops-table-scroll">
-              <table className="ops-table">
+              <table className="ops-table ops-table--responsive">
                 <thead>
                   <tr>
                     <th>{t('admin.activities.pools.typeState')}</th>
@@ -531,10 +531,10 @@ export function ActivitiesPage() {
                 <tbody>
                   {pools.data.data.map((pool) => (
                     <tr key={pool.id}>
-                      <td>
+                      <td data-label={t('admin.activities.pools.typeState')}>
                         {poolTypeLabels[pool.pool_type]} / {poolStateLabels[pool.state]}
                       </td>
-                      <td>
+                      <td data-label={t('admin.activities.pools.period')}>
                         {pool.period_id ??
                           t(
                             pool.pool_type === 'welfare'
@@ -542,11 +542,11 @@ export function ActivitiesPage() {
                               : 'admin.activities.pools.unboundPeriod',
                           )}
                       </td>
-                      <td>
+                      <td data-label={t('admin.activities.pools.balance')}>
                         {pool.balance} {t('admin.activities.units.credits')}
                       </td>
-                      <td>{pool.revision}</td>
-                      <td>
+                      <td data-label={t('admin.activities.pools.revision')}>{pool.revision}</td>
+                      <td className="ops-cell-wide" data-label={t('admin.activities.pools.adjust')}>
                         <button
                           className="btn btn-secondary"
                           type="button"

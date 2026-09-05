@@ -3,7 +3,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { clearStationSession } from '@shared/charityManagement';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
-import { Card, EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
+import {
+  Card,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PageHeader,
+  StatusBadge,
+} from '@shared/components/States';
 import { CursorPagination } from '@shared/operations/CursorPagination';
 import { conflictOrUnknown } from '@shared/operations/api';
 import { useCursorPager } from '@shared/operations/useCursorPager';
@@ -61,7 +68,10 @@ function draftFor(channel?: AdminMainstreamChannel): ChannelDraft {
   };
 }
 
-function changedPatch(channel: AdminMainstreamChannel, draft: ChannelDraft): AdminMainstreamChannelPatch {
+function changedPatch(
+  channel: AdminMainstreamChannel,
+  draft: ChannelDraft,
+): AdminMainstreamChannelPatch {
   const patch: AdminMainstreamChannelPatch = { expected_revision: channel.revision };
   if (draft.name !== channel.name) patch.name = draft.name;
   if (draft.category !== channel.category) patch.category = draft.category;
@@ -176,11 +186,19 @@ function ChannelForm({
         />
         <span>{t('admin.mainstreamChannels.form.enabled')}</span>
       </label>
-      {invalid ? <p className="inline-notice">{t('admin.mainstreamChannels.validation.invalid')}</p> : null}
+      {invalid ? (
+        <p className="inline-notice">{t('admin.mainstreamChannels.validation.invalid')}</p>
+      ) : null}
       {error ? <ErrorState error={error} /> : null}
       <div className="ops-actions">
         <button className="btn btn-primary" type="submit" disabled={!canEdit || busy}>
-          {busy ? t('common.working') : t(mode === 'create' ? 'admin.mainstreamChannels.actions.create' : 'admin.mainstreamChannels.actions.save')}
+          {busy
+            ? t('common.working')
+            : t(
+                mode === 'create'
+                  ? 'admin.mainstreamChannels.actions.create'
+                  : 'admin.mainstreamChannels.actions.save',
+              )}
         </button>
         {onCancel ? (
           <button className="btn btn-secondary" type="button" disabled={busy} onClick={onCancel}>
@@ -197,7 +215,9 @@ function ChannelDetails({ channel }: { channel: AdminMainstreamChannel }) {
   return (
     <dl className="ops-kv">
       <dt>{t('admin.mainstreamChannels.detail.idRevision')}</dt>
-      <dd>{channel.id} / {channel.revision}</dd>
+      <dd>
+        {channel.id} / {channel.revision}
+      </dd>
       <dt>{t('admin.mainstreamChannels.detail.category')}</dt>
       <dd>{t(CATEGORY_LABEL_KEYS[channel.category])}</dd>
       <dt>{t('admin.mainstreamChannels.detail.connector')}</dt>
@@ -262,7 +282,8 @@ export function MainstreamChannelsPanel() {
     reconcile,
     adminMainstreamChannelKeys.root,
   );
-  const authorityError = channels.error ?? detail.error ?? create.error ?? patch.error ?? retire.error;
+  const authorityError =
+    channels.error ?? detail.error ?? create.error ?? patch.error ?? retire.error;
 
   /* eslint-disable react-hooks/set-state-in-effect -- Authority loss must clear selected state and mutation UI. */
   useEffect(() => {
@@ -315,9 +336,10 @@ export function MainstreamChannelsPanel() {
         ) : (
           <>
             <div className="ops-table-scroll">
-              <table className="ops-table">
+              <table className="ops-table ops-table--responsive">
                 <thead>
                   <tr>
+                    <th>{t('common.itemId')}</th>
                     <th>{t('admin.mainstreamChannels.table.name')}</th>
                     <th>{t('admin.mainstreamChannels.table.category')}</th>
                     <th>{t('admin.mainstreamChannels.table.connector')}</th>
@@ -331,20 +353,44 @@ export function MainstreamChannelsPanel() {
                 <tbody>
                   {channels.data.data.map((channel) => (
                     <tr key={channel.id}>
-                      <td>{channel.name}<small>{channel.id}</small></td>
-                      <td>{t(CATEGORY_LABEL_KEYS[channel.category])}</td>
-                      <td>{t(CONNECTOR_LABEL_KEYS[channel.connector_type])}</td>
-                      <td className="ops-wrap">{channel.base_url}</td>
-                      <td>
+                      <td className="ops-id" data-label={t('common.itemId')}>
+                        {channel.id}
+                      </td>
+                      <td
+                        className="ops-cell-wide"
+                        data-label={t('admin.mainstreamChannels.table.name')}
+                      >
+                        {channel.name}
+                      </td>
+                      <td data-label={t('admin.mainstreamChannels.table.category')}>
+                        {t(CATEGORY_LABEL_KEYS[channel.category])}
+                      </td>
+                      <td data-label={t('admin.mainstreamChannels.table.connector')}>
+                        {t(CONNECTOR_LABEL_KEYS[channel.connector_type])}
+                      </td>
+                      <td
+                        className="ops-cell-wide ops-wrap"
+                        data-label={t('admin.mainstreamChannels.table.baseUrl')}
+                      >
+                        {channel.base_url}
+                      </td>
+                      <td data-label={t('admin.mainstreamChannels.table.enabled')}>
                         <StatusBadge
                           active={channel.enabled}
                           danger={channel.state === 'retired'}
                           label={t(channel.enabled ? 'common.enabled' : 'common.disabled')}
                         />
                       </td>
-                      <td>{channel.revision}</td>
-                      <td>{formatDateTime(channel.updated_at)}</td>
-                      <td>
+                      <td data-label={t('admin.mainstreamChannels.table.revision')}>
+                        {channel.revision}
+                      </td>
+                      <td data-label={t('admin.mainstreamChannels.table.updated')}>
+                        {formatDateTime(channel.updated_at)}
+                      </td>
+                      <td
+                        className="ops-cell-wide"
+                        data-label={t('admin.mainstreamChannels.table.actions')}
+                      >
                         <button
                           className="btn btn-secondary"
                           type="button"
@@ -426,7 +472,9 @@ export function MainstreamChannelsPanel() {
                   </div>
                 </>
               ) : (
-                <p className="inline-notice">{t('admin.mainstreamChannels.detail.retiredImmutable')}</p>
+                <p className="inline-notice">
+                  {t('admin.mainstreamChannels.detail.retiredImmutable')}
+                </p>
               )}
             </>
           ) : null}
