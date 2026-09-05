@@ -34,9 +34,28 @@ export async function assertResponsiveOperationTables(page: Page): Promise<void>
         }),
       );
       expect(problems, `table layout at ${width}px on ${page.url()}`).toEqual([]);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-        true,
-      );
+      const layout = await page.evaluate(() => ({
+        fits: document.documentElement.scrollWidth <= innerWidth,
+        width: innerWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+        overflowing: [...document.querySelectorAll('body *')]
+          .filter(
+            (element) =>
+              element.getClientRects().length &&
+              element.getBoundingClientRect().right > innerWidth + 1,
+          )
+          .slice(-15)
+          .map((element) => ({
+            tag: element.tagName,
+            class: element.className,
+            text: element.textContent?.slice(0, 100),
+            right: element.getBoundingClientRect().right,
+          })),
+      }));
+      expect(
+        layout.fits,
+        `page layout at ${width}px on ${page.url()}: ${JSON.stringify(layout)}`,
+      ).toBe(true);
     }
   } finally {
     if (original) await page.setViewportSize(original);
