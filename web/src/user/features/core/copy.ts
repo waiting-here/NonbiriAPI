@@ -230,7 +230,7 @@ const en = {
     'Provider and model must each contain 1–64 characters with no surrounding whitespace or control characters.',
   'models.detailTitle': 'Model connections',
   'models.detailDescription':
-    'Adding service models and changing their order are separate actions.',
+    'Choose the models to connect and arrange the order in which they are tried.',
   'models.selectorTitle': 'Add connections',
   'models.levelEndpoint': '1 · Endpoint',
   'models.levelKey': '2 · Key',
@@ -529,7 +529,7 @@ const zh: Record<CoreCopyKey, string> = {
   'models.editModel': '编辑平台模型',
   'models.invalidName': 'provider 与 model 均须为 1–64 个字符，且不能含首尾空白或控制字符。',
   'models.detailTitle': '模型连接',
-  'models.detailDescription': '添加服务模型与调整尝试顺序是两个独立操作。',
+  'models.detailDescription': '选择要连接的模型，并按需要调整尝试顺序。',
   'models.selectorTitle': '新增连接',
   'models.levelEndpoint': '1 · 端点',
   'models.levelKey': '2 · 密钥',

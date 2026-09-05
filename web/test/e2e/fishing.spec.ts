@@ -345,9 +345,9 @@ test('Fishing pending survives reload, settles from authority, auto-ACKs, and pe
   await page.goto(`${USER_ORIGIN}/games/fishing`);
 
   await expect(page.getByRole('heading', { name: 'A quiet cast, a surprise catch' })).toBeVisible();
-  await page.getByRole('button', { name: 'Start this batch' }).click();
+  await page.getByRole('button', { name: 'Start fishing' }).click();
   await expect(page.locator('[data-phase="pending"]')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'This batch is already accepted' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your catch is on its way' })).toBeVisible();
   expect(fixture.starts).toBe(1);
   expect(await page.locator('.fishing-result').count()).toBe(0);
 
@@ -364,8 +364,8 @@ test('Fishing pending survives reload, settles from authority, auto-ACKs, and pe
 
   await expect.poll(() => fixture.acks).toBe(1);
   await expect(page.getByRole('heading', { name: 'Total catch', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Start this batch' })).toBeEnabled();
-  await page.getByRole('button', { name: 'Start this batch' }).click();
+  await expect(page.getByRole('button', { name: 'Start fishing' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Start fishing' }).click();
   expect(fixture.starts).toBe(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
@@ -519,11 +519,11 @@ test('Fishing remains keyboard usable in Chinese at 390px, 200% zoom, both theme
   }));
   expect(zoomLayout.zoom).toBe('2');
   expect(zoomLayout.body <= zoomLayout.viewport).toBe(true);
-  const start = page.getByRole('button', { name: '开始本批' });
+  const start = page.getByRole('button', { name: '开始垂钓' });
   await tabTo(page, start);
   await expect(start).toBeFocused();
   await page.keyboard.press('Enter');
   await expect.poll(() => fixture.starts).toBe(1);
-  await expect(page.getByRole('heading', { name: '本批已经受理' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '正在等待收获' })).toBeVisible();
   consoleGuard.assertNone();
 });
