@@ -428,6 +428,10 @@
         "available": "At least one charity model is currently available."
       },
       "availableModels": "Available charity models",
+      "searchModels": "Search model names",
+      "pricingFilter": "Pricing method",
+      "allPricing": "All pricing methods",
+      "tokenPricing": "Per million tokens",
       "intakeTitle": "Submit existing resources",
       "intakeState": {
         "open": "Open",
@@ -475,6 +479,8 @@
       "noEligibleKeysBody": "Create and enable a key in Endpoints first, or wait for its security check to finish. Keys already in a donation cannot be selected again.",
       "manageEndpoints": "Manage endpoints",
       "selectExistingKeys": "Select existing endpoint keys",
+      "searchResources": "Find endpoints or key notes",
+      "groupSelected": "{{count}} / {{total}} keys selected",
       "disclosureTitle": "Before you submit",
       "disclosureMasked": "The page displays only masked key fragments; it never asks you to enter a new key here.",
       "disclosureThirdParty": "Charity requests may be sent through the selected third-party AI service.",

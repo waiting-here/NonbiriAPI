@@ -173,6 +173,27 @@ describe('donation intake authority', () => {
 });
 
 describe('public charity pricing', () => {
+  it('keeps active filters reachable when a refresh leaves only one model', async () => {
+    const extra = {
+      ...CHARITY_OPEN.models[0],
+      id: '8',
+      fullName: '[公益]provider/extra',
+      model: 'extra',
+    };
+    const rendered = await renderWithProviders(
+      <CharityCapabilityPanel
+        capability={{ ...CHARITY_OPEN, models: [...CHARITY_OPEN.models, extra] }}
+      />,
+      { station: 'user', role: 'user' },
+    );
+    await rendered.user.type(screen.getByRole('searchbox'), 'extra');
+    rendered.rerender(<CharityCapabilityPanel capability={CHARITY_OPEN} />);
+    expect(screen.getByRole('searchbox')).toHaveValue('extra');
+    expect(screen.queryByRole('table')).toBeNull();
+    await rendered.user.clear(screen.getByRole('searchbox'));
+    expect(screen.getByRole('table', { name: charityCopy.priceCaption })).toBeVisible();
+  });
+
   it('shows the server-projected current offer without donor economics', async () => {
     await renderWithProviders(<CharityCapabilityPanel capability={CHARITY_OPEN} />, {
       station: 'user',

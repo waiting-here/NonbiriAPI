@@ -15,6 +15,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Separate identifiers in review, channel, legal-hold and report tables, with readable field labels on narrow screens. Large connection lists support bounded scrolling and page filters; charity access supports model-name and pricing filters.
+- The home donation total is labeled as accumulated donation rewards.
 - Streaming providers that report cumulative token counts now update usage and billing correctly. Repeated snapshots are not summed, and malformed or regressing values remain unknown.
 - Model connections can be selected across donations, endpoints, keys, filters and pages. Charity connection order can be adjusted before saving once.
 - Charity and activity pages use the centered desktop width. Charity models, donation history and submission have separate tabs, and model creation previews the API model name.

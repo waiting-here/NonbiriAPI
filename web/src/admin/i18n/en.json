@@ -565,6 +565,7 @@
         "endpoint": "Endpoint",
         "id": "ID",
         "keySnapshot": "Key snapshot",
+        "keyReference": "Key reference",
         "donationMatches": "Donation matches",
         "lineageAction": "Donation lineage",
         "openLineage": "Open lineage",

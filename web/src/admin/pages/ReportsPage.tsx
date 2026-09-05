@@ -124,7 +124,7 @@ export function ReportsPage() {
         ) : (
           <>
             <div className="ops-table-scroll">
-              <table className="ops-table">
+              <table className="ops-table ops-table--responsive">
                 <thead>
                   <tr>
                     <th>{t('admin.reports.table.status')}</th>
@@ -138,19 +138,22 @@ export function ReportsPage() {
                 <tbody>
                   {reports.data.data.map((item) => (
                     <tr key={item.id}>
-                      <td>
+                      <td data-label={t('admin.reports.table.status')}>
                         <StatusBadge
                           active={item.status === 'pending_review'}
                           danger={item.status === 'approved_processing'}
                           label={statusLabels[item.status]}
                         />
                       </td>
-                      <td>
+                      <td
+                        className="ops-cell-wide"
+                        data-label={t('admin.reports.table.connectorUrl')}
+                      >
                         {item.connector_type}
                         <br />
                         <span className="ops-wrap">{item.canonical_base_url}</span>
                       </td>
-                      <td>
+                      <td data-label={t('admin.reports.table.progress')}>
                         {progressLabels[item.progress_state]}
                         {item.retry ? (
                           <>
@@ -162,15 +165,17 @@ export function ReportsPage() {
                           </>
                         ) : null}
                       </td>
-                      <td>
+                      <td data-label={t('admin.reports.table.counts')}>
                         {t('admin.reports.table.materials', { count: item.counts.materials })}
                         <br />
                         {t('admin.reports.table.targets', { count: item.counts.targets })}
                         <br />
                         {t('admin.reports.table.processed', { count: item.counts.processed })}
                       </td>
-                      <td>{formatDateTime(item.deadline)}</td>
-                      <td>
+                      <td data-label={t('admin.reports.table.deadline')}>
+                        {formatDateTime(item.deadline)}
+                      </td>
+                      <td data-label={t('admin.reports.table.open')}>
                         <Link
                           className="btn btn-secondary"
                           to={`/reports/${encodeURIComponent(item.id)}`}

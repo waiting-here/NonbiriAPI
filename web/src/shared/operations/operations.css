@@ -95,6 +95,8 @@ form.ops-toolbar > label {
 }
 
 .ops-table-scroll {
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
 }
 
@@ -109,6 +111,72 @@ form.ops-toolbar > label {
   border-bottom: 1px solid var(--border-subtle, currentColor);
   text-align: left;
   vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.ops-table th {
+  overflow-wrap: normal;
+}
+
+.ops-table td > small {
+  display: block;
+  margin-top: var(--nb-space-1);
+  color: var(--nb-color-text-muted);
+}
+
+.ops-table .ops-id {
+  font-family: var(--nb-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.ops-table--responsive .ops-id {
+  width: 8rem;
+}
+
+.ops-table--responsive {
+  min-width: 0;
+}
+
+@media (max-width: 60rem) {
+  .ops-table--responsive,
+  .ops-table--responsive > tbody {
+    display: block;
+    width: 100%;
+  }
+  .ops-table--responsive > thead {
+    display: none;
+  }
+  .ops-table--responsive .ops-id {
+    width: auto;
+  }
+  .ops-table--responsive > tbody > tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--nb-space-2) var(--nb-space-3);
+    padding-block: var(--nb-space-4);
+    border-bottom: 1px solid var(--nb-color-border);
+  }
+  .ops-table--responsive > tbody > tr > td {
+    display: grid;
+    align-content: start;
+    gap: var(--nb-space-1);
+    min-width: 0;
+    width: auto;
+    padding: 0;
+    border: 0;
+  }
+  .ops-table--responsive > tbody > tr > td::before {
+    content: attr(data-label);
+    font-family: var(--nb-font-sans);
+    color: var(--nb-color-text-muted);
+    font-size: var(--nb-font-size-sm);
+  }
+  .ops-table--responsive > tbody > tr > :is(.ops-cell-wide, [colspan]) {
+    grid-column: 1 / -1;
+  }
+  .ops-table--responsive td > :is(button, a) {
+    justify-self: start;
+  }
 }
 
 .ops-kv {
@@ -264,12 +332,6 @@ form.ops-toolbar > label {
   display: grid;
   gap: var(--nb-space-4);
 }
-.ops-picker-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
-  gap: var(--nb-space-3);
-}
-
 .ops-picker-context p,
 .ops-picker-choice > span {
   white-space: pre-wrap;
@@ -310,6 +372,9 @@ form.ops-toolbar > label {
 }
 .ops-picker-selection ul {
   padding: 0;
+  max-height: 24rem;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   list-style: none;
 }
 .ops-picker-selection li {
@@ -328,6 +393,9 @@ form.ops-toolbar > label {
 .ops-picker-selection li span {
   color: var(--nb-color-text-muted);
   font-size: var(--nb-font-size-sm);
+}
+.ops-picker-selection li > button {
+  flex-shrink: 0;
 }
 .ops-picker-source-types {
   display: block;

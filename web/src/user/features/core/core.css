@@ -313,6 +313,8 @@
 
 .core-choice {
   display: grid;
+  min-width: 0;
+  overflow-wrap: anywhere;
   gap: var(--nb-space-1);
   min-block-size: 3.25rem;
   padding: var(--nb-space-3);
@@ -657,6 +659,9 @@
 }
 .core-selection-list {
   padding: 0;
+  max-height: 24rem;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   list-style: none;
 }
 .core-selection-list li {
@@ -675,4 +680,8 @@
 .core-selection-list li span {
   color: var(--nb-color-text-muted);
   font-size: var(--nb-font-size-sm);
+}
+
+.core-selection-list li > button {
+  flex-shrink: 0;
 }

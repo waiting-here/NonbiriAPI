@@ -992,7 +992,7 @@ describe('experimental policy and charity controls', () => {
     await screen.findByRole('heading', { name: 'Platform models' });
     await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
     await rendered.user.click(
-      await screen.findByRole('button', { name: /Anthropic-compatible.*upstream\.test/ }),
+      await screen.findByRole('button', { name: /upstream\.test.*Anthropic-compatible/ }),
     );
     await rendered.user.click(await screen.findByRole('button', { name: /sk-a…tail/ }));
     await rendered.user.click(await screen.findByRole('button', { name: /claude-3/ }));

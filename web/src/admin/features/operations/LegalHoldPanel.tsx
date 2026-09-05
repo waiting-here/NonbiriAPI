@@ -307,10 +307,11 @@ export function LegalHoldPanel() {
         ) : (
           <>
             <div className="ops-table-scroll">
-              <table className="ops-table">
+              <table className="ops-table ops-table--responsive">
                 <thead>
                   <tr>
                     <th>{t('admin.legalHolds.table.object')}</th>
+                    <th>{t('admin.legalHolds.create.objectReference')}</th>
                     <th>{t('admin.legalHolds.table.state')}</th>
                     <th>{t('admin.legalHolds.table.window')}</th>
                     <th>{t('admin.legalHolds.table.detail')}</th>
@@ -319,20 +320,25 @@ export function LegalHoldPanel() {
                 <tbody>
                   {list.data.data.map((hold) => (
                     <tr key={hold.id}>
-                      <td>
+                      <td data-label={t('admin.legalHolds.table.object')}>
                         {t(KIND_LABEL_KEYS[hold.object_kind])}
-                        <small>{hold.object_ref}</small>
                       </td>
-                      <td>
+                      <td
+                        className="ops-id ops-cell-wide"
+                        data-label={t('admin.legalHolds.create.objectReference')}
+                      >
+                        {hold.object_ref}
+                      </td>
+                      <td data-label={t('admin.legalHolds.table.state')}>
                         <StatusBadge
                           active={hold.state === 'active'}
                           label={t(STATE_LABEL_KEYS[hold.state])}
                         />
                       </td>
-                      <td>
+                      <td data-label={t('admin.legalHolds.table.window')}>
                         {formatDateTime(hold.created_at)} — {formatDateTime(hold.expires_at)}
                       </td>
-                      <td>
+                      <td className="ops-cell-wide" data-label={t('admin.legalHolds.table.detail')}>
                         <button
                           className="btn btn-secondary"
                           type="button"

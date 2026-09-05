@@ -565,6 +565,7 @@
         "endpoint": "端点",
         "id": "ID",
         "keySnapshot": "密钥快照",
+        "keyReference": "密钥引用",
         "donationMatches": "匹配捐赠数",
         "lineageAction": "捐赠关联链",
         "openLineage": "打开关联链",

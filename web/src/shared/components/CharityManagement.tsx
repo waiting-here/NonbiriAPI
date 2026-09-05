@@ -895,10 +895,11 @@ function DonationsPanel({
         ) : (
           <>
             <div className="ops-table-scroll">
-              <table className="ops-table">
+              <table className="ops-table ops-table--responsive">
                 <thead>
                   <tr>
-                    <th>{t('common.operations.charity.donation')}</th>
+                    <th>{t('common.itemId')}</th>
+                    <th>{t('common.operations.charity.description')}</th>
                     <th>{t('common.operations.charity.owner')}</th>
                     <th>{t('common.status')}</th>
                     <th>{t('common.operations.charity.keys')}</th>
@@ -908,21 +909,32 @@ function DonationsPanel({
                 <tbody>
                   {list.data.data.map((item) => (
                     <tr key={item.id}>
-                      <td>
+                      <td className="ops-id" data-label={t('common.itemId')}>
                         {item.id}
-                        <small>{item.description}</small>
                       </td>
-                      <td>
+                      <td
+                        className="ops-cell-wide"
+                        data-label={t('common.operations.charity.description')}
+                      >
+                        {item.description || t('common.operations.charity.noDescription')}
+                      </td>
+                      <td
+                        className="ops-cell-wide"
+                        data-label={t('common.operations.charity.owner')}
+                      >
                         {item.owner?.display_name ?? t('common.operations.charity.deidentified')}
                       </td>
-                      <td>
+                      <td data-label={t('common.status')}>
                         <StatusBadge
                           active={item.status === 'approved'}
                           label={t(charityStatusKey(role, item.status))}
                         />
                       </td>
-                      <td>{item.keys.length}</td>
-                      <td>
+                      <td data-label={t('common.operations.charity.keys')}>{item.keys.length}</td>
+                      <td
+                        className="ops-cell-wide"
+                        data-label={t('common.operations.charity.open')}
+                      >
                         <button
                           className="btn btn-secondary"
                           type="button"
@@ -1474,7 +1486,7 @@ function BindingsPanel({
         />
       ) : (
         <div className="ops-table-scroll">
-          <table className="ops-table">
+          <table className="ops-table ops-table--responsive">
             <thead>
               <tr>
                 <th>{t(charityCopyKey(role, 'order'))}</th>
@@ -1486,13 +1498,23 @@ function BindingsPanel({
             <tbody>
               {orderedBindings.map((entry, index) => (
                 <tr key={entry.id}>
-                  <td>{index + 1}</td>
-                  <td>
+                  <td data-label={t(charityCopyKey(role, 'order'))}>{index + 1}</td>
+                  <td className="ops-cell-wide" data-label={t('common.operations.charity.source')}>
                     {entry.source.connector_type} · {entry.source.canonical_base_url} ·{' '}
                     {entry.source.display_head}…{entry.source.display_tail}
+                    <KeyLimitSummary
+                      concurrency={entry.source.max_concurrency}
+                      rpm={entry.source.max_rpm}
+                      readOnly
+                    />
                   </td>
-                  <td>{entry.upstream_model_id}</td>
-                  <td>
+                  <td
+                    className="ops-cell-wide"
+                    data-label={t(charityCopyKey(role, 'upstreamModel'))}
+                  >
+                    {entry.upstream_model_id}
+                  </td>
+                  <td className="ops-cell-wide" data-label={t(charityCopyKey(role, 'actions'))}>
                     <button
                       className="btn btn-secondary"
                       type="button"
@@ -1668,7 +1690,7 @@ function ModelsPanel({
         ) : (
           <>
             <div className="ops-table-scroll">
-              <table className="ops-table">
+              <table className="ops-table ops-table--responsive">
                 <thead>
                   <tr>
                     <th>{t(charityCopyKey(role, 'model'))}</th>
@@ -1681,14 +1703,16 @@ function ModelsPanel({
                 <tbody>
                   {models.data.data.map((model) => (
                     <tr key={model.id}>
-                      <td>{model.full_name}</td>
-                      <td>
+                      <td className="ops-cell-wide" data-label={t(charityCopyKey(role, 'model'))}>
+                        {model.full_name}
+                      </td>
+                      <td data-label={t('common.operations.charity.state')}>
                         <StatusBadge
                           active={model.enabled}
                           label={t(charityCopyKey(role, model.enabled ? 'enabled' : 'disabled'))}
                         />
                       </td>
-                      <td>
+                      <td data-label={t('common.operations.charity.pricing')}>
                         {t(
                           charityCopyKey(
                             role,
@@ -1696,8 +1720,13 @@ function ModelsPanel({
                           ),
                         )}
                       </td>
-                      <td>{model.binding_count}</td>
-                      <td>
+                      <td data-label={t(charityCopyKey(role, 'bindings'))}>
+                        {model.binding_count}
+                      </td>
+                      <td
+                        className="ops-cell-wide"
+                        data-label={t('common.operations.charity.open')}
+                      >
                         <button
                           className="btn btn-secondary"
                           type="button"

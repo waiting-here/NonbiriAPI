@@ -1,5 +1,6 @@
 import { ADMIN_ORIGIN, USER_ORIGIN } from './ports';
 import {
+  assertResponsiveOperationTables,
   assertNoSensitiveBrowserPersistence,
   collectConsoleViolations,
   installURLPersistenceObserver,
@@ -60,6 +61,7 @@ async function assertRouteClean(
   setup: Awaited<ReturnType<typeof prepare>>,
   scenario: Scenario,
 ) {
+  await assertResponsiveOperationTables(page);
   await expect(page.locator('html')).toHaveAttribute(
     'lang',
     scenario.locale === 'zh' ? 'zh-CN' : 'en',
@@ -433,20 +435,22 @@ test('administrator dashboard accepts the runtime activity day contract', async 
     path: '/admin/api/activity?limit=50',
     body: {
       enabled: true,
-      data: [{
-        day: 1_788_451_200,
-        product_active: true,
-        api_requests: '0',
-        uncached_input_tokens: '0',
-        cache_write_input_tokens: '0',
-        cache_read_input_tokens: '0',
-        output_tokens: '0',
-        checkins: '1',
-        console_writes: '0',
-        game_active: false,
-        game_rounds: '0',
-        distinct_product_users: null,
-      }],
+      data: [
+        {
+          day: 1_788_451_200,
+          product_active: true,
+          api_requests: '0',
+          uncached_input_tokens: '0',
+          cache_write_input_tokens: '0',
+          cache_read_input_tokens: '0',
+          output_tokens: '0',
+          checkins: '1',
+          console_writes: '0',
+          game_active: false,
+          game_rounds: '0',
+          distinct_product_users: null,
+        },
+      ],
       next_cursor: null,
     },
   });
@@ -518,16 +522,18 @@ test('administrator activities route reads the singleton and unbound Thursday po
     method: 'GET',
     path: '/admin/api/pools?limit=50',
     body: {
-      data: [{
-        id: `pol_${'P'.repeat(21)}A`,
-        pool_type: 'thursday',
-        period_id: null,
-        state: 'open',
-        revision: '1',
-        balance: '0',
-        created_at: 1_800_000_000,
-        closed_at: null,
-      }],
+      data: [
+        {
+          id: `pol_${'P'.repeat(21)}A`,
+          pool_type: 'thursday',
+          period_id: null,
+          state: 'open',
+          revision: '1',
+          balance: '0',
+          created_at: 1_800_000_000,
+          closed_at: null,
+        },
+      ],
       next_cursor: null,
     },
   });

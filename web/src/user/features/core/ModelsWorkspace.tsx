@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { ChoiceList } from '@shared/components/ChoiceList';
 import { PageHeader } from '@shared/components/States';
 import { isNotFoundError } from '@shared/query/http';
 import {
@@ -342,8 +343,14 @@ function CandidateSource({
       ) : !page || page.data.length === 0 ? (
         <p className="core-muted">{t('models.candidateEmpty')}</p>
       ) : (
-        <div className="core-choice-grid">
-          {page.data.map((candidate) => {
+        <ChoiceList
+          searchable={false}
+          items={page.data}
+          getKey={candidateIdentity}
+          getSearchText={(candidate) => candidate.upstream_model_id}
+          label={source === 'automatic' ? t('models.automatic') : t('models.manual')}
+        >
+          {(candidate) => {
             const identity = candidateIdentity(candidate);
             const isSelected = selected.has(identity);
             const isBound = bound.has(identity);
@@ -373,8 +380,8 @@ function CandidateSource({
                 </span>
               </button>
             );
-          })}
-        </div>
+          }}
+        </ChoiceList>
       )}
       {canPrevious || canNext ? (
         <div className="core-pagination">
@@ -745,8 +752,16 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
           ) : endpoints.data.data.length === 0 ? (
             <p className="core-muted">{t('models.endpointEmpty')}</p>
           ) : (
-            <div className="core-choice-grid">
-              {endpoints.data.data.map((endpoint) => (
+            <ChoiceList
+              key={endpointCursors.at(-1) ?? 'first'}
+              items={endpoints.data.data}
+              getKey={(endpoint) => endpoint.id}
+              getSearchText={(endpoint) =>
+                `${endpoint.note} ${endpoint.base_url} ${endpoint.connector_type}`
+              }
+              label={t('models.levelEndpoint')}
+            >
+              {(endpoint) => (
                 <button
                   key={endpoint.id}
                   type="button"
@@ -754,16 +769,15 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
                   disabled={!bindingsKnown || Boolean(replayAttempt) || !endpoint.enabled}
                   onClick={() => chooseEndpoint(endpoint.id)}
                 >
-                  <strong>
-                    <ConnectorLabel value={endpoint.connector_type} />
-                  </strong>
+                  <strong>{endpoint.note || endpoint.base_url}</strong>
                   <span className="core-mono">{endpoint.base_url}</span>
                   <span>
-                    {endpoint.enabled ? endpoint.note || t('common.notSet') : t('common.disabled')}
+                    <ConnectorLabel value={endpoint.connector_type} />
+                    {!endpoint.enabled ? ` · ${t('common.disabled')}` : ''}
                   </span>
                 </button>
-              ))}
-            </div>
+              )}
+            </ChoiceList>
           )}
           {endpoints.data && (endpointCursors.length > 1 || endpoints.data.next_cursor) ? (
             <div className="core-pagination">
@@ -804,8 +818,14 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
           ) : keys.data.data.length === 0 ? (
             <p className="core-muted">{t('models.keyEmpty')}</p>
           ) : (
-            <div className="core-choice-grid">
-              {keys.data.data.map((key) => {
+            <ChoiceList
+              key={`${endpointId}:${keyCursors.at(-1) ?? 'first'}`}
+              items={keys.data.data}
+              getKey={(key) => key.id}
+              getSearchText={(key) => `${key.note} ${key.display_head} ${key.display_tail}`}
+              label={t('models.levelKey')}
+            >
+              {(key) => {
                 const unavailable = !key.enabled || key.suspension_state !== 'none';
                 return (
                   <button
@@ -815,10 +835,10 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
                     disabled={!bindingsKnown || Boolean(replayAttempt) || unavailable}
                     onClick={() => chooseKey(key.id)}
                   >
-                    <strong className="core-mono">
+                    <strong>{key.note || `${key.display_head}…${key.display_tail}`}</strong>
+                    <span className="core-mono">
                       {key.display_head}…{key.display_tail}
-                    </strong>
-                    <span>{key.note || t('common.notSet')}</span>
+                    </span>
                     {unavailable ? (
                       <span>
                         {key.suspension_state === 'security_processing'
@@ -828,8 +848,8 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
                     ) : null}
                   </button>
                 );
-              })}
-            </div>
+              }}
+            </ChoiceList>
           )}
           {keys.data && (keyCursors.length > 1 || keys.data.next_cursor) ? (
             <div className="core-pagination">

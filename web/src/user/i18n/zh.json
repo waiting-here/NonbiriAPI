@@ -424,6 +424,10 @@
         "available": "至少有一个公益模型当前可用。"
       },
       "availableModels": "可用公益模型",
+      "searchModels": "搜索模型名称",
+      "pricingFilter": "计价方式",
+      "allPricing": "全部计价方式",
+      "tokenPricing": "按百万 Token",
       "intakeTitle": "提交已有资源",
       "intakeState": {
         "open": "开放",
@@ -471,6 +475,8 @@
       "noEligibleKeysBody": "请先在端点页面创建并启用密钥，或等待安全检查完成。已经属于其他捐赠的密钥不能再次选择。",
       "manageEndpoints": "管理端点",
       "selectExistingKeys": "选择已有端点密钥",
+      "searchResources": "查找端点或密钥备注",
+      "groupSelected": "已选 {{count}} / {{total}} 把密钥",
       "disclosureTitle": "提交前请确认",
       "disclosureMasked": "此页面只显示掩码后的密钥片段，不会要求你在这里输入新的密钥。",
       "disclosureThirdParty": "公益请求可能通过所选资源对应的第三方 AI 服务发送。",
