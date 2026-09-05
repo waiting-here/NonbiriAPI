@@ -90,10 +90,16 @@ func parseFilter(raw string) (ledger.HistoryFilter, error) {
 			case "page":
 				f.Page = n
 			case "page_size":
-				if n != 20 && n != 50 && n != 100 {
+				switch n {
+				case 20:
+					f.PageSize = 20
+				case 50:
+					f.PageSize = 50
+				case 100:
+					f.PageSize = 100
+				default:
 					return f, ledger.ErrInvalidHistory
 				}
-				f.PageSize = int(n)
 			case "from":
 				f.From = &n
 			case "to":
