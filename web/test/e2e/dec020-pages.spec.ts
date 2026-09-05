@@ -6,6 +6,7 @@ import {
   mockJson,
   mockPublicConfig,
   mockRoleSession,
+  userSession,
 } from './support';
 import { expect, test } from './test';
 
@@ -47,6 +48,23 @@ async function assertClean(page: Page, consoleGuard: ReturnType<typeof collectCo
   );
   await assertNoSensitiveBrowserPersistence(page, [EPHEMERAL_MARKER]);
   consoleGuard.assertNone();
+}
+
+async function assertPricesFit(page: Page) {
+  const table = page.locator('.charity-price-table');
+  const layout = await table.evaluate((element) => {
+    const wrapper = element.parentElement!;
+    const bounds = wrapper.getBoundingClientRect();
+    return {
+      wrapperOverflow: wrapper.scrollWidth > wrapper.clientWidth + 1,
+      tableOverflow: element.scrollWidth > element.clientWidth + 1,
+      pricesVisible: [...element.querySelectorAll('.charity-amount')].every((amount) => {
+        const rect = amount.getBoundingClientRect();
+        return rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1;
+      }),
+    };
+  });
+  expect(layout).toEqual({ wrapperOverflow: false, tableOverflow: false, pricesVisible: true });
 }
 
 function endpointKey(
@@ -509,6 +527,7 @@ test('user charity overview loads all cursor pages, filters each key state, and 
     });
     expect(layout.overflow).toBe(false);
     expect(layout.width).toBeGreaterThanOrEqual(layout.available - 2);
+    await assertPricesFit(page);
   }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('tab', { name: 'My donations', exact: true }).click();
@@ -548,6 +567,84 @@ test('user charity overview loads all cursor pages, filters each key state, and 
   });
   await assertClean(page, guard);
 });
+
+for (const locale of ['en', 'zh'] as const) {
+  test(`charity token prices remain fully readable on narrow screens (${locale})`, async ({
+    context,
+    page,
+  }) => {
+    const guard = await prepare(context, page, 'user', 'user', locale, 'dark');
+    const session = userSession('user');
+    session.user.lang = locale;
+    for (const path of ['/api/session', '/api/me']) {
+      await mockJson(page, { origin: USER_ORIGIN, method: 'GET', path, body: session });
+    }
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/charity/models',
+      body: {
+        state: 'available',
+        models: [
+          {
+            id: '7',
+            provider: 'provider',
+            model: 'charity',
+            full_name: '[公益]provider/charity',
+            pricing: {
+              mode: 'per_token',
+              user_price_milli: null,
+              discounted_user_price_milli: null,
+              user_prices_milli: {
+                uncached_input: '10000000',
+                cache_write_input: '10000000',
+                cache_read_input: '1600000',
+                output: '30000000',
+              },
+              discounted_user_prices_milli: {
+                uncached_input: '8000000',
+                cache_write_input: '8000000',
+                cache_read_input: '1280000',
+                output: '24000000',
+              },
+            },
+            discount: {
+              enabled: true,
+              percent: 80,
+              start_at: 1_799_999_000,
+              end_at: 1_800_003_600,
+            },
+          },
+        ],
+        donation_intake: 'closed',
+        server_now: 1_800_000_000,
+      },
+    });
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/donations?limit=100',
+      body: { data: [], next_cursor: null },
+    });
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/endpoints?limit=100',
+      body: { data: [], next_cursor: null },
+    });
+    await page.goto(`${USER_ORIGIN}/charity`);
+    await expect(
+      page.getByRole('table', { name: locale === 'zh' ? '公益模型价格' : 'Charity model prices' }),
+    ).toBeVisible();
+    await expect(page.locator('.charity-price-table tbody tr')).toHaveCount(4);
+    await expect(page.locator('.charity-amount')).toHaveCount(8);
+    for (const width of [320, 390, 768, 1935]) {
+      await page.setViewportSize({ width, height: 900 });
+      await assertPricesFit(page);
+    }
+    await assertClean(page, guard);
+  });
+}
 
 test('user charity overview fails closed on a cursor page and privacy states export and lineage retention', async ({
   context,
