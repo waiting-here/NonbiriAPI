@@ -226,9 +226,11 @@ function normalizeDonationCommon(
     ? null
     : (() => {
         const value = record(root.reviewer, ['user_id', 'role'], `${label} reviewer`);
+        // Earlier mutation receipts can still contain the stored role name.
+        const role = oneOf(value.role, ['admin', 'steward', 'level5'] as const, `${label} reviewer role`);
         return {
           user_id: nullableDecimalID(value.user_id, `${label} reviewer user id`),
-          role: oneOf(value.role, ['admin', 'steward'] as const, `${label} reviewer role`),
+          role: role === 'level5' ? 'steward' as const : role,
         };
       })();
   let review: DonationCommon['review_result'] = null;
@@ -243,7 +245,7 @@ function normalizeDonationCommon(
   if (reviewer === null && review !== null && (review.decision !== 'approve' || review.reason !== '')) {
     invalidResponse(`${label} automatic review`);
   }
-  if (reviewer !== null && (review === null || review.reason.length === 0)) {
+  if (reviewer !== null && review === null) {
     invalidResponse(`${label} attributed review`);
   }
   if (status === 'pending' && review !== null) invalidResponse(`${label} pending review`);

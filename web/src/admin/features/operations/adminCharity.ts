@@ -109,7 +109,7 @@ function validateAdminReviewer(value: unknown): boolean {
   if (value === null) return false;
   const root = record(value, ['user_id', 'role'], 'administrator charity reviewer');
   nullableDecimalID(root.user_id, 'administrator charity reviewer ID');
-  oneOf(root.role, ['admin', 'steward'] as const, 'administrator charity reviewer role');
+  oneOf(root.role, ['admin', 'steward', 'level5'] as const, 'administrator charity reviewer role');
   return true;
 }
 
@@ -339,9 +339,6 @@ function normalizeReview(
   };
   if (!reviewerPresent && (result.decision !== 'approve' || result.reason !== '')) {
     invalidResponse('administrator charity automatic review');
-  }
-  if (reviewerPresent && result.reason.length === 0) {
-    invalidResponse('administrator charity attributed review');
   }
   return result;
 }

@@ -68,6 +68,21 @@ const managedKey = {
 };
 
 describe('role-safe charity wire', () => {
+  it.each(['admin', 'steward', 'level5'])('accepts an optional manual review reason from %s', (role) => {
+    const reviewed = {
+      ...common,
+      status: 'approved',
+      review_result: { decision: 'approve', reason: '', reviewed_at: 2 },
+      reviewer: { user_id: '2', role },
+    };
+    const expected = role === 'level5' ? 'steward' : role;
+    expect(normalizeAdminDonation({ ...reviewed, owner: null }).reviewer?.role).toBe(expected);
+    expect(normalizeStewardDonation({
+      ...reviewed, owner: { user_id: '2', display_name: 'Owner' },
+    }).reviewer?.role).toBe(expected);
+    expect(() => normalizeAdminDonation({ ...reviewed, owner: null, review_result: null })).toThrow(/review/i);
+  });
+
   it('accepts a deidentified administrator owner but requires a steward owner', () => {
     expect(normalizeAdminDonation({ ...common, owner: null }).owner).toBeNull();
     expect(normalizeStewardDonation({ ...common, owner: { user_id: '2', display_name: 'Owner' } }).owner).toEqual({ user_id: '2', display_name: 'Owner' });

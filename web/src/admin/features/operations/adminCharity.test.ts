@@ -143,6 +143,16 @@ describe('administrator charity grouped projection', () => {
     expect(result.status).toBe('approved');
   });
 
+  it.each(['admin', 'steward', 'level5'])('accepts a manual %s review without retaining its identity', (role) => {
+    const result = donation('1', [key(custom, '11')], {
+      review_result: { decision: 'approve', reason: '', reviewed_at: 2 },
+      reviewer: { user_id: '8', role },
+    });
+    expect(result.status).toBe('approved');
+    expect(result).not.toHaveProperty('reviewer');
+    expect(result).not.toHaveProperty('review_result');
+  });
+
   it('accepts a clock-expired key while lifecycle cleanup is pending', () => {
     const result = donation('1', [
       key(mainstream, '11', { charity_state: 'expired', ended_reason: null }),

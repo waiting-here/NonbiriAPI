@@ -387,6 +387,9 @@ FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, donationID).
 		out.Owner = &owner
 	}
 	if reviewRole != "" {
+		if reviewRole == string(reviewerSteward) {
+			reviewRole = "steward"
+		}
 		reviewer := DonationReviewer{Role: reviewRole}
 		if reviewedBy.Valid {
 			value := strconv.FormatInt(reviewedBy.Int64, 10)
