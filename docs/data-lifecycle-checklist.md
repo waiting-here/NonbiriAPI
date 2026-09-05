@@ -13,6 +13,17 @@ family. The registered routes, export builder, deletion coordinator, retention w
 and bilingual privacy text are covered by their implementation and contract tests.
 Schema presence alone never creates a route or expands a response.
 
+The signed-in credit history is a read-only projection of the current user's wallet
+entries. It adds no stored data or retention period. Request links use the existing
+owner-scoped 30-day log window; expired logs disappear from those links while wallet
+history remains available. Donation rewards never expose another caller's request ID.
+
+Short charity rejections use the same 30-day owner-scoped request logs, with only
+model metadata and numeric character counts. Penalties use the existing wallet
+ledger and survive log expiry. Violation windows contain bounded in-memory counts
+and times, are pruned as violations arrive, and are cleared for a deleted account
+or a stopped process. They contain no request bodies and are excluded from export.
+
 Every user-associated table or column MUST be checked in the same task that introduces
 it. This includes direct `users(id)` links, transitive foreign keys, and no-FK user
 references used for late-callback suppression.

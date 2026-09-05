@@ -6,8 +6,16 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## [Unreleased]
 
+### Added
+
+- Personal credit history with reason, time and income/expense filters, adjustable page sizes, direct page navigation, and links to the account's own request logs. Donation rewards do not expose another caller's requests.
+
 ### Fixed
 
+- Periodic maintenance no longer finalizes active API requests as interrupted startup work, which could incorrectly record a 502 while the response continued streaming.
+- Restored configured short-charity-request penalties, automatic bans and suspensions, and RPM automatic bans. Credit penalties and safe rejection logs commit together. Accounts without an active API key can also be banned successfully.
+- Donation reviews display correctly for stewards and for approvals with an empty note. Administrator source groups have a separate tab.
+- Request details use vertical attempt cards and wrap long fields on narrow screens.
 - User and site usage totals now update atomically when requests finish. Existing uninitialized totals are repaired once from retained request logs; logs already removed by retention cannot be reconstructed.
 - Account event streams release idle write deadlines and reconnect after session refreshes without retaining stale page subscriptions.
 - Mobile navigation keeps its full-height background and locks page scrolling. Wider desktop layouts and responsive fishing tables keep leaderboard results visible.
@@ -17,6 +25,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
+- LinkLink uses distinct pictures and animated connections along the confirmed match path, with a stable board position. Active games use less space for explanatory text on mobile.
+- Fishing catch effects reflect rarity. RPS adds gesture reveals, tie progress, and a visible hidden ending after six consecutive free ties. Viewed results remain on the current page until dismissed or another game begins.
 - Simplified user-facing copy and reduced internal configuration details in routine settings workflows.
 
 ## [1.0.0-beta.1]
