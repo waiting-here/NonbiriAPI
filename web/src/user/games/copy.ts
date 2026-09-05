@@ -13,8 +13,7 @@ const en = {
   'common.unavailable': 'Temporarily unavailable',
   'common.responseUnknown':
     'The result could not be confirmed. No new action can start until the latest status is checked.',
-  'common.conflict':
-    'The game changed. The latest status is shown; review it before trying again.',
+  'common.conflict': 'The game changed. The latest status is shown; review it before trying again.',
   'common.serviceStopped': 'The game service is recovering. Timers and results remain unchanged.',
   'common.leaseActive': 'This page can continue the current game.',
   'common.leaseRenewing': 'Confirming that this page can continue the game…',
@@ -22,7 +21,9 @@ const en = {
     'This page can no longer confirm continuation access. Timers and automatic actions still continue.',
   'common.maintenanceContinuation':
     'Maintenance is active. Keep this page open: leaving, refreshing, or losing the connection may end continuation access.',
-  'common.noHistory': 'This page does not create a normal game history.',
+  'common.anonymous': 'Stay anonymous on leaderboards',
+  'common.anonymousHelp':
+    'Applies to all game leaderboards. Turn off to show your name and avatar.',
   'common.rulesButton': 'How to play',
   'common.closeRules': 'Close rules',
   'center.eyebrow': 'Game lounge',
@@ -41,7 +42,8 @@ const en = {
   'center.modes': '{{count}} of 3 modes open',
   'fishing.eyebrow': 'Pond fishing',
   'fishing.title': 'A quiet cast, a surprise catch',
-  'fishing.description': 'Choose bait and the number of casts. The game settles each result.',
+  'fishing.description': 'Choose your bait and cast a line.',
+  'fishing.castCount': 'Number of casts',
   'fishing.stage.idle': 'The water is calm',
   'fishing.stage.casting': 'The float flies out',
   'fishing.stage.pending': 'The batch is settling',
@@ -80,7 +82,8 @@ const en = {
   'fishing.result.entry': 'Entry total',
   'fishing.result.payout': 'Credits received',
   'fishing.result.balance': 'Resulting balance',
-  'fishing.result.more': 'More unviewed batches are waiting and will load after this result is marked viewed.',
+  'fishing.result.more':
+    'More unviewed batches are waiting and will load after this result is marked viewed.',
   'fishing.result.ackWaiting': 'The complete result is shown. Marking it viewed…',
   'fishing.result.ackFailed':
     'This result could not be marked viewed. It remains visible and its settlement is unchanged.',
@@ -94,8 +97,7 @@ const en = {
   'fishing.reward': '{{amount}} credits',
   'fishing.leaderboard.single': 'Largest single catch',
   'fishing.leaderboard.total': '30-day total catch',
-  'fishing.leaderboard.helpSingle':
-    'All-time Top 20 plus your row. Equal scores are ordered consistently without exposing the tie-breaker.',
+  'fishing.leaderboard.helpSingle': 'Largest single catches, showing the top 20 and your position.',
   'fishing.leaderboard.helpTotal': 'Rolling 30-day Top 20 plus your row.',
   'fishing.leaderboard.empty': 'No eligible rows yet.',
   'fishing.leaderboard.catch': 'Catch',
@@ -284,7 +286,8 @@ const en = {
   'rps.result.returned': 'Your total returned',
   'rps.result.net': 'Your wallet net',
   'rps.result.ackWaiting': 'The complete private result is shown. Marking it viewed…',
-  'rps.result.ackFailed': 'The result could not be marked viewed. It remains here, and new matches stay locked.',
+  'rps.result.ackFailed':
+    'The result could not be marked viewed. It remains here, and new matches stay locked.',
   'rps.result.ackRetry': 'Retry marking as viewed',
   'rps.result.deidentified': 'Identity-hidden seat',
   'rps.result.win': 'Net win',
@@ -364,7 +367,8 @@ const zh: Record<CopyKey, string> = {
   'common.leaseLost': '当前页面暂时无法确认继续资格；计时和自动操作仍会继续。',
   'common.maintenanceContinuation':
     '维护已开启。请保持本页打开；离开、刷新或失去连接后可能无法继续。',
-  'common.noHistory': '本页不会建立普通游戏历史。',
+  'common.anonymous': '在排行榜中匿名',
+  'common.anonymousHelp': '适用于所有游戏排行榜。关闭后将展示你的昵称和头像。',
   'common.rulesButton': '玩法说明',
   'common.closeRules': '关闭玩法说明',
   'center.eyebrow': '游戏小馆',
@@ -383,7 +387,8 @@ const zh: Record<CopyKey, string> = {
   'center.modes': '3 种模式开放 {{count}} 种',
   'fishing.eyebrow': '池塘垂钓',
   'fishing.title': '悠闲抛竿，看看收获',
-  'fishing.description': '选择鱼饵和抛竿次数；每次结果都由游戏系统结算。',
+  'fishing.description': '选好鱼饵，抛竿试试今天的运气。',
+  'fishing.castCount': '抛竿次数',
   'fishing.stage.idle': '水面正安静',
   'fishing.stage.casting': '浮漂飞出',
   'fishing.stage.pending': '本批正在结算',
@@ -433,8 +438,8 @@ const zh: Record<CopyKey, string> = {
   'fishing.reward': '{{amount}} 积分',
   'fishing.leaderboard.single': '单次最大收获',
   'fishing.leaderboard.total': '近 30 天总收获',
-  'fishing.leaderboard.helpSingle': '全期 Top 20 与本人行；同分时采用稳定顺序，不展示用于排序的信息。',
-  'fishing.leaderboard.helpTotal': '滚动 30 天 Top 20 与本人行。',
+  'fishing.leaderboard.helpSingle': '最大的单次收获，展示前 20 名和你的排名。',
+  'fishing.leaderboard.helpTotal': '最近 30 天的总收获，展示前 20 名和你的排名。',
   'fishing.leaderboard.empty': '暂时没有符合条件的记录。',
   'fishing.leaderboard.catch': '收获',
   'fishing.leaderboard.score': '成绩',
@@ -467,7 +472,8 @@ const zh: Record<CopyKey, string> = {
   'linklink.price': '{{amount}} 积分',
   'linklink.specClosed': '该规格已关闭',
   'linklink.startReview': '确认付费开始',
-  'linklink.startConsequences': '开始时只扣显示的门票一次；若已有进行中的棋盘，将直接恢复且不会再次扣费。',
+  'linklink.startConsequences':
+    '开始时只扣显示的门票一次；若已有进行中的棋盘，将直接恢复且不会再次扣费。',
   'linklink.start': '开始 {{spec}}',
   'linklink.starting': '正在开始或恢复…',
   'linklink.active': '进行中的棋盘',

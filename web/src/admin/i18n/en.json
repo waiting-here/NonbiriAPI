@@ -19,7 +19,7 @@
     "dashboard": {
       "nav": "Dashboard",
       "title": "Operations overview",
-      "description": "Read site signals from the administrator API.",
+      "description": "Review site health, requests, and usage.",
       "usageTitle": "Site usage",
       "endpointsTitle": "Endpoint overview",
       "requests": "Requests",
@@ -47,7 +47,7 @@
     "users": {
       "nav": "Users",
       "title": "User management",
-      "description": "Review server-authoritative user records and apply explicit ban, limit or deletion actions.",
+      "description": "Manage accounts, credits, access limits, and bans.",
       "listTitle": "Users",
       "username": "Username",
       "status": "Status",
@@ -125,7 +125,7 @@
     "endpoints": {
       "nav": "Endpoints",
       "title": "Endpoint overview",
-      "description": "Global endpoint metadata grouped by stored base URL.",
+      "description": "Review endpoint connections grouped by service address.",
       "baseUrl": "Base URL",
       "users": "Users",
       "endpointCount": "Endpoints",
@@ -144,7 +144,7 @@
     "alerts": {
       "nav": "Alerts",
       "title": "Alert center",
-      "description": "Review bounded, server-recorded operational alerts. Alert text is displayed as plain text.",
+      "description": "Review operational alerts and resolve issues.",
       "kind": "Kind",
       "message": "Message",
       "reference": "Reference",
@@ -176,8 +176,7 @@
     "settings": {
       "nav": "Site settings",
       "title": "Site settings",
-      "description": "Edit server-authoritative runtime settings exposed by the site-config API. Values are not cached by the browser.",
-      "save": "Save value",
+      "description": "Edit multiple settings, review your changes, and save them together.",
       "booleanValue": "Boolean setting",
       "numberValue": "Numeric setting",
       "textValue": "Text setting",
@@ -188,12 +187,10 @@
       "catalogStep": "step",
       "catalogIndependentGate": "Independent gate",
       "catalogDurationPreview": "Human-readable duration: {{value}}",
-      "catalogMilliPreview": "Exact milli-credits: {{raw}} · Display credits: {{credits}}",
+      "catalogMilliPreview": "{{credits}} credits",
       "restoreFallback": "Remove override",
       "legalBytes": "{{count}} / {{max}} UTF-8 bytes",
       "timezonePreview": "Preview: {{value}}",
-      "authorityRevision": "Revision {{revision}}",
-      "authorityRevisionNote": "Authority revision {{revision}}. A conflict or unknown response reloads the complete authoritative snapshot without resubmitting.",
       "dangerousDescription": "Access, abuse, and legal changes can affect admission or published policy. Review each server description before saving.",
       "dangerousEmpty": "No dangerous settings",
       "dangerousEmptyBody": "No dangerous catalog entry matches the search.",
@@ -228,10 +225,8 @@
       "ordinaryEmpty": "No ordinary settings",
       "ordinaryEmptyBody": "No ordinary catalog entry matches the search.",
       "ordinaryTitle": "Ordinary settings",
-      "readOnlyAuthority": "Read-only here; this value is owned by its dedicated authority page.",
-      "reloadAuthority": "Reload authority",
       "remoteLogoWarning": "A remote logo makes a public third-party browser request and may fail independently. Never place a secret in this URL.",
-      "restoreAuthorityValue": "Restore authority value",
+      "restoreAuthorityValue": "Undo this change",
       "unknownCatalogGate": "Unknown gate ({{key}})",
       "validation": {
         "allowedChoice": "comes from the allowed choices",
@@ -244,6 +239,19 @@
         "notNull": "is not null",
         "rangeStep": "is within {{minimum}}–{{maximum}} at step {{step}}",
         "unicodeLength": "contains {{minimum}}–{{maximum}} Unicode characters"
+      },
+      "fieldDetails": "Defaults and limits",
+      "pendingChanges": "{{count}} unsaved changes",
+      "saveAll": "Save all changes",
+      "discardAll": "Discard changes",
+      "saved": "Settings saved.",
+      "changedElsewhere": "These settings changed elsewhere: {{fields}}. Restore those fields before editing them again.",
+      "dependencies": {
+        "donations": "Enable shared models, or disable new donations in the same edit.",
+        "timezone": "Set the site timezone before enabling check-in.",
+        "checkinBounds": "The minimum check-in reward must not exceed the maximum.",
+        "levels": "Enabled level thresholds must increase from level 2 to level 4.",
+        "timezoneLocked": "Daily activity records already exist, so the site timezone can no longer be changed."
       }
     },
     "games": {
@@ -264,7 +272,7 @@
       "controls": {
         "globalGate": "Global gate",
         "priceCredits": "{{field}} price (credits)",
-        "revisionTerms": "Revision {{revision}}. Saved changes govern only newly accepted games; in-flight sessions keep their frozen terms."
+        "revisionTerms": "Edit multiple settings and save them together. Games already in progress keep their starting settings."
       },
       "counts": {
         "active": "Active",
@@ -335,7 +343,11 @@
         "amountMinimum": "{{field}} must be a canonical credit amount of at least {{minimum}}.",
         "amountNonNegative": "{{field}} must be a canonical non-negative credit amount.",
         "integerRange": "{{field}} must be a whole number from {{minimum}} to {{maximum}}.",
-        "totalCuts": "{{mode}} pool cuts must total less than {{maximum}} basis points."
+        "totalCuts": "{{mode}} pool cuts must total less than {{maximum}} basis points.",
+        "masterRequired": "Enable the game master switch, or turn off each game in the same edit.",
+        "specRequiresPrice": "To enable the {{spec}} board, enable Link Link and set a positive price.",
+        "modeRequiresStake": "To enable {{mode}}, enable Rock Paper Scissors and set a positive base stake.",
+        "changedElsewhere": "Game settings changed elsewhere. Your draft is retained; restore the latest settings before editing again."
       }
     },
     "activities": {
@@ -355,15 +367,18 @@
       },
       "config": {
         "masterEnabled": "Master enabled",
-        "revisionHint": "Revision {{revision}}. Configuration changes compile atomically; an open Thursday period keeps its frozen snapshot.",
+        "revisionHint": "Save activity switches and claim rules together. Set the site timezone first; Thursday also needs a period configured below. Open periods keep their existing rules.",
         "save": "Save atomic configuration",
         "thursdayEnabled": "Thursday enabled",
         "title": "Activity configuration",
         "welfareCap": "Welfare cap (credits)",
         "welfareEnabled": "Welfare enabled",
-        "welfareThreshold": "Welfare threshold (credits)"
+        "welfareThreshold": "Welfare threshold (credits)",
+        "masterRequired": "Enable the activity master switch, or turn off welfare and Thursday together.",
+        "periodRequired": "Configure a Thursday period below, including its time, announcement and entry rules, before enabling it.",
+        "changedElsewhere": "Activity settings changed. Cancel this draft and edit the latest settings."
       },
-      "description": "Configuration, Thursday lifecycle, and balance adjustments remain separate authority surfaces.",
+      "description": "Configure activities, schedule periods, and manage prize pools.",
       "fields": {
         "state": "State"
       },
@@ -522,7 +537,7 @@
         "reject": "Rejected",
         "resumeProcessing": "Resumed processing"
       },
-      "description": "Indexing, human review, and approved processing are distinct authority states.",
+      "description": "Review reports and evidence, then take action on reported resources.",
       "detail": {
         "action": "Action",
         "actor": "Actor",
@@ -747,7 +762,7 @@
     "charity": {
       "nav": "Charity",
       "title": "Charity and donation management",
-      "description": "Review donations, manage charity models and bindings, and configure charity safety controls. Every mutation is refetched from the server.",
+      "description": "Review donations, manage shared models and connections, and adjust usage limits.",
       "group": {
         "custom": "Custom donation key",
         "mainstreamSubscription": "【Mainstream subscription】{{name}}",

@@ -105,7 +105,7 @@ export async function installLoopbackNetworkBoundary(context: BrowserContext): P
   });
 }
 
-function userSession(role: Exclude<TestRole, 'anonymous' | 'admin'>) {
+export function userSession(role: Exclude<TestRole, 'anonymous' | 'admin'>) {
   const level = role === 'level5' ? 5 : role === 'level4' ? 4 : 1;
   return {
     user: {

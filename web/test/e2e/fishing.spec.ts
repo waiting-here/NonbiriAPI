@@ -8,10 +8,15 @@ import {
   mockRoleSession,
   tabTo,
   useNarrowReducedMotion,
+  userSession,
 } from './support';
 import { USER_ORIGIN } from './ports';
 import { gamesSnapshotWire } from '../../src/user/games/common/testFixtures';
-import { fishArtwork, junkArtwork, treasureArtwork } from '../../src/user/games/fishing/artRegistry';
+import {
+  fishArtwork,
+  junkArtwork,
+  treasureArtwork,
+} from '../../src/user/games/fishing/artRegistry';
 
 const BATCH_ID = 'fb_AAAAAAAAAAAAAAAAAAAAAA';
 const RESULT = {
@@ -20,9 +25,7 @@ const RESULT = {
   count: 1,
   unit_price: '2.5',
   entry_total: '2.5',
-  outcomes: [
-    { ordinal: 0, species_key: 'koi', tier: 'legend', size_cm: 180, reward: '12' },
-  ],
+  outcomes: [{ ordinal: 0, species_key: 'koi', tier: 'legend', size_cm: 180, reward: '12' }],
   payout_total: '12',
   balance: '14.5',
   settled_at: 1_787_450_010,
@@ -75,7 +78,10 @@ function jsonResponse(body: unknown, status = 200) {
   };
 }
 
-async function installFishingRoutes(page: import('@playwright/test').Page, fixture: FishingFixture) {
+async function installFishingRoutes(
+  page: import('@playwright/test').Page,
+  fixture: FishingFixture,
+) {
   await page.route('**/api/games**', async (route) => {
     const request = route.request();
     const requestURL = new URL(request.url());
@@ -104,10 +110,7 @@ async function installFishingRoutes(page: import('@playwright/test').Page, fixtu
       await route.fulfill(jsonResponse(fixture.state));
       return;
     }
-    if (
-      requestURL.pathname === '/api/games/fishing/leaderboard' &&
-      request.method() === 'GET'
-    ) {
+    if (requestURL.pathname === '/api/games/fishing/leaderboard' && request.method() === 'GET') {
       if (requestURL.searchParams.get('board') === 'total') {
         await route.fulfill(
           jsonResponse({
@@ -163,7 +166,10 @@ async function installFishingRoutes(page: import('@playwright/test').Page, fixtu
       const body = request.postDataJSON() as { bait?: unknown; count?: unknown };
       if (body.bait !== 'worm' || body.count !== 1) {
         await route.fulfill(
-          jsonResponse({ error: { code: 'invalid_request', message: 'Unexpected test intent.' } }, 400),
+          jsonResponse(
+            { error: { code: 'invalid_request', message: 'Unexpected test intent.' } },
+            400,
+          ),
         );
         return;
       }
@@ -196,7 +202,10 @@ async function installFishingRoutes(page: import('@playwright/test').Page, fixtu
       }
       if (fixture.failACK) {
         await route.fulfill(
-          jsonResponse({ error: { code: 'temporarily_unavailable', message: 'Synthetic ACK failure.' } }, 503),
+          jsonResponse(
+            { error: { code: 'temporarily_unavailable', message: 'Synthetic ACK failure.' } },
+            503,
+          ),
         );
         return;
       }
@@ -208,7 +217,10 @@ async function installFishingRoutes(page: import('@playwright/test').Page, fixtu
   });
 }
 
-async function installUserShell(page: import('@playwright/test').Page, language: 'en' | 'zh' = 'en') {
+async function installUserShell(
+  page: import('@playwright/test').Page,
+  language: 'en' | 'zh' = 'en',
+) {
   await page.addInitScript((selectedLanguage) => {
     localStorage.setItem('nb.lang', selectedLanguage);
     localStorage.setItem('nb.theme', 'dark');
@@ -216,6 +228,52 @@ async function installUserShell(page: import('@playwright/test').Page, language:
   await mockPublicConfig(page, 'user');
   await mockRoleSession(page, 'user', 'level4');
 }
+
+test('fishing uses desktop space, fits mobile results, and retains the anonymity preference', async ({
+  page,
+}) => {
+  const guard = collectConsoleViolations(page);
+  await installUserShell(page);
+  await installFishingRoutes(page, fixtureWith());
+  const session = userSession('level4');
+  let writes = 0;
+  await page.route('**/api/{me,session}', async (route) => {
+    const request = route.request();
+    if (request.method() === 'PATCH') {
+      expect(new URL(request.url()).pathname).toBe('/api/me');
+      expect(request.postDataJSON()).toEqual({ game_profile_public: true });
+      expect(request.headers()['idempotency-key']).toBeTruthy();
+      session.user.game_profile_public = true;
+      writes += 1;
+    }
+    await route.fulfill(jsonResponse(session));
+  });
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto(`${USER_ORIGIN}/games/fishing`);
+  await expect(page.getByRole('heading', { name: 'Largest single catch' })).toBeVisible();
+  expect((await page.locator('.fishing-page').boundingBox())!.width).toBeGreaterThan(1500);
+  for (const table of await page.locator('.fishing-table-wrap').all()) {
+    expect(await table.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  }
+  await expect(page.getByRole('link', { name: 'API access', exact: true })).toBeVisible();
+  const anonymity = page.getByRole('checkbox', { name: 'Stay anonymous on leaderboards' });
+  await expect(anonymity).toBeChecked();
+  await anonymity.click();
+  await expect.poll(() => writes).toBe(1);
+  await expect(anonymity).not.toBeChecked();
+  await page.reload();
+  await expect(anonymity).not.toBeChecked();
+  await page.screenshot({ path: '../tmp/usability-fishing-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const table of await page.locator('.fishing-table-wrap').all()) {
+    expect(await table.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.screenshot({ path: '../tmp/usability-fishing-mobile.png', fullPage: true });
+  guard.assertNone();
+});
 
 const ART_FISH_SPECS: Readonly<Record<string, { readonly tier: string; readonly size: number }>> = {
   whitebait: { tier: 'small', size: 10 },
@@ -263,16 +321,12 @@ const ARTWORK_RESULTS = [
   }),
   ...junkArtwork.map((art) => ({
     ...RESULT,
-    outcomes: [
-      { ordinal: 0, species_key: art.key, tier: 'junk', size_cm: 0, reward: '0' },
-    ],
+    outcomes: [{ ordinal: 0, species_key: art.key, tier: 'junk', size_cm: 0, reward: '0' }],
     payout_total: '0',
   })),
   ...treasureArtwork.map((art) => ({
     ...RESULT,
-    outcomes: [
-      { ordinal: 0, species_key: art.key, tier: 'treasure', size_cm: 0, reward: '0' },
-    ],
+    outcomes: [{ ordinal: 0, species_key: art.key, tier: 'treasure', size_cm: 0, reward: '0' }],
     payout_total: '0',
   })),
 ];
@@ -290,9 +344,7 @@ test('Fishing pending survives reload, settles from authority, auto-ACKs, and pe
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto(`${USER_ORIGIN}/games/fishing`);
 
-  await expect(
-    page.getByRole('heading', { name: 'A quiet cast, a surprise catch' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'A quiet cast, a surprise catch' })).toBeVisible();
   await page.getByRole('button', { name: 'Start this batch' }).click();
   await expect(page.locator('[data-phase="pending"]')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'This batch is already accepted' })).toBeVisible();
@@ -400,9 +452,9 @@ test('Fishing recovery is identical across a second page and leaderboard identit
     await expect(secondPage.getByRole('button', { name: 'Retry marking as viewed' })).toBeVisible();
     fixture.failACK = false;
     await secondPage.getByRole('button', { name: 'Retry marking as viewed' }).click();
-    await expect(
-      secondPage.getByRole('heading', { name: 'Total catch', exact: true }),
-    ).toHaveCount(0);
+    await expect(secondPage.getByRole('heading', { name: 'Total catch', exact: true })).toHaveCount(
+      0,
+    );
     await secondPage.close();
   } finally {
     await secondContext.close();
@@ -431,11 +483,22 @@ test('Fishing remains keyboard usable in Chinese at 390px, 200% zoom, both theme
   );
   await page.getByRole('button', { name: '打开导航' }).click();
   await expect(page.getByRole('link', { name: '账号' })).toBeVisible();
+  const drawer = page.locator('.nb-user-header__nav');
+  const drawerBox = await drawer.boundingBox();
+  await page.screenshot({ path: '../tmp/usability-mobile-drawer.png' });
+  expect(drawerBox!.height).toBeGreaterThan(500);
+  expect(drawerBox!.y + drawerBox!.height).toBeCloseTo((await page.viewportSize())!.height, 0);
+  expect(await drawer.evaluate((node) => getComputedStyle(node).backgroundColor)).not.toBe(
+    'rgba(0, 0, 0, 0)',
+  );
+  await expect(page.getByRole('link', { name: 'API 接入', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.body.style.overflow)).toBe('hidden');
   await page.getByRole('combobox', { name: '主题' }).selectOption('light');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await page.getByRole('combobox', { name: '主题' }).selectOption('dark');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.keyboard.press('Escape');
+  expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
   await page.evaluate(() => {
     document.documentElement.style.zoom = '2';
   });

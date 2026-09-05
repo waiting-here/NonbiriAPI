@@ -106,6 +106,6 @@ export const cssVar = (token: DesignToken): `var(${string})` => `var(${token})`;
  * drawer before its trigger becomes hidden.
  */
 export const SHELL_DRAWER_MEDIA_QUERY = {
-  user: '(max-width: 70rem)',
+  user: '(max-width: 80rem)',
   admin: '(max-width: 64rem)',
 } as const;

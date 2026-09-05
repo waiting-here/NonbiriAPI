@@ -199,6 +199,19 @@ export async function beginElevation(signal?: AbortSignal): Promise<string> {
   return normalizeAuthorizationURL(response.payload);
 }
 
+export async function patchGameProfile(
+  isPublic: boolean,
+  operation: OperationIdentity,
+): Promise<UserEnvelope> {
+  const response = await coreRequest('/api/me', {
+    method: 'PATCH',
+    headers: operationHeaders(operation),
+    json: { game_profile_public: exactBooleanInput(isPublic, 'game profile visibility') },
+  });
+  expectedStatus(response.status, 200, 'profile update');
+  return normalizeUserEnvelope(response.payload);
+}
+
 const MAX_ACCOUNT_EXPORT_BYTES = 16 * 1024 * 1024;
 const ACCOUNT_EXPORT_KEYS = [
   'schema_version',

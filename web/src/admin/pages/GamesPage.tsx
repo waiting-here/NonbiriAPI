@@ -83,8 +83,8 @@ const enumLabel = (t: TFunction, labels: Readonly<Record<string, string>>, value
   t(labels[value] ?? 'admin.games.enums.unknown', { value });
 
 function amountMilli(value: string): bigint | null {
-  const match = /^(0|[1-9][0-9]*)(?:\.([0-9]{1,3}))?$/.exec(value);
-  if (!match || match[2]?.endsWith('0')) return null;
+  const match = /^(0|[1-9][0-9]*)(?:\.([0-9]{1,3}))?$/.exec(value.trim());
+  if (!match) return null;
   try {
     const result = BigInt(match[1]) * 1_000n + BigInt((match[2] ?? '').padEnd(3, '0') || '0');
     return result <= MAX_AMOUNT_MILLI ? result : null;
@@ -97,6 +97,11 @@ const validInteger = (value: number, minimum: number, maximum: number) =>
   Number.isSafeInteger(value) && value >= minimum && value <= maximum;
 
 function validateGamesDraft(draft: GamesConfig, t: TFunction): string | null {
+  if (
+    !draft.master_enabled &&
+    (draft.fishing.enabled || draft.linklink.enabled || draft.rps.enabled)
+  )
+    return t('admin.games.validation.masterRequired');
   for (const bait of ['worm', 'lure', 'premium'] as const) {
     const value = amountMilli(draft.fishing.bait_prices[bait]);
     if (value === null || value < 1n)
@@ -123,6 +128,11 @@ function validateGamesDraft(draft: GamesConfig, t: TFunction): string | null {
     }
   }
   for (const spec of ['6x8', '8x8', '10x10'] as const) {
+    if (
+      draft.linklink.specs[spec].enabled &&
+      (!draft.linklink.enabled || amountMilli(draft.linklink.specs[spec].price) === 0n)
+    )
+      return t('admin.games.validation.specRequiresPrice', { spec });
     if (amountMilli(draft.linklink.specs[spec].price) === null)
       return t('admin.games.validation.amountNonNegative', {
         field: enumLabel(t, LINKLINK_SPEC_LABEL_KEYS, spec),
@@ -130,6 +140,8 @@ function validateGamesDraft(draft: GamesConfig, t: TFunction): string | null {
   }
   for (const mode of RPS_MODES) {
     const value = draft.rps.modes[mode];
+    if (value.enabled && (!draft.rps.enabled || amountMilli(value.base) === 0n))
+      return t('admin.games.validation.modeRequiresStake', { mode: t(RPS_MODE_LABEL_KEYS[mode]) });
     if (amountMilli(value.base) === null)
       return t('admin.games.validation.amountNonNegative', {
         field: t('admin.games.rps.base', { mode: t(RPS_MODE_LABEL_KEYS[mode]) }),
@@ -193,6 +205,21 @@ function validateGamesDraft(draft: GamesConfig, t: TFunction): string | null {
 
 const numberInput = (value: number): string | number => (Number.isNaN(value) ? '' : value);
 const numberFromInput = (value: string): number => (value === '' ? Number.NaN : Number(value));
+function canonicalGamesDraft(draft: GamesConfig): GamesConfig {
+  const result = structuredClone(draft);
+  const canonical = (value: string) => {
+    const milli = amountMilli(value);
+    if (milli === null) return value;
+    return `${milli / 1000n}${milli % 1000n ? '.' + (milli % 1000n).toString().padStart(3, '0').replace(/0+$/, '') : ''}`;
+  };
+  for (const bait of ['worm', 'lure', 'premium'] as const)
+    result.fishing.bait_prices[bait] = canonical(result.fishing.bait_prices[bait]);
+  for (const spec of ['6x8', '8x8', '10x10'] as const)
+    result.linklink.specs[spec].price = canonical(result.linklink.specs[spec].price);
+  for (const mode of RPS_MODES)
+    result.rps.modes[mode].base = canonical(result.rps.modes[mode].base);
+  return result;
+}
 function GamesEditor({
   authority,
   refresh,
@@ -205,7 +232,7 @@ function GamesEditor({
   const [draft, setDraft] = useState(authority);
   const [validation, setValidation] = useState<string | null>(null);
   const save = useRetainedOperation<GamesConfig, GamesConfig>(
-    (input, key) => patchGamesConfig(gamesConfigPatch(input), key),
+    (input, key) => patchGamesConfig(gamesConfigPatch(canonicalGamesDraft(input)), key),
     refresh,
   );
   const edit = (updater: (current: GamesConfig) => GamesConfig) => {
@@ -229,10 +256,13 @@ function GamesEditor({
     event.preventDefault();
     const error = validateGamesDraft(draft, t);
     setValidation(error);
-    if (error === null) {
+    if (error === null && changed && !stale && !save.isPending) {
       void save
         .mutateAsync(draft)
-        .then(() => toast?.push({ message: t('admin.games.saved'), tone: 'success' }))
+        .then((result) => {
+          setDraft(result);
+          toast?.push({ message: t('admin.games.saved'), tone: 'success' });
+        })
         .catch(() => undefined);
     }
   };
@@ -241,12 +271,15 @@ function GamesEditor({
     setValidation(null);
     setDraft(authority);
   };
+  const formError = validation ?? validateGamesDraft(draft, t);
+  const changed = JSON.stringify(canonicalGamesDraft(draft)) !== JSON.stringify(authority);
+  const stale = draft.revision !== authority.revision;
 
   return (
     <form className="ops-stack" noValidate onSubmit={submit}>
       <Card>
         <h2>{t('admin.games.controls.globalGate')}</h2>
-        <p>{t('admin.games.controls.revisionTerms', { revision: authority.revision })}</p>
+        <p>{t('admin.games.controls.revisionTerms')}</p>
         <label className="checkbox-label">
           <input
             type="checkbox"
@@ -540,14 +573,23 @@ function GamesEditor({
           })}
         </div>
       </Card>
-      {validation ? (
+      {formError ? (
         <p className="field-error" role="alert">
-          {validation}
+          {formError}
+        </p>
+      ) : null}
+      {stale ? (
+        <p className="field-error" role="alert">
+          {t('admin.games.validation.changedElsewhere')}
         </p>
       ) : null}
       {save.error ? <ErrorState error={save.error} /> : null}
       <div className="ops-actions">
-        <button className="btn btn-primary" type="submit" disabled={save.isPending}>
+        <button
+          className="btn btn-primary"
+          type="submit"
+          disabled={save.isPending || !changed || Boolean(formError) || stale}
+        >
           {save.isPending ? t('common.working') : t('admin.games.save')}
         </button>
         <button
@@ -648,7 +690,6 @@ export function GamesPage() {
             <ErrorState error={config.error} onRetry={() => void config.refetch()} />
           ) : null}
           <GamesEditor
-            key={config.data.revision}
             authority={config.data}
             refresh={async () => {
               await Promise.all([config.refetch(), counts.refetch()]);

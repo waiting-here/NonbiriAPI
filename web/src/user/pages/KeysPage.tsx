@@ -12,11 +12,7 @@ import {
   SafeCopyValue,
 } from '../features/core/components';
 import { useCoreCopy } from '../features/core/copy';
-import {
-  coreKeys,
-  coreSessionMatchesAccount,
-  useCallerKey,
-} from '../features/core/queries';
+import { coreKeys, coreSessionMatchesAccount, useCallerKey } from '../features/core/queries';
 import { createOperationIdentity, isConflict, isOutcomeUnknown } from '../features/core/request';
 import {
   callerKeyMachineReducer,
@@ -249,12 +245,6 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
               <dt>{t('keys.display')}</dt>
               <dd>
                 <SafeCopyValue value={metadata.display} label={t('keys.display')} />
-              </dd>
-            </div>
-            <div>
-              <dt>{t('keys.generation')}</dt>
-              <dd>
-                <span className="core-number">{state.authority.generation}</span>
               </dd>
             </div>
             <div>

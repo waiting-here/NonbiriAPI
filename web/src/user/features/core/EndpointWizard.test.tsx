@@ -38,6 +38,86 @@ async function reachEndpointForm(user: Awaited<ReturnType<typeof renderWithProvi
 }
 
 describe('EndpointWizard secret and exact-replay boundaries', () => {
+  it('adds multiple keys in one flow and shows discovery completion without reloading', async () => {
+    const key = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), '..', 'internal/resources/testdata/endpoint_key.json'),
+        'utf8',
+      ),
+    ) as Record<string, unknown>;
+    const catalog = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), '..', 'internal/resources/testdata/catalog_succeeded_empty.json'),
+        'utf8',
+      ),
+    ) as Record<string, unknown>;
+    const checking = {
+      state: 'checking',
+      revision: '6',
+      result: null,
+      safe_class: 'none',
+      observed_at: 1700000020,
+      count: null,
+    };
+    let complete = false;
+    const created: Record<string, unknown>[] = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const path = String(input);
+      if (path === '/api/endpoint-create-options') return endpointOptionsResponse();
+      if (path === '/api/endpoints' && init?.method === 'POST')
+        return jsonResponse(endpointFixture(), 201);
+      if (path === '/api/endpoints/11/keys' && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        created.push(body);
+        return jsonResponse({ ...key, id: String(20 + created.length), note: body.note }, 201);
+      }
+      if (path.endsWith('/models/refresh'))
+        return jsonResponse({ operation_id: `op_${'A'.repeat(22)}`, evidence: checking }, 202);
+      if (path.startsWith('/api/endpoints/11/keys/22/models?'))
+        return jsonResponse({ ...catalog, evidence: complete ? catalog.evidence : checking });
+      throw new Error(`Unexpected request: ${init?.method ?? 'GET'} ${path}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const rendered = await renderWithProviders(
+      <EndpointWizard accountId="1" onClose={vi.fn()} onCreated={vi.fn()} />,
+      { station: 'user', role: 'user', locale: 'en' },
+    );
+    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
+    await reachEndpointForm(rendered.user);
+    await rendered.user.click(screen.getByRole('button', { name: 'Create endpoint' }));
+    for (const note of ['Primary', 'Backup']) {
+      fireEvent.change(await screen.findByLabelText('Service key'), {
+        target: { value: `synthetic-secret-${note}` },
+      });
+      await rendered.user.type(screen.getByLabelText('Key note'), note);
+      await rendered.user.click(screen.getByLabelText(/I own this credential/));
+      await rendered.user.click(screen.getByRole('button', { name: 'Add key' }));
+      await screen.findByRole('button', { name: 'Add another key' });
+      if (note === 'Primary') {
+        await rendered.user.click(screen.getByRole('button', { name: 'Add another key' }));
+        expect(screen.getByLabelText('Service key')).toHaveValue('');
+        expect(screen.getByLabelText('Key note')).toHaveValue('');
+      }
+    }
+    expect(created.map((item) => item.note)).toEqual(['Primary', 'Backup']);
+    await rendered.user.click(screen.getByRole('button', { name: 'Check models' }));
+    await screen.findByText('Checking models');
+    complete = true;
+    expect(
+      await screen.findByText(
+        'The check completed, but no models were found',
+        {},
+        { timeout: 3000 },
+      ),
+    ).toBeVisible();
+    expect(
+      fetchMock.mock.calls.filter(([path]) => String(path).endsWith('/models/refresh')),
+    ).toHaveLength(1);
+    assertNoSensitiveQueryCache(rendered.queryClient, [
+      'synthetic-secret-Primary',
+      'synthetic-secret-Backup',
+    ]);
+  });
   it('defaults to a mainstream channel and submits only its strict union fields', async () => {
     const channelID = `mch_${'C'.repeat(21)}A`;
     const onCreated = vi.fn();

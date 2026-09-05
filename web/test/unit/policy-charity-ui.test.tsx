@@ -662,7 +662,7 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.click(await screen.findByRole('button', { name: 'Edit platform model' }));
     await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
-    await expect(screen.findByText(/This resource changed/)).resolves.toBeVisible();
+    await expect(screen.findByText(/The data changed/)).resolves.toBeVisible();
     await waitFor(() => expect(modelReads).toBeGreaterThan(1));
     expect(
       fetchMock.mock.calls.filter(

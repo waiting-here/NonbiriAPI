@@ -428,6 +428,30 @@ export function patchSiteSetting(entry: SiteConfigCatalogEntry, value: unknown, 
     return { key: responseKey, value: normalizeConfigValue(root.value, 'site configuration result value'), revision: decimal(root.revision, 'site configuration result revision', { positive: true }) };
   }, idempotentOptions(key, { method: 'PATCH', json: { value } }));
 }
+export function patchSiteSettings(
+  input: { expected_revision: string; values: SiteConfigBundle['values'] },
+  key: string,
+): Promise<{ revision: string; changed_keys: string[] }> {
+  return decoded(
+    '/admin/api/site-config',
+    (payload) => {
+      const root = record(payload, ['revision', 'changed_keys'], 'site configuration update');
+      const changed = array(root.changed_keys, 'changed configuration keys', 64).map((value) =>
+        string(value, 'configuration key', { min: 1, max: 128, ascii: true }),
+      );
+      if (
+        changed.some((name) => !Object.hasOwn(input.values, name)) ||
+        new Set(changed).size !== changed.length
+      )
+        invalidResponse('changed configuration keys');
+      return {
+        revision: decimal(root.revision, 'site configuration revision', { positive: true }),
+        changed_keys: changed,
+      };
+    },
+    idempotentOptions(key, { method: 'PATCH', json: input }),
+  );
+}
 export const getLegalHolds = (state: string, kind: string, cursor: string | null, signal?: AbortSignal) => decoded(queryPath('/admin/api/legal-holds', { state: state || undefined, object_kind: kind || undefined, cursor, limit: 50 }), (value) => page(value, 'legal hold page', normalizeLegalHoldSummary), { signal });
 export const getLegalHold = (id: string, signal?: AbortSignal) => decoded(`/admin/api/legal-holds/${encodeURIComponent(opaqueID(id, 'lgh_', 'legal hold id'))}`, normalizeLegalHoldDetail, { signal });
 export const createLegalHold = (body: unknown, key: string, token: string) => decoded('/admin/api/legal-holds', normalizeLegalHoldDetail, idempotentOptions(key, { method: 'POST', json: body }, token));

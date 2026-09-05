@@ -14,6 +14,9 @@ const profileIdempotencyKey = "profile_key_1234567890AB"
 func TestPatchMeStrictIdempotentAndReauthorizesReplay(t *testing.T) {
 	f := newRuntimeFixture(t, nil)
 	cookie := loginUser(t, f, "profile", "")
+	if _, err := f.store.DB().Exec(`INSERT INTO game_user_preferences(user_id,tutorial_rps_seen,game_profile_public,updated_at) VALUES(1,1,0,1)`); err != nil {
+		t.Fatal(err)
+	}
 	handler := f.runtime.UserHandler()
 	patch := func(body, key string) *httptest.ResponseRecorder {
 		headers := map[string]string{"Content-Type": "application/json"}
@@ -46,6 +49,10 @@ func TestPatchMeStrictIdempotentAndReauthorizesReplay(t *testing.T) {
 	}
 	if envelope.User.Lang != "en" || !envelope.User.GameProfilePublic {
 		t.Fatalf("envelope=%+v", envelope.User)
+	}
+	var gamePublic int
+	if err := f.store.DB().QueryRow(`SELECT game_profile_public FROM game_user_preferences WHERE user_id=1`).Scan(&gamePublic); err != nil || gamePublic != 1 {
+		t.Fatalf("leaderboard preference=%d, error=%v", gamePublic, err)
 	}
 	replay := patch(`{"lang":"en","game_profile_public":true}`, profileIdempotencyKey)
 	if replay.Code != http.StatusOK || replay.Body.String() != first.Body.String() {

@@ -1158,6 +1158,10 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
                 <div className="core-muted core-mono">
                   {binding.endpoint_key_display_head}…{binding.endpoint_key_display_tail}
                 </div>
+                {binding.endpoint_key_note ? <div>{binding.endpoint_key_note}</div> : null}
+                {binding.endpoint_note ? (
+                  <div className="core-muted">{binding.endpoint_note}</div>
+                ) : null}
                 <div className="core-row-actions">
                   <div className="core-order-controls">
                     <button

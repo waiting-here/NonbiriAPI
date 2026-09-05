@@ -16,6 +16,8 @@ import { creditsToMilli, formatCredits, multiplyCredits } from '../common/strict
 import { BAITS, type Bait } from '../common/types';
 import { gameKeys, useGamesSnapshot } from '../common/snapshot';
 import { FishingArtwork } from './FishingArtwork';
+import fishingScene from '@shared/assets/game-heroes/fishing.webp';
+import { GamePrivacyControl } from '../common/GamePrivacyControl';
 import {
   acknowledgeFishing,
   fishingKeys,
@@ -104,37 +106,14 @@ function FishingStage({ phase, level4 }: { readonly phase: string; readonly leve
     <div className={`fishing-stage${level4 ? ' fishing-stage--l4' : ''}`} data-phase={phase}>
       <svg
         className="fishing-stage__scene"
-        viewBox="0 0 800 360"
+        viewBox="0 0 960 480"
         role="img"
         aria-label={text(`fishing.stage.${phase}` as Parameters<typeof text>[0])}
       >
-        <defs>
-          <linearGradient id="fishing-water" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="currentColor" stopOpacity=".18" />
-            <stop offset="1" stopColor="currentColor" stopOpacity=".52" />
-          </linearGradient>
-        </defs>
-        <path className="fishing-stage__bank" d="M0 100 Q170 66 340 98T800 78V0H0Z" />
-        <path
-          className="fishing-stage__water"
-          d="M0 105 Q175 77 350 108T800 91V360H0Z"
-          fill="url(#fishing-water)"
-        />
-        <path className="fishing-stage__rod" d="M83 78 Q280 42 560 112" />
-        <path className="fishing-stage__line" d="M560 112 Q596 164 607 258" />
-        <g className="fishing-stage__float" transform="translate(607 258)">
-          <path d="M0-19V-5" />
-          <ellipse cx="0" cy="6" rx="9" ry="17" />
-          <path d="M-8 4H8" />
-        </g>
+        <image href={fishingScene} width="960" height="480" />
         <g className="fishing-stage__ripples">
-          <ellipse cx="607" cy="279" rx="40" ry="9" />
-          <ellipse cx="607" cy="279" rx="76" ry="16" />
-        </g>
-        <g className="fishing-stage__particles" aria-hidden="true">
-          <circle cx="146" cy="184" r="3" />
-          <circle cx="246" cy="270" r="2" />
-          <circle cx="711" cy="190" r="3" />
+          <ellipse cx="598" cy="388" rx="32" ry="7" />
+          <ellipse cx="598" cy="388" rx="58" ry="12" />
         </g>
       </svg>
       <strong className="fishing-stage__label" role="status">
@@ -543,11 +522,7 @@ export function FishingGame() {
     snapshot.data?.gamesEnabled && snapshot.data.fishing.enabled && snapshot.data.fishing.available,
   );
   const locked = Boolean(
-    state.isPending ||
-    state.error ||
-    pending ||
-    replayOperation ||
-    effectiveActionState !== 'idle',
+    state.isPending || state.error || pending || replayOperation || effectiveActionState !== 'idle',
   );
   const phase = fishingPresentationPhase({
     submitting: effectiveActionState === 'sending' && !pending,
@@ -643,7 +618,6 @@ export function FishingGame() {
           </>
         }
       />
-      <span className="sr-only">{text('fishing.sound.hint')}</span>
       <div className="fishing-layout">
         <div className="fishing-main">
           <FishingStage phase={phase} level4={(session.data?.user.effective_level ?? 0) >= 4} />
@@ -770,7 +744,7 @@ export function FishingGame() {
             </div>
           </fieldset>
           <fieldset disabled={locked || !startsOpen}>
-            <legend>{text('fishing.result.total')}</legend>
+            <legend>{text('fishing.castCount')}</legend>
             <div className="fishing-count">
               <button
                 type="button"
@@ -825,11 +799,11 @@ export function FishingGame() {
           </button>
         </Card>
       </div>
-      <section className="fishing-leaderboards" aria-label="Fishing leaderboards">
+      <GamePrivacyControl />
+      <section className="fishing-leaderboards" aria-label={text('fishing.leaderboard.single')}>
         <LeaderboardCard board="single" query={single} />
         <LeaderboardCard board="total" query={total} />
       </section>
-      <p className="game-footnote">{text('common.noHistory')}</p>
       {rulesDialog}
     </main>
   );

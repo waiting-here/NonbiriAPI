@@ -17,6 +17,7 @@ import {
   coreKeys,
   coreSessionMatchesAccount,
   invalidateResourceDependents,
+  useCatalog,
   useEndpointCreateOptions,
 } from './queries';
 import { createOperationIdentity, isConflict, isOutcomeUnknown } from './request';
@@ -82,6 +83,8 @@ export function EndpointWizard({
   const [endpointKey, setEndpointKey] = useState<EndpointKey | null>(null);
   const [accepted, setAccepted] = useState<DiscoveryAccepted | null>(null);
   const [catalog, setCatalog] = useState<CatalogView | null>(null);
+  const liveCatalog = useCatalog(accountId, endpoint?.id, endpointKey?.id, undefined, step === 4);
+  const [addedKeys, setAddedKeys] = useState<EndpointKey[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [outcome, setOutcome] = useState<'conflict' | 'unknown' | null>(null);
@@ -101,6 +104,7 @@ export function EndpointWizard({
     dispatchSecret({ type: 'cancel', accountId, pageInstanceId });
     setEndpoint(null);
     setEndpointKey(null);
+    setAddedKeys([]);
     setAccepted(null);
     setCatalog(null);
     setBusy(false);
@@ -129,6 +133,7 @@ export function EndpointWizard({
       setForceStoreFalse(false);
       setEndpoint(null);
       setEndpointKey(null);
+      setAddedKeys([]);
       setAccepted(null);
       setCatalog(null);
       setBusy(false);
@@ -356,6 +361,7 @@ export function EndpointWizard({
       setHasKeyAttempt(false);
       dispatchSecret({ type: 'success', accountId, pageInstanceId });
       setEndpointKey(created);
+      setAddedKeys((current) => [...current.filter((key) => key.id !== created.id), created]);
       if (!coreSessionMatchesAccount(queryClient, accountId)) {
         discardStaleMutation();
         return;
@@ -802,6 +808,55 @@ export function EndpointWizard({
         </form>
       ) : null}
 
+      {step >= 2 && endpoint ? (
+        <div className="core-stack">
+          <p>{t('endpoints.multipleKeysHint')}</p>
+          {addedKeys.length > 0 ? (
+            <ul className="core-added-keys">
+              {addedKeys.map((key) => (
+                <li key={key.id}>
+                  {key.note || t('endpoints.key')}{' '}
+                  <span className="core-muted core-mono">
+                    {key.display_head}…{key.display_tail}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {step >= 3 ? (
+            <div className="core-row-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={busy || hasDiscoveryAttempt}
+                onClick={() => {
+                  dispatchSecret({ type: 'boundary', accountId, pageInstanceId });
+                  setKeyNote('');
+                  setEndpointKey(null);
+                  setCatalog(null);
+                  setAccepted(null);
+                  setError(null);
+                  setOutcome(null);
+                  setStep(2);
+                }}
+              >
+                {t('endpoints.addAnotherKey')}
+              </button>
+              {step === 3 ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={busy || hasDiscoveryAttempt}
+                  onClick={close}
+                >
+                  {t('endpoints.finish')}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {step === 2 && endpoint ? (
         <form
           className="core-form"
@@ -914,7 +969,16 @@ export function EndpointWizard({
 
       {step === 4 && (accepted || catalog) ? (
         <div className="core-form">
-          <DiscoveryStatus evidence={catalog?.evidence ?? accepted!.evidence} />
+          <DiscoveryStatus
+            evidence={liveCatalog.data?.evidence ?? catalog?.evidence ?? accepted!.evidence}
+          />
+          {liveCatalog.error ? (
+            <CoreErrorPanel
+              compact
+              error={liveCatalog.error}
+              onRetry={() => void liveCatalog.refetch()}
+            />
+          ) : null}
           <div className="core-form-actions">
             <button type="button" className="btn btn-secondary" onClick={close}>
               {t('endpoints.finish')}

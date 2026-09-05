@@ -114,12 +114,18 @@ export function ActivitiesPage() {
   });
   const period = thursday.data?.period ?? null;
   const authorityPeriodRevision = thursday.data?.period?.revision ?? (thursday.data ? 'none' : '');
-  const configDraft = config.data
-    ? configOverride
-      ? { ...configOverride, revision: config.data.revision }
-      : config.data
-    : null;
+  const configDraft = config.data ? (configOverride ? configOverride : config.data) : null;
   const periodDraft = periodOverride ?? draftForPeriod(period);
+  const configUnchanged = JSON.stringify(configDraft) === JSON.stringify(config.data);
+  const configStale = configDraft?.revision !== config.data?.revision;
+  const configDependency =
+    configDraft &&
+    !configDraft.master_enabled &&
+    (configDraft.welfare.enabled || configDraft.thursday.enabled)
+      ? t('admin.activities.config.masterRequired')
+      : configDraft?.thursday.enabled && !period
+        ? t('admin.activities.config.periodRequired')
+        : null;
   const adjustmentConfirmed =
     adjustment.confirmed && adjustment.authorityRevision === authorityPeriodRevision;
   const reconcile = async () => {
@@ -228,12 +234,13 @@ export function ActivitiesPage() {
           <LoadingState />
         ) : (
           <>
-            <p>{t('admin.activities.config.revisionHint', { revision: configDraft.revision })}</p>
+            <p>{t('admin.activities.config.revisionHint')}</p>
             <div className="ops-field-grid">
               <label className="checkbox-label">
                 <input
                   type="checkbox"
                   checked={configDraft.master_enabled}
+                  disabled={saveConfig.isPending}
                   onChange={(event) =>
                     editConfig({ ...configDraft, master_enabled: event.target.checked })
                   }
@@ -244,6 +251,7 @@ export function ActivitiesPage() {
                 <input
                   type="checkbox"
                   checked={configDraft.welfare.enabled}
+                  disabled={saveConfig.isPending}
                   onChange={(event) =>
                     editConfig({
                       ...configDraft,
@@ -257,6 +265,7 @@ export function ActivitiesPage() {
                 <span>{t('admin.activities.config.welfareThreshold')}</span>
                 <input
                   value={configDraft.welfare.threshold}
+                  disabled={saveConfig.isPending}
                   onChange={(event) =>
                     editConfig({
                       ...configDraft,
@@ -269,6 +278,7 @@ export function ActivitiesPage() {
                 <span>{t('admin.activities.config.welfareCap')}</span>
                 <input
                   value={configDraft.welfare.cap}
+                  disabled={saveConfig.isPending}
                   onChange={(event) =>
                     editConfig({
                       ...configDraft,
@@ -281,6 +291,7 @@ export function ActivitiesPage() {
                 <input
                   type="checkbox"
                   checked={configDraft.thursday.enabled}
+                  disabled={saveConfig.isPending}
                   onChange={(event) =>
                     editConfig({ ...configDraft, thursday: { enabled: event.target.checked } })
                   }
@@ -289,16 +300,38 @@ export function ActivitiesPage() {
               </label>
             </div>
             {saveConfig.error ? <ErrorState error={saveConfig.error} /> : null}
+            {configDependency ? (
+              <p role="alert" className="field-error">
+                {configDependency}
+              </p>
+            ) : null}
+            {configStale ? (
+              <p role="alert" className="field-error">
+                {t('admin.activities.config.changedElsewhere')}
+              </p>
+            ) : null}
             <button
               className="btn btn-primary"
               type="button"
-              disabled={saveConfig.isPending}
+              disabled={
+                saveConfig.isPending || configUnchanged || configStale || Boolean(configDependency)
+              }
               onClick={() =>
                 saveConfig.mutate(configDraft, { onSuccess: () => setConfigOverride(null) })
               }
             >
               {t('admin.activities.config.save')}
             </button>
+            {configOverride ? (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={saveConfig.isPending}
+                onClick={() => setConfigOverride(null)}
+              >
+                {t('common.cancel')}
+              </button>
+            ) : null}
           </>
         )}
       </Card>
@@ -502,10 +535,12 @@ export function ActivitiesPage() {
                         {poolTypeLabels[pool.pool_type]} / {poolStateLabels[pool.state]}
                       </td>
                       <td>
-                        {pool.period_id
-                          ?? t(pool.pool_type === 'welfare'
-                            ? 'admin.activities.pools.singleton'
-                            : 'admin.activities.pools.unboundPeriod')}
+                        {pool.period_id ??
+                          t(
+                            pool.pool_type === 'welfare'
+                              ? 'admin.activities.pools.singleton'
+                              : 'admin.activities.pools.unboundPeriod',
+                          )}
                       </td>
                       <td>
                         {pool.balance} {t('admin.activities.units.credits')}

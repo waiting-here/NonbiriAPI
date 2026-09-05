@@ -1137,7 +1137,7 @@ function EndpointKeyCard({
     <li className="core-key-card">
       <div className="core-key-card__top">
         <div>
-          <strong>{t('endpoints.key')}</strong>
+          <strong>{keyData.note || t('endpoints.key')}</strong>
           <div>
             <SafeCopyValue value={display} label={t('endpoints.key')} />
           </div>
@@ -1151,10 +1151,6 @@ function EndpointKeyCard({
         )}
       </div>
       <dl className="core-detail-list">
-        <div>
-          <dt>{t('endpoints.keyNote')}</dt>
-          <dd>{keyData.note || t('common.notSet')}</dd>
-        </div>
         <div>
           <dt>{t('endpoints.storePolicy')}</dt>
           <dd>{keyData.force_store_false ? t('common.yes') : t('common.no')}</dd>
@@ -1189,7 +1185,13 @@ function EndpointKeyCard({
         <button
           type="button"
           className="btn btn-secondary"
-          disabled={busy || reconciliationRequired || !physicalAvailable || Boolean(replayAttempt)}
+          disabled={
+            busy ||
+            catalog.data?.evidence.state === 'checking' ||
+            reconciliationRequired ||
+            !physicalAvailable ||
+            Boolean(replayAttempt)
+          }
           onClick={() =>
             void run({
               kind: 'refresh',
@@ -1255,13 +1257,16 @@ function EndpointKeyCard({
         )}
       </section>
 
-      <ManualCatalog
-        accountId={accountId}
-        endpointId={endpoint.id}
-        keyId={keyData.id}
-        routingEntries={routingEntries}
-        routingKnown={!routingPending && !routingError}
-      />
+      <details className="core-manual-details">
+        <summary>{t('endpoints.manualTitle')}</summary>
+        <ManualCatalog
+          accountId={accountId}
+          endpointId={endpoint.id}
+          keyId={keyData.id}
+          routingEntries={routingEntries}
+          routingKnown={!routingPending && !routingError}
+        />
+      </details>
       <OutcomeNotice outcome={outcome} />
       {reconciliationRequired ? (
         <button
@@ -1634,16 +1639,6 @@ export function EndpointDetail({
         title={t('endpoints.detailsTitle')}
         description={t('endpoints.detailsDescription')}
         back={<Link to={CORE_ROUTE_PATHS.endpoints}>{t('common.back')}</Link>}
-        actions={
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={reconciliationRequired || Boolean(replayAttempt)}
-            onClick={() => setAddingKey(true)}
-          >
-            {t('endpoints.addKey')}
-          </button>
-        }
       />
       <section className="core-card">
         <div className="core-card__header">
@@ -1779,18 +1774,25 @@ export function EndpointDetail({
         )}
       </section>
 
-      {addingKey ? (
-        <AddEndpointKeyForm
-          accountId={accountId}
-          endpoint={endpoint.data}
-          onClose={() => setAddingKey(false)}
-        />
-      ) : null}
-
       <section className="core-card">
         <div className="core-card__header">
           <h2>{t('endpoints.key')}</h2>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={addingKey || reconciliationRequired || Boolean(replayAttempt)}
+            onClick={() => setAddingKey(true)}
+          >
+            {t('endpoints.addKey')}
+          </button>
         </div>
+        {addingKey ? (
+          <AddEndpointKeyForm
+            accountId={accountId}
+            endpoint={endpoint.data}
+            onClose={() => setAddingKey(false)}
+          />
+        ) : null}
         {keys.error && keys.data ? (
           <CoreErrorPanel compact error={keys.error} onRetry={() => void keys.refetch()} />
         ) : null}
@@ -1802,15 +1804,7 @@ export function EndpointDetail({
             onRetry={() => void keys.refetch()}
           />
         ) : keys.data.data.length === 0 ? (
-          <CoreEmpty
-            title={t('endpoints.noKeysTitle')}
-            body={t('endpoints.noKeysBody')}
-            action={
-              <button type="button" className="btn btn-primary" onClick={() => setAddingKey(true)}>
-                {t('endpoints.addKey')}
-              </button>
-            }
-          />
+          <CoreEmpty title={t('endpoints.noKeysTitle')} body={t('endpoints.noKeysBody')} />
         ) : (
           <ul className="core-key-list">
             {keys.data.data.map((keyData) => (
