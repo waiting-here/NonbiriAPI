@@ -130,6 +130,7 @@ type AdminRollingSuccess struct {
 }
 
 type AdminCharityModel struct {
+	RouteStrategy    string              `json:"route_strategy"`
 	ID               string              `json:"id"`
 	Provider         string              `json:"provider"`
 	Model            string              `json:"model"`
@@ -177,6 +178,7 @@ type StewardRollingSuccess struct {
 }
 
 type StewardCharityModel struct {
+	RouteStrategy    string                `json:"route_strategy"`
 	ID               string                `json:"id"`
 	Provider         string                `json:"provider"`
 	Model            string                `json:"model"`
@@ -283,6 +285,7 @@ type DiscountPatchInput struct {
 }
 
 type ModelCreate struct {
+	RouteStrategy    string        `json:"route_strategy,omitempty"`
 	Provider         string        `json:"provider"`
 	Model            string        `json:"model"`
 	Enabled          bool          `json:"enabled"`
@@ -292,6 +295,7 @@ type ModelCreate struct {
 }
 
 type ModelPatch struct {
+	RouteStrategy    *string       `json:"route_strategy,omitempty"`
 	ExpectedRevision string        `json:"expected_revision"`
 	Provider         *string       `json:"provider,omitempty"`
 	Model            *string       `json:"model,omitempty"`

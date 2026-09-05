@@ -373,7 +373,11 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, maxBindingBatch+1)
 		return RuntimeSnapshot{}, ErrUnavailable
 	}
 	if freezeOrder {
-		snapshot.candidates, err = orderWeightedRuntimeCandidates(s.entropy, weighted)
+		strategy, strategyErr := readRoutingStrategy(ctx, tx, modelID)
+		if strategyErr != nil {
+			return RuntimeSnapshot{}, strategyErr
+		}
+		snapshot.candidates, err = orderRuntimeCandidates(s.entropy, weighted, strategy)
 		if err != nil {
 			return RuntimeSnapshot{}, err
 		}

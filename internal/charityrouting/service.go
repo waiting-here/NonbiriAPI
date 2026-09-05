@@ -31,21 +31,25 @@ const (
 )
 
 const (
-	routeCapability          = "/api/charity/models"
-	routeAdminModels         = "/admin/api/charity-models"
-	routeAdminModel          = "/admin/api/charity-models/{id}"
-	routeAdminCandidates     = "/admin/api/charity-models/{id}/binding-candidates"
-	routeAdminBindings       = "/admin/api/charity-models/{id}/bindings"
-	routeAdminBindingBatch   = "/admin/api/charity-models/{id}/bindings/batch"
-	routeAdminBindingOrder   = "/admin/api/charity-models/{id}/bindings/order"
-	routeAdminBinding        = "/admin/api/charity-models/{id}/bindings/{bindingId}"
-	routeStewardModels       = "/api/steward/charity-models"
-	routeStewardModel        = "/api/steward/charity-models/{id}"
-	routeStewardCandidates   = "/api/steward/charity-models/{id}/binding-candidates"
-	routeStewardBindings     = "/api/steward/charity-models/{id}/bindings"
-	routeStewardBindingBatch = "/api/steward/charity-models/{id}/bindings/batch"
-	routeStewardBindingOrder = "/api/steward/charity-models/{id}/bindings/order"
-	routeStewardBinding      = "/api/steward/charity-models/{id}/bindings/{bindingId}"
+	routeCapability              = "/api/charity/models"
+	routeAdminModels             = "/admin/api/charity-models"
+	routeAdminModel              = "/admin/api/charity-models/{id}"
+	routeAdminCandidates         = "/admin/api/charity-models/{id}/binding-candidates"
+	routeAdminBindingDonations   = "/admin/api/charity-models/{id}/binding-donations"
+	routeAdminBindingKeys        = "/admin/api/charity-models/{id}/binding-donations/{donationId}/keys"
+	routeAdminBindings           = "/admin/api/charity-models/{id}/bindings"
+	routeAdminBindingBatch       = "/admin/api/charity-models/{id}/bindings/batch"
+	routeAdminBindingOrder       = "/admin/api/charity-models/{id}/bindings/order"
+	routeAdminBinding            = "/admin/api/charity-models/{id}/bindings/{bindingId}"
+	routeStewardModels           = "/api/steward/charity-models"
+	routeStewardModel            = "/api/steward/charity-models/{id}"
+	routeStewardCandidates       = "/api/steward/charity-models/{id}/binding-candidates"
+	routeStewardBindingDonations = "/api/steward/charity-models/{id}/binding-donations"
+	routeStewardBindingKeys      = "/api/steward/charity-models/{id}/binding-donations/{donationId}/keys"
+	routeStewardBindings         = "/api/steward/charity-models/{id}/bindings"
+	routeStewardBindingBatch     = "/api/steward/charity-models/{id}/bindings/batch"
+	routeStewardBindingOrder     = "/api/steward/charity-models/{id}/bindings/order"
+	routeStewardBinding          = "/api/steward/charity-models/{id}/bindings/{bindingId}"
 )
 
 type Config struct {
@@ -147,6 +151,9 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?)`,
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO charity_model_stats(model_id) VALUES(?)`, modelID); err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, fmt.Errorf("charity routing: initialize stats: %w", err)
+	}
+	if err := setRoutingStrategy(ctx, tx, modelID, defaultRouteStrategy(input.RouteStrategy)); err != nil {
+		return resources.MutationResult[AdminCharityModel]{}, err
 	}
 	if input.FlattenToolCalls {
 		if err := insertPolicyAudit(ctx, tx, actorID, string(role), modelID, false, true, now); err != nil {
@@ -284,6 +291,11 @@ revision=revision+1,updated_at=? WHERE id=? AND revision=?`,
 	}
 	if current.flatten != updated.flatten {
 		if err := insertPolicyAudit(ctx, tx, actorID, string(role), modelID, current.flatten == 1, updated.flatten == 1, now); err != nil {
+			return resources.MutationResult[AdminCharityModel]{}, err
+		}
+	}
+	if input.RouteStrategy != nil {
+		if err := setRoutingStrategy(ctx, tx, modelID, *input.RouteStrategy); err != nil {
 			return resources.MutationResult[AdminCharityModel]{}, err
 		}
 	}
@@ -516,7 +528,8 @@ cm.cache_read_user_price,cm.output_user_price,cm.uncached_donor_reward,cm.cache_
 cm.cache_read_donor_reward,cm.output_donor_reward,cm.discount_enabled,cm.discount_percent,
 cm.discount_start_at,cm.discount_end_at,cm.flatten_tool_calls,cm.revision,cm.binding_revision,
 (SELECT COUNT(*) FROM charity_model_bindings b WHERE b.charity_model_id=cm.id),
-COALESCE(s.sample_count,0),COALESCE(s.success_count,0),cm.created_at,cm.updated_at
+COALESCE(s.sample_count,0),COALESCE(s.success_count,0),cm.created_at,cm.updated_at,
+COALESCE((SELECT strategy FROM charity_model_routing WHERE model_id=cm.id),'expiry_weighted')
 FROM charity_models cm LEFT JOIN charity_model_stats s ON s.model_id=cm.id WHERE cm.id=?`
 
 type rowScanner interface{ Scan(...any) error }
@@ -534,7 +547,7 @@ func scanAdminModel(row rowScanner) (AdminCharityModel, error) {
 		&requestUser, &requestReward, &user[0], &user[1], &user[2], &user[3],
 		&reward[0], &reward[1], &reward[2], &reward[3], &discountEnabled, &value.Discount.Percent,
 		&start, &end, &flatten, &revision, &bindingRevision, &bindingCount, &samples, &successes,
-		&value.CreatedAt, &value.UpdatedAt)
+		&value.CreatedAt, &value.UpdatedAt, &value.RouteStrategy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AdminCharityModel{}, ErrNotFound
 	}
@@ -542,6 +555,9 @@ func scanAdminModel(row rowScanner) (AdminCharityModel, error) {
 		return AdminCharityModel{}, fmt.Errorf("charity routing: scan model: %w", err)
 	}
 	value.ID = strconv.FormatInt(id, 10)
+	if !validRouteStrategy(value.RouteStrategy) {
+		return AdminCharityModel{}, ErrInvariant
+	}
 	value.Enabled = enabled == 1
 	value.FlattenToolCalls = flatten == 1
 	value.Revision = strconv.FormatInt(revision, 10)
@@ -596,7 +612,8 @@ func stewardModel(value AdminCharityModel) StewardCharityModel {
 		}
 	}
 	return StewardCharityModel{
-		ID: value.ID, Provider: value.Provider, Model: value.Model, FullName: value.FullName,
+		RouteStrategy: defaultRouteStrategy(value.RouteStrategy),
+		ID:            value.ID, Provider: value.Provider, Model: value.Model, FullName: value.FullName,
 		Enabled: value.Enabled, Pricing: pricing,
 		Discount: StewardDiscount{Enabled: value.Discount.Enabled, Percent: value.Discount.Percent,
 			StartAt: copyInt(value.Discount.StartAt), EndAt: copyInt(value.Discount.EndAt)},
@@ -614,6 +631,9 @@ type validatedPricing struct {
 }
 
 func validateModelCreate(input ModelCreate) (validatedPricing, error) {
+	if !validRouteStrategy(defaultRouteStrategy(input.RouteStrategy)) {
+		return validatedPricing{}, ErrInvalidRequest
+	}
 	if !validModelName(input.Provider) || !validModelName(input.Model) || !validDiscount(input.Discount) {
 		return validatedPricing{}, ErrInvalidRequest
 	}
@@ -621,8 +641,11 @@ func validateModelCreate(input ModelCreate) (validatedPricing, error) {
 }
 
 func validateModelPatch(input ModelPatch) bool {
+	if input.RouteStrategy != nil && !validRouteStrategy(*input.RouteStrategy) {
+		return false
+	}
 	if input.ExpectedRevision == "" || input.Provider == nil && input.Model == nil && input.Enabled == nil &&
-		input.Pricing == nil && input.Discount == nil && input.FlattenToolCalls == nil {
+		input.Pricing == nil && input.Discount == nil && input.FlattenToolCalls == nil && input.RouteStrategy == nil {
 		return false
 	}
 	if input.Provider != nil && !validModelName(*input.Provider) || input.Model != nil && !validModelName(*input.Model) ||

@@ -33,6 +33,8 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		{http.MethodPatch, routeAdminModel, api.patchAdminModel},
 		{http.MethodDelete, routeAdminModel, api.deleteAdminModel},
 		{http.MethodGet, routeAdminCandidates, api.adminCandidates},
+		{http.MethodGet, routeAdminBindingDonations, api.adminBindingDonations},
+		{http.MethodGet, routeAdminBindingKeys, api.adminBindingKeys},
 		{http.MethodGet, routeAdminBindings, api.getAdminBindings},
 		{http.MethodPost, routeAdminBindingBatch, api.addAdminBindings},
 		{http.MethodPut, routeAdminBindingOrder, api.orderAdminBindings},
@@ -61,6 +63,8 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		{http.MethodPatch, routeStewardModel, api.patchStewardModel},
 		{http.MethodDelete, routeStewardModel, api.deleteStewardModel},
 		{http.MethodGet, routeStewardCandidates, api.stewardCandidates},
+		{http.MethodGet, routeStewardBindingDonations, api.stewardBindingDonations},
+		{http.MethodGet, routeStewardBindingKeys, api.stewardBindingKeys},
 		{http.MethodGet, routeStewardBindings, api.getStewardBindings},
 		{http.MethodPost, routeStewardBindingBatch, api.addStewardBindings},
 		{http.MethodPut, routeStewardBindingOrder, api.orderStewardBindings},
@@ -291,6 +295,7 @@ func parseDiscount(wire discountWire) (DiscountInput, map[string]any, error) {
 }
 
 type modelCreateWire struct {
+	RouteStrategy    requiredField[string]       `json:"route_strategy"`
 	Provider         requiredField[string]       `json:"provider"`
 	Model            requiredField[string]       `json:"model"`
 	Enabled          requiredField[bool]         `json:"enabled"`
@@ -315,6 +320,13 @@ func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error)
 		Pricing: pricing, Discount: discount, FlattenToolCalls: wire.FlattenToolCalls.Value}
 	canonical := map[string]any{"provider": input.Provider, "model": input.Model, "enabled": input.Enabled,
 		"pricing": pricingJSON, "discount": discountJSON, "flatten_tool_calls": input.FlattenToolCalls}
+	if wire.RouteStrategy.Set {
+		if !validRouteStrategy(wire.RouteStrategy.Value) {
+			return ModelCreate{}, nil, ErrInvalidRequest
+		}
+		input.RouteStrategy = wire.RouteStrategy.Value
+		canonical["route_strategy"] = wire.RouteStrategy.Value
+	}
 	return input, canonical, nil
 }
 
@@ -397,6 +409,7 @@ func parseDiscountPatch(wire discountPatchWire) (*DiscountPatchInput, map[string
 }
 
 type modelPatchWire struct {
+	RouteStrategy    requiredField[string]            `json:"route_strategy"`
 	ExpectedRevision requiredField[string]            `json:"expected_revision"`
 	Provider         requiredField[string]            `json:"provider"`
 	Model            requiredField[string]            `json:"model"`
@@ -415,6 +428,13 @@ func parseModelPatch(wire modelPatchWire) (ModelPatch, map[string]any, error) {
 	}
 	input := ModelPatch{ExpectedRevision: wire.ExpectedRevision.Value}
 	canonical := map[string]any{"expected_revision": wire.ExpectedRevision.Value}
+	if wire.RouteStrategy.Set {
+		if !validRouteStrategy(wire.RouteStrategy.Value) {
+			return ModelPatch{}, nil, ErrInvalidRequest
+		}
+		input.RouteStrategy = &wire.RouteStrategy.Value
+		canonical["route_strategy"] = wire.RouteStrategy.Value
+	}
 	if wire.Provider.Set {
 		input.Provider = &wire.Provider.Value
 		canonical["provider"] = wire.Provider.Value
