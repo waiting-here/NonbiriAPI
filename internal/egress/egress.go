@@ -149,6 +149,17 @@ func CanonicalEndpointTarget(raw string) (target string, origin string, err erro
 	return target, origin, err
 }
 
+// CanonicalEndpointBaseURL returns the stored form used by ValidateBaseURL,
+// preserving whether the input explicitly included a port. It only parses;
+// outbound requests must still pass the configured egress policy.
+func CanonicalEndpointBaseURL(raw string) (string, error) {
+	_, _, parsed, explicitPort, err := canonicalizeBaseURL(raw, false)
+	if err != nil {
+		return "", err
+	}
+	return displayBaseURL(parsed, explicitPort), nil
+}
+
 // AddSelfOrigins registers the process's public station names, every A/AAAA
 // answer for those names, and the listener's local addresses and port. It must
 // succeed before Stack.NewClient can create a dialing client. Hostname origins

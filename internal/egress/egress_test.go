@@ -189,6 +189,30 @@ func TestCanonicalEndpointTargetUsesEffectiveOriginAndPreservesPath(t *testing.T
 	}
 }
 
+func TestCanonicalEndpointBaseURLMatchesStoredPolicyForm(t *testing.T) {
+	policy, err := NewEgressPolicy(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range []string{
+		"https://api.example.com/v1", "http://api.example.com/v1",
+		"https://api.example.com:443/v1", "http://api.example.com:80/v1",
+		"https://api.example.com:8443/v1", "https://[2606:4700:4700::1111]/v1",
+		"HTTPS://API.EXAMPLE.COM./api//v1/", "https://api.example.com/a%2Fb",
+	} {
+		t.Run(raw, func(t *testing.T) {
+			stored, err := policy.ValidateBaseURL(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := CanonicalEndpointBaseURL(stored)
+			if err != nil || got != stored {
+				t.Fatalf("stored URL = %q, canonical = %q, error = %v", stored, got, err)
+			}
+		})
+	}
+}
+
 func TestEgressPolicyExactOriginOnly(t *testing.T) {
 	for _, entry := range []string{
 		"10.0.0.0/8",
