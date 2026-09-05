@@ -100,7 +100,8 @@ function approve(current: AdminDonation, body: Record<string, unknown>): AdminDo
     keys: current.keys.map((key) => ({
       ...key,
       charity_state: 'available',
-      expires_at: settings.find((setting) => setting.donation_key_id === key.id)?.expires_at ?? null,
+      expires_at:
+        settings.find((setting) => setting.donation_key_id === key.id)?.expires_at ?? null,
     })),
     reviewer: { user_id: '9', role: 'admin' },
     updated_at: 1_735_689_700,
@@ -151,9 +152,7 @@ describe('Generation 2 charity management policy', () => {
     expect(reviewRequests).toHaveLength(1);
     const body = JSON.parse(String(reviewRequests[0].body)) as Record<string, unknown>;
     expect(body).not.toHaveProperty('expires_at');
-    expect(
-      (body.key_settings as { expires_at: number | null }[])[0]?.expires_at,
-    ).toBe(expiresAt);
+    expect((body.key_settings as { expires_at: number | null }[])[0]?.expires_at).toBe(expiresAt);
     expect(new Headers(reviewRequests[0].headers).get('Idempotency-Key')).toMatch(
       operationKeyPattern,
     );
@@ -262,6 +261,7 @@ describe('Generation 2 charity management policy', () => {
         createRequests.push(init ?? {});
         const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
         const model: CharityModel = {
+          route_strategy: body.route_strategy as CharityModel['route_strategy'],
           id: '1',
           provider: String(body.provider),
           model: String(body.model),

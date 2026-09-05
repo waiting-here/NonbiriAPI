@@ -373,9 +373,7 @@ test('user endpoint source wizard submits an immutable mainstream channel select
     'true',
   );
   await wizard.getByRole('button', { name: 'Next' }).click();
-  await expect(wizard.getByLabel('Service address')).toHaveValue(
-    'https://channel.example.test/v1',
-  );
+  await expect(wizard.getByLabel('Service address')).toHaveValue('https://channel.example.test/v1');
   await expect(wizard.getByLabel('Service address')).toHaveAttribute('readonly');
   await wizard.getByLabel('Note').fill('Selected channel endpoint');
   await wizard.getByRole('button', { name: 'Create endpoint' }).click();
@@ -496,7 +494,25 @@ test('user charity overview loads all cursor pages, filters each key state, and 
   await expect(page.getByLabel('Offer price: 2.4')).toBeVisible();
   await expect(page.getByText('Limited-time 20% off')).toBeVisible();
   await expect(priceTable.getByText('Donor reward')).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'My donated keys' })).toBeVisible();
+  for (const width of [320, 390, 1440, 1935]) {
+    await page.setViewportSize({ width, height: 1000 });
+    const layout = await page.locator('.economy-page').evaluate((element) => {
+      const main = element.closest('main')!;
+      const outer = main.getBoundingClientRect();
+      const inner = element.getBoundingClientRect();
+      const style = getComputedStyle(main);
+      return {
+        width: inner.width,
+        available: outer.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+        overflow: document.documentElement.scrollWidth > innerWidth,
+      };
+    });
+    expect(layout.overflow).toBe(false);
+    expect(layout.width).toBeGreaterThanOrEqual(layout.available - 2);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('tab', { name: 'My donations', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'My donations' })).toBeVisible();
   await expect(page.getByText('Showing 3 of 3 keys')).toBeVisible();
   const filter = page.getByLabel('Key status');
   await filter.selectOption('available');
@@ -510,6 +526,7 @@ test('user charity overview loads all cursor pages, filters each key state, and 
   await expect(page.getByRole('heading', { name: 'key-ended…tail' })).toBeVisible();
   await filter.selectOption('all');
 
+  await page.getByRole('tab', { name: 'Donate resources', exact: true }).click();
   const composer = page.locator('.economy-donation-composer');
   await expect(composer.getByRole('heading', { name: 'Submit a charity donation' })).toBeVisible();
   await composer.getByLabel(/key-free…tail/).check();
@@ -562,6 +579,7 @@ test('user charity overview fails closed on a cursor page and privacy states exp
     body: { data: [], next_cursor: 99 },
   });
   await page.goto(`${USER_ORIGIN}/charity`);
+  await page.getByRole('tab', { name: 'My donations', exact: true }).click();
   await expect(
     page.getByRole('heading', { name: 'The donated-key overview is incomplete' }),
   ).toBeVisible();

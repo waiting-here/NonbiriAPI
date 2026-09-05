@@ -179,7 +179,9 @@ describe('public charity pricing', () => {
     const table = screen.getByRole('table', { name: charityCopy.priceCaption });
     expect(within(table).getByLabelText(`${charityCopy.originalPrice}: 3`)).toBeVisible();
     expect(within(table).getByLabelText(`${charityCopy.currentPrice}: 2.4`)).toBeVisible();
-    expect(screen.getByText(charityCopy.discountPercent.replace('{{percent}}', '20'))).toBeVisible();
+    expect(
+      screen.getByText(charityCopy.discountPercent.replace('{{percent}}', '20')),
+    ).toBeVisible();
     expect(screen.queryByText(charityCopy.donorReward)).toBeNull();
   });
 
@@ -284,6 +286,7 @@ describe('donation composer recovery', () => {
       station: 'user',
       role: 'user',
     });
+    await rendered.user.click(screen.getByRole('tab', { name: 'Donate resources' }));
     const checkboxes = screen.getAllByRole('checkbox');
     await rendered.user.type(screen.getByRole('textbox'), 'account-scoped draft');
     await rendered.user.click(checkboxes[0]);
@@ -301,6 +304,11 @@ describe('donation composer recovery', () => {
     expect(screen.getByRole('textbox')).toHaveValue('account-scoped draft');
     expect(screen.getByRole('button', { name: /submit for review/i })).toBeDisabled();
     expect(unknown.mutateAsync).toHaveBeenCalledTimes(1);
+
+    await rendered.user.click(screen.getByRole('tab', { name: 'Shared models' }));
+    await rendered.user.click(screen.getByRole('tab', { name: 'Donate resources' }));
+    expect(screen.getByRole('textbox')).toHaveValue('account-scoped draft');
+    expect(screen.getByRole('button', { name: /submit for review/i })).toBeDisabled();
 
     unknown.reconcileGeneration = 1;
     rendered.rerender(<CharityPage />);
@@ -551,6 +559,9 @@ describe('donation composer recovery', () => {
       createdAt: 1_788_100_000,
       updatedAt: 1_788_100_010,
     };
+    vi.mocked(economyQueries.useEditDonation).mockReturnValue(successfulMutation() as never);
+    vi.mocked(economyQueries.useWithdrawDonation).mockReturnValue(successfulMutation() as never);
+    vi.mocked(economyQueries.useTerminateDonation).mockReturnValue(successfulMutation() as never);
     const rendered = await renderWithProviders(<DonationKeyOverview donations={[donation]} />, {
       station: 'user',
       role: 'user',

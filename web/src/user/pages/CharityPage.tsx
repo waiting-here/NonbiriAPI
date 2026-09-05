@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Link, useParams } from 'react-router';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { isNotFoundError } from '@shared/query/http';
 import { usePublicConfig } from '@shared/query/publicConfig';
@@ -39,7 +39,7 @@ function DonationDetailContent({ donationID }: { donationID: string }) {
         title={t('user.charity.donationDetailTitle')}
         description={t('user.charity.donationDetailDescription')}
         icon="charity"
-        back={<Link to="/charity">{t('user.charity.backToDonations')}</Link>}
+        back={<Link to="/charity?tab=donations">{t('user.charity.backToDonations')}</Link>}
       />
       {!valid ? (
         <EmptyState
@@ -77,6 +77,18 @@ function DonationDetailContent({ donationID }: { donationID: string }) {
 
 function CharityContent() {
   const { t, i18n } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab =
+    searchParams.get('tab') === 'donations'
+      ? 'donations'
+      : searchParams.get('tab') === 'donate'
+        ? 'donate'
+        : 'models';
+  const selectTab = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', value);
+    setSearchParams(next);
+  };
   const session = useUserSession();
   const publicConfig = usePublicConfig();
   const capability = useCharityCapability();
@@ -85,7 +97,7 @@ function CharityContent() {
   const intake = capability.data?.donationIntake;
   const choices = useEndpointKeyChoices(
     donations.data ?? [],
-    intake === 'open' && donations.isSuccess,
+    tab === 'donate' && intake === 'open' && donations.isSuccess,
   );
   const configuredDonationNotice = (i18n.resolvedLanguage ?? i18n.language).startsWith('zh')
     ? publicConfig.data?.charityDonationNoticeZh
@@ -94,36 +106,59 @@ function CharityContent() {
   return (
     <div className="page economy-page economy-charity-page">
       <PageHeader
-        eyebrow={t('user.charity.eyebrow')}
         title={t('user.charity.title')}
         description={t('user.charity.description')}
         icon="charity"
+        actions={
+          <>
+            <Link className="btn btn-secondary" to="/keys">
+              {t('user.charity.apiAccess')}
+            </Link>
+            {session.data?.user.effective_level === 5 ? (
+              <Link className="btn btn-secondary" to="/steward?tab=charity">
+                {t('user.charity.manageCharity')}
+              </Link>
+            ) : null}
+          </>
+        }
       />
-
-      <section className="economy-capability-grid" aria-label={t('user.charity.capabilities')}>
+      <nav className="economy-tabs" role="tablist" aria-label={t('user.charity.sections')}>
+        {(
+          [
+            ['models', 'user.charity.tabs.models'],
+            ['donations', 'user.charity.tabs.donations'],
+            ['donate', 'user.charity.tabs.donate'],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={tab === value}
+            className={`btn btn-quiet${tab === value ? ' is-active' : ''}`}
+            onClick={() => selectTab(value)}
+          >
+            {t(label)}
+          </button>
+        ))}
+      </nav>
+      <section
+        hidden={tab !== 'models'}
+        className="economy-model-workspace"
+        aria-label={t('user.charity.availableModels')}
+      >
         {capability.isPending ? (
           <LoadingState />
         ) : capability.error ? (
           <ErrorState error={capability.error} onRetry={() => void capability.refetch()} />
         ) : capability.data ? (
-          <>
-            <CharityCapabilityPanel capability={capability.data} />
-            <DonationIntakePanel state={capability.data.donationIntake} />
-          </>
+          <CharityCapabilityPanel capability={capability.data} />
         ) : (
           <LoadingState />
         )}
+        <CharitySafetyNotice />
       </section>
-
-      <CharitySafetyNotice />
-
-      <section aria-labelledby="donations-title">
-        <div className="card-title-row economy-section-heading">
-          <div>
-            <p className="eyebrow">{t('user.charity.yourResources')}</p>
-            <h2 id="donations-title">{t('user.charity.donationsTitle')}</h2>
-          </div>
-        </div>
+      <section hidden={tab !== 'donations'} aria-label={t('user.charity.donationsTitle')}>
         {donations.isPending ? (
           <LoadingState />
         ) : donations.error ? (
@@ -134,44 +169,59 @@ function CharityContent() {
           )
         ) : !donations.data ? (
           <LoadingState />
+        ) : donations.data.length === 0 ? (
+          <EmptyState
+            title={t('user.charity.noDonations')}
+            body={t('user.charity.noDonationsBody')}
+            action={
+              intake === 'open' ? (
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  onClick={() => selectTab('donate')}
+                >
+                  {t('user.charity.submitDonation')}
+                </button>
+              ) : undefined
+            }
+          />
         ) : (
-          <>
-            <DonationKeyOverview donations={donations.data} />
-            {donations.data.length === 0 ? (
-              <EmptyState
-                title={t('user.charity.noDonations')}
-                body={t('user.charity.noDonationsBody')}
-              />
-            ) : (
-              <div className="item-list economy-donation-list">
-                {donations.data.map((donation) => (
-                  <DonationCard key={donation.id} donation={donation} />
-                ))}
-              </div>
-            )}
-          </>
+          <DonationKeyOverview donations={donations.data} />
         )}
       </section>
-
-      {intake === 'open' && donations.isSuccess && accountID ? (
-        <section id="submit-donation" aria-labelledby="submit-donation-title">
-          <h2 id="submit-donation-title" className="economy-visually-supported-title">
-            {t('user.charity.submitDonation')}
-          </h2>
-          {choices.isPending ? (
-            <LoadingState />
-          ) : choices.error ? (
-            <ErrorState error={choices.error} onRetry={() => void choices.refetch()} />
-          ) : (
-            <DonationComposer
-              key={accountID}
-              choices={choices.data}
-              draftNamespace={accountID}
-              notice={configuredDonationNotice}
-            />
-          )}
-        </section>
-      ) : null}
+      <section
+        hidden={tab !== 'donate'}
+        id="submit-donation"
+        aria-label={t('user.charity.submitDonation')}
+      >
+        {capability.error ? (
+          <ErrorState error={capability.error} onRetry={() => void capability.refetch()} />
+        ) : intake ? (
+          <DonationIntakePanel state={intake} />
+        ) : (
+          <LoadingState />
+        )}
+        {intake === 'open' && donations.isSuccess && accountID ? (
+          <>
+            {choices.isPending ? (
+              <LoadingState />
+            ) : choices.error ? (
+              <ErrorState error={choices.error} onRetry={() => void choices.refetch()} />
+            ) : (
+              <DonationComposer
+                key={accountID}
+                choices={choices.data}
+                draftNamespace={accountID}
+                notice={configuredDonationNotice}
+              />
+            )}
+          </>
+        ) : donations.error ? (
+          <ErrorState error={donations.error} onRetry={() => void donations.refetch()} />
+        ) : donations.isPending ? (
+          <LoadingState />
+        ) : null}
+      </section>
     </div>
   );
 }

@@ -293,9 +293,10 @@ function pendingDonationFixture(frame: 'admin' | 'steward', id: string, descript
     description,
     review_result: null,
     keys: [managedKeyFixture],
-    owner: frame === 'admin'
-      ? { user_id: '1', discord_id: null, display_name: 'fixture-user' }
-      : { user_id: '1', display_name: 'fixture-user' },
+    owner:
+      frame === 'admin'
+        ? { user_id: '1', discord_id: null, display_name: 'fixture-user' }
+        : { user_id: '1', display_name: 'fixture-user' },
     reviewer: null,
     created_at: 1,
     updated_at: 2,
@@ -898,7 +899,7 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.type(screen.getByLabelText('Service provider'), 'created-provider');
     await rendered.user.type(screen.getByLabelText('Model name'), 'created-model');
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
-    await screen.findByText('created-provider/created-model');
+    await screen.findAllByText('created-provider/created-model');
     await waitFor(() => expect(modelReads).toBeGreaterThan(1));
     expect(screen.getByRole('button', { name: 'Retry the same operation' })).toBeVisible();
     expect(modelPosts).toBe(1);
@@ -1168,6 +1169,7 @@ describe('experimental policy and charity controls', () => {
       role: 'user',
     });
     await screen.findByText('[公益]provider/charity-model');
+    await rendered.user.click(screen.getByRole('tab', { name: 'Donate resources' }));
     await rendered.user.click(await screen.findByRole('checkbox', { name: /sk-a…tail/ }));
     await rendered.user.type(screen.getByLabelText('Donation description'), 'fixture donation');
     await rendered.user.click(
@@ -1279,9 +1281,11 @@ describe('experimental policy and charity controls', () => {
     await screen.findByRole('heading', { name: 'Review pending submission' });
     await rendered.user.type(screen.getByLabelText('Reason'), 'expiry validation');
     await rendered.user.click(screen.getByRole('checkbox', { name: 'No expiry' }));
-    await rendered.user.click(screen.getByRole('checkbox', {
-      name: 'I confirm this review result and its per-key consequences.',
-    }));
+    await rendered.user.click(
+      screen.getByRole('checkbox', {
+        name: 'I confirm this review result and its per-key consequences.',
+      }),
+    );
     const expiry = document.querySelector<HTMLInputElement>('input[type="datetime-local"]');
     if (!expiry) throw new Error('review expiry control not found');
     Object.defineProperty(expiry, 'value', {
@@ -1291,13 +1295,17 @@ describe('experimental policy and charity controls', () => {
     });
     fireEvent.change(expiry);
     await expect(
-      screen.findByText('Each effective expiry must be a valid supported date or permanent where authorized.'),
+      screen.findByText(
+        'Each effective expiry must be a valid supported date or permanent where authorized.',
+      ),
     ).resolves.toBeVisible();
     expect(
       fetchMock.mock.calls.filter((call) => {
         const requestURL = new URL(String(call[0]), window.location.origin);
         const requestInit = call[1] as RequestInit | undefined;
-        return requestURL.pathname === '/admin/api/donations/20/review' && requestInit?.method === 'POST';
+        return (
+          requestURL.pathname === '/admin/api/donations/20/review' && requestInit?.method === 'POST'
+        );
       }),
     ).toHaveLength(0);
     await rendered.user.click(screen.getByRole('checkbox', { name: 'No expiry' }));
@@ -1351,9 +1359,11 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(detailReads).toBe(2));
     await rendered.user.type(screen.getByLabelText('Reason'), 'detail recovered');
-    await rendered.user.click(screen.getByRole('checkbox', {
-      name: 'I confirm this review result and its per-key consequences.',
-    }));
+    await rendered.user.click(
+      screen.getByRole('checkbox', {
+        name: 'I confirm this review result and its per-key consequences.',
+      }),
+    );
     await rendered.user.click(screen.getByRole('button', { name: 'Approve donation' }));
     await waitFor(() =>
       expect(lastBody(fetchMock, 'POST', '/admin/api/donations/21/review')).toMatchObject({
@@ -1435,7 +1445,9 @@ describe('experimental policy and charity controls', () => {
       );
       await screen.findByText('[公益]provider/charity-model');
       await rendered.user.click(screen.getByRole('button', { name: 'Manage' }));
-      const editHeading = await screen.findByRole('heading', { name: '[公益]provider/charity-model' });
+      const editHeading = await screen.findByRole('heading', {
+        name: '[公益]provider/charity-model',
+      });
       const editForm = editHeading.closest('.card');
       if (!(editForm instanceof HTMLElement)) throw new Error('Missing charity model editor');
       await rendered.user.click(
@@ -1443,9 +1455,7 @@ describe('experimental policy and charity controls', () => {
           name: flattenLabel,
         }),
       );
-      await rendered.user.click(
-        within(editForm).getByRole('button', { name: 'Save model' }),
-      );
+      await rendered.user.click(within(editForm).getByRole('button', { name: 'Save model' }));
       await waitFor(() =>
         expect(lastBody(fetchMock, 'PATCH', `${basePath}/charity-models/7`)).toMatchObject({
           flatten_tool_calls: true,
@@ -1454,15 +1464,10 @@ describe('experimental policy and charity controls', () => {
 
       const createHeading = screen.getByRole('heading', { name: 'Add charity model' });
       const createForm = createHeading.closest('.card');
-      if (!(createForm instanceof HTMLElement)) throw new Error('Missing charity model creation form');
-      await rendered.user.type(
-        within(createForm).getByLabelText('Provider'),
-        'new-provider',
-      );
-      await rendered.user.type(
-        within(createForm).getByLabelText('Model'),
-        'new-model',
-      );
+      if (!(createForm instanceof HTMLElement))
+        throw new Error('Missing charity model creation form');
+      await rendered.user.type(within(createForm).getByLabelText('Provider'), 'new-provider');
+      await rendered.user.type(within(createForm).getByLabelText('Model'), 'new-model');
       await rendered.user.click(
         within(createForm).getByRole('checkbox', {
           name: flattenLabel,
@@ -1494,8 +1499,16 @@ describe('experimental policy and charity controls', () => {
         path: '/api/steward/charity-models?limit=50',
         body: { data: [managedModelFixture], next_cursor: null },
       },
-      { method: 'GET', path: '/api/steward/charity-models/7/bindings', body: { bindings: [bindingFixture], binding_revision: '1' } },
-      { method: 'GET', path: '/api/steward/charity-models/7/binding-candidates?limit=50', body: { data: [], next_cursor: null } },
+      {
+        method: 'GET',
+        path: '/api/steward/charity-models/7/bindings',
+        body: { bindings: [bindingFixture], binding_revision: '1' },
+      },
+      {
+        method: 'GET',
+        path: '/api/steward/charity-models/7/binding-candidates?limit=50',
+        body: { data: [], next_cursor: null },
+      },
       {
         method: 'PATCH',
         path: '/api/steward/charity-models/7',
@@ -1515,7 +1528,9 @@ describe('experimental policy and charity controls', () => {
     );
     await screen.findByText('[公益]provider/charity-model');
     await rendered.user.click(screen.getByRole('button', { name: 'Manage' }));
-    const editHeading = await screen.findByRole('heading', { name: '[公益]provider/charity-model' });
+    const editHeading = await screen.findByRole('heading', {
+      name: '[公益]provider/charity-model',
+    });
     const editForm = editHeading.closest('.card');
     if (!(editForm instanceof HTMLElement)) throw new Error('Missing charity model editor');
     await rendered.user.click(
@@ -1523,9 +1538,7 @@ describe('experimental policy and charity controls', () => {
         name: '[Experimental] Flatten tool calls',
       }),
     );
-    await rendered.user.click(
-      within(editForm).getByRole('button', { name: 'Save model' }),
-    );
+    await rendered.user.click(within(editForm).getByRole('button', { name: 'Save model' }));
 
     await waitFor(() => {
       expect(screen.getByText(/Charity management access is no longer available/i)).toBeVisible();
@@ -1595,11 +1608,15 @@ describe('experimental policy and charity controls', () => {
       await screen.findByRole('heading', { name: /sk-a…tail.*upstream\.test\/v1/i });
       expect(screen.getByText(/Original key status: enabled/i)).toBeVisible();
       await rendered.user.type(screen.getByLabelText('Reason'), 'approved');
-      await rendered.user.click(screen.getByRole('checkbox', {
-        name: 'I confirm this review result and its per-key consequences.',
-      }));
+      await rendered.user.click(
+        screen.getByRole('checkbox', {
+          name: 'I confirm this review result and its per-key consequences.',
+        }),
+      );
       await rendered.user.click(screen.getByRole('button', { name: 'Approve donation' }));
-      await waitFor(() => expect(lastBody(fetchMock, 'POST', `${basePath}/donations/9/review`)).toBeDefined());
+      await waitFor(() =>
+        expect(lastBody(fetchMock, 'POST', `${basePath}/donations/9/review`)).toBeDefined(),
+      );
       const body = lastBody(fetchMock, 'POST', `${basePath}/donations/9/review`);
       expect(body).toHaveProperty('key_settings.0.donation_key_id', '6');
       expect(body).not.toHaveProperty('key_settings.0.endpoint_key_id');
@@ -1650,7 +1667,10 @@ describe('experimental policy and charity controls', () => {
       role: 'level5',
     });
     await screen.findByText('No logs');
-    rendered.queryClient.setQueryData(charityKeys.models('steward', '', '', null), { data: [managedModelFixture], next_cursor: null });
+    rendered.queryClient.setQueryData(charityKeys.models('steward', '', '', null), {
+      data: [managedModelFixture],
+      next_cursor: null,
+    });
     revoke = true;
     await rendered.queryClient.invalidateQueries({ queryKey: roleLogKeys.root('steward') });
     await expect(
@@ -1711,13 +1731,13 @@ describe('experimental policy and charity controls', () => {
     await screen.findByText('No logs');
     revoke = true;
     await rendered.queryClient.invalidateQueries({ queryKey: roleLogKeys.root('steward') });
-    await waitFor(() => expect(screen.queryByRole('tab', { name: 'Charity management' })).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole('tab', { name: 'Charity management' })).toBeNull(),
+    );
     await waitFor(() => expect(sessionCalls).toBeGreaterThanOrEqual(2));
     releaseRefresh();
     await waitFor(() =>
-      expect(
-        screen.queryByText(/does not have confirmed level-5 steward access/i),
-      ).toBeNull(),
+      expect(screen.queryByText(/does not have confirmed level-5 steward access/i)).toBeNull(),
     );
     await expect(screen.findByText('No logs')).resolves.toBeVisible();
   });
@@ -2677,7 +2697,9 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
     await rendered.user.click(await screen.findByRole('button', { name: 'Delete platform model' }));
     const dialog = screen.getByRole('alertdialog');
-    await rendered.user.click(within(dialog).getByRole('button', { name: 'Delete platform model' }));
+    await rendered.user.click(
+      within(dialog).getByRole('button', { name: 'Delete platform model' }),
+    );
     await screen.findByText('No platform models');
     expect(lastBody(fetchMock, 'DELETE', '/api/models/3')).toEqual({ expected_revision: '1' });
   });

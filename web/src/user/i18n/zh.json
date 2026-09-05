@@ -395,18 +395,20 @@
       "eyebrow": "运维"
     },
     "charity": {
+      "tabs": { "models": "公益模型", "donations": "我的捐赠", "donate": "提交捐赠" },
+      "sections": "公益导航",
+      "apiAccess": "API 接入",
+      "manageCharity": "公益管理",
+      "modelName": "模型名称",
       "nav": "公益",
       "eyebrow": "公益 · 共享资源",
       "title": "公益资源与捐赠",
-      "description": "查看当前公益调用与捐赠接收状态，并管理你已经提交的资源。",
+      "description": "选用大家分享的模型，或捐赠闲置 API 资源。",
       "donationDetailTitle": "捐赠详情",
       "donationDetailDescription": "查看捐赠、审核和资源的当前状态。",
       "backToDonations": "返回公益页面",
       "donationNotFound": "未找到捐赠",
       "donationNotFoundBody": "这条捐赠不存在，或不属于当前账号。",
-      "capabilities": "当前公益状态",
-      "yourResources": "你的资源",
-      "callCapabilityEyebrow": "可用情况",
       "callCapabilityTitle": "公益模型访问",
       "capabilityState": {
         "feature_disabled": "已关闭",
@@ -421,7 +423,6 @@
         "available": "至少有一个公益模型当前可用。"
       },
       "availableModels": "可用公益模型",
-      "intakeEyebrow": "捐赠接收",
       "intakeTitle": "提交已有资源",
       "intakeState": {
         "open": "开放",
@@ -526,7 +527,6 @@
       "callQuota": "调用额度",
       "tokenQuota": "Token 额度",
       "tokensUnit": "tokens",
-      "failureGeneration": "失败计数批次",
       "tokenReserve": "每次请求预留的 Token",
       "tokensPerRequest": "tokens / 次",
       "failureStreak": "连续失败次数",
@@ -542,9 +542,7 @@
         "expired": "捐赠已过期",
         "account_deleted": "账号已删除"
       },
-      "donationLabel": "捐赠",
-      "donationOverviewEyebrow": "账号级状态",
-      "donationOverviewTitle": "我的捐赠密钥",
+      "donationOverviewTitle": "我的捐赠",
       "donationOverviewCount": "当前显示 {{visible}} / {{total}} 把密钥",
       "donationOverviewFilter": "密钥状态",
       "donationOverviewFilters": {
@@ -574,7 +572,9 @@
       "terminateBody": "终止后，其资源不再接受新的公益调用；进行中的调用仍会继续并完成结算。",
       "donationDescription": "捐赠说明",
       "upstreamPrivacyTitle": "第三方服务隐私提示：",
+      "quotaDetails": "额度、用量与限制",
       "upstreamPrivacyWarning": "公益请求会发送给捐赠者提供的第三方 AI 服务；该服务及其账户日志可能看到完整请求内容，其存储与隐私做法不受本站控制。",
+      "upstreamQualityWarning": "本站无法保证捐赠上游的服务质量，包括可用性、响应速度，以及实际使用的模型是否与其宣称一致。请根据自己的需求评估后使用。",
       "dispatchedFailureWarning": "请求开始后，即使超时或返回失败，也可能消耗服务方额度并正常结算。"
     },
     "activities": {
@@ -611,8 +611,7 @@
       "poolUnavailable": "不可用",
       "siteDay": "站点日期",
       "welfare": {
-        "eyebrow": "每日低保",
-        "title": "低保领取",
+        "title": "每日低保",
         "state": {
           "unavailable": "不可用",
           "available": "可领取",
@@ -637,7 +636,6 @@
         "claim": "领取低保"
       },
       "thursday": {
-        "eyebrow": "疯狂星期四池",
         "title": "疯狂星期四",
         "state": {
           "unavailable": "不可用",

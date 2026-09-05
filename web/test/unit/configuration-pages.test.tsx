@@ -210,6 +210,9 @@ describe('screenshot-facing configuration pages', () => {
     expect(warning).toHaveTextContent('Third-party service privacy:');
     expect(warning).toHaveTextContent(/account logs may see the full request content/i);
     expect(warning).toHaveTextContent(/outside this site's control/i);
+    expect(warning).toHaveTextContent(
+      /availability, response speed, or whether the model used matches the model advertised/i,
+    );
     expect(screen.queryByText('Call status guide')).not.toBeInTheDocument();
   });
 });
@@ -642,7 +645,7 @@ describe('admin per-user limit explanations', () => {
     const adminUser = {
       id: '7',
       username: 'fixture-user',
-      discord_id: 'discord',
+      discord_id: '1234567890123456789',
       avatar_url: null,
       guild_nick: null,
       guild_avatar_url: null,
@@ -689,6 +692,15 @@ describe('admin per-user limit explanations', () => {
       locale: 'en',
       role: 'admin',
     });
+    await screen.findByRole('columnheader', { name: 'User ID' });
+    expect(screen.getByRole('columnheader', { name: 'Discord ID' })).toBeVisible();
+    const row = (await screen.findByText('fixture-user')).closest('tr');
+    expect(row).not.toBeNull();
+    const cells = within(row!).getAllByRole('cell');
+    expect(cells[0]).toHaveTextContent(/^7$/);
+    expect(cells[1]).toHaveTextContent(/^fixture-user$/);
+    await rendered.user.click(within(row!).getByRole('button', { name: 'Copy Discord ID' }));
+    expect(await navigator.clipboard.readText()).toBe('1234567890123456789');
     await rendered.user.click(await screen.findByRole('button', { name: 'Manage' }));
     const note = screen.getByText(/built-in default of 5/i);
     expect(note).toHaveTextContent(/global RPM, global egress, endpoint and key gates/i);

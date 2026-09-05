@@ -224,7 +224,7 @@ test('reachable user home keeps level state but removes the implementation hint'
     origin: USER_ORIGIN,
     method: 'GET',
     path: '/api/home/game-summary',
-    body: [],
+    body: { continue: [], pending_results: [] },
   });
   await mockJson(page, {
     origin: USER_ORIGIN,
@@ -237,6 +237,23 @@ test('reachable user home keeps level state but removes the implementation hint'
   await expect(page.getByText('Level', { exact: true })).toBeVisible();
   await expect(page.getByText('Lv2', { exact: true })).toBeVisible();
   await expect(page.getByText(/This page computes nothing/i)).toHaveCount(0);
+  for (const width of [320, 390, 1440, 1935]) {
+    await page.setViewportSize({ width, height: 1000 });
+    const layout = await page.locator('.core-page').evaluate((element) => {
+      const main = element.closest('main')!;
+      const outer = main.getBoundingClientRect();
+      const inner = element.getBoundingClientRect();
+      const style = getComputedStyle(main);
+      return {
+        width: inner.width,
+        available: outer.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+        overflow: document.documentElement.scrollWidth > innerWidth,
+      };
+    });
+    expect(layout.overflow).toBe(false);
+    expect(layout.width).toBeGreaterThanOrEqual(layout.available - 2);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   const endpointLink = page.getByRole('link', { name: 'Manage resources' });
   await tabTo(page, endpointLink);
   await expect(endpointLink).toBeFocused();
@@ -272,6 +289,7 @@ test('reachable user charity shows the neutral upstream warning without the stat
   await expect(page.getByRole('note')).toContainText('账户日志可能看到完整请求内容');
   await expect(page.getByText('调用状态说明')).toHaveCount(0);
   await expect(page.getByText('当前没有启用的公益模型。')).toBeVisible();
+  await page.getByRole('tab', { name: '我的捐赠', exact: true }).click();
   await expect(page.getByText('还没有捐赠记录')).toBeVisible();
   await assertResponsiveAndClean(page, guard);
 });
@@ -613,9 +631,55 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/charity-models/7/binding-candidates?limit=50',
-    body: { data: [], next_cursor: null },
+    path: '/admin/api/charity-models/7/binding-donations?limit=50',
+    body: {
+      data: [
+        {
+          id: '9',
+          description: 'Shared donation instructions\nReview the limits before use.',
+          key_count: 1,
+        },
+      ],
+      next_cursor: null,
+    },
   });
+  const sharedSource = {
+    connector_type: 'openai-compatible',
+    canonical_base_url: 'https://shared.example.test/v1',
+    display_head: 'head',
+    display_tail: 'tail',
+  };
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN,
+    method: 'GET',
+    path: '/admin/api/charity-models/7/binding-donations/9/keys?limit=50',
+    body: {
+      data: [{ donation_key_id: '6', source: sharedSource, note: 'Reviewed key note' }],
+      next_cursor: null,
+    },
+  });
+  await page.route(
+    `${ADMIN_ORIGIN}/admin/api/charity-models/7/binding-candidates?*`,
+    async (route) => {
+      const url = new URL(route.request().url());
+      expect(url.searchParams.get('donation_id')).toBe('9');
+      expect(url.searchParams.get('donation_key_id')).toBe('6');
+      await route.fulfill({
+        json: {
+          data: [
+            {
+              donation_id: '9',
+              donation_key_id: '6',
+              upstream_model_id: 'upstream-model',
+              source: sharedSource,
+              source_types: ['automatic'],
+            },
+          ],
+          next_cursor: null,
+        },
+      });
+    },
+  );
   let patchBody: Record<string, unknown> | undefined;
   page.on('request', (request) => {
     const url = new URL(request.url());
@@ -651,6 +715,14 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
   await expect(flatten).toBeChecked();
   await editor.getByRole('button', { name: 'Save model' }).click();
   await expect.poll(() => patchBody).toMatchObject({ flatten_tool_calls: true });
+  const picker = page.locator('.ops-binding-picker');
+  await picker.getByRole('button', { name: /Donation #9/ }).click();
+  await expect(picker.getByText(/Shared donation instructions/)).toBeVisible();
+  await picker.getByRole('button', { name: /Reviewed key note/ }).click();
+  await picker.getByRole('checkbox', { name: /upstream-model/ }).check();
+  await picker.getByRole('button', { name: '1 · Choose donation' }).click();
+  await expect(picker.locator('.ops-picker-selection')).toContainText('upstream-model');
+  await expect(picker.locator('.ops-picker-selection')).toContainText('Reviewed key note');
   await assertResponsiveAndClean(page, guard);
 });
 
