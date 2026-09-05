@@ -56,6 +56,12 @@ for (const station of ['user', 'admin'] as const) {
       .toBe(true);
     await page.screenshot({ path: `../tmp/${station}-request-detail-desktop.png` });
     await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => {
+      document.documentElement.style.scrollbarGutter = 'stable';
+    });
+    await expect
+      .poll(() => drawer.evaluate((node) => node.getBoundingClientRect().left))
+      .toBeGreaterThanOrEqual(0);
     await expect
       .poll(() => drawer.evaluate((node) => node.scrollWidth <= node.clientWidth + 1))
       .toBe(true);

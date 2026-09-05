@@ -1929,7 +1929,7 @@ tr:first-child td {
 
 @media (max-width: 38rem) {
   .log-drawer {
-    width: 100vw;
+    width: 100%;
     border-left: 0;
   }
 
