@@ -67,7 +67,7 @@ An owner-visible upstream 4xx may retain its HTTP status. Other upstream failure
 
 ### 1.4 Database and export versions
 
-Beta.1 is fresh-only database Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. Only a completely absent main/WAL/SHM set or a validated Generation 2 set is accepted. Empty, alpha/Generation 1, unknown, corrupt, structurally unexpected, unsafe, or anomalous-sidecar sources are rejected before a writable open or source-side change. There is no migration, repair, old-data import, or compatibility schema.
+Beta.1 uses database Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. Only a completely absent main/WAL/SHM set or a validated Generation 2 set is accepted. Empty, alpha/Generation 1, unknown, corrupt, structurally unexpected, unsafe, or anomalous-sidecar sources are rejected before a writable open or source-side change. The exact prior Generation 2 schema receives the additive charity-routing table in one transaction after read-only validation, preserving existing data. Alpha/Generation 1 requires a fresh database; arbitrary schema repair and old-generation import remain unsupported.
 
 Account export `schema_version=4` is independent of SQLite `user_version`.
 
@@ -95,7 +95,7 @@ Personal models use `ordered` or `random` routing. Request capability filtering 
 
 `openai-compatible` appends `/chat/completions` to the configured versioned base. `anthropic-compatible` appends `/messages`, translates the strict supported subset, and sends only the required Anthropic key/version/content headers. The Anthropic subset supports system/developer and user/assistant text, HTTPS or bounded image data parts, OpenAI function tools and matched tool results, `temperature`, `top_p`, stop strings, tool choice, parallel-tool indication, and streaming usage. Lossy or unsupported fields make that candidate incompatible; they are never silently dropped. If neither token-limit field is supplied, Anthropic uses the nullable administrator default or the built-in 65,536 fallback. The fallback is not a cap on explicit values.
 
-Usage is normalized into uncached input, cache-write input, cache-read input, and output. Invalid, negative, regressing, contradictory, or overflowing usage marks the entire request usage unknown rather than fabricating numbers. Literal and semantic response guards block reflection of the exact credential, including across bounded JSON/SSE fragments; this is defense in depth, not general data-loss prevention.
+Usage is normalized into uncached input, cache-write input, cache-read input, and output. OpenAI-compatible streams may send cumulative snapshots: fixed input buckets and nondecreasing output replace the previous value without being added together. Missing/null snapshots preserve the last credible value. Tool flattening emits only the last usage frame after finish and before `[DONE]`. Invalid, negative, regressing, contradictory, or overflowing usage marks the entire request usage unknown rather than fabricating numbers. Literal and semantic response guards block reflection of the exact credential, including across bounded JSON/SSE fragments; this is defense in depth, not general data-loss prevention.
 
 The OpenAI-only physical-key policy `force_store_false` overwrites/inserts top-level `store:false`; an upstream may ignore or reject it. The logical-model policy `flatten_tool_calls` converts bounded validated tool calls to text and restores only complete matched history. Both default off, and flattening is permitted only when every binding is OpenAI-compatible.
 
@@ -313,6 +313,10 @@ Stewards can review only their own donations, and can enable but cannot disable 
 | `DELETE /api/steward/charity-models/{id}/bindings/{bindingId}` | `{expected_binding_revision}`. |
 
 ## 7. Administrator API
+
+Both administrator and steward charity model projections include `route_strategy`: `ordered`, `random`, or `expiry_weighted`. Creation may omit it to keep the expiry-weighted default; a patch may omit it to leave the setting unchanged. Explicit null, empty, and unknown values are invalid. Ordered routing uses saved binding order; uniform random gives every eligible connection equal weight; expiry-weighted routing uses weights 8/4/2/1 for expiry within 1/7/30 days/later, with unlimited expiry weighted 1. Each request freezes a candidate order without replacement. Strategy changes use the model revision and existing idempotency rules.
+
+Each role also has `GET {prefix}/charity-models/{id}/binding-donations` and `GET {prefix}/charity-models/{id}/binding-donations/{donationId}/keys`, where `{prefix}` is `/admin/api` or `/api/steward`. Both use `cursor,limit` pagination. Donation menu entries contain only `{id,description,key_count}`. Key menu entries contain only `{donation_key_id,source,note}`; `source` has the same safe address, connector and masked fragments as binding candidates, and `note` is the reviewed shared note. They list approved, unexpired shared resources with at least one unbound catalog model. Cursors are bound to the role, actor, model, and donation. These menus never expose donor account identity or private endpoint/key notes and do not expand the steward's donation management permissions.
 
 All routes below are available only on the administrator host with an administrator session. Mutations use idempotency and expected revisions as specified by §1.2, and sensitive final transactions reauthenticate the actor.
 

@@ -149,16 +149,16 @@ location / {
 
 Use separate `server` blocks/certificates for user and administrator hosts so the administrator host can have stricter network or identity controls. Adjust the upstream port and timeouts to the actual deployment; test SSE through the complete Cloudflare → Nginx → application path.
 
-## Beta.1 fresh-only database and version changes
+## Beta.1 database compatibility and version changes
 
-Beta.1 accepts only a completely absent database set or a validated Generation 2 database whose SQLite header contains `application_id=0x4E425249` and `user_version=2`. It does not run `ALTER`, schema repair, migration, or data import. Before a writable source open, an existing database is copied through no-follow read-only handles to a private validation directory; header, schema, foreign keys, indexes, sidecars, and contextual credential envelopes are checked there. An alpha or Generation 1 file, empty file, unknown generation, corrupt or unexpected schema, unsafe file shape, rollback journal, or anomalous sidecar is refused without modifying the source set or creating a new source-side WAL/SHM.
+Beta.1 accepts only a completely absent database set or a validated Generation 2 database whose SQLite header contains `application_id=0x4E425249` and `user_version=2`. The exact previous Generation 2 schema is supported through one additive update: a transaction creates `charity_model_routing`, then validates the new full manifest. Existing tables and business rows are preserved, and existing charity models retain expiry-weighted routing. It does not run `ALTER`, arbitrary schema repair, or old-generation data import. Before a writable source open, an existing database is copied through no-follow read-only handles to a private validation directory; header, schema, foreign keys, indexes, sidecars, and contextual credential envelopes are checked there. An alpha or Generation 1 file, empty file, unknown generation, corrupt or unexpected schema, unsafe file shape, rollback journal, or anomalous sidecar is refused without modifying the source set or creating a new source-side WAL/SHM.
 
 Therefore:
 
 - installing a beta.1 binary over an alpha or Generation 1 database does not upgrade it;
 - switching only the binary to an older version is never a supported downgrade;
 - a stateful rollback must restore a complete compatible snapshot, not combine an old binary with the current database;
-- a cutover from an earlier prerelease deliberately starts with an empty Generation 2 database and loses active application state unless the operator later re-enters it manually;
+- a cutover from an alpha release deliberately starts with an empty Generation 2 database and loses active application state unless the operator later re-enters it manually;
 - a fresh beta.1 database starts with maintenance on and registration, activities, charity, donation intake, and games off. Keep those gates closed until instance legal text, required configuration, initialization, and smoke tests pass.
 
 Beta.1 adds no startup environment-variable names relative to alpha.3. An existing environment file must still satisfy the current validation rules and is retained by the separately maintained helper, but every database-backed runtime setting is reset by a destructive fresh cutover and must be reviewed or re-entered through the administrator station.
@@ -225,7 +225,7 @@ If the cutover fails before the target passes local health and reaches its recor
 
 ## Beta.1 limitations
 
-- Beta.1 is fresh-only Generation 2. A current database is validated, not bootstrapped or migrated; a completely absent main/WAL/SHM path set permits fresh creation, while every unsupported existing state is rejected without repair.
+- Beta.1 requires a fresh Generation 2 database when coming from alpha. Current Generation 2 databases are validated; the exact supported predecessor receives only the additive routing table. A completely absent main/WAL/SHM path set permits fresh creation, while every unsupported existing state is rejected without repair.
 - The release target is Linux/amd64 and the release process is source-first.
 - SMTP settings are reserved and do not send alert email in the current prereleases.
 - Real Discord OAuth and upstream success flows must be tested with disposable staging credentials before public operation.
