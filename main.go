@@ -33,6 +33,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
+	"github.com/waiting-here/NonbiriAPI/internal/creditapi"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
@@ -1165,6 +1166,10 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err := logapi.RegisterUserRoutes(authRuntime, logRepository); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("register user log routes: %w", err)
+	}
+	if err := creditapi.RegisterUserRoutes(authRuntime, store.DB()); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register credit history route: %w", err)
 	}
 	if err := logapi.RegisterStewardRoutes(authRuntime, logRepository, roleAuthorizer); err != nil {
 		cleanup()

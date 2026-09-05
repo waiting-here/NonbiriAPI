@@ -125,7 +125,15 @@
         "charge": "扣费",
         "request": "请求",
         "callerResult": "调用方结果",
-        "callerError": "调用方错误"
+        "callerError": "调用方错误",
+        "attemptNumber": "第 {{number}} 次调用",
+        "platformRecord": "平台生成的记录",
+        "requestUnavailable": "这条请求日志已过期或不属于当前账号。日志过期后，积分流水仍会保留。",
+        "upstreamResponse": "上游实际响应",
+        "syntheticExplanation": "这条记录由平台生成，当时未能确认上游响应结果。下方状态码由平台记录。",
+        "notes": "端点 / 密钥备注",
+        "recordedStatus": "记录的状态码",
+        "upstreamStatus": "上游 HTTP 状态码"
       },
       "charity": {
         "accessLost": "公益管理权限已失效。",
@@ -214,6 +222,7 @@
         "saveModel": "保存模型",
         "searchModels": "搜索模型",
         "sectionsLabel": "公益管理分区",
+        "sourceGroups": "按来源查看",
         "source": "来源",
         "customSource": "自定义端点",
         "mainstreamSource": "主流渠道：{{name}}",

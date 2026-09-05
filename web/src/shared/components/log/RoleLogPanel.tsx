@@ -67,37 +67,99 @@ function AttemptTable({
   const attempts = detail.attempts;
   return (
     <div className="ops-stack">
-      {attempts.data.length === 0 ? <p>{t('common.operations.logs.noAttempts')}</p> : (
-        <div className="ops-table-scroll">
-          <table className="ops-table">
-            <caption>{t('common.operations.logs.attempts')}</caption>
-            <thead><tr><th>#</th><th>{t('logs.endpointBaseUrl')}</th><th>{t('common.operations.logs.connectorModel')}</th><th>{t('common.status')}</th><th>{t('logs.tokens')}</th><th>{t('logs.diag')}</th></tr></thead>
-            <tbody>
-              {attempts.data.map((attempt: RoleLogAttempt) => (
-                <tr key={attempt.attempt_seq}>
-                  <td className="mono">{attempt.attempt_seq}</td>
-                  <td>
-                    <span className="mono">{attempt.endpoint_base_url}</span>
-                    {'endpoint_note' in attempt && (attempt.endpoint_note || attempt.key_note) ? (
-                      <div className="table-note">{attempt.endpoint_note || '—'} / {attempt.key_note || '—'}</div>
-                    ) : null}
-                  </td>
-                  <td>{attempt.connector_type}<br /><span className="mono">{attempt.upstream_model_id}</span></td>
-                  <td>{attempt.status_code ?? '—'}<br /><span className="mono">{attempt.upstream_code ?? '—'}</span></td>
-                  <td><TokenBuckets row={attempt.usage} /><span className="table-note">{attempt.usage.charge}</span></td>
-                  <td className="mono">{attempt.diag ?? '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {attempts.data.length === 0 ? (
+        <p>{t('common.operations.logs.noAttempts')}</p>
+      ) : (
+        <ol className="log-attempts">
+          {attempts.data.map((attempt: RoleLogAttempt) => (
+            <li className="log-attempt" key={attempt.attempt_seq}>
+              <div className="log-attempt-heading">
+                <h3>
+                  {t('common.operations.logs.attemptNumber', { number: attempt.attempt_seq })}
+                </h3>
+                <span className="status-badge">
+                  {t(
+                    attempt.result_kind === 'synthetic'
+                      ? 'common.operations.logs.platformRecord'
+                      : 'common.operations.logs.upstreamResponse',
+                  )}
+                </span>
+              </div>
+              {attempt.result_kind === 'synthetic' ? (
+                <p className="log-attempt-notice">
+                  {t('common.operations.logs.syntheticExplanation')}
+                </p>
+              ) : null}
+              <dl>
+                <div>
+                  <dt>{t('logs.endpointBaseUrl')}</dt>
+                  <dd className="mono">{attempt.endpoint_base_url}</dd>
+                </div>
+                {'endpoint_note' in attempt && (attempt.endpoint_note || attempt.key_note) ? (
+                  <div>
+                    <dt>{t('common.operations.logs.notes')}</dt>
+                    <dd>
+                      {attempt.endpoint_note || '—'} / {attempt.key_note || '—'}
+                    </dd>
+                  </div>
+                ) : null}
+                <div>
+                  <dt>{t('common.operations.logs.connectorModel')}</dt>
+                  <dd>
+                    {attempt.connector_type}
+                    <br />
+                    <span className="mono">{attempt.upstream_model_id}</span>
+                  </dd>
+                </div>
+                <div>
+                  <dt>
+                    {t(
+                      attempt.result_kind === 'synthetic'
+                        ? 'common.operations.logs.recordedStatus'
+                        : 'common.operations.logs.upstreamStatus',
+                    )}
+                  </dt>
+                  <dd>
+                    {attempt.status_code ?? '—'}{' '}
+                    <span className="mono">{attempt.upstream_code ?? ''}</span>
+                  </dd>
+                </div>
+                <div>
+                  <dt>{t('logs.time')}</dt>
+                  <dd>
+                    {formatDateTime(attempt.started_at)} ·{' '}
+                    {Math.max(0, attempt.completed_at - attempt.started_at)}s
+                  </dd>
+                </div>
+                <div>
+                  <dt>{t('logs.tokens')}</dt>
+                  <dd>
+                    <TokenBuckets row={attempt.usage} />
+                  </dd>
+                </div>
+                <div>
+                  <dt>{t('common.operations.logs.charge')}</dt>
+                  <dd>{attempt.usage.charge}</dd>
+                </div>
+                <div>
+                  <dt>{t('logs.diag')}</dt>
+                  <dd className="mono log-attempt-diagnostic">{attempt.diag ?? '—'}</dd>
+                </div>
+              </dl>
+            </li>
+          ))}
+        </ol>
       )}
       <CursorPagination
         page={page}
         nextCursor={attempts.next_cursor}
         onPrevious={onPrevious}
         onNext={onNext}
-        labels={{ previous: t('common.previous'), next: t('common.next'), page: t('common.operations.logs.pageLabel') }}
+        labels={{
+          previous: t('common.previous'),
+          next: t('common.next'),
+          page: t('common.operations.logs.pageLabel'),
+        }}
       />
     </div>
   );
@@ -107,11 +169,15 @@ export function RoleLogPanel({
   role,
   enabled = true,
   onAuthorityLoss,
+  requestID = null,
+  onRequestClose,
 }: {
   role: LogRole;
   language?: string;
   enabled?: boolean;
   onAuthorityLoss?: () => void;
+  requestID?: string | null;
+  onRequestClose?: () => void;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -124,7 +190,7 @@ export function RoleLogPanel({
   const [toDraft, setToDraft] = useState('');
   const [filter, setFilter] = useState<LogFiltersValue>({});
   const [validation, setValidation] = useState('');
-  const [selectedID, setSelectedID] = useState<string | null>(null);
+  const [selectedID, setSelectedID] = useState<string | null>(requestID);
   const [revoked, setRevoked] = useState(false);
   const [revokedError, setRevokedError] = useState<unknown>(null);
   const authorityClosedRef = useRef(false);
@@ -133,7 +199,9 @@ export function RoleLogPanel({
   const detail = useRoleLogDetail(role, selectedID, attemptPager.cursor, 50, observerEnabled);
   const authorityError = isFinalAuthorityError(logs.error)
     ? logs.error
-    : isFinalAuthorityError(detail.error) ? detail.error : null;
+    : isFinalAuthorityError(detail.error)
+      ? detail.error
+      : null;
   const authorityClosed = revoked || authorityError !== null;
 
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -155,10 +223,10 @@ export function RoleLogPanel({
   }, [authorityError, onAuthorityLoss, queryClient, resetAttemptPager, resetPager, role]);
 
   useEffect(() => {
-    setSelectedID(null);
+    setSelectedID(requestID);
     resetPager();
     resetAttemptPager();
-  }, [resetAttemptPager, resetPager, role]);
+  }, [resetAttemptPager, resetPager, role, requestID]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const fields = useMemo(() => {
@@ -174,21 +242,30 @@ export function RoleLogPanel({
     return values;
   }, [role, t]);
   const routeLabel = (route: LogRouteKind) => t(ROUTE_LABEL_KEYS[route]);
-  const resultLabel = (row: RoleLogRow) => row.caller_result_class
-    ? t(RESULT_LABEL_KEYS[row.caller_result_class])
-    : t('common.operations.logs.resultValue.pending');
+  const resultLabel = (row: RoleLogRow) =>
+    row.caller_result_class
+      ? t(RESULT_LABEL_KEYS[row.caller_result_class])
+      : t('common.operations.logs.resultValue.pending');
 
   const apply = (event: FormEvent) => {
     event.preventDefault();
     setValidation('');
     const from = datetimeUnix(fromDraft);
     const to = datetimeUnix(toDraft);
-    if ((fromDraft && from === undefined) || (toDraft && to === undefined) || (from !== undefined && to !== undefined && from >= to)
-      || (raw.status?.trim() && !/^[1-5][0-9]{2}$/.test(raw.status.trim()))) {
+    if (
+      (fromDraft && from === undefined) ||
+      (toDraft && to === undefined) ||
+      (from !== undefined && to !== undefined && from >= to) ||
+      (raw.status?.trim() && !/^[1-5][0-9]{2}$/.test(raw.status.trim()))
+    ) {
       setValidation(t('common.operations.logs.filterInvalid'));
       return;
     }
-    setFilter({ ...validateLogFilter(role, raw), ...(from === undefined ? {} : { from }), ...(to === undefined ? {} : { to }) });
+    setFilter({
+      ...validateLogFilter(role, raw),
+      ...(from === undefined ? {} : { from }),
+      ...(to === undefined ? {} : { to }),
+    });
     setSelectedID(null);
     pager.reset();
     attemptPager.reset();
@@ -197,50 +274,104 @@ export function RoleLogPanel({
   const columns: LogColumn<RoleLogRow>[] = [
     { key: 'time', header: t('logs.time'), render: (row) => formatDateTime(row.started_at) },
     { key: 'route', header: t('logs.routeKind'), render: (row) => routeLabel(row.route_kind) },
-    ...(role === 'user' ? [{ key: 'model', header: t('common.model'), render: (row: RoleLogRow) => 'model' in row ? row.model : '—' }] : []),
-    ...(role === 'admin' ? [{ key: 'user', header: t('common.userId'), render: (row: RoleLogRow) => 'user_id' in row ? row.user_id ?? '—' : '—' }] : []),
+    ...(role === 'user'
+      ? [
+          {
+            key: 'model',
+            header: t('common.model'),
+            render: (row: RoleLogRow) => ('model' in row ? row.model : '—'),
+          },
+        ]
+      : []),
+    ...(role === 'admin'
+      ? [
+          {
+            key: 'user',
+            header: t('common.userId'),
+            render: (row: RoleLogRow) => ('user_id' in row ? (row.user_id ?? '—') : '—'),
+          },
+        ]
+      : []),
     { key: 'result', header: t('common.operations.logs.result'), render: resultLabel },
     { key: 'status', header: t('common.status'), render: (row) => row.caller_status ?? '—' },
-    { key: 'error', header: t('logs.error'), render: (row) => <span className="mono">{row.caller_error_code ?? '—'}</span> },
+    {
+      key: 'error',
+      header: t('logs.error'),
+      render: (row) => <span className="mono">{row.caller_error_code ?? '—'}</span>,
+    },
     { key: 'usage', header: t('logs.tokens'), render: (row) => <TokenBuckets row={row.usage} /> },
-    { key: 'charge', header: t('common.operations.logs.charge'), render: (row) => <span className="mono">{row.usage.charge}</span> },
+    {
+      key: 'charge',
+      header: t('common.operations.logs.charge'),
+      render: (row) => <span className="mono">{row.usage.charge}</span>,
+    },
   ];
 
   let detailBody: ReactNode = null;
   if (selectedID && detail.isPending) detailBody = t('common.loading');
-  else if (selectedID && detail.error) detailBody = <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />;
+  else if (selectedID && detail.error)
+    detailBody = isApiError(detail.error) && detail.error.code === 'not_found'
+      ? <p role="status">{t('common.operations.logs.requestUnavailable')}</p>
+      : <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />;
 
-  const detailFields = detail.data ? [
-    { label: t('common.operations.logs.request'), value: <span className="mono">{requestFrom(detail.data).id}</span> },
-    { label: t('logs.routeKind'), value: routeLabel(requestFrom(detail.data).route_kind) },
-    { label: t('common.operations.logs.callerResult'), value: `${resultLabel(requestFrom(detail.data))} / ${requestFrom(detail.data).caller_status ?? '—'}` },
-    { label: t('common.operations.logs.callerError'), value: <span className="mono">{requestFrom(detail.data).caller_error_code ?? '—'}</span> },
-    { label: t('logs.tokens'), value: <TokenBuckets row={requestFrom(detail.data).usage} /> },
-    {
-      label: t('common.operations.logs.attempts'),
-      value: (
-        <AttemptTable
-          detail={detail.data}
-          page={attemptPager.page}
-          onPrevious={attemptPager.previous}
-          onNext={attemptPager.next}
-        />
-      ),
-    },
-  ] : detailBody ? [{ label: t('logs.details'), value: detailBody }] : [];
+  const detailFields = detail.data
+    ? [
+        {
+          label: t('common.operations.logs.request'),
+          value: <span className="mono">{requestFrom(detail.data).id}</span>,
+        },
+        { label: t('logs.routeKind'), value: routeLabel(requestFrom(detail.data).route_kind) },
+        {
+          label: t('common.operations.logs.callerResult'),
+          value: `${resultLabel(requestFrom(detail.data))} / ${requestFrom(detail.data).caller_status ?? '—'}`,
+        },
+        {
+          label: t('common.operations.logs.callerError'),
+          value: <span className="mono">{requestFrom(detail.data).caller_error_code ?? '—'}</span>,
+        },
+        { label: t('logs.tokens'), value: <TokenBuckets row={requestFrom(detail.data).usage} /> },
+        {
+          label: t('common.operations.logs.attempts'),
+          wide: true,
+          value: (
+            <AttemptTable
+              detail={detail.data}
+              page={attemptPager.page}
+              onPrevious={attemptPager.previous}
+              onNext={attemptPager.next}
+            />
+          ),
+        },
+      ]
+    : detailBody
+      ? [{ label: t('logs.details'), value: detailBody }]
+      : [];
 
-  const title = role === 'admin'
-    ? t('admin.logs.logsTitle')
-    : role === 'user' ? t('user.logs.title') : t('common.operations.logs.stewardTitle');
-  const empty = role === 'admin'
-    ? t('admin.logs.noLogs')
-    : role === 'user' ? t('user.logs.empty') : t('common.operations.logs.stewardEmpty');
-  const emptyBody = role === 'admin'
-    ? t('admin.logs.noLogsBody')
-    : role === 'user' ? t('user.logs.emptyBody') : t('common.operations.logs.stewardEmptyBody');
+  const title =
+    role === 'admin'
+      ? t('admin.logs.logsTitle')
+      : role === 'user'
+        ? t('user.logs.title')
+        : t('common.operations.logs.stewardTitle');
+  const empty =
+    role === 'admin'
+      ? t('admin.logs.noLogs')
+      : role === 'user'
+        ? t('user.logs.empty')
+        : t('common.operations.logs.stewardEmpty');
+  const emptyBody =
+    role === 'admin'
+      ? t('admin.logs.noLogsBody')
+      : role === 'user'
+        ? t('user.logs.emptyBody')
+        : t('common.operations.logs.stewardEmptyBody');
 
   if (authorityClosed) {
-    return <Card><ErrorState error={authorityError ?? revokedError} /></Card>;
+    return (
+      <Card>
+        <ErrorState error={authorityError ?? revokedError} />
+      </Card>
+    );
   }
 
   return (
@@ -249,55 +380,118 @@ export function RoleLogPanel({
         <h2>{title}</h2>
         {role === 'admin' ? (
           <div className="ops-actions">
-            <a className="btn btn-secondary" href={adminLogExportPath(filter, 'csv')} download>{t('admin.logs.exportCsv')}</a>
-            <a className="btn btn-secondary" href={adminLogExportPath(filter, 'json')} download>{t('admin.logs.exportJson')}</a>
+            <a className="btn btn-secondary" href={adminLogExportPath(filter, 'csv')} download>
+              {t('admin.logs.exportCsv')}
+            </a>
+            <a className="btn btn-secondary" href={adminLogExportPath(filter, 'json')} download>
+              {t('admin.logs.exportJson')}
+            </a>
           </div>
         ) : null}
       </div>
       <form className="ops-stack" onSubmit={apply}>
         <div className="ops-field-grid">
           {fields.map((field) => (
-            <label key={field.key}>{field.label}
+            <label key={field.key}>
+              {field.label}
               <input
                 value={raw[field.key] ?? ''}
                 maxLength={field.max}
-                onChange={(event) => setRaw((current) => ({ ...current, [field.key]: event.target.value }))}
+                onChange={(event) =>
+                  setRaw((current) => ({ ...current, [field.key]: event.target.value }))
+                }
               />
             </label>
           ))}
-          <label>{t('common.from')}<input type="datetime-local" value={fromDraft} onChange={(event) => setFromDraft(event.target.value)} /></label>
-          <label>{t('common.to')}<input type="datetime-local" value={toDraft} onChange={(event) => setToDraft(event.target.value)} /></label>
+          <label>
+            {t('common.from')}
+            <input
+              type="datetime-local"
+              value={fromDraft}
+              onChange={(event) => setFromDraft(event.target.value)}
+            />
+          </label>
+          <label>
+            {t('common.to')}
+            <input
+              type="datetime-local"
+              value={toDraft}
+              onChange={(event) => setToDraft(event.target.value)}
+            />
+          </label>
         </div>
-        {validation ? <p className="field-error" role="alert">{validation}</p> : null}
+        {validation ? (
+          <p className="field-error" role="alert">
+            {validation}
+          </p>
+        ) : null}
         <div className="ops-actions">
-          <button className="btn btn-primary" type="submit">{t('common.applyFilter')}</button>
-          <button className="btn btn-secondary" type="button" onClick={() => {
-            setRaw({}); setFromDraft(''); setToDraft(''); setFilter({}); setValidation(''); setSelectedID(null); pager.reset(); attemptPager.reset();
-          }}>{t('common.resetFilter')}</button>
+          <button className="btn btn-primary" type="submit">
+            {t('common.applyFilter')}
+          </button>
+          <button
+            className="btn btn-secondary"
+            type="button"
+            onClick={() => {
+              setRaw({});
+              setFromDraft('');
+              setToDraft('');
+              setFilter({});
+              setValidation('');
+              setSelectedID(null);
+              pager.reset();
+              attemptPager.reset();
+            }}
+          >
+            {t('common.resetFilter')}
+          </button>
         </div>
       </form>
-      {logs.isPending ? <LoadingState /> : logs.error ? <ErrorState error={logs.error} onRetry={() => void logs.refetch()} />
-        : logs.data.data.length === 0 ? <EmptyState title={empty} body={emptyBody} /> : (
-          <>
-            <LogTable
-              caption={title}
-              columns={columns}
-              rows={logs.data.data}
-              rowKey={(row) => row.id}
-              actions={(row) => <button type="button" className="btn btn-secondary" onClick={() => {
-                attemptPager.reset();
-                setSelectedID(row.id);
-              }}>{t('logs.details')}</button>}
-            />
-            <CursorPagination page={pager.page} nextCursor={logs.data.next_cursor} onPrevious={pager.previous} onNext={pager.next}
-              labels={{ previous: t('common.previous'), next: t('common.next'), page: t('common.operations.logs.pageLabel') }} />
-          </>
-        )}
+      {logs.isPending ? (
+        <LoadingState />
+      ) : logs.error ? (
+        <ErrorState error={logs.error} onRetry={() => void logs.refetch()} />
+      ) : logs.data.data.length === 0 ? (
+        <EmptyState title={empty} body={emptyBody} />
+      ) : (
+        <>
+          <LogTable
+            caption={title}
+            columns={columns}
+            rows={logs.data.data}
+            rowKey={(row) => row.id}
+            actions={(row) => (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  attemptPager.reset();
+                  setSelectedID(row.id);
+                }}
+              >
+                {t('logs.details')}
+              </button>
+            )}
+          />
+          <CursorPagination
+            page={pager.page}
+            nextCursor={logs.data.next_cursor}
+            onPrevious={pager.previous}
+            onNext={pager.next}
+            labels={{
+              previous: t('common.previous'),
+              next: t('common.next'),
+              page: t('common.operations.logs.pageLabel'),
+            }}
+          />
+        </>
+      )}
       <LogDetailDrawer
         open={Boolean(selectedID)}
         onClose={() => {
           setSelectedID(null);
           attemptPager.reset();
+          onRequestClose?.();
         }}
         title={selectedID ? `${t('logs.drawerTitle')} ${selectedID}` : t('logs.drawerTitle')}
         fields={detailFields}

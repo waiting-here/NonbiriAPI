@@ -155,6 +155,7 @@ export const USER_ROUTE_DESCRIPTORS = [
     fallbackLabelKey: 'user.debug.nav',
   }),
   user({ id: 'debug', path: '/debug', access: 'user', layout: 'wide', registered: true }),
+  user({ id: 'credits', path: '/credits', access: 'user', layout: 'wide', registered: true }),
   user({ id: 'issues', path: '/issues', access: 'user', layout: 'readable', registered: true }),
   user({
     id: 'credential-report',
