@@ -63,6 +63,8 @@ const choices: EndpointKeyChoice[] = [
       note: 'existing key',
       enabled: false,
       forceStoreFalse: true,
+      maxConcurrency: 0,
+      maxRPM: 0,
       suspensionState: 'none',
       revision: '2',
       createdAt: 1_788_100_000,

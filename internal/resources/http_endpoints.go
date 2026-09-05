@@ -48,6 +48,8 @@ type createEndpointKeyRequest struct {
 	Enabled            requestField[bool]   `json:"enabled"`
 	ForceStoreFalse    requestField[bool]   `json:"force_store_false"`
 	OwnershipConfirmed requestField[bool]   `json:"ownership_confirmed"`
+	MaxConcurrency     requestField[int64]  `json:"max_concurrency"`
+	MaxRPM             requestField[int64]  `json:"max_rpm"`
 }
 
 type createEndpointKeyCanonical struct {
@@ -56,6 +58,8 @@ type createEndpointKeyCanonical struct {
 	Enabled            bool   `json:"enabled"`
 	ForceStoreFalse    bool   `json:"force_store_false"`
 	OwnershipConfirmed bool   `json:"ownership_confirmed"`
+	MaxConcurrency     int64  `json:"max_concurrency,omitempty"`
+	MaxRPM             int64  `json:"max_rpm,omitempty"`
 }
 
 type patchEndpointKeyRequest struct {
@@ -63,6 +67,8 @@ type patchEndpointKeyRequest struct {
 	Enabled          requestField[bool]   `json:"enabled"`
 	ForceStoreFalse  requestField[bool]   `json:"force_store_false"`
 	ExpectedRevision requestField[string] `json:"expected_revision"`
+	MaxConcurrency   requestField[int64]  `json:"max_concurrency"`
+	MaxRPM           requestField[int64]  `json:"max_rpm"`
 }
 
 type patchEndpointKeyCanonical struct {
@@ -70,6 +76,8 @@ type patchEndpointKeyCanonical struct {
 	Enabled          *bool   `json:"enabled,omitempty"`
 	ForceStoreFalse  *bool   `json:"force_store_false,omitempty"`
 	ExpectedRevision string  `json:"expected_revision"`
+	MaxConcurrency   *int64  `json:"max_concurrency,omitempty"`
+	MaxRPM           *int64  `json:"max_rpm,omitempty"`
 }
 
 func (api *httpAPI) listEndpoints(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
@@ -242,6 +250,7 @@ func (api *httpAPI) createEndpointKey(writer http.ResponseWriter, request *http.
 	canonical := createEndpointKeyCanonical{
 		Secret: body.Secret.Value, Note: body.Note.Value, Enabled: body.Enabled.Value,
 		ForceStoreFalse: body.ForceStoreFalse.Value, OwnershipConfirmed: body.OwnershipConfirmed.Value,
+		MaxConcurrency: body.MaxConcurrency.Value, MaxRPM: body.MaxRPM.Value,
 	}
 	mutation, ok := controlMutation(writer, request, routeEndpointKeys, []int64{endpointID}, canonical)
 	if !ok {
@@ -252,6 +261,7 @@ func (api *httpAPI) createEndpointKey(writer http.ResponseWriter, request *http.
 	result, err := api.repository.CreateEndpointKey(request.Context(), principal.UserID, endpointID, mutation, CreateEndpointKeyInput{
 		Secret: secretBytes, Note: canonical.Note, Enabled: canonical.Enabled,
 		ForceStoreFalse: canonical.ForceStoreFalse, OwnershipConfirmed: canonical.OwnershipConfirmed,
+		MaxConcurrency: canonical.MaxConcurrency, MaxRPM: canonical.MaxRPM,
 	})
 	if err != nil {
 		writeResourceError(writer, err)
@@ -274,13 +284,14 @@ func (api *httpAPI) patchEndpointKey(writer http.ResponseWriter, request *http.R
 		return
 	}
 	revision, ok := canonicalExpectedRevision(body.ExpectedRevision)
-	if !ok || (!body.Note.Set && !body.Enabled.Set && !body.ForceStoreFalse.Set) {
+	if !ok || (!body.Note.Set && !body.Enabled.Set && !body.ForceStoreFalse.Set && !body.MaxConcurrency.Set && !body.MaxRPM.Set) {
 		writeResourceError(writer, ErrInvalidRequest)
 		return
 	}
 	canonical := patchEndpointKeyCanonical{
 		Note: optionalPointer(body.Note), Enabled: optionalPointer(body.Enabled),
 		ForceStoreFalse: optionalPointer(body.ForceStoreFalse), ExpectedRevision: body.ExpectedRevision.Value,
+		MaxConcurrency: optionalPointer(body.MaxConcurrency), MaxRPM: optionalPointer(body.MaxRPM),
 	}
 	mutation, ok := controlMutation(writer, request, routeEndpointKey, []int64{endpointID, keyID}, canonical)
 	if !ok {
@@ -288,6 +299,7 @@ func (api *httpAPI) patchEndpointKey(writer http.ResponseWriter, request *http.R
 	}
 	result, err := api.repository.PatchEndpointKey(request.Context(), principal.UserID, endpointID, keyID, mutation, PatchEndpointKeyInput{
 		Note: canonical.Note, Enabled: canonical.Enabled, ForceStoreFalse: canonical.ForceStoreFalse,
+		MaxConcurrency: canonical.MaxConcurrency, MaxRPM: canonical.MaxRPM,
 		ExpectedRevision: revision,
 	})
 	if err != nil {

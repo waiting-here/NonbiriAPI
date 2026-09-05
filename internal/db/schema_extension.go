@@ -10,6 +10,8 @@ import (
 // Other incomplete or modified schemas remain invalid.
 const preRoutingManifestHash = "22c5d92ad7b1b077298caa2220f41b911414248ed87acbdd7cf978eb29483c36"
 
+const preKeyLimitsManifestHash = "8d39bd424d9df29960c6c113fd874833615de1d95e0f820042bb8b60d7678400"
+
 func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) {
 	if GenerationTwoSchemaHash() != PinnedGenerationTwoSchemaHash {
 		return false, errors.New("generation-two schema hash drift")
@@ -25,7 +27,7 @@ func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) 
 	switch generationManifestDigest(actual) {
 	case expected:
 		return false, nil
-	case preRoutingManifestHash:
+	case preRoutingManifestHash, preKeyLimitsManifestHash:
 		return true, nil
 	default:
 		return false, errors.New("generation-two schema manifest mismatch")
@@ -45,7 +47,16 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) error
 	if !needed {
 		return nil
 	}
-	if _, err := tx.ExecContext(ctx, charityModelRoutingSchema); err != nil {
+	manifest, err := readGenerationManifest(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if generationManifestDigest(manifest) == preRoutingManifestHash {
+		if _, err := tx.ExecContext(ctx, charityModelRoutingSchema); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, endpointKeyLimitsSchema); err != nil {
 		return err
 	}
 	if err := validateGenerationTwoManifest(ctx, tx); err != nil {

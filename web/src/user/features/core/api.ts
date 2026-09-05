@@ -108,6 +108,17 @@ function exactBooleanInput(value: unknown, label: string): boolean {
   return value;
 }
 
+function keyLimitInput(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 2_147_483_647) {
+    throw new ApiError(
+      'invalid_request',
+      'Key request limits must be whole numbers from 0 to 2147483647.',
+      400,
+    );
+  }
+  return value;
+}
+
 function revisionField(value: unknown, label: string, positive = false): string {
   if (typeof value !== 'string') throw new ApiError('invalid_request', `Invalid ${label}.`, 400);
   return validateRevisionInput(value, label, positive);
@@ -534,7 +545,7 @@ export async function createEndpointKey(
   const record = exactInput(
     input,
     ['secret', 'note', 'enabled', 'force_store_false', 'ownership_confirmed'],
-    [],
+    ['max_concurrency', 'max_rpm'],
     'endpoint key creation input',
   );
   if (record.ownership_confirmed !== true) {
@@ -546,6 +557,10 @@ export async function createEndpointKey(
     enabled: exactBooleanInput(record.enabled, 'endpoint key enabled state'),
     force_store_false: exactBooleanInput(record.force_store_false, 'endpoint key store policy'),
     ownership_confirmed: true,
+    ...(record.max_concurrency !== undefined
+      ? { max_concurrency: keyLimitInput(record.max_concurrency) }
+      : {}),
+    ...(record.max_rpm !== undefined ? { max_rpm: keyLimitInput(record.max_rpm) } : {}),
   };
   const response = await coreRequest(`/api/endpoints/${pathID(endpointId, 'endpoint id')}/keys`, {
     method: 'POST',
@@ -570,14 +585,22 @@ export async function patchEndpointKey(
   const record = exactInput(
     input,
     ['expected_revision'],
-    ['note', 'enabled', 'force_store_false'],
+    ['note', 'enabled', 'force_store_false', 'max_concurrency', 'max_rpm'],
     'endpoint key update input',
   );
-  if (!['note', 'enabled', 'force_store_false'].some((key) => Object.hasOwn(record, key))) {
+  if (
+    !['note', 'enabled', 'force_store_false', 'max_concurrency', 'max_rpm'].some((key) =>
+      Object.hasOwn(record, key),
+    )
+  ) {
     throw new ApiError('invalid_request', 'Invalid endpoint key update input.', 400);
   }
   const payload: EndpointKeyPatchInput = {
     expected_revision: revisionField(record.expected_revision, 'endpoint key revision', true),
+    ...(Object.hasOwn(record, 'max_concurrency')
+      ? { max_concurrency: keyLimitInput(record.max_concurrency) }
+      : {}),
+    ...(Object.hasOwn(record, 'max_rpm') ? { max_rpm: keyLimitInput(record.max_rpm) } : {}),
     ...(Object.hasOwn(record, 'note')
       ? { note: validateScalarInput(record.note, 1_024, 'endpoint key note') }
       : {}),

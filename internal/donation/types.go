@@ -124,12 +124,16 @@ type AdminDonationKey struct {
 	EndedReason         *string         `json:"ended_reason"`
 	AuthorizedExpiresAt *int64          `json:"authorized_expires_at"`
 	SafeNote            string          `json:"safe_note"`
+	MaxConcurrency      *int64          `json:"max_concurrency"`
+	MaxRPM              *int64          `json:"max_rpm"`
 }
 
 type StewardDonationKey struct {
 	DonationKey
 	AuthorizedExpiresAt *int64 `json:"authorized_expires_at"`
 	SafeNote            string `json:"safe_note"`
+	MaxConcurrency      *int64 `json:"max_concurrency"`
+	MaxRPM              *int64 `json:"max_rpm"`
 }
 
 type ReviewResult struct {

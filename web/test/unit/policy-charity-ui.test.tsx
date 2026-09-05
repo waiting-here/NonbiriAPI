@@ -472,7 +472,7 @@ function ManagementSessionGate({
 describe('experimental policy and charity controls', () => {
   test('edits the owner-only endpoint key policy and keeps a new secret out of query state', async () => {
     const marker = 'synthetic-secret-123456';
-    let currentKey = { ...coreEndpointKey };
+    let currentKey = { ...coreEndpointKey, max_concurrency: 0, max_rpm: 0 };
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const path = requestPath(input);
       const method = (
@@ -486,10 +486,19 @@ describe('experimental policy and charity controls', () => {
       if (method === 'GET' && path === '/api/endpoints/1/keys/2/models?limit=50')
         return jsonResponse(coreCatalogUnknown);
       if (method === 'PATCH' && path === '/api/endpoints/1/keys/2') {
+        const patch = JSON.parse(String(init?.body)) as Record<string, unknown>;
         currentKey = {
           ...currentKey,
-          force_store_false: true,
-          revision: '2',
+          force_store_false:
+            typeof patch.force_store_false === 'boolean'
+              ? patch.force_store_false
+              : currentKey.force_store_false,
+          max_concurrency:
+            typeof patch.max_concurrency === 'number'
+              ? patch.max_concurrency
+              : currentKey.max_concurrency,
+          max_rpm: typeof patch.max_rpm === 'number' ? patch.max_rpm : currentKey.max_rpm,
+          revision: String(Number(currentKey.revision) + 1),
           updated_at: 1_700_000_002,
         };
         return jsonResponse(currentKey);
@@ -527,9 +536,30 @@ describe('experimental policy and charity controls', () => {
     );
     await screen.findByRole('button', { name: 'Stop requiring store=false' });
 
+    await rendered.user.click(within(keyCard).getByRole('button', { name: 'Edit' }));
+    await rendered.user.clear(screen.getByLabelText('Maximum concurrency'));
+    await rendered.user.type(screen.getByLabelText('Maximum concurrency'), '3');
+    await rendered.user.clear(screen.getByLabelText('Maximum RPM'));
+    await rendered.user.type(screen.getByLabelText('Maximum RPM'), '50');
+    await rendered.user.click(within(keyCard).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(lastBody(fetchMock, 'PATCH', '/api/endpoints/1/keys/2')).toEqual({
+        note: coreEndpointKey.note,
+        max_concurrency: 3,
+        max_rpm: 50,
+        expected_revision: '2',
+      }),
+    );
+    await waitFor(() => expect(within(keyCard).queryByLabelText('Maximum RPM')).toBeNull());
+    await within(keyCard).findByText('Maximum RPM: 50');
+
     await rendered.user.click(screen.getByRole('button', { name: 'Add key' }));
     await rendered.user.type(screen.getByLabelText('Service key'), marker);
     await rendered.user.type(screen.getByLabelText('Key note'), 'created key');
+    await rendered.user.clear(screen.getByLabelText('Maximum concurrency'));
+    await rendered.user.type(screen.getByLabelText('Maximum concurrency'), '2');
+    await rendered.user.clear(screen.getByLabelText('Maximum RPM'));
+    await rendered.user.type(screen.getByLabelText('Maximum RPM'), '30');
     await rendered.user.click(screen.getByLabelText(/I own this credential/));
     await rendered.user.click(screen.getByLabelText('Do not save requests (store=false)'));
     await rendered.user.click(screen.getAllByRole('button', { name: 'Add key' })[1]);
@@ -540,6 +570,8 @@ describe('experimental policy and charity controls', () => {
         enabled: true,
         force_store_false: true,
         ownership_confirmed: true,
+        max_concurrency: 2,
+        max_rpm: 30,
       }),
     );
     await waitFor(() => expect(screen.queryByDisplayValue(marker)).toBeNull());

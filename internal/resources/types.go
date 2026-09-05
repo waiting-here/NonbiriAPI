@@ -72,6 +72,8 @@ type EndpointKey struct {
 	Note            string `json:"note"`
 	Enabled         bool   `json:"enabled"`
 	ForceStoreFalse bool   `json:"force_store_false"`
+	MaxConcurrency  int64  `json:"max_concurrency"`
+	MaxRPM          int64  `json:"max_rpm"`
 	SuspensionState string `json:"suspension_state"`
 	Revision        string `json:"revision"`
 	CreatedAt       int64  `json:"created_at"`
@@ -224,6 +226,8 @@ type CreateEndpointKeyInput struct {
 	Enabled            bool
 	ForceStoreFalse    bool
 	OwnershipConfirmed bool
+	MaxConcurrency     int64
+	MaxRPM             int64
 }
 
 type PatchEndpointKeyInput struct {
@@ -231,6 +235,8 @@ type PatchEndpointKeyInput struct {
 	Enabled          *bool
 	ForceStoreFalse  *bool
 	ExpectedRevision int64
+	MaxConcurrency   *int64
+	MaxRPM           *int64
 }
 
 type ManualCatalogInput struct {

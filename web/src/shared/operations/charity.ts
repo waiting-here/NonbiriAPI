@@ -69,6 +69,8 @@ export interface ManagedDonationKey {
   streak: { generation: string; count: string; failure_disabled: boolean };
   ended_reason: DonationEndedReason | null;
   safe_note: string;
+  max_concurrency?: number | null;
+  max_rpm?: number | null;
 }
 
 interface DonationCommon {
@@ -162,27 +164,24 @@ function normalizeManagedSource(
 }
 
 function normalizeManagedKey(value: unknown, label: string, role: CharityRole): ManagedDonationKey {
-  const root = record(
-    value,
-    [
-      'id',
-      'endpoint_key_id',
-      'display_head',
-      'display_tail',
-      'safe_source',
-      'physical_enabled',
-      'charity_state',
-      'limits',
-      'usage',
-      'token_reserve',
-      'expires_at',
-      'streak',
-      'ended_reason',
-      'authorized_expires_at',
-      'safe_note',
-    ],
-    label,
-  );
+  const required = [
+    'id',
+    'endpoint_key_id',
+    'display_head',
+    'display_tail',
+    'safe_source',
+    'physical_enabled',
+    'charity_state',
+    'limits',
+    'usage',
+    'token_reserve',
+    'expires_at',
+    'streak',
+    'ended_reason',
+    'authorized_expires_at',
+    'safe_note',
+  ];
+  const root = record(value, [...required, 'max_concurrency', 'max_rpm'], label, required);
   const limits = record(root.limits, ['price', 'calls', 'tokens'], `${label} limits`);
   const usage = record(
     root.usage,
@@ -271,6 +270,11 @@ function normalizeManagedKey(value: unknown, label: string, role: CharityRole): 
       bytes: 1_024,
       multiline: true,
     }),
+    max_concurrency:
+      root.max_concurrency == null
+        ? null
+        : integer(root.max_concurrency, `${label} concurrency`, 0, 2_147_483_647),
+    max_rpm: root.max_rpm == null ? null : integer(root.max_rpm, `${label} RPM`, 0, 2_147_483_647),
   };
 }
 
@@ -459,6 +463,8 @@ export interface CharityBinding {
     canonical_base_url: string;
     display_head: string;
     display_tail: string;
+    max_concurrency?: number;
+    max_rpm?: number;
   };
   upstream_model_id: string;
   source_types: ('automatic' | 'manual')[];
@@ -620,10 +626,24 @@ export const normalizeStewardCharityModel = (value: unknown) =>
 function normalizeSource(value: unknown, label: string): CharityBinding['source'] {
   const root = record(
     value,
-    ['connector_type', 'canonical_base_url', 'display_head', 'display_tail'],
+    [
+      'connector_type',
+      'canonical_base_url',
+      'display_head',
+      'display_tail',
+      'max_concurrency',
+      'max_rpm',
+    ],
     label,
+    ['connector_type', 'canonical_base_url', 'display_head', 'display_tail'],
   );
   return {
+    max_concurrency:
+      root.max_concurrency === undefined
+        ? 0
+        : integer(root.max_concurrency, `${label} concurrency`, 0, 2_147_483_647),
+    max_rpm:
+      root.max_rpm === undefined ? 0 : integer(root.max_rpm, `${label} RPM`, 0, 2_147_483_647),
     connector_type: oneOf(
       root.connector_type,
       ['openai-compatible', 'anthropic-compatible'] as const,

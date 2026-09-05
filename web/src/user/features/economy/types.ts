@@ -161,6 +161,8 @@ export interface EndpointKeySummary {
   note: string;
   enabled: boolean;
   forceStoreFalse: boolean;
+  maxConcurrency: number;
+  maxRPM: number;
   suspensionState: 'none' | 'security_processing';
   revision: string;
   createdAt: number;

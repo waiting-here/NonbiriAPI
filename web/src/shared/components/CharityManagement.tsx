@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { CharityBindingPicker, type CharitySelection } from './CharityBindingPicker';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { KeyLimitSummary } from './KeyRoutingLimits';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { CursorPagination } from '@shared/operations/CursorPagination';
 import { useCursorPager } from '@shared/operations/useCursorPager';
@@ -369,6 +370,7 @@ function DonationKeyEditor({
       <p className="muted">
         {item.safe_source.connector_type} · {item.safe_source.base_url}
       </p>
+      <KeyLimitSummary concurrency={item.max_concurrency} rpm={item.max_rpm} readOnly />
       <div className="ops-toolbar">
         <StatusBadge
           active={item.charity_state === 'available'}
@@ -686,6 +688,11 @@ function DonationDetail({
                     <h4>
                       {entry.display_head}…{entry.display_tail} · {entry.safe_source.base_url}
                     </h4>
+                    <KeyLimitSummary
+                      concurrency={entry.max_concurrency}
+                      rpm={entry.max_rpm}
+                      readOnly
+                    />
                     <div className="ops-field-grid">
                       <NullableValue
                         label={t('common.operations.charity.priceLimitCredits')}

@@ -200,6 +200,8 @@ type CandidateSource struct {
 	CanonicalBaseURL string `json:"canonical_base_url"`
 	DisplayHead      string `json:"display_head"`
 	DisplayTail      string `json:"display_tail"`
+	MaxConcurrency   int64  `json:"max_concurrency"`
+	MaxRPM           int64  `json:"max_rpm"`
 }
 
 type AdminBindingCandidate struct {
@@ -215,6 +217,8 @@ type StewardCandidateSource struct {
 	CanonicalBaseURL string `json:"canonical_base_url"`
 	DisplayHead      string `json:"display_head"`
 	DisplayTail      string `json:"display_tail"`
+	MaxConcurrency   int64  `json:"max_concurrency"`
+	MaxRPM           int64  `json:"max_rpm"`
 }
 
 type StewardBindingCandidate struct {

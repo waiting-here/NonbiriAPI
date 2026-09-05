@@ -414,9 +414,12 @@ dk.price_used_mag,dk.price_reserved_mag,dk.calls_used,dk.calls_reserved,dk.token
 dk.token_reserve,dk.enabled,dk.failure_disabled,dk.failure_streak,dk.streak_generation,dk.safe_note,
 dk.authorized_expires_at,dk.expires_at,dk.ended_reason,
 EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=dk.endpoint_key_id),
-EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id)
+EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id),
+CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.max_concurrency,0) END,
+CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.max_rpm,0) END
 FROM donation_keys dk
 LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id
+LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id
 LEFT JOIN endpoints e ON e.id=k.endpoint_id
 WHERE dk.donation_id=? ORDER BY dk.id`, donationID)
 	if err != nil {
@@ -441,7 +444,7 @@ WHERE dk.donation_id=? ORDER BY dk.id`, donationID)
 			&channelName, &channelCategory, &endpointEnabled, &keyPhysicalEnabled,
 			&priceLimit, &callLimit, &tokenLimit, &priceUsed, &priceReserved, &callsUsed, &callsReserved,
 			&tokensUsed, &tokensReserved, &item.TokenReserve, &enabled, &failureDisabled, &streak,
-			&generation, &item.SafeNote, &authorizedExpires, &expires, &ended, &suspended, &member); err != nil {
+			&generation, &item.SafeNote, &authorizedExpires, &expires, &ended, &suspended, &member, &item.MaxConcurrency, &item.MaxRPM); err != nil {
 			return nil, fmt.Errorf("donation: scan key projection: %w", err)
 		}
 		item.ID = strconv.FormatInt(id, 10)
@@ -572,7 +575,8 @@ func stewardKeys(values []AdminDonationKey) []StewardDonationKey {
 	out := make([]StewardDonationKey, len(values))
 	for index := range values {
 		out[index] = StewardDonationKey{DonationKey: ownerKey(values[index]),
-			AuthorizedExpiresAt: values[index].AuthorizedExpiresAt, SafeNote: values[index].SafeNote}
+			AuthorizedExpiresAt: values[index].AuthorizedExpiresAt, SafeNote: values[index].SafeNote,
+			MaxConcurrency: values[index].MaxConcurrency, MaxRPM: values[index].MaxRPM}
 	}
 	return out
 }

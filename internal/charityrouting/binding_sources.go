@@ -26,6 +26,7 @@ JOIN donations d
 JOIN donation_keys dk ON dk.donation_id=d.id
 JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id
 JOIN endpoint_keys k ON k.id=m.endpoint_key_id
+LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id
 WHERE cm.id=? AND d.status='approved' AND d.user_id IS NOT NULL
 AND dk.ended_at IS NULL AND (dk.expires_at IS NULL OR dk.expires_at>?)
 AND EXISTS(SELECT 1 FROM model_pair_catalog pc WHERE pc.endpoint_key_id=k.id
@@ -66,7 +67,7 @@ func (s *Service) bindingSources(ctx context.Context, role roleKind, actorID, mo
 	query := `SELECT d.id,d.description,COUNT(DISTINCT dk.id)` + bindingSourceFrom + ` AND d.id>? GROUP BY d.id,d.description ORDER BY d.id LIMIT ?`
 	args := []any{modelID, now, afterID, limit + 1}
 	if donationID != 0 {
-		query = `SELECT dk.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,dk.safe_note` + bindingSourceFrom + ` AND d.id=? AND dk.id>? ORDER BY dk.id LIMIT ?`
+		query = `SELECT dk.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,dk.safe_note,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)` + bindingSourceFrom + ` AND d.id=? AND dk.id>? ORDER BY dk.id LIMIT ?`
 		args = []any{modelID, now, donationID, afterID, limit + 1}
 	}
 	rows, err := tx.QueryContext(ctx, query, args...)
@@ -88,7 +89,7 @@ func (s *Service) bindingSources(ctx context.Context, role roleKind, actorID, mo
 			donations = append(donations, entry)
 		} else {
 			var entry BindingSourceKey
-			if err := rows.Scan(&id, &entry.Source.ConnectorType, &entry.Source.CanonicalBaseURL, &entry.Source.DisplayHead, &entry.Source.DisplayTail, &entry.Note); err != nil {
+			if err := rows.Scan(&id, &entry.Source.ConnectorType, &entry.Source.CanonicalBaseURL, &entry.Source.DisplayHead, &entry.Source.DisplayTail, &entry.Note, &entry.Source.MaxConcurrency, &entry.Source.MaxRPM); err != nil {
 				return nil, nil, 0, err
 			}
 			entry.DonationKeyID = strconv.FormatInt(id, 10)

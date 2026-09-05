@@ -14,6 +14,14 @@
     "accountMenu": "账号操作"
   },
   "common": {
+    "keyLimits": {
+      "title": "密钥调用限制",
+      "concurrency": "最大并发",
+      "rpm": "最大 RPM",
+      "unlimited": "不限制",
+      "readOnly": "所有者配置（只读）",
+      "hint": "0 表示不限制。自用和公益模型调用共用额度。RPM 统计最近 60 秒发出的请求，流式请求占用并发直至结束。达到上限后会尝试其他可用连接。"
+    },
     "loading": "加载中…",
     "error": "出了点问题",
     "errorBody": "服务暂时无法完成请求，请稍后重试。",

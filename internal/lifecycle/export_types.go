@@ -99,6 +99,8 @@ type EndpointKeyExport struct {
 	Note            string `json:"note"`
 	Enabled         bool   `json:"enabled"`
 	ForceStoreFalse bool   `json:"force_store_false"`
+	MaxConcurrency  int64  `json:"max_concurrency"`
+	MaxRPM          int64  `json:"max_rpm"`
 	SuspensionState string `json:"suspension_state"`
 	CreatedAt       int64  `json:"created_at"`
 	UpdatedAt       int64  `json:"updated_at"`

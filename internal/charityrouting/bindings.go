@@ -61,12 +61,13 @@ func (s *Service) bindingCandidates(ctx context.Context, role roleKind, actorUse
 		return nil, 0, "", fmt.Errorf("charity routing: materialize candidate expiry: %w", err)
 	}
 	statement := `SELECT dk.id,d.id,dk.connector_type,dk.canonical_base_url,dk.display_head,dk.display_tail,
-pc.normalized_model_id,pc.automatic_supports,pc.manual_supports
+pc.normalized_model_id,pc.automatic_supports,pc.manual_supports,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)
 FROM charity_models cm
 JOIN donation_keys dk
 JOIN donations d ON d.id=dk.donation_id
 JOIN donation_key_memberships m ON m.donation_key_id=dk.id AND m.endpoint_key_id=dk.endpoint_key_id
 JOIN endpoint_keys k ON k.id=m.endpoint_key_id
+LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id
 JOIN model_pair_catalog pc ON pc.endpoint_key_id=k.id
 WHERE cm.id=? AND d.status='approved' AND (dk.expires_at IS NULL OR dk.expires_at>?)
 AND dk.ended_at IS NULL AND (dk.id>? OR (dk.id=? AND pc.normalized_model_id>?))
@@ -106,7 +107,7 @@ AND NOT EXISTS(SELECT 1 FROM charity_model_bindings b WHERE b.charity_model_id=c
 		var keyID, donationID int64
 		var automatic, manual int64
 		if err := rows.Scan(&keyID, &donationID, &item.Source.ConnectorType, &item.Source.CanonicalBaseURL,
-			&item.Source.DisplayHead, &item.Source.DisplayTail, &item.UpstreamModelID, &automatic, &manual); err != nil {
+			&item.Source.DisplayHead, &item.Source.DisplayTail, &item.UpstreamModelID, &automatic, &manual, &item.Source.MaxConcurrency, &item.Source.MaxRPM); err != nil {
 			return nil, 0, "", fmt.Errorf("charity routing: scan binding candidate: %w", err)
 		}
 		item.DonationKeyID = strconv.FormatInt(keyID, 10)
@@ -525,8 +526,9 @@ func readAdminBindingsTx(ctx context.Context, tx *sql.Tx, modelID int64) (AdminB
 	}
 	out.BindingRevision = strconv.FormatInt(revision, 10)
 	rows, err := tx.QueryContext(ctx, `SELECT b.id,b.ord,dk.id,d.id,dk.connector_type,dk.canonical_base_url,
-dk.display_head,dk.display_tail,b.upstream_model_id,pc.automatic_supports,pc.manual_supports
+dk.display_head,dk.display_tail,b.upstream_model_id,pc.automatic_supports,pc.manual_supports,COALESCE(kl.max_concurrency,0),COALESCE(kl.max_rpm,0)
 FROM charity_model_bindings b
+LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=b.endpoint_key_id
 JOIN donation_keys dk ON dk.id=b.donation_key_id
 JOIN donations d ON d.id=dk.donation_id
 JOIN model_pair_catalog pc ON pc.endpoint_key_id=b.endpoint_key_id AND pc.normalized_model_id=b.upstream_model_id
@@ -542,7 +544,7 @@ WHERE b.charity_model_id=? ORDER BY b.ord,b.id`, modelID)
 		var automatic, manual int64
 		if err := rows.Scan(&id, &item.Ord, &donationKeyID, &donationID, &item.Source.ConnectorType,
 			&item.Source.CanonicalBaseURL, &item.Source.DisplayHead, &item.Source.DisplayTail,
-			&item.UpstreamModelID, &automatic, &manual); err != nil {
+			&item.UpstreamModelID, &automatic, &manual, &item.Source.MaxConcurrency, &item.Source.MaxRPM); err != nil {
 			return AdminBindings{}, fmt.Errorf("charity routing: scan binding: %w", err)
 		}
 		item.ID = strconv.FormatInt(id, 10)
@@ -638,6 +640,7 @@ func stewardCandidate(value AdminBindingCandidate) StewardBindingCandidate {
 		Source: StewardCandidateSource{
 			ConnectorType: value.Source.ConnectorType, CanonicalBaseURL: value.Source.CanonicalBaseURL,
 			DisplayHead: value.Source.DisplayHead, DisplayTail: value.Source.DisplayTail,
+			MaxConcurrency: value.Source.MaxConcurrency, MaxRPM: value.Source.MaxRPM,
 		},
 		UpstreamModelID: value.UpstreamModelID, SourceTypes: append([]string(nil), value.SourceTypes...),
 	}
@@ -651,6 +654,7 @@ func stewardBindings(value AdminBindings) StewardBindings {
 			Source: StewardCandidateSource{
 				ConnectorType: binding.Source.ConnectorType, CanonicalBaseURL: binding.Source.CanonicalBaseURL,
 				DisplayHead: binding.Source.DisplayHead, DisplayTail: binding.Source.DisplayTail,
+				MaxConcurrency: binding.Source.MaxConcurrency, MaxRPM: binding.Source.MaxRPM,
 			},
 			UpstreamModelID: binding.UpstreamModelID, SourceTypes: append([]string(nil), binding.SourceTypes...),
 		}

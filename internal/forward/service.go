@@ -506,6 +506,7 @@ func (service *Service) runAttempts(
 	accepted claim.Request,
 ) attemptRun {
 	var run attemptRun
+	keyLimited := false
 	for index, candidate := range plan.candidates {
 		if executionContext.Err() != nil {
 			break
@@ -532,6 +533,10 @@ func (service *Service) runAttempts(
 			DonationKeyID: candidate.DonationKeyID,
 		})
 		if err != nil {
+			if errors.Is(err, claim.ErrKeyRateLimited) {
+				keyLimited = true
+				continue
+			}
 			if errors.Is(err, claim.ErrNotFound) {
 				continue
 			}
@@ -634,6 +639,9 @@ func (service *Service) runAttempts(
 			value := platformFailure(httperr.CodeUnboundModel, "model has no usable binding")
 			if plan.charity {
 				value = platformFailure(httperr.CodeRateLimited, "charity candidates are temporarily unavailable")
+			}
+			if keyLimited {
+				value = platformFailure(httperr.CodeRateLimited, "model connections are temporarily at capacity")
 			}
 			run.failure = &value
 		}

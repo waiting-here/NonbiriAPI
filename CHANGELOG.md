@@ -8,6 +8,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Added
 
+- Owner-configurable per-key concurrency and rolling-minute request limits. Personal and charity model calls share the limits, skip busy connections automatically, and expose the owner's settings read-only to authorized administrators and stewards.
 - Per-model charity routing choices: saved order, uniform random, or expiry-weighted random. Existing models keep expiry weighting through a compatible database update.
 - Separate user IDs and copyable Discord IDs in administrator user management, with a compact mobile layout.
 - Personal credit history with reason, time and income/expense filters, adjustable page sizes, direct page navigation, and links to the account's own request logs. Donation rewards do not expose another caller's requests.

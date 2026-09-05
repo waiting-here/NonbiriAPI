@@ -7,6 +7,15 @@ import (
 )
 
 func TestRoutingExtensionPreservesExistingGenerationTwoData(t *testing.T) {
+	testKeyLimitExtensionPreservesData(t, true)
+}
+
+func TestKeyLimitsExtensionPreservesExistingGenerationTwoData(t *testing.T) {
+	testKeyLimitExtensionPreservesData(t, false)
+}
+
+func testKeyLimitExtensionPreservesData(t *testing.T, beforeRouting bool) {
+	t.Helper()
 	path := bootstrapTestPath(t, "routing-extension.sqlite")
 	vault := bootstrapTestVault(t)
 	store, err := Open(path, vault)
@@ -27,11 +36,18 @@ func TestRoutingExtensionPreservesExistingGenerationTwoData(t *testing.T) {
 	if err := store.DB().QueryRow(`SELECT encrypted_secret FROM endpoint_key_secrets WHERE id=?`, ids[0]).Scan(&envelope); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.DB().Exec(`DROP TABLE charity_model_routing`); err != nil {
+	if _, err := store.DB().Exec(`DROP TABLE endpoint_key_limits; DROP INDEX idx_dispatch_claims_key_active; DROP INDEX idx_dispatch_claims_key_rpm`); err != nil {
 		t.Fatal(err)
 	}
+	wantHash := preKeyLimitsManifestHash
+	if beforeRouting {
+		if _, err := store.DB().Exec(`DROP TABLE charity_model_routing`); err != nil {
+			t.Fatal(err)
+		}
+		wantHash = preRoutingManifestHash
+	}
 	manifest, err := readGenerationManifest(context.Background(), store.DB())
-	if err != nil || generationManifestDigest(manifest) != preRoutingManifestHash {
+	if err != nil || generationManifestDigest(manifest) != wantHash {
 		t.Fatalf("fixture does not match deployed schema: %v", err)
 	}
 	if err := store.Close(); err != nil {
@@ -79,7 +95,7 @@ func TestRoutingExtensionRejectsModifiedPriorSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.DB().Exec(`DROP TABLE charity_model_routing; DROP INDEX idx_users_created`); err != nil {
+	if _, err := store.DB().Exec(`DROP TABLE charity_model_routing; DROP TABLE endpoint_key_limits; DROP INDEX idx_dispatch_claims_key_active; DROP INDEX idx_dispatch_claims_key_rpm; DROP INDEX idx_users_created`); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Close(); err != nil {

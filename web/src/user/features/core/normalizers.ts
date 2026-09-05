@@ -690,7 +690,7 @@ export function normalizeEndpointKey(value: unknown): EndpointKey {
       'created_at',
       'updated_at',
     ],
-    [],
+    ['max_concurrency', 'max_rpm'],
     'endpoint key',
   );
   if (record.suspension_state !== 'none' && record.suspension_state !== 'security_processing') {
@@ -707,11 +707,20 @@ export function normalizeEndpointKey(value: unknown): EndpointKey {
     note: scalarString(record.note, 1_024, 'endpoint key note', { allowEmpty: true }),
     enabled: exactBoolean(record.enabled, 'endpoint key enabled state'),
     force_store_false: exactBoolean(record.force_store_false, 'endpoint key store policy'),
+    max_concurrency: keyRoutingLimit(record.max_concurrency),
+    max_rpm: keyRoutingLimit(record.max_rpm),
     suspension_state: record.suspension_state,
     revision: decimal(record.revision, 'endpoint key revision', true),
     created_at: createdAt,
     updated_at: updatedAt,
   };
+}
+
+function keyRoutingLimit(value: unknown): number {
+  if (value === undefined) return 0;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 2_147_483_647)
+    invalid('endpoint key routing limit');
+  return value;
 }
 
 export function normalizeCallerKeyMetadata(value: unknown): CallerKeyMetadata {

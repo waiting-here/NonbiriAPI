@@ -43,11 +43,16 @@ function invalid(field: string): never {
   throw new ApiError('invalid_response', `The server returned an invalid ${field}.`, 200);
 }
 
-function record(value: unknown, field: string, keys: readonly string[]): UnknownRecord {
+function record(
+  value: unknown,
+  field: string,
+  keys: readonly string[],
+  optional: readonly string[] = [],
+): UnknownRecord {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) invalid(field);
   const result = value as UnknownRecord;
   const actual = Object.keys(result);
-  if (actual.length !== keys.length || actual.some((key) => !keys.includes(key))) invalid(field);
+  if (actual.some((key) => !keys.includes(key) && !optional.includes(key))) invalid(field);
   for (const key of keys) {
     if (!Object.prototype.hasOwnProperty.call(result, key)) invalid(field);
   }
@@ -303,7 +308,10 @@ function capabilityMilli(value: unknown, field: string): string {
   return decimal(value, field, MAX_MONEY_MILLI);
 }
 
-function normalizeCapabilityTokenPrices(value: unknown, field: string): CharityCapabilityTokenPrices {
+function normalizeCapabilityTokenPrices(
+  value: unknown,
+  field: string,
+): CharityCapabilityTokenPrices {
   const prices = record(value, field, [
     'uncached_input',
     'cache_write_input',
@@ -349,12 +357,7 @@ export function normalizeCharityCapabilityModel(value: unknown): CharityCapabili
     'end_at',
   ]);
   const discountEnabled = bool(discount.enabled, 'charity model discount enabled');
-  const discountPercent = integer(
-    discount.percent,
-    'charity model discount percent',
-    0,
-    100,
-  );
+  const discountPercent = integer(discount.percent, 'charity model discount percent', 0, 100);
   const startAt = nullableTimestamp(discount.start_at, 'charity model discount start');
   const endAt = nullableTimestamp(discount.end_at, 'charity model discount end');
   if (startAt !== null && endAt !== null && endAt < startAt) {
@@ -373,10 +376,7 @@ export function normalizeCharityCapabilityModel(value: unknown): CharityCapabili
     if (pricing.user_prices_milli !== null || pricing.discounted_user_prices_milli !== null) {
       invalid('charity model request pricing');
     }
-    const userPriceMilli = capabilityMilli(
-      pricing.user_price_milli,
-      'charity model request price',
-    );
+    const userPriceMilli = capabilityMilli(pricing.user_price_milli, 'charity model request price');
     const discountedUserPriceMilli = capabilityMilli(
       pricing.discounted_user_price_milli,
       'charity model discounted request price',
@@ -814,19 +814,24 @@ export function normalizeEndpoint(value: unknown): EndpointSummary {
 }
 
 export function normalizeEndpointKey(value: unknown): EndpointKeySummary {
-  const item = record(value, 'endpoint key', [
-    'id',
-    'endpoint_id',
-    'display_head',
-    'display_tail',
-    'note',
-    'enabled',
-    'force_store_false',
-    'suspension_state',
-    'revision',
-    'created_at',
-    'updated_at',
-  ]);
+  const item = record(
+    value,
+    'endpoint key',
+    [
+      'id',
+      'endpoint_id',
+      'display_head',
+      'display_tail',
+      'note',
+      'enabled',
+      'force_store_false',
+      'suspension_state',
+      'revision',
+      'created_at',
+      'updated_at',
+    ],
+    ['max_concurrency', 'max_rpm'],
+  );
   if (item.suspension_state !== 'none' && item.suspension_state !== 'security_processing') {
     invalid('endpoint key suspension state');
   }
@@ -841,6 +846,12 @@ export function normalizeEndpointKey(value: unknown): EndpointKeySummary {
     note: text(item.note, 'endpoint key note', 1024),
     enabled: bool(item.enabled, 'endpoint key enabled state'),
     forceStoreFalse: bool(item.force_store_false, 'endpoint key store policy'),
+    maxConcurrency:
+      item.max_concurrency === undefined
+        ? 0
+        : integer(item.max_concurrency, 'endpoint key concurrency', 0, 2_147_483_647),
+    maxRPM:
+      item.max_rpm === undefined ? 0 : integer(item.max_rpm, 'endpoint key RPM', 0, 2_147_483_647),
     suspensionState: item.suspension_state,
     revision: positiveDecimal(item.revision, 'endpoint key revision'),
     createdAt,
