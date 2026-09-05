@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { GamePrivacyControl } from './common/GamePrivacyControl';
 import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
 import { GameHero, type GameHeroKind } from './assets/GameHero';
 import { useGameCopy, type GameCopyKey } from './copy';
@@ -116,7 +117,7 @@ export function GameCenter() {
           <GameCard key={card.id} card={card} />
         ))}
       </div>
-      <p className="game-footnote">{text('common.noHistory')}</p>
+      <GamePrivacyControl />
     </main>
   );
 }

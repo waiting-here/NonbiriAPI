@@ -340,8 +340,8 @@ func (service *Service) MarkTutorialSeen(ctx context.Context, userID int64) erro
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO game_user_preferences(user_id,tutorial_rps_seen,game_profile_public,updated_at)
-VALUES(?,1,0,?) ON CONFLICT(user_id) DO UPDATE SET tutorial_rps_seen=1,updated_at=excluded.updated_at
-WHERE game_user_preferences.tutorial_rps_seen=0`, userID, now); err != nil {
+SELECT id,1,game_profile_public,? FROM users WHERE id=? ON CONFLICT(user_id) DO UPDATE SET tutorial_rps_seen=1,updated_at=excluded.updated_at
+WHERE game_user_preferences.tutorial_rps_seen=0`, now, userID); err != nil {
 		return classifyDB(err)
 	}
 	if err := tx.Commit(); err != nil {

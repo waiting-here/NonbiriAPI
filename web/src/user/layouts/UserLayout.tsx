@@ -86,6 +86,7 @@ export function UserLayout() {
   }, [restoreMenuFocus]);
 
   const location = useLocation();
+  const diagnosticsOpen = ['/logs', '/debug', '/issues'].includes(location.pathname);
   // The OAuth re-authorization callback always returns to the configured
   // redirect path (default "/"), not to the account page that requested it.
   // If an account action parked a pending intent in sessionStorage and the
@@ -109,6 +110,8 @@ export function UserLayout() {
 
   useEffect(() => {
     if (!menuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     const firstLink = navRef.current?.querySelector<HTMLElement>('a[href], button:not([disabled])');
     firstLink?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
@@ -131,7 +134,10 @@ export function UserLayout() {
       }
     };
     document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [closeMenu, menuOpen]);
 
   useEffect(() => {
@@ -230,7 +236,7 @@ export function UserLayout() {
           <ul className="nb-user-header__nav-list">
             {navItems.map((item) => (
               <li key={item.key}>
-                <NavLink className="nb-user-header__nav-link" to={item.to} end={item.end} onClick={closeMenu}>
+                <NavLink className="nb-user-header__nav-link" data-active={item.key === 'logs' && diagnosticsOpen ? 'true' : undefined} to={item.to} end={item.end} onClick={closeMenu}>
                   {item.icon ? <Icon name={item.icon} /> : null}
                   {item.labelKey ? t(item.labelKey, { defaultValue: item.fallbackLabelKey ? t(item.fallbackLabelKey) : item.labelKey }) : t(`user.${item.key}.nav`)}
                 </NavLink>
@@ -289,6 +295,13 @@ export function UserLayout() {
         </div>
       ) : null}
       <main id="main" className="user-main nb-user-shell__main" tabIndex={-1}>
+        {diagnosticsOpen ? (
+          <nav className="diagnostics-nav" aria-label={t('user.diagnostics.nav')}>
+            <NavLink to="/logs">{t('user.logs.title')}</NavLink>
+            <NavLink to="/debug">{t('user.debug.nav')}</NavLink>
+            <NavLink to="/issues">{t('user.issues.title')}</NavLink>
+          </nav>
+        ) : null}
         {/* A same-tab account switch must remount every route-local form,
             mutation observer, and transient secret/result state. */}
         <Outlet key={profile?.id ?? 'signed-out'} />

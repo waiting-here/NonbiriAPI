@@ -1,5 +1,6 @@
 {
   "user": {
+    "keys": { "nav": "API 接入" },
     "resources": {
       "nav": "资源"
     },

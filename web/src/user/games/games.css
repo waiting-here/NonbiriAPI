@@ -1,11 +1,7 @@
 .game-page {
-  width: min(100%, 72rem);
+  width: 100%;
   margin-inline: auto;
   overflow-wrap: anywhere;
-}
-
-.game-center {
-  width: min(100%, 62rem);
 }
 
 .game-center-grid {

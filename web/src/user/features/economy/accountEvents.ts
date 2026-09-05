@@ -203,6 +203,7 @@ async function consumeAccountEventStream(
       throw new MalformedAccountEventStreamError('Truncated SSE record.');
     }
   } finally {
+    await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
 }

@@ -6,6 +6,19 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## [Unreleased]
 
+### Fixed
+
+- User and site usage totals now update atomically when requests finish. Existing uninitialized totals are repaired once from retained request logs; logs already removed by retention cannot be reconstructed.
+- Account event streams release idle write deadlines and reconnect after session refreshes without retaining stale page subscriptions.
+- Mobile navigation keeps its full-height background and locks page scrolling. Wider desktop layouts and responsive fishing tables keep leaderboard results visible.
+- API access and personal request logs are reachable from the main navigation. Endpoint creation supports adding several keys, connection lists show notes, and model checks update automatically.
+- Administrator settings retain drafts and save related fields together, with dependency guidance, conflict detection, and no revision increase for unchanged values.
+- Game anonymity controls are available beside leaderboards and remain consistent after completing the RPS tutorial. Fishing uses the existing illustrated scene with a stationary ripple effect.
+
+### Changed
+
+- Simplified user-facing copy and reduced internal configuration details in routine settings workflows.
+
 ## [1.0.0-beta.1]
 
 ### Added

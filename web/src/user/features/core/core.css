@@ -372,6 +372,31 @@
   overflow-wrap: anywhere;
 }
 
+.core-key-list {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr));
+  align-items: start;
+}
+.core-key-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.core-key-card > .core-card {
+  padding: 0.75rem 0;
+  border: 0;
+  border-top: 1px solid var(--nb-color-border);
+  border-radius: 0;
+  box-shadow: none;
+}
+.core-manual-details summary {
+  cursor: pointer;
+  padding-block: 0.75rem;
+  font-weight: 600;
+}
+.core-added-keys {
+  margin: 0;
+  padding-inline-start: 1.4rem;
+}
+
 .core-endpoint-card,
 .core-key-card,
 .core-binding-row,

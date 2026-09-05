@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
+import { GamePrivacyControl } from '../common/GamePrivacyControl';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
 import { useGameCopy } from '../copy';
@@ -1254,7 +1255,7 @@ export function RPSGame() {
       {operationError && operationState !== 'unknown' && !isConflict(operationError) ? (
         <ErrorState error={operationError} onRetry={reconcile} />
       ) : null}
-      <p className="game-footnote">{text('common.noHistory')}</p>
+      <GamePrivacyControl />
       {rulesDialog}
     </main>
   );

@@ -234,8 +234,8 @@ test('reachable user home keeps level state but removes the implementation hint'
   });
 
   await page.goto(`${USER_ORIGIN}/`);
-  await expect(page.getByText('Effective level')).toBeVisible();
-  await expect(page.getByText('Lv2 · Lv2')).toBeVisible();
+  await expect(page.getByText('Level', { exact: true })).toBeVisible();
+  await expect(page.getByText('Lv2', { exact: true })).toBeVisible();
   await expect(page.getByText(/This page computes nothing/i)).toHaveCount(0);
   const endpointLink = page.getByRole('link', { name: 'Manage resources' });
   await tabTo(page, endpointLink);
@@ -432,14 +432,19 @@ test('reachable admin settings consumes the bilingual catalog and rejects a 345-
   await expect(page.getByLabel('Default Anthropic max output tokens')).toBeVisible();
   const timezoneInput = page.getByLabel('Site timezone offset');
   await timezoneInput.fill('345');
-  const timezoneForm = page.locator('form').filter({ has: timezoneInput });
+  const timezoneForm = page.locator('.ops-setting').filter({ has: timezoneInput });
   await expect(timezoneForm.getByRole('alert')).toBeVisible();
-  await expect(timezoneForm.getByRole('button', { name: 'Save value' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Save all changes' })).toBeDisabled();
+  await timezoneForm.locator('summary').click();
   await expect(page.getByText(/Hard range -720–840 · step 30/)).toBeVisible();
   await expect(page.getByText('Human-readable duration: 1h 1m 1s')).toBeVisible();
-  await expect(page.getByText(/Exact milli-credits: 9000000000000000/)).toContainText(
-    'Display credits: 9,000,000,000,000',
-  );
+  await expect(page.getByText('9,000,000,000,000 credits', { exact: true })).toBeVisible();
+  for (const width of [900, 1280, 1920]) {
+    await page.setViewportSize({ width, height: 1080 });
+    await assertResponsiveAndClean(page, guard);
+  }
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: '../tmp/usability-admin-settings-desktop.png' });
   await page.setViewportSize({ width: 780, height: 844 });
   await page.evaluate(() => {
     document.documentElement.style.zoom = '200%';
@@ -487,15 +492,20 @@ test('reachable admin settings preserves CRLF legal text through untouched and e
         body: JSON.stringify({ data: [legal] }),
       });
     }
-    if (request.method() === 'PATCH' && url.pathname === `/admin/api/site-config/${key}`) {
-      const value = (request.postDataJSON() as { value: string }).value;
+    if (request.method() === 'PATCH' && url.pathname === '/admin/api/site-config') {
+      const payload = request.postDataJSON() as {
+        expected_revision: string;
+        values: Record<string, string>;
+      };
+      expect(payload.expected_revision).toBe(String(revision));
+      const value = payload.values[key];
       patches.push(value);
       state = value;
       revision += 1;
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ key, value, revision: String(revision) }),
+        body: JSON.stringify({ changed_keys: [key], revision: String(revision) }),
       });
     }
     return route.fallback();
@@ -504,25 +514,20 @@ test('reachable admin settings preserves CRLF legal text through untouched and e
   await page.goto(`${ADMIN_ORIGIN}/settings`);
   await page.getByText('Legal text', { exact: true }).click();
   const textarea = page.getByLabel('Terms override (English)');
-  const save = page
-    .locator('form')
-    .filter({ has: textarea })
-    .getByRole('button', { name: 'Save value' });
-  await save.click();
-  await expect.poll(() => patches.length).toBe(1);
-  expect(patches[0]).toBe(original);
-  await expect(page.getByText(/^Authority revision 2\./)).toBeVisible();
+  const save = page.getByRole('button', { name: 'Save all changes' });
+  await expect(save).toBeDisabled();
+  expect(patches).toHaveLength(0);
   await textarea.fill('alpha\nbeta\n!');
   await expect(textarea).toHaveValue('alpha\nbeta\n!');
   await save.click();
-  await expect.poll(() => patches.length).toBe(2);
-  expect(patches[1]).toBe('alpha\r\nbeta\r\n!');
-  expect(/(^|[^\r])\n/.test(patches[1] ?? '')).toBe(false);
-  await expect(page.getByText(/^Authority revision 3\./)).toBeVisible();
+  await expect.poll(() => patches.length).toBe(1);
+  expect(patches[0]).toBe('alpha\r\nbeta\r\n!');
+  expect(/(^|[^\r])\n/.test(patches[0] ?? '')).toBe(false);
+  await expect(save).toBeDisabled();
   await textarea.fill(original.replaceAll('\r\n', '\n'));
   await save.click();
-  await expect.poll(() => patches.length).toBe(3);
-  await expect(page.getByText(/^Authority revision 4\./)).toBeVisible();
+  await expect.poll(() => patches.length).toBe(2);
+  await expect(save).toBeDisabled();
   expect(state).toBe(original);
   await assertResponsiveAndClean(page, guard);
 });

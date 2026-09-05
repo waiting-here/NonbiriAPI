@@ -25,6 +25,7 @@ func writeFrame(writer http.ResponseWriter, controller *http.ResponseController,
 	if err := writeDeadline(controller, timeout); err != nil {
 		return err
 	}
+	defer controller.SetWriteDeadline(time.Time{})
 	if _, err := fmt.Fprintf(writer, "id: %s\nevent: %s\ndata: %s\n\n", frame.ID, frame.Type, data); err != nil {
 		return err
 	}
@@ -35,6 +36,7 @@ func writeHeartbeat(writer http.ResponseWriter, controller *http.ResponseControl
 	if err := writeDeadline(controller, timeout); err != nil {
 		return err
 	}
+	defer controller.SetWriteDeadline(time.Time{})
 	if _, err := writer.Write([]byte(": heartbeat\n\n")); err != nil {
 		return err
 	}

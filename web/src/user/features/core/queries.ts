@@ -316,6 +316,8 @@ export function useCatalog(
     },
     enabled: enabled && Boolean(endpointId && keyId),
     staleTime: 5_000,
+    refetchInterval: (query) =>
+      !query.state.error && query.state.data?.evidence.state === 'checking' ? 1_000 : false,
   });
 }
 

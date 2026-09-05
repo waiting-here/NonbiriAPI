@@ -740,7 +740,6 @@ export function LinkLinkGame() {
       {mutationError && mutationState !== 'unknown' && !isConflict(mutationError) ? (
         <ErrorState error={mutationError} onRetry={() => void reconcile()} />
       ) : null}
-      <p className="game-footnote">{text('common.noHistory')}</p>
       {rulesDialog}
     </main>
   );

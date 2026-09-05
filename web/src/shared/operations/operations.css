@@ -164,14 +164,39 @@ form.ops-toolbar > label {
 
 .ops-settings-columns {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 32rem), 1fr));
   gap: var(--space-5, 1.25rem);
   align-items: start;
 }
 
+.ops-settings-columns > section {
+  min-width: 0;
+}
+
+.ops-save-bar {
+  position: sticky;
+  top: 5rem;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: var(--nb-color-surface);
+}
+.ops-save-bar > p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.ops-setting summary {
+  cursor: pointer;
+  color: var(--nb-color-text-muted);
+  font-size: 0.85rem;
+}
+
 .ops-setting {
   display: grid;
-  grid-template-columns: minmax(12rem, 0.8fr) minmax(14rem, 1.2fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
   gap: var(--space-4, 1rem);
   padding-block: var(--space-3, 0.75rem);
   border-top: 1px solid var(--border-subtle, currentColor);

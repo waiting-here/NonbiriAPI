@@ -109,13 +109,18 @@ function installSiteConfigServer(
     if (method === 'GET' && path === '/admin/api/legal-holds') {
       return jsonResponse({ data: [], next_cursor: null });
     }
-    if (method === 'PATCH' && path.startsWith('/admin/api/site-config/')) {
-      const body = JSON.parse(String(init?.body)) as { value: unknown };
-      const key = decodeURIComponent(path.slice('/admin/api/site-config/'.length));
-      patches.push({ path, value: body.value });
-      state.values[key] = body.value as SiteConfigSnapshot['values'][string];
+    if (method === 'PATCH' && path === '/admin/api/site-config') {
+      const body = JSON.parse(String(init?.body)) as {
+        expected_revision: string;
+        values: SiteConfigSnapshot['values'];
+      };
+      expect(body.expected_revision).toBe(state.revision);
+      for (const [key, value] of Object.entries(body.values)) {
+        patches.push({ path: `${path}/${key}`, value });
+        state.values[key] = value;
+      }
       state.revision = String(BigInt(state.revision) + 1n);
-      return jsonResponse({ key, value: body.value, revision: state.revision });
+      return jsonResponse({ changed_keys: Object.keys(body.values), revision: state.revision });
     }
     throw new Error(`Unexpected fixture request: ${method} ${path}`);
   });
@@ -178,8 +183,8 @@ describe('screenshot-facing configuration pages', () => {
     ]);
     await renderWithProviders(<HomePage />, { station: 'user', locale: 'en', role: 'user' });
 
-    expect(await screen.findByText('Effective level')).toBeVisible();
-    expect(screen.getByText('Lv2 · Lv2')).toBeVisible();
+    expect(await screen.findByText('Level')).toBeVisible();
+    expect(screen.getByText('Lv2', { exact: true })).toBeVisible();
     expect(screen.queryByText(/This page computes nothing/i)).not.toBeInTheDocument();
   });
 
@@ -210,6 +215,61 @@ describe('screenshot-facing configuration pages', () => {
 });
 
 describe('authoritative site-config frontend', () => {
+  async function renderSettings() {
+    const rendered = await renderWithProviders(<SettingsPage />, {
+      station: 'admin',
+      locale: 'en',
+      role: 'admin',
+    });
+    rendered.queryClient.setQueryData(['admin', 'session'], {
+      admin: { username: 'fixture-admin' },
+    });
+    return rendered;
+  }
+
+  test('keeps edits across groups and searches, then sends one atomic configuration update', async () => {
+    const siteName = catalogEntry('site_name', {
+      group: 'identity',
+      type: 'string',
+      title: { zh: '站点名称', en: 'Site name' },
+      minimum: 1,
+      maximum: 256,
+      step: null,
+    });
+    const limit = catalogEntry('default_endpoint_limit', {
+      group: 'limits',
+      title: { zh: '端点数量上限', en: 'Endpoint limit' },
+      minimum: 1,
+      maximum: 10000,
+    });
+    const server = installSiteConfigServer(
+      { revision: '12', values: { site_name: 'Before', default_endpoint_limit: 4 } },
+      [siteName, limit],
+    );
+    const rendered = await renderSettings();
+    await rendered.user.click(
+      (await screen.findByText('Identity and appearance')).closest('button')!,
+    );
+    fireEvent.change(screen.getByLabelText('Site name'), { target: { value: 'After' } });
+    await rendered.user.click(screen.getByText('Identity and appearance').closest('button')!);
+    fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'Endpoint' } });
+    await rendered.user.click(screen.getByText('Limits').closest('button')!);
+    fireEvent.change(screen.getByLabelText('Endpoint limit'), { target: { value: '8' } });
+    fireEvent.change(screen.getByLabelText('Search'), { target: { value: '' } });
+    await rendered.user.click(screen.getByText('Identity and appearance').closest('button')!);
+    expect(screen.getByLabelText('Site name')).toHaveValue('After');
+    await rendered.user.click(screen.getByRole('button', { name: 'Save all changes' }));
+    await waitFor(() => expect(server.state.revision).toBe('13'));
+    const writes = server.fetchMock.mock.calls.filter(([, init]) => init?.method === 'PATCH');
+    expect(writes).toHaveLength(1);
+    expect(JSON.parse(String(writes[0][1]?.body))).toEqual({
+      expected_revision: '12',
+      values: { site_name: 'After', default_endpoint_limit: 8 },
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save all changes' })).toBeDisabled(),
+    );
+  });
   test('rejects non-canonical Anthropic integers and enforces the frozen timezone step', async () => {
     const anthropic = catalogEntry('anthropic_default_max_tokens', {
       type: 'integer',
@@ -238,32 +298,26 @@ describe('authoritative site-config frontend', () => {
       },
       [anthropic, timezone],
     );
-    const rendered = await renderWithProviders(<SettingsPage />, {
-      station: 'admin',
-      locale: 'en',
-      role: 'admin',
-    });
+    const rendered = await renderSettings();
     await rendered.user.click((await screen.findByText('Other (fixture)')).closest('button')!);
 
     let anthropicInput = screen.getByLabelText('Default Anthropic max output tokens');
-    let anthropicForm = anthropicInput.closest('form');
+    let anthropicForm = anthropicInput.closest<HTMLElement>('.ops-setting');
     expect(anthropicForm).not.toBeNull();
     expect(anthropicInput).toBeDisabled();
-    await rendered.user.click(
-      within(anthropicForm!).getByLabelText('Remove override'),
-    );
+    await rendered.user.click(within(anthropicForm!).getByLabelText('Remove override'));
     expect(anthropicInput).toBeEnabled();
-    for (const invalid of ['1e3', '0', '1.5', '01', ' 1']) {
+    for (const invalid of ['1e3', '0', '1.5', '01']) {
       fireEvent.change(anthropicInput, { target: { value: invalid } });
       expect(within(anthropicForm!).getByRole('alert')).toHaveTextContent(
         /canonical numeric setting value/i,
       );
-      expect(within(anthropicForm!).getByRole('button', { name: 'Save value' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Save all changes' })).toBeDisabled();
     }
     expect(server.patches).toHaveLength(0);
 
     fireEvent.change(anthropicInput, { target: { value: '131072' } });
-    await rendered.user.click(within(anthropicForm!).getByRole('button', { name: 'Save value' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Save all changes' }));
     await waitFor(() =>
       expect(server.patches).toContainEqual({
         path: '/admin/api/site-config/anthropic_default_max_tokens',
@@ -271,17 +325,13 @@ describe('authoritative site-config frontend', () => {
       }),
     );
     anthropicInput = await screen.findByLabelText('Default Anthropic max output tokens');
-    anthropicForm = anthropicInput.closest('form');
-    await rendered.user.click(
-      within(anthropicForm!).getByLabelText('Remove override'),
-    );
-    await rendered.user.click(
-      within(anthropicForm!).getByRole('button', { name: 'Remove override' }),
-    );
+    anthropicForm = anthropicInput.closest<HTMLElement>('.ops-setting');
+    await rendered.user.click(within(anthropicForm!).getByLabelText('Remove override'));
+    await rendered.user.click(screen.getByRole('button', { name: 'Save all changes' }));
     await waitFor(() => expect(server.patches.at(-1)?.value).toBeNull());
 
     let timezoneInput = await screen.findByLabelText('Site timezone offset');
-    const timezoneForm = timezoneInput.closest('form');
+    const timezoneForm = timezoneInput.closest<HTMLElement>('.ops-setting');
     expect(timezoneForm).not.toBeNull();
     expect(timezoneInput).toBeEnabled();
     expect(timezoneInput).toHaveAttribute('min', '-720');
@@ -292,12 +342,12 @@ describe('authoritative site-config frontend', () => {
     expect(within(timezoneForm!).getByRole('alert')).toHaveTextContent(
       /canonical numeric setting value/i,
     );
-    expect(within(timezoneForm!).getByRole('button', { name: 'Save value' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save all changes' })).toBeDisabled();
     expect(server.patches).toHaveLength(patchCount);
 
     fireEvent.change(timezoneInput, { target: { value: '-300' } });
     expect(within(timezoneForm!).getByText('Preview: UTC-05:00')).toBeVisible();
-    await rendered.user.click(within(timezoneForm!).getByRole('button', { name: 'Save value' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Save all changes' }));
     await waitFor(() => expect(server.patches.at(-1)?.value).toBe(-300));
     timezoneInput = await screen.findByLabelText('Site timezone offset');
     expect(timezoneInput).toHaveValue(-300);
@@ -354,11 +404,7 @@ describe('authoritative site-config frontend', () => {
         throw new Error(`Unexpected fixture request: GET ${path}`);
       }),
     );
-    await renderWithProviders(<SettingsPage />, {
-      station: 'admin',
-      locale: 'en',
-      role: 'admin',
-    });
+    await renderSettings();
     expect(await screen.findByText(/service returned an invalid response/i)).toBeVisible();
     expect(screen.queryByLabelText('Site name')).not.toBeInTheDocument();
   });
@@ -384,41 +430,34 @@ describe('authoritative site-config frontend', () => {
       { revision: '9', values: { legal_terms_override_en: document } },
       [legal],
     );
-    const rendered = await renderWithProviders(<SettingsPage />, {
-      station: 'admin',
-      locale: 'en',
-      role: 'admin',
-    });
+    const rendered = await renderSettings();
     await rendered.user.click((await screen.findByText('Legal text')).closest('button')!);
     let textarea = screen.getByLabelText('Terms override (English)');
-    let form = textarea.closest('form');
+    let form = textarea.closest<HTMLElement>('.ops-setting');
     expect(form).not.toBeNull();
     expect(within(form!).getByText('65536 / 65536 UTF-8 bytes')).toBeVisible();
-    let save = within(form!).getByRole('button', { name: 'Save value' });
-    await rendered.user.click(save);
-    await waitFor(() => expect(server.patches).toHaveLength(1));
-    expect(server.patches[0]?.path).toBe('/admin/api/site-config/legal_terms_override_en');
-    expect(server.patches[0]?.value === document).toBe(true);
+    let save = screen.getByRole('button', { name: 'Save all changes' });
+    expect(save).toBeDisabled();
+    expect(server.patches).toHaveLength(0);
 
     const browserDocument = document.replaceAll('\r\n', '\n');
     const editedBrowserDocument = `${browserDocument.slice(0, -1)}y`;
     const editedDocument = `${document.slice(0, -1)}y`;
     textarea = await screen.findByLabelText('Terms override (English)');
-    form = textarea.closest('form');
-    save = within(form!).getByRole('button', { name: 'Save value' });
+    save = screen.getByRole('button', { name: 'Save all changes' });
     fireEvent.change(textarea, { target: { value: editedBrowserDocument } });
     await rendered.user.click(save);
-    await waitFor(() => expect(server.patches).toHaveLength(2));
-    expect(server.patches[1]?.value === editedDocument).toBe(true);
-    expect(String(server.patches[1]?.value).replaceAll('\r\n', '')).not.toContain('\n');
+    await waitFor(() => expect(server.patches).toHaveLength(1));
+    expect(server.patches[0]?.value === editedDocument).toBe(true);
+    expect(String(server.patches[0]?.value).replaceAll('\r\n', '')).not.toContain('\n');
 
     textarea = await screen.findByLabelText('Terms override (English)');
-    form = textarea.closest('form');
+    form = textarea.closest<HTMLElement>('.ops-setting');
     fireEvent.change(textarea, { target: { value: 'x'.repeat(65_537) } });
     expect(within(form!).getByText('65537 / 65536 UTF-8 bytes')).toBeVisible();
     expect(within(form!).getByRole('alert')).toHaveTextContent(/no larger than 65536 UTF-8 bytes/i);
-    expect(within(form!).getByRole('button', { name: 'Save value' })).toBeDisabled();
-    expect(server.patches).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Save all changes' })).toBeDisabled();
+    expect(server.patches).toHaveLength(1);
   });
 
   test('renders exact amount and human-readable seconds previews without float conversion', async () => {
@@ -448,36 +487,24 @@ describe('authoritative site-config frontend', () => {
       },
       [amount, seconds],
     );
-    const rendered = await renderWithProviders(<SettingsPage />, {
-      station: 'admin',
-      locale: 'en',
-      role: 'admin',
-    });
+    const rendered = await renderSettings();
     await rendered.user.click((await screen.findByText('Other (fixture)')).closest('button')!);
-    expect(
-      screen.getByText('Exact milli-credits: 1234567089 · Display credits: 1,234,567.089'),
-    ).toBeVisible();
+    expect(screen.getByText('1,234,567.089 credits')).toBeVisible();
     expect(screen.getByText('Human-readable duration: 1h 1m 1s')).toBeVisible();
 
     const amountInput = screen.getByLabelText('Check-in credit threshold');
     expect(amountInput).toHaveAttribute('min', '0');
     expect(amountInput).toHaveAttribute('max', '9000000000000');
     expect(amountInput).toHaveAttribute('step', '0.001');
-    const amountForm = amountInput.closest('form');
+    const amountForm = amountInput.closest<HTMLElement>('.ops-setting');
     fireEvent.change(amountInput, { target: { value: '1.230' } });
-    expect(within(amountForm!).getByRole('alert')).toHaveTextContent(
-      /canonical numeric setting value/i,
-    );
-    expect(within(amountForm!).getByRole('button', { name: 'Save value' })).toBeDisabled();
-    expect(server.patches).toHaveLength(0);
+    expect(screen.getByRole('button', { name: 'Save all changes' })).toBeEnabled();
+    await rendered.user.click(screen.getByRole('button', { name: 'Save all changes' }));
+    await waitFor(() => expect(server.patches.at(-1)?.value).toBe('1.23'));
 
     fireEvent.change(amountInput, { target: { value: '9000000000000' } });
-    expect(
-      within(amountForm!).getByText(
-        'Exact milli-credits: 9000000000000000 · Display credits: 9,000,000,000,000',
-      ),
-    ).toBeVisible();
-    await rendered.user.click(within(amountForm!).getByRole('button', { name: 'Save value' }));
+    expect(within(amountForm!).getByText('9,000,000,000,000 credits')).toBeVisible();
+    await rendered.user.click(screen.getByRole('button', { name: 'Save all changes' }));
     await waitFor(() => expect(server.patches.at(-1)?.value).toBe('9000000000000'));
   });
 
@@ -522,24 +549,18 @@ describe('authoritative site-config frontend', () => {
         if (method === 'GET' && path === '/admin/api/legal-holds') {
           return jsonResponse({ data: [], next_cursor: null });
         }
-        if (method === 'PATCH' && path.endsWith('/site_timezone_offset_minutes')) {
+        if (method === 'PATCH' && path === '/admin/api/site-config') {
           patchWrites += 1;
           return jsonResponse({ error: { code: 'conflict', message: 'timezone locked' } }, 409);
         }
         throw new Error(`Unexpected fixture request: ${method} ${path}`);
       }),
     );
-    const rendered = await renderWithProviders(<SettingsPage />, {
-      station: 'admin',
-      locale: 'en',
-      role: 'admin',
-    });
+    const rendered = await renderSettings();
     await rendered.user.click((await screen.findByText('Other (fixture)')).closest('button')!);
     const input = screen.getByLabelText('Site timezone offset');
     fireEvent.change(input, { target: { value: '30' } });
-    await rendered.user.click(
-      within(input.closest('form')!).getByRole('button', { name: 'Save value' }),
-    );
+    await rendered.user.click(screen.getByRole('button', { name: 'Save all changes' }));
     await waitFor(() => expect(configReads).toBe(2));
     expect(patchWrites).toBe(1);
     expect(input).toHaveValue(30);
@@ -588,33 +609,29 @@ describe('authoritative site-config frontend', () => {
         if (method === 'GET' && path === '/admin/api/legal-holds') {
           return jsonResponse({ data: [], next_cursor: null });
         }
-        if (method === 'PATCH' && path === '/admin/api/site-config/site_name') {
+        if (method === 'PATCH' && path === '/admin/api/site-config') {
           patchBody = JSON.parse(String(init?.body));
           return pendingPatch;
         }
         throw new Error(`Unexpected fixture request: ${method} ${path}`);
       }),
     );
-    const rendered = await renderWithProviders(<SettingsPage />, {
-      station: 'admin',
-      locale: 'en',
-      role: 'admin',
-    });
+    const rendered = await renderSettings();
     await rendered.user.click((await screen.findByText('Other (fixture)')).closest('button')!);
     const input = screen.getByLabelText('Site name');
-    const form = input.closest('form');
+    const form = input.closest<HTMLElement>('.ops-setting');
     fireEvent.change(input, { target: { value: 'After' } });
-    await rendered.user.click(within(form!).getByRole('button', { name: 'Save value' }));
+    await rendered.user.click(screen.getByRole('button', { name: 'Save all changes' }));
 
-    expect(patchBody).toEqual({ value: 'After' });
+    expect(patchBody).toEqual({ expected_revision: '1', values: { site_name: 'After' } });
     expect(input).toBeDisabled();
-    expect(within(form!).getByRole('button', { name: 'Working…' })).toBeDisabled();
-    expect(within(form!).getByRole('button', { name: 'Restore authority value' })).toBeDisabled();
-    expect(within(form!).getByRole('button', { name: 'Reload authority' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Working…' })).toBeDisabled();
+    expect(within(form!).getByRole('button', { name: 'Undo this change' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Discard changes' })).toBeDisabled();
 
     snapshot.revision = '2';
     snapshot.values.site_name = 'After';
-    resolvePatch?.(jsonResponse({ key: 'site_name', value: 'After', revision: '2' }));
+    resolvePatch?.(jsonResponse({ changed_keys: ['site_name'], revision: '2' }));
     await waitFor(() => expect(screen.getByLabelText('Site name')).toBeEnabled());
     expect(screen.getByLabelText('Site name')).toHaveValue('After');
   });
@@ -686,7 +703,7 @@ describe('admin per-user limit explanations', () => {
 
 const initialGameConfig: GamesConfig = {
   revision: '7',
-  master_enabled: false,
+  master_enabled: true,
   fishing: {
     enabled: false,
     bait_prices: { worm: '2.5', lure: '5', premium: '7.5' },
@@ -694,7 +711,7 @@ const initialGameConfig: GamesConfig = {
     treasure_multipliers: { bottle: 2, clover: 3, shell: 5 },
   },
   linklink: {
-    enabled: false,
+    enabled: true,
     specs: {
       '6x8': { enabled: true, price: '1' },
       '8x8': { enabled: true, price: '2' },
@@ -702,7 +719,7 @@ const initialGameConfig: GamesConfig = {
     },
   },
   rps: {
-    enabled: false,
+    enabled: true,
     modes: {
       quick: {
         enabled: true,
@@ -854,14 +871,14 @@ describe('standalone Admin Games feature', () => {
     await waitFor(() => expect(server.patches).toHaveLength(1));
     expect(server.patches[0]).toEqual({
       expected_revision: '7',
-      master_enabled: false,
+      master_enabled: true,
       fishing: {
         ...initialGameConfig.fishing,
         bait_prices: { ...initialGameConfig.fishing.bait_prices, worm: '3' },
       },
       linklink: initialGameConfig.linklink,
       rps: {
-        enabled: false,
+        enabled: true,
         modes: {
           quick: {
             enabled: true,
@@ -894,7 +911,7 @@ describe('standalone Admin Games feature', () => {
       },
     });
     expect(JSON.stringify(server.patches[0])).not.toContain('queue_capacity');
-    await waitFor(() => expect(screen.getByText(/Revision 8/)).toBeVisible());
+    await waitFor(() => expect(save).toBeDisabled());
     expect(screen.getByLabelText(/worm bait price/i)).toHaveValue(3);
     expect(screen.getByText('1024')).toBeVisible();
   });
@@ -958,9 +975,7 @@ describe('standalone Admin Games feature', () => {
     });
     const worm = await screen.findByLabelText(/worm bait price/i);
     fireEvent.change(worm, { target: { value: '3' } });
-    await rendered.user.click(
-      screen.getByRole('button', { name: 'Save game configuration' }),
-    );
+    await rendered.user.click(screen.getByRole('button', { name: 'Save game configuration' }));
     expect(worm).toBeDisabled();
     expect(screen.getByLabelText('Games master switch')).toBeDisabled();
     expect(screen.getByLabelText(/6×8 entry price/i)).toBeDisabled();

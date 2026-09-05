@@ -154,11 +154,8 @@
 }
 
 .user-main {
-  /* Cap and center the reading column: an unbounded main area leaves cards
-     pinned to the left with a large empty right side on wide viewports. The
-     cap also bounds text line length now that paragraphs have no own cap. */
   width: 100%;
-  max-width: 72rem;
+  max-width: 112rem;
   min-width: 0;
   margin-inline: auto;
   padding: clamp(1.4rem, 4vw, 3.25rem) clamp(1rem, 4vw, 2rem) 4rem;
@@ -212,6 +209,7 @@
 
 .page-description {
   margin-bottom: 0;
+  max-width: 72ch;
   color: var(--nb-color-text-muted);
 }
 

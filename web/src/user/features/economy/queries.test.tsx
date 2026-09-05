@@ -2,7 +2,11 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearManagementSession } from '@shared/charityManagement';
+import {
+  beginManagementSessionRequest,
+  clearManagementSession,
+  noteManagementSessionSuccess,
+} from '@shared/charityManagement';
 import { ApiError } from '@shared/query/http';
 import {
   economyKeys,
@@ -55,6 +59,7 @@ vi.mock('./api', async (loadOriginal) => ({
 interface EventHandlers {
   onReplace: (snapshot: ActivitiesSnapshot, revision: string) => void;
   onResync: (reason: 'gap' | 'malformed' | 'disconnect' | 'reconnect') => void;
+  onConnectionChange: (state: 'connecting' | 'connected' | 'disconnected') => void;
 }
 
 const OLD_SNAPSHOT: ActivitiesSnapshot = {
@@ -146,6 +151,29 @@ describe('activity query authority recovery', () => {
   function wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
   }
+
+  it('reconnects with renewed session authority and ignores callbacks from the closed stream', async () => {
+    const rendered = renderHook(({ updated }) => useActivityAccountEvents(true, '7', updated), {
+      initialProps: { updated: 1 },
+      wrapper,
+    });
+    await waitFor(() => expect(mocks.connect).toHaveBeenCalledTimes(1));
+    const old = handlers;
+    act(() => old.onConnectionChange('disconnected'));
+    const generation = beginManagementSessionRequest(queryClient, 'steward');
+    noteManagementSessionSuccess(
+      queryClient,
+      'steward',
+      queryClient.getQueryData(['user', 'session']),
+      generation,
+    );
+    rendered.rerender({ updated: 2 });
+    await waitFor(() => expect(mocks.connect).toHaveBeenCalledTimes(2));
+    act(() => handlers.onConnectionChange('connected'));
+    act(() => old.onConnectionChange('disconnected'));
+    expect(rendered.result.current.connection).toBe('connected');
+    rendered.unmount();
+  });
 
   it('uses complete SSE replacement and prevents an older gap GET from overwriting it', async () => {
     queryClient.setQueryData(economyKeys.activities, OLD_SNAPSHOT);

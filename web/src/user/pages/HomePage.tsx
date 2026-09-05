@@ -21,10 +21,7 @@ import {
 } from '../features/core/components';
 import { useCoreCopy } from '../features/core/copy';
 import { CORE_ROUTE_PATHS } from '../features/core/descriptors';
-import {
-  CapabilityUnavailableError,
-  productionHomeAdapters,
-} from '../features/core/adapters';
+import { CapabilityUnavailableError, productionHomeAdapters } from '../features/core/adapters';
 import {
   coreKeys,
   coreSessionMatchesAccount,
@@ -175,10 +172,12 @@ function EconomyCard({ accountId }: { accountId: string }) {
           <div className="core-metric">
             <span>{t('home.level')}</span>
             <strong>
-              {t('home.levelValue', {
-                level: me.data.user.effective_level,
-                name: me.data.user.level_display_name,
-              })}
+              {me.data.user.level_display_name === `Lv${me.data.user.effective_level}`
+                ? me.data.user.level_display_name
+                : t('home.levelValue', {
+                    level: me.data.user.effective_level,
+                    name: me.data.user.level_display_name,
+                  })}
             </strong>
           </div>
         </div>
@@ -346,9 +345,7 @@ function CheckinCard({
             <div className="core-metric">
               <span>{t('home.checkin.today')}</span>
               <strong>
-                {checkedIn
-                  ? t('home.checkin.checkedIn')
-                  : t('home.checkin.notCheckedIn')}
+                {checkedIn ? t('home.checkin.checkedIn') : t('home.checkin.notCheckedIn')}
               </strong>
             </div>
             <div className="core-metric">

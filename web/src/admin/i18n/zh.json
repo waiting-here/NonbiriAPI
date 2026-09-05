@@ -19,7 +19,7 @@
     "dashboard": {
       "nav": "仪表盘",
       "title": "运营概览",
-      "description": "读取管理员 API 的站点信号。",
+      "description": "查看站点运行状态、请求量和用量。",
       "usageTitle": "站点用量",
       "endpointsTitle": "端点概览",
       "requests": "请求数",
@@ -47,7 +47,7 @@
     "users": {
       "nav": "用户",
       "title": "用户管理",
-      "description": "查看服务端权威用户记录，并明确执行封禁、限制或删号操作。",
+      "description": "管理账号、积分、访问限制与封禁。",
       "listTitle": "用户",
       "username": "用户名",
       "status": "状态",
@@ -125,7 +125,7 @@
     "endpoints": {
       "nav": "端点",
       "title": "端点概览",
-      "description": "按已存储的基础 URL 分组显示全局端点元数据。",
+      "description": "按服务地址查看用户端点和连接状态。",
       "baseUrl": "基础 URL",
       "users": "用户数",
       "endpointCount": "端点数",
@@ -144,7 +144,7 @@
     "alerts": {
       "nav": "告警",
       "title": "告警中心",
-      "description": "查看服务端记录的有界运营告警。告警文本只按纯文本显示。",
+      "description": "查看运行告警并处理需要关注的问题。",
       "kind": "类型",
       "message": "消息",
       "reference": "引用",
@@ -176,8 +176,7 @@
     "settings": {
       "nav": "站点参数",
       "title": "站点参数",
-      "description": "编辑 site-config API 暴露的服务端权威运行参数。浏览器不会缓存这些值。",
-      "save": "保存值",
+      "description": "调整站点参数。可同时编辑多项，检查后统一保存。",
       "booleanValue": "布尔参数",
       "numberValue": "数字参数",
       "textValue": "文本参数",
@@ -188,12 +187,10 @@
       "catalogStep": "步长",
       "catalogIndependentGate": "独立门禁",
       "catalogDurationPreview": "人类可读时长：{{value}}",
-      "catalogMilliPreview": "精确毫积分：{{raw}} · 展示积分：{{credits}}",
+      "catalogMilliPreview": "{{credits}} 积分",
       "restoreFallback": "移除覆盖值",
       "legalBytes": "UTF-8 字节：{{count}} / {{max}}",
       "timezonePreview": "预览：{{value}}",
-      "authorityRevision": "修订号 {{revision}}",
-      "authorityRevisionNote": "权威修订号为 {{revision}}。发生冲突或响应结果未知时会重新加载完整权威快照，不会自动重提。",
       "dangerousDescription": "访问、滥用控制和法律文本变更可能影响准入或已发布政策；保存前请核对服务端说明。",
       "dangerousEmpty": "没有危险设置",
       "dangerousEmptyBody": "没有危险目录项符合当前搜索。",
@@ -228,10 +225,8 @@
       "ordinaryEmpty": "没有普通设置",
       "ordinaryEmptyBody": "没有普通目录项符合当前搜索。",
       "ordinaryTitle": "普通设置",
-      "readOnlyAuthority": "此处只读；该值由对应的权威页面管理。",
-      "reloadAuthority": "重新加载权威状态",
       "remoteLogoWarning": "远程站点标志会让浏览器公开请求第三方地址，并可能独立失败；切勿在该 URL 中放置秘密。",
-      "restoreAuthorityValue": "恢复权威值",
+      "restoreAuthorityValue": "撤销此项修改",
       "unknownCatalogGate": "未知门禁（{{key}}）",
       "validation": {
         "allowedChoice": "取自允许选项",
@@ -244,6 +239,19 @@
         "notNull": "不可为 null",
         "rangeStep": "处于 {{minimum}}–{{maximum}} 范围内且步长为 {{step}}",
         "unicodeLength": "包含 {{minimum}}–{{maximum}} 个 Unicode 字符"
+      },
+      "fieldDetails": "默认值与范围",
+      "pendingChanges": "待保存 {{count}} 项修改",
+      "saveAll": "保存所有修改",
+      "discardAll": "放弃修改",
+      "saved": "设置已保存。",
+      "changedElsewhere": "这些设置已在其他位置修改：{{fields}}。请还原相应字段后重新填写。",
+      "dependencies": {
+        "donations": "请先开启公益模型，或同时关闭新捐赠受理。",
+        "timezone": "请先设置站点时区，再开启签到。",
+        "checkinBounds": "签到奖励的最小值不能大于最大值。",
+        "levels": "已启用的等级门槛必须按 2 至 4 级依次递增。",
+        "timezoneLocked": "已有每日活动记录，站点时区已锁定，无法修改。"
       }
     },
     "games": {
@@ -264,7 +272,7 @@
       "controls": {
         "globalGate": "全局门禁",
         "priceCredits": "{{field}}价格（积分）",
-        "revisionTerms": "修订号 {{revision}}。保存后的变更只影响新准入游戏；进行中的对局继续使用已冻结条款。"
+        "revisionTerms": "可同时调整多项，保存后生效；已经开始的游戏继续使用开始时的设置。"
       },
       "counts": {
         "active": "进行中",
@@ -335,7 +343,11 @@
         "amountMinimum": "{{field}}必须是至少 {{minimum}} 的规范积分金额。",
         "amountNonNegative": "{{field}}必须是规范的非负积分金额。",
         "integerRange": "{{field}}必须是 {{minimum}} 到 {{maximum}} 之间的整数。",
-        "totalCuts": "{{mode}}各项资金池抽成合计必须小于 {{maximum}} 基点。"
+        "totalCuts": "{{mode}}各项资金池抽成合计必须小于 {{maximum}} 基点。",
+        "masterRequired": "请开启游戏总开关，或同时关闭各游戏。",
+        "specRequiresPrice": "启用 {{spec}} 棋盘需要开启连连看，并设置大于 0 的价格。",
+        "modeRequiresStake": "启用{{mode}}需要开启三人猜拳，并设置大于 0 的基础投入。",
+        "changedElsewhere": "游戏设置已在其他位置修改。你的输入仍保留，请恢复最新设置后重新编辑。"
       }
     },
     "activities": {
@@ -355,15 +367,18 @@
       },
       "config": {
         "masterEnabled": "启用活动总开关",
-        "revisionHint": "当前修订为 {{revision}}。配置变更将原子编译；已经开放的星期四活动周期会继续使用其冻结快照。",
+        "revisionHint": "可同时调整活动开关和领取规则。开启前请在站点参数中设置时区；疯狂星期四还需要先填写下方的活动周期。已经开放的周期继续使用原有规则。",
         "save": "保存原子配置",
         "thursdayEnabled": "启用星期四活动",
         "title": "活动配置",
         "welfareCap": "公益上限（积分）",
         "welfareEnabled": "启用公益活动",
-        "welfareThreshold": "公益门槛（积分）"
+        "welfareThreshold": "公益门槛（积分）",
+        "masterRequired": "请开启活动总开关，或同时关闭低保和疯狂星期四。",
+        "periodRequired": "请先在下方设置疯狂星期四的活动时间、文案和投入规则，再开启活动。",
+        "changedElsewhere": "活动设置已更新。请取消当前修改，再基于最新设置编辑。"
       },
-      "description": "配置、星期四活动生命周期与余额调整分别使用独立的权威操作面。",
+      "description": "设置活动开关、管理活动期次和奖池余额。",
       "fields": {
         "state": "状态"
       },
@@ -522,7 +537,7 @@
         "reject": "已驳回",
         "resumeProcessing": "已恢复处理"
       },
-      "description": "索引、人工审核和批准后的处理是相互独立的权威状态。",
+      "description": "查看举报、审核证据并处理违规资源。",
       "detail": {
         "action": "操作",
         "actor": "操作者",
@@ -747,7 +762,7 @@
     "charity": {
       "nav": "公益",
       "title": "公益与捐赠管理",
-      "description": "审核捐赠、管理公益模型与绑定，并配置公益安全参数。每次变更都会从服务端重取真实状态。",
+      "description": "审核捐赠、管理公益模型及连接，调整使用限制。",
       "group": {
         "custom": "自定义捐赠密钥",
         "mainstreamSubscription": "【主流订阅】{{name}}",

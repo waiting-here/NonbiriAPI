@@ -156,6 +156,12 @@ func (r *Runtime) patchMe(w http.ResponseWriter, req *http.Request) {
 		writeStableError(w, httperr.CodeConflict, "profile changed")
 		return
 	}
+	if patch.GameProfilePublic != nil {
+		if _, err := tx.ExecContext(req.Context(), `UPDATE game_user_preferences SET game_profile_public=?,updated_at=? WHERE user_id=?`, public, r.now().Unix(), actor.UserID); err != nil {
+			writeStableError(w, httperr.CodeInternal, "profile update failed")
+			return
+		}
+	}
 	envelope, err := r.userEnvelopeTx(req.Context(), tx, actor.UserID, r.now().Unix())
 	if err != nil {
 		writeStableError(w, httperr.CodeInternal, "profile update failed")

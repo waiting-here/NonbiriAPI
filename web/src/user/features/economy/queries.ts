@@ -355,7 +355,7 @@ export function useContributeThursday() {
 
 export type ActivityConnectionState = 'connecting' | 'connected' | 'disconnected';
 
-export function useActivityAccountEvents(enabled = true, identity = '') {
+export function useActivityAccountEvents(enabled = true, identity = '', sessionUpdatedAt = 0) {
   const queryClient = useQueryClient();
   const [connection, setConnection] = useState<ActivityConnectionState>('connecting');
   const [recoveryError, setRecoveryError] = useState<unknown>(null);
@@ -369,8 +369,8 @@ export function useActivityAccountEvents(enabled = true, identity = '') {
     } catch {
       return;
     }
-    const stationCurrent = () => stationSessionMatches(queryClient, 'steward', station);
     let alive = true;
+    const stationCurrent = () => alive && stationSessionMatches(queryClient, 'steward', station);
     let resyncRequest: Promise<void> | null = null;
     const controller = new AbortController();
     const resync = () => {
@@ -415,7 +415,7 @@ export function useActivityAccountEvents(enabled = true, identity = '') {
       window.removeEventListener('online', online);
       disconnect();
     };
-  }, [enabled, identity, queryClient]);
+  }, [enabled, identity, queryClient, sessionUpdatedAt]);
 
   return { connection, recoveryError, reconciledAt };
 }

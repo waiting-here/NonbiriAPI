@@ -39,16 +39,19 @@ describe('alpha.3 central route and navigation wiring', () => {
     expect(adminPaths.indexOf('mainstream-channels')).toBe(adminPaths.indexOf('settings') + 1);
     expect(adminPaths.indexOf('games')).toBe(adminPaths.indexOf('mainstream-channels') + 1);
     expect(adminChildren.find((route) => route.path === 'games')?.lazy).toBeTypeOf('function');
-    expect(adminChildren.find((route) => route.path === 'mainstream-channels')?.lazy).toBeTypeOf('function');
+    expect(adminChildren.find((route) => route.path === 'mainstream-channels')?.lazy).toBeTypeOf(
+      'function',
+    );
 
     expect(userNav.map(({ to, key }) => `${to}:${key}`)).toEqual([
       '/:home',
+      '/keys:caller-key',
       '/endpoints:endpoints',
       '/models:models',
       '/charity:charity',
       '/activities:activities',
       '/games:games',
-      '/debug:debug',
+      '/logs:logs',
     ]);
     expect(adminNav.map(({ to, key }) => `${to}:${key}`)).toEqual([
       '/:admin-home',

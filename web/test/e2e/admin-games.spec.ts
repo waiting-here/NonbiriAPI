@@ -184,6 +184,9 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
   await master.focus();
   await page.keyboard.press('Space');
   await expect(master).not.toBeChecked();
+  await expect(page.getByRole('button', { name: 'Save game configuration' })).toBeDisabled();
+  await master.press('Space');
+  await expect(master).toBeChecked();
 
   const worm = page.getByLabel('Worm bait price (credits)');
   await worm.focus();
@@ -195,7 +198,7 @@ test('admin games route performs authoritative PATCH with keyboard input at 390p
   await expect.poll(() => config.patches.length).toBe(1);
   expect(config.patches[0]).toEqual({
     expected_revision: '7',
-    master_enabled: false,
+    master_enabled: true,
     fishing: {
       ...INITIAL_CONFIG.fishing,
       bait_prices: { ...INITIAL_CONFIG.fishing.bait_prices, worm: '3' },

@@ -139,9 +139,28 @@
 }
 
 .nb-user-header__nav-link:hover,
+.nb-user-header__nav-link[data-active='true'],
 .nb-user-header__nav-link[aria-current='page'] {
   background: var(--nb-color-accent-soft);
   color: var(--nb-color-accent);
+}
+
+.diagnostics-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--nb-color-border);
+}
+.diagnostics-nav a {
+  padding: 0.7rem 1rem;
+  color: var(--nb-color-text-muted);
+  text-decoration: none;
+  border-bottom: 3px solid transparent;
+}
+.diagnostics-nav a[aria-current='page'] {
+  color: var(--nb-color-accent);
+  border-bottom-color: currentColor;
 }
 
 .nb-user-header__actions {
@@ -241,9 +260,13 @@
   border-top: 1px solid var(--nb-color-border);
 }
 
-@media (max-width: 70rem) {
+@media (max-width: 80rem) {
   .nb-user-header {
     grid-template-columns: minmax(0, 1fr) auto;
+    /* A backdrop filter makes fixed descendants relative to the header,
+       collapsing the drawer to the header height on mobile browsers. */
+    backdrop-filter: none;
+    background: var(--nb-color-surface);
   }
 
   .nb-user-header .nb-menu-button {
@@ -251,7 +274,9 @@
     order: 2;
   }
 
-  .nb-user-header__actions { order: 3; }
+  .nb-user-header__actions {
+    order: 3;
+  }
 
   .nb-user-header .nb-user-header__nav {
     display: block;
@@ -259,6 +284,8 @@
     top: 4.25rem;
     right: 0;
     bottom: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     z-index: var(--nb-z-drawer);
     width: min(21rem, calc(100vw - 3.5rem));
     /* Keep the closed drawer's box inside the viewport. Moving a fixed
@@ -272,7 +299,7 @@
     padding: var(--nb-space-4);
     background: var(--nb-color-surface-raised);
     box-shadow: var(--nb-elevation-overlay);
-    transition: opacity var(--nb-motion-standard) var(--nb-motion-ease), visibility 0s linear var(--nb-motion-standard);
+    transition: opacity var(--nb-motion-standard) var(--nb-motion-ease);
     order: 4;
   }
 
@@ -312,23 +339,9 @@
   .nb-user-header__actions.is-drawer-actions {
     display: none;
   }
-}
 
-/* layout.css keeps a legacy wrap rule through 80rem. The beta shell stays a
- * single header row until its own drawer breakpoint at 70rem. */
-@media (min-width: 70.0625rem) and (max-width: 80rem) {
-  .nb-user-header {
-    display: grid;
-    flex-wrap: nowrap;
-  }
-
-  .nb-user-header .nb-user-header__nav {
-    order: initial;
-    width: auto;
-  }
-
-  .nb-user-header .nb-user-header__nav-list {
-    flex-wrap: nowrap;
+  .nb-user-drawer-overlay {
+    top: 4.25rem;
   }
 }
 
