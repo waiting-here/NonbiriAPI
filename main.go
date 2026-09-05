@@ -861,6 +861,13 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("create claim service: %w", err)
 	}
+	usageContext, cancelUsageInitialization := context.WithTimeout(context.Background(), 30*time.Second)
+	err = claimService.InitializeUsageTotals(usageContext)
+	cancelUsageInitialization()
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("initialize request usage totals: %w", err)
+	}
 	bridgeRuntime, err = resourcebridge.New(resourcebridge.Config{
 		Store:   store,
 		Vault:   vault,

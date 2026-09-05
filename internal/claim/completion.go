@@ -559,7 +559,7 @@ WHERE logical_request_id=?
 		if err := requireOneRow(logResult); err != nil {
 			return fmt.Errorf("claim: verify request log terminal mirror: %w", err)
 		}
-		return nil
+		return addRequestUsageTx(callbackCtx, callbackTx, request.ID, request.UserID, at)
 	}
 
 	if request.Route == RouteDiscovery {
