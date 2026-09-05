@@ -20,7 +20,7 @@
     "preview:admin": "vite preview --mode admin",
     "preview:user": "vite preview --mode user",
     "test": "npm run check:copy && npm run test:node && npm run test:unit",
-    "test:node": "node --test src/shared/utils/formatNumber.test.js src/admin/utils/economyInput.test.js",
+    "test:node": "node --test src/shared/utils/formatNumber.test.js src/admin/utils/economyInput.test.js scripts/gen-manifest.test.mjs",
     "test:unit": "vitest run",
     "test:e2e": "cross-env PLAYWRIGHT_HTML_OPEN=never PLAYWRIGHT_NO_COPY_PROMPT=1 playwright test",
     "check:copy": "node scripts/check-copy.mjs",
