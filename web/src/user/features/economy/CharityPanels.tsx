@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { CopyValue } from '@shared/components/CopyValue';
 import { CharityPriceTable, type CharityPriceRow } from '@shared/components/CharityPriceTable';
 import { Card, EmptyState, ErrorState, StatusBadge } from '@shared/components/States';
 import { formatDateTime } from '@shared/utils/datetime';
@@ -111,7 +112,6 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
     <Card className="economy-capability-card">
       <div className="card-title-row">
         <div>
-          <p className="eyebrow">{t('user.charity.callCapabilityEyebrow')}</p>
           <h2>{t('user.charity.callCapabilityTitle')}</h2>
         </div>
         <StatusBadge
@@ -137,20 +137,17 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
                     {
                       label: t('user.charity.uncachedInputPrice'),
                       userMilli: model.pricing.userPricesMilli.uncachedInput,
-                      discountedUserMilli:
-                        model.pricing.discountedUserPricesMilli.uncachedInput,
+                      discountedUserMilli: model.pricing.discountedUserPricesMilli.uncachedInput,
                     },
                     {
                       label: t('user.charity.cacheWriteInputPrice'),
                       userMilli: model.pricing.userPricesMilli.cacheWriteInput,
-                      discountedUserMilli:
-                        model.pricing.discountedUserPricesMilli.cacheWriteInput,
+                      discountedUserMilli: model.pricing.discountedUserPricesMilli.cacheWriteInput,
                     },
                     {
                       label: t('user.charity.cacheReadInputPrice'),
                       userMilli: model.pricing.userPricesMilli.cacheReadInput,
-                      discountedUserMilli:
-                        model.pricing.discountedUserPricesMilli.cacheReadInput,
+                      discountedUserMilli: model.pricing.discountedUserPricesMilli.cacheReadInput,
                     },
                     {
                       label: t('user.charity.outputPrice'),
@@ -161,10 +158,7 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
             return (
               <li key={model.id}>
                 <div className="economy-model-heading">
-                  <strong>{model.fullName}</strong>
-                  <span className="muted">
-                    {model.provider} · {model.model}
-                  </span>
+                  <CopyValue value={model.fullName} label={t('user.charity.modelName')} />
                 </div>
                 <CharityPriceTable
                   mode={model.pricing.mode}
@@ -173,9 +167,7 @@ export function CharityCapabilityPanel({ capability }: { capability: CharityCapa
                   discount={{
                     enabled: model.discount.enabled,
                     percent: model.discount.percent,
-                    ...(model.discount.startAt !== null
-                      ? { startAt: model.discount.startAt }
-                      : {}),
+                    ...(model.discount.startAt !== null ? { startAt: model.discount.startAt } : {}),
                     ...(model.discount.endAt !== null ? { endAt: model.discount.endAt } : {}),
                   }}
                 />
@@ -194,7 +186,6 @@ export function DonationIntakePanel({ state }: { state: DonationIntakeState }) {
     <Card className="economy-capability-card">
       <div className="card-title-row">
         <div>
-          <p className="eyebrow">{t('user.charity.intakeEyebrow')}</p>
           <h2>{t('user.charity.intakeTitle')}</h2>
         </div>
         <StatusBadge
@@ -592,10 +583,12 @@ export function DonationKeyPanel({
   donationKey,
   donationId,
   donationStatus,
+  compact = false,
 }: {
   donationKey: DonationKey;
   donationId?: string;
   donationStatus?: Donation['status'];
+  compact?: boolean;
 }) {
   const { t } = useTranslation();
   const states = keyStateKeys(donationKey);
@@ -653,14 +646,16 @@ export function DonationKeyPanel({
         </div>
       </div>
       <dl className="detail-grid economy-key-status-details">
-        <div className="detail-row">
-          <dt>{t('user.charity.blockingReasons')}</dt>
-          <dd>
-            {blockingReasons.length === 0
-              ? t('user.charity.noBlockingReason')
-              : blockingReasons.map((state) => t(`user.charity.keyState.${state}`)).join(' · ')}
-          </dd>
-        </div>
+        {blockingReasons.length > 0 ? (
+          <div className="detail-row">
+            <dt>{t('user.charity.blockingReasons')}</dt>
+            <dd>
+              {blockingReasons.length === 0
+                ? t('user.charity.noBlockingReason')
+                : blockingReasons.map((state) => t(`user.charity.keyState.${state}`)).join(' · ')}
+            </dd>
+          </div>
+        ) : null}
         <div className="detail-row">
           <dt>{t('user.charity.effectiveExpiry')}</dt>
           <dd>
@@ -670,73 +665,70 @@ export function DonationKeyPanel({
           </dd>
         </div>
       </dl>
-      <div className="economy-limit-grid">
-        <section>
-          <h5>{t('user.charity.priceQuota')}</h5>
-          <LimitValue
-            limit={donationKey.limits.price}
-            used={donationKey.usage.priceUsed}
-            inflight={donationKey.usage.priceInflight}
-            amount
-          />
-        </section>
-        <section>
-          <h5>{t('user.charity.callQuota')}</h5>
-          <LimitValue
-            limit={donationKey.limits.calls}
-            used={donationKey.usage.callsUsed}
-            inflight={donationKey.usage.callsInflight}
-          />
-        </section>
-        <section>
-          <h5>{t('user.charity.tokenQuota')}</h5>
-          <LimitValue
-            limit={donationKey.limits.tokens}
-            used={donationKey.usage.tokensUsed}
-            inflight={donationKey.usage.tokensInflight}
-            unit={t('user.charity.tokensUnit')}
-          />
-        </section>
-      </div>
-      <dl className="detail-grid economy-key-metadata">
-        <div className="detail-row">
-          <dt>{t('user.charity.failureGeneration')}</dt>
-          <dd>
-            <ExactCount value={donationKey.streak.generation} />
-          </dd>
-        </div>
-        <div className="detail-row">
-          <dt>{t('user.charity.tokenReserve')}</dt>
-          <dd>
-            <ExactCount
-              value={String(donationKey.tokenReserve)}
-              unit={t('user.charity.tokensPerRequest')}
+      <details className="economy-key-details" open={!compact}>
+        <summary>{t('user.charity.quotaDetails')}</summary>
+        <div className="economy-limit-grid">
+          <section>
+            <h5>{t('user.charity.priceQuota')}</h5>
+            <LimitValue
+              limit={donationKey.limits.price}
+              used={donationKey.usage.priceUsed}
+              inflight={donationKey.usage.priceInflight}
+              amount
             />
-          </dd>
+          </section>
+          <section>
+            <h5>{t('user.charity.callQuota')}</h5>
+            <LimitValue
+              limit={donationKey.limits.calls}
+              used={donationKey.usage.callsUsed}
+              inflight={donationKey.usage.callsInflight}
+            />
+          </section>
+          <section>
+            <h5>{t('user.charity.tokenQuota')}</h5>
+            <LimitValue
+              limit={donationKey.limits.tokens}
+              used={donationKey.usage.tokensUsed}
+              inflight={donationKey.usage.tokensInflight}
+              unit={t('user.charity.tokensUnit')}
+            />
+          </section>
         </div>
-        <div className="detail-row">
-          <dt>{t('user.charity.failureStreak')}</dt>
-          <dd>
-            <ExactCount value={donationKey.streak.count} />
-          </dd>
-        </div>
-        <div className="detail-row">
-          <dt>{t('user.charity.failureDisabled')}</dt>
-          <dd>
-            {donationKey.streak.failureDisabled
-              ? t('user.charity.failureDisabledYes')
-              : t('user.charity.failureDisabledNo')}
-          </dd>
-        </div>
-        <div className="detail-row">
-          <dt>{t('user.charity.endedReason')}</dt>
-          <dd>
-            {donationKey.endedReason
-              ? t(`user.charity.endedReasonValue.${donationKey.endedReason}`)
-              : t('user.charity.notEnded')}
-          </dd>
-        </div>
-      </dl>
+        <dl className="detail-grid economy-key-metadata">
+          <div className="detail-row">
+            <dt>{t('user.charity.tokenReserve')}</dt>
+            <dd>
+              <ExactCount
+                value={String(donationKey.tokenReserve)}
+                unit={t('user.charity.tokensPerRequest')}
+              />
+            </dd>
+          </div>
+          <div className="detail-row">
+            <dt>{t('user.charity.failureStreak')}</dt>
+            <dd>
+              <ExactCount value={donationKey.streak.count} />
+            </dd>
+          </div>
+          <div className="detail-row">
+            <dt>{t('user.charity.failureDisabled')}</dt>
+            <dd>
+              {donationKey.streak.failureDisabled
+                ? t('user.charity.failureDisabledYes')
+                : t('user.charity.failureDisabledNo')}
+            </dd>
+          </div>
+          <div className="detail-row">
+            <dt>{t('user.charity.endedReason')}</dt>
+            <dd>
+              {donationKey.endedReason
+                ? t(`user.charity.endedReasonValue.${donationKey.endedReason}`)
+                : t('user.charity.notEnded')}
+            </dd>
+          </div>
+        </dl>
+      </details>
     </article>
   );
 }
@@ -744,9 +736,11 @@ export function DonationKeyPanel({
 export function DonationCard({
   donation,
   showDetailLink = true,
+  visibleKeys,
 }: {
   donation: Donation;
   showDetailLink?: boolean;
+  visibleKeys?: readonly DonationKey[];
 }) {
   const { t } = useTranslation();
   const edit = useEditDonation();
@@ -846,7 +840,6 @@ export function DonationCard({
     <Card className="economy-donation-card">
       <div className="item-header">
         <div>
-          <p className="eyebrow">{t('user.charity.donationLabel')}</p>
           <h3>{t('user.charity.donationNumber', { id: donation.id })}</h3>
           <p className="item-meta">{formatDateTime(donation.createdAt)}</p>
         </div>
@@ -893,25 +886,36 @@ export function DonationCard({
       </dl>
 
       {donation.reviewResult ? (
-        <section className="economy-review-result">
-          <h4>{t('user.charity.reviewResult')}</h4>
+        <details className="economy-review-result" open={!showDetailLink}>
+          <summary>{t('user.charity.reviewResult')}</summary>
           <p>{donation.reviewResult.reason}</p>
           <span className="muted">{formatDateTime(donation.reviewResult.reviewedAt)}</span>
-        </section>
+        </details>
       ) : null}
 
-      <details className="economy-donation-details">
-        <summary>{t('user.charity.resourceDetails', { count: donation.keys.length })}</summary>
-        {donation.keys.length > 0 ? (
-          <div className="economy-donation-key-list">
-            {donation.keys.map((key) => (
-              <DonationKeyPanel key={key.id} donationKey={key} />
-            ))}
-          </div>
-        ) : (
-          <p className="muted">{t('user.charity.noRemainingKeys')}</p>
-        )}
-      </details>
+      {visibleKeys ? (
+        <div className="economy-donation-key-list">
+          {visibleKeys.map((key) => (
+            <DonationKeyPanel key={key.id} donationKey={key} compact />
+          ))}
+          {visibleKeys.length === 0 ? (
+            <p className="muted">{t('user.charity.noRemainingKeys')}</p>
+          ) : null}
+        </div>
+      ) : (
+        <details className="economy-donation-details">
+          <summary>{t('user.charity.resourceDetails', { count: donation.keys.length })}</summary>
+          {donation.keys.length > 0 ? (
+            <div className="economy-donation-key-list">
+              {donation.keys.map((key) => (
+                <DonationKeyPanel key={key.id} donationKey={key} />
+              ))}
+            </div>
+          ) : (
+            <p className="muted">{t('user.charity.noRemainingKeys')}</p>
+          )}
+        </details>
+      )}
 
       <MutationNotice error={visibleError} successKey={visibleSuccessKey} />
       {waitingForAuthority && blockedMutation?.reconcileError ? (
@@ -1006,14 +1010,13 @@ export function DonationKeyOverview({ donations }: { donations: readonly Donatio
       donation,
       keys: donation.keys.filter((key) => matchesDonationOverviewFilter(key, filter)),
     }))
-    .filter((group) => group.keys.length > 0);
+    .filter((group) => filter === 'all' || group.keys.length > 0);
   const visibleKeys = groups.reduce((total, group) => total + group.keys.length, 0);
 
   return (
     <section className="economy-donation-overview" aria-labelledby="donation-key-overview-title">
       <div className="card-title-row economy-section-heading">
         <div>
-          <p className="eyebrow">{t('user.charity.donationOverviewEyebrow')}</p>
           <h2 id="donation-key-overview-title">{t('user.charity.donationOverviewTitle')}</h2>
           <p className="muted">
             {t('user.charity.donationOverviewCount', { visible: visibleKeys, total: totalKeys })}
@@ -1041,33 +1044,7 @@ export function DonationKeyOverview({ donations }: { donations: readonly Donatio
       ) : (
         <div className="item-list economy-donation-overview-list">
           {groups.map(({ donation, keys }) => (
-            <article className="economy-donation-overview-group" key={donation.id}>
-              <div className="item-header">
-                <div>
-                  <p className="eyebrow">{t('user.charity.donationLabel')}</p>
-                  <h3>
-                    <Link to={`/charity/donations/${donation.id}`}>
-                      {t('user.charity.donationNumber', { id: donation.id })}
-                    </Link>
-                  </h3>
-                </div>
-                <StatusBadge
-                  active={donation.status === 'approved'}
-                  danger={statusDanger(donation.status)}
-                  label={t(`user.charity.status.${donation.status}`)}
-                />
-              </div>
-              <div className="economy-donation-key-list">
-                {keys.map((key) => (
-                  <DonationKeyPanel
-                    key={key.id}
-                    donationKey={key}
-                    donationId={donation.id}
-                    donationStatus={donation.status}
-                  />
-                ))}
-              </div>
-            </article>
+            <DonationCard donation={donation} visibleKeys={keys} key={donation.id} />
           ))}
         </div>
       )}
@@ -1097,6 +1074,7 @@ export function CharitySafetyNotice() {
       <Card className="economy-safety-card">
         <h2>{t('user.charity.upstreamPrivacyTitle')}</h2>
         <p>{t('user.charity.upstreamPrivacyWarning')}</p>
+        <p>{t('user.charity.upstreamQualityWarning')}</p>
         <p className="inline-notice">{t('user.charity.dispatchedFailureWarning')}</p>
       </Card>
     </div>

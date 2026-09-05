@@ -24,8 +24,8 @@ type Store struct {
 
 // Open classifies path as either completely fresh or current Generation 2.
 // Existing databases are validated from a private read-only snapshot before
-// SQLite is allowed to open the source path. No migration or repair is ever
-// attempted.
+// SQLite is allowed to open the source path. Only the exact supported prior
+// Generation 2 schema receives the additive routing table; no repair is attempted.
 func Open(path string, secrets secret.GenerationTwoContextCodec) (*Store, error) {
 	if nilSecretCodec(secrets) {
 		return nil, fmt.Errorf("open database: secret codec is required")

@@ -1,5 +1,5 @@
 .core-page {
-  inline-size: min(100%, var(--nb-content-readable));
+  inline-size: 100%;
   margin-inline: auto;
   min-inline-size: 0;
   overflow-wrap: anywhere;
@@ -15,6 +15,20 @@
 .core-stack {
   display: grid;
   gap: var(--nb-space-6);
+}
+
+.core-model-preview {
+  display: grid;
+  gap: var(--nb-space-2);
+  padding: var(--nb-space-4);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-alt);
+  overflow-wrap: anywhere;
+}
+
+.core-model-preview > span {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
 }
 
 .core-grid {
@@ -627,4 +641,38 @@
   .core-page input[type='radio'] {
     min-block-size: 1.25rem;
   }
+}
+.core-selector__level[hidden] {
+  display: none;
+}
+.core-selector-path,
+.core-selector-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nb-space-2);
+}
+.core-selector-context {
+  overflow-wrap: anywhere;
+}
+.core-selection-list {
+  padding: 0;
+  list-style: none;
+}
+.core-selection-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nb-space-3);
+  border-bottom: 1px solid var(--nb-color-border);
+  padding-block: var(--nb-space-3);
+}
+.core-selection-list li > div {
+  display: grid;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.core-selection-list li span {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
 }

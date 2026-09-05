@@ -560,9 +560,7 @@ describe('beta.1 game pages', () => {
       route: '/games/fishing',
       role: 'user',
     });
-    await rendered.user.click(
-      await screen.findByRole('button', { name: 'Continue fishing' }),
-    );
+    await rendered.user.click(await screen.findByRole('button', { name: 'Continue fishing' }));
     expect(await screen.findByText(/result could not be confirmed/i)).toBeInTheDocument();
     const replay = screen
       .getAllByRole('button', { name: 'Continue fishing' })
@@ -587,6 +585,12 @@ describe('beta.1 game pages', () => {
       { method: 'GET', path: '/api/games/linklink/session', body: linkLinkState() },
       {
         method: 'POST',
+        path: '/api/games/linklink/sessions/ll_AAAAAAAAAAAAAAAAAAAAAA/matches',
+        status: 400,
+        body: { error: { code: 'invalid_request', message: 'invalid request' } },
+      },
+      {
+        method: 'POST',
         path: '/api/games/linklink/sessions/ll_AAAAAAAAAAAAAAAAAAAAAA/lease',
         body: { expires_at: 1_800_000_025 },
       },
@@ -602,7 +606,9 @@ describe('beta.1 game pages', () => {
     expect(cells[0]).toHaveTextContent('');
     await waitFor(() => expect(cells[0]).toBeEnabled());
     await rendered.user.click(cells[0]);
-    expect(screen.getByText('Connect identical pictures with no more than two turns.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Connect identical pictures with no more than two turns.'),
+    ).toBeInTheDocument();
     expect(cells[0]).toHaveAttribute('aria-selected', 'true');
     await rendered.user.click(screen.getByRole('button', { name: 'How to play' }));
     const rules = screen.getByRole('dialog', { name: 'How LinkLink works' });
@@ -612,6 +618,12 @@ describe('beta.1 game pages', () => {
     cells[0].focus();
     fireEvent.keyDown(cells[0], { key: 'ArrowRight' });
     expect(cells[1]).toHaveFocus();
+    await rendered.user.click(cells[4]);
+    await waitFor(() => {
+      for (const cell of cells) expect(cell).toHaveAttribute('aria-selected', 'false');
+    });
+    await rendered.user.click(cells[5]);
+    expect(cells[5]).toHaveAttribute('aria-selected', 'true');
   });
 
   it('requires a frozen-cost LinkLink confirmation and submits one paid start intent', async () => {
@@ -639,7 +651,7 @@ describe('beta.1 game pages', () => {
       await screen.findByText(/No active board or recent 30-day summary/i),
     ).toBeInTheDocument();
     await rendered.user.click(screen.getByRole('button', { name: 'Start 6x8' }));
-    const dialog = screen.getByRole('dialog', { name: 'Review paid start' });
+    const dialog = screen.getByRole('alertdialog', { name: 'Review paid start' });
     expect(dialog).toHaveTextContent('3 credits');
     await rendered.user.click(within(dialog).getByRole('button', { name: 'Start 6x8' }));
     expect(await screen.findAllByRole('gridcell')).toHaveLength(48);
@@ -690,6 +702,13 @@ describe('beta.1 game pages', () => {
     expect(rules).toHaveTextContent('消除所有配对');
     await rendered.user.click(within(rules).getByRole('button', { name: '关闭玩法说明' }));
     expect(screen.queryByRole('dialog', { name: '连连看怎么玩' })).not.toBeInTheDocument();
+    await rendered.user.click(screen.getByRole('button', { name: '开始另一局' }));
+    const start = screen.getByRole('alertdialog', { name: '确认付费开始' });
+    expect(start).not.toHaveTextContent('恢复');
+    expect(within(start).queryByRole('button', { name: '继续游玩' })).not.toBeInTheDocument();
+    await rendered.user.click(within(start).getByRole('button', { name: '关闭' }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(screen.getByText('棋盘已完成')).toBeInTheDocument();
   });
 
   it('renders three viewer-aware RPS seats and only the current gesture action', async () => {

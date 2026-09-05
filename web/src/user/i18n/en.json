@@ -395,6 +395,15 @@
       "eyebrow": "Operations"
     },
     "charity": {
+      "tabs": {
+        "models": "Shared models",
+        "donations": "My donations",
+        "donate": "Donate resources"
+      },
+      "sections": "Charity navigation",
+      "apiAccess": "API access",
+      "manageCharity": "Manage charity",
+      "modelName": "Model name",
       "nav": "Charity",
       "eyebrow": "Charity · Shared resources",
       "title": "Charity resources & donations",
@@ -404,9 +413,6 @@
       "backToDonations": "Back to charity",
       "donationNotFound": "Donation not found",
       "donationNotFoundBody": "This donation does not exist or is not owned by your account.",
-      "capabilities": "Current charity status",
-      "yourResources": "Your resources",
-      "callCapabilityEyebrow": "Availability",
       "callCapabilityTitle": "Charity model access",
       "capabilityState": {
         "feature_disabled": "Closed",
@@ -421,7 +427,6 @@
         "available": "At least one charity model is currently available."
       },
       "availableModels": "Available charity models",
-      "intakeEyebrow": "Donation intake",
       "intakeTitle": "Submit existing resources",
       "intakeState": {
         "open": "Open",
@@ -526,7 +531,6 @@
       "callQuota": "Call quota",
       "tokenQuota": "Token quota",
       "tokensUnit": "tokens",
-      "failureGeneration": "Failure counter group",
       "tokenReserve": "Tokens reserved per request",
       "tokensPerRequest": "tokens / request",
       "failureStreak": "Failure streak",
@@ -542,9 +546,7 @@
         "expired": "Donation expired",
         "account_deleted": "Account deleted"
       },
-      "donationLabel": "Donation",
-      "donationOverviewEyebrow": "Account-wide status",
-      "donationOverviewTitle": "My donated keys",
+      "donationOverviewTitle": "My donations",
       "donationOverviewCount": "Showing {{visible}} of {{total}} keys",
       "donationOverviewFilter": "Key status",
       "donationOverviewFilters": {
@@ -574,7 +576,9 @@
       "terminateBody": "This stops future charity admission for its resources. Calls already in progress will continue and be settled.",
       "donationDescription": "Donation description",
       "upstreamPrivacyTitle": "Third-party service privacy:",
+      "quotaDetails": "Quotas, usage and limits",
       "upstreamPrivacyWarning": "Charity requests are sent to donor-provided third-party AI services. That service and its account logs may see the full request content; its storage and privacy practices are outside this site's control.",
+      "upstreamQualityWarning": "This site cannot guarantee the quality of donor-provided services, including availability, response speed, or whether the model used matches the model advertised. Please assess whether each service meets your needs before using it.",
       "dispatchedFailureWarning": "After a request begins, even a timeout or failed response may consume the service provider's quota and be settled normally."
     },
     "activities": {
@@ -611,8 +615,7 @@
       "poolUnavailable": "Unavailable",
       "siteDay": "Site day",
       "welfare": {
-        "eyebrow": "Daily welfare",
-        "title": "Welfare claim",
+        "title": "Daily welfare",
         "state": {
           "unavailable": "Unavailable",
           "available": "Available",
@@ -637,7 +640,6 @@
         "claim": "Claim welfare"
       },
       "thursday": {
-        "eyebrow": "Crazy Thursday pool",
         "title": "Crazy Thursday",
         "state": {
           "unavailable": "Unavailable",

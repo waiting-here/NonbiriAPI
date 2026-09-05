@@ -120,6 +120,7 @@ function installDonationFetch(initial: AdminDonation) {
 const operationKeyPattern = /^[A-Za-z0-9_-]{22,128}$/;
 
 const charityModel = (start: number, end: number): CharityModel => ({
+  route_strategy: 'expiry_weighted',
   id: '1',
   provider: 'provider',
   model: 'model',
@@ -143,6 +144,124 @@ function localDateTime(epoch: number): string {
 }
 
 describe('CharityManagement corrective controls', () => {
+  it('keeps selections across donation, key, and model pages and submits the full set', async () => {
+    const first = {
+      ...approvedDonation(managedKey({ safe_note: 'First shared key\nReviewed limits' })),
+      description: 'First donation instructions\nA second line of guidance',
+    };
+    const second = {
+      ...approvedDonation(
+        managedKey({ id: '12', endpoint_key_id: '22', safe_note: 'Second shared key' }),
+      ),
+      id: '2',
+      description: 'Second donation instructions',
+    };
+    const model = charityModel(10, 20);
+    const bodies: Record<string, unknown>[] = [];
+    let bindingRevision = '0';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input, init) => {
+        const url = new URL(String(input), 'https://example.test');
+        const method = init?.method ?? 'GET';
+        if (url.pathname === '/admin/api/donations')
+          return jsonResponse({ data: [first], next_cursor: null });
+        if (url.pathname.endsWith('/binding-donations')) {
+          const entry = url.searchParams.has('cursor') ? second : first;
+          return jsonResponse({
+            data: [{ id: entry.id, description: entry.description, key_count: 1 }],
+            next_cursor: url.searchParams.has('cursor') ? null : 'bmV4dA',
+          });
+        }
+        if (url.pathname.includes('/binding-donations/') && url.pathname.endsWith('/keys')) {
+          const entry = url.pathname.includes('/binding-donations/2/') ? second : first;
+          const key = entry.keys[0];
+          return jsonResponse({
+            data: [
+              {
+                donation_key_id: key.id,
+                note: key.safe_note,
+                source: {
+                  connector_type: key.safe_source.connector_type,
+                  canonical_base_url: key.safe_source.base_url,
+                  display_head: key.display_head,
+                  display_tail: key.display_tail,
+                },
+              },
+            ],
+            next_cursor: null,
+          });
+        }
+        if (url.pathname === '/admin/api/donations/1') return jsonResponse(first);
+        if (url.pathname === '/admin/api/donations/2') return jsonResponse(second);
+        if (url.pathname === '/admin/api/charity-models')
+          return jsonResponse({ data: [model], next_cursor: null });
+        if (url.pathname.endsWith('/bindings'))
+          return jsonResponse({ bindings: [], binding_revision: bindingRevision });
+        if (url.pathname.endsWith('/binding-candidates')) {
+          const donation = url.searchParams.get('donation_id') === '2' ? second : first;
+          expect(url.searchParams.get('donation_key_id')).toBe(donation.keys[0].id);
+          const last = url.searchParams.has('cursor') || donation.id === '2';
+          return jsonResponse({
+            data: [
+              {
+                donation_id: donation.id,
+                donation_key_id: donation.keys[0].id,
+                upstream_model_id: url.searchParams.has('cursor') ? 'model-two' : 'model-one',
+                source: {
+                  connector_type: 'openai-compatible',
+                  canonical_base_url: 'https://example.test/v1',
+                  display_head: 'head',
+                  display_tail: 'tail',
+                },
+                source_types: ['automatic'],
+              },
+            ],
+            next_cursor: last ? null : 'cGFnZTI',
+          });
+        }
+        if (method === 'POST' && url.pathname.endsWith('/bindings/batch')) {
+          bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+          bindingRevision = '1';
+          return jsonResponse({ bindings: [], binding_revision: bindingRevision });
+        }
+        throw new Error(`Unexpected request: ${method} ${url.pathname}`);
+      }),
+    );
+    const view = await renderWithProviders(<CharityManagement frame="admin" />, {
+      station: 'admin',
+      role: 'admin',
+    });
+    await view.user.click(screen.getByRole('tab', { name: 'Charity models and bindings' }));
+    await view.user.click(await screen.findByRole('button', { name: 'Manage' }));
+    const pickerNode = view.container.querySelector('.ops-binding-picker')! as HTMLElement;
+    const picker = within(pickerNode);
+    await view.user.click(await picker.findByRole('button', { name: /Donation #1/ }));
+    expect(
+      await picker.findByText(/First donation instructions.*A second line of guidance/),
+    ).toBeVisible();
+    await view.user.click(await picker.findByRole('button', { name: /First shared key/ }));
+    await view.user.click(await picker.findByRole('checkbox', { name: /model-one/ }));
+    await view.user.click(picker.getByRole('button', { name: 'Next' }));
+    await view.user.click(await picker.findByRole('checkbox', { name: /model-two/ }));
+    await view.user.click(picker.getByRole('button', { name: '1 · Choose donation' }));
+    await view.user.click(picker.getByRole('button', { name: 'Next' }));
+    await view.user.click(await picker.findByRole('button', { name: /Donation #2/ }));
+    expect(await picker.findByText('Second donation instructions')).toBeVisible();
+    await view.user.click(await picker.findByRole('button', { name: /Second shared key/ }));
+    await view.user.click(await picker.findByRole('checkbox', { name: /model-one/ }));
+    expect(picker.getByRole('heading', { name: '3 service connection(s) selected' })).toBeVisible();
+    await view.user.click(screen.getByRole('button', { name: 'Add selected connections' }));
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(bodies[0]).toEqual({
+      expected_binding_revision: '0',
+      selections: [
+        { donation_key_id: '11', upstream_model_id: 'model-one' },
+        { donation_key_id: '11', upstream_model_id: 'model-two' },
+        { donation_key_id: '12', upstream_model_id: 'model-one' },
+      ],
+    });
+  });
   it('omits enabled when reset is the only switch-related operator action', async () => {
     const fixture = approvedDonation(
       managedKey({
@@ -261,10 +380,7 @@ describe('CharityManagement corrective controls', () => {
       if (method === 'GET' && path === '/admin/api/charity-models/1/bindings') {
         return jsonResponse({ bindings: [], binding_revision: '0' });
       }
-      if (
-        method === 'GET' &&
-        path.startsWith('/admin/api/charity-models/1/binding-candidates?')
-      ) {
+      if (method === 'GET' && path.startsWith('/admin/api/charity-models/1/binding-candidates?')) {
         return jsonResponse({ data: [], next_cursor: null });
       }
       if (method === 'PATCH' && path === '/admin/api/charity-models/1') {
@@ -300,6 +416,7 @@ describe('CharityManagement corrective controls', () => {
 
     await waitFor(() => expect(patchBodies).toHaveLength(1));
     expect(patchBodies[0]).toEqual({
+      route_strategy: 'expiry_weighted',
       expected_revision: '1',
       provider: 'provider',
       model: 'model',

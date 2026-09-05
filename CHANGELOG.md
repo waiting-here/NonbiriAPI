@@ -8,10 +8,16 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Added
 
+- Per-model charity routing choices: saved order, uniform random, or expiry-weighted random. Existing models keep expiry weighting through a compatible database update.
+- Separate user IDs and copyable Discord IDs in administrator user management, with a compact mobile layout.
 - Personal credit history with reason, time and income/expense filters, adjustable page sizes, direct page navigation, and links to the account's own request logs. Donation rewards do not expose another caller's requests.
 
 ### Fixed
 
+- Streaming providers that report cumulative token counts now update usage and billing correctly. Repeated snapshots are not summed, and malformed or regressing values remain unknown.
+- Model connections can be selected across donations, endpoints, keys, filters and pages. Charity connection order can be adjusted before saving once.
+- Charity and activity pages use the centered desktop width. Charity models, donation history and submission have separate tabs, and model creation previews the API model name.
+- LinkLink starts a new paid game from completed summaries with a closable confirmation, and clears both selections after a failed pair.
 - Mobile navigation keeps its close button visible and preserves the page position when opened after scrolling.
 - Mobile request details fit the available page width when system scrollbars are present.
 - Administrator setting descriptions use the displayed credit amounts and give a readable label for related charity pricing.

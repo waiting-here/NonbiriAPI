@@ -260,3 +260,123 @@ form.ops-toolbar > label {
     grid-template-columns: 1fr;
   }
 }
+.ops-binding-picker {
+  display: grid;
+  gap: var(--nb-space-4);
+}
+.ops-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  gap: var(--nb-space-3);
+}
+
+.ops-picker-context p,
+.ops-picker-choice > span {
+  white-space: pre-wrap;
+}
+.ops-picker-choice {
+  display: grid;
+  align-content: start;
+  gap: var(--nb-space-2);
+  min-width: 0;
+  text-align: start;
+  border: 1px solid var(--nb-color-border);
+  border-radius: var(--nb-radius-md);
+  padding: var(--nb-space-4);
+  background: var(--nb-color-surface-alt);
+  color: var(--nb-color-text);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  font: inherit;
+}
+.ops-picker-choice.checkbox-label {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+.ops-picker-choice:hover {
+  border-color: var(--nb-color-accent);
+}
+.ops-picker-choice:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.ops-picker-context {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.ops-picker-selection {
+  padding: var(--nb-space-4);
+  border-radius: var(--nb-radius-md);
+  background: var(--nb-color-surface-alt);
+}
+.ops-picker-selection ul {
+  padding: 0;
+  list-style: none;
+}
+.ops-picker-selection li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nb-space-3);
+  padding-block: var(--nb-space-2);
+  border-bottom: 1px solid var(--nb-color-border);
+}
+.ops-picker-selection li > div {
+  display: grid;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ops-picker-selection li span {
+  color: var(--nb-color-text-muted);
+  font-size: var(--nb-font-size-sm);
+}
+.ops-picker-source-types {
+  display: block;
+  color: var(--nb-color-text-muted);
+}
+.ops-model-preview {
+  display: grid;
+  gap: var(--nb-space-2);
+  padding: var(--nb-space-3);
+  background: var(--nb-color-surface-alt);
+  border-radius: var(--nb-radius-md);
+  overflow-wrap: anywhere;
+}
+.ops-model-preview output {
+  font-family: var(--nb-font-mono);
+}
+.ops-users-table {
+  min-width: 0;
+}
+.ops-users-table td {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 48rem) {
+  .ops-users-table,
+  .ops-users-table tbody {
+    display: block;
+    width: 100%;
+  }
+  .ops-users-table thead {
+    display: none;
+  }
+  .ops-users-table tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-block: var(--nb-space-3);
+    border-bottom: 1px solid var(--nb-color-border);
+  }
+  .ops-users-table td {
+    display: grid;
+    gap: var(--nb-space-1);
+    min-width: 0;
+    border: 0;
+  }
+  .ops-users-table td::before {
+    content: attr(data-label);
+    color: var(--nb-color-text-muted);
+    font-size: var(--nb-font-size-sm);
+  }
+  .ops-users-table .ops-users-discord {
+    grid-column: 1 / -1;
+  }
+}

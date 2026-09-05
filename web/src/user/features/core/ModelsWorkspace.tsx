@@ -220,6 +220,7 @@ function ModelEditor({
           {t('common.cancel')}
         </button>
       </div>
+      <p className="core-muted">{t('models.namingHelp')}</p>
       <div className="core-field-grid">
         <label>
           <span>{t('models.provider')}</span>
@@ -252,6 +253,12 @@ function ModelEditor({
             <option value="random">{t('models.random')}</option>
           </select>
         </label>
+      </div>
+      <div className="core-model-preview">
+        <span>{t('models.namePreview')}</span>
+        <output className="core-mono">
+          {provider || t('models.provider')}/{modelName || t('models.model')}
+        </output>
       </div>
       <label className="core-checkbox">
         <input
@@ -403,6 +410,9 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
   const [manualCursors, setManualCursors] = useState<Array<string | undefined>>([undefined]);
   const [endpointId, setEndpointId] = useState('');
   const [keyId, setKeyId] = useState('');
+  const [modelQuery, setModelQuery] = useState('');
+  const [queryDraft, setQueryDraft] = useState('');
+  const [selectionDetails, setSelectionDetails] = useState<Record<string, BindingCandidate>>({});
   const [invalidSelection, setInvalidSelection] = useState(false);
   const [replayAttempt, setReplayAttempt] = useState<{
     revision: string;
@@ -423,6 +433,7 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
       endpointId: endpointId || undefined,
       keyId: keyId || undefined,
       source: 'automatic',
+      query: modelQuery,
       cursor: automaticCursors.at(-1),
     },
     Boolean(endpointId && keyId),
@@ -434,6 +445,7 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
       endpointId: endpointId || undefined,
       keyId: keyId || undefined,
       source: 'manual',
+      query: modelQuery,
       cursor: manualCursors.at(-1),
     },
     Boolean(endpointId && keyId),
@@ -470,6 +482,9 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
       setManualCursors([undefined]);
       setEndpointId('');
       setKeyId('');
+      setModelQuery('');
+      setQueryDraft('');
+      setSelectionDetails({});
       setInvalidSelection(false);
       setReplayAttempt(null);
     });
@@ -500,12 +515,21 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
     setKeyCursors([undefined]);
     setAutomaticCursors([undefined]);
     setManualCursors([undefined]);
+    setModelQuery('');
+    setQueryDraft('');
   };
 
   const chooseKey = (next: string) => {
     setKeyId(next);
     setAutomaticCursors([undefined]);
     setManualCursors([undefined]);
+    setModelQuery('');
+    setQueryDraft('');
+  };
+
+  const toggleCandidate = (candidate: BindingCandidate) => {
+    setSelectionDetails((current) => ({ ...current, [candidateIdentity(candidate)]: candidate }));
+    dispatch({ type: 'toggle', accountId, modelId: model.id, candidate });
   };
 
   const reconcileSelections = async (): Promise<boolean> => {
@@ -669,8 +693,46 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
       {!bindings.data && bindings.error ? (
         <CoreErrorPanel compact error={bindings.error} onRetry={() => void bindings.refetch()} />
       ) : null}
+      <nav className="core-selector-path" aria-label={t('models.selectorTitle')}>
+        <button
+          type="button"
+          className="btn btn-quiet"
+          onClick={() => chooseEndpoint('')}
+          aria-current={!endpointId ? 'step' : undefined}
+        >
+          {t('models.levelEndpoint')}
+        </button>
+        {endpointId ? (
+          <>
+            <span aria-hidden="true">/</span>
+            <button
+              type="button"
+              className="btn btn-quiet"
+              onClick={() => chooseKey('')}
+              aria-current={!keyId ? 'step' : undefined}
+            >
+              {t('models.levelKey')}
+            </button>
+          </>
+        ) : null}
+        {keyId ? (
+          <>
+            <span aria-hidden="true">/</span>
+            <span aria-current="step">{t('models.levelCandidate')}</span>
+          </>
+        ) : null}
+      </nav>
+      {endpointId ? (
+        <p className="core-muted core-selector-context">
+          {endpoints.data?.data.find((entry) => entry.id === endpointId)?.note} ·{' '}
+          {endpoints.data?.data.find((entry) => entry.id === endpointId)?.base_url}
+          {keyId
+            ? ` / ${keys.data?.data.find((entry) => entry.id === keyId)?.note || ''} · ${keys.data?.data.find((entry) => entry.id === keyId)?.display_head || ''}…${keys.data?.data.find((entry) => entry.id === keyId)?.display_tail || ''}`
+            : ''}
+        </p>
+      ) : null}
       <div className="core-selector">
-        <section className="core-selector__level">
+        <section className="core-selector__level" hidden={Boolean(endpointId)}>
           <h3>{t('models.levelEndpoint')}</h3>
           {endpoints.isPending ? (
             <CoreLoading compact />
@@ -731,7 +793,7 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
           ) : null}
         </section>
 
-        <section className="core-selector__level">
+        <section className="core-selector__level" hidden={!endpointId || Boolean(keyId)}>
           <h3>{t('models.levelKey')}</h3>
           {!endpointId ? (
             <p className="core-muted">{t('models.chooseEndpoint')}</p>
@@ -794,8 +856,29 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
           ) : null}
         </section>
 
-        <section className="core-selector__level">
+        <section className="core-selector__level" hidden={!keyId}>
           <h3>{t('models.levelCandidate')}</h3>
+          <form
+            className="core-selector-search"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setModelQuery(queryDraft.trim());
+              setAutomaticCursors([undefined]);
+              setManualCursors([undefined]);
+            }}
+          >
+            <label>
+              <span>{t('models.searchCandidates')}</span>
+              <input
+                value={queryDraft}
+                onChange={(event) => setQueryDraft(event.target.value)}
+                maxLength={256}
+              />
+            </label>
+            <button type="submit" className="btn btn-secondary">
+              {t('common.search')}
+            </button>
+          </form>
           {!keyId ? (
             <p className="core-muted">{t('models.chooseKey')}</p>
           ) : (
@@ -807,9 +890,7 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
                 error={automatic.error}
                 selected={selected}
                 bound={bound}
-                onToggle={(candidate) =>
-                  dispatch({ type: 'toggle', accountId, modelId: model.id, candidate })
-                }
+                onToggle={toggleCandidate}
                 onRetry={() => void automatic.refetch()}
                 canPrevious={automaticCursors.length > 1}
                 canNext={Boolean(automatic.data?.next_cursor)}
@@ -830,9 +911,7 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
                 error={manual.error}
                 selected={selected}
                 bound={bound}
-                onToggle={(candidate) =>
-                  dispatch({ type: 'toggle', accountId, modelId: model.id, candidate })
-                }
+                onToggle={toggleCandidate}
                 onRetry={() => void manual.refetch()}
                 canPrevious={manualCursors.length > 1}
                 canNext={Boolean(manual.data?.next_cursor)}
@@ -848,6 +927,37 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
         </section>
       </div>
       <p className="core-muted">{t('models.selectedCount', { count: draft.selections.length })}</p>
+      {draft.selections.length ? (
+        <ul className="core-selection-list">
+          {draft.selections.map((candidate) => {
+            const detail = selectionDetails[candidateIdentity(candidate)];
+            return (
+              <li key={candidateIdentity(candidate)}>
+                <div>
+                  <strong>{candidate.upstream_model_id}</strong>
+                  {detail ? (
+                    <span>
+                      {detail.endpoint_note || detail.endpoint_base_url} ·{' '}
+                      {detail.endpoint_key_note} · {detail.endpoint_key_display_head}…
+                      {detail.endpoint_key_display_tail}
+                    </span>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-quiet"
+                  disabled={draft.status === 'pending' || Boolean(replayAttempt)}
+                  onClick={() =>
+                    dispatch({ type: 'candidate-invalid', accountId, modelId: model.id, candidate })
+                  }
+                >
+                  {t('common.remove')}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
       {invalidSelection ? (
         <p className="core-inline-warning">{t('models.selectionInvalid')}</p>
       ) : null}

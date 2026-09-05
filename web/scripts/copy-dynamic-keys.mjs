@@ -18,21 +18,25 @@ const charityPanels = 'src/user/features/economy/CharityPanels.tsx';
 const activitiesPanels = 'src/user/features/economy/ActivitiesPanels.tsx';
 
 function anchorFor(key, defaultAnchor) {
-  if (key.includes('.capabilityBody.')) return 't(`user.charity.capabilityBody.${capability.state}`)';
+  if (key.includes('.capabilityBody.'))
+    return 't(`user.charity.capabilityBody.${capability.state}`)';
   if (key.includes('.intakeBody.')) return 't(`user.charity.intakeBody.${state}`)';
   if (key.endsWith('.withdraw') || key.endsWith('.terminate')) {
-    return 't(`user.charity.${confirmation === \'withdraw\' ? \'withdraw\' : \'terminate\'}`)';
+    return "t(`user.charity.${confirmation === 'withdraw' ? 'withdraw' : 'terminate'}`)";
   }
   if (key.endsWith('.withdrawTitle') || key.endsWith('.terminateTitle')) {
-    return 'user.charity.${confirmation === \'withdraw\' ? \'withdrawTitle\' : \'terminateTitle\'}';
+    return "user.charity.${confirmation === 'withdraw' ? 'withdrawTitle' : 'terminateTitle'}";
   }
   if (key.endsWith('.withdrawBody') || key.endsWith('.terminateBody')) {
-    return 'user.charity.${confirmation === \'withdraw\' ? \'withdrawBody\' : \'terminateBody\'}';
+    return "user.charity.${confirmation === 'withdraw' ? 'withdrawBody' : 'terminateBody'}";
   }
-  if (key.includes('.masterBody.')) return 't(`user.activities.masterBody.${snapshot.master.reason}`)';
+  if (key.includes('.masterBody.'))
+    return 't(`user.activities.masterBody.${snapshot.master.reason}`)';
   if (key.includes('.welfare.body.')) return 't(`user.activities.welfare.body.${welfare.state}`)';
-  if (key.includes('.thursday.body.')) return 't(`user.activities.thursday.body.${thursday.state}`)';
-  if (key.includes('.thursday.unpaidReason.')) return 't(`user.activities.thursday.unpaidReason.${result.unpaidReason}`)';
+  if (key.includes('.thursday.body.'))
+    return 't(`user.activities.thursday.body.${thursday.state}`)';
+  if (key.includes('.thursday.unpaidReason.'))
+    return 't(`user.activities.thursday.unpaidReason.${result.unpaidReason}`)';
   return defaultAnchor;
 }
 
@@ -69,10 +73,7 @@ const dynamicCopyKeys = [
     ),
   ),
   // Common charity reviewer roles are finite.
-  ...[
-    'common.operations.charity.role.admin',
-    'common.operations.charity.role.steward',
-  ].map((key) =>
+  ...['common.operations.charity.role.admin', 'common.operations.charity.role.steward'].map((key) =>
     entry(
       'common',
       key,
@@ -89,7 +90,7 @@ const dynamicCopyKeys = [
     entry(
       'common',
       key,
-      charityManagement,
+      'src/shared/components/CharityBindingPicker.tsx',
       't(sourceTypeKey(source))',
       'Source type is constrained to the automatic/manual union.',
     ),
@@ -134,15 +135,12 @@ const dynamicCopyKeys = [
     ),
   ),
   // Common charity pricing side labels are selected from a two-value tuple.
-  ...[
-    'common.operations.charity.userPrices',
-    'common.operations.charity.donorRewards',
-  ].map((key) =>
+  ...['common.operations.charity.userPrices', 'common.operations.charity.donorRewards'].map((key) =>
     entry(
       'common',
       key,
       charityManagement,
-      '`common.operations.charity.${side === \'userPrices\' ? \'userPrices\' : \'donorRewards\'}`',
+      "`common.operations.charity.${side === 'userPrices' ? 'userPrices' : 'donorRewards'}`",
       'The side expression has exactly the userPrices/donorRewards alternatives.',
     ),
   ),
@@ -191,10 +189,10 @@ const dynamicCopyKeys = [
       key.endsWith('.donationsTitle') || key.endsWith('.modelsTitle')
         ? `charityCopyKey(frame, '${key.split('.').at(-1)}')`
         : key.endsWith('.enabled') || key.endsWith('.disabled')
-        ? "charityCopyKey(role, model.enabled ? 'enabled' : 'disabled')"
-        : key.endsWith('.approve') || key.endsWith('.reject')
-          ? "charityCopyKey(role, decision === 'approve' ? 'approve' : 'reject')"
-          : `charityCopyKey(role, '${key.split('.').at(-1)}')`,
+          ? "charityCopyKey(role, model.enabled ? 'enabled' : 'disabled')"
+          : key.endsWith('.approve') || key.endsWith('.reject')
+            ? "charityCopyKey(role, decision === 'approve' ? 'approve' : 'reject')"
+            : `charityCopyKey(role, '${key.split('.').at(-1)}')`,
       'charityCopyKey is constrained to admin/steward callers and this exact field is passed to it.',
     ),
   ),
@@ -241,18 +239,15 @@ const dynamicCopyKeys = [
       key.endsWith('.donationsTitle') || key.endsWith('.modelsTitle')
         ? `charityCopyKey(frame, '${key.split('.').at(-1)}')`
         : key.endsWith('.enabled') || key.endsWith('.disabled')
-        ? "charityCopyKey(role, model.enabled ? 'enabled' : 'disabled')"
-        : key.endsWith('.approve') || key.endsWith('.reject')
-          ? "charityCopyKey(role, decision === 'approve' ? 'approve' : 'reject')"
-          : `charityCopyKey(role, '${key.split('.').at(-1)}')`,
+          ? "charityCopyKey(role, model.enabled ? 'enabled' : 'disabled')"
+          : key.endsWith('.approve') || key.endsWith('.reject')
+            ? "charityCopyKey(role, decision === 'approve' ? 'approve' : 'reject')"
+            : `charityCopyKey(role, '${key.split('.').at(-1)}')`,
       'charityCopyKey is constrained to admin/steward callers and this exact field is passed to it.',
     ),
   ),
   // Shared charity management decisions are selected from a closed pair.
-  ...[
-    'admin.charity.approve',
-    'admin.charity.reject',
-  ].map((key) =>
+  ...['admin.charity.approve', 'admin.charity.reject'].map((key) =>
     entry(
       'admin',
       key,
@@ -261,10 +256,7 @@ const dynamicCopyKeys = [
       'The review action is constrained to the explicit approve/reject pair for the admin role.',
     ),
   ),
-  ...[
-    'user.steward.approve',
-    'user.steward.reject',
-  ].map((key) =>
+  ...['user.steward.approve', 'user.steward.reject'].map((key) =>
     entry(
       'user',
       key,
@@ -459,15 +451,15 @@ const dynamicCopyKeys = [
       'user',
       key,
       charityPanels,
-      anchorFor(key, 'user.charity.${confirmation === \'withdraw\' ? \'withdrawTitle\' : \'terminateTitle\'}'),
+      anchorFor(
+        key,
+        "user.charity.${confirmation === 'withdraw' ? 'withdrawTitle' : 'terminateTitle'}",
+      ),
       'Confirmation is constrained to withdraw or terminate and selects this exact title/body/action leaf.',
     ),
   ),
   // Legal pages resolve the authoritative locale through a finite locale union.
-  ...[
-    'user.legal.localeName.zh',
-    'user.legal.localeName.en',
-  ].map((key) =>
+  ...['user.legal.localeName.zh', 'user.legal.localeName.en'].map((key) =>
     entry(
       'user',
       key,

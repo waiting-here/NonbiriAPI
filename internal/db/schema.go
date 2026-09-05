@@ -1,8 +1,8 @@
 // Package db owns the canonical Generation 2 SQLite schema.
 //
 // This string is the only DDL source used by fresh bootstrap and manifest
-// validation. Generation 2 is a destructive fresh database: no migration,
-// compatibility view, or legacy table is intentionally present here.
+// validation. Prior generations require a fresh database. The supported
+// additive update within Generation 2 uses the same DDL without rewriting data.
 package db
 
 // no runtime DDL transformation is permitted
@@ -10,7 +10,16 @@ package db
 // generationTwoSchema is deliberately non-idempotent. Keep all scalar
 // constraints in this source so that the startup manifest is an exact lock,
 // rather than a best-effort list of tables.
-const generationTwoSchema = `
+const generationTwoSchema = generationTwoBaseSchema + charityModelRoutingSchema
+
+const charityModelRoutingSchema = `
+CREATE TABLE charity_model_routing (
+ model_id INTEGER PRIMARY KEY REFERENCES charity_models(id) ON DELETE CASCADE,
+ strategy TEXT NOT NULL CHECK(strategy IN ('ordered','random','expiry_weighted'))
+);
+`
+
+const generationTwoBaseSchema = `
 PRAGMA foreign_keys=ON;
 
 -- ===== identity and inherited alpha.3 facts ================================

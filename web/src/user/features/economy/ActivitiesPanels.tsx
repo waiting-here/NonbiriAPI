@@ -174,7 +174,6 @@ export function WelfareCard({
     <Card className="economy-activity-card economy-welfare-card">
       <div className="card-title-row">
         <div>
-          <p className="eyebrow">{t('user.activities.welfare.eyebrow')}</p>
           <h2>{t('user.activities.welfare.title')}</h2>
         </div>
         <StatusBadge
@@ -353,7 +352,6 @@ export function ThursdayCard({
     <Card className="economy-activity-card economy-thursday-card">
       <div className="card-title-row">
         <div>
-          <p className="eyebrow">{t('user.activities.thursday.eyebrow')}</p>
           <h2>{t('user.activities.thursday.title')}</h2>
         </div>
         <StatusBadge

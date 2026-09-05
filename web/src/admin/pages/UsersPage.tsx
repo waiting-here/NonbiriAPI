@@ -2,7 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
-import { Card, EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
+import { CopyValue } from '@shared/components/CopyValue';
+import {
+  Card,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PageHeader,
+  StatusBadge,
+} from '@shared/components/States';
 import { CursorPagination } from '@shared/operations/CursorPagination';
 import { elevateAdmin } from '@shared/operations/api';
 import { useCursorPager } from '@shared/operations/useCursorPager';
@@ -64,30 +72,38 @@ function UserAuthority({ user, refresh }: { user: AdminUser; refresh: () => Prom
   const [elevationError, setElevationError] = useState<unknown>(null);
   const elevationToken = useRef<string | null>(null);
   const authorityRevision = useRef(user.revision);
-  const reconcile = async () => { await refresh(); };
+  const reconcile = async () => {
+    await refresh();
+  };
   const patch = useRetainedOperation(
-    (input: { revision: string; body: Record<string, unknown> }, key) => mutateAdminUser(user.id, { ...input.body, expected_revision: input.revision }, key),
+    (input: { revision: string; body: Record<string, unknown> }, key) =>
+      mutateAdminUser(user.id, { ...input.body, expected_revision: input.revision }, key),
     reconcile,
   );
   const ban = useRetainedOperation(
-    (input: { revision: string; reason: string; duration_seconds: number | null }, key) => banAdminUser(user.id, { reason: input.reason, duration_seconds: input.duration_seconds, expected_revision: input.revision }, key),
+    (input: { revision: string; reason: string; duration_seconds: number | null }, key) =>
+      banAdminUser(
+        user.id,
+        {
+          reason: input.reason,
+          duration_seconds: input.duration_seconds,
+          expected_revision: input.revision,
+        },
+        key,
+      ),
     reconcile,
   );
-  const unban = useRetainedOperation((input: { revision: string }, key) => unbanAdminUser(user.id, input.revision, key), reconcile);
-  const deletion = useRetainedOperation(
-    async (input: { revision: string }, key) => {
-      const token = elevationToken.current;
-      elevationToken.current = null;
-      if (!token)
-        throw new ApiError(
-          'elevated_required',
-          t('admin.users.deletePasswordRequired'),
-          403,
-        );
-      await deleteAdminUser(user.id, input.revision, key, token);
-    },
+  const unban = useRetainedOperation(
+    (input: { revision: string }, key) => unbanAdminUser(user.id, input.revision, key),
     reconcile,
   );
+  const deletion = useRetainedOperation(async (input: { revision: string }, key) => {
+    const token = elevationToken.current;
+    elevationToken.current = null;
+    if (!token)
+      throw new ApiError('elevated_required', t('admin.users.deletePasswordRequired'), 403);
+    await deleteAdminUser(user.id, input.revision, key, token);
+  }, reconcile);
 
   useEffect(() => {
     authorityRevision.current = user.revision;
@@ -99,17 +115,28 @@ function UserAuthority({ user, refresh }: { user: AdminUser; refresh: () => Prom
     setDeleteConfirmation('');
     setElevationError(null);
   }, [user.revision]);
-  useEffect(() => () => {
-    authorityRevision.current = '';
-    elevationToken.current = null;
-  }, []);
+  useEffect(
+    () => () => {
+      authorityRevision.current = '';
+      elevationToken.current = null;
+    },
+    [],
+  );
 
   const saveLimits = () => {
     const endpoint = nullableLimit(draft.endpointLimit);
     const rpm = nullableLimit(draft.rpmLimit);
     const concurrency = nullableLimit(draft.concurrencyLimit);
     if (endpoint === undefined || rpm === undefined || concurrency === undefined) return;
-    patch.mutate({ revision: user.revision, body: { mode: 'profile', endpoint_limit: endpoint, rpm_limit: rpm, concurrency_limit: concurrency } });
+    patch.mutate({
+      revision: user.revision,
+      body: {
+        mode: 'profile',
+        endpoint_limit: endpoint,
+        rpm_limit: rpm,
+        concurrency_limit: concurrency,
+      },
+    });
   };
   const submitDeletion = async () => {
     if (!password || deleteConfirmation !== 'DELETE') return;
@@ -142,9 +169,15 @@ function UserAuthority({ user, refresh }: { user: AdminUser; refresh: () => Prom
       <Card>
         <h2>{user.username}</h2>
         <dl className="ops-kv">
-          <dt>{t('admin.users.detailIdRevision')}</dt>
+          <dt>{t('admin.users.userId')}</dt>
+          <dd>{user.id}</dd>
+          <dt>{t('admin.users.discordId')}</dt>
           <dd>
-            {user.id} / {user.revision}
+            {user.discord_id ? (
+              <CopyValue value={user.discord_id} label={t('admin.users.discordId')} />
+            ) : (
+              t('admin.users.discordUnlinked')
+            )}
           </dd>
           <dt>{t('admin.users.status')}</dt>
           <dd>
@@ -329,8 +362,7 @@ function UserAuthority({ user, refresh }: { user: AdminUser; refresh: () => Prom
                 },
               },
               {
-                onSuccess: () =>
-                  setDraft({ ...draft, economyAmount: '', economyReason: '' }),
+                onSuccess: () => setDraft({ ...draft, economyAmount: '', economyReason: '' }),
               },
             )
           }
@@ -364,11 +396,7 @@ function UserAuthority({ user, refresh }: { user: AdminUser; refresh: () => Prom
         </div>
         <div className="ops-actions">
           {user.is_banned ? (
-            <button
-              className="btn btn-danger"
-              type="button"
-              onClick={() => setConfirm('unban')}
-            >
+            <button className="btn btn-danger" type="button" onClick={() => setConfirm('unban')}>
               {t('admin.users.unban')}
             </button>
           ) : (
@@ -385,11 +413,7 @@ function UserAuthority({ user, refresh }: { user: AdminUser; refresh: () => Prom
               {t('admin.users.ban')}
             </button>
           )}
-          <button
-            className="btn btn-danger"
-            type="button"
-            onClick={() => setConfirm('delete')}
-          >
+          <button className="btn btn-danger" type="button" onClick={() => setConfirm('delete')}>
             {t('admin.users.delete')}
           </button>
         </div>
@@ -461,10 +485,7 @@ function UserAuthority({ user, refresh }: { user: AdminUser; refresh: () => Prom
                 { onSuccess: () => setConfirm(null) },
               );
             else if (confirm === 'unban')
-              unban.mutate(
-                { revision: user.revision },
-                { onSuccess: () => setConfirm(null) },
-              );
+              unban.mutate({ revision: user.revision }, { onSuccess: () => setConfirm(null) });
             else void submitDeletion();
           }}
         />
@@ -480,9 +501,19 @@ export function UsersPage() {
   const [query, setQuery] = useState('');
   const [banned, setBanned] = useState<'' | 'true' | 'false'>('');
   const [selected, setSelected] = useState('');
-  const users = useQuery({ queryKey: adminCoreKeys.users(banned, query, pager.cursor), queryFn: () => getAdminUsers(banned, query, pager.cursor), retry: false });
-  const detail = useQuery({ queryKey: adminCoreKeys.user(selected), queryFn: () => getAdminUser(selected), retry: false, enabled: Boolean(selected) });
-  const detailUnavailable = isUnauthorized(detail.error) || isForbidden(detail.error) || isNotFoundError(detail.error);
+  const users = useQuery({
+    queryKey: adminCoreKeys.users(banned, query, pager.cursor),
+    queryFn: () => getAdminUsers(banned, query, pager.cursor),
+    retry: false,
+  });
+  const detail = useQuery({
+    queryKey: adminCoreKeys.user(selected),
+    queryFn: () => getAdminUser(selected),
+    retry: false,
+    enabled: Boolean(selected),
+  });
+  const detailUnavailable =
+    isUnauthorized(detail.error) || isForbidden(detail.error) || isNotFoundError(detail.error);
   return (
     <div className="page ops-page">
       <PageHeader title={t('admin.users.title')} description={t('admin.users.description')} />
@@ -534,10 +565,12 @@ export function UsersPage() {
         ) : (
           <>
             <div className="ops-table-scroll">
-              <table className="ops-table">
+              <table className="ops-table ops-users-table">
                 <thead>
                   <tr>
+                    <th>{t('admin.users.userId')}</th>
                     <th>{t('admin.users.username')}</th>
+                    <th>{t('admin.users.discordId')}</th>
                     <th>{t('admin.users.status')}</th>
                     <th>{t('admin.users.level')}</th>
                     <th>{t('admin.users.balances')}</th>
@@ -547,22 +580,25 @@ export function UsersPage() {
                 <tbody>
                   {users.data.data.map((user) => (
                     <tr key={user.id}>
-                      <td>
-                        {user.username}
-                        <small>{user.id}</small>
+                      <td data-label={t('admin.users.userId')}>{user.id}</td>
+                      <td data-label={t('admin.users.username')}>{user.username}</td>
+                      <td data-label={t('admin.users.discordId')} className="ops-users-discord">
+                        {user.discord_id ? (
+                          <CopyValue value={user.discord_id} label={t('admin.users.discordId')} />
+                        ) : (
+                          t('admin.users.discordUnlinked')
+                        )}
                       </td>
-                      <td>
+                      <td data-label={t('admin.users.status')}>
                         <StatusBadge
                           active={!user.is_banned}
                           danger={user.is_banned}
-                          label={t(
-                            user.is_banned ? 'admin.users.banned' : 'admin.users.active',
-                          )}
+                          label={t(user.is_banned ? 'admin.users.banned' : 'admin.users.active')}
                         />
                       </td>
-                      <td>{user.level.effective}</td>
-                      <td>{user.balance}</td>
-                      <td>
+                      <td data-label={t('admin.users.level')}>{user.level.effective}</td>
+                      <td data-label={t('admin.users.balances')}>{user.balance}</td>
+                      <td data-label={t('admin.users.actions')}>
                         <button
                           className="btn btn-secondary"
                           type="button"
@@ -585,8 +621,29 @@ export function UsersPage() {
           </>
         )}
       </Card>
-      {selected && !detailUnavailable ? detail.isPending ? <LoadingState /> : detail.error ? <ErrorState error={detail.error} onRetry={() => void detail.refetch()} /> : <UserAuthority key={detail.data.id} user={detail.data} refresh={async () => { await Promise.all([detail.refetch(), users.refetch()]); }} /> : null}
-      {selected && detailUnavailable ? <ErrorState error={detail.error} onRetry={() => { setSelected(''); }} /> : null}
+      {selected && !detailUnavailable ? (
+        detail.isPending ? (
+          <LoadingState />
+        ) : detail.error ? (
+          <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
+        ) : (
+          <UserAuthority
+            key={detail.data.id}
+            user={detail.data}
+            refresh={async () => {
+              await Promise.all([detail.refetch(), users.refetch()]);
+            }}
+          />
+        )
+      ) : null}
+      {selected && detailUnavailable ? (
+        <ErrorState
+          error={detail.error}
+          onRetry={() => {
+            setSelected('');
+          }}
+        />
+      ) : null}
     </div>
   );
 }

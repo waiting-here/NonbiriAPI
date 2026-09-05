@@ -574,7 +574,7 @@ func validateReadOnlyCopy(workspace *validationWorkspace, secrets secret.Generat
 	if err := quickCheck(ctx, d); err != nil {
 		return startupError(StartupCorruptDatabase)
 	}
-	if err := validateGenerationTwoManifest(ctx, d); err != nil {
+	if _, err := generationTwoExtensionNeeded(ctx, d); err != nil {
 		return startupError(StartupSchemaMismatch)
 	}
 	if err := validateGenerationTwoSeedManifest(ctx, d); err != nil {
@@ -977,6 +977,9 @@ func openValidatedSource(path string, expected *sourceSnapshotSet, secrets secre
 	}
 	if err := secureDBFiles(path); err != nil {
 		return fail()
+	}
+	if err := extendKnownGenerationTwoSchema(context.Background(), d); err != nil {
+		return failError(startupError(StartupSchemaMismatch))
 	}
 	if err := checkpointAndRecoverBeforeListener(context.Background(), d, secrets); err != nil {
 		return failError(err)
