@@ -55,16 +55,39 @@ for (const station of ['user', 'admin'] as const) {
       .poll(() => drawer.evaluate((node) => node.scrollWidth <= node.clientWidth + 1))
       .toBe(true);
     await page.screenshot({ path: `../tmp/${station}-request-detail-desktop.png` });
-    await page.setViewportSize({ width: 390, height: 844 });
-    await expect
-      .poll(() => drawer.evaluate((node) => node.scrollWidth <= node.clientWidth + 1))
-      .toBe(true);
-    await expect.poll(() => page.evaluate(() => document.body.style.overflow)).toBe('hidden');
-    await drawer.evaluate((node) => {
-      node.scrollTop = node.scrollHeight;
-    });
-    await expect(drawer.getByRole('button', { name: 'Close', exact: true })).toBeVisible();
-    await page.screenshot({ path: `../tmp/${station}-request-detail-mobile.png` });
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.evaluate(() => {
+        document.documentElement.style.scrollbarGutter = 'stable';
+      });
+      await expect
+        .poll(() => drawer.evaluate((node) => node.getBoundingClientRect().left))
+        .toBeGreaterThanOrEqual(0);
+      await expect
+        .poll(() =>
+          drawer.evaluate((node) =>
+            [node, ...node.querySelectorAll<HTMLElement>('*')]
+              .filter(
+                (element) =>
+                  element.clientWidth > 0 &&
+                  element.scrollWidth > element.clientWidth + 1 &&
+                  !element.classList.contains('visually-hidden'),
+              )
+              .map((element) => ({
+                element: `${element.tagName}.${element.className}`,
+                width: element.clientWidth,
+                content: element.scrollWidth,
+              })),
+          ),
+        )
+        .toEqual([]);
+      await expect.poll(() => page.evaluate(() => document.body.style.overflow)).toBe('hidden');
+      await drawer.evaluate((node) => {
+        node.scrollTop = node.scrollHeight;
+      });
+      await expect(drawer.getByRole('button', { name: 'Close', exact: true })).toBeInViewport();
+      await page.screenshot({ path: `../tmp/${station}-request-detail-mobile-${width}.png` });
+    }
     await page.keyboard.press('Escape');
     await expect(drawer).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');

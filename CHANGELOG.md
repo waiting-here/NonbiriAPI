@@ -12,6 +12,10 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Mobile navigation keeps its close button visible and preserves the page position when opened after scrolling.
+- Mobile request details fit the available page width when system scrollbars are present.
+- Administrator setting descriptions use the displayed credit amounts and give a readable label for related charity pricing.
+- Embedded asset manifests are reproducible and exclude their previous output, allowing verified rebuilds of an unchanged release.
 - Existing endpoint credentials with an omitted default port survive normal restarts. Startup validation uses the same stored URL form as endpoint creation while still rejecting mismatched credential targets.
 - Periodic maintenance no longer finalizes active API requests as interrupted startup work, which could incorrectly record a 502 while the response continued streaming.
 - Restored configured short-charity-request penalties, automatic bans and suspensions, and RPM automatic bans. Credit penalties and safe rejection logs commit together. Accounts without an active API key can also be banned successfully.

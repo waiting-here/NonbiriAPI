@@ -29,16 +29,18 @@ function sha256(data) {
 
 for (const app of ['admin', 'user']) {
   const appDir = join(distDir, app);
-  const files = (await walk(appDir)).sort();
+  const manifestPath = join(appDir, 'build-manifest.json');
+  const files = (await walk(appDir)).filter((file) => file !== manifestPath).sort();
+  // Build timestamps belong to release metadata. The embedded manifest depends
+  // only on asset contents, so repeated builds of the same tree stay identical.
   const manifest = {
     app,
-    generatedAt: new Date().toISOString(),
     files: {},
   };
   for (const file of files) {
     const rel = relative(appDir, file).split(sep).join('/');
     manifest.files[rel] = sha256(await readFile(file));
   }
-  await writeFile(join(appDir, 'build-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`manifest written for ${app} (${files.length} files)`);
 }

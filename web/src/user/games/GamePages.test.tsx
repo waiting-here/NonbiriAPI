@@ -331,7 +331,7 @@ describe('beta.1 game pages', () => {
       route: '/games/fishing',
       role: 'user',
     });
-    const start = await screen.findByRole('button', { name: 'Start this batch' });
+    const start = await screen.findByRole('button', { name: 'Start fishing' });
     await rendered.user.click(start);
     expect(await screen.findByText(/result could not be confirmed/i)).toBeInTheDocument();
     expect(start).toBeDisabled();
@@ -486,7 +486,7 @@ describe('beta.1 game pages', () => {
     const retry = await screen.findByRole('button', { name: 'Retry marking as viewed' });
     expect(screen.getByText(/result could not be marked viewed/i)).toBeInTheDocument();
     expect(screen.getByRole('list')).toHaveTextContent('Whitebait');
-    expect(screen.getByRole('button', { name: 'Start this batch' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Start fishing' })).toBeEnabled();
     await rendered.user.click(retry);
     await waitFor(() =>
       expect(
@@ -494,7 +494,7 @@ describe('beta.1 game pages', () => {
       ).not.toBeInTheDocument(),
     );
     expect(screen.getByRole('list')).toHaveTextContent('Whitebait');
-    expect(screen.getByRole('button', { name: 'Start this batch' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Start fishing' })).toBeEnabled();
     expect(attempts).toBe(2);
   });
 
@@ -561,11 +561,11 @@ describe('beta.1 game pages', () => {
       role: 'user',
     });
     await rendered.user.click(
-      await screen.findByRole('button', { name: 'Recover this same batch' }),
+      await screen.findByRole('button', { name: 'Continue fishing' }),
     );
     expect(await screen.findByText(/result could not be confirmed/i)).toBeInTheDocument();
     const replay = screen
-      .getAllByRole('button', { name: 'Recover this same batch' })
+      .getAllByRole('button', { name: 'Continue fishing' })
       .find((button) => !(button as HTMLButtonElement).disabled);
     expect(replay).toBeDefined();
     await rendered.user.click(replay!);

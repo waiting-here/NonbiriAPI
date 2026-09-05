@@ -1801,8 +1801,14 @@ tr:first-child td {
 }
 
 .log-drawer-header h2 {
+  min-width: 0;
   margin: 0;
   font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+
+.log-drawer-header > button {
+  flex: 0 0 auto;
 }
 
 .log-drawer-fields {
@@ -1929,7 +1935,7 @@ tr:first-child td {
 
 @media (max-width: 38rem) {
   .log-drawer {
-    width: 100vw;
+    width: 100%;
     border-left: 0;
   }
 

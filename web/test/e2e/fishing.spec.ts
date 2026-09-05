@@ -345,9 +345,9 @@ test('Fishing pending survives reload, settles from authority, auto-ACKs, and pe
   await page.goto(`${USER_ORIGIN}/games/fishing`);
 
   await expect(page.getByRole('heading', { name: 'A quiet cast, a surprise catch' })).toBeVisible();
-  await page.getByRole('button', { name: 'Start this batch' }).click();
+  await page.getByRole('button', { name: 'Start fishing' }).click();
   await expect(page.locator('[data-phase="pending"]')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'This batch is already accepted' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your catch is on its way' })).toBeVisible();
   expect(fixture.starts).toBe(1);
   expect(await page.locator('.fishing-result').count()).toBe(0);
 
@@ -364,8 +364,8 @@ test('Fishing pending survives reload, settles from authority, auto-ACKs, and pe
 
   await expect.poll(() => fixture.acks).toBe(1);
   await expect(page.getByRole('heading', { name: 'Total catch', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Start this batch' })).toBeEnabled();
-  await page.getByRole('button', { name: 'Start this batch' }).click();
+  await expect(page.getByRole('button', { name: 'Start fishing' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Start fishing' }).click();
   expect(fixture.starts).toBe(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
@@ -479,8 +479,13 @@ test('Fishing remains keyboard usable in Chinese at 390px, 200% zoom, both theme
   expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(
     true,
   );
+  await page.evaluate(() => window.scrollTo(0, 600));
+  const scrollBeforeMenu = await page.evaluate(() => window.scrollY);
+  expect(scrollBeforeMenu).toBeGreaterThan(100);
   await page.getByRole('button', { name: '打开导航' }).click();
   await expect(page.getByRole('link', { name: '账号' })).toBeVisible();
+  await expect(page.locator('.nb-menu-button')).toBeInViewport();
+  expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(scrollBeforeMenu, 0);
   const drawer = page.locator('.nb-user-header__nav');
   const drawerBox = await drawer.boundingBox();
   await page.screenshot({ path: '../tmp/usability-mobile-drawer.png' });
@@ -490,13 +495,19 @@ test('Fishing remains keyboard usable in Chinese at 390px, 200% zoom, both theme
     'rgba(0, 0, 0, 0)',
   );
   await expect(page.getByRole('link', { name: 'API 接入', exact: true })).toBeVisible();
-  expect(await page.evaluate(() => document.body.style.overflow)).toBe('hidden');
+  expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe('hidden');
   await page.getByRole('combobox', { name: '主题' }).selectOption('light');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await page.getByRole('combobox', { name: '主题' }).selectOption('dark');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.keyboard.press('Escape');
-  expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
+  expect(await page.evaluate(() => document.documentElement.style.overflow)).not.toBe('hidden');
+  expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(scrollBeforeMenu, 0);
+  await page.getByRole('button', { name: '打开导航' }).click();
+  await expect(page.getByRole('link', { name: '首页', exact: true })).toBeInViewport();
+  await page.locator('.nb-menu-button').click();
+  await expect(drawer).not.toBeVisible();
+  expect(await page.evaluate(() => window.scrollY)).toBeCloseTo(scrollBeforeMenu, 0);
   await page.evaluate(() => {
     document.documentElement.style.zoom = '2';
   });
@@ -508,11 +519,11 @@ test('Fishing remains keyboard usable in Chinese at 390px, 200% zoom, both theme
   }));
   expect(zoomLayout.zoom).toBe('2');
   expect(zoomLayout.body <= zoomLayout.viewport).toBe(true);
-  const start = page.getByRole('button', { name: '开始本批' });
+  const start = page.getByRole('button', { name: '开始垂钓' });
   await tabTo(page, start);
   await expect(start).toBeFocused();
   await page.keyboard.press('Enter');
   await expect.poll(() => fixture.starts).toBe(1);
-  await expect(page.getByRole('heading', { name: '本批已经受理' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '正在等待收获' })).toBeVisible();
   consoleGuard.assertNone();
 });
