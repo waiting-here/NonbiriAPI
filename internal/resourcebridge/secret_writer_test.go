@@ -14,9 +14,37 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
+
+func TestWrittenEndpointCredentialsSurviveDatabaseRestart(t *testing.T) {
+	fixture := newBridgeFixture(t)
+	owner := fixture.seedUser(t, "restart")
+	fixture.seedEndpointKey(t, owner, "restart-openai", connectorcontract.TypeOpenAICompatible, "restart-credential-one")
+	fixture.seedEndpointKey(t, owner, "restart-anthropic", connectorcontract.TypeAnthropicCompatible, "restart-credential-two")
+	var sequence int
+	var name, path string
+	if err := fixture.store.DB().QueryRow(`PRAGMA database_list`).Scan(&sequence, &name, &path); err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.runtime.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := db.Open(path, fixture.vault)
+	if err != nil {
+		t.Fatalf("reopen database after writing endpoint credentials: %v", err)
+	}
+	defer reopened.Close()
+	var count int
+	if err := reopened.DB().QueryRow(`SELECT COUNT(*) FROM endpoint_keys`).Scan(&count); err != nil || count != 2 {
+		t.Fatalf("reopened credential count = %d, error = %v", count, err)
+	}
+}
 
 func TestWriteEndpointSecretUsesUniqueContextAndExactAAD(t *testing.T) {
 	fixture := newBridgeFixture(t)

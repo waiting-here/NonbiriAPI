@@ -12,6 +12,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Existing endpoint credentials with an omitted default port survive normal restarts. Startup validation uses the same stored URL form as endpoint creation while still rejecting mismatched credential targets.
 - Periodic maintenance no longer finalizes active API requests as interrupted startup work, which could incorrectly record a 502 while the response continued streaming.
 - Restored configured short-charity-request penalties, automatic bans and suspensions, and RPM automatic bans. Credit penalties and safe rejection logs commit together. Accounts without an active API key can also be banned successfully.
 - Donation reviews display correctly for stewards and for approvals with an empty note. Administrator source groups have a separate tab.

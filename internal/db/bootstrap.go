@@ -669,8 +669,8 @@ ORDER BY id`, maxEndpointCredentialEnvelopeBytes)
 			ciphertext.String = ""
 			return errors.New("invalid endpoint credential row")
 		}
-		target, _, originErr := egress.CanonicalEndpointTarget(canonicalBaseURL)
-		if originErr != nil || target != canonicalBaseURL {
+		storedBaseURL, originErr := egress.CanonicalEndpointBaseURL(canonicalBaseURL)
+		if originErr != nil || storedBaseURL != canonicalBaseURL {
 			clear(contextID)
 			ciphertext.String = ""
 			return errors.New("invalid endpoint credential origin")
@@ -738,8 +738,9 @@ ORDER BY ek.id`, maxStoredEndpointBaseURLBytes)
 			return errors.New("invalid endpoint credential link")
 		}
 		target, _, targetErr := egress.CanonicalEndpointTarget(baseURL.String)
+		secretTarget, _, secretTargetErr := egress.CanonicalEndpointTarget(secretBaseURL)
 		baseURL.String = ""
-		if targetErr != nil || target != secretBaseURL {
+		if targetErr != nil || secretTargetErr != nil || target != secretTarget {
 			return errors.New("invalid endpoint credential link origin")
 		}
 	}
