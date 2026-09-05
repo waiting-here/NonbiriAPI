@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
+import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
 import { useGameCopy } from '../copy';
 import { GameRulesButton, GameRulesDialog, type GameRulesSection } from '../common/GameRulesDialog';
@@ -443,6 +444,7 @@ export function LinkLinkGame() {
       setSelection(null);
       return;
     }
+    setSelection(null);
     void execute({
       kind: 'match',
       value: {
@@ -624,9 +626,9 @@ export function LinkLinkGame() {
           <SummaryCard
             summary={summary}
             onNew={() => {
-              queryClient.setQueryData(linkLinkKeys.current, null);
               setSelectedSpec(summary.spec);
               setAnimation(null);
+              setReview(true);
             }}
           />
         </>
@@ -683,38 +685,24 @@ export function LinkLinkGame() {
           </button>
         </Card>
       ) : null}
-      {review ? (
-        <div
-          className="linklink-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="linklink-start-title"
-        >
-          <Card>
-            <h2 id="linklink-start-title">{text('linklink.startReview')}</h2>
-            <p>{text('linklink.startConsequences')}</p>
-            <p>
-              <strong>{text('linklink.spec', { spec: selectedSpec })}</strong> ·{' '}
-              {spec ? <Money value={spec.price} /> : null}
-            </p>
-            <div className="game-state-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => setReview(false)}>
-                {text('linklink.keep')}
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={!canStart || mutationState !== 'idle'}
-                onClick={() =>
-                  void execute({ kind: 'start', spec: selectedSpec, key: createIdempotencyKey() })
-                }
-              >
-                {text('linklink.start', { spec: selectedSpec })}
-              </button>
-            </div>
-          </Card>
-        </div>
-      ) : null}
+      <ConfirmDialog
+        open={review}
+        title={text('linklink.startReview')}
+        description={text('linklink.startConsequences')}
+        confirmLabel={text('linklink.start', { spec: selectedSpec })}
+        busy={mutationState === 'sending'}
+        confirmDisabled={!canStart || mutationState !== 'idle'}
+        showClose
+        onCancel={() => setReview(false)}
+        onConfirm={() =>
+          void execute({ kind: 'start', spec: selectedSpec, key: createIdempotencyKey() })
+        }
+      >
+        <p>
+          <strong>{text('linklink.spec', { spec: selectedSpec })}</strong> ·{' '}
+          {spec ? <Money value={spec.price} /> : null}
+        </p>
+      </ConfirmDialog>
       {abandonReview && state ? (
         <div
           className="linklink-modal"

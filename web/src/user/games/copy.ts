@@ -23,7 +23,7 @@ const en = {
     'Maintenance is active. Keep this page open: leaving, refreshing, or losing the connection may end continuation access.',
   'common.anonymous': 'Stay anonymous on leaderboards',
   'common.anonymousHelp':
-    'Applies to all game leaderboards. Turn off to show your name and avatar.',
+    'Applies to all game leaderboards. Turn off to show your name and avatar. In three-player RPS matches and other public-identity play, your name and avatar remain visible to the other players.',
   'common.rulesButton': 'How to play',
   'common.closeRules': 'Close rules',
   'center.eyebrow': 'Game lounge',
@@ -64,8 +64,7 @@ const en = {
   'fishing.start': 'Start fishing',
   'fishing.starting': 'Casting…',
   'fishing.insufficient': 'You need more credits to use this bait and number of casts.',
-  'fishing.closed':
-    'Fishing is closed for now. Please come back later.',
+  'fishing.closed': 'Fishing is closed for now. Please come back later.',
   'fishing.runtimeUnavailable': 'The pond is getting ready. Please try again later.',
   'fishing.pending.title': 'Your catch is on its way',
   'fishing.pending.body': 'Please wait for your results before casting again.',
@@ -82,8 +81,7 @@ const en = {
   'fishing.result.entry': 'Entry total',
   'fishing.result.payout': 'Credits received',
   'fishing.result.balance': 'Resulting balance',
-  'fishing.result.more':
-    'More catches are waiting to be shown next.',
+  'fishing.result.more': 'More catches are waiting to be shown next.',
   'fishing.result.ackWaiting': 'The complete result is shown. Marking it viewed…',
   'fishing.result.ackFailed':
     'This result could not be marked viewed. It remains visible and its settlement is unchanged.',
@@ -131,8 +129,7 @@ const en = {
     'Check your bait, number of casts, and total price. You can start while fishing is open.',
   'linklink.eyebrow': 'LinkLink',
   'linklink.title': 'Find a pair, draw a path',
-  'linklink.description':
-    'Match identical pictures and clear the board before time runs out.',
+  'linklink.description': 'Match identical pictures and clear the board before time runs out.',
   'linklink.playing': 'Playing',
   'linklink.spec': '{{spec}} board',
   'linklink.seconds': '{{seconds}} second time limit',
@@ -140,7 +137,7 @@ const en = {
   'linklink.specClosed': 'This size is closed',
   'linklink.startReview': 'Review paid start',
   'linklink.startConsequences':
-    'Starting charges the displayed price once. An existing active board is restored with no second charge.',
+    'Confirm to pay the displayed ticket price and start the timer. Leaving the page does not pause the game or refund the ticket.',
   'linklink.start': 'Start {{spec}}',
   'linklink.starting': 'Starting or restoring…',
   'linklink.active': 'Active board',
@@ -196,11 +193,12 @@ const en = {
     'Abandoning ends that board without a refund and without a performance score. You must confirm first; a later board uses its own displayed price.',
   'rps.eyebrow': 'Three-player RPS',
   'rps.title': 'Three players, one showdown',
-  'rps.description':
-    'Three players, three gestures. Read the table and make your move.',
+  'rps.description': 'Three players, three gestures. Read the table and make your move.',
   'rps.tutorial.title': 'How this table works',
-  'rps.tutorial.1': 'Choose quick, standard, or deathmatch. The game begins when three players join.',
-  'rps.tutorial.2': 'Pick a gesture before the timer runs out. Everyone reveals their choice together.',
+  'rps.tutorial.1':
+    'Choose quick, standard, or deathmatch. The game begins when three players join.',
+  'rps.tutorial.2':
+    'Pick a gesture before the timer runs out. Everyone reveals their choice together.',
   'rps.tutorial.3': 'View the complete result here before joining another RPS match.',
   'rps.tutorial.next': 'Next',
   'rps.tutorial.skip': 'Skip for now',
@@ -224,8 +222,7 @@ const en = {
     'Deathmatch uses all your available credits. You can lose the full amount. Confirm when you are ready to join.',
   'rps.deathmatchConfirm': 'I understand; join deathmatch',
   'rps.pendingQueue': 'Waiting for two other players…',
-  'rps.pendingQueuePrivacy':
-    'The game will begin automatically once three players are matched.',
+  'rps.pendingQueuePrivacy': 'The game will begin automatically once three players are matched.',
   'rps.cancelQueue': 'Leave queue and return the entry amount',
   'rps.match.title': 'Live match',
   'rps.phase.gesture': 'Choose a gesture',
@@ -389,7 +386,8 @@ const zh: Record<CopyKey, string> = {
   'common.maintenanceContinuation':
     '维护已开启。请保持本页打开；离开、刷新或失去连接后可能无法继续。',
   'common.anonymous': '在排行榜中匿名',
-  'common.anonymousHelp': '适用于所有游戏排行榜。关闭后将展示你的昵称和头像。',
+  'common.anonymousHelp':
+    '适用于所有游戏排行榜。关闭后将展示你的昵称和头像。三人猜拳对局等强制公开身份的场景中，其他玩家仍会看到你的昵称和头像。',
   'common.rulesButton': '玩法说明',
   'common.closeRules': '关闭玩法说明',
   'center.eyebrow': '游戏小馆',
@@ -488,8 +486,7 @@ const zh: Record<CopyKey, string> = {
   'fishing.rules.scoresTitle': '收获榜',
   'fishing.rules.scoresBody': '十连中的每次收获都可以计入收获榜，全部渔获都会计入总收获。',
   'fishing.rules.startTitle': '开始前确认',
-  'fishing.rules.startBody':
-    '请先确认鱼饵、抛竿次数和总价，开放期间即可开始垂钓。',
+  'fishing.rules.startBody': '请先确认鱼饵、抛竿次数和总价，开放期间即可开始垂钓。',
   'linklink.eyebrow': '连连看',
   'linklink.title': '找相同，连成对',
   'linklink.description': '配对相同图案，在时间用完前消除整个棋盘。',
@@ -499,8 +496,7 @@ const zh: Record<CopyKey, string> = {
   'linklink.price': '{{amount}} 积分',
   'linklink.specClosed': '该规格已关闭',
   'linklink.startReview': '确认付费开始',
-  'linklink.startConsequences':
-    '开始时只扣显示的门票一次；若已有进行中的棋盘，将直接恢复且不会再次扣费。',
+  'linklink.startConsequences': '确认后扣除下方门票并开始计时。离开页面后计时继续，门票不退还。',
   'linklink.start': '开始 {{spec}}',
   'linklink.starting': '正在开始或恢复…',
   'linklink.active': '进行中的棋盘',

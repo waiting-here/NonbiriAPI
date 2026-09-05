@@ -10,6 +10,7 @@ interface ConfirmDialogProps {
   busy?: boolean;
   confirmDisabled?: boolean;
   danger?: boolean;
+  showClose?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
   children?: ReactNode;
@@ -27,6 +28,7 @@ export function ConfirmDialog({
   busy = false,
   confirmDisabled = false,
   danger = false,
+  showClose = false,
   onConfirm,
   onCancel,
   children,
@@ -48,7 +50,8 @@ export function ConfirmDialog({
   useEffect(() => {
     if (open) {
       if (!previousActiveRef.current) {
-        previousActiveRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        previousActiveRef.current =
+          document.activeElement instanceof HTMLElement ? document.activeElement : null;
       }
       const dialog = dialogRef.current;
       if (dialog) {
@@ -135,7 +138,20 @@ export function ConfirmDialog({
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
       >
-        <h2 id={titleId}>{title}</h2>
+        <div className="dialog-title-row">
+          <h2 id={titleId}>{title}</h2>
+          {showClose ? (
+            <button
+              type="button"
+              className="btn btn-quiet dialog-close"
+              aria-label={t('common.close')}
+              disabled={busy}
+              onClick={onCancel}
+            >
+              ×
+            </button>
+          ) : null}
+        </div>
         <p id={descriptionId}>{description}</p>
         {children ? <div className="dialog-body">{children}</div> : null}
         <div className="dialog-actions nb-dialog-actions">
