@@ -16,7 +16,11 @@ function ActivitiesContent() {
   const session = useUserSession();
   const activities = useActivities();
   const accountID = session.data?.user.id;
-  const stream = useActivityAccountEvents(Boolean(activities.data && accountID), accountID ?? '');
+  const stream = useActivityAccountEvents(
+    Boolean(activities.data && accountID && !session.isFetching && !session.error),
+    accountID ?? '',
+    session.dataUpdatedAt,
+  );
 
   return (
     <div className="page economy-page economy-activities-page">

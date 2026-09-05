@@ -1,15 +1,55 @@
 package accountstream
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+func TestStreamIdlePeriodDoesNotExpireHTTP2WriteDeadline(t *testing.T) {
+	hub, _ := newTestHub(t, newTestAuthority(1), func(config *hubConfig) {
+		config.heartbeat = 150 * time.Millisecond
+		config.writeTimeout = 30 * time.Millisecond
+	})
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		subscription, err := hub.Subscribe(r.Context(), SubscribeRequest{AccountID: 1, Channels: []Channel{ChannelActivities}})
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		_ = subscription.Stream(r.Context(), w)
+	}))
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
+	response, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.ProtoMajor != 2 {
+		t.Fatalf("protocol=%s", response.Proto)
+	}
+	scanner := bufio.NewScanner(response.Body)
+	for heartbeats := 0; heartbeats < 2; {
+		if !scanner.Scan() {
+			t.Fatalf("stream closed between writes: %v", scanner.Err())
+		}
+		if scanner.Text() == ": heartbeat" {
+			heartbeats++
+		}
+	}
+}
 
 type streamWriter struct {
 	mu      sync.Mutex
