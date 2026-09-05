@@ -4,11 +4,18 @@ import { gameRequest } from '../common/request';
 import {
   normalizeLinkLinkCurrent,
   normalizeLinkLinkLease,
+  normalizeLinkLinkMatch,
   normalizeLinkLinkState,
   normalizeLinkLinkSummary,
   shouldApplyLinkLinkReplacement,
 } from './normalize';
-import type { LinkLinkCurrent, LinkLinkMatchIntent, LinkLinkState, LinkLinkSummary } from './types';
+import type {
+  LinkLinkCurrent,
+  LinkLinkMatchIntent,
+  LinkLinkState,
+  LinkLinkSummary,
+  LinkLinkMatchResult,
+} from './types';
 import type { LinkLinkSpec } from '../common/types';
 
 export const linkLinkKeys = { current: ['user', 'games', 'linklink', 'current', 'beta1'] as const };
@@ -38,9 +45,7 @@ export async function startLinkLink(
     );
   return state;
 }
-export async function matchLinkLink(
-  intent: LinkLinkMatchIntent,
-): Promise<LinkLinkState | LinkLinkSummary> {
+export async function matchLinkLink(intent: LinkLinkMatchIntent): Promise<LinkLinkMatchResult> {
   const response = await gameRequest<unknown>(
     `/api/games/linklink/sessions/${encodeURIComponent(intent.sessionID)}/matches`,
     {
@@ -51,21 +56,11 @@ export async function matchLinkLink(
         expected_revision: intent.expectedRevision,
         first: intent.first,
         second: intent.second,
+        include_path: true,
       },
     },
   );
-  const root = response.data as Record<string, unknown> | null;
-  const result =
-    root && Object.prototype.hasOwnProperty.call(root, 'terminal_reason')
-      ? normalizeLinkLinkSummary(response.data)
-      : normalizeLinkLinkState(response.data);
-  if (result.sessionID !== intent.sessionID)
-    throw new ApiError(
-      'invalid_response',
-      'The server returned a different LinkLink session.',
-      response.status,
-    );
-  return result;
+  return normalizeLinkLinkMatch(response.data, intent);
 }
 export async function abandonLinkLink(
   sessionID: string,

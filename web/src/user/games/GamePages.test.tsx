@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installJsonFetchFixtures, renderWithProviders } from '../../../test/unit/support';
 import { userKeys } from '../data';
 import { GameCenter } from './GameCenter';
@@ -85,7 +85,46 @@ function rpsPendingResult(mode = 'standard') {
   };
 }
 
+function mockResultVisibility(initial = true) {
+  const targets = new Map<Element, IntersectionObserverCallback>();
+  let visible = initial;
+  const emit = (target: Element, callback: IntersectionObserverCallback) =>
+    callback(
+      [
+        {
+          target,
+          isIntersecting: visible,
+          intersectionRatio: visible ? 1 : 0,
+        } as IntersectionObserverEntry,
+      ],
+      {} as IntersectionObserver,
+    );
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      constructor(private callback: IntersectionObserverCallback) {}
+      observe(target: Element) {
+        targets.set(target, this.callback);
+        queueMicrotask(() => {
+          if (targets.has(target)) emit(target, this.callback);
+        });
+      }
+      disconnect() {
+        for (const [target, callback] of targets)
+          if (callback === this.callback) targets.delete(target);
+      }
+    },
+  );
+  return (next: boolean) => {
+    visible = next;
+    for (const [target, callback] of targets) emit(target, callback);
+  };
+}
+
 describe('beta.1 game pages', () => {
+  beforeEach(() => {
+    mockResultVisibility();
+  });
   afterEach(() => vi.unstubAllGlobals());
 
   it('renders three center cards with open, partial, and explicitly closed availability', async () => {
@@ -104,7 +143,9 @@ describe('beta.1 game pages', () => {
     expect(screen.getByText('Closed')).toBeInTheDocument();
     expect(screen.getAllByRole('link')).toHaveLength(3);
     const heroes = Array.from(
-      rendered.container.querySelectorAll<HTMLImageElement>('.game-center-card__hero img.game-hero'),
+      rendered.container.querySelectorAll<HTMLImageElement>(
+        '.game-center-card__hero img.game-hero',
+      ),
     );
     expect(heroes.map((hero) => hero.getAttribute('src'))).toEqual([
       expect.stringMatching(/fishing\.webp$/),
@@ -359,7 +400,7 @@ describe('beta.1 game pages', () => {
     expect(rules).toHaveTextContent('先选鱼饵');
     await rendered.user.click(within(rules).getByRole('button', { name: '关闭玩法说明' }));
     expect(screen.queryByRole('dialog', { name: '池塘垂钓怎么玩' })).not.toBeInTheDocument();
-    expect(await screen.findAllByText('银鱼')).toHaveLength(2);
+    expect(await screen.findByRole('list')).toHaveTextContent('银鱼');
     expect(screen.getByText('12 厘米')).toBeInTheDocument();
     await waitFor(() =>
       expect(
@@ -372,7 +413,7 @@ describe('beta.1 game pages', () => {
     );
   });
 
-  it('keeps the Fishing result visible after an ACK failure and removes it after a safe retry', async () => {
+  it('keeps the Fishing result visible after an ACK failure and unlocks another batch after retry', async () => {
     vi.stubGlobal('matchMedia', (query: string) => ({
       matches: query === '(prefers-reduced-motion: reduce)',
       media: query,
@@ -441,13 +482,19 @@ describe('beta.1 game pages', () => {
       route: '/games/fishing',
       role: 'user',
     });
-    expect(await screen.findAllByText('Whitebait')).toHaveLength(2);
+    await waitFor(() => expect(screen.getByRole('list')).toHaveTextContent('Whitebait'));
     const retry = await screen.findByRole('button', { name: 'Retry marking as viewed' });
     expect(screen.getByText(/result could not be marked viewed/i)).toBeInTheDocument();
-    expect(screen.getAllByText('Whitebait')).toHaveLength(2);
+    expect(screen.getByRole('list')).toHaveTextContent('Whitebait');
     expect(screen.getByRole('button', { name: 'Start this batch' })).toBeEnabled();
     await rendered.user.click(retry);
-    await waitFor(() => expect(screen.queryAllByText('Whitebait')).toHaveLength(0));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Retry marking as viewed' }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole('list')).toHaveTextContent('Whitebait');
+    expect(screen.getByRole('button', { name: 'Start this batch' })).toBeEnabled();
     expect(attempts).toBe(2);
   });
 
@@ -522,7 +569,7 @@ describe('beta.1 game pages', () => {
       .find((button) => !(button as HTMLButtonElement).disabled);
     expect(replay).toBeDefined();
     await rendered.user.click(replay!);
-    expect(await screen.findAllByText('Whitebait')).toHaveLength(2);
+    await waitFor(() => expect(screen.getByRole('list')).toHaveTextContent('Whitebait'));
     const calls = fetchMock.mock.calls.filter(
       ([input, init]) =>
         new URL(String(input), window.location.origin).pathname ===
@@ -551,10 +598,12 @@ describe('beta.1 game pages', () => {
     });
     const cells = await screen.findAllByRole('gridcell');
     expect(cells).toHaveLength(48);
-    expect(cells[0]).toHaveTextContent('1');
+    expect(within(cells[0]).getByRole('img', { name: 'Apple' })).toBeInTheDocument();
+    expect(cells[0]).toHaveTextContent('');
     await waitFor(() => expect(cells[0]).toBeEnabled());
     await rendered.user.click(cells[0]);
-    expect(screen.getByText(/game will check whether they can connect/i)).toBeInTheDocument();
+    expect(screen.getByText('Connect identical pictures with no more than two turns.')).toBeInTheDocument();
+    expect(cells[0]).toHaveAttribute('aria-selected', 'true');
     await rendered.user.click(screen.getByRole('button', { name: 'How to play' }));
     const rules = screen.getByRole('dialog', { name: 'How LinkLink works' });
     expect(rules).toHaveTextContent('Clear every pair');
@@ -697,9 +746,7 @@ describe('beta.1 game pages', () => {
     expect(screen.getAllByText('Hidden until reveal')).toHaveLength(3);
     expect(screen.getByText(/A very long opponent name/)).toBeInTheDocument();
     expect(screen.getByText('Rock 4 · 40%')).toBeInTheDocument();
-    expect(
-      screen.getByText(/choices made automatically after a timeout/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/choices made automatically after a timeout/i)).toBeInTheDocument();
     expect(screen.getByText('Automatic actions: 2')).toBeInTheDocument();
     expect(screen.getByText('Current base stake').parentElement).toHaveTextContent('1 credits');
     expect(screen.getByText('Completed base rounds').parentElement).toHaveTextContent('1');
@@ -972,7 +1019,8 @@ describe('beta.1 game pages', () => {
     expect(within(dialog).getByRole('button', { name: /join deathmatch/i })).toBeEnabled();
   });
 
-  it('keeps a complete private RPS result visible until its post-render ACK succeeds', async () => {
+  it('ACKs a complete RPS result only after it becomes visible', async () => {
+    const setVisible = mockResultVisibility(false);
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
       window.setTimeout(() => callback(performance.now()), 0),
     );
@@ -1005,6 +1053,10 @@ describe('beta.1 game pages', () => {
     await renderWithProviders(<RPSGame />, { station: 'user', route: '/games/rps', role: 'user' });
     expect(await screen.findByRole('heading', { name: 'Quick' })).toBeInTheDocument();
     expect(screen.getByText('Identity-hidden seat')).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).endsWith('/pending-result/ack')),
+    ).toBe(false);
+    act(() => setVisible(true));
     await waitFor(() =>
       expect(
         fetchMock.mock.calls.some(
@@ -1080,7 +1132,7 @@ describe('beta.1 game pages', () => {
     act(() => {
       rendered.queryClient.setQueryData(rpsKeys.state, normalizeRPSHome(rpsPendingResult()));
     });
-    expect(await screen.findByText('Pending result')).toBeInTheDocument();
+    expect(await screen.findByText('Match result')).toBeInTheDocument();
     expect(screen.getByText(/Maintenance is active/i)).toBeInTheDocument();
     await waitFor(() =>
       expect(
@@ -1163,7 +1215,7 @@ describe('beta.1 game pages', () => {
       );
     });
     expect(await screen.findByText('Maintenance')).toBeInTheDocument();
-    expect(screen.queryByText('Pending result')).not.toBeInTheDocument();
+    expect(screen.queryByText('Match result')).not.toBeInTheDocument();
     await new Promise((resolve) => window.setTimeout(resolve, 20));
     expect(
       fetchMock.mock.calls.some(

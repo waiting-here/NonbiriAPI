@@ -714,6 +714,7 @@ test('administrator charity provenance grouping and report lineage expose safe d
   });
 
   await page.goto(`${ADMIN_ORIGIN}/charity`);
+  await page.getByRole('tab', { name: 'Browse by source' }).click();
   await expect(page.getByText('【Mainstream subscription】Hosted channel')).toBeVisible();
   await expect(page.getByText('safe-head…safe-tail')).toBeVisible();
   await expect(page.getByText('Safe administrative note')).toHaveCount(0);

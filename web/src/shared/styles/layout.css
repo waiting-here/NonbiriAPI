@@ -1779,7 +1779,7 @@ tr:first-child td {
   right: 0;
   bottom: 0;
   z-index: 61;
-  width: min(26rem, 92vw);
+  width: min(56rem, 96vw);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 1.2rem;
@@ -1789,6 +1789,11 @@ tr:first-child td {
 }
 
 .log-drawer-header {
+  position: sticky;
+  top: -1.2rem;
+  z-index: 2;
+  padding-block: 0.9rem;
+  background: var(--nb-color-surface);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1808,7 +1813,7 @@ tr:first-child td {
 
 .log-detail-row {
   display: grid;
-  grid-template-columns: minmax(7.5rem, auto) 1fr;
+  grid-template-columns: 10rem minmax(0, 1fr);
   gap: 0.2rem 0.8rem;
   font-size: 0.86rem;
 }
@@ -1818,8 +1823,74 @@ tr:first-child td {
 }
 
 .log-detail-row dd {
+  min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.log-detail-row--wide {
+  grid-template-columns: minmax(0, 1fr);
+  padding-top: 1rem;
+  gap: 0.6rem;
+}
+.log-attempts {
+  display: grid;
+  gap: 1rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.log-attempt {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--nb-color-border);
+  border-radius: 0.8rem;
+  background: var(--nb-color-surface-alt);
+}
+.log-attempt-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+.log-attempt h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+.log-attempt dl {
+  display: grid;
+  gap: 0.7rem;
+  margin: 1rem 0 0;
+}
+.log-attempt dl > div {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: 0.25rem 1rem;
+}
+.log-attempt dt {
+  color: var(--nb-color-text-muted);
+}
+.log-attempt dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.log-attempt-notice {
+  margin: 0.7rem 0 0;
+  color: var(--nb-color-text-muted);
+  line-height: 1.65;
+}
+.log-attempt-diagnostic {
+  white-space: pre-wrap;
+}
+@media (max-width: 38rem) {
+  .log-attempt dl > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .log-attempt {
+    padding: 0.75rem;
+  }
 }
 
 .log-drawer-diagnostics {

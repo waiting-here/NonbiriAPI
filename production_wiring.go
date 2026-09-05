@@ -9,6 +9,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
+	"github.com/waiting-here/NonbiriAPI/internal/antiabuse"
 	"github.com/waiting-here/NonbiriAPI/internal/auth"
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
@@ -16,6 +17,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
+	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
@@ -35,6 +37,7 @@ import (
 type publicForwardRuntime struct {
 	service   *forward.Service
 	flow      *flowcontrol.Controller
+	abuse     *antiabuse.Service
 	lifecycle *lifecyclegate.Gate
 	handler   http.Handler
 }
@@ -51,6 +54,7 @@ func newPublicForwardRuntime(
 	debugHub *debug.Hub,
 	maintenanceGate *maintenance.Gate,
 	rpm ratelimit.RPMConfig,
+	onBan ...func(int64),
 ) (*publicForwardRuntime, error) {
 	if store == nil || vault == nil || claims == nil || charityService == nil || charityRoutes == nil ||
 		resourcesRepository == nil || registry == nil || outboundBackend == nil || debugHub == nil || maintenanceGate == nil {
@@ -60,15 +64,38 @@ func newPublicForwardRuntime(
 	if err != nil {
 		return nil, fmt.Errorf("create caller lifecycle gate: %w", err)
 	}
-	flow, err := flowcontrol.New(flowcontrol.Config{RPM: rpm, UserLimits: flowcontrol.DBUserLimitResolver(store)})
+	var abuse *antiabuse.Service
+	flow, err := flowcontrol.New(flowcontrol.Config{RPM: rpm, UserLimits: flowcontrol.DBUserLimitResolver(store),
+		OnDenied: func(ctx context.Context, userID int64, reason ratelimit.RPMReason) {
+			if abuse != nil {
+				abuse.RPMDenied(ctx, userID, reason)
+			}
+		},
+	})
 	if err != nil {
 		_ = lifecycle.Close()
 		return nil, fmt.Errorf("create forward flow controller: %w", err)
 	}
 	fail := func(err error) (*publicForwardRuntime, error) {
+		_ = abuse.Close()
 		_ = flow.Close()
 		_ = lifecycle.Close()
 		return nil, err
+	}
+	var invalidate func(int64)
+	if len(onBan) > 0 {
+		invalidate = onBan[0]
+	}
+	abuse, err = antiabuse.NewService(antiabuse.ServiceConfig{Database: store.DB(), Rejections: claims, OnBan: invalidate,
+		BeginUserRetirement: func(ctx context.Context, userID int64) (antiabuse.Retirement, error) {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			return flow.BeginUserRetirement(userID)
+		},
+	})
+	if err != nil {
+		return fail(fmt.Errorf("create request abuse prevention: %w", err))
 	}
 	claimRail, err := forward.NewClaimServiceAdapter(claims)
 	if err != nil {
@@ -103,7 +130,7 @@ func newPublicForwardRuntime(
 		connectors = append(connectors, instance)
 	}
 	service, err := forward.NewService(forward.Config{
-		Personal: personal, Charity: charity, Claims: claimRail, CharityCharges: charityService,
+		Personal: personal, Charity: charityPolicyRouter{CharityRouter: charity, abuse: abuse}, Claims: claimRail, CharityCharges: charityService,
 		Debug: debugHub, Registry: registry, Connectors: connectors, Safety: safety,
 	})
 	if err != nil {
@@ -122,8 +149,31 @@ func newPublicForwardRuntime(
 	}
 	handler := maintenance.GateMiddleware(maintenanceGate,
 		callerKey.Wrap(flowMiddleware.Wrap(forward.NewHandler(service))))
-	return &publicForwardRuntime{service: service, flow: flow, lifecycle: lifecycle, handler: handler}, nil
+	return &publicForwardRuntime{service: service, flow: flow, abuse: abuse, lifecycle: lifecycle, handler: handler}, nil
 }
+
+type charityPolicyRouter struct {
+	forward.CharityRouter
+	abuse *antiabuse.Service
+}
+
+func (router charityPolicyRouter) Preflight(ctx context.Context, userID int64, model string, request *openai.ChatRequest, now int64) (forward.CharityPreflight, error) {
+	value, err := router.CharityRouter.Preflight(ctx, userID, model, request, now)
+	var short *charityrouting.ContentTooShortError
+	if !errors.As(err, &short) {
+		return value, err
+	}
+	rejection, recordErr := router.abuse.RecordShort(ctx, userID, model, short.Actual)
+	if recordErr != nil {
+		return forward.CharityPreflight{}, recordErr
+	}
+	if rejection == nil {
+		return router.CharityRouter.Preflight(ctx, userID, model, request, now)
+	}
+	return forward.CharityPreflight{}, rejection
+}
+
+var _ forward.CharityRouter = charityPolicyRouter{}
 
 func (runtime *publicForwardRuntime) BeginShutdown() {
 	if runtime != nil && runtime.lifecycle != nil {
@@ -140,6 +190,7 @@ func (runtime *publicForwardRuntime) Close() error {
 		failures = append(failures, runtime.service.Close())
 	}
 	if runtime.flow != nil {
+		failures = append(failures, runtime.abuse.Close())
 		failures = append(failures, runtime.flow.Close())
 	}
 	if runtime.lifecycle != nil {

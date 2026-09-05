@@ -150,6 +150,7 @@ function EconomyCard({ accountId }: { accountId: string }) {
     <section className="core-card">
       <div className="core-card__header">
         <h2>{t('home.economyTitle')}</h2>
+        <Link className="btn btn-secondary" to="/credits">{t('home.creditHistory')}</Link>
       </div>
       {me.isPending ? (
         <CoreLoading compact />

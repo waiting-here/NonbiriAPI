@@ -1,4 +1,6 @@
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
+import { useCreditCopy } from '../features/credits/copy';
 import { ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { UserPageGate } from '../components/UserPageGate';
 import { useUserSession } from '../data';
@@ -13,6 +15,7 @@ import '../features/economy/economy.css';
 
 function ActivitiesContent() {
   const { t } = useTranslation();
+  const { copy } = useCreditCopy();
   const session = useUserSession();
   const activities = useActivities();
   const accountID = session.data?.user.id;
@@ -29,6 +32,7 @@ function ActivitiesContent() {
         title={t('user.activities.title')}
         description={t('user.activities.description')}
         icon="activities"
+        actions={<Link className="btn btn-secondary" to="/credits">{copy.title}</Link>}
       />
       {activities.isPending && !activities.data ? <LoadingState /> : null}
       {activities.error && !activities.data ? (

@@ -89,6 +89,8 @@ The request is the OpenAI Chat Completions shape, bounded to 1 MiB. `model` is a
 
 Admission order is fixed: CallerKey/account, one user-wide concurrency permit, global/user RPM, strict body/model policy, Debug interception, model/capability resolution, candidate selection, credential/egress checks, then dispatch. A refused concurrency permit creates no RPM hit, candidate access, reservation, or penalty. One logical request retains one permit and one five-minute aggregate deadline across retries and streaming.
 
+Short charity requests return `400 content_too_short` with the actual and minimum character counts. The server applies the current optional penalty, temporary ban, and charity suspension settings before any reservation or upstream attempt. Their rejection log and any credit penalty commit together; `X-Request-ID` identifies that log. Rejected requests count once with zero upstream tokens. Only personal RPM-limit denials contribute to the separate automatic RPM-ban window. Successfully intercepted Debug dry runs retain their zero-accounting and zero-log behavior.
+
 Personal models use `ordered` or `random` routing. Request capability filtering happens before a credential is decrypted. Silent retry may advance only while no response-body byte has been committed. A clean EOF is never success: non-streaming requires a complete valid response, and streaming requires a valid protocol terminator and `[DONE]`. Client disconnect cancels upstream work.
 
 `openai-compatible` appends `/chat/completions` to the configured versioned base. `anthropic-compatible` appends `/messages`, translates the strict supported subset, and sends only the required Anthropic key/version/content headers. The Anthropic subset supports system/developer and user/assistant text, HTTPS or bounded image data parts, OpenAI function tools and matched tool results, `temperature`, `top_p`, stop strings, tool choice, parallel-tool indication, and streaming usage. Lossy or unsupported fields make that candidate incompatible; they are never silently dropped. If neither token-limit field is supplied, Anthropic uses the nullable administrator default or the built-in 65,536 fallback. The fallback is not a cap on explicit values.
@@ -168,6 +170,14 @@ All routes in this section require a user session unless marked anonymous.
 
 Provider/model parts are bounded opaque strings and form the external `provider/model` name. `[公益]` is reserved. Binding DTOs contain only owner-safe endpoint/key display data, Connector type, upstream model ID, and order.
 
+### 3.3 Credit history
+
+`GET /api/credits/history` returns the signed-in user's credit history. Optional single-value filters are `category=checkin|welfare|thursday|fishing|linklink|rps|api|charity|donation|admin|penalty`, `direction=income|expense`, and Unix-second `from,to` using `[from,to)`. `page` is a positive decimal integer, default 1; `page_size` is 20, 50, or 100, default 20. An out-of-range page returns the last page.
+
+The response is `{data:[{operation_id,line,kind,delta,created_at,request_id}],page,page_size,total,total_pages,anchor,current_balance,server_now}`. Amounts and page/count fields are exact decimal strings; `line`, `page_size`, and times are bounded numbers. Only nonzero changes to the current user's wallet appear. Reasons use the stable ledger `kind`; private management notes, actor identities, source IDs, other wallets, and historical post-balances are omitted. `current_balance` is the balance at this read, including any changes after the browsing anchor.
+
+Pass the returned nullable `anchor` operation ID to subsequent pages to keep newer entries from shifting the result set. The server checks that the anchor belongs to this wallet. Omit it to refresh. Related `request_id` is present only for the caller's own API/charity entries and short-request penalties whose request log is still ordinarily viewable; donor rewards always return null. Expired logs do not remove credit history. The user page is `/credits`; `/logs?request_id=...` opens the existing owner-checked log detail. This read creates no new stored data and leaves export/deletion/retention rules unchanged.
+
 ## 4. Donations, charity capability, and public reports
 
 ### 4.1 Donations and charity models
@@ -183,6 +193,8 @@ Provider/model parts are bounded opaque strings and form the external `provider/
 | `GET /api/charity/models` | `{state,models,donation_intake,server_now}`; accepts no query parameters. |
 
 Each donation key has immutable `authorized_expires_at` and an effective `expires_at`, equal at creation. A reviewer may shorten the effective expiry or restore it only up to the donor's authorization; an unlimited effective value is permitted only when the authorization is unlimited. One key expiring removes only that key's membership and bindings and blocks new claims. The donation becomes expired only when its last live key ends. Accepted claims and reservations complete normally.
+
+Management projections identify a reviewer with `role: admin|steward`. A manual review may have an empty reason. Automatic approval has no reviewer and uses an empty reason.
 
 Every owner-visible key carries `safe_source`: a custom Connector/base URL or a mainstream channel/name/Connector/base URL. Internal source IDs, channel category/revision, report fingerprints, secrets, and management notes are excluded. A donation containing only keys from one immutable mainstream channel is approved atomically at creation. A fully custom donation remains pending. Mixed custom/mainstream or multiple-channel submissions are `invalid_request`.
 
@@ -236,9 +248,11 @@ A start creates all 1 or 10 CSPRNG outcomes and the reservation atomically. A fa
 | --- | --- |
 | `POST /api/games/linklink/sessions` | Idempotency key plus `{spec}`; 201 new game or 200 existing active game. |
 | `GET /api/games/linklink/session` | `null`, active `LinkLinkState`, or the latest retained `LinkLinkSummary`. |
-| `POST /api/games/linklink/sessions/{id}/matches` | `{expected_revision,first:{row,col},second:{row,col}}`; returns authoritative state. |
+| `POST /api/games/linklink/sessions/{id}/matches` | `{expected_revision,first:{row,col},second:{row,col},include_path?:boolean}`; returns authoritative state or terminal summary. |
 | `POST /api/games/linklink/sessions/{id}/abandon` | `{expected_revision,confirmation}`; returns terminal summary. |
 | `POST /api/games/linklink/sessions/{id}/lease` | `{lease_id}`; returns the lease expiry. |
+
+With `include_path:true`, a successful match also returns `match_path:[{row,col},…]`: two to four vertices of the server-approved connection, starting at `first` and ending at `second`. Coordinates can use the single outer ring (row −1 through rows, column −1 through columns). This optional field is retained only in the existing idempotency receipt and is replayed unchanged. Omitted or false preserves the original response shape and request identity. Current, start, and abandon responses do not include a path.
 
 The board is server-generated and solvable. A legal connection travels through empty cells and at most one perimeter ring with no more than two turns. Completion, timeout, and abandonment delete the active board/lease in the terminal transaction and retain only a 30-day summary. The absolute deadline does not move after ordinary disconnect or process downtime.
 
@@ -412,7 +426,7 @@ Account deletion is synchronous. It revokes credentials, removes private project
 
 Maintenance mode rejects new public inference, OAuth admission, ordinary pages, reports, activities, queues, and games. Health, safe configuration, logout, administrator control, workers, and work already accepted before the switch remain available. A game continuation additionally requires the same user/session and a valid pre-existing lease; it cannot start a game, queue, list, or open a new lease after losing that authority.
 
-Recovery runs before listeners open. Accepted requests, donation claims, report indexing/deletion, Thursday settlement, Fishing settlement, LinkLink deadlines, and RPS matching/phases/terminal processing resume from persisted state and exact-once operation identities. Non-terminal records are not removed by age. SQLite WAL/checkpoint restart is supported for a valid Generation 2 database; cross-version recovery is outside this release.
+Recovery runs before listeners open. Recovery of unfinished API requests drains once per process before accepting traffic; periodic maintenance cannot settle live requests as abandoned after a restart. Accepted requests, donation claims, report indexing/deletion, Thursday settlement, Fishing settlement, LinkLink deadlines, and RPS matching/phases/terminal processing resume from persisted state and exact-once operation identities. Non-terminal records are not removed by age. SQLite WAL/checkpoint restart is supported for a valid Generation 2 database; cross-version recovery is outside this release.
 
 Principal retention periods are:
 

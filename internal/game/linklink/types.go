@@ -124,6 +124,7 @@ func (result CurrentResult) MarshalJSON() ([]byte, error) {
 type Result struct {
 	State            *State
 	Summary          *Summary
+	MatchPath        []Coordinate
 	HTTPStatus       int
 	IdempotentReplay bool
 }
@@ -153,6 +154,7 @@ type MatchInput struct {
 	ExpectedRevision string
 	First            Coordinate
 	Second           Coordinate
+	IncludePath      bool
 	IdempotencyKey   string
 }
 

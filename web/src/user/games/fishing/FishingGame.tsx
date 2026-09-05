@@ -100,8 +100,20 @@ function FishingRules({ open, onClose }: { readonly open: boolean; readonly onCl
   );
 }
 
-function FishingStage({ phase, level4 }: { readonly phase: string; readonly level4: boolean }) {
-  const { text } = useGameCopy();
+function FishingStage({
+  phase,
+  level4,
+  catchResult,
+}: {
+  readonly phase: string;
+  readonly level4: boolean;
+  readonly catchResult: FishingBatchResult | null;
+}) {
+  const { text, language } = useGameCopy();
+  const rarity = ['junk', 'small', 'regular', 'big', 'giant', 'treasure', 'legend'];
+  const highlight = catchResult?.outcomes.reduce((best, outcome) =>
+    rarity.indexOf(outcome.tier) > rarity.indexOf(best.tier) ? outcome : best,
+  );
   return (
     <div className={`fishing-stage${level4 ? ' fishing-stage--l4' : ''}`} data-phase={phase}>
       <svg
@@ -116,6 +128,26 @@ function FishingStage({ phase, level4 }: { readonly phase: string; readonly leve
           <ellipse cx="598" cy="388" rx="58" ry="12" />
         </g>
       </svg>
+      {highlight ? (
+        <div
+          className={`fishing-catch-celebration fishing-rarity--${highlight.tier}`}
+          key={`${catchResult?.batchID}:${highlight.ordinal}`}
+        >
+          <div className="fishing-catch-halo" aria-hidden="true" />
+          <div className="fishing-catch-sparks" aria-hidden="true">
+            {Array.from({ length: 8 }, (_, index) => (
+              <i
+                key={index}
+                style={{ '--spark-angle': `${index * 45}deg` } as React.CSSProperties}
+              />
+            ))}
+          </div>
+          <FishingArtwork
+            itemKey={highlight.speciesKey}
+            label={fishingItemName(highlight.speciesKey, language)}
+          />
+        </div>
+      ) : null}
       <strong className="fishing-stage__label" role="status">
         {text(`fishing.stage.${phase}` as Parameters<typeof text>[0])}
       </strong>
@@ -134,7 +166,7 @@ function ResultPanel({
   readonly result: FishingBatchResult;
   readonly revealed: number;
   readonly hasMore: boolean;
-  readonly ackState: 'idle' | 'sending' | 'failed';
+  readonly ackState: 'idle' | 'sending' | 'failed' | 'viewed';
   readonly onRetryACK: () => void;
   readonly resultRef: React.RefObject<HTMLElement | null>;
 }) {
@@ -154,8 +186,8 @@ function ResultPanel({
         <div className="fishing-outcomes" role="list">
           {result.outcomes.slice(0, revealed).map((outcome) => (
             <article
-              className={`fishing-outcome fishing-outcome--${outcome.tier}`}
-              key={outcome.ordinal}
+              className={`fishing-outcome fishing-outcome--${outcome.tier} fishing-rarity--${outcome.tier}`}
+              key={`${result.batchID}:${outcome.ordinal}`}
               role="listitem"
               data-ordinal={outcome.ordinal}
             >
@@ -164,6 +196,9 @@ function ResultPanel({
                 label={fishingItemName(outcome.speciesKey, language)}
               />
               <div>
+                <span className="fishing-rarity-label">
+                  {text(`fishing.tier.${outcome.tier}` as Parameters<typeof text>[0])}
+                </span>
                 <strong>{fishingItemName(outcome.speciesKey, language)}</strong>
                 <span>
                   {outcome.sizeCM > 0
@@ -335,6 +370,7 @@ export function FishingGame() {
     readonly state: 'sending' | 'failed';
   } | null>(null);
   const [sound, setSound] = useState(false);
+  const [viewedResult, setViewedResult] = useState<FishingBatchResult | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const audioRef = useRef<AudioContext | null>(null);
   const resultRef = useRef<HTMLElement | null>(null);
@@ -355,6 +391,8 @@ export function FishingGame() {
     : 0;
   const ackState =
     result && ackStatus?.batchID === result.batchID ? ackStatus.state : ('idle' as const);
+  const shownResult = result ?? (!pending && effectiveActionState === 'idle' ? viewedResult : null);
+  const shownRevealed = result ? revealed : (shownResult?.outcomes.length ?? 0);
 
   useEffect(
     () => () => {
@@ -399,6 +437,7 @@ export function FishingGame() {
       setAckStatus({ batchID, state: 'sending' });
       try {
         await acknowledgeFishing(batchID);
+        if (result?.batchID === batchID) setViewedResult(result);
         setAckStatus(null);
         await refreshAfterMutation();
         await queryClient.invalidateQueries({
@@ -409,7 +448,7 @@ export function FishingGame() {
         await refetchState();
       }
     },
-    [queryClient, refetchState, refreshAfterMutation],
+    [queryClient, refetchState, refreshAfterMutation, result],
   );
 
   useEffect(() => {
@@ -417,14 +456,12 @@ export function FishingGame() {
       return;
     if (resultRef.current?.querySelectorAll('[data-ordinal]').length !== result.outcomes.length)
       return;
-    ackAttempted.current = result.batchID;
-    let second = 0;
-    const first = requestAnimationFrame(() => {
-      second = requestAnimationFrame(() => void sendACK(result.batchID));
-    });
+    const timer = window.setTimeout(() => {
+      ackAttempted.current = result.batchID;
+      void sendACK(result.batchID);
+    }, 650);
     return () => {
-      cancelAnimationFrame(first);
-      if (second) cancelAnimationFrame(second);
+      window.clearTimeout(timer);
     };
   }, [result, revealed, sendACK]);
 
@@ -620,7 +657,13 @@ export function FishingGame() {
       />
       <div className="fishing-layout">
         <div className="fishing-main">
-          <FishingStage phase={phase} level4={(session.data?.user.effective_level ?? 0) >= 4} />
+          <FishingStage
+            phase={shownResult && shownRevealed === shownResult.outcomes.length ? 'result' : phase}
+            level4={(session.data?.user.effective_level ?? 0) >= 4}
+            catchResult={
+              shownResult && shownRevealed === shownResult.outcomes.length ? shownResult : null
+            }
+          />
           {state.isPending ? <LoadingState label={text('common.loading')} /> : null}
           {state.error ? (
             <ErrorState error={state.error} onRetry={() => void state.refetch()} />
@@ -672,15 +715,15 @@ export function FishingGame() {
               ) : null}
             </Card>
           ) : null}
-          {result ? (
+          {shownResult ? (
             <ResultPanel
-              result={result}
-              revealed={revealed}
+              result={shownResult}
+              revealed={shownRevealed}
               hasMore={authoritative?.hasMoreUnrevealed ?? false}
-              ackState={ackState}
+              ackState={result ? ackState : 'viewed'}
               onRetryACK={() => {
-                ackAttempted.current = result.batchID;
-                void sendACK(result.batchID);
+                ackAttempted.current = shownResult.batchID;
+                void sendACK(shownResult.batchID);
               }}
               resultRef={resultRef}
             />

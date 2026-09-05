@@ -16,3 +16,4 @@ export const test = base.extend<FoundationFixtures>({
 });
 
 export { expect };
+export type { Page } from '@playwright/test';

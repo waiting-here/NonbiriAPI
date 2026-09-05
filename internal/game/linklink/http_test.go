@@ -125,6 +125,17 @@ func TestHTTPRoutesUseOrdinaryStartAndContinuationOnlyForExistingFlow(t *testing
 		t.Fatalf("client authority fields = %d %s", clientRecorder.Code, clientRecorder.Body.String())
 	}
 
+	for _, flag := range []string{"null", "1", `"true"`, "[]"} {
+		invalid := httptest.NewRequest(http.MethodPost, "https://user.example/api/games/linklink/sessions/ignored/matches", strings.NewReader(strings.TrimSuffix(matchBody, "}")+`,"include_path":`+flag+`}`))
+		invalid.SetPathValue("id", state.SessionID)
+		invalid.Header.Set("Idempotency-Key", fixture.key(154))
+		out := httptest.NewRecorder()
+		match(out, invalid, resources.ContinuationUserPrincipal{UserID: userID, SessionBinding: binding})
+		if out.Code != http.StatusBadRequest {
+			t.Fatalf("invalid path flag %s: %d", flag, out.Code)
+		}
+	}
+	matchBody = strings.TrimSuffix(matchBody, "}") + `,"include_path":true}`
 	valid := httptest.NewRequest(http.MethodPost, "https://user.example/api/games/linklink/sessions/ignored/matches", strings.NewReader(matchBody))
 	valid.SetPathValue("id", state.SessionID)
 	valid.Header.Set("Idempotency-Key", fixture.key(154))
@@ -132,6 +143,20 @@ func TestHTTPRoutesUseOrdinaryStartAndContinuationOnlyForExistingFlow(t *testing
 	match(validRecorder, valid, resources.ContinuationUserPrincipal{UserID: userID, SessionBinding: binding})
 	if validRecorder.Code != http.StatusOK || !strings.Contains(validRecorder.Body.String(), `"revision":"2"`) {
 		t.Fatalf("match HTTP = %d %s", validRecorder.Code, validRecorder.Body.String())
+	}
+	var matched struct {
+		MatchPath []Coordinate `json:"match_path"`
+	}
+	if err := json.Unmarshal(validRecorder.Body.Bytes(), &matched); err != nil || len(matched.MatchPath) < 2 || matched.MatchPath[0] != first || matched.MatchPath[len(matched.MatchPath)-1] != second {
+		t.Fatalf("match path=%v err=%v", matched.MatchPath, err)
+	}
+	replay := httptest.NewRequest(http.MethodPost, "https://user.example/api/games/linklink/sessions/ignored/matches", strings.NewReader(matchBody))
+	replay.SetPathValue("id", state.SessionID)
+	replay.Header.Set("Idempotency-Key", fixture.key(154))
+	replayed := httptest.NewRecorder()
+	match(replayed, replay, resources.ContinuationUserPrincipal{UserID: userID, SessionBinding: binding})
+	if replayed.Code != http.StatusOK || replayed.Body.String() != validRecorder.Body.String() {
+		t.Fatalf("match replay changed path: %d %s", replayed.Code, replayed.Body.String())
 	}
 }
 

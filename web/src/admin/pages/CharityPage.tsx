@@ -16,8 +16,11 @@ export function CharityPage() {
   return (
     <div className="page ops-page">
       <PageHeader title={t('admin.charity.title')} description={t('admin.charity.description')} />
-      <CharityManagement frame="admin" onCapabilityLoss={clearAuthority} />
-      <AdminCharityGroupsPanel />
+      <CharityManagement
+        frame="admin"
+        onCapabilityLoss={clearAuthority}
+        sourceGroups={<AdminCharityGroupsPanel />}
+      />
     </div>
   );
 }

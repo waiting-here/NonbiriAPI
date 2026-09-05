@@ -932,8 +932,8 @@ WHERE id=? AND is_admin=0 AND revision=?`, db.EncodeU128(next), now, userID, row
 			return MutationResult[struct{}]{}, classifyDatabaseError("revoke user sessions", err)
 		}
 		keyUpdate, err := tx.ExecContext(ctx, `
-UPDATE caller_keys SET generation=generation+1,key_hash=NULL,display_head='',display_tail='',key_created_at=NULL,updated_at=?
-WHERE user_id=? AND generation<?`, now, userID, int64(math.MaxInt64))
+UPDATE caller_keys SET generation=CASE WHEN key_hash IS NULL THEN generation ELSE generation+1 END,key_hash=NULL,display_head='',display_tail='',key_created_at=NULL,updated_at=?
+WHERE user_id=? AND (key_hash IS NULL OR generation<?)`, now, userID, int64(math.MaxInt64))
 		if err != nil {
 			return MutationResult[struct{}]{}, classifyDatabaseError("revoke caller key", err)
 		}

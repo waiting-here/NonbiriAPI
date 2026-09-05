@@ -26,6 +26,7 @@ import {
 } from './api';
 import { boardWasRearranged, shouldApplyLinkLinkReplacement } from './normalize';
 import { TileGlyph } from './TileGlyph';
+import { MatchEffect, type MatchAnimation } from './MatchEffect';
 import type {
   LinkLinkCoordinate,
   LinkLinkCurrent,
@@ -120,11 +121,13 @@ function LinkBoard({
   state,
   selected,
   busy,
+  animation,
   onSelect,
 }: {
   readonly state: LinkLinkState;
   readonly selected: LinkLinkCoordinate | null;
   readonly busy: boolean;
+  readonly animation: MatchAnimation | null;
   readonly onSelect: (coordinate: LinkLinkCoordinate) => void;
 }) {
   const { text } = useGameCopy();
@@ -165,6 +168,14 @@ function LinkBoard({
         {state.board.tiles.map((tile) => {
           const key = `${tile.row}:${tile.col}`;
           const isSelected = selected?.row === tile.row && selected.col === tile.col;
+          const vanishing = animation?.pair.some(
+            (point) => point.row === tile.row && point.col === tile.col,
+          );
+          const glyph = vanishing
+            ? (animation?.before.board.tiles.find(
+                (point) => point.row === tile.row && point.col === tile.col,
+              )?.tileKey ?? tile.tileKey)
+            : tile.tileKey;
           return (
             <button
               type="button"
@@ -172,8 +183,7 @@ function LinkBoard({
               aria-rowindex={tile.row + 1}
               aria-colindex={tile.col + 1}
               aria-selected={isSelected}
-              aria-label={`${tile.tileKey}, ${tile.row + 1}, ${tile.col + 1}`}
-              className={`linklink-tile${isSelected ? ' is-selected' : ''}${tile.removed ? ' is-removed' : ''}`}
+              className={`linklink-tile${isSelected ? ' is-selected' : ''}${tile.removed ? ' is-removed' : ''}${vanishing ? ' is-vanishing' : ''}`}
               disabled={tile.removed || busy}
               tabIndex={!tile.removed && key === effectiveFocus ? 0 : -1}
               key={key}
@@ -199,10 +209,15 @@ function LinkBoard({
                 focusAt(tile.row + delta[0], tile.col + delta[1]);
               }}
             >
-              {tile.removed ? <span aria-hidden="true" /> : <TileGlyph tileKey={tile.tileKey} />}
+              {tile.removed && !vanishing ? (
+                <span aria-hidden="true" />
+              ) : (
+                <TileGlyph tileKey={glyph} />
+              )}
             </button>
           );
         })}
+        {animation ? <MatchEffect key={animation.key} animation={animation} /> : null}
       </div>
     </div>
   );
@@ -273,6 +288,12 @@ export function LinkLinkGame() {
   const [mutation, setMutation] = useState<MutationIntent | null>(null);
   const [mutationState, setMutationState] = useState<'idle' | 'sending' | 'unknown'>('idle');
   const [mutationError, setMutationError] = useState<unknown>(null);
+  const [animation, setAnimation] = useState<MatchAnimation | null>(null);
+  useEffect(() => {
+    if (!animation) return;
+    const timer = window.setTimeout(() => setAnimation(null), 650);
+    return () => window.clearTimeout(timer);
+  }, [animation]);
   const [feedbackState, setFeedbackState] = useState<{
     readonly identity: string;
     readonly value: LinkFeedback;
@@ -361,9 +382,22 @@ export function LinkLinkGame() {
           setReview(false);
         } else if (intent.kind === 'match') {
           const before = isActiveLinkLink(current.data) ? current.data : null;
-          const next = await matchLinkLink(intent.value);
+          const { result: next, path } = await matchLinkLink(intent.value);
           const applied = adopt(next);
           if (!applied) await refetchCurrent();
+          if (
+            applied &&
+            before &&
+            before.sessionID === intent.value.sessionID &&
+            before.revision === intent.value.expectedRevision
+          ) {
+            setAnimation({
+              key: intent.value.idempotencyKey,
+              before,
+              pair: [intent.value.first, intent.value.second],
+              path,
+            });
+          }
           setFeedbackState(
             applied && isActiveLinkLink(next)
               ? {
@@ -495,16 +529,16 @@ export function LinkLinkGame() {
     );
 
   return (
-    <main className="game-page linklink-page">
+    <main className={`game-page linklink-page${state ? ' is-playing' : ''}`}>
       <PageHeader
         back={
           <Link className="game-back-link" to="/games">
             {text('common.back')}
           </Link>
         }
-        eyebrow={text('linklink.eyebrow')}
-        title={text('linklink.title')}
-        description={text('linklink.description')}
+        eyebrow={state ? undefined : text('linklink.eyebrow')}
+        title={text(state ? 'linklink.eyebrow' : 'linklink.title')}
+        description={state ? undefined : text('linklink.description')}
         actions={rulesButton}
       />
       {maintenance ? (
@@ -521,15 +555,17 @@ export function LinkLinkGame() {
           <Card className="linklink-status">
             <div className="linklink-heading">
               <div>
-                <p className="eyebrow">{text('linklink.active')}</p>
                 <h2>{text('linklink.spec', { spec: state.spec })}</h2>
+                <p className="linklink-countdown">
+                  {text('linklink.remaining', { seconds: remaining ?? 0 })}
+                </p>
               </div>
               <StatusBadge
                 active={lease === 'active'}
                 danger={lease === 'lost' || lease === 'stopped'}
                 label={
                   lease === 'active'
-                    ? text('common.leaseActive')
+                    ? text('linklink.playing')
                     : lease === 'renewing'
                       ? text('common.leaseRenewing')
                       : lease === 'stopped'
@@ -547,36 +583,22 @@ export function LinkLinkGame() {
                 })}
               </span>
             </div>
-            <p>
-              <strong>{text('linklink.deadline')}:</strong>{' '}
-              {new Date(state.deadline * 1000).toLocaleTimeString()} ·{' '}
-              {text('linklink.remaining', { seconds: remaining ?? 0 })}
-            </p>
-            <p role="status">
-              {mutationState === 'sending'
-                ? text('linklink.matching')
-                : selected
-                  ? text('linklink.selectSecond')
+            <p
+              className={`linklink-feedback${feedback === 'rejected' ? ' is-warning' : ''}`}
+              role="status"
+            >
+              {feedback === 'rejected'
+                ? text('linklink.matchRejected')
+                : feedback === 'rearranged'
+                  ? text('linklink.rearranged')
                   : text('linklink.selectFirst')}
             </p>
-            {feedback ? (
-              <p
-                className={`game-inline-notice${feedback === 'rejected' ? ' game-inline-notice--warning' : ''}`}
-              >
-                {text(
-                  feedback === 'accepted'
-                    ? 'linklink.matchAccepted'
-                    : feedback === 'rearranged'
-                      ? 'linklink.rearranged'
-                      : 'linklink.matchRejected',
-                )}
-              </p>
-            ) : null}
           </Card>
           <LinkBoard
             state={state}
             selected={selected}
             busy={mutationState !== 'idle' || lease !== 'active'}
+            animation={animation?.before.sessionID === state.sessionID ? animation : null}
             onSelect={chooseTile}
           />
           <button
@@ -589,13 +611,25 @@ export function LinkLinkGame() {
           </button>
         </div>
       ) : summary ? (
-        <SummaryCard
-          summary={summary}
-          onNew={() => {
-            queryClient.setQueryData(linkLinkKeys.current, null);
-            setSelectedSpec(summary.spec);
-          }}
-        />
+        <>
+          {animation?.before.sessionID === summary.sessionID ? (
+            <LinkBoard
+              state={animation.before}
+              selected={null}
+              busy
+              animation={animation}
+              onSelect={() => undefined}
+            />
+          ) : null}
+          <SummaryCard
+            summary={summary}
+            onNew={() => {
+              queryClient.setQueryData(linkLinkKeys.current, null);
+              setSelectedSpec(summary.spec);
+              setAnimation(null);
+            }}
+          />
+        </>
       ) : null}
       {!state ? (
         <Card className="linklink-lobby">

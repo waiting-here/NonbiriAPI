@@ -3,6 +3,7 @@ package adapters
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -35,6 +36,7 @@ func (stub *discoveryRecoveryStub) RecoverStaleDiscoveriesAt(
 }
 
 type claimRecoveryStub struct {
+	calls  int
 	call   recoveryCall
 	result claim.RecoveryReport
 	err    error
@@ -46,8 +48,57 @@ func (stub *claimRecoveryStub) RecoverNonterminalAt(
 	limit int,
 	deadline time.Time,
 ) (claim.RecoveryReport, error) {
+	stub.calls++
 	stub.call = recoveryCall{ctx: ctx, now: now, limit: limit, deadline: deadline}
 	return stub.result, stub.err
+}
+
+func TestClaimRecoveryDrainsOnceAndRetriesIncompleteStartup(t *testing.T) {
+	owner := &claimRecoveryStub{result: claim.RecoveryReport{ReleasedClaims: 1, More: true}}
+	adapter := newClaimRecovery(owner)
+	run := func() (lifecycle.WorkResult, error) {
+		return adapter.RecoverBeforeListener(context.Background(), 1, 10, time.Now().Add(time.Minute))
+	}
+	if got, err := run(); err != nil || !got.More {
+		t.Fatalf("first batch: %+v %v", got, err)
+	}
+	wantErr := errors.New("temporary recovery failure")
+	owner.err = wantErr
+	if _, err := run(); !errors.Is(err, wantErr) {
+		t.Fatalf("retry error: %v", err)
+	}
+	owner.err = nil
+	owner.result = claim.RecoveryReport{CompletedRequests: 11}
+	if _, err := run(); !errors.Is(err, lifecycle.ErrInvariant) {
+		t.Fatalf("invalid report: %v", err)
+	}
+	owner.result = claim.RecoveryReport{CompletedRequests: 1}
+	if got, err := run(); err != nil || got.Processed != 1 || got.More {
+		t.Fatalf("last batch: %+v %v", got, err)
+	}
+	owner.err = wantErr
+	var wg sync.WaitGroup
+	for range 20 {
+		wg.Go(func() {
+			if got, err := run(); err != nil || got != (lifecycle.WorkResult{}) {
+				t.Errorf("maintenance: %+v %v", got, err)
+			}
+		})
+	}
+	wg.Wait()
+	if owner.calls != 4 {
+		t.Fatalf("startup owner called %d times", owner.calls)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := adapter.RecoverBeforeListener(ctx, 1, 10, time.Now().Add(time.Minute)); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled: %v", err)
+	}
+	// A newly constructed adapter belongs to a new process and must recover again.
+	owner.err = nil
+	if _, err := newClaimRecovery(owner).RecoverBeforeListener(context.Background(), 1, 10, time.Now().Add(time.Minute)); err != nil || owner.calls != 5 {
+		t.Fatalf("restart: calls=%d %v", owner.calls, err)
+	}
 }
 
 type secretRecoveryStub struct {

@@ -45,6 +45,7 @@ export function PrivacyPage() {
           <section>
             <h2>{t('user.legal.privacy.economyTitle')}</h2>
             <p>{t('user.legal.privacy.economyBody')}</p>
+            <p>{t('user.legal.privacy.creditHistoryBody')}</p>
           </section>
           <section>
             <h2>{t('user.legal.privacy.credentialsTitle')}</h2>

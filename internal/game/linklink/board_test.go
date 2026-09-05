@@ -236,3 +236,74 @@ func activeValues(value board) []byte {
 	sort.Slice(values, func(left, right int) bool { return values[left] < values[right] })
 	return values
 }
+
+func TestMatchPathsTraceAcceptedConnections(t *testing.T) {
+	for _, spec := range []string{game.LinkLinkSpec6x8, game.LinkLinkSpec8x8, game.LinkLinkSpec10x10} {
+		definition, _ := resolveSpec(spec)
+		value, err := newBoard(definition, &scriptedSource{sequence: 41})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, pair := range value.legalPairs() {
+			first := Coordinate{pair[0] / definition.Cols, pair[0] % definition.Cols}
+			second := Coordinate{pair[1] / definition.Cols, pair[1] % definition.Cols}
+			assertMatchPath(t, value, first, second, value.matchPath(first, second))
+		}
+	}
+	definition, _ := resolveSpec(game.LinkLinkSpec6x8)
+	for name, points := range map[string][]Coordinate{
+		"straight":   {{2, 1}, {2, 6}},
+		"one turn":   {{4, 1}, {5, 2}},
+		"outer ring": {{0, 0}, {0, 7}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			value := sparseBoard(definition, map[Coordinate]byte{points[0]: 1, points[1]: 1})
+			if name == "outer ring" {
+				value.tiles[3] = 2
+				value.removed[0] &^= 1 << 3
+			}
+			path := value.matchPath(points[0], points[1])
+			assertMatchPath(t, value, points[0], points[1], path)
+			want := map[string]int{"straight": 2, "one turn": 3, "outer ring": 4}[name]
+			if len(path) != want {
+				t.Fatalf("path=%v want %d vertices", path, want)
+			}
+		})
+	}
+	blocked := sparseBoard(definition, map[Coordinate]byte{{0, 0}: 1, {0, 1}: 2, {1, 0}: 2, {1, 1}: 1})
+	if path := blocked.matchPath(Coordinate{0, 0}, Coordinate{1, 1}); path != nil {
+		t.Fatalf("blocked path=%v", path)
+	}
+}
+
+func assertMatchPath(t *testing.T, value board, first, second Coordinate, path []Coordinate) {
+	t.Helper()
+	if len(path) < 2 || len(path) > 4 || path[0] != first || path[len(path)-1] != second {
+		t.Fatalf("invalid path %v", path)
+	}
+	for i := 1; i < len(path); i++ {
+		from, to := path[i-1], path[i]
+		if (from.Row == to.Row) == (from.Col == to.Col) {
+			t.Fatalf("non-orthogonal segment %v", path)
+		}
+		delta := Coordinate{}
+		if to.Row > from.Row {
+			delta.Row = 1
+		} else if to.Row < from.Row {
+			delta.Row = -1
+		}
+		if to.Col > from.Col {
+			delta.Col = 1
+		} else if to.Col < from.Col {
+			delta.Col = -1
+		}
+		for point := from; point != to; point = (Coordinate{point.Row + delta.Row, point.Col + delta.Col}) {
+			if point.Row < -1 || point.Row > value.definition.Rows || point.Col < -1 || point.Col > value.definition.Cols {
+				t.Fatalf("outside ring %v", path)
+			}
+			if index, ok := value.index(point); ok && point != first && point != second && !value.isRemovedIndex(index) {
+				t.Fatalf("occupied cell %v in %v", point, path)
+			}
+		}
+	}
+}

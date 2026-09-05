@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { copyText } from '@shared/utils/clipboard';
 
@@ -10,6 +10,7 @@ import { copyText } from '@shared/utils/clipboard';
 export interface LogDetailField {
   label: string;
   value: React.ReactNode;
+  wide?: boolean;
 }
 
 interface LogDetailDrawerProps {
@@ -24,12 +25,19 @@ interface LogDetailDrawerProps {
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
 
-export function LogDetailDrawer({ open, onClose, title, fields, diagnostics }: LogDetailDrawerProps) {
+export function LogDetailDrawer({
+  open,
+  onClose,
+  title,
+  fields,
+  diagnostics,
+}: LogDetailDrawerProps) {
   const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const previousActiveRef = useRef<HTMLElement | null>(null);
   const [copied, setCopied] = useState(false);
+  const closeFromKeyboard = useEffectEvent(onClose);
 
   // Clear the copied feedback whenever the drawer opens again or shows a
   // different row's diagnostics (render-time state adjustment).
@@ -45,11 +53,13 @@ export function LogDetailDrawer({ open, onClose, title, fields, diagnostics }: L
     previousActiveRef.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeRef.current?.focus();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        onClose();
+        closeFromKeyboard();
         return;
       }
       if (event.key !== 'Tab') return;
@@ -70,10 +80,11 @@ export function LogDetailDrawer({ open, onClose, title, fields, diagnostics }: L
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
       previousActiveRef.current?.focus();
       previousActiveRef.current = null;
     };
-  }, [open, onClose]);
+  }, [open]);
 
   const onCopy = useCallback(() => {
     if (!diagnostics) return;
@@ -110,7 +121,10 @@ export function LogDetailDrawer({ open, onClose, title, fields, diagnostics }: L
         </div>
         <dl className="log-drawer-fields">
           {fields.map((field) => (
-            <div className="log-detail-row" key={field.label}>
+            <div
+              className={`log-detail-row${field.wide ? ' log-detail-row--wide' : ''}`}
+              key={field.label}
+            >
               <dt>{field.label}</dt>
               <dd>{field.value}</dd>
             </div>

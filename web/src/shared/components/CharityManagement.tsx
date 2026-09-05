@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
@@ -1757,12 +1757,14 @@ function ModelsPanel({
 export function CharityManagement({
   frame,
   onCapabilityLoss,
+  sourceGroups,
 }: {
   frame: CharityRole;
   onCapabilityLoss?: () => void;
+  sourceGroups?: ReactNode;
 }) {
   const { t } = useTranslation();
-  const [section, setSection] = useState<'donations' | 'models'>('donations');
+  const [section, setSection] = useState<'donations' | 'models' | 'sources'>('donations');
   const [capabilityLost, setCapabilityLost] = useState(false);
   const clearCapability = useCallback(() => {
     setCapabilityLost(true);
@@ -1802,12 +1804,23 @@ export function CharityManagement({
         >
           {t(charityCopyKey(frame, 'modelsTitle'))}
         </button>
+        {frame === 'admin' && sourceGroups ? (
+          <button
+            className={section === 'sources' ? 'btn btn-primary' : 'btn btn-secondary'}
+            type="button"
+            role="tab"
+            aria-selected={section === 'sources'}
+            onClick={() => setSection('sources')}
+          >
+            {t('common.operations.charity.sourceGroups')}
+          </button>
+        ) : null}
       </div>
       {section === 'donations' ? (
         <DonationsPanel role={frame} onCapabilityLoss={clearCapability} />
-      ) : (
+      ) : section === 'models' ? (
         <ModelsPanel role={frame} onCapabilityLoss={clearCapability} />
-      )}
+      ) : frame === 'admin' ? sourceGroups : null}
     </div>
   );
 }

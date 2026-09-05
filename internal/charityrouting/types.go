@@ -33,8 +33,9 @@ var (
 )
 
 type ContentTooShortError struct {
-	Actual  int
-	Minimum int
+	Actual    int
+	Minimum   int
+	RequestID string
 }
 
 func (e *ContentTooShortError) Error() string {

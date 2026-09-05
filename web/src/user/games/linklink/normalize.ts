@@ -10,7 +10,14 @@ import {
   safeInteger,
   unixTime,
 } from '../common/strict';
-import type { LinkLinkCurrent, LinkLinkState, LinkLinkSummary, LinkLinkTile } from './types';
+import type {
+  LinkLinkCurrent,
+  LinkLinkState,
+  LinkLinkSummary,
+  LinkLinkTile,
+  LinkLinkMatchIntent,
+  LinkLinkMatchResult,
+} from './types';
 
 const DIMENSIONS: Readonly<Record<LinkLinkSpec, readonly [number, number]>> = {
   '6x8': [6, 8],
@@ -228,6 +235,51 @@ export function normalizeLinkLinkLease(value: unknown): number {
     exactRecord(value, ['expires_at'], [], 'LinkLink lease').expires_at,
     'LinkLink lease expiry',
   );
+}
+
+export function normalizeLinkLinkMatch(
+  value: unknown,
+  intent: LinkLinkMatchIntent,
+): LinkLinkMatchResult {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    invalidResponse('LinkLink match');
+  const { match_path: rawPath, ...body } = value as Record<string, unknown>;
+  const result = Object.prototype.hasOwnProperty.call(body, 'terminal_reason')
+    ? normalizeLinkLinkSummary(body)
+    : normalizeLinkLinkState(body);
+  if (result.sessionID !== intent.sessionID) invalidResponse('LinkLink match session');
+  if (rawPath === undefined) return { result, path: null };
+  if (!Array.isArray(rawPath) || rawPath.length < 2 || rawPath.length > 4)
+    invalidResponse('LinkLink match path');
+  const [rows, cols] = DIMENSIONS[result.spec];
+  const path = rawPath.map((value) => {
+    const point = exactRecord(value, ['row', 'col'], [], 'LinkLink path point');
+    return {
+      row: safeInteger(point.row, -1, rows, 'LinkLink path row'),
+      col: safeInteger(point.col, -1, cols, 'LinkLink path column'),
+    };
+  });
+  if (
+    path[0].row !== intent.first.row ||
+    path[0].col !== intent.first.col ||
+    path.at(-1)?.row !== intent.second.row ||
+    path.at(-1)?.col !== intent.second.col
+  )
+    invalidResponse('LinkLink path endpoints');
+  let previousAxis: string | null = null;
+  for (let index = 1; index < path.length; index++) {
+    const first = path[index - 1],
+      second = path[index];
+    const axis =
+      first.row === second.row && first.col !== second.col
+        ? 'row'
+        : first.col === second.col && first.row !== second.row
+          ? 'col'
+          : null;
+    if (!axis || axis === previousAxis) invalidResponse('LinkLink path segment');
+    previousAxis = axis;
+  }
+  return { result, path };
 }
 
 export function boardWasRearranged(before: LinkLinkState, after: LinkLinkState): boolean {

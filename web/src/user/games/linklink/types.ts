@@ -39,6 +39,10 @@ export interface LinkLinkSummary {
   readonly score: string | null;
 }
 export type LinkLinkCurrent = LinkLinkState | LinkLinkSummary | null;
+export interface LinkLinkMatchResult {
+  readonly result: LinkLinkState | LinkLinkSummary;
+  readonly path: readonly LinkLinkCoordinate[] | null;
+}
 export interface LinkLinkMatchIntent {
   readonly sessionID: string;
   readonly expectedRevision: string;

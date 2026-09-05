@@ -67,8 +67,17 @@ func (fixture *rpsFixture) dealerDecision(sessionID string, bindings map[int64]s
 }
 
 func TestStandardPaidToFreeTieReminderAndForcedTerminal(t *testing.T) {
+	assertPaidToFreeTieReminderAndForcedTerminal(t, game.RPSModeStandard)
+}
+
+func TestDeathmatchPaidToFreeTieReminderAndForcedTerminal(t *testing.T) {
+	assertPaidToFreeTieReminderAndForcedTerminal(t, game.RPSModeDeathmatch)
+}
+
+func assertPaidToFreeTieReminderAndForcedTerminal(t *testing.T, mode string) {
+	t.Helper()
 	fixture := newRPSFixture(t)
-	users, bindings := fixture.startThree(game.RPSModeStandard, 100_000, 600)
+	users, bindings := fixture.startThree(mode, 5_000, 600)
 	record := fixture.sessionForUser(users[0])
 	var found bool
 	sessionID := record.ID

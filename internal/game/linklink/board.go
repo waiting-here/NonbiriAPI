@@ -199,23 +199,41 @@ func (value board) view() BoardView {
 }
 
 func (value board) canMatch(first, second Coordinate) bool {
+	return value.matchingTiles(first, second) && value.pathExists(first, second)
+}
+
+func (value board) matchingTiles(first, second Coordinate) bool {
 	firstIndex, firstOK := value.index(first)
 	secondIndex, secondOK := value.index(second)
 	if !firstOK || !secondOK || firstIndex == secondIndex || value.isRemovedIndex(firstIndex) || value.isRemovedIndex(secondIndex) || value.tiles[firstIndex] != value.tiles[secondIndex] {
 		return false
 	}
-	return value.pathExists(first, second)
+	return true
+}
+
+func (value board) matchPath(first, second Coordinate) []Coordinate {
+	if !value.matchingTiles(first, second) {
+		return nil
+	}
+	path, _ := value.searchPath(first, second, true)
+	return path
 }
 
 type pathState struct {
 	row, col  int
 	direction int
 	turns     int
+	parent    int
 }
 
 var pathDirections = [...]Coordinate{{Row: -1}, {Col: 1}, {Row: 1}, {Col: -1}}
 
 func (value board) pathExists(first, second Coordinate) bool {
+	_, found := value.searchPath(first, second, false)
+	return found
+}
+
+func (value board) searchPath(first, second Coordinate, trace bool) ([]Coordinate, bool) {
 	rows, cols := value.definition.Rows+2, value.definition.Cols+2
 	startRow, startCol := first.Row+1, first.Col+1
 	targetRow, targetCol := second.Row+1, second.Col+1
@@ -243,13 +261,31 @@ func (value board) pathExists(first, second Coordinate) bool {
 		row, col := startRow+delta.Row, startCol+delta.Col
 		if passable(row, col) {
 			best[row*cols+col][direction] = 0
-			queue = append(queue, pathState{row: row, col: col, direction: direction})
+			queue = append(queue, pathState{row: row, col: col, direction: direction, parent: -1})
 		}
 	}
 	for head := 0; head < len(queue); head++ {
 		current := queue[head]
 		if current.row == targetRow && current.col == targetCol {
-			return true
+			if !trace {
+				return nil, true
+			}
+			points := []Coordinate{}
+			for index := head; index >= 0; index = queue[index].parent {
+				points = append(points, Coordinate{Row: queue[index].row - 1, Col: queue[index].col - 1})
+			}
+			points = append(points, first)
+			for left, right := 0, len(points)-1; left < right; left, right = left+1, right-1 {
+				points[left], points[right] = points[right], points[left]
+			}
+			path := []Coordinate{points[0]}
+			for index := 1; index < len(points)-1; index++ {
+				previous, point, next := points[index-1], points[index], points[index+1]
+				if previous.Row != next.Row && previous.Col != next.Col {
+					path = append(path, point)
+				}
+			}
+			return append(path, points[len(points)-1]), true
 		}
 		for direction, delta := range pathDirections {
 			turns := current.turns
@@ -264,10 +300,10 @@ func (value board) pathExists(first, second Coordinate) bool {
 				continue
 			}
 			best[row*cols+col][direction] = uint8(turns)
-			queue = append(queue, pathState{row: row, col: col, direction: direction, turns: turns})
+			queue = append(queue, pathState{row: row, col: col, direction: direction, turns: turns, parent: head})
 		}
 	}
-	return false
+	return nil, false
 }
 
 func (value board) legalPairs() [][2]int {

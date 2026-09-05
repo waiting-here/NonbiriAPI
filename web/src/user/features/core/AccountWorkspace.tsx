@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useRef, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGE_STORAGE_KEY } from '@shared/i18n';
 import { ApiError } from '@shared/query/http';
@@ -716,6 +716,7 @@ export function AccountWorkspace({
         icon="account"
         title={t('account.title')}
         description={t('account.description')}
+        actions={<Link className="btn btn-secondary" to="/credits">{t('home.creditHistory')}</Link>}
       />
       <div className="core-grid core-grid--wide">
         <section className="core-card">

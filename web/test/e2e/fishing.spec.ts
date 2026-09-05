@@ -358,12 +358,12 @@ test('Fishing pending survives reload, settles from authority, auto-ACKs, and pe
     BATCH_ID,
   );
   await expect(page.getByRole('heading', { name: 'Total catch', exact: true })).toBeVisible();
-  await expect(page.locator('.fishing-art')).toHaveAttribute('data-art-key', 'koi');
+  await expect(page.locator('.fishing-result .fishing-art')).toHaveAttribute('data-art-key', 'koi');
   await expect(page.locator('.fishing-result')).toContainText('14.5');
   expect(fixture.settlements).toBe(1);
 
   await expect.poll(() => fixture.acks).toBe(1);
-  await expect(page.getByRole('heading', { name: 'Total catch', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Total catch', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start this batch' })).toBeEnabled();
   await page.getByRole('button', { name: 'Start this batch' }).click();
   expect(fixture.starts).toBe(2);
@@ -452,9 +452,7 @@ test('Fishing recovery is identical across a second page and leaderboard identit
     await expect(secondPage.getByRole('button', { name: 'Retry marking as viewed' })).toBeVisible();
     fixture.failACK = false;
     await secondPage.getByRole('button', { name: 'Retry marking as viewed' }).click();
-    await expect(secondPage.getByRole('heading', { name: 'Total catch', exact: true })).toHaveCount(
-      0,
-    );
+    await expect(secondPage.getByRole('heading', { name: 'Total catch', exact: true })).toBeVisible();
     await secondPage.close();
   } finally {
     await secondContext.close();

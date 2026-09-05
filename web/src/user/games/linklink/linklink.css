@@ -27,23 +27,130 @@
   accent-color: var(--nb-color-accent);
 }
 .linklink-board-scroll {
+  container-type: inline-size;
   max-width: 100%;
   overflow: auto;
   overscroll-behavior: contain;
-  padding: 0.5rem;
+  padding: 0;
   border: 1px solid var(--nb-color-border);
   border-radius: 1rem;
   background: color-mix(in srgb, var(--nb-color-accent) 6%, var(--nb-color-surface));
 }
 .linklink-board {
-  --linklink-tile: min(8vw, 4.25rem);
+  --linklink-gap: 0.3rem;
+  --linklink-tile: clamp(1.7rem, calc((100cqw - 3.4rem) / (var(--linklink-cols) + 1.5)), 4.25rem);
   position: relative;
   display: grid;
   grid-template-columns: repeat(var(--linklink-cols), var(--linklink-tile));
-  gap: 0.35rem;
+  gap: var(--linklink-gap);
   width: max-content;
-  min-width: 100%;
-  justify-content: center;
+  margin-inline: auto;
+  padding: calc(var(--linklink-tile) * 0.75 + var(--linklink-gap));
+}
+.linklink-feedback {
+  min-block-size: 3em;
+  margin: 0;
+  color: var(--nb-color-text-muted);
+}
+.linklink-feedback.is-warning {
+  color: var(--nb-color-warning);
+}
+.linklink-status {
+  gap: 0.6rem;
+}
+.linklink-status p {
+  margin: 0;
+}
+.linklink-countdown {
+  color: var(--nb-color-accent);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.linklink-page.is-playing > .page-header {
+  margin-bottom: 0;
+}
+.linklink-match-effect {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 2;
+  color: var(--nb-color-accent);
+}
+.linklink-match-beam {
+  stroke: currentColor;
+  stroke-width: 4;
+  filter: drop-shadow(0 0 5px currentColor);
+  animation: linklink-beam 650ms ease-out both;
+}
+.linklink-match-ring {
+  stroke: currentColor;
+  stroke-width: 2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: linklink-ring 650ms ease-out both;
+}
+.linklink-match-sparks {
+  stroke: currentColor;
+  stroke-width: 3;
+  animation: linklink-sparks 650ms ease-out both;
+}
+.linklink-tile.is-vanishing {
+  visibility: visible;
+  pointer-events: none;
+  animation: linklink-vanish 650ms ease-out both;
+}
+@keyframes linklink-beam {
+  0% {
+    opacity: 0;
+    stroke-width: 1;
+  }
+  15%,
+  40% {
+    opacity: 1;
+    stroke-width: 5;
+  }
+  100% {
+    opacity: 0;
+    stroke-width: 1;
+  }
+}
+@keyframes linklink-ring {
+  from {
+    opacity: 1;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.3);
+  }
+}
+@keyframes linklink-sparks {
+  from {
+    opacity: 1;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+@keyframes linklink-vanish {
+  0%,
+  15% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.2) rotate(12deg);
+  }
 }
 .linklink-tile {
   display: grid;
@@ -137,14 +244,25 @@
     grid-template-columns: 1fr;
   }
   .linklink-heading {
-    display: grid;
+    align-items: center;
   }
   .linklink-progress {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(2rem, 1fr) auto;
+    font-size: 0.85rem;
+  }
+  .linklink-page.is-playing > .page-header {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .linklink-page.is-playing > .page-header h1 {
+    font-size: 1.65rem;
+  }
+  .linklink-page.is-playing .page-header-actions {
+    width: auto;
   }
   .linklink-board {
-    --linklink-tile: 3rem;
-    justify-content: start;
+    margin-inline: auto;
   }
   .linklink-board-scroll--10x10 .linklink-board {
     --linklink-tile: 3.1rem;
@@ -156,8 +274,7 @@
 }
 @media (max-width: 420px) {
   .linklink-board {
-    --linklink-tile: 2.85rem;
-    gap: 0.28rem;
+    --linklink-gap: 0.25rem;
   }
   .linklink-board-scroll--10x10 .linklink-board {
     --linklink-tile: 3rem;
@@ -169,5 +286,22 @@
 @media (prefers-reduced-motion: reduce) {
   .linklink-tile {
     transition: none;
+  }
+  .linklink-match-beam,
+  .linklink-match-ring,
+  .linklink-match-sparks,
+  .linklink-tile.is-vanishing {
+    animation: none;
+  }
+  .linklink-tile.is-vanishing {
+    opacity: 0.35;
+  }
+  .linklink-match-sparks,
+  .linklink-match-ring {
+    display: none;
+  }
+  .linklink-match-beam {
+    stroke-width: 3;
+    filter: none;
   }
 }

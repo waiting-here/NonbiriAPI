@@ -29,6 +29,7 @@ var userReturnRoutes = map[string]routeSpec{
 	"charity": {path: "/charity"}, "donation-detail": {path: "/charity/donations/%s", detail: true},
 	"activities": {path: "/activities"}, "games": {path: "/games"}, "game-fishing": {path: "/games/fishing"}, "game-linklink": {path: "/games/linklink"}, "game-rps": {path: "/games/rps"},
 	"debug": {path: "/debug"}, "logs": {path: "/logs"}, "issues": {path: "/issues"}, "credential-report": {path: "/report"},
+	"credits":       {path: "/credits"},
 	"announcements": {path: "/announcements"}, "announcement-detail": {path: "/announcements/%s", detail: true},
 	"account": {path: "/account"}, "steward": {path: "/steward"}, "privacy": {path: "/privacy"}, "terms": {path: "/terms"},
 	"maintenance": {path: "/maintenance"}, "registration-closed": {path: "/registration-closed"},

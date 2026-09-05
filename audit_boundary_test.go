@@ -22,6 +22,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/config"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbtest"
+	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -433,6 +434,74 @@ FROM sessions s JOIN users u ON u.id=s.user_id WHERE u.is_admin=1`).Scan(&adminU
 	if authorizedModels.Code != http.StatusOK || !strings.Contains(authorizedModels.Body.String(), `"object":"list"`) {
 		t.Fatalf("authorized caller models status=%d body=%s", authorizedModels.Code, authorizedModels.Body.String())
 	}
+	t.Run("short request logging and automatic RPM consequences", func(t *testing.T) {
+		var userID int64
+		if err := store.DB().QueryRow(`SELECT user_id FROM caller_keys WHERE key_hash IS NOT NULL`).Scan(&userID); err != nil {
+			t.Fatal(err)
+		}
+		tx, err := store.DB().BeginTx(context.Background(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ledger.CreateUserAccount(context.Background(), tx, userID, time.Now().Unix()); err != nil {
+			tx.Rollback()
+			t.Fatal(err)
+		}
+		if _, err := tx.Exec(`UPDATE site_config SET value=CASE key WHEN 'charity_enabled' THEN '1' WHEN 'charity_violation_deduct_milli' THEN '7' WHEN 'rpm_ban_threshold' THEN '1' ELSE value END`); err != nil {
+			tx.Rollback()
+			t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+		body := `{"model":"[公益]provider/model","messages":[{"role":"user","content":"hi"}]}`
+		headers := map[string]string{"Authorization": "Bearer " + callerKey, "Content-Type": "application/json"}
+		rejected := testApplicationRequest(t, app.handler, http.MethodPost, auditUserHost, "/v1/chat/completions", body, nil, headers)
+		requestID := rejected.Header().Get("X-Request-ID")
+		var failure struct {
+			Error struct{ Code, Message string }
+		}
+		if err := json.Unmarshal(rejected.Body.Bytes(), &failure); err != nil {
+			t.Fatal(err)
+		}
+		if rejected.Code != http.StatusBadRequest || failure.Error.Code != "content_too_short" || !strings.Contains(failure.Error.Message, "2 < 20") || !db.ValidateOpaqueID(requestID, "req_") {
+			t.Fatalf("short request=%d %s id=%q", rejected.Code, rejected.Body.String(), requestID)
+		}
+		tx, err = store.DB().BeginTx(context.Background(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		history, err := ledger.UserHistory(context.Background(), tx, userID, time.Now().Unix(), ledger.HistoryFilter{Page: 1, PageSize: 20})
+		tx.Rollback()
+		if err != nil || history.CurrentBalance != "-0.007" || len(history.Data) != 1 || history.Data[0].RequestID == nil || *history.Data[0].RequestID != requestID {
+			t.Fatalf("history=%+v err=%v", history, err)
+		}
+		detail := testApplicationRequest(t, app.handler, http.MethodGet, auditAdminHost, "/admin/api/logs/"+requestID, "", []*http.Cookie{adminCookie}, nil)
+		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), "content_too_short") {
+			t.Fatalf("log=%d %s", detail.Code, detail.Body.String())
+		}
+		if _, err := store.DB().Exec(`UPDATE users SET rpm_limit=1 WHERE id=?`, userID); err != nil {
+			t.Fatal(err)
+		}
+		limited := testApplicationRequest(t, app.handler, http.MethodPost, auditUserHost, "/v1/chat/completions", body, nil, headers)
+		if limited.Code != http.StatusTooManyRequests {
+			t.Fatalf("RPM=%d %s", limited.Code, limited.Body.String())
+		}
+		var banned, logs int
+		if err := store.DB().QueryRow(`SELECT is_banned FROM users WHERE id=?`, userID).Scan(&banned); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.DB().QueryRow(`SELECT COUNT(*) FROM request_logs WHERE user_id=?`, userID).Scan(&logs); err != nil {
+			t.Fatal(err)
+		}
+		if banned != 1 || logs != 1 {
+			t.Fatalf("ban=%d logs=%d", banned, logs)
+		}
+		staleKey := testApplicationRequest(t, app.handler, http.MethodGet, auditUserHost, "/v1/models", "", nil, headers)
+		if staleKey.Code != http.StatusUnauthorized {
+			t.Fatalf("revoked key=%d", staleKey.Code)
+		}
+	})
 	for _, path := range []string{"/admin/api/donations", "/admin/api/charity-models", "/admin/api/activities/thursday", "/admin/api/announcements", "/admin/api/reports/badge", "/admin/api/logs", "/admin/api/games/config"} {
 		authorized := testApplicationRequest(t, app.handler, http.MethodGet, auditAdminHost, path, "", []*http.Cookie{adminCookie}, nil)
 		if authorized.Code != http.StatusOK {
