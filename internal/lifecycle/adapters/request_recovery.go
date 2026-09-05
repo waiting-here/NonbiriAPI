@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
@@ -53,7 +54,9 @@ func (adapter *DiscoveryRecoveryAdapter) RecoverBeforeListener(
 }
 
 type ClaimRecoveryAdapter struct {
-	owner claimRecoveryOwner
+	owner    claimRecoveryOwner
+	mu       sync.Mutex
+	finished bool
 }
 
 func NewClaimRecovery(owner *claim.Service) *ClaimRecoveryAdapter {
@@ -76,11 +79,31 @@ func (adapter *ClaimRecoveryAdapter) RecoverBeforeListener(
 	if adapter == nil || adapter.owner == nil {
 		return lifecycle.WorkResult{}, lifecycle.ErrUnavailable
 	}
+	if ctx == nil {
+		return lifecycle.WorkResult{}, lifecycle.ErrInvalid
+	}
+	adapter.mu.Lock()
+	defer adapter.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return lifecycle.WorkResult{}, err
+	}
+	// Only a new process may reconcile claims left by its predecessor. The
+	// coordinator also visits this slot during maintenance while requests run.
+	if adapter.finished {
+		return lifecycle.WorkResult{}, nil
+	}
 	report, err := adapter.owner.RecoverNonterminalAt(ctx, decisionNow, limit, budgetDeadline)
 	if err != nil {
 		return lifecycle.WorkResult{}, err
 	}
 	processed := report.ReleasedClaims + report.CommittedClaims + report.CompletedRequests
+	if report.ReleasedClaims < 0 || report.ReleasedClaims > limit ||
+		report.CommittedClaims < 0 || report.CommittedClaims > limit ||
+		report.CompletedRequests < 0 || report.CompletedRequests > limit ||
+		processed < 0 || processed > limit || report.More && processed == 0 {
+		return lifecycle.WorkResult{}, lifecycle.ErrInvariant
+	}
+	adapter.finished = !report.More
 	return lifecycle.WorkResult{Processed: processed, More: report.More}, nil
 }
 
