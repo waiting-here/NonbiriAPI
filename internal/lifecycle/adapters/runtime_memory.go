@@ -24,16 +24,28 @@ type debugForgetter interface {
 type RuntimeMemoryDeleteAdapter struct {
 	accountStream accountStreamForgetter
 	debug         debugForgetter
+	forgetUsers   []func(int64)
 }
 
 func NewRuntimeMemoryDeleteAdapter(
 	accountEvents *accountstream.Hub,
 	debugHub *debug.Hub,
+	forgetUsers ...func(int64),
 ) (*RuntimeMemoryDeleteAdapter, error) {
 	if accountEvents == nil || debugHub == nil {
 		return nil, lifecycle.ErrInvalid
 	}
-	return newRuntimeMemoryDeleteAdapter(accountEvents, debugHub)
+	adapter, err := newRuntimeMemoryDeleteAdapter(accountEvents, debugHub)
+	if err != nil {
+		return nil, err
+	}
+	for _, forget := range forgetUsers {
+		if forget == nil {
+			return nil, lifecycle.ErrInvalid
+		}
+	}
+	adapter.forgetUsers = append([]func(int64){}, forgetUsers...)
+	return adapter, nil
 }
 
 func newRuntimeMemoryDeleteAdapter(
@@ -59,6 +71,7 @@ func (adapter *RuntimeMemoryDeleteAdapter) PrepareDelete(
 		accountStream: adapter.accountStream,
 		debug:         adapter.debug,
 		userID:        request.UserID,
+		forgetUsers:   adapter.forgetUsers,
 	}, nil
 }
 
@@ -66,6 +79,7 @@ type runtimeMemoryDeleteFinalizer struct {
 	accountStream accountStreamForgetter
 	debug         debugForgetter
 	userID        int64
+	forgetUsers   []func(int64)
 	done          atomic.Bool
 }
 
@@ -78,6 +92,9 @@ func (finalizer *runtimeMemoryDeleteFinalizer) Commit() bool {
 	// process-local and idempotent; an already-closed owner needs no DB rollback.
 	_ = finalizer.accountStream.ForgetAccounts(context.Background(), []int64{finalizer.userID})
 	_ = finalizer.debug.ForgetAccount(finalizer.userID)
+	for _, forget := range finalizer.forgetUsers {
+		forget(finalizer.userID)
+	}
 	return true
 }
 

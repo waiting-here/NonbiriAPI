@@ -1061,7 +1061,7 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	}
 	forwardRuntime, err = newPublicForwardRuntime(
 		store, vault, claimService, charityService, charityRoutingService, resourceRepository,
-		connectorRegistry, localBackend, debugHub, gate, rpmLimits,
+		connectorRegistry, localBackend, debugHub, gate, rpmLimits, userInvalidations.InvalidateUserAuthority,
 	)
 	if err != nil {
 		cleanup()

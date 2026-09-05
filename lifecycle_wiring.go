@@ -315,7 +315,7 @@ func newLifecycleCoordinator(
 	if err != nil {
 		return nil, err
 	}
-	runtimeMemory, err := lifecycleadapters.NewRuntimeMemoryDeleteAdapter(activityEvents, debugHub)
+	runtimeMemory, err := lifecycleadapters.NewRuntimeMemoryDeleteAdapter(activityEvents, debugHub, forwardRuntime.abuse.ForgetUser)
 	if err != nil {
 		return nil, err
 	}

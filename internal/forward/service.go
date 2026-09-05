@@ -21,6 +21,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
@@ -817,6 +818,10 @@ func (service *Service) writePreAcceptanceFailure(
 		return
 	}
 	failure := failureForError(err, charity)
+	var rejected *charityrouting.ContentTooShortError
+	if errors.As(err, &rejected) && db.ValidateOpaqueID(rejected.RequestID, "req_") {
+		writer.Header().Set("X-Request-ID", rejected.RequestID)
+	}
 	if trace != nil {
 		result := debugCallerResult(failure, service.mustNowUnix())
 		if completeErr := trace.CompleteCaller(result); completeErr != nil {
