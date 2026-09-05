@@ -92,9 +92,9 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 	KeyRegistrationOpen:          {"access", catalogText("开放注册", "Registration open"), catalogText("控制新的 Discord 身份是否可以创建账号。", "Controls whether a new Discord identity may create an account."), unitNone, nil},
 	KeySiteTimezoneOffsetMinutes: {"economy", catalogText("站点时区偏移", "Site timezone offset"), catalogText("签到与按日活跃使用的 UTC 有符号分钟偏移；产生数据后不可修改。", "Signed minutes from UTC used by check-in and daily activity; immutable after data exists."), unitMinute, nil},
 
-	KeyLevelThreshold2Milli: {"economy", catalogText("Lv2 自动晋级阈值", "Lv2 auto-promotion threshold"), catalogText("累计捐赠者回馈达到该毫积分值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this milli-credit value."), unitMilli, []string{KeyLevelThreshold3Milli, KeyLevelThreshold4Milli}},
-	KeyLevelThreshold3Milli: {"economy", catalogText("Lv3 自动晋级阈值", "Lv3 auto-promotion threshold"), catalogText("累计捐赠者回馈达到该毫积分值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this milli-credit value."), unitMilli, []string{KeyLevelThreshold2Milli, KeyLevelThreshold4Milli}},
-	KeyLevelThreshold4Milli: {"economy", catalogText("Lv4 自动晋级阈值", "Lv4 auto-promotion threshold"), catalogText("累计捐赠者回馈达到该毫积分值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this milli-credit value."), unitMilli, []string{KeyLevelThreshold2Milli, KeyLevelThreshold3Milli}},
+	KeyLevelThreshold2Milli: {"economy", catalogText("Lv2 自动晋级阈值", "Lv2 auto-promotion threshold"), catalogText("累计捐赠者回馈达到此数值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this amount."), unitMilli, []string{KeyLevelThreshold3Milli, KeyLevelThreshold4Milli}},
+	KeyLevelThreshold3Milli: {"economy", catalogText("Lv3 自动晋级阈值", "Lv3 auto-promotion threshold"), catalogText("累计捐赠者回馈达到此数值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this amount."), unitMilli, []string{KeyLevelThreshold2Milli, KeyLevelThreshold4Milli}},
+	KeyLevelThreshold4Milli: {"economy", catalogText("Lv4 自动晋级阈值", "Lv4 auto-promotion threshold"), catalogText("累计捐赠者回馈达到此数值后自动晋级。", "Auto-promotes after cumulative donor reward reaches this amount."), unitMilli, []string{KeyLevelThreshold2Milli, KeyLevelThreshold3Milli}},
 	KeyCheckinMode:          {"economy", catalogText("签到模式", "Check-in mode"), catalogText("控制签到关闭、全部开放或仅 Lv3 及以上开放。", "Selects disabled, open-to-all, or level-3-and-above check-in."), unitNone, nil},
 	KeyCheckinAwardMinMilli: {"economy", catalogText("签到奖励下限", "Minimum check-in award"), catalogText("服务端抽取签到奖励时使用的闭区间下限。", "Inclusive lower bound used when the server draws a check-in award."), unitMilli, []string{KeyCheckinAwardMaxMilli}},
 	KeyCheckinAwardMaxMilli: {"economy", catalogText("签到奖励上限", "Maximum check-in award"), catalogText("服务端抽取签到奖励时使用的闭区间上限。", "Inclusive upper bound used when the server draws a check-in award."), unitMilli, []string{KeyCheckinAwardMinMilli}},
@@ -104,13 +104,13 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 	KeyDonationAcceptEnabled:    {"charity", catalogText("接受公益捐赠", "Donation intake"), catalogText("只控制新捐赠提交，不影响既有资源管理。", "Controls new donation submissions only; existing resources remain manageable."), unitNone, nil},
 	KeyCharityDonationNoticeZh:  {"charity", catalogText("捐赠说明（中文）", "Donation notice (Chinese)"), catalogText("显示在用户提交捐赠的位置；留空使用内置中文说明。", "Shown where users submit donations; empty uses the built-in Chinese notice."), unitNone, nil},
 	KeyCharityDonationNoticeEn:  {"charity", catalogText("捐赠说明（英文）", "Donation notice (English)"), catalogText("显示在用户提交捐赠的位置；留空使用内置英文说明。", "Shown where users submit donations; empty uses the built-in English notice."), unitNone, nil},
-	KeyCharityTokenReserveMilli: {"charity", catalogText("公益 Token 预留单价", "Charity token reserve price"), catalogText("按 Token 公益模型用于保守预留的可选毫积分单价。", "Optional milli-credit price used for conservative reservation by per-token charity models."), unitMilli, []string{"charity_model_pricing"}},
+	KeyCharityTokenReserveMilli: {"charity", catalogText("公益 Token 预留单价", "Charity token reserve price"), catalogText("用于按 Token 计价的公益模型在调用前预留积分。", "Price used to reserve credits before a call to a per-token charity model."), unitMilli, []string{"charity_model_pricing"}},
 
 	KeyRPMBanThreshold:                  {"abuse", catalogText("RPM 自动封禁阈值", "RPM auto-ban threshold"), catalogText("违规窗口内达到该次拒绝数后触发自动封禁。", "Number of denials in the violation window that triggers an automatic ban."), unitCount, nil},
 	KeyRPMBanWindowSeconds:              {"abuse", catalogText("RPM 违规窗口", "RPM violation window"), catalogText("统计单用户 RPM 拒绝的滚动窗口。", "Rolling window used to count per-user RPM denials."), unitSecond, nil},
 	KeyRPMBanDurationSeconds:            {"abuse", catalogText("RPM 自动封禁时长", "RPM auto-ban duration"), catalogText("RPM 自动封禁生效的时长。", "Duration of an RPM-triggered automatic ban."), unitSecond, nil},
 	KeyCharityMinChars:                  {"abuse", catalogText("公益请求最少字符", "Minimum charity request characters"), catalogText("公益调用内容需达到的最少 Unicode 字符数。", "Minimum Unicode character count required for a charity call."), unitCount, nil},
-	KeyCharityViolationDeductMilli:      {"abuse", catalogText("公益违规扣分", "Charity violation deduction"), catalogText("一次公益内容违规从可用积分扣除的毫积分。", "Milli-credits deducted from spendable credits for one charity content violation."), unitMilli, nil},
+	KeyCharityViolationDeductMilli:      {"abuse", catalogText("公益违规扣分", "Charity violation deduction"), catalogText("每次公益请求内容过短时扣除的积分金额。", "Amount deducted from available credits for each charity request that is too short."), unitMilli, nil},
 	KeyCharityViolationBanSeconds:       {"abuse", catalogText("公益单次违规封禁", "Single charity-violation ban"), catalogText("一次公益内容违规可触发的封禁时长。", "Ban duration optionally triggered by one charity content violation."), unitSecond, nil},
 	KeyCharityViolationWindowSeconds:    {"abuse", catalogText("公益违规统计窗口", "Charity violation window"), catalogText("累计公益内容违规次数的滚动窗口。", "Rolling window used to count charity content violations."), unitSecond, nil},
 	KeyCharityViolationBanThreshold:     {"abuse", catalogText("公益累计违规阈值", "Charity violation threshold"), catalogText("窗口内达到该违规次数后触发累计处罚。", "Violation count in the window that triggers the cumulative penalty."), unitCount, nil},
@@ -123,9 +123,9 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 
 	KeyGamesEnabled:                {"games", catalogText("小游戏总开关", "Games master switch"), catalogText("控制是否允许开始新的小游戏局。", "Controls whether new game rounds may start."), unitNone, nil},
 	KeyGameFishingEnabled:          {"games", catalogText("池塘垂钓开关", "Pond fishing switch"), catalogText("控制是否允许开始新的垂钓局。", "Controls whether new fishing rounds may start."), unitNone, nil},
-	KeyGameFishingBaitWormPrice:    {"games", catalogText("蚯蚓鱼饵价格", "Worm bait price"), catalogText("开始一局蚯蚓鱼饵垂钓扣除的精确毫积分。", "Exact milli-credit entry price for a worm-bait round."), unitMilli, nil},
-	KeyGameFishingBaitLurePrice:    {"games", catalogText("拟饵价格", "Lure bait price"), catalogText("开始一局拟饵垂钓扣除的精确毫积分。", "Exact milli-credit entry price for a lure round."), unitMilli, nil},
-	KeyGameFishingBaitPremiumPrice: {"games", catalogText("高级鱼饵价格", "Premium bait price"), catalogText("开始一局高级鱼饵垂钓扣除的精确毫积分。", "Exact milli-credit entry price for a premium-bait round."), unitMilli, nil},
+	KeyGameFishingBaitWormPrice:    {"games", catalogText("蚯蚓鱼饵价格", "Worm bait price"), catalogText("使用蚯蚓鱼饵单次抛竿的价格。", "Price for one cast using worm bait."), unitMilli, nil},
+	KeyGameFishingBaitLurePrice:    {"games", catalogText("拟饵价格", "Lure bait price"), catalogText("使用拟饵单次抛竿的价格。", "Price for one cast using a lure."), unitMilli, nil},
+	KeyGameFishingBaitPremiumPrice: {"games", catalogText("高级鱼饵价格", "Premium bait price"), catalogText("使用高级鱼饵单次抛竿的价格。", "Price for one cast using premium bait."), unitMilli, nil},
 	KeyGameFishingRTP:              {"games", catalogText("普通鱼饵目标 RTP", "Standard bait target RTP"), catalogText("蚯蚓与拟饵的目标返还率，需通过完整经济组合校验。", "Target return for worm and lure; the complete economy must validate."), unitPercent, nil},
 	KeyGameFishingRTPPremium:       {"games", catalogText("高级鱼饵目标 RTP", "Premium bait target RTP"), catalogText("高级鱼饵目标返还率，需通过完整经济组合校验。", "Premium-bait target return; the complete economy must validate."), unitPercent, nil},
 	KeyGameFishingTreasureBottle:   {"games", catalogText("漂流瓶宝物倍率", "Bottle treasure multiplier"), catalogText("钓到漂流瓶时按门票计算的整数倍率。", "Integer entry-price multiplier paid for a bottle treasure."), unitTimes, nil},
@@ -149,7 +149,7 @@ func init() {
 	add(KeyActivitiesEnabled, "activities", "活动总开关", "Activities master switch", "控制是否允许开始新的活动操作。", "Controls whether new activity operations may start.", unitNone, KeySiteTimezoneOffsetMinutes)
 	add(KeyActivityWelfareEnabled, "activities", "福利活动开关", "Welfare activity switch", "控制每日福利领取；开启时要求阈值和上限完整。", "Controls daily welfare claims; enabling requires complete threshold and cap values.", unitNone, KeyActivitiesEnabled, KeySiteTimezoneOffsetMinutes, KeyActivityWelfareThreshold, KeyActivityWelfareCap)
 	add(KeyActivityWelfareThreshold, "activities", "福利余额阈值", "Welfare balance threshold", "可用积分低于该值时才可能领取福利。", "Welfare may be claimed only while spendable credits are below this value.", unitMilli, KeyActivityWelfareEnabled)
-	add(KeyActivityWelfareCap, "activities", "福利单次上限", "Welfare award cap", "单次福利领取的毫积分上限；零保持 fail closed。", "Maximum milli-credit welfare award per claim; zero remains fail-closed.", unitMilli, KeyActivityWelfareEnabled)
+	add(KeyActivityWelfareCap, "activities", "福利单次上限", "Welfare award cap", "单次低保领取的金额上限；设为零时无法领取。", "Maximum amount for one welfare claim; zero prevents claims.", unitMilli, KeyActivityWelfareEnabled)
 	add(KeyActivityThursdayEnabled, "activities", "星期四活动开关", "Thursday activity switch", "控制疯狂星期四新投入；开启要求完整的下一期配置。", "Controls new Thursday contributions; enabling requires a complete next-period configuration.", unitNone, KeyActivitiesEnabled, KeySiteTimezoneOffsetMinutes, "thursday_next_period")
 
 	add(KeyGameLinkLinkEnabled, "games", "连连看总开关", "LinkLink master switch", "控制是否允许开始新的连连看对局。", "Controls whether new LinkLink sessions may start.", unitNone, KeyGamesEnabled)
@@ -161,7 +161,7 @@ func init() {
 		{"10×10", KeyGameLinkLink10x10Enabled, KeyGameLinkLink10x10Price},
 	} {
 		add(spec.enabled, "games", "连连看 "+spec.name+" 开关", "LinkLink "+spec.name+" switch", "控制该棋盘规格的新对局。", "Controls new sessions for this board specification.", unitNone, KeyGamesEnabled, KeyGameLinkLinkEnabled, spec.price)
-		add(spec.price, "games", "连连看 "+spec.name+" 价格", "LinkLink "+spec.name+" price", "该棋盘规格每局的精确毫积分价格。", "Exact milli-credit entry price for this board specification.", unitMilli, spec.enabled)
+		add(spec.price, "games", "连连看 "+spec.name+" 价格", "LinkLink "+spec.name+" price", "该棋盘规格每局的入场价格。", "Entry price for this board size.", unitMilli, spec.enabled)
 	}
 
 	add(KeyGameRPSEnabled, "games", "三人猜拳总开关", "Three-player RPS master switch", "控制是否允许进入新的三人猜拳队列。", "Controls whether players may enter new three-player RPS queues.", unitNone, KeyGamesEnabled)
@@ -172,7 +172,7 @@ func init() {
 		enabled := prefix + "enabled"
 		base := prefix + "b_milli"
 		add(enabled, "games", mode.zh+"猜拳开关", mode.en+" RPS switch", "控制该模式的新排队。", "Controls new queue entries for this mode.", unitNone, KeyGamesEnabled, KeyGameRPSEnabled, base, "rps_central_health")
-		add(base, "games", mode.zh+"猜拳基础 B", mode.en+" RPS base B", "该模式冻结到队列和对局的基础毫积分。", "Base milli-credit amount frozen into queues and sessions for this mode.", unitMilli, enabled)
+		add(base, "games", mode.zh+"猜拳基础 B", mode.en+" RPS base B", "该模式使用的基础积分，玩家入场后保持不变。", "Base amount for this mode, fixed once a player joins.", unitMilli, enabled)
 		for _, cut := range cuts {
 			key := prefix + cut.key + "_bp"
 			add(key, "games", mode.zh+"猜拳"+cut.zh+"抽成", mode.en+" RPS "+cut.en+" cut", "该模式每次真实抽成的基点比例。", "Basis-point share for each real cut in this mode.", unitBP, enabled, prefix+"platform_bp", prefix+"welfare_bp", prefix+"thursday_bp")

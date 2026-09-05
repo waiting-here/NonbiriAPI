@@ -575,10 +575,13 @@ export function SettingsPage() {
   }, [authority.data, search]);
   const catalogLabels = useMemo(
     () =>
-      Object.fromEntries(
-        (authority.data?.catalog ?? []).map((entry) => [entry.key, entry.title[locale]]),
-      ),
-    [authority.data, locale],
+      ({
+        charity_model_pricing: t('admin.settings.charityModelPricing'),
+        ...Object.fromEntries(
+          (authority.data?.catalog ?? []).map((entry) => [entry.key, entry.title[locale]]),
+        ),
+      }),
+    [authority.data, locale, t],
   );
   const ordinary = [...groups].filter(([name]) => !DANGEROUS_GROUPS.has(name));
   const dangerous = [...groups].filter(([name]) => DANGEROUS_GROUPS.has(name));
