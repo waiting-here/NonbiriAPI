@@ -438,7 +438,7 @@
         "closed": "当前暂停接受捐赠；仍可查看和管理既有捐赠记录。"
       },
       "donationsTitle": "我的捐赠",
-      "requestUnit": "每次实际发送的请求；费用由系统结算。",
+      "requestUnit": "按开始成功回传的请求次数计费。",
       "tokenUnit": "每百万 Token；输入、缓存写入、缓存读取和输出分别计价。",
       "priceCaption": "公益模型价格",
       "priceType": "项目",
