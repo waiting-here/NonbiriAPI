@@ -88,6 +88,48 @@ func (bulkDeletionLifecycleHook) PrepareModelDeletion(context.Context, *sql.Tx, 
 	return nil
 }
 
+func TestResourcesRepositoryDeletesEmptyEndpoint(t *testing.T) {
+	environment := newDonationTestEnv(t)
+	owner := environment.seedUser(t, "empty-endpoint-owner", nil, false)
+	otherOwner := environment.seedUser(t, "other-endpoint-owner", nil, false)
+	endpointID, _ := seedBulkDeletionEndpoint(t, environment, owner, 0)
+	otherEndpointID, _ := seedBulkDeletionEndpoint(t, environment, otherOwner, 0)
+	repository, err := resources.New(resources.Config{
+		Store: environment.store, Connectors: connector.NewDefaultRegistry(),
+		BaseURLs: bulkDeletionBaseURLValidator{}, Secrets: bulkDeletionSecretWriter{},
+		KeyDeletion: environment.service, DiscoveryRail: bulkDeletionDiscoveryRail{},
+		KeyCreation: bulkDeletionLifecycleHook{}, Projection: bulkDeletionLifecycleHook{},
+		DiscoveryWorker: bulkDeletionDiscoveryWorker{}, CursorKeys: environment.vault,
+		FinalAuth: environment.auth,
+		Now:       func() time.Time { return time.Unix(environment.clock.Load(), 0) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutation := resources.ControlMutation{
+		IdempotencyKey: "LLLLLLLLLLLLLLLLLLLLLL", Method: http.MethodDelete,
+		Route: "/api/endpoints/{id}", PathIDs: []string{strconv.FormatInt(endpointID, 10)},
+	}
+	if _, err := repository.DeleteEndpoint(context.Background(), otherOwner, endpointID, mutation, 1); !errors.Is(err, resources.ErrNotFound) {
+		t.Fatalf("foreign endpoint deletion = %v", err)
+	}
+	for attempt := range 2 {
+		deleted, err := repository.DeleteEndpoint(context.Background(), owner, endpointID, mutation, 1)
+		if err != nil || deleted.Status != http.StatusNoContent {
+			t.Fatalf("DeleteEndpoint attempt %d = %#v, %v", attempt, deleted, err)
+		}
+	}
+	for id, want := range map[int64]int{endpointID: 0, otherEndpointID: 1} {
+		var count int
+		if err := environment.store.DB().QueryRow(`SELECT COUNT(*) FROM endpoints WHERE id=?`, id).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != want {
+			t.Fatalf("endpoint %d count = %d, want %d", id, count, want)
+		}
+	}
+}
+
 func TestResourcesRepositoryDeletesEndpointWithMoreThanDonationCreateLimit(t *testing.T) {
 	environment := newDonationTestEnv(t)
 	owner := environment.seedUser(t, "bulk-delete-owner", nil, false)

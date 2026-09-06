@@ -69,7 +69,11 @@ function EndpointList({ user }: { user: UserProfile }) {
                 <div className="core-endpoint-card__top">
                   <div>
                     <strong>
-                      <ConnectorLabel value={endpoint.connector_type} />
+                      {endpoint.origin.kind === 'mainstream' ? (
+                        t('endpoints.originMainstream', { name: endpoint.origin.name })
+                      ) : (
+                        <ConnectorLabel value={endpoint.connector_type} />
+                      )}
                     </strong>
                   </div>
                   <StatusPill tone={endpoint.enabled ? 'success' : 'neutral'}>
@@ -77,6 +81,14 @@ function EndpointList({ user }: { user: UserProfile }) {
                   </StatusPill>
                 </div>
                 <dl className="core-detail-list">
+                  {endpoint.origin.kind === 'mainstream' ? (
+                    <div>
+                      <dt>{t('endpoints.connector')}</dt>
+                      <dd>
+                        <ConnectorLabel value={endpoint.connector_type} />
+                      </dd>
+                    </div>
+                  ) : null}
                   <div>
                     <dt>{t('endpoints.baseUrl')}</dt>
                     <dd>
