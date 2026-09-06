@@ -33,3 +33,18 @@ condition = "AND"
 regexTarget = "line"
 paths = ['''^internal[\\/]reports[\\/]testdata[\\/]crypto_golden\.json$''']
 regexes = ['''"key_ref"\s*:\s*"[0-9a-f]{64}"''']
+
+[[allowlists]]
+description = "Exact previous database schema fingerprint"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^internal[\\/]db[\\/]schema_extension\.go$''']
+regexes = ['''^8d39bd424d9df29960c6c113fd874833615de1d95e0f820042bb8b60d7678400$''']
+
+[[allowlists]]
+description = "Fixed Discord identifier in the donation review browser fixture"
+targetRules = ["discord-client-id"]
+condition = "AND"
+regexTarget = "line"
+paths = ['''^web[\\/]test[\\/]e2e[\\/]list-density\.spec\.ts$''']
+regexes = ["discord_id: '123456789012345678'"]

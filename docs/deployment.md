@@ -1,6 +1,6 @@
 # VPS deployment with systemd
 
-This guide describes the supported single-instance operating model for `v1.0.0-beta.1`: one Linux/amd64 binary built from the exact source commit, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS. Verify the fresh-only boundary, backups, configuration, legal text, and smoke tests before opening any deployment. See [configuration.md](configuration.md) for the full environment and runtime-settings reference.
+This guide describes the supported single-instance operating model for `v1.0.0-beta.1`: one Linux/amd64 binary built from the exact source commit, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS. Alpha deployments require a fresh cutover; validated current and explicitly supported earlier Generation 2 schemas can be updated normally with existing data preserved. Verify compatibility, backups, configuration, legal text, and smoke tests before opening any deployment. See [configuration.md](configuration.md) for the full environment and runtime-settings reference.
 
 The commands are examples. Replace paths, hostnames, users, and package-manager commands for the target VPS. Do not copy real secrets into a Git checkout.
 

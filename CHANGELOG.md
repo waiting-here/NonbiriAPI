@@ -6,12 +6,36 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## [Unreleased]
 
+## [1.0.0-beta.1] - 2026-09-06
+
 ### Added
 
+- Database Generation 2 with a manifest-validated schema; a central double-entry credit ledger and shared pools; crash-recoverable worker checkpoints; strict mutation replay; and bounded legal holds.
+- Bilingual announcements, daily welfare, the Thursday pooled activity, account activity summaries, and shared user-station SSE updates with replay/gap recovery.
+- LinkLink and server-authoritative three-player Rock Paper Scissors alongside batched Pond Fishing, with persistent recovery, privacy-aware leaderboards, pending-result acknowledgement, and account-lifetime aggregate fun statistics.
+- Public credential-theft reporting with indistinguishable accepted responses, live-key plus time-bounded donation-tombstone matching, resumable administrator review, and safe donation lineage inspection.
+- Administrator-managed mainstream channel templates, strict mainstream/custom endpoint creation, immutable endpoint provenance snapshots, and a user-facing endpoint creation guide.
+- Per-donation-key authorization and effective expiry, same-channel mainstream auto-approval, account-wide key status views, and administrator-controlled bilingual donation guidance.
+- Public charity capability lists currently routable enabled models with exact base pricing, effective promotional pricing and promotion windows, without revealing donated resources. Administrator and level-5 management views retain the rolling success count and rate for the most recent 100 completed calls.
+- Bilingual React pages for the new activities, announcements, games, reports, legal holds, mainstream channels, donation-key overview, and recovery states. The game center now ships three original local illustrations.
 - Owner-configurable per-key concurrency and rolling-minute request limits. Personal and charity model calls share the limits, skip busy connections automatically, and expose the owner's settings read-only to authorized administrators and stewards.
 - Per-model charity routing choices: saved order, uniform random, or expiry-weighted random. Existing models keep expiry weighting through a compatible database update.
 - Separate user IDs and copyable Discord IDs in administrator user management, with a compact mobile layout.
 - Personal credit history with reason, time and income/expense filters, adjustable page sizes, direct page navigation, and links to the account's own request logs. Donation rewards do not expose another caller's requests.
+
+### Changed
+
+- Account export is schema version 4. It adds safe endpoint origin, authorized/effective donation-key expiry and source provenance, activity/game state, while retaining hard collection and total-size bounds and excluding secrets, reports, other users, internal fingerprints, and administrative material.
+- Donation routing filters eligibility and connector capability before freezing the selected saved-order, uniform-random, or expiry-weighted candidate order without replacement. Random strategies fail closed on entropy failure before any request, reservation, claim, or ledger write.
+- Debug Hub uses a version-2 bounded SSE protocol with explicit dry/live outcomes, safe stop/replace cancellation, and no persisted request or response content.
+- The API uses cursor pagination, strict closed JSON objects, explicit revisions, and idempotency keys for state-changing operations. Removed alpha routes have no compatibility shim.
+- Frontend dependencies include `@eslint/js` 10.0.1, Vite 8.2.2, jsdom 30.0.1, and Testing Library React 16.3.3; TypeScript remains on 5.9.3.
+- GitHub Actions dependencies are pinned to immutable commits for their documented release tags.
+- Upstream response-header waits allow 900 seconds and the logical request budget is 1200 seconds, including retries and streaming. Deployment proxy examples use matching 1200-second timeouts.
+- Donation guidance, descriptions, review reasons, and activity text render common Markdown formatting with inert HTML and safe links.
+- LinkLink uses distinct pictures and animated connections along the confirmed match path, with a stable board position. Active games use less space for explanatory text on mobile.
+- Fishing catch effects reflect rarity. RPS adds gesture reveals, tie progress, and a visible hidden ending after six consecutive free ties. Viewed results remain on the current page until dismissed or another game begins.
+- Simplified user-facing copy and reduced internal configuration details in routine settings workflows.
 
 ### Fixed
 
@@ -41,43 +65,16 @@ Each version entry describes its source and compatibility boundary; a release ta
 - API access and personal request logs are reachable from the main navigation. Endpoint creation supports adding several keys, connection lists show notes, and model checks update automatically.
 - Administrator settings retain drafts and save related fields together, with dependency guidance, conflict detection, and no revision increase for unchanged values.
 - Game anonymity controls are available beside leaderboards and remain consistent after completing the RPS tutorial. Fishing uses the existing illustrated scene with a stationary ripple effect.
-
-### Changed
-
-- Upstream response-header waits allow 900 seconds and the logical request budget is 1200 seconds, including retries and streaming. Deployment proxy examples use matching 1200-second timeouts.
-- Donation guidance, descriptions, review reasons, and activity text render common Markdown formatting with inert HTML and safe links.
-- LinkLink uses distinct pictures and animated connections along the confirmed match path, with a stable board position. Active games use less space for explanatory text on mobile.
-- Fishing catch effects reflect rarity. RPS adds gesture reveals, tie progress, and a visible hidden ending after six consecutive free ties. Viewed results remain on the current page until dismissed or another game begins.
-- Simplified user-facing copy and reduced internal configuration details in routine settings workflows.
-
-## [1.0.0-beta.1]
-
-### Added
-
-- Database Generation 2 with a fresh-only, manifest-validated schema; a central double-entry credit ledger and shared pools; crash-recoverable worker checkpoints; strict mutation replay; and bounded legal holds.
-- Bilingual announcements, daily welfare, the Thursday pooled activity, account activity summaries, and shared user-station SSE updates with replay/gap recovery.
-- LinkLink and server-authoritative three-player Rock Paper Scissors alongside batched Pond Fishing, with persistent recovery, privacy-aware leaderboards, pending-result acknowledgement, and account-lifetime aggregate fun statistics.
-- Public credential-theft reporting with indistinguishable accepted responses, live-key plus time-bounded donation-tombstone matching, resumable administrator review, and safe donation lineage inspection.
-- Administrator-managed mainstream channel templates, strict mainstream/custom endpoint creation, immutable endpoint provenance snapshots, and a user-facing endpoint creation guide.
-- Per-donation-key authorization and effective expiry, same-channel mainstream auto-approval, account-wide key status views, and administrator-controlled bilingual donation guidance.
-- Public charity capability lists currently routable enabled models with exact base pricing, effective promotional pricing and promotion windows, without revealing donated resources. Administrator and level-5 management views retain the rolling success count and rate for the most recent 100 completed calls.
-- Bilingual React pages for the new activities, announcements, games, reports, legal holds, mainstream channels, donation-key overview, and recovery states. The game center now ships three original local illustrations created with ChatGPT assistance.
-
-### Changed
-
-- Account export is schema version 4. It adds safe endpoint origin, authorized/effective donation-key expiry and source provenance, activity/game state, while retaining hard collection and total-size bounds and excluding secrets, reports, other users, internal fingerprints, and administrative material.
-- Donation routing filters eligibility and connector capability before freezing a cryptographically random, expiry-weighted, without-replacement candidate order. Entropy failure returns `service_unavailable` before any request, reservation, claim, or ledger write.
-- Debug Hub uses a version-2 bounded SSE protocol with explicit dry/live outcomes, safe stop/replace cancellation, and no persisted request or response content.
-- The API uses cursor pagination, strict closed JSON objects, explicit revisions, and idempotency keys for state-changing operations. Removed alpha routes have no compatibility shim.
-- Frontend dependencies include `@eslint/js` 10.0.1, Vite 8.2.2, jsdom 30.0.1, and Testing Library React 16.3.3; TypeScript remains on 5.9.3.
-- GitHub Actions dependencies are pinned to immutable commits for their documented release tags.
+- Empty endpoints can be deleted safely. Resource lists distinguish mainstream channel names from Connector protocols, and closing a completed setup step clearly preserves the saved resource.
+- Charity prices show struck-through original amounts, prominent effective discounts, accurate unlimited-offer labels, and browser-local promotion deadlines across mobile and desktop layouts.
 
 ### Compatibility and deployment
 
 - Beta.1 accepts only a completely absent database set or a validated Generation 2 database with SQLite `application_id=0x4E425249` and `user_version=2`. Alpha and Generation 1 databases are not migrated or imported.
-- Upgrading from an earlier prerelease requires a deliberate fresh cutover after a verified complete snapshot. Rollback requires restoring the matching database/sidecars, release, environment, master key, unit, manifest, and checksums together.
+- Upgrading from alpha requires a deliberate fresh cutover after a verified complete snapshot. Three exact earlier beta.1 schemas support a normal additive update for charity routing, per-key request limits, and successful-response checkpoints, preserving existing data. An incompatible downgrade requires restoring the matching database/sidecars, release, environment, master key, unit, manifest, and checksums together.
 - Startup environment-variable names are unchanged from alpha.3, but a fresh cutover resets every database-backed runtime setting and requires operator review or re-entry before opening the instance.
-- The release is source-first and targets Linux/amd64. A `-tags dist -trimpath` build is required after building both embedded web stations.
+- The release is source-first and supports Linux/amd64 production deployments. Go 1.26.6, Node.js 22.22.3 or newer, and npm 12.0.1 are the build baseline; use `CGO_ENABLED=0 -tags dist -trimpath` after building both embedded web stations. No official precompiled binaries, containers, or installers are published.
+- Public ingress remains limited to `/v1/models` and `/v1/chat/completions`; Anthropic compatibility is an upstream translation subset. Other API families, Dify App API, additional production platforms, multi-instance deployment, Gamepad support, and accessibility certification remain outside this release.
 
 ### Security and privacy
 
