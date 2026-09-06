@@ -96,6 +96,29 @@ function jsonResponse(value: unknown): Response {
 }
 
 describe('administrator charity grouped projection', () => {
+  it.each([
+    [0, 0],
+    [4, 90],
+    [null, null],
+  ])('accepts the current key limit projection %s/%s', (concurrency, rpm) => {
+    const result = donation('1', [
+      key(custom, '11', { max_concurrency: concurrency, max_rpm: rpm }),
+    ]);
+    expect(result.keys[0]).toMatchObject({ max_concurrency: concurrency, max_rpm: rpm });
+  });
+
+  it.each([-1, 1.5, '4', Number.MAX_SAFE_INTEGER])(
+    'rejects invalid source key limits %s',
+    (value) => {
+      expect(() =>
+        donation('1', [key(custom, '11', { max_concurrency: value, max_rpm: 0 })]),
+      ).toThrow();
+      expect(() =>
+        donation('1', [key(custom, '11', { max_concurrency: 0, max_rpm: value })]),
+      ).toThrow();
+    },
+  );
+
   it('merges only the exact mainstream provenance tuple and keeps custom keys independent', () => {
     const values = [
       donation('1', [key(mainstream, '11')]),
@@ -106,7 +129,13 @@ describe('administrator charity grouped projection', () => {
     ];
     const groups = groupAdminCharityDonations(values);
     expect(groups).toHaveLength(4);
-    expect(groups.find((group) => group.source.kind === 'mainstream' && group.source.channel_revision === '3')?.items.map((item) => item.key.id)).toEqual(['11', '12']);
+    expect(
+      groups
+        .find(
+          (group) => group.source.kind === 'mainstream' && group.source.channel_revision === '3',
+        )
+        ?.items.map((item) => item.key.id),
+    ).toEqual(['11', '12']);
     expect(groups.filter((group) => group.source.kind === 'custom')).toHaveLength(2);
   });
 
@@ -120,38 +149,33 @@ describe('administrator charity grouped projection', () => {
   });
 
   it('accepts deidentified nullable identities and a removed physical key', () => {
-    const result = donation(
-      '1',
-      [key(custom, '11', { endpoint_key_id: null })],
-      {
-        owner: { user_id: '7', discord_id: null, display_name: 'Donor' },
-        reviewer: { user_id: null, role: 'steward' },
-      },
-    );
+    const result = donation('1', [key(custom, '11', { endpoint_key_id: null })], {
+      owner: { user_id: '7', discord_id: null, display_name: 'Donor' },
+      reviewer: { user_id: null, role: 'steward' },
+    });
     expect(result.keys[0].id).toBe('11');
   });
 
   it('accepts the empty system review used by automatic mainstream approval', () => {
-    const result = donation(
-      '1',
-      [key(mainstream, '11')],
-      {
-        review_result: { decision: 'approve', reason: '', reviewed_at: 2 },
-        reviewer: null,
-      },
-    );
+    const result = donation('1', [key(mainstream, '11')], {
+      review_result: { decision: 'approve', reason: '', reviewed_at: 2 },
+      reviewer: null,
+    });
     expect(result.status).toBe('approved');
   });
 
-  it.each(['admin', 'steward', 'level5'])('accepts a manual %s review without retaining its identity', (role) => {
-    const result = donation('1', [key(custom, '11')], {
-      review_result: { decision: 'approve', reason: '', reviewed_at: 2 },
-      reviewer: { user_id: '8', role },
-    });
-    expect(result.status).toBe('approved');
-    expect(result).not.toHaveProperty('reviewer');
-    expect(result).not.toHaveProperty('review_result');
-  });
+  it.each(['admin', 'steward', 'level5'])(
+    'accepts a manual %s review without retaining its identity',
+    (role) => {
+      const result = donation('1', [key(custom, '11')], {
+        review_result: { decision: 'approve', reason: '', reviewed_at: 2 },
+        reviewer: { user_id: '8', role },
+      });
+      expect(result.status).toBe('approved');
+      expect(result).not.toHaveProperty('reviewer');
+      expect(result).not.toHaveProperty('review_result');
+    },
+  );
 
   it('accepts a clock-expired key while lifecycle cleanup is pending', () => {
     const result = donation('1', [
@@ -202,21 +226,23 @@ describe('administrator charity grouped projection', () => {
     expect(() => donation('1', [key({ ...mainstream, extra: 'not-allowed' }, '11')])).toThrow(
       /mainstream charity source/i,
     );
-    expect(() => donation('1', [key(mainstream, '11', { ended_reason: 'physical_deleted' })])).toThrow(
-      /ended reason/i,
-    );
+    expect(() =>
+      donation('1', [key(mainstream, '11', { ended_reason: 'physical_deleted' })]),
+    ).toThrow(/ended reason/i);
     expect(() => donation('1', [key({ ...mainstream, name: 'bad\u0080name' }, '11')])).toThrow(
       /channel name/i,
     );
-    expect(() => donation('1', [key({ ...custom, base_url: 'https://bad\u0080.example' }, '11')])).toThrow(
-      /source URL/i,
-    );
-    expect(() => donation('1', [key(mainstream, '11', { charity_state: 'available', ended_reason: 'expired' })])).toThrow(
-      /ended reason/i,
-    );
-    expect(() => donation('1', [key(mainstream, '11', { charity_state: 'ended', ended_reason: null })])).toThrow(
-      /ended reason/i,
-    );
+    expect(() =>
+      donation('1', [key({ ...custom, base_url: 'https://bad\u0080.example' }, '11')]),
+    ).toThrow(/source URL/i);
+    expect(() =>
+      donation('1', [
+        key(mainstream, '11', { charity_state: 'available', ended_reason: 'expired' }),
+      ]),
+    ).toThrow(/ended reason/i);
+    expect(() =>
+      donation('1', [key(mainstream, '11', { charity_state: 'ended', ended_reason: null })]),
+    ).toThrow(/ended reason/i);
   });
 
   it('reads the closed admin page with a status filter and cursor', async () => {

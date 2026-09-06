@@ -243,7 +243,15 @@ export async function mockRoleSession(
   await mockJson(page, { origin, method: 'GET', path: '/api/me', body });
 }
 
-export async function mockPublicConfig(page: Page, station: TestStation): Promise<void> {
+export async function mockPublicConfig(page: Page, station: TestStation, overrides: Record<string, unknown> = {}): Promise<void> {
+  if (station === 'admin') {
+    await mockJson(page, {
+      origin: ADMIN_ORIGIN,
+      method: 'GET',
+      path: '/admin/api/branding',
+      body: { site_name: 'Fixture Site', site_logo_url: '' },
+    });
+  }
   await mockJson(page, {
     origin: station === 'admin' ? ADMIN_ORIGIN : USER_ORIGIN,
     method: 'GET',
@@ -261,6 +269,7 @@ export async function mockPublicConfig(page: Page, station: TestStation): Promis
       maintenance_mode: false,
       registration_open: true,
       announcement_epoch: 'b1e_AAAAAAAAAAAAAAAAAAAAAA',
+      ...overrides,
     },
   });
 }
