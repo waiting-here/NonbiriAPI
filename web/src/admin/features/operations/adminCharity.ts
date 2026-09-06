@@ -28,7 +28,13 @@ import {
  * read model.  In particular, source endpoint IDs, safe notes, fingerprints,
  * ciphertext and donor text never enter this query's data cache.
  */
-export const ADMIN_CHARITY_STATUSES = ['pending', 'approved', 'rejected', 'deleted', 'expired'] as const;
+export const ADMIN_CHARITY_STATUSES = [
+  'pending',
+  'approved',
+  'rejected',
+  'deleted',
+  'expired',
+] as const;
 export type AdminCharityStatus = (typeof ADMIN_CHARITY_STATUSES)[number];
 
 export const ADMIN_CHARITY_KEY_STATES = [
@@ -45,10 +51,7 @@ export type AdminCharityKeyState = (typeof ADMIN_CHARITY_KEY_STATES)[number];
 export const ADMIN_CHARITY_CATEGORIES = ['subscription', 'api_platform'] as const;
 export type AdminCharityCategory = (typeof ADMIN_CHARITY_CATEGORIES)[number];
 
-export const ADMIN_CHARITY_CONNECTOR_TYPES = [
-  'openai-compatible',
-  'anthropic-compatible',
-] as const;
+export const ADMIN_CHARITY_CONNECTOR_TYPES = ['openai-compatible', 'anthropic-compatible'] as const;
 export type AdminCharityConnectorType = (typeof ADMIN_CHARITY_CONNECTOR_TYPES)[number];
 
 export const ADMIN_CHARITY_ENDED_REASONS = [
@@ -137,6 +140,8 @@ export interface AdminCharityKey {
   display_tail: string;
   safe_source: AdminCharitySource;
   physical_enabled: boolean;
+  max_concurrency?: number | null;
+  max_rpm?: number | null;
   charity_state: AdminCharityKeyState;
   limits: { price: string | null; calls: string | null; tokens: string | null };
   usage: {
@@ -164,7 +169,11 @@ export interface AdminCharityDonation {
 }
 
 function normalizeCustomSource(value: unknown): AdminCharityCustomSource {
-  const root = record(value, ['kind', 'connector_type', 'base_url'], 'administrator custom charity source');
+  const root = record(
+    value,
+    ['kind', 'connector_type', 'base_url'],
+    'administrator custom charity source',
+  );
   if (root.kind !== 'custom') invalidResponse('administrator custom charity source kind');
   return {
     kind: 'custom',
@@ -197,7 +206,11 @@ function normalizeMainstreamSource(value: unknown): AdminCharityMainstreamSource
     ),
     base_url: channelURL(root.base_url),
     name: channelName(root.name),
-    category: oneOf(root.category, ADMIN_CHARITY_CATEGORIES, 'administrator charity channel category'),
+    category: oneOf(
+      root.category,
+      ADMIN_CHARITY_CATEGORIES,
+      'administrator charity channel category',
+    ),
   };
 }
 
@@ -214,26 +227,28 @@ export function normalizeAdminCharitySource(value: unknown): AdminCharitySource 
 function normalizeAdminCharityKey(value: unknown): AdminCharityKey {
   // The allow-list mirrors the server wire, but forbidden reviewer/physical
   // identity fields are intentionally not read into the returned object.
+  const required = [
+    'id',
+    'endpoint_key_id',
+    'display_head',
+    'display_tail',
+    'safe_source',
+    'physical_enabled',
+    'charity_state',
+    'limits',
+    'usage',
+    'token_reserve',
+    'expires_at',
+    'streak',
+    'ended_reason',
+    'authorized_expires_at',
+    'safe_note',
+  ];
   const root = record(
     value,
-    [
-      'id',
-      'endpoint_key_id',
-      'display_head',
-      'display_tail',
-      'safe_source',
-      'physical_enabled',
-      'charity_state',
-      'limits',
-      'usage',
-      'token_reserve',
-      'expires_at',
-      'streak',
-      'ended_reason',
-      'authorized_expires_at',
-      'safe_note',
-    ],
+    [...required, 'max_concurrency', 'max_rpm'],
     'administrator charity key',
+    required,
   );
   const id = decimalID(root.id, 'administrator charity key ID');
   nullableDecimalID(root.endpoint_key_id, 'administrator charity source endpoint key ID');
@@ -252,7 +267,11 @@ function normalizeAdminCharityKey(value: unknown): AdminCharityKey {
     bytes: 1_024,
     multiline: true,
   });
-  const limits = record(root.limits, ['price', 'calls', 'tokens'], 'administrator charity key limits');
+  const limits = record(
+    root.limits,
+    ['price', 'calls', 'tokens'],
+    'administrator charity key limits',
+  );
   const usage = record(
     root.usage,
     [
@@ -270,10 +289,19 @@ function normalizeAdminCharityKey(value: unknown): AdminCharityKey {
     ['generation', 'count', 'failure_disabled'],
     'administrator charity key streak',
   );
-  const state = oneOf(root.charity_state, ADMIN_CHARITY_KEY_STATES, 'administrator charity key state');
-  const endedReason = root.ended_reason === null
-    ? null
-    : oneOf(root.ended_reason, ADMIN_CHARITY_ENDED_REASONS, 'administrator charity key ended reason');
+  const state = oneOf(
+    root.charity_state,
+    ADMIN_CHARITY_KEY_STATES,
+    'administrator charity key state',
+  );
+  const endedReason =
+    root.ended_reason === null
+      ? null
+      : oneOf(
+          root.ended_reason,
+          ADMIN_CHARITY_ENDED_REASONS,
+          'administrator charity key ended reason',
+        );
   const authorizedExpiresAt = nullableUnixSecond(
     root.authorized_expires_at,
     'administrator charity authorized expiry',
@@ -294,11 +322,24 @@ function normalizeAdminCharityKey(value: unknown): AdminCharityKey {
     display_tail: displayTail,
     safe_source: normalizeAdminCharitySource(root.safe_source),
     physical_enabled: boolean(root.physical_enabled, 'administrator charity physical state'),
+    max_concurrency:
+      root.max_concurrency == null
+        ? null
+        : integer(root.max_concurrency, 'administrator charity key concurrency', 0, 2_147_483_647),
+    max_rpm:
+      root.max_rpm == null
+        ? null
+        : integer(root.max_rpm, 'administrator charity key RPM', 0, 2_147_483_647),
     charity_state: state,
     limits: {
-      price: limits.price === null ? null : amount(limits.price, 'administrator charity price limit', false),
-      calls: limits.calls === null ? null : decimal(limits.calls, 'administrator charity call limit'),
-      tokens: limits.tokens === null ? null : decimal(limits.tokens, 'administrator charity token limit'),
+      price:
+        limits.price === null
+          ? null
+          : amount(limits.price, 'administrator charity price limit', false),
+      calls:
+        limits.calls === null ? null : decimal(limits.calls, 'administrator charity call limit'),
+      tokens:
+        limits.tokens === null ? null : decimal(limits.tokens, 'administrator charity token limit'),
     },
     usage: {
       price_used: amount(usage.price_used, 'administrator charity price used', false),
@@ -308,13 +349,21 @@ function normalizeAdminCharityKey(value: unknown): AdminCharityKey {
       tokens_used: decimal(usage.tokens_used, 'administrator charity tokens used'),
       tokens_inflight: decimal(usage.tokens_inflight, 'administrator charity tokens inflight'),
     },
-    token_reserve: integer(root.token_reserve, 'administrator charity token reserve', 0, 2_147_483_647),
+    token_reserve: integer(
+      root.token_reserve,
+      'administrator charity token reserve',
+      0,
+      2_147_483_647,
+    ),
     authorized_expires_at: authorizedExpiresAt,
     expires_at: expiresAt,
     streak: {
       generation: decimal(streak.generation, 'administrator charity streak generation'),
       count: decimal(streak.count, 'administrator charity failure streak'),
-      failure_disabled: boolean(streak.failure_disabled, 'administrator charity failure-disabled state'),
+      failure_disabled: boolean(
+        streak.failure_disabled,
+        'administrator charity failure-disabled state',
+      ),
     },
     ended_reason: endedReason,
   };
@@ -327,7 +376,11 @@ function normalizeReview(
   if (value === null) return null;
   const root = record(value, ['decision', 'reason', 'reviewed_at'], 'administrator charity review');
   const result = {
-    decision: oneOf(root.decision, ['approve', 'reject'] as const, 'administrator charity review decision'),
+    decision: oneOf(
+      root.decision,
+      ['approve', 'reject'] as const,
+      'administrator charity review decision',
+    ),
     // Review text is deliberately validated but not returned to the page's
     // grouped projection. It is management material, not group metadata.
     reason: string(root.reason, 'administrator charity review reason', {
@@ -360,7 +413,11 @@ export function normalizeAdminCharityDonation(value: unknown): AdminCharityDonat
     ],
     'administrator charity donation',
   );
-  const status = oneOf(root.status, ADMIN_CHARITY_STATUSES, 'administrator charity donation status');
+  const status = oneOf(
+    root.status,
+    ADMIN_CHARITY_STATUSES,
+    'administrator charity donation status',
+  );
   // Validate the closed management projection without retaining donor text,
   // owner identity or reviewer identity in the feature-local query cache.
   string(root.description, 'administrator charity description', {
@@ -372,14 +429,16 @@ export function normalizeAdminCharityDonation(value: unknown): AdminCharityDonat
   const reviewerPresent = validateAdminReviewer(root.reviewer);
   const review = normalizeReview(root.review_result, reviewerPresent);
   if (reviewerPresent && review === null) invalidResponse('administrator charity reviewer state');
-  if (status === 'pending' && review !== null) invalidResponse('administrator charity pending review');
+  if (status === 'pending' && review !== null)
+    invalidResponse('administrator charity pending review');
   if ((status === 'approved' || status === 'expired') && review?.decision !== 'approve') {
     invalidResponse('administrator charity approved review');
   }
   if (status === 'rejected' && review?.decision !== 'reject') {
     invalidResponse('administrator charity rejected review');
   }
-  if (!Array.isArray(root.keys) || root.keys.length > 100) invalidResponse('administrator charity donation keys');
+  if (!Array.isArray(root.keys) || root.keys.length > 100)
+    invalidResponse('administrator charity donation keys');
   return {
     id: decimalID(root.id, 'administrator charity donation ID'),
     status,
@@ -410,9 +469,17 @@ export function getAdminCharityDonations(
     cursor(cursorValue, 'administrator charity cursor');
   }
   return decoded(
-    queryPath('/admin/api/donations', { status: status || undefined, cursor: cursorValue, limit: 50 }),
+    queryPath('/admin/api/donations', {
+      status: status || undefined,
+      cursor: cursorValue,
+      limit: 50,
+    }),
     (value) => {
-      const result = page(value, 'administrator charity donation page', normalizeAdminCharityDonation);
+      const result = page(
+        value,
+        'administrator charity donation page',
+        normalizeAdminCharityDonation,
+      );
       if (result.data.length > 100) invalidResponse('administrator charity donation page size');
       return result;
     },

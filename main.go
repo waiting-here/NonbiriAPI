@@ -202,6 +202,9 @@ func servePublicConfig(store *db.Store, w http.ResponseWriter, r *http.Request) 
 func freshSafeMux(cfg *config.Config, store *db.Store) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", healthz)
+	if store != nil {
+		mux.Handle("/admin/api/branding", httpmw.API(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { servePublicBranding(store, w, r) })))
+	}
 
 	userAPI := httpmw.API(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if store != nil && r.URL.Path == "/api/config" {
@@ -232,6 +235,7 @@ func generationTwoMux(cfg *config.Config, store *db.Store, authRuntime *auth.Run
 		servePublicConfig(store, w, r)
 	}))
 	mux.Handle("/api/config", publicConfig)
+	mux.Handle("/admin/api/branding", httpmw.API(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { servePublicBranding(store, w, r) })))
 
 	userAuth := authRuntime.UserHandler()
 	mux.Handle("/api", userAuth)
@@ -398,7 +402,7 @@ func (a *application) Close() error {
 const (
 	discoveryWorkerMaxConcurrent = 4
 	discoveryWorkerMaxAdmitted   = 32
-	discoveryWorkerTimeout       = egress.DefaultRequestTimeout
+	discoveryWorkerTimeout       = 5 * time.Minute
 )
 
 // roleFinalTxAuthorizer adapts the request actor established by auth.Runtime

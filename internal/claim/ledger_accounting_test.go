@@ -335,6 +335,7 @@ func TestLedgerAccountingCharityAttemptLifecycleAtMaximum(t *testing.T) {
 	}
 	fixture.requireRealLedgerState(request.ID, 96, 96, 3, 6)
 
+	fixture.charity.requestCharges = map[string]int64{request.ID: 23}
 	fixture.clock.Add(1)
 	terminal, err := fixture.service.CompleteRequest(context.Background(), CompleteRequestInput{
 		RequestID:         request.ID,

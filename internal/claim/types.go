@@ -408,6 +408,7 @@ type Charity interface {
 	ReleaseUndispatched(context.Context, *sql.Tx, CharityRelease) error
 	PrepareAttempt(context.Context, *sql.Tx, CharityAttemptInput) (CharityActual, error)
 	CompleteAttempt(context.Context, *sql.Tx, CharityAttemptCompletion) error
+	RequestCharge(context.Context, *sql.Tx, string, AccountingDisposition) (int64, error)
 	CompleteRequest(context.Context, *sql.Tx, CharityRequestCompletion) error
 }
 

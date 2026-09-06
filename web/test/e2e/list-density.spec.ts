@@ -101,6 +101,75 @@ function publicModel(index: number) {
   };
 }
 
+test('donation guidance renders Markdown without overflowing mobile or desktop pages', async ({
+  page,
+}) => {
+  const guard = await prepare(page, 'user');
+  const markdown =
+    '# Donation guide\n\n- **Read first**\n- Use `model/name`\n\n[Documentation](https://example.test/help)\n\n| Model | Details |\n| --- | --- |\n| Example | ' +
+    'long'.repeat(70) +
+    ' |\n\n```text\n' +
+    'x'.repeat(400) +
+    '\n```';
+  await mockPublicConfig(page, 'user', { charity_donation_notice_en: markdown });
+  await mockJson(page, {
+    origin: USER_ORIGIN,
+    method: 'GET',
+    path: '/api/charity/models',
+    body: {
+      state: 'available',
+      donation_intake: 'open',
+      server_now: NOW,
+      models: [publicModel(1)],
+    },
+  });
+  for (const path of ['/api/donations?limit=100', '/api/endpoints?limit=100'])
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path,
+      body: { data: [], next_cursor: null },
+    });
+  await page.goto(`${USER_ORIGIN}/charity?tab=donate`);
+  await expect(page.getByRole('heading', { name: 'Donation guide', exact: true })).toBeVisible();
+  await expect(page.locator('.economy-donation-notice strong')).toHaveText('Read first');
+  for (const width of [320, 390, 1935]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await fitsPage(page);
+    await expect(page.locator('.economy-donation-notice pre')).toBeVisible();
+    expect(
+      await page
+        .locator('.economy-donation-notice th')
+        .first()
+        .evaluate((element) => element.getBoundingClientRect().width),
+    ).toBeGreaterThan(45);
+    await screenshot(page, `markdown-guidance-${width}`);
+  }
+  guard.assertNone();
+});
+
+test('administrator source grouping accepts current key limits on narrow and wide screens', async ({
+  page,
+}) => {
+  const guard = await prepare(page, 'admin');
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN,
+    method: 'GET',
+    path: '/admin/api/donations?limit=50',
+    body: { data: [managedDonation(9, 'admin')], next_cursor: null },
+  });
+  await page.goto(`${ADMIN_ORIGIN}/charity`);
+  await page.getByRole('tab', { name: 'Browse by source' }).click();
+  await expect(page.getByText('Maximum RPM: 45', { exact: true })).toBeVisible();
+  for (const width of [320, 1935]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await fitsPage(page);
+    await expect(page.getByText('Maximum concurrency: 3', { exact: true })).toBeVisible();
+    await screenshot(page, `source-group-limits-${width}`);
+  }
+  guard.assertNone();
+});
+
 for (const locale of ['en', 'zh'] as const) {
   test(`multiple charity prices remain compact, readable and searchable in ${locale}`, async ({
     page,

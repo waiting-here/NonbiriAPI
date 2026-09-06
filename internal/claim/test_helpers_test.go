@@ -377,6 +377,7 @@ type testCharity struct {
 	releases           []CharityRelease
 	attempts           []CharityAttemptInput
 	completions        []CharityRequestCompletion
+	requestCharges     map[string]int64
 }
 
 func newTestCharity() *testCharity {
@@ -501,6 +502,28 @@ VALUES('request',?)`, input.RequestID); err != nil {
 	c.completions = append(c.completions, input)
 	c.mu.Unlock()
 	return nil
+}
+
+func (c *testCharity) RequestCharge(_ context.Context, _ *sql.Tx, requestID string, disposition AccountingDisposition) (int64, error) {
+	if disposition == AccountingRelease {
+		return 0, nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if charge, ok := c.requestCharges[requestID]; ok {
+		return charge, nil
+	}
+	for _, accepted := range c.accepts {
+		if accepted.RequestID == requestID {
+			for _, attempt := range c.claims {
+				if attempt.RequestID == requestID {
+					return min(accepted.ReservedMilli, c.configs[attempt.DonationKeyID].priceMilli), nil
+				}
+			}
+			return accepted.ReservedMilli, nil
+		}
+	}
+	return 0, nil
 }
 
 type claimFixture struct {

@@ -109,9 +109,22 @@ VALUES(?,'openai-compatible',?,'private endpoint',1,1,?,?)`, environment.donorID
 	environment.endpointID, _ = result.LastInsertId()
 	contextID, fingerprint := make([]byte, 16), make([]byte, 32)
 	contextID[15], fingerprint[31] = 1, 1
+	vault, err := secret.New(bytes.Repeat([]byte{0x43}, secret.MasterKeyBytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vault.Close()
+	keyContext, err := secret.NewGenerationTwoEndpointKeyContext(contextID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envelope, err := vault.SealForGenerationTwoContext([]byte("charity-test-key"), keyContext)
+	if err != nil {
+		t.Fatal(err)
+	}
 	result, err = environment.store.DB().Exec(`INSERT INTO endpoint_key_secrets(
 context_id,canonical_base_url,connector_type,encrypted_secret,created_at)
-VALUES(?,?,'openai-compatible','test-envelope',?)`, contextID, baseURL, charityTestNow)
+VALUES(?,?,'openai-compatible',?,?)`, contextID, baseURL, envelope, charityTestNow)
 	if err != nil {
 		t.Fatalf("seed endpoint secret: %v", err)
 	}
@@ -300,7 +313,7 @@ func TestPerRequestSettlementRewardAndReceiverDeletion(t *testing.T) {
 	}
 	input := claim.CharityAttemptInput{
 		ReceiverUserID: &environment.donorID, Usage: connectorcontract.Usage{Present: true},
-		ProtocolSuccess: true, ResponseStarted: false, CompletedAt: charityTestNow + 10,
+		ProtocolSuccess: true, ResponseStarted: true, CompletedAt: charityTestNow + 10,
 	}
 	environment.completeAttempt(t, requestID, claimed, input, claim.RewardPosted,
 		claim.CharityActual{PriceMilli: 3000, RewardMilli: 1250})
@@ -320,7 +333,7 @@ WHERE id=?`, environment.donationKey).Scan(&priceUsed, &callsUsed, &priceReserve
 	assertU128(t, rewardBlob, 1250, "posted reward aggregate")
 	assertU128(t, donorCredit, 0, "charity settlement must not post donor ledger credit")
 	assertU128(t, priceUsed, 3000, "raw donor price")
-	assertU128(t, callsUsed, 0, "response-not-started calls")
+	assertU128(t, callsUsed, 1, "successful response calls")
 	assertU128(t, priceReserved, 0, "released price reservation")
 
 	charge, err := environment.service.CalculateRequestCharge(context.Background(), requestID, claim.AccountingCommit)

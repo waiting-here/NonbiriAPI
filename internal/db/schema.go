@@ -10,7 +10,14 @@ package db
 // generationTwoSchema is deliberately non-idempotent. Keep all scalar
 // constraints in this source so that the startup manifest is an exact lock,
 // rather than a best-effort list of tables.
-const generationTwoSchema = generationTwoBaseSchema + charityModelRoutingSchema + endpointKeyLimitsSchema
+const generationTwoSchema = generationTwoBaseSchema + charityModelRoutingSchema + endpointKeyLimitsSchema + dispatchResponseStartsSchema
+
+const dispatchResponseStartsSchema = `
+CREATE TABLE dispatch_response_starts (
+ claim_id TEXT NOT NULL PRIMARY KEY REFERENCES dispatch_claims(id) ON DELETE CASCADE CHECK(length(claim_id)=26 AND substr(claim_id,1,4)='clm_' AND substr(claim_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(claim_id,-1,1) IN ('A','Q','g','w')),
+ started_at INTEGER NOT NULL CHECK(typeof(started_at)='integer' AND started_at BETWEEN 0 AND 253402300799)
+);
+`
 
 const endpointKeyLimitsSchema = `
 CREATE TABLE endpoint_key_limits (

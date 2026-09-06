@@ -331,6 +331,16 @@ func (s *Service) completeAttemptTx(
 		if s.charity == nil || s.accounting == nil {
 			return Attempt{}, ErrDependencyUnavailable
 		}
+		started, err := responseStartedTx(ctx, tx, record.claimID)
+		if err != nil {
+			return Attempt{}, err
+		}
+		outcome.ResponseStarted = outcome.ResponseStarted || started
+		if outcome.ResponseStarted && !started {
+			if err := recordResponseStartTx(ctx, tx, record.claimID, at); err != nil {
+				return Attempt{}, err
+			}
+		}
 		isAdmin := false
 		if record.receiverUserID.Valid {
 			var admin int
@@ -500,6 +510,16 @@ FROM dispatch_claims WHERE logical_request_id=?`, request.ID).Scan(&nonterminalC
 		}
 		if request.Route == RouteCharityChat && s.charity == nil {
 			return Request{}, ErrDependencyUnavailable
+		}
+		if request.Route == RouteCharityChat {
+			charge, err := s.charity.RequestCharge(ctx, tx, request.ID, input.Disposition)
+			if err != nil {
+				return Request{}, fmt.Errorf("claim: prepare authoritative request charge: %w", err)
+			}
+			if !validMoney(charge) || charge > request.ReservedMilli {
+				return Request{}, ErrInvariant
+			}
+			input.ActualChargeMilli = charge
 		}
 	}
 

@@ -568,6 +568,9 @@ WHERE u.claim_id=? AND c.logical_request_id=?`, input.ClaimID, input.RequestID).
 	if state != "reserved" || input.DonationKeyID != nil && (!key.Valid || key.Int64 != *input.DonationKeyID) {
 		return claim.CharityActual{}, claim.ErrConflict
 	}
+	if !input.ResponseStarted {
+		return claim.CharityActual{}, nil
+	}
 
 	if mode == "per_request" {
 		reward := requestReward
@@ -704,6 +707,9 @@ FROM donation_usage_reservations WHERE claim_id=?`, completion.Attempt.ClaimID).
 }
 
 func actualTokenCount(input claim.CharityAttemptInput, reserve int64) (int64, error) {
+	if !input.ResponseStarted {
+		return 0, nil
+	}
 	if input.UsageUnknown || !input.Usage.Present {
 		return reserve, nil
 	}
@@ -819,7 +825,7 @@ FROM charity_reservations WHERE logical_request_id=?`, input.RequestID).Scan(&to
 	values := []int64{input.Usage.UncachedInputTokens, input.Usage.CacheWriteInputTokens,
 		input.Usage.CacheReadInputTokens, input.Usage.OutputTokens}
 	stored := []*int64{&u0, &u1, &u2, &u3}
-	if input.Usage.Present {
+	if input.ResponseStarted && input.Usage.Present {
 		for index, value := range values {
 			if value < 0 || *stored[index] > math.MaxInt64-value {
 				return claim.ErrInvariant
@@ -827,7 +833,7 @@ FROM charity_reservations WHERE logical_request_id=?`, input.RequestID).Scan(&to
 			*stored[index] += value
 		}
 	}
-	if input.UsageUnknown {
+	if input.ResponseStarted && input.UsageUnknown {
 		unknown = 1
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE charity_reservations SET
@@ -976,10 +982,18 @@ user_charge_milli=?,finalized_at=?,updated_at=? WHERE logical_request_id=? AND s
 	return nil
 }
 
-// CalculateRequestCharge returns the frozen conservative caller settlement.
-// The forwarder may call it after every attempt is terminal and pass the
-// returned user charge to claim.CompleteRequest. CompleteRequest recomputes
-// the same immutable result inside its terminal savepoint.
+// RequestCharge computes the caller settlement inside the claim transaction.
+func (s *Service) RequestCharge(ctx context.Context, tx *sql.Tx, requestID string, disposition claim.AccountingDisposition) (int64, error) {
+	if s == nil || ctx == nil || tx == nil || !db.ValidateOpaqueID(requestID, "req_") ||
+		(disposition != claim.AccountingCommit && disposition != claim.AccountingRelease) {
+		return 0, claim.ErrInvalidInput
+	}
+	_, charge, err := calculateRequestChargeTx(ctx, tx, requestID, disposition)
+	return charge, err
+}
+
+// CalculateRequestCharge previews the caller settlement after all attempts
+// are terminal. Completion recomputes it in the transaction that posts it.
 func (s *Service) CalculateRequestCharge(ctx context.Context, requestID string, disposition claim.AccountingDisposition) (int64, error) {
 	if s == nil || s.db == nil || ctx == nil || !db.ValidateOpaqueID(requestID, "req_") ||
 		(disposition != claim.AccountingCommit && disposition != claim.AccountingRelease) {
@@ -999,6 +1013,15 @@ func (s *Service) CalculateRequestCharge(ctx context.Context, requestID string, 
 
 func calculateRequestChargeTx(ctx context.Context, tx *sql.Tx, requestID string, disposition claim.AccountingDisposition) (int64, int64, error) {
 	if disposition == claim.AccountingRelease {
+		return 0, 0, nil
+	}
+	var started bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM donation_usage_reservations u
+JOIN dispatch_claims c ON c.id=u.claim_id
+WHERE c.logical_request_id=? AND u.state='committed' AND u.calls_actual=1)`, requestID).Scan(&started); err != nil {
+		return 0, 0, fmt.Errorf("charity: read successful response evidence: %w", err)
+	}
+	if !started {
 		return 0, 0, nil
 	}
 	var mode string
@@ -1117,6 +1140,9 @@ func (s *Service) Cleanup(ctx context.Context, decisionNow int64, limit int) (in
 func validAttemptInput(input claim.CharityAttemptInput) bool {
 	if !db.ValidateOpaqueID(input.RequestID, "req_") || !db.ValidateOpaqueID(input.ClaimID, "clm_") ||
 		!validTime(input.CompletedAt) || input.UsageUnknown != !input.Usage.Present {
+		return false
+	}
+	if input.ProtocolSuccess && !input.ResponseStarted {
 		return false
 	}
 	if input.DonationKeyID != nil && *input.DonationKeyID <= 0 || input.ReceiverUserID != nil && *input.ReceiverUserID <= 0 {

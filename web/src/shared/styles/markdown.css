@@ -1,0 +1,73 @@
+.nb-markdown {
+  min-width: 0;
+  max-width: 100%;
+  contain: inline-size;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+  white-space: normal;
+}
+.nb-markdown > :first-child {
+  margin-top: 0;
+}
+.nb-markdown > :last-child {
+  margin-bottom: 0;
+}
+.nb-markdown p {
+  white-space: pre-wrap;
+  margin-block: 0.65em;
+}
+.nb-markdown :is(h1, h2, h3, h4, h5, h6) {
+  margin-block: 1em 0.4em;
+  font-weight: 700;
+}
+.nb-markdown :is(ul, ol) {
+  padding-inline-start: 1.5em;
+  margin-block: 0.65em;
+}
+.nb-markdown ul {
+  list-style: disc;
+}
+.nb-markdown ol {
+  list-style: decimal;
+}
+.nb-markdown li + li {
+  margin-top: 0.25em;
+}
+.nb-markdown blockquote {
+  margin-inline: 0;
+  padding-inline-start: 1em;
+  border-inline-start: 3px solid currentColor;
+}
+.nb-markdown pre {
+  max-width: 100%;
+  padding: 0.75em;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: rgb(127 127 127 / 10%);
+  border-radius: 0.5em;
+}
+.nb-markdown :not(pre) > code {
+  padding: 0.1em 0.3em;
+  background: rgb(127 127 127 / 10%);
+  border-radius: 0.25em;
+}
+.nb-markdown__table {
+  max-width: 100%;
+  overflow: auto;
+}
+.nb-markdown table {
+  border-collapse: collapse;
+  min-width: 24rem;
+  width: auto;
+}
+.nb-markdown :is(th, td) {
+  min-width: 8rem;
+  padding: 0.4em 0.7em;
+  border: 1px solid rgb(127 127 127 / 30%);
+  text-align: start;
+}
+.nb-markdown input[type='checkbox'] {
+  width: auto;
+  margin-inline-end: 0.4em;
+}

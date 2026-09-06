@@ -330,6 +330,9 @@ func (a *Adapter) nonStreamWithPolicy(ctx context.Context, writer http.ResponseW
 			return upstreamFailure("upstream response was rejected", response.StatusCode)
 		}
 	}
+	if err := connectorcontract.MarkResponseStarted(writer); err != nil {
+		return sinkFailure(false, usage)
+	}
 	if ctx.Err() != nil {
 		return canceledFailure()
 	}
@@ -426,6 +429,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 			clear(frame)
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream was rejected")
 		}
+		usage = usageState.observe(chunkUsage, chunkUsageMalformed)
 		wrote, writeErr := a.writeStreamFrame(writer, controller, frame)
 		clear(frame)
 		committed = committed || wrote
@@ -433,7 +437,6 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 			return sinkFailureWithCommit(committed, usage)
 		}
 		seenChunk = true
-		usage = usageState.observe(chunkUsage, chunkUsageMalformed)
 	}
 }
 
@@ -625,6 +628,10 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 		}
 		usage = usageState.observe(chunkUsage, chunkMalformed)
 		seenChunk = true
+		if err := connectorcontract.MarkResponseStarted(writer); err != nil {
+			clear(frame)
+			return sinkFailureWithCommit(committed, usage)
+		}
 		if len(choices) == 0 {
 			// Hold the latest usage until finish -> usage -> DONE. Empty
 			// keepalive chunks must not erase a previously received snapshot.

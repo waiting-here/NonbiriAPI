@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { clearStationSession } from '@shared/charityManagement';
+import { KeyLimitSummary } from '@shared/components/KeyRoutingLimits';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { CursorPagination } from '@shared/operations/CursorPagination';
 import { useCursorPager } from '@shared/operations/useCursorPager';
@@ -108,11 +109,12 @@ function endedReasonLabel(
 
 function GroupSource({ group }: { group: AdminCharityGroup }) {
   const { t } = useTranslation();
-  const label = group.source.kind === 'custom'
-    ? t('admin.charity.group.custom')
-    : group.source.category === 'subscription'
-      ? t('admin.charity.group.mainstreamSubscription', { name: group.source.name })
-      : t('admin.charity.group.mainstreamApiPlatform', { name: group.source.name });
+  const label =
+    group.source.kind === 'custom'
+      ? t('admin.charity.group.custom')
+      : group.source.category === 'subscription'
+        ? t('admin.charity.group.mainstreamSubscription', { name: group.source.name })
+        : t('admin.charity.group.mainstreamApiPlatform', { name: group.source.name });
   return (
     <div className="ops-subcard">
       <h3>{label}</h3>
@@ -195,6 +197,7 @@ function GroupKey({
             : formatDateTime(keyValue.authorized_expires_at)}
         </dd>
       </dl>
+      <KeyLimitSummary concurrency={keyValue.max_concurrency} rpm={keyValue.max_rpm} readOnly />
       {blocked ? <p className="inline-notice">{blocked}</p> : null}
       {endedReason ? (
         <p className="inline-notice">

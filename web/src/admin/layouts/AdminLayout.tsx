@@ -14,6 +14,7 @@ import { apiFetch, isApiError, isNotFoundError, isUnauthorized } from '@shared/q
 import { ThemeToggle } from '@shared/theme/ThemeToggle';
 import { SHELL_DRAWER_MEDIA_QUERY } from '@shared/styles/tokens';
 import { useAdminSession } from '../data';
+import { useAdminBranding } from '../branding';
 import { clearManagementSession } from '@shared/charityManagement';
 import { ADMIN_NAV_GROUPS, ADMIN_PRIMARY_NAV } from '../navigation';
 
@@ -24,12 +25,8 @@ const ADMIN_GROUP_LABEL_KEYS: Record<(typeof ADMIN_NAV_GROUPS)[number], string> 
   content: 'admin.navigation.content',
 };
 
-function AdminLogin({ onSignedIn, notice }: { onSignedIn: () => Promise<void>; notice?: unknown }) {
+function AdminLogin({ onSignedIn, notice, siteName, siteLogoURL }: { onSignedIn: () => Promise<void>; notice?: unknown; siteName: string; siteLogoURL?: string }) {
   const { t } = useTranslation();
-  // Anonymous admin bootstrap must remain local: /admin/api/config is an ADM
-  // route and a 401 response must never prevent this login surface from
-  // rendering. Authenticated AdminLayout owns the protected config query.
-  const siteName = t('app.name');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -63,7 +60,7 @@ function AdminLogin({ onSignedIn, notice }: { onSignedIn: () => Promise<void>; n
   return (
     <div className="auth-shell">
       <header className="site-header nb-admin-header">
-        <Brand siteName={siteName} className="brand nb-admin-header__brand" suffix={<span className="brand-suffix nb-admin-header__suffix">{t('admin.shell.brandSuffix')}</span>} />
+        <Brand siteName={siteName} siteLogoURL={siteLogoURL} className="brand nb-admin-header__brand" suffix={<span className="brand-suffix nb-admin-header__suffix">{t('admin.shell.brandSuffix')}</span>} />
         <div className="site-actions">
           <LanguageSwitcher />
           <ThemeToggle />
@@ -118,9 +115,10 @@ export function AdminLayout() {
   const clearToasts = toastContext?.clear;
   const [logoutRequested, setLogoutRequested] = useState(false);
   const session = useAdminSession(!logoutRequested);
+  const branding = useAdminBranding();
   const config = usePublicConfig(Boolean(session.data) && !logoutRequested, '/admin/api/config');
-  const siteName = config.data?.siteName || t('app.name');
-  const siteLogoURL = config.data?.siteLogoURL;
+  const siteName = config.data?.siteName || branding.data?.siteName || t('app.name');
+  const siteLogoURL = config.data?.siteLogoURL ?? branding.data?.siteLogoURL;
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -203,6 +201,7 @@ export function AdminLayout() {
     if (logoutBusy) return <LoadingState />;
     return (
       <AdminLogin
+        siteName={siteName} siteLogoURL={siteLogoURL}
         notice={logoutError}
         onSignedIn={async () => {
           const result = await session.refetch();
@@ -219,6 +218,7 @@ export function AdminLayout() {
   if (session.error || !session.data) {
     return (
       <AdminLogin
+        siteName={siteName} siteLogoURL={siteLogoURL}
         onSignedIn={async () => {
           const result = await session.refetch();
           if (result.error) throw result.error;

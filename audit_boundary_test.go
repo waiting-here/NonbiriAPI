@@ -104,6 +104,9 @@ func assertFreshSafeApplication(t *testing.T, app *application) {
 		{name: "caller models mounted behind maintenance", host: auditUserHost, path: "/v1/models", want: http.StatusServiceUnavailable},
 		{name: "caller chat mounted behind maintenance", host: auditUserHost, path: "/v1/chat/completions", want: http.StatusServiceUnavailable},
 		{name: "admin bootstrap requires session", host: auditAdminHost, path: "/admin/api/config", want: http.StatusUnauthorized},
+		{name: "admin branding is public", host: auditAdminHost, path: "/admin/api/branding", want: http.StatusOK},
+		{name: "admin branding rejects query", host: auditAdminHost, path: "/admin/api/branding?extra=1", want: http.StatusBadRequest},
+		{name: "user cannot reach admin branding", host: auditUserHost, path: "/admin/api/branding", want: http.StatusNotFound},
 		{name: "admin catalog requires session", host: auditAdminHost, path: "/admin/api/site-config", want: http.StatusUnauthorized},
 		{name: "admin users require session", host: auditAdminHost, path: "/admin/api/users", want: http.StatusUnauthorized},
 		{name: "admin alerts require session", host: auditAdminHost, path: "/admin/api/alerts", want: http.StatusUnauthorized},
@@ -153,6 +156,11 @@ func assertFreshSafeApplication(t *testing.T, app *application) {
 	var body map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("public config body=%s err=%v", rec.Body.String(), err)
+	}
+	branding := testHTTPResponse(t, app.handler, http.MethodGet, auditAdminHost, "/admin/api/branding")
+	var brand map[string]any
+	if err := json.Unmarshal(branding.Body.Bytes(), &brand); err != nil || len(brand) != 2 || brand["site_name"] != body["site_name"] || brand["site_logo_url"] != body["site_logo_url"] || branding.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("anonymous branding escaped its two-field public projection: %s %v", branding.Body.String(), err)
 	}
 	gotKeys := make([]string, 0, len(body))
 	for key := range body {

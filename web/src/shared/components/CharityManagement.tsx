@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { CharityBindingPicker, type CharitySelection } from './CharityBindingPicker';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { KeyLimitSummary } from './KeyRoutingLimits';
+import { MarkdownText } from './MarkdownText';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { CursorPagination } from '@shared/operations/CursorPagination';
 import { useCursorPager } from '@shared/operations/useCursorPager';
@@ -634,7 +635,7 @@ function DonationDetail({
               : ''}
           </dd>
           <dt>{t('common.operations.charity.donorDescription')}</dt>
-          <dd>{item.description || t('common.operations.charity.noDescription')}</dd>
+          <dd><MarkdownText>{item.description || t('common.operations.charity.noDescription')}</MarkdownText></dd>
           <dt>{t('common.operations.charity.createdUpdated')}</dt>
           <dd>
             {formatDateTime(item.created_at)} / {formatDateTime(item.updated_at)}
@@ -916,7 +917,7 @@ function DonationsPanel({
                         className="ops-cell-wide"
                         data-label={t('common.operations.charity.description')}
                       >
-                        {item.description || t('common.operations.charity.noDescription')}
+                        <MarkdownText>{item.description || t('common.operations.charity.noDescription')}</MarkdownText>
                       </td>
                       <td
                         className="ops-cell-wide"

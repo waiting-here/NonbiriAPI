@@ -119,7 +119,7 @@ WHERE state IN ('claimed','dispatched') ORDER BY claim_now,id LIMIT 1`).Scan(&cl
 			UpstreamStatus:  502,
 			Diagnostic:      "dispatch outcome unavailable after restart",
 			ProtocolSuccess: false,
-			ResponseStarted: true,
+			ResponseStarted: false,
 		}, at); err != nil {
 			return "", err
 		}

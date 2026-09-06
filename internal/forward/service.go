@@ -590,6 +590,14 @@ func (service *Service) runAttempts(
 		if suppressor != nil {
 			sink = suppressor.UpstreamWriter()
 		}
+		var responseStart *responseStartWriter
+		if plan.charity {
+			sink, responseStart = checkpointResponseWriter(sink, func() error {
+				checkpointContext, cancel := context.WithTimeout(context.WithoutCancel(parent), service.settlement)
+				defer cancel()
+				return service.claims.MarkResponseStarted(checkpointContext, handle)
+			})
+		}
 		protocolConnector := service.connectors[candidate.ConnectorType]
 		if protocolConnector == nil {
 			credential.Clear()
@@ -613,7 +621,11 @@ func (service *Service) runAttempts(
 		}
 		run.result, run.hasResult = result, true
 		settleContext, cancel := context.WithTimeout(context.WithoutCancel(parent), service.settlement)
-		_, completionErr := service.claims.CompleteAttempt(settleContext, handle, attemptOutcome(result))
+		outcome := attemptOutcome(result)
+		if responseStart != nil && responseStart.started {
+			outcome.ResponseStarted = true
+		}
+		_, completionErr := service.claims.CompleteAttempt(settleContext, handle, outcome)
 		cancel()
 		if completionErr != nil {
 			run.err = completionErr

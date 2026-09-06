@@ -195,12 +195,13 @@ describe('activity cards', () => {
     expect(screen.queryByText(activityCopy.welfare.claimedAmount)).toBeNull();
   });
 
-  it('renders literature as text, exposes one fixed action, and hides internal ids', async () => {
+  it('renders literature Markdown with inert HTML, exposes one fixed action, and hides internal ids', async () => {
     const rendered = await renderWithProviders(
       <ThursdayCard thursday={thursday} masterAvailable />,
       { station: 'user', role: 'user' },
     );
-    expect(screen.getByText('<img src=x onerror=alert(1)> **not markdown**')).toBeInTheDocument();
+    expect(screen.getByText('not markdown', { selector: 'strong' })).toBeInTheDocument();
+    expect(screen.getByText('<img src=x onerror=alert(1)>', { exact: false })).toBeInTheDocument();
     expect(rendered.container.querySelector('img')).toBeNull();
     expect(rendered.container.querySelector('input')).toBeNull();
     expect(screen.getAllByRole('button')).toHaveLength(1);

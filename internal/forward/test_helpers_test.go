@@ -209,6 +209,10 @@ func (rail *fakeClaimRail) ReleaseUndispatched(_ context.Context, _ claim.Handle
 	return claim.Attempt{}, err
 }
 
+func (rail *fakeClaimRail) MarkResponseStarted(context.Context, claim.Handle) error {
+	return nil
+}
+
 func (rail *fakeClaimRail) CompleteAttempt(_ context.Context, _ claim.Handle, outcome claim.AttemptOutcome) (claim.Attempt, error) {
 	rail.mu.Lock()
 	index := rail.attemptCall

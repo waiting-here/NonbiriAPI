@@ -23,7 +23,7 @@ const (
 	MaxRouteAttempts       = claim.MaxAttempts
 	MaxCallerModels        = 1000
 	MaxModelListBytes      = 1 << 20
-	DefaultForwardTimeout  = 5 * time.Minute
+	DefaultForwardTimeout  = 20 * time.Minute
 	DefaultSettlementLimit = 30 * time.Second
 	DefaultBackoffBase     = 200 * time.Millisecond
 	DefaultBackoffMax      = 2 * time.Second
@@ -123,6 +123,7 @@ type ClaimRail interface {
 	Accept(context.Context, claim.AcceptInput) (claim.Request, error)
 	Claim(context.Context, claim.ClaimInput) (claim.Handle, error)
 	TakeForDispatch(context.Context, claim.Handle) (DispatchGrant, error)
+	MarkResponseStarted(context.Context, claim.Handle) error
 	ReleaseUndispatched(context.Context, claim.Handle) (claim.Attempt, error)
 	CompleteAttempt(context.Context, claim.Handle, claim.AttemptOutcome) (claim.Attempt, error)
 	CompleteRequest(context.Context, claim.CompleteRequestInput) (claim.Request, error)

@@ -15,6 +15,11 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Fixed
 
+- Charity attempts that fail before any validated successful output now refund the caller reservation and consume no donation quota or reward. Persisted response-start evidence keeps interrupted-request recovery consistent with live settlement.
+- Upstream response-header timeouts retain their timeout cause instead of being mislabeled as caller cancellation.
+- Administrator charity source groups accept current key-limit fields and display them read-only.
+- Administrator login pages load the configured site name and icon from a minimal public branding projection.
+- API access uses a clearer key icon, and the charity service-quality notice clarifies that its examples are non-exhaustive.
 - Separate identifiers in review, channel, legal-hold and report tables, with readable field labels on narrow screens. Large connection lists support bounded scrolling and page filters; charity access supports model-name and pricing filters.
 - The home donation total is labeled as accumulated donation rewards.
 - Streaming providers that report cumulative token counts now update usage and billing correctly. Repeated snapshots are not summed, and malformed or regressing values remain unknown.
@@ -39,6 +44,8 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ### Changed
 
+- Upstream response-header waits allow 900 seconds and the logical request budget is 1200 seconds, including retries and streaming. Deployment proxy examples use matching 1200-second timeouts.
+- Donation guidance, descriptions, review reasons, and activity text render common Markdown formatting with inert HTML and safe links.
 - LinkLink uses distinct pictures and animated connections along the confirmed match path, with a stable board position. Active games use less space for explanatory text on mobile.
 - Fishing catch effects reflect rarity. RPS adds gesture reveals, tie progress, and a visible hidden ending after six consecutive free ties. Viewed results remain on the current page until dismissed or another game begins.
 - Simplified user-facing copy and reduced internal configuration details in routine settings workflows.
