@@ -1,5 +1,6 @@
-import Markdown, { type Components } from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { useMemo } from 'react';
+import { Marked, Renderer } from 'marked';
+import DOMPurify from 'dompurify';
 import '../styles/markdown.css';
 
 function safeLink(value: string): string {
@@ -16,33 +17,87 @@ function safeLink(value: string): string {
   }
 }
 
-const components: Components = {
-  h1: ({ children }) => <h3>{children}</h3>,
-  h2: ({ children }) => <h4>{children}</h4>,
-  h3: ({ children }) => <h5>{children}</h5>,
-  h4: ({ children }) => <h6>{children}</h6>,
-  a: ({ href, children }) =>
-    href ? (
-      <a
-        href={href}
-        target={href.startsWith('#') || href.startsWith('/') ? undefined : '_blank'}
-        rel="noopener noreferrer nofollow"
-        referrerPolicy="no-referrer"
-      >
-        {children}
-      </a>
-    ) : (
-      <span>{children}</span>
-    ),
-  // Donor-authored descriptions must not trigger external image requests
-  // while another account reads them.
-  img: ({ alt }) => <span>{alt}</span>,
-  table: ({ children }) => (
-    <div className="nb-markdown__table">
-      <table>{children}</table>
-    </div>
-  ),
-};
+function escapeHTML(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+const markdown = new Marked({
+  gfm: true,
+  breaks: false,
+  renderer: {
+    html: ({ text }) => escapeHTML(text),
+    // Images remain text, so reading donor content sends no media requests.
+    image: ({ text }) => escapeHTML(text),
+    heading({ tokens, depth }) {
+      const level = Math.min(depth + 2, 6);
+      return `<h${level}>${this.parser.parseInline(tokens)}</h${level}>`;
+    },
+    link({ href, tokens }) {
+      const text = this.parser.parseInline(tokens);
+      const url = safeLink(href);
+      if (!url) return text;
+      const target = url.startsWith('#') || url.startsWith('/') ? '' : ' target="_blank"';
+      return `<a href="${escapeHTML(url)}"${target} rel="noopener noreferrer nofollow" referrerpolicy="no-referrer">${text}</a>`;
+    },
+    table(token) {
+      return `<div class="nb-markdown__table">${Renderer.prototype.table.call(this, token)}</div>`;
+    },
+  },
+});
+
+function renderMarkdown(value: string): string {
+  try {
+    return DOMPurify.sanitize(markdown.parse(value, { async: false }), {
+      ALLOWED_TAGS: [
+        'p',
+        'br',
+        'hr',
+        'h3',
+        'h4',
+        'h5',
+        'h6',
+        'strong',
+        'em',
+        'del',
+        'ul',
+        'ol',
+        'li',
+        'blockquote',
+        'pre',
+        'code',
+        'a',
+        'div',
+        'table',
+        'thead',
+        'tbody',
+        'tr',
+        'th',
+        'td',
+        'input',
+      ],
+      ALLOWED_ATTR: [
+        'href',
+        'target',
+        'rel',
+        'referrerpolicy',
+        'class',
+        'start',
+        'type',
+        'disabled',
+        'checked',
+      ],
+      ALLOW_DATA_ATTR: false,
+      ALLOW_ARIA_ATTR: false,
+    });
+  } catch {
+    return escapeHTML(value);
+  }
+}
 
 export function MarkdownText({
   children,
@@ -51,11 +106,8 @@ export function MarkdownText({
   children: string;
   className?: string;
 }) {
+  const html = useMemo(() => renderMarkdown(children), [children]);
   return (
-    <div className={`nb-markdown ${className}`.trim()}>
-      <Markdown remarkPlugins={[remarkGfm]} components={components} urlTransform={safeLink}>
-        {children}
-      </Markdown>
-    </div>
+    <div className={`nb-markdown ${className}`.trim()} dangerouslySetInnerHTML={{ __html: html }} />
   );
 }

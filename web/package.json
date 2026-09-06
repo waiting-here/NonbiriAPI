@@ -35,13 +35,13 @@
   },
   "dependencies": {
     "@tanstack/react-query": "5.101.4",
+    "dompurify": "3.4.14",
     "i18next": "26.3.6",
+    "marked": "18.0.11",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-i18next": "17.0.13",
-    "react-markdown": "10.1.0",
-    "react-router": "8.3.0",
-    "remark-gfm": "4.0.1"
+    "react-router": "8.3.0"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -35,4 +35,15 @@ describe('MarkdownText', () => {
     expect(container).toHaveTextContent('<img src=x onerror=alert(1)>');
     expect(container).toHaveTextContent('picture');
   });
+
+  it.each([
+    '<svg><a href="javascript:alert(1)">x</a></svg><script>alert(1)</script>',
+    '[x](data:text/html,test) [x](//example.test/path) [x](/\\example.test/path)',
+    '![<img src=x onerror=alert(1)>](https://example.test/pixel)',
+    '<form id=location><input name=attributes autofocus onfocus=alert(1)></form>',
+  ])('keeps hostile markup and URLs inert: %s', (value) => {
+    const { container } = render(<MarkdownText>{value}</MarkdownText>);
+    expect(container.querySelector('script, svg, math, img, iframe, form, input, a[href]')).toBeNull();
+    expect(container.querySelector('[id], [style], [onerror], [onfocus]')).toBeNull();
+  });
 });
