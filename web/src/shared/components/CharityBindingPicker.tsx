@@ -15,6 +15,7 @@ import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { EmptyState, ErrorState, LoadingState } from './States';
 import { ChoiceList } from './ChoiceList';
 import { KeyLimitSummary } from './KeyRoutingLimits';
+import { MarkdownText } from './MarkdownText';
 
 export type CharitySelection = CharityBindingCandidate & { note: string };
 const charitySelectionKey = (entry: CharityBindingCandidate) =>
@@ -173,7 +174,7 @@ export function CharityBindingPicker({
         <>
           <div className="ops-picker-context">
             <strong>{t('common.operations.charity.donationNumber', { id: donationId })}</strong>
-            <p>{description || t('common.operations.charity.noDescription')}</p>
+            <MarkdownText>{description || t('common.operations.charity.noDescription')}</MarkdownText>
           </div>
           {!keyId ? (
             <>

@@ -51,7 +51,7 @@ const PATHS: Record<IconName, ReactNode> = {
   diagnostics: <path d="M4 12h3l2-6 4 12 2-6h5" />,
   account: <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 9a7 7 0 0 1 14 0" />,
   endpoints: <path d="M8 7V4h8v3M5 7h14v13H5zm3 4h8m-8 4h5" />,
-  keys: <path d="m14 10 7-7m-3 0h3v3M13 11a5 5 0 1 1-2-2l2 2Z" />,
+  keys: <><circle cx="8" cy="8" r="5" /><path d="m11.5 11.5 8 8H22V17h-3v-3h-3m-9-7h.01" /></>,
   logs: <path d="M5 4h14v16H5zm3 4h8m-8 4h8m-8 4h5" />,
   issues: <path d="M12 4 2.5 20h19L12 4Zm0 5v5m0 3h.01" />,
   steward: <path d="M12 3 5 6v5c0 4.4 2.8 8.1 7 10 4.2-1.9 7-5.6 7-10V6zm-3 9 2 2 4-4" />,

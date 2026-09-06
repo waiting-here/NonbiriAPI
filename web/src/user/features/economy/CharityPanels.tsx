@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { CopyValue } from '@shared/components/CopyValue';
 import { KeyLimitSummary } from '@shared/components/KeyRoutingLimits';
+import { MarkdownText } from '@shared/components/MarkdownText';
 import { CharityPriceTable, type CharityPriceRow } from '@shared/components/CharityPriceTable';
 import { Card, EmptyState, ErrorState, StatusBadge } from '@shared/components/States';
 import { formatDateTime } from '@shared/utils/datetime';
@@ -410,7 +411,7 @@ export function DonationComposer({
       </div>
       <section className="economy-donation-notice" aria-labelledby="donation-notice-title">
         <h3 id="donation-notice-title">{t('user.charity.donationNoticeTitle')}</h3>
-        <p>{donationNotice}</p>
+        <MarkdownText>{donationNotice}</MarkdownText>
       </section>
       <form onSubmit={submit} noValidate>
         <label className="full-width">
@@ -967,7 +968,7 @@ export function DonationCard({
           </div>
         </form>
       ) : (
-        <p className="economy-long-text">{donation.description}</p>
+        <MarkdownText>{donation.description}</MarkdownText>
       )}
 
       <dl className="detail-grid">
@@ -980,7 +981,7 @@ export function DonationCard({
       {donation.reviewResult ? (
         <details className="economy-review-result" open={!showDetailLink}>
           <summary>{t('user.charity.reviewResult')}</summary>
-          <p>{donation.reviewResult.reason}</p>
+          <MarkdownText>{donation.reviewResult.reason}</MarkdownText>
           <span className="muted">{formatDateTime(donation.reviewResult.reviewedAt)}</span>
         </details>
       ) : null}

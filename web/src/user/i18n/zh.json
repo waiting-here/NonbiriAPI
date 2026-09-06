@@ -581,7 +581,7 @@
       "upstreamPrivacyTitle": "第三方服务隐私提示：",
       "quotaDetails": "额度、用量与限制",
       "upstreamPrivacyWarning": "公益请求会发送给捐赠者提供的第三方 AI 服务；该服务及其账户日志可能看到完整请求内容，其存储与隐私做法不受本站控制。",
-      "upstreamQualityWarning": "本站无法保证捐赠上游的服务质量，包括可用性、响应速度，以及实际使用的模型是否与其宣称一致。请根据自己的需求评估后使用。",
+      "upstreamQualityWarning": "本站无法保证捐赠上游的服务质量，包括但不限于可用性、响应速度，以及实际使用的模型是否与其宣称一致。请根据自己的需求评估后使用。",
       "dispatchedFailureWarning": "请求开始后，即使超时或返回失败，也可能消耗服务方额度并正常结算。"
     },
     "activities": {

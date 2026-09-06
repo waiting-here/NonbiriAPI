@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, ErrorState, StatusBadge } from '@shared/components/States';
+import { MarkdownText } from '@shared/components/MarkdownText';
 import { formatDateTime } from '@shared/utils/datetime';
 import { isConflictError, isResponseUnknown } from './api';
 import { CreditAmount, ExactCount } from './ExactValue';
@@ -361,7 +362,7 @@ export function ThursdayCard({
         />
       </div>
       <p>{t(`user.activities.thursday.body.${thursday.state}`)}</p>
-      {current?.literature ? <p className="economy-literature">{current.literature}</p> : null}
+      {current?.literature ? <MarkdownText className="economy-literature">{current.literature}</MarkdownText> : null}
       <div className="economy-stat-grid">
         {current ? (
           <section>
