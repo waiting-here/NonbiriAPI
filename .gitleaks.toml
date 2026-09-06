@@ -38,9 +38,8 @@ regexes = ['''"key_ref"\s*:\s*"[0-9a-f]{64}"''']
 description = "Exact previous database schema fingerprint"
 targetRules = ["generic-api-key"]
 condition = "AND"
-regexTarget = "line"
 paths = ['''^internal[\\/]db[\\/]schema_extension\.go$''']
-regexes = ['''^const preKeyLimitsManifestHash = "8d39bd424d9df29960c6c113fd874833615de1d95e0f820042bb8b60d7678400"$''']
+regexes = ['''^8d39bd424d9df29960c6c113fd874833615de1d95e0f820042bb8b60d7678400$''']
 
 [[allowlists]]
 description = "Fixed Discord identifier in the donation review browser fixture"
