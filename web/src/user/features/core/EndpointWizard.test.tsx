@@ -202,8 +202,13 @@ describe('EndpointWizard secret and exact-replay boundaries', () => {
     expect(storageValues(window.localStorage)).not.toContain(syntheticSecret);
     expect(storageValues(window.sessionStorage)).not.toContain(syntheticSecret);
 
-    await rendered.user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(
+      screen.getByText('Endpoint saved. You can add keys later from Manage endpoint.'),
+    ).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+    await rendered.user.click(screen.getByRole('button', { name: 'Finish later' }));
     await waitFor(() => expect(screen.getByLabelText('Service key')).toHaveValue(''));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('GET-reconciles first and reuses one request body and Idempotency-Key after response loss', async () => {

@@ -101,6 +101,92 @@ function publicModel(index: number) {
   };
 }
 
+for (const [timezoneId, expectedTime] of [
+  ['America/New_York', '08:30 AM'],
+  ['Asia/Shanghai', '08:30 PM'],
+] as const) {
+  test.describe(`charity deadlines in ${timezoneId}`, () => {
+    test.use({ timezoneId });
+    test('uses the browser timezone while offer boundaries follow the server clock', async ({
+      page,
+    }) => {
+      const guard = await prepare(page, 'user');
+      await page.clock.install({ time: new Date() });
+      const endAt = Date.parse('2026-09-07T12:30:00Z') / 1000;
+      const model = publicModel(1);
+      model.discount = { enabled: true, percent: 80, start_at: endAt - 60, end_at: endAt };
+      await mockJson(page, {
+        origin: USER_ORIGIN,
+        method: 'GET',
+        path: '/api/donations?limit=100',
+        body: { data: [], next_cursor: null },
+      });
+      await mockJson(page, {
+        origin: USER_ORIGIN,
+        method: 'GET',
+        path: '/api/charity/models',
+        body: {
+          state: 'available',
+          donation_intake: 'closed',
+          server_now: endAt - 120,
+          models: [model],
+        },
+      });
+      await page.goto(`${USER_ORIGIN}/charity`);
+      const deadline = page.locator(`time[datetime="2026-09-07T12:30:00.000Z"]`);
+      await expect(deadline).toHaveText(`Ends 09/07/2026, ${expectedTime} (your local time)`);
+      await expect(page.getByText('Upcoming offer', { exact: true })).toBeVisible();
+      await expect(page.locator('.charity-original')).toHaveCount(0);
+      await page.clock.fastForward(60_000);
+      await expect(page.locator('.charity-original')).toHaveCount(1);
+      await expect(deadline).toBeVisible();
+      await page.clock.fastForward(60_000);
+      await expect(page.locator('.charity-original')).toHaveCount(0);
+      await expect(page.locator('.charity-discount')).toHaveCount(0);
+      await expect(page.getByLabel('Price: 123,456,789.012', { exact: true })).toBeVisible();
+      guard.assertNone();
+    });
+  });
+}
+
+test('mainstream resources retain their channel name and protocol in the list', async ({
+  page,
+}) => {
+  const guard = await prepare(page, 'user');
+  await mockJson(page, {
+    origin: USER_ORIGIN,
+    method: 'GET',
+    path: '/api/endpoints?limit=50',
+    body: {
+      data: [
+        {
+          ...endpoint(1),
+          key_count: '0',
+          origin: {
+            kind: 'mainstream',
+            channel_id: 'mch_abcdefghijklmnopqrstuA',
+            name: 'Example Gateway',
+          },
+        },
+        endpoint(2),
+      ],
+      next_cursor: null,
+    },
+  });
+  await page.goto(`${USER_ORIGIN}/endpoints`);
+  const cards = page.locator('.core-endpoint-card');
+  await expect(cards).toHaveCount(2);
+  await expect(cards.first().locator('strong')).toHaveText('Mainstream channel: Example Gateway');
+  await expect(cards.first()).toContainText('OpenAI-compatible');
+  await expect(cards.nth(1).locator('strong')).toHaveText('OpenAI-compatible');
+  for (const width of [320, 390, 1935]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await fitsPage(page);
+    await screenshot(page, `endpoint-provenance-${width}`);
+  }
+  guard.assertNone();
+});
+
 test('donation guidance renders Markdown without overflowing mobile or desktop pages', async ({
   page,
 }) => {
@@ -176,11 +262,20 @@ for (const locale of ['en', 'zh'] as const) {
   }) => {
     const guard = await prepare(page, 'user', locale);
     const models = Array.from({ length: 12 }, (_, i) => publicModel(i + 1));
+    const unlimited = {
+      ...publicModel(13),
+      discount: { enabled: true, percent: 80, start_at: null, end_at: null },
+    };
     await mockJson(page, {
       origin: USER_ORIGIN,
       method: 'GET',
       path: '/api/charity/models',
-      body: { state: 'available', donation_intake: 'closed', server_now: NOW, models },
+      body: {
+        state: 'available',
+        donation_intake: 'closed',
+        server_now: NOW,
+        models: [unlimited, ...models.slice(1)],
+      },
     });
     await mockJson(page, {
       origin: USER_ORIGIN,
@@ -192,6 +287,10 @@ for (const locale of ['en', 'zh'] as const) {
     await page.goto(`${USER_ORIGIN}/charity`);
     const cards = page.locator('.economy-model-list > li');
     await expect(cards).toHaveCount(12);
+    await expect(cards.first().locator('.charity-discount')).toHaveText(
+      locale === 'zh' ? '立减 20%' : '20% off',
+    );
+    await expect(cards.first().locator('time')).toHaveCount(0);
     await screenshot(page, `prices-${locale}-desktop`);
     expect((await cards.first().boundingBox())!.height).toBeLessThan(400);
     const heading = (await cards.first().locator('.economy-model-heading').boundingBox())!;
@@ -202,6 +301,11 @@ for (const locale of ['en', 'zh'] as const) {
     for (const width of [320, 390, 768, 1119, 1120, 1121, 1935]) {
       await page.setViewportSize({ width, height: 1000 });
       await fitsPage(page);
+      await expect(cards.first().locator('.charity-original .charity-amount')).toHaveCSS(
+        'text-decoration-line',
+        'line-through',
+      );
+      await expect(cards.first().locator('.charity-current')).toHaveCSS('font-weight', '750');
       const clipped = await page.locator('.charity-price-table').evaluateAll((tables) =>
         tables.some((table) => {
           const wrapper = table.parentElement!;

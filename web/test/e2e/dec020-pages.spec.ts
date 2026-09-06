@@ -512,7 +512,7 @@ test('user charity overview loads all cursor pages, filters each key state, and 
   await expect(priceTable).toBeVisible();
   await expect(page.getByLabel('Original price: 3')).toBeVisible();
   await expect(page.getByLabel('Offer price: 2.4')).toBeVisible();
-  await expect(page.getByText('Limited-time 20% off')).toBeVisible();
+  await expect(page.getByText('20% off', { exact: true })).toBeVisible();
   await expect(priceTable.getByText('Donor reward')).toHaveCount(0);
   for (const width of [320, 390, 1440, 1935]) {
     await page.setViewportSize({ width, height: 1000 });

@@ -159,6 +159,8 @@ const en = {
   'endpoints.deleteKeyBody':
     'Model connections, shared resources, and model check results that use this key will be affected.',
   'endpoints.wizardTitle': 'Create endpoint and key',
+  'endpoints.finishLater': 'Finish later',
+  'endpoints.savedForLater': 'Endpoint saved. You can add keys later from Manage endpoint.',
   'endpoints.wizardConnector': '1 · Service type',
   'endpoints.wizardUrl': '2 · URL preview',
   'endpoints.wizardKey': '3 · Key',
@@ -472,6 +474,8 @@ const zh: Record<CoreCopyKey, string> = {
   'endpoints.deleteKeyTitle': '删除此密钥？',
   'endpoints.deleteKeyBody': '使用此密钥的模型连接、共享资源和模型检查结果都会受到影响。',
   'endpoints.wizardTitle': '创建端点与密钥',
+  'endpoints.finishLater': '稍后继续',
+  'endpoints.savedForLater': '端点已保存，稍后可从「管理端点」继续添加密钥。',
   'endpoints.wizardConnector': '1 · 服务类型',
   'endpoints.wizardUrl': '2 · 地址预览',
   'endpoints.wizardKey': '3 · 密钥',

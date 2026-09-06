@@ -424,6 +424,29 @@
   color: var(--nb-color-text-muted);
 }
 
+.charity-original .charity-amount {
+  text-decoration: line-through;
+  text-decoration-thickness: 0.1em;
+}
+
+.charity-price-pair {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 0.2rem 0.65rem;
+}
+
+.charity-price-pair > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.charity-current {
+  color: var(--nb-color-success);
+  font-weight: 750;
+}
+
 .charity-amount {
   font-variant-numeric: tabular-nums;
 }

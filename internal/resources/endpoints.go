@@ -420,8 +420,10 @@ func (r *Repository) DeleteEndpoint(ctx context.Context, userID, endpointID int6
 	if err := r.projection.PrepareEndpointDeletion(ctx, tx, userID, endpointID, now); err != nil {
 		return MutationResult[struct{}]{}, fmt.Errorf("resources: prepare endpoint projection deletion: %w", err)
 	}
-	if err := r.keyDeletion.PrepareEndpointKeyDeletion(ctx, tx, userID, keyIDs, now); err != nil {
-		return MutationResult[struct{}]{}, fmt.Errorf("resources: prepare endpoint key deletion: %w", err)
+	if len(keyIDs) > 0 {
+		if err := r.keyDeletion.PrepareEndpointKeyDeletion(ctx, tx, userID, keyIDs, now); err != nil {
+			return MutationResult[struct{}]{}, fmt.Errorf("resources: prepare endpoint key deletion: %w", err)
+		}
 	}
 	if err := advanceBindingRevisionsForDeletionTx(ctx, tx, userID, models, now); err != nil {
 		return MutationResult[struct{}]{}, err

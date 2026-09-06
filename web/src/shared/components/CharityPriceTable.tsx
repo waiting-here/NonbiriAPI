@@ -50,6 +50,11 @@ function ExactAmount({ value, label }: { value: string; label: string }) {
   );
 }
 
+function timestampISO(value: number): string | undefined {
+  const date = new Date(value * 1000);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : undefined;
+}
+
 /**
  * Shared, display-only charity price table. It never participates in routing
  * or accounting. Base and discounted prices are server projections; the
@@ -78,6 +83,14 @@ export function CharityPriceTable({ mode, rows, serverNow, discount }: CharityPr
     return formatCountdown(target - now);
   }, [active, discount, now]);
   const showRewards = rows.length > 0 && rows.every((row) => row.rewardMilli !== undefined);
+  const deadline =
+    discount?.endAt !== undefined ? (
+      <span>
+        <time dateTime={timestampISO(discount.endAt)}>
+          {t('user.charity.discountEndsAt', { time: formatDateTime(discount.endAt) })}
+        </time>
+      </span>
+    ) : null;
 
   return (
     <div className="charity-price-wrap">
@@ -88,7 +101,10 @@ export function CharityPriceTable({ mode, rows, serverNow, discount }: CharityPr
               ? t('user.charity.discountFree')
               : t('user.charity.discountPercent', { percent: 100 - (discount?.percent ?? 100) })}
           </strong>
-          {countdown ? <span>{t('user.charity.discountRemaining', { time: countdown })}</span> : null}
+          {deadline}
+          {countdown ? (
+            <span>{t('user.charity.discountRemaining', { time: countdown })}</span>
+          ) : null}
         </p>
       ) : phase === 'scheduled' && discount?.startAt !== undefined ? (
         <p className="charity-discount" role="status">
@@ -98,8 +114,11 @@ export function CharityPriceTable({ mode, rows, serverNow, discount }: CharityPr
               ? t('user.charity.discountFree')
               : t('user.charity.discountPercent', { percent: 100 - discount.percent })}
             {' · '}
-            {t('user.charity.discountStartsAt', { time: formatDateTime(discount.startAt) })}
+            <time dateTime={timestampISO(discount.startAt)}>
+              {t('user.charity.discountStartsAt', { time: formatDateTime(discount.startAt) })}
+            </time>
           </span>
+          {deadline}
         </p>
       ) : null}
       <div className="table-scroll">
@@ -122,10 +141,17 @@ export function CharityPriceTable({ mode, rows, serverNow, discount }: CharityPr
                   <th scope="row">{row.label}</th>
                   <td>
                     {active && current !== undefined && current !== row.userMilli ? (
-                      <>
-                        <s className="charity-original"><ExactAmount value={row.userMilli} label={t('user.charity.originalPrice')} /></s>{' '}
-                        <strong><ExactAmount value={current ?? row.userMilli} label={t('user.charity.currentPrice')} /></strong>
-                      </>
+                      <span className="charity-price-pair">
+                        <s className="charity-original">
+                          <ExactAmount
+                            value={row.userMilli}
+                            label={t('user.charity.originalPrice')}
+                          />
+                        </s>
+                        <strong className="charity-current">
+                          <ExactAmount value={current} label={t('user.charity.currentPrice')} />
+                        </strong>
+                      </span>
                     ) : (
                       <ExactAmount value={row.userMilli} label={t('user.charity.userPrice')} />
                     )}
@@ -141,7 +167,9 @@ export function CharityPriceTable({ mode, rows, serverNow, discount }: CharityPr
           </tbody>
         </table>
       </div>
-      <p className="muted charity-price-note">{t(mode === 'per_token' ? 'user.charity.tokenUnit' : 'user.charity.requestUnit')}</p>
+      <p className="muted charity-price-note">
+        {t(mode === 'per_token' ? 'user.charity.tokenUnit' : 'user.charity.requestUnit')}
+      </p>
     </div>
   );
 }

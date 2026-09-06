@@ -641,7 +641,7 @@ export function EndpointWizard({
       <div className="core-card__header">
         <h2 id="endpoint-wizard-title">{t('endpoints.wizardTitle')}</h2>
         <button type="button" className="btn btn-secondary" onClick={close}>
-          {t('common.cancel')}
+          {endpoint ? t('endpoints.finishLater') : t('common.cancel')}
         </button>
       </div>
       <ol className="core-steps">
@@ -875,6 +875,7 @@ export function EndpointWizard({
           }}
         >
           <div className="core-inline-success">
+            <span>{t('endpoints.savedForLater')}</span>
             <span className="core-mono">{endpoint.base_url}</span>
           </div>
           <div className="core-field-grid">
