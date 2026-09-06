@@ -18,8 +18,8 @@ import (
 
 const (
 	DefaultDialTimeout                  = 10 * time.Second
-	DefaultRequestTimeout               = 5 * time.Minute
-	DefaultResponseHeaderTimeout        = 30 * time.Second
+	DefaultRequestTimeout               = 20 * time.Minute
+	DefaultResponseHeaderTimeout        = 15 * time.Minute
 	DefaultTLSHandshakeTimeout          = 10 * time.Second
 	DefaultMaxResponseBytes       int64 = 32 << 20
 	DefaultMaxResponseHeaderBytes int64 = 1 << 20
@@ -295,6 +295,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	// both URL and Host to that exact origin before the request is dispatched.
 	resp, err := c.httpClient.Do(outbound)
 	if err != nil {
+		ctxErr := ctx.Err()
 		permit.Release()
 		cancel()
 		if resp != nil && resp.Body != nil {
@@ -303,7 +304,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		if errors.Is(err, ErrRedirectBlocked) {
 			return nil, ErrRedirectBlocked
 		}
-		if ctxErr := ctx.Err(); ctxErr != nil {
+		if ctxErr != nil {
 			return nil, ctxErr
 		}
 		return nil, newBoundedError("egress request failed", unwrapURLError(err))

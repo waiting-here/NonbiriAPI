@@ -142,16 +142,18 @@ location / {
     proxy_set_header X-Forwarded-For $remote_addr;
 
     proxy_buffering off;
-    proxy_read_timeout 310s;
-    proxy_send_timeout 310s;
+    proxy_read_timeout 1200s;
+    proxy_send_timeout 1200s;
 }
 ```
 
 Use separate `server` blocks/certificates for user and administrator hosts so the administrator host can have stricter network or identity controls. Adjust the upstream port and timeouts to the actual deployment; test SSE through the complete Cloudflare → Nginx → application path.
 
+Model calls allow up to 900 seconds for upstream response headers and 1200 seconds for the whole logical request, including retries and streaming. Keep proxy timeouts at least 1200 seconds. These are application defaults, not editable site settings. Model discovery retains its separate five-minute worker budget.
+
 ## Beta.1 database compatibility and version changes
 
-Beta.1 accepts only a completely absent database set or a validated Generation 2 database whose SQLite header contains `application_id=0x4E425249` and `user_version=2`. Two exact earlier Generation 2 manifests are supported: the schema before charity routing and the schema with charity routing before key request limits. A single transaction adds the missing `charity_model_routing` table when needed, `endpoint_key_limits`, and two dispatch lookup indexes, then validates the new full manifest. Existing tables and business rows are preserved; existing models retain expiry-weighted routing and existing keys have no additional concurrency/RPM limit. It does not run `ALTER`, arbitrary schema repair, or old-generation data import. Before a writable source open, an existing database is copied through no-follow read-only handles to a private validation directory; header, schema, foreign keys, indexes, sidecars, and contextual credential envelopes are checked there. An alpha or Generation 1 file, empty file, unknown generation, corrupt or unexpected schema, unsafe file shape, rollback journal, or anomalous sidecar is refused without modifying the source set or creating a new source-side WAL/SHM.
+Beta.1 accepts only a completely absent database set or a validated Generation 2 database whose SQLite header contains `application_id=0x4E425249` and `user_version=2`. Three exact earlier Generation 2 manifests are supported: the schema before charity routing, before key request limits, and before successful-response checkpoints. A single transaction adds the missing `charity_model_routing`, `endpoint_key_limits`, dispatch lookup indexes, and `dispatch_response_starts` as needed, then validates the new full manifest. Existing tables, business rows, routing strategies and key limits are preserved. Older models without routing configuration retain expiry-weighted routing; older keys without limits remain unlimited. No historical response-start evidence is invented. It does not run `ALTER`, arbitrary schema repair, or old-generation data import. Before a writable source open, an existing database is copied through no-follow read-only handles to a private validation directory; header, schema, foreign keys, indexes, sidecars, and contextual credential envelopes are checked there. An alpha or Generation 1 file, empty file, unknown generation, corrupt or unexpected schema, unsafe file shape, rollback journal, or anomalous sidecar is refused without modifying the source set or creating a new source-side WAL/SHM.
 
 Therefore:
 
@@ -225,7 +227,7 @@ If the cutover fails before the target passes local health and reaches its recor
 
 ## Beta.1 limitations
 
-- Beta.1 requires a fresh Generation 2 database when coming from alpha. Current Generation 2 databases are validated; the exact supported predecessor receives only the additive routing table. A completely absent main/WAL/SHM path set permits fresh creation, while every unsupported existing state is rejected without repair.
+- Beta.1 requires a fresh Generation 2 database when coming from alpha. Current Generation 2 databases are validated; exact supported predecessors receive only the additive tables and indexes described above. A completely absent main/WAL/SHM path set permits fresh creation, while every unsupported existing state is rejected without repair.
 - The release target is Linux/amd64 and the release process is source-first.
 - SMTP settings are reserved and do not send alert email in the current prereleases.
 - Real Discord OAuth and upstream success flows must be tested with disposable staging credentials before public operation.

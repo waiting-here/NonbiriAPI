@@ -286,6 +286,9 @@ func (a *Adapter) nonStream(ctx context.Context, writer http.ResponseWriter, res
 	if wireGuard.Contains(translated) {
 		return upstreamFailure("upstream response was rejected", response.StatusCode)
 	}
+	if err := connectorcontract.MarkResponseStarted(writer); err != nil {
+		return sinkFailure(false, usage)
+	}
 	if ctx.Err() != nil {
 		return canceledFailure()
 	}

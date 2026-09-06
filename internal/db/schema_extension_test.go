@@ -7,14 +7,18 @@ import (
 )
 
 func TestRoutingExtensionPreservesExistingGenerationTwoData(t *testing.T) {
-	testKeyLimitExtensionPreservesData(t, true)
+	testResponseExtensionPreservesData(t, preRoutingManifestHash)
 }
 
 func TestKeyLimitsExtensionPreservesExistingGenerationTwoData(t *testing.T) {
-	testKeyLimitExtensionPreservesData(t, false)
+	testResponseExtensionPreservesData(t, preKeyLimitsManifestHash)
 }
 
-func testKeyLimitExtensionPreservesData(t *testing.T, beforeRouting bool) {
+func TestResponseStartsExtensionPreservesExistingGenerationTwoData(t *testing.T) {
+	testResponseExtensionPreservesData(t, preResponseStartsManifestHash)
+}
+
+func testResponseExtensionPreservesData(t *testing.T, wantHash string) {
 	t.Helper()
 	path := bootstrapTestPath(t, "routing-extension.sqlite")
 	vault := bootstrapTestVault(t)
@@ -36,15 +40,18 @@ func testKeyLimitExtensionPreservesData(t *testing.T, beforeRouting bool) {
 	if err := store.DB().QueryRow(`SELECT encrypted_secret FROM endpoint_key_secrets WHERE id=?`, ids[0]).Scan(&envelope); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.DB().Exec(`DROP TABLE endpoint_key_limits; DROP INDEX idx_dispatch_claims_key_active; DROP INDEX idx_dispatch_claims_key_rpm`); err != nil {
+	if _, err := store.DB().Exec(`DROP TABLE dispatch_response_starts`); err != nil {
 		t.Fatal(err)
 	}
-	wantHash := preKeyLimitsManifestHash
-	if beforeRouting {
+	if wantHash != preResponseStartsManifestHash {
+		if _, err := store.DB().Exec(`DROP TABLE endpoint_key_limits; DROP INDEX idx_dispatch_claims_key_active; DROP INDEX idx_dispatch_claims_key_rpm`); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if wantHash == preRoutingManifestHash {
 		if _, err := store.DB().Exec(`DROP TABLE charity_model_routing`); err != nil {
 			t.Fatal(err)
 		}
-		wantHash = preRoutingManifestHash
 	}
 	manifest, err := readGenerationManifest(context.Background(), store.DB())
 	if err != nil || generationManifestDigest(manifest) != wantHash {
@@ -95,7 +102,7 @@ func TestRoutingExtensionRejectsModifiedPriorSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.DB().Exec(`DROP TABLE charity_model_routing; DROP TABLE endpoint_key_limits; DROP INDEX idx_dispatch_claims_key_active; DROP INDEX idx_dispatch_claims_key_rpm; DROP INDEX idx_users_created`); err != nil {
+	if _, err := store.DB().Exec(`DROP TABLE dispatch_response_starts; DROP TABLE charity_model_routing; DROP TABLE endpoint_key_limits; DROP INDEX idx_dispatch_claims_key_active; DROP INDEX idx_dispatch_claims_key_rpm; DROP INDEX idx_users_created`); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Close(); err != nil {

@@ -191,6 +191,9 @@ func TestPrepareAccountDeletionReleasesUnusedCharityCapacityAndKeepsLatePathExte
 		t.Fatalf("new claim after deletion error = %v, want not found", err)
 	}
 
+	if err := fixture.service.MarkResponseStarted(context.Background(), dispatched); err != nil {
+		t.Fatalf("response checkpoint after account handoff: %v", err)
+	}
 	if attempt, err := fixture.service.CompleteAttempt(context.Background(), dispatched, successfulDeletionOutcome()); err != nil || attempt.State != StateCommitted {
 		t.Fatalf("late charity attempt = (%+v,%v)", attempt, err)
 	}

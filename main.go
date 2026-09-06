@@ -402,7 +402,7 @@ func (a *application) Close() error {
 const (
 	discoveryWorkerMaxConcurrent = 4
 	discoveryWorkerMaxAdmitted   = 32
-	discoveryWorkerTimeout       = egress.DefaultRequestTimeout
+	discoveryWorkerTimeout       = 5 * time.Minute
 )
 
 // roleFinalTxAuthorizer adapts the request actor established by auth.Runtime

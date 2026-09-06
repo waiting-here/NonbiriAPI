@@ -125,6 +125,7 @@ func TestCharityClaimsSettleIndependently(t *testing.T) {
 		t.Fatalf("idempotent charity release = %+v, %v", replay, err)
 	}
 	fixture.requireCapacity(request.ID, 1, 1, 2)
+	fixture.charity.requestCharges = map[string]int64{request.ID: 23}
 
 	terminal, err := fixture.service.CompleteRequest(context.Background(), CompleteRequestInput{
 		RequestID:   request.ID,
