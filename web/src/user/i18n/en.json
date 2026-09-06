@@ -586,7 +586,7 @@
       "quotaDetails": "Quotas, usage and limits",
       "upstreamPrivacyWarning": "Charity requests are sent to donor-provided third-party AI services. That service and its account logs may see the full request content; its storage and privacy practices are outside this site's control.",
       "upstreamQualityWarning": "This site cannot guarantee the quality of donor-provided services, including but not limited to availability, response speed, or whether the model used matches the model advertised. Please assess whether each service meets your needs before using it.",
-      "dispatchedFailureWarning": "After a request begins, even a timeout or failed response may consume the service provider's quota and be settled normally."
+      "dispatchedFailureWarning": "Charging starts when the upstream begins returning valid output. Later interruptions are still settled. Failed requests with no valid output receive a full refund of reserved credits."
     },
     "activities": {
       "nav": "Activities",
