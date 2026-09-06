@@ -4,9 +4,9 @@
 
 NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible ingress gateway. It lets each user manage their own upstream endpoints and credentials, discover upstream models, define user-owned platform model names, and call those models through a single `CallerKey`.
 
-> **Source version:** `v1.0.0-beta.1`. Release tags identify published snapshots; publishing a prerelease is not an authorization for any particular operator deployment. Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
+> **Source version:** `v1.0.0-beta.1`. Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
 >
-> **Compatibility boundary:** beta.1 uses database Generation 2, supports fresh deployment only, and targets source builds for Linux/amd64. It is not an in-place upgrade for an alpha database.
+> **Compatibility boundary:** beta.1 uses database Generation 2 and targets source builds for Linux/amd64. Alpha deployments require a fresh database; validated current and explicitly supported earlier beta.1 schemas preserve existing data during a normal update.
 >
 > Source repository: [github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
@@ -14,16 +14,18 @@ NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible ingress g
 
 - OpenAI-compatible `/v1/models` and `/v1/chat/completions` ingress, with OpenAI-compatible and Anthropic-compatible upstream connectors.
 - Discord OAuth user sign-in and a separate administrator station.
-- Per-user endpoints, encrypted upstream credentials, model discovery, platform model names, bindings, ordered/random routing, opt-in pre-commit retry, and independent per-user in-flight concurrency limits.
+- Per-user endpoints, mainstream channel templates, encrypted upstream credentials, automatic/manual model catalogs, platform model names, and a guided endpoint → key → model connection workflow.
+- Ordered/random personal routing, ordered/uniform-random/expiry-weighted charity routing, opt-in pre-commit retry, user concurrency limits, and owner-configured per-key concurrency/RPM shared by personal, charity, and live diagnostic calls.
 - SSRF, DNS-rebinding, redirect, proxy, response-size, timeout, cancellation, concurrency, and streaming safeguards.
 - Encrypted-at-rest upstream secrets; plaintext credentials are not returned in lists, logs, alerts, or account exports.
 - Request metadata, usage accounting, retention cleanup, account export/deletion, issues, alerts, and runtime limits.
-- Credits, check-in, donation-backed charity routing, and a live-authorized level-5 steward view whose site-wide logs hide donated resources.
+- Credits, check-in, personal credit history, donation-backed charity routing, per-key donation expiry and usage limits, and level-5 co-management. Authorized administrator and steward logs expose a fixed safe set of upstream resource details; ordinary charity callers do not receive those details.
+- Daily welfare, the Thursday pooled activity, bilingual announcements, and public credential-theft reporting with administrator review.
 - Experimental OpenAI-only per-key `store:false` enforcement and per-model tool-call flattening, both disabled by default and explicitly risk-labelled.
-- A memory-only Debug Hub that starts in dry-run mode and requires a fresh challenge plus confirmation before observing a real upstream call.
+- A memory-only Debug Hub that starts in dry-run mode and requires explicit confirmation to send requests upstream. Live results are captured in the Debug page; the API caller receives a dedicated HTTP 422 debug response.
 - A server-authoritative game center with Pond Fishing, LinkLink, and three-player Rock Paper Scissors, including idempotent accounting, recovery, privacy-aware leaderboards, and bundled local artwork.
 - Server-generated upstream safety pseudonyms scoped to one user and one canonical upstream origin; see the [API contract](docs/api-contract.md#22-post-v1chatcompletions) for their rotation and privacy boundary.
-- React user/admin stations embedded into a single Go binary.
+- Redesigned bilingual React user/admin stations with responsive navigation, continuous resource workflows, safe Markdown guidance, and configurable site branding, embedded into a single Go binary.
 
 Beta.1 exposes only the two OpenAI-compatible ingress routes listed above. An `anthropic-compatible` endpoint is translated behind that ingress; NonbiriAPI does not expose an Anthropic-native public endpoint. Other OpenAI API families and connector types remain deferred. See the [API contract](docs/api-contract.md) for the strict Anthropic subset and token-limit rules.
 
@@ -40,7 +42,7 @@ Configure a user origin and a distinct administrator host. `NONBIRI_ADMIN_HOST` 
 
 Build-time requirements:
 
-- Go 1.26.x.
+- Go 1.26.6.
 - Node.js 22.22.3 or newer and npm 12.0.1 for the web build.
 
 Node.js is not needed to run the finished binary.
@@ -87,9 +89,9 @@ The intended first deployment model is a manually updated systemd service. See:
 - [Example environment file](admin.env.example)
 - [Example systemd unit](deploy/nonbiriapi.service.example)
 
-Beta.1 uses database Generation 2 (`user_version=2`). It does not migrate an alpha database or Generation 1 in place and refuses an unsupported, empty, unknown, malformed, or unexpected database without writing to it. The exact previous beta.1 schema can be updated normally: startup adds the charity-routing table atomically and keeps existing data and routing behavior. A binary-only downgrade is unsafe. Stop the service, preserve a verified complete snapshot (database/sidecars, release, configuration, master key and unit), and follow the [deployment guide](docs/deployment.md). Starting beta.1 from an alpha deployment requires an explicit fresh cutover; the new database starts with maintenance on and registration, activities, charity, donation intake, and games off.
+Beta.1 uses database Generation 2 (`user_version=2`). It does not migrate an alpha database or Generation 1 in place and refuses unsupported or malformed existing databases without writing to them. Three exact earlier beta.1 schemas can be updated normally: startup atomically adds the missing charity-routing, per-key limit, and successful-response checkpoint tables and indexes. Existing accounts, resources, balances, configuration, routing choices, and key limits are preserved. A binary-only downgrade to an incompatible schema is unsafe. Stop the service, preserve a verified complete snapshot (database/sidecars, release, configuration, master key and unit), and follow the [deployment guide](docs/deployment.md). Starting beta.1 from an alpha deployment requires an explicit fresh cutover; the new database starts with maintenance on and registration, activities, charity, donation intake, and games off.
 
-Beta.1 is source-first and supports Linux/amd64 as its release target. Operators compile the exact source commit on that target or use an equivalent controlled build pipeline. A prebuilt binary, if added later, is a convenience artifact rather than the compatibility boundary.
+Beta.1 is source-first and supports Linux/amd64 as its production target. Operators compile the exact tagged source on that target or use an equivalent controlled build pipeline. This prerelease provides no official precompiled binaries, container images, or installers; other production platforms are not supported.
 
 ## GitHub automation
 
@@ -116,6 +118,26 @@ curl https://api.example.com/v1/chat/completions \
 ```
 
 Treat caller keys and upstream credentials as secrets. Do not put them in URLs, issue reports, notes, shell history, screenshots, or logs.
+
+Errors contain stable `error.code`, `source`, and `message` fields. Platform messages start with `[NonbiriAPI]`; upstream messages do not. Common outcomes are:
+
+| HTTP | Stable `error.code` | `source` | Meaning |
+| --- | --- | --- | --- |
+| 400 | `invalid_request`, `content_too_short` | `platform` | Invalid input or a charity request below the configured minimum. |
+| 401 | `unauthorized` | `platform` | Missing or invalid authentication. |
+| 403 | `forbidden`, `elevated_required`, `feature_disabled`, `insufficient_credits`, `charity_suspended`, `checkin_cap_reached` | `platform` | Permission, feature, balance, or account restriction. |
+| 404 / 405 | `not_found` / `method_not_allowed` | `platform` | Unavailable resource, wrong station, or unsupported method. |
+| 409 | `conflict`, `already_checked_in`, `debug_live_cancelled` | `platform` | A state conflict, repeated check-in, or canceled live debug call. |
+| 413 | `payload_too_large` | `platform` | Request size exceeds the limit. |
+| 422 | `resource_limit_exceeded`, `debug_dry_run_intercepted`, `debug_live_result_captured` | `platform` | A resource limit or an intentional Debug interception. |
+| 423 | `resource_locked` | `platform` | The resource is temporarily protected. |
+| 429 | `rate_limited` | `platform` | A rate or concurrency limit prevents admission. |
+| 500 | `internal` | `platform` | An internal error. |
+| 503 | `maintenance`, `service_unavailable`, `unbound_model` | `platform` | Maintenance, unavailable service, or no usable model binding. |
+| Upstream 4xx | `upstream` | `upstream` | Personal calls may preserve the upstream HTTP status. |
+| 502 / 504 | `upstream` | `upstream` | An upstream failure or an owner-visible upstream timeout. |
+
+After a charity call is dispatched, upstream failures use a generic `502 upstream` response without provider details. Once SSE headers are sent, the HTTP status cannot change; failures use a bounded error event or close the connection. A failed charity attempt with no validated successful output costs no credits or donation quota; interruption after successful output starts follows the documented usage and settlement rules. See the [full error and billing contract](docs/api-contract.md).
 
 ## Development checks
 
