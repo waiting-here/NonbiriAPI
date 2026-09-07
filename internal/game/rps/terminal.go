@@ -267,6 +267,9 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?)`, record.ID, index, user, db.EncodeU256(seat.Total
 			db.EncodeU128(seat.ScissorsCount), db.EncodeU128(seat.PaperCount)); err != nil {
 			return classifyDB(err)
 		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO game_rps_summary_presentation(session_id, seat_no, own_buy_in, own_cash_out) VALUES(?, ?, NULL, NULL)`, record.ID, index); err != nil {
+			return classifyDB(err)
+		}
 	}
 	for index, seat := range record.Seats {
 		if seat.DeletionState != "active" || seat.UserID == nil {
@@ -278,6 +281,9 @@ seat0_result,seat1_result,seat2_result,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,
 			*seat.UserID, record.ID, record.Mode, *record.TerminalReason, index, db.EncodeU256(seat.TotalInput),
 			db.EncodeU256(seat.TotalReturned), *seat.WalletNetSign, db.EncodeU128(*seat.WalletNetMag),
 			outcomes[0], outcomes[1], outcomes[2], now); err != nil {
+			return classifyDB(err)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO game_rps_pending_presentation(user_id, own_buy_in, own_cash_out, quick_seat0_gesture, quick_seat1_gesture, quick_seat2_gesture) VALUES(?, NULL, NULL, NULL, NULL, NULL)`, *seat.UserID); err != nil {
 			return classifyDB(err)
 		}
 		if err := service.applyFunStatsTx(ctx, tx, *seat.UserID, seat, now); err != nil {

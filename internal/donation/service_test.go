@@ -258,6 +258,22 @@ func TestCreateMembershipIsolationAndSequenceStartsAtOne(t *testing.T) {
 	}
 }
 
+func TestCreateDonationInitializesPendingHandling(t *testing.T) {
+	environment := newDonationTestEnv(t)
+	owner := environment.seedUser(t, "handling-owner", nil, false)
+	_, keyA := environment.seedEndpointKey(t, owner, 'h')
+	donation := environment.createDonation(t, owner, keyA)
+	donationID := parseTestID(t, donation.ID)
+	var state string
+	var revision int64
+	if err := environment.store.DB().QueryRow(`SELECT state, revision FROM donation_handling WHERE donation_id=?`, donationID).Scan(&state, &revision); err != nil {
+		t.Fatalf("read donation_handling: %v", err)
+	}
+	if state != "pending" || revision != 1 {
+		t.Fatalf("donation_handling = (%q,%d), want (pending,1)", state, revision)
+	}
+}
+
 func TestPerKeyExpiryAuthorizationTraceAndIndependentTerminalization(t *testing.T) {
 	environment := newDonationTestEnv(t)
 	owner := environment.seedUser(t, "per-key-owner", nil, false)

@@ -14,6 +14,11 @@ const preKeyLimitsManifestHash = "8d39bd424d9df29960c6c113fd874833615de1d95e0f82
 
 const preResponseStartsManifestHash = "8fb054cef12ae7316f80d40994d9091a84b983a79868fdfef89e7f875c6a3ceb"
 
+// preBetaTwoManifestHash is the complete beta.1 schema manifest digest.
+// beta.2 extends from this baseline by applying the additive schema and
+// seeding default sidecar rows in a single transaction.
+const preBetaTwoManifestHash = "32d3e952512b7eb5c452e478eb9990b0518d51502d70bd93c195273980ba365d"
+
 func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) {
 	if GenerationTwoSchemaHash() != PinnedGenerationTwoSchemaHash {
 		return false, errors.New("generation-two schema hash drift")
@@ -29,7 +34,7 @@ func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) 
 	switch generationManifestDigest(actual) {
 	case expected:
 		return false, nil
-	case preRoutingManifestHash, preKeyLimitsManifestHash, preResponseStartsManifestHash:
+	case preRoutingManifestHash, preKeyLimitsManifestHash, preResponseStartsManifestHash, preBetaTwoManifestHash:
 		return true, nil
 	default:
 		return false, errors.New("generation-two schema manifest mismatch")
@@ -53,17 +58,28 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) error
 	if err != nil {
 		return err
 	}
-	if generationManifestDigest(manifest) == preRoutingManifestHash {
-		if _, err := tx.ExecContext(ctx, charityModelRoutingSchema); err != nil {
+	digest := generationManifestDigest(manifest)
+	// Extend any pre-beta.1 structure to the complete beta.1 schema first.
+	if digest == preRoutingManifestHash || digest == preKeyLimitsManifestHash || digest == preResponseStartsManifestHash {
+		if digest == preRoutingManifestHash {
+			if _, err := tx.ExecContext(ctx, charityModelRoutingSchema); err != nil {
+				return err
+			}
+		}
+		if digest != preResponseStartsManifestHash {
+			if _, err := tx.ExecContext(ctx, endpointKeyLimitsSchema); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, dispatchResponseStartsSchema); err != nil {
 			return err
 		}
 	}
-	if generationManifestDigest(manifest) != preResponseStartsManifestHash {
-		if _, err := tx.ExecContext(ctx, endpointKeyLimitsSchema); err != nil {
-			return err
-		}
+	// Apply the beta.2 additive schema and seed default sidecar rows.
+	if _, err := tx.ExecContext(ctx, betaTwoAdditiveSchema); err != nil {
+		return err
 	}
-	if _, err := tx.ExecContext(ctx, dispatchResponseStartsSchema); err != nil {
+	if err := migrateBetaTwoDefaults(ctx, tx); err != nil {
 		return err
 	}
 	if err := validateGenerationTwoManifest(ctx, tx); err != nil {
@@ -73,4 +89,26 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) error
 		return err
 	}
 	return tx.Commit()
+}
+
+// migrateBetaTwoDefaults seeds the beta.2 sidecar rows required for every
+// existing donation, charity model and the quota capacity singleton. The
+// statements are idempotent so a second startup run is a no-op.
+func migrateBetaTwoDefaults(ctx context.Context, tx *sql.Tx) error {
+	if _, err := tx.ExecContext(ctx, `
+INSERT INTO charity_model_access(model_id, allowed_level_mask, public_description)
+SELECT id, 31, '' FROM charity_models
+WHERE id NOT IN (SELECT model_id FROM charity_model_access);`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+INSERT INTO donation_handling(donation_id, state, revision, processed_at, processed_by_user_id, processed_by_role, closed_at, closed_reason, created_at, updated_at)
+SELECT id, 'legacy', 1, NULL, NULL, '', NULL, '', created_at, updated_at FROM donations
+WHERE id NOT IN (SELECT donation_id FROM donation_handling);`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO donation_quota_capacity(id, rows_used, rows_held) VALUES(1, 0, 0);`); err != nil {
+		return err
+	}
+	return nil
 }

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -191,6 +192,24 @@ WHERE key IN ('charity_enabled','donation_accept_enabled')`, charity, donation)
 	changed, err := result.RowsAffected()
 	if err != nil || changed != 2 {
 		t.Fatalf("capability gate rows changed = %d, %v", changed, err)
+	}
+}
+
+func TestCreateModelInitializesFullAccessMask(t *testing.T) {
+	environment := newRoutingTestEnv(t)
+	environment.seedUser(t, true, nil)
+	model := environment.createModel(t, 'a')
+	modelID, err := strconv.ParseInt(model.ID, 10, 64)
+	if err != nil {
+		t.Fatalf("parse model id: %v", err)
+	}
+	var mask int
+	var desc string
+	if err := environment.store.DB().QueryRow(`SELECT allowed_level_mask, public_description FROM charity_model_access WHERE model_id=?`, modelID).Scan(&mask, &desc); err != nil {
+		t.Fatalf("read charity_model_access: %v", err)
+	}
+	if mask != 31 || desc != "" {
+		t.Fatalf("charity_model_access = (%d,%q), want (31,'')", mask, desc)
 	}
 }
 
