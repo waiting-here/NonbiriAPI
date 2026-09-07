@@ -53,6 +53,7 @@ func testResponseExtensionPreservesData(t *testing.T, wantHash string) {
 			t.Fatal(err)
 		}
 	}
+	dropBetaTwoAdditiveObjects(t, store.DB())
 	manifest, err := readGenerationManifest(context.Background(), store.DB())
 	if err != nil || generationManifestDigest(manifest) != wantHash {
 		t.Fatalf("fixture does not match deployed schema: %v", err)

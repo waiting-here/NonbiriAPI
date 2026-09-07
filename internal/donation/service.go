@@ -140,6 +140,9 @@ VALUES(?,'pending',1,?,'','',?,?)`, userID, input.Description, now, now)
 	if err != nil || donationID <= 0 {
 		return resources.MutationResult[Donation]{}, ErrInvariant
 	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO donation_handling(donation_id, state, revision, processed_at, processed_by_user_id, processed_by_role, closed_at, closed_reason, created_at, updated_at) VALUES(?, 'pending', 1, NULL, NULL, '', NULL, '', ?, ?)`, donationID, now, now); err != nil {
+		return resources.MutationResult[Donation]{}, classifyWrite("create donation handling", err)
+	}
 	zero := db.EncodeU128(db.U128{})
 	one := db.U128{}
 	one[15] = 1

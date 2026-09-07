@@ -1129,6 +1129,9 @@ func seedGenerationTwo(ctx context.Context, tx *sql.Tx, announcementEpoch string
 	if _, err := tx.ExecContext(ctx, `INSERT INTO maintenance_state(id,enabled,revision,changed_at) VALUES(1,1,1,0)`); err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO donation_quota_capacity(id,rows_used,rows_held) VALUES(1,0,0)`); err != nil {
+		return err
+	}
 	return nil
 }
 

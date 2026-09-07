@@ -152,6 +152,9 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?)`,
 	if _, err := tx.ExecContext(ctx, `INSERT INTO charity_model_stats(model_id) VALUES(?)`, modelID); err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, fmt.Errorf("charity routing: initialize stats: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO charity_model_access(model_id, allowed_level_mask, public_description) VALUES(?, 31, '')`, modelID); err != nil {
+		return resources.MutationResult[AdminCharityModel]{}, fmt.Errorf("charity routing: initialize access: %w", err)
+	}
 	if err := setRoutingStrategy(ctx, tx, modelID, defaultRouteStrategy(input.RouteStrategy)); err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
