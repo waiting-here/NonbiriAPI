@@ -276,6 +276,7 @@ func TestMatchCommitFailureRollsBackThenConverges(t *testing.T) {
 	if fixture.scalar(`SELECT COUNT(*) FROM game_rps_queue`) != 3 ||
 		fixture.scalar(`SELECT COUNT(*) FROM game_rps_user_slots WHERE queue_id IS NOT NULL`) != 3 ||
 		fixture.scalar(`SELECT COUNT(*) FROM game_rps_sessions`) != 0 ||
+		fixture.scalar(`SELECT COUNT(*) FROM game_rps_presentation`) != 0 ||
 		fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='rps_session_start'`) != 0 {
 		t.Fatal("precommit failure left partial match state")
 	}
@@ -285,6 +286,7 @@ func TestMatchCommitFailureRollsBackThenConverges(t *testing.T) {
 	}
 	if fixture.scalar(`SELECT COUNT(*) FROM game_rps_queue`) != 0 ||
 		fixture.scalar(`SELECT COUNT(*) FROM game_rps_sessions`) != 1 ||
+		fixture.scalar(`SELECT COUNT(*) FROM game_rps_presentation`) != 1 ||
 		fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='rps_session_start'`) != 1 {
 		t.Fatal("match retry did not converge exactly once")
 	}

@@ -191,6 +191,10 @@ func detachTerminalIdentityTx(ctx context.Context, tx *sql.Tx, userID int64, sur
 		return classifyDB(err)
 	}
 	for sessionID, seatNo := range seats {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM game_rps_summary_presentation
+WHERE session_id=? AND seat_no=?`, sessionID, seatNo); err != nil {
+			return classifyDB(err)
+		}
 		column := "seat0_result"
 		if seatNo == 1 {
 			column = "seat1_result"
