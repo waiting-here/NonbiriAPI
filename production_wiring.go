@@ -67,9 +67,7 @@ func newPublicForwardRuntime(
 	var abuse *antiabuse.Service
 	flow, err := flowcontrol.New(flowcontrol.Config{RPM: rpm, UserLimits: flowcontrol.DBUserLimitResolver(store),
 		OnDenied: func(ctx context.Context, userID int64, reason ratelimit.RPMReason) {
-			if abuse != nil {
-				abuse.RPMDenied(ctx, userID, reason)
-			}
+			applyPublicRPMDenial(ctx, userID, reason, abuse)
 		},
 	})
 	if err != nil {
@@ -137,7 +135,7 @@ func newPublicForwardRuntime(
 		_ = safety.Close()
 		return fail(fmt.Errorf("create public forward service: %w", err))
 	}
-	flowMiddleware, err := flowcontrol.NewMiddleware(flow, forward.CallerIdentity)
+	flowHandler, err := publicFlowHandler(flow, forward.NewHandler(service))
 	if err != nil {
 		_ = service.Close()
 		return fail(fmt.Errorf("create forward flow middleware: %w", err))
@@ -148,13 +146,27 @@ func newPublicForwardRuntime(
 		return fail(fmt.Errorf("create CallerKey middleware: %w", err))
 	}
 	handler := maintenance.GateMiddleware(maintenanceGate,
-		callerKey.Wrap(flowMiddleware.Wrap(forward.NewHandler(service))))
+		callerKey.Wrap(flowHandler))
 	return &publicForwardRuntime{service: service, flow: flow, abuse: abuse, lifecycle: lifecycle, handler: handler}, nil
 }
 
 type charityPolicyRouter struct {
 	forward.CharityRouter
 	abuse *antiabuse.Service
+}
+
+func applyPublicRPMDenial(ctx context.Context, userID int64, reason ratelimit.RPMReason, abuse *antiabuse.Service) {
+	if abuse != nil && reason == ratelimit.RPMUserLimit && forward.CharityRPMDenial(ctx, userID) {
+		abuse.RPMDenied(ctx, userID, reason)
+	}
+}
+
+func publicFlowHandler(flow *flowcontrol.Controller, next http.Handler) (http.Handler, error) {
+	middleware, err := flowcontrol.NewMiddleware(flow, forward.CallerIdentity)
+	if err != nil {
+		return nil, err
+	}
+	return forward.WithRPMDenialScope(middleware.Wrap(next)), nil
 }
 
 func (router charityPolicyRouter) Preflight(ctx context.Context, userID int64, model string, request *openai.ChatRequest, now int64) (forward.CharityPreflight, error) {

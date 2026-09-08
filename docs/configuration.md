@@ -59,7 +59,7 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | `charity_enabled` | boolean | `false`; charity system master switch — while off, no new charity routing happens and the price table is hidden; in-flight reservations still settle |
 | `donation_accept_enabled` | boolean | `false`; gates new donation submissions only; review/routing of existing donations is unaffected |
 | `charity_token_reserve_milli` | nullable canonical positive decimal milli-credit string | **null (default) = not configured** — distinct from an explicit value; while unset, per-token charity models cannot be enabled or routed (fail closed); PATCH rejects `null` and non-positive values |
-| `rpm_ban_threshold` | integer `[0,4096]` | `5`; count of effective per-user RPM denials before an automatic 24-hour ban; `0` disables |
+| `rpm_ban_threshold` | integer `[0,4096]` | `5`; charity requests denied by the site's per-user RPM limit before an automatic ban; personal calls, global limits, shared key limits and upstream `429` do not count; `0` disables |
 | `rpm_ban_window_seconds` | integer `[1,316224000]` | `86400`; in-memory RPM violation window |
 | `rpm_ban_duration_seconds` | integer `[1,316224000]` | `86400`; automatic ban duration |
 | `charity_min_chars` | integer `[0,1048576]` | `20`; counted Unicode message runes before a charity request is dispatched; `0` disables |

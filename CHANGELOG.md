@@ -6,6 +6,10 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## [Unreleased]
 
+### Fixed
+
+- Automatic RPM bans apply only to charity requests exceeding the site's per-user limit. Rate-limited personal resource calls, shared key limits and upstream rate-limit responses do not trigger this policy.
+
 ## [1.0.0-beta.1] - 2026-09-06
 
 ### Added
