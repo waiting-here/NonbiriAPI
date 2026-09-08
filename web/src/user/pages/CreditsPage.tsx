@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react';
 import { CancelledError, keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { TimeInput } from '@shared/components/TimeInput';
+import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
 import { formatDateTime } from '@shared/utils/datetime';
 import { UserPageGate } from '../components/UserPageGate';
 import { useUserSession } from '../data';
@@ -14,7 +16,9 @@ function CreditHistory({ accountID }: { accountID: string }) {
   const { copy, reason } = useCreditCopy();
   const client = useQueryClient();
   const [filter, setFilter] = useState<HistoryFilter>({ page: '1', page_size: 20 });
-  const [draft, setDraft] = useState({ category: '', direction: '', from: '', to: '' });
+  const [draft, setDraft] = useState({ category: '', direction: '' });
+  const [fromTimeDraft, setFromTimeDraft] = useState<TimeDraft>(() => createTimeDraft(null));
+  const [toTimeDraft, setToTimeDraft] = useState<TimeDraft>(() => createTimeDraft(null));
   const [revision, setRevision] = useState(0);
   const [validation, setValidation] = useState<'range' | 'page' | null>(null);
   const [jump, setJump] = useState('');
@@ -31,6 +35,9 @@ function CreditHistory({ accountID }: { accountID: string }) {
   });
   const data = history.data;
   const busy = history.isFetching;
+  const fromValue = timeDraftValue(fromTimeDraft);
+  const toValue = timeDraftValue(toTimeDraft);
+  const timeReady = fromValue !== undefined && toValue !== undefined;
   const move = (page: string, pageSize = filter.page_size) => {
     setValidation(null);
     setJump('');
@@ -40,15 +47,21 @@ function CreditHistory({ accountID }: { accountID: string }) {
     setValidation(null);
     setJump('');
     setFilter({ page: '1', page_size: filter.page_size });
-    setDraft({ category: '', direction: '', from: '', to: '' });
+    setDraft({ category: '', direction: '' });
+    setFromTimeDraft(createTimeDraft(null));
+    setToTimeDraft(createTimeDraft(null));
     setRevision((value) => value + 1);
   };
   const apply = (event: FormEvent) => {
     event.preventDefault();
-    const parse = (value: string) =>
-      value ? Math.floor(new Date(value).getTime() / 1000) : undefined;
-    const from = parse(draft.from),
-      to = parse(draft.to);
+    const fromValue = timeDraftValue(fromTimeDraft);
+    const toValue = timeDraftValue(toTimeDraft);
+    if (fromValue === undefined || toValue === undefined) {
+      setValidation('range');
+      return;
+    }
+    const from = fromValue === null ? undefined : fromValue;
+    const to = toValue === null ? undefined : toValue;
     if (
       [from, to].some(
         (value) =>
@@ -130,24 +143,15 @@ function CreditHistory({ accountID }: { accountID: string }) {
               <option value="expense">{copy.expense}</option>
             </select>
           </label>
-          <label>
-            {copy.from}
-            <input
-              type="datetime-local"
-              value={draft.from}
-              onChange={(e) => setDraft({ ...draft, from: e.target.value })}
-            />
-          </label>
-          <label>
-            {copy.to}
-            <input
-              type="datetime-local"
-              value={draft.to}
-              onChange={(e) => setDraft({ ...draft, to: e.target.value })}
-            />
-          </label>
+          <TimeInput
+            station="user"
+            label={copy.from}
+            draft={fromTimeDraft}
+            onChange={setFromTimeDraft}
+          />
+          <TimeInput station="user" label={copy.to} draft={toTimeDraft} onChange={setToTimeDraft} />
           <div className="credit-history__filter-actions">
-            <button className="btn btn-primary" disabled={busy}>
+            <button className="btn btn-primary" disabled={busy || !timeReady}>
               {copy.apply}
             </button>
             <button className="btn btn-secondary" type="button" disabled={busy} onClick={reset}>

@@ -14,6 +14,17 @@
     "accountMenu": "账号操作"
   },
   "common": {
+    "time": {
+      "zone": "时区：{{zone}}",
+      "zoneChanged": "浏览器时区已改变，请在保存前核对时间。",
+      "fallback": "无法使用浏览器时区，输入新时间前请确认使用 UTC。",
+      "confirmUTC": "使用 UTC",
+      "invalid": "请输入完整、有效的日期和时间。",
+      "failed": "暂时无法核对时间，已保留你的输入。",
+      "resolving": "正在核对时间…",
+      "gap_shifted": "这个时间处于时钟跳转的空档，将保存为 {{local}} · {{zone}}（UTC{{offset}}）。",
+      "fold_later": "时钟回拨使这个时间出现两次，将保存较晚的一次：{{local}} · {{zone}}（UTC{{offset}}）。"
+    },
     "keyLimits": {
       "title": "密钥调用限制",
       "concurrency": "最大并发",

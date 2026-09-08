@@ -14,6 +14,17 @@
     "accountMenu": "Account actions"
   },
   "common": {
+    "time": {
+      "zone": "Time zone: {{zone}}",
+      "zoneChanged": "Your browser time zone changed. Check the time before saving.",
+      "fallback": "Your browser time zone is unavailable. Confirm UTC to enter a new time.",
+      "confirmUTC": "Use UTC",
+      "invalid": "Enter a complete, valid date and time.",
+      "failed": "The time could not be checked. Your input has been kept.",
+      "resolving": "Checking this time…",
+      "gap_shifted": "This time falls in a clock change. It will be saved as {{local}} · {{zone}} (UTC{{offset}}).",
+      "fold_later": "This time occurs twice during a clock change. The later occurrence will be saved: {{local}} · {{zone}} (UTC{{offset}})."
+    },
     "keyLimits": {
       "title": "Key request limits",
       "concurrency": "Maximum concurrency",

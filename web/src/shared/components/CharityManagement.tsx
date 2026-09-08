@@ -10,6 +10,8 @@ import { CursorPagination } from '@shared/operations/CursorPagination';
 import { useCursorPager } from '@shared/operations/useCursorPager';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { formatDateTime } from '@shared/utils/datetime';
+import { TimeInput } from './TimeInput';
+import { createTimeDraft, timeDraftValue, type TimeDraft, type TimeStation } from '@shared/time';
 import {
   addManagedBindings,
   charityKeys,
@@ -155,7 +157,7 @@ interface KeySettingsDraft {
   token_reserve: number;
   enabled: boolean;
   safe_note: string;
-  expiry: DateTimeDraft;
+  expiry: TimeDraft;
   no_expiry: boolean;
 }
 interface KeyManagementDraft extends Omit<KeySettingsDraft, 'enabled'> {
@@ -172,7 +174,7 @@ const keySettingsDraft = (key: ManagedDonationKey): KeySettingsDraft => ({
     key.charity_state !== 'ended' &&
     key.charity_state !== 'expired',
   safe_note: key.safe_note,
-  expiry: dateTimeDraft(key.expires_at),
+  expiry: createTimeDraft(key.expires_at, 'second'),
   no_expiry: key.expires_at === null,
 });
 
@@ -184,8 +186,8 @@ const keyManagementDraft = (key: ManagedDonationKey): KeyManagementDraft => ({
 type KeySettingsValidation =
   'priceLimit' | 'countLimits' | 'tokenReserve' | 'safeNote' | 'expiry' | 'expiryAuthorization';
 
-function effectiveExpiry(value: Omit<KeySettingsDraft, 'enabled'>): number | null {
-  return value.no_expiry ? null : dateTimeEpoch(value.expiry);
+function effectiveExpiry(value: Omit<KeySettingsDraft, 'enabled'>): number | null | undefined {
+  return value.no_expiry ? null : timeDraftValue(value.expiry);
 }
 
 function keySettingsError(
@@ -207,17 +209,19 @@ function keySettingsError(
   const expiry = effectiveExpiry(value);
   if (
     !value.no_expiry &&
-    (expiry === null || !Number.isSafeInteger(expiry) || expiry < 0 || expiry > MAX_UNIX_SECOND)
+    (expiry === undefined || expiry === null || !Number.isSafeInteger(expiry) || expiry < 0 || expiry > MAX_UNIX_SECOND)
   ) {
     return 'expiry';
   }
-  if (authorizedExpiresAt !== null && (expiry === null || expiry > authorizedExpiresAt)) {
+  if (authorizedExpiresAt !== null && (expiry === undefined || expiry === null || expiry > authorizedExpiresAt)) {
     return 'expiryAuthorization';
   }
   return null;
 }
 
-function keySettingsBody(value: KeySettingsDraft) {
+function keySettingsBody(value: KeySettingsDraft | KeyManagementDraft) {
+  const expiresAt = effectiveExpiry(value);
+  if (expiresAt === undefined) throw new Error('Time is not ready');
   return {
     price_limit: value.price_limit,
     calls_limit: value.calls_limit,
@@ -225,7 +229,7 @@ function keySettingsBody(value: KeySettingsDraft) {
     token_reserve: value.token_reserve,
     enabled: value.enabled,
     safe_note: value.safe_note,
-    expires_at: effectiveExpiry(value),
+    expires_at: expiresAt,
   };
 }
 
@@ -258,38 +262,32 @@ function safeSourceLabel(
 }
 
 function KeyExpiryEditor({
+  station,
   draft,
   authorizedExpiresAt,
   onChange,
 }: {
+  station: TimeStation;
   draft: Pick<KeySettingsDraft, 'expiry' | 'no_expiry'>;
   authorizedExpiresAt: number | null;
-  onChange: (value: Pick<KeySettingsDraft, 'expiry' | 'no_expiry'>) => void;
+  onChange: (update: (value: Pick<KeySettingsDraft, 'expiry' | 'no_expiry'>) => Pick<KeySettingsDraft, 'expiry' | 'no_expiry'>) => void;
 }) {
   const { t } = useTranslation();
   return (
     <div className="ops-form-field">
-      <label>
-        <span>{t('common.operations.charity.effectiveExpiry')}</span>
-        <input
-          type="datetime-local"
-          step="1"
-          value={draft.expiry.value}
+        <TimeInput
+          label={t('common.operations.charity.effectiveExpiry')}
+          station={station}
+          draft={draft.expiry}
           disabled={draft.no_expiry}
-          onChange={(event) =>
-            onChange({
-              ...draft,
-              expiry: { ...draft.expiry, value: event.target.value, dirty: true },
-            })
-          }
+          onChange={(update) => onChange(current => ({ ...current, expiry: update(current.expiry) }))}
         />
-      </label>
       <label className="checkbox-label">
         <input
           type="checkbox"
           checked={draft.no_expiry}
           disabled={authorizedExpiresAt !== null}
-          onChange={(event) => onChange({ ...draft, no_expiry: event.target.checked })}
+          onChange={(event) => { const checked = event.target.checked; onChange(current => ({ ...current, no_expiry: checked })); }}
         />
         <span>{t('common.operations.charity.noExpiry')}</span>
       </label>
@@ -321,10 +319,10 @@ function DonationKeyEditor({
   const [draft, setDraft] = useState(() => keyManagementDraft(item));
   const [reset, setReset] = useState(false);
   const save = useRetainedOperation<
-    KeyManagementDraft & { reset_failure_streak: boolean },
+    ReturnType<typeof keySettingsBody> & { reset_failure_streak: boolean },
     ManagedDonation
   >(
-    (input: KeyManagementDraft & { reset_failure_streak: boolean }, key) =>
+    (input, key) =>
       patchManagedDonationKey(
         role,
         donation.id,
@@ -337,7 +335,7 @@ function DonationKeyEditor({
           tokens_limit: input.tokens_limit,
           token_reserve: input.token_reserve,
           safe_note: input.safe_note,
-          expires_at: effectiveExpiry(input),
+          expires_at: input.expires_at,
           ...(input.reset_failure_streak ? { reset_failure_streak: true } : {}),
         },
         key,
@@ -486,9 +484,10 @@ function DonationKeyEditor({
               </select>
             </label>
             <KeyExpiryEditor
+              station={role === 'admin' ? 'admin' : 'user'}
               draft={draft}
               authorizedExpiresAt={item.authorized_expires_at}
-              onChange={(value) => setDraft({ ...draft, ...value })}
+              onChange={update => setDraft(current => ({ ...current, ...update(current) }))}
             />
             {item.streak.failure_disabled ? (
               <label className="checkbox-label">
@@ -511,7 +510,11 @@ function DonationKeyEditor({
             className="btn btn-secondary"
             type="button"
             disabled={save.isPending || Boolean(validationError)}
-            onClick={() => save.mutate({ ...draft, reset_failure_streak: reset })}
+            onClick={() => {
+              const expiresAt = effectiveExpiry(draft);
+              if (expiresAt === undefined || keySettingsError(draft, item.authorized_expires_at)) return;
+              save.mutate({ ...keySettingsBody(draft), reset_failure_streak: reset });
+            }}
           >
             {t(charityCopyKey(role, 'saveKeyLimits'))}
           </button>
@@ -551,7 +554,7 @@ function DonationDetail({
     {
       decision: 'approve' | 'reject';
       reason: string;
-      settings: Record<string, KeySettingsDraft>;
+      settings: Record<string, ReturnType<typeof keySettingsBody>>;
     },
     ManagedDonation
   >(
@@ -559,7 +562,7 @@ function DonationDetail({
       input: {
         decision: 'approve' | 'reject';
         reason: string;
-        settings: Record<string, KeySettingsDraft>;
+        settings: Record<string, ReturnType<typeof keySettingsBody>>;
       },
       key,
     ) =>
@@ -574,7 +577,7 @@ function DonationDetail({
               reason: input.reason,
               key_settings: item.keys.map((entry) => ({
                 donation_key_id: entry.id,
-                ...keySettingsBody(input.settings[entry.id]),
+                ...input.settings[entry.id],
               })),
             },
         key,
@@ -745,11 +748,10 @@ function DonationDetail({
                         />
                       </label>
                       <KeyExpiryEditor
+                        station={role === 'admin' ? 'admin' : 'user'}
                         draft={draft}
                         authorizedExpiresAt={entry.authorized_expires_at}
-                        onChange={(value) =>
-                          setKeys({ ...keys, [entry.id]: { ...draft, ...value } })
-                        }
+                        onChange={update => setKeys(current => ({ ...current, [entry.id]: { ...current[entry.id], ...update(current[entry.id]) } }))}
                       />
                       <label className="checkbox-label">
                         <input
@@ -788,13 +790,15 @@ function DonationDetail({
             className={decision === 'reject' ? 'btn btn-danger' : 'btn btn-primary'}
             type="button"
             disabled={!reason.trim() || !confirmed || review.isPending || Boolean(validationError)}
-            onClick={() =>
+            onClick={() => {
+              if (!confirmed || !validText(reason.trim(), 1024, true) || (decision === 'approve' &&
+                item.keys.some(entry => !keys[entry.id] || keySettingsError(keys[entry.id], entry.authorized_expires_at)))) return;
               review.mutate({
                 decision,
                 reason: reason.trim(),
-                settings: keys,
-              })
-            }
+                settings: decision === 'approve' ? Object.fromEntries(Object.entries(keys).map(([id, value]) => [id, keySettingsBody(value)])) : {},
+              });
+            }}
           >
             {t(charityCopyKey(role, decision === 'approve' ? 'approve' : 'reject'))}
           </button>
@@ -982,12 +986,6 @@ function DonationsPanel({
   );
 }
 
-interface DateTimeDraft {
-  value: string;
-  original: number | null;
-  dirty: boolean;
-}
-
 interface ModelDraft {
   routeStrategy: CharityModel['route_strategy'];
   provider: string;
@@ -1000,8 +998,8 @@ interface ModelDraft {
   donorRewards: TokenPrices;
   discountEnabled: boolean;
   discountPercent: number;
-  discountStart: DateTimeDraft;
-  discountEnd: DateTimeDraft;
+  discountStart: TimeDraft;
+  discountEnd: TimeDraft;
   flatten: boolean;
 }
 const zeroPrices = (): TokenPrices => ({
@@ -1010,22 +1008,6 @@ const zeroPrices = (): TokenPrices => ({
   cache_read_input: '0',
   output: '0',
 });
-
-const datePart = (value: number) => String(value).padStart(2, '0');
-function dateTimeDraft(epoch: number | null | undefined): DateTimeDraft {
-  if (epoch === null || epoch === undefined) return { value: '', original: null, dirty: false };
-  const date = new Date(epoch * 1_000);
-  return {
-    value: `${date.getFullYear()}-${datePart(date.getMonth() + 1)}-${datePart(date.getDate())}T${datePart(date.getHours())}:${datePart(date.getMinutes())}:${datePart(date.getSeconds())}`,
-    original: epoch,
-    dirty: false,
-  };
-}
-
-function dateTimeEpoch(draft: DateTimeDraft): number | null {
-  if (!draft.dirty) return draft.original;
-  return draft.value ? Math.floor(Date.parse(draft.value) / 1_000) : null;
-}
 
 function modelDraft(model?: CharityModel): ModelDraft {
   return {
@@ -1040,12 +1022,15 @@ function modelDraft(model?: CharityModel): ModelDraft {
     donorRewards: model?.pricing.mode === 'per_token' ? model.pricing.donor_rewards : zeroPrices(),
     discountEnabled: model?.discount.enabled ?? false,
     discountPercent: model?.discount.percent ?? 0,
-    discountStart: dateTimeDraft(model?.discount.start_at),
-    discountEnd: dateTimeDraft(model?.discount.end_at),
+    discountStart: createTimeDraft(model?.discount.start_at ?? null, 'second'),
+    discountEnd: createTimeDraft(model?.discount.end_at ?? null, 'second'),
     flatten: model?.flatten_tool_calls ?? false,
   };
 }
 function modelBody(draft: ModelDraft) {
+  const start = timeDraftValue(draft.discountStart);
+  const end = timeDraftValue(draft.discountEnd);
+  if (start === undefined || end === undefined) throw new Error('Time is not ready');
   return {
     route_strategy: draft.routeStrategy,
     provider: draft.provider.trim(),
@@ -1058,8 +1043,8 @@ function modelBody(draft: ModelDraft) {
     discount: {
       enabled: draft.discountEnabled,
       percent: draft.discountPercent,
-      start_at: dateTimeEpoch(draft.discountStart),
-      end_at: dateTimeEpoch(draft.discountEnd),
+      start_at: start,
+      end_at: end,
     },
     flatten_tool_calls: draft.flatten,
   };
@@ -1091,9 +1076,10 @@ function modelDraftError(draft: ModelDraft): ModelValidation | null {
   ) {
     return 'discountPercent';
   }
-  const start = dateTimeEpoch(draft.discountStart);
-  const end = dateTimeEpoch(draft.discountEnd);
+  const start = timeDraftValue(draft.discountStart);
+  const end = timeDraftValue(draft.discountEnd);
   if (
+    start === undefined || end === undefined ||
     (start !== null && (!Number.isSafeInteger(start) || start < 0 || start > MAX_UNIX_SECOND)) ||
     (end !== null && (!Number.isSafeInteger(end) || end < 0 || end > MAX_UNIX_SECOND)) ||
     (start !== null && end !== null && end <= start)
@@ -1119,16 +1105,16 @@ function ModelForm({
   const { t } = useTranslation();
   const [draft, setDraft] = useState(() => modelDraft(model));
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const save = useRetainedOperation<ModelDraft, CharityModel>(
-    (input: ModelDraft, key) =>
+  const save = useRetainedOperation<ReturnType<typeof modelBody>, CharityModel>(
+    (input, key) =>
       model
         ? patchManagedCharityModel(
             role,
             model.id,
-            { expected_revision: model.revision, ...modelBody(input) },
+            { expected_revision: model.revision, ...input },
             key,
           )
-        : createManagedCharityModel(role, modelBody(input), key),
+        : createManagedCharityModel(role, input, key),
     refresh,
     charityKeys.root(role),
   );
@@ -1312,34 +1298,18 @@ function ModelForm({
             }
           />
         </label>
-        <label>
-          <span>{t(charityCopyKey(role, 'discountStart'))}</span>
-          <input
-            type="datetime-local"
-            step="1"
-            value={draft.discountStart.value}
-            onChange={(event) =>
-              setDraft({
-                ...draft,
-                discountStart: { ...draft.discountStart, value: event.target.value, dirty: true },
-              })
-            }
+          <TimeInput
+            label={t(charityCopyKey(role, 'discountStart'))}
+            station={role === 'admin' ? 'admin' : 'user'}
+            draft={draft.discountStart}
+            onChange={update => setDraft(current => ({ ...current, discountStart: update(current.discountStart) }))}
           />
-        </label>
-        <label>
-          <span>{t(charityCopyKey(role, 'discountEnd'))}</span>
-          <input
-            type="datetime-local"
-            step="1"
-            value={draft.discountEnd.value}
-            onChange={(event) =>
-              setDraft({
-                ...draft,
-                discountEnd: { ...draft.discountEnd, value: event.target.value, dirty: true },
-              })
-            }
+          <TimeInput
+            label={t(charityCopyKey(role, 'discountEnd'))}
+            station={role === 'admin' ? 'admin' : 'user'}
+            draft={draft.discountEnd}
+            onChange={update => setDraft(current => ({ ...current, discountEnd: update(current.discountEnd) }))}
           />
-        </label>
       </div>
       {save.error ? (
         <ErrorState error={save.error} />
@@ -1356,7 +1326,7 @@ function ModelForm({
           className="btn btn-primary"
           type="button"
           disabled={Boolean(validationError) || save.isPending}
-          onClick={() => save.mutate(draft)}
+          onClick={() => { if (!modelDraftError(draft)) save.mutate(modelBody(draft)); }}
         >
           {model ? t('common.operations.charity.saveModel') : t(charityCopyKey(role, 'newModel'))}
         </button>

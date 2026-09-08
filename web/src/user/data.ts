@@ -315,7 +315,7 @@ function requiredTimestamp(value: unknown, field: string): string {
   // Alpha.2 wire timestamps are Unix seconds, never ISO strings.  Keeping
   // this boundary numeric prevents an invalid string from becoming a blank
   // datetime-local value that a later edit could accidentally clear.
-  if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) {
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 253402300799) {
     const date = new Date(value * 1000);
     if (!Number.isNaN(date.getTime())) return date.toISOString();
   }
@@ -324,7 +324,7 @@ function requiredTimestamp(value: unknown, field: string): string {
 
 function optionalTimestamp(value: unknown, field: string): number | undefined {
   if (value === undefined || value === null) return undefined;
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0 || value > 253402300799) {
     throw new ApiError('invalid_response', `The server returned an invalid ${field}.`, 200);
   }
   return value;
@@ -335,7 +335,7 @@ function requiredCount(value: unknown, field: string, maximum = Number.MAX_SAFE_
 }
 
 function requiredUnixSeconds(value: unknown, field: string): number {
-  return strictInteger(value, 1, Number.MAX_SAFE_INTEGER, field);
+  return strictInteger(value, 0, 253402300799, field);
 }
 
 // Resource policy fields are strict JSON booleans. Connector-specific store

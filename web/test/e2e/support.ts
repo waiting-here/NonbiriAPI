@@ -225,6 +225,13 @@ export async function mockRoleSession(
     });
     return;
   }
+  await mockJson(page, {
+    origin, method: 'GET', path: station === 'admin' ? '/admin/api/time-zones' : '/api/time-zones',
+    body: { version: 'go1.26.6-zoneinfo', zones: [
+      'America/Indianapolis', 'America/New_York', 'Asia/Calcutta', 'Asia/Kolkata', 'Asia/Tokyo',
+      'Australia/Lord_Howe', 'Europe/Berlin', 'Pacific/Apia', 'UTC',
+    ] },
+  });
   if (station === 'admin') {
     await mockJson(page, {
       origin,

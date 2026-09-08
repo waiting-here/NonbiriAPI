@@ -1344,7 +1344,7 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
     ).toThrow(/upstream model status/i);
   });
 
-  test('normalizes omitted reviews to an empty list but rejects invalid or zero timestamps', () => {
+  test('normalizes omitted reviews and Unix zero but rejects invalid timestamps', () => {
     const donation = {
       id: 1,
       endpoint_id: 2,
@@ -1365,12 +1365,12 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
     expect(() => normalizeManagementDonation({ ...donation, reviews: {} }, true)).toThrow(
       /review list/i,
     );
-    expect(() =>
-      normalizeDonation({ ...donation, created_at: 0 }, true, 'openai-compatible'),
-    ).toThrow(/created timestamp/i);
-    expect(() =>
-      normalizeDonation({ ...donation, expires_at: 0 }, true, 'openai-compatible'),
-    ).toThrow(/expiry timestamp/i);
+    expect(normalizeDonation({ ...donation, created_at: 0 }, true, 'openai-compatible').created_at).toBe(0);
+    expect(normalizeDonation({ ...donation, expires_at: 0 }, true, 'openai-compatible').expires_at).toBe(0);
+    for (const invalid of [-1, 253402300800, 0.5]) {
+      expect(() => normalizeDonation({ ...donation, created_at: invalid }, true, 'openai-compatible')).toThrow(/created timestamp/i);
+      expect(() => normalizeDonation({ ...donation, expires_at: invalid }, true, 'openai-compatible')).toThrow(/expiry timestamp/i);
+    }
     expect(() =>
       normalizeDonation(
         { ...donation, reviewed_at: '2026-08-23T00:00:00Z' },

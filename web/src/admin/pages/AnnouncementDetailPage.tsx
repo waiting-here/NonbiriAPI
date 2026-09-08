@@ -4,14 +4,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { clearStationSession } from '@shared/charityManagement';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
+import { TimeInput } from '@shared/components/TimeInput';
 import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
 import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
+import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
 import { formatDateTime } from '@shared/utils/datetime';
 import { SafeAnnouncementBody } from '../../user/features/operations/SafeAnnouncementBody';
 import {
   adminAnnouncementKeys,
-  announcementExpiryInput,
-  announcementExpiryWire,
   deleteAnnouncement,
   editAnnouncement,
   getAdminAnnouncement,
@@ -33,8 +33,21 @@ interface DraftState {
   severity: 'info' | 'warning' | 'important';
   pinned: boolean;
   dismissible: boolean;
-  expires_at: string;
+  expires_at: TimeDraft;
 }
+
+interface AnnouncementSaveInput {
+  revision: string;
+  title_zh: string;
+  body_zh: string;
+  title_en: string;
+  body_en: string;
+  severity: DraftState['severity'];
+  pinned: boolean;
+  dismissible: boolean;
+  expires_at: number | null;
+}
+
 const fromAuthority = (item: AdminAnnouncement): DraftState => ({
   title_zh: item.draft.zh?.title ?? '',
   body_zh: item.draft.zh?.body ?? '',
@@ -43,7 +56,7 @@ const fromAuthority = (item: AdminAnnouncement): DraftState => ({
   severity: item.severity,
   pinned: item.pinned,
   dismissible: item.dismissible,
-  expires_at: item.expires_at === null ? '' : announcementExpiryInput(item.expires_at),
+  expires_at: createTimeDraft(item.expires_at, 'minute'),
 });
 
 export function AnnouncementDetailPage() {
@@ -75,19 +88,19 @@ export function AnnouncementDetailPage() {
       }),
   });
   const save = useRetainedOperation(
-    (input: { revision: string; draft: DraftState }, key) =>
+    (input: AnnouncementSaveInput, key) =>
       editAnnouncement(
         announcementId,
         {
           expected_revision: input.revision,
-          title_zh: input.draft.title_zh,
-          body_zh: input.draft.body_zh,
-          title_en: input.draft.title_en,
-          body_en: input.draft.body_en,
-          severity: input.draft.severity,
-          pinned: input.draft.pinned,
-          dismissible: input.draft.dismissible,
-          expires_at: announcementExpiryWire(input.draft.expires_at),
+          title_zh: input.title_zh,
+          body_zh: input.body_zh,
+          title_en: input.title_en,
+          body_en: input.body_en,
+          severity: input.severity,
+          pinned: input.pinned,
+          dismissible: input.dismissible,
+          expires_at: input.expires_at,
         },
         key,
       ),
@@ -134,8 +147,10 @@ export function AnnouncementDetailPage() {
     !authority.isFetching &&
     authority.data.revision !== loadedRevision
   ) {
-    setLoadedRevision(authority.data.revision);
-    if (!dirty) setDraft(fromAuthority(authority.data));
+    if (!dirty && (!draft || draft.expires_at.text === draft.expires_at.originalText)) {
+      setLoadedRevision(authority.data.revision);
+      setDraft(fromAuthority(authority.data));
+    }
   }
   useEffect(() => {
     const error = authority.error ?? preview.error;
@@ -198,7 +213,9 @@ export function AnnouncementDetailPage() {
   const languagePairsValid =
     Boolean(draft.title_zh.trim()) === Boolean(draft.body_zh.trim()) &&
     Boolean(draft.title_en.trim()) === Boolean(draft.body_en.trim());
-  const expiryValid = !draft.expires_at || Number.isFinite(Date.parse(draft.expires_at));
+  const expiry = timeDraftValue(draft.expires_at);
+  const expiryValid = expiry !== undefined;
+  const draftDirty = dirty || draft.expires_at.text !== draft.expires_at.originalText;
   const draftValid =
     languagePairsValid && zhBodyBytes <= 65_536 && enBodyBytes <= 65_536 && expiryValid;
   const complete =
@@ -207,6 +224,33 @@ export function AnnouncementDetailPage() {
       (draft.title_zh.trim() && draft.body_zh.trim()) ||
       (draft.title_en.trim() && draft.body_en.trim()),
     );
+  const submitSave = () => {
+    const expiresAt = timeDraftValue(draft.expires_at);
+    if (!draftDirty || expiresAt === undefined) return;
+    save.mutate(
+      {
+        revision: conflict ? item.revision : loadedRevision,
+        title_zh: draft.title_zh,
+        body_zh: draft.body_zh,
+        title_en: draft.title_en,
+        body_en: draft.body_en,
+        severity: draft.severity,
+        pinned: draft.pinned,
+        dismissible: draft.dismissible,
+        expires_at: expiresAt,
+      },
+      {
+        onSuccess: (receipt) => {
+          setLoadedRevision(receipt.revision);
+          setDirty(false);
+          setConflict(false);
+          setDraft((current) =>
+            current ? { ...current, expires_at: createTimeDraft(expiresAt, 'minute') } : current,
+          );
+        },
+      },
+    );
+  };
   const authorityBlocked = Boolean(authority.error) || authority.isFetching;
   return (
     <div className="page ops-page">
@@ -232,7 +276,7 @@ export function AnnouncementDetailPage() {
         {authority.error ? (
           <ErrorState error={authority.error} onRetry={() => void authority.refetch()} />
         ) : null}
-        {conflict ? (
+        {conflict || loadedRevision !== item.revision ? (
           <p className="inline-notice">
             {t('admin.announcements.detail.conflict', { revision: item.revision })}
           </p>
@@ -240,7 +284,7 @@ export function AnnouncementDetailPage() {
       </Card>
       <Card>
         <h2>{t('admin.announcements.detail.editorTitle')}</h2>
-        <div className="ops-field-grid">
+        <fieldset className="ops-field-grid" disabled={save.isPending || lifecycle.isPending}>
           <label>
             <span>{t('admin.announcements.chineseTitle')}</span>
             <input
@@ -257,8 +301,8 @@ export function AnnouncementDetailPage() {
               onChange={(event) => update('title_en', event.target.value)}
             />
           </label>
-        </div>
-        <div className="ops-field-grid">
+        </fieldset>
+        <fieldset className="ops-field-grid" disabled={save.isPending || lifecycle.isPending}>
           <label>
             <span>{t('admin.announcements.chineseMarkdown', { bytes: zhBodyBytes })}</span>
             <textarea
@@ -273,13 +317,13 @@ export function AnnouncementDetailPage() {
               onChange={(event) => update('body_en', event.target.value)}
             />
           </label>
-        </div>
+        </fieldset>
         {!draftValid ? (
           <p className="field-error" role="alert">
             {t('admin.announcements.validation')}
           </p>
         ) : null}
-        <div className="ops-field-grid">
+        <fieldset className="ops-field-grid" disabled={save.isPending || lifecycle.isPending}>
           <label>
             <span>{t('admin.announcements.severityLabel')}</span>
             <select
@@ -291,14 +335,16 @@ export function AnnouncementDetailPage() {
               <option value="important">{severityLabels.important}</option>
             </select>
           </label>
-          <label>
-            <span>{t('admin.announcements.expiry')}</span>
-            <input
-              type="datetime-local"
-              value={draft.expires_at}
-              onChange={(event) => update('expires_at', event.target.value)}
-            />
-          </label>
+          <TimeInput
+            station="admin"
+            label={t('admin.announcements.expiry')}
+            draft={draft.expires_at}
+            onChange={(updateTime) =>
+              setDraft((current) =>
+                current ? { ...current, expires_at: updateTime(current.expires_at) } : current,
+              )
+            }
+          />
           <label className="checkbox-label">
             <input
               type="checkbox"
@@ -315,26 +361,20 @@ export function AnnouncementDetailPage() {
             />
             <span>{t('admin.announcements.dismissible')}</span>
           </label>
-        </div>
+        </fieldset>
         {save.error ? <ErrorState error={save.error} /> : null}
         <div className="ops-actions">
           <button
             className="btn btn-primary"
             type="button"
             disabled={
-              authorityBlocked || !dirty || !draftValid || save.isPending || lifecycle.isPending
+              authorityBlocked ||
+              !draftDirty ||
+              !draftValid ||
+              save.isPending ||
+              lifecycle.isPending
             }
-            onClick={() =>
-              save.mutate(
-                { revision: item.revision, draft },
-                {
-                  onSuccess: () => {
-                    setDirty(false);
-                    setConflict(false);
-                  },
-                },
-              )
-            }
+            onClick={submitSave}
           >
             {t('admin.announcements.detail.saveDraft')}
           </button>
@@ -358,6 +398,7 @@ export function AnnouncementDetailPage() {
             disabled={save.isPending || lifecycle.isPending}
             onClick={() => {
               setDraft(fromAuthority(item));
+              setLoadedRevision(item.revision);
               setDirty(false);
               setConflict(false);
               preview.reset();
@@ -432,7 +473,7 @@ export function AnnouncementDetailPage() {
             className="btn btn-primary"
             type="button"
             disabled={
-              authorityBlocked || !complete || dirty || lifecycle.isPending || save.isPending
+              authorityBlocked || !complete || draftDirty || lifecycle.isPending || save.isPending
             }
             onClick={() => setConfirmation('publish')}
           >

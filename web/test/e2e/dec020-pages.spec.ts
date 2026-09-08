@@ -407,167 +407,184 @@ test('user endpoint source wizard submits an immutable mainstream channel select
   await assertClean(page, guard);
 });
 
-test('user charity overview loads all cursor pages, filters each key state, and submits per-key expiry', async ({
-  context,
-  page,
-}) => {
-  const guard = await prepare(context, page, 'user', 'user', 'en', 'dark');
-  const available = endpointKey('11', 'available', { displayHead: 'key-available' });
-  const blocked = endpointKey('12', 'disabled', { displayHead: 'key-blocked' });
-  const ended = endpointKey('13', 'expired', {
-    endpointKeyID: null,
-    endedReason: 'expired',
-    displayHead: 'key-ended',
-  });
-  const donationOne = userDonation('9', [available, blocked]);
-  const donationTwo = userDonation('10', [ended], {
-    status: 'expired',
-    createdAt: 1_800_000_020,
-    updatedAt: 1_800_000_030,
-    reviewAt: 1_800_000_021,
-  });
-  const createdDonation = userDonation('11', [
-    endpointKey('14', 'available', { displayHead: 'key-free' }),
-  ]);
-  let donationPostBody: Record<string, unknown> | null = null;
-  await mockJson(page, {
-    origin: USER_ORIGIN,
-    method: 'GET',
-    path: '/api/charity/models',
-    body: {
-      state: 'available',
-      models: [
-        {
-          id: '7',
-          provider: 'provider',
-          model: 'charity',
-          full_name: '[公益]provider/charity',
-          pricing: {
-            mode: 'per_request',
-            user_price_milli: '3000',
-            discounted_user_price_milli: '2400',
-            user_prices_milli: null,
-            discounted_user_prices_milli: null,
+test.describe('donation expiry in UTC', () => {
+  test.use({ timezoneId: 'UTC' });
+  test('user charity overview loads all cursor pages, filters each key state, and submits per-key expiry', async ({
+    context,
+    page,
+  }) => {
+    const guard = await prepare(context, page, 'user', 'user', 'en', 'dark');
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: `/api/time/resolve?${new URLSearchParams({ local: '2027-01-15T08:00:00', time_zone: 'UTC' })}`,
+      body: {
+        instant: 1_800_000_000,
+        local: '2027-01-15T08:00:00',
+        time_zone: 'UTC',
+        offset_seconds: 0,
+        adjustment: 'none',
+      },
+    });
+    const available = endpointKey('11', 'available', { displayHead: 'key-available' });
+    const blocked = endpointKey('12', 'disabled', { displayHead: 'key-blocked' });
+    const ended = endpointKey('13', 'expired', {
+      endpointKeyID: null,
+      endedReason: 'expired',
+      displayHead: 'key-ended',
+    });
+    const donationOne = userDonation('9', [available, blocked]);
+    const donationTwo = userDonation('10', [ended], {
+      status: 'expired',
+      createdAt: 1_800_000_020,
+      updatedAt: 1_800_000_030,
+      reviewAt: 1_800_000_021,
+    });
+    const createdDonation = userDonation('11', [
+      endpointKey('14', 'available', { displayHead: 'key-free' }),
+    ]);
+    let donationPostBody: Record<string, unknown> | null = null;
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/charity/models',
+      body: {
+        state: 'available',
+        models: [
+          {
+            id: '7',
+            provider: 'provider',
+            model: 'charity',
+            full_name: '[公益]provider/charity',
+            pricing: {
+              mode: 'per_request',
+              user_price_milli: '3000',
+              discounted_user_price_milli: '2400',
+              user_prices_milli: null,
+              discounted_user_prices_milli: null,
+            },
+            discount: {
+              enabled: true,
+              percent: 80,
+              start_at: 1_799_999_000,
+              end_at: 1_800_003_600,
+            },
           },
-          discount: {
-            enabled: true,
-            percent: 80,
-            start_at: 1_799_999_000,
-            end_at: 1_800_003_600,
-          },
-        },
-      ],
-      donation_intake: 'open',
-      server_now: 1_800_000_000,
-    },
-  });
-  await mockJson(page, {
-    origin: USER_ORIGIN,
-    method: 'GET',
-    path: '/api/donations?limit=100',
-    body: { data: [donationOne], next_cursor: 'donation-next' },
-  });
-  await mockJson(page, {
-    origin: USER_ORIGIN,
-    method: 'GET',
-    path: '/api/donations?limit=100&cursor=donation-next',
-    body: { data: [donationTwo], next_cursor: null },
-  });
-  await mockJson(page, {
-    origin: USER_ORIGIN,
-    method: 'GET',
-    path: '/api/endpoints?limit=100',
-    body: { data: [endpointSummary('20', '4')], next_cursor: null },
-  });
-  await mockJson(page, {
-    origin: USER_ORIGIN,
-    method: 'GET',
-    path: '/api/endpoints/20/keys?limit=100',
-    body: {
-      data: [
-        endpointKeySummary('11', '20'),
-        endpointKeySummary('12', '20'),
-        endpointKeySummary('13', '20'),
-        endpointKeySummary('14', '20', 'key-free'),
-      ],
-      next_cursor: null,
-    },
-  });
-  await page.route(`${USER_ORIGIN}/api/donations`, async (route) => {
-    const request = route.request();
-    if (request.method() !== 'POST') {
-      await route.fallback();
-      return;
+        ],
+        donation_intake: 'open',
+        server_now: 1_800_000_000,
+      },
+    });
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/donations?limit=100',
+      body: { data: [donationOne], next_cursor: 'donation-next' },
+    });
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/donations?limit=100&cursor=donation-next',
+      body: { data: [donationTwo], next_cursor: null },
+    });
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/endpoints?limit=100',
+      body: { data: [endpointSummary('20', '4')], next_cursor: null },
+    });
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/endpoints/20/keys?limit=100',
+      body: {
+        data: [
+          endpointKeySummary('11', '20'),
+          endpointKeySummary('12', '20'),
+          endpointKeySummary('13', '20'),
+          endpointKeySummary('14', '20', 'key-free'),
+        ],
+        next_cursor: null,
+      },
+    });
+    await page.route(`${USER_ORIGIN}/api/donations`, async (route) => {
+      const request = route.request();
+      if (request.method() !== 'POST') {
+        await route.fallback();
+        return;
+      }
+      donationPostBody = request.postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        status: 201,
+        headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+        body: JSON.stringify(createdDonation),
+      });
+    });
+
+    await page.goto(`${USER_ORIGIN}/charity`);
+    const priceTable = page.getByRole('table', { name: 'Charity model prices' });
+    await expect(priceTable).toBeVisible();
+    await expect(page.getByLabel('Original price: 3')).toBeVisible();
+    await expect(page.getByLabel('Offer price: 2.4')).toBeVisible();
+    await expect(page.getByText('20% off', { exact: true })).toBeVisible();
+    await expect(priceTable.getByText('Donor reward')).toHaveCount(0);
+    for (const width of [320, 390, 1440, 1935]) {
+      await page.setViewportSize({ width, height: 1000 });
+      const layout = await page.locator('.economy-page').evaluate((element) => {
+        const main = element.closest('main')!;
+        const outer = main.getBoundingClientRect();
+        const inner = element.getBoundingClientRect();
+        const style = getComputedStyle(main);
+        return {
+          width: inner.width,
+          available: outer.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+          overflow: document.documentElement.scrollWidth > innerWidth,
+        };
+      });
+      expect(layout.overflow).toBe(false);
+      expect(layout.width).toBeGreaterThanOrEqual(layout.available - 2);
+      await assertPricesFit(page);
     }
-    donationPostBody = request.postDataJSON() as Record<string, unknown>;
-    await route.fulfill({
-      status: 201,
-      headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
-      body: JSON.stringify(createdDonation),
-    });
-  });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('tab', { name: 'My donations', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'My donations' })).toBeVisible();
+    await expect(page.getByText('Showing 3 of 3 keys')).toBeVisible();
+    const filter = page.getByLabel('Key status');
+    await filter.selectOption('available');
+    await expect(page.getByText('Showing 1 of 3 keys')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'key-available…tail' })).toBeVisible();
+    await filter.selectOption('blocked');
+    await expect(page.getByText('Showing 1 of 3 keys')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'key-blocked…tail' })).toBeVisible();
+    await filter.selectOption('ended');
+    await expect(page.getByText('Showing 1 of 3 keys')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'key-ended…tail' })).toBeVisible();
+    await filter.selectOption('all');
 
-  await page.goto(`${USER_ORIGIN}/charity`);
-  const priceTable = page.getByRole('table', { name: 'Charity model prices' });
-  await expect(priceTable).toBeVisible();
-  await expect(page.getByLabel('Original price: 3')).toBeVisible();
-  await expect(page.getByLabel('Offer price: 2.4')).toBeVisible();
-  await expect(page.getByText('20% off', { exact: true })).toBeVisible();
-  await expect(priceTable.getByText('Donor reward')).toHaveCount(0);
-  for (const width of [320, 390, 1440, 1935]) {
-    await page.setViewportSize({ width, height: 1000 });
-    const layout = await page.locator('.economy-page').evaluate((element) => {
-      const main = element.closest('main')!;
-      const outer = main.getBoundingClientRect();
-      const inner = element.getBoundingClientRect();
-      const style = getComputedStyle(main);
-      return {
-        width: inner.width,
-        available: outer.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
-        overflow: document.documentElement.scrollWidth > innerWidth,
-      };
+    await page.getByRole('tab', { name: 'Donate resources', exact: true }).click();
+    const composer = page.locator('.economy-donation-composer');
+    await expect(
+      composer.getByRole('heading', { name: 'Submit a charity donation' }),
+    ).toBeVisible();
+    await composer.getByLabel(/key-free…tail/).check();
+    await composer.getByLabel('Expiry for key-free…tail').fill('2027-01-15T08:00');
+    await composer
+      .getByRole('checkbox', {
+        name: 'I own every selected resource or have authorization to contribute its capacity.',
+      })
+      .check();
+    await composer
+      .getByRole('textbox', { name: 'Donation description' })
+      .fill('Per-key expiry fixture');
+    await composer.getByRole('button', { name: 'Submit for review' }).click();
+    await expect(page.getByText('Donation submitted for review.')).toBeVisible();
+    expect(donationPostBody).toMatchObject({
+      description: 'Per-key expiry fixture',
+      ownership_authorized: true,
+      keys: [{ endpoint_key_id: '14', expires_at: 1_800_000_000 }],
     });
-    expect(layout.overflow).toBe(false);
-    expect(layout.width).toBeGreaterThanOrEqual(layout.available - 2);
-    await assertPricesFit(page);
-  }
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('tab', { name: 'My donations', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'My donations' })).toBeVisible();
-  await expect(page.getByText('Showing 3 of 3 keys')).toBeVisible();
-  const filter = page.getByLabel('Key status');
-  await filter.selectOption('available');
-  await expect(page.getByText('Showing 1 of 3 keys')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'key-available…tail' })).toBeVisible();
-  await filter.selectOption('blocked');
-  await expect(page.getByText('Showing 1 of 3 keys')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'key-blocked…tail' })).toBeVisible();
-  await filter.selectOption('ended');
-  await expect(page.getByText('Showing 1 of 3 keys')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'key-ended…tail' })).toBeVisible();
-  await filter.selectOption('all');
-
-  await page.getByRole('tab', { name: 'Donate resources', exact: true }).click();
-  const composer = page.locator('.economy-donation-composer');
-  await expect(composer.getByRole('heading', { name: 'Submit a charity donation' })).toBeVisible();
-  await composer.getByLabel(/key-free…tail/).check();
-  await composer.getByLabel('Expiry for key-free…tail').fill('2027-01-15T08:00');
-  await composer
-    .getByRole('checkbox', {
-      name: 'I own every selected resource or have authorization to contribute its capacity.',
-    })
-    .check();
-  await composer
-    .getByRole('textbox', { name: 'Donation description' })
-    .fill('Per-key expiry fixture');
-  await composer.getByRole('button', { name: 'Submit for review' }).click();
-  await expect(page.getByText('Donation submitted for review.')).toBeVisible();
-  expect(donationPostBody).toMatchObject({
-    description: 'Per-key expiry fixture',
-    ownership_authorized: true,
-    keys: [{ endpoint_key_id: '14', expires_at: 1_800_000_000 }],
+    await assertClean(page, guard);
   });
-  await assertClean(page, guard);
 });
 
 for (const locale of ['en', 'zh'] as const) {

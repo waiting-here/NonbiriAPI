@@ -109,7 +109,7 @@ export function integerValue(value: unknown, fallback = 0): number {
 }
 
 export function dateValue(value: unknown): string {
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
     const milliseconds = value < 1_000_000_000_000 ? value * 1000 : value;
     const date = new Date(milliseconds);
     if (!Number.isNaN(date.getTime())) return date.toISOString();

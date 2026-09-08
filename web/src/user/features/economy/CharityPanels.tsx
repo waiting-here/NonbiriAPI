@@ -8,6 +8,8 @@ import { MarkdownText } from '@shared/components/MarkdownText';
 import { CharityPriceTable, type CharityPriceRow } from '@shared/components/CharityPriceTable';
 import { Card, EmptyState, ErrorState, StatusBadge } from '@shared/components/States';
 import { formatDateTime } from '@shared/utils/datetime';
+import { TimeInput } from '@shared/components/TimeInput';
+import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
 import { isConflictError, isResponseUnknown, type CreateDonationInput } from './api';
 import { CreditAmount, ExactCount } from './ExactValue';
 import { maskedKey } from './format';
@@ -49,23 +51,6 @@ function classifyDonationSelection(choices: readonly EndpointKeyChoice[]): Donat
     return { kind: 'cross_channel' };
   }
   return { kind: 'mainstream', channelId: first.channelId, channelName: first.name };
-}
-
-function expiryInputValue(value: number | null): string {
-  if (value === null) return '';
-  return new Date(value * 1000).toISOString().slice(0, 16);
-}
-
-function parseExpiryInput(value: string): number | null | undefined {
-  if (value === '') return null;
-  // datetime-local has no timezone. Treat the rendered value as UTC so the
-  // request remains an explicit UTC Unix-seconds deadline across locales.
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return undefined;
-  const timestamp = Date.parse(`${value}:00Z`);
-  if (!Number.isFinite(timestamp) || timestamp < 0 || timestamp % 1000 !== 0) return undefined;
-  const seconds = timestamp / 1000;
-  if (!Number.isSafeInteger(seconds) || expiryInputValue(seconds) !== value) return undefined;
-  return seconds;
 }
 
 function validDonationDescription(value: string): boolean {
@@ -289,7 +274,7 @@ export function DonationComposer({
     signature: '',
     ids: new Set(),
   }));
-  const [expiryByKey, setExpiryByKey] = useState<Record<string, string>>({});
+  const [expiryByKey, setExpiryByKey] = useState<Record<string, TimeDraft>>({});
   const [resourceQuery, setResourceQuery] = useState('');
   const [authorized, setAuthorized] = useState(false);
   const [validation, setValidation] = useState('');
@@ -366,8 +351,7 @@ export function DonationComposer({
       return;
     }
     const keys = [...selected].map((endpointKeyId) => {
-      const rawExpiry = expiryByKey[endpointKeyId] ?? '';
-      const expiresAt = parseExpiryInput(rawExpiry);
+      const expiresAt = expiryByKey[endpointKeyId] ? timeDraftValue(expiryByKey[endpointKeyId]) : null;
       if (expiresAt === undefined) return undefined;
       return { endpointKeyId, expiresAt };
     });
@@ -508,14 +492,13 @@ export function DonationComposer({
                           {selectedChoice ? (
                             <span className="economy-key-expiry">
                               <span>{t('user.charity.keyExpiry')}</span>
-                              <input
-                                type="datetime-local"
-                                step={60}
-                                value={expiryByKey[choice.key.id] ?? ''}
-                                onChange={(event) =>
+                              <TimeInput
+                                station="user"
+                                draft={expiryByKey[choice.key.id] ?? createTimeDraft()}
+                                onChange={(update) =>
                                   setExpiryByKey((current) => ({
                                     ...current,
-                                    [choice.key.id]: event.target.value,
+                                    [choice.key.id]: update(current[choice.key.id] ?? createTimeDraft()),
                                   }))
                                 }
                                 onClick={(event) => event.stopPropagation()}
@@ -523,7 +506,7 @@ export function DonationComposer({
                                   key: maskedKey(choice.key.displayHead, choice.key.displayTail),
                                 })}
                               />
-                              <small className="muted">{t('user.charity.expiryHintUtc')}</small>
+                              <small className="muted">{t('user.charity.expiryHint')}</small>
                             </span>
                           ) : null}
                         </span>
@@ -593,6 +576,7 @@ export function DonationComposer({
             disabled={
               mutation.isPending ||
               mutation.isReconciling ||
+              [...selected].some(id => expiryByKey[id] && timeDraftValue(expiryByKey[id]) === undefined) ||
               eligible.length === 0 ||
               waitingForAuthority
             }

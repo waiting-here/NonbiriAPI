@@ -761,115 +761,132 @@ for (const role of ['admin', 'steward'] as const)
     guard.assertNone();
   });
 
-test('donation resources can be filtered across many endpoints without losing selected keys or expiry', async ({
-  page,
-}) => {
-  const guard = await prepare(page, 'user');
-  let submitted: Record<string, unknown> | undefined;
-  let saved: Record<string, unknown> | undefined;
-  await mockJson(page, {
-    origin: USER_ORIGIN,
-    method: 'GET',
-    path: '/api/charity/models',
-    body: {
-      state: 'available',
-      donation_intake: 'open',
-      server_now: NOW,
-      models: [publicModel(1)],
-    },
-  });
-  await page.route(`${USER_ORIGIN}/api/donations**`, async (route) => {
-    if (route.request().method() === 'POST') {
-      submitted = route.request().postDataJSON();
-      const selections = submitted!.keys as Array<{
-        endpoint_key_id: string;
-        expires_at: number | null;
-      }>;
-      const template = managedDonation(99, 'admin');
-      saved = {
-        id: '99',
-        status: 'pending',
-        revision: '1',
-        description: submitted!.description,
-        review_result: null,
-        created_at: NOW,
-        updated_at: NOW,
-        keys: selections.map((selection, i) => ({
-          ...Object.fromEntries(
-            Object.entries(template.keys[0]).filter(
-              ([key]) =>
-                !['safe_note', 'authorized_expires_at', 'max_concurrency', 'max_rpm'].includes(key),
-            ),
-          ),
-          id: String(i + 1),
-          endpoint_key_id: selection.endpoint_key_id,
-          expires_at: selection.expires_at,
-          token_reserve: 0,
-        })),
-      };
-      return route.fulfill({ status: 201, json: saved });
-    }
-    return route.fulfill({ json: { data: saved ? [saved] : [], next_cursor: null } });
-  });
-  await page.route(`${USER_ORIGIN}/api/endpoints**`, async (route) => {
-    const url = new URL(route.request().url());
-    const match = url.pathname.match(/^\/api\/endpoints\/(\d+)\/keys$/);
-    const data = match
-      ? Array.from({ length: 3 }, (_, i) => ({
-          ...endpointKey(match[1], i + 1),
-          max_concurrency: 2,
-          max_rpm: 12,
-        }))
-      : Array.from({ length: 20 }, (_, i) => ({ ...endpoint(i + 1), key_count: '3' }));
-    return route.fulfill({ json: { data, next_cursor: null } });
-  });
-  await page.setViewportSize({ width: 1935, height: 1000 });
-  await page.goto(`${USER_ORIGIN}/charity?tab=donate`);
-  const groups = page.locator('.economy-key-group');
-  await expect(groups).toHaveCount(20);
-  await expect(groups.locator('input[type=checkbox]:visible')).toHaveCount(0);
-  const filter = page.getByRole('searchbox', { name: 'Find endpoints or key notes' });
-  await filter.fill('Endpoint 20 —');
-  await expect(groups).toHaveCount(1);
-  const choice = page.locator('.economy-key-choice').first();
-  await choice.getByRole('checkbox').check();
-  const expiry = choice.locator('input[type=datetime-local]');
-  await expiry.fill('2027-02-01T12:00');
-  await expect(choice.getByRole('checkbox')).toBeChecked();
-  await filter.fill('Endpoint 1 —');
-  await page.locator('.economy-key-choice').nth(1).getByRole('checkbox').check();
-  await filter.fill('Endpoint 20 —');
-  await expect(page.locator('.economy-key-choice').first().getByRole('checkbox')).toBeChecked();
-  await expect(
-    page.locator('.economy-key-choice').first().locator('input[type=datetime-local]'),
-  ).toHaveValue('2027-02-01T12:00');
-  await filter.fill('');
-  for (const width of [320, 390, 768, 1935]) {
-    await page.setViewportSize({ width, height: 1000 });
-    await fitsPage(page);
-    expect(
-      (await page.locator('.economy-resource-groups').boundingBox())!.height,
-    ).toBeLessThanOrEqual(602);
-  }
-  await page.setViewportSize({ width: 390, height: 1000 });
-  await screenshot(page, 'donation-resources-mobile');
-  await page
-    .getByLabel('Donation description')
-    .fill('A helpful description for the shared resources');
-  await page.locator('.economy-authorization input').check();
-  await page.getByRole('button', { name: 'Submit for review', exact: true }).click();
-  await expect
-    .poll(() => submitted)
-    .toEqual({
-      description: 'A helpful description for the shared resources',
-      keys: [
-        { endpoint_key_id: '20001', expires_at: Date.parse('2027-02-01T12:00:00Z') / 1000 },
-        { endpoint_key_id: '1002', expires_at: null },
-      ],
-      ownership_authorized: true,
+test.describe('donation selection expiry in UTC', () => {
+  test.use({ timezoneId: 'UTC' });
+  test('donation resources can be filtered across many endpoints without losing selected keys or expiry', async ({
+    page,
+  }) => {
+    const guard = await prepare(page, 'user');
+    let submitted: Record<string, unknown> | undefined;
+    let saved: Record<string, unknown> | undefined;
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: `/api/time/resolve?${new URLSearchParams({ local: '2027-02-01T12:00:00', time_zone: 'UTC' })}`,
+      body: {
+        instant: 1_801_483_200,
+        local: '2027-02-01T12:00:00',
+        time_zone: 'UTC',
+        offset_seconds: 0,
+        adjustment: 'none',
+      },
     });
-  await expect(page.getByText('Donation submitted for review.', { exact: true })).toBeVisible();
-  guard.assertNone();
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/charity/models',
+      body: {
+        state: 'available',
+        donation_intake: 'open',
+        server_now: NOW,
+        models: [publicModel(1)],
+      },
+    });
+    await page.route(`${USER_ORIGIN}/api/donations**`, async (route) => {
+      if (route.request().method() === 'POST') {
+        submitted = route.request().postDataJSON();
+        const selections = submitted!.keys as Array<{
+          endpoint_key_id: string;
+          expires_at: number | null;
+        }>;
+        const template = managedDonation(99, 'admin');
+        saved = {
+          id: '99',
+          status: 'pending',
+          revision: '1',
+          description: submitted!.description,
+          review_result: null,
+          created_at: NOW,
+          updated_at: NOW,
+          keys: selections.map((selection, i) => ({
+            ...Object.fromEntries(
+              Object.entries(template.keys[0]).filter(
+                ([key]) =>
+                  !['safe_note', 'authorized_expires_at', 'max_concurrency', 'max_rpm'].includes(
+                    key,
+                  ),
+              ),
+            ),
+            id: String(i + 1),
+            endpoint_key_id: selection.endpoint_key_id,
+            expires_at: selection.expires_at,
+            token_reserve: 0,
+          })),
+        };
+        return route.fulfill({ status: 201, json: saved });
+      }
+      return route.fulfill({ json: { data: saved ? [saved] : [], next_cursor: null } });
+    });
+    await page.route(`${USER_ORIGIN}/api/endpoints**`, async (route) => {
+      const url = new URL(route.request().url());
+      const match = url.pathname.match(/^\/api\/endpoints\/(\d+)\/keys$/);
+      const data = match
+        ? Array.from({ length: 3 }, (_, i) => ({
+            ...endpointKey(match[1], i + 1),
+            max_concurrency: 2,
+            max_rpm: 12,
+          }))
+        : Array.from({ length: 20 }, (_, i) => ({ ...endpoint(i + 1), key_count: '3' }));
+      return route.fulfill({ json: { data, next_cursor: null } });
+    });
+    await page.setViewportSize({ width: 1935, height: 1000 });
+    await page.goto(`${USER_ORIGIN}/charity?tab=donate`);
+    const groups = page.locator('.economy-key-group');
+    await expect(groups).toHaveCount(20);
+    await expect(groups.locator('input[type=checkbox]:visible')).toHaveCount(0);
+    const filter = page.getByRole('searchbox', { name: 'Find endpoints or key notes' });
+    await filter.fill('Endpoint 20 —');
+    await expect(groups).toHaveCount(1);
+    const choice = page.locator('.economy-key-choice').first();
+    await choice.getByRole('checkbox').check();
+    const expiry = choice.locator('input[type=datetime-local]');
+    await expiry.fill('2027-02-01T12:00');
+    await expect(choice.getByRole('checkbox')).toBeChecked();
+    await filter.fill('Endpoint 1 —');
+    await page.locator('.economy-key-choice').nth(1).getByRole('checkbox').check();
+    await filter.fill('Endpoint 20 —');
+    await expect(page.locator('.economy-key-choice').first().getByRole('checkbox')).toBeChecked();
+    await expect(
+      page.locator('.economy-key-choice').first().locator('input[type=datetime-local]'),
+    ).toHaveValue('2027-02-01T12:00');
+    await filter.fill('');
+    for (const width of [320, 390, 768, 1935]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await fitsPage(page);
+      expect(
+        (await page.locator('.economy-resource-groups').boundingBox())!.height,
+      ).toBeLessThanOrEqual(602);
+    }
+    await page.setViewportSize({ width: 390, height: 1000 });
+    await screenshot(page, 'donation-resources-mobile');
+    await page
+      .getByLabel('Donation description')
+      .fill('A helpful description for the shared resources');
+    await page.locator('.economy-authorization input').check();
+    await page.getByRole('button', { name: 'Submit for review', exact: true }).click();
+    await expect
+      .poll(() => submitted)
+      .toEqual({
+        description: 'A helpful description for the shared resources',
+        keys: [
+          { endpoint_key_id: '20001', expires_at: Date.parse('2027-02-01T12:00:00Z') / 1000 },
+          { endpoint_key_id: '1002', expires_at: null },
+        ],
+        ownership_authorized: true,
+      });
+    await expect(page.getByText('Donation submitted for review.', { exact: true })).toBeVisible();
+    guard.assertNone();
+  });
 });
 
 for (const locale of ['en', 'zh'] as const)

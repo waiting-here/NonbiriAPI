@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { TimeInput } from '@shared/components/TimeInput';
+import { createTimeDraft, timeDraftValue, type TimeDraft, type TimeStation } from '@shared/time';
 import type { LogUrlState } from './useLogUrlState';
 
 // Shared filter bar for both log screens. Text fields are declared by the
 // caller (the two stations expose different frozen filter sets); the time
-// range offers quick presets plus explicit datetime-local inputs. Draft
+// range offers quick presets plus explicit time inputs. Draft
 // inputs only reach the URL/API through Apply, and every applied change is
 // expected to restart paging at page 1 (callers own that rule).
 
@@ -27,44 +29,41 @@ const QUICK_RANGES = [
   { key: 'logs.range7d', seconds: 7 * 86_400 },
 ] as const;
 
-function datetimeLocalToUnix(value: string): number | undefined {
-  if (!value.trim()) return undefined;
-  const millis = Date.parse(value);
-  if (!Number.isFinite(millis)) return undefined;
-  return Math.max(0, Math.floor(millis / 1000));
-}
-
-function unixToDatetimeLocal(unix: number | undefined): string {
-  if (unix === undefined || unix <= 0) return '';
-  const date = new Date(unix * 1000);
-  if (Number.isNaN(date.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 interface LogFiltersProps {
+  station: TimeStation;
   fields: readonly LogFilterField[];
   state: Pick<LogUrlState, 'filters' | 'fromUnix' | 'toUnix'>;
   onApply: (next: { filters: Record<string, string>; fromUnix?: number; toUnix?: number }) => void;
 }
 
-export function LogFilters({ fields, state, onApply }: LogFiltersProps) {
+export function LogFilters({ station, fields, state, onApply }: LogFiltersProps) {
   const { t } = useTranslation();
   const [drafts, setDrafts] = useState<Record<string, string>>(() => ({ ...state.filters }));
-  const [draftFrom, setDraftFrom] = useState(() => unixToDatetimeLocal(state.fromUnix));
-  const [draftTo, setDraftTo] = useState(() => unixToDatetimeLocal(state.toUnix));
+  const [draftFrom, setDraftFrom] = useState<TimeDraft>(() =>
+    createTimeDraft(state.fromUnix ?? null),
+  );
+  const [draftTo, setDraftTo] = useState<TimeDraft>(() => createTimeDraft(state.toUnix ?? null));
+  const [invalidRange, setInvalidRange] = useState(false);
 
   // Re-seed the drafts whenever the applied state changes (including when a
   // quick range or another navigation rewrites the URL). Adjusting state
   // during render keeps the seed comparison in the same commit.
-  const stateSeed = JSON.stringify([state.filters, state.fromUnix ?? 0, state.toUnix ?? 0]);
+  const stateSeed = JSON.stringify([
+    state.filters,
+    state.fromUnix === undefined ? 'unset' : state.fromUnix,
+    state.toUnix === undefined ? 'unset' : state.toUnix,
+  ]);
   const [seededFor, setSeededFor] = useState(stateSeed);
   if (seededFor !== stateSeed) {
     setSeededFor(stateSeed);
+    setInvalidRange(false);
     setDrafts({ ...state.filters });
-    setDraftFrom(unixToDatetimeLocal(state.fromUnix));
-    setDraftTo(unixToDatetimeLocal(state.toUnix));
+    setDraftFrom(createTimeDraft(state.fromUnix ?? null));
+    setDraftTo(createTimeDraft(state.toUnix ?? null));
   }
+  const fromValue = timeDraftValue(draftFrom);
+  const toValue = timeDraftValue(draftTo);
+  const timeReady = fromValue !== undefined && toValue !== undefined;
 
   const collectFilters = (): Record<string, string> => {
     const next: Record<string, string> = {};
@@ -76,15 +75,24 @@ export function LogFilters({ fields, state, onApply }: LogFiltersProps) {
   };
 
   const applyRange = (fromUnix: number | undefined, toUnix: number | undefined) => {
+    setInvalidRange(false);
     onApply({ filters: collectFilters(), fromUnix, toUnix });
   };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    applyRange(datetimeLocalToUnix(draftFrom), datetimeLocalToUnix(draftTo));
+    const from = timeDraftValue(draftFrom);
+    const to = timeDraftValue(draftTo);
+    if (from === undefined || to === undefined) return;
+    if (from !== null && to !== null && from >= to) {
+      setInvalidRange(true);
+      return;
+    }
+    applyRange(from === null ? undefined : from, to === null ? undefined : to);
   };
 
   const reset = () => {
+    setInvalidRange(false);
     onApply({ filters: {}, fromUnix: undefined, toUnix: undefined });
   };
 
@@ -134,26 +142,27 @@ export function LogFilters({ fields, state, onApply }: LogFiltersProps) {
           </button>
         ))}
       </div>
-      <label>
-        <span>{t('common.from')}</span>
-        <input
-          type="datetime-local"
-          value={draftFrom}
-          onChange={(event) => setDraftFrom(event.target.value)}
-          aria-label={t('common.filterFromAria')}
-        />
-      </label>
-      <label>
-        <span>{t('common.to')}</span>
-        <input
-          type="datetime-local"
-          value={draftTo}
-          onChange={(event) => setDraftTo(event.target.value)}
-          aria-label={t('common.filterToAria')}
-        />
-      </label>
+      <TimeInput
+        station={station}
+        label={t('common.from')}
+        draft={draftFrom}
+        onChange={setDraftFrom}
+        aria-label={t('common.filterFromAria')}
+      />
+      <TimeInput
+        station={station}
+        label={t('common.to')}
+        draft={draftTo}
+        onChange={setDraftTo}
+        aria-label={t('common.filterToAria')}
+      />
+      {invalidRange ? (
+        <p className="field-error" role="alert">
+          {t('common.operations.logs.filterInvalid')}
+        </p>
+      ) : null}
       <div className="filter-actions">
-        <button type="submit" className="btn btn-quiet">
+        <button type="submit" className="btn btn-quiet" disabled={!timeReady}>
           {t('common.applyFilter')}
         </button>
         <button type="button" className="btn btn-link" onClick={reset}>
