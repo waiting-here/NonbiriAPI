@@ -62,7 +62,7 @@ func testApplicationRequest(t *testing.T, handler http.Handler, method, hostName
 		request.Header.Set(name, value)
 	}
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, request)
+	handler.ServeHTTP(&scopeRecorder{response}, request)
 	return response
 }
 
@@ -490,6 +490,19 @@ FROM sessions s JOIN users u ON u.id=s.user_id WHERE u.is_admin=1`).Scan(&adminU
 		}
 		if _, err := store.DB().Exec(`UPDATE users SET rpm_limit=1 WHERE id=?`, userID); err != nil {
 			t.Fatal(err)
+		}
+		for i := 0; i < 3; i++ {
+			personal := testApplicationRequest(t, app.handler, http.MethodPost, auditUserHost, "/v1/chat/completions", `{"model":"provider/model","messages":[{"role":"user","content":"x"}]}`, nil, headers)
+			if personal.Code != http.StatusTooManyRequests {
+				t.Fatalf("personal RPM denial %d=%d %s", i, personal.Code, personal.Body.String())
+			}
+		}
+		var personalBan int
+		if err := store.DB().QueryRow(`SELECT is_banned FROM users WHERE id=?`, userID).Scan(&personalBan); err != nil {
+			t.Fatal(err)
+		}
+		if personalBan != 0 {
+			t.Fatal("personal RPM refusals triggered charity automatic ban")
 		}
 		limited := testApplicationRequest(t, app.handler, http.MethodPost, auditUserHost, "/v1/chat/completions", body, nil, headers)
 		if limited.Code != http.StatusTooManyRequests {

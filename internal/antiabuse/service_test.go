@@ -262,7 +262,7 @@ func TestShortPolicyRechecksGatesThresholdChangesAndDeletion(t *testing.T) {
 	}
 }
 
-func TestRPMOnlyCountsPersonalLimitAndRevokesAtThreshold(t *testing.T) {
+func TestRPMOnlyCountsPerUserLimitAndRevokesAtThreshold(t *testing.T) {
 	f := newAbuseFixture(t)
 	user := f.user()
 	f.set(KeyRPMBanThreshold, "2")
