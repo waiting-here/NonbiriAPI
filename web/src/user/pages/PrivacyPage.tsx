@@ -60,6 +60,7 @@ export function PrivacyPage() {
             <h2>{t('user.legal.privacy.sharingTitle')}</h2>
             <p>{t('user.legal.privacy.sharingBody')}</p>
             <p>{t('user.legal.privacy.keyLimitsBody')}</p>
+            <p>{t('user.legal.privacy.charityManagementBody')}</p>
           </section>
           <section>
             <h2>{t('user.legal.privacy.retentionTitle')}</h2>

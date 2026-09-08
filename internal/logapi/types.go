@@ -1,6 +1,7 @@
 // Package logapi projects persisted logical request facts into three distinct
 // role-safe read models. It never reads credentials, ciphertext, request or
-// response bodies, raw upstream errors, Discord identity, or donor material.
+// response bodies, raw upstream errors, or donor material. Authorized stewards
+// can read a charity caller's current account identity through a separate join.
 package logapi
 
 import (
@@ -171,15 +172,21 @@ type AdminLogDetail struct {
 // alias, or convert through Admin DTOs, so future Admin additions cannot cross
 // the L5 boundary by construction.
 type StewardLogRow struct {
-	ID                string       `json:"id"`
-	RouteKind         RouteKind    `json:"route_kind"`
-	CallerResultClass *ResultClass `json:"caller_result_class"`
-	CallerStatus      *int         `json:"caller_status"`
-	CallerErrorCode   *string      `json:"caller_error_code"`
-	StartedAt         int64        `json:"started_at"`
-	CompletedAt       *int64       `json:"completed_at"`
-	Usage             LogUsage     `json:"usage"`
-	AttemptCount      string       `json:"attempt_count"`
+	ID                string          `json:"id"`
+	RouteKind         RouteKind       `json:"route_kind"`
+	CallerResultClass *ResultClass    `json:"caller_result_class"`
+	CallerStatus      *int            `json:"caller_status"`
+	CallerErrorCode   *string         `json:"caller_error_code"`
+	StartedAt         int64           `json:"started_at"`
+	CompletedAt       *int64          `json:"completed_at"`
+	Usage             LogUsage        `json:"usage"`
+	AttemptCount      string          `json:"attempt_count"`
+	CallerIdentity    *CallerIdentity `json:"caller_identity"`
+}
+
+type CallerIdentity struct {
+	DiscordNickname *string `json:"discord_nickname"`
+	DiscordID       *string `json:"discord_id"`
 }
 
 type StewardLogAttempt struct {

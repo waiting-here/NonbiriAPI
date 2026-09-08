@@ -65,11 +65,15 @@ func (field *nullableField[T]) UnmarshalJSON(data []byte) error {
 }
 
 func decodeStrictObject[T any](writer http.ResponseWriter, request *http.Request, destination *T) bool {
+	return decodeStrictObjectLimit(writer, request, destination, idempotency.MaxControlBodyBytes)
+}
+
+func decodeStrictObjectLimit[T any](writer http.ResponseWriter, request *http.Request, destination *T, limit int64) bool {
 	if request == nil || request.Body == nil || destination == nil {
 		writeRoutingError(writer, ErrInvalidRequest)
 		return false
 	}
-	limited := http.MaxBytesReader(writer, request.Body, idempotency.MaxControlBodyBytes)
+	limited := http.MaxBytesReader(writer, request.Body, limit)
 	body, err := io.ReadAll(limited)
 	if err != nil {
 		var maximum *http.MaxBytesError

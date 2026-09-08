@@ -187,7 +187,8 @@
         "usage_unknown": false,
         "charge": "1.234"
       },
-      "attempt_count": "2"
+      "attempt_count": "2",
+      "caller_identity": null
     },
     "attempts": {
       "data": [

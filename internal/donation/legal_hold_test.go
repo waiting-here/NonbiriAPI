@@ -30,6 +30,7 @@ func (stub *donationHeldReadStub) AuthorizeHeldDonationRead(
 
 func TestDonationOrdinaryCutoffAndKnownIDHeldRead(t *testing.T) {
 	environment := newDonationTestEnv(t)
+	environment.seedUser(t, "", nil, true)
 	owner := environment.seedUser(t, "held-read-donation-owner", nil, false)
 	_, endpointKeyID := environment.seedEndpointKey(t, owner, 'j')
 	donation := environment.createDonation(t, owner, endpointKeyID)

@@ -3,6 +3,8 @@ package charityrouting
 import (
 	"errors"
 	"net/http"
+
+	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
 )
 
 type httpAPI struct{ service *Service }
@@ -78,8 +80,12 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 	return nil
 }
 
-func (api *httpAPI) capability(writer http.ResponseWriter, request *http.Request, _ UserPrincipal) {
-	if !requireEmptyQuery(writer, request) || !requireNoBody(writer, request) {
+func (api *httpAPI) capability(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
+	if !requireNoBody(writer, request) {
+		return
+	}
+	if request.URL.RawQuery != "" {
+		api.catalog(writer, request, principal)
 		return
 	}
 	now, err := api.service.nowUnix()
@@ -87,7 +93,7 @@ func (api *httpAPI) capability(writer http.ResponseWriter, request *http.Request
 		writeRoutingError(writer, err)
 		return
 	}
-	value, err := api.service.Capability(request.Context(), now)
+	value, err := api.service.Capability(request.Context(), principal.UserID, now)
 	if err != nil {
 		writeRoutingError(writer, err)
 		return
@@ -295,13 +301,15 @@ func parseDiscount(wire discountWire) (DiscountInput, map[string]any, error) {
 }
 
 type modelCreateWire struct {
-	RouteStrategy    requiredField[string]       `json:"route_strategy"`
-	Provider         requiredField[string]       `json:"provider"`
-	Model            requiredField[string]       `json:"model"`
-	Enabled          requiredField[bool]         `json:"enabled"`
-	Pricing          requiredField[pricingWire]  `json:"pricing"`
-	Discount         requiredField[discountWire] `json:"discount"`
-	FlattenToolCalls requiredField[bool]         `json:"flatten_tool_calls"`
+	AllowedLevels     requiredField[[]int]        `json:"allowed_levels"`
+	PublicDescription requiredField[string]       `json:"public_description"`
+	RouteStrategy     requiredField[string]       `json:"route_strategy"`
+	Provider          requiredField[string]       `json:"provider"`
+	Model             requiredField[string]       `json:"model"`
+	Enabled           requiredField[bool]         `json:"enabled"`
+	Pricing           requiredField[pricingWire]  `json:"pricing"`
+	Discount          requiredField[discountWire] `json:"discount"`
+	FlattenToolCalls  requiredField[bool]         `json:"flatten_tool_calls"`
 }
 
 func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error) {
@@ -327,6 +335,21 @@ func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error)
 		input.RouteStrategy = wire.RouteStrategy.Value
 		canonical["route_strategy"] = wire.RouteStrategy.Value
 	}
+	if wire.AllowedLevels.Set {
+		mask, err := charityaccess.Mask(wire.AllowedLevels.Value)
+		if err != nil {
+			return ModelCreate{}, nil, ErrInvalidRequest
+		}
+		input.AllowedLevels, _ = charityaccess.Levels(mask)
+		canonical["allowed_levels"] = input.AllowedLevels
+	}
+	if wire.PublicDescription.Set {
+		input.PublicDescription, err = charityaccess.NormalizeDescription(wire.PublicDescription.Value)
+		if err != nil {
+			return ModelCreate{}, nil, ErrInvalidRequest
+		}
+		canonical["public_description"] = input.PublicDescription
+	}
 	return input, canonical, nil
 }
 
@@ -343,7 +366,7 @@ func (api *httpAPI) createModel(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 	var wire modelCreateWire
-	if !decodeStrictObject(writer, request, &wire) {
+	if !decodeStrictObjectLimit(writer, request, &wire, 16<<10) {
 		return
 	}
 	input, canonical, err := parseModelCreate(wire)
@@ -409,14 +432,16 @@ func parseDiscountPatch(wire discountPatchWire) (*DiscountPatchInput, map[string
 }
 
 type modelPatchWire struct {
-	RouteStrategy    requiredField[string]            `json:"route_strategy"`
-	ExpectedRevision requiredField[string]            `json:"expected_revision"`
-	Provider         requiredField[string]            `json:"provider"`
-	Model            requiredField[string]            `json:"model"`
-	Enabled          requiredField[bool]              `json:"enabled"`
-	Pricing          requiredField[pricingWire]       `json:"pricing"`
-	Discount         requiredField[discountPatchWire] `json:"discount"`
-	FlattenToolCalls requiredField[bool]              `json:"flatten_tool_calls"`
+	AllowedLevels     requiredField[[]int]             `json:"allowed_levels"`
+	PublicDescription requiredField[string]            `json:"public_description"`
+	RouteStrategy     requiredField[string]            `json:"route_strategy"`
+	ExpectedRevision  requiredField[string]            `json:"expected_revision"`
+	Provider          requiredField[string]            `json:"provider"`
+	Model             requiredField[string]            `json:"model"`
+	Enabled           requiredField[bool]              `json:"enabled"`
+	Pricing           requiredField[pricingWire]       `json:"pricing"`
+	Discount          requiredField[discountPatchWire] `json:"discount"`
+	FlattenToolCalls  requiredField[bool]              `json:"flatten_tool_calls"`
 }
 
 func parseModelPatch(wire modelPatchWire) (ModelPatch, map[string]any, error) {
@@ -428,6 +453,23 @@ func parseModelPatch(wire modelPatchWire) (ModelPatch, map[string]any, error) {
 	}
 	input := ModelPatch{ExpectedRevision: wire.ExpectedRevision.Value}
 	canonical := map[string]any{"expected_revision": wire.ExpectedRevision.Value}
+	if wire.AllowedLevels.Set {
+		mask, err := charityaccess.Mask(wire.AllowedLevels.Value)
+		if err != nil {
+			return ModelPatch{}, nil, ErrInvalidRequest
+		}
+		levels, _ := charityaccess.Levels(mask)
+		input.AllowedLevels = &levels
+		canonical["allowed_levels"] = levels
+	}
+	if wire.PublicDescription.Set {
+		description, err := charityaccess.NormalizeDescription(wire.PublicDescription.Value)
+		if err != nil {
+			return ModelPatch{}, nil, ErrInvalidRequest
+		}
+		input.PublicDescription = &description
+		canonical["public_description"] = description
+	}
 	if wire.RouteStrategy.Set {
 		if !validRouteStrategy(wire.RouteStrategy.Value) {
 			return ModelPatch{}, nil, ErrInvalidRequest
@@ -484,7 +526,7 @@ func (api *httpAPI) patchModel(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	var wire modelPatchWire
-	if !decodeStrictObject(writer, request, &wire) {
+	if !decodeStrictObjectLimit(writer, request, &wire, 16<<10) {
 		return
 	}
 	input, canonical, err := parseModelPatch(wire)

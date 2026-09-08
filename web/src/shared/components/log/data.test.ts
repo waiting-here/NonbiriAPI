@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { roleLogKeys, normalizeAdminLogAttempt, normalizeAdminLogRow } from './data';
+import {
+  normalizeAdminLogAttempt,
+  normalizeAdminLogRow,
+  normalizeStewardLogDetail,
+  normalizeStewardLogRow,
+  normalizeUserLogRow,
+  roleLogKeys,
+} from './data';
+
+const syntheticDiscordID = '1'.repeat(18);
 
 const usage = {
   uncached_input_tokens: '0',
@@ -11,7 +20,7 @@ const usage = {
   charge: '0',
 };
 
-const row = {
+const commonRow = {
   id: `req_${'A'.repeat(22)}`,
   route_kind: 'openai_chat_completions',
   caller_result_class: 'success',
@@ -20,8 +29,29 @@ const row = {
   started_at: 1,
   completed_at: 2,
   usage,
+};
+
+const row = {
+  ...commonRow,
   user_id: '1',
   attempt_count: '1',
+};
+
+const userRow = {
+  ...commonRow,
+  model: 'model',
+  attempt_count: '1',
+};
+
+const stewardRow = {
+  ...commonRow,
+  caller_identity: null,
+  attempt_count: '1',
+};
+
+const charityStewardRow = {
+  ...stewardRow,
+  route_kind: 'charity_chat_completions',
 };
 
 const attempt = {
@@ -93,5 +123,105 @@ describe('role log wire', () => {
     expect(() => normalizeAdminLogAttempt({ ...attempt, diag: 'first\nsecond' })).toThrow(
       /diagnostic/i,
     );
+  });
+
+  it('normalizes the steward caller identity on rows and details', () => {
+    const complete = normalizeStewardLogRow({
+      ...charityStewardRow,
+      caller_identity: {
+        discord_nickname: 'Ada Example',
+        discord_id: syntheticDiscordID,
+      },
+    });
+    expect(complete.caller_identity).toEqual({
+      discord_nickname: 'Ada Example',
+      discord_id: syntheticDiscordID,
+    });
+
+    const partial = normalizeStewardLogRow({
+      ...charityStewardRow,
+      caller_identity: { discord_nickname: null, discord_id: syntheticDiscordID },
+    });
+    expect(partial.caller_identity?.discord_nickname).toBeNull();
+    expect(partial.caller_identity?.discord_id).toBe(syntheticDiscordID);
+    expect(normalizeStewardLogRow(stewardRow).caller_identity).toBeNull();
+
+    const detail = normalizeStewardLogDetail({
+      request: {
+        ...charityStewardRow,
+        caller_identity: {
+          discord_nickname: 'Ada Example',
+          discord_id: syntheticDiscordID,
+        },
+      },
+      attempts: { data: [], next_cursor: null },
+    });
+    expect(detail.request.caller_identity?.discord_id).toBe(syntheticDiscordID);
+  });
+
+  it('keeps caller identity scoped to steward rows and requires explicit null', () => {
+    expect(() => normalizeStewardLogRow({ ...stewardRow, caller_identity: undefined })).toThrow(
+      /caller identity/i,
+    );
+    expect(() =>
+      normalizeStewardLogRow({
+        ...charityStewardRow,
+        caller_identity: { discord_nickname: 'Ada Example' },
+      }),
+    ).toThrow(/caller identity/i);
+    expect(() =>
+      normalizeStewardLogRow({
+        ...stewardRow,
+        caller_identity: { discord_nickname: 'Ada Example', discord_id: syntheticDiscordID },
+      }),
+    ).toThrow(/steward caller identity/i);
+    expect(() => normalizeAdminLogRow({ ...row, caller_identity: null })).toThrow(
+      /administrator log row/i,
+    );
+    expect(() => normalizeUserLogRow({ ...userRow, caller_identity: null })).toThrow(
+      /user log row/i,
+    );
+  });
+
+  it('accepts bounded long caller values and rejects values beyond the wire limit', () => {
+    const nickname = 'N'.repeat(256);
+    const discordID = '9'.repeat(128);
+    expect(
+      normalizeStewardLogRow({
+        ...charityStewardRow,
+        caller_identity: { discord_nickname: nickname, discord_id: discordID },
+      }).caller_identity,
+    ).toEqual({ discord_nickname: nickname, discord_id: discordID });
+    expect(() =>
+      normalizeStewardLogRow({
+        ...charityStewardRow,
+        caller_identity: { discord_nickname: `${nickname}N`, discord_id: discordID },
+      }),
+    ).toThrow(/caller Discord nickname/i);
+    expect(() =>
+      normalizeStewardLogRow({
+        ...charityStewardRow,
+        caller_identity: { discord_nickname: 'Ada', discord_id: '9'.repeat(129) },
+      }),
+    ).toThrow(/caller Discord ID/i);
+    expect(() =>
+      normalizeStewardLogRow({
+        ...charityStewardRow,
+        caller_identity: { discord_nickname: '名'.repeat(86), discord_id: discordID },
+      }),
+    ).toThrow(/caller Discord nickname/i);
+    expect(() =>
+      normalizeStewardLogRow({
+        ...charityStewardRow,
+        caller_identity: { discord_nickname: 'Ada', discord_id: '界'.repeat(43) },
+      }),
+    ).toThrow(/caller Discord ID/i);
+    const unicodeID = '界'.repeat(42);
+    expect(
+      normalizeStewardLogRow({
+        ...charityStewardRow,
+        caller_identity: { discord_nickname: 'Ada', discord_id: unicodeID },
+      }).caller_identity?.discord_id,
+    ).toBe(unicodeID);
   });
 });

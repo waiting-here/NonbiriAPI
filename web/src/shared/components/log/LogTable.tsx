@@ -26,7 +26,7 @@ export function LogTable<Row>({ caption, columns, rows, rowKey, actions }: LogTa
   const { t } = useTranslation();
   return (
     <div className="table-wrap">
-      <table>
+      <table className="log-table">
         <caption>{caption}</caption>
         <thead>
           <tr>
@@ -42,7 +42,9 @@ export function LogTable<Row>({ caption, columns, rows, rowKey, actions }: LogTa
           {rows.map((row) => (
             <tr key={rowKey(row)}>
               {columns.map((column) => (
-                <td key={column.key}>{column.render(row)}</td>
+                <td key={column.key} data-column={column.key}>
+                  {column.render(row)}
+                </td>
               ))}
               {actions ? <td>{actions(row)}</td> : null}
             </tr>

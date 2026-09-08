@@ -463,8 +463,9 @@ func TestDonationAutoApprovalRollsBackOversizedReplayProjection(t *testing.T) {
 	}
 }
 
-func TestDonationListFailsClosedUntilDueExpiryBacklogCaughtUp(t *testing.T) {
+func TestDonationManagementFiltersLogicalExpiryWithoutWorker(t *testing.T) {
 	environment := newDonationTestEnv(t)
+	environment.seedUser(t, "", nil, true)
 	owner := environment.seedUser(t, "donation-backlog-owner", nil, false)
 	expires := donationTestNow + 1
 	for index := 0; index < 101; index++ {
@@ -482,8 +483,11 @@ func TestDonationListFailsClosedUntilDueExpiryBacklogCaughtUp(t *testing.T) {
 	if _, _, err := environment.service.ListOwner(context.Background(), owner, 0, 10); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("owner backlog list error = %v, want unavailable", err)
 	}
-	if _, _, err := environment.service.ListAdmin(context.Background(), "", 0, 10); !errors.Is(err, ErrUnavailable) {
-		t.Fatalf("admin backlog list error = %v, want unavailable", err)
+	if items, _, err := environment.service.ListAdminFiltered(context.Background(), ManagementFilter{Handling: "pending"}, 0, 10); err != nil || len(items) != 0 {
+		t.Fatalf("logical pending list = %d, %v", len(items), err)
+	}
+	if badge, err := environment.service.BadgeAdmin(context.Background()); err != nil || badge.PendingCount != "0" {
+		t.Fatalf("logical pending badge = %+v, %v", badge, err)
 	}
 	var live int
 	if err := environment.store.DB().QueryRow(`SELECT COUNT(*) FROM donations WHERE status='pending'`).Scan(&live); err != nil || live != 101 {

@@ -201,6 +201,16 @@ describe('screenshot-facing configuration pages', () => {
           server_now: 1_788_100_000,
         },
       },
+      {
+        method: 'GET',
+        path: '/api/charity/models?view=catalog&page=1&page_size=20',
+        body: {
+          models: [],
+          pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+          donation_intake: 'closed',
+          server_now: 1_788_100_000,
+        },
+      },
       { method: 'GET', path: '/api/donations', body: [] },
       { method: 'GET', path: '/api/endpoints', body: [] },
     ]);
@@ -1365,11 +1375,19 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
     expect(() => normalizeManagementDonation({ ...donation, reviews: {} }, true)).toThrow(
       /review list/i,
     );
-    expect(normalizeDonation({ ...donation, created_at: 0 }, true, 'openai-compatible').created_at).toBe(0);
-    expect(normalizeDonation({ ...donation, expires_at: 0 }, true, 'openai-compatible').expires_at).toBe(0);
+    expect(
+      normalizeDonation({ ...donation, created_at: 0 }, true, 'openai-compatible').created_at,
+    ).toBe(0);
+    expect(
+      normalizeDonation({ ...donation, expires_at: 0 }, true, 'openai-compatible').expires_at,
+    ).toBe(0);
     for (const invalid of [-1, 253402300800, 0.5]) {
-      expect(() => normalizeDonation({ ...donation, created_at: invalid }, true, 'openai-compatible')).toThrow(/created timestamp/i);
-      expect(() => normalizeDonation({ ...donation, expires_at: invalid }, true, 'openai-compatible')).toThrow(/expiry timestamp/i);
+      expect(() =>
+        normalizeDonation({ ...donation, created_at: invalid }, true, 'openai-compatible'),
+      ).toThrow(/created timestamp/i);
+      expect(() =>
+        normalizeDonation({ ...donation, expires_at: invalid }, true, 'openai-compatible'),
+      ).toThrow(/expiry timestamp/i);
     }
     expect(() =>
       normalizeDonation(

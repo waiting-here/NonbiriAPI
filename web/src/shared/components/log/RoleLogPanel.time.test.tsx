@@ -33,6 +33,7 @@ function row(role: LogRole) {
     usage,
     ...(role === 'admin' ? { user_id: null } : {}),
     ...(role === 'user' ? { model: 'model', attempt_count: '1' } : { attempt_count: '1' }),
+    ...(role === 'steward' ? { caller_identity: null } : {}),
   };
 }
 

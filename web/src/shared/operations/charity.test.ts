@@ -11,6 +11,14 @@ const common = {
   id: '1',
   status: 'pending',
   revision: '1',
+  handling: {
+    state: 'pending',
+    revision: '1',
+    processed_at: null,
+    processed_by_role: null,
+    closed_at: null,
+    closed_reason: null,
+  },
   description: 'Donor-safe description',
   review_result: null,
   keys: [],
@@ -25,6 +33,8 @@ const model = {
   model: 'model',
   full_name: '[公益]provider/model',
   enabled: true,
+  allowed_levels: [1, 2, 3, 4, 5],
+  public_description: '',
   pricing: { mode: 'per_request', user_price: '1', donor_reward: '0' },
   discount: { enabled: true, percent: 10, start_at: null, end_at: null },
   flatten_tool_calls: false,
@@ -38,6 +48,8 @@ const model = {
 
 const managedKey = {
   id: '11',
+  binding_count: '0',
+  idle: true,
   endpoint_key_id: '21',
   display_head: 'A'.repeat(16),
   display_tail: 'Z'.repeat(16),
@@ -68,31 +80,50 @@ const managedKey = {
 };
 
 describe('role-safe charity wire', () => {
-  it.each(['admin', 'steward', 'level5'])('accepts an optional manual review reason from %s', (role) => {
-    const reviewed = {
-      ...common,
-      status: 'approved',
-      review_result: { decision: 'approve', reason: '', reviewed_at: 2 },
-      reviewer: { user_id: '2', role },
-    };
-    const expected = role === 'level5' ? 'steward' : role;
-    expect(normalizeAdminDonation({ ...reviewed, owner: null }).reviewer?.role).toBe(expected);
-    expect(normalizeStewardDonation({
-      ...reviewed, owner: { user_id: '2', display_name: 'Owner' },
-    }).reviewer?.role).toBe(expected);
-    expect(() => normalizeAdminDonation({ ...reviewed, owner: null, review_result: null })).toThrow(/review/i);
-  });
+  it.each(['admin', 'steward', 'level5'])(
+    'accepts an optional manual review reason from %s',
+    (role) => {
+      const reviewed = {
+        ...common,
+        status: 'approved',
+        review_result: { decision: 'approve', reason: '', reviewed_at: 2 },
+        reviewer: { user_id: '2', role },
+      };
+      const expected = role === 'level5' ? 'steward' : role;
+      expect(normalizeAdminDonation({ ...reviewed, owner: null }).reviewer?.role).toBe(expected);
+      expect(
+        normalizeStewardDonation({
+          ...reviewed,
+          owner: { user_id: '2', display_name: 'Owner' },
+        }).reviewer?.role,
+      ).toBe(expected);
+      expect(() =>
+        normalizeAdminDonation({ ...reviewed, owner: null, review_result: null }),
+      ).toThrow(/review/i);
+    },
+  );
 
-  it('accepts a deidentified administrator owner but requires a steward owner', () => {
+  it('accepts hidden owners in role-safe management views', () => {
     expect(normalizeAdminDonation({ ...common, owner: null }).owner).toBeNull();
-    expect(normalizeStewardDonation({ ...common, owner: { user_id: '2', display_name: 'Owner' } }).owner).toEqual({ user_id: '2', display_name: 'Owner' });
-    expect(() => normalizeStewardDonation({ ...common, owner: null })).toThrow(/owner/i);
+    expect(
+      normalizeStewardDonation({ ...common, owner: { user_id: '2', display_name: 'Owner' } }).owner,
+    ).toEqual({ user_id: '2', display_name: 'Owner' });
+    expect(normalizeStewardDonation({ ...common, owner: null }).owner).toBeNull();
   });
 
   it('keeps admin and steward projections closed and rejects secret-bearing additions', () => {
-    expect(() => normalizeAdminDonation({ ...common, owner: null, secret: 'sk-never-project' })).toThrow(/invalid administrator donation/i);
-    expect(() => normalizeStewardDonation({ ...common, owner: { user_id: '2', display_name: 'Owner', discord_id: 'private' } })).toThrow(/invalid steward donation owner/i);
-    expect(() => normalizeAdminDonation({ ...common, owner: { user_id: '2', display_name: 'Owner' } })).toThrow(/invalid administrator donation owner/i);
+    expect(() =>
+      normalizeAdminDonation({ ...common, owner: null, secret: 'sk-never-project' }),
+    ).toThrow(/invalid administrator donation/i);
+    expect(() =>
+      normalizeStewardDonation({
+        ...common,
+        owner: { user_id: '2', display_name: 'Owner', discord_id: 'private' },
+      }),
+    ).toThrow(/invalid steward donation owner/i);
+    expect(() =>
+      normalizeAdminDonation({ ...common, owner: { user_id: '2', display_name: 'Owner' } }),
+    ).toThrow(/invalid administrator donation owner/i);
     expect(() => normalizeAdminDonation({ ...common, owner: null, expires_at: null })).toThrow(
       /invalid administrator donation/i,
     );
@@ -182,6 +213,61 @@ describe('role-safe charity wire', () => {
 });
 
 describe('charity model wire', () => {
+  it('validates sorted level access and canonicalizes public description line endings', () => {
+    expect(
+      normalizeAdminCharityModel({
+        ...model,
+        allowed_levels: [1, 3, 5],
+        public_description: 'First\r\nSecond\t<b>literal</b>',
+      }),
+    ).toMatchObject({
+      allowed_levels: [1, 3, 5],
+      public_description: 'First\nSecond\t<b>literal</b>',
+    });
+    for (const allowed_levels of [[0], [6], [1, 1], [2, 1]]) {
+      expect(() => normalizeAdminCharityModel({ ...model, allowed_levels })).toThrow(
+        /allowed levels/i,
+      );
+    }
+    expect(() => normalizeAdminCharityModel({ ...model, allowed_levels: null })).toThrow(
+      /allowed levels/i,
+    );
+    expect(() => normalizeAdminCharityModel({ ...model, allowed_levels: undefined })).toThrow(
+      /allowed levels/i,
+    );
+  });
+
+  it('enforces public description code point, byte, and control character limits', () => {
+    expect(
+      normalizeAdminCharityModel({ ...model, public_description: '😀'.repeat(1_024) })
+        .public_description,
+    ).toHaveLength(2_048);
+    expect(() =>
+      normalizeAdminCharityModel({ ...model, public_description: 'a'.repeat(1_025) }),
+    ).toThrow(/public description/i);
+    expect(() =>
+      normalizeAdminCharityModel({ ...model, public_description: '😀'.repeat(1_025) }),
+    ).toThrow(/public description/i);
+    for (const control of ['\0', '\r', '\u000b', '\u007f', '\u0085']) {
+      expect(() =>
+        normalizeAdminCharityModel({ ...model, public_description: `safe${control}text` }),
+      ).toThrow(/public description/i);
+    }
+    expect(() => normalizeAdminCharityModel({ ...model, public_description: null })).toThrow(
+      /public description/i,
+    );
+    expect(() => normalizeAdminCharityModel({ ...model, public_description: undefined })).toThrow(
+      /public description/i,
+    );
+  });
+
+  it('rejects private model fields while accepting an empty public description', () => {
+    expect(normalizeStewardCharityModel(model).public_description).toBe('');
+    expect(() => normalizeAdminCharityModel({ ...model, secret: 'upstream-key' })).toThrow(
+      /invalid administrator charity model/i,
+    );
+  });
+
   it('accepts the prefixed 133-rune model name and initial binding revision', () => {
     const provider = '😀'.repeat(64);
     const modelName = '🧪'.repeat(64);
@@ -201,9 +287,9 @@ describe('charity model wire', () => {
       full_name: '[公益]provider/model',
       binding_revision: '0',
     });
-    expect(() =>
-      normalizeAdminCharityModel({ ...model, full_name: 'provider/model' }),
-    ).toThrow(/full name/i);
+    expect(() => normalizeAdminCharityModel({ ...model, full_name: 'provider/model' })).toThrow(
+      /full name/i,
+    );
   });
 
   it('accepts independent and equal discount bounds but rejects a reversed window', () => {
@@ -230,11 +316,12 @@ describe('charity model wire', () => {
   });
 
   it('accepts binding revision zero from the bindings API', async () => {
-    const fetchMock = vi.fn<typeof fetch>(async () =>
-      new Response(JSON.stringify({ bindings: [], binding_revision: '0' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
+    const fetchMock = vi.fn<typeof fetch>(
+      async () =>
+        new Response(JSON.stringify({ bindings: [], binding_revision: '0' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
     );
     vi.stubGlobal('fetch', fetchMock);
 

@@ -190,6 +190,10 @@ VALUES('provider',?,?,1,?,?,?,?,?,80,1,?,?,1,1,?,?)`, model, "[公益]provider/"
 		t.Fatalf("seed charity model: %v", err)
 	}
 	modelID, _ := result.LastInsertId()
+	if _, err := environment.store.DB().Exec(`INSERT INTO charity_model_access(
+model_id,allowed_level_mask,public_description) VALUES(?,31,'')`, modelID); err != nil {
+		t.Fatalf("seed charity model access: %v", err)
+	}
 	if _, err := environment.store.DB().Exec(`INSERT INTO charity_model_bindings(
 charity_model_id,donation_key_id,endpoint_key_id,upstream_model_id,ord,created_at,updated_at)
 VALUES(?,?,?,'upstream-model',0,?,?)`, modelID, environment.donationKey, environment.endpointKey,

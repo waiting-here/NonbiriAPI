@@ -28,6 +28,25 @@ export type CharityState =
 export type DonationEndedReason =
   'withdrawn' | 'terminated' | 'expired' | 'member_removed' | 'account_deleted';
 
+export interface DonationHandling {
+  state: 'legacy' | 'pending' | 'processed' | 'closed';
+  revision: string;
+  processed_at: number | null;
+  processed_by_role: CharityRole | null;
+  closed_at: number | null;
+  closed_reason: DonationEndedReason | 'rejected' | null;
+}
+
+export interface DonationHandlingReceipt {
+  donation_id: string;
+  handling: DonationHandling;
+}
+
+export interface ManagedDonationFilters {
+  handling?: string;
+  q?: string;
+}
+
 type CharityConnectorType = 'openai-compatible' | 'anthropic-compatible';
 
 export type ManagedSafeSource =
@@ -47,6 +66,8 @@ export type ManagedSafeSource =
     };
 
 export interface ManagedDonationKey {
+  binding_count: string;
+  idle: boolean;
   id: string;
   endpoint_key_id: string | null;
   display_head: string;
@@ -74,6 +95,7 @@ export interface ManagedDonationKey {
 }
 
 interface DonationCommon {
+  handling: DonationHandling;
   id: string;
   status: DonationStatus;
   revision: string;
@@ -90,7 +112,7 @@ export interface AdminDonation extends DonationCommon {
 }
 
 export interface StewardDonation extends DonationCommon {
-  owner: { user_id: string; display_name: string };
+  owner: { user_id: string; display_name: string } | null;
 }
 
 function containsForbiddenControl(value: string): boolean {
@@ -165,6 +187,8 @@ function normalizeManagedSource(
 
 function normalizeManagedKey(value: unknown, label: string, role: CharityRole): ManagedDonationKey {
   const required = [
+    'binding_count',
+    'idle',
     'id',
     'endpoint_key_id',
     'display_head',
@@ -182,6 +206,9 @@ function normalizeManagedKey(value: unknown, label: string, role: CharityRole): 
     'safe_note',
   ];
   const root = record(value, [...required, 'max_concurrency', 'max_rpm'], label, required);
+  const bindingCount = decimal(root.binding_count, `${label} binding count`);
+  const idle = boolean(root.idle, `${label} idle`);
+  if (idle !== (bindingCount === '0')) invalidResponse(`${label} idle state`);
   const limits = record(root.limits, ['price', 'calls', 'tokens'], `${label} limits`);
   const usage = record(
     root.usage,
@@ -228,6 +255,8 @@ function normalizeManagedKey(value: unknown, label: string, role: CharityRole): 
     invalidResponse(`${label} expiry authorization`);
   }
   return {
+    binding_count: bindingCount,
+    idle,
     id: decimalID(root.id, `${label} id`),
     endpoint_key_id: nullableDecimalID(root.endpoint_key_id, `${label} endpoint key id`),
     display_head: string(root.display_head, `${label} display head`, {
@@ -280,6 +309,55 @@ function normalizeManagedKey(value: unknown, label: string, role: CharityRole): 
 
 function nullableAmount(value: unknown, label: string): string | null {
   return value === null ? null : amount(value, label, false);
+}
+
+export function normalizeDonationHandling(value: unknown): DonationHandling {
+  const root = record(
+    value,
+    ['state', 'revision', 'processed_at', 'processed_by_role', 'closed_at', 'closed_reason'],
+    'donation handling',
+  );
+  const state = oneOf(
+    root.state,
+    ['legacy', 'pending', 'processed', 'closed'] as const,
+    'handling state',
+  );
+  const processedAt = nullableUnixSecond(root.processed_at, 'handling processed time');
+  const processedBy =
+    root.processed_by_role === null
+      ? null
+      : oneOf(root.processed_by_role, ['admin', 'steward'] as const, 'handling processed role');
+  const closedAt = nullableUnixSecond(root.closed_at, 'handling closed time');
+  const reason =
+    root.closed_reason === null
+      ? null
+      : oneOf(
+          root.closed_reason,
+          [
+            'rejected',
+            'withdrawn',
+            'terminated',
+            'expired',
+            'member_removed',
+            'account_deleted',
+          ] as const,
+          'handling closed reason',
+        );
+  if (
+    (state === 'processed') !== (processedAt !== null && processedBy !== null) ||
+    (state !== 'processed' && (processedAt !== null || processedBy !== null)) ||
+    (state === 'closed') !== (closedAt !== null && reason !== null) ||
+    (state !== 'closed' && (closedAt !== null || reason !== null))
+  )
+    invalidResponse('handling state fields');
+  return {
+    state,
+    revision: decimal(root.revision, 'handling revision', { positive: true }),
+    processed_at: processedAt,
+    processed_by_role: processedBy,
+    closed_at: closedAt,
+    closed_reason: reason,
+  };
 }
 
 function normalizeDonationCommon(
@@ -343,6 +421,7 @@ function normalizeDonationCommon(
   return {
     id: decimalID(root.id, `${label} id`),
     status,
+    handling: normalizeDonationHandling(root.handling),
     revision: decimal(root.revision, `${label} revision`, { positive: true }),
     description: string(root.description, `${label} donor description`, {
       max: 1_024,
@@ -361,6 +440,7 @@ function normalizeDonationCommon(
 
 export function normalizeAdminDonation(value: unknown): AdminDonation {
   const fields = [
+    'handling',
     'id',
     'status',
     'revision',
@@ -400,6 +480,7 @@ export function normalizeAdminDonation(value: unknown): AdminDonation {
 
 export function normalizeStewardDonation(value: unknown): StewardDonation {
   const fields = [
+    'handling',
     'id',
     'status',
     'revision',
@@ -413,6 +494,7 @@ export function normalizeStewardDonation(value: unknown): StewardDonation {
   ] as const;
   const root = record(value, fields, 'steward donation');
   const common = normalizeDonationCommon(root, 'steward donation', 'steward');
+  if (root.owner === null) return { ...common, owner: null };
   const item = record(root.owner, ['user_id', 'display_name'], 'steward donation owner');
   return {
     ...common,
@@ -434,6 +516,8 @@ export interface CharityModel {
   model: string;
   full_name: string;
   enabled: boolean;
+  allowed_levels: number[];
+  public_description: string;
   pricing:
     | { mode: 'per_request'; user_price: string; donor_reward: string }
     | { mode: 'per_token'; user_prices: TokenPrices; donor_rewards: TokenPrices };
@@ -492,6 +576,8 @@ function normalizeModel(value: unknown, label: string): CharityModel {
     'model',
     'full_name',
     'enabled',
+    'allowed_levels',
+    'public_description',
     'pricing',
     'discount',
     'flatten_tool_calls',
@@ -507,6 +593,11 @@ function normalizeModel(value: unknown, label: string): CharityModel {
   const model = string(root.model, `${label} model`, { min: 1, max: 64, bytes: 256 });
   const fullName = string(root.full_name, `${label} full name`, { min: 7, max: 133, bytes: 521 });
   if (fullName !== `[公益]${provider}/${model}`) invalidResponse(`${label} full name`);
+  const allowedLevels = normalizeAllowedLevels(root.allowed_levels, `${label} allowed levels`);
+  const publicDescription = normalizePublicDescription(
+    root.public_description,
+    `${label} public description`,
+  );
   const pricingRoot = record(
     root.pricing,
     ['mode', 'user_price', 'donor_reward', 'user_prices', 'donor_rewards'],
@@ -587,6 +678,8 @@ function normalizeModel(value: unknown, label: string): CharityModel {
             `${label} route strategy`,
           ),
     enabled: boolean(root.enabled, `${label} enabled`),
+    allowed_levels: allowedLevels,
+    public_description: publicDescription,
     pricing,
     discount: {
       enabled: boolean(discount.enabled, `${label} discount enabled`),
@@ -602,6 +695,32 @@ function normalizeModel(value: unknown, label: string): CharityModel {
     created_at: unixSecond(root.created_at, `${label} creation time`),
     updated_at: unixSecond(root.updated_at, `${label} update time`),
   };
+}
+
+function normalizeAllowedLevels(value: unknown, label: string): number[] {
+  const levels = array(value, label, 5).map((entry, index) =>
+    integer(entry, `${label} item ${index + 1}`, 1, 5),
+  );
+  if (levels.some((level, index) => index > 0 && levels[index - 1] >= level)) {
+    invalidResponse(`${label} order`);
+  }
+  return levels;
+}
+
+function normalizePublicDescription(value: unknown, label: string): string {
+  if (typeof value !== 'string') invalidResponse(label);
+  const normalized = value.replace(/\r\n/g, '\n');
+  if (
+    Array.from(normalized).length > 1_024 ||
+    new TextEncoder().encode(normalized).byteLength > 4_096 ||
+    Array.from(normalized).some((character) => {
+      const point = character.codePointAt(0) ?? 0;
+      return (point < 0x20 && point !== 0x09 && point !== 0x0a) || (point >= 0x7f && point <= 0x9f);
+    })
+  ) {
+    invalidResponse(label);
+  }
+  return normalized;
 }
 
 function normalizeTokenPrices(value: unknown, label: string): TokenPrices {
@@ -735,8 +854,15 @@ const charityRoot = (role: CharityRole) =>
 
 export const charityKeys = {
   root: charityRoot,
-  donations: (role: CharityRole, status: string, cursor: string | null) =>
-    [...charityRoot(role), 'donations', status, cursor] as const,
+  donations: (
+    role: CharityRole,
+    status: string,
+    cursor: string | null,
+    filters: ManagedDonationFilters = {},
+  ) => [...charityRoot(role), 'donations', status, cursor, filters] as const,
+  badges: (role: CharityRole) => [...charityRoot(role), 'badge'] as const,
+  badge: (role: CharityRole, accountID: string) =>
+    [...charityRoot(role), 'badge', accountID] as const,
   donation: (role: CharityRole, id: string) => [...charityRoot(role), 'donation', id] as const,
   models: (role: CharityRole, query: string, enabled: string, cursor: string | null) =>
     [...charityRoot(role), 'models', query, enabled, cursor] as const,
@@ -763,9 +889,16 @@ export const getManagedDonations = (
   role: CharityRole,
   status: string,
   cursor: string | null,
+  filters: ManagedDonationFilters = {},
 ): Promise<CursorPage<AdminDonation | StewardDonation>> =>
   decoded(
-    queryPath(`${base(role)}/donations`, { status: status || undefined, cursor, limit: 50 }),
+    queryPath(`${base(role)}/donations`, {
+      status: status || undefined,
+      handling: filters.handling || undefined,
+      q: filters.q || undefined,
+      cursor,
+      limit: 50,
+    }),
     (value) =>
       page<AdminDonation | StewardDonation>(value, `${role} donation page`, (entry) =>
         decodeDonation(role, entry),
@@ -778,6 +911,42 @@ export const getManagedDonation = (
   decoded(
     `${base(role)}/donations/${encodeURIComponent(decimalID(id, `${role} donation id`))}`,
     (value) => decodeDonation(role, value),
+  );
+
+export const processManagedDonation = (
+  role: CharityRole,
+  id: string,
+  revision: string,
+  key: string,
+): Promise<DonationHandlingReceipt> =>
+  decoded(
+    `${base(role)}/donations/${encodeURIComponent(decimalID(id, 'donation id'))}/handling/processed`,
+    (value) => {
+      const root = record(value, ['donation_id', 'handling'], 'handling receipt');
+      return {
+        donation_id: decimalID(root.donation_id, 'handled donation id'),
+        handling: normalizeDonationHandling(root.handling),
+      };
+    },
+    idempotentOptions(key, {
+      method: 'POST',
+      json: {
+        expected_handling_revision: decimal(revision, 'handling revision', { positive: true }),
+      },
+    }),
+  );
+
+export const getDonationBadge = (role: CharityRole, signal?: AbortSignal) =>
+  decoded(
+    `${base(role)}/donations/badge`,
+    (value) => {
+      const root = record(value, ['pending_count', 'server_now'], 'donation badge');
+      return {
+        pending_count: decimal(root.pending_count, 'pending donations'),
+        server_now: unixSecond(root.server_now, 'badge time'),
+      };
+    },
+    { signal },
   );
 export const reviewManagedDonation = (
   role: CharityRole,

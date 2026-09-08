@@ -152,9 +152,9 @@ func (repository *Repository) GetSteward(
 		return StewardLogDetail{}, err
 	}
 	defer tx.Rollback()
-	// Independent SELECT excludes user identity and logical model before scan.
-	record, err := scanCommon(tx.QueryRowContext(ctx,
-		`SELECT `+commonListColumns+` FROM request_logs l WHERE l.logical_request_id=?`, requestID))
+	// Only the current charity caller's two authorized identity fields are joined.
+	record, identity, err := scanStewardCommon(tx.QueryRowContext(ctx,
+		`SELECT `+commonListColumns+`,`+callerIdentityColumns+` FROM request_logs l`+callerIdentityJoin+`WHERE l.logical_request_id=?`, requestID))
 	if err != nil {
 		return StewardLogDetail{}, translateSQLError(err)
 	}
@@ -170,7 +170,7 @@ func (repository *Repository) GetSteward(
 		CallerResultClass: resultClassPointer(record.callerResultClass),
 		CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 		StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-		AttemptCount: strconv.FormatInt(record.attemptCount, 10),
+		AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity,
 	}
 	attempts, err := repository.listStewardAttempts(ctx, tx, stewardUserID, record.rowID, requestID, filter)
 	if err != nil {

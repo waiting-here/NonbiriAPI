@@ -15,6 +15,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
@@ -95,6 +96,9 @@ func (s *Service) AcceptRequest(ctx context.Context, tx *sql.Tx, input claim.Cha
 
 	pricing, err := readAcceptancePricing(ctx, tx, input.CharityModelID, input.AcceptedAt)
 	if err != nil {
+		return err
+	}
+	if err := requireModelAccess(ctx, tx, input.UserID, input.CharityModelID); err != nil {
 		return err
 	}
 	expectedReserve := pricing.tokenReserve
@@ -229,6 +233,9 @@ func (s *Service) Claim(ctx context.Context, tx *sql.Tx, input claim.CharityClai
 
 	row, err := readClaimKey(ctx, tx, input)
 	if err != nil {
+		return claim.CharityReservation{}, err
+	}
+	if err := requireModelAccess(ctx, tx, input.ActorUserID, row.modelID); err != nil {
 		return claim.CharityReservation{}, err
 	}
 	if row.status != "approved" || row.endedReason != "" || row.keyEnabled != 1 || row.failureDisabled != 0 ||
@@ -376,6 +383,17 @@ LIMIT 1`, input.DonationKeyID, input.UpstreamModelID, input.UpstreamModelID,
 		return keyReservation{}, claim.ErrNotFound
 	}
 	return row, nil
+}
+
+func requireModelAccess(ctx context.Context, tx *sql.Tx, userID, modelID int64) error {
+	err := charityaccess.Require(ctx, tx, userID, modelID)
+	if errors.Is(err, charityaccess.ErrForbidden) {
+		return claim.ErrForbidden
+	}
+	if errors.Is(err, charityaccess.ErrUnavailable) {
+		return claim.ErrModelUnavailable
+	}
+	return err
 }
 
 func validUpstreamModelID(value string) bool {

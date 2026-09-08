@@ -101,6 +101,36 @@ function publicModel(index: number) {
   };
 }
 
+function catalogModel(model: Record<string, unknown>, levelAllowed = true) {
+  return {
+    ...model,
+    public_description: '',
+    enabled: true,
+    allowed_levels: levelAllowed ? [1, 2, 3, 4, 5] : [1, 2, 3, 4],
+    level_allowed: levelAllowed,
+    availability: levelAllowed ? 'available' : 'level_denied',
+  };
+}
+
+function catalogPage(
+  models: Record<string, unknown>[],
+  donationIntake: 'open' | 'closed',
+  serverNow = NOW,
+  levelAllowed: (model: Record<string, unknown>) => boolean = () => true,
+) {
+  return {
+    models: models.map((model) => catalogModel(model, levelAllowed(model))),
+    pagination: {
+      page: '1',
+      page_size: 20,
+      total_items: String(models.length),
+      total_pages: '1',
+    },
+    donation_intake: donationIntake,
+    server_now: serverNow,
+  };
+}
+
 for (const [timezoneId, expectedTime] of [
   ['America/New_York', '08:30 AM'],
   ['Asia/Shanghai', '08:30 PM'],
@@ -131,6 +161,12 @@ for (const [timezoneId, expectedTime] of [
           server_now: endAt - 120,
           models: [model],
         },
+      });
+      await mockJson(page, {
+        origin: USER_ORIGIN,
+        method: 'GET',
+        path: '/api/charity/models?view=catalog&page=1&page_size=20',
+        body: catalogPage([model], 'closed', endAt - 120),
       });
       await page.goto(`${USER_ORIGIN}/charity`);
       const deadline = page.locator(`time[datetime="2026-09-07T12:30:00.000Z"]`);
@@ -209,6 +245,12 @@ test('donation guidance renders Markdown without overflowing mobile or desktop p
       models: [publicModel(1)],
     },
   });
+  await mockJson(page, {
+    origin: USER_ORIGIN,
+    method: 'GET',
+    path: '/api/charity/models?view=catalog&page=1&page_size=20',
+    body: catalogPage([publicModel(1)], 'open'),
+  });
   for (const path of ['/api/donations?limit=100', '/api/endpoints?limit=100'])
     await mockJson(page, {
       origin: USER_ORIGIN,
@@ -280,12 +322,44 @@ for (const locale of ['en', 'zh'] as const) {
     await mockJson(page, {
       origin: USER_ORIGIN,
       method: 'GET',
+      path: '/api/charity/models?view=catalog&page=1&page_size=20',
+      body: catalogPage(
+        [unlimited, ...models.slice(1)],
+        'closed',
+        NOW,
+        (model) => Number(model.id) % 2 === 0,
+      ),
+    });
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/charity/models?view=catalog&page=1&page_size=20&q=MODEL-12-',
+      body: catalogPage([models[11]], 'closed'),
+    });
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/charity/models?view=catalog&page=1&page_size=20&q=does-not-exist',
+      body: catalogPage([], 'closed'),
+    });
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/charity/models?view=catalog&page=1&page_size=20&allowed_for_me=true',
+      body: catalogPage(
+        [unlimited, ...models.slice(1)].filter((model) => Number(model.id) % 2 === 0),
+        'closed',
+      ),
+    });
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
       path: '/api/donations?limit=100',
       body: { data: [], next_cursor: null },
     });
     await page.setViewportSize({ width: 1935, height: 1000 });
     await page.goto(`${USER_ORIGIN}/charity`);
-    const cards = page.locator('.economy-model-list > li');
+    const cards = page.locator('.economy-catalog-list > li');
     await expect(cards).toHaveCount(12);
     await expect(cards.first().locator('.charity-discount')).toHaveText(
       locale === 'zh' ? '立减 20%' : '20% off',
@@ -293,7 +367,7 @@ for (const locale of ['en', 'zh'] as const) {
     await expect(cards.first().locator('time')).toHaveCount(0);
     await screenshot(page, `prices-${locale}-desktop`);
     expect((await cards.first().boundingBox())!.height).toBeLessThan(400);
-    const heading = (await cards.first().locator('.economy-model-heading').boundingBox())!;
+    const heading = (await cards.first().locator('.economy-catalog-item__heading').boundingBox())!;
     const prices = (await cards.first().locator('.charity-price-wrap').boundingBox())!;
     expect(prices.y - heading.y - heading.height).toBeLessThanOrEqual(20);
     const firstRow = cards.first().locator('tbody tr');
@@ -328,17 +402,29 @@ for (const locale of ['en', 'zh'] as const) {
       if (width === 390) await screenshot(page, `prices-${locale}-mobile`);
     }
     const search = page.getByRole('searchbox', {
-      name: locale === 'zh' ? '搜索模型名称' : 'Search model names',
+      name: locale === 'zh' ? '搜索模型名称或公开说明' : 'Search model name or public description',
     });
     await search.fill('MODEL-12-');
+    await page
+      .getByRole('button', { name: locale === 'zh' ? '搜索' : 'Search', exact: true })
+      .click();
     await expect(cards).toHaveCount(1);
     await expect(cards).toContainText(models[11].full_name);
     await search.fill('does-not-exist');
+    await page
+      .getByRole('button', { name: locale === 'zh' ? '搜索' : 'Search', exact: true })
+      .click();
     await expect(cards).toHaveCount(0);
     await search.fill('');
     await page
-      .getByLabel(locale === 'zh' ? '计价方式' : 'Pricing method', { exact: true })
-      .selectOption('per_token');
+      .getByRole('button', { name: locale === 'zh' ? '搜索' : 'Search', exact: true })
+      .click();
+    await page
+      .getByRole('combobox', {
+        name: locale === 'zh' ? '本人访问权限' : 'Your access',
+        exact: true,
+      })
+      .selectOption('true');
     await expect(cards).toHaveCount(6);
     await expect(cards.first().locator('tbody tr')).toHaveCount(4);
     guard.assertNone();
@@ -541,6 +627,8 @@ const managedModel = {
   model: 'shared',
   full_name: '[公益]provider/shared',
   enabled: true,
+  allowed_levels: [1, 2, 3, 4, 5],
+  public_description: '',
   pricing: { mode: 'per_request', user_price: '1', donor_reward: '0.1' },
   discount: { enabled: false, percent: 100, start_at: null, end_at: null },
   flatten_tool_calls: false,
@@ -565,11 +653,21 @@ function managedDonation(id: number, role: 'admin' | 'steward') {
   return {
     id: String(id),
     status: 'pending',
+    handling: {
+      state: 'pending',
+      revision: '1',
+      processed_at: null,
+      processed_by_role: null,
+      closed_at: null,
+      closed_reason: null,
+    },
     revision: '1',
     description: `Donation ${id} — ${'Shared instructions with a long description. '.repeat(6)}`,
     review_result: null,
     keys: [
       {
+        binding_count: '0',
+        idle: true,
         id: String(id * 1000 + 1),
         endpoint_key_id: String(id),
         display_head: 'head',
@@ -792,6 +890,12 @@ test.describe('donation selection expiry in UTC', () => {
         models: [publicModel(1)],
       },
     });
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/charity/models?view=catalog&page=1&page_size=20',
+      body: catalogPage([publicModel(1)], 'open'),
+    });
     await page.route(`${USER_ORIGIN}/api/donations**`, async (route) => {
       if (route.request().method() === 'POST') {
         submitted = route.request().postDataJSON();
@@ -812,9 +916,14 @@ test.describe('donation selection expiry in UTC', () => {
             ...Object.fromEntries(
               Object.entries(template.keys[0]).filter(
                 ([key]) =>
-                  !['safe_note', 'authorized_expires_at', 'max_concurrency', 'max_rpm'].includes(
-                    key,
-                  ),
+                  ![
+                    'binding_count',
+                    'idle',
+                    'safe_note',
+                    'authorized_expires_at',
+                    'max_concurrency',
+                    'max_rpm',
+                  ].includes(key),
               ),
             ),
             id: String(i + 1),

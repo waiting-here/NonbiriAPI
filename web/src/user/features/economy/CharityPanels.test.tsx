@@ -13,9 +13,12 @@ import {
   DonationKeyPanel,
 } from './CharityPanels';
 import * as economyQueries from './queries';
+import * as catalogModule from './catalog';
 import type { CharityCapability, Donation, DonationKey, EndpointKeyChoice } from './types';
 
-afterEach(() => { vi.unstubAllGlobals(); });
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const pageMocks = vi.hoisted(() => ({
   usePublicConfig: vi.fn(),
@@ -41,6 +44,11 @@ vi.mock('./queries', async (loadOriginal) => ({
   useEditDonation: vi.fn(),
   useWithdrawDonation: vi.fn(),
   useTerminateDonation: vi.fn(),
+}));
+
+vi.mock('./catalog', async (loadOriginal) => ({
+  ...(await loadOriginal<typeof import('./catalog')>()),
+  useCharityCatalog: vi.fn(),
 }));
 
 const choices: EndpointKeyChoice[] = [
@@ -262,6 +270,18 @@ describe('donation composer recovery', () => {
     pageMocks.usePublicConfig.mockReturnValue({
       data: { announcementEpoch: 'announcement-1' },
     });
+    vi.mocked(catalogModule.useCharityCatalog).mockReturnValue({
+      data: {
+        models: [],
+        pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+        donationIntake: 'open',
+        serverNow: 1_788_100_000,
+      },
+      error: null,
+      isPending: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    } as never);
   });
 
   it('shows the configured donation notice and falls back to the built-in copy', async () => {
@@ -512,9 +532,22 @@ describe('donation composer recovery', () => {
     const local = '2030-01-01T00:00:00';
     const instant = Math.floor(new Date(2030, 0, 1).getTime() / 1000);
     installJsonFetchFixtures([
-      { method: 'GET', path: '/api/time-zones', body: { version: 'go1.26.6-zoneinfo', zones: [...new Set([zone, 'UTC'])].sort() } },
-      { method: 'GET', path: `/api/time/resolve?${new URLSearchParams({ local, time_zone: zone })}`,
-        body: { instant, local, time_zone: zone, offset_seconds: Date.parse(`${local}Z`) / 1000 - instant, adjustment: 'none' } },
+      {
+        method: 'GET',
+        path: '/api/time-zones',
+        body: { version: 'go1.26.6-zoneinfo', zones: [...new Set([zone, 'UTC'])].sort() },
+      },
+      {
+        method: 'GET',
+        path: `/api/time/resolve?${new URLSearchParams({ local, time_zone: zone })}`,
+        body: {
+          instant,
+          local,
+          time_zone: zone,
+          offset_seconds: Date.parse(`${local}Z`) / 1000 - instant,
+          adjustment: 'none',
+        },
+      },
     ]);
     const mutation = successfulMutation();
     vi.mocked(economyQueries.useCreateDonation).mockReturnValue(mutation as never);
@@ -529,7 +562,9 @@ describe('donation composer recovery', () => {
     await rendered.user.type(expiry, '2030-01-01T00:00');
     expect(checkboxes[0]).toBeChecked();
     await rendered.user.click(checkboxes[1]);
-    await waitFor(() => expect(screen.getByRole('button', { name: /submit for review/i })).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /submit for review/i })).toBeEnabled(),
+    );
     await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
     await waitFor(() =>
       expect(mutation.mutateAsync).toHaveBeenCalledWith({

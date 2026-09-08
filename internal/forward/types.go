@@ -115,7 +115,7 @@ type PersonalRouter interface {
 type CharityRouter interface {
 	Preflight(context.Context, int64, string, *openai.ChatRequest, int64) (CharityPreflight, error)
 	Snapshot(context.Context, int64, int64, []connectorcontract.Type) (CharitySnapshot, error)
-	ListAvailableModels(context.Context, int64, int) ([]ListedModel, error)
+	ListAvailableModels(context.Context, int64, int64, int) ([]ListedModel, error)
 }
 
 // ClaimRail is the complete closed dispatch state machine consumed here.

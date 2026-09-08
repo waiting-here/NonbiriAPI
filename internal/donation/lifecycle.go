@@ -123,6 +123,11 @@ WHERE id=? AND status IN ('pending','approved')`
 		if err := requireOne(result); err != nil {
 			return ErrInvariant
 		}
+		if remaining == 0 {
+			if err := closePendingHandlingTx(ctx, tx, donationID, decisionNow, "member_removed"); err != nil {
+				return err
+			}
+		}
 		var revision int64
 		if err := tx.QueryRowContext(ctx, `SELECT revision FROM donations WHERE id=?`, donationID).Scan(&revision); err != nil {
 			return fmt.Errorf("donation: read deletion revision: %w", err)
@@ -164,6 +169,9 @@ WHERE id=? AND user_id=? AND status=? AND revision=?`, finalStatus, now, now, do
 		return fmt.Errorf("donation: terminalize submission: %w", err)
 	}
 	if err := requireOne(result); err != nil {
+		return err
+	}
+	if err := closePendingHandlingTx(ctx, tx, donationID, now, endedReason); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO donation_reviews(
@@ -371,6 +379,11 @@ WHERE id=? AND status=? AND revision=?`, newStatus, now, terminalAt, donationID,
 	if err := requireOne(result); err != nil {
 		return expiryMaterialization{}, err
 	}
+	if terminal {
+		if err := closePendingHandlingTx(ctx, tx, donationID, now, "expired"); err != nil {
+			return expiryMaterialization{}, err
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO donation_reviews(
 donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at)
 VALUES(?,?,NULL,'','expire','',?)`, donationID, revision+1, now); err != nil {
@@ -500,6 +513,9 @@ description='',review_note='',user_id=NULL,updated_at=?,terminal_at=? WHERE id=?
 				return fmt.Errorf("donation: revoke account donation: %w", err)
 			}
 			if err := requireOne(result); err != nil {
+				return err
+			}
+			if err := closePendingHandlingTx(ctx, tx, value.id, decisionNow, "account_deleted"); err != nil {
 				return err
 			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO donation_reviews(

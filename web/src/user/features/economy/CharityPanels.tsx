@@ -351,7 +351,9 @@ export function DonationComposer({
       return;
     }
     const keys = [...selected].map((endpointKeyId) => {
-      const expiresAt = expiryByKey[endpointKeyId] ? timeDraftValue(expiryByKey[endpointKeyId]) : null;
+      const expiresAt = expiryByKey[endpointKeyId]
+        ? timeDraftValue(expiryByKey[endpointKeyId])
+        : null;
       if (expiresAt === undefined) return undefined;
       return { endpointKeyId, expiresAt };
     });
@@ -498,7 +500,9 @@ export function DonationComposer({
                                 onChange={(update) =>
                                   setExpiryByKey((current) => ({
                                     ...current,
-                                    [choice.key.id]: update(current[choice.key.id] ?? createTimeDraft()),
+                                    [choice.key.id]: update(
+                                      current[choice.key.id] ?? createTimeDraft(),
+                                    ),
                                   }))
                                 }
                                 onClick={(event) => event.stopPropagation()}
@@ -535,6 +539,8 @@ export function DonationComposer({
             <li>{t('user.charity.disclosureMasked')}</li>
             <li>{t('user.charity.disclosureThirdParty')}</li>
             <li>{t('user.charity.disclosureCost')}</li>
+            <li>{t('user.charity.disclosureManagement')}</li>
+            <li>{t('user.charity.disclosureLimitCounts')}</li>
             <li>{t('user.charity.disclosureResponsibility')}</li>
             <li>{t('user.charity.disclosureDeletion')}</li>
           </ul>
@@ -576,7 +582,9 @@ export function DonationComposer({
             disabled={
               mutation.isPending ||
               mutation.isReconciling ||
-              [...selected].some(id => expiryByKey[id] && timeDraftValue(expiryByKey[id]) === undefined) ||
+              [...selected].some(
+                (id) => expiryByKey[id] && timeDraftValue(expiryByKey[id]) === undefined,
+              ) ||
               eligible.length === 0 ||
               waitingForAuthority
             }

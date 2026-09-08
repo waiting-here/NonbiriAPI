@@ -80,6 +80,7 @@ type routingTestEnv struct {
 	state   *routingDonationState
 	clock   *atomic.Int64
 	userSeq atomic.Int64
+	caller  int64
 }
 
 func newRoutingTestEnv(t *testing.T) *routingTestEnv {
@@ -110,7 +111,9 @@ func newRoutingTestEnv(t *testing.T) *routingTestEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &routingTestEnv{store: store, vault: vault, service: service, auth: auth, state: state, clock: clock}
+	environment := &routingTestEnv{store: store, vault: vault, service: service, auth: auth, state: state, clock: clock}
+	environment.caller = environment.seedUser(t, false, nil)
+	return environment
 }
 
 func (environment *routingTestEnv) seedUser(t *testing.T, admin bool, level *int64) int64 {
@@ -524,7 +527,7 @@ func TestAvailableModelListTracksGateCandidateAndStableBound(t *testing.T) {
 	}
 	secondID, _ := parsePositiveID(secondResult.Value.ID)
 
-	models, err := environment.service.ListAvailableModels(context.Background(), routingTestNow, 10)
+	models, err := environment.service.ListAvailableModels(context.Background(), environment.caller, routingTestNow, 10)
 	if err != nil || len(models) != 0 {
 		t.Fatalf("unbound available models=%+v err=%v", models, err)
 	}
@@ -547,17 +550,17 @@ func TestAvailableModelListTracksGateCandidateAndStableBound(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	models, err = environment.service.ListAvailableModels(context.Background(), routingTestNow, 10)
+	models, err = environment.service.ListAvailableModels(context.Background(), environment.caller, routingTestNow, 10)
 	if err != nil || len(models) != 2 || models[0].FullName != "[公益]alpha/second" || models[1].FullName != "[公益]provider/model" {
 		t.Fatalf("available models=%+v err=%v", models, err)
 	}
-	if _, err := environment.service.ListAvailableModels(context.Background(), routingTestNow, 1); !errors.Is(err, ErrResourceLimit) {
+	if _, err := environment.service.ListAvailableModels(context.Background(), environment.caller, routingTestNow, 1); !errors.Is(err, ErrResourceLimit) {
 		t.Fatalf("available model bound error=%v", err)
 	}
 	if _, err := environment.store.DB().Exec(`UPDATE site_config SET value='0' WHERE key='charity_enabled'`); err != nil {
 		t.Fatal(err)
 	}
-	models, err = environment.service.ListAvailableModels(context.Background(), routingTestNow, 10)
+	models, err = environment.service.ListAvailableModels(context.Background(), environment.caller, routingTestNow, 10)
 	if err != nil || models == nil || len(models) != 0 {
 		t.Fatalf("disabled available models=%+v err=%v", models, err)
 	}
@@ -582,7 +585,7 @@ func TestCapabilityReleasesRowsBeforeSnapshotWithSingleConnection(t *testing.T) 
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	capability, err := environment.service.Capability(ctx, routingTestNow)
+	capability, err := environment.service.Capability(ctx, environment.caller, routingTestNow)
 	if err != nil {
 		t.Fatalf("Capability with one connection: %v", err)
 	}
@@ -608,7 +611,7 @@ func TestCapabilityDonationIntakeCombinations(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			environment := newRoutingTestEnv(t)
 			environment.setCapabilityGates(t, test.charity, test.donation)
-			capability, err := environment.service.Capability(context.Background(), routingTestNow)
+			capability, err := environment.service.Capability(context.Background(), environment.caller, routingTestNow)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -657,7 +660,7 @@ func TestCapabilityRejectsMissingInvalidOrContradictoryGates(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			environment := newRoutingTestEnv(t)
 			test.mutate(environment, t)
-			capability, err := environment.service.Capability(context.Background(), routingTestNow)
+			capability, err := environment.service.Capability(context.Background(), environment.caller, routingTestNow)
 			if !errors.Is(err, ErrInvariant) {
 				t.Fatalf("Capability error = %v, want invariant", err)
 			}
@@ -673,7 +676,7 @@ func TestCapabilityDatabaseFailureIsNotProjectedAsClosed(t *testing.T) {
 	if _, err := environment.store.DB().Exec(`DROP TABLE site_config`); err != nil {
 		t.Fatal(err)
 	}
-	capability, err := environment.service.Capability(context.Background(), routingTestNow)
+	capability, err := environment.service.Capability(context.Background(), environment.caller, routingTestNow)
 	if err == nil || errors.Is(err, ErrInvariant) {
 		t.Fatalf("Capability error = %v, want internal database error", err)
 	}
@@ -685,13 +688,13 @@ func TestCapabilityDatabaseFailureIsNotProjectedAsClosed(t *testing.T) {
 func TestCapabilityModelStatesAndCandidatePrivacy(t *testing.T) {
 	environment := newRoutingTestEnv(t)
 	environment.setCapabilityGates(t, "0", "0")
-	capability, err := environment.service.Capability(context.Background(), routingTestNow)
+	capability, err := environment.service.Capability(context.Background(), environment.caller, routingTestNow)
 	if err != nil || capability.State != "feature_disabled" || capability.DonationIntake != "closed" {
 		t.Fatalf("disabled Capability = %+v, %v", capability, err)
 	}
 
 	environment.setCapabilityGates(t, "1", "1")
-	capability, err = environment.service.Capability(context.Background(), routingTestNow)
+	capability, err = environment.service.Capability(context.Background(), environment.caller, routingTestNow)
 	if err != nil || capability.State != "no_models" || capability.DonationIntake != "open" {
 		t.Fatalf("empty Capability = %+v, %v", capability, err)
 	}
@@ -700,7 +703,7 @@ func TestCapabilityModelStatesAndCandidatePrivacy(t *testing.T) {
 	owner := environment.seedUser(t, false, nil)
 	model := environment.createModel(t, 'I')
 	modelID, _ := parsePositiveID(model.ID)
-	capability, err = environment.service.Capability(context.Background(), routingTestNow)
+	capability, err = environment.service.Capability(context.Background(), environment.caller, routingTestNow)
 	if err != nil || capability.State != "no_candidates" || capability.DonationIntake != "open" || len(capability.Models) != 0 {
 		t.Fatalf("candidate-free Capability = %+v, %v", capability, err)
 	}
@@ -713,7 +716,7 @@ func TestCapabilityModelStatesAndCandidatePrivacy(t *testing.T) {
 		routingMutation(t, 'J', http.MethodPost, routeAdminBindingBatch, []int64{modelID}, map[string]any{"available": true}), batch); err != nil {
 		t.Fatal(err)
 	}
-	capability, err = environment.service.Capability(context.Background(), routingTestNow)
+	capability, err = environment.service.Capability(context.Background(), environment.caller, routingTestNow)
 	if err != nil || capability.State != "available" || capability.DonationIntake != "open" ||
 		capability.ServerNow != routingTestNow || len(capability.Models) != 1 || capability.Models[0].ID != model.ID {
 		t.Fatalf("available Capability = %+v, %v", capability, err)
@@ -748,7 +751,7 @@ uncached_user_price=1,cache_write_user_price=2000,cache_read_user_price=3001,out
 discount_percent=33 WHERE id=?`, modelID); err != nil {
 		t.Fatal(err)
 	}
-	capability, err = environment.service.Capability(context.Background(), routingTestNow)
+	capability, err = environment.service.Capability(context.Background(), environment.caller, routingTestNow)
 	if err != nil || len(capability.Models) != 1 {
 		t.Fatalf("token Capability = %+v, %v", capability, err)
 	}
@@ -780,7 +783,7 @@ func TestCapabilityFreezesIntakeBeforeCandidateSnapshots(t *testing.T) {
 		_, err := tx.ExecContext(ctx, `UPDATE site_config SET value='0' WHERE key='donation_accept_enabled'`)
 		return err
 	}
-	capability, err := environment.service.Capability(context.Background(), routingTestNow)
+	capability, err := environment.service.Capability(context.Background(), environment.caller, routingTestNow)
 	if err != nil {
 		t.Fatal(err)
 	}

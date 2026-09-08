@@ -90,6 +90,7 @@ func newLogFixture(t *testing.T) *logFixture {
 	}
 	database.SetMaxOpenConns(1)
 	statements := []string{
+		`CREATE TABLE users(id INTEGER PRIMARY KEY,discord_id TEXT,username TEXT NOT NULL DEFAULT '',guild_nick TEXT NOT NULL DEFAULT '',is_admin INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE TABLE request_logs(
  id INTEGER PRIMARY KEY, logical_request_id TEXT NOT NULL, user_id INTEGER, model TEXT NOT NULL,
  route_kind TEXT NOT NULL, caller_result_class TEXT, caller_status INTEGER, caller_error_code TEXT,

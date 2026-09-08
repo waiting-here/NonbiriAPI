@@ -14,6 +14,57 @@
     "accountMenu": "Account actions"
   },
   "common": {
+    "refresh": "Refresh",
+    "donationHandling": {
+      "title": "Shared follow-up",
+      "filter": "Follow-up status",
+      "all": "All follow-up states",
+      "search": "Search public description or donation ID",
+      "applySearch": "Search",
+      "searchInvalid": "Use at most 128 characters for this search.",
+      "process": "Mark as processed",
+      "idle": "Idle · no model bindings",
+      "bound": "{{count}} model bindings",
+      "ownerHidden": "Donor details are hidden",
+      "processedInfo": "Processed by {{role}} · {{at}}",
+      "closedInfo": "Closed: {{reason}} · {{at}}",
+      "conflictHint": "Reload the current status before trying again if another manager has changed it.",
+      "badgeLabel": "Pending",
+      "badgeCount": "{{count}} donations awaiting shared follow-up",
+      "badgeUnknown": "Pending donation count is unavailable",
+      "badgeRetry": "Retry pending donation count",
+      "states": {
+        "legacy": "Existing donation",
+        "pending": "Pending follow-up",
+        "processed": "Processed",
+        "closed": "Closed"
+      },
+      "help": {
+        "legacy": "Existing donations do not enter the shared follow-up queue.",
+        "pending": "Administrators and stewards share this queue. Reviewing, editing or binding a donation does not mark it as processed.",
+        "processed": "This donation has been processed for everyone.",
+        "closed": "This donation ended and was removed from the pending queue."
+      },
+      "roles": {
+        "admin": "an administrator",
+        "steward": "a steward"
+      },
+      "reasons": {
+        "rejected": "rejected",
+        "withdrawn": "withdrawn",
+        "terminated": "terminated",
+        "expired": "expired",
+        "member_removed": "all keys removed",
+        "account_deleted": "account deleted"
+      }
+    },
+    "pageControls": {
+      "size": "Items per page",
+      "summary": "Page {{page}} of {{pages}} · {{total}} items",
+      "jump": "Go to page",
+      "go": "Go",
+      "invalid": "Enter a whole page number from 1 to 2147483647."
+    },
     "time": {
       "zone": "Time zone: {{zone}}",
       "zoneChanged": "Your browser time zone changed. Check the time before saving.",
@@ -219,7 +270,17 @@
         "donorDescription": "Donor description",
         "donorRewards": "Donor rewards",
         "enableForCharity": "Enable for charity",
-        "enabledForNewClaims": "Enabled for new claims",
+        "enableCharityModel": "Enable charity model",
+        "modelChanged": "This model has changed since you started editing. Your draft is kept. Reload the saved model before editing its latest version.",
+        "retrySavedModel": "Retry the last save",
+        "reloadModel": "Discard edits and reload saved model",
+        "allowedLevels": "Allowed levels",
+        "levelLabel": "L{{level}}",
+        "selectAllLevels": "Select all levels",
+        "clearAllLevels": "Clear all levels",
+        "noAllowedLevels": "No ordinary user can call this model (including level 5 users).",
+        "publicDescription": "Public description (plain text, optional)",
+        "publicDescriptionHelp": "Line breaks are shown as entered. Markdown, HTML, and links are displayed as plain text.",
         "endedReason": "Ended",
         "endedReasonValue": {
           "withdrawn": "Pending donation withdrawn",
@@ -302,6 +363,8 @@
           "expiryAuthorization": "The effective expiry must stay within the donor-authorized limit.",
           "completeSettings": "Approval requires a complete setting for every surviving key.",
           "modelIdentity": "Provider and model are required, limited to 64 characters, and cannot reuse the [公益] prefix.",
+          "modelLevels": "Choose zero or more levels from L1 through L5.",
+          "publicDescription": "Public description must be at most 1,024 characters and 4,096 UTF-8 bytes, with no control characters except line breaks and tabs.",
           "modelPrices": "Every price must be an exact non-negative credit amount with at most three decimal places.",
           "discountPercent": "Discount percent must be an integer from 0 through 100.",
           "discountDates": "Discount dates must be valid and the end must be later than the start."
@@ -312,6 +375,10 @@
   "logs": {
     "details": "Details",
     "drawerTitle": "Log details",
+    "caller": "Caller identity",
+    "callerNickname": "Discord nickname",
+    "callerDiscordId": "Discord ID",
+    "callerUnavailable": "Profile unavailable",
     "time": "Time",
     "routeKind": "Request type",
     "endpointBaseUrl": "Endpoint URL",

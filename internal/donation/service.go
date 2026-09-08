@@ -425,17 +425,15 @@ func (s *Service) review(
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
-	if role == reviewerSteward {
-		if err := requireStewardDonationOwnershipTx(ctx, tx, donationID, actorID); err != nil {
-			return roleDonationMutation{}, err
-		}
+	if err := requireManagedDonationTx(ctx, tx, role, donationID, now); err != nil {
+		return roleDonationMutation{}, err
 	}
 	decision, err := beginMutation(ctx, tx, string(role), actorID, idempotency.ScopeControlMutation, mutation, now)
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		return replayRoleDonation(decision, role)
+		return replayRoleDonation(ctx, tx, decision, role, actorID, donationID)
 	}
 	expiry, err := materializeDonationExpiryStateTx(ctx, tx, donationID, now)
 	if err != nil {
@@ -458,7 +456,7 @@ func (s *Service) review(
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
-	out, err := finishRoleDonation(ctx, tx, decision, role, value)
+	out, err := finishRoleDonation(ctx, tx, decision, role, actorID, value)
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
@@ -493,6 +491,9 @@ WHERE id=? AND status='pending' AND revision=?`, input.Reason, actorID, role, no
 			return fmt.Errorf("donation: reject submission: %w", err)
 		}
 		if err := requireOne(result); err != nil {
+			return err
+		}
+		if err := closePendingHandlingTx(ctx, tx, donationID, now, "rejected"); err != nil {
 			return err
 		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO donation_reviews(
@@ -687,17 +688,15 @@ func (s *Service) manageKey(
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
-	if role == reviewerSteward {
-		if err := requireStewardDonationOwnershipTx(ctx, tx, donationID, actorID); err != nil {
-			return roleDonationMutation{}, err
-		}
+	if err := requireManagedDonationTx(ctx, tx, role, donationID, now); err != nil {
+		return roleDonationMutation{}, err
 	}
 	decision, err := beginMutation(ctx, tx, string(role), actorID, idempotency.ScopeControlMutation, mutation, now)
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		return replayRoleDonation(decision, role)
+		return replayRoleDonation(ctx, tx, decision, role, actorID, donationID)
 	}
 	expiry, err := materializeDonationExpiryStateTx(ctx, tx, donationID, now)
 	if err != nil {
@@ -730,7 +729,7 @@ func (s *Service) manageKey(
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
-	out, err := finishRoleDonation(ctx, tx, decision, role, value)
+	out, err := finishRoleDonation(ctx, tx, decision, role, actorID, value)
 	if err != nil {
 		return roleDonationMutation{}, err
 	}
@@ -740,10 +739,39 @@ func (s *Service) manageKey(
 	return out, nil
 }
 
-func replayRoleDonation(decision idempotency.Decision, role reviewerRole) (roleDonationMutation, error) {
+func replayRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.Decision, role reviewerRole, actorID, donationID int64) (roleDonationMutation, error) {
 	result := roleDonationMutation{status: decision.HTTPStatus, body: append([]byte(nil), decision.ResponseBody...), replayed: true}
 	if role == reviewerSteward {
 		if err := json.Unmarshal(decision.ResponseBody, &result.steward); err != nil {
+			return roleDonationMutation{}, ErrInvariant
+		}
+		viewer := strconv.FormatInt(actorID, 10)
+		if result.steward.Owner != nil && result.steward.Owner.UserID != viewer {
+			result.steward.Owner = nil
+		}
+		if result.steward.Reviewer != nil && result.steward.Reviewer.UserID != nil && *result.steward.Reviewer.UserID != viewer {
+			result.steward.Reviewer.UserID = nil
+		}
+		if result.steward.Handling.State == "" {
+			var err error
+			result.steward.Handling, err = readHandlingTx(ctx, tx, donationID)
+			if err != nil {
+				return roleDonationMutation{}, err
+			}
+		}
+		for index := range result.steward.Keys {
+			key := &result.steward.Keys[index]
+			if key.BindingCount == "" {
+				count, err := receiptBindingCount(ctx, tx, donationID, key.ID)
+				if err != nil {
+					return roleDonationMutation{}, err
+				}
+				key.BindingCount, key.Idle = strconv.FormatInt(count, 10), count == 0
+			}
+		}
+		var err error
+		result.body, err = json.Marshal(result.steward)
+		if err != nil {
 			return roleDonationMutation{}, ErrInvariant
 		}
 		return result, nil
@@ -751,12 +779,53 @@ func replayRoleDonation(decision idempotency.Decision, role reviewerRole) (roleD
 	if err := json.Unmarshal(decision.ResponseBody, &result.admin); err != nil {
 		return roleDonationMutation{}, ErrInvariant
 	}
+	changed := false
+	if result.admin.Handling.State == "" {
+		var err error
+		result.admin.Handling, err = readHandlingTx(ctx, tx, donationID)
+		if err != nil {
+			return roleDonationMutation{}, err
+		}
+		changed = true
+	}
+	for index := range result.admin.Keys {
+		key := &result.admin.Keys[index]
+		if key.BindingCount == "" {
+			count, err := receiptBindingCount(ctx, tx, donationID, key.ID)
+			if err != nil {
+				return roleDonationMutation{}, err
+			}
+			key.BindingCount, key.Idle = strconv.FormatInt(count, 10), count == 0
+			changed = true
+		}
+	}
+	if changed {
+		var err error
+		result.body, err = json.Marshal(result.admin)
+		if err != nil {
+			return roleDonationMutation{}, ErrInvariant
+		}
+	}
 	return result, nil
 }
 
-func finishRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.Decision, role reviewerRole, value AdminDonation) (roleDonationMutation, error) {
+func receiptBindingCount(ctx context.Context, tx *sql.Tx, donationID int64, keyText string) (int64, error) {
+	keyID, err := strconv.ParseInt(keyText, 10, 64)
+	if err != nil || keyID <= 0 {
+		return 0, ErrInvariant
+	}
+	var count int64
+	err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM charity_model_bindings b
+JOIN donation_keys dk ON dk.id=b.donation_key_id WHERE dk.donation_id=? AND dk.id=?`, donationID, keyID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("donation: read receipt binding count: %w", err)
+	}
+	return count, nil
+}
+
+func finishRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.Decision, role reviewerRole, actorID int64, value AdminDonation) (roleDonationMutation, error) {
 	if role == reviewerSteward {
-		steward := stewardFromAdmin(value)
+		steward := stewardFromAdmin(value, actorID)
 		out, err := finishJSON(ctx, tx, decision, http.StatusOK, steward)
 		if err != nil {
 			return roleDonationMutation{}, err
@@ -929,36 +998,19 @@ func (s *Service) beginRoleTx(ctx context.Context, role reviewerRole, actorUserI
 	return tx, actorUserID, nil
 }
 
-func requireStewardDonationOwnershipTx(ctx context.Context, tx *sql.Tx, donationID, actorUserID int64) error {
-	var owned int
-	err := tx.QueryRowContext(ctx, `SELECT 1 FROM donations WHERE id=? AND user_id=?`, donationID, actorUserID).Scan(&owned)
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrNotFound
-	}
-	if err != nil {
-		return fmt.Errorf("donation: verify steward donation ownership: %w", err)
-	}
-	if owned != 1 {
-		return ErrInvariant
-	}
-	return nil
-}
-
 func (s *Service) materializeRoleExpiryStandalone(
 	ctx context.Context,
 	role reviewerRole,
 	actorUserID, donationID, now int64,
 ) error {
-	tx, actorID, err := s.beginRoleTx(ctx, role, actorUserID)
+	tx, _, err := s.beginRoleTx(ctx, role, actorUserID)
 	if err != nil {
 		return err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
-	if role == reviewerSteward {
-		if err := requireStewardDonationOwnershipTx(ctx, tx, donationID, actorID); err != nil {
-			return err
-		}
+	if err := requireManagedDonationTx(ctx, tx, role, donationID, now); err != nil {
+		return err
 	}
 	if _, err := materializeDonationExpiryTx(ctx, tx, donationID, now); err != nil {
 		return err
