@@ -170,11 +170,11 @@ func (adapter *CharityRoutingAdapter) Snapshot(ctx context.Context, modelID, now
 	return out, nil
 }
 
-func (adapter *CharityRoutingAdapter) ListAvailableModels(ctx context.Context, now int64, limit int) ([]ListedModel, error) {
+func (adapter *CharityRoutingAdapter) ListAvailableModels(ctx context.Context, userID, now int64, limit int) ([]ListedModel, error) {
 	if adapter == nil || adapter.service == nil {
 		return nil, ErrInternal
 	}
-	values, err := adapter.service.ListAvailableModels(ctx, now, limit)
+	values, err := adapter.service.ListAvailableModels(ctx, userID, now, limit)
 	if err != nil {
 		return nil, err
 	}

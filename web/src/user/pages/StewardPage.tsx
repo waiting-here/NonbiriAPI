@@ -104,7 +104,7 @@ export function StewardPage() {
       </div>
       {section === 'logs' ? (
         <RoleLogPanel
-          key={`logs:${authority.dataUpdatedAt}`}
+          key={`logs:${authority.data.id}`}
           role="steward"
           enabled
           onAuthorityLoss={authorityLoss}
@@ -112,14 +112,14 @@ export function StewardPage() {
       ) : null}
       {section === 'charity' ? (
         <CharityManagement
-          key={`charity:${authority.dataUpdatedAt}`}
+          key={`charity:${authority.data.id}`}
           frame="steward"
           onCapabilityLoss={authorityLoss}
         />
       ) : null}
       {section === 'maintenance' ? (
         <MaintenancePanel
-          key={`maintenance:${authority.dataUpdatedAt}`}
+          key={`maintenance:${authority.data.id}`}
           role="steward"
           onAuthorityLoss={authorityLoss}
         />

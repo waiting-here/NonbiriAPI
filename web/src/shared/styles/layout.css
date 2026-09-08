@@ -923,6 +923,11 @@
   border-radius: var(--nb-radius-sm);
 }
 
+.log-table .btn,
+.log-table [data-column='result'] {
+  overflow-wrap: normal;
+}
+
 table {
   width: 100%;
   min-width: 60rem;
@@ -1872,6 +1877,31 @@ tr:first-child td {
 .log-detail-row dd {
   min-width: 0;
   margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.log-caller-identity {
+  display: grid;
+  min-width: 0;
+  gap: 0.25rem;
+}
+
+.log-caller-identity__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  min-width: 0;
+  gap: 0.25rem 0.5rem;
+}
+
+.log-caller-identity__label {
+  color: var(--nb-color-text-muted);
+  font-size: 0.8em;
+}
+
+.log-caller-identity__value,
+.log-caller-identity__line .nb-copy-value {
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 

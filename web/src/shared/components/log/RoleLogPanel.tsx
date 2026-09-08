@@ -9,6 +9,7 @@ import { TimeInput } from '@shared/components/TimeInput';
 import { CursorPagination } from '@shared/operations/CursorPagination';
 import { useCursorPager } from '@shared/operations/useCursorPager';
 import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
+import { CallerIdentity } from './CallerIdentity';
 import { LogDetailDrawer } from './LogDetailDrawer';
 import { LogTable, type LogColumn } from './LogTable';
 import { TokenBuckets } from './TokenBuckets';
@@ -295,6 +296,16 @@ export function RoleLogPanel({
           },
         ]
       : []),
+    ...(role === 'steward'
+      ? [
+          {
+            key: 'caller',
+            header: t('logs.caller'),
+            render: (row: RoleLogRow) =>
+              row.role === 'steward' ? <CallerIdentity identity={row.caller_identity} /> : '—',
+          },
+        ]
+      : []),
     { key: 'result', header: t('common.operations.logs.result'), render: resultLabel },
     { key: 'status', header: t('common.status'), render: (row) => row.caller_status ?? '—' },
     {
@@ -320,38 +331,49 @@ export function RoleLogPanel({
         <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
       );
 
-  const detailFields = detail.data
-    ? [
-        {
-          label: t('common.operations.logs.request'),
-          value: <span className="mono">{requestFrom(detail.data).id}</span>,
-        },
-        { label: t('logs.routeKind'), value: routeLabel(requestFrom(detail.data).route_kind) },
-        {
-          label: t('common.operations.logs.callerResult'),
-          value: `${resultLabel(requestFrom(detail.data))} / ${requestFrom(detail.data).caller_status ?? '—'}`,
-        },
-        {
-          label: t('common.operations.logs.callerError'),
-          value: <span className="mono">{requestFrom(detail.data).caller_error_code ?? '—'}</span>,
-        },
-        { label: t('logs.tokens'), value: <TokenBuckets row={requestFrom(detail.data).usage} /> },
-        {
-          label: t('common.operations.logs.attempts'),
-          wide: true,
-          value: (
-            <AttemptTable
-              detail={detail.data}
-              page={attemptPager.page}
-              onPrevious={attemptPager.previous}
-              onNext={attemptPager.next}
-            />
-          ),
-        },
-      ]
-    : detailBody
-      ? [{ label: t('logs.details'), value: detailBody }]
-      : [];
+  const detailData = detail.data;
+  const detailRequest = detailData ? requestFrom(detailData) : null;
+  const detailFields =
+    detailData && detailRequest
+      ? [
+          {
+            label: t('common.operations.logs.request'),
+            value: <span className="mono">{detailRequest.id}</span>,
+          },
+          ...(role === 'steward' && detailRequest.role === 'steward'
+            ? [
+                {
+                  label: t('logs.caller'),
+                  value: <CallerIdentity identity={detailRequest.caller_identity} />,
+                },
+              ]
+            : []),
+          { label: t('logs.routeKind'), value: routeLabel(detailRequest.route_kind) },
+          {
+            label: t('common.operations.logs.callerResult'),
+            value: `${resultLabel(detailRequest)} / ${detailRequest.caller_status ?? '—'}`,
+          },
+          {
+            label: t('common.operations.logs.callerError'),
+            value: <span className="mono">{detailRequest.caller_error_code ?? '—'}</span>,
+          },
+          { label: t('logs.tokens'), value: <TokenBuckets row={detailRequest.usage} /> },
+          {
+            label: t('common.operations.logs.attempts'),
+            wide: true,
+            value: (
+              <AttemptTable
+                detail={detailData}
+                page={attemptPager.page}
+                onPrevious={attemptPager.previous}
+                onNext={attemptPager.next}
+              />
+            ),
+          },
+        ]
+      : detailBody
+        ? [{ label: t('logs.details'), value: detailBody }]
+        : [];
 
   const title =
     role === 'admin'

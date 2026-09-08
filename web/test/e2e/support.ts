@@ -226,11 +226,23 @@ export async function mockRoleSession(
     return;
   }
   await mockJson(page, {
-    origin, method: 'GET', path: station === 'admin' ? '/admin/api/time-zones' : '/api/time-zones',
-    body: { version: 'go1.26.6-zoneinfo', zones: [
-      'America/Indianapolis', 'America/New_York', 'Asia/Calcutta', 'Asia/Kolkata', 'Asia/Tokyo',
-      'Australia/Lord_Howe', 'Europe/Berlin', 'Pacific/Apia', 'UTC',
-    ] },
+    origin,
+    method: 'GET',
+    path: station === 'admin' ? '/admin/api/time-zones' : '/api/time-zones',
+    body: {
+      version: 'go1.26.6-zoneinfo',
+      zones: [
+        'America/Indianapolis',
+        'America/New_York',
+        'Asia/Calcutta',
+        'Asia/Kolkata',
+        'Asia/Tokyo',
+        'Australia/Lord_Howe',
+        'Europe/Berlin',
+        'Pacific/Apia',
+        'UTC',
+      ],
+    },
   });
   if (station === 'admin') {
     await mockJson(page, {
@@ -238,6 +250,12 @@ export async function mockRoleSession(
       method: 'GET',
       path,
       body: { admin: { username: 'fixture-admin' } },
+    });
+    await mockJson(page, {
+      origin: ADMIN_ORIGIN,
+      method: 'GET',
+      path: '/admin/api/donations/badge',
+      body: { pending_count: '0', server_now: 1_800_000_000 },
     });
     return;
   }
@@ -248,9 +266,21 @@ export async function mockRoleSession(
   // The shell keeps a deliberately narrow session projection. Generation 2
   // pages then read the same account through /api/me for the strict profile.
   await mockJson(page, { origin, method: 'GET', path: '/api/me', body });
+  if (role === 'level5') {
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/steward/donations/badge',
+      body: { pending_count: '0', server_now: 1_800_000_000 },
+    });
+  }
 }
 
-export async function mockPublicConfig(page: Page, station: TestStation, overrides: Record<string, unknown> = {}): Promise<void> {
+export async function mockPublicConfig(
+  page: Page,
+  station: TestStation,
+  overrides: Record<string, unknown> = {},
+): Promise<void> {
   if (station === 'admin') {
     await mockJson(page, {
       origin: ADMIN_ORIGIN,

@@ -126,6 +126,8 @@ type AdminDonationKey struct {
 	SafeNote            string          `json:"safe_note"`
 	MaxConcurrency      *int64          `json:"max_concurrency"`
 	MaxRPM              *int64          `json:"max_rpm"`
+	BindingCount        string          `json:"binding_count"`
+	Idle                bool            `json:"idle"`
 }
 
 type StewardDonationKey struct {
@@ -134,6 +136,8 @@ type StewardDonationKey struct {
 	SafeNote            string `json:"safe_note"`
 	MaxConcurrency      *int64 `json:"max_concurrency"`
 	MaxRPM              *int64 `json:"max_rpm"`
+	BindingCount        string `json:"binding_count"`
+	Idle                bool   `json:"idle"`
 }
 
 type ReviewResult struct {
@@ -169,6 +173,26 @@ type DonationReviewer struct {
 	Role   string  `json:"role"`
 }
 
+// DonationHandling is shared management state; it deliberately omits actor IDs.
+type DonationHandling struct {
+	State           string  `json:"state"`
+	Revision        string  `json:"revision"`
+	ProcessedAt     *int64  `json:"processed_at"`
+	ProcessedByRole *string `json:"processed_by_role"`
+	ClosedAt        *int64  `json:"closed_at"`
+	ClosedReason    *string `json:"closed_reason"`
+}
+
+type HandlingReceipt struct {
+	DonationID string           `json:"donation_id"`
+	Handling   DonationHandling `json:"handling"`
+}
+
+type DonationBadge struct {
+	PendingCount string `json:"pending_count"`
+	ServerNow    int64  `json:"server_now"`
+}
+
 // AdminDonation and StewardDonation intentionally do not alias one another.
 // This keeps later role-specific expansion from accidentally widening L5.
 type AdminDonation struct {
@@ -180,21 +204,23 @@ type AdminDonation struct {
 	Keys         []AdminDonationKey `json:"keys"`
 	Owner        *DonationOwner     `json:"owner"`
 	Reviewer     *DonationReviewer  `json:"reviewer"`
+	Handling     DonationHandling   `json:"handling"`
 	CreatedAt    int64              `json:"created_at"`
 	UpdatedAt    int64              `json:"updated_at"`
 }
 
 type StewardDonation struct {
-	ID           string               `json:"id"`
-	Status       string               `json:"status"`
-	Revision     string               `json:"revision"`
-	Description  string               `json:"description"`
-	ReviewResult *ReviewResult        `json:"review_result"`
-	Keys         []StewardDonationKey `json:"keys"`
-	Owner        StewardDonationOwner `json:"owner"`
-	Reviewer     *DonationReviewer    `json:"reviewer"`
-	CreatedAt    int64                `json:"created_at"`
-	UpdatedAt    int64                `json:"updated_at"`
+	ID           string                `json:"id"`
+	Status       string                `json:"status"`
+	Revision     string                `json:"revision"`
+	Description  string                `json:"description"`
+	ReviewResult *ReviewResult         `json:"review_result"`
+	Keys         []StewardDonationKey  `json:"keys"`
+	Owner        *StewardDonationOwner `json:"owner"`
+	Reviewer     *DonationReviewer     `json:"reviewer"`
+	Handling     DonationHandling      `json:"handling"`
+	CreatedAt    int64                 `json:"created_at"`
+	UpdatedAt    int64                 `json:"updated_at"`
 }
 
 type CreateKeyInput struct {

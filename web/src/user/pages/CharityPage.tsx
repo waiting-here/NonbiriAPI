@@ -5,8 +5,8 @@ import { isNotFoundError } from '@shared/query/http';
 import { usePublicConfig } from '@shared/query/publicConfig';
 import { UserPageGate } from '../components/UserPageGate';
 import { useUserSession } from '../data';
+import { CharityCatalogPanel } from '../features/economy/CharityCatalogPanel';
 import {
-  CharityCapabilityPanel,
   CharitySafetyNotice,
   DonationCard,
   DonationComposer,
@@ -147,15 +147,7 @@ function CharityContent() {
         className="economy-model-workspace"
         aria-label={t('user.charity.availableModels')}
       >
-        {capability.isPending ? (
-          <LoadingState />
-        ) : capability.error ? (
-          <ErrorState error={capability.error} onRetry={() => void capability.refetch()} />
-        ) : capability.data ? (
-          <CharityCapabilityPanel capability={capability.data} />
-        ) : (
-          <LoadingState />
-        )}
+        <CharityCatalogPanel key={accountID ?? 'no-account'} accountID={accountID} />
         <CharitySafetyNotice />
       </section>
       <section hidden={tab !== 'donations'} aria-label={t('user.charity.donationsTitle')}>

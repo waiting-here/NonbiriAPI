@@ -1,0 +1,23 @@
+.page-pagination {
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: end;
+}
+.page-pagination__size,
+.page-pagination__jump {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.page-pagination__jump input {
+  width: 6.5rem;
+  max-width: 100%;
+}
+.page-pagination select {
+  width: auto;
+  min-width: 4.5rem;
+}
+.page-pagination > span {
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}

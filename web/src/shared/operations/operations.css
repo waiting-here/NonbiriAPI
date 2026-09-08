@@ -36,6 +36,10 @@ form.ops-toolbar > label {
   margin-block: 0;
 }
 
+.ops-subcard > :where(h2, h3, h4) {
+  overflow-wrap: anywhere;
+}
+
 .ops-page .card > .card-title-row,
 .ops-subcard > .card-title-row {
   margin-bottom: 0;

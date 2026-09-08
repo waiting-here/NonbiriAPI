@@ -1,4 +1,5 @@
 import { decoded, queryPath } from '@shared/operations/api';
+import { normalizeDonationHandling } from '@shared/operations/charity';
 import {
   amount,
   boolean,
@@ -229,6 +230,8 @@ function normalizeAdminCharityKey(value: unknown): AdminCharityKey {
   // identity fields are intentionally not read into the returned object.
   const required = [
     'id',
+    'binding_count',
+    'idle',
     'endpoint_key_id',
     'display_head',
     'display_tail',
@@ -251,6 +254,10 @@ function normalizeAdminCharityKey(value: unknown): AdminCharityKey {
     required,
   );
   const id = decimalID(root.id, 'administrator charity key ID');
+  const bindingCount = decimal(root.binding_count, 'administrator charity binding count');
+  if (boolean(root.idle, 'administrator charity idle state') !== (bindingCount === '0')) {
+    invalidResponse('administrator charity idle state');
+  }
   nullableDecimalID(root.endpoint_key_id, 'administrator charity source endpoint key ID');
   const displayHead = string(root.display_head, 'administrator charity key head', {
     max: 16,
@@ -403,6 +410,7 @@ export function normalizeAdminCharityDonation(value: unknown): AdminCharityDonat
       'id',
       'status',
       'revision',
+      'handling',
       'description',
       'review_result',
       'keys',
@@ -420,6 +428,7 @@ export function normalizeAdminCharityDonation(value: unknown): AdminCharityDonat
   );
   // Validate the closed management projection without retaining donor text,
   // owner identity or reviewer identity in the feature-local query cache.
+  normalizeDonationHandling(root.handling);
   string(root.description, 'administrator charity description', {
     max: 1_024,
     bytes: 4_096,

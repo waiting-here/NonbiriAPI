@@ -60,6 +60,7 @@ type fakeCharityRouter struct {
 	preCalls  int
 	snapCalls int
 	listCalls int
+	listUsers []int64
 	preTimes  []int64
 	snapTimes []int64
 	snapTypes [][]connectorcontract.Type
@@ -78,8 +79,9 @@ func (router *fakeCharityRouter) Snapshot(_ context.Context, _ int64, now int64,
 	return router.snapshot, router.snapErr
 }
 
-func (router *fakeCharityRouter) ListAvailableModels(_ context.Context, _ int64, _ int) ([]ListedModel, error) {
+func (router *fakeCharityRouter) ListAvailableModels(_ context.Context, userID int64, _ int64, _ int) ([]ListedModel, error) {
 	router.listCalls++
+	router.listUsers = append(router.listUsers, userID)
 	return append([]ListedModel(nil), router.models...), router.listErr
 }
 

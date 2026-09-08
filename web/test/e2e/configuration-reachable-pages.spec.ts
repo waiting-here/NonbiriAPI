@@ -57,6 +57,8 @@ const user = {
 
 const pendingKey = {
   id: '6',
+  binding_count: '0',
+  idle: true,
   endpoint_key_id: '2',
   display_head: 'sk-a',
   display_tail: 'tail',
@@ -87,6 +89,14 @@ const pendingKey = {
 const pendingAdminDonation = {
   id: '9',
   status: 'pending',
+  handling: {
+    state: 'pending',
+    revision: '1',
+    processed_at: null,
+    processed_by_role: null,
+    closed_at: null,
+    closed_reason: null,
+  },
   revision: '1',
   description: 'Fixture donation',
   review_result: null,
@@ -108,6 +118,8 @@ const currentCharityModel = {
   model: 'charity-model',
   full_name: '[公益]provider/charity-model',
   enabled: true,
+  allowed_levels: [1, 2, 3, 4, 5],
+  public_description: '',
   pricing: { mode: 'per_request', user_price: '0', donor_reward: '0' },
   discount: { enabled: false, percent: 100, start_at: null, end_at: null },
   flatten_tool_calls: false,
@@ -281,6 +293,17 @@ test('reachable user charity shows the neutral upstream warning without the stat
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
+    path: '/api/charity/models?view=catalog&page=1&page_size=20',
+    body: {
+      models: [],
+      pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+      donation_intake: 'closed',
+      server_now: 1_788_100_000,
+    },
+  });
+  await mockJson(page, {
+    origin: USER_ORIGIN,
+    method: 'GET',
     path: '/api/donations?limit=100',
     body: { data: [], next_cursor: null },
   });
@@ -290,7 +313,7 @@ test('reachable user charity shows the neutral upstream warning without the stat
   await expect(page.getByRole('note')).toContainText('第三方 AI 服务');
   await expect(page.getByRole('note')).toContainText('账户日志可能看到完整请求内容');
   await expect(page.getByText('调用状态说明')).toHaveCount(0);
-  await expect(page.getByText('当前没有启用的公益模型。')).toBeVisible();
+  await expect(page.getByText('没有匹配的公益模型')).toBeVisible();
   await page.getByRole('tab', { name: '我的捐赠', exact: true }).click();
   await expect(page.getByText('还没有捐赠记录')).toBeVisible();
   await assertResponsiveAndClean(page, guard);

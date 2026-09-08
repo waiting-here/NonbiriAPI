@@ -22,6 +22,8 @@ function errorResponse(status: number, code: string): Response {
 
 const managedKey = (overrides: Partial<ManagedDonationKey> = {}): ManagedDonationKey => ({
   id: '11',
+  binding_count: '0',
+  idle: true,
   endpoint_key_id: '21',
   display_head: 'head',
   display_tail: 'tail',
@@ -55,6 +57,14 @@ function pendingAdminDonation(expiresAt: number | null = null): AdminDonation {
     id: '1',
     status: 'pending',
     revision: '7',
+    handling: {
+      state: 'pending',
+      revision: '1',
+      processed_at: null,
+      processed_by_role: null,
+      closed_at: null,
+      closed_reason: null,
+    },
     description: 'Generation 2 donor submission',
     review_result: null,
     keys: [managedKey({ authorized_expires_at: expiresAt, expires_at: expiresAt })],
@@ -70,6 +80,14 @@ function stewardDonation(): StewardDonation {
     id: '2',
     status: 'pending',
     revision: '3',
+    handling: {
+      state: 'pending',
+      revision: '1',
+      processed_at: null,
+      processed_by_role: null,
+      closed_at: null,
+      closed_reason: null,
+    },
     description: 'My donation',
     review_result: null,
     keys: [managedKey({ id: '12', endpoint_key_id: '22' })],
@@ -267,6 +285,8 @@ describe('Generation 2 charity management policy', () => {
           model: String(body.model),
           full_name: `[公益]${String(body.provider)}/${String(body.model)}`,
           enabled: true,
+          allowed_levels: body.allowed_levels as number[],
+          public_description: String(body.public_description),
           pricing: body.pricing as CharityModel['pricing'],
           discount: body.discount as CharityModel['discount'],
           flatten_tool_calls: false,
@@ -305,6 +325,8 @@ describe('Generation 2 charity management policy', () => {
     await waitFor(() => expect(createRequests).toHaveLength(1));
     const body = JSON.parse(String(createRequests[0].body)) as Record<string, unknown>;
     expect(body).toMatchObject({
+      allowed_levels: [1, 2, 3, 4, 5],
+      public_description: '',
       pricing: { mode: 'per_request', user_price: '1.001', donor_reward: '0' },
     });
     expect(new Headers(createRequests[0].headers).get('Idempotency-Key')).toMatch(

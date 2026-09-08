@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { AccountMenu } from '@shared/components/AccountMenu';
+import { DonationPendingBadge } from '@shared/components/DonationPendingBadge';
 import { Brand, useBrandFavicon } from '@shared/components/Brand';
 import { LanguageSwitcher } from '@shared/components/LanguageSwitcher';
 import { PublicShell } from '@shared/components/PublicShell';
@@ -74,9 +75,11 @@ export function UserLayout() {
     // The menu button is intentionally hidden on desktop. Only restore focus
     // when the drawer can actually be opened, otherwise a desktop navigation
     // click would move focus to an invisible control.
-    if (typeof window !== 'undefined'
-      && typeof window.matchMedia === 'function'
-      && window.matchMedia(SHELL_DRAWER_MEDIA_QUERY.user).matches) {
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia(SHELL_DRAWER_MEDIA_QUERY.user).matches
+    ) {
       menuButtonRef.current?.focus({ preventScroll: true });
     }
   }, []);
@@ -125,7 +128,11 @@ export function UserLayout() {
         return;
       }
       if (event.key !== 'Tab') return;
-      const focusable = Array.from(navRef.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), select:not([disabled])') ?? []);
+      const focusable = Array.from(
+        navRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), select:not([disabled])',
+        ) ?? [],
+      );
       if (focusable.length === 0) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
@@ -145,7 +152,8 @@ export function UserLayout() {
   }, [closeMenu, menuOpen]);
 
   useEffect(() => {
-    if (!menuOpen || typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    if (!menuOpen || typeof window === 'undefined' || typeof window.matchMedia !== 'function')
+      return;
     const media = window.matchMedia(SHELL_DRAWER_MEDIA_QUERY.user);
     const closeForDesktop = (event?: MediaQueryListEvent) => {
       if (event && event.matches) return;
@@ -168,8 +176,10 @@ export function UserLayout() {
   // be absent, in which case the global value (or nothing) is shown.
   const displayName = profile ? profile.guild_nick || profile.username : '';
   const profileAvatar = profile ? profile.guild_avatar_url || profile.avatar_url || '' : '';
-  const showSignIn = !logout.isPending
-    && (logoutRequested || (!signedIn && (isUnauthorized(session.error) || isNotFoundError(session.error))));
+  const showSignIn =
+    !logout.isPending &&
+    (logoutRequested ||
+      (!signedIn && (isUnauthorized(session.error) || isNotFoundError(session.error))));
   const toastIdentity = logoutRequested
     ? 'logout'
     : signedIn && profile
@@ -177,7 +187,8 @@ export function UserLayout() {
       : 'anonymous';
   const previousToastIdentityRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (previousToastIdentityRef.current && previousToastIdentityRef.current !== toastIdentity) clearToasts?.();
+    if (previousToastIdentityRef.current && previousToastIdentityRef.current !== toastIdentity)
+      clearToasts?.();
     previousToastIdentityRef.current = toastIdentity;
   }, [clearToasts, toastIdentity]);
 
@@ -198,15 +209,33 @@ export function UserLayout() {
     );
   }
   if (config.isPending && !config.data) {
-    return <PublicShell siteName={siteName}><div className="nb-page nb-page--readable"><LoadingState /></div></PublicShell>;
+    return (
+      <PublicShell siteName={siteName}>
+        <div className="nb-page nb-page--readable">
+          <LoadingState />
+        </div>
+      </PublicShell>
+    );
   }
   if (config.error && !config.data) {
-    return <PublicShell siteName={siteName}><div className="nb-page nb-page--readable"><ErrorState error={config.error} onRetry={() => void config.refetch()} /></div></PublicShell>;
+    return (
+      <PublicShell siteName={siteName}>
+        <div className="nb-page nb-page--readable">
+          <ErrorState error={config.error} onRetry={() => void config.refetch()} />
+        </div>
+      </PublicShell>
+    );
   }
   if (inMaintenance) {
     return (
       <PublicShell siteName={siteName} siteLogoURL={siteLogoURL}>
-        <div className="nb-page nb-page--readable"><NoticePage titleKey="common.maintenanceTitle" bodyKey="common.maintenanceBody" icon="maintenance" /></div>
+        <div className="nb-page nb-page--readable">
+          <NoticePage
+            titleKey="common.maintenanceTitle"
+            bodyKey="common.maintenanceBody"
+            icon="maintenance"
+          />
+        </div>
       </PublicShell>
     );
   }
@@ -217,7 +246,12 @@ export function UserLayout() {
         {t('shell.skipToContent')}
       </a>
       <header className="site-header user-header nb-user-header">
-        <Brand href={routePath('user', 'home')} siteName={siteName} siteLogoURL={siteLogoURL} className="brand" />
+        <Brand
+          href={routePath('user', 'home')}
+          siteName={siteName}
+          siteLogoURL={siteLogoURL}
+          className="brand"
+        />
         {signedIn ? (
           <button
             ref={menuButtonRef}
@@ -240,9 +274,21 @@ export function UserLayout() {
           <ul className="nb-user-header__nav-list">
             {navItems.map((item) => (
               <li key={item.key}>
-                <NavLink className="nb-user-header__nav-link" data-active={item.key === 'logs' && diagnosticsOpen ? 'true' : undefined} to={item.to} end={item.end} onClick={closeMenu}>
+                <NavLink
+                  className="nb-user-header__nav-link"
+                  data-active={item.key === 'logs' && diagnosticsOpen ? 'true' : undefined}
+                  to={item.to}
+                  end={item.end}
+                  onClick={closeMenu}
+                >
                   {item.icon ? <Icon name={item.icon} /> : null}
-                  {item.labelKey ? t(item.labelKey, { defaultValue: item.fallbackLabelKey ? t(item.fallbackLabelKey) : item.labelKey }) : t(`user.${item.key}.nav`)}
+                  {item.labelKey
+                    ? t(item.labelKey, {
+                        defaultValue: item.fallbackLabelKey
+                          ? t(item.fallbackLabelKey)
+                          : item.labelKey,
+                      })
+                    : t(`user.${item.key}.nav`)}
                 </NavLink>
               </li>
             ))}
@@ -250,18 +296,34 @@ export function UserLayout() {
           {signedIn && menuOpen ? (
             <div className="nb-user-drawer-actions">
               <div className="nb-user-drawer-actions__identity">{displayName}</div>
-              <Link className="nb-button nb-button--ghost nb-button--small" to={USER_ACCOUNT_PATH} onClick={closeMenu}>
+              <Link
+                className="nb-button nb-button--ghost nb-button--small"
+                to={USER_ACCOUNT_PATH}
+                onClick={closeMenu}
+              >
                 <Icon name="account" />
                 {t('user.account.nav')}
               </Link>
               {showStewardEntry ? (
-                  <Link className="nb-button nb-button--ghost nb-button--small" to={USER_STEWARD_PATH} onClick={closeMenu}>
+                <Link
+                  className="nb-button nb-button--ghost nb-button--small"
+                  to={USER_STEWARD_PATH}
+                  onClick={closeMenu}
+                >
                   <Icon name="steward" />
                   {t('user.steward.nav')}
                 </Link>
               ) : null}
               <ThemeToggle />
-              <button type="button" className="nb-button nb-button--secondary" onClick={() => { closeMenu(); logout.mutate(); }} disabled={logout.isPending}>
+              <button
+                type="button"
+                className="nb-button nb-button--secondary"
+                onClick={() => {
+                  closeMenu();
+                  logout.mutate();
+                }}
+                disabled={logout.isPending}
+              >
                 <Icon name="logout" />
                 {logout.isPending ? t('common.working') : t('common.signOut')}
               </button>
@@ -276,9 +338,26 @@ export function UserLayout() {
             onClick={closeMenu}
           />
         ) : null}
-        <div className={`site-actions nb-user-header__actions ${signedIn ? 'nb-user-header__actions--signed-in' : 'nb-user-header__actions--anonymous'}`}>
+        <div
+          className={`site-actions nb-user-header__actions ${signedIn ? 'nb-user-header__actions--signed-in' : 'nb-user-header__actions--anonymous'}`}
+        >
+          {signedIn && showStewardEntry && profile ? (
+            <DonationPendingBadge
+              key={profile.id}
+              role="steward"
+              accountID={profile.id}
+              onNavigate={closeMenu}
+            />
+          ) : null}
           {signedIn ? (
-            <AccountMenu displayName={displayName} avatarURL={profileAvatar} signOutLabel={t('common.signOut')} working={logout.isPending} steward={showStewardEntry} onSignOut={() => logout.mutate()} />
+            <AccountMenu
+              displayName={displayName}
+              avatarURL={profileAvatar}
+              signOutLabel={t('common.signOut')}
+              working={logout.isPending}
+              steward={showStewardEntry}
+              onSignOut={() => logout.mutate()}
+            />
           ) : null}
           {!signedIn ? <LanguageSwitcher /> : null}
           {!signedIn ? <ThemeToggle /> : null}
@@ -292,7 +371,9 @@ export function UserLayout() {
       {logout.error ? (
         <div className="shell-error nb-shell-status">
           {isApiError(logout.error) ? (
-            <p className="field-error" role="alert">{logout.error.message}</p>
+            <p className="field-error" role="alert">
+              {logout.error.message}
+            </p>
           ) : (
             <ErrorState error={logout.error} />
           )}
@@ -313,7 +394,16 @@ export function UserLayout() {
       <div className="site-footer nb-user-shell__footer">
         <PageFooter
           copyright={t('common.copyright', { year: new Date().getFullYear() })}
-          links={<>{signedIn ? <Link to={USER_ANNOUNCEMENTS_PATH}>{t('user.announcements.nav')}</Link> : null}<Link to={USER_REPORT_PATH}>{t('user.report.nav')}</Link><Link to={USER_PRIVACY_PATH}>{t('user.legal.privacy.nav')}</Link><Link to={USER_TERMS_PATH}>{t('user.legal.terms.nav')}</Link></>}
+          links={
+            <>
+              {signedIn ? (
+                <Link to={USER_ANNOUNCEMENTS_PATH}>{t('user.announcements.nav')}</Link>
+              ) : null}
+              <Link to={USER_REPORT_PATH}>{t('user.report.nav')}</Link>
+              <Link to={USER_PRIVACY_PATH}>{t('user.legal.privacy.nav')}</Link>
+              <Link to={USER_TERMS_PATH}>{t('user.legal.terms.nav')}</Link>
+            </>
+          }
         />
       </div>
     </div>

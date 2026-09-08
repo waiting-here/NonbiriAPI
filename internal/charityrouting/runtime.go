@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
@@ -91,6 +92,15 @@ FROM charity_models WHERE full_name=?`, fullName).Scan(&preflight.ModelID, &pref
 	if enabled != 1 {
 		return RuntimePreflight{}, ErrNotFound
 	}
+	if err := charityaccess.Require(ctx, tx, userID, preflight.ModelID); err != nil {
+		if errors.Is(err, charityaccess.ErrForbidden) {
+			return RuntimePreflight{}, ErrForbidden
+		}
+		if errors.Is(err, charityaccess.ErrUnavailable) {
+			return RuntimePreflight{}, ErrNotFound
+		}
+		return RuntimePreflight{}, err
+	}
 	activeDiscount := discountPercentAt(discount, discountEnabled, discountStart, discountEnd, decisionNow)
 	if pricingMode == "per_request" {
 		preflight.ReservedMilli, err = credits.ApplyDiscountPercent(requestPrice, activeDiscount)
@@ -138,8 +148,8 @@ WHERE kind='user' AND user_id=?`, userID).Scan(&balanceSign, &balanceMagnitude);
 // public OpenAI list. Availability uses the same runtime eligibility checks,
 // but neither ordering entropy, donation/key identities, nor candidate counts
 // leave this method.
-func (s *Service) ListAvailableModels(ctx context.Context, decisionNow int64, limit int) ([]AvailableModel, error) {
-	if s == nil || s.db == nil || ctx == nil || decisionNow < 0 || decisionNow > maxUnixSecond || limit < 1 || limit > MaxAvailableModels {
+func (s *Service) ListAvailableModels(ctx context.Context, userID, decisionNow int64, limit int) ([]AvailableModel, error) {
+	if s == nil || s.db == nil || ctx == nil || userID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond || limit < 1 || limit > MaxAvailableModels {
 		return nil, ErrInvalidRequest
 	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
@@ -147,6 +157,13 @@ func (s *Service) ListAvailableModels(ctx context.Context, decisionNow int64, li
 		return nil, fmt.Errorf("charity routing: begin available model list: %w", err)
 	}
 	defer tx.Rollback()
+	level, err := charityaccess.CurrentLevel(ctx, tx, userID)
+	if err != nil {
+		if errors.Is(err, charityaccess.ErrUnavailable) {
+			return nil, ErrUnauthorized
+		}
+		return nil, err
+	}
 	gate, err := capabilityGateTx(ctx, tx, "charity_enabled")
 	if err != nil {
 		return nil, err
@@ -157,8 +174,8 @@ func (s *Service) ListAvailableModels(ctx context.Context, decisionNow int64, li
 		}
 		return []AvailableModel{}, nil
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT id,provider,full_name,created_at FROM charity_models
-WHERE enabled=1 ORDER BY full_name,id LIMIT ?`, limit+1)
+	rows, err := tx.QueryContext(ctx, `SELECT cm.id,cm.provider,cm.full_name,cm.created_at FROM charity_models cm
+JOIN charity_model_access a ON a.model_id=cm.id WHERE cm.enabled=1 AND (a.allowed_level_mask & ?)<>0 ORDER BY cm.full_name,cm.id LIMIT ?`, 1<<(level-1), limit+1)
 	if err != nil {
 		return nil, fmt.Errorf("charity routing: read available model list: %w", err)
 	}
@@ -217,17 +234,33 @@ func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64
 	if s == nil || s.db == nil || ctx == nil || modelID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond {
 		return RuntimeSnapshot{}, ErrInvalidRequest
 	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return RuntimeSnapshot{}, fmt.Errorf("charity routing: begin runtime snapshot: %w", err)
+	}
+	defer tx.Rollback()
+	snapshot, admissionErr := s.readSnapshotTx(ctx, tx, modelID, decisionNow, freezeOrder, connectorSet)
+	if admissionErr != nil && !errors.Is(admissionErr, ErrUnavailable) {
+		return RuntimeSnapshot{}, admissionErr
+	}
+	if err := s.donationState.MaterializeDueExpiriesTx(ctx, tx, decisionNow, 100); err != nil {
+		return RuntimeSnapshot{}, fmt.Errorf("charity routing: materialize runtime expiry: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return RuntimeSnapshot{}, fmt.Errorf("charity routing: commit runtime snapshot: %w", err)
+	}
+	return snapshot, admissionErr
+}
+
+// readSnapshotTx shares eligibility with read-only catalogs without opening a
+// second transaction or materializing expiry inside a browse request.
+func (s *Service) readSnapshotTx(ctx context.Context, tx *sql.Tx, modelID, decisionNow int64, freezeOrder bool, connectorSet map[connectorcontract.Type]struct{}) (RuntimeSnapshot, error) {
 	var snapshot RuntimeSnapshot
 	var enabled int
 	var pricingMode string
 	var requestPrice int64
 	var discount, discountEnabled int
 	var discountStart, discountEnd sql.NullInt64
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return RuntimeSnapshot{}, fmt.Errorf("charity routing: begin runtime snapshot: %w", err)
-	}
-	defer tx.Rollback()
 	var gate string
 	if err := tx.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key='charity_enabled'`).Scan(&gate); err != nil {
 		return RuntimeSnapshot{}, fmt.Errorf("charity routing: read runtime feature gate: %w", err)
@@ -238,7 +271,7 @@ func (s *Service) snapshot(ctx context.Context, modelID int64, decisionNow int64
 	if gate == "0" {
 		return RuntimeSnapshot{}, ErrNotFound
 	}
-	err = tx.QueryRowContext(ctx, `SELECT id,provider,model,full_name,enabled,flatten_tool_calls,
+	err := tx.QueryRowContext(ctx, `SELECT id,provider,model,full_name,enabled,flatten_tool_calls,
 pricing_mode,request_user_price,discount_percent,discount_enabled,discount_start_at,discount_end_at
 FROM charity_models WHERE id=?`, modelID).Scan(&snapshot.ModelID, &snapshot.Provider, &snapshot.Model,
 		&snapshot.FullName, &enabled, &snapshot.FlattenToolCalls, &pricingMode, &requestPrice,
@@ -364,12 +397,6 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, maxBindingBatch+1)
 		return RuntimeSnapshot{}, ErrInvalidRequest
 	}
 	if len(weighted) == 0 {
-		if err := s.donationState.MaterializeDueExpiriesTx(ctx, tx, decisionNow, 100); err != nil {
-			return RuntimeSnapshot{}, fmt.Errorf("charity routing: materialize runtime expiry: %w", err)
-		}
-		if err := tx.Commit(); err != nil {
-			return RuntimeSnapshot{}, fmt.Errorf("charity routing: commit empty runtime snapshot: %w", err)
-		}
 		return RuntimeSnapshot{}, ErrUnavailable
 	}
 	if freezeOrder {
@@ -386,12 +413,6 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, maxBindingBatch+1)
 		for index := range weighted {
 			snapshot.candidates[index] = weighted[index].candidate
 		}
-	}
-	if err := s.donationState.MaterializeDueExpiriesTx(ctx, tx, decisionNow, 100); err != nil {
-		return RuntimeSnapshot{}, fmt.Errorf("charity routing: materialize runtime expiry: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return RuntimeSnapshot{}, fmt.Errorf("charity routing: commit runtime snapshot: %w", err)
 	}
 	return snapshot, nil
 }
@@ -419,8 +440,8 @@ func capacityAllows(limitBlob, usedBlob, reservedBlob []byte, increment *big.Int
 	return new(big.Int).Add(current, increment).Cmp(limit.Big()) <= 0, nil
 }
 
-func (s *Service) Capability(ctx context.Context, decisionNow int64) (Capability, error) {
-	if s == nil || s.db == nil || ctx == nil || decisionNow < 0 || decisionNow > maxUnixSecond {
+func (s *Service) Capability(ctx context.Context, userID, decisionNow int64) (Capability, error) {
+	if s == nil || s.db == nil || ctx == nil || userID <= 0 || decisionNow < 0 || decisionNow > maxUnixSecond {
 		return Capability{}, ErrInvalidRequest
 	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
@@ -428,6 +449,13 @@ func (s *Service) Capability(ctx context.Context, decisionNow int64) (Capability
 		return Capability{}, fmt.Errorf("charity routing: begin capability snapshot: %w", err)
 	}
 	defer tx.Rollback()
+	level, err := charityaccess.CurrentLevel(ctx, tx, userID)
+	if err != nil {
+		if errors.Is(err, charityaccess.ErrUnavailable) {
+			return Capability{}, ErrUnauthorized
+		}
+		return Capability{}, err
+	}
 	charityGate, err := capabilityGateTx(ctx, tx, "charity_enabled")
 	if err != nil {
 		return Capability{}, err
@@ -441,13 +469,15 @@ func (s *Service) Capability(ctx context.Context, decisionNow int64) (Capability
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT id,provider,model,full_name,pricing_mode,
 request_user_price,uncached_user_price,cache_write_user_price,cache_read_user_price,output_user_price,
-discount_enabled,discount_percent,discount_start_at,discount_end_at FROM charity_models
+discount_enabled,discount_percent,discount_start_at,discount_end_at,
+(SELECT allowed_level_mask FROM charity_model_access WHERE model_id=charity_models.id) FROM charity_models
 WHERE enabled=1 ORDER BY id`)
 	if err != nil {
 		return Capability{}, fmt.Errorf("charity routing: read capability models: %w", err)
 	}
 	models := make([]CapabilityModel, 0)
 	modelIDs := make([]int64, 0)
+	allowed := make([]bool, 0)
 	for rows.Next() {
 		var model CapabilityModel
 		var id int64
@@ -455,10 +485,11 @@ WHERE enabled=1 ORDER BY id`)
 		var requestPrice int64
 		var tokenPrices [4]int64
 		var discountEnabled int
+		var mask int
 		var discountStart, discountEnd sql.NullInt64
 		if err := rows.Scan(&id, &model.Provider, &model.Model, &model.FullName, &mode,
 			&requestPrice, &tokenPrices[0], &tokenPrices[1], &tokenPrices[2], &tokenPrices[3],
-			&discountEnabled, &model.Discount.Percent, &discountStart, &discountEnd); err != nil {
+			&discountEnabled, &model.Discount.Percent, &discountStart, &discountEnd, &mask); err != nil {
 			_ = rows.Close()
 			return Capability{}, fmt.Errorf("charity routing: scan capability model: %w", err)
 		}
@@ -479,6 +510,7 @@ WHERE enabled=1 ORDER BY id`)
 		}
 		models = append(models, model)
 		modelIDs = append(modelIDs, id)
+		allowed = append(allowed, charityaccess.Allows(mask, level))
 	}
 	if err := rows.Err(); err != nil {
 		_ = rows.Close()
@@ -506,6 +538,9 @@ WHERE enabled=1 ORDER BY id`)
 	}
 	available := make([]CapabilityModel, 0, len(models))
 	for index, id := range modelIDs {
+		if !allowed[index] {
+			continue
+		}
 		if _, err := s.snapshot(ctx, id, decisionNow, false, nil); err == nil {
 			available = append(available, models[index])
 		} else if !errors.Is(err, ErrUnavailable) && !errors.Is(err, ErrNotFound) {

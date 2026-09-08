@@ -14,6 +14,57 @@
     "accountMenu": "账号操作"
   },
   "common": {
+    "refresh": "刷新",
+    "donationHandling": {
+      "title": "公共待办",
+      "filter": "待办状态",
+      "all": "全部待办状态",
+      "search": "搜索公开说明或捐赠 ID",
+      "applySearch": "搜索",
+      "searchInvalid": "搜索内容最多 128 个字符。",
+      "process": "标记为已处理",
+      "idle": "闲置中 · 尚无模型绑定",
+      "bound": "已绑定 {{count}} 项模型连接",
+      "ownerHidden": "捐赠者资料不显示",
+      "processedInfo": "{{role}}已处理 · {{at}}",
+      "closedInfo": "已关闭：{{reason}} · {{at}}",
+      "conflictHint": "若其他管理者已修改，请先重新加载当前状态，再核对后重试。",
+      "badgeLabel": "待办",
+      "badgeCount": "{{count}} 项捐赠待处理",
+      "badgeUnknown": "暂时无法取得捐赠待办数量",
+      "badgeRetry": "重新读取捐赠待办数量",
+      "states": {
+        "legacy": "既有捐赠",
+        "pending": "待处理",
+        "processed": "已处理",
+        "closed": "已关闭"
+      },
+      "help": {
+        "legacy": "既有捐赠不进入公共待办。",
+        "pending": "管理员和协管共用此待办。审核、编辑或绑定不会自动标记为已处理。",
+        "processed": "此捐赠已为所有管理者标记为已处理。",
+        "closed": "此捐赠已结束，已自动退出待办。"
+      },
+      "roles": {
+        "admin": "管理员",
+        "steward": "协管"
+      },
+      "reasons": {
+        "rejected": "审核拒绝",
+        "withdrawn": "已撤回",
+        "terminated": "已终止",
+        "expired": "已到期",
+        "member_removed": "全部密钥已移除",
+        "account_deleted": "账号已删除"
+      }
+    },
+    "pageControls": {
+      "size": "每页条数",
+      "summary": "第 {{page}} / {{pages}} 页 · 共 {{total}} 项",
+      "jump": "跳转页码",
+      "go": "跳转",
+      "invalid": "请输入 1～2147483647 的整数页码。"
+    },
     "time": {
       "zone": "时区：{{zone}}",
       "zoneChanged": "浏览器时区已改变，请在保存前核对时间。",
@@ -219,7 +270,17 @@
         "donorDescription": "捐赠者说明",
         "donorRewards": "捐赠者回馈",
         "enableForCharity": "启用于公益",
-        "enabledForNewClaims": "允许新公益请求使用",
+        "enableCharityModel": "启用公益模型",
+        "modelChanged": "此模型在你开始编辑后发生了变化，当前草稿已保留。请重新载入已保存的模型，再编辑其最新版本。",
+        "retrySavedModel": "重试上次保存",
+        "reloadModel": "放弃编辑并载入已保存的模型",
+        "allowedLevels": "允许等级",
+        "levelLabel": "L{{level}}",
+        "selectAllLevels": "全选等级",
+        "clearAllLevels": "清空等级",
+        "noAllowedLevels": "所有普通用户均不可调用（包括 5 级用户）。",
+        "publicDescription": "公开说明（纯文本，可留空）",
+        "publicDescriptionHelp": "会按输入内容显示换行；Markdown、HTML 和链接均按纯文本显示。",
         "endedReason": "终止原因",
         "endedReasonValue": {
           "withdrawn": "待审核捐赠已撤回",
@@ -302,6 +363,8 @@
           "expiryAuthorization": "当前有效期必须位于捐赠者授权上限内。",
           "completeSettings": "批准操作要求为每个仍存续的密钥提供完整设置。",
           "modelIdentity": "Provider 与模型均为必填项，最多 64 个字符，且不能复用 [公益] 前缀。",
+          "modelLevels": "请选择 L1 至 L5 中的任意等级，也可以全部清空。",
+          "publicDescription": "公开说明最多 1,024 个字符、4,096 个 UTF-8 字节，除换行和制表符外不能包含控制字符。",
           "modelPrices": "每项价格都必须是精确的非负积分金额，最多三位小数。",
           "discountPercent": "折扣百分比必须是 0 至 100 的整数。",
           "discountDates": "折扣日期必须有效，且结束时间必须晚于开始时间。"
@@ -312,6 +375,10 @@
   "logs": {
     "details": "详情",
     "drawerTitle": "日志详情",
+    "caller": "调用者身份",
+    "callerNickname": "Discord 昵称",
+    "callerDiscordId": "Discord ID",
+    "callerUnavailable": "资料不可用",
     "time": "时间",
     "routeKind": "请求类型",
     "endpointBaseUrl": "端点地址",

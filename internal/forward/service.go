@@ -183,7 +183,7 @@ func (service *Service) ListModels(ctx context.Context, userID int64) (ModelList
 	if err != nil {
 		return ModelList{}, err
 	}
-	charityModels, err := service.charity.ListAvailableModels(ctx, now, MaxCallerModels)
+	charityModels, err := service.charity.ListAvailableModels(ctx, userID, now, MaxCallerModels)
 	if err != nil {
 		return ModelList{}, err
 	}
@@ -533,6 +533,11 @@ func (service *Service) runAttempts(
 			DonationKeyID: candidate.DonationKeyID,
 		})
 		if err != nil {
+			if plan.charity && (errors.Is(err, claim.ErrForbidden) || errors.Is(err, claim.ErrModelUnavailable)) {
+				value := failureForError(err, true)
+				run.failure = &value
+				break
+			}
 			if errors.Is(err, claim.ErrKeyRateLimited) {
 				keyLimited = true
 				continue
@@ -641,7 +646,7 @@ func (service *Service) runAttempts(
 			break
 		}
 	}
-	if !run.dispatched && run.err == nil {
+	if !run.dispatched && run.err == nil && run.failure == nil {
 		if executionContext.Err() != nil {
 			if errors.Is(executionContext.Err(), context.DeadlineExceeded) {
 				value := platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
@@ -666,6 +671,11 @@ func (run *attemptRun) handleDispatchFailure(parent context.Context, service *Se
 	defer cancel()
 	_, releaseErr := service.claims.ReleaseUndispatched(settleContext, handle)
 	if releaseErr == nil {
+		if errors.Is(dispatchErr, claim.ErrForbidden) || errors.Is(dispatchErr, claim.ErrModelUnavailable) {
+			value := failureForError(dispatchErr, true)
+			run.failure = &value
+			return
+		}
 		run.err = dispatchErr
 		return
 	}
@@ -1042,8 +1052,10 @@ func failureForError(err error, charity bool) wireFailure {
 		return platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
 	case errors.Is(err, maintenance.ErrMaintenanceOn):
 		return platformFailure(httperr.CodeMaintenance, "maintenance mode is active")
-	case errors.Is(err, routing.ErrNotFound), errors.Is(err, charityrouting.ErrNotFound):
+	case errors.Is(err, routing.ErrNotFound), errors.Is(err, charityrouting.ErrNotFound), errors.Is(err, claim.ErrModelUnavailable):
 		return platformFailure(httperr.CodeNotFound, "model not found")
+	case errors.Is(err, charityrouting.ErrForbidden), errors.Is(err, claim.ErrForbidden):
+		return platformFailure(httperr.CodeForbidden, "your account level is not allowed to call this model")
 	case errors.Is(err, routing.ErrAmbiguousIdentity), errors.Is(err, routing.ErrInvalidIdentity),
 		errors.Is(err, openai.ErrInvalidRequest), errors.Is(err, charityrouting.ErrInvalidRequest):
 		return platformFailure(httperr.CodeInvalidRequest, "invalid request")

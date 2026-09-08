@@ -19,6 +19,35 @@ const MAINSTREAM_CHANNEL_ID = `mch_${'C'.repeat(21)}A`;
 const REPORT_ID = `rpc_${'R'.repeat(21)}A`;
 const REPORT_TARGET_ID = `rpt_${'T'.repeat(21)}A`;
 
+function catalogModel(model: Record<string, unknown>, levelAllowed = true) {
+  return {
+    ...model,
+    public_description: '',
+    enabled: true,
+    allowed_levels: levelAllowed ? [1, 2, 3, 4, 5] : [1, 2, 3, 4],
+    level_allowed: levelAllowed,
+    availability: levelAllowed ? 'available' : 'level_denied',
+  };
+}
+
+function catalogPage(
+  models: Record<string, unknown>[],
+  donationIntake: 'open' | 'closed',
+  serverNow = 1_800_000_000,
+) {
+  return {
+    models: models.map((model) => catalogModel(model)),
+    pagination: {
+      page: '1',
+      page_size: 20,
+      total_items: String(models.length),
+      total_pages: String(Math.max(1, Math.ceil(models.length / 20))),
+    },
+    donation_intake: donationIntake,
+    server_now: serverNow,
+  };
+}
+
 async function prepare(
   context: BrowserContext,
   page: Page,
@@ -478,6 +507,35 @@ test.describe('donation expiry in UTC', () => {
     await mockJson(page, {
       origin: USER_ORIGIN,
       method: 'GET',
+      path: '/api/charity/models?view=catalog&page=1&page_size=20',
+      body: catalogPage(
+        [
+          {
+            id: '7',
+            provider: 'provider',
+            model: 'charity',
+            full_name: '[公益]provider/charity',
+            pricing: {
+              mode: 'per_request',
+              user_price_milli: '3000',
+              discounted_user_price_milli: '2400',
+              user_prices_milli: null,
+              discounted_user_prices_milli: null,
+            },
+            discount: {
+              enabled: true,
+              percent: 80,
+              start_at: 1_799_999_000,
+              end_at: 1_800_003_600,
+            },
+          },
+        ],
+        'open',
+      ),
+    });
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
       path: '/api/donations?limit=100',
       body: { data: [donationOne], next_cursor: 'donation-next' },
     });
@@ -642,6 +700,45 @@ for (const locale of ['en', 'zh'] as const) {
     await mockJson(page, {
       origin: USER_ORIGIN,
       method: 'GET',
+      path: '/api/charity/models?view=catalog&page=1&page_size=20',
+      body: catalogPage(
+        [
+          {
+            id: '7',
+            provider: 'provider',
+            model: 'charity',
+            full_name: '[公益]provider/charity',
+            pricing: {
+              mode: 'per_token',
+              user_price_milli: null,
+              discounted_user_price_milli: null,
+              user_prices_milli: {
+                uncached_input: '10000000',
+                cache_write_input: '10000000',
+                cache_read_input: '1600000',
+                output: '30000000',
+              },
+              discounted_user_prices_milli: {
+                uncached_input: '8000000',
+                cache_write_input: '8000000',
+                cache_read_input: '1280000',
+                output: '24000000',
+              },
+            },
+            discount: {
+              enabled: true,
+              percent: 80,
+              start_at: 1_799_999_000,
+              end_at: 1_800_003_600,
+            },
+          },
+        ],
+        'closed',
+      ),
+    });
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
       path: '/api/donations?limit=100',
       body: { data: [], next_cursor: null },
     });
@@ -685,6 +782,12 @@ test('user charity overview fails closed on a cursor page and privacy states exp
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
+    path: '/api/charity/models?view=catalog&page=1&page_size=20',
+    body: catalogPage([], 'closed'),
+  });
+  await mockJson(page, {
+    origin: USER_ORIGIN,
+    method: 'GET',
     path: '/api/donations?limit=100',
     body: { data: [firstDonation], next_cursor: 'missing-page' },
   });
@@ -724,6 +827,8 @@ test('administrator charity provenance grouping and report lineage expose safe d
   };
   const managedKey = {
     id: '31',
+    binding_count: '0',
+    idle: true,
     endpoint_key_id: '41',
     display_head: 'safe-head',
     display_tail: 'safe-tail',
@@ -750,6 +855,14 @@ test('administrator charity provenance grouping and report lineage expose safe d
     id: '41',
     status: 'approved',
     revision: '2',
+    handling: {
+      state: 'pending',
+      revision: '1',
+      processed_at: null,
+      processed_by_role: null,
+      closed_at: null,
+      closed_reason: null,
+    },
     description: 'Administrative fixture donation',
     review_result: { decision: 'approve', reason: 'Reviewed', reviewed_at: 1_800_000_001 },
     keys: [managedKey],

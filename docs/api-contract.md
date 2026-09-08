@@ -81,7 +81,7 @@ Returns the caller's currently routable personal models plus currently available
 {"object":"list","data":[{"id":"provider/model","object":"model","created":1788000000,"owned_by":"provider"}]}
 ```
 
-The list is sorted by external model ID. It never contains physical endpoint, key, binding, donation, price, or donor data. A charity model appears only while its feature gate is open and at least one real candidate is currently usable.
+The list is sorted by external model ID. It never contains physical endpoint, key, binding, donation, price, or donor data. A charity model appears only while its feature gate is open, the caller's current effective level is allowed, and at least one real candidate is currently usable.
 
 ### 2.2 `POST /v1/chat/completions`
 
@@ -200,20 +200,28 @@ Pass the returned nullable `anchor` operation ID to subsequent pages to keep new
 | `PATCH /api/donations/{id}` | Pending-only `{description,expected_revision}`. |
 | `POST /api/donations/{id}/withdraw` | Pending `{expected_revision}`. |
 | `POST /api/donations/{id}/terminate` | Approved `{expected_revision,confirmation}`. |
-| `GET /api/charity/models` | `{state,models,donation_intake,server_now}`; accepts no query parameters. |
+| `GET /api/charity/models` | Without query parameters: `{state,models,donation_intake,server_now}`. Use `view=catalog` for the paginated web directory described below. |
 
 Each donation key has immutable `authorized_expires_at` and an effective `expires_at`, equal at creation. A reviewer may shorten the effective expiry or restore it only up to the donor's authorization; an unlimited effective value is permitted only when the authorization is unlimited. One key expiring removes only that key's membership and bindings and blocks new claims. The donation becomes expired only when its last live key ends. Accepted claims and reservations complete normally.
 
-Management projections identify a reviewer with `role: admin|steward`. A manual review may have an empty reason. Automatic approval has no reviewer and uses an empty reason.
+Management projections identify a reviewer with `role: admin|steward`. A manual review may have an empty reason. Automatic approval has no reviewer and uses an empty reason. The steward projection shows `owner` only for the steward's own donation; otherwise it is null. A reviewer's `user_id` is present only when it is that steward's own ID; another reviewer's role remains visible with a null ID.
 
 Every owner-visible key carries `safe_source`: a custom Connector/base URL or a mainstream channel/name/Connector/base URL. Internal source IDs, channel category/revision, report fingerprints, secrets, and management notes are excluded. A donation containing only keys from one immutable mainstream channel is approved atomically at creation. A fully custom donation remains pending. Mixed custom/mainstream or multiple-channel submissions are `invalid_request`.
 
-`CharityCapability.state` is `feature_disabled|no_models|no_candidates|available`; `donation_intake` is `open|closed`. Only models with a usable candidate are listed. Each model contains `id,provider,model,full_name,pricing,discount`. Pricing is a tagged union:
+`CharityCapability.state` is `feature_disabled|no_models|no_candidates|available`; `donation_intake` is `open|closed`. Only models allowed for the caller's current level and with a usable candidate are listed. Each model contains `id,provider,model,full_name,pricing,discount`. Pricing is a tagged union:
 
 - `per_request`: canonical base and current discounted user price;
 - `per_token`: canonical base and current price for uncached input, cache-write input, cache-read input, and output.
 
 `discount` contains `enabled,percent,start_at,end_at`; the interval is `[start_at,end_at)`, nullable at either end. Effective prices use the same integer ceiling rule as billing. `server_now` is the single decision time used for availability and promotion status. No donated-resource identity is exposed.
+
+The web directory uses `GET /api/charity/models?view=catalog`. Optional single-value parameters are `q` (at most 128 Unicode code points and 512 UTF-8 bytes, no NUL), `allowed_for_me=true|false`, `page`, and `page_size`. It rejects cursor/limit and unknown or repeated parameters. Page numbers are canonical decimal strings from 1 to 2147483647; sizes are 10, 20, 50, or 100, with defaults 1 and 20. The response is `{models,pagination,donation_intake,server_now}`. Pagination contains decimal-string `page,total_items,total_pages` and integer `page_size`; empty results use page 1 of 1, and an excessive requested page is clamped to the last page.
+
+Catalog entries contain the six capability fields plus `public_description,enabled,allowed_levels,level_allowed,availability`. They include unavailable models so users can understand the reason. Availability is `feature_disabled|model_disabled|level_denied|no_usable_key|available`, in that precedence. Search, count, ordered page, pricing and availability share one read-only snapshot and a five-second query budget. No donor rewards, bindings, physical resources or private notes appear in the directory.
+
+Administrator and steward model create/patch bodies accept `allowed_levels` and `public_description` within a 16 KiB request limit. Levels are unique integers 1–5, returned sorted. Omitted creation fields mean all five levels and an empty description; omitted patch fields remain unchanged. An explicit empty array blocks every ordinary caller, including L5. Null and duplicate/out-of-range levels are invalid. Descriptions are plain text, at most 1,024 code points and 4,096 UTF-8 bytes after CRLF-to-LF normalization; controls other than LF and TAB, including lone CR, are rejected. These fields use the existing model revision and idempotency rules.
+
+Level permission is rechecked at admission, claim and immediately before the dispatch marker. A denied level returns `403 forbidden`; an unavailable model returns `404 not_found`. A blocked unsent attempt releases its reservations. Already dispatched attempts finish under their accepted accounting, while later sends and retries must pass current access rules. Debug dry and live calls follow the same caller-level restriction.
 
 ### 4.2 Credential-theft reports
 
@@ -304,10 +312,18 @@ Level-5 steward routes are user-host routes and require a currently effective L5
 | --- | --- |
 | Logs | `GET /api/steward/logs`, `GET /api/steward/logs/{id}` |
 | Maintenance | `GET /api/steward/maintenance`, `POST /api/steward/maintenance/enable` |
-| Own donations | `GET /api/steward/donations`, `GET /api/steward/donations/{id}`, `POST /api/steward/donations/{id}/review`, `PATCH /api/steward/donations/{id}/keys/{keyId}` |
+| Shared donation management | `GET /api/steward/donations`, `GET /api/steward/donations/{id}`, `POST /api/steward/donations/{id}/review`, `PATCH /api/steward/donations/{id}/keys/{keyId}` |
 | Charity models | Exact route family in the table below |
 
-Stewards can review only their own donations, and can enable but cannot disable maintenance. They have no report route, legal-hold route, user-account mutation route, or administrator audit identity.
+Stewards can review and manage charity settings across donations. They can enable but cannot disable maintenance. They have no report route, legal-hold route, account-export route, user-account mutation route, or administrator audit identity. Held-only donation history remains administrator-only; shared management does not widen an account's owner export.
+
+Both management prefixes (`/admin/api` and `/api/steward`) provide `GET {prefix}/donations/badge`, with no query or body. The no-store response is `{pending_count,server_now}` with an exact decimal-string count. Only logically active donations with pending handling count; expiration is reflected even before cleanup runs.
+
+`POST {prefix}/donations/{id}/handling/processed` accepts `{expected_handling_revision}` and an idempotency key, with a 16 KiB body limit. It returns `{donation_id,handling}`. Processing is a shared action with one winner, not a per-person read flag. Approval, model binding and key edits do not mark it processed. Handling has `state=legacy|pending|processed|closed`, its own decimal-string `revision`, and nullable `processed_at,processed_by_role,closed_at,closed_reason`. Only actor role and time are public. Terminal pending donations close automatically; closed reasons are `rejected|withdrawn|terminated|expired|member_removed|account_deleted`. Existing processed or legacy handling remains unchanged at termination.
+
+Management donation lists accept `status`, `handling`, and `q` alongside cursor/limit, and bind cursors to their filters. Search uses donation ID and description, with the same 128-code-point/512-byte/no-NUL limit. Each management key adds decimal-string `binding_count` and boolean `idle`. All actual bindings count, including bindings to disabled models; zero bindings means idle. Owner donation DTOs and exports omit handling and these management fields. Historical management receipts add safe handling/count fields when replayed without rewriting the stored immutable result.
+
+Steward charity log list/detail entries add nullable `caller_identity: {discord_nickname,discord_id}`. Both members are nullable, with UTF-8 byte limits of 256 and 128 respectively. The name uses the current guild nickname, falling back to the stored username. Data comes from the account's latest synced profile, not a historical identity snapshot. Unlinked/deleted callers produce null, the existing 30-day visibility limit still applies, and stewards gain no log export.
 
 | Method and path | Request / response |
 | --- | --- |

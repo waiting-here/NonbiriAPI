@@ -655,7 +655,7 @@ func testU128Decimal(t *testing.T, value []byte) string {
 	return decoded.Decimal()
 }
 
-func TestStewardOwnershipPrecedesDueExpiryAndMutationAcceptance(t *testing.T) {
+func TestStewardCrossDonorExpiryPrecedesMutationAcceptance(t *testing.T) {
 	environment := newDonationTestEnv(t)
 	levelFive := int64(5)
 	owner := environment.seedUser(t, "due-owner", &levelFive, false)
@@ -684,15 +684,15 @@ func TestStewardOwnershipPrecedesDueExpiryAndMutationAcceptance(t *testing.T) {
 	foreignReview := ReviewInput{Decision: "approve", ExpectedRevision: 2, Reason: "foreign",
 		KeySettings: []KeySetting{{DonationKeyID: donationKeyID, Enabled: false}}}
 	if _, err := environment.service.ReviewSteward(context.Background(), foreignSteward, donationID,
-		reviewMutation, foreignReview); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("foreign due review error = %v, want not found", err)
+		reviewMutation, foreignReview); !errors.Is(err, ErrConflict) {
+		t.Fatalf("cross-donor due review error = %v, want conflict", err)
 	}
 	disable := false
 	keyMutation := donationMutation(t, 'P', http.MethodPatch, routeStewardKey, []int64{donationID, donationKeyID},
 		map[string]any{"foreign_key": true})
 	if _, err := environment.service.ManageKeySteward(context.Background(), foreignSteward, donationID, donationKeyID,
-		keyMutation, KeyManagementInput{ExpectedRevision: 2, Enabled: &disable}); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("foreign due key mutation error = %v, want not found", err)
+		keyMutation, KeyManagementInput{ExpectedRevision: 2, Enabled: &disable}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("cross-donor due key mutation error = %v, want conflict", err)
 	}
 
 	var status string
@@ -713,8 +713,8 @@ func TestStewardOwnershipPrecedesDueExpiryAndMutationAcceptance(t *testing.T) {
 		Scan(&reviewsAfter); err != nil {
 		t.Fatal(err)
 	}
-	if status != "approved" || revision != 2 || memberships != 1 || enabled != 1 || reviewsAfter != reviewsBefore {
-		t.Fatalf("foreign requests changed donation: status=%q revision=%d memberships=%d enabled=%d reviews=%d/%d",
+	if status != "expired" || revision != 3 || memberships != 0 || enabled != 0 || reviewsAfter != reviewsBefore+1 {
+		t.Fatalf("cross-donor expiry was not materialized once: status=%q revision=%d memberships=%d enabled=%d reviews=%d/%d",
 			status, revision, memberships, enabled, reviewsBefore, reviewsAfter)
 	}
 	if count := mutationRecordCount(t, environment.store.DB(), idempotency.ScopeControlMutation,

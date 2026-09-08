@@ -15,6 +15,8 @@ function key(
 ): Record<string, unknown> {
   return {
     id,
+    binding_count: '0',
+    idle: true,
     endpoint_key_id: '91',
     display_head: 'head',
     display_tail: 'tail',
@@ -49,6 +51,14 @@ function donationWire(
     id,
     status: 'approved',
     revision: '2',
+    handling: {
+      state: 'pending',
+      revision: '1',
+      processed_at: null,
+      processed_by_role: null,
+      closed_at: null,
+      closed_reason: null,
+    },
     description: 'donor private description must not render',
     review_result: {
       decision: 'approve',
@@ -146,6 +156,17 @@ describe('administrator charity grouped projection', () => {
     expect(JSON.stringify(result)).not.toContain('donor private');
     expect(JSON.stringify(result)).not.toContain('reviewer-private');
     expect(result.keys[0]).not.toHaveProperty('authorized_endpoint_key_id');
+    expect(result).not.toHaveProperty('handling');
+    expect(result.keys[0]).not.toHaveProperty('binding_count');
+    expect(result.keys[0]).not.toHaveProperty('idle');
+  });
+
+  it('validates handling and idle state before dropping them from the grouped projection', () => {
+    expect(() => donation('1', [key(custom, '11', { binding_count: '1' })])).toThrow(/idle/i);
+    expect(() => donation('1', [key(custom, '11')], { handling: null })).toThrow(/handling/i);
+    expect(
+      donation('1', [key(custom, '11', { binding_count: '1', idle: false })]).keys,
+    ).toHaveLength(1);
   });
 
   it('accepts deidentified nullable identities and a removed physical key', () => {

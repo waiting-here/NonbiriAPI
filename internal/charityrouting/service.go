@@ -16,6 +16,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -112,6 +113,17 @@ func (s *Service) create(ctx context.Context, role roleKind, actorUserID int64, 
 	if s == nil || ctx == nil || err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
 	}
+	mask := 31
+	if input.AllowedLevels != nil {
+		mask, err = charityaccess.Mask(input.AllowedLevels)
+		if err != nil {
+			return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
+		}
+	}
+	description, err := charityaccess.NormalizeDescription(input.PublicDescription)
+	if err != nil {
+		return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
+	}
 	now, err := s.nowUnix()
 	if err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, err
@@ -127,7 +139,7 @@ func (s *Service) create(ctx context.Context, role roleKind, actorUserID int64, 
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		return replay[AdminCharityModel](decision)
+		return replayModel(decision)
 	}
 	fullName := "[公益]" + input.Provider + "/" + input.Model
 	result, err := tx.ExecContext(ctx, `INSERT INTO charity_models(
@@ -152,7 +164,7 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?)`,
 	if _, err := tx.ExecContext(ctx, `INSERT INTO charity_model_stats(model_id) VALUES(?)`, modelID); err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, fmt.Errorf("charity routing: initialize stats: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO charity_model_access(model_id, allowed_level_mask, public_description) VALUES(?, 31, '')`, modelID); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO charity_model_access(model_id, allowed_level_mask, public_description) VALUES(?, ?, ?)`, modelID, mask, description); err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, fmt.Errorf("charity routing: initialize access: %w", err)
 	}
 	if err := setRoutingStrategy(ctx, tx, modelID, defaultRouteStrategy(input.RouteStrategy)); err != nil {
@@ -220,7 +232,7 @@ func (s *Service) patch(ctx context.Context, role roleKind, actorUserID, modelID
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
 	if decision.Kind == idempotency.Replay {
-		return replay[AdminCharityModel](decision)
+		return replayModel(decision)
 	}
 	current, err := readStoredModelTx(ctx, tx, modelID)
 	if err != nil {
@@ -230,6 +242,18 @@ func (s *Service) patch(ctx context.Context, role roleKind, actorUserID, modelID
 		return resources.MutationResult[AdminCharityModel]{}, ErrConflict
 	}
 	updated := current
+	if input.AllowedLevels != nil {
+		updated.allowedMask, err = charityaccess.Mask(*input.AllowedLevels)
+		if err != nil {
+			return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
+		}
+	}
+	if input.PublicDescription != nil {
+		updated.publicDescription, err = charityaccess.NormalizeDescription(*input.PublicDescription)
+		if err != nil {
+			return resources.MutationResult[AdminCharityModel]{}, ErrInvalidRequest
+		}
+	}
 	if input.Provider != nil {
 		updated.provider = *input.Provider
 	}
@@ -296,6 +320,13 @@ revision=revision+1,updated_at=? WHERE id=? AND revision=?`,
 		if err := insertPolicyAudit(ctx, tx, actorID, string(role), modelID, current.flatten == 1, updated.flatten == 1, now); err != nil {
 			return resources.MutationResult[AdminCharityModel]{}, err
 		}
+	}
+	result, err = tx.ExecContext(ctx, `UPDATE charity_model_access SET allowed_level_mask=?,public_description=? WHERE model_id=?`, updated.allowedMask, updated.publicDescription, modelID)
+	if err != nil {
+		return resources.MutationResult[AdminCharityModel]{}, fmt.Errorf("charity routing: update model access: %w", err)
+	}
+	if err := requireOne(result); err != nil {
+		return resources.MutationResult[AdminCharityModel]{}, err
 	}
 	if input.RouteStrategy != nil {
 		if err := setRoutingStrategy(ctx, tx, modelID, *input.RouteStrategy); err != nil {
@@ -489,6 +520,8 @@ func listModelsQuery(ctx context.Context, queryer modelQueryer, query string, en
 }
 
 type storedModel struct {
+	allowedMask                      int
+	publicDescription                string
 	id, revision, bindingRevision    int64
 	provider, model, mode            string
 	enabled, flatten                 int
@@ -503,11 +536,13 @@ func readStoredModelTx(ctx context.Context, tx *sql.Tx, modelID int64) (storedMo
 	err := tx.QueryRowContext(ctx, `SELECT id,provider,model,enabled,pricing_mode,
 request_user_price,request_donor_reward,uncached_user_price,cache_write_user_price,cache_read_user_price,output_user_price,
 uncached_donor_reward,cache_write_donor_reward,cache_read_donor_reward,output_donor_reward,
-discount_percent,discount_start_at,discount_end_at,discount_enabled,flatten_tool_calls,revision,binding_revision
+discount_percent,discount_start_at,discount_end_at,discount_enabled,flatten_tool_calls,revision,binding_revision,
+(SELECT allowed_level_mask FROM charity_model_access WHERE model_id=charity_models.id),
+(SELECT public_description FROM charity_model_access WHERE model_id=charity_models.id)
 FROM charity_models WHERE id=?`, modelID).Scan(&value.id, &value.provider, &value.model, &value.enabled, &value.mode,
 		&value.requestUser, &value.requestReward, &value.user[0], &value.user[1], &value.user[2], &value.user[3],
 		&value.reward[0], &value.reward[1], &value.reward[2], &value.reward[3], &value.discountPercent,
-		&value.discountStart, &value.discountEnd, &value.discountEnabled, &value.flatten, &value.revision, &value.bindingRevision)
+		&value.discountStart, &value.discountEnd, &value.discountEnabled, &value.flatten, &value.revision, &value.bindingRevision, &value.allowedMask, &value.publicDescription)
 	if errors.Is(err, sql.ErrNoRows) {
 		return storedModel{}, ErrNotFound
 	}
@@ -532,7 +567,9 @@ cm.cache_read_donor_reward,cm.output_donor_reward,cm.discount_enabled,cm.discoun
 cm.discount_start_at,cm.discount_end_at,cm.flatten_tool_calls,cm.revision,cm.binding_revision,
 (SELECT COUNT(*) FROM charity_model_bindings b WHERE b.charity_model_id=cm.id),
 COALESCE(s.sample_count,0),COALESCE(s.success_count,0),cm.created_at,cm.updated_at,
-COALESCE((SELECT strategy FROM charity_model_routing WHERE model_id=cm.id),'expiry_weighted')
+COALESCE((SELECT strategy FROM charity_model_routing WHERE model_id=cm.id),'expiry_weighted'),
+(SELECT allowed_level_mask FROM charity_model_access WHERE model_id=cm.id),
+(SELECT public_description FROM charity_model_access WHERE model_id=cm.id)
 FROM charity_models cm LEFT JOIN charity_model_stats s ON s.model_id=cm.id WHERE cm.id=?`
 
 type rowScanner interface{ Scan(...any) error }
@@ -546,11 +583,12 @@ func scanAdminModel(row rowScanner) (AdminCharityModel, error) {
 	var user, reward [4]int64
 	var start, end sql.NullInt64
 	var samples, successes int
+	var mask int
 	err := row.Scan(&id, &value.Provider, &value.Model, &value.FullName, &enabled, &mode,
 		&requestUser, &requestReward, &user[0], &user[1], &user[2], &user[3],
 		&reward[0], &reward[1], &reward[2], &reward[3], &discountEnabled, &value.Discount.Percent,
 		&start, &end, &flatten, &revision, &bindingRevision, &bindingCount, &samples, &successes,
-		&value.CreatedAt, &value.UpdatedAt, &value.RouteStrategy)
+		&value.CreatedAt, &value.UpdatedAt, &value.RouteStrategy, &mask, &value.PublicDescription)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AdminCharityModel{}, ErrNotFound
 	}
@@ -558,6 +596,10 @@ func scanAdminModel(row rowScanner) (AdminCharityModel, error) {
 		return AdminCharityModel{}, fmt.Errorf("charity routing: scan model: %w", err)
 	}
 	value.ID = strconv.FormatInt(id, 10)
+	value.AllowedLevels, err = charityaccess.Levels(mask)
+	if err != nil {
+		return AdminCharityModel{}, ErrInvariant
+	}
 	if !validRouteStrategy(value.RouteStrategy) {
 		return AdminCharityModel{}, ErrInvariant
 	}
@@ -615,6 +657,7 @@ func stewardModel(value AdminCharityModel) StewardCharityModel {
 		}
 	}
 	return StewardCharityModel{
+		AllowedLevels: append([]int{}, value.AllowedLevels...), PublicDescription: value.PublicDescription,
 		RouteStrategy: defaultRouteStrategy(value.RouteStrategy),
 		ID:            value.ID, Provider: value.Provider, Model: value.Model, FullName: value.FullName,
 		Enabled: value.Enabled, Pricing: pricing,
@@ -648,7 +691,7 @@ func validateModelPatch(input ModelPatch) bool {
 		return false
 	}
 	if input.ExpectedRevision == "" || input.Provider == nil && input.Model == nil && input.Enabled == nil &&
-		input.Pricing == nil && input.Discount == nil && input.FlattenToolCalls == nil && input.RouteStrategy == nil {
+		input.Pricing == nil && input.Discount == nil && input.FlattenToolCalls == nil && input.RouteStrategy == nil && input.AllowedLevels == nil && input.PublicDescription == nil {
 		return false
 	}
 	if input.Provider != nil && !validModelName(*input.Provider) || input.Model != nil && !validModelName(*input.Model) ||
@@ -810,6 +853,24 @@ func beginMutation(ctx context.Context, tx *sql.Tx, role roleKind, actorID int64
 		return idempotency.Decision{}, fmt.Errorf("charity routing: accept idempotency record: %w", err)
 	}
 	return decision, nil
+}
+
+func replayModel(decision idempotency.Decision) (resources.MutationResult[AdminCharityModel], error) {
+	result, err := replay[AdminCharityModel](decision)
+	if err != nil {
+		return result, err
+	}
+	if result.Value.AllowedLevels == nil {
+		// Receipts predating level restrictions describe the former all-level
+		// behavior. The stored immutable receipt and its existing fields stay intact.
+		result.Value.AllowedLevels = []int{1, 2, 3, 4, 5}
+		result.Value.PublicDescription = ""
+		result.Body, err = json.Marshal(result.Value)
+		if err != nil {
+			return resources.MutationResult[AdminCharityModel]{}, ErrInvariant
+		}
+	}
+	return result, nil
 }
 
 func replay[T any](decision idempotency.Decision) (resources.MutationResult[T], error) {

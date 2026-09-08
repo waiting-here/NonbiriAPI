@@ -369,11 +369,13 @@ type testCharity struct {
 	mu                 sync.Mutex
 	configs            map[int64]testCharityConfig
 	acceptErr          error
+	dispatchErr        error
 	releaseErr         error
 	completeAttemptErr error
 	completeRequestErr error
 	accepts            []CharityAcceptance
 	claims             []CharityClaimInput
+	dispatches         []CharityDispatch
 	releases           []CharityRelease
 	attempts           []CharityAttemptInput
 	completions        []CharityRequestCompletion
@@ -422,6 +424,18 @@ func (c *testCharity) Claim(_ context.Context, _ *sql.Tx, input CharityClaimInpu
 		ReservedCalls:      1,
 		ReservedTokens:     32,
 	}, nil
+}
+
+func (c *testCharity) PrepareDispatch(ctx context.Context, tx *sql.Tx, input CharityDispatch) error {
+	c.mu.Lock()
+	failure := c.dispatchErr
+	c.dispatches = append(c.dispatches, input)
+	c.mu.Unlock()
+	if _, err := tx.ExecContext(ctx, `INSERT INTO claim_test_charity_facts(kind,source_id)
+VALUES('dispatch',?)`, input.ClaimID); err != nil {
+		return err
+	}
+	return failure
 }
 
 func (c *testCharity) ReleaseUndispatched(ctx context.Context, tx *sql.Tx, input CharityRelease) error {

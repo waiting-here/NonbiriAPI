@@ -407,15 +407,18 @@ func (s *Service) TakeForDispatch(ctx context.Context, handle Handle) (*Dispatch
 		connectorText string
 		baseURL       string
 		loggedModel   string
+		requestRoute  string
+		callerID      sql.NullInt64
 	)
 	if err := tx.QueryRowContext(ctx, `SELECT c.state,c.logical_request_id,c.attempt_seq,c.purpose,
 s.context_id,s.encrypted_secret,s.connector_type,s.canonical_base_url,
-COALESCE(l.upstream_model_id,'')
+COALESCE(l.upstream_model_id,''),lr.route_kind,lr.user_id
 FROM dispatch_claims c
 JOIN endpoint_key_secrets s ON s.id=c.secret_ref_id
 LEFT JOIN request_logs l ON l.logical_request_id=c.logical_request_id
+JOIN logical_requests lr ON lr.id=c.logical_request_id
 WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purposeText,
-		&contextID, &encrypted, &connectorText, &baseURL, &loggedModel); err != nil {
+		&contextID, &encrypted, &connectorText, &baseURL, &loggedModel, &requestRoute, &callerID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -442,6 +445,30 @@ WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purpos
 		clear(contextID)
 		clear(encrypted)
 		return nil, ErrInvariant
+	}
+	if requestRoute == string(RouteCharityChat) {
+		if !callerID.Valid {
+			clear(contextID)
+			clear(encrypted)
+			return nil, ErrNotFound
+		}
+		if err := requireActiveUser(ctx, tx, callerID.Int64, at, true); err != nil {
+			clear(contextID)
+			clear(encrypted)
+			return nil, err
+		}
+		if s.charity == nil {
+			clear(contextID)
+			clear(encrypted)
+			return nil, ErrDependencyUnavailable
+		}
+		if err := s.charity.PrepareDispatch(ctx, tx, CharityDispatch{
+			RequestID: requestID, ClaimID: handle.claimID, ActorUserID: callerID.Int64, DispatchedAt: at,
+		}); err != nil {
+			clear(contextID)
+			clear(encrypted)
+			return nil, err
+		}
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE dispatch_claims
 SET state='dispatched',dispatched_at=? WHERE id=? AND state='claimed'`, at, handle.claimID)

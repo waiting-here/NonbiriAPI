@@ -245,6 +245,8 @@ const managedModelFixture = {
   model: 'charity-model',
   full_name: '[公益]provider/charity-model',
   enabled: true,
+  allowed_levels: [1, 2, 3, 4, 5],
+  public_description: '',
   pricing: { mode: 'per_request', user_price: '0', donor_reward: '0' },
   discount: { enabled: false, percent: 0, start_at: null, end_at: null },
   flatten_tool_calls: false,
@@ -258,6 +260,8 @@ const managedModelFixture = {
 
 const managedKeyFixture = {
   id: '6',
+  binding_count: '0',
+  idle: true,
   endpoint_key_id: '2',
   display_head: 'sk-a',
   display_tail: 'tail',
@@ -290,6 +294,14 @@ function pendingDonationFixture(frame: 'admin' | 'steward', id: string, descript
     id,
     status: 'pending',
     revision: '1',
+    handling: {
+      state: 'pending',
+      revision: '1',
+      processed_at: null,
+      processed_by_role: null,
+      closed_at: null,
+      closed_reason: null,
+    },
     description,
     review_result: null,
     keys: [managedKeyFixture],
@@ -1171,6 +1183,19 @@ describe('experimental policy and charity controls', () => {
       created_at: 1_700_000_000,
       updated_at: 1_700_000_000,
     };
+    const catalog = {
+      models: capability.models.map((model) => ({
+        ...model,
+        public_description: 'Fixture charity model',
+        enabled: true,
+        allowed_levels: [1, 2, 3, 4, 5],
+        level_allowed: true,
+        availability: 'available',
+      })),
+      pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+      donation_intake: 'open',
+      server_now: capability.server_now,
+    };
     let submitted = false;
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const path = requestPath(input);
@@ -1178,6 +1203,9 @@ describe('experimental policy and charity controls', () => {
         init?.method ?? (input instanceof Request ? input.method : 'GET')
       ).toUpperCase();
       if (method === 'GET' && path === '/api/session') return jsonResponse(session);
+      if (method === 'GET' && path === '/api/charity/models?view=catalog&page=1&page_size=20') {
+        return jsonResponse(catalog);
+      }
       if (method === 'GET' && path === '/api/charity/models') return jsonResponse(capability);
       if (method === 'GET' && path === '/api/donations?limit=100') {
         return jsonResponse(corePage(submitted ? [donation] : []));
@@ -1233,6 +1261,14 @@ describe('experimental policy and charity controls', () => {
         init?.method ?? (input instanceof Request ? input.method : 'GET')
       ).toUpperCase();
       if (method === 'GET' && path === '/api/session') return jsonResponse(session);
+      if (method === 'GET' && path === '/api/charity/models?view=catalog&page=1&page_size=20') {
+        return jsonResponse({
+          models: [],
+          pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+          donation_intake: 'closed',
+          server_now: 1_788_100_000,
+        });
+      }
       if (method === 'GET' && path === '/api/charity/models') {
         return jsonResponse({ state: 'no_models', models: [] });
       }
@@ -1243,9 +1279,11 @@ describe('experimental policy and charity controls', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await renderWithProviders(<CharityPage />, { station: 'user', role: 'user' });
+    const rendered = await renderWithProviders(<CharityPage />, { station: 'user', role: 'user' });
+    await rendered.user.click(await screen.findByRole('tab', { name: 'Donate resources' }));
     const alerts = await screen.findAllByRole('alert');
     expect(alerts.some((alert) => /invalid response/i.test(alert.textContent ?? ''))).toBe(true);
+    expect(alerts[0]).toBeVisible();
     expect(screen.queryByText('Submit a charity donation')).toBeNull();
     expect(
       fetchMock.mock.calls.some((call) =>
@@ -1772,6 +1810,64 @@ describe('experimental policy and charity controls', () => {
       expect(screen.queryByText(/does not have confirmed level-5 steward access/i)).toBeNull(),
     );
     await expect(screen.findByText('No logs')).resolves.toBeVisible();
+  });
+
+  test('preserves a steward model draft across session refresh but clears it for another account', async () => {
+    let accountID = '1';
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(
+        input instanceof Request ? input.url : String(input),
+        window.location.origin,
+      );
+      expect(init?.method ?? 'GET').toBe('GET');
+      if (url.pathname === '/api/session') {
+        return jsonResponse({
+          ...coreSession,
+          user: { ...coreSession.user, id: accountID, effective_level: 5 },
+        });
+      }
+      if (url.pathname === '/api/steward/charity-models') {
+        return jsonResponse({ data: [managedModelFixture], next_cursor: null });
+      }
+      if (url.pathname === '/api/steward/charity-models/7/bindings') {
+        return jsonResponse({ bindings: [], binding_revision: '1' });
+      }
+      if (url.pathname === '/api/steward/logs' || url.pathname === '/api/steward/donations') {
+        return jsonResponse({ data: [], next_cursor: null });
+      }
+      throw new Error(`Unexpected fixture request: ${url.pathname}${url.search}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const rendered = await renderWithProviders(<StewardPage />, {
+      station: 'user',
+      role: 'level5',
+    });
+    await rendered.user.click(await screen.findByRole('tab', { name: 'Charity management' }));
+    await rendered.user.click(
+      screen.getByRole('tab', { name: 'Charity models and service connections' }),
+    );
+    await screen.findByText('[公益]provider/charity-model');
+    await rendered.user.click(screen.getByRole('button', { name: 'Manage' }));
+    const description = screen
+      .getAllByRole('textbox', { name: 'Public description (plain text, optional)' })
+      .at(-1)!;
+    await rendered.user.type(description, 'Unsubmitted description');
+
+    await act(async () => {
+      await rendered.queryClient.invalidateQueries({ queryKey: operationsKeys.session });
+    });
+    expect(description).toBeInTheDocument();
+    expect(description).toHaveValue('Unsubmitted description');
+    expect(
+      screen.getByRole('tab', { name: 'Charity models and service connections' }),
+    ).toHaveAttribute('aria-selected', 'true');
+
+    accountID = '2';
+    await act(async () => {
+      await rendered.queryClient.invalidateQueries({ queryKey: operationsKeys.session });
+    });
+    await waitFor(() => expect(description).not.toBeInTheDocument());
+    expect(screen.queryByDisplayValue('Unsubmitted description')).toBeNull();
   });
 
   test('clears charity management data and removes write controls after an L5 downgrade', async () => {

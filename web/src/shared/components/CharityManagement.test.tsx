@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import type { AdminDonation, CharityModel, ManagedDonationKey } from '@shared/operations/charity';
@@ -13,6 +13,8 @@ function jsonResponse(value: unknown): Response {
 
 const managedKey = (overrides: Partial<ManagedDonationKey> = {}): ManagedDonationKey => ({
   id: '11',
+  binding_count: '0',
+  idle: true,
   endpoint_key_id: '21',
   display_head: 'head',
   display_tail: 'tail',
@@ -46,6 +48,14 @@ function approvedDonation(key = managedKey()): AdminDonation {
     id: '1',
     status: 'approved',
     revision: '1',
+    handling: {
+      state: 'pending',
+      revision: '1',
+      processed_at: null,
+      processed_by_role: null,
+      closed_at: null,
+      closed_reason: null,
+    },
     description: 'Donation description',
     review_result: { decision: 'approve', reason: 'accepted', reviewed_at: 10 },
     keys: [key],
@@ -119,6 +129,14 @@ function installDonationFetch(initial: AdminDonation) {
 
 const operationKeyPattern = /^[A-Za-z0-9_-]{22,128}$/;
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
 const charityModel = (start: number, end: number): CharityModel => ({
   route_strategy: 'expiry_weighted',
   id: '1',
@@ -126,6 +144,8 @@ const charityModel = (start: number, end: number): CharityModel => ({
   model: 'model',
   full_name: '[公益]provider/model',
   enabled: true,
+  allowed_levels: [1, 2, 3, 4, 5],
+  public_description: '',
   pricing: { mode: 'per_request', user_price: '1', donor_reward: '0' },
   discount: { enabled: true, percent: 10, start_at: start, end_at: end },
   flatten_tool_calls: false,
@@ -421,6 +441,8 @@ describe('CharityManagement corrective controls', () => {
       provider: 'provider',
       model: 'model',
       enabled: true,
+      allowed_levels: [1, 2, 3, 4, 5],
+      public_description: '',
       pricing: { mode: 'per_request', user_price: '1', donor_reward: '0' },
       discount: { enabled: true, percent: 10, start_at: start, end_at: end },
       flatten_tool_calls: false,
@@ -428,5 +450,237 @@ describe('CharityManagement corrective controls', () => {
     expect(patchBodies[0]).not.toHaveProperty('pricing_mode');
     expect(patchBodies[0]).not.toHaveProperty('prices');
     expect(idempotencyKeys).toEqual([expect.stringMatching(operationKeyPattern)]);
+  });
+
+  it('creates a model with the selected levels and canonical public description', async () => {
+    const createBodies: Record<string, unknown>[] = [];
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input), 'https://example.test');
+      const method = init?.method ?? 'GET';
+      if (method === 'GET' && url.pathname === '/admin/api/donations') {
+        return jsonResponse({ data: [], next_cursor: null });
+      }
+      if (method === 'GET' && url.pathname === '/admin/api/charity-models') {
+        return jsonResponse({ data: [], next_cursor: null });
+      }
+      if (method === 'POST' && url.pathname === '/admin/api/charity-models') {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        createBodies.push(body);
+        return jsonResponse({
+          ...charityModel(10, 20),
+          allowed_levels: body.allowed_levels,
+          public_description: body.public_description,
+        });
+      }
+      throw new Error(`Unexpected request: ${method} ${url.pathname}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const view = await renderWithProviders(<CharityManagement frame="admin" />, {
+      station: 'admin',
+      role: 'admin',
+    });
+
+    await view.user.click(screen.getByRole('tab', { name: 'Charity models and bindings' }));
+    expect(screen.getByRole('checkbox', { name: 'L1' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'L5' })).toBeChecked();
+    await view.user.click(screen.getByRole('button', { name: 'Clear all levels' }));
+    expect(
+      screen.getByText('No ordinary user can call this model (including level 5 users).'),
+    ).toBeVisible();
+    await view.user.click(screen.getByRole('checkbox', { name: 'L2' }));
+    await view.user.click(screen.getByRole('checkbox', { name: 'L5' }));
+    await view.user.type(screen.getByLabelText('Provider'), 'provider');
+    await view.user.type(screen.getByLabelText('Model'), 'model');
+    fireEvent.change(screen.getByLabelText('Public description (plain text, optional)'), {
+      target: { value: 'First line\r\n<b>literal</b>\t😀' },
+    });
+
+    await view.user.click(screen.getByRole('button', { name: 'Add charity model' }));
+    await waitFor(() => expect(createBodies).toHaveLength(1));
+    expect(createBodies[0]).toMatchObject({
+      allowed_levels: [2, 5],
+      public_description: 'First line\n<b>literal</b>\t😀',
+    });
+  });
+
+  it('retains a newer draft when a saved model response is slow', async () => {
+    let current = charityModel(10, 20);
+    const patchResponse = deferred<Response>();
+    const patchBodies: Record<string, unknown>[] = [];
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input), 'https://example.test');
+      const method = init?.method ?? 'GET';
+      if (method === 'GET' && url.pathname === '/admin/api/donations') {
+        return jsonResponse({ data: [], next_cursor: null });
+      }
+      if (method === 'GET' && url.pathname === '/admin/api/charity-models') {
+        return jsonResponse({ data: [current], next_cursor: null });
+      }
+      if (method === 'GET' && url.pathname === '/admin/api/charity-models/1/bindings') {
+        return jsonResponse({ bindings: [], binding_revision: current.binding_revision });
+      }
+      if (method === 'GET' && url.pathname === '/admin/api/charity-models/1/binding-candidates') {
+        return jsonResponse({ data: [], next_cursor: null });
+      }
+      if (method === 'PATCH' && url.pathname === '/admin/api/charity-models/1') {
+        patchBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        if (patchBodies.length > 1) {
+          current = {
+            ...current,
+            revision: '3',
+            public_description: String(patchBodies.at(-1)?.public_description),
+          };
+          return jsonResponse(current);
+        }
+        return patchResponse.promise;
+      }
+      throw new Error(`Unexpected request: ${method} ${url.pathname}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const view = await renderWithProviders(<CharityManagement frame="admin" />, {
+      station: 'admin',
+      role: 'admin',
+    });
+
+    await view.user.click(screen.getByRole('tab', { name: 'Charity models and bindings' }));
+    await view.user.click(await screen.findByRole('button', { name: 'Manage' }));
+    const heading = await screen.findByRole('heading', { name: '[公益]provider/model' });
+    const card = heading.closest('.card');
+    if (!(card instanceof HTMLElement)) throw new Error('Expected model editor card.');
+    const editor = within(card);
+    const textarea = editor.getByLabelText('Public description (plain text, optional)');
+    fireEvent.change(textarea, { target: { value: 'submitted' } });
+    await view.user.click(editor.getByRole('button', { name: 'Save model' }));
+    await waitFor(() => expect(patchBodies).toHaveLength(1));
+    fireEvent.change(textarea, { target: { value: 'new draft' } });
+
+    current = { ...current, revision: '2', public_description: 'submitted', updated_at: 2 };
+    patchResponse.resolve(jsonResponse(current));
+    await waitFor(() => expect(editor.getByRole('button', { name: 'Save model' })).toBeEnabled());
+    expect(textarea).toHaveValue('new draft');
+    expect(patchBodies[0]).toMatchObject({
+      public_description: 'submitted',
+      expected_revision: '1',
+    });
+    await view.user.click(editor.getByRole('button', { name: 'Save model' }));
+    await waitFor(() => expect(patchBodies).toHaveLength(2));
+    expect(patchBodies[1]).toMatchObject({
+      public_description: 'new draft',
+      expected_revision: '2',
+    });
+  });
+
+  it('retries a lost model save with its original revision and retains subsequent edits', async () => {
+    let current = charityModel(10, 20);
+    const sent: { body: Record<string, unknown>; key: string | null }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async (input, init) => {
+        const url = new URL(String(input), 'https://example.test');
+        const method = init?.method ?? 'GET';
+        if (method === 'GET' && url.pathname === '/admin/api/donations')
+          return jsonResponse({ data: [], next_cursor: null });
+        if (method === 'GET' && url.pathname === '/admin/api/charity-models')
+          return jsonResponse({ data: [current], next_cursor: null });
+        if (method === 'GET' && url.pathname.endsWith('/bindings'))
+          return jsonResponse({ bindings: [], binding_revision: '0' });
+        if (method === 'GET' && url.pathname.endsWith('/binding-candidates'))
+          return jsonResponse({ data: [], next_cursor: null });
+        if (method === 'PATCH' && url.pathname === '/admin/api/charity-models/1') {
+          const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+          sent.push({ body, key: new Headers(init?.headers).get('Idempotency-Key') });
+          if (sent.length === 1) {
+            current = {
+              ...current,
+              revision: '2',
+              public_description: String(body.public_description),
+            };
+            throw new TypeError('Connection lost after saving');
+          }
+          if (sent.length === 3)
+            current = {
+              ...current,
+              revision: '3',
+              public_description: String(body.public_description),
+            };
+          return jsonResponse(current);
+        }
+        throw new Error('Unexpected model editor request');
+      }),
+    );
+    const view = await renderWithProviders(<CharityManagement frame="admin" />, {
+      station: 'admin',
+      role: 'admin',
+    });
+    await view.user.click(screen.getByRole('tab', { name: 'Charity models and bindings' }));
+    await view.user.click(await screen.findByRole('button', { name: 'Manage' }));
+    const heading = await screen.findByRole('heading', { name: '[公益]provider/model' });
+    const card = heading.closest('.card');
+    if (!(card instanceof HTMLElement)) throw new Error('Expected model editor card.');
+    const editor = within(card);
+    const text = editor.getByLabelText('Public description (plain text, optional)');
+    fireEvent.change(text, { target: { value: 'first save' } });
+    await view.user.click(editor.getByRole('button', { name: 'Save model' }));
+    const retry = await editor.findByRole('button', { name: 'Retry the last save' });
+    expect(editor.getByText(/This model has changed/)).toBeVisible();
+    fireEvent.change(text, { target: { value: 'new draft' } });
+    await view.user.click(retry);
+    await waitFor(() => expect(editor.getByRole('button', { name: 'Save model' })).toBeEnabled());
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toEqual(sent[0]);
+    expect(sent[1].body).toMatchObject({
+      expected_revision: '1',
+      public_description: 'first save',
+    });
+    expect(text).toHaveValue('new draft');
+    await view.user.click(editor.getByRole('button', { name: 'Save model' }));
+    await waitFor(() => expect(sent).toHaveLength(3));
+    expect(sent[2].body).toMatchObject({ expected_revision: '2', public_description: 'new draft' });
+    expect(sent[2].key).not.toBe(sent[0].key);
+  });
+
+  it('uses the same level and description editor for steward management', async () => {
+    const model = {
+      ...charityModel(10, 20),
+      allowed_levels: [2, 5],
+      public_description: 'Steward copy',
+    };
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(String(input), 'https://example.test');
+      if (url.pathname === '/api/steward/donations') {
+        return jsonResponse({ data: [], next_cursor: null });
+      }
+      if (url.pathname === '/api/steward/charity-models') {
+        return jsonResponse({ data: [model], next_cursor: null });
+      }
+      if (url.pathname === '/api/steward/charity-models/1/bindings') {
+        return jsonResponse({ bindings: [], binding_revision: model.binding_revision });
+      }
+      if (url.pathname === '/api/steward/charity-models/1/binding-candidates') {
+        return jsonResponse({ data: [], next_cursor: null });
+      }
+      throw new Error(`Unexpected request: ${url.pathname}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const view = await renderWithProviders(<CharityManagement frame="steward" />, {
+      station: 'user',
+      role: 'user',
+    });
+
+    await view.user.click(
+      screen.getByRole('tab', { name: 'Charity models and service connections' }),
+    );
+    await view.user.click(await screen.findByRole('button', { name: 'Manage' }));
+    const heading = await screen.findByRole('heading', { name: '[公益]provider/model' });
+    const editorCard = heading.closest('.card');
+    if (!(editorCard instanceof HTMLElement))
+      throw new Error('Expected steward model editor card.');
+    const editor = within(editorCard);
+    expect(editor.getByRole('checkbox', { name: 'L1' })).not.toBeChecked();
+    expect(editor.getByRole('checkbox', { name: 'L2' })).toBeChecked();
+    expect(editor.getByRole('checkbox', { name: 'L5' })).toBeChecked();
+    expect(editor.getByLabelText('Public description (plain text, optional)')).toHaveValue(
+      'Steward copy',
+    );
   });
 });

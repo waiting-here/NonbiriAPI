@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useId, useState, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLocation, useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { CharityBindingPicker, type CharitySelection } from './CharityBindingPicker';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { KeyLimitSummary } from './KeyRoutingLimits';
+import { DonationHandlingControl, DonationHandlingStatus } from './DonationHandling';
+import { donationHandlingStateKey } from './donationHandlingCopy';
 import { MarkdownText } from './MarkdownText';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { CursorPagination } from '@shared/operations/CursorPagination';
@@ -38,6 +41,7 @@ import {
   type TokenPrices,
 } from '@shared/operations/charity';
 import { useRetainedOperation } from '../../admin/features/operations/useRetainedOperation';
+import { responseOutcomeUnknown } from '@shared/operations/api';
 import '@shared/operations/operations.css';
 
 type ManagedDonation = AdminDonation | StewardDonation;
@@ -69,6 +73,7 @@ const MAX_TOKEN_RESERVE = 2_147_483_647;
 const MAX_UNIX_SECOND = 253_402_300_799;
 const CANONICAL_DECIMAL = /^(0|[1-9][0-9]*)$/;
 const CANONICAL_AMOUNT = /^(0|[1-9][0-9]*)(?:\.([0-9]{0,2}[1-9]))?$/;
+const MODEL_LEVELS = [1, 2, 3, 4, 5] as const;
 
 function hasForbiddenControl(value: string): boolean {
   return Array.from(value).some((character) => {
@@ -82,6 +87,22 @@ function validText(value: string, maximum: number, required = false): boolean {
     (!required || value.trim().length > 0) &&
     Array.from(value).length <= maximum &&
     !hasForbiddenControl(value)
+  );
+}
+
+function normalizePublicDescriptionInput(value: string): string {
+  return value.replace(/\r\n/g, '\n');
+}
+
+function validPublicDescription(value: string): boolean {
+  const normalized = normalizePublicDescriptionInput(value);
+  return (
+    Array.from(normalized).length <= 1_024 &&
+    new TextEncoder().encode(normalized).byteLength <= 4_096 &&
+    !Array.from(normalized).some((character) => {
+      const point = character.codePointAt(0) ?? 0;
+      return (point < 0x20 && point !== 0x09 && point !== 0x0a) || (point >= 0x7f && point <= 0x9f);
+    })
   );
 }
 
@@ -209,11 +230,18 @@ function keySettingsError(
   const expiry = effectiveExpiry(value);
   if (
     !value.no_expiry &&
-    (expiry === undefined || expiry === null || !Number.isSafeInteger(expiry) || expiry < 0 || expiry > MAX_UNIX_SECOND)
+    (expiry === undefined ||
+      expiry === null ||
+      !Number.isSafeInteger(expiry) ||
+      expiry < 0 ||
+      expiry > MAX_UNIX_SECOND)
   ) {
     return 'expiry';
   }
-  if (authorizedExpiresAt !== null && (expiry === undefined || expiry === null || expiry > authorizedExpiresAt)) {
+  if (
+    authorizedExpiresAt !== null &&
+    (expiry === undefined || expiry === null || expiry > authorizedExpiresAt)
+  ) {
     return 'expiryAuthorization';
   }
   return null;
@@ -270,24 +298,33 @@ function KeyExpiryEditor({
   station: TimeStation;
   draft: Pick<KeySettingsDraft, 'expiry' | 'no_expiry'>;
   authorizedExpiresAt: number | null;
-  onChange: (update: (value: Pick<KeySettingsDraft, 'expiry' | 'no_expiry'>) => Pick<KeySettingsDraft, 'expiry' | 'no_expiry'>) => void;
+  onChange: (
+    update: (
+      value: Pick<KeySettingsDraft, 'expiry' | 'no_expiry'>,
+    ) => Pick<KeySettingsDraft, 'expiry' | 'no_expiry'>,
+  ) => void;
 }) {
   const { t } = useTranslation();
   return (
     <div className="ops-form-field">
-        <TimeInput
-          label={t('common.operations.charity.effectiveExpiry')}
-          station={station}
-          draft={draft.expiry}
-          disabled={draft.no_expiry}
-          onChange={(update) => onChange(current => ({ ...current, expiry: update(current.expiry) }))}
-        />
+      <TimeInput
+        label={t('common.operations.charity.effectiveExpiry')}
+        station={station}
+        draft={draft.expiry}
+        disabled={draft.no_expiry}
+        onChange={(update) =>
+          onChange((current) => ({ ...current, expiry: update(current.expiry) }))
+        }
+      />
       <label className="checkbox-label">
         <input
           type="checkbox"
           checked={draft.no_expiry}
           disabled={authorizedExpiresAt !== null}
-          onChange={(event) => { const checked = event.target.checked; onChange(current => ({ ...current, no_expiry: checked })); }}
+          onChange={(event) => {
+            const checked = event.target.checked;
+            onChange((current) => ({ ...current, no_expiry: checked }));
+          }}
         />
         <span>{t('common.operations.charity.noExpiry')}</span>
       </label>
@@ -382,6 +419,11 @@ function DonationKeyEditor({
           })}
         </span>
         <span>{t('common.operations.charity.failureStreak', { count: item.streak.count })}</span>
+        <span>
+          {t(item.idle ? 'common.donationHandling.idle' : 'common.donationHandling.bound', {
+            count: item.binding_count,
+          })}
+        </span>
       </div>
       <dl className="ops-kv">
         <dt>{t('common.operations.charity.priceCredits')}</dt>
@@ -487,7 +529,7 @@ function DonationKeyEditor({
               station={role === 'admin' ? 'admin' : 'user'}
               draft={draft}
               authorizedExpiresAt={item.authorized_expires_at}
-              onChange={update => setDraft(current => ({ ...current, ...update(current) }))}
+              onChange={(update) => setDraft((current) => ({ ...current, ...update(current) }))}
             />
             {item.streak.failure_disabled ? (
               <label className="checkbox-label">
@@ -512,7 +554,8 @@ function DonationKeyEditor({
             disabled={save.isPending || Boolean(validationError)}
             onClick={() => {
               const expiresAt = effectiveExpiry(draft);
-              if (expiresAt === undefined || keySettingsError(draft, item.authorized_expires_at)) return;
+              if (expiresAt === undefined || keySettingsError(draft, item.authorized_expires_at))
+                return;
               save.mutate({ ...keySettingsBody(draft), reset_failure_streak: reset });
             }}
           >
@@ -585,10 +628,7 @@ function DonationDetail({
     refresh,
     charityKeys.root(role),
   );
-  const owner = item.owner ?? {
-    user_id: t('common.operations.charity.deidentified'),
-    display_name: t('common.operations.charity.deidentified'),
-  };
+  const owner = item.owner;
   let validationError: KeySettingsValidation | 'reviewReason' | 'completeSettings' | null = null;
   if (!validText(reason.trim(), 1_024, true)) {
     validationError = 'reviewReason';
@@ -619,6 +659,13 @@ function DonationDetail({
     <div className="ops-stack">
       <Card>
         <h3>{t(charityCopyKey(role, 'donationNumber'), { id: item.id })}</h3>
+        <DonationHandlingControl
+          donationID={item.id}
+          role={role}
+          handling={item.handling}
+          refresh={refresh}
+          onCapabilityLoss={onCapabilityLoss}
+        />
         <div className="ops-toolbar">
           <StatusBadge
             active={item.status === 'approved'}
@@ -632,13 +679,23 @@ function DonationDetail({
         <dl className="ops-kv">
           <dt>{t('common.operations.charity.owner')}</dt>
           <dd>
-            {owner.display_name} · {owner.user_id}
-            {role === 'admin' && 'discord_id' in owner
+            {owner
+              ? `${owner.display_name} · ${owner.user_id}`
+              : t(
+                  role === 'steward'
+                    ? 'common.donationHandling.ownerHidden'
+                    : 'common.operations.charity.deidentified',
+                )}
+            {role === 'admin' && owner && 'discord_id' in owner
               ? ` · ${owner.discord_id ?? t('common.operations.charity.discordDetached')}`
               : ''}
           </dd>
           <dt>{t('common.operations.charity.donorDescription')}</dt>
-          <dd><MarkdownText>{item.description || t('common.operations.charity.noDescription')}</MarkdownText></dd>
+          <dd>
+            <MarkdownText>
+              {item.description || t('common.operations.charity.noDescription')}
+            </MarkdownText>
+          </dd>
           <dt>{t('common.operations.charity.createdUpdated')}</dt>
           <dd>
             {formatDateTime(item.created_at)} / {formatDateTime(item.updated_at)}
@@ -751,7 +808,12 @@ function DonationDetail({
                         station={role === 'admin' ? 'admin' : 'user'}
                         draft={draft}
                         authorizedExpiresAt={entry.authorized_expires_at}
-                        onChange={update => setKeys(current => ({ ...current, [entry.id]: { ...current[entry.id], ...update(current[entry.id]) } }))}
+                        onChange={(update) =>
+                          setKeys((current) => ({
+                            ...current,
+                            [entry.id]: { ...current[entry.id], ...update(current[entry.id]) },
+                          }))
+                        }
                       />
                       <label className="checkbox-label">
                         <input
@@ -791,12 +853,26 @@ function DonationDetail({
             type="button"
             disabled={!reason.trim() || !confirmed || review.isPending || Boolean(validationError)}
             onClick={() => {
-              if (!confirmed || !validText(reason.trim(), 1024, true) || (decision === 'approve' &&
-                item.keys.some(entry => !keys[entry.id] || keySettingsError(keys[entry.id], entry.authorized_expires_at)))) return;
+              if (
+                !confirmed ||
+                !validText(reason.trim(), 1024, true) ||
+                (decision === 'approve' &&
+                  item.keys.some(
+                    (entry) =>
+                      !keys[entry.id] ||
+                      keySettingsError(keys[entry.id], entry.authorized_expires_at),
+                  ))
+              )
+                return;
               review.mutate({
                 decision,
                 reason: reason.trim(),
-                settings: decision === 'approve' ? Object.fromEntries(Object.entries(keys).map(([id, value]) => [id, keySettingsBody(value)])) : {},
+                settings:
+                  decision === 'approve'
+                    ? Object.fromEntries(
+                        Object.entries(keys).map(([id, value]) => [id, keySettingsBody(value)]),
+                      )
+                    : {},
               });
             }}
           >
@@ -830,13 +906,69 @@ function DonationsPanel({
   role: CharityRole;
   onCapabilityLoss?: () => void;
 }) {
-  const { t } = useTranslation();
-  const pager = useCursorPager();
+  const [searchParams] = useSearchParams();
+  const initialHandling = searchParams.get('handling') ?? '';
+  const handling = ['pending', 'processed', 'legacy', 'closed'].includes(initialHandling)
+    ? initialHandling
+    : '';
+  const query = searchParams.get('q') ?? '';
   const [status, setStatus] = useState('');
+  return (
+    <DonationsPanelContents
+      key={`${handling}\0${query}`}
+      role={role}
+      onCapabilityLoss={onCapabilityLoss}
+      handling={handling}
+      query={query}
+      status={status}
+      setStatus={setStatus}
+    />
+  );
+}
+
+function DonationsPanelContents({
+  role,
+  onCapabilityLoss,
+  handling,
+  query,
+  status,
+  setStatus,
+}: {
+  role: CharityRole;
+  onCapabilityLoss?: () => void;
+  handling: string;
+  query: string;
+  status: string;
+  setStatus: (status: string) => void;
+}) {
+  const { t } = useTranslation();
+  const client = useQueryClient();
+  const pager = useCursorPager();
+  const [, setSearchParams] = useSearchParams();
+  const [queryDraft, setQueryDraft] = useState(query);
   const [selected, setSelected] = useState('');
+  const queryValid =
+    Array.from(queryDraft).length <= 128 &&
+    new TextEncoder().encode(queryDraft).byteLength <= 512 &&
+    !queryDraft.includes('\0');
+  const updateFilters = (nextHandling: string, nextQuery: string) => {
+    pager.reset();
+    setSelected('');
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (nextHandling) next.set('handling', nextHandling);
+        else next.delete('handling');
+        if (nextQuery) next.set('q', nextQuery);
+        else next.delete('q');
+        return next;
+      },
+      { replace: true },
+    );
+  };
   const list = useQuery({
-    queryKey: charityKeys.donations(role, status, pager.cursor),
-    queryFn: () => getManagedDonations(role, status, pager.cursor),
+    queryKey: charityKeys.donations(role, status, pager.cursor, { handling, q: query }),
+    queryFn: () => getManagedDonations(role, status, pager.cursor, { handling, q: query }),
     retry: false,
   });
   const detail = useQuery({
@@ -854,7 +986,11 @@ function DonationsPanel({
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
   const refresh = async () => {
-    await Promise.all([list.refetch(), selected ? detail.refetch() : Promise.resolve()]);
+    await Promise.all([
+      list.refetch(),
+      selected ? detail.refetch() : Promise.resolve(),
+      client.invalidateQueries({ queryKey: charityKeys.badges(role) }),
+    ]);
   };
   if (capabilityLost) {
     return (
@@ -869,6 +1005,45 @@ function DonationsPanel({
     <div className="ops-stack">
       <Card>
         <div className="ops-toolbar">
+          <label>
+            <span>{t('common.donationHandling.filter')}</span>
+            <select value={handling} onChange={(event) => updateFilters(event.target.value, query)}>
+              <option value="">{t('common.donationHandling.all')}</option>
+              {(['pending', 'processed', 'closed', 'legacy'] as const).map((state) => (
+                <option key={state} value={state}>
+                  {t(donationHandlingStateKey[state])}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>{t('common.donationHandling.search')}</span>
+            <input
+              type="search"
+              value={queryDraft}
+              aria-invalid={!queryValid}
+              onChange={(event) => setQueryDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && queryValid) {
+                  event.preventDefault();
+                  updateFilters(handling, queryDraft);
+                }
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={!queryValid}
+            onClick={() => updateFilters(handling, queryDraft)}
+          >
+            {t('common.donationHandling.applySearch')}
+          </button>
+          {!queryValid ? (
+            <p className="field-error" role="alert">
+              {t('common.donationHandling.searchInvalid')}
+            </p>
+          ) : null}
           <label>
             <span>{t(charityCopyKey(role, 'statusFilter'))}</span>
             <select
@@ -907,6 +1082,7 @@ function DonationsPanel({
                     <th>{t('common.operations.charity.description')}</th>
                     <th>{t('common.operations.charity.owner')}</th>
                     <th>{t('common.status')}</th>
+                    <th>{t('common.donationHandling.title')}</th>
                     <th>{t('common.operations.charity.keys')}</th>
                     <th>{t('common.operations.charity.open')}</th>
                   </tr>
@@ -921,19 +1097,29 @@ function DonationsPanel({
                         className="ops-cell-wide"
                         data-label={t('common.operations.charity.description')}
                       >
-                        <MarkdownText>{item.description || t('common.operations.charity.noDescription')}</MarkdownText>
+                        <MarkdownText>
+                          {item.description || t('common.operations.charity.noDescription')}
+                        </MarkdownText>
                       </td>
                       <td
                         className="ops-cell-wide"
                         data-label={t('common.operations.charity.owner')}
                       >
-                        {item.owner?.display_name ?? t('common.operations.charity.deidentified')}
+                        {item.owner?.display_name ??
+                          t(
+                            role === 'steward'
+                              ? 'common.donationHandling.ownerHidden'
+                              : 'common.operations.charity.deidentified',
+                          )}
                       </td>
                       <td data-label={t('common.status')}>
                         <StatusBadge
                           active={item.status === 'approved'}
                           label={t(charityStatusKey(role, item.status))}
                         />
+                      </td>
+                      <td className="ops-cell-wide" data-label={t('common.donationHandling.title')}>
+                        <DonationHandlingStatus handling={item.handling} />
                       </td>
                       <td data-label={t('common.operations.charity.keys')}>{item.keys.length}</td>
                       <td
@@ -991,6 +1177,8 @@ interface ModelDraft {
   provider: string;
   model: string;
   enabled: boolean;
+  allowedLevels: number[];
+  publicDescription: string;
   mode: 'per_request' | 'per_token';
   requestUser: string;
   requestDonor: string;
@@ -1015,6 +1203,8 @@ function modelDraft(model?: CharityModel): ModelDraft {
     provider: model?.provider ?? '',
     model: model?.model ?? '',
     enabled: model?.enabled ?? true,
+    allowedLevels: model ? [...model.allowed_levels] : [...MODEL_LEVELS],
+    publicDescription: model ? model.public_description : '',
     mode: model?.pricing.mode ?? 'per_request',
     requestUser: model?.pricing.mode === 'per_request' ? model.pricing.user_price : '0',
     requestDonor: model?.pricing.mode === 'per_request' ? model.pricing.donor_reward : '0',
@@ -1036,6 +1226,8 @@ function modelBody(draft: ModelDraft) {
     provider: draft.provider.trim(),
     model: draft.model.trim(),
     enabled: draft.enabled,
+    allowed_levels: MODEL_LEVELS.filter((level) => draft.allowedLevels.includes(level)),
+    public_description: normalizePublicDescriptionInput(draft.publicDescription),
     pricing:
       draft.mode === 'per_request'
         ? { mode: 'per_request', user_price: draft.requestUser, donor_reward: draft.requestDonor }
@@ -1050,7 +1242,13 @@ function modelBody(draft: ModelDraft) {
   };
 }
 
-type ModelValidation = 'modelIdentity' | 'modelPrices' | 'discountPercent' | 'discountDates';
+type ModelValidation =
+  | 'modelIdentity'
+  | 'modelLevels'
+  | 'publicDescription'
+  | 'modelPrices'
+  | 'discountPercent'
+  | 'discountDates';
 
 function modelDraftError(draft: ModelDraft): ModelValidation | null {
   const provider = draft.provider.trim();
@@ -1062,6 +1260,15 @@ function modelDraftError(draft: ModelDraft): ModelValidation | null {
   ) {
     return 'modelIdentity';
   }
+  if (
+    draft.allowedLevels.some(
+      (level) => !MODEL_LEVELS.includes(level as (typeof MODEL_LEVELS)[number]),
+    ) ||
+    new Set(draft.allowedLevels).size !== draft.allowedLevels.length
+  ) {
+    return 'modelLevels';
+  }
+  if (!validPublicDescription(draft.publicDescription)) return 'publicDescription';
   const prices =
     draft.mode === 'per_request'
       ? [draft.requestUser, draft.requestDonor]
@@ -1079,7 +1286,8 @@ function modelDraftError(draft: ModelDraft): ModelValidation | null {
   const start = timeDraftValue(draft.discountStart);
   const end = timeDraftValue(draft.discountEnd);
   if (
-    start === undefined || end === undefined ||
+    start === undefined ||
+    end === undefined ||
     (start !== null && (!Number.isSafeInteger(start) || start < 0 || start > MAX_UNIX_SECOND)) ||
     (end !== null && (!Number.isSafeInteger(end) || end < 0 || end > MAX_UNIX_SECOND)) ||
     (start !== null && end !== null && end <= start)
@@ -1104,27 +1312,34 @@ function ModelForm({
 }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState(() => modelDraft(model));
+  const [baseRevision, setBaseRevision] = useState(model?.revision);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const save = useRetainedOperation<ReturnType<typeof modelBody>, CharityModel>(
-    (input, key) =>
-      model
-        ? patchManagedCharityModel(
+  const save = useRetainedOperation<
+    { body: ReturnType<typeof modelBody>; revision?: string },
+    CharityModel
+  >(
+    async (input, key) => {
+      const result = model
+        ? await patchManagedCharityModel(
             role,
             model.id,
-            { expected_revision: model.revision, ...input },
+            { expected_revision: input.revision, ...input.body },
             key,
           )
-        : createManagedCharityModel(role, input, key),
+        : await createManagedCharityModel(role, input.body, key);
+      if (model) setBaseRevision(result.revision);
+      return result;
+    },
     refresh,
     charityKeys.root(role),
   );
   const remove = useRetainedOperation<{ id: string; revision: string }, void>(
-    (_input: { id: string; revision: string }, key) =>
-      deleteManagedCharityModel(role, model!.id, model!.revision, key),
+    (input, key) => deleteManagedCharityModel(role, input.id, input.revision, key),
     refresh,
     charityKeys.root(role),
   );
   const validationError = modelDraftError(draft);
+  const unknownSave = save.error && responseOutcomeUnknown(save.error);
   const capabilityLost =
     isUnauthorized(save.error) ||
     isForbidden(save.error) ||
@@ -1227,7 +1442,7 @@ function ModelForm({
             checked={draft.enabled}
             onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })}
           />
-          <span>{t('common.operations.charity.enabledForNewClaims')}</span>
+          <span>{t('common.operations.charity.enableCharityModel')}</span>
         </label>
         <label className="checkbox-label">
           <input
@@ -1236,6 +1451,68 @@ function ModelForm({
             onChange={(event) => setDraft({ ...draft, flatten: event.target.checked })}
           />
           <span>{t(charityCopyKey(role, 'flattenExperimental'))}</span>
+        </label>
+      </div>
+      <div className="ops-model-settings">
+        <fieldset className="ops-model-levels">
+          <legend>{t('common.operations.charity.allowedLevels')}</legend>
+          <div className="ops-model-level-actions">
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() =>
+                setDraft((current) => ({ ...current, allowedLevels: [...MODEL_LEVELS] }))
+              }
+            >
+              {t('common.operations.charity.selectAllLevels')}
+            </button>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => setDraft((current) => ({ ...current, allowedLevels: [] }))}
+            >
+              {t('common.operations.charity.clearAllLevels')}
+            </button>
+          </div>
+          <div className="ops-model-level-options">
+            {MODEL_LEVELS.map((level) => (
+              <label className="checkbox-label" key={level}>
+                <input
+                  type="checkbox"
+                  checked={draft.allowedLevels.includes(level)}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      allowedLevels: event.target.checked
+                        ? MODEL_LEVELS.filter(
+                            (candidate) =>
+                              candidate === level || current.allowedLevels.includes(candidate),
+                          )
+                        : current.allowedLevels.filter((candidate) => candidate !== level),
+                    }))
+                  }
+                />
+                <span>{t('common.operations.charity.levelLabel', { level })}</span>
+              </label>
+            ))}
+          </div>
+          {draft.allowedLevels.length === 0 ? (
+            <small className="ops-model-level-empty">
+              {t('common.operations.charity.noAllowedLevels')}
+            </small>
+          ) : null}
+        </fieldset>
+        <label className="ops-model-description">
+          <span>{t('common.operations.charity.publicDescription')}</span>
+          <textarea
+            rows={5}
+            value={draft.publicDescription}
+            aria-label={t('common.operations.charity.publicDescription')}
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, publicDescription: event.target.value }))
+            }
+          />
+          <small>{t('common.operations.charity.publicDescriptionHelp')}</small>
         </label>
       </div>
       {draft.mode === 'per_request' ? (
@@ -1298,40 +1575,85 @@ function ModelForm({
             }
           />
         </label>
-          <TimeInput
-            label={t(charityCopyKey(role, 'discountStart'))}
-            station={role === 'admin' ? 'admin' : 'user'}
-            draft={draft.discountStart}
-            onChange={update => setDraft(current => ({ ...current, discountStart: update(current.discountStart) }))}
-          />
-          <TimeInput
-            label={t(charityCopyKey(role, 'discountEnd'))}
-            station={role === 'admin' ? 'admin' : 'user'}
-            draft={draft.discountEnd}
-            onChange={update => setDraft(current => ({ ...current, discountEnd: update(current.discountEnd) }))}
-          />
+        <TimeInput
+          label={t(charityCopyKey(role, 'discountStart'))}
+          station={role === 'admin' ? 'admin' : 'user'}
+          draft={draft.discountStart}
+          onChange={(update) =>
+            setDraft((current) => ({ ...current, discountStart: update(current.discountStart) }))
+          }
+        />
+        <TimeInput
+          label={t(charityCopyKey(role, 'discountEnd'))}
+          station={role === 'admin' ? 'admin' : 'user'}
+          draft={draft.discountEnd}
+          onChange={(update) =>
+            setDraft((current) => ({ ...current, discountEnd: update(current.discountEnd) }))
+          }
+        />
       </div>
       {save.error ? (
         <ErrorState error={save.error} />
       ) : remove.error ? (
         <ErrorState error={remove.error} />
       ) : null}
+      {model && model.revision !== baseRevision ? (
+        <p role="status">{t('common.operations.charity.modelChanged')}</p>
+      ) : null}
       {validationError ? (
         <p className="field-error" role="alert">
-          {t(`common.operations.charity.validation.${validationError}`)}
+          {validationError === 'modelLevels'
+            ? t('common.operations.charity.validation.modelLevels')
+            : validationError === 'publicDescription'
+              ? t('common.operations.charity.validation.publicDescription')
+              : t(`common.operations.charity.validation.${validationError}`)}
         </p>
       ) : null}
       <div className="ops-actions">
         <button
           className="btn btn-primary"
           type="button"
-          disabled={Boolean(validationError) || save.isPending}
-          onClick={() => { if (!modelDraftError(draft)) save.mutate(modelBody(draft)); }}
+          disabled={
+            Boolean(validationError) || save.isPending || remove.isPending || Boolean(unknownSave)
+          }
+          onClick={() => {
+            if (!modelDraftError(draft))
+              save.mutate({ body: modelBody(draft), revision: baseRevision });
+          }}
         >
           {model ? t('common.operations.charity.saveModel') : t(charityCopyKey(role, 'newModel'))}
         </button>
+        {unknownSave && save.variables ? (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={save.isPending || remove.isPending}
+            onClick={() => save.mutate(save.variables!)}
+          >
+            {t('common.operations.charity.retrySavedModel')}
+          </button>
+        ) : null}
         {model ? (
-          <button className="btn btn-danger" type="button" onClick={() => setConfirmDelete(true)}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={save.isPending || remove.isPending}
+            onClick={() => {
+              setDraft(modelDraft(model));
+              setBaseRevision(model.revision);
+              save.reset();
+            }}
+          >
+            {t('common.operations.charity.reloadModel')}
+          </button>
+        ) : null}
+        {model ? (
+          <button
+            className="btn btn-danger"
+            type="button"
+            disabled={save.isPending || remove.isPending || Boolean(unknownSave)}
+            onClick={() => setConfirmDelete(true)}
+          >
             {t('common.operations.charity.deleteModel')}
           </button>
         ) : null}
@@ -1347,7 +1669,7 @@ function ModelForm({
           onCancel={() => setConfirmDelete(false)}
           onConfirm={() => {
             setConfirmDelete(false);
-            remove.mutate({ id: model.id, revision: model.revision }, { onSuccess: onDeleted });
+            remove.mutate({ id: model.id, revision: baseRevision! }, { onSuccess: onDeleted });
           }}
         />
       ) : null}
@@ -1666,6 +1988,8 @@ function ModelsPanel({
                   <tr>
                     <th>{t(charityCopyKey(role, 'model'))}</th>
                     <th>{t('common.operations.charity.state')}</th>
+                    <th>{t('common.operations.charity.publicDescription')}</th>
+                    <th>{t('common.operations.charity.allowedLevels')}</th>
                     <th>{t('common.operations.charity.pricing')}</th>
                     <th>{t(charityCopyKey(role, 'bindings'))}</th>
                     <th>{t('common.operations.charity.open')}</th>
@@ -1682,6 +2006,19 @@ function ModelsPanel({
                           active={model.enabled}
                           label={t(charityCopyKey(role, model.enabled ? 'enabled' : 'disabled'))}
                         />
+                      </td>
+                      <td
+                        className="ops-cell-wide ops-model-description-cell"
+                        data-label={t('common.operations.charity.publicDescription')}
+                      >
+                        {model.public_description}
+                      </td>
+                      <td data-label={t('common.operations.charity.allowedLevels')}>
+                        {model.allowed_levels.length > 0
+                          ? model.allowed_levels
+                              .map((level) => t('common.operations.charity.levelLabel', { level }))
+                              .join(', ')
+                          : t('common.operations.charity.noAllowedLevels')}
                       </td>
                       <td data-label={t('common.operations.charity.pricing')}>
                         {t(
@@ -1728,7 +2065,7 @@ function ModelsPanel({
       {selected && !capabilityLost ? (
         <>
           <ModelForm
-            key={`model:${selected.id}:${selected.revision}`}
+            key={`model:${selected.id}`}
             role={role}
             model={selected}
             refresh={refresh}
@@ -1757,7 +2094,18 @@ export function CharityManagement({
   sourceGroups?: ReactNode;
 }) {
   const { t } = useTranslation();
-  const [section, setSection] = useState<'donations' | 'models' | 'sources'>('donations');
+  const location = useLocation();
+  const [selection, setSelection] = useState<{
+    locationKey: string;
+    section: 'donations' | 'models' | 'sources';
+  }>({ locationKey: location.key, section: 'donations' });
+  const [searchParams] = useSearchParams();
+  const handlingFilter = searchParams.get('handling');
+  const section =
+    handlingFilter && selection.locationKey !== location.key ? 'donations' : selection.section;
+  const setSection = (next: 'donations' | 'models' | 'sources') => {
+    setSelection({ locationKey: location.key, section: next });
+  };
   const [capabilityLost, setCapabilityLost] = useState(false);
   const clearCapability = useCallback(() => {
     setCapabilityLost(true);
@@ -1773,7 +2121,7 @@ export function CharityManagement({
     );
   }
   return (
-    <div className="ops-stack">
+    <div className="ops-stack charity-management">
       <div
         className="ops-tabs"
         role="tablist"
