@@ -521,3 +521,17 @@
   font-size: 0.875rem;
   overflow-wrap: anywhere;
 }
+/* Time hints stay attached to their input, including in narrow nested forms. */
+.time-input-field,
+.time-input-hint {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.time-input-field > input {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}

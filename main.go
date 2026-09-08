@@ -53,6 +53,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/resourcebridge"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/timeapi"
 	"github.com/waiting-here/NonbiriAPI/web"
 )
 
@@ -1203,6 +1204,10 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err := lifecycle.RegisterRoutes(lifecycleRoutes, lifecycleRoutes, lifecycleCoordinator); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("register account lifecycle routes: %w", err)
+	}
+	if err := timeapi.RegisterRoutes(authRuntime, resourceAdminRouteRegistrar{runtime: authRuntime}); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register time API routes: %w", err)
 	}
 	if err := registerAccountEventRoute(authRuntime, gate, gameRuntimes.rps, activityEvents, accountConnections); err != nil {
 		cleanup()

@@ -9,3 +9,7 @@ The repository includes original project artwork generated with assistance
 from ChatGPT. It is distributed with NonbiriAPI under the same AGPL-3.0 terms.
 Visual research references and asset-specific details are recorded in
 web/src/shared/assets/NOTICE.md.
+
+The embedded time zone archive is compiled from the public-domain IANA
+Time Zone Database. Its source and pinned digest are recorded in
+internal/calendar/NOTICE.md.

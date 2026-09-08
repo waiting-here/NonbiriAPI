@@ -79,20 +79,6 @@ export function normalizeAnnouncementPreview(value: unknown): AnnouncementPrevie
   return result;
 }
 
-// datetime-local carries wall-clock components without an offset. Shift an
-// authority epoch by the offset that applies at that exact instant (including
-// DST) before taking the ISO components; using the raw UTC ISO value would
-// silently move expiry whenever the browser is not in UTC.
-export function announcementExpiryInput(epochSeconds: number, offsetMinutes?: number): string {
-  const instant = new Date(epochSeconds * 1_000);
-  const offset = offsetMinutes ?? instant.getTimezoneOffset();
-  return new Date(instant.getTime() - offset * 60_000).toISOString().slice(0, 16);
-}
-
-export function announcementExpiryWire(value: string): number | null {
-  return value ? Math.floor(new Date(value).getTime() / 1_000) : null;
-}
-
 export const adminAnnouncementKeys = {
   list: (state: string, severity: string, cursor: string | null) => ['admin', 'operations', 'announcements', state, severity, cursor] as const,
   detail: (id: string) => ['admin', 'operations', 'announcement', id] as const,

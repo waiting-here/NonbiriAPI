@@ -5,8 +5,10 @@ import { clearStationSession } from '@shared/charityManagement';
 import { isApiError } from '@shared/query/http';
 import { formatDateTime } from '@shared/utils/datetime';
 import { Card, EmptyState, ErrorState, LoadingState } from '@shared/components/States';
+import { TimeInput } from '@shared/components/TimeInput';
 import { CursorPagination } from '@shared/operations/CursorPagination';
 import { useCursorPager } from '@shared/operations/useCursorPager';
+import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
 import { LogDetailDrawer } from './LogDetailDrawer';
 import { LogTable, type LogColumn } from './LogTable';
 import { TokenBuckets } from './TokenBuckets';
@@ -35,13 +37,6 @@ const RESULT_LABEL_KEYS: Record<LogResultClass, string> = {
   failed: 'common.operations.logs.resultValue.failed',
   cancelled: 'common.operations.logs.resultValue.cancelled',
 };
-
-function datetimeUnix(value: string): number | undefined {
-  if (!value) return undefined;
-  const milliseconds = Date.parse(value);
-  if (!Number.isFinite(milliseconds) || milliseconds < 0) return undefined;
-  return Math.floor(milliseconds / 1_000);
-}
 
 function requestFrom(detail: RoleLogDetail): RoleLogRow {
   return detail.request;
@@ -186,8 +181,8 @@ export function RoleLogPanel({
   const resetPager = pager.reset;
   const resetAttemptPager = attemptPager.reset;
   const [raw, setRaw] = useState<Record<string, string>>({});
-  const [fromDraft, setFromDraft] = useState('');
-  const [toDraft, setToDraft] = useState('');
+  const [fromDraft, setFromDraft] = useState<TimeDraft>(() => createTimeDraft(null));
+  const [toDraft, setToDraft] = useState<TimeDraft>(() => createTimeDraft(null));
   const [filter, setFilter] = useState<LogFiltersValue>({});
   const [validation, setValidation] = useState('');
   const [selectedID, setSelectedID] = useState<string | null>(requestID);
@@ -195,8 +190,12 @@ export function RoleLogPanel({
   const [revokedError, setRevokedError] = useState<unknown>(null);
   const authorityClosedRef = useRef(false);
   const observerEnabled = enabled && !revoked;
+  const station = role === 'admin' ? 'admin' : 'user';
   const logs = useRoleLogs(role, pager.cursor, filter, 20, observerEnabled);
   const detail = useRoleLogDetail(role, selectedID, attemptPager.cursor, 50, observerEnabled);
+  const fromValue = timeDraftValue(fromDraft);
+  const toValue = timeDraftValue(toDraft);
+  const timeReady = fromValue !== undefined && toValue !== undefined;
   const authorityError = isFinalAuthorityError(logs.error)
     ? logs.error
     : isFinalAuthorityError(detail.error)
@@ -211,8 +210,8 @@ export function RoleLogPanel({
     setRevoked(true);
     setRevokedError(authorityError);
     setRaw({});
-    setFromDraft('');
-    setToDraft('');
+    setFromDraft(createTimeDraft(null));
+    setToDraft(createTimeDraft(null));
     setFilter({});
     setValidation('');
     setSelectedID(null);
@@ -250,11 +249,15 @@ export function RoleLogPanel({
   const apply = (event: FormEvent) => {
     event.preventDefault();
     setValidation('');
-    const from = datetimeUnix(fromDraft);
-    const to = datetimeUnix(toDraft);
+    const fromValue = timeDraftValue(fromDraft);
+    const toValue = timeDraftValue(toDraft);
+    if (fromValue === undefined || toValue === undefined) {
+      setValidation(t('common.operations.logs.filterInvalid'));
+      return;
+    }
+    const from = fromValue === null ? undefined : fromValue;
+    const to = toValue === null ? undefined : toValue;
     if (
-      (fromDraft && from === undefined) ||
-      (toDraft && to === undefined) ||
       (from !== undefined && to !== undefined && from >= to) ||
       (raw.status?.trim() && !/^[1-5][0-9]{2}$/.test(raw.status.trim()))
     ) {
@@ -310,9 +313,12 @@ export function RoleLogPanel({
   let detailBody: ReactNode = null;
   if (selectedID && detail.isPending) detailBody = t('common.loading');
   else if (selectedID && detail.error)
-    detailBody = isApiError(detail.error) && detail.error.code === 'not_found'
-      ? <p role="status">{t('common.operations.logs.requestUnavailable')}</p>
-      : <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />;
+    detailBody =
+      isApiError(detail.error) && detail.error.code === 'not_found' ? (
+        <p role="status">{t('common.operations.logs.requestUnavailable')}</p>
+      ) : (
+        <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
+      );
 
   const detailFields = detail.data
     ? [
@@ -403,22 +409,18 @@ export function RoleLogPanel({
               />
             </label>
           ))}
-          <label>
-            {t('common.from')}
-            <input
-              type="datetime-local"
-              value={fromDraft}
-              onChange={(event) => setFromDraft(event.target.value)}
-            />
-          </label>
-          <label>
-            {t('common.to')}
-            <input
-              type="datetime-local"
-              value={toDraft}
-              onChange={(event) => setToDraft(event.target.value)}
-            />
-          </label>
+          <TimeInput
+            station={station}
+            label={t('common.from')}
+            draft={fromDraft}
+            onChange={setFromDraft}
+          />
+          <TimeInput
+            station={station}
+            label={t('common.to')}
+            draft={toDraft}
+            onChange={setToDraft}
+          />
         </div>
         {validation ? (
           <p className="field-error" role="alert">
@@ -426,7 +428,7 @@ export function RoleLogPanel({
           </p>
         ) : null}
         <div className="ops-actions">
-          <button className="btn btn-primary" type="submit">
+          <button className="btn btn-primary" type="submit" disabled={!timeReady}>
             {t('common.applyFilter')}
           </button>
           <button
@@ -434,8 +436,8 @@ export function RoleLogPanel({
             type="button"
             onClick={() => {
               setRaw({});
-              setFromDraft('');
-              setToDraft('');
+              setFromDraft(createTimeDraft(null));
+              setToDraft(createTimeDraft(null));
               setFilter({});
               setValidation('');
               setSelectedID(null);

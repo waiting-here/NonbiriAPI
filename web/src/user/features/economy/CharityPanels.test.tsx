@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@shared/query/http';
-import { renderWithProviders } from '../../../../test/unit/support';
+import { installJsonFetchFixtures, renderWithProviders } from '../../../../test/unit/support';
 import userEn from '../../i18n/en.json';
 import { CharityPage } from '../../pages/CharityPage';
 import {
@@ -14,6 +14,8 @@ import {
 } from './CharityPanels';
 import * as economyQueries from './queries';
 import type { CharityCapability, Donation, DonationKey, EndpointKeyChoice } from './types';
+
+afterEach(() => { vi.unstubAllGlobals(); });
 
 const pageMocks = vi.hoisted(() => ({
   usePublicConfig: vi.fn(),
@@ -505,7 +507,15 @@ describe('donation composer recovery', () => {
     expect(screen.getByRole('alert')).toBeInTheDocument();
   });
 
-  it('submits one expiry per selected key as UTC Unix seconds', async () => {
+  it('submits one local expiry per selected key using the server resolution', async () => {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const local = '2030-01-01T00:00:00';
+    const instant = Math.floor(new Date(2030, 0, 1).getTime() / 1000);
+    installJsonFetchFixtures([
+      { method: 'GET', path: '/api/time-zones', body: { version: 'go1.26.6-zoneinfo', zones: [...new Set([zone, 'UTC'])].sort() } },
+      { method: 'GET', path: `/api/time/resolve?${new URLSearchParams({ local, time_zone: zone })}`,
+        body: { instant, local, time_zone: zone, offset_seconds: Date.parse(`${local}Z`) / 1000 - instant, adjustment: 'none' } },
+    ]);
     const mutation = successfulMutation();
     vi.mocked(economyQueries.useCreateDonation).mockReturnValue(mutation as never);
     const rendered = await renderWithProviders(
@@ -519,11 +529,12 @@ describe('donation composer recovery', () => {
     await rendered.user.type(expiry, '2030-01-01T00:00');
     expect(checkboxes[0]).toBeChecked();
     await rendered.user.click(checkboxes[1]);
+    await waitFor(() => expect(screen.getByRole('button', { name: /submit for review/i })).toBeEnabled());
     await rendered.user.click(screen.getByRole('button', { name: /submit for review/i }));
     await waitFor(() =>
       expect(mutation.mutateAsync).toHaveBeenCalledWith({
         description: '',
-        keys: [{ endpointKeyId: '61', expiresAt: 1_893_456_000 }],
+        keys: [{ endpointKeyId: '61', expiresAt: instant }],
         ownershipAuthorized: true,
       }),
     );

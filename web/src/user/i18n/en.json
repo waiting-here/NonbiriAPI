@@ -492,7 +492,7 @@
       "expiryInvalid": "Enter a valid UTC expiry, or leave it blank for permanent authorization.",
       "keyExpiry": "Authorized expiry",
       "keyExpiryFor": "Expiry for {{key}}",
-      "expiryHintUtc": "UTC; leave blank for permanent authorization.",
+      "expiryHint": "Leave blank for permanent authorization.",
       "selectedMainstreamChannel": "Mainstream channel: {{name}}. This donation can be approved automatically.",
       "selectedCustomSources": "Custom resources are submitted for review.",
       "never": "Never",

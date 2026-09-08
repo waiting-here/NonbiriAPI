@@ -488,7 +488,7 @@
       "expiryInvalid": "请输入有效的 UTC 过期时间；留空表示永久授权。",
       "keyExpiry": "授权有效期",
       "keyExpiryFor": "{{key}} 的有效期",
-      "expiryHintUtc": "时间按 UTC 解释；留空表示永久授权。",
+      "expiryHint": "留空表示永久授权。",
       "selectedMainstreamChannel": "主流渠道：{{name}}。这条捐赠可自动通过审核。",
       "selectedCustomSources": "自定义资源将进入人工审核。",
       "never": "永不过期",
