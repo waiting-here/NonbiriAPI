@@ -79,6 +79,7 @@ type routingTestEnv struct {
 	auth    *routingTestAuth
 	state   *routingDonationState
 	clock   *atomic.Int64
+	userSeq atomic.Int64
 }
 
 func newRoutingTestEnv(t *testing.T) *routingTestEnv {
@@ -115,7 +116,7 @@ func newRoutingTestEnv(t *testing.T) *routingTestEnv {
 func (environment *routingTestEnv) seedUser(t *testing.T, admin bool, level *int64) int64 {
 	t.Helper()
 	zero := make([]byte, 16)
-	var discord any = fmt.Sprintf("routing-%d-%v", time.Now().UnixNano(), admin)
+	var discord any = fmt.Sprintf("routing-%d", environment.userSeq.Add(1))
 	if admin {
 		discord = nil
 	}
@@ -210,6 +211,82 @@ func TestCreateModelInitializesFullAccessMask(t *testing.T) {
 	}
 	if mask != 31 || desc != "" {
 		t.Fatalf("charity_model_access = (%d,%q), want (31,'')", mask, desc)
+	}
+}
+
+func TestCreateModelSidecarFailureRollsBackAndCanRetry(t *testing.T) {
+	environment := newRoutingTestEnv(t)
+	environment.seedUser(t, true, nil)
+	input := testModelCreate()
+	mutation := routingMutation(t, 'R', http.MethodPost, routeAdminModels, nil, map[string]any{"retry": true})
+
+	tables := []string{
+		"charity_models", "charity_model_stats", "charity_model_access", "charity_model_routing",
+		"policy_audits", "idempotency_records",
+	}
+	counts := func() map[string]int {
+		t.Helper()
+		out := make(map[string]int, len(tables))
+		for _, table := range tables {
+			var count int
+			if err := environment.store.DB().QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&count); err != nil {
+				t.Fatalf("count %s: %v", table, err)
+			}
+			out[table] = count
+		}
+		return out
+	}
+	before := counts()
+
+	if _, err := environment.store.DB().Exec(`
+CREATE TRIGGER test_reject_charity_model_access_insert
+BEFORE INSERT ON charity_model_access
+BEGIN
+ SELECT RAISE(ABORT, 'test sidecar insertion rejected');
+END`); err != nil {
+		t.Fatalf("create charity model access trigger: %v", err)
+	}
+	if _, err := environment.service.CreateAdmin(context.Background(), mutation, input); err == nil {
+		t.Fatal("CreateAdmin succeeded while charity model access insertion was rejected")
+	}
+	afterFailure := counts()
+	for table, want := range before {
+		if got := afterFailure[table]; got != want {
+			t.Fatalf("%s rows after rejected create = %d, want %d", table, got, want)
+		}
+	}
+
+	if _, err := environment.store.DB().Exec(`DROP TRIGGER test_reject_charity_model_access_insert`); err != nil {
+		t.Fatalf("remove charity model access trigger: %v", err)
+	}
+	result, err := environment.service.CreateAdmin(context.Background(), mutation, input)
+	if err != nil {
+		t.Fatalf("CreateAdmin after removing trigger: %v", err)
+	}
+	if result.Replayed || result.Status != http.StatusCreated {
+		t.Fatalf("recovered create result = replayed:%v status:%d, want new 201", result.Replayed, result.Status)
+	}
+	modelID, err := strconv.ParseInt(result.Value.ID, 10, 64)
+	if err != nil {
+		t.Fatalf("parse recovered model id: %v", err)
+	}
+	var mask int
+	var description string
+	if err := environment.store.DB().QueryRow(`SELECT allowed_level_mask,public_description FROM charity_model_access WHERE model_id=?`, modelID).Scan(&mask, &description); err != nil {
+		t.Fatalf("read recovered charity model access: %v", err)
+	}
+	if mask != 31 || description != "" {
+		t.Fatalf("recovered charity_model_access = (%d,%q), want (31,'')", mask, description)
+	}
+	after := counts()
+	wantCounts := map[string]int{
+		"charity_models": 1, "charity_model_stats": 1, "charity_model_access": 1,
+		"charity_model_routing": 1, "policy_audits": 1, "idempotency_records": 1,
+	}
+	for table, want := range wantCounts {
+		if got := after[table]; got != want {
+			t.Fatalf("%s rows after recovered create = %d, want %d", table, got, want)
+		}
 	}
 }
 

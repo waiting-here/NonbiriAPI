@@ -267,8 +267,10 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?)`, record.ID, index, user, db.EncodeU256(seat.Total
 			db.EncodeU128(seat.ScissorsCount), db.EncodeU128(seat.PaperCount)); err != nil {
 			return classifyDB(err)
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO game_rps_summary_presentation(session_id, seat_no, own_buy_in, own_cash_out) VALUES(?, ?, NULL, NULL)`, record.ID, index); err != nil {
-			return classifyDB(err)
+		if user != nil {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO game_rps_summary_presentation(session_id, seat_no, own_buy_in, own_cash_out) VALUES(?, ?, NULL, NULL)`, record.ID, index); err != nil {
+				return classifyDB(err)
+			}
 		}
 	}
 	for index, seat := range record.Seats {

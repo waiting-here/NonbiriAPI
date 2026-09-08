@@ -47,26 +47,26 @@ CREATE TABLE donation_handling (
  closed_at INTEGER CHECK(closed_at IS NULL OR (typeof(closed_at)='integer' AND closed_at BETWEEN 0 AND 253402300799)),
  closed_reason TEXT NOT NULL DEFAULT '',
  created_at INTEGER NOT NULL CHECK(typeof(created_at)='integer' AND created_at BETWEEN 0 AND 253402300799), updated_at INTEGER NOT NULL CHECK(typeof(updated_at)='integer' AND updated_at BETWEEN 0 AND 253402300799),
- CHECK((state IN ('legacy','pending') AND processed_at IS NULL AND processed_by_role='' AND closed_at IS NULL AND closed_reason='')
+ CHECK((state IN ('legacy','pending') AND processed_at IS NULL AND processed_by_user_id IS NULL AND processed_by_role='' AND closed_at IS NULL AND closed_reason='')
    OR (state='processed' AND processed_at IS NOT NULL AND processed_by_role<>'' AND closed_at IS NULL AND closed_reason='')
-   OR (state='closed' AND closed_at IS NOT NULL AND closed_reason<>'' AND processed_at IS NULL AND processed_by_role=''))
+   OR (state='closed' AND closed_at IS NOT NULL AND closed_reason<>'' AND processed_at IS NULL AND processed_by_user_id IS NULL AND processed_by_role=''))
 );
 CREATE INDEX idx_donation_handling_state ON donation_handling(state,donation_id);
 
 CREATE TABLE charity_model_access (
  model_id INTEGER PRIMARY KEY REFERENCES charity_models(id) ON DELETE CASCADE,
  allowed_level_mask INTEGER NOT NULL DEFAULT 31 CHECK(typeof(allowed_level_mask)='integer' AND allowed_level_mask BETWEEN 0 AND 31),
- public_description TEXT NOT NULL DEFAULT '',
+ public_description TEXT NOT NULL DEFAULT '' CHECK(typeof(public_description)='text'),
  CHECK(length(public_description)<=1024),
  CHECK(length(cast(public_description AS BLOB))<=4096),
  CHECK(instr(public_description,char(0))=0),
- CHECK(instr(public_description,char(13))=0)
+ CHECK(public_description NOT GLOB ('*['||char(1)||'-'||char(8)||char(11)||'-'||char(31)||char(127)||'-'||char(159)||']*'))
 );
 
 CREATE TABLE donation_quota_capacity (
  id INTEGER PRIMARY KEY CHECK(id=1),
- rows_used INTEGER NOT NULL CHECK(typeof(rows_used)='integer' AND rows_used>=0),
- rows_held INTEGER NOT NULL CHECK(typeof(rows_held)='integer' AND rows_held>=0),
+ rows_used INTEGER NOT NULL CHECK(typeof(rows_used)='integer' AND rows_used BETWEEN 0 AND 5000000),
+ rows_held INTEGER NOT NULL CHECK(typeof(rows_held)='integer' AND rows_held BETWEEN 0 AND 5000000),
  CHECK(rows_used+rows_held<=5000000)
 );
 
@@ -87,15 +87,17 @@ CREATE TABLE game_rps_pending_presentation (
  quick_seat0_gesture TEXT CHECK(quick_seat0_gesture IS NULL OR quick_seat0_gesture IN ('rock','scissors','paper')),
  quick_seat1_gesture TEXT CHECK(quick_seat1_gesture IS NULL OR quick_seat1_gesture IN ('rock','scissors','paper')),
  quick_seat2_gesture TEXT CHECK(quick_seat2_gesture IS NULL OR quick_seat2_gesture IN ('rock','scissors','paper')),
+ CHECK((own_buy_in IS NULL AND own_cash_out IS NULL) OR (own_buy_in IS NOT NULL AND own_cash_out IS NOT NULL)),
  CHECK((quick_seat0_gesture IS NULL AND quick_seat1_gesture IS NULL AND quick_seat2_gesture IS NULL)
    OR (quick_seat0_gesture IS NOT NULL AND quick_seat1_gesture IS NOT NULL AND quick_seat2_gesture IS NOT NULL))
 );
 
 CREATE TABLE game_rps_summary_presentation (
  session_id TEXT NOT NULL CHECK(length(session_id)=26 AND substr(session_id,1,4)='rps_' AND substr(session_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(session_id,-1,1) IN ('A','Q','g','w')),
- seat_no INTEGER NOT NULL CHECK(seat_no BETWEEN 0 AND 2),
+ seat_no INTEGER NOT NULL CHECK(typeof(seat_no)='integer' AND seat_no BETWEEN 0 AND 2),
  own_buy_in BLOB CHECK(own_buy_in IS NULL OR (typeof(own_buy_in)='blob' AND length(own_buy_in)=16)),
  own_cash_out BLOB CHECK(own_cash_out IS NULL OR (typeof(own_cash_out)='blob' AND length(own_cash_out)=16)),
+ CHECK((own_buy_in IS NULL AND own_cash_out IS NULL) OR (own_buy_in IS NOT NULL AND own_cash_out IS NOT NULL)),
  PRIMARY KEY(session_id,seat_no),
  FOREIGN KEY(session_id,seat_no) REFERENCES game_rps_summary_seats(session_id,seat_no) ON DELETE CASCADE
 );
@@ -103,7 +105,7 @@ CREATE TABLE game_rps_summary_presentation (
 CREATE TABLE donation_quota_rules (
  id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='qlr_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  donation_key_id INTEGER NOT NULL REFERENCES donation_keys(id) ON DELETE CASCADE CHECK(typeof(donation_key_id)='integer' AND donation_key_id>0),
- current_epoch INTEGER CHECK(current_epoch IS NULL OR current_epoch BETWEEN 1 AND 9223372036854775807),
+ current_epoch INTEGER CHECK(current_epoch IS NULL OR (typeof(current_epoch)='integer' AND current_epoch BETWEEN 1 AND 9223372036854775807)),
  display_order INTEGER CHECK(display_order IS NULL OR (typeof(display_order)='integer' AND display_order BETWEEN 0 AND 15)),
  CHECK((current_epoch IS NULL AND display_order IS NULL) OR (current_epoch IS NOT NULL AND display_order IS NOT NULL)),
  FOREIGN KEY(id, current_epoch) REFERENCES donation_quota_epochs(rule_id, epoch)
@@ -112,7 +114,7 @@ CREATE UNIQUE INDEX idx_donation_quota_rules_key_order ON donation_quota_rules(d
 
 CREATE TABLE donation_quota_epochs (
  rule_id TEXT NOT NULL REFERENCES donation_quota_rules(id) ON DELETE CASCADE CHECK(length(rule_id)=26 AND substr(rule_id,1,4)='qlr_' AND substr(rule_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(rule_id,-1,1) IN ('A','Q','g','w')),
- epoch INTEGER NOT NULL CHECK(epoch BETWEEN 1 AND 9223372036854775807),
+ epoch INTEGER NOT NULL CHECK(typeof(epoch)='integer' AND epoch BETWEEN 1 AND 9223372036854775807),
  mode TEXT NOT NULL CHECK(mode IN ('reset','sliding')),
  interval TEXT NOT NULL CHECK(interval IN ('5h','day','week','month')),
  alignment TEXT CHECK(alignment IS NULL OR alignment IN ('first_success','calendar')),
@@ -124,20 +126,23 @@ CREATE TABLE donation_quota_epochs (
  retired_at INTEGER CHECK(retired_at IS NULL OR (typeof(retired_at)='integer' AND retired_at BETWEEN 0 AND 253402300799)),
  last_observed_at INTEGER CHECK(last_observed_at IS NULL OR (typeof(last_observed_at)='integer' AND last_observed_at BETWEEN 0 AND 253402300799)),
  current_period_start INTEGER CHECK(current_period_start IS NULL OR (typeof(current_period_start)='integer' AND current_period_start BETWEEN -62167219200 AND 253402300799)),
- window_left INTEGER CHECK(window_left IS NULL OR (typeof(window_left)='integer' AND window_left BETWEEN 0 AND 253402300799)),
+ window_left INTEGER CHECK(window_left IS NULL OR (typeof(window_left)='integer' AND window_left BETWEEN -62167219200 AND 253402300799)),
  window_at INTEGER CHECK(window_at IS NULL OR (typeof(window_at)='integer' AND window_at BETWEEN 0 AND 253402300799)),
  window_used BLOB CHECK(window_used IS NULL OR (typeof(window_used)='blob' AND length(window_used)=16)),
  window_reserved BLOB CHECK(window_reserved IS NULL OR (typeof(window_reserved)='blob' AND length(window_reserved)=16)),
  pending_reserved BLOB NOT NULL CHECK(typeof(pending_reserved)='blob' AND length(pending_reserved)=16),
  PRIMARY KEY(rule_id, epoch),
- CHECK((window_used IS NULL AND window_reserved IS NULL) OR (window_used IS NOT NULL AND window_reserved IS NOT NULL)),
- CHECK(retired_at IS NULL OR retired_at>effective_at),
+ FOREIGN KEY(rule_id,epoch,current_period_start) REFERENCES donation_quota_periods(rule_id,epoch,start_at) DEFERRABLE INITIALLY DEFERRED,
+ CHECK((window_left IS NULL AND window_at IS NULL AND window_used IS NULL AND window_reserved IS NULL)
+   OR (window_left IS NOT NULL AND window_at IS NOT NULL AND window_used IS NOT NULL AND window_reserved IS NOT NULL AND window_left<window_at)),
+ CHECK(retired_at IS NULL OR retired_at>=effective_at),
  CHECK(
   (mode='sliding' AND alignment IS NULL AND week_starts_on IS NULL AND current_period_start IS NULL)
   OR
-  (mode='reset' AND alignment IN ('first_success','calendar')
+  (mode='reset' AND alignment IS NOT NULL AND alignment IN ('first_success','calendar')
    AND NOT (alignment='calendar' AND interval='5h')
-   AND (week_starts_on IS NULL OR (alignment='calendar' AND interval='week' AND week_starts_on BETWEEN 1 AND 7))
+   AND ((alignment='calendar' AND interval='week' AND week_starts_on IS NOT NULL)
+     OR ((alignment<>'calendar' OR interval<>'week') AND week_starts_on IS NULL))
    AND window_left IS NULL AND window_at IS NULL AND window_used IS NULL AND window_reserved IS NULL)
  )
 );
@@ -146,7 +151,7 @@ CREATE INDEX idx_donation_quota_epochs_retired ON donation_quota_epochs(rule_id,
 CREATE TABLE donation_quota_receipts (
  claim_id TEXT NOT NULL REFERENCES dispatch_claims(id) ON DELETE CASCADE CHECK(length(claim_id)=26 AND substr(claim_id,1,4)='clm_' AND substr(claim_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(claim_id,-1,1) IN ('A','Q','g','w')),
  rule_id TEXT NOT NULL CHECK(length(rule_id)=26 AND substr(rule_id,1,4)='qlr_' AND substr(rule_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(rule_id,-1,1) IN ('A','Q','g','w')),
- epoch INTEGER NOT NULL CHECK(epoch BETWEEN 1 AND 9223372036854775807),
+ epoch INTEGER NOT NULL CHECK(typeof(epoch)='integer' AND epoch BETWEEN 1 AND 9223372036854775807),
  state TEXT NOT NULL CHECK(state IN ('reserved','started','settled')),
  reserved_mag BLOB CHECK(reserved_mag IS NULL OR (typeof(reserved_mag)='blob' AND length(reserved_mag)=16)),
  remaining_reserved_mag BLOB CHECK(remaining_reserved_mag IS NULL OR (typeof(remaining_reserved_mag)='blob' AND length(remaining_reserved_mag)=16)),
@@ -156,8 +161,9 @@ CREATE TABLE donation_quota_receipts (
  capacity_state TEXT NOT NULL CHECK(capacity_state IN ('held','attached','released')),
  PRIMARY KEY(claim_id, rule_id, epoch),
  FOREIGN KEY(rule_id, epoch) REFERENCES donation_quota_epochs(rule_id, epoch) ON DELETE RESTRICT,
+ FOREIGN KEY(rule_id,epoch,period_start) REFERENCES donation_quota_periods(rule_id,epoch,start_at) DEFERRABLE INITIALLY DEFERRED,
  CHECK(
-  (state='reserved' AND reserved_mag IS NOT NULL AND remaining_reserved_mag IS NOT NULL AND actual_mag IS NULL AND success_at IS NULL)
+  (state='reserved' AND reserved_mag IS NOT NULL AND remaining_reserved_mag IS NOT NULL AND actual_mag IS NULL AND success_at IS NULL AND period_start IS NULL)
   OR (state='started' AND reserved_mag IS NOT NULL AND remaining_reserved_mag IS NOT NULL AND success_at IS NOT NULL)
   OR (state='settled' AND reserved_mag IS NULL AND remaining_reserved_mag IS NULL AND actual_mag IS NOT NULL)
  )
@@ -166,8 +172,8 @@ CREATE INDEX idx_donation_quota_receipts_epoch ON donation_quota_receipts(rule_i
 
 CREATE TABLE donation_quota_periods (
  rule_id TEXT NOT NULL CHECK(length(rule_id)=26 AND substr(rule_id,1,4)='qlr_' AND substr(rule_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(rule_id,-1,1) IN ('A','Q','g','w')),
- epoch INTEGER NOT NULL CHECK(epoch BETWEEN 1 AND 9223372036854775807),
- start_at INTEGER NOT NULL CHECK(start_at BETWEEN -62167219200 AND 253402300799),
+ epoch INTEGER NOT NULL CHECK(typeof(epoch)='integer' AND epoch BETWEEN 1 AND 9223372036854775807),
+ start_at INTEGER NOT NULL CHECK(typeof(start_at)='integer' AND start_at BETWEEN -62167219200 AND 253402300799),
  end_at INTEGER NOT NULL CHECK(typeof(end_at)='integer' AND end_at BETWEEN -62167219200 AND 253402300799),
  used_mag BLOB NOT NULL CHECK(typeof(used_mag)='blob' AND length(used_mag)=16),
  reserved_mag BLOB NOT NULL CHECK(typeof(reserved_mag)='blob' AND length(reserved_mag)=16),
@@ -179,13 +185,30 @@ CREATE INDEX idx_donation_quota_periods_end ON donation_quota_periods(rule_id, e
 
 CREATE TABLE donation_quota_buckets (
  rule_id TEXT NOT NULL CHECK(length(rule_id)=26 AND substr(rule_id,1,4)='qlr_' AND substr(rule_id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(rule_id,-1,1) IN ('A','Q','g','w')),
- epoch INTEGER NOT NULL CHECK(epoch BETWEEN 1 AND 9223372036854775807),
- success_at INTEGER NOT NULL CHECK(success_at BETWEEN 0 AND 253402300799),
+ epoch INTEGER NOT NULL CHECK(typeof(epoch)='integer' AND epoch BETWEEN 1 AND 9223372036854775807),
+ success_at INTEGER NOT NULL CHECK(typeof(success_at)='integer' AND success_at BETWEEN 0 AND 253402300799),
  used_mag BLOB NOT NULL CHECK(typeof(used_mag)='blob' AND length(used_mag)=16),
  reserved_mag BLOB NOT NULL CHECK(typeof(reserved_mag)='blob' AND length(reserved_mag)=16),
  PRIMARY KEY(rule_id, epoch, success_at),
  FOREIGN KEY(rule_id, epoch) REFERENCES donation_quota_epochs(rule_id, epoch) ON DELETE CASCADE
 );
+
+CREATE TRIGGER donation_quota_period_mode_insert BEFORE INSERT ON donation_quota_periods
+WHEN NOT EXISTS(SELECT 1 FROM donation_quota_epochs WHERE rule_id=NEW.rule_id AND epoch=NEW.epoch AND mode='reset')
+BEGIN SELECT RAISE(ABORT,'quota period requires reset epoch'); END;
+CREATE TRIGGER donation_quota_period_mode_update BEFORE UPDATE OF rule_id,epoch ON donation_quota_periods
+WHEN NOT EXISTS(SELECT 1 FROM donation_quota_epochs WHERE rule_id=NEW.rule_id AND epoch=NEW.epoch AND mode='reset')
+BEGIN SELECT RAISE(ABORT,'quota period requires reset epoch'); END;
+CREATE TRIGGER donation_quota_bucket_mode_insert BEFORE INSERT ON donation_quota_buckets
+WHEN NOT EXISTS(SELECT 1 FROM donation_quota_epochs WHERE rule_id=NEW.rule_id AND epoch=NEW.epoch AND mode='sliding')
+BEGIN SELECT RAISE(ABORT,'quota bucket requires sliding epoch'); END;
+CREATE TRIGGER donation_quota_bucket_mode_update BEFORE UPDATE OF rule_id,epoch ON donation_quota_buckets
+WHEN NOT EXISTS(SELECT 1 FROM donation_quota_epochs WHERE rule_id=NEW.rule_id AND epoch=NEW.epoch AND mode='sliding')
+BEGIN SELECT RAISE(ABORT,'quota bucket requires sliding epoch'); END;
+CREATE TRIGGER donation_quota_epoch_mode_update BEFORE UPDATE OF mode ON donation_quota_epochs
+WHEN (NEW.mode<>'reset' AND EXISTS(SELECT 1 FROM donation_quota_periods WHERE rule_id=OLD.rule_id AND epoch=OLD.epoch))
+  OR (NEW.mode<>'sliding' AND EXISTS(SELECT 1 FROM donation_quota_buckets WHERE rule_id=OLD.rule_id AND epoch=OLD.epoch))
+BEGIN SELECT RAISE(ABORT,'quota epoch mode conflicts with aggregates'); END;
 `
 
 const generationTwoBaseSchema = `
