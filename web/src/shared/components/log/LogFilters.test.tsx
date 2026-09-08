@@ -7,6 +7,10 @@ const nativeOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
 const fields: readonly LogFilterField[] = [
   { name: 'model', label: 'Model', ariaLabel: 'Model', maxLength: 133 },
 ];
+const statusFields: readonly LogFilterField[] = [
+  ...fields,
+  { name: 'status', label: 'Status', ariaLabel: 'Status', inputType: 'number', maxLength: 3 },
+];
 
 function installTimeZoneFixture(station: 'user' | 'admin') {
   const prefix = station === 'admin' ? '/admin/api' : '/api';
@@ -159,5 +163,18 @@ describe('shared log time filters', () => {
     fireEvent.submit(screen.getByTestId('log-filters'));
     expect(onApply).not.toHaveBeenCalled();
     expect(from).toHaveValue('2026-09-08T12:34');
+  });
+
+  it('rejects a status filter outside the caller status range', async () => {
+    installTimeZoneFixture('user');
+    const onApply = vi.fn();
+    await renderWithProviders(
+      <LogFilters station="user" fields={statusFields} state={{ filters: {} }} onApply={onApply} />,
+      { station: 'user' },
+    );
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: '99' } });
+    fireEvent.submit(screen.getByTestId('log-filters'));
+    expect(onApply).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('status code or time range is invalid');
   });
 });

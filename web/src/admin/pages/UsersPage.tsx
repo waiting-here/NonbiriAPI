@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
+import { clearStationSession } from '@shared/charityManagement';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { CopyValue } from '@shared/components/CopyValue';
 import {
@@ -11,21 +13,25 @@ import {
   PageHeader,
   StatusBadge,
 } from '@shared/components/States';
-import { CursorPagination } from '@shared/operations/CursorPagination';
+import { PagePagination } from '@shared/operations/PagePagination';
+import { isPageNumber } from '@shared/operations/pageNumbers';
+import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { elevateAdmin } from '@shared/operations/api';
-import { useCursorPager } from '@shared/operations/useCursorPager';
 import { ApiError, isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { formatDateTime } from '@shared/utils/datetime';
 import {
-  adminCoreKeys,
   banAdminUser,
   deleteAdminUser,
-  getAdminUser,
-  getAdminUsers,
   mutateAdminUser,
   unbanAdminUser,
   type AdminUser,
 } from '../features/operations/core';
+import {
+  adminPageKeys,
+  getAdminUserDetail,
+  getAdminUsersPage,
+} from '../features/operations/adminPages';
+import { useAdminSession } from '../data';
 import { useRetainedOperation } from '../features/operations/useRetainedOperation';
 import '@shared/operations/operations.css';
 
@@ -62,7 +68,15 @@ function nullableLimit(value: string): number | null | undefined {
   return Number.isSafeInteger(parsed) ? parsed : undefined;
 }
 
-function UserAuthority({ user, refresh }: { user: AdminUser; refresh: () => Promise<unknown> }) {
+function UserAuthority({
+  user,
+  refresh,
+  onClose,
+}: {
+  user: AdminUser;
+  refresh: () => Promise<unknown>;
+  onClose: () => void;
+}) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState<UserDraft>(() => draftFor(user));
   const [confirm, setConfirm] = useState<'ban' | 'unban' | 'delete' | null>(null);
@@ -167,7 +181,12 @@ function UserAuthority({ user, refresh }: { user: AdminUser; refresh: () => Prom
   return (
     <div className="ops-stack">
       <Card>
-        <h2>{user.username}</h2>
+        <div className="ops-actions">
+          <h2>{user.username}</h2>
+          <button className="btn btn-quiet" type="button" onClick={onClose}>
+            {t('common.close')}
+          </button>
+        </div>
         <dl className="ops-kv">
           <dt>{t('admin.users.userId')}</dt>
           <dd>{user.id}</dd>
@@ -494,26 +513,101 @@ function UserAuthority({ user, refresh }: { user: AdminUser; refresh: () => Prom
   );
 }
 
-export function UsersPage() {
+interface UsersPageContentProps {
+  account: string;
+  scopeReady: boolean;
+  sessionError: unknown;
+}
+
+function UsersPageContent({ account, scopeReady, sessionError }: UsersPageContentProps) {
   const { t } = useTranslation();
-  const pager = useCursorPager();
-  const [queryDraft, setQueryDraft] = useState('');
-  const [query, setQuery] = useState('');
-  const [banned, setBanned] = useState<'' | 'true' | 'false'>('');
-  const [selected, setSelected] = useState('');
+  const client = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawBanned = searchParams.get('is_banned');
+  const banned: '' | 'true' | 'false' =
+    rawBanned === 'true' || rawBanned === 'false' ? rawBanned : '';
+  const query = searchParams.get('q') ?? '';
+  const selectedValue = searchParams.get('user');
+  const selected = isPageNumber(selectedValue, 9_223_372_036_854_775_807n) ? selectedValue : '';
+  const [queryDraft, setQueryDraft] = useState(query);
+  const pager = useUrlPagePager({
+    station: 'admin',
+    listType: 'admin.users',
+    scopeKey: account,
+    scopeReady,
+    resetKey: `${banned}|${query}`,
+  });
   const users = useQuery({
-    queryKey: adminCoreKeys.users(banned, query, pager.cursor),
-    queryFn: () => getAdminUsers(banned, query, pager.cursor),
+    queryKey: adminPageKeys.users(account, banned, query, pager.page, pager.pageSize),
+    queryFn: ({ signal }) => getAdminUsersPage(banned, query, pager.page, pager.pageSize, signal),
     retry: false,
+    enabled: scopeReady,
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[3] === account &&
+      previousQuery.queryKey[4] === banned &&
+      previousQuery.queryKey[5] === query
+        ? previous
+        : undefined,
   });
   const detail = useQuery({
-    queryKey: adminCoreKeys.user(selected),
-    queryFn: () => getAdminUser(selected),
+    queryKey: adminPageKeys.user(account, selected),
+    queryFn: ({ signal }) => getAdminUserDetail(selected, signal),
     retry: false,
-    enabled: Boolean(selected),
+    enabled: Boolean(selected) && scopeReady,
   });
   const detailUnavailable =
-    isUnauthorized(detail.error) || isForbidden(detail.error) || isNotFoundError(detail.error);
+    isUnauthorized(users.error) ||
+    isForbidden(users.error) ||
+    isUnauthorized(detail.error) ||
+    isForbidden(detail.error) ||
+    isNotFoundError(detail.error);
+  useEffect(() => {
+    // Browser back/forward can change the committed filter while this draft
+    // remains mounted. Keep the input aligned with that URL state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setQueryDraft(query);
+  }, [query]);
+  useEffect(() => {
+    if (
+      isUnauthorized(users.error) ||
+      isForbidden(users.error) ||
+      isUnauthorized(detail.error) ||
+      isForbidden(detail.error)
+    ) {
+      clearStationSession(client, 'admin');
+    }
+  }, [client, detail.error, users.error]);
+  const commitListState = (nextQuery: string, nextBanned: typeof banned) => {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (nextQuery) next.set('q', nextQuery);
+      else next.delete('q');
+      if (nextBanned) next.set('is_banned', nextBanned);
+      else next.delete('is_banned');
+      next.delete('page');
+      next.set('page', '1');
+      next.delete('page_size');
+      next.set('page_size', String(pager.pageSize));
+      next.delete('user');
+      return next;
+    });
+  };
+  const selectUser = (id: string) => {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set('user', id);
+      if (users.data) next.set('page', users.data.pagination.page);
+      return next;
+    });
+  };
+  const closeUser = () => {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.delete('user');
+      if (users.data) next.set('page', users.data.pagination.page);
+      return next;
+    });
+  };
   return (
     <div className="page ops-page">
       <PageHeader title={t('admin.users.title')} description={t('admin.users.description')} />
@@ -522,8 +616,7 @@ export function UsersPage() {
           className="ops-toolbar"
           onSubmit={(event) => {
             event.preventDefault();
-            pager.reset();
-            setQuery(queryDraft.trim());
+            commitListState(queryDraft.trim(), banned);
           }}
         >
           <label>
@@ -539,10 +632,7 @@ export function UsersPage() {
             <span>{t('admin.users.filterStatus')}</span>
             <select
               value={banned}
-              onChange={(event) => {
-                pager.reset();
-                setBanned(event.target.value as typeof banned);
-              }}
+              onChange={(event) => commitListState(query, event.target.value as typeof banned)}
             >
               <option value="">{t('common.all')}</option>
               <option value="false">{t('admin.users.active')}</option>
@@ -556,14 +646,17 @@ export function UsersPage() {
       </Card>
       <Card>
         <h2>{t('admin.users.listTitle')}</h2>
-        {users.isPending ? (
+        {sessionError ? (
+          <ErrorState error={sessionError} />
+        ) : users.isPending ? (
           <LoadingState />
         ) : users.error ? (
           <ErrorState error={users.error} onRetry={() => void users.refetch()} />
         ) : users.data.data.length === 0 ? (
           <EmptyState title={t('admin.users.empty')} body={t('admin.users.emptyBody')} />
         ) : (
-          <>
+          <div aria-busy={users.isFetching}>
+            {users.isFetching ? <LoadingState /> : null}
             <div className="ops-table-scroll">
               <table className="ops-table ops-users-table">
                 <thead>
@@ -602,7 +695,8 @@ export function UsersPage() {
                         <button
                           className="btn btn-secondary"
                           type="button"
-                          onClick={() => setSelected(user.id)}
+                          disabled={!scopeReady || users.isFetching}
+                          onClick={() => selectUser(user.id)}
                         >
                           {t('admin.users.manage')}
                         </button>
@@ -612,16 +706,19 @@ export function UsersPage() {
                 </tbody>
               </table>
             </div>
-            <CursorPagination
-              page={pager.page}
-              nextCursor={users.data.next_cursor}
-              onPrevious={pager.previous}
-              onNext={pager.next}
-            />
-          </>
+          </div>
         )}
+        {scopeReady && !sessionError && !users.error && users.data ? (
+          <PagePagination
+            metadata={users.data.pagination}
+            requestedPage={pager.page}
+            busy={users.isFetching}
+            onPageChange={pager.setPage}
+            onPageSizeChange={pager.setPageSize}
+          />
+        ) : null}
       </Card>
-      {selected && !detailUnavailable ? (
+      {scopeReady && !sessionError && selected && !detailUnavailable ? (
         detail.isPending ? (
           <LoadingState />
         ) : detail.error ? (
@@ -630,6 +727,7 @@ export function UsersPage() {
           <UserAuthority
             key={detail.data.id}
             user={detail.data}
+            onClose={closeUser}
             refresh={async () => {
               await Promise.all([detail.refetch(), users.refetch()]);
             }}
@@ -637,13 +735,37 @@ export function UsersPage() {
         )
       ) : null}
       {selected && detailUnavailable ? (
-        <ErrorState
-          error={detail.error}
-          onRetry={() => {
-            setSelected('');
-          }}
-        />
+        <ErrorState error={detail.error ?? users.error} onRetry={closeUser} />
       ) : null}
     </div>
+  );
+}
+
+export function UsersPage() {
+  const [, setSearchParams] = useSearchParams();
+  const session = useAdminSession();
+  const account = session.data?.admin.username;
+  const scopeReady = Boolean(account) && !session.error;
+  const previousAccount = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (previousAccount.current !== undefined && previousAccount.current !== account) {
+      setSearchParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+          next.delete('user');
+          return next;
+        },
+        { replace: true },
+      );
+    }
+    previousAccount.current = account;
+  }, [account, setSearchParams]);
+  return (
+    <UsersPageContent
+      key={account ?? 'anonymous'}
+      account={account ?? ''}
+      scopeReady={scopeReady}
+      sessionError={session.error}
+    />
   );
 }

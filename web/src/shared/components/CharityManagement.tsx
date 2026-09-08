@@ -1,16 +1,30 @@
-import { useCallback, useEffect, useId, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLocation, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { CharityBindingPicker, type CharitySelection } from './CharityBindingPicker';
+import { CharitySourceBrowser } from './CharitySourceBrowser';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { KeyLimitSummary } from './KeyRoutingLimits';
 import { DonationHandlingControl, DonationHandlingStatus } from './DonationHandling';
 import { donationHandlingStateKey } from './donationHandlingCopy';
 import { MarkdownText } from './MarkdownText';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
-import { CursorPagination } from '@shared/operations/CursorPagination';
-import { useCursorPager } from '@shared/operations/useCursorPager';
+import { PagePagination } from '@shared/operations/PagePagination';
+import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
+import { usePagePager } from '@shared/operations/usePagePager';
+import { type PageSize } from '@shared/operations/pageNumbers';
+import {
+  getManagedDonationsPage,
+  getManagedDonationKeysPage,
+  type ManagedDonationPageFilters,
+} from '@shared/operations/donationPages';
+import {
+  getManagedCharityModel,
+  getManagedCharityModelsPage,
+  managementResourceID,
+  validManagementSearch,
+} from '@shared/operations/charityModelPages';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { formatDateTime } from '@shared/utils/datetime';
 import { TimeInput } from './TimeInput';
@@ -23,9 +37,7 @@ import {
   deleteManagedBinding,
   deleteManagedCharityModel,
   getManagedBindings,
-  getManagedCharityModels,
   getManagedDonation,
-  getManagedDonations,
   orderManagedBindings,
   patchManagedCharityModel,
   patchManagedDonationKey,
@@ -46,6 +58,42 @@ import { responseOutcomeUnknown } from '@shared/operations/api';
 import '@shared/operations/operations.css';
 
 type ManagedDonation = AdminDonation | StewardDonation;
+
+function snapshotPage<T>(items: readonly T[], requestedPage: string, pageSize: PageSize) {
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const page = Math.min(Number(requestedPage), totalPages);
+  const offset = (page - 1) * pageSize;
+  return {
+    data: items.slice(offset, offset + pageSize),
+    offset,
+    pagination: {
+      page: String(page),
+      page_size: pageSize,
+      total_items: String(items.length),
+      total_pages: String(totalPages),
+    },
+  };
+}
+
+function oneParam(params: URLSearchParams, name: string): string {
+  const values = params.getAll(name);
+  return values.length === 1 ? values[0] : '';
+}
+
+function selectedID(params: URLSearchParams, name: string): string {
+  const value = oneParam(params, name);
+  return managementResourceID(value) ? value : '';
+}
+
+function samePageFamily(
+  previous: readonly unknown[] | undefined,
+  current: readonly unknown[],
+): boolean {
+  return (
+    previous?.length === current.length &&
+    current.slice(0, -2).every((part, index) => part === previous[index])
+  );
+}
 
 const charityCopyKey = (role: CharityRole, key: string) =>
   `${role === 'admin' ? 'admin.charity' : 'user.steward'}.${key}`;
@@ -395,7 +443,7 @@ function DonationKeyEditor({
     );
   }
   return (
-    <section className="ops-subcard">
+    <section className="ops-subcard ops-unframed">
       <h4>
         {t('common.operations.charity.keyHeading', {
           id: item.id,
@@ -576,18 +624,49 @@ function DonationKeyEditor({
   );
 }
 
-function DonationDetail({
-  item,
-  role,
-  refresh,
-  onCapabilityLoss,
-}: {
+interface DonationDetailProps {
   item: ManagedDonation;
   role: CharityRole;
+  accountId: string;
+  busy: boolean;
   refresh: () => Promise<unknown>;
   onCapabilityLoss?: () => void;
+}
+
+function DonationDetail(props: DonationDetailProps) {
+  const [reviewPending, setReviewPending] = useState(false);
+  return (
+    <fieldset className="ops-stack ops-unframed" disabled={props.busy || reviewPending}>
+      <DonationReview key={props.item.revision} {...props} onPendingChange={setReviewPending} />
+      <DonationKeyPages
+        item={props.item}
+        role={props.role}
+        accountId={props.accountId}
+        refresh={props.refresh}
+        onCapabilityLoss={props.onCapabilityLoss}
+      />
+    </fieldset>
+  );
+}
+
+function DonationReview({
+  item,
+  role,
+  accountId,
+  busy,
+  refresh,
+  onCapabilityLoss,
+  onPendingChange,
+}: DonationDetailProps & {
+  onPendingChange: (pending: boolean) => void;
 }) {
   const { t } = useTranslation();
+  const reviewPager = usePagePager({
+    station: role === 'admin' ? 'admin' : 'user',
+    listType: 'donation-review-keys',
+    scopeKey: `${accountId}:${item.id}`,
+  });
+  const reviewPage = snapshotPage(item.keys, reviewPager.page, reviewPager.pageSize);
   const [decision, setDecision] = useState<'approve' | 'reject'>('approve');
   const [reason, setReason] = useState('');
   const [confirmed, setConfirmed] = useState(false);
@@ -629,6 +708,10 @@ function DonationDetail({
     refresh,
     charityKeys.root(role),
   );
+  useEffect(() => {
+    onPendingChange(review.isPending);
+    return () => onPendingChange(false);
+  }, [onPendingChange, review.isPending]);
   const owner = item.owner;
   let validationError: KeySettingsValidation | 'reviewReason' | 'completeSettings' | null = null;
   if (!validText(reason.trim(), 1_024, true)) {
@@ -657,7 +740,7 @@ function DonationDetail({
     );
   }
   return (
-    <div className="ops-stack">
+    <fieldset className="ops-stack ops-unframed" disabled={busy || review.isPending}>
       <Card>
         <h3>{t(charityCopyKey(role, 'donationNumber'), { id: item.id })}</h3>
         <DonationHandlingControl
@@ -743,7 +826,7 @@ function DonationDetail({
           </div>
           {decision === 'approve' ? (
             <div className="ops-stack">
-              {item.keys.map((entry) => {
+              {reviewPage.data.map((entry) => {
                 const draft = keys[entry.id];
                 return (
                   <section key={entry.id} className="ops-subcard">
@@ -833,6 +916,13 @@ function DonationDetail({
                   </section>
                 );
               })}
+              <PagePagination
+                metadata={reviewPage.pagination}
+                requestedPage={reviewPager.page}
+                onPageChange={reviewPager.setPage}
+                onPageSizeChange={reviewPager.setPageSize}
+                busy={review.isPending}
+              />
             </div>
           ) : null}
           <label className="checkbox-label">
@@ -881,22 +971,141 @@ function DonationDetail({
           </button>
         </Card>
       ) : null}
-      <Card>
-        <h3>{t('common.operations.charity.donationKeys')}</h3>
-        <div className="ops-stack">
-          {item.keys.map((key) => (
-            <DonationKeyEditor
-              key={`${key.id}:${item.revision}`}
-              item={key}
-              donation={item}
-              role={role}
-              refresh={refresh}
-              onCapabilityLoss={onCapabilityLoss}
-            />
-          ))}
+    </fieldset>
+  );
+}
+
+function DonationKeyPages({
+  item,
+  role,
+  accountId,
+  refresh,
+  onCapabilityLoss,
+}: {
+  item: ManagedDonation;
+  role: CharityRole;
+  accountId: string;
+  refresh: () => Promise<unknown>;
+  onCapabilityLoss?: () => void;
+}) {
+  const { t } = useTranslation();
+  const [params, setParams] = useSearchParams();
+  const pager = useUrlPagePager({
+    station: role === 'admin' ? 'admin' : 'user',
+    listType: 'managed-donation-keys',
+    scopeKey: `${accountId}:${item.id}`,
+    pageParam: 'donation_keys_page',
+    pageSizeParam: 'donation_keys_page_size',
+  });
+  const focusKey = selectedID(params, 'donation_key');
+  const focusIndex = focusKey ? item.keys.findIndex((key) => key.id === focusKey) : -1;
+  const needsFocusPage = focusIndex >= 0 && !params.has('donation_keys_page');
+  const page = needsFocusPage ? String(Math.floor(focusIndex / pager.pageSize) + 1) : pager.page;
+  useEffect(() => {
+    if (needsFocusPage)
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.set('donation_keys_page', page);
+          return next;
+        },
+        { replace: true },
+      );
+  }, [needsFocusPage, page, setParams]);
+  const queryKey = [
+    ...charityKeys.root(role),
+    'key-pages',
+    accountId,
+    item.id,
+    page,
+    pager.pageSize,
+  ] as const;
+  const keys = useQuery({
+    queryKey,
+    queryFn: ({ signal }) =>
+      getManagedDonationKeysPage(role, item.id, page, pager.pageSize, signal),
+    retry: false,
+    placeholderData: (previous, query) =>
+      samePageFamily(query?.queryKey, queryKey) ? previous : undefined,
+  });
+  const capabilityLost = isForbidden(keys.error) || isUnauthorized(keys.error);
+  useEffect(() => {
+    if (capabilityLost) onCapabilityLoss?.();
+  }, [capabilityLost, onCapabilityLoss]);
+  const staleRevision = keys.data?.data.some((key) => key.donation_revision !== item.revision);
+  if (capabilityLost)
+    return (
+      <p className="field-error" role="alert">
+        {t('common.operations.charity.accessLost')}
+      </p>
+    );
+  return (
+    <Card>
+      <h3>{t('common.operations.charity.donationKeys')}</h3>
+      {focusKey && focusIndex === -1 ? (
+        <p className="inline-notice">{t('common.operations.charity.selectedKeyMissing')}</p>
+      ) : null}
+      {keys.isPending ? (
+        <LoadingState />
+      ) : keys.error ? (
+        <ErrorState error={keys.error} onRetry={() => void keys.refetch()} />
+      ) : null}
+      {staleRevision ? (
+        <div role="status">
+          <p>{t('common.operations.charity.changedWhileReading')}</p>
+          <button type="button" className="btn btn-secondary" onClick={() => void refresh()}>
+            {t('common.refresh')}
+          </button>
         </div>
-      </Card>
-    </div>
+      ) : null}
+      {keys.data ? (
+        <>
+          <fieldset
+            className="ops-stack ops-unframed"
+            disabled={keys.isFetching || Boolean(keys.error) || staleRevision}
+          >
+            {keys.data.data.map((key) => (
+              <section
+                className={key.id === focusKey ? 'ops-subcard is-selected' : 'ops-subcard'}
+                key={key.id}
+              >
+                <DonationKeyEditor
+                  key={item.revision}
+                  item={key}
+                  donation={item}
+                  role={role}
+                  refresh={refresh}
+                  onCapabilityLoss={onCapabilityLoss}
+                />
+                <RecurringLimitsDisclosure
+                  accountId={accountId}
+                  role={role}
+                  donationId={item.id}
+                  keyId={key.id}
+                  label={t('common.operations.charity.keyHeading', {
+                    id: key.id,
+                    head: key.display_head,
+                    tail: key.display_tail,
+                  })}
+                  readOnly={key.charity_state === 'ended' || key.charity_state === 'expired'}
+                  onSaved={() => {
+                    void refresh();
+                  }}
+                  onCapabilityLoss={onCapabilityLoss}
+                />
+              </section>
+            ))}
+          </fieldset>
+          <PagePagination
+            metadata={keys.data.pagination}
+            requestedPage={page}
+            onPageChange={pager.setPage}
+            onPageSizeChange={pager.setPageSize}
+            busy={keys.isFetching}
+          />
+        </>
+      ) : null}
+    </Card>
   );
 }
 
@@ -906,98 +1115,119 @@ function DonationsPanel({
   onCapabilityLoss,
 }: {
   role: CharityRole;
-  accountId?: string;
+  accountId: string;
   onCapabilityLoss?: () => void;
-}) {
-  const [searchParams] = useSearchParams();
-  const initialHandling = searchParams.get('handling') ?? '';
-  const handling = ['pending', 'processed', 'legacy', 'closed'].includes(initialHandling)
-    ? initialHandling
-    : '';
-  const query = searchParams.get('q') ?? '';
-  const [status, setStatus] = useState('');
-  return (
-    <DonationsPanelContents
-      key={`${handling}\0${query}`}
-      role={role}
-      accountId={accountId}
-      onCapabilityLoss={onCapabilityLoss}
-      handling={handling}
-      query={query}
-      status={status}
-      setStatus={setStatus}
-    />
-  );
-}
-
-function DonationsPanelContents({
-  role,
-  accountId,
-  onCapabilityLoss,
-  handling,
-  query,
-  status,
-  setStatus,
-}: {
-  role: CharityRole;
-  accountId?: string;
-  onCapabilityLoss?: () => void;
-  handling: string;
-  query: string;
-  status: string;
-  setStatus: (status: string) => void;
 }) {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const pager = useCursorPager();
-  const [, setSearchParams] = useSearchParams();
-  const [queryDraft, setQueryDraft] = useState(query);
-  const [selected, setSelected] = useState('');
-  const queryValid =
-    Array.from(queryDraft).length <= 128 &&
-    new TextEncoder().encode(queryDraft).byteLength <= 512 &&
-    !queryDraft.includes('\0');
-  const updateFilters = (nextHandling: string, nextQuery: string) => {
-    pager.reset();
-    setSelected('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawHandling = oneParam(searchParams, 'handling');
+  const handling = ['pending', 'processed', 'legacy', 'closed'].includes(rawHandling)
+    ? rawHandling
+    : '';
+  const rawQuery = oneParam(searchParams, 'q');
+  const query = validManagementSearch(rawQuery) ? rawQuery : '';
+  const rawStatus = oneParam(searchParams, 'donation_status');
+  const status = ['pending', 'approved', 'rejected', 'deleted', 'expired'].includes(rawStatus)
+    ? rawStatus
+    : '';
+  const selected = selectedID(searchParams, 'donation_id');
+  const [draft, setDraft] = useState({ query, text: query });
+  const queryDraft = draft.query === query ? draft.text : query;
+  const setQueryDraft = (text: string) => setDraft({ query, text });
+  const queryValid = validManagementSearch(queryDraft);
+  const pager = useUrlPagePager({
+    station: role === 'admin' ? 'admin' : 'user',
+    listType: 'managed-donations',
+    scopeKey: accountId,
+    pageParam: 'donations_page',
+    pageSizeParam: 'donations_page_size',
+  });
+  const updateFilters = (nextHandling: string, nextQuery: string, nextStatus = status) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      for (const [name, value] of [
+        ['handling', nextHandling],
+        ['q', nextQuery],
+        ['donation_status', nextStatus],
+      ]) {
+        if (value) next.set(name, value);
+        else next.delete(name);
+      }
+      next.set('donations_page', '1');
+      return next;
+    });
+  };
+  const setSelected = (id: string) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (id) next.set('donation_id', id);
+      else next.delete('donation_id');
+      for (const name of ['donation_key', 'donation_keys_page', 'donation_keys_page_size'])
+        next.delete(name);
+      if (!id && next.get('donation_from') === 'sources') next.set('charity_section', 'sources');
+      next.delete('donation_from');
+      return next;
+    });
+  };
+  useEffect(() => {
+    const desired = { handling, q: query, donation_status: status, donation_id: selected };
+    if (
+      Object.entries(desired).every(
+        ([name, value]) =>
+          searchParams.getAll(name).length <= 1 && (searchParams.get(name) ?? '') === value,
+      )
+    )
+      return;
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);
-        if (nextHandling) next.set('handling', nextHandling);
-        else next.delete('handling');
-        if (nextQuery) next.set('q', nextQuery);
-        else next.delete('q');
+        for (const [name, value] of Object.entries(desired)) {
+          next.delete(name);
+          if (value) next.set(name, value);
+        }
         return next;
       },
       { replace: true },
     );
-  };
+  }, [handling, query, status, selected, searchParams, setSearchParams]);
+  const listKey = [
+    ...charityKeys.root(role),
+    'donation-pages',
+    accountId,
+    status,
+    handling,
+    query,
+    pager.page,
+    pager.pageSize,
+  ] as const;
   const list = useQuery({
-    queryKey: charityKeys.donations(role, status, pager.cursor, { handling, q: query }),
-    queryFn: () => getManagedDonations(role, status, pager.cursor, { handling, q: query }),
+    queryKey: listKey,
+    queryFn: ({ signal }) =>
+      getManagedDonationsPage(
+        role,
+        { status, handling, q: query } as ManagedDonationPageFilters,
+        pager.page,
+        pager.pageSize,
+        signal,
+      ),
     retry: false,
+    placeholderData: (previous, previousQuery) =>
+      samePageFamily(previousQuery?.queryKey, listKey) ? previous : undefined,
   });
   const detail = useQuery({
-    queryKey: charityKeys.donation(role, selected),
-    queryFn: () => getManagedDonation(role, selected),
+    queryKey: [...charityKeys.donation(role, selected), accountId],
+    queryFn: ({ signal }) => getManagedDonation(role, selected, signal),
     enabled: Boolean(selected),
     retry: false,
   });
-  const capabilityLost =
-    isUnauthorized(list.error) ||
-    isForbidden(list.error) ||
-    isUnauthorized(detail.error) ||
-    isForbidden(detail.error);
+  const capabilityLost = [list.error, detail.error].some(
+    (error) => isUnauthorized(error) || isForbidden(error),
+  );
   useEffect(() => {
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
-  const refresh = async () => {
-    await Promise.all([
-      list.refetch(),
-      selected ? detail.refetch() : Promise.resolve(),
-      client.invalidateQueries({ queryKey: charityKeys.badges(role) }),
-    ]);
-  };
+  const refresh = () => client.invalidateQueries({ queryKey: charityKeys.root(role) });
   if (capabilityLost) {
     return (
       <Card>
@@ -1055,9 +1285,7 @@ function DonationsPanelContents({
             <select
               value={status}
               onChange={(event) => {
-                pager.reset();
-                setSelected('');
-                setStatus(event.target.value);
+                updateFilters(handling, query, event.target.value);
               }}
             >
               <option value="">{t(charityCopyKey(role, 'allStatuses'))}</option>
@@ -1106,6 +1334,24 @@ function DonationsPanelContents({
                         <MarkdownText>
                           {item.description || t('common.operations.charity.noDescription')}
                         </MarkdownText>
+                        <ul className="ops-source-preview">
+                          {item.sources.map((source) => (
+                            <li
+                              key={`${source.kind}:${source.kind === 'mainstream' ? source.channel_id : source.base_url}:${source.connector_type}`}
+                            >
+                              {source.kind === 'mainstream' ? `${source.name} · ` : ''}
+                              {source.base_url}
+                            </li>
+                          ))}
+                        </ul>
+                        {BigInt(item.source_count) > BigInt(item.sources.length) ? (
+                          <small>
+                            {t('common.operations.charity.sourcePreview', {
+                              shown: item.sources.length,
+                              total: item.source_count,
+                            })}
+                          </small>
+                        ) : null}
                       </td>
                       <td
                         className="ops-cell-wide"
@@ -1127,7 +1373,18 @@ function DonationsPanelContents({
                       <td className="ops-cell-wide" data-label={t('common.donationHandling.title')}>
                         <DonationHandlingStatus handling={item.handling} />
                       </td>
-                      <td data-label={t('common.operations.charity.keys')}>{item.keys.length}</td>
+                      <td data-label={t('common.operations.charity.keys')}>
+                        {item.key_count}
+                        <div className="muted">
+                          {Object.entries(item.state_counts)
+                            .filter(([, count]) => count !== '0')
+                            .map(([state, count]) => (
+                              <span className="ops-summary-part" key={state}>
+                                {t(charityStateKey(state as CharityState))}: {count}
+                              </span>
+                            ))}
+                        </div>
+                      </td>
                       <td
                         className="ops-cell-wide"
                         data-label={t('common.operations.charity.open')}
@@ -1135,6 +1392,7 @@ function DonationsPanelContents({
                         <button
                           className="btn btn-secondary"
                           type="button"
+                          disabled={list.isFetching}
                           onClick={() => setSelected(item.id)}
                         >
                           {t('common.operations.charity.openReview')}
@@ -1145,20 +1403,23 @@ function DonationsPanelContents({
                 </tbody>
               </table>
             </div>
-            <CursorPagination
-              page={pager.page}
-              nextCursor={list.data.next_cursor}
-              onPrevious={pager.previous}
-              onNext={pager.next}
-              labels={{
-                previous: t(charityCopyKey(role, 'previous')),
-                next: t(charityCopyKey(role, 'next')),
-                page: t('common.operations.charity.page'),
-              }}
-            />
           </>
         )}
+        {list.data && !list.error ? (
+          <PagePagination
+            metadata={list.data.pagination}
+            requestedPage={pager.page}
+            onPageChange={pager.setPage}
+            onPageSizeChange={pager.setPageSize}
+            busy={list.isFetching}
+          />
+        ) : null}
       </Card>
+      {selected ? (
+        <button className="btn btn-quiet" type="button" onClick={() => setSelected('')}>
+          {t('common.operations.charity.returnToList')}
+        </button>
+      ) : null}
       {selected ? (
         detail.isPending ? (
           <LoadingState />
@@ -1167,39 +1428,14 @@ function DonationsPanelContents({
         ) : (
           <>
             <DonationDetail
-              key={`${detail.data.id}:${detail.data.revision}`}
+              key={detail.data.id}
               item={detail.data}
+              accountId={accountId}
+              busy={detail.isFetching || list.isFetching || Boolean(list.error)}
               role={role}
               refresh={refresh}
               onCapabilityLoss={onCapabilityLoss}
             />
-            {accountId ? (
-              <Card>
-                <div className="ops-stack">
-                  {detail.data.keys.map((entry) => (
-                    <RecurringLimitsDisclosure
-                      key={`${accountId}:${detail.data.id}:${entry.id}`}
-                      accountId={accountId}
-                      role={role}
-                      donationId={detail.data.id}
-                      keyId={entry.id}
-                      label={t('common.operations.charity.keyHeading', {
-                        id: entry.id,
-                        head: entry.display_head,
-                        tail: entry.display_tail,
-                      })}
-                      readOnly={
-                        entry.charity_state === 'ended' || entry.charity_state === 'expired'
-                      }
-                      onSaved={() => {
-                        void refresh();
-                      }}
-                      onCapabilityLoss={onCapabilityLoss}
-                    />
-                  ))}
-                </div>
-              </Card>
-            ) : null}
           </>
         )
       ) : null}
@@ -1714,19 +1950,29 @@ function ModelForm({
 
 function BindingsPanel({
   role,
+  accountId,
+  refresh,
   model,
   onCapabilityLoss,
 }: {
   role: CharityRole;
+  accountId: string;
+  refresh: () => Promise<unknown>;
   model: CharityModel;
   onCapabilityLoss?: () => void;
 }) {
   const { t } = useTranslation();
+  const pager = usePagePager({
+    station: role === 'admin' ? 'admin' : 'user',
+    listType: 'charity-binding-order',
+    scopeKey: `${accountId}:${model.id}`,
+  });
   const [selected, setSelected] = useState<Record<string, CharitySelection>>({});
+  const [pickerBlocked, setPickerBlocked] = useState(true);
   const [orderDraft, setOrderDraft] = useState<{ revision: string; ids: string[] } | null>(null);
   const bindings = useQuery({
-    queryKey: charityKeys.bindings(role, model.id),
-    queryFn: () => getManagedBindings(role, model.id),
+    queryKey: [...charityKeys.bindings(role, model.id), accountId],
+    queryFn: ({ signal }) => getManagedBindings(role, model.id, signal),
     retry: false,
   });
 
@@ -1735,7 +1981,7 @@ function BindingsPanel({
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
   const reconcile = async () => {
-    await bindings.refetch();
+    await refresh();
   };
   const add = useRetainedOperation(
     (
@@ -1786,7 +2032,13 @@ function BindingsPanel({
     bindings.data &&
     orderedBindings.some((entry, index) => entry.id !== bindings.data.bindings[index]?.id),
   );
-  const busy = order.isPending || add.isPending || remove.isPending;
+  const bindingPage = snapshotPage(orderedBindings, pager.page, pager.pageSize);
+  const busy =
+    bindings.isFetching ||
+    Boolean(bindings.error) ||
+    order.isPending ||
+    add.isPending ||
+    remove.isPending;
   const chosen = Object.values(selected).map((entry) => ({
     donation_key_id: entry.donation_key_id,
     upstream_model_id: entry.upstream_model_id,
@@ -1824,58 +2076,73 @@ function BindingsPanel({
               </tr>
             </thead>
             <tbody>
-              {orderedBindings.map((entry, index) => (
-                <tr key={entry.id}>
-                  <td data-label={t(charityCopyKey(role, 'order'))}>{index + 1}</td>
-                  <td className="ops-cell-wide" data-label={t('common.operations.charity.source')}>
-                    {entry.source.connector_type} · {entry.source.canonical_base_url} ·{' '}
-                    {entry.source.display_head}…{entry.source.display_tail}
-                    <KeyLimitSummary
-                      concurrency={entry.source.max_concurrency}
-                      rpm={entry.source.max_rpm}
-                      readOnly
-                    />
-                  </td>
-                  <td
-                    className="ops-cell-wide"
-                    data-label={t(charityCopyKey(role, 'upstreamModel'))}
-                  >
-                    {entry.upstream_model_id}
-                  </td>
-                  <td className="ops-cell-wide" data-label={t(charityCopyKey(role, 'actions'))}>
-                    <button
-                      className="btn btn-secondary"
-                      type="button"
-                      disabled={index === 0 || busy}
-                      onClick={() => move(index, -1)}
+              {bindingPage.data.map((entry, pageIndex) => {
+                const index = bindingPage.offset + pageIndex;
+                return (
+                  <tr key={entry.id}>
+                    <td data-label={t(charityCopyKey(role, 'order'))}>{index + 1}</td>
+                    <td
+                      className="ops-cell-wide"
+                      data-label={t('common.operations.charity.source')}
                     >
-                      {t('common.operations.charity.moveUp')}
-                    </button>
-                    <button
-                      className="btn btn-secondary"
-                      type="button"
-                      disabled={index === orderedBindings.length - 1 || busy}
-                      onClick={() => move(index, 1)}
+                      {entry.source.connector_type} · {entry.source.canonical_base_url} ·{' '}
+                      {entry.source.display_head}…{entry.source.display_tail}
+                      <KeyLimitSummary
+                        concurrency={entry.source.max_concurrency}
+                        rpm={entry.source.max_rpm}
+                        readOnly
+                      />
+                    </td>
+                    <td
+                      className="ops-cell-wide"
+                      data-label={t(charityCopyKey(role, 'upstreamModel'))}
                     >
-                      {t('common.operations.charity.moveDown')}
-                    </button>
-                    <button
-                      className="btn btn-danger"
-                      type="button"
-                      disabled={busy || orderChanged}
-                      onClick={() =>
-                        remove.mutate({ id: entry.id, revision: bindings.data.binding_revision })
-                      }
-                    >
-                      {t('common.operations.charity.remove')}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                      {entry.upstream_model_id}
+                    </td>
+                    <td className="ops-cell-wide" data-label={t(charityCopyKey(role, 'actions'))}>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        disabled={index === 0 || busy}
+                        onClick={() => move(index, -1)}
+                      >
+                        {t('common.operations.charity.moveUp')}
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        disabled={index === orderedBindings.length - 1 || busy}
+                        onClick={() => move(index, 1)}
+                      >
+                        {t('common.operations.charity.moveDown')}
+                      </button>
+                      <button
+                        className="btn btn-danger"
+                        type="button"
+                        disabled={busy || orderChanged}
+                        onClick={() =>
+                          remove.mutate({ id: entry.id, revision: bindings.data.binding_revision })
+                        }
+                      >
+                        {t('common.operations.charity.remove')}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
+      {bindings.data && !bindings.error ? (
+        <PagePagination
+          metadata={bindingPage.pagination}
+          requestedPage={pager.page}
+          onPageChange={pager.setPage}
+          onPageSizeChange={pager.setPageSize}
+          busy={busy}
+        />
+      ) : null}
       {orderChanged ? (
         <div className="ops-actions">
           <button
@@ -1908,14 +2175,16 @@ function BindingsPanel({
         onChange={setSelected}
         locked={busy || !bindings.data}
         onCapabilityLoss={onCapabilityLoss}
+        onReadStateChange={setPickerBlocked}
       />
       <div className="ops-actions">
         <button
           className="btn btn-primary"
           type="button"
-          disabled={!bindings.data || chosen.length === 0 || busy || orderChanged}
+          disabled={!bindings.data || chosen.length === 0 || busy || orderChanged || pickerBlocked}
           onClick={() =>
             bindings.data &&
+            !pickerBlocked &&
             add.mutate(
               { selections: chosen, revision: bindings.data.binding_revision },
               { onSuccess: () => setSelected({}) },
@@ -1938,31 +2207,103 @@ function BindingsPanel({
 
 function ModelsPanel({
   role,
+  accountId,
   onCapabilityLoss,
 }: {
   role: CharityRole;
+  accountId: string;
   onCapabilityLoss?: () => void;
 }) {
   const { t } = useTranslation();
-  const pager = useCursorPager();
-  const [queryDraft, setQueryDraft] = useState('');
-  const [query, setQuery] = useState('');
-  const [enabled, setEnabled] = useState('');
-  const [selected, setSelected] = useState<CharityModel | null>(null);
-  const models = useQuery({
-    queryKey: charityKeys.models(role, query, enabled, pager.cursor),
-    queryFn: () => getManagedCharityModels(role, query, enabled, pager.cursor),
-    retry: false,
+  const client = useQueryClient();
+  const [params, setParams] = useSearchParams();
+  const rawQuery = oneParam(params, 'model_q');
+  const query = validManagementSearch(rawQuery) ? rawQuery : '';
+  const rawEnabled = oneParam(params, 'model_enabled');
+  const enabled = ['true', 'false'].includes(rawEnabled) ? rawEnabled : '';
+  const selectedId = selectedID(params, 'charity_model');
+  const [draft, setDraft] = useState({ query, text: query });
+  const queryDraft = draft.query === query ? draft.text : query;
+  const setQueryDraft = (text: string) => setDraft({ query, text });
+  const pager = useUrlPagePager({
+    station: role === 'admin' ? 'admin' : 'user',
+    listType: 'managed-charity-models',
+    scopeKey: accountId,
+    pageParam: 'models_page',
+    pageSizeParam: 'models_page_size',
   });
-  const capabilityLost = isUnauthorized(models.error) || isForbidden(models.error);
+  const updateFilters = (nextQuery: string, nextEnabled = enabled) => {
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      for (const [name, value] of [
+        ['model_q', nextQuery],
+        ['model_enabled', nextEnabled],
+      ]) {
+        next.delete(name);
+        if (value) next.set(name, value);
+      }
+      next.set('models_page', '1');
+      return next;
+    });
+  };
+  const setSelected = (id: string) =>
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      if (id) next.set('charity_model', id);
+      else next.delete('charity_model');
+      return next;
+    });
+  useEffect(() => {
+    const desired = { model_q: query, model_enabled: enabled, charity_model: selectedId };
+    if (
+      Object.entries(desired).every(
+        ([name, value]) => params.getAll(name).length <= 1 && (params.get(name) ?? '') === value,
+      )
+    )
+      return;
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        for (const [name, value] of Object.entries(desired)) {
+          next.delete(name);
+          if (value) next.set(name, value);
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  }, [query, enabled, selectedId, params, setParams]);
+  const listKey = [
+    ...charityKeys.root(role),
+    'model-pages',
+    accountId,
+    query,
+    enabled,
+    pager.page,
+    pager.pageSize,
+  ] as const;
+  const models = useQuery({
+    queryKey: listKey,
+    queryFn: ({ signal }) =>
+      getManagedCharityModelsPage(role, query, enabled, pager.page, pager.pageSize, signal),
+    retry: false,
+    placeholderData: (previous, previousQuery) =>
+      samePageFamily(previousQuery?.queryKey, listKey) ? previous : undefined,
+  });
+  const detail = useQuery({
+    queryKey: [...charityKeys.root(role), 'model-detail', accountId, selectedId],
+    queryFn: ({ signal }) => getManagedCharityModel(role, selectedId, signal),
+    retry: false,
+    enabled: Boolean(selectedId),
+  });
+  const selected = detail.data;
+  const capabilityLost = [models.error, detail.error].some(
+    (error) => isUnauthorized(error) || isForbidden(error),
+  );
   useEffect(() => {
     if (capabilityLost) onCapabilityLoss?.();
   }, [capabilityLost, onCapabilityLoss]);
-  const refresh = async () => {
-    const result = await models.refetch();
-    if (selected && result.data)
-      setSelected(result.data.data.find((item) => item.id === selected.id) ?? null);
-  };
+  const refresh = () => client.invalidateQueries({ queryKey: charityKeys.root(role) });
   if (capabilityLost) {
     return (
       <Card>
@@ -1980,21 +2321,24 @@ function ModelsPanel({
           className="ops-toolbar"
           onSubmit={(event) => {
             event.preventDefault();
-            pager.reset();
-            setQuery(queryDraft.trim());
+            if (validManagementSearch(queryDraft)) updateFilters(queryDraft.trim());
           }}
         >
           <label>
             <span>{t('common.operations.charity.searchModels')}</span>
-            <input value={queryDraft} onChange={(event) => setQueryDraft(event.target.value)} />
+            <input
+              maxLength={256}
+              aria-invalid={!validManagementSearch(queryDraft)}
+              value={queryDraft}
+              onChange={(event) => setQueryDraft(event.target.value)}
+            />
           </label>
           <label>
             <span>{t(charityCopyKey(role, 'enabled'))}</span>
             <select
               value={enabled}
               onChange={(event) => {
-                pager.reset();
-                setEnabled(event.target.value);
+                updateFilters(query, event.target.value);
               }}
             >
               <option value="">{t('common.all')}</option>
@@ -2002,7 +2346,11 @@ function ModelsPanel({
               <option value="false">{t(charityCopyKey(role, 'disabled'))}</option>
             </select>
           </label>
-          <button className="btn btn-secondary" type="submit">
+          <button
+            className="btn btn-secondary"
+            type="submit"
+            disabled={!validManagementSearch(queryDraft)}
+          >
             {t('common.applyFilter')}
           </button>
         </form>
@@ -2073,7 +2421,8 @@ function ModelsPanel({
                         <button
                           className="btn btn-secondary"
                           type="button"
-                          onClick={() => setSelected(model)}
+                          disabled={models.isFetching}
+                          onClick={() => setSelected(model.id)}
                         >
                           {t('common.operations.charity.manage')}
                         </button>
@@ -2083,72 +2432,94 @@ function ModelsPanel({
                 </tbody>
               </table>
             </div>
-            <CursorPagination
-              page={pager.page}
-              nextCursor={models.data.next_cursor}
-              onPrevious={pager.previous}
-              onNext={pager.next}
-              labels={{
-                previous: t(charityCopyKey(role, 'previous')),
-                next: t(charityCopyKey(role, 'next')),
-                page: t('common.operations.charity.page'),
-              }}
-            />
           </>
         )}
+        {models.data && !models.error ? (
+          <PagePagination
+            metadata={models.data.pagination}
+            requestedPage={pager.page}
+            onPageChange={pager.setPage}
+            onPageSizeChange={pager.setPageSize}
+            busy={models.isFetching}
+          />
+        ) : null}
       </Card>
-      {selected && !capabilityLost ? (
-        <>
+      {selectedId ? (
+        <button className="btn btn-quiet" type="button" onClick={() => setSelected('')}>
+          {t('common.operations.charity.returnToList')}
+        </button>
+      ) : null}
+      {selectedId && detail.isPending ? (
+        <LoadingState />
+      ) : selectedId && detail.error ? (
+        <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
+      ) : selected ? (
+        <fieldset
+          className="ops-stack ops-unframed"
+          disabled={detail.isFetching || models.isFetching || Boolean(models.error)}
+        >
           <ModelForm
             key={`model:${selected.id}`}
             role={role}
             model={selected}
             refresh={refresh}
-            onDeleted={() => setSelected(null)}
+            onDeleted={() => setSelected('')}
             onCapabilityLoss={onCapabilityLoss}
           />
           <BindingsPanel
-            key={`bindings:${selected.id}:${selected.binding_revision}`}
+            key={`bindings:${selected.id}`}
             role={role}
+            accountId={accountId}
             model={selected}
+            refresh={refresh}
             onCapabilityLoss={onCapabilityLoss}
           />
-        </>
+        </fieldset>
       ) : null}
     </div>
   );
 }
 
-export function CharityManagement({
-  frame,
-  accountId,
-  onCapabilityLoss,
-  sourceGroups,
-}: {
+export function CharityManagement(props: {
   frame: CharityRole;
   accountId?: string;
   onCapabilityLoss?: () => void;
-  sourceGroups?: ReactNode;
+}) {
+  if (!props.accountId) return <LoadingState />;
+  return (
+    <CharityManagementAccount
+      key={`${props.frame}:${props.accountId}`}
+      {...props}
+      accountId={props.accountId}
+    />
+  );
+}
+
+function CharityManagementAccount({
+  frame,
+  accountId,
+  onCapabilityLoss,
+}: {
+  frame: CharityRole;
+  accountId: string;
+  onCapabilityLoss?: () => void;
 }) {
   const { t } = useTranslation();
-  const location = useLocation();
-  const [selection, setSelection] = useState<{
-    locationKey: string;
-    section: 'donations' | 'models' | 'sources';
-  }>({ locationKey: location.key, section: 'donations' });
-  const [searchParams] = useSearchParams();
-  const handlingFilter = searchParams.get('handling');
-  const section =
-    handlingFilter && selection.locationKey !== location.key ? 'donations' : selection.section;
-  const setSection = (next: 'donations' | 'models' | 'sources') => {
-    setSelection({ locationKey: location.key, section: next });
-  };
+  const [params, setParams] = useSearchParams();
+  const rawSection = oneParam(params, 'charity_section');
+  const section = rawSection === 'models' || rawSection === 'sources' ? rawSection : 'donations';
+  const setSection = (nextSection: 'donations' | 'models' | 'sources') =>
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set('charity_section', nextSection);
+      return next;
+    });
   const [capabilityLost, setCapabilityLost] = useState(false);
   const clearCapability = useCallback(() => {
     setCapabilityLost(true);
     onCapabilityLoss?.();
   }, [onCapabilityLoss]);
-  if (capabilityLost) {
+  if (capabilityLost)
     return (
       <Card>
         <p className="field-error" role="alert">
@@ -2156,7 +2527,6 @@ export function CharityManagement({
         </p>
       </Card>
     );
-  }
   return (
     <div className="ops-stack charity-management">
       <div
@@ -2164,43 +2534,57 @@ export function CharityManagement({
         role="tablist"
         aria-label={t('common.operations.charity.sectionsLabel')}
       >
-        <button
-          className={section === 'donations' ? 'btn btn-primary' : 'btn btn-secondary'}
-          type="button"
-          role="tab"
-          aria-selected={section === 'donations'}
-          onClick={() => setSection('donations')}
-        >
-          {t(charityCopyKey(frame, 'donationsTitle'))}
-        </button>
-        <button
-          className={section === 'models' ? 'btn btn-primary' : 'btn btn-secondary'}
-          type="button"
-          role="tab"
-          aria-selected={section === 'models'}
-          onClick={() => setSection('models')}
-        >
-          {t(charityCopyKey(frame, 'modelsTitle'))}
-        </button>
-        {frame === 'admin' && sourceGroups ? (
+        {(
+          [
+            [
+              'donations',
+              frame === 'admin'
+                ? t('admin.charity.donationsTitle')
+                : t('user.steward.donationsTitle'),
+            ],
+            [
+              'models',
+              frame === 'admin' ? t('admin.charity.modelsTitle') : t('user.steward.modelsTitle'),
+            ],
+            ['sources', t('common.operations.charity.sourceGroups')],
+          ] as const
+        ).map(([value, label]) => (
           <button
-            className={section === 'sources' ? 'btn btn-primary' : 'btn btn-secondary'}
+            key={value}
+            className={section === value ? 'btn btn-primary' : 'btn btn-secondary'}
             type="button"
             role="tab"
-            aria-selected={section === 'sources'}
-            onClick={() => setSection('sources')}
+            aria-selected={section === value}
+            onClick={() => setSection(value)}
           >
-            {t('common.operations.charity.sourceGroups')}
+            {label}
           </button>
-        ) : null}
+        ))}
       </div>
       {section === 'donations' ? (
         <DonationsPanel role={frame} accountId={accountId} onCapabilityLoss={clearCapability} />
       ) : section === 'models' ? (
-        <ModelsPanel role={frame} onCapabilityLoss={clearCapability} />
-      ) : frame === 'admin' ? (
-        sourceGroups
-      ) : null}
+        <ModelsPanel role={frame} accountId={accountId} onCapabilityLoss={clearCapability} />
+      ) : (
+        <CharitySourceBrowser
+          role={frame}
+          accountId={accountId}
+          enabled
+          onCapabilityLoss={clearCapability}
+          onOpenDonation={(donationId, keyId) =>
+            setParams((current) => {
+              const next = new URLSearchParams(current);
+              next.set('charity_section', 'donations');
+              next.set('donation_id', donationId);
+              next.set('donation_from', 'sources');
+              for (const name of ['donation_key', 'donation_keys_page', 'donation_keys_page_size'])
+                next.delete(name);
+              if (keyId) next.set('donation_key', keyId);
+              return next;
+            })
+          }
+        />
+      )}
     </div>
   );
 }

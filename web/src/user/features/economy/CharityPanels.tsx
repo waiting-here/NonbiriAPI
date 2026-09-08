@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { CopyValue } from '@shared/components/CopyValue';
-import { KeyLimitSummary } from '@shared/components/KeyRoutingLimits';
 import { MarkdownText } from '@shared/components/MarkdownText';
 import { CharityPriceTable, type CharityPriceRow } from '@shared/components/CharityPriceTable';
 import { Card, EmptyState, ErrorState, StatusBadge } from '@shared/components/States';
@@ -15,6 +14,7 @@ import { isConflictError, isResponseUnknown, type CreateDonationInput } from './
 import { CreditAmount, ExactCount } from './ExactValue';
 import { maskedKey } from './format';
 import { isDimensionExhausted } from './normalize';
+import { DonationResourcePicker } from './DonationResourcePicker';
 import {
   useCreateDonation,
   useEditDonation,
@@ -31,7 +31,6 @@ import type {
 } from './types';
 
 const DRAFT_STORAGE_PREFIX = 'nonbiri:charity-donation-draft:v1';
-const EMPTY_SELECTION = new Set<string>();
 
 export type DonationOverviewFilter = 'all' | 'available' | 'blocked' | 'ended';
 
@@ -252,85 +251,51 @@ function storeDraft(namespace: string, description: string): void {
   }
 }
 
-function eligibilityLabel(choice: EndpointKeyChoice, t: (key: string) => string): string {
-  return choice.eligibility === 'eligible'
-    ? t('user.charity.keyEligibility.eligible')
-    : t(`user.charity.keyEligibility.${choice.eligibility}`);
-}
-
 export function DonationComposer({
-  choices,
   draftNamespace,
   notice,
+  enabled = true,
 }: {
-  choices: readonly EndpointKeyChoice[];
   draftNamespace: string;
   notice?: string;
+  enabled?: boolean;
 }) {
   const { t } = useTranslation();
   const donationNotice = notice?.trim() ? notice : t('user.charity.donationNoticeDefault');
+  const formID = useId();
   const mutation = useCreateDonation();
   const [description, setDescription] = useState(() => parseDraft(draftNamespace));
-  const [selection, setSelection] = useState<{ signature: string; ids: Set<string> }>(() => ({
-    signature: '',
-    ids: new Set(),
-  }));
+  const [selectedChoices, setSelectedChoices] = useState<readonly EndpointKeyChoice[]>([]);
   const [expiryByKey, setExpiryByKey] = useState<Record<string, TimeDraft>>({});
-  const [resourceQuery, setResourceQuery] = useState('');
+  const [readBlocked, setReadBlocked] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [validation, setValidation] = useState('');
   const [success, setSuccess] = useState(false);
-  const [blockedAuthority, setBlockedAuthority] = useState<{
-    baselineGeneration: number;
-  } | null>(null);
+  const [blockedAuthority, setBlockedAuthority] = useState<{ baselineGeneration: number } | null>(
+    null,
+  );
   const authorityAdvanced =
     blockedAuthority !== null && mutation.reconcileGeneration > blockedAuthority.baselineGeneration;
   const waitingForAuthority = blockedAuthority !== null && !authorityAdvanced;
-  const eligible = choices.filter((choice) => choice.eligibility === 'eligible');
-  const eligibleSignature = eligible.map((choice) => choice.key.id).join('|');
-  const selected = selection.signature === eligibleSignature ? selection.ids : EMPTY_SELECTION;
-  const selectedChoices = eligible.filter((choice) => selected.has(choice.key.id));
   const selectionMode = classifyDonationSelection(selectedChoices);
+  const locked = !enabled || mutation.isPending || mutation.isReconciling || waitingForAuthority;
+  const invalidSelection =
+    selectedChoices.length === 0 ||
+    selectedChoices.length > 100 ||
+    selectedChoices.some((choice) => choice.eligibility !== 'eligible') ||
+    new Set(selectedChoices.map((choice) => choice.key.id)).size !== selectedChoices.length;
+  const invalidExpiry = selectedChoices.some(
+    (choice) =>
+      expiryByKey[choice.key.id] && timeDraftValue(expiryByKey[choice.key.id]) === undefined,
+  );
 
   useEffect(() => {
     storeDraft(draftNamespace, description);
   }, [description, draftNamespace]);
 
-  const grouped = useMemo(() => {
-    const groups = new Map<
-      string,
-      { endpoint: EndpointKeyChoice['endpoint']; choices: EndpointKeyChoice[] }
-    >();
-    for (const choice of choices) {
-      const existing = groups.get(choice.endpoint.id);
-      if (existing) existing.choices.push(choice);
-      else groups.set(choice.endpoint.id, { endpoint: choice.endpoint, choices: [choice] });
-    }
-    return [...groups.values()];
-  }, [choices]);
-
-  const resourceFilter = resourceQuery.trim().toLocaleLowerCase();
-  const visibleGroups = grouped
-    .map((group) => {
-      const endpointMatches =
-        `${group.endpoint.note} ${group.endpoint.baseUrl} ${group.endpoint.origin.kind === 'mainstream' ? group.endpoint.origin.name : ''}`
-          .toLocaleLowerCase()
-          .includes(resourceFilter);
-      return {
-        ...group,
-        choices: endpointMatches
-          ? group.choices
-          : group.choices.filter((choice) =>
-              `${choice.key.note} ${choice.key.displayHead} ${choice.key.displayTail}`
-                .toLocaleLowerCase()
-                .includes(resourceFilter),
-            ),
-      };
-    })
-    .filter((group) => group.choices.length > 0);
-
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (locked || readBlocked) return;
     setValidation('');
     setSuccess(false);
     setBlockedAuthority(null);
@@ -339,7 +304,7 @@ export function DonationComposer({
       setValidation(t('user.charity.descriptionInvalid'));
       return;
     }
-    if (selected.size === 0) {
+    if (invalidSelection) {
       setValidation(t('user.charity.chooseExistingKeys'));
       return;
     }
@@ -351,12 +316,11 @@ export function DonationComposer({
       setValidation(t('user.charity.splitDonationSources'));
       return;
     }
-    const keys = [...selected].map((endpointKeyId) => {
-      const expiresAt = expiryByKey[endpointKeyId]
-        ? timeDraftValue(expiryByKey[endpointKeyId])
+    const keys = selectedChoices.map((choice) => {
+      const expiresAt = expiryByKey[choice.key.id]
+        ? timeDraftValue(expiryByKey[choice.key.id])
         : null;
-      if (expiresAt === undefined) return undefined;
-      return { endpointKeyId, expiresAt };
+      return expiresAt === undefined ? undefined : { endpointKeyId: choice.key.id, expiresAt };
     });
     if (keys.some((key) => key === undefined)) {
       setValidation(t('user.charity.expiryInvalid'));
@@ -371,20 +335,20 @@ export function DonationComposer({
     try {
       await mutation.mutateAsync(input);
       setDescription('');
-      setSelection({ signature: eligibleSignature, ids: new Set() });
+      setSelectedChoices([]);
       setExpiryByKey({});
       setAuthorized(false);
       storeDraft(draftNamespace, '');
       setSuccess(true);
+      setBlockedAuthority({ baselineGeneration });
     } catch (error) {
       if (isConflictError(error) || isResponseUnknown(error)) {
-        setSelection({ signature: eligibleSignature, ids: new Set() });
+        setSelectedChoices([]);
         setExpiryByKey({});
         setAuthorized(false);
         setBlockedAuthority({ baselineGeneration });
       }
       if (isConflictError(error)) setValidation(t('user.charity.reselectAfterConflict'));
-      // React Query retains the bounded error for the explicit notice below.
     }
   };
 
@@ -400,130 +364,47 @@ export function DonationComposer({
         <h3 id="donation-notice-title">{t('user.charity.donationNoticeTitle')}</h3>
         <MarkdownText>{donationNotice}</MarkdownText>
       </section>
-      <form onSubmit={submit} noValidate>
-        <label className="full-width">
-          <span>{t('user.charity.donationDescription')}</span>
-          <textarea
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            aria-invalid={Boolean(validation)}
-          />
-        </label>
-
-        {eligible.length === 0 ? (
-          <EmptyState
-            title={t('user.charity.noEligibleKeys')}
-            body={t('user.charity.noEligibleKeysBody')}
-            action={
-              <Link className="btn btn-secondary" to="/endpoints" state={{ returnTo: '/charity' }}>
-                {t('user.charity.manageEndpoints')}
-              </Link>
-            }
-          />
-        ) : (
-          <fieldset className="economy-key-picker">
-            <legend>{t('user.charity.selectExistingKeys')}</legend>
-            {choices.length > 8 || resourceQuery ? (
-              <label className="economy-resource-search">
-                <span>{t('user.charity.searchResources')}</span>
-                <input
-                  type="search"
-                  maxLength={512}
-                  value={resourceQuery}
-                  onChange={(event) => setResourceQuery(event.target.value)}
-                />
-              </label>
-            ) : null}
-            {visibleGroups.length === 0 ? <p>{t('common.noResultsBody')}</p> : null}
-            <div className="economy-resource-groups">
-              {visibleGroups.map((group) => (
-                <details
-                  className="economy-key-group"
-                  key={group.endpoint.id}
-                  open={grouped.length === 1 || Boolean(resourceFilter)}
-                >
-                  <summary>
-                    <strong>
-                      {group.endpoint.note ||
-                        (group.endpoint.origin.kind === 'mainstream'
-                          ? group.endpoint.origin.name
-                          : group.endpoint.baseUrl)}
-                    </strong>
-                    <span className="muted">
-                      {t('user.charity.groupSelected', {
-                        count: group.choices.filter((choice) => selected.has(choice.key.id)).length,
-                        total: group.choices.length,
-                      })}
-                    </span>
-                  </summary>
-                  <p className="muted">
-                    {group.endpoint.connectorType} · {group.endpoint.baseUrl}
-                  </p>
-                  {group.choices.map((choice) => {
-                    const disabled = choice.eligibility !== 'eligible';
-                    const selectedChoice = selected.has(choice.key.id);
-                    return (
-                      <div className="economy-key-choice" key={choice.key.id}>
-                        <input
-                          type="checkbox"
-                          id={`donation-key-${choice.key.id}`}
-                          checked={selectedChoice}
-                          disabled={disabled}
-                          onChange={(event) =>
-                            setSelection((current) => {
-                              const next = new Set(
-                                current.signature === eligibleSignature ? current.ids : [],
-                              );
-                              if (event.target.checked) next.add(choice.key.id);
-                              else next.delete(choice.key.id);
-                              return { signature: eligibleSignature, ids: next };
-                            })
-                          }
-                        />
-                        <span>
-                          <label htmlFor={`donation-key-${choice.key.id}`}>
-                            <span className="mono">
-                              {maskedKey(choice.key.displayHead, choice.key.displayTail)}
-                            </span>
-                            {choice.key.note ? <span>{choice.key.note}</span> : null}
-                          </label>
-                          <small className="muted">{eligibilityLabel(choice, t)}</small>
-                          <KeyLimitSummary
-                            concurrency={choice.key.maxConcurrency}
-                            rpm={choice.key.maxRPM}
-                          />
-                          {selectedChoice ? (
-                            <span className="economy-key-expiry">
-                              <span>{t('user.charity.keyExpiry')}</span>
-                              <TimeInput
-                                station="user"
-                                draft={expiryByKey[choice.key.id] ?? createTimeDraft()}
-                                onChange={(update) =>
-                                  setExpiryByKey((current) => ({
-                                    ...current,
-                                    [choice.key.id]: update(
-                                      current[choice.key.id] ?? createTimeDraft(),
-                                    ),
-                                  }))
-                                }
-                                onClick={(event) => event.stopPropagation()}
-                                aria-label={t('user.charity.keyExpiryFor', {
-                                  key: maskedKey(choice.key.displayHead, choice.key.displayTail),
-                                })}
-                              />
-                              <small className="muted">{t('user.charity.expiryHint')}</small>
-                            </span>
-                          ) : null}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </details>
-              ))}
+      <div className="economy-donation-form">
+        <form id={formID} onSubmit={submit} noValidate>
+          <label className="full-width">
+            <span>{t('user.charity.donationDescription')}</span>
+            <textarea
+              value={description}
+              disabled={locked}
+              onChange={(event) => setDescription(event.target.value)}
+              aria-invalid={Boolean(validation)}
+            />
+          </label>
+        </form>
+        <DonationResourcePicker
+          accountId={draftNamespace}
+          selected={selectedChoices}
+          onChange={setSelectedChoices}
+          disabled={locked}
+          enabled={enabled}
+          onReadStateChange={setReadBlocked}
+          renderSelected={(choice) => (
+            <div className="economy-key-expiry">
+              <span>{t('user.charity.keyExpiry')}</span>
+              <TimeInput
+                station="user"
+                disabled={locked}
+                draft={expiryByKey[choice.key.id] ?? createTimeDraft()}
+                onChange={(update) =>
+                  setExpiryByKey((current) => ({
+                    ...current,
+                    [choice.key.id]: update(current[choice.key.id] ?? createTimeDraft()),
+                  }))
+                }
+                onClick={(event) => event.stopPropagation()}
+                aria-label={t('user.charity.keyExpiryFor', {
+                  key: maskedKey(choice.key.displayHead, choice.key.displayTail),
+                })}
+              />
+              <small className="muted">{t('user.charity.expiryHint')}</small>
             </div>
-          </fieldset>
-        )}
-
+          )}
+        />
         {selectedChoices.length > 0 ? (
           <p className="inline-notice" role="status">
             {selectionMode.kind === 'mainstream'
@@ -533,7 +414,6 @@ export function DonationComposer({
                 : t('user.charity.splitDonationSources')}
           </p>
         ) : null}
-
         <section className="economy-disclosure" aria-labelledby="donation-disclosure-title">
           <h3 id="donation-disclosure-title">{t('user.charity.disclosureTitle')}</h3>
           <ul>
@@ -546,11 +426,12 @@ export function DonationComposer({
             <li>{t('user.charity.disclosureDeletion')}</li>
           </ul>
         </section>
-
         <label className="checkbox-label economy-authorization">
           <input
             type="checkbox"
             checked={authorized}
+            form={formID}
+            disabled={locked}
             onChange={(event) => setAuthorized(event.target.checked)}
           />
           <span>{t('user.charity.ownershipAuthorization')}</span>
@@ -563,10 +444,10 @@ export function DonationComposer({
         <MutationNotice
           error={authorityAdvanced ? null : mutation.error}
           successKey={
-            authorityAdvanced
-              ? 'user.charity.mutationReconciled'
-              : success
-                ? 'user.charity.submitted'
+            success
+              ? 'user.charity.submitted'
+              : authorityAdvanced
+                ? 'user.charity.mutationReconciled'
                 : undefined
           }
         />
@@ -580,22 +461,15 @@ export function DonationComposer({
           <button
             className="btn btn-primary"
             type="submit"
-            disabled={
-              mutation.isPending ||
-              mutation.isReconciling ||
-              [...selected].some(
-                (id) => expiryByKey[id] && timeDraftValue(expiryByKey[id]) === undefined,
-              ) ||
-              eligible.length === 0 ||
-              waitingForAuthority
-            }
+            form={formID}
+            disabled={locked || readBlocked || invalidSelection || invalidExpiry}
           >
             {mutation.isPending || mutation.isReconciling
               ? t('common.working')
               : t('user.charity.submit')}
           </button>
         </div>
-      </form>
+      </div>
     </Card>
   );
 }
@@ -671,12 +545,16 @@ export function DonationKeyPanel({
   donationId,
   donationStatus,
   compact = false,
+  returnTo,
+  ruleSummary,
 }: {
   donationKey: DonationKey;
   accountID?: string;
   donationId?: string;
   donationStatus?: Donation['status'];
   compact?: boolean;
+  returnTo?: string;
+  ruleSummary?: ReactNode;
 }) {
   const { t } = useTranslation();
   const states = keyStateKeys(donationKey);
@@ -686,7 +564,11 @@ export function DonationKeyPanel({
       <div className="item-header">
         <div>
           {donationId ? (
-            <Link className="eyebrow" to={`/charity/donations/${donationId}`}>
+            <Link
+              className="eyebrow"
+              to={`/charity/donations/${donationId}`}
+              state={returnTo ? { returnTo } : undefined}
+            >
               {t('user.charity.donationNumber', { id: donationId })}
             </Link>
           ) : null}
@@ -817,6 +699,7 @@ export function DonationKeyPanel({
           </div>
         </dl>
       </details>
+      {ruleSummary}
       {accountID && donationId ? (
         <RecurringLimitsDisclosure
           key={`${accountID}:${donationId}:${donationKey.id}`}
@@ -835,11 +718,15 @@ export function DonationCard({
   accountID,
   showDetailLink = true,
   visibleKeys,
+  keysContent,
+  disabled = false,
 }: {
   donation: Donation;
   accountID?: string;
   showDetailLink?: boolean;
   visibleKeys?: readonly DonationKey[];
+  keysContent?: ReactNode;
+  disabled?: boolean;
 }) {
   const { t } = useTranslation();
   const edit = useEditDonation();
@@ -870,6 +757,7 @@ export function DonationCard({
   );
   const waitingForAuthority = blockedAuthority !== null && !authorityAdvanced;
   const busy =
+    disabled ||
     edit.isPending ||
     withdraw.isPending ||
     terminate.isPending ||
@@ -992,7 +880,9 @@ export function DonationCard({
         </details>
       ) : null}
 
-      {visibleKeys ? (
+      {keysContent !== undefined ? (
+        keysContent
+      ) : visibleKeys ? (
         <div className="economy-donation-key-list">
           {visibleKeys.map((key) => (
             <DonationKeyPanel

@@ -180,6 +180,29 @@ function corePage<T>(data: T[]) {
   return { data, next_cursor: null };
 }
 
+function coreNumberedPage<T>(data: T[]) {
+  return {
+    data,
+    next_cursor: null,
+    pagination: { page: '1', page_size: 20, total_items: String(data.length), total_pages: '1' },
+  };
+}
+
+function coreNumberedCatalog<T extends { automatic_entries: unknown[]; manual_entries: unknown[] }>(
+  catalog: T,
+) {
+  return {
+    ...catalog,
+    next_cursor: null,
+    pagination: {
+      page: '1',
+      page_size: 20,
+      total_items: String(catalog.automatic_entries.length + catalog.manual_entries.length),
+      total_pages: '1',
+    },
+  };
+}
+
 function coreBinding(id: string, upstreamModelId: string, ord: number) {
   return {
     id,
@@ -313,6 +336,92 @@ function pendingDonationFixture(frame: 'admin' | 'steward', id: string, descript
     created_at: 1,
     updated_at: 2,
   };
+}
+
+function managementNumberedPage<T>(data: T[]) {
+  return {
+    data,
+    next_cursor: null,
+    pagination: { page: '1', page_size: 20, total_items: String(data.length), total_pages: '1' },
+  };
+}
+
+function managedDonationPageSummary(
+  donation: ReturnType<typeof pendingDonationFixture>,
+  frame: 'admin' | 'steward',
+) {
+  const stateCounts: Record<string, string> = {
+    available: '0',
+    pending: '0',
+    disabled: '0',
+    suspended: '0',
+    exhausted: '0',
+    expired: '0',
+    ended: '0',
+  };
+  for (const key of donation.keys) {
+    stateCounts[key.charity_state] = String(Number(stateCounts[key.charity_state]) + 1);
+  }
+  const source = donation.keys[0]?.safe_source;
+  return {
+    id: donation.id,
+    status: donation.status,
+    revision: donation.revision,
+    description: donation.description,
+    review_result: donation.review_result,
+    created_at: donation.created_at,
+    updated_at: donation.updated_at,
+    key_count: String(donation.keys.length),
+    state_counts: stateCounts,
+    source_count: source ? '1' : '0',
+    sources: source ? [source] : [],
+    handling: donation.handling,
+    reviewer: donation.reviewer,
+    owner:
+      donation.owner === null
+        ? null
+        : frame === 'admin'
+          ? donation.owner
+          : { user_id: donation.owner.user_id, display_name: donation.owner.display_name },
+  };
+}
+
+function managedDonationKeyPageSummary(
+  donation: ReturnType<typeof pendingDonationFixture>,
+  key: typeof managedKeyFixture,
+) {
+  return {
+    ...key,
+    donation_id: donation.id,
+    key_id: key.id,
+    donation_revision: donation.revision,
+    rule_count: '0',
+    rules: [],
+    handling: donation.handling,
+    max_concurrency: null,
+    max_rpm: null,
+  };
+}
+
+function RealManagement({
+  frame,
+  keepMounted = false,
+}: {
+  frame: 'admin' | 'steward';
+  keepMounted?: boolean;
+}) {
+  const admin = useAdminSession(frame === 'admin');
+  const user = useUserSession(frame === 'steward');
+  const accountId =
+    frame === 'admin'
+      ? admin.data
+        ? `admin:${admin.data.admin.username}`
+        : undefined
+      : user.data?.user.id;
+  const fallbackAccountId = frame === 'admin' ? 'admin:fixture-admin' : '1';
+  return accountId || keepMounted ? (
+    <CharityManagement frame={frame} accountId={accountId ?? fallbackAccountId} />
+  ) : null;
 }
 
 const bindingFixture = {
@@ -492,11 +601,15 @@ describe('experimental policy and charity controls', () => {
       ).toUpperCase();
       if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
       if (method === 'GET' && path === '/api/endpoints/1') return jsonResponse(coreEndpoint);
-      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50')
-        return jsonResponse(corePage([currentKey]));
-      if (method === 'GET' && path === '/api/models?limit=50') return jsonResponse(corePage([]));
-      if (method === 'GET' && path === '/api/endpoints/1/keys/2/models?limit=50')
-        return jsonResponse(coreCatalogUnknown);
+      if (method === 'GET' && path === '/api/endpoints/1/keys?page=1&page_size=20')
+        return jsonResponse(coreNumberedPage([currentKey]));
+      if (method === 'GET' && path === '/api/models?page=1&page_size=20')
+        return jsonResponse(coreNumberedPage([]));
+      if (
+        method === 'GET' &&
+        path === '/api/endpoints/1/keys/2/models?page=1&page_size=20&source=manual'
+      )
+        return jsonResponse(coreNumberedCatalog(coreCatalogUnknown));
       if (method === 'PATCH' && path === '/api/endpoints/1/keys/2') {
         const patch = JSON.parse(String(init?.body)) as Record<string, unknown>;
         currentKey = {
@@ -596,9 +709,17 @@ describe('experimental policy and charity controls', () => {
     const fetchMock = installJsonFetchFixtures([
       { method: 'GET', path: '/api/session', body: coreSession },
       { method: 'GET', path: '/api/endpoints/4', body: anthropicEndpoint },
-      { method: 'GET', path: '/api/endpoints/4/keys?limit=50', body: corePage([anthropicKey]) },
-      { method: 'GET', path: '/api/models?limit=50', body: corePage([]) },
-      { method: 'GET', path: '/api/endpoints/4/keys/5/models?limit=50', body: coreCatalogUnknown },
+      {
+        method: 'GET',
+        path: '/api/endpoints/4/keys?page=1&page_size=20',
+        body: coreNumberedPage([anthropicKey]),
+      },
+      { method: 'GET', path: '/api/models?page=1&page_size=20', body: coreNumberedPage([]) },
+      {
+        method: 'GET',
+        path: '/api/endpoints/4/keys/5/models?page=1&page_size=20&source=manual',
+        body: coreNumberedCatalog(coreCatalogUnknown),
+      },
     ]);
     const rendered = await renderWithProviders(endpointRouteTree(), {
       station: 'user',
@@ -620,20 +741,20 @@ describe('experimental policy and charity controls', () => {
       ).toUpperCase();
       if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
       if (method === 'GET' && path === '/api/endpoints/1') return jsonResponse(coreEndpoint);
-      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50') {
-        return jsonResponse(corePage([coreEndpointKey]));
+      if (method === 'GET' && path === '/api/endpoints/1/keys?page=1&page_size=20') {
+        return jsonResponse(coreNumberedPage([coreEndpointKey]));
       }
-      if (method === 'GET' && path === '/api/models?limit=100') {
-        return jsonResponse(corePage([coreModel]));
-      }
-      if (method === 'GET' && path === '/api/models/3/bindings') {
+      if (method === 'GET' && path.startsWith('/api/endpoints/1/keys/2/bindings?')) {
         return jsonResponse(
           { error: { code: 'temporarily_unavailable', message: 'try later' } },
           503,
         );
       }
-      if (method === 'GET' && path === '/api/endpoints/1/keys/2/models?limit=50') {
-        return jsonResponse(coreManualCatalog);
+      if (
+        method === 'GET' &&
+        path === '/api/endpoints/1/keys/2/models?page=1&page_size=20&source=manual'
+      ) {
+        return jsonResponse(coreNumberedCatalog(coreManualCatalog));
       }
       throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
@@ -644,6 +765,7 @@ describe('experimental policy and charity controls', () => {
       route: '/endpoints/1',
     });
 
+    await rendered.user.click(await screen.findByText('Manual catalog'));
     const entryRow = (await screen.findByText('Vendor/Exact')).closest('li');
     if (!entryRow) throw new Error('Manual catalog row not found');
     await rendered.user.click(within(entryRow).getByRole('button', { name: 'Edit' }));
@@ -682,8 +804,8 @@ describe('experimental policy and charity controls', () => {
         init?.method ?? (input instanceof Request ? input.method : 'GET')
       ).toUpperCase();
       if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
-      if (method === 'GET' && path === '/api/models?limit=50')
-        return jsonResponse(corePage([coreModel]));
+      if (method === 'GET' && path === '/api/models?page=1&page_size=20')
+        return jsonResponse(coreNumberedPage([coreModel]));
       if (method === 'GET' && path === '/api/models/3') {
         modelReads += 1;
         return jsonResponse(coreModel);
@@ -694,7 +816,8 @@ describe('experimental policy and charity controls', () => {
           binding_revision: '2',
         });
       }
-      if (method === 'GET' && path === '/api/endpoints?limit=50') return jsonResponse(corePage([]));
+      if (method === 'GET' && path === '/api/endpoints?page=1&page_size=20')
+        return jsonResponse(coreNumberedPage([]));
       if (method === 'PATCH' && path === '/api/models/3') {
         return jsonResponse({ error: { code: 'conflict', message: 'conflict' } }, 409);
       }
@@ -732,8 +855,8 @@ describe('experimental policy and charity controls', () => {
         init?.method ?? (input instanceof Request ? input.method : 'GET')
       ).toUpperCase();
       if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
-      if (method === 'GET' && path === '/api/models?limit=50')
-        return jsonResponse(corePage([modelReads > 0 ? committed : coreModel]));
+      if (method === 'GET' && path === '/api/models?page=1&page_size=20')
+        return jsonResponse(coreNumberedPage([modelReads > 0 ? committed : coreModel]));
       if (method === 'GET' && path === '/api/models/3') {
         modelReads += 1;
         return jsonResponse(modelReads === 1 ? coreModel : committed);
@@ -744,7 +867,8 @@ describe('experimental policy and charity controls', () => {
           binding_revision: '2',
         });
       }
-      if (method === 'GET' && path === '/api/endpoints?limit=50') return jsonResponse(corePage([]));
+      if (method === 'GET' && path === '/api/endpoints?page=1&page_size=20')
+        return jsonResponse(coreNumberedPage([]));
       if (method === 'PATCH' && path === '/api/models/3') {
         return jsonResponse(
           { error: { code: 'conflict', message: 'response lost after commit' } },
@@ -779,13 +903,18 @@ describe('experimental policy and charity controls', () => {
       ).toUpperCase();
       if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
       if (method === 'GET' && path === '/api/endpoints/1') return jsonResponse(coreEndpoint);
-      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50') {
+
+      if (method === 'GET' && path === '/api/endpoints/1/keys?page=1&page_size=20') {
         keyReads += 1;
-        return jsonResponse(corePage([keyReads === 1 ? coreEndpointKey : committed]));
+        return jsonResponse(coreNumberedPage([keyReads === 1 ? coreEndpointKey : committed]));
       }
-      if (method === 'GET' && path === '/api/models?limit=50') return jsonResponse(corePage([]));
-      if (method === 'GET' && path === '/api/endpoints/1/keys/2/models?limit=50')
-        return jsonResponse(coreCatalogUnknown);
+      if (method === 'GET' && path === '/api/models?page=1&page_size=20')
+        return jsonResponse(coreNumberedPage([]));
+      if (
+        method === 'GET' &&
+        path === '/api/endpoints/1/keys/2/models?page=1&page_size=20&source=manual'
+      )
+        return jsonResponse(coreNumberedCatalog(coreCatalogUnknown));
       if (method === 'PATCH' && path === '/api/endpoints/1/keys/2')
         throw new TypeError('connection reset');
       throw new Error(`Unexpected fixture request: ${method} ${path}`);
@@ -817,8 +946,8 @@ describe('experimental policy and charity controls', () => {
         init?.method ?? (input instanceof Request ? input.method : 'GET')
       ).toUpperCase();
       if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
-      if (method === 'GET' && path === '/api/models?limit=50')
-        return jsonResponse(corePage([coreModel]));
+      if (method === 'GET' && path === '/api/models?page=1&page_size=20')
+        return jsonResponse(coreNumberedPage([coreModel]));
       if (method === 'GET' && path === '/api/models/3') {
         modelReads += 1;
         return jsonResponse(coreModel);
@@ -829,7 +958,8 @@ describe('experimental policy and charity controls', () => {
           binding_revision: '2',
         });
       }
-      if (method === 'GET' && path === '/api/endpoints?limit=50') return jsonResponse(corePage([]));
+      if (method === 'GET' && path === '/api/endpoints?page=1&page_size=20')
+        return jsonResponse(coreNumberedPage([]));
       if (method === 'PATCH' && path === '/api/models/3') return jsonResponse({ committed: true });
       throw new Error(`Unexpected fixture request: ${method} ${path}`);
     });
@@ -867,15 +997,19 @@ describe('experimental policy and charity controls', () => {
       ).toUpperCase();
       if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
       if (method === 'GET' && path === '/api/endpoints/1') return jsonResponse(coreEndpoint);
-      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50') {
+      if (method === 'GET' && path === '/api/endpoints/1/keys?page=1&page_size=20') {
         keyReads += 1;
         return jsonResponse(
-          corePage(keyReads === 1 ? [coreEndpointKey] : [coreEndpointKey, createdKey]),
+          coreNumberedPage(keyReads === 1 ? [coreEndpointKey] : [coreEndpointKey, createdKey]),
         );
       }
-      if (method === 'GET' && path === '/api/models?limit=50') return jsonResponse(corePage([]));
-      if (method === 'GET' && /^\/api\/endpoints\/1\/keys\/(2|4)\/models\?limit=50$/.test(path))
-        return jsonResponse(coreCatalogUnknown);
+      if (method === 'GET' && path === '/api/models?page=1&page_size=20')
+        return jsonResponse(coreNumberedPage([]));
+      if (
+        method === 'GET' &&
+        /^\/api\/endpoints\/1\/keys\/(2|4)\/models\?page=1&page_size=20&source=manual$/.test(path)
+      )
+        return jsonResponse(coreNumberedCatalog(coreCatalogUnknown));
       if (method === 'POST' && path === '/api/endpoints/1/keys') {
         keyPosts += 1;
         return jsonResponse(
@@ -923,9 +1057,11 @@ describe('experimental policy and charity controls', () => {
         init?.method ?? (input instanceof Request ? input.method : 'GET')
       ).toUpperCase();
       if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
-      if (method === 'GET' && path === '/api/models?limit=50') {
+      if (method === 'GET' && path === '/api/models?page=1&page_size=20') {
         modelReads += 1;
-        return jsonResponse(corePage(modelReads === 1 ? [coreModel] : [coreModel, createdModel]));
+        return jsonResponse(
+          coreNumberedPage(modelReads === 1 ? [coreModel] : [coreModel, createdModel]),
+        );
       }
       if (method === 'POST' && path === '/api/models') {
         modelPosts += 1;
@@ -976,20 +1112,22 @@ describe('experimental policy and charity controls', () => {
         init?.method ?? (input instanceof Request ? input.method : 'GET')
       ).toUpperCase();
       if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
-      if (method === 'GET' && path === '/api/models?limit=50')
-        return jsonResponse(corePage([anthropicModel]));
+      if (method === 'GET' && path === '/api/models?page=1&page_size=20')
+        return jsonResponse(coreNumberedPage([anthropicModel]));
       if (method === 'GET' && path === '/api/models/3') return jsonResponse(anthropicModel);
       if (method === 'GET' && path === '/api/models/3/bindings') {
         bindingReads += 1;
         return jsonResponse({ bindings: [], binding_revision: '0' });
       }
-      if (method === 'GET' && path === '/api/endpoints?limit=50')
-        return jsonResponse(corePage([anthropicEndpoint]));
-      if (method === 'GET' && path === '/api/endpoints/4/keys?limit=50')
-        return jsonResponse(corePage([anthropicKey]));
+      if (method === 'GET' && path === '/api/endpoints?page=1&page_size=20')
+        return jsonResponse(coreNumberedPage([anthropicEndpoint]));
+      if (method === 'GET' && path === '/api/endpoints/4/keys?page=1&page_size=20')
+        return jsonResponse(coreNumberedPage([anthropicKey]));
       if (method === 'GET' && path.startsWith('/api/models/3/binding-candidates?')) {
         const params = new URL(path, window.location.origin).searchParams;
-        return jsonResponse(corePage(params.get('source') === 'automatic' ? [candidate] : []));
+        return jsonResponse(
+          coreNumberedPage(params.get('source') === 'automatic' ? [candidate] : []),
+        );
       }
       if (method === 'POST' && path === '/api/models/3/bindings/batch') {
         return jsonResponse(
@@ -1036,12 +1174,13 @@ describe('experimental policy and charity controls', () => {
         init?.method ?? (input instanceof Request ? input.method : 'GET')
       ).toUpperCase();
       if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
-      if (method === 'GET' && path === '/api/models?limit=50')
-        return jsonResponse(corePage([currentModel]));
+      if (method === 'GET' && path === '/api/models?page=1&page_size=20')
+        return jsonResponse(coreNumberedPage([currentModel]));
       if (method === 'GET' && path === '/api/models/3') return jsonResponse(currentModel);
       if (method === 'GET' && path === '/api/models/3/bindings')
         return jsonResponse({ bindings, binding_revision: bindingRevision });
-      if (method === 'GET' && path === '/api/endpoints?limit=50') return jsonResponse(corePage([]));
+      if (method === 'GET' && path === '/api/endpoints?page=1&page_size=20')
+        return jsonResponse(coreNumberedPage([]));
       if (method === 'PUT' && path === '/api/models/3/bindings/order') {
         bindings = [coreBinding('11', 'gpt-b', 0), coreBinding('10', 'gpt-a', 1)];
         bindingRevision = '3';
@@ -1090,14 +1229,22 @@ describe('experimental policy and charity controls', () => {
     const oneBindingModel = { ...coreModel, binding_count: '1' };
     const fetchMock = installJsonFetchFixtures([
       { method: 'GET', path: '/api/session', body: coreSession },
-      { method: 'GET', path: '/api/models?limit=50', body: corePage([oneBindingModel]) },
+      {
+        method: 'GET',
+        path: '/api/models?page=1&page_size=20',
+        body: coreNumberedPage([oneBindingModel]),
+      },
       { method: 'GET', path: '/api/models/3', body: oneBindingModel },
       {
         method: 'GET',
         path: '/api/models/3/bindings',
         body: { bindings: [binding], binding_revision: '2' },
       },
-      { method: 'GET', path: '/api/endpoints?limit=50', body: corePage([]) },
+      {
+        method: 'GET',
+        path: '/api/endpoints?page=1&page_size=20',
+        body: coreNumberedPage([]),
+      },
       {
         method: 'DELETE',
         path: '/api/models/3/bindings/10',
@@ -1153,7 +1300,6 @@ describe('experimental policy and charity controls', () => {
       revision: '1',
       description: 'fixture donation',
       review_result: null,
-      expires_at: null,
       keys: [
         {
           id: '6',
@@ -1161,6 +1307,7 @@ describe('experimental policy and charity controls', () => {
           display_head: 'sk-a',
           display_tail: 'tail',
           safe_source: {
+            kind: 'custom',
             base_url: coreEndpoint.base_url,
             connector_type: coreEndpoint.connector_type,
           },
@@ -1176,6 +1323,7 @@ describe('experimental policy and charity controls', () => {
             tokens_inflight: '0',
           },
           token_reserve: 0,
+          expires_at: null,
           streak: { generation: '1', count: '0', failure_disabled: false },
           ended_reason: null,
         },
@@ -1191,6 +1339,7 @@ describe('experimental policy and charity controls', () => {
         allowed_levels: [1, 2, 3, 4, 5],
         level_allowed: true,
         availability: 'available',
+        currently_available: true,
       })),
       pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
       donation_intake: 'open',
@@ -1203,18 +1352,67 @@ describe('experimental policy and charity controls', () => {
         init?.method ?? (input instanceof Request ? input.method : 'GET')
       ).toUpperCase();
       if (method === 'GET' && path === '/api/session') return jsonResponse(session);
-      if (method === 'GET' && path === '/api/charity/models?view=catalog&page=1&page_size=20') {
+      if (
+        method === 'GET' &&
+        path ===
+          '/api/charity/models?view=catalog&page=1&page_size=20&allowed_for_me=true&currently_available=true'
+      ) {
         return jsonResponse(catalog);
       }
       if (method === 'GET' && path === '/api/charity/models') return jsonResponse(capability);
-      if (method === 'GET' && path === '/api/donations?limit=100') {
-        return jsonResponse(corePage(submitted ? [donation] : []));
+      if (method === 'GET' && path === '/api/time-zones') {
+        return jsonResponse({
+          version: 'go1.26.6-zoneinfo',
+          zones: [...new Set(['UTC', Intl.DateTimeFormat().resolvedOptions().timeZone])].sort(),
+        });
       }
-      if (method === 'GET' && path === '/api/endpoints?limit=100') {
-        return jsonResponse(corePage([coreEndpoint]));
+      if (method === 'GET' && path === '/api/donations?page=1&page_size=20') {
+        const summary = Object.fromEntries(
+          Object.entries(donation).filter(([name]) => name !== 'keys'),
+        );
+        return jsonResponse(
+          coreNumberedPage(
+            submitted
+              ? [
+                  {
+                    ...summary,
+                    key_count: '1',
+                    state_counts: {
+                      available: '0',
+                      pending: '1',
+                      disabled: '0',
+                      suspended: '0',
+                      exhausted: '0',
+                      expired: '0',
+                      ended: '0',
+                    },
+                    source_count: '1',
+                    sources: [donation.keys[0].safe_source],
+                  },
+                ]
+              : [],
+          ),
+        );
       }
-      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=100') {
-        return jsonResponse(corePage([coreEndpointKey]));
+      if (method === 'GET' && path === '/api/endpoints?page=1&page_size=20') {
+        return jsonResponse(coreNumberedPage([coreEndpoint]));
+      }
+      if (method === 'GET' && path === '/api/endpoints/1/keys?page=1&page_size=20') {
+        return jsonResponse(
+          coreNumberedPage([
+            {
+              ...coreEndpointKey,
+              browse: {
+                donation_eligibility: submitted ? 'already_donated' : 'eligible',
+                model_count: '0',
+                binding_count: '0',
+                available_binding_count: '0',
+                discovery: coreCatalogUnknown.evidence,
+                preview: [],
+              },
+            },
+          ]),
+        );
       }
       if (method === 'POST' && path === '/api/donations') {
         submitted = true;
@@ -1230,6 +1428,7 @@ describe('experimental policy and charity controls', () => {
     });
     await screen.findByText('[公益]provider/charity-model');
     await rendered.user.click(screen.getByRole('tab', { name: 'Donate resources' }));
+    await rendered.user.click(await screen.findByRole('button', { name: /^primary/ }));
     await rendered.user.click(await screen.findByRole('checkbox', { name: /sk-a…tail/ }));
     await rendered.user.type(screen.getByLabelText('Donation description'), 'fixture donation');
     await rendered.user.click(
@@ -1251,7 +1450,12 @@ describe('experimental policy and charity controls', () => {
     expect(JSON.stringify(lastBody(fetchMock, 'POST', '/api/donations'))).not.toMatch(
       /secret|base_url|max_concurrency|rpm_limit/i,
     );
+    await screen.findByText('Donation submitted for review.');
+    await rendered.user.click(screen.getByRole('tab', { name: 'My donations' }));
     await expect(screen.findByText('fixture donation')).resolves.toBeVisible();
+    expect(fetchMock.mock.calls.some(([input]) => requestPath(input).includes('limit=100'))).toBe(
+      false,
+    );
   });
 
   test('fails closed when the charity capability omits donation intake', async () => {
@@ -1261,7 +1465,11 @@ describe('experimental policy and charity controls', () => {
         init?.method ?? (input instanceof Request ? input.method : 'GET')
       ).toUpperCase();
       if (method === 'GET' && path === '/api/session') return jsonResponse(session);
-      if (method === 'GET' && path === '/api/charity/models?view=catalog&page=1&page_size=20') {
+      if (
+        method === 'GET' &&
+        path ===
+          '/api/charity/models?view=catalog&page=1&page_size=20&allowed_for_me=true&currently_available=true'
+      ) {
         return jsonResponse({
           models: [],
           pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
@@ -1298,7 +1506,11 @@ describe('experimental policy and charity controls', () => {
     installJsonFetchFixtures([
       { method: 'GET', path: '/api/session', body: coreSession },
       { method: 'GET', path: '/api/endpoints/1', body: coreEndpoint },
-      { method: 'GET', path: '/api/endpoints/1/keys?limit=50', body: corePage([malformedKey]) },
+      {
+        method: 'GET',
+        path: '/api/endpoints/1/keys?page=1&page_size=20',
+        body: coreNumberedPage([malformedKey]),
+      },
     ]);
     await renderWithProviders(endpointRouteTree(), {
       station: 'user',
@@ -1311,7 +1523,11 @@ describe('experimental policy and charity controls', () => {
   test('fails closed when a binding order exceeds the frozen range', async () => {
     installJsonFetchFixtures([
       { method: 'GET', path: '/api/session', body: coreSession },
-      { method: 'GET', path: '/api/models?limit=50', body: corePage([coreModel]) },
+      {
+        method: 'GET',
+        path: '/api/models?page=1&page_size=20',
+        body: coreNumberedPage([coreModel]),
+      },
       { method: 'GET', path: '/api/models/3', body: coreModel },
       {
         method: 'GET',
@@ -1321,7 +1537,11 @@ describe('experimental policy and charity controls', () => {
           binding_revision: '2',
         },
       },
-      { method: 'GET', path: '/api/endpoints?limit=50', body: corePage([]) },
+      {
+        method: 'GET',
+        path: '/api/endpoints?page=1&page_size=20',
+        body: coreNumberedPage([]),
+      },
     ]);
     const rendered = await renderWithProviders(<ModelsPage />, { station: 'user', role: 'user' });
     await screen.findByRole('heading', { name: 'Platform models' });
@@ -1332,20 +1552,34 @@ describe('experimental policy and charity controls', () => {
   test('rejects a non-empty invalid reviewer expiry and sends no PATCH', async () => {
     const detailDonation = pendingDonationFixture('admin', '20', 'review expiry fixture');
     const fetchMock = installJsonFetchFixtures([
+      { method: 'GET', path: '/admin/api/session', body: { admin: { username: 'fixture-admin' } } },
       {
         method: 'GET',
-        path: '/admin/api/donations?limit=50',
-        body: { data: [detailDonation], next_cursor: null },
+        path: '/admin/api/time-zones',
+        body: {
+          version: 'go1.26.6-zoneinfo',
+          zones: ['America/Indianapolis', 'UTC'],
+        },
+      },
+      {
+        method: 'GET',
+        path: '/admin/api/donations?page=1&page_size=20',
+        body: managementNumberedPage([managedDonationPageSummary(detailDonation, 'admin')]),
       },
       { method: 'GET', path: '/admin/api/donations/20', body: detailDonation },
+      {
+        method: 'GET',
+        path: '/admin/api/donations/20/keys?page=1&page_size=20',
+        body: managementNumberedPage(
+          detailDonation.keys.map((key) => managedDonationKeyPageSummary(detailDonation, key)),
+        ),
+      },
       { method: 'POST', path: '/admin/api/donations/20/review', body: detailDonation },
     ]);
-    const rendered = await renderWithProviders(
-      <ManagementSessionGate frame="admin">
-        <CharityManagement frame="admin" />
-      </ManagementSessionGate>,
-      { station: 'admin', role: 'admin' },
-    );
+    const rendered = await renderWithProviders(<RealManagement frame="admin" />, {
+      station: 'admin',
+      role: 'admin',
+    });
     await screen.findByText('review expiry fixture');
     await rendered.user.click(screen.getByRole('button', { name: 'Review' }));
     await screen.findByRole('heading', { name: 'Review pending submission' });
@@ -1399,8 +1633,17 @@ describe('experimental policy and charity controls', () => {
       const method = (
         init?.method ?? (input instanceof Request ? input.method : 'GET')
       ).toUpperCase();
+      if (method === 'GET' && requestURL.pathname === '/admin/api/session')
+        return jsonResponse({ admin: { username: 'fixture-admin' } });
+      if (method === 'GET' && requestURL.pathname === '/admin/api/time-zones')
+        return jsonResponse({
+          version: 'go1.26.6-zoneinfo',
+          zones: ['America/Indianapolis', 'UTC'],
+        });
       if (method === 'GET' && requestURL.pathname === '/admin/api/donations')
-        return jsonResponse({ data: [detailDonation], next_cursor: null });
+        return jsonResponse(
+          managementNumberedPage([managedDonationPageSummary(detailDonation, 'admin')]),
+        );
       if (method === 'GET' && requestURL.pathname === '/admin/api/donations/21') {
         detailReads += 1;
         return detailReads === 1
@@ -1410,6 +1653,12 @@ describe('experimental policy and charity controls', () => {
             )
           : jsonResponse(detailDonation);
       }
+      if (method === 'GET' && requestURL.pathname === '/admin/api/donations/21/keys')
+        return jsonResponse(
+          managementNumberedPage(
+            detailDonation.keys.map((key) => managedDonationKeyPageSummary(detailDonation, key)),
+          ),
+        );
       if (method === 'POST' && requestURL.pathname === '/admin/api/donations/21/review')
         return jsonResponse(detailDonation);
       throw new Error(
@@ -1417,12 +1666,10 @@ describe('experimental policy and charity controls', () => {
       );
     });
     vi.stubGlobal('fetch', fetchMock);
-    const rendered = await renderWithProviders(
-      <ManagementSessionGate frame="admin">
-        <CharityManagement frame="admin" />
-      </ManagementSessionGate>,
-      { station: 'admin', role: 'admin' },
-    );
+    const rendered = await renderWithProviders(<RealManagement frame="admin" />, {
+      station: 'admin',
+      role: 'admin',
+    });
     await screen.findByText('detail retry fixture');
     await rendered.user.click(screen.getByRole('button', { name: 'Review' }));
     await waitFor(() => expect(detailReads).toBeGreaterThan(0));
@@ -1461,13 +1708,34 @@ describe('experimental policy and charity controls', () => {
       const fetchMock = installJsonFetchFixtures([
         {
           method: 'GET',
-          path: `${basePath}/donations?limit=50`,
-          body: { data: [], next_cursor: null },
+          path: frame === 'admin' ? '/admin/api/session' : '/api/session',
+          body:
+            frame === 'admin'
+              ? { admin: { username: 'fixture-admin' } }
+              : { ...session, user: { ...session.user, effective_level: 5 } },
         },
         {
           method: 'GET',
-          path: `${basePath}/charity-models?limit=50`,
-          body: { data: [managedModelFixture], next_cursor: null },
+          path: `${basePath === '/admin/api' ? '/admin/api' : '/api'}/time-zones`,
+          body: {
+            version: 'go1.26.6-zoneinfo',
+            zones: ['America/Indianapolis', 'UTC'],
+          },
+        },
+        {
+          method: 'GET',
+          path: `${basePath}/donations?page=1&page_size=20`,
+          body: managementNumberedPage([]),
+        },
+        {
+          method: 'GET',
+          path: `${basePath}/charity-models?page=1&page_size=20`,
+          body: managementNumberedPage([managedModelFixture]),
+        },
+        {
+          method: 'GET',
+          path: `${basePath}/charity-models/7`,
+          body: managedModelFixture,
         },
         {
           method: 'GET',
@@ -1476,8 +1744,8 @@ describe('experimental policy and charity controls', () => {
         },
         {
           method: 'GET',
-          path: `${basePath}/charity-models/7/binding-candidates?limit=50`,
-          body: { data: [], next_cursor: null },
+          path: `${basePath}/charity-models/7/binding-candidates?page=1&page_size=20`,
+          body: managementNumberedPage([]),
         },
         {
           method: 'PATCH',
@@ -1497,7 +1765,7 @@ describe('experimental policy and charity controls', () => {
           },
         },
       ]);
-      const rendered = await renderWithProviders(<CharityManagement frame={frame} />, {
+      const rendered = await renderWithProviders(<RealManagement frame={frame} />, {
         station,
         role,
       });
@@ -1506,7 +1774,7 @@ describe('experimental policy and charity controls', () => {
           ? 'Experimental: flatten tool calls'
           : '[Experimental] Flatten tool calls';
       await rendered.user.click(
-        screen.getByRole('tab', {
+        await screen.findByRole('tab', {
           name:
             frame === 'admin'
               ? 'Charity models and bindings'
@@ -1557,44 +1825,64 @@ describe('experimental policy and charity controls', () => {
   test('keeps management controls hidden after a mutation 403 even if the sensitive root is evicted', async () => {
     // A sparse response must not borrow identity fields from the stale cache
     // and accidentally reopen the capability latch.
-    const revokedSession = { user: { effective_level: 5 } };
-    const fetchMock = installJsonFetchFixtures([
-      {
-        method: 'GET',
-        path: '/api/steward/donations?limit=50',
-        body: { data: [], next_cursor: null },
-      },
-      {
-        method: 'GET',
-        path: '/api/steward/charity-models?limit=50',
-        body: { data: [managedModelFixture], next_cursor: null },
-      },
-      {
-        method: 'GET',
-        path: '/api/steward/charity-models/7/bindings',
-        body: { bindings: [bindingFixture], binding_revision: '1' },
-      },
-      {
-        method: 'GET',
-        path: '/api/steward/charity-models/7/binding-candidates?limit=50',
-        body: { data: [], next_cursor: null },
-      },
-      {
-        method: 'PATCH',
-        path: '/api/steward/charity-models/7',
-        body: { error: { code: 'forbidden', message: 'capability revoked' } },
-        status: 403,
-      },
-      // A stale/insufficient authoritative session must keep the external
-      // capability latch closed after the write is rejected.
-      { method: 'GET', path: '/api/session', body: revokedSession },
-    ]);
-    const rendered = await renderWithProviders(<CharityManagement frame="steward" />, {
+    let sessionReads = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const requestURL = new URL(
+        input instanceof Request ? input.url : String(input),
+        window.location.origin,
+      );
+      const method = (
+        init?.method ?? (input instanceof Request ? input.method : 'GET')
+      ).toUpperCase();
+      if (method === 'GET' && requestURL.pathname === '/api/session') {
+        sessionReads += 1;
+        return sessionReads === 1
+          ? jsonResponse({ ...session, user: { ...session.user, effective_level: 5 } })
+          : jsonResponse({ user: { effective_level: 5 } });
+      }
+      if (method === 'GET' && requestURL.pathname === '/api/time-zones') {
+        return jsonResponse({
+          version: 'go1.26.6-zoneinfo',
+          zones: ['America/Indianapolis', 'UTC'],
+        });
+      }
+      if (method === 'GET' && requestURL.pathname === '/api/steward/donations') {
+        expect(requestURL.search).toBe('?page=1&page_size=20');
+        return jsonResponse(managementNumberedPage([]));
+      }
+      if (method === 'GET' && requestURL.pathname === '/api/steward/charity-models') {
+        expect(requestURL.search).toBe('?page=1&page_size=20');
+        return jsonResponse(managementNumberedPage([managedModelFixture]));
+      }
+      if (method === 'GET' && requestURL.pathname === '/api/steward/charity-models/7') {
+        expect(requestURL.search).toBe('');
+        return jsonResponse(managedModelFixture);
+      }
+      if (method === 'GET' && requestURL.pathname === '/api/steward/charity-models/7/bindings') {
+        expect(requestURL.search).toBe('');
+        return jsonResponse({ bindings: [bindingFixture], binding_revision: '1' });
+      }
+      if (
+        method === 'GET' &&
+        requestURL.pathname === '/api/steward/charity-models/7/binding-candidates'
+      ) {
+        expect(requestURL.search).toBe('?page=1&page_size=20');
+        return jsonResponse(managementNumberedPage([]));
+      }
+      if (method === 'PATCH' && requestURL.pathname === '/api/steward/charity-models/7') {
+        return jsonResponse({ error: { code: 'forbidden', message: 'capability revoked' } }, 403);
+      }
+      throw new Error(
+        `Unexpected fixture request: ${method} ${requestURL.pathname}${requestURL.search}`,
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const rendered = await renderWithProviders(<RealManagement frame="steward" keepMounted />, {
       station: 'user',
       role: 'level5',
     });
     await rendered.user.click(
-      screen.getByRole('tab', { name: 'Charity models and service connections' }),
+      await screen.findByRole('tab', { name: 'Charity models and service connections' }),
     );
     await screen.findByText('[公益]provider/charity-model');
     await rendered.user.click(screen.getByRole('button', { name: 'Manage' }));
@@ -1617,6 +1905,14 @@ describe('experimental policy and charity controls', () => {
       ).toBeNull();
       expect(screen.queryByRole('button', { name: 'Add charity model' })).toBeNull();
     });
+    // Exercise the mounted station's next authoritative session refresh after
+    // the rejected write instead of leaving the sparse response unused.
+    await rendered.queryClient.invalidateQueries({ queryKey: userKeys.session });
+    await waitFor(() => expect(sessionReads).toBeGreaterThanOrEqual(2));
+    expect(rendered.queryClient.getQueryData(userKeys.session)).toBeNull();
+    expect(rendered.queryClient.getQueryData(charityManagementKeys.capability('steward'))).toBe(
+      true,
+    );
 
     // Evicting the remote query cache must not reopen the component-local
     // fail-closed latch after an authoritative rejection.
@@ -1659,17 +1955,40 @@ describe('experimental policy and charity controls', () => {
       const fetchMock = installJsonFetchFixtures([
         {
           method: 'GET',
-          path: `${basePath}/donations?limit=50`,
-          body: { data: [detailDonation], next_cursor: null },
+          path: frame === 'admin' ? '/admin/api/session' : '/api/session',
+          body:
+            frame === 'admin'
+              ? { admin: { username: 'fixture-admin' } }
+              : { ...session, user: { ...session.user, effective_level: 5 } },
+        },
+        {
+          method: 'GET',
+          path: `${basePath === '/admin/api' ? '/admin/api' : '/api'}/time-zones`,
+          body: {
+            version: 'go1.26.6-zoneinfo',
+            zones: ['America/Indianapolis', 'UTC'],
+          },
+        },
+        {
+          method: 'GET',
+          path: `${basePath}/donations?page=1&page_size=20`,
+          body: managementNumberedPage([managedDonationPageSummary(detailDonation, frame)]),
         },
         { method: 'GET', path: `${basePath}/donations/9`, body: detailDonation },
+        {
+          method: 'GET',
+          path: `${basePath}/donations/9/keys?page=1&page_size=20`,
+          body: managementNumberedPage(
+            detailDonation.keys.map((key) => managedDonationKeyPageSummary(detailDonation, key)),
+          ),
+        },
         {
           method: 'POST',
           path: `${basePath}/donations/9/review`,
           body: reviewedDonation,
         },
       ]);
-      const rendered = await renderWithProviders(<CharityManagement frame={frame} />, {
+      const rendered = await renderWithProviders(<RealManagement frame={frame} />, {
         station,
         role,
       });
@@ -1714,8 +2033,11 @@ describe('experimental policy and charity controls', () => {
         });
       }
       if (method === 'GET' && requestURL.pathname === '/api/steward/logs') {
+        expect(requestURL.searchParams.get('page')).toBe('1');
+        expect(requestURL.searchParams.get('page_size')).toBe('20');
+        expect(requestURL.searchParams.has('limit')).toBe(false);
         if (!revoke)
-          return new Response(JSON.stringify({ data: [], next_cursor: null }), {
+          return new Response(JSON.stringify(coreNumberedPage([])), {
             status: 200,
             headers: { 'content-type': 'application/json' },
           });
@@ -1787,7 +2109,7 @@ describe('experimental policy and charity controls', () => {
             403,
           );
         }
-        return jsonResponse({ data: [], next_cursor: null });
+        return jsonResponse(coreNumberedPage([]));
       }
       throw new Error(
         `Unregistered test request: ${method} ${requestURL.pathname}${requestURL.search}`,
@@ -1826,14 +2148,29 @@ describe('experimental policy and charity controls', () => {
           user: { ...coreSession.user, id: accountID, effective_level: 5 },
         });
       }
-      if (url.pathname === '/api/steward/charity-models') {
-        return jsonResponse({ data: [managedModelFixture], next_cursor: null });
+      if (url.pathname === '/api/time-zones') {
+        return jsonResponse({
+          version: 'go1.26.6-zoneinfo',
+          zones: ['America/Indianapolis', 'UTC'],
+        });
       }
+      if (url.pathname === '/api/steward/charity-models') {
+        return jsonResponse(managementNumberedPage([managedModelFixture]));
+      }
+      if (url.pathname === '/api/steward/charity-models/7')
+        return jsonResponse(managedModelFixture);
       if (url.pathname === '/api/steward/charity-models/7/bindings') {
         return jsonResponse({ bindings: [], binding_revision: '1' });
       }
-      if (url.pathname === '/api/steward/logs' || url.pathname === '/api/steward/donations') {
-        return jsonResponse({ data: [], next_cursor: null });
+      if (url.pathname === '/api/steward/charity-models/7/binding-candidates') {
+        return jsonResponse(managementNumberedPage([]));
+      }
+      if (url.pathname === '/api/steward/logs') return jsonResponse(coreNumberedPage([]));
+      if (url.pathname === '/api/steward/donations') {
+        return jsonResponse(managementNumberedPage([]));
+      }
+      if (url.pathname === '/api/steward/donation-sources') {
+        return jsonResponse(managementNumberedPage([]));
       }
       throw new Error(`Unexpected fixture request: ${url.pathname}${url.search}`);
     });
@@ -1889,25 +2226,58 @@ describe('experimental policy and charity controls', () => {
         });
       }
       if (method === 'GET' && requestURL.pathname === '/api/steward/logs') {
-        return new Response(JSON.stringify({ data: [], next_cursor: null }), {
+        return new Response(JSON.stringify(coreNumberedPage([])), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
       }
+      if (method === 'GET' && requestURL.pathname === '/api/time-zones') {
+        return new Response(
+          JSON.stringify({
+            version: 'go1.26.6-zoneinfo',
+            zones: ['America/Indianapolis', 'UTC'],
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        );
+      }
       if (method === 'GET' && requestURL.pathname === '/api/steward/donations') {
-        return new Response(JSON.stringify({ data: [], next_cursor: null }), {
+        return new Response(JSON.stringify(managementNumberedPage([])), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
       }
       if (method === 'GET' && requestURL.pathname === '/api/steward/charity-models') {
-        return new Response(JSON.stringify({ data: [managedModelFixture], next_cursor: null }), {
+        return new Response(JSON.stringify(managementNumberedPage([managedModelFixture])), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (method === 'GET' && requestURL.pathname === '/api/steward/charity-models/7') {
+        return new Response(JSON.stringify(managedModelFixture), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
       }
       if (method === 'GET' && requestURL.pathname === '/api/steward/charity-models/7/bindings') {
         return new Response(JSON.stringify({ bindings: [], binding_revision: '1' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (
+        method === 'GET' &&
+        requestURL.pathname === '/api/steward/charity-models/7/binding-candidates'
+      ) {
+        return new Response(JSON.stringify(managementNumberedPage([])), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (method === 'GET' && requestURL.pathname === '/api/steward/donation-sources') {
+        return new Response(JSON.stringify(managementNumberedPage([])), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -1927,16 +2297,15 @@ describe('experimental policy and charity controls', () => {
       screen.getByRole('tab', { name: 'Charity models and service connections' }),
     );
     await screen.findByText('[公益]provider/charity-model');
+    const modelPageKey = [...charityKeys.root('steward'), 'model-pages'];
     expect(
-      rendered.queryClient.getQueryData(charityKeys.models('steward', '', '', null)),
-    ).toBeDefined();
+      rendered.queryClient.getQueriesData({ queryKey: modelPageKey }).some(([, data]) => data),
+    ).toBe(true);
 
     demote = true;
     await rendered.queryClient.invalidateQueries({ queryKey: operationsKeys.session });
     await screen.findByText(/does not have confirmed level-5 steward access/i);
-    expect(
-      rendered.queryClient.getQueryData(charityKeys.models('steward', '', '', null)),
-    ).toBeUndefined();
+    expect(rendered.queryClient.getQueriesData({ queryKey: modelPageKey })).toEqual([]);
     expect(
       screen.queryByRole('checkbox', { name: '[Experimental] Flatten tool calls' }),
     ).toBeNull();
@@ -2652,12 +3021,16 @@ describe('experimental policy and charity controls', () => {
           deleted ? { ...coreEndpoint, revision: '2', key_count: '0' } : coreEndpoint,
         );
       }
-      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50') {
-        return jsonResponse(corePage(deleted ? [] : [coreEndpointKey]));
+      if (method === 'GET' && path === '/api/endpoints/1/keys?page=1&page_size=20') {
+        return jsonResponse(coreNumberedPage(deleted ? [] : [coreEndpointKey]));
       }
-      if (method === 'GET' && path === '/api/models?limit=50') return jsonResponse(corePage([]));
-      if (method === 'GET' && path === '/api/endpoints/1/keys/2/models?limit=50')
-        return jsonResponse(coreCatalogUnknown);
+      if (method === 'GET' && path === '/api/models?page=1&page_size=20')
+        return jsonResponse(coreNumberedPage([]));
+      if (
+        method === 'GET' &&
+        path === '/api/endpoints/1/keys/2/models?page=1&page_size=20&source=manual'
+      )
+        return jsonResponse(coreNumberedCatalog(coreCatalogUnknown));
       if (method === 'DELETE' && path === '/api/endpoints/1/keys/2') {
         deleted = true;
         return new Response(null, { status: 204 });
@@ -2704,12 +3077,12 @@ describe('experimental policy and charity controls', () => {
       ).toUpperCase();
       if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
       if (method === 'GET' && path === '/api/endpoints/1') return jsonResponse(coreEndpoint);
-      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50') {
-        return jsonResponse(corePage([]));
+      if (method === 'GET' && path === '/api/endpoints/1/keys?page=1&page_size=20') {
+        return jsonResponse(coreNumberedPage([]));
       }
-      if (method === 'GET' && path === '/api/endpoints?limit=50') {
+      if (method === 'GET' && path === '/api/endpoints?page=1&page_size=20') {
         listReads += 1;
-        return jsonResponse(corePage(deleted ? [] : [coreEndpoint]));
+        return jsonResponse(coreNumberedPage(deleted ? [] : [coreEndpoint]));
       }
       if (method === 'DELETE' && path === '/api/endpoints/1') {
         deleted = true;
@@ -2759,11 +3132,11 @@ describe('experimental policy and charity controls', () => {
         }
         return jsonResponse({ error: { code: 'not_found', message: 'already deleted' } }, 404);
       }
-      if (method === 'GET' && path === '/api/endpoints/1/keys?limit=50') {
-        return jsonResponse(corePage([]));
+      if (method === 'GET' && path === '/api/endpoints/1/keys?page=1&page_size=20') {
+        return jsonResponse(coreNumberedPage([]));
       }
-      if (method === 'GET' && path === '/api/endpoints?limit=50') {
-        return jsonResponse(corePage(detailReads >= 3 ? [] : [coreEndpoint]));
+      if (method === 'GET' && path === '/api/endpoints?page=1&page_size=20') {
+        return jsonResponse(coreNumberedPage(detailReads >= 3 ? [] : [coreEndpoint]));
       }
       if (method === 'DELETE' && path === '/api/endpoints/1') {
         deleteCalls += 1;
@@ -2803,8 +3176,8 @@ describe('experimental policy and charity controls', () => {
         init?.method ?? (input instanceof Request ? input.method : 'GET')
       ).toUpperCase();
       if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
-      if (method === 'GET' && path === '/api/models?limit=50')
-        return jsonResponse(corePage(deleted ? [] : [coreModel]));
+      if (method === 'GET' && path === '/api/models?page=1&page_size=20')
+        return jsonResponse(coreNumberedPage(deleted ? [] : [coreModel]));
       if (method === 'GET' && path === '/api/models/3') return jsonResponse(coreModel);
       if (method === 'GET' && path === '/api/models/3/bindings') {
         return jsonResponse({
@@ -2812,7 +3185,8 @@ describe('experimental policy and charity controls', () => {
           binding_revision: '2',
         });
       }
-      if (method === 'GET' && path === '/api/endpoints?limit=50') return jsonResponse(corePage([]));
+      if (method === 'GET' && path === '/api/endpoints?page=1&page_size=20')
+        return jsonResponse(coreNumberedPage([]));
       if (method === 'DELETE' && path === '/api/models/3') {
         deleted = true;
         return new Response(null, { status: 204 });
@@ -2841,8 +3215,8 @@ describe('experimental policy and charity controls', () => {
         init?.method ?? (input instanceof Request ? input.method : 'GET')
       ).toUpperCase();
       if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
-      if (method === 'GET' && path === '/api/models?limit=50') {
-        return jsonResponse(corePage(detailReads >= 2 ? [] : [coreModel]));
+      if (method === 'GET' && path === '/api/models?page=1&page_size=20') {
+        return jsonResponse(coreNumberedPage(detailReads >= 2 ? [] : [coreModel]));
       }
       if (method === 'GET' && path === '/api/models/3') {
         detailReads += 1;
@@ -2853,8 +3227,8 @@ describe('experimental policy and charity controls', () => {
       if (method === 'GET' && path === '/api/models/3/bindings') {
         return jsonResponse({ bindings: [], binding_revision: '2' });
       }
-      if (method === 'GET' && path === '/api/endpoints?limit=50') {
-        return jsonResponse(corePage([]));
+      if (method === 'GET' && path === '/api/endpoints?page=1&page_size=20') {
+        return jsonResponse(coreNumberedPage([]));
       }
       if (method === 'DELETE' && path === '/api/models/3') {
         deleteCalls += 1;
@@ -2888,8 +3262,8 @@ describe('experimental policy and charity controls', () => {
         init?.method ?? (input instanceof Request ? input.method : 'GET')
       ).toUpperCase();
       if (method === 'GET' && path === '/api/session') return jsonResponse(coreSession);
-      if (method === 'GET' && path === '/api/models?limit=50') {
-        return jsonResponse(corePage(detailReads >= 3 ? [] : [coreModel]));
+      if (method === 'GET' && path === '/api/models?page=1&page_size=20') {
+        return jsonResponse(coreNumberedPage(detailReads >= 3 ? [] : [coreModel]));
       }
       if (method === 'GET' && path === '/api/models/3') {
         detailReads += 1;
@@ -2905,8 +3279,8 @@ describe('experimental policy and charity controls', () => {
       if (method === 'GET' && path === '/api/models/3/bindings') {
         return jsonResponse({ bindings: [], binding_revision: '2' });
       }
-      if (method === 'GET' && path === '/api/endpoints?limit=50') {
-        return jsonResponse(corePage([]));
+      if (method === 'GET' && path === '/api/endpoints?page=1&page_size=20') {
+        return jsonResponse(coreNumberedPage([]));
       }
       if (method === 'DELETE' && path === '/api/models/3') {
         deleteCalls += 1;

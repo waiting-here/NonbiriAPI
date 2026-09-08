@@ -125,7 +125,7 @@ func TestCatalogExplainsAllStatesWithoutPrivateFieldsOrWrites(t *testing.T) {
 		if err := json.Unmarshal(encoded, &fields); err != nil {
 			t.Fatal(err)
 		}
-		if len(fields) != 11 {
+		if len(fields) != 12 {
 			t.Fatalf("catalog model fields: %s", encoded)
 		}
 		for _, forbidden := range []string{"source", "bindings", "donor_reward", "limits", "donation_key_id", "owner", "route_strategy"} {

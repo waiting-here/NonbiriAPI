@@ -10,6 +10,7 @@ import {
   userSession,
 } from './support';
 import { expect, test } from './test';
+import { numberedResponse } from './numbered-fixtures';
 
 type BrowserContext = Parameters<typeof installURLPersistenceObserver>[0];
 type Page = Parameters<typeof collectConsoleViolations>[0];
@@ -27,6 +28,7 @@ function catalogModel(model: Record<string, unknown>, levelAllowed = true) {
     allowed_levels: levelAllowed ? [1, 2, 3, 4, 5] : [1, 2, 3, 4],
     level_allowed: levelAllowed,
     availability: levelAllowed ? 'available' : 'level_denied',
+    currently_available: true,
   };
 }
 
@@ -174,6 +176,50 @@ function userDonation(
   };
 }
 
+function ownerDonationPageItem(donation: ReturnType<typeof userDonation>): Record<string, unknown> {
+  const keys = donation.keys as Array<Record<string, unknown>>;
+  const stateCounts = {
+    available: '0',
+    pending: '0',
+    disabled: '0',
+    suspended: '0',
+    exhausted: '0',
+    expired: '0',
+    ended: '0',
+  };
+  const sources: Record<string, unknown>[] = [];
+  for (const key of keys) {
+    const state = key.charity_state;
+    if (typeof state === 'string' && Object.hasOwn(stateCounts, state)) {
+      stateCounts[state as keyof typeof stateCounts] = String(
+        Number(stateCounts[state as keyof typeof stateCounts]) + 1,
+      );
+    }
+    const source = key.safe_source;
+    if (
+      source !== null &&
+      typeof source === 'object' &&
+      !Array.isArray(source) &&
+      !sources.some((entry) => JSON.stringify(entry) === JSON.stringify(source))
+    ) {
+      sources.push(source as Record<string, unknown>);
+    }
+  }
+  return {
+    id: donation.id,
+    status: donation.status,
+    revision: donation.revision,
+    description: donation.description,
+    review_result: donation.review_result,
+    created_at: donation.created_at,
+    updated_at: donation.updated_at,
+    key_count: String(keys.length),
+    state_counts: stateCounts,
+    source_count: String(sources.length),
+    sources,
+  };
+}
+
 function endpointSummary(id: string, keyCount: string) {
   return {
     id,
@@ -232,7 +278,13 @@ test('administrator mainstream channel CRUD keeps the channel authority and reti
       await route.fulfill({
         status: 200,
         headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
-        body: JSON.stringify({ data: include ? [channel] : [], next_cursor: null }),
+        body: JSON.stringify(
+          numberedResponse(
+            include ? [channel] : [],
+            url.searchParams.get('page') ?? '1',
+            Number(url.searchParams.get('page_size') ?? '20'),
+          ),
+        ),
       });
       return;
     }
@@ -380,8 +432,8 @@ test('user endpoint source wizard submits an immutable mainstream channel select
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/endpoints?limit=50',
-    body: { data: [], next_cursor: null },
+    path: '/api/endpoints?page=1&page_size=20',
+    body: numberedResponse([], '1', 20),
   });
   await mockJson(page, {
     origin: USER_ORIGIN,
@@ -438,7 +490,7 @@ test('user endpoint source wizard submits an immutable mainstream channel select
 
 test.describe('donation expiry in UTC', () => {
   test.use({ timezoneId: 'UTC' });
-  test('user charity overview loads all cursor pages, filters each key state, and submits per-key expiry', async ({
+  test('user charity overview reads numbered state summaries and key pages, and submits per-key expiry', async ({
     context,
     page,
   }) => {
@@ -507,7 +559,7 @@ test.describe('donation expiry in UTC', () => {
     await mockJson(page, {
       origin: USER_ORIGIN,
       method: 'GET',
-      path: '/api/charity/models?view=catalog&page=1&page_size=20',
+      path: '/api/charity/models?view=catalog&page=1&page_size=20&allowed_for_me=true&currently_available=true',
       body: catalogPage(
         [
           {
@@ -533,38 +585,75 @@ test.describe('donation expiry in UTC', () => {
         'open',
       ),
     });
+    await page.route(`${USER_ORIGIN}/api/donations?*`, async (route) => {
+      const url = new URL(route.request().url());
+      const donations = [donationOne, donationTwo];
+      const status = url.searchParams.get('status');
+      return route.fulfill({
+        json: numberedResponse(
+          donations.filter((item) => !status || item.status === status).map(ownerDonationPageItem),
+          '1',
+          20,
+        ),
+      });
+    });
+    for (const donation of [donationOne, donationTwo]) {
+      await mockJson(page, {
+        origin: USER_ORIGIN,
+        method: 'GET',
+        path: `/api/donations/${donation.id}/keys?page=1&page_size=20`,
+        body: numberedResponse(
+          donation.keys.map((value) => {
+            const key = value as Record<string, unknown>;
+            return {
+              ...key,
+              donation_id: donation.id,
+              key_id: key.id,
+              donation_revision: donation.revision,
+              rule_count: '0',
+              rules: [],
+            };
+          }),
+          '1',
+          20,
+        ),
+      });
+    }
     await mockJson(page, {
       origin: USER_ORIGIN,
       method: 'GET',
-      path: '/api/donations?limit=100',
-      body: { data: [donationOne], next_cursor: 'donation-next' },
+      path: '/api/endpoints?page=1&page_size=20',
+      body: numberedResponse([endpointSummary('20', '4')], '1', 20),
     });
-    await mockJson(page, {
-      origin: USER_ORIGIN,
-      method: 'GET',
-      path: '/api/donations?limit=100&cursor=donation-next',
-      body: { data: [donationTwo], next_cursor: null },
-    });
-    await mockJson(page, {
-      origin: USER_ORIGIN,
-      method: 'GET',
-      path: '/api/endpoints?limit=100',
-      body: { data: [endpointSummary('20', '4')], next_cursor: null },
-    });
-    await mockJson(page, {
-      origin: USER_ORIGIN,
-      method: 'GET',
-      path: '/api/endpoints/20/keys?limit=100',
-      body: {
-        data: [
-          endpointKeySummary('11', '20'),
-          endpointKeySummary('12', '20'),
-          endpointKeySummary('13', '20'),
-          endpointKeySummary('14', '20', 'key-free'),
-        ],
-        next_cursor: null,
-      },
-    });
+    await page.route(`${USER_ORIGIN}/api/endpoints/20/keys?*`, async (route) =>
+      route.fulfill({
+        json: numberedResponse(
+          [
+            ...['11', '12', '13', '14'].map((id) => ({
+              ...endpointKeySummary(id, '20', id === '14' ? 'key-free' : `key-${id}`),
+              browse: {
+                donation_eligibility:
+                  id === '14' && !donationPostBody ? 'eligible' : 'already_donated',
+                model_count: '0',
+                binding_count: '0',
+                available_binding_count: '0',
+                preview: [],
+                discovery: {
+                  state: 'unknown',
+                  revision: '1',
+                  result: null,
+                  safe_class: 'none',
+                  observed_at: null,
+                  count: null,
+                },
+              },
+            })),
+          ],
+          '1',
+          20,
+        ),
+      }),
+    );
     await page.route(`${USER_ORIGIN}/api/donations`, async (route) => {
       const request = route.request();
       if (request.method() !== 'POST') {
@@ -605,26 +694,38 @@ test.describe('donation expiry in UTC', () => {
     }
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole('tab', { name: 'My donations', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'My donations' })).toBeVisible();
-    await expect(page.getByText('Showing 3 of 3 keys')).toBeVisible();
-    const filter = page.getByLabel('Key status');
-    await filter.selectOption('available');
-    await expect(page.getByText('Showing 1 of 3 keys')).toBeVisible();
+    const donations = page.locator('.economy-donation-list');
+    await expect(donations.locator('.economy-donation-card')).toHaveCount(2);
+    const first = donations
+      .locator('.economy-donation-card')
+      .filter({ has: page.getByRole('heading', { name: 'Donation #9', exact: true }) });
+    await expect(first.getByText('Keys: 2', { exact: true })).toBeVisible();
+    await expect(first.locator('.economy-status-stack')).toContainText('Available · 1');
+    await expect(first.locator('.economy-status-stack')).toContainText('Charity use disabled · 1');
+    await first.getByRole('button', { name: 'View donated keys', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'key-available…tail' })).toBeVisible();
-    await filter.selectOption('blocked');
-    await expect(page.getByText('Showing 1 of 3 keys')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'key-blocked…tail' })).toBeVisible();
-    await filter.selectOption('ended');
-    await expect(page.getByText('Showing 1 of 3 keys')).toBeVisible();
+    const filter = page.getByRole('combobox', { name: 'Review status', exact: true });
+    await filter.selectOption('expired');
+    await expect(donations.locator('.economy-donation-card')).toHaveCount(1);
+    await expect(donations.getByText('Keys: 1', { exact: true })).toBeVisible();
+    await expect(donations.locator('.economy-status-stack')).toContainText('Expired · 1');
+    await donations.getByRole('button', { name: 'View donated keys', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'key-ended…tail' })).toBeVisible();
-    await filter.selectOption('all');
+    await expect(page.getByRole('heading', { name: 'key-available…tail' })).toHaveCount(0);
+    await filter.selectOption('');
+    await expect(donations.locator('.economy-donation-card')).toHaveCount(2);
 
     await page.getByRole('tab', { name: 'Donate resources', exact: true }).click();
     const composer = page.locator('.economy-donation-composer');
     await expect(
       composer.getByRole('heading', { name: 'Submit a charity donation' }),
     ).toBeVisible();
-    await composer.getByLabel(/key-free…tail/).check();
+    const resources = composer.locator('.donation-resource-picker');
+    await resources.getByRole('button', { name: /^Fixture endpoint / }).click();
+    const keyChoices = resources.locator('.donation-resource-picker__section').nth(1);
+    await expect(keyChoices.getByRole('checkbox', { name: /key-11…tail/ })).toBeDisabled();
+    await keyChoices.getByRole('checkbox', { name: /key-free…tail/ }).check();
     await composer.getByLabel('Expiry for key-free…tail').fill('2027-01-15T08:00');
     await composer
       .getByRole('checkbox', {
@@ -700,7 +801,7 @@ for (const locale of ['en', 'zh'] as const) {
     await mockJson(page, {
       origin: USER_ORIGIN,
       method: 'GET',
-      path: '/api/charity/models?view=catalog&page=1&page_size=20',
+      path: '/api/charity/models?view=catalog&page=1&page_size=20&allowed_for_me=true&currently_available=true',
       body: catalogPage(
         [
           {
@@ -739,14 +840,14 @@ for (const locale of ['en', 'zh'] as const) {
     await mockJson(page, {
       origin: USER_ORIGIN,
       method: 'GET',
-      path: '/api/donations?limit=100',
-      body: { data: [], next_cursor: null },
+      path: '/api/donations?page=1&page_size=20',
+      body: numberedResponse([], '1', 20),
     });
     await mockJson(page, {
       origin: USER_ORIGIN,
       method: 'GET',
-      path: '/api/endpoints?limit=100',
-      body: { data: [], next_cursor: null },
+      path: '/api/endpoints?page=1&page_size=20',
+      body: numberedResponse([], '1', 20),
     });
     await page.goto(`${USER_ORIGIN}/charity`);
     await expect(
@@ -762,7 +863,7 @@ for (const locale of ['en', 'zh'] as const) {
   });
 }
 
-test('user charity overview fails closed on a cursor page and privacy states export and lineage retention', async ({
+test('user charity overview fails closed on an invalid numbered page and privacy states export and lineage retention', async ({
   context,
   page,
 }) => {
@@ -782,25 +883,22 @@ test('user charity overview fails closed on a cursor page and privacy states exp
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/charity/models?view=catalog&page=1&page_size=20',
+    path: '/api/charity/models?view=catalog&page=1&page_size=20&allowed_for_me=true&currently_available=true',
     body: catalogPage([], 'closed'),
   });
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/donations?limit=100',
-    body: { data: [firstDonation], next_cursor: 'missing-page' },
-  });
-  await mockJson(page, {
-    origin: USER_ORIGIN,
-    method: 'GET',
-    path: '/api/donations?limit=100&cursor=missing-page',
-    body: { data: [], next_cursor: 99 },
+    path: '/api/donations?page=1&page_size=20',
+    body: {
+      ...numberedResponse([ownerDonationPageItem(firstDonation)], '1', 20),
+      next_cursor: 'unexpected-cursor',
+    },
   });
   await page.goto(`${USER_ORIGIN}/charity`);
   await page.getByRole('tab', { name: 'My donations', exact: true }).click();
   await expect(
-    page.getByRole('heading', { name: 'The donated-key overview is incomplete' }),
+    page.getByText('The service returned an invalid response.', { exact: true }),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
   await page.goto(`${USER_ORIGIN}/privacy`);
@@ -825,6 +923,13 @@ test('administrator charity provenance grouping and report lineage expose safe d
     channel_revision: '3',
     category: 'subscription',
   };
+  const safeSource = {
+    kind: 'mainstream',
+    connector_type: source.connector_type,
+    base_url: source.base_url,
+    channel_id: source.channel_id,
+    name: source.name,
+  };
   const managedKey = {
     id: '31',
     binding_count: '0',
@@ -832,7 +937,7 @@ test('administrator charity provenance grouping and report lineage expose safe d
     endpoint_key_id: '41',
     display_head: 'safe-head',
     display_tail: 'safe-tail',
-    safe_source: source,
+    safe_source: safeSource,
     physical_enabled: true,
     charity_state: 'available',
     limits: { price: null, calls: '20', tokens: '1000' },
@@ -929,42 +1034,96 @@ test('administrator charity provenance grouping and report lineage expose safe d
     ended_reason: 'account_deleted',
     ended_at: 1_800_000_100,
   };
+  const sourceKey = `dsg_${'A'.repeat(43)}`;
+  const sourceKeys = {
+    source_key: sourceKey,
+    safe_source: safeSource,
+    donation_count: '1',
+    key_count: '1',
+    usable_key_count: '0',
+    pending_donation_count: '1',
+  };
+  const managedKeyPage = {
+    max_concurrency: 0,
+    max_rpm: 0,
+    ...managedKey,
+    donation_id: '41',
+    key_id: '31',
+    donation_revision: '2',
+    rule_count: '0',
+    rules: [],
+    handling: managedDonation.handling,
+  };
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/donations?limit=50',
-    body: { data: [managedDonation], next_cursor: null },
+    path: '/admin/api/donations?page=1&page_size=20',
+    body: numberedResponse([], '1', 20),
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: `/admin/api/reports/${REPORT_ID}?materials_limit=50`,
-    body: { ...reportSummary, materials: { data: [], next_cursor: null }, decision: null },
+    path: '/admin/api/donation-sources?scope=active&page=1&page_size=20',
+    body: numberedResponse([sourceKeys], '1', 20),
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: `/admin/api/reports/${REPORT_ID}/targets?limit=50`,
-    body: { data: [reportTarget], next_cursor: null },
+    path: `/admin/api/donation-sources/${sourceKey}/keys?scope=active&page=1&page_size=20`,
+    body: numberedResponse([managedKeyPage], '1', 20),
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: `/admin/api/reports/${REPORT_ID}/targets/${REPORT_TARGET_ID}/donations?limit=50`,
-    body: { data: [lineageFirst], next_cursor: 'lineage-next' },
+    path: `/admin/api/reports/${REPORT_ID}?materials_page=1&materials_page_size=20`,
+    body: {
+      ...reportSummary,
+      materials: { data: [], next_cursor: null },
+      materials_pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+      decision: null,
+    },
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: `/admin/api/reports/${REPORT_ID}/targets/${REPORT_TARGET_ID}/donations?cursor=lineage-next&limit=50`,
-    body: { data: [lineageSecond], next_cursor: null },
+    path: `/admin/api/reports/${REPORT_ID}/targets?page=1&page_size=20`,
+    body: numberedResponse([reportTarget], '1', 20),
+  });
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN,
+    method: 'GET',
+    path: `/admin/api/reports/${REPORT_ID}/targets/${REPORT_TARGET_ID}/donations?page=1&page_size=20`,
+    body: numberedResponse(
+      [
+        lineageFirst,
+        ...Array.from({ length: 19 }, (_, index) => ({
+          ...lineageFirst,
+          donation_id: String(100 + index),
+          donation_key_id: String(200 + index),
+        })),
+      ],
+      '1',
+      20,
+      21,
+    ),
+  });
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN,
+    method: 'GET',
+    path: `/admin/api/reports/${REPORT_ID}/targets/${REPORT_TARGET_ID}/donations?page=2&page_size=20`,
+    body: numberedResponse([lineageSecond], '2', 20, 21),
   });
 
   await page.goto(`${ADMIN_ORIGIN}/charity`);
   await page.getByRole('tab', { name: 'Browse by source' }).click();
-  await expect(page.getByText('【Mainstream subscription】Hosted channel')).toBeVisible();
-  await expect(page.getByText('safe-head…safe-tail')).toBeVisible();
-  await expect(page.getByText('Safe administrative note')).toHaveCount(0);
+  await page.getByRole('button', { name: /Hosted channel/ }).click();
+  const sourceRow = page.locator('.charity-source-browser__source');
+  await expect(sourceRow).toContainText('Hosted channel');
+  await expect(sourceRow).toContainText('https://channel.example.test/v1');
+  await expect(sourceRow).toContainText('openai-compatible');
+  const keyRow = page.locator('.charity-source-browser__key');
+  await expect(keyRow.getByRole('heading', { name: 'safe-head…safe-tail' })).toBeVisible();
+  await expect(keyRow.getByText('Safe administrative note', { exact: true })).toHaveCount(0);
   await page.goto(`${ADMIN_ORIGIN}/reports/${REPORT_ID}`);
   const targetRow = page.getByRole('row').filter({ hasText: 'safe-head…safe-tail' });
   await expect(targetRow).toContainText('2');

@@ -106,6 +106,8 @@ export function StewardPage() {
         <RoleLogPanel
           key={`logs:${authority.data.id}`}
           role="steward"
+          accountId={authority.data.id}
+          scopeReady={allowed}
           enabled
           onAuthorityLoss={authorityLoss}
         />

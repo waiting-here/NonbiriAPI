@@ -339,6 +339,16 @@ func getAdminDonationTx(ctx context.Context, tx *sql.Tx, donationID, now int64) 
 }
 
 func getDonationProjectionTx(ctx context.Context, tx *sql.Tx, donationID, now int64) (AdminDonation, error) {
+	out, err := getDonationHeaderTx(ctx, tx, donationID)
+	if err != nil {
+		return AdminDonation{}, err
+	}
+	out.Keys, err = readDonationKeysTx(ctx, tx, donationID, out.Status, now)
+	return out, err
+}
+
+// Header reads deliberately avoid loading a donation's complete key collection.
+func getDonationHeaderTx(ctx context.Context, tx *sql.Tx, donationID int64) (AdminDonation, error) {
 	var out AdminDonation
 	var id, revision int64
 	var userID, reviewedBy sql.NullInt64
@@ -390,11 +400,6 @@ FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, donationID).
 		}
 		out.Reviewer = &reviewer
 	}
-	keys, err := readDonationKeysTx(ctx, tx, donationID, out.Status, now)
-	if err != nil {
-		return AdminDonation{}, err
-	}
-	out.Keys = keys
 	out.Handling, err = readHandlingTx(ctx, tx, donationID)
 	if err != nil {
 		return AdminDonation{}, err
@@ -403,6 +408,34 @@ FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, donationID).
 }
 
 func readDonationKeysTx(ctx context.Context, tx *sql.Tx, donationID int64, donationStatus string, now int64) ([]AdminDonationKey, error) {
+	return readDonationKeySelectionTx(ctx, tx, donationID, donationStatus, now, nil)
+}
+
+// selectedIDs, when present, were obtained from an authorized page in this
+// transaction. The parent condition is retained for every projected key.
+func readDonationKeySelectionTx(ctx context.Context, tx *sql.Tx, donationID int64, donationStatus string, now int64, selectedIDs []int64) ([]AdminDonationKey, error) {
+	where := `dk.donation_id=?`
+	args := []any{donationID}
+	if selectedIDs != nil {
+		if len(selectedIDs) == 0 {
+			return []AdminDonationKey{}, nil
+		}
+		if len(selectedIDs) > 100 {
+			return nil, ErrInvalidRequest
+		}
+		where += ` AND dk.id IN (`
+		for index, id := range selectedIDs {
+			if id <= 0 {
+				return nil, ErrInvalidRequest
+			}
+			if index > 0 {
+				where += ","
+			}
+			where += "?"
+			args = append(args, id)
+		}
+		where += ")"
+	}
 	rows, err := tx.QueryContext(ctx, `SELECT dk.id,dk.endpoint_key_id,dk.display_head,dk.display_tail,
 dk.canonical_base_url,dk.connector_type,dk.mainstream_channel_id,dk.mainstream_channel_revision,
 dk.mainstream_channel_name,dk.mainstream_channel_category,COALESCE(e.enabled,0),COALESCE(k.enabled,0),
@@ -419,7 +452,7 @@ FROM donation_keys dk
 LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id
 LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id
 LEFT JOIN endpoints e ON e.id=k.endpoint_id
-WHERE dk.donation_id=? ORDER BY dk.id`, donationID)
+WHERE `+where+` ORDER BY dk.id`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("donation: read key projections: %w", err)
 	}

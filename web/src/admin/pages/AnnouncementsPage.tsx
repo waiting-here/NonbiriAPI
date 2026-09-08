@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { clearStationSession } from '@shared/charityManagement';
@@ -12,15 +12,16 @@ import {
   PageHeader,
   StatusBadge,
 } from '@shared/components/States';
-import { CursorPagination } from '@shared/operations/CursorPagination';
-import { useCursorPager } from '@shared/operations/useCursorPager';
+import { PagePagination } from '@shared/operations/PagePagination';
+import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
 import { formatDateTime } from '@shared/utils/datetime';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { useAdminSession } from '../data';
 import {
   adminAnnouncementKeys,
   createAnnouncement,
-  getAdminAnnouncements,
+  getAdminAnnouncementsPage,
   type AnnouncementSeverity,
   type AnnouncementState,
 } from '../features/operations/announcements';
@@ -52,10 +53,28 @@ interface AnnouncementCreateInput {
 export function AnnouncementsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [params, setParams] = useSearchParams();
   const client = useQueryClient();
-  const pager = useCursorPager();
-  const [state, setState] = useState('');
-  const [severity, setSeverity] = useState('');
+  const session = useAdminSession();
+  const state =
+    params.getAll('state').length === 1 &&
+    ['draft', 'published', 'withdrawn', 'expired'].includes(params.get('state') ?? '')
+      ? params.get('state')!
+      : '';
+  const severity =
+    params.getAll('severity').length === 1 &&
+    ['info', 'warning', 'important'].includes(params.get('severity') ?? '')
+      ? params.get('severity')!
+      : '';
+  const accountID = session.data ? `admin:${session.data.admin.username}` : undefined;
+  const pager = useUrlPagePager({
+    station: 'admin',
+    listType: 'announcements',
+    scopeKey: accountID ?? 'anonymous',
+    scopeReady: Boolean(accountID) && !session.error,
+    resetKey: `${state}\u0000${severity}`,
+  });
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState<AnnouncementDraft>(() => ({
     title_zh: '',
@@ -68,8 +87,18 @@ export function AnnouncementsPage() {
     expires: createTimeDraft(null, 'minute'),
   }));
   const list = useQuery({
-    queryKey: adminAnnouncementKeys.list(state, severity, pager.cursor),
-    queryFn: () => getAdminAnnouncements(state, severity, pager.cursor),
+    queryKey: adminAnnouncementKeys.page(
+      accountID ?? 'none',
+      state,
+      severity,
+      pager.page,
+      pager.pageSize,
+    ),
+    queryFn: ({ signal }) =>
+      getAdminAnnouncementsPage(state, severity, pager.page, pager.pageSize, signal),
+    enabled: Boolean(accountID) && !session.error,
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[3] === accountID ? previous : undefined,
     retry: false,
   });
   const create = useRetainedOperation(
@@ -81,6 +110,22 @@ export function AnnouncementsPage() {
   const expiry = timeDraftValue(draft.expires);
   const zhBodyBytes = new TextEncoder().encode(draft.body_zh).byteLength;
   const enBodyBytes = new TextEncoder().encode(draft.body_en).byteLength;
+  const pageData = list.data;
+  const busy = list.isFetching;
+  const returnParams = new URLSearchParams(location.search);
+  returnParams.set('page', pageData?.pagination.page ?? pager.page);
+  returnParams.set('page_size', String(pager.pageSize));
+  const returnTo = `/announcements?${returnParams.toString()}`;
+  const setFilter = (name: 'state' | 'severity', value: string) => {
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete(name);
+      if (value) next.set(name, value);
+      next.set('page', '1');
+      next.set('page_size', String(pager.pageSize));
+      return next;
+    });
+  };
   const languagePairsValid =
     Boolean(draft.title_zh.trim()) === Boolean(draft.body_zh.trim()) &&
     Boolean(draft.title_en.trim()) === Boolean(draft.body_en.trim());
@@ -101,7 +146,8 @@ export function AnnouncementsPage() {
         expires_at: expiresAt,
       },
       {
-        onSuccess: (receipt) => navigate(`/announcements/${encodeURIComponent(receipt.id)}`),
+        onSuccess: (receipt) =>
+          navigate(`/announcements/${encodeURIComponent(receipt.id)}`, { state: { returnTo } }),
       },
     );
   };
@@ -237,8 +283,7 @@ export function AnnouncementsPage() {
             <select
               value={state}
               onChange={(event) => {
-                setState(event.target.value);
-                pager.reset();
+                setFilter('state', event.target.value);
               }}
             >
               <option value="">{t('admin.announcements.all')}</option>
@@ -253,8 +298,7 @@ export function AnnouncementsPage() {
             <select
               value={severity}
               onChange={(event) => {
-                setSeverity(event.target.value);
-                pager.reset();
+                setFilter('severity', event.target.value);
               }}
             >
               <option value="">{t('admin.announcements.all')}</option>
@@ -264,85 +308,96 @@ export function AnnouncementsPage() {
             </select>
           </label>
         </div>
-        {list.isPending ? (
+        {session.error ? (
+          <ErrorState error={session.error} onRetry={() => void session.refetch()} />
+        ) : list.isPending ? (
           <LoadingState />
         ) : list.error ? (
           <ErrorState error={list.error} onRetry={() => void list.refetch()} />
-        ) : list.data.data.length === 0 ? (
-          <EmptyState
-            title={t('admin.announcements.emptyTitle')}
-            body={t('admin.announcements.emptyBody')}
-          />
-        ) : (
+        ) : pageData ? (
           <>
-            <div className="ops-table-scroll">
-              <table className="ops-table ops-table--responsive">
-                <thead>
-                  <tr>
-                    <th>{t('admin.announcements.table.state')}</th>
-                    <th>{t('admin.announcements.table.draftTitle')}</th>
-                    <th>{t('admin.announcements.table.severity')}</th>
-                    <th>{t('admin.announcements.table.publication')}</th>
-                    <th>{t('admin.announcements.table.updated')}</th>
-                    <th>{t('admin.announcements.table.open')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {list.data.data.map((item) => (
-                    <tr key={item.id}>
-                      <td data-label={t('admin.announcements.table.state')}>
-                        <StatusBadge
-                          active={item.state === 'published'}
-                          label={stateLabels[item.state]}
-                        />
-                      </td>
-                      <td
-                        className="ops-cell-wide"
-                        data-label={t('admin.announcements.table.draftTitle')}
-                      >
-                        {item.draft.en?.title ??
-                          item.draft.zh?.title ??
-                          t('admin.announcements.emptyDraft')}
-                      </td>
-                      <td data-label={t('admin.announcements.table.severity')}>
-                        {severityLabels[item.severity]}
-                        {item.pinned ? ` · ${t('admin.announcements.pinned')}` : ''}
-                      </td>
-                      <td data-label={t('admin.announcements.table.publication')}>
-                        {item.published
-                          ? t('admin.announcements.publicationValue', {
-                              revision: item.published.revision,
-                              date: formatDateTime(item.published.published_at),
-                            })
-                          : t('admin.announcements.neverPublished')}
-                      </td>
-                      <td data-label={t('admin.announcements.table.updated')}>
-                        {formatDateTime(item.updated_at)}
-                      </td>
-                      <td
-                        className="ops-cell-wide"
-                        data-label={t('admin.announcements.table.open')}
-                      >
-                        <button
-                          className="btn btn-secondary"
-                          type="button"
-                          onClick={() => navigate(`/announcements/${encodeURIComponent(item.id)}`)}
-                        >
-                          {t('admin.announcements.edit')}
-                        </button>
-                      </td>
+            {pageData.data.length === 0 ? (
+              <EmptyState
+                title={t('admin.announcements.emptyTitle')}
+                body={t('admin.announcements.emptyBody')}
+              />
+            ) : (
+              <div className="ops-table-scroll" aria-busy={busy}>
+                <table className="ops-table ops-table--responsive">
+                  <thead>
+                    <tr>
+                      <th>{t('admin.announcements.table.state')}</th>
+                      <th>{t('admin.announcements.table.draftTitle')}</th>
+                      <th>{t('admin.announcements.table.severity')}</th>
+                      <th>{t('admin.announcements.table.publication')}</th>
+                      <th>{t('admin.announcements.table.updated')}</th>
+                      <th>{t('admin.announcements.table.open')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <CursorPagination
-              page={pager.page}
-              nextCursor={list.data.next_cursor}
-              onPrevious={pager.previous}
-              onNext={pager.next}
+                  </thead>
+                  <tbody>
+                    {pageData.data.map((item) => (
+                      <tr key={item.id}>
+                        <td data-label={t('admin.announcements.table.state')}>
+                          <StatusBadge
+                            active={item.state === 'published'}
+                            label={stateLabels[item.state]}
+                          />
+                        </td>
+                        <td
+                          className="ops-cell-wide"
+                          data-label={t('admin.announcements.table.draftTitle')}
+                        >
+                          {item.draft.en?.title ??
+                            item.draft.zh?.title ??
+                            t('admin.announcements.emptyDraft')}
+                        </td>
+                        <td data-label={t('admin.announcements.table.severity')}>
+                          {severityLabels[item.severity]}
+                          {item.pinned ? ` · ${t('admin.announcements.pinned')}` : ''}
+                        </td>
+                        <td data-label={t('admin.announcements.table.publication')}>
+                          {item.published
+                            ? t('admin.announcements.publicationValue', {
+                                revision: item.published.revision,
+                                date: formatDateTime(item.published.published_at),
+                              })
+                            : t('admin.announcements.neverPublished')}
+                        </td>
+                        <td data-label={t('admin.announcements.table.updated')}>
+                          {formatDateTime(item.updated_at)}
+                        </td>
+                        <td
+                          className="ops-cell-wide"
+                          data-label={t('admin.announcements.table.open')}
+                        >
+                          <button
+                            className="btn btn-secondary"
+                            type="button"
+                            onClick={() =>
+                              navigate(`/announcements/${encodeURIComponent(item.id)}`, {
+                                state: { returnTo },
+                              })
+                            }
+                          >
+                            {t('admin.announcements.edit')}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <PagePagination
+              metadata={pageData.pagination}
+              requestedPage={pager.page}
+              busy={busy}
+              onPageChange={pager.setPage}
+              onPageSizeChange={pager.setPageSize}
             />
           </>
+        ) : (
+          <LoadingState />
         )}
       </Card>
     </div>

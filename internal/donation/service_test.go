@@ -138,8 +138,13 @@ revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 
 func (environment *donationTestEnv) seedEndpointKey(t *testing.T, userID int64, suffix byte) (int64, int64) {
 	t.Helper()
-	now := environment.clock.Load()
 	baseURL := fmt.Sprintf("https://%c.example.test/v1", suffix)
+	return environment.seedEndpointKeyAt(t, userID, suffix, baseURL)
+}
+
+func (environment *donationTestEnv) seedEndpointKeyAt(t *testing.T, userID int64, suffix byte, baseURL string) (int64, int64) {
+	t.Helper()
+	now := environment.clock.Load()
 	result, err := environment.store.DB().Exec(`INSERT INTO endpoints(
 user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
 VALUES(?,'openai-compatible',?,'private endpoint note',1,1,?,?)`, userID, baseURL, now, now)

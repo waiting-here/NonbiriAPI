@@ -267,6 +267,12 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 	if !export {
 		allowed["cursor"] = true
 		allowed["limit"] = true
+		allowed["page"] = true
+		allowed["page_size"] = true
+		filter.Page, err = parseLogPage(values, "")
+		if err != nil {
+			return ListFilter{}, err
+		}
 	}
 	for name, entries := range values {
 		if !allowed[name] || len(entries) != 1 {
@@ -341,11 +347,16 @@ func parseAttemptFilter(rawQuery string) (AttemptFilter, error) {
 		return AttemptFilter{}, ErrInvalid
 	}
 	filter := AttemptFilter{}
+	filter.Page, err = parseLogPage(values, "attempt_")
+	if err != nil {
+		return AttemptFilter{}, err
+	}
 	for name, entries := range values {
 		if len(entries) != 1 {
 			return AttemptFilter{}, ErrInvalid
 		}
 		switch name {
+		case "attempt_page", "attempt_page_size":
 		case "attempt_cursor":
 			if entries[0] == "" {
 				return AttemptFilter{}, ErrInvalid
@@ -403,7 +414,7 @@ func writeLogError(writer http.ResponseWriter, err error) {
 	case errors.Is(err, ErrNotFound):
 		httperr.WriteError(writer, httperr.New(httperr.CodeNotFound, "log was not found"))
 	case errors.Is(err, ErrForbidden):
-		httperr.WriteError(writer, httperr.New(httperr.CodeForbidden, "steward access is required"))
+		httperr.WriteError(writer, httperr.New(httperr.CodeForbidden, "log access is not permitted"))
 	case errors.Is(err, ErrConflict):
 		httperr.WriteError(writer, httperr.New(httperr.CodeConflict, "log is not terminal"))
 	case errors.Is(err, ErrCapacity):

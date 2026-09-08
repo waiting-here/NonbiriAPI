@@ -7,6 +7,7 @@ import {
   mockRoleSession,
   userSession,
 } from './support';
+import { numberedResponse } from './numbered-fixtures';
 
 test('user management separates identifiers and copies Discord IDs exactly at desktop and mobile sizes', async ({
   page,
@@ -40,8 +41,8 @@ test('user management separates identifiers and copies Discord IDs exactly at de
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/users?limit=50',
-    body: { data: [user], next_cursor: null },
+    path: '/admin/api/users?page=1&page_size=20',
+    body: numberedResponse([user], '1', 20),
   });
   await page.setViewportSize({ width: 1935, height: 1000 });
   await page.goto(`${ADMIN_ORIGIN}/users`);

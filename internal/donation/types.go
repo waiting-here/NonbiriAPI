@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -44,8 +45,9 @@ type UserPrincipal = resources.UserPrincipal
 type AuthorizedUserHandler = resources.AuthorizedUserHandler
 
 type Page[T any] struct {
-	Data       []T     `json:"data"`
-	NextCursor *string `json:"next_cursor"`
+	Data       []T                  `json:"data"`
+	NextCursor *string              `json:"next_cursor"`
+	Pagination *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 type SafeSource struct {

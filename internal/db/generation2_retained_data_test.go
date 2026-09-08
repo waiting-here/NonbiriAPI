@@ -19,6 +19,7 @@ var retainedSourceManifests = []struct{ name, hash string }{
 	{"before_key_limits", preKeyLimitsManifestHash},
 	{"before_response_starts", preResponseStartsManifestHash},
 	{"complete", preBetaTwoManifestHash},
+	{"recurring_limits", preBrowseManifestHash},
 }
 
 // The fixture uses only synthetic identities and a credential sealed by the
@@ -139,6 +140,22 @@ VALUES(?,?,'10x10',0,'completed',101,1101,201,50,99)`, hostileOID("ll_"), users[
 
 func makeRetainedSource(t *testing.T, database *sql.DB, want string) {
 	t.Helper()
+	if want == preBrowseManifestHash {
+		dropBrowseIndexes(t, database)
+		tx, err := database.BeginTx(context.Background(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := migrateBetaTwoDefaults(context.Background(), tx); err != nil {
+			tx.Rollback()
+			t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+		assertRetainedManifest(t, database, want)
+		return
+	}
 	dropBetaTwoAdditiveObjects(t, database)
 	if want != preBetaTwoManifestHash {
 		hostileMustExec(t, database, `DROP TABLE dispatch_response_starts`)

@@ -401,10 +401,14 @@
         "welfareBp": "公益分配（基点）"
       },
       "pools": {
+        "allStates": "全部奖池状态",
+        "allTypes": "全部奖池类型",
         "adjust": "调整",
         "balance": "余额",
         "emptyBody": "权威读取没有返回任何共享池。",
         "emptyTitle": "没有共享池",
+        "filterState": "奖池状态",
+        "filterType": "奖池类型",
         "period": "周期",
         "revision": "修订",
         "select": "选择",
@@ -764,6 +768,8 @@
       "validation": "每种语言必须同时包含标题和正文，或两者均为空；每份正文最多 65,536 个 UTF-8 字节，且到期时间必须有效。"
     },
     "charity": {
+      "donationsTitle": "捐赠审核队列",
+      "modelsTitle": "公益模型与绑定",
       "nav": "公益",
       "title": "公益与捐赠管理",
       "description": "审核捐赠、管理公益模型及连接，调整使用限制。",
@@ -825,7 +831,6 @@
       "discountStart": "开始时间（可选）",
       "discountEnd": "结束时间（可选）",
       "newModel": "新增公益模型",
-      "modelsTitle": "公益模型与绑定",
       "noModels": "暂无公益模型",
       "noModelsBody": "请在捐赠资源准备好后创建公益模型。",
       "successRate": "最近 {{count}} 次成功率 {{rate}}%",
@@ -834,7 +839,6 @@
       "order": "顺序",
       "actions": "操作",
       "noBindings": "暂无绑定",
-      "donationsTitle": "捐赠审核队列",
       "statusFilter": "捐赠状态",
       "allStatuses": "全部状态",
       "noDonations": "暂无捐赠",
@@ -844,8 +848,6 @@
       "reject": "驳回捐赠",
       "saveKeyLimits": "保存密钥限制",
       "deleteModelTitle": "删除这个公益模型？",
-      "previous": "上一页",
-      "next": "下一页",
       "status": {
         "pending": "待审核",
         "approved": "已通过",
@@ -856,6 +858,7 @@
     },
     "legalHolds": {
       "actions": {
+        "close": "关闭详情",
         "create": "创建法律保留",
         "metadata": "查看元数据",
         "release": "解除保留"
@@ -896,7 +899,6 @@
         "released": "由管理员解除：{{reason}}"
       },
       "errors": {
-        "authorityChanged": "管理员权限已变化。",
         "elevationRequired": "需要重新验证管理员密码。"
       },
       "filters": {

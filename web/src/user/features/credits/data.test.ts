@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { HISTORY_KINDS, normalizeHistory } from './data';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  HISTORY_KINDS,
+  MAX_HISTORY_PAGE,
+  loadHistory,
+  normalizeHistory,
+  normalizeHistoryFilter,
+} from './data';
 
 const entry = {
   operation_id: `op_${'A'.repeat(22)}`,
@@ -19,6 +25,10 @@ const page = {
   current_balance: '9000000000000.007',
   server_now: 1_800_000_001,
 };
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('owner credit history projection', () => {
   it('preserves wide signed decimal values without coercion', () => {
@@ -71,5 +81,77 @@ describe('owner credit history projection', () => {
   it('accepts an empty filter result with or without a browsing anchor', () => {
     for (const anchor of [null, entry.operation_id])
       expect(normalizeHistory({ ...page, data: [], total: '0', anchor }).data).toEqual([]);
+  });
+
+  it('accepts the new ten-row page size and the full positive int64 page range', () => {
+    expect(normalizeHistory({ ...page, page_size: 10 }).page_size).toBe(10);
+    expect(normalizeHistoryFilter({ page: MAX_HISTORY_PAGE.toString(), page_size: 10 })).toEqual({
+      page: MAX_HISTORY_PAGE.toString(),
+      page_size: 10,
+    });
+  });
+
+  it('sends the original filter and signal, then accepts a server clamp', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn((_input: string | URL | Request, init?: RequestInit) => {
+      expect(init?.signal).toBe(controller.signal);
+      return Promise.resolve(
+        new Response(JSON.stringify({ ...page, page: '1', page_size: 10 }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await loadHistory(
+      {
+        page: MAX_HISTORY_PAGE.toString(),
+        page_size: 10,
+        anchor: entry.operation_id,
+        from: 0,
+        to: 253_402_300_799,
+        category: 'charity',
+        direction: 'income',
+      },
+      controller.signal,
+    );
+
+    expect(result.page).toBe('1');
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      `/api/credits/history?page=${MAX_HISTORY_PAGE}&page_size=10&anchor=${entry.operation_id}&from=0&to=253402300799&category=charity&direction=income`,
+    );
+  });
+
+  it('rejects invalid requests before fetch and rejects an unexpected clamp', async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', fetchMock);
+    expect(() => loadHistory({ page: '0', page_size: 20 })).toThrow(/filter/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ ...page, page: '1', total: '20', total_pages: '2' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    await expect(loadHistory({ page: '2', page_size: 20 })).rejects.toMatchObject({
+      code: 'invalid_response',
+    });
+  });
+
+  it('rejects a changed browsing anchor even when the page window is valid', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(page), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    );
+    await expect(
+      loadHistory({ page: '1', page_size: 20, anchor: `op_${'B'.repeat(21)}A` }),
+    ).rejects.toMatchObject({ code: 'invalid_response' });
   });
 });

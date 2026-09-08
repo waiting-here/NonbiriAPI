@@ -128,6 +128,15 @@ func (api *httpAPI) listModels(writer http.ResponseWriter, request *http.Request
 	if !ok {
 		return
 	}
+	numberedPage, numbered, pageErr := parseNumberedQuery(values, "q", "enabled")
+	if pageErr != nil {
+		writeRoutingError(writer, pageErr)
+		return
+	}
+	if numbered {
+		api.numberedModels(writer, request, role, actorID, values, numberedPage)
+		return
+	}
 	limit, cursor, ok := parsePage(values, "q", "enabled", "cursor", "limit")
 	if !ok {
 		writeRoutingError(writer, ErrInvalidRequest)

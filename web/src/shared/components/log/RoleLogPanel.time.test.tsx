@@ -40,7 +40,12 @@ function row(role: LogRole) {
 function installFixtures(role: 'admin' | 'steward') {
   const prefix = role === 'admin' ? '/admin/api' : '/api';
   const logPath = role === 'admin' ? '/admin/api/logs' : '/api/steward/logs';
-  const filteredLogPath = `${logPath}?from=${from}&to=${to}&limit=20`;
+  const listBody = {
+    data: [row(role)],
+    next_cursor: null,
+    pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+  };
+  const filteredLogPath = `${logPath}?from=${from}&to=${to}&page=1&page_size=20`;
   const resolvePath = `${prefix}/time/resolve?${new URLSearchParams({
     local: localFrom,
     time_zone: 'UTC',
@@ -79,13 +84,13 @@ function installFixtures(role: 'admin' | 'steward') {
     },
     {
       method: 'GET',
-      path: `${logPath}?limit=20`,
-      body: { data: [row(role)], next_cursor: null },
+      path: `${logPath}?page=1&page_size=20`,
+      body: listBody,
     },
     {
       method: 'GET',
       path: filteredLogPath,
-      body: { data: [row(role)], next_cursor: null },
+      body: listBody,
     },
   ]);
 }
@@ -107,17 +112,20 @@ afterEach(() => {
 describe('role log time filters', () => {
   it('rechecks a zone change that has not emitted a browser notification', async () => {
     const fetchMock = installFixtures('admin');
-    await renderWithProviders(<RoleLogPanel role="admin" />, { station: 'admin', role: 'admin' });
+    await renderWithProviders(<RoleLogPanel accountId="viewer" role="admin" />, {
+      station: 'admin',
+      role: 'admin',
+    });
     await waitFor(() =>
       expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
-        '/admin/api/logs?limit=20',
+        '/admin/api/logs?page=1&page_size=20',
       ),
     );
     currentZone = 'Asia/Tokyo';
     fireEvent.submit(screen.getByRole('button', { name: 'Apply filter' }).closest('form')!);
     expect(screen.getByText(/status code or time range is invalid/i)).toBeVisible();
     expect(fetchMock.mock.calls.map(([path]) => String(path))).not.toContain(
-      `/admin/api/logs?from=${from}&to=${to}&limit=20`,
+      `/admin/api/logs?from=${from}&to=${to}&page=1&page_size=20`,
     );
   });
 
@@ -138,7 +146,7 @@ describe('role log time filters', () => {
     'uses the %s station for time resolution and preserves range validation',
     async ({ role, station, testRole, timePath }) => {
       const fetchMock = installFixtures(role);
-      const view = await renderWithProviders(<RoleLogPanel role={role} />, {
+      const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role={role} />, {
         station,
         role: testRole,
       });
@@ -163,7 +171,7 @@ describe('role log time filters', () => {
       await view.user.click(screen.getByRole('button', { name: 'Apply filter' }));
       await waitFor(() =>
         expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
-          `${role === 'admin' ? '/admin/api/logs' : '/api/steward/logs'}?from=${from}&to=${to}&limit=20`,
+          `${role === 'admin' ? '/admin/api/logs' : '/api/steward/logs'}?from=${from}&to=${to}&page=1&page_size=20`,
         ),
       );
     },
@@ -171,7 +179,7 @@ describe('role log time filters', () => {
 
   it('keeps an invalid range in the inputs and does not replace the applied filter', async () => {
     installFixtures('admin');
-    const view = await renderWithProviders(<RoleLogPanel role="admin" />, {
+    const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="admin" />, {
       station: 'admin',
       role: 'admin',
     });

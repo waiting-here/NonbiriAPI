@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+  type MutateOptions,
+} from '@tanstack/react-query';
 import {
   captureStationSession,
   clearStationSession,
@@ -36,11 +42,15 @@ export const economyKeys = {
   activities: ['user', 'economy', 'activities'] as const,
 };
 
-async function economySessionRequest<T>(
+export async function economySessionRequest<T>(
   queryClient: QueryClient,
   request: () => Promise<T>,
+  accountID?: string,
 ): Promise<T> {
   const station = captureStationSession(queryClient, 'steward');
+  if (accountID !== undefined && JSON.parse(station.subject)[1] !== accountID) {
+    throw new StationSessionChangedError();
+  }
   try {
     const value = await request();
     if (!stationSessionMatches(queryClient, 'steward', station)) {
@@ -119,42 +129,47 @@ async function reconcileDonations(
   donationId?: string,
   includeCapability = false,
 ): Promise<void> {
-  const includeEndpointChoices = queryClient
-    .getQueryCache()
-    .findAll({ queryKey: economyKeys.endpointChoicesRoot, exact: false })
-    .some((query) => query.isActive());
-  await queryClient.cancelQueries({ queryKey: economyKeys.donations, exact: false });
-  if (includeCapability) {
-    await queryClient.cancelQueries({ queryKey: economyKeys.charityCapability, exact: true });
-  }
-  if (includeEndpointChoices) {
-    await queryClient.cancelQueries({ queryKey: economyKeys.endpointChoicesRoot, exact: false });
-  }
-  const [donationValues, donationValue, capabilityValue, endpointChoices] =
-    await economySessionRequest(queryClient, async () => {
-      const [donationValues, donationValue, capabilityValue] = await Promise.all([
-        getDonations(),
-        donationId ? getDonation(donationId) : Promise.resolve(null),
-        includeCapability ? getCharityCapability() : Promise.resolve(null),
-      ]);
-      const endpointChoices = includeEndpointChoices
-        ? await getEndpointChoices(donationValues)
-        : null;
-      return [donationValues, donationValue, capabilityValue, endpointChoices] as const;
-    });
-  queryClient.setQueryData(economyKeys.donations, donationValues);
-  if (donationId && donationValue) {
-    queryClient.setQueryData(economyKeys.donation(donationId), donationValue);
-  }
-  if (capabilityValue) {
-    queryClient.setQueryData(economyKeys.charityCapability, capabilityValue);
-  }
-  if (endpointChoices) {
-    queryClient.setQueryData(
-      economyKeys.endpointChoices(membershipSignature(donationValues)),
-      endpointChoices,
+  await economySessionRequest(queryClient, async () => {
+    const station = captureStationSession(queryClient, 'steward');
+    const roots = [
+      economyKeys.donations,
+      economyKeys.endpointChoicesRoot,
+      ...(includeCapability ? [economyKeys.charityCapability] : []),
+    ];
+    await Promise.all(roots.map((queryKey) => queryClient.cancelQueries({ queryKey })));
+    if (!stationSessionMatches(queryClient, 'steward', station))
+      throw new StationSessionChangedError();
+    // Invalidate inactive pages without fetching them. Only visible windows
+    // and the selected detail participate in reconciliation.
+    await Promise.all(
+      roots.map((queryKey) => queryClient.invalidateQueries({ queryKey, refetchType: 'none' })),
     );
-  }
+    if (includeCapability) {
+      const capability = await getCharityCapability();
+      if (!stationSessionMatches(queryClient, 'steward', station))
+        throw new StationSessionChangedError();
+      queryClient.setQueryData(economyKeys.charityCapability, capability);
+    }
+    if (
+      donationId &&
+      !queryClient
+        .getQueryCache()
+        .find({ queryKey: economyKeys.donation(donationId), exact: true })
+        ?.isActive()
+    ) {
+      const value = await getDonation(donationId);
+      if (!stationSessionMatches(queryClient, 'steward', station))
+        throw new StationSessionChangedError();
+      queryClient.setQueryData(economyKeys.donation(donationId), value);
+    }
+    await Promise.all(
+      roots
+        .filter((queryKey) => queryKey !== economyKeys.charityCapability)
+        .map((queryKey) =>
+          queryClient.refetchQueries({ queryKey, type: 'active' }, { throwOnError: true }),
+        ),
+    );
+  });
 }
 
 function isStationBoundaryError(error: unknown): boolean {
@@ -216,71 +231,104 @@ function useAuthoritativeReconciliation(): AuthoritativeReconciliation {
   };
 }
 
-export function useCreateDonation() {
-  const queryClient = useQueryClient();
+interface PreparedDonation<T> {
+  variables: T;
+  station?: ReturnType<typeof captureStationSession>;
+  error?: unknown;
+}
+
+function useDonationOperation<T>(
+  execute: (variables: T) => Promise<Donation>,
+  reconcile: (client: QueryClient, variables: T) => Promise<void>,
+) {
+  const client = useQueryClient();
   const reconciliation = useAuthoritativeReconciliation();
-  const mutation = useMutation({
-    mutationFn: (input: CreateDonationInput) =>
-      economySessionRequest(queryClient, () => createDonation(input)),
+  const current = (input: PreparedDonation<T>) =>
+    input.station !== undefined && stationSessionMatches(client, 'steward', input.station);
+  const prepare = (variables: T): PreparedDonation<T> => {
+    try {
+      return { variables, station: captureStationSession(client, 'steward') };
+    } catch (error) {
+      return { variables, error };
+    }
+  };
+  const mutation = useMutation<Donation, Error, PreparedDonation<T>>({
     retry: false,
-    onSettled: (_data, error) =>
-      isStationBoundaryError(error)
-        ? undefined
-        : reconciliation.runReconcile(() => reconcileDonations(queryClient, undefined, true)),
+    mutationFn: async (input) => {
+      if (input.error) throw input.error;
+      if (!current(input)) throw new StationSessionChangedError();
+      return economySessionRequest(client, async () => {
+        const result = await execute(input.variables);
+        if (!current(input)) throw new StationSessionChangedError();
+        return result;
+      });
+    },
+    onSettled: (_data, error, input) => {
+      if (isStationBoundaryError(error) || !current(input)) return;
+      return reconciliation.runReconcile(() => {
+        if (!current(input)) throw new StationSessionChangedError();
+        return reconcile(client, input.variables);
+      });
+    },
   });
-  return { ...mutation, ...reconciliation };
+  const callbacks = (
+    options: MutateOptions<Donation, Error, T> | undefined,
+  ): MutateOptions<Donation, Error, PreparedDonation<T>> => ({
+    onSuccess: (result, input, context, mutationContext) => {
+      if (current(input)) options?.onSuccess?.(result, input.variables, context, mutationContext);
+    },
+    onError: (error, input, context, mutationContext) => {
+      if (current(input)) options?.onError?.(error, input.variables, context, mutationContext);
+    },
+    onSettled: (result, error, input, context, mutationContext) => {
+      if (current(input))
+        options?.onSettled?.(result, error, input.variables, context, mutationContext);
+    },
+  });
+  return {
+    ...mutation,
+    ...reconciliation,
+    variables: mutation.variables?.variables,
+    mutate: (input: T, options?: MutateOptions<Donation, Error, T>) =>
+      mutation.mutate(prepare(input), callbacks(options)),
+    mutateAsync: async (variables: T, options?: MutateOptions<Donation, Error, T>) => {
+      const input = prepare(variables);
+      const result = await mutation.mutateAsync(input, callbacks(options));
+      if (!current(input)) throw new StationSessionChangedError();
+      return result;
+    },
+  };
+}
+
+export function useCreateDonation() {
+  return useDonationOperation(
+    (input: CreateDonationInput) => createDonation(input),
+    (client) => reconcileDonations(client, undefined, true),
+  );
 }
 
 export function useEditDonation() {
-  const queryClient = useQueryClient();
-  const reconciliation = useAuthoritativeReconciliation();
-  const mutation = useMutation({
-    mutationFn: ({
-      id,
-      description,
-      expectedRevision,
-    }: {
-      id: string;
-      description: string;
-      expectedRevision: string;
-    }) => economySessionRequest(queryClient, () => editDonation(id, description, expectedRevision)),
-    retry: false,
-    onSettled: (_data, error, variables) =>
-      isStationBoundaryError(error)
-        ? undefined
-        : reconciliation.runReconcile(() => reconcileDonations(queryClient, variables.id)),
-  });
-  return { ...mutation, ...reconciliation };
+  return useDonationOperation(
+    (input: { id: string; description: string; expectedRevision: string }) =>
+      editDonation(input.id, input.description, input.expectedRevision),
+    (client, input) => reconcileDonations(client, input.id),
+  );
 }
 
 export function useWithdrawDonation() {
-  const queryClient = useQueryClient();
-  const reconciliation = useAuthoritativeReconciliation();
-  const mutation = useMutation({
-    mutationFn: ({ id, expectedRevision }: { id: string; expectedRevision: string }) =>
-      economySessionRequest(queryClient, () => withdrawDonation(id, expectedRevision)),
-    retry: false,
-    onSettled: (_data, error, variables) =>
-      isStationBoundaryError(error)
-        ? undefined
-        : reconciliation.runReconcile(() => reconcileDonations(queryClient, variables.id)),
-  });
-  return { ...mutation, ...reconciliation };
+  return useDonationOperation(
+    (input: { id: string; expectedRevision: string }) =>
+      withdrawDonation(input.id, input.expectedRevision),
+    (client, input) => reconcileDonations(client, input.id),
+  );
 }
 
 export function useTerminateDonation() {
-  const queryClient = useQueryClient();
-  const reconciliation = useAuthoritativeReconciliation();
-  const mutation = useMutation({
-    mutationFn: ({ id, expectedRevision }: { id: string; expectedRevision: string }) =>
-      economySessionRequest(queryClient, () => terminateDonation(id, expectedRevision)),
-    retry: false,
-    onSettled: (_data, error, variables) =>
-      isStationBoundaryError(error)
-        ? undefined
-        : reconciliation.runReconcile(() => reconcileDonations(queryClient, variables.id)),
-  });
-  return { ...mutation, ...reconciliation };
+  return useDonationOperation(
+    (input: { id: string; expectedRevision: string }) =>
+      terminateDonation(input.id, input.expectedRevision),
+    (client, input) => reconcileDonations(client, input.id),
+  );
 }
 
 export function useActivities(enabled = true) {

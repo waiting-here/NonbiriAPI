@@ -1,8 +1,12 @@
 package resources
 
 import (
+	"context"
 	"net/http"
+	"net/url"
 	"strconv"
+
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
 type createModelRequest struct {
@@ -79,6 +83,11 @@ type expectedBindingRevisionCanonical struct {
 
 func (api *httpAPI) listModels(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
 	if !requireNoBody(writer, request) {
+		return
+	}
+	if serveNumberedPage(writer, request, nil, func(ctx context.Context, _ url.Values, page pagination.Request) (Page[Model], error) {
+		return api.repository.ListModelsPage(ctx, principal.UserID, page)
+	}) {
 		return
 	}
 	limit, cursor, ok := parsePageQuery(writer, request)
@@ -215,7 +224,12 @@ func (api *httpAPI) bindingCandidates(writer http.ResponseWriter, request *http.
 	if !parsed {
 		return
 	}
-	if !exactQuery(values, "endpoint_id", "key_id", "source", "q", "cursor", "limit") {
+	if !exactQuery(values, "endpoint_id", "key_id", "source", "q", "cursor", "limit", "page", "page_size") {
+		writeResourceError(writer, ErrInvalidRequest)
+		return
+	}
+	window, numbered, err := pagination.Parse(values)
+	if err != nil {
 		writeResourceError(writer, ErrInvalidRequest)
 		return
 	}
@@ -258,7 +272,12 @@ func (api *httpAPI) bindingCandidates(writer http.ResponseWriter, request *http.
 			return
 		}
 	}
-	page, err := api.repository.BindingCandidates(request.Context(), principal.UserID, modelID, query)
+	var page Page[BindingCandidate]
+	if numbered {
+		page, err = api.repository.BindingCandidatesPage(request.Context(), principal.UserID, modelID, query, window)
+	} else {
+		page, err = api.repository.BindingCandidates(request.Context(), principal.UserID, modelID, query)
+	}
 	if err != nil {
 		writeResourceError(writer, err)
 		return

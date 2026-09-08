@@ -18,9 +18,12 @@ import {
   type DiscoveryEvidence,
   type DiscoverySafeClass,
   type Endpoint,
+  type EndpointBrowse,
+  type EndpointBrowseState,
   type EndpointCreateOptions,
   type EndpointOrigin,
   type EndpointKey,
+  type EndpointKeyBrowse,
   type HomeAnnouncementSummary,
   type HomeCheckinResult,
   type HomeCheckinStatus,
@@ -29,7 +32,10 @@ import {
   type ManualEntriesResponse,
   type ManualUpdateResponse,
   type Model,
+  type ModelBrowse,
   type Page,
+  type KeyBindingState,
+  type KeyBindingView,
   type UsageSummary,
   type UserEnvelope,
   type UserProfile,
@@ -639,6 +645,239 @@ export function normalizeEndpointCreateOptions(value: unknown): EndpointCreateOp
   };
 }
 
+function endpointBrowseState(value: unknown): EndpointBrowseState {
+  if (
+    value !== 'available' &&
+    value !== 'endpoint_disabled' &&
+    value !== 'no_keys' &&
+    value !== 'no_usable_key'
+  ) {
+    invalid('endpoint browse state');
+  }
+  return value;
+}
+
+function keyBindingState(value: unknown): KeyBindingState {
+  if (
+    value !== 'available' &&
+    value !== 'endpoint_disabled' &&
+    value !== 'key_disabled' &&
+    value !== 'key_suspended' &&
+    value !== 'unsupported'
+  ) {
+    invalid('key binding state');
+  }
+  return value;
+}
+
+function browseRoutingLimit(value: unknown, label: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0 || (value as number) > 2_147_483_647) {
+    invalid(label);
+  }
+  return value as number;
+}
+
+export function normalizeKeyBindingView(value: unknown): KeyBindingView {
+  const record = exactRecord(
+    value,
+    [
+      'id',
+      'model_id',
+      'model_full_name',
+      'endpoint_id',
+      'endpoint_key_id',
+      'endpoint_base_url',
+      'connector_type',
+      'endpoint_note',
+      'display_head',
+      'display_tail',
+      'key_note',
+      'upstream_model_id',
+      'ord',
+      'max_concurrency',
+      'max_rpm',
+      'state',
+    ],
+    [],
+    'key binding view',
+  );
+  if (
+    !Number.isSafeInteger(record.ord) ||
+    (record.ord as number) < 0 ||
+    (record.ord as number) > 255
+  ) {
+    invalid('key binding order');
+  }
+  return {
+    id: id(record.id, 'key binding id'),
+    model_id: id(record.model_id, 'key binding model id'),
+    model_full_name: scalarString(record.model_full_name, 129, 'key binding model full name'),
+    endpoint_id: id(record.endpoint_id, 'key binding endpoint id'),
+    endpoint_key_id: id(record.endpoint_key_id, 'key binding endpoint key id'),
+    endpoint_base_url: normalizeBaseURL(record.endpoint_base_url, 'key binding endpoint base URL'),
+    connector_type: connectorType(record.connector_type),
+    endpoint_note: scalarString(record.endpoint_note, 1_024, 'key binding endpoint note', {
+      allowEmpty: true,
+    }),
+    display_head: asciiFragment(record.display_head, 'key binding display head'),
+    display_tail: asciiFragment(record.display_tail, 'key binding display tail'),
+    key_note: scalarString(record.key_note, 1_024, 'key binding key note', { allowEmpty: true }),
+    upstream_model_id: manualValue(
+      record.upstream_model_id,
+      512,
+      false,
+      'key binding upstream model id',
+    ),
+    ord: record.ord as number,
+    max_concurrency: browseRoutingLimit(record.max_concurrency, 'key binding max concurrency'),
+    max_rpm: browseRoutingLimit(record.max_rpm, 'key binding max RPM'),
+    state: keyBindingState(record.state),
+  };
+}
+
+function normalizeBrowsePreview(value: unknown): KeyBindingView[] {
+  const preview = boundedArray(value, normalizeKeyBindingView, 'binding preview', 3);
+  uniqueBy(preview, (binding) => binding.id, 'binding preview ids');
+  uniqueBy(
+    preview,
+    (binding) =>
+      `${binding.model_id}\u0000${binding.endpoint_key_id}\u0000${binding.upstream_model_id}`,
+    'binding preview pairs',
+  );
+  return preview;
+}
+
+function browseCount(value: unknown, label: string): string {
+  return decimal(value, label);
+}
+
+function browsePreviewLimit(bindingCount: string): number {
+  const count = BigInt(bindingCount);
+  return count < 3n ? Number(count) : 3;
+}
+
+function normalizeEndpointBrowse(
+  value: unknown,
+  endpointKeyCount: string,
+  endpointEnabled: boolean,
+): EndpointBrowse {
+  const record = exactRecord(
+    value,
+    ['model_count', 'available_key_count', 'state'],
+    [],
+    'endpoint browse summary',
+  );
+  const modelCount = browseCount(record.model_count, 'endpoint browse model count');
+  const availableKeyCount = browseCount(
+    record.available_key_count,
+    'endpoint browse available key count',
+  );
+  if (BigInt(availableKeyCount) > BigInt(endpointKeyCount)) {
+    invalid('endpoint browse available key count');
+  }
+  const state = endpointBrowseState(record.state);
+  if (
+    (state === 'endpoint_disabled' && (endpointEnabled || availableKeyCount !== '0')) ||
+    (state === 'no_keys' &&
+      (!endpointEnabled || endpointKeyCount !== '0' || availableKeyCount !== '0')) ||
+    (state === 'no_usable_key' &&
+      (!endpointEnabled || endpointKeyCount === '0' || availableKeyCount !== '0')) ||
+    (state === 'available' &&
+      (!endpointEnabled || endpointKeyCount === '0' || availableKeyCount === '0'))
+  ) {
+    invalid('endpoint browse state');
+  }
+  return {
+    model_count: modelCount,
+    available_key_count: availableKeyCount,
+    state,
+  };
+}
+
+function normalizeEndpointKeyBrowse(
+  value: unknown,
+  endpointID: string,
+  keyID: string,
+): EndpointKeyBrowse {
+  const record = exactRecord(
+    value,
+    [
+      'model_count',
+      'binding_count',
+      'available_binding_count',
+      'discovery',
+      'preview',
+      'donation_eligibility',
+    ],
+    [],
+    'endpoint key browse summary',
+  );
+  const modelCount = browseCount(record.model_count, 'endpoint key browse model count');
+  const eligibility = record.donation_eligibility;
+  if (
+    eligibility !== 'eligible' &&
+    eligibility !== 'already_donated' &&
+    eligibility !== 'security_processing'
+  ) {
+    invalid('endpoint key donation eligibility');
+  }
+  const bindingCount = browseCount(record.binding_count, 'endpoint key browse binding count');
+  const availableBindingCount = browseCount(
+    record.available_binding_count,
+    'endpoint key browse available binding count',
+  );
+  if (
+    BigInt(modelCount) > BigInt(bindingCount) ||
+    BigInt(availableBindingCount) > BigInt(bindingCount)
+  ) {
+    invalid('endpoint key browse counts');
+  }
+  const preview = normalizeBrowsePreview(record.preview);
+  if (preview.length !== browsePreviewLimit(bindingCount)) {
+    invalid('endpoint key browse preview');
+  }
+  if (
+    preview.some(
+      (binding) => binding.endpoint_id !== endpointID || binding.endpoint_key_id !== keyID,
+    )
+  ) {
+    invalid('endpoint key browse parent');
+  }
+  return {
+    model_count: modelCount,
+    binding_count: bindingCount,
+    donation_eligibility: eligibility,
+    available_binding_count: availableBindingCount,
+    discovery: normalizeDiscoveryEvidence(record.discovery),
+    preview,
+  };
+}
+
+function normalizeModelBrowse(value: unknown, modelID: string, bindingCount: string): ModelBrowse {
+  if (BigInt(bindingCount) > BigInt(MAX_BINDINGS)) invalid('model binding count');
+  const record = exactRecord(
+    value,
+    ['available_binding_count', 'preview'],
+    [],
+    'model browse summary',
+  );
+  const availableBindingCount = browseCount(
+    record.available_binding_count,
+    'model browse available binding count',
+  );
+  if (BigInt(availableBindingCount) > BigInt(bindingCount)) {
+    invalid('model browse available binding count');
+  }
+  const preview = normalizeBrowsePreview(record.preview);
+  if (preview.length !== browsePreviewLimit(bindingCount)) {
+    invalid('model browse preview');
+  }
+  if (preview.some((binding) => binding.model_id !== modelID)) {
+    invalid('model browse parent');
+  }
+  return { available_binding_count: availableBindingCount, preview };
+}
+
 export function normalizeEndpoint(value: unknown): Endpoint {
   const record = exactRecord(
     value,
@@ -654,23 +893,30 @@ export function normalizeEndpoint(value: unknown): Endpoint {
       'created_at',
       'updated_at',
     ],
-    [],
+    ['browse'],
     'endpoint',
   );
   const createdAt = unixTime(record.created_at, 'endpoint creation time');
   const updatedAt = unixTime(record.updated_at, 'endpoint update time');
   if (updatedAt < createdAt) invalid('endpoint update time');
+  const endpointID = id(record.id, 'endpoint id');
+  const enabled = exactBoolean(record.enabled, 'endpoint enabled state');
+  const keyCount = decimal(record.key_count, 'endpoint key count');
+  const browse = Object.hasOwn(record, 'browse')
+    ? normalizeEndpointBrowse(record.browse, keyCount, enabled)
+    : undefined;
   return {
-    id: id(record.id, 'endpoint id'),
+    id: endpointID,
     connector_type: connectorType(record.connector_type),
     base_url: normalizeBaseURL(record.base_url, 'endpoint base URL'),
     origin: normalizeEndpointOrigin(record.origin),
     note: scalarString(record.note, 1_024, 'endpoint note', { allowEmpty: true }),
-    enabled: exactBoolean(record.enabled, 'endpoint enabled state'),
+    enabled,
     revision: decimal(record.revision, 'endpoint revision', true),
-    key_count: decimal(record.key_count, 'endpoint key count'),
+    key_count: keyCount,
     created_at: createdAt,
     updated_at: updatedAt,
+    ...(browse ? { browse } : {}),
   };
 }
 
@@ -690,7 +936,7 @@ export function normalizeEndpointKey(value: unknown): EndpointKey {
       'created_at',
       'updated_at',
     ],
-    ['max_concurrency', 'max_rpm'],
+    ['max_concurrency', 'max_rpm', 'browse'],
     'endpoint key',
   );
   if (record.suspension_state !== 'none' && record.suspension_state !== 'security_processing') {
@@ -699,9 +945,14 @@ export function normalizeEndpointKey(value: unknown): EndpointKey {
   const createdAt = unixTime(record.created_at, 'endpoint key creation time');
   const updatedAt = unixTime(record.updated_at, 'endpoint key update time');
   if (updatedAt < createdAt) invalid('endpoint key update time');
+  const endpointID = id(record.endpoint_id, 'endpoint owner id');
+  const keyID = id(record.id, 'endpoint key id');
+  const browse = Object.hasOwn(record, 'browse')
+    ? normalizeEndpointKeyBrowse(record.browse, endpointID, keyID)
+    : undefined;
   return {
-    id: id(record.id, 'endpoint key id'),
-    endpoint_id: id(record.endpoint_id, 'endpoint owner id'),
+    id: keyID,
+    endpoint_id: endpointID,
     display_head: asciiFragment(record.display_head, 'key display head'),
     display_tail: asciiFragment(record.display_tail, 'key display tail'),
     note: scalarString(record.note, 1_024, 'endpoint key note', { allowEmpty: true }),
@@ -713,6 +964,7 @@ export function normalizeEndpointKey(value: unknown): EndpointKey {
     revision: decimal(record.revision, 'endpoint key revision', true),
     created_at: createdAt,
     updated_at: updatedAt,
+    ...(browse ? { browse } : {}),
   };
 }
 
@@ -1010,7 +1262,7 @@ export function normalizeModel(value: unknown): Model {
       'created_at',
       'updated_at',
     ],
-    [],
+    ['browse'],
     'logical model',
   );
   const provider = logicalName(record.provider, 'logical model provider');
@@ -1023,8 +1275,13 @@ export function normalizeModel(value: unknown): Model {
   const createdAt = unixTime(record.created_at, 'logical model creation time');
   const updatedAt = unixTime(record.updated_at, 'logical model update time');
   if (updatedAt < createdAt) invalid('logical model update time');
+  const modelID = id(record.id, 'logical model id');
+  const bindingCount = decimal(record.binding_count, 'binding count');
+  const browse = Object.hasOwn(record, 'browse')
+    ? normalizeModelBrowse(record.browse, modelID, bindingCount)
+    : undefined;
   return {
-    id: id(record.id, 'logical model id'),
+    id: modelID,
     provider,
     model,
     full_name: fullName,
@@ -1033,9 +1290,10 @@ export function normalizeModel(value: unknown): Model {
     flatten_tool_calls: exactBoolean(record.flatten_tool_calls, 'tool call setting'),
     revision: decimal(record.revision, 'logical model revision', true),
     binding_revision: decimal(record.binding_revision, 'binding revision'),
-    binding_count: decimal(record.binding_count, 'binding count'),
+    binding_count: bindingCount,
     created_at: createdAt,
     updated_at: updatedAt,
+    ...(browse ? { browse } : {}),
   };
 }
 

@@ -1,8 +1,12 @@
 package resources
 
 import (
+	"context"
 	"net/http"
+	"net/url"
 	"strconv"
+
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
 type createMainstreamChannelRequest struct {
@@ -75,6 +79,15 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, repository *Repository) 
 
 func (api *httpAPI) listMainstreamChannels(writer http.ResponseWriter, request *http.Request, principal AdminPrincipal) {
 	if !requireNoBody(writer, request) {
+		return
+	}
+	writer.Header().Set("Cache-Control", "no-store")
+	if serveNumberedPage(writer, request, []string{"state"}, func(ctx context.Context, values url.Values, page pagination.Request) (Page[MainstreamChannel], error) {
+		if entries, present := values["state"]; present && !validMainstreamChannelState(entries[0]) {
+			return Page[MainstreamChannel]{}, ErrInvalidRequest
+		}
+		return api.repository.ListMainstreamChannelsPage(ctx, principal.UserID, values.Get("state"), page)
+	}) {
 		return
 	}
 	values, ok := requestQuery(writer, request)

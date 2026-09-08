@@ -12,6 +12,7 @@ import (
 // donation_quota_epochs form a circular FK that otherwise blocks DROP.
 func dropBetaTwoAdditiveObjects(t *testing.T, database *sql.DB) {
 	t.Helper()
+	dropBrowseIndexes(t, database)
 	if _, err := database.Exec(`PRAGMA foreign_keys=OFF;
 DROP TABLE IF EXISTS donation_quota_receipts;
 DROP TABLE IF EXISTS donation_quota_periods;
@@ -26,6 +27,26 @@ DROP TABLE IF EXISTS game_rps_pending_presentation;
 DROP TABLE IF EXISTS game_rps_summary_presentation;
 PRAGMA foreign_keys=ON;`); err != nil {
 		t.Fatalf("drop beta.2 additive objects: %v", err)
+	}
+}
+
+func dropBrowseIndexes(t *testing.T, database *sql.DB) {
+	t.Helper()
+	if _, err := database.Exec(`
+DROP INDEX IF EXISTS idx_request_logs_started;
+DROP INDEX IF EXISTS idx_report_cases_created;
+DROP INDEX IF EXISTS idx_report_materials_created;
+DROP INDEX IF EXISTS idx_legal_holds_created;
+DROP INDEX IF EXISTS idx_endpoints_base_users;
+DROP INDEX IF EXISTS idx_shared_pools_created;
+DROP INDEX IF EXISTS idx_models_user_updated;
+DROP INDEX IF EXISTS idx_model_bindings_key_browse;
+DROP INDEX IF EXISTS idx_model_catalog_key_source;
+DROP INDEX IF EXISTS idx_mainstream_channels_updated;
+DROP INDEX IF EXISTS idx_donations_owner_page;
+DROP INDEX IF EXISTS idx_charity_bindings_key;
+DROP INDEX IF EXISTS idx_donation_keys_source_page;`); err != nil {
+		t.Fatal(err)
 	}
 }
 

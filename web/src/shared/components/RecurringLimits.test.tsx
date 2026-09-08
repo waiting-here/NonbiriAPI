@@ -1,6 +1,12 @@
+import type { QueryClient } from '@tanstack/react-query';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useAdminSession } from '../../admin/data';
+import {
+  beginManagementSessionRequest,
+  noteManagementSessionSuccess,
+} from '@shared/charityManagement';
 import { recurringLimitsKeys } from '@shared/operations/recurringLimits';
 import { renderWithProviders } from '../../../test/unit/support';
 import { RecurringLimits } from './RecurringLimits';
@@ -57,6 +63,20 @@ function response(
 type ReadResult = unknown | Response | Error;
 type WriteResult = Response | Error;
 
+function seedAdminSession(queryClient: QueryClient, username = 'fixture-admin') {
+  const session = { admin: { username } } as const;
+  const generation = beginManagementSessionRequest(queryClient, 'admin');
+  if (!noteManagementSessionSuccess(queryClient, 'admin', session, generation)) {
+    throw new Error('Could not seed the admin station session.');
+  }
+  queryClient.setQueryData(['admin', 'session'], session);
+}
+
+function AdminSessionFixture({ children }: { children: ReactNode }) {
+  const session = useAdminSession();
+  return session.data ? children : null;
+}
+
 function installQuotaFetch({
   role = 'admin',
   reads = [response()],
@@ -78,6 +98,9 @@ function installQuotaFetch({
     const path = String(input);
     const method = init?.method ?? 'GET';
     requests.push({ path, init });
+    if (path === '/admin/api/session' && method === 'GET') {
+      return jsonResponse({ admin: { username: 'fixture-admin' } });
+    }
     if (path === `${base}/time-zones` && method === 'GET') {
       const value = zoneReads[Math.min(zoneReadIndex++, zoneReads.length - 1)];
       if (value instanceof Response) return value;
@@ -115,10 +138,13 @@ async function renderAdmin(
   props: Partial<ComponentProps<typeof RecurringLimits>> = {},
   options: { locale?: 'en' | 'zh' } = {},
 ) {
-  return renderWithProviders(
-    <RecurringLimits role="admin" donationId="7" keyId="8" accountId="account-a" {...props} />,
+  const rendered = await renderWithProviders(
+    <AdminSessionFixture>
+      <RecurringLimits role="admin" donationId="7" keyId="8" accountId="account-a" {...props} />
+    </AdminSessionFixture>,
     { station: 'admin', role: 'admin', locale: options.locale ?? 'en' },
   );
+  return rendered;
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -192,7 +218,9 @@ describe('RecurringLimits', () => {
     expect(screen.queryByRole('button', { name: 'Save recurring limits' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add recurring rule' })).not.toBeInTheDocument();
     expect(getDetailRequests(requests)).toHaveLength(1);
-    expect(requests[0]?.path).toBe('/admin/api/donations/7/keys/8/recurring-limits');
+    expect(getDetailRequests(requests)[0]?.path).toBe(
+      '/admin/api/donations/7/keys/8/recurring-limits',
+    );
     expect(requests.some(({ path }) => path.endsWith('/time-zones'))).toBe(false);
   });
 
@@ -574,6 +602,7 @@ describe('RecurringLimits', () => {
     const oldKey = recurringLimitsKeys.detail('admin', 'account-a', '7', '8');
     expect(rendered.queryClient.getQueryData(oldKey)).toBeDefined();
 
+    seedAdminSession(rendered.queryClient, 'fixture-admin-b');
     rendered.rerender(
       <RecurringLimits role="admin" donationId="7" keyId="8" accountId="account-b" />,
     );
@@ -596,6 +625,9 @@ describe('RecurringLimits', () => {
     const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
       const path = String(input);
       const method = init?.method ?? 'GET';
+      if (path === '/admin/api/session' && method === 'GET') {
+        return jsonResponse({ admin: { username: 'fixture-admin' } });
+      }
       if (path === '/admin/api/time-zones' && method === 'GET') return jsonResponse(ZONES);
       if (path === endpoint && method === 'GET') {
         detailCalls += 1;
@@ -607,6 +639,7 @@ describe('RecurringLimits', () => {
 
     const rendered = await renderAdmin();
     await waitFor(() => expect(detailCalls).toBe(1));
+    seedAdminSession(rendered.queryClient, 'fixture-admin-b');
     rendered.rerender(
       <RecurringLimits role="admin" donationId="7" keyId="8" accountId="account-b" />,
     );
@@ -631,6 +664,9 @@ describe('RecurringLimits', () => {
       const path = String(input);
       const method = init?.method ?? 'GET';
       requests.push({ path, init });
+      if (path === '/admin/api/session' && method === 'GET') {
+        return jsonResponse({ admin: { username: 'fixture-admin' } });
+      }
       if (path === '/admin/api/time-zones' && method === 'GET') return jsonResponse(ZONES);
       if (path === endpoint && method === 'GET') {
         detailCalls += 1;
@@ -656,6 +692,7 @@ describe('RecurringLimits', () => {
     await rendered.user.click(screen.getByRole('button', { name: 'Save recurring limits' }));
     await waitFor(() => expect(writeCalls).toBe(1));
 
+    seedAdminSession(rendered.queryClient, 'fixture-admin-b');
     rendered.rerender(
       <RecurringLimits
         role="admin"

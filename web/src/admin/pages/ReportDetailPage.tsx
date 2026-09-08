@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { clearStationSession } from '@shared/charityManagement';
+import { clearStationSession, stationSessionWrite } from '@shared/charityManagement';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import {
   Card,
@@ -12,16 +12,14 @@ import {
   PageHeader,
   StatusBadge,
 } from '@shared/components/States';
-import { CursorPagination } from '@shared/operations/CursorPagination';
-import { useCursorPager } from '@shared/operations/useCursorPager';
+import { PagePagination } from '@shared/operations/PagePagination';
+import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
+import { listReturnPath } from '@shared/operations/listReturn';
 import { formatDateTime } from '@shared/utils/datetime';
-import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
+import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { useAdminSession } from '../data';
 import {
-  adminReportKeys,
   approveReport,
-  getReportDetail,
-  getReportTargetDonations,
-  getReportTargets,
   REPORT_DONATION_ENDED_REASONS,
   rejectReport,
   resumeReport,
@@ -31,56 +29,107 @@ import {
   type ReportStatus,
   type ReportTarget,
 } from '../features/operations/reports';
+import {
+  reportPageKeys,
+  useReportDetailPage,
+  useReportTargetDonationsPage,
+  useReportTargetsPage,
+} from '../features/operations/reportPages';
 import { useRetainedOperation } from '../features/operations/useRetainedOperation';
 import '@shared/operations/operations.css';
 
 type Decision = 'approve' | 'reject' | null;
 
 export function ReportDetailPage() {
-  const { t } = useTranslation();
   const { caseId = '' } = useParams();
+  const session = useAdminSession();
+  if (session.error)
+    return <ErrorState error={session.error} onRetry={() => void session.refetch()} />;
+  if (!session.data) return <LoadingState />;
+  return (
+    <ReportDetail
+      key={`${session.data.admin.username}:${caseId}`}
+      accountId={session.data.admin.username}
+      caseId={caseId}
+    />
+  );
+}
+
+function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string }) {
+  const { t } = useTranslation();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const client = useQueryClient();
-  const materials = useCursorPager();
-  const targets = useCursorPager();
-  const lineage = useCursorPager();
-  const {
-    page: lineagePage,
-    cursor: lineageCursor,
-    reset: resetLineage,
-    previous: previousLineage,
-    next: nextLineage,
-  } = lineage;
+  const scopeReady = Boolean(accountId);
+  const lineageTargetValues = searchParams.getAll('lineage_target');
+  const urlLineageTargetId =
+    lineageTargetValues.length === 1 &&
+    /^rpt_[A-Za-z0-9_-]{22}$/.test(lineageTargetValues[0]) &&
+    /[AQgw]$/.test(lineageTargetValues[0])
+      ? lineageTargetValues[0]
+      : null;
+  const materials = useUrlPagePager({
+    station: 'admin',
+    listType: 'report-materials',
+    scopeKey: `${accountId || 'anonymous'}:${caseId}`,
+    scopeReady,
+    resetKey: caseId,
+    pageParam: 'materials_page',
+    pageSizeParam: 'materials_page_size',
+  });
+  const targets = useUrlPagePager({
+    station: 'admin',
+    listType: 'report-targets',
+    scopeKey: `${accountId || 'anonymous'}:${caseId}`,
+    scopeReady,
+    resetKey: caseId,
+    pageParam: 'targets_page',
+    pageSizeParam: 'targets_page_size',
+  });
+  const lineage = useUrlPagePager({
+    station: 'admin',
+    listType: 'report-lineage',
+    scopeKey: `${accountId}:${caseId}`,
+    scopeReady,
+    pageParam: 'lineage_page',
+    pageSizeParam: 'lineage_page_size',
+  });
   const [reason, setReason] = useState('');
   const [confirmation, setConfirmation] = useState(false);
   const [decision, setDecision] = useState<Decision>(null);
   const [lineageTarget, setLineageTarget] = useState<ReportTarget | null>(null);
-  const detail = useQuery({
-    queryKey: adminReportKeys.detail(caseId, materials.cursor),
-    queryFn: () => getReportDetail(caseId, materials.cursor),
-    retry: false,
-    enabled: Boolean(caseId),
-  });
-  const targetList = useQuery({
-    queryKey: adminReportKeys.targets(caseId, targets.cursor),
-    queryFn: () => getReportTargets(caseId, targets.cursor),
-    retry: false,
-    enabled: Boolean(caseId),
-  });
-  const targetDonations = useQuery({
-    queryKey: lineageTarget
-      ? adminReportKeys.targetDonations(caseId, lineageTarget.id, lineageCursor)
-      : (['admin', 'operations', 'reports', 'target-donations', 'none'] as const),
-    queryFn: ({ signal }) =>
-      getReportTargetDonations(caseId, lineageTarget?.id ?? '', lineageCursor, signal),
-    retry: false,
-    enabled: Boolean(caseId && lineageTarget),
-  });
+  const detail = useReportDetailPage(
+    accountId,
+    caseId,
+    materials.page,
+    materials.pageSize,
+    scopeReady,
+  );
+  const targetList = useReportTargetsPage(
+    accountId,
+    caseId,
+    targets.page,
+    targets.pageSize,
+    scopeReady,
+  );
+  const targetDonations = useReportTargetDonationsPage(
+    accountId,
+    caseId,
+    urlLineageTargetId ?? '',
+    lineage.page,
+    lineage.pageSize,
+    scopeReady,
+  );
+  const effectiveLineageTargetId = urlLineageTargetId;
+  const displayedLineageTarget =
+    (lineageTarget?.id === effectiveLineageTargetId ? lineageTarget : undefined) ??
+    targetList.data?.data.find((target) => target.id === effectiveLineageTargetId);
   const reconcile = async () => {
     await Promise.all([
       detail.refetch(),
       targetList.refetch(),
-      lineageTarget ? targetDonations.refetch() : Promise.resolve(),
-      client.invalidateQueries({ queryKey: adminReportKeys.badge }),
+      effectiveLineageTargetId ? targetDonations.refetch() : Promise.resolve(),
+      client.invalidateQueries({ queryKey: reportPageKeys.badge(accountId || 'anonymous') }),
     ]);
   };
   const decide = useRetainedOperation(
@@ -93,34 +142,36 @@ export function ReportDetailPage() {
         confirmed: boolean;
       },
       key,
-    ) => {
-      if (input.action === 'approve')
-        return approveReport(
+    ) =>
+      stationSessionWrite(client, 'admin', async () => {
+        if (input.action === 'approve')
+          return approveReport(
+            caseId,
+            {
+              expected_material_version: input.material,
+              expected_target_version: input.target,
+              reason: input.reason,
+              confirmation: input.confirmed,
+            },
+            key,
+          );
+        return rejectReport(
           caseId,
           {
             expected_material_version: input.material,
             expected_target_version: input.target,
             reason: input.reason,
-            confirmation: input.confirmed,
           },
           key,
         );
-      return rejectReport(
-        caseId,
-        {
-          expected_material_version: input.material,
-          expected_target_version: input.target,
-          reason: input.reason,
-        },
-        key,
-      );
-    },
+      }),
     async () => {
       await reconcile();
     },
   );
   const resume = useRetainedOperation(
-    (input: { target: string }, key) => resumeReport(caseId, input.target, key),
+    (input: { target: string }, key) =>
+      stationSessionWrite(client, 'admin', () => resumeReport(caseId, input.target, key)),
     async () => {
       await reconcile();
     },
@@ -129,7 +180,15 @@ export function ReportDetailPage() {
   const resetResume = resume.reset;
 
   useEffect(() => {
-    const error = detail.error ?? targetList.error ?? targetDonations.error;
+    const errors = [
+      detail.error,
+      targetList.error,
+      targetDonations.error,
+      decide.error,
+      resume.error,
+    ];
+    const error =
+      errors.find((value) => isForbidden(value) || isUnauthorized(value)) ?? errors.find(Boolean);
     if (error) {
       // A retained cache entry is not authority after a failed refresh.
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -142,46 +201,44 @@ export function ReportDetailPage() {
       resetDecision();
       resetResume();
       setLineageTarget(null);
-      resetLineage();
-    } else if (isNotFoundError(error)) {
-      setReason('');
-      resetDecision();
-      resetResume();
-      setLineageTarget(null);
-      resetLineage();
-      client.removeQueries({
-        queryKey: adminReportKeys.detail(caseId, materials.cursor),
-        exact: true,
-      });
-      client.removeQueries({
-        queryKey: lineageTarget
-          ? adminReportKeys.targetDonations(caseId, lineageTarget.id, lineageCursor)
-          : (['admin', 'operations', 'reports', 'target-donations', 'none'] as const),
-        exact: true,
-      });
-      client.removeQueries({
-        queryKey: adminReportKeys.targets(caseId, targets.cursor),
-        exact: true,
-      });
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          for (const key of ['lineage_target', 'lineage_page', 'lineage_page_size'])
+            next.delete(key);
+          return next;
+        },
+        { replace: true },
+      );
     }
   }, [
+    accountId,
     caseId,
     client,
     detail.error,
-    materials.cursor,
     resetDecision,
     resetResume,
+    decide.error,
+    resume.error,
+    setSearchParams,
     targetList.error,
     targetDonations.error,
-    lineageCursor,
-    resetLineage,
-    lineageTarget,
-    targets.cursor,
   ]);
 
   const lineageAuthorityBlocked =
     isUnauthorized(targetDonations.error) || isForbidden(targetDonations.error);
-  const authorityBlocked = Boolean(detail.error || targetList.error || lineageAuthorityBlocked);
+  const authorityBlocked = Boolean(
+    detail.error ||
+    targetList.error ||
+    lineageAuthorityBlocked ||
+    detail.isFetching ||
+    targetList.isFetching,
+  );
+  const readAuthorityError = [detail.error, targetList.error, targetDonations.error].find(
+    (error) => isForbidden(error) || isUnauthorized(error),
+  );
+  if (readAuthorityError)
+    return <ErrorState error={readAuthorityError} onRetry={() => void reconcile()} />;
   const statusLabels: Record<ReportStatus, string> = {
     pending_indexing: t('admin.reports.status.pendingIndexing'),
     pending_review: t('admin.reports.status.pendingReview'),
@@ -246,7 +303,11 @@ export function ReportDetailPage() {
       <PageHeader
         title={t('admin.reports.detail.title')}
         description={t('admin.reports.detail.description')}
-        back={<Link to="/reports">{t('admin.reports.detail.back')}</Link>}
+        back={
+          <Link to={listReturnPath(location.state, '/reports')}>
+            {t('admin.reports.detail.back')}
+          </Link>
+        }
       />
       {detail.isPending ? (
         <LoadingState />
@@ -310,128 +371,156 @@ export function ReportDetailPage() {
           ) : null}
           <Card>
             <h2>{t('admin.reports.detail.materialsTitle')}</h2>
-            {detail.data.materials.data.length === 0 ? (
-              <EmptyState
-                title={t('admin.reports.detail.materialsEmptyTitle')}
-                body={t('admin.reports.detail.materialsEmptyBody')}
+            <div className="ops-stack" aria-busy={detail.isFetching}>
+              {detail.data.materials.data.length === 0 ? (
+                <EmptyState
+                  title={t('admin.reports.detail.materialsEmptyTitle')}
+                  body={t('admin.reports.detail.materialsEmptyBody')}
+                />
+              ) : (
+                <div className="ops-stack">
+                  {detail.data.materials.data.map((item) => (
+                    <article className="card" key={item.id}>
+                      <p>{item.note_text || t('admin.reports.detail.noReporterNote')}</p>
+                      <dl className="ops-kv">
+                        <dt>{t('admin.reports.detail.reporter')}</dt>
+                        <dd>
+                          {item.reporter
+                            ? `${item.reporter.user_id} / ${item.reporter.discord_id}`
+                            : t('admin.reports.detail.anonymous')}
+                        </dd>
+                        <dt>{t('admin.reports.detail.sourceIp')}</dt>
+                        <dd>{item.source_ip}</dd>
+                        <dt>{t('admin.reports.detail.submitted')}</dt>
+                        <dd>{formatDateTime(item.created_at)}</dd>
+                      </dl>
+                    </article>
+                  ))}
+                </div>
+              )}
+              <PagePagination
+                metadata={detail.data.materials_pagination}
+                requestedPage={materials.page}
+                busy={detail.isFetching}
+                onPageChange={materials.setPage}
+                onPageSizeChange={materials.setPageSize}
               />
-            ) : (
-              <div className="ops-stack">
-                {detail.data.materials.data.map((item) => (
-                  <article className="card" key={item.id}>
-                    <p>{item.note_text || t('admin.reports.detail.noReporterNote')}</p>
-                    <dl className="ops-kv">
-                      <dt>{t('admin.reports.detail.reporter')}</dt>
-                      <dd>
-                        {item.reporter
-                          ? `${item.reporter.user_id} / ${item.reporter.discord_id}`
-                          : t('admin.reports.detail.anonymous')}
-                      </dd>
-                      <dt>{t('admin.reports.detail.sourceIp')}</dt>
-                      <dd>{item.source_ip}</dd>
-                      <dt>{t('admin.reports.detail.submitted')}</dt>
-                      <dd>{formatDateTime(item.created_at)}</dd>
-                    </dl>
-                  </article>
-                ))}
-              </div>
-            )}
-            <CursorPagination
-              page={materials.page}
-              nextCursor={detail.data.materials.next_cursor}
-              onPrevious={materials.previous}
-              onNext={materials.next}
-            />
+            </div>
           </Card>
         </>
       )}
       <Card>
         <h2>{t('admin.reports.detail.targetsTitle')}</h2>
-        {targetList.isPending ? (
-          <LoadingState />
-        ) : targetList.error ? (
-          <ErrorState error={targetList.error} onRetry={() => void targetList.refetch()} />
-        ) : targetList.data.data.length === 0 ? (
-          <EmptyState
-            title={t('admin.reports.detail.targetsEmptyTitle')}
-            body={t('admin.reports.detail.targetsEmptyBody')}
-          />
-        ) : (
-          <>
-            <div className="ops-table-scroll">
-              <table className="ops-table ops-table--responsive">
-                <thead>
-                  <tr>
-                    <th>{t('admin.reports.detail.sequence')}</th>
-                    <th>{t('admin.reports.detail.state')}</th>
-                    <th>{t('admin.reports.detail.owner')}</th>
-                    <th>{t('common.userId')}</th>
-                    <th>{t('admin.reports.detail.endpoint')}</th>
-                    <th>{t('admin.reports.detail.keySnapshot')}</th>
-                    <th>{t('admin.reports.detail.keyReference')}</th>
-                    <th>{t('admin.reports.detail.donationMatches')}</th>
-                    <th>{t('admin.reports.detail.lineageAction')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {targetList.data.data.map((target) => (
-                    <tr key={target.id}>
-                      <td data-label={t('admin.reports.detail.sequence')}>{target.target_seq}</td>
-                      <td data-label={t('admin.reports.detail.state')}>
-                        {targetStateLabels[target.state]}
-                      </td>
-                      <td className="ops-cell-wide" data-label={t('admin.reports.detail.owner')}>
-                        {target.owner
-                          ? target.owner.display_name
-                          : t('admin.reports.detail.deidentified')}
-                      </td>
-                      <td className="ops-id" data-label={t('common.userId')}>
-                        {target.owner?.user_id ?? '—'}
-                      </td>
-                      <td className="ops-cell-wide" data-label={t('admin.reports.detail.endpoint')}>
-                        {target.endpoint.connector_type}
-                        <br />
-                        {target.endpoint.canonical_base_url}
-                      </td>
-                      <td data-label={t('admin.reports.detail.keySnapshot')}>
-                        {target.endpoint.display_head}…{target.endpoint.display_tail}
-                      </td>
-                      <td className="ops-id" data-label={t('admin.reports.detail.keyReference')}>
-                        {target.key_ref}
-                      </td>
-                      <td data-label={t('admin.reports.detail.donationMatches')}>
-                        {target.donation_match_count}
-                      </td>
-                      <td
-                        className="ops-cell-wide"
-                        data-label={t('admin.reports.detail.lineageAction')}
-                      >
-                        <button
-                          className="btn btn-secondary"
-                          type="button"
-                          onClick={() => {
-                            resetLineage();
-                            setLineageTarget(target);
-                          }}
-                        >
-                          {t('admin.reports.detail.openLineage')}
-                        </button>
-                      </td>
+        <div className="ops-stack" aria-busy={targetList.isFetching}>
+          {targetList.isPending ? (
+            <LoadingState />
+          ) : targetList.error ? (
+            <ErrorState error={targetList.error} onRetry={() => void targetList.refetch()} />
+          ) : targetList.data.data.length === 0 ? (
+            <>
+              <EmptyState
+                title={t('admin.reports.detail.targetsEmptyTitle')}
+                body={t('admin.reports.detail.targetsEmptyBody')}
+              />
+              <PagePagination
+                metadata={targetList.data.pagination}
+                requestedPage={targets.page}
+                busy={targetList.isFetching}
+                onPageChange={targets.setPage}
+                onPageSizeChange={targets.setPageSize}
+              />
+            </>
+          ) : (
+            <>
+              <div className="ops-table-scroll">
+                <table className="ops-table ops-table--responsive">
+                  <thead>
+                    <tr>
+                      <th>{t('admin.reports.detail.sequence')}</th>
+                      <th>{t('admin.reports.detail.state')}</th>
+                      <th>{t('admin.reports.detail.owner')}</th>
+                      <th>{t('common.userId')}</th>
+                      <th>{t('admin.reports.detail.endpoint')}</th>
+                      <th>{t('admin.reports.detail.keySnapshot')}</th>
+                      <th>{t('admin.reports.detail.keyReference')}</th>
+                      <th>{t('admin.reports.detail.donationMatches')}</th>
+                      <th>{t('admin.reports.detail.lineageAction')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <CursorPagination
-              page={targets.page}
-              nextCursor={targetList.data.next_cursor}
-              onPrevious={targets.previous}
-              onNext={targets.next}
-            />
-          </>
-        )}
+                  </thead>
+                  <tbody>
+                    {targetList.data.data.map((target) => (
+                      <tr key={target.id}>
+                        <td data-label={t('admin.reports.detail.sequence')}>{target.target_seq}</td>
+                        <td data-label={t('admin.reports.detail.state')}>
+                          {targetStateLabels[target.state]}
+                        </td>
+                        <td className="ops-cell-wide" data-label={t('admin.reports.detail.owner')}>
+                          {target.owner
+                            ? target.owner.display_name
+                            : t('admin.reports.detail.deidentified')}
+                        </td>
+                        <td className="ops-id" data-label={t('common.userId')}>
+                          {target.owner?.user_id ?? '—'}
+                        </td>
+                        <td
+                          className="ops-cell-wide"
+                          data-label={t('admin.reports.detail.endpoint')}
+                        >
+                          {target.endpoint.connector_type}
+                          <br />
+                          {target.endpoint.canonical_base_url}
+                        </td>
+                        <td data-label={t('admin.reports.detail.keySnapshot')}>
+                          {target.endpoint.display_head}…{target.endpoint.display_tail}
+                        </td>
+                        <td className="ops-id" data-label={t('admin.reports.detail.keyReference')}>
+                          {target.key_ref}
+                        </td>
+                        <td data-label={t('admin.reports.detail.donationMatches')}>
+                          {target.donation_match_count}
+                        </td>
+                        <td
+                          className="ops-cell-wide"
+                          data-label={t('admin.reports.detail.lineageAction')}
+                        >
+                          <button
+                            className="btn btn-secondary"
+                            type="button"
+                            disabled={targetList.isFetching}
+                            onClick={() => {
+                              setSearchParams((current) => {
+                                const next = new URLSearchParams(current);
+                                next.delete('lineage_target');
+                                next.set('lineage_target', target.id);
+                                next.delete('lineage_page');
+                                next.set('lineage_page', '1');
+                                next.delete('lineage_page_size');
+                                next.set('lineage_page_size', String(lineage.pageSize));
+                                return next;
+                              });
+                              setLineageTarget(target);
+                            }}
+                          >
+                            {t('admin.reports.detail.openLineage')}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <PagePagination
+                metadata={targetList.data.pagination}
+                requestedPage={targets.page}
+                busy={targetList.isFetching}
+                onPageChange={targets.setPage}
+                onPageSizeChange={targets.setPageSize}
+              />
+            </>
+          )}
+        </div>
       </Card>
-      {lineageTarget ? (
+      {effectiveLineageTargetId ? (
         <Card>
           <div className="ops-toolbar">
             <h2>{t('admin.reports.detail.lineageTitle')}</h2>
@@ -440,7 +529,13 @@ export function ReportDetailPage() {
               type="button"
               onClick={() => {
                 setLineageTarget(null);
-                resetLineage();
+                setSearchParams((current) => {
+                  const next = new URLSearchParams(current);
+                  for (const key of ['lineage_target', 'lineage_page', 'lineage_page_size']) {
+                    next.delete(key);
+                  }
+                  return next;
+                });
               }}
             >
               {t('common.close')}
@@ -448,73 +543,85 @@ export function ReportDetailPage() {
           </div>
           <p>
             {t('admin.reports.detail.lineageTarget', {
-              sequence: lineageTarget.target_seq,
+              sequence: displayedLineageTarget?.target_seq ?? effectiveLineageTargetId,
             })}
           </p>
-          {targetDonations.isPending ? (
-            <LoadingState />
-          ) : targetDonations.error ? (
-            <ErrorState
-              error={targetDonations.error}
-              onRetry={() => void targetDonations.refetch()}
-            />
-          ) : targetDonations.data.data.length === 0 ? (
-            <EmptyState
-              title={t('admin.reports.detail.lineageEmptyTitle')}
-              body={t('admin.reports.detail.lineageEmptyBody')}
-            />
-          ) : (
-            <>
-              <div className="ops-table-scroll">
-                <table className="ops-table ops-table--responsive">
-                  <thead>
-                    <tr>
-                      <th>{t('admin.reports.detail.lineage.donation')}</th>
-                      <th>{t('admin.reports.detail.lineage.key')}</th>
-                      <th>{t('admin.reports.detail.lineage.donationStatus')}</th>
-                      <th>{t('admin.reports.detail.lineage.keyStatus')}</th>
-                      <th>{t('admin.reports.detail.lineage.expires')}</th>
-                      <th>{t('admin.reports.detail.lineage.ended')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {targetDonations.data.data.map((match) => (
-                      <tr key={match.donation_key_id}>
-                        <td data-label={t('admin.reports.detail.lineage.donation')}>
-                          {match.donation_id}
-                        </td>
-                        <td data-label={t('admin.reports.detail.lineage.key')}>
-                          {match.donation_key_id}
-                        </td>
-                        <td data-label={t('admin.reports.detail.lineage.donationStatus')}>
-                          {donationStatusLabels[match.donation_status]}
-                        </td>
-                        <td data-label={t('admin.reports.detail.lineage.keyStatus')}>
-                          {donationKeyStateLabels[match.key_state]}
-                        </td>
-                        <td data-label={t('admin.reports.detail.lineage.expires')}>
-                          {match.expires_at === null
-                            ? t('admin.reports.detail.lineage.never')
-                            : formatDateTime(match.expires_at)}
-                        </td>
-                        <td data-label={t('admin.reports.detail.lineage.ended')}>
-                          {match.ended_at === null
-                            ? t('admin.reports.detail.lineage.notEnded')
-                            : `${formatDateTime(match.ended_at)}${match.ended_reason ? ` · ${donationEndedReasonLabels[match.ended_reason]}` : ''}`}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <CursorPagination
-                page={lineagePage}
-                nextCursor={targetDonations.data.next_cursor}
-                onPrevious={previousLineage}
-                onNext={nextLineage}
+          <div className="ops-stack" aria-busy={targetDonations.isFetching}>
+            {targetDonations.isPending ? (
+              <LoadingState />
+            ) : targetDonations.error ? (
+              <ErrorState
+                error={targetDonations.error}
+                onRetry={() => void targetDonations.refetch()}
               />
-            </>
-          )}
+            ) : targetDonations.data.data.length === 0 ? (
+              <>
+                <EmptyState
+                  title={t('admin.reports.detail.lineageEmptyTitle')}
+                  body={t('admin.reports.detail.lineageEmptyBody')}
+                />
+                <PagePagination
+                  metadata={targetDonations.data.pagination}
+                  requestedPage={lineage.page}
+                  busy={targetDonations.isFetching}
+                  onPageChange={lineage.setPage}
+                  onPageSizeChange={lineage.setPageSize}
+                />
+              </>
+            ) : (
+              <>
+                <div className="ops-table-scroll">
+                  <table className="ops-table ops-table--responsive">
+                    <thead>
+                      <tr>
+                        <th>{t('admin.reports.detail.lineage.donation')}</th>
+                        <th>{t('admin.reports.detail.lineage.key')}</th>
+                        <th>{t('admin.reports.detail.lineage.donationStatus')}</th>
+                        <th>{t('admin.reports.detail.lineage.keyStatus')}</th>
+                        <th>{t('admin.reports.detail.lineage.expires')}</th>
+                        <th>{t('admin.reports.detail.lineage.ended')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {targetDonations.data.data.map((match) => (
+                        <tr key={match.donation_key_id}>
+                          <td data-label={t('admin.reports.detail.lineage.donation')}>
+                            {match.donation_id}
+                          </td>
+                          <td data-label={t('admin.reports.detail.lineage.key')}>
+                            {match.donation_key_id}
+                          </td>
+                          <td data-label={t('admin.reports.detail.lineage.donationStatus')}>
+                            {donationStatusLabels[match.donation_status]}
+                          </td>
+                          <td data-label={t('admin.reports.detail.lineage.keyStatus')}>
+                            {donationKeyStateLabels[match.key_state]}
+                          </td>
+                          <td data-label={t('admin.reports.detail.lineage.expires')}>
+                            {match.expires_at === null
+                              ? t('admin.reports.detail.lineage.never')
+                              : formatDateTime(match.expires_at)}
+                          </td>
+                          <td data-label={t('admin.reports.detail.lineage.ended')}>
+                            {match.ended_at === null
+                              ? t('admin.reports.detail.lineage.notEnded')
+                              : `${formatDateTime(match.ended_at)}${match.ended_reason ? ` · ${donationEndedReasonLabels[match.ended_reason]}` : ''}`}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <PagePagination
+                  metadata={targetDonations.data.pagination}
+                  requestedPage={lineage.page}
+                  busy={targetDonations.isFetching}
+                  onPageChange={lineage.setPage}
+                  onPageSizeChange={lineage.setPageSize}
+                />
+              </>
+            )}
+          </div>
         </Card>
       ) : null}
       {!authorityBlocked && detail.data?.status === 'pending_review' ? (

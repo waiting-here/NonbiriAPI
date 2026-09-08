@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
 const routeIssues = "/api/issues"
@@ -37,7 +38,7 @@ func (api *httpAPI) list(writer http.ResponseWriter, request *http.Request, prin
 		return
 	}
 	values, err := url.ParseQuery(request.URL.RawQuery)
-	if err != nil || !exactQuery(values, "state", "cursor", "limit") {
+	if err != nil || !exactQuery(values, "state", "cursor", "limit", "page", "page_size") {
 		writeError(writer, ErrInvalidRequest)
 		return
 	}
@@ -47,6 +48,14 @@ func (api *httpAPI) list(writer http.ResponseWriter, request *http.Request, prin
 		return
 	}
 	query := ListQuery{State: states[0]}
+	page, numbered, err := pagination.Parse(values)
+	if err != nil {
+		writeError(writer, ErrInvalidRequest)
+		return
+	}
+	if numbered {
+		query.Numbered = &page
+	}
 	if cursor, present := values["cursor"]; present {
 		if cursor[0] == "" || len(cursor[0]) > maxCursorBytes {
 			writeError(writer, ErrInvalidRequest)

@@ -11,6 +11,7 @@ import (
 	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
@@ -85,11 +86,19 @@ func parseListRequest(writer http.ResponseWriter, request *http.Request) (ListQu
 	if !ok {
 		return ListQuery{}, false
 	}
-	if !exactQuery(values, "resolved", "cursor", "limit") {
+	if !exactQuery(values, "resolved", "cursor", "limit", "page", "page_size") {
 		writeError(writer, ErrInvalidRequest)
 		return ListQuery{}, false
 	}
 	query := ListQuery{}
+	page, numbered, err := pagination.Parse(values)
+	if err != nil {
+		writeError(writer, ErrInvalidRequest)
+		return ListQuery{}, false
+	}
+	if numbered {
+		query.Numbered = &page
+	}
 	if entries, set := values["resolved"]; set {
 		switch entries[0] {
 		case "true":

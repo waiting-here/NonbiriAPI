@@ -14,6 +14,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
 const (
@@ -43,8 +44,9 @@ type LegalHoldDetail struct {
 }
 
 type LegalHoldPage struct {
-	Data       []LegalHoldSummary `json:"data"`
-	NextCursor *string            `json:"next_cursor"`
+	Data       []LegalHoldSummary   `json:"data"`
+	NextCursor *string              `json:"next_cursor"`
+	Pagination *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 type LegalHoldListFilter struct {
@@ -54,6 +56,7 @@ type LegalHoldListFilter struct {
 	Cursor      string
 	Limit       int
 	DecisionNow int64
+	Page        *pagination.Request
 }
 
 type LegalHoldCreate struct {
@@ -381,6 +384,12 @@ func (coordinator *Coordinator) ListLegalHolds(ctx context.Context, filter Legal
 	}
 	if coordinator.closed.Load() {
 		return LegalHoldPage{}, ErrClosed
+	}
+	if filter.Page != nil {
+		if !filter.Page.Valid() || filter.Cursor != "" || filter.Limit != 0 {
+			return LegalHoldPage{}, ErrInvalid
+		}
+		return coordinator.listLegalHoldsPage(ctx, filter)
 	}
 	if filter.Limit == 0 {
 		filter.Limit = legalHoldDefaultLimit

@@ -1,13 +1,16 @@
 package announcements
 
+import "github.com/waiting-here/NonbiriAPI/internal/pagination"
+
 const (
 	RenderProfileVersion        = "announcement-markdown/v1"
 	PermanentDeleteConfirmation = "DELETE"
 )
 
 type Page[T any] struct {
-	Data       []T     `json:"data"`
-	NextCursor *string `json:"next_cursor"`
+	Data       []T                  `json:"data"`
+	NextCursor *string              `json:"next_cursor"`
+	Pagination *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 type AnnouncementSummary struct {
@@ -131,11 +134,13 @@ type AdminListQuery struct {
 	Severity string
 	Cursor   string
 	Limit    int
+	Numbered *pagination.Request
 }
 
 type PageQuery struct {
-	Cursor string
-	Limit  int
+	Cursor   string
+	Limit    int
+	Numbered *pagination.Request
 }
 
 type RecoveryResult struct {

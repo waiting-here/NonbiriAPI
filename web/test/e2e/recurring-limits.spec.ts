@@ -12,6 +12,7 @@ import {
   mockPublicConfig,
   mockRoleSession,
 } from './support';
+import { numberedPage, numberedResponse } from './numbered-fixtures';
 
 type BrowserContext = Parameters<typeof installURLPersistenceObserver>[0];
 type Route = Parameters<Parameters<Page['route']>[1]>[0];
@@ -19,6 +20,15 @@ type Route = Parameters<Parameters<Page['route']>[1]>[0];
 const NOW = 1_800_000_000;
 const RULE_ID = `qlr_${'A'.repeat(21)}Q`;
 const MARKER = 'quota-draft-ephemeral-7e49a2c1';
+const DONATION_STATES = [
+  'available',
+  'pending',
+  'disabled',
+  'suspended',
+  'exhausted',
+  'expired',
+  'ended',
+] as const;
 
 test.afterEach(async ({ page }, info) => {
   if (info.status === info.expectedStatus || !process.env.NONBIRI_VISUAL_DIR) return;
@@ -85,6 +95,88 @@ async function json(route: Route, body: unknown, status = 200) {
     headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
     body: JSON.stringify(body),
   });
+}
+
+function donationPageItem(
+  value: Record<string, unknown>,
+  role: 'admin' | 'steward' | 'owner',
+): Record<string, unknown> {
+  const keys = Array.isArray(value.keys)
+    ? value.keys.filter(
+        (entry): entry is Record<string, unknown> =>
+          entry !== null && typeof entry === 'object' && !Array.isArray(entry),
+      )
+    : [];
+  const stateCounts = Object.fromEntries(DONATION_STATES.map((state) => [state, '0'])) as Record<
+    string,
+    string
+  >;
+  const sources: Record<string, unknown>[] = [];
+  for (const key of keys) {
+    if (typeof key.charity_state === 'string' && Object.hasOwn(stateCounts, key.charity_state)) {
+      stateCounts[key.charity_state] = String(Number(stateCounts[key.charity_state]) + 1);
+    }
+    if (
+      key.safe_source !== null &&
+      typeof key.safe_source === 'object' &&
+      !Array.isArray(key.safe_source) &&
+      !sources.some((source) => JSON.stringify(source) === JSON.stringify(key.safe_source))
+    ) {
+      sources.push(key.safe_source as Record<string, unknown>);
+    }
+  }
+  const common = {
+    id: value.id,
+    status: value.status,
+    revision: value.revision,
+    description: value.description,
+    review_result: value.review_result,
+    created_at: value.created_at,
+    updated_at: value.updated_at,
+    key_count: String(keys.length),
+    state_counts: stateCounts,
+    source_count: String(sources.length),
+    sources,
+  };
+  if (role === 'owner') return common;
+  const owner = value.owner;
+  return {
+    ...common,
+    handling: value.handling,
+    reviewer: value.reviewer ?? null,
+    owner:
+      owner === null || typeof owner !== 'object' || Array.isArray(owner)
+        ? null
+        : role === 'admin'
+          ? owner
+          : {
+              user_id: (owner as Record<string, unknown>).user_id,
+              display_name: (owner as Record<string, unknown>).display_name,
+            },
+  };
+}
+
+function donationKeyPageItem(
+  value: Record<string, unknown>,
+  role: 'admin' | 'steward' | 'owner',
+  rules: RecurringLimitRuleView[],
+): Record<string, unknown> {
+  const keys = Array.isArray(value.keys) ? value.keys : [];
+  const key = keys[0];
+  if (key === null || typeof key !== 'object' || Array.isArray(key)) {
+    throw new Error('Recurring-limit fixture donation has no key.');
+  }
+  return {
+    ...(key as Record<string, unknown>),
+    donation_id: value.id,
+    key_id: (key as Record<string, unknown>).id,
+    donation_revision: value.revision,
+    rule_count: String(rules.length),
+    rules: [...rules]
+      .sort((left, right) => Number(right.state === 'limited') - Number(left.state === 'limited'))
+      .slice(0, 3),
+    ...(role === 'owner' ? {} : { handling: value.handling, max_concurrency: 2, max_rpm: 30 }),
+  };
 }
 
 async function prepare(
@@ -175,7 +267,20 @@ async function prepare(
     const url = new URL(request.url());
     if (url.origin !== origin) return route.fallback();
     if (request.method() === 'GET' && url.pathname === `${base}/donations`) {
-      return json(route, { data: [donation()], next_cursor: null });
+      return json(
+        route,
+        numberedResponse(
+          [donationPageItem(donation(), role)],
+          url.searchParams.get('page') ?? '1',
+          Number(url.searchParams.get('page_size') ?? '20'),
+        ),
+      );
+    }
+    if (request.method() === 'GET' && url.pathname === `${base}/donations/7/keys`) {
+      return json(
+        route,
+        numberedPage([donationKeyPageItem(donation(), role, state.rules)], url.searchParams),
+      );
     }
     if (request.method() === 'GET' && url.pathname === `${base}/donations/7`) {
       return json(route, donation());
@@ -271,7 +376,6 @@ async function prepare(
   const open = async () => {
     if (role === 'owner') {
       await page.goto(`${origin}/charity/donations/7`);
-      await page.locator('.economy-donation-details > summary').click();
     } else {
       await page.goto(role === 'admin' ? `${origin}/charity` : `${origin}/steward?tab=charity`);
       await page

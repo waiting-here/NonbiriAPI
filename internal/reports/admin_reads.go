@@ -13,6 +13,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
 const (
@@ -245,19 +246,25 @@ material_version,target_version,deadline,material_count,target_count,distinct_ow
 processed_target_count,deleted_target_count,released_target_count,retry_attempt_count,next_retry_at,
 last_error_class,created_at,terminal_at`
 
-func (repository *Repository) ListCases(
+func (repository *Repository) listCases(
 	ctx context.Context,
 	actor authz.Actor,
 	status string,
 	cursor string,
 	limit int,
+	requested *pagination.Request,
 ) (Page[CaseSummary], error) {
 	if err := repository.admit(); err != nil {
 		return Page[CaseSummary]{}, err
 	}
 	defer repository.release()
-	if !validCaseStatus(status, true) || !validPageLimit(limit) {
+	if ctx == nil || !validCaseStatus(status, true) || !validPageRequest(requested, cursor, limit) {
 		return Page[CaseSummary]{}, ErrInvalidRequest
+	}
+	if requested != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, pageReadTimeout)
+		defer cancel()
 	}
 	now, err := repository.nowUnix()
 	if err != nil {
@@ -275,7 +282,7 @@ func (repository *Repository) ListCases(
 			return Page[CaseSummary]{}, ErrInvalidRequest
 		}
 	}
-	tx, committed, err := repository.beginAdminRead(ctx, actor)
+	tx, committed, err := repository.beginCasePageRead(ctx, actor, requested != nil)
 	if err != nil {
 		return Page[CaseSummary]{}, err
 	}
@@ -288,8 +295,10 @@ WHERE (?='' OR status=?)
 		query += ` AND (created_at<? OR (created_at=? AND id<?))`
 		args = append(args, cursorTime, cursorTime, cursorID)
 	}
-	query += ` ORDER BY created_at DESC,id DESC LIMIT ?`
-	args = append(args, limit+1)
+	query, args, metadata, err := reportPageSQL(ctx, tx, query, ` ORDER BY created_at DESC,id DESC`, args, requested, limit)
+	if err != nil {
+		return Page[CaseSummary]{}, err
+	}
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return Page[CaseSummary]{}, fmt.Errorf("reports: list cases: %w", err)
@@ -306,7 +315,7 @@ WHERE (?='' OR status=?)
 	if err := rows.Err(); err != nil {
 		return Page[CaseSummary]{}, fmt.Errorf("reports: list cases: %w", err)
 	}
-	page := Page[CaseSummary]{Data: items}
+	page := Page[CaseSummary]{Data: items, Pagination: metadata}
 	if len(items) > limit {
 		last := items[limit-1]
 		token, err := repository.cursors.encode(caseCursorScope, owner, last.CreatedAt, last.ID, now)
@@ -322,19 +331,25 @@ WHERE (?='' OR status=?)
 	return page, nil
 }
 
-func (repository *Repository) CaseDetail(
+func (repository *Repository) caseDetail(
 	ctx context.Context,
 	actor authz.Actor,
 	caseID string,
 	materialsCursor string,
 	materialsLimit int,
+	requested *pagination.Request,
 ) (CaseDetail, error) {
 	if err := repository.admit(); err != nil {
 		return CaseDetail{}, err
 	}
 	defer repository.release()
-	if !db.ValidateOpaqueID(caseID, "rpc_") || !validPageLimit(materialsLimit) {
+	if ctx == nil || !db.ValidateOpaqueID(caseID, "rpc_") || !validPageRequest(requested, materialsCursor, materialsLimit) {
 		return CaseDetail{}, ErrInvalidRequest
+	}
+	if requested != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, pageReadTimeout)
+		defer cancel()
 	}
 	now, err := repository.nowUnix()
 	if err != nil {
@@ -397,8 +412,10 @@ FROM report_materials WHERE case_id=?`
 		query += ` AND (created_at>? OR (created_at=? AND id>?))`
 		args = append(args, cursorTime, cursorTime, cursorID)
 	}
-	query += ` ORDER BY created_at,id LIMIT ?`
-	args = append(args, materialsLimit+1)
+	query, args, metadata, err := reportPageSQL(ctx, tx, query, ` ORDER BY created_at,id`, args, requested, materialsLimit)
+	if err != nil {
+		return CaseDetail{}, err
+	}
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return CaseDetail{}, fmt.Errorf("reports: list materials: %w", err)
@@ -452,6 +469,10 @@ FROM report_materials WHERE case_id=?`
 		}
 		materials = append(materials, material)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return CaseDetail{}, fmt.Errorf("reports: iterate materials: %w", err)
+	}
 	if err := rows.Close(); err != nil {
 		return CaseDetail{}, fmt.Errorf("reports: close materials: %w", err)
 	}
@@ -484,22 +505,28 @@ WHERE case_id=? AND action IN ('approve','reject','expire') ORDER BY id DESC LIM
 	if err := commit(tx, committed); err != nil {
 		return CaseDetail{}, err
 	}
-	return CaseDetail{CaseSummary: summary, Materials: materialPage, Decision: decisionPointer}, nil
+	return CaseDetail{CaseSummary: summary, Materials: materialPage, Decision: decisionPointer, MaterialsPagination: metadata}, nil
 }
 
-func (repository *Repository) Targets(
+func (repository *Repository) targets(
 	ctx context.Context,
 	actor authz.Actor,
 	caseID string,
 	cursor string,
 	limit int,
+	requested *pagination.Request,
 ) (Page[Target], error) {
 	if err := repository.admit(); err != nil {
 		return Page[Target]{}, err
 	}
 	defer repository.release()
-	if !db.ValidateOpaqueID(caseID, "rpc_") || !validPageLimit(limit) {
+	if ctx == nil || !db.ValidateOpaqueID(caseID, "rpc_") || !validPageRequest(requested, cursor, limit) {
 		return Page[Target]{}, ErrInvalidRequest
+	}
+	if requested != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, pageReadTimeout)
+		defer cancel()
 	}
 	now, err := repository.nowUnix()
 	if err != nil {
@@ -555,8 +582,10 @@ FROM report_targets t WHERE t.case_id=?`
 		query += ` AND (t.target_seq>? OR (t.target_seq=? AND t.id>?))`
 		args = append(args, cursorSequence, cursorSequence, cursorID)
 	}
-	query += ` ORDER BY t.target_seq,t.id LIMIT ?`
-	args = append(args, limit+1)
+	query, args, metadata, err := reportPageSQL(ctx, tx, query, ` ORDER BY t.target_seq,t.id`, args, requested, limit)
+	if err != nil {
+		return Page[Target]{}, err
+	}
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return Page[Target]{}, fmt.Errorf("reports: list targets: %w", err)
@@ -613,7 +642,7 @@ FROM report_targets t WHERE t.case_id=?`
 	if err := rows.Err(); err != nil {
 		return Page[Target]{}, fmt.Errorf("reports: list targets: %w", err)
 	}
-	page := Page[Target]{Data: items}
+	page := Page[Target]{Data: items, Pagination: metadata}
 	if len(items) > limit {
 		last := items[limit-1]
 		sequence, _ := strconv.ParseInt(last.TargetSequence, 10, 64)
@@ -656,20 +685,26 @@ const targetDonationCursorScope = "report-target-donations/v1"
 // immutable source identity equals the target's original physical key; the
 // 90-day fingerprint window does not gate this read, and no secret,
 // fingerprint, safe note, or donor identity is ever projected.
-func (repository *Repository) TargetDonations(
+func (repository *Repository) targetDonations(
 	ctx context.Context,
 	actor authz.Actor,
 	caseID string,
 	targetID string,
 	cursor string,
 	limit int,
+	requested *pagination.Request,
 ) (Page[ReportDonationMatch], error) {
 	if err := repository.admit(); err != nil {
 		return Page[ReportDonationMatch]{}, err
 	}
 	defer repository.release()
-	if !db.ValidateOpaqueID(caseID, "rpc_") || !db.ValidateOpaqueID(targetID, "rpt_") || !validPageLimit(limit) {
+	if ctx == nil || !db.ValidateOpaqueID(caseID, "rpc_") || !db.ValidateOpaqueID(targetID, "rpt_") || !validPageRequest(requested, cursor, limit) {
 		return Page[ReportDonationMatch]{}, ErrInvalidRequest
+	}
+	if requested != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, pageReadTimeout)
+		defer cancel()
 	}
 	now, err := repository.nowUnix()
 	if err != nil {
@@ -738,9 +773,12 @@ LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id
 LEFT JOIN endpoints e ON e.id=k.endpoint_id
 WHERE dk.source_endpoint_key_id=? AND dk.id>?
  AND (d.status IN ('pending','approved') OR
-      (d.status IN ('rejected','deleted','expired') AND d.terminal_at IS NOT NULL AND d.terminal_at>?))
-ORDER BY dk.id LIMIT ?`
-	args := []any{sourceKeyID, cursorID, now - donationRetentionSeconds, limit + 1}
+      (d.status IN ('rejected','deleted','expired') AND d.terminal_at IS NOT NULL AND d.terminal_at>?))`
+	args := []any{sourceKeyID, cursorID, now - donationRetentionSeconds}
+	query, args, metadata, err := reportPageSQL(ctx, tx, query, ` ORDER BY dk.id`, args, requested, limit)
+	if err != nil {
+		return Page[ReportDonationMatch]{}, err
+	}
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return Page[ReportDonationMatch]{}, fmt.Errorf("reports: list target donations: %w", err)
@@ -824,7 +862,7 @@ ORDER BY dk.id LIMIT ?`
 	if err := rows.Err(); err != nil {
 		return Page[ReportDonationMatch]{}, fmt.Errorf("reports: iterate target donations: %w", err)
 	}
-	page := Page[ReportDonationMatch]{Data: items}
+	page := Page[ReportDonationMatch]{Data: items, Pagination: metadata}
 	if len(items) > limit {
 		last := items[limit-1]
 		sequence, err := strconv.ParseInt(last.DonationKeyID, 10, 64)

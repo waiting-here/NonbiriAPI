@@ -14,6 +14,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
@@ -169,7 +170,7 @@ func (api *httpAPI) listUser(writer http.ResponseWriter, request *http.Request, 
 	if !requireNoBody(writer, request) {
 		return
 	}
-	values, ok := strictQuery(writer, request, "cursor", "limit")
+	values, ok := strictQuery(writer, request, "cursor", "limit", "page", "page_size")
 	if !ok {
 		return
 	}
@@ -202,7 +203,7 @@ func (api *httpAPI) listAdmin(writer http.ResponseWriter, request *http.Request,
 	if !requireNoBody(writer, request) {
 		return
 	}
-	values, ok := strictQuery(writer, request, "state", "severity", "cursor", "limit")
+	values, ok := strictQuery(writer, request, "state", "severity", "cursor", "limit", "page", "page_size")
 	if !ok {
 		return
 	}
@@ -210,7 +211,7 @@ func (api *httpAPI) listAdmin(writer http.ResponseWriter, request *http.Request,
 	if !ok {
 		return
 	}
-	query := AdminListQuery{Cursor: page.Cursor, Limit: page.Limit}
+	query := AdminListQuery{Cursor: page.Cursor, Limit: page.Limit, Numbered: page.Numbered}
 	if value, present := values["state"]; present {
 		query.State = value[0]
 		if query.State == "" {
@@ -585,6 +586,15 @@ func strictQuery(writer http.ResponseWriter, request *http.Request, allowed ...s
 
 func pageQuery(writer http.ResponseWriter, values url.Values) (PageQuery, bool) {
 	query := PageQuery{}
+	page, numbered, err := pagination.Parse(values)
+	if err != nil {
+		writeError(writer, ErrInvalidRequest)
+		return PageQuery{}, false
+	}
+	if numbered {
+		query.Numbered = &page
+		return query, true
+	}
 	if cursor, present := values["cursor"]; present {
 		if cursor[0] == "" || len(cursor[0]) > maxCursorBytes {
 			writeError(writer, ErrInvalidRequest)

@@ -1,10 +1,14 @@
 package adminusers
 
-import "github.com/waiting-here/NonbiriAPI/internal/db"
+import (
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
+)
 
 type Page[T any] struct {
-	Data       []T     `json:"data"`
-	NextCursor *string `json:"next_cursor"`
+	Data       []T                  `json:"data"`
+	NextCursor *string              `json:"next_cursor"`
+	Pagination *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 type UsageSummary struct {
@@ -75,9 +79,10 @@ type ActivityDay struct {
 }
 
 type ActivityPage struct {
-	Enabled    bool          `json:"enabled"`
-	Data       []ActivityDay `json:"data"`
-	NextCursor *string       `json:"next_cursor"`
+	Enabled    bool                 `json:"enabled"`
+	Data       []ActivityDay        `json:"data"`
+	NextCursor *string              `json:"next_cursor"`
+	Pagination *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 type EndpointOverviewUser struct {
@@ -100,17 +105,20 @@ type UserListQuery struct {
 	Q        string
 	Cursor   string
 	Limit    int
+	Page     *pagination.Request
 }
 
 type PageQuery struct {
 	Cursor string
 	Limit  int
+	Page   *pagination.Request
 }
 
 type EndpointOverviewQuery struct {
 	Q      string
 	Cursor string
 	Limit  int
+	Page   *pagination.Request
 }
 
 type ProfileMutation struct {

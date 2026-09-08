@@ -128,7 +128,7 @@ function sourceText(value: unknown, label: string, maximum: number, bytes: numbe
   return result;
 }
 
-function normalizeManagedSource(
+export function normalizeManagedSource(
   value: unknown,
   label: string,
   role: CharityRole,
@@ -185,7 +185,11 @@ function normalizeManagedSource(
   return mainstream;
 }
 
-function normalizeManagedKey(value: unknown, label: string, role: CharityRole): ManagedDonationKey {
+export function normalizeManagedKey(
+  value: unknown,
+  label: string,
+  role: CharityRole,
+): ManagedDonationKey {
   const required = [
     'binding_count',
     'idle',
@@ -815,7 +819,10 @@ function normalizeBinding(value: unknown, label: string): CharityBinding {
   };
 }
 
-function normalizeCandidate(value: unknown, label: string): CharityBindingCandidate {
+export function normalizeCharityBindingCandidate(
+  value: unknown,
+  label: string,
+): CharityBindingCandidate {
   const root = record(
     value,
     ['donation_key_id', 'donation_id', 'source', 'upstream_model_id', 'source_types'],
@@ -833,6 +840,8 @@ function normalizeCandidate(value: unknown, label: string): CharityBindingCandid
     source_types: normalizeSourceTypes(root.source_types, `${label} source types`),
   };
 }
+
+const normalizeCandidate = normalizeCharityBindingCandidate;
 
 function normalizeBindings(value: unknown, label: string): CharityBindings {
   const root = record(value, ['bindings', 'binding_revision'], label);
@@ -907,10 +916,16 @@ export const getManagedDonations = (
 export const getManagedDonation = (
   role: CharityRole,
   id: string,
+  signal?: AbortSignal,
 ): Promise<AdminDonation | StewardDonation> =>
   decoded(
     `${base(role)}/donations/${encodeURIComponent(decimalID(id, `${role} donation id`))}`,
-    (value) => decodeDonation(role, value),
+    (value) => {
+      const item = decodeDonation(role, value);
+      if (item.id !== id) invalidResponse('donation identity');
+      return item;
+    },
+    { signal },
   );
 
 export const processManagedDonation = (
@@ -1022,10 +1037,11 @@ export async function deleteManagedCharityModel(
     }),
   );
 }
-export const getManagedBindings = (role: CharityRole, id: string) =>
+export const getManagedBindings = (role: CharityRole, id: string, signal?: AbortSignal) =>
   decoded(
     `${base(role)}/charity-models/${encodeURIComponent(decimalID(id, `${role} charity model id`))}/bindings`,
     (value) => normalizeBindings(value, `${role} charity bindings`),
+    { signal },
   );
 export const getBindingDonations = (role: CharityRole, id: string, cursor: string | null) =>
   decoded(

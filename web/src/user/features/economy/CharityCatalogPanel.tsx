@@ -1,21 +1,28 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router';
 import { CharityPriceTable, type CharityPriceRow } from '@shared/components/CharityPriceTable';
 import { CopyValue } from '@shared/components/CopyValue';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
-import { PAGE_SIZES, type PageSize } from '@shared/operations/pageNumbers';
+import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
+import type { PageSize } from '@shared/operations/pageNumbers';
 import {
+  canonicalCharityCatalogSearch,
+  charityCatalogFilterKey,
+  DEFAULT_CHARITY_CATALOG_FILTERS,
+  readCharityCatalogUrlState,
+  writeCharityCatalogFilters,
   useCharityCatalog,
   type CatalogAccessFilter,
   type CatalogAvailability,
+  type CatalogAvailabilityFilter,
   type CatalogFilter,
+  type CatalogLevelFilter,
   type CatalogModel,
 } from './catalog';
 import './catalog.css';
 
-const DEFAULT_PAGE_SIZE: PageSize = 20;
-const PAGE_SIZE_STORAGE_KEY = 'nonbiri:user:charity-catalog-page-size:v1';
 const MAX_QUERY_CODE_POINTS = 128;
 const MAX_QUERY_BYTES = 512;
 const AVAILABILITY_COPY: Record<CatalogAvailability, string> = {
@@ -25,17 +32,6 @@ const AVAILABILITY_COPY: Record<CatalogAvailability, string> = {
   no_usable_key: 'user.charity.catalog.availability.no_usable_key',
   available: 'user.charity.catalog.availability.available',
 };
-
-function readPageSize(): PageSize {
-  if (typeof window === 'undefined') return DEFAULT_PAGE_SIZE;
-  try {
-    const value = Number(window.localStorage.getItem(PAGE_SIZE_STORAGE_KEY));
-    if (PAGE_SIZES.includes(value as PageSize)) return value as PageSize;
-  } catch {
-    // A blocked or unavailable browser storage falls back to this session.
-  }
-  return DEFAULT_PAGE_SIZE;
-}
 
 function boundQueryDraft(value: string): string {
   const encoder = new TextEncoder();
@@ -133,6 +129,16 @@ function CatalogModelCard({
           <span className="economy-catalog-item__availability">
             {t(AVAILABILITY_COPY[model.availability])}
           </span>
+          {!model.levelAllowed ? (
+            <span
+              className={`economy-catalog-item__resource-state${model.currentlyAvailable ? ' is-available' : ''}`}
+              aria-label={t('user.charity.catalog.resourceAvailability')}
+            >
+              {model.currentlyAvailable
+                ? t('user.charity.catalog.currentlyAvailable')
+                : t('user.charity.catalog.currentlyUnavailable')}
+            </span>
+          ) : null}
         </div>
       </div>
       <CharityPriceTable
@@ -178,25 +184,29 @@ function CatalogModelCard({
 
 function CatalogFilters({
   filter,
-  queryDraft,
-  onQueryDraftChange,
   onQuerySubmit,
   onAccessChange,
+  onLevelChange,
+  onAvailabilityChange,
+  onReset,
 }: {
   filter: CatalogFilter;
-  queryDraft: string;
-  onQueryDraftChange: (value: string) => void;
-  onQuerySubmit: () => void;
+  onQuerySubmit: (query: string) => void;
   onAccessChange: (value: CatalogAccessFilter) => void;
+  onLevelChange: (value: CatalogLevelFilter) => void;
+  onAvailabilityChange: (value: CatalogAvailabilityFilter) => void;
+  onReset: () => void;
 }) {
   const { t } = useTranslation();
+  const [queryDraft, setQueryDraft] = useState(filter.query);
+  const appliedLabel = t('user.charity.catalog.filterApplied');
   return (
     <div className="economy-catalog-filters">
       <form
         className="economy-catalog-search"
         onSubmit={(event) => {
           event.preventDefault();
-          onQuerySubmit();
+          onQuerySubmit(queryDraft);
         }}
       >
         <label>
@@ -205,16 +215,39 @@ function CatalogFilters({
             type="search"
             value={queryDraft}
             maxLength={MAX_QUERY_BYTES}
-            onChange={(event) => onQueryDraftChange(boundQueryDraft(event.target.value))}
+            onChange={(event) => setQueryDraft(boundQueryDraft(event.target.value))}
           />
         </label>
         <button type="submit" className="btn btn-secondary">
           {t('common.search')}
         </button>
       </form>
-      <label>
+      <label
+        className={`economy-catalog-filter${filter.allowedLevel !== 'all' ? ' is-applied' : ''}`}
+      >
+        <span>{t('user.charity.catalog.levelFilter')}</span>
+        <select
+          aria-label={t('user.charity.catalog.levelFilter')}
+          value={filter.allowedLevel}
+          onChange={(event) => onLevelChange(event.target.value as CatalogLevelFilter)}
+        >
+          <option value="all">{t('user.charity.catalog.levelAll')}</option>
+          <option value="1">{t('user.charity.catalog.level', { level: 1 })}</option>
+          <option value="2">{t('user.charity.catalog.level', { level: 2 })}</option>
+          <option value="3">{t('user.charity.catalog.level', { level: 3 })}</option>
+          <option value="4">{t('user.charity.catalog.level', { level: 4 })}</option>
+          <option value="5">{t('user.charity.catalog.level', { level: 5 })}</option>
+        </select>
+        {filter.allowedLevel !== 'all' ? (
+          <span className="economy-catalog-filter__applied">{appliedLabel}</span>
+        ) : null}
+      </label>
+      <label
+        className={`economy-catalog-filter${filter.allowedForMe !== 'all' ? ' is-applied' : ''}`}
+      >
         <span>{t('user.charity.catalog.accessFilter')}</span>
         <select
+          aria-label={t('user.charity.catalog.accessFilter')}
           value={filter.allowedForMe}
           onChange={(event) => onAccessChange(event.target.value as CatalogAccessFilter)}
         >
@@ -222,22 +255,66 @@ function CatalogFilters({
           <option value="true">{t('user.charity.catalog.accessAllowed')}</option>
           <option value="false">{t('user.charity.catalog.accessDenied')}</option>
         </select>
+        {filter.allowedForMe !== 'all' ? (
+          <span className="economy-catalog-filter__applied">{appliedLabel}</span>
+        ) : null}
       </label>
+      <label
+        className={`economy-catalog-filter${filter.currentlyAvailable !== 'all' ? ' is-applied' : ''}`}
+      >
+        <span>{t('user.charity.catalog.availabilityFilter')}</span>
+        <select
+          aria-label={t('user.charity.catalog.availabilityFilter')}
+          value={filter.currentlyAvailable}
+          onChange={(event) =>
+            onAvailabilityChange(event.target.value as CatalogAvailabilityFilter)
+          }
+        >
+          <option value="all">{t('user.charity.catalog.availabilityAll')}</option>
+          <option value="true">{t('user.charity.catalog.availabilityAllowed')}</option>
+          <option value="false">{t('user.charity.catalog.availabilityDenied')}</option>
+        </select>
+        {filter.currentlyAvailable !== 'all' ? (
+          <span className="economy-catalog-filter__applied">{appliedLabel}</span>
+        ) : null}
+      </label>
+      <button
+        type="button"
+        className="btn btn-quiet economy-catalog-filter-reset"
+        onClick={onReset}
+      >
+        {t('user.charity.catalog.resetFilters')}
+      </button>
     </div>
   );
 }
 
 export function CharityCatalogPanel({ accountID }: { accountID: string | undefined }) {
   const { t } = useTranslation();
-  const [filter, setFilter] = useState<CatalogFilter>({
-    page: '1',
-    pageSize: readPageSize(),
-    query: '',
-    allowedForMe: 'all',
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlState = readCharityCatalogUrlState(searchParams);
+  const pager = useUrlPagePager({
+    station: 'user',
+    listType: 'charity-catalog',
+    scopeKey: accountID ?? 'anonymous',
+    scopeReady: Boolean(accountID),
+    resetKey: charityCatalogFilterKey(urlState.filters),
   });
-  const [queryDraft, setQueryDraft] = useState('');
+  const filter: CatalogFilter = {
+    ...urlState.filters,
+    page: pager.page,
+    pageSize: pager.pageSize,
+  };
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const catalog = useCharityCatalog(accountID, filter);
+
+  useEffect(() => {
+    if (!urlState.needsNormalization) return;
+    const canonical = canonicalCharityCatalogSearch(searchParams);
+    if (canonical.toString() !== searchParams.toString()) {
+      setSearchParams(canonical, { replace: true });
+    }
+  }, [searchParams, setSearchParams, urlState.needsNormalization]);
 
   const pageData = catalog.data;
   const busy = catalog.isFetching;
@@ -249,22 +326,51 @@ export function CharityCatalogPanel({ accountID }: { accountID: string | undefin
       return next;
     });
   };
-  const submitQuery = () => {
+  const submitQuery = (query: string) => {
     setExpanded(new Set());
-    setFilter((current) => ({ ...current, query: queryDraft, page: '1' }));
+    setSearchParams(
+      (previous) => {
+        const next = writeCharityCatalogFilters(previous, {
+          ...urlState.filters,
+          query,
+        });
+        next.delete('page');
+        next.set('page', '1');
+        return next;
+      },
+      { replace: false },
+    );
   };
-  const changeAccess = (allowedForMe: CatalogAccessFilter) => {
+  const updateFilter = (changes: Partial<typeof DEFAULT_CHARITY_CATALOG_FILTERS>) => {
     setExpanded(new Set());
-    setFilter((current) => ({ ...current, allowedForMe, page: '1' }));
+    setSearchParams((previous) => {
+      const current = readCharityCatalogUrlState(previous).filters;
+      const next = writeCharityCatalogFilters(previous, { ...current, ...changes });
+      next.delete('page');
+      next.set('page', '1');
+      return next;
+    });
+  };
+  const changeAccess = (allowedForMe: CatalogAccessFilter) => updateFilter({ allowedForMe });
+  const changeLevel = (allowedLevel: CatalogLevelFilter) => updateFilter({ allowedLevel });
+  const changeAvailability = (currentlyAvailable: CatalogAvailabilityFilter) =>
+    updateFilter({ currentlyAvailable });
+  const resetFilters = () => {
+    setExpanded(new Set());
+    setSearchParams((previous) => {
+      const current = readCharityCatalogUrlState(previous).filters;
+      const next = writeCharityCatalogFilters(previous, {
+        ...DEFAULT_CHARITY_CATALOG_FILTERS,
+        query: current.query,
+      });
+      next.delete('page');
+      next.set('page', '1');
+      return next;
+    });
   };
   const changePageSize = (pageSize: PageSize) => {
     setExpanded(new Set());
-    try {
-      window.localStorage.setItem(PAGE_SIZE_STORAGE_KEY, String(pageSize));
-    } catch {
-      // Storage is an optional preference; the current session still updates.
-    }
-    setFilter((current) => ({ ...current, pageSize, page: '1' }));
+    pager.setPageSize(pageSize);
   };
   const priceCount = pageData?.models.length ?? 0;
 
@@ -283,11 +389,13 @@ export function CharityCatalogPanel({ accountID }: { accountID: string | undefin
         ) : null}
       </div>
       <CatalogFilters
+        key={urlState.filters.query}
         filter={filter}
-        queryDraft={queryDraft}
-        onQueryDraftChange={setQueryDraft}
         onQuerySubmit={submitQuery}
         onAccessChange={changeAccess}
+        onLevelChange={changeLevel}
+        onAvailabilityChange={changeAvailability}
+        onReset={resetFilters}
       />
       {catalog.isPending && !pageData ? (
         <LoadingState />
@@ -320,9 +428,10 @@ export function CharityCatalogPanel({ accountID }: { accountID: string | undefin
               busy={busy}
               onPageChange={(page) => {
                 setExpanded(new Set());
-                setFilter((current) => ({ ...current, page }));
+                pager.setPage(page);
               }}
               onPageSizeChange={changePageSize}
+              requestedPage={filter.page}
             />
           </div>
         </div>

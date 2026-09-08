@@ -21,8 +21,20 @@ func (repository *Repository) GetUser(ctx context.Context, userID int64, request
 	if err != nil {
 		return nil, err
 	}
+	var reader logReadQueryer = repository.db
+	if filter.Page != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, logPageTimeout)
+		defer cancel()
+		tx, err := repository.beginPageRead(ctx, "user", userID, now)
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Rollback()
+		reader = tx
+	}
 	var model string
-	record, err := scanCommon(repository.db.QueryRowContext(ctx,
+	record, err := scanCommon(reader.QueryRowContext(ctx,
 		`SELECT `+commonListColumns+`,l.model FROM request_logs l WHERE l.logical_request_id=? AND l.user_id=?`,
 		requestID, userID), &model)
 	if err != nil {
@@ -44,11 +56,13 @@ func (repository *Repository) GetUser(ctx context.Context, userID int64, request
 			StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
 			Model: model, AttemptCount: strconv.FormatInt(record.attemptCount, 10),
 		}
-		attempts, err := repository.listUserAttempts(ctx, userID, record.rowID, requestID, filter)
+		attempts, err := repository.listUserAttempts(ctx, reader, userID, record.rowID, requestID, filter)
 		if err != nil {
 			return nil, err
 		}
-		return UserSelfLogDetail{Request: row, Attempts: attempts}, nil
+		metadata := attempts.Pagination
+		attempts.Pagination = nil
+		return UserSelfLogDetail{Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
 	case RouteCharityChat:
 		// Charity detail deliberately returns before constructing or querying an
 		// attempt projection. Its response shape and size are independent of the
@@ -82,11 +96,21 @@ func (repository *Repository) GetAdmin(ctx context.Context, requestID string, fi
 	if err != nil {
 		return AdminLogDetail{}, err
 	}
+	if filter.Page != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, logPageTimeout)
+		defer cancel()
+	}
 	tx, err := repository.db.BeginTx(ctx, nil)
 	if err != nil {
 		return AdminLogDetail{}, translateSQLError(err)
 	}
 	defer tx.Rollback()
+	if filter.Page != nil {
+		if err := authorizePageAccount(ctx, tx, "admin", 0, now); err != nil {
+			return AdminLogDetail{}, err
+		}
+	}
 	var userID sql.NullInt64
 	record, err := scanCommon(tx.QueryRowContext(ctx,
 		`SELECT `+commonListColumns+`,l.user_id FROM request_logs l WHERE l.logical_request_id=?`, requestID), &userID)
@@ -125,7 +149,9 @@ func (repository *Repository) GetAdmin(ctx context.Context, requestID string, fi
 	if err := tx.Commit(); err != nil {
 		return AdminLogDetail{}, translateSQLError(err)
 	}
-	return AdminLogDetail{Request: row, Attempts: attempts}, nil
+	metadata := attempts.Pagination
+	attempts.Pagination = nil
+	return AdminLogDetail{Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
 }
 
 func (repository *Repository) GetSteward(
@@ -146,6 +172,11 @@ func (repository *Repository) GetSteward(
 	now, err := repository.decisionNow()
 	if err != nil {
 		return StewardLogDetail{}, err
+	}
+	if filter.Page != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, logPageTimeout)
+		defer cancel()
 	}
 	tx, err := repository.beginStewardRead(ctx, stewardUserID, authorizer)
 	if err != nil {
@@ -179,7 +210,9 @@ func (repository *Repository) GetSteward(
 	if err := tx.Commit(); err != nil {
 		return StewardLogDetail{}, translateSQLError(err)
 	}
-	return StewardLogDetail{Request: row, Attempts: attempts}, nil
+	metadata := attempts.Pagination
+	attempts.Pagination = nil
+	return StewardLogDetail{Request: row, Attempts: attempts, AttemptPagination: metadata}, nil
 }
 
 type attemptRecord struct {
@@ -253,7 +286,7 @@ func attemptKeyID(value sql.NullInt64) *string {
 	return &result
 }
 
-func (repository *Repository) listUserAttempts(ctx context.Context, userID, requestLogID int64, requestID string, filter AttemptFilter) (Page[UserSelfLogAttempt], error) {
+func (repository *Repository) listUserAttempts(ctx context.Context, reader logReadQueryer, userID, requestLogID int64, requestID string, filter AttemptFilter) (Page[UserSelfLogAttempt], error) {
 	owner := attemptOwner("user", userID, requestID)
 	cursor, err := repository.decodeAttemptCursor(filter.Cursor, "logapi-user-attempt-v1", owner)
 	if err != nil {
@@ -265,13 +298,17 @@ CASE WHEN k.id IS NULL THEN '' ELSE k.note END
 FROM request_attempts a
 LEFT JOIN endpoints e ON e.id=a.endpoint_id_snapshot AND e.user_id=?
 LEFT JOIN endpoint_keys k ON k.id=a.endpoint_key_id_snapshot AND k.endpoint_id=e.id
-WHERE a.request_log_id=? AND a.attempt_seq>? ORDER BY a.attempt_seq ASC LIMIT ?`
-	rows, err := repository.db.QueryContext(ctx, query, userID, requestLogID, cursor, filter.Limit+1)
+WHERE a.request_log_id=? AND a.attempt_seq>?`
+	query, args, metadata, err := logPageQuery(ctx, reader, query, ` ORDER BY a.attempt_seq ASC`, []any{userID, requestLogID, cursor}, filter.Page, filter.Limit)
+	if err != nil {
+		return Page[UserSelfLogAttempt]{}, err
+	}
+	rows, err := reader.QueryContext(ctx, query, args...)
 	if err != nil {
 		return Page[UserSelfLogAttempt]{}, translateSQLError(err)
 	}
 	defer rows.Close()
-	page := Page[UserSelfLogAttempt]{Data: make([]UserSelfLogAttempt, 0, filter.Limit)}
+	page := Page[UserSelfLogAttempt]{Data: make([]UserSelfLogAttempt, 0, filter.Limit), Pagination: metadata}
 	var last int64
 	more := false
 	for rows.Next() {
@@ -318,9 +355,7 @@ func (repository *Repository) listAdminAttempts(ctx context.Context, requestLogI
 	return repository.listAdminAttemptsTx(ctx, repository.db, requestLogID, requestID, filter)
 }
 
-type adminAttemptQueryer interface {
-	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
-}
+type adminAttemptQueryer = logReadQueryer
 
 func (repository *Repository) listAdminAttemptsTx(
 	ctx context.Context,
@@ -338,13 +373,17 @@ func (repository *Repository) listAdminAttemptsTx(
 		return Page[AdminLogAttempt]{}, err
 	}
 	query := `SELECT ` + attemptColumns + ` FROM request_attempts a
-WHERE a.request_log_id=? AND a.attempt_seq>? ORDER BY a.attempt_seq ASC LIMIT ?`
-	rows, err := queryer.QueryContext(ctx, query, requestLogID, cursor, filter.Limit+1)
+WHERE a.request_log_id=? AND a.attempt_seq>?`
+	query, args, metadata, err := logPageQuery(ctx, queryer, query, ` ORDER BY a.attempt_seq ASC`, []any{requestLogID, cursor}, filter.Page, filter.Limit)
+	if err != nil {
+		return Page[AdminLogAttempt]{}, err
+	}
+	rows, err := queryer.QueryContext(ctx, query, args...)
 	if err != nil {
 		return Page[AdminLogAttempt]{}, translateSQLError(err)
 	}
 	defer rows.Close()
-	page := Page[AdminLogAttempt]{Data: make([]AdminLogAttempt, 0, filter.Limit)}
+	page := Page[AdminLogAttempt]{Data: make([]AdminLogAttempt, 0, filter.Limit), Pagination: metadata}
 	var last int64
 	more := false
 	for rows.Next() {
@@ -409,13 +448,17 @@ func (repository *Repository) listStewardAttempts(
 	}
 	// Independent query and projection: no Admin/user/note/logical model column.
 	query := `SELECT ` + attemptColumns + ` FROM request_attempts a
-WHERE a.request_log_id=? AND a.attempt_seq>? ORDER BY a.attempt_seq ASC LIMIT ?`
-	rows, err := tx.QueryContext(ctx, query, requestLogID, cursor, filter.Limit+1)
+WHERE a.request_log_id=? AND a.attempt_seq>?`
+	query, args, metadata, err := logPageQuery(ctx, tx, query, ` ORDER BY a.attempt_seq ASC`, []any{requestLogID, cursor}, filter.Page, filter.Limit)
+	if err != nil {
+		return Page[StewardLogAttempt]{}, err
+	}
+	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return Page[StewardLogAttempt]{}, translateSQLError(err)
 	}
 	defer rows.Close()
-	page := Page[StewardLogAttempt]{Data: make([]StewardLogAttempt, 0, filter.Limit)}
+	page := Page[StewardLogAttempt]{Data: make([]StewardLogAttempt, 0, filter.Limit), Pagination: metadata}
 	var last int64
 	more := false
 	for rows.Next() {

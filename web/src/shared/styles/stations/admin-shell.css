@@ -1,6 +1,97 @@
 /* Layer 5: admin station shell. The visual language is quieter and denser
  * than the user station while sharing all tokens and primitives. */
 
+.brand-suffix {
+  color: var(--nb-color-text-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.admin-sidebar nav ul {
+  display: flex;
+  gap: 0.2rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.admin-sidebar a {
+  display: inline-flex;
+  min-height: 2.35rem;
+  align-items: center;
+  border-radius: var(--nb-radius-sm);
+  color: var(--nb-color-text-muted);
+  font-size: 0.9rem;
+  font-weight: 650;
+  text-decoration: none;
+  transition:
+    background-color var(--nb-transition),
+    color var(--nb-transition);
+}
+
+.admin-sidebar a:hover {
+  background: var(--nb-color-surface-alt);
+  color: var(--nb-color-text);
+}
+
+.admin-sidebar a[aria-current='page'] {
+  background: var(--nb-color-accent-soft);
+  color: var(--nb-color-accent);
+}
+
+.admin-shell {
+  display: flex;
+  min-height: calc(100vh - 4.25rem);
+}
+
+.admin-sidebar {
+  width: 16rem;
+  flex: 0 0 16rem;
+  padding: 1.25rem 0.9rem;
+  background: var(--nb-color-surface);
+  border-right: 1px solid var(--nb-color-border);
+}
+
+.admin-sidebar nav ul {
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.admin-sidebar a {
+  width: 100%;
+  padding: 0.55rem 0.8rem;
+}
+
+.admin-content {
+  width: 100%;
+  min-width: 0;
+  padding: clamp(1.3rem, 3vw, 2.6rem) clamp(1rem, 4vw, 3rem) 4rem;
+}
+
+.admin-menu-btn {
+  display: none;
+}
+
+@media (max-width: 52rem) {
+  .admin-sidebar {
+    position: fixed;
+    inset: 4.25rem auto 0 0;
+    z-index: 15;
+    width: min(17rem, 88vw);
+    transform: translateX(-102%);
+    transition: transform var(--nb-transition);
+    box-shadow: var(--nb-shadow-2);
+  }
+
+  .admin-sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  .admin-shell {
+    display: block;
+  }
+}
+
 .nb-admin-shell {
   display: grid;
   grid-template-columns: 16rem minmax(0, 1fr);
@@ -163,8 +254,7 @@
     padding-inline: var(--nb-space-3);
   }
 
-  .nb-admin-header__actions .nb-account-trigger__name,
-  .nb-admin-header__actions .user-chip-name {
+  .nb-admin-header__actions .nb-account-trigger__name {
     display: none;
   }
 }
