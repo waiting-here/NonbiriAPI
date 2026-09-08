@@ -2,7 +2,7 @@ import { ApiError } from '@shared/query/http';
 import {
   beginElevation,
   deleteCurrentAccount,
-  exportAccountV4,
+  exportAccountV5,
   getHomeAnnouncements,
   getHomeCheckinStatus,
   getHomeGameSummary,
@@ -33,27 +33,25 @@ const unavailable = async (): Promise<never> => {
 };
 
 /**
- * Export v4 and final account deletion are intentionally disabled until the
- * lifecycle integration is available. Keeping this adapter
- * in production makes the missing dependency explicit without issuing a
- * legacy request or manufacturing a successful result.
+ * A caller without lifecycle integration can explicitly disable export and
+ * deletion without issuing a request or manufacturing a successful result.
  */
 export const disabledAccountLifecycleAdapter: AccountLifecycleAdapter = Object.freeze({
-  capabilities: Object.freeze({ exportV4: false, deleteAccount: false }),
+  capabilities: Object.freeze({ exportV5: false, deleteAccount: false }),
   beginElevation: unavailable,
-  exportV4: unavailable,
+  exportV5: unavailable,
   deleteAccount: unavailable,
   readAccountAuthority: unavailable,
 });
 
 export const productionAccountLifecycleAdapter = Object.freeze<AccountLifecycleAdapter>({
-  capabilities: Object.freeze({ exportV4: true, deleteAccount: true }),
+  capabilities: Object.freeze({ exportV5: true, deleteAccount: true }),
   beginElevation: async (_intent, accountId) => {
     if (!/^[1-9][0-9]*$/.test(accountId))
       throw new ApiError('invalid_request', 'Invalid account id.', 400);
     return beginElevation();
   },
-  exportV4: ({ accountId, elevatedToken }) => exportAccountV4(accountId, elevatedToken),
+  exportV5: ({ accountId, elevatedToken }) => exportAccountV5(accountId, elevatedToken),
   deleteAccount: ({ accountId, elevatedToken, confirmation }) =>
     deleteCurrentAccount(accountId, elevatedToken, confirmation),
   readAccountAuthority,

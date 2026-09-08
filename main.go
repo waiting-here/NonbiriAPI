@@ -1229,6 +1229,10 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("validate Fishing persisted state: %w", err)
 	}
+	if err := charityService.ValidateRecurringState(startupContext); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("validate recurring charity limits: %w", err)
+	}
 	if err := lifecycleCoordinator.RecoverBeforeListener(startupContext); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("recover account lifecycle before listener: %w", err)

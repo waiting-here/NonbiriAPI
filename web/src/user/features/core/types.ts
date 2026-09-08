@@ -374,15 +374,15 @@ export type LifecycleIntent = 'export' | 'delete';
 
 export interface AccountExportAttachment {
   blob: Blob;
-  schemaVersion: 4;
+  schemaVersion: 5;
 }
 
 export type AccountAuthority = 'active' | 'deleted';
 
 export interface AccountLifecycleAdapter {
-  capabilities: Readonly<{ exportV4: boolean; deleteAccount: boolean }>;
+  capabilities: Readonly<{ exportV5: boolean; deleteAccount: boolean }>;
   beginElevation(intent: LifecycleIntent, accountId: string): Promise<string>;
-  exportV4(input: { accountId: string; elevatedToken: string }): Promise<AccountExportAttachment>;
+  exportV5(input: { accountId: string; elevatedToken: string }): Promise<AccountExportAttachment>;
   deleteAccount(input: {
     accountId: string;
     elevatedToken: string;

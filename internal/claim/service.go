@@ -12,6 +12,7 @@ import (
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -174,7 +175,7 @@ func (s *Service) Claim(ctx context.Context, input ClaimInput) (Handle, error) {
 	}
 	handle, err := s.claimTx(ctx, tx, claimID, at, input)
 	if err != nil {
-		return Handle{}, err
+		return Handle{}, s.quotaCapacityFailure(ctx, tx, at, err)
 	}
 	if err := tx.Commit(); err != nil {
 		return Handle{}, fmt.Errorf("claim: commit claim: %w", err)
@@ -357,6 +358,11 @@ VALUES(?,?,?,?,?,?,?,?,?,'claimed',?,?,?,?,?,?,?)`,
 		reservation.ReservedCalls, reservation.ReservedTokens, donorState); err != nil {
 		return Handle{}, fmt.Errorf("claim: persist dispatch claim: %w", err)
 	}
+	if input.Purpose == PurposeCharity {
+		if err := donationquota.Reserve(ctx, tx, claimID, at); err != nil {
+			return Handle{}, fmt.Errorf("claim: reserve recurring limits: %w", err)
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE logical_requests SET state='running'
 WHERE id=? AND state='accepted'`, input.RequestID); err != nil {
 		return Handle{}, fmt.Errorf("claim: mark request running: %w", err)
@@ -467,7 +473,7 @@ WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purpos
 		}); err != nil {
 			clear(contextID)
 			clear(encrypted)
-			return nil, err
+			return nil, s.quotaCapacityFailure(ctx, tx, at, err)
 		}
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE dispatch_claims

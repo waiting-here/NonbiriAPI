@@ -1,12 +1,10 @@
 # Data Lifecycle Checklist (Generation 2 export / delete / retention / privacy)
 
-> Status: **v1.0.0-beta.1** — this checklist describes the implemented
-> Generation 2 export, deletion, retention, and privacy boundary. It replaces
-> the alpha.3 coverage list.
+> Status: **current Generation 2 implementation** — this checklist describes
+> the implemented export, deletion, retention, and privacy boundary.
 >
 > Canonical DDL: `internal/db/schema.go`; manifest: `internal/db/schema_manifest.go`;
-> current `GenerationTwoSchemaHash`: `0fb85e661cab07c433b5003dcd606c89fd60e496ad76412a7a412926a6e5a8a9`.
-> Normative lifecycle values come from the frozen beta.1 data-lifecycle contract.
+> current `GenerationTwoSchemaHash`: `3b13fe4d4abb62b3ff380592d5c101e17c8a35544add5a7b88ccc667922c3ccb`.
 
 The table cells below describe the version contract for each exact Generation 2 table
 family. The registered routes, export builder, deletion coordinator, retention workers,
@@ -34,9 +32,17 @@ references used for late-callback suppression.
 
 ## The four checks
 
+`donation_handling` retains shared management state with its donation; processing actors are SET NULL on deletion and their identity is not copied. It is excluded from ordinary owner export. `charity_model_access` stores the current level mask and public plain-text description, cascades with its model and does not add caller records or export privileges.
+
+`donation_quota_rules` and `donation_quota_epochs` hold current recurring settings and the minimum retired settings needed by accepted work. Export version 5 includes only each owned key's current `recurring_limits` RuleView from the same snapshot as the rest of the export. Steward access never expands that export scope. `donation_quota_receipts`, `donation_quota_periods`, `donation_quota_buckets` and `donation_quota_capacity` are internal and excluded. Buckets carry no caller, model, content or credential identity.
+
+The recurring marker, receipt and terminal accounting transitions share the original claim transaction. Caller deletion releases unsent work and deidentifies dispatched work; donor deletion revokes new admission while existing sends settle the original key and rule generation. Neither path rewrites actual usage or transfers it to a new donation instance. Retired rules cannot be removed while their receipts or aggregates remain. Terminal donation retention first retires rules, then bounded quota cleanup releases aggregates and capacity, and only then removes the parent.
+
+Completed sliding aggregates remain for at most 35 actual days; reset retains its current period and older periods still needed by unfinished receipts. A receipt's minimum completion evidence outlives those age limits until settlement. Each quota cleanup batch removes at most 1,000 rows; retirement shares a bounded mutation budget. Startup verifies receipt, aggregate, cache and capacity consistency before recovery and admission. Missing or inconsistent state fails closed and is not silently reset. These counters do not extend request-log or content retention.
+
 For every table/column, answer all four. A missing answer is an acceptance gap.
 
-1. **Export** — Include the owner's safe slice in the beta.1 account export, or record
+1. **Export** — Include the owner's safe slice in the version 5 account export, or record
    an explicit policy exclusion. Never export secrets/ciphertext, CallerKey plaintext
    or verifier, fingerprints, dispatch/idempotency/worker material, Debug bodies,
    device tokens, raw IP, raw upstream data, or another participant's identity/result.
@@ -98,13 +104,15 @@ Complete operator snapshots are outside the account-export contract. They may co
 all private data, encrypted credentials, configuration, game state, and correlation
 indexes, and must stay paired with the exact release, environment, master key, unit,
 manifest, and checksums. Snapshot retention/deletion is operator-controlled and must
-be disclosed by the instance policy; beta.1 does not promise per-user erasure inside
+be disclosed by the instance policy; the service does not promise per-user erasure inside
 historical snapshots.
 
 Generation 2 accepts a fresh database only when main/WAL/SHM are all absent; an
 existing 0-byte main, alpha.3/unknown generation, bad header/identity/manifest/secret
-envelope/config, or an unsafe path fails closed. There is no migration, old-data
-import, automatic repair, or compatibility schema. A current database is validated
+envelope/config, or an unsafe path fails closed. The four exact supported predecessor
+manifests receive a validated, transactional additive upgrade; all existing business
+rows and custom legal settings are preserved. Arbitrary schema repair and old-generation
+data import are unsupported. Current and supported predecessor databases are validated
 before any source write and before writable open. Destructive fresh starts with
 maintenance on and registration/game/activity off, and does not merge a source
 snapshot. Re-activating an old copy is an operator event that must disclose its data

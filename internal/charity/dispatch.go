@@ -8,6 +8,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 )
 
 func (s *Service) PrepareDispatch(ctx context.Context, tx *sql.Tx, input claim.CharityDispatch) error {
@@ -45,5 +46,8 @@ WHERE cr.logical_request_id=? AND cr.user_id=? AND lr.user_id=?
 	if err := requireModelAccess(ctx, tx, input.ActorUserID, modelID.Int64); err != nil {
 		return err
 	}
-	return nil
+	if err := s.revalidateDispatchKey(ctx, tx, input); err != nil {
+		return err
+	}
+	return donationquota.Reconcile(ctx, tx, input.ClaimID, input.DispatchedAt)
 }

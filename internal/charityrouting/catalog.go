@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
+	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -127,7 +128,7 @@ cm.enabled,a.allowed_level_mask,a.public_description`+from+` ORDER BY cm.full_na
 			_, err := s.readSnapshotTx(ctx, tx, ids[index], now, false, nil)
 			if err == nil {
 				model.Availability = "available"
-			} else if errors.Is(err, ErrUnavailable) || errors.Is(err, ErrNotFound) {
+			} else if errors.Is(err, ErrUnavailable) || errors.Is(err, ErrNotFound) || errors.Is(err, donationquota.ErrLimited) {
 				model.Availability = "no_usable_key"
 			} else {
 				return Catalog{}, err

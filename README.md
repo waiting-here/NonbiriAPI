@@ -20,6 +20,7 @@ NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible ingress g
 - Encrypted-at-rest upstream secrets; plaintext credentials are not returned in lists, logs, alerts, or account exports.
 - Request metadata, usage accounting, retention cleanup, account export/deletion, issues, alerts, and runtime limits.
 - Credits, check-in, personal credit history, donation-backed charity routing, per-key donation expiry and usage limits, and level-5 co-management. Authorized administrator and steward logs expose a fixed safe set of upstream resource details; ordinary charity callers do not receive those details.
+- Donated keys can combine recurring call, Token and credit limits with their total limits. Administrators and level-5 stewards configure reset or sliding windows with a saved time zone; donors can inspect their own rules, usage, reservations and remaining capacity. These counters include only charity calls. Sharing the same key with personal calls may consume more upstream capacity than the charity counters show.
 - Daily welfare, the Thursday pooled activity, bilingual announcements, and public credential-theft reporting with administrator review.
 - Experimental OpenAI-only per-key `store:false` enforcement and per-model tool-call flattening, both disabled by default and explicitly risk-labelled.
 - A memory-only Debug Hub that starts in dry-run mode and requires explicit confirmation to send requests upstream. Live results are captured in the Debug page; the API caller receives a dedicated HTTP 422 debug response.

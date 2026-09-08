@@ -3,7 +3,10 @@ package claim
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+
+	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 )
 
 // MarkResponseStarted records that a charity connector has validated its
@@ -42,7 +45,19 @@ func (s *Service) MarkResponseStarted(ctx context.Context, handle Handle) error 
 }
 
 func recordResponseStartTx(ctx context.Context, tx *sql.Tx, claimID string, at int64) error {
-	_, err := tx.ExecContext(ctx, `INSERT INTO dispatch_response_starts(claim_id,started_at)
+	var existing int64
+	err := tx.QueryRowContext(ctx, `SELECT started_at FROM dispatch_response_starts WHERE claim_id=?`, claimID).Scan(&existing)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	at, err = donationquota.Start(ctx, tx, claimID, at)
+	if err != nil {
+		return fmt.Errorf("claim: assign recurring success: %w", err)
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO dispatch_response_starts(claim_id,started_at)
 VALUES(?,?) ON CONFLICT(claim_id) DO NOTHING`, claimID, at)
 	if err != nil {
 		return fmt.Errorf("claim: record successful response: %w", err)

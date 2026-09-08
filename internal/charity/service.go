@@ -20,6 +20,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -448,6 +449,9 @@ func (s *Service) ReleaseUndispatched(ctx context.Context, tx *sql.Tx, input cla
 	if row.state != "reserved" {
 		return claim.ErrConflict
 	}
+	if err := donationquota.Settle(ctx, tx, input.ClaimID, input.ReleasedAt, donationquota.Amounts{}, false); err != nil {
+		return err
+	}
 	if row.keyID != nil {
 		if err := releaseKeyCapacity(ctx, tx, *row.keyID, row.priceReserved, row.callsReserved, row.tokensReserved, input.ReleasedAt); err != nil {
 			return err
@@ -665,6 +669,22 @@ func (s *Service) CompleteAttempt(ctx context.Context, tx *sql.Tx, completion cl
 	callsActual := 0
 	if input.ResponseStarted {
 		callsActual = 1
+	}
+	quotaPrice, err := db.U128FromBig(big.NewInt(completion.Actual.PriceMilli))
+	if err != nil {
+		return claim.ErrInvariant
+	}
+	quotaCalls, err := db.U128FromBig(big.NewInt(int64(callsActual)))
+	if err != nil {
+		return claim.ErrInvariant
+	}
+	quotaTokens, err := db.U128FromBig(big.NewInt(tokensActual))
+	if err != nil {
+		return claim.ErrInvariant
+	}
+	if err := donationquota.Settle(ctx, tx, input.ClaimID, input.CompletedAt,
+		donationquota.Amounts{Calls: quotaCalls, Tokens: quotaTokens, Credits: quotaPrice}, input.ResponseStarted); err != nil {
+		return err
 	}
 
 	if err := settleKeyCapacity(ctx, tx, *row.keyID, row, completion.Actual, callsActual, tokensActual, input.CompletedAt); err != nil {

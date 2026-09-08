@@ -119,7 +119,10 @@ describe('home independent capability states', () => {
 
   it('does not turn an available capability with no loader into a successful empty summary', async () => {
     const envelope = canonicalEnvelope();
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(envelope)),
+    );
     const adapters = {
       checkin: { state: 'unavailable' },
       games: { state: 'available' },
@@ -132,15 +135,16 @@ describe('home independent capability states', () => {
       locale: 'en',
     });
 
-    expect(
-      await screen.findByRole('heading', { name: 'Continue or view results' }),
-    ).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Continue or view results' })).toBeVisible();
     expect(await screen.findByText('Could not load this section')).toBeVisible();
   });
 
   it('GET-reconciles an unknown check-in response without automatically resubmitting', async () => {
     const envelope = canonicalEnvelope();
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(envelope)),
+    );
     const reconciliation = deferred<HomeCheckinStatus>();
     const initial: HomeCheckinStatus = {
       enabled: true,
@@ -190,7 +194,10 @@ describe('home independent capability states', () => {
 
   it('preserves exact check-in amounts and refreshes authority after a committed response', async () => {
     const envelope = canonicalEnvelope();
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(envelope)),
+    );
     const maximum = '340282366920938463463374607431768211.455';
     const initial: HomeCheckinStatus = {
       enabled: true,
@@ -225,7 +232,10 @@ describe('home independent capability states', () => {
 
   it('disables capped lower-level check-in while preserving the level-three bypass', async () => {
     const envelope = canonicalEnvelope();
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(envelope)),
+    );
     const load = vi.fn(async (): Promise<HomeCheckinStatus> => ({
       enabled: true,
       checked_in_today: false,
@@ -257,7 +267,10 @@ describe('home independent capability states', () => {
 
   it('keeps a committed receipt visible when its follow-up GET fails and retries only the read', async () => {
     const envelope = canonicalEnvelope();
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(envelope)),
+    );
     const initial: HomeCheckinStatus = {
       enabled: true,
       checked_in_today: false,
@@ -307,7 +320,10 @@ describe('home independent capability states', () => {
 
   it('uses a successful post-midnight authority read for the next day without losing the receipt', async () => {
     const envelope = canonicalEnvelope();
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(envelope)),
+    );
     const initial: HomeCheckinStatus = {
       enabled: true,
       checked_in_today: false,
@@ -343,7 +359,10 @@ describe('home independent capability states', () => {
       user: { ...first.user, id: '2', username: 'second-user', guild_nick: null },
     };
     let current = first;
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(current)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(current)),
+    );
     const lateGames = deferred<
       Array<{
         game: 'linklink';
@@ -391,7 +410,9 @@ describe('home independent capability states', () => {
     });
 
     await waitFor(() =>
-      expect(rendered.queryClient.getQueryData(coreKeys.home(first.user.id, 'games'))).toBeUndefined(),
+      expect(
+        rendered.queryClient.getQueryData(coreKeys.home(first.user.id, 'games')),
+      ).toBeUndefined(),
     );
     expect(rendered.queryClient.getQueryData(coreKeys.home(second.user.id, 'games'))).toEqual([]);
   });
@@ -632,9 +653,9 @@ describe('account deletion confirmation', () => {
     document.cookie = 'nb_elevated=elevated_token; Path=/; SameSite=Lax';
     const deleteAccount = vi.fn(async () => undefined);
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV4: false, deleteAccount: true },
+      capabilities: { exportV5: false, deleteAccount: true },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportV4: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 4 }) as const),
+      exportV5: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 5 }) as const),
       deleteAccount,
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -682,9 +703,9 @@ describe('account deletion confirmation', () => {
     const completion = deferred<void>();
     const deleteAccount = vi.fn(() => completion.promise);
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV4: false, deleteAccount: true },
+      capabilities: { exportV5: false, deleteAccount: true },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportV4: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 4 }) as const),
+      exportV5: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 5 }) as const),
       deleteAccount,
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -728,9 +749,9 @@ describe('account deletion confirmation', () => {
       .mockResolvedValueOnce('active')
       .mockResolvedValueOnce('deleted');
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV4: false, deleteAccount: true },
+      capabilities: { exportV5: false, deleteAccount: true },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportV4: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 4 }) as const),
+      exportV5: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 5 }) as const),
       deleteAccount,
       readAccountAuthority,
     };
@@ -768,13 +789,13 @@ describe('account deletion confirmation', () => {
     window.sessionStorage.setItem('nb.pending.elevation.account', '1');
     document.cookie = 'nb_elevated=unknown_export_token; Path=/; SameSite=Lax';
     const beginElevation = vi.fn(async () => 'https://identity.example.test/elevate');
-    const exportV4 = vi.fn(async () => {
+    const exportV5 = vi.fn(async () => {
       throw new ApiError('network_error', 'The network request failed.', 0);
     });
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV4: true, deleteAccount: false },
+      capabilities: { exportV5: true, deleteAccount: false },
       beginElevation,
-      exportV4,
+      exportV5,
       deleteAccount: vi.fn(async () => undefined),
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -787,9 +808,11 @@ describe('account deletion confirmation', () => {
     const dialog = await screen.findByRole('alertdialog');
     await rendered.user.click(within(dialog).getByRole('button', { name: 'Create export' }));
 
-    expect(await screen.findByText(/verify your Discord identity again to create a new export/i)).toBeVisible();
-    expect(exportV4).toHaveBeenCalledTimes(1);
-    expect(exportV4).toHaveBeenCalledWith({
+    expect(
+      await screen.findByText(/verify your Discord identity again to create a new export/i),
+    ).toBeVisible();
+    expect(exportV5).toHaveBeenCalledTimes(1);
+    expect(exportV5).toHaveBeenCalledWith({
       accountId: '1',
       elevatedToken: 'unknown_export_token',
     });

@@ -3,14 +3,81 @@ package charityrouting
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
+
+func TestRecurringLimitsAgreeAcrossCatalogCapabilityAndRuntimeWithoutWrites(t *testing.T) {
+	env := newRoutingTestEnv(t)
+	env.seedUser(t, true, nil)
+	owner := env.seedUser(t, false, nil)
+	model := catalogCreate(t, env, 'a', "limited", nil, true)
+	_, key, _ := env.seedCandidate(t, owner, 'k', "upstream")
+	modelID, _ := parsePositiveID(model.ID)
+	if _, err := env.service.AddBindingsAdmin(context.Background(), modelID, routingMutation(t, 'b', http.MethodPost, routeAdminBindingBatch, []int64{modelID}, map[string]any{"bind": true}), BindingBatch{ExpectedBindingRevision: "0", Selections: []BindingSelection{{DonationKeyID: fmt.Sprint(key), UpstreamModelID: "upstream"}}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, limit := range []string{"0", "1"} {
+		tx, err := env.store.DB().BeginTx(context.Background(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		alignment := "first_success"
+		err = donationquota.Replace(context.Background(), tx, key, env.clock.Load(), []donationquota.RuleInput{{Mode: "reset", Interval: "5h", Alignment: &alignment, TimeZone: "UTC", Metric: "calls", Limit: limit}})
+		if err != nil {
+			_ = tx.Rollback()
+			t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+		var before int64
+		if err := env.store.DB().QueryRow(`SELECT total_changes()`).Scan(&before); err != nil {
+			t.Fatal(err)
+		}
+		catalog, err := env.service.Catalog(context.Background(), env.caller, CatalogFilter{}, pagination.Default())
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := "available"
+		if limit == "0" {
+			want = "no_usable_key"
+		}
+		if len(catalog.Models) != 1 || catalog.Models[0].Availability != want {
+			t.Fatal(catalog)
+		}
+		available, err := env.service.ListAvailableModels(context.Background(), env.caller, env.clock.Load(), 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		capability, err := env.service.Capability(context.Background(), env.caller, env.clock.Load())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if (len(available) == 0) != (limit == "0") || (len(capability.Models) == 0) != (limit == "0") {
+			t.Fatal(available, capability)
+		}
+		var after int64
+		if err := env.store.DB().QueryRow(`SELECT total_changes()`).Scan(&after); err != nil || after != before {
+			t.Fatal("readonly availability wrote state", before, after, err)
+		}
+		_, err = env.service.Snapshot(context.Background(), modelID, env.clock.Load(), []connectorcontract.Type{connectorcontract.TypeOpenAICompatible})
+		if limit == "0" && !errors.Is(err, donationquota.ErrLimited) {
+			t.Fatal(err)
+		}
+		if limit != "0" && err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 
 func catalogCreate(t *testing.T, env *routingTestEnv, seed byte, name string, levels []int, enabled bool) AdminCharityModel {
 	t.Helper()

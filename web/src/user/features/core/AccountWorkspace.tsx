@@ -57,8 +57,8 @@ export function AccountLanguageForm({ user }: { user: UserProfile }) {
   const [hasAttempt, setHasAttempt] = useState(false);
   const original = currentExplicitLanguage(user, i18n.resolvedLanguage);
   const [language, setLanguage] = useState<ExplicitLanguage>(original);
-  const languageMatchesAuthority = (user.lang === 'zh' || user.lang === 'en')
-    && language === original;
+  const languageMatchesAuthority =
+    (user.lang === 'zh' || user.lang === 'en') && language === original;
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [outcome, setOutcome] = useState<'conflict' | 'unknown' | 'error' | null>(null);
@@ -387,7 +387,7 @@ export function AccountLifecyclePanel({
     if (
       intent &&
       token &&
-      (intent === 'export' ? adapter.capabilities.exportV4 : adapter.capabilities.deleteAccount)
+      (intent === 'export' ? adapter.capabilities.exportV5 : adapter.capabilities.deleteAccount)
     ) {
       tokenRef.current = token;
       dispatch({ type: 'confirm', accountId, intent });
@@ -515,7 +515,7 @@ export function AccountLifecyclePanel({
     try {
       const attachment =
         intent === 'export'
-          ? await adapter.exportV4({ accountId, elevatedToken })
+          ? await adapter.exportV5({ accountId, elevatedToken })
           : await adapter
               .deleteAccount({ accountId, elevatedToken, confirmation: 'DELETE' })
               .then(() => null);
@@ -586,7 +586,7 @@ export function AccountLifecyclePanel({
           <h2>{t('account.exportTitle')}</h2>
         </div>
         <p>{t('account.exportBody')}</p>
-        {!adapter.capabilities.exportV4 ? (
+        {!adapter.capabilities.exportV5 ? (
           <p className="core-inline-warning">{t('account.lifecycleUnavailable')}</p>
         ) : null}
         {state.intent === 'export' && state.status === 'error' ? (
@@ -600,7 +600,7 @@ export function AccountLifecyclePanel({
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!adapter.capabilities.exportV4 || busy}
+            disabled={!adapter.capabilities.exportV5 || busy}
             onClick={() => void begin('export')}
           >
             {state.intent === 'export' && state.status === 'elevating'
@@ -622,8 +622,7 @@ export function AccountLifecyclePanel({
         {state.intent === 'delete' && state.status === 'error' ? (
           <p className="core-inline-error">{state.message ?? t('common.errorBody')}</p>
         ) : null}
-        {state.intent === 'delete' &&
-        (state.status === 'unknown' || state.status === 'active') ? (
+        {state.intent === 'delete' && (state.status === 'unknown' || state.status === 'active') ? (
           <p className="core-inline-warning">{state.message ?? t('account.deleteUnknown')}</p>
         ) : null}
         <div className="core-row-actions">
@@ -716,7 +715,11 @@ export function AccountWorkspace({
         icon="account"
         title={t('account.title')}
         description={t('account.description')}
-        actions={<Link className="btn btn-secondary" to="/credits">{t('home.creditHistory')}</Link>}
+        actions={
+          <Link className="btn btn-secondary" to="/credits">
+            {t('home.creditHistory')}
+          </Link>
+        }
       />
       <div className="core-grid core-grid--wide">
         <section className="core-card">

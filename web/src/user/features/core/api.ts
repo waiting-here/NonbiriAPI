@@ -305,7 +305,7 @@ function validateAccountExport(bytes: Uint8Array): void {
   const record = value as Record<string, unknown>;
   const expected = new Set<string>(ACCOUNT_EXPORT_KEYS);
   if (
-    record.schema_version !== 4 ||
+    record.schema_version !== 5 ||
     Object.keys(record).length !== ACCOUNT_EXPORT_KEYS.length ||
     Object.keys(record).some((key) => !expected.has(key))
   ) {
@@ -313,7 +313,7 @@ function validateAccountExport(bytes: Uint8Array): void {
   }
 }
 
-export async function exportAccountV4(
+export async function exportAccountV5(
   accountId: string,
   elevatedToken: string,
   signal?: AbortSignal,
@@ -329,7 +329,7 @@ export async function exportAccountV4(
   const disposition = response.headers.get('Content-Disposition') ?? '';
   if (
     !contentType.startsWith('application/json') ||
-    disposition !== 'attachment; filename="nonbiriapi-account-export-v4.json"'
+    disposition !== 'attachment; filename="nonbiriapi-account-export-v5.json"'
   ) {
     throw new ApiError('invalid_response', 'The server returned invalid export metadata.', 200);
   }
@@ -339,7 +339,7 @@ export async function exportAccountV4(
   new Uint8Array(buffer).set(bytes);
   return {
     blob: new Blob([buffer], { type: 'application/json' }),
-    schemaVersion: 4,
+    schemaVersion: 5,
   };
 }
 

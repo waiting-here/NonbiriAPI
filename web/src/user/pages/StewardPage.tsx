@@ -114,6 +114,7 @@ export function StewardPage() {
         <CharityManagement
           key={`charity:${authority.data.id}`}
           frame="steward"
+          accountId={authority.data.id}
           onCapabilityLoss={authorityLoss}
         />
       ) : null}

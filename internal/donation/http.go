@@ -21,6 +21,7 @@ func RegisterOwnerRoutes(registrar UserRouteRegistrar, service *Service) error {
 		{http.MethodGet, routeDonations, api.listOwner},
 		{http.MethodPost, routeDonations, api.createOwner},
 		{http.MethodGet, routeDonation, api.getOwner},
+		{http.MethodGet, routeOwnerRecurring, api.recurringOwner},
 		{http.MethodPatch, routeDonation, api.editOwner},
 		{http.MethodPost, routeWithdraw, api.withdrawOwner},
 		{http.MethodPost, routeTerminate, api.terminateOwner},
@@ -46,6 +47,8 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		{http.MethodGet, routeAdminBadge, api.badgeAdmin},
 		{http.MethodPost, routeAdminProcessed, api.processAdmin},
 		{http.MethodGet, routeAdminDonation, api.getAdmin},
+		{http.MethodGet, routeAdminRecurring, api.recurringAdmin},
+		{http.MethodPut, routeAdminRecurring, api.replaceRecurringAdmin},
 		{http.MethodPost, routeAdminReview, api.reviewAdmin},
 		{http.MethodPatch, routeAdminKey, api.manageKeyAdmin},
 	}
@@ -70,6 +73,8 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		{http.MethodGet, routeStewardBadge, api.badgeSteward},
 		{http.MethodPost, routeStewardProcessed, api.processSteward},
 		{http.MethodGet, routeStewardDonation, api.getSteward},
+		{http.MethodGet, routeStewardRecurring, api.recurringSteward},
+		{http.MethodPut, routeStewardRecurring, api.replaceRecurringSteward},
 		{http.MethodPost, routeStewardReview, api.reviewSteward},
 		{http.MethodPatch, routeStewardKey, api.manageKeySteward},
 	}
