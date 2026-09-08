@@ -2,10 +2,19 @@ import { useQuery } from '@tanstack/react-query';
 import { ApiError } from '@shared/query/http';
 import { decoded, queryPath } from '@shared/operations/api';
 import {
+  isPageNumber,
+  isPageSize,
+  normalizePageMetadata,
+  validatePageResponse,
+  type PageMetadata,
+  type PageSize,
+} from '@shared/operations/pageNumbers';
+import {
   amount,
   boolean,
   decimal,
   decimalID,
+  array,
   integer,
   invalidResponse,
   nullableDecimal,
@@ -42,7 +51,11 @@ interface IssueCommon {
 type IssueTuple =
   | { source: 'model_discovery'; resource_kind: 'endpoint_key'; summary_code: 'discovery_failed' }
   | { source: 'routing_projection'; resource_kind: 'model'; summary_code: 'no_routable_binding' }
-  | { source: 'resource_validator'; resource_kind: 'endpoint' | 'endpoint_key'; summary_code: 'credential_invalid' | 'configuration_invalid' };
+  | {
+      source: 'resource_validator';
+      resource_kind: 'endpoint' | 'endpoint_key';
+      summary_code: 'credential_invalid' | 'configuration_invalid';
+    };
 
 export type Issue = IssueCommon & IssueTuple;
 
@@ -69,19 +82,49 @@ export interface AnnouncementDetail extends Omit<AnnouncementSummary, 'excerpt'>
   rendered_body: string;
 }
 
+export interface AnnouncementPage extends CursorPage<AnnouncementSummary> {
+  next_cursor: null;
+  pagination: PageMetadata;
+}
+
 const USAGE_FIELDS = [
-  'total_requests', 'total_uncached_input_tokens', 'total_cache_write_input_tokens',
-  'total_cache_read_input_tokens', 'total_output_tokens', 'total_prompt_tokens',
-  'total_completion_tokens', 'total_unknown_usage_requests',
+  'total_requests',
+  'total_uncached_input_tokens',
+  'total_cache_write_input_tokens',
+  'total_cache_read_input_tokens',
+  'total_output_tokens',
+  'total_prompt_tokens',
+  'total_completion_tokens',
+  'total_unknown_usage_requests',
 ] as const;
 
 export function normalizeUserAuthority(value: unknown): UserAuthority {
   const envelope = record(value, ['user'], 'user session');
   const fields = [
-    'id', 'username', 'avatar', 'avatar_url', 'guild_nick', 'guild_avatar_url', 'lang', 'is_banned',
-    'banned_until', 'charity_suspended_until', 'endpoint_limit', 'effective_endpoint_limit', 'rpm_limit',
-    'effective_rpm_limit', 'concurrency_limit', 'effective_concurrency_limit', 'balance', 'donation_credit',
-    'effective_level', 'level_display_name', 'game_profile_public', 'created_at', 'updated_at', 'usage',
+    'id',
+    'username',
+    'avatar',
+    'avatar_url',
+    'guild_nick',
+    'guild_avatar_url',
+    'lang',
+    'is_banned',
+    'banned_until',
+    'charity_suspended_until',
+    'endpoint_limit',
+    'effective_endpoint_limit',
+    'rpm_limit',
+    'effective_rpm_limit',
+    'concurrency_limit',
+    'effective_concurrency_limit',
+    'balance',
+    'donation_credit',
+    'effective_level',
+    'level_display_name',
+    'game_profile_public',
+    'created_at',
+    'updated_at',
+    'usage',
   ] as const;
   const user = record(envelope.user, fields, 'user session subject');
   nullableString(user.avatar, 'avatar', { max: 512, bytes: 2_048 });
@@ -114,20 +157,61 @@ export function normalizeUserAuthority(value: unknown): UserAuthority {
 }
 
 export function normalizeIssue(value: unknown): Issue {
-  const root = record(value, [
-    'id', 'state', 'source', 'resource_kind', 'summary_code', 'safe_detail', 'deep_link',
-    'first_seen_at', 'last_seen_at', 'count', 'closed_at',
-  ], 'issue');
-  const source = oneOf(root.source, ['model_discovery', 'routing_projection', 'resource_validator'] as const, 'issue source');
-  const resourceKind = oneOf(root.resource_kind, ['endpoint', 'endpoint_key', 'model'] as const, 'issue resource kind');
-  const summaryCode = oneOf(root.summary_code, ['discovery_failed', 'no_routable_binding', 'credential_invalid', 'configuration_invalid'] as const, 'issue summary');
+  const root = record(
+    value,
+    [
+      'id',
+      'state',
+      'source',
+      'resource_kind',
+      'summary_code',
+      'safe_detail',
+      'deep_link',
+      'first_seen_at',
+      'last_seen_at',
+      'count',
+      'closed_at',
+    ],
+    'issue',
+  );
+  const source = oneOf(
+    root.source,
+    ['model_discovery', 'routing_projection', 'resource_validator'] as const,
+    'issue source',
+  );
+  const resourceKind = oneOf(
+    root.resource_kind,
+    ['endpoint', 'endpoint_key', 'model'] as const,
+    'issue resource kind',
+  );
+  const summaryCode = oneOf(
+    root.summary_code,
+    [
+      'discovery_failed',
+      'no_routable_binding',
+      'credential_invalid',
+      'configuration_invalid',
+    ] as const,
+    'issue summary',
+  );
   let tuple: IssueTuple;
-  if (source === 'model_discovery' && resourceKind === 'endpoint_key' && summaryCode === 'discovery_failed') {
+  if (
+    source === 'model_discovery' &&
+    resourceKind === 'endpoint_key' &&
+    summaryCode === 'discovery_failed'
+  ) {
     tuple = { source, resource_kind: resourceKind, summary_code: summaryCode };
-  } else if (source === 'routing_projection' && resourceKind === 'model' && summaryCode === 'no_routable_binding') {
+  } else if (
+    source === 'routing_projection' &&
+    resourceKind === 'model' &&
+    summaryCode === 'no_routable_binding'
+  ) {
     tuple = { source, resource_kind: resourceKind, summary_code: summaryCode };
-  } else if (source === 'resource_validator' && (resourceKind === 'endpoint' || resourceKind === 'endpoint_key')
-      && (summaryCode === 'credential_invalid' || summaryCode === 'configuration_invalid')) {
+  } else if (
+    source === 'resource_validator' &&
+    (resourceKind === 'endpoint' || resourceKind === 'endpoint_key') &&
+    (summaryCode === 'credential_invalid' || summaryCode === 'configuration_invalid')
+  ) {
     tuple = { source, resource_kind: resourceKind, summary_code: summaryCode };
   } else {
     return invalidResponse('issue source tuple');
@@ -138,17 +222,23 @@ export function normalizeIssue(value: unknown): Issue {
     const link = record(root.deep_link, ['route_id', 'resource_id'], 'issue deep link');
     const routeID = oneOf(link.route_id, ['endpoint-detail', 'models'] as const, 'issue route id');
     const resourceID = decimalID(link.resource_id, 'issue resource id');
-    if ((resourceKind === 'model') !== (routeID === 'models')) invalidResponse('issue deep link route');
+    if ((resourceKind === 'model') !== (routeID === 'models'))
+      invalidResponse('issue deep link route');
     deepLink = { route_id: routeID, resource_id: resourceID };
   }
   const state = oneOf(root.state, ['current', 'closed'] as const, 'issue state');
   const closedAt = nullableUnixSecond(root.closed_at, 'issue close time');
-  if ((state === 'current') !== (closedAt === null)) throw new ApiError('invalid_response', 'The server returned an invalid issue state.', 200);
+  if ((state === 'current') !== (closedAt === null))
+    throw new ApiError('invalid_response', 'The server returned an invalid issue state.', 200);
   return {
     id: opaqueID(root.id, 'iss_', 'issue id'),
     state,
     ...tuple,
-    safe_detail: string(root.safe_detail, 'issue detail', { max: 4_096, bytes: 4_096, multiline: true }),
+    safe_detail: string(root.safe_detail, 'issue detail', {
+      max: 4_096,
+      bytes: 4_096,
+      multiline: true,
+    }),
     deep_link: deepLink,
     first_seen_at: unixSecond(root.first_seen_at, 'issue first seen time'),
     last_seen_at: unixSecond(root.last_seen_at, 'issue last seen time'),
@@ -160,32 +250,69 @@ export function normalizeIssue(value: unknown): Issue {
 export function normalizeIssuePage(value: unknown): IssuePage {
   const root = record(value, ['data', 'next_cursor', 'projection_incomplete'], 'issues');
   const base = page({ data: root.data, next_cursor: root.next_cursor }, 'issues', normalizeIssue);
-  return { ...base, projection_incomplete: boolean(root.projection_incomplete, 'issue projection marker') };
+  return {
+    ...base,
+    projection_incomplete: boolean(root.projection_incomplete, 'issue projection marker'),
+  };
 }
 
-function normalizeAnnouncementCommon(value: unknown, detail: boolean): AnnouncementSummary | AnnouncementDetail {
+function normalizeAnnouncementCommon(
+  value: unknown,
+  detail: boolean,
+): AnnouncementSummary | AnnouncementDetail {
   const fields = [
-    'epoch', 'id', 'revision', 'severity', 'pinned', 'dismissible', 'published_at', 'expires_at',
-    'effective_language', 'fallback_from', 'title', detail ? 'rendered_body' : 'excerpt',
+    'epoch',
+    'id',
+    'revision',
+    'severity',
+    'pinned',
+    'dismissible',
+    'published_at',
+    'expires_at',
+    'effective_language',
+    'fallback_from',
+    'title',
+    detail ? 'rendered_body' : 'excerpt',
   ];
   const root = record(value, fields, detail ? 'announcement detail' : 'announcement summary');
   const common = {
     epoch: opaqueID(root.epoch, 'b1e_', 'announcement epoch'),
     id: opaqueID(root.id, 'ann_', 'announcement id'),
     revision: decimal(root.revision, 'announcement revision', { positive: true }),
-    severity: oneOf(root.severity, ['info', 'warning', 'important'] as const, 'announcement severity'),
+    severity: oneOf(
+      root.severity,
+      ['info', 'warning', 'important'] as const,
+      'announcement severity',
+    ),
     pinned: boolean(root.pinned, 'announcement pinned state'),
     dismissible: boolean(root.dismissible, 'announcement dismissible state'),
     published_at: unixSecond(root.published_at, 'announcement publish time'),
     expires_at: nullableUnixSecond(root.expires_at, 'announcement expiry'),
-    effective_language: oneOf(root.effective_language, ['zh', 'en'] as const, 'announcement language'),
-    fallback_from: root.fallback_from === null ? null : oneOf(root.fallback_from, ['zh', 'en'] as const, 'announcement fallback language'),
+    effective_language: oneOf(
+      root.effective_language,
+      ['zh', 'en'] as const,
+      'announcement language',
+    ),
+    fallback_from:
+      root.fallback_from === null
+        ? null
+        : oneOf(root.fallback_from, ['zh', 'en'] as const, 'announcement fallback language'),
     title: string(root.title, 'announcement title', { min: 1, max: 160, bytes: 640 }),
   };
   if (detail) {
-    return { ...common, rendered_body: string(root.rendered_body, 'rendered announcement body', { max: 65_536, bytes: 65_536, multiline: true }) };
+    return {
+      ...common,
+      rendered_body: string(root.rendered_body, 'rendered announcement body', {
+        max: 65_536,
+        bytes: 65_536,
+        multiline: true,
+      }),
+    };
   }
-  return { ...common, excerpt: string(root.excerpt, 'announcement excerpt', { max: 240, bytes: 960 }) };
+  return {
+    ...common,
+    excerpt: string(root.excerpt, 'announcement excerpt', { max: 240, bytes: 960 }),
+  };
 }
 
 export function normalizeAnnouncementSummary(value: unknown): AnnouncementSummary {
@@ -196,11 +323,53 @@ export function normalizeAnnouncementDetail(value: unknown): AnnouncementDetail 
   return normalizeAnnouncementCommon(value, true) as AnnouncementDetail;
 }
 
+function validateAnnouncementPageItems(
+  data: AnnouncementSummary[],
+  pagination: PageMetadata,
+): void {
+  const total = BigInt(pagination.total_items);
+  const pageNumber = BigInt(pagination.page);
+  const pageSize = BigInt(pagination.page_size);
+  const remaining = total - (pageNumber - 1n) * pageSize;
+  const expectedItems = remaining > pageSize ? pageSize : remaining;
+  if (expectedItems < 0n || BigInt(data.length) !== expectedItems) {
+    invalidResponse('announcement page');
+  }
+  const ids = new Set<string>();
+  for (const item of data) {
+    if (ids.has(item.id)) invalidResponse('announcement identities');
+    ids.add(item.id);
+  }
+}
+
+export function normalizeAnnouncementPage(value: unknown): AnnouncementPage {
+  const root = record(value, ['data', 'next_cursor', 'pagination'], 'announcement page');
+  if (root.next_cursor !== null) invalidResponse('announcement page cursor');
+  const pagination = normalizePageMetadata(root.pagination);
+  const data = array(root.data, 'announcement page data', pagination.page_size).map(
+    normalizeAnnouncementSummary,
+  );
+  validateAnnouncementPageItems(data, pagination);
+  return { data, next_cursor: null, pagination };
+}
+
 export const operationsKeys = {
   root: ['user', 'operations'] as const,
   session: ['user', 'operations', 'session'] as const,
-  issues: (state: 'current' | 'closed', cursor: string | null) => ['user', 'operations', 'issues', state, cursor] as const,
-  announcements: (cursor: string | null) => ['user', 'operations', 'announcements', cursor] as const,
+  issues: (state: 'current' | 'closed', cursor: string | null) =>
+    ['user', 'operations', 'issues', state, cursor] as const,
+  announcements: (cursor: string | null) =>
+    ['user', 'operations', 'announcements', cursor] as const,
+  announcementsPage: (accountID: string, pageNumber: string, pageSize: PageSize, language = '') =>
+    [
+      'user',
+      'operations',
+      'announcements-page',
+      accountID,
+      pageNumber,
+      pageSize,
+      language,
+    ] as const,
   announcement: (id: string) => ['user', 'operations', 'announcement', id] as const,
 };
 
@@ -217,7 +386,8 @@ export function useUserAuthority(enabled = true) {
 export function useIssues(state: 'current' | 'closed', cursor: string | null, enabled = true) {
   return useQuery({
     queryKey: operationsKeys.issues(state, cursor),
-    queryFn: () => decoded(queryPath('/api/issues', { state, cursor, limit: 20 }), normalizeIssuePage),
+    queryFn: () =>
+      decoded(queryPath('/api/issues', { state, cursor, limit: 20 }), normalizeIssuePage),
     enabled,
   });
 }
@@ -230,9 +400,60 @@ export function useAnnouncements(cursor: string | null, enabled = true) {
         queryPath('/api/announcements', { cursor, limit: 20 }),
         (value) => page(value, 'announcements', normalizeAnnouncementSummary),
       );
-      return { ...result, data: [...result.data].sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.published_at - left.published_at) };
+      return {
+        ...result,
+        data: [...result.data].sort(
+          (left, right) =>
+            Number(right.pinned) - Number(left.pinned) || right.published_at - left.published_at,
+        ),
+      };
     },
     enabled,
+  });
+}
+
+export async function getAnnouncementsPage(
+  pageNumber: string,
+  pageSize: PageSize,
+  signal?: AbortSignal,
+): Promise<AnnouncementPage> {
+  if (!isPageNumber(pageNumber)) {
+    throw new ApiError('invalid_request', 'Invalid announcement page.', 400);
+  }
+  if (!isPageSize(pageSize)) {
+    throw new ApiError('invalid_request', 'Invalid announcement page size.', 400);
+  }
+  const result = await decoded(
+    queryPath('/api/announcements', { page: pageNumber, page_size: pageSize }),
+    normalizeAnnouncementPage,
+    { signal },
+  );
+  validatePageResponse(result.pagination, pageNumber, pageSize, result.data.length);
+  return result;
+}
+
+export function useAnnouncementsPage(
+  accountID: string | undefined,
+  pageNumber: string,
+  pageSize: PageSize,
+  enabled = true,
+  language = '',
+) {
+  const queryKey = operationsKeys.announcementsPage(
+    accountID ?? 'none',
+    pageNumber,
+    pageSize,
+    language,
+  );
+  return useQuery({
+    queryKey,
+    queryFn: ({ signal }) => getAnnouncementsPage(pageNumber, pageSize, signal),
+    enabled: enabled && Boolean(accountID),
+    placeholderData: (previous, previousQuery) =>
+      previousQuery && previousQuery.queryKey[3] === accountID && previousQuery.queryKey[6] === language
+        ? previous
+        : undefined,
+    retry: false,
   });
 }
 
@@ -241,7 +462,10 @@ export function useAnnouncement(id: string | undefined, enabled = true) {
     queryKey: operationsKeys.announcement(id ?? 'none'),
     queryFn: () => {
       if (!id) throw new ApiError('invalid_request', 'An announcement id is required.', 400);
-      return decoded(`/api/announcements/${encodeURIComponent(opaqueID(id, 'ann_', 'announcement id'))}`, normalizeAnnouncementDetail);
+      return decoded(
+        `/api/announcements/${encodeURIComponent(opaqueID(id, 'ann_', 'announcement id'))}`,
+        normalizeAnnouncementDetail,
+      );
     },
     enabled: enabled && Boolean(id),
   });
@@ -254,14 +478,20 @@ export interface CredentialReportInput {
   note: string;
 }
 
-export const REPORT_ACCEPTED_MESSAGE = 'If matching credentials exist, temporary protection will be applied and an administrator will review the report.';
+export const REPORT_ACCEPTED_MESSAGE =
+  'If matching credentials exist, temporary protection will be applied and an administrator will review the report.';
 
 export function shouldRetainCredentialReportIntent(error: unknown): boolean {
-  return error instanceof ApiError
-    && (error.status === 0 || error.code === 'invalid_response' || error.status >= 500);
+  return (
+    error instanceof ApiError &&
+    (error.status === 0 || error.code === 'invalid_response' || error.status >= 500)
+  );
 }
 
-export async function submitCredentialReport(input: CredentialReportInput, idempotencyKey: string): Promise<void> {
+export async function submitCredentialReport(
+  input: CredentialReportInput,
+  idempotencyKey: string,
+): Promise<void> {
   let response: Response;
   try {
     response = await fetch('/api/reports/credential-theft', {
@@ -281,8 +511,13 @@ export async function submitCredentialReport(input: CredentialReportInput, idemp
   }
   if (response.status !== 202) {
     const status = response.status;
-    throw new ApiError(status === 409 ? 'conflict' : status === 503 ? 'service_unavailable' : 'http_error',
-      status === 409 ? 'This retry does not match the original submission.' : `Request failed (HTTP ${status}).`, status);
+    throw new ApiError(
+      status === 409 ? 'conflict' : status === 503 ? 'service_unavailable' : 'http_error',
+      status === 409
+        ? 'This retry does not match the original submission.'
+        : `Request failed (HTTP ${status}).`,
+      status,
+    );
   }
   let payload: unknown;
   try {
@@ -291,13 +526,19 @@ export async function submitCredentialReport(input: CredentialReportInput, idemp
     throw new ApiError('invalid_response', 'The server returned an invalid report receipt.', 202);
   }
   const root = record(payload, ['accepted', 'message'], 'report receipt');
-  if (root.accepted !== true || root.message !== REPORT_ACCEPTED_MESSAGE
-    || response.headers.get('X-Nonbiri-Report-Accepted') !== '1'
-    || response.headers.get('Cache-Control')?.toLowerCase() !== 'no-store') {
+  if (
+    root.accepted !== true ||
+    root.message !== REPORT_ACCEPTED_MESSAGE ||
+    response.headers.get('X-Nonbiri-Report-Accepted') !== '1' ||
+    response.headers.get('Cache-Control')?.toLowerCase() !== 'no-store'
+  ) {
     throw new ApiError('invalid_response', 'The server returned an invalid report receipt.', 202);
   }
 }
 
-export function announcementDismissalKey(accountID: string, value: Pick<AnnouncementSummary, 'epoch' | 'id' | 'revision'>): string {
+export function announcementDismissalKey(
+  accountID: string,
+  value: Pick<AnnouncementSummary, 'epoch' | 'id' | 'revision'>,
+): string {
   return `nonbiri:announcement-dismissed:${value.epoch}:${accountID}:${value.id}:${value.revision}`;
 }

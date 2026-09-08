@@ -1,7 +1,12 @@
+import type { QueryClient } from '@tanstack/react-query';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
+import {
+  beginManagementSessionRequest,
+  noteManagementSessionSuccess,
+} from '@shared/charityManagement';
 import { charityKeys, type DonationHandling } from '@shared/operations/charity';
 import { DonationHandlingControl } from './DonationHandling';
 
@@ -18,6 +23,58 @@ function deferred<T>() {
     resolve = next;
   });
   return { promise, resolve };
+}
+
+const adminSession = { admin: { username: 'fixture-admin' } } as const;
+const stewardSession = {
+  user: {
+    id: '5',
+    username: 'fixture-steward',
+    avatar: null,
+    avatar_url: null,
+    guild_nick: null,
+    guild_avatar_url: null,
+    lang: 'en',
+    is_banned: false,
+    banned_until: null,
+    charity_suspended_until: null,
+    endpoint_limit: null,
+    effective_endpoint_limit: '10',
+    rpm_limit: null,
+    effective_rpm_limit: '60',
+    concurrency_limit: null,
+    effective_concurrency_limit: '5',
+    balance: '0',
+    donation_credit: '0',
+    effective_level: 5,
+    level_display_name: 'Lv5',
+    game_profile_public: false,
+    created_at: 1_700_000_000,
+    updated_at: 1_700_000_001,
+    usage: {
+      total_requests: '0',
+      total_uncached_input_tokens: '0',
+      total_cache_write_input_tokens: '0',
+      total_cache_read_input_tokens: '0',
+      total_output_tokens: '0',
+      total_prompt_tokens: '0',
+      total_completion_tokens: '0',
+      total_unknown_usage_requests: '0',
+    },
+  },
+} as const;
+
+function seedStationSession(queryClient: QueryClient, role: 'admin' | 'steward') {
+  const frame = role === 'admin' ? 'admin' : 'steward';
+  const session = role === 'admin' ? adminSession : stewardSession;
+  const generation = beginManagementSessionRequest(queryClient, frame);
+  if (!noteManagementSessionSuccess(queryClient, frame, session, generation)) {
+    throw new Error(`Could not seed the ${frame} station session.`);
+  }
+  queryClient.setQueryData(
+    role === 'admin' ? (['admin', 'session'] as const) : (['user', 'session'] as const),
+    session,
+  );
 }
 
 const pendingHandling: DonationHandling = {
@@ -68,7 +125,8 @@ describe('DonationHandlingControl', () => {
       );
     }
 
-    await renderWithProviders(<Harness />, { station: 'admin', role: 'admin' });
+    const view = await renderWithProviders(<Harness />, { station: 'admin', role: 'admin' });
+    seedStationSession(view.queryClient, 'admin');
     const process = await screen.findByRole('button', { name: 'Mark as processed' });
     fireEvent.click(process);
     await waitFor(() => expect(requests).toHaveLength(1));
@@ -106,6 +164,7 @@ describe('DonationHandlingControl', () => {
       />,
       { station: 'admin', role: 'admin' },
     );
+    seedStationSession(view.queryClient, 'admin');
     await view.user.click(await screen.findByRole('button', { name: 'Mark as processed' }));
 
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
@@ -174,6 +233,7 @@ describe('DonationHandlingControl', () => {
         />,
         { station, role: role === 'admin' ? 'admin' : 'level5' },
       );
+      seedStationSession(view.queryClient, role);
       view.queryClient.setQueryData(sentinel, { private: 'marker' });
       await view.user.click(await screen.findByRole('button', { name: 'Mark as processed' }));
 

@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
 const (
@@ -245,9 +246,12 @@ func projectAlert(row rawAlert) (AdminAlert, error) {
 
 func (repository *Repository) List(ctx context.Context, adminID int64, query ListQuery) (Page[AdminAlert], error) {
 	empty := Page[AdminAlert]{Data: []AdminAlert{}}
-	if repository == nil || !validLimit(query.Limit) || len(query.Cursor) > maxCursorBytes {
+	if ctx == nil || repository == nil || !validLimit(query.Limit) || len(query.Cursor) > maxCursorBytes ||
+		(query.Numbered != nil && (!query.Numbered.Valid() || query.Cursor != "" || query.Limit != 0)) {
 		return empty, ErrInvalidRequest
 	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	now, err := repository.nowUnix()
 	if err != nil {
 		return empty, err
@@ -277,13 +281,29 @@ func (repository *Repository) List(ctx context.Context, adminID int64, query Lis
 		where = append(where, "id<?")
 		arguments = append(arguments, cursorID)
 	}
-	statement := `SELECT id,kind,message,ref,subject_user_id,created_at,resolved,resolved_at FROM admin_alerts`
+	filter := ""
 	if len(where) != 0 {
-		statement += " WHERE " + strings.Join(where, " AND ")
+		filter = " WHERE " + strings.Join(where, " AND ")
 	}
+	statement := `SELECT id,kind,message,ref,subject_user_id,created_at,resolved,resolved_at FROM admin_alerts` + filter
 	limit := normalizedLimit(query.Limit)
 	statement += " ORDER BY id DESC LIMIT ?"
-	arguments = append(arguments, limit+1)
+	var meta *pagination.Metadata
+	if query.Numbered != nil {
+		var total int64
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM admin_alerts`+filter, arguments...).Scan(&total); err != nil {
+			return empty, err
+		}
+		value, offset, err := query.Numbered.Window(total)
+		if err != nil {
+			return empty, ErrInvalidRequest
+		}
+		meta, limit = &value, query.Numbered.Size
+		statement += " OFFSET ?"
+		arguments = append(arguments, limit, offset)
+	} else {
+		arguments = append(arguments, limit+1)
+	}
 	rows, err := tx.QueryContext(ctx, statement, arguments...)
 	if err != nil {
 		return empty, fmt.Errorf("administrator alerts: list rows: %w", err)
@@ -308,7 +328,7 @@ func (repository *Repository) List(ctx context.Context, adminID int64, query Lis
 	if hasMore {
 		rawRows = rawRows[:limit]
 	}
-	page := Page[AdminAlert]{Data: make([]AdminAlert, 0, len(rawRows))}
+	page := Page[AdminAlert]{Data: make([]AdminAlert, 0, len(rawRows)), Pagination: meta}
 	for _, row := range rawRows {
 		value, err := projectAlert(row)
 		if err != nil {

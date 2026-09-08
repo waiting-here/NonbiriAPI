@@ -4,7 +4,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { clearStationSession } from '@shared/charityManagement';
 import { CharityManagement } from '@shared/components/CharityManagement';
 import { PageHeader } from '@shared/components/States';
-import { AdminCharityGroupsPanel } from '../features/operations/AdminCharityGroups';
 import { useAdminSession } from '../data';
 import '@shared/operations/operations.css';
 
@@ -24,7 +23,6 @@ export function CharityPage() {
         frame="admin"
         accountId={accountId}
         onCapabilityLoss={clearAuthority}
-        sourceGroups={<AdminCharityGroupsPanel />}
       />
     </div>
   );

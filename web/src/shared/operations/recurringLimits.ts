@@ -164,7 +164,7 @@ function metricValue(value: unknown, metric: RecurringLimitMetric, label: string
     : canonicalUnsignedDecimal(value, label);
 }
 
-function normalizeRuleView(value: unknown, label: string): RecurringLimitRuleView {
+export function normalizeRuleView(value: unknown, label: string): RecurringLimitRuleView {
   const root = record(
     value,
     [

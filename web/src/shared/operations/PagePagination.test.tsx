@@ -115,6 +115,51 @@ describe('PagePagination', () => {
     expect(onPageSizeChange).not.toHaveBeenCalled();
   });
 
+  it('ignores a forged page-size value outside the shared allowlist', async () => {
+    const onPageSizeChange = vi.fn();
+    await renderWithProviders(
+      <PagePagination
+        metadata={metadata()}
+        onPageChange={vi.fn()}
+        onPageSizeChange={onPageSizeChange}
+      />,
+      { station: 'admin', role: 'admin' },
+    );
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Items per page' }), {
+      target: { value: '30' },
+    });
+    expect(onPageSizeChange).not.toHaveBeenCalled();
+  });
+
+  it('preserves full integer page identifiers for existing domain protocols', async () => {
+    const onPageChange = vi.fn();
+    const view = await renderWithProviders(
+      <PagePagination
+        metadata={{
+          page: '1',
+          page_size: 10,
+          total_items: '9223372036854775807',
+          total_pages: '922337203685477581',
+        }}
+        maxPage={9223372036854775807n}
+        onPageChange={onPageChange}
+        onPageSizeChange={vi.fn()}
+      />,
+      { station: 'user', role: 'user' },
+    );
+    const input = screen.getByRole('textbox', { name: 'Go to page' });
+    await view.user.clear(input);
+    await view.user.type(input, '9007199254740993');
+    await view.user.keyboard('{Enter}');
+    expect(onPageChange).toHaveBeenLastCalledWith('9007199254740993');
+    await view.user.clear(input);
+    await view.user.type(input, '9223372036854775808');
+    await view.user.keyboard('{Enter}');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(onPageChange).toHaveBeenCalledTimes(1);
+  });
+
   it('handles Enter without submitting an outer form', async () => {
     const onSubmit = vi.fn((event: FormEvent) => event.preventDefault());
     const onPageChange = vi.fn();

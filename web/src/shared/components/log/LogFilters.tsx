@@ -83,8 +83,16 @@ export function LogFilters({ station, fields, state, onApply }: LogFiltersProps)
     event.preventDefault();
     const from = timeDraftValue(draftFrom);
     const to = timeDraftValue(draftTo);
-    if (from === undefined || to === undefined) return;
+    if (from === undefined || to === undefined) {
+      setInvalidRange(true);
+      return;
+    }
     if (from !== null && to !== null && from >= to) {
+      setInvalidRange(true);
+      return;
+    }
+    const status = drafts.status?.trim();
+    if (status && !/^[1-5][0-9]{2}$/.test(status)) {
       setInvalidRange(true);
       return;
     }

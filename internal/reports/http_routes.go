@@ -299,12 +299,12 @@ func (repository *Repository) targetDonationsHTTP(writer http.ResponseWriter, re
 		writeReportError(writer, err)
 		return
 	}
-	values, err := parseReportQuery(request, "cursor", "limit")
+	values, err := parseReportQuery(request, "cursor", "limit", "page", "page_size")
 	if err != nil {
 		writeReportError(writer, err)
 		return
 	}
-	limit, err := queryLimit(values, "limit")
+	limit, requested, err := reportReadWindow(values, "")
 	if err != nil {
 		writeReportError(writer, err)
 		return
@@ -314,7 +314,7 @@ func (repository *Repository) targetDonationsHTTP(writer http.ResponseWriter, re
 		writeReportError(writer, err)
 		return
 	}
-	response, err := repository.TargetDonations(request.Context(), actor, id, targetID, values.Get("cursor"), limit)
+	response, err := repository.targetDonations(request.Context(), actor, id, targetID, values.Get("cursor"), limit, requested)
 	if err != nil {
 		writeReportError(writer, err)
 		return
@@ -345,12 +345,12 @@ func (repository *Repository) casesHTTP(writer http.ResponseWriter, request *htt
 		writeReportError(writer, ErrInvalidRequest)
 		return
 	}
-	values, err := parseReportQuery(request, "status", "cursor", "limit")
+	values, err := parseReportQuery(request, "status", "cursor", "limit", "page", "page_size")
 	if err != nil {
 		writeReportError(writer, err)
 		return
 	}
-	limit, err := queryLimit(values, "limit")
+	limit, requested, err := reportReadWindow(values, "")
 	if err != nil {
 		writeReportError(writer, err)
 		return
@@ -360,7 +360,7 @@ func (repository *Repository) casesHTTP(writer http.ResponseWriter, request *htt
 		writeReportError(writer, err)
 		return
 	}
-	response, err := repository.ListCases(request.Context(), actor, values.Get("status"), values.Get("cursor"), limit)
+	response, err := repository.listCases(request.Context(), actor, values.Get("status"), values.Get("cursor"), limit, requested)
 	if err != nil {
 		writeReportError(writer, err)
 		return
@@ -378,12 +378,12 @@ func (repository *Repository) caseDetailHTTP(writer http.ResponseWriter, request
 		writeReportError(writer, err)
 		return
 	}
-	values, err := parseReportQuery(request, "materials_cursor", "materials_limit")
+	values, err := parseReportQuery(request, "materials_cursor", "materials_limit", "materials_page", "materials_page_size")
 	if err != nil {
 		writeReportError(writer, err)
 		return
 	}
-	limit, err := queryLimit(values, "materials_limit")
+	limit, requested, err := reportReadWindow(values, "materials_")
 	if err != nil {
 		writeReportError(writer, err)
 		return
@@ -393,7 +393,7 @@ func (repository *Repository) caseDetailHTTP(writer http.ResponseWriter, request
 		writeReportError(writer, err)
 		return
 	}
-	response, err := repository.CaseDetail(request.Context(), actor, id, values.Get("materials_cursor"), limit)
+	response, err := repository.caseDetail(request.Context(), actor, id, values.Get("materials_cursor"), limit, requested)
 	if err != nil {
 		writeReportError(writer, err)
 		return
@@ -411,12 +411,12 @@ func (repository *Repository) targetsHTTP(writer http.ResponseWriter, request *h
 		writeReportError(writer, err)
 		return
 	}
-	values, err := parseReportQuery(request, "cursor", "limit")
+	values, err := parseReportQuery(request, "cursor", "limit", "page", "page_size")
 	if err != nil {
 		writeReportError(writer, err)
 		return
 	}
-	limit, err := queryLimit(values, "limit")
+	limit, requested, err := reportReadWindow(values, "")
 	if err != nil {
 		writeReportError(writer, err)
 		return
@@ -426,7 +426,7 @@ func (repository *Repository) targetsHTTP(writer http.ResponseWriter, request *h
 		writeReportError(writer, err)
 		return
 	}
-	response, err := repository.Targets(request.Context(), actor, id, values.Get("cursor"), limit)
+	response, err := repository.targets(request.Context(), actor, id, values.Get("cursor"), limit, requested)
 	if err != nil {
 		writeReportError(writer, err)
 		return

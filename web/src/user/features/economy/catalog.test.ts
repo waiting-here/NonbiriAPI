@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getCharityCatalog, normalizeCharityCatalog } from './catalog';
+import {
+  canonicalCharityCatalogSearch,
+  DEFAULT_CHARITY_CATALOG_FILTERS,
+  getCharityCatalog,
+  normalizeCharityCatalog,
+  readCharityCatalogUrlState,
+  writeCharityCatalogFilters,
+} from './catalog';
 import { installJsonFetchFixtures } from '../../../../test/unit/support';
 
 afterEach(() => {
@@ -31,6 +38,7 @@ function catalogModel(overrides: Record<string, unknown> = {}) {
     enabled: true,
     allowed_levels: [1, 3, 5],
     level_allowed: true,
+    currently_available: true,
     availability: 'available',
     ...overrides,
   };
@@ -68,6 +76,7 @@ describe('charity catalog normalizer', () => {
       enabled: true,
       allowedLevels: [1, 3, 5],
       levelAllowed: true,
+      currentlyAvailable: true,
       availability: 'available',
       pricing: { userPriceMilli: '3000', discountedUserPriceMilli: '2400' },
     });
@@ -104,6 +113,41 @@ describe('charity catalog normalizer', () => {
         catalogPage([catalogModel({ availability: 'level_denied', level_allowed: true })]),
       ),
     ).toThrow();
+    expect(() =>
+      normalizeCharityCatalog(
+        catalogPage([catalogModel({ availability: 'available', currently_available: false })]),
+      ),
+    ).toThrow();
+    expect(() =>
+      normalizeCharityCatalog(
+        catalogPage([catalogModel({ availability: 'no_usable_key', currently_available: true })]),
+      ),
+    ).toThrow();
+  });
+
+  it('keeps resource availability independent from the reader level', () => {
+    expect(
+      normalizeCharityCatalog(
+        catalogPage([
+          catalogModel({
+            level_allowed: false,
+            availability: 'level_denied',
+            currently_available: true,
+          }),
+        ]),
+      ).models[0],
+    ).toMatchObject({ levelAllowed: false, currentlyAvailable: true });
+    expect(
+      normalizeCharityCatalog(
+        catalogPage([
+          catalogModel({
+            level_allowed: false,
+            availability: 'level_denied',
+            currently_available: false,
+          }),
+        ]),
+      ).models[0],
+    ).toMatchObject({ levelAllowed: false, currentlyAvailable: false });
   });
 
   it('enforces the public-description text boundary while allowing LF and TAB', () => {
@@ -155,11 +199,11 @@ describe('charity catalog normalizer', () => {
 });
 
 describe('charity catalog request', () => {
-  it('sends page, search, and access filters in the catalog query', async () => {
+  it('sends independent access filters in the catalog query', async () => {
     const fetchMock = installJsonFetchFixtures([
       {
         method: 'GET',
-        path: '/api/charity/models?view=catalog&page=2&page_size=50&q=public&allowed_for_me=false',
+        path: '/api/charity/models?view=catalog&page=2&page_size=50&q=public&allowed_for_me=false&allowed_level=3&currently_available=true',
         body: catalogPage(
           [catalogModel({ id: '2', model: 'other', full_name: '[公益]provider/other' })],
           {
@@ -176,10 +220,34 @@ describe('charity catalog request', () => {
       pageSize: 50,
       query: 'public',
       allowedForMe: 'false',
+      allowedLevel: '3',
+      currentlyAvailable: 'true',
     });
     expect(result.pagination.page).toBe('2');
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/charity/models?view=catalog&page=2&page_size=50&q=public&allowed_for_me=false',
+      '/api/charity/models?view=catalog&page=2&page_size=50&q=public&allowed_for_me=false&allowed_level=3&currently_available=true',
+      expect.objectContaining({ signal: undefined }),
+    );
+  });
+
+  it('omits all unlimited filters while retaining the page query', async () => {
+    const fetchMock = installJsonFetchFixtures([
+      {
+        method: 'GET',
+        path: '/api/charity/models?view=catalog&page=1&page_size=20',
+        body: catalogPage(),
+      },
+    ]);
+    await getCharityCatalog({
+      page: '1',
+      pageSize: 20,
+      query: '',
+      allowedForMe: 'all',
+      allowedLevel: 'all',
+      currentlyAvailable: 'all',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/charity/models?view=catalog&page=1&page_size=20',
       expect.objectContaining({ signal: undefined }),
     );
   });
@@ -187,11 +255,69 @@ describe('charity catalog request', () => {
   it('rejects invalid search bounds before making a request', async () => {
     const fetchMock = installJsonFetchFixtures([]);
     await expect(
-      getCharityCatalog({ page: '1', pageSize: 20, query: '界'.repeat(129), allowedForMe: 'all' }),
+      getCharityCatalog({
+        page: '1',
+        pageSize: 20,
+        query: '界'.repeat(129),
+        allowedForMe: 'all',
+        allowedLevel: 'all',
+        currentlyAvailable: 'all',
+      }),
     ).rejects.toMatchObject({ code: 'invalid_request', status: 400 });
     await expect(
-      getCharityCatalog({ page: '1', pageSize: 20, query: 'bad\u0000query', allowedForMe: 'all' }),
+      getCharityCatalog({
+        page: '1',
+        pageSize: 20,
+        query: 'bad\u0000query',
+        allowedForMe: 'all',
+        allowedLevel: 'all',
+        currentlyAvailable: 'all',
+      }),
     ).rejects.toMatchObject({ code: 'invalid_request', status: 400 });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('charity catalog URL filters', () => {
+  it('uses the new defaults while keeping explicit unlimited selections', () => {
+    expect(readCharityCatalogUrlState(new URLSearchParams()).filters).toEqual(
+      DEFAULT_CHARITY_CATALOG_FILTERS,
+    );
+    const explicit = writeCharityCatalogFilters(
+      new URLSearchParams('tab=models'),
+      DEFAULT_CHARITY_CATALOG_FILTERS,
+    );
+    expect(explicit.toString()).toBe(
+      'tab=models&allowed_for_me=true&allowed_level=all&currently_available=true',
+    );
+    expect(readCharityCatalogUrlState(explicit)).toMatchObject({
+      filters: DEFAULT_CHARITY_CATALOG_FILTERS,
+      needsNormalization: false,
+    });
+  });
+
+  it('normalizes duplicate and non-canonical filter values without touching route context', () => {
+    const raw = new URLSearchParams(
+      'tab=models&page=3&allowed_for_me=false&allowed_for_me=true&allowed_level=03&currently_available=TRUE&q=',
+    );
+    expect(readCharityCatalogUrlState(raw)).toMatchObject({
+      filters: DEFAULT_CHARITY_CATALOG_FILTERS,
+      needsNormalization: true,
+    });
+    expect(canonicalCharityCatalogSearch(raw).toString()).toBe(
+      'tab=models&page=3&allowed_for_me=true&allowed_level=all&currently_available=true',
+    );
+  });
+
+  it('writes one filter at a time without dropping the search or other selections', () => {
+    const next = writeCharityCatalogFilters(new URLSearchParams('tab=models&q=needle&page=4'), {
+      query: 'needle',
+      allowedForMe: 'false',
+      allowedLevel: '3',
+      currentlyAvailable: 'all',
+    });
+    expect(next.toString()).toBe(
+      'tab=models&page=4&q=needle&allowed_for_me=false&allowed_level=3&currently_available=all',
+    );
   });
 });

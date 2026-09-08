@@ -1,7 +1,11 @@
 package resources
 
 import (
+	"context"
 	"net/http"
+	"net/url"
+
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
 type createEndpointRequest struct {
@@ -82,6 +86,11 @@ type patchEndpointKeyCanonical struct {
 
 func (api *httpAPI) listEndpoints(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
 	if !requireNoBody(writer, request) {
+		return
+	}
+	if serveNumberedPage(writer, request, []string{"q"}, func(ctx context.Context, values url.Values, page pagination.Request) (Page[Endpoint], error) {
+		return api.repository.SearchEndpointsPage(ctx, principal.UserID, values.Get("q"), page)
+	}) {
 		return
 	}
 	limit, cursor, ok := parsePageQuery(writer, request)
@@ -219,6 +228,11 @@ func (api *httpAPI) deleteEndpoint(writer http.ResponseWriter, request *http.Req
 func (api *httpAPI) listEndpointKeys(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
 	endpointID, ok := parsePathID(writer, request, "id")
 	if !ok || !requireNoBody(writer, request) {
+		return
+	}
+	if serveNumberedPage(writer, request, []string{"q"}, func(ctx context.Context, values url.Values, page pagination.Request) (Page[EndpointKey], error) {
+		return api.repository.SearchEndpointKeysPage(ctx, principal.UserID, endpointID, values.Get("q"), page)
+	}) {
 		return
 	}
 	limit, cursor, ok := parsePageQuery(writer, request)

@@ -2,6 +2,7 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
+import { useAdminSession } from '../data';
 import { adminAnnouncementKeys } from '../features/operations/announcements';
 import { ActivitiesPage } from './ActivitiesPage';
 import { AnnouncementDetailPage } from './AnnouncementDetailPage';
@@ -78,6 +79,9 @@ function installAdminFixtures(
       ).toUpperCase();
       const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
       requests.push({ method, path: url.pathname, body });
+      if (method === 'GET' && url.pathname === '/admin/api/session') {
+        return json({ admin: { username: 'fixture-admin' } });
+      }
       if (url.pathname === '/admin/api/time-zones') {
         return json({ version: 'go1.26.6-zoneinfo', zones: [zone] });
       }
@@ -106,6 +110,11 @@ function dateTimeInput(): HTMLInputElement {
   return input;
 }
 
+function AuthenticatedAnnouncementDetail() {
+  const session = useAdminSession();
+  return session.data ? <AnnouncementDetailPage /> : null;
+}
+
 describe('administrator time forms', () => {
   const nativeOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
 
@@ -121,7 +130,11 @@ describe('administrator time forms', () => {
     let created: unknown;
     installAdminFixtures((method, path, body) => {
       if (method === 'GET' && path === '/admin/api/announcements') {
-        return { data: [], next_cursor: null };
+        return {
+          data: [],
+          next_cursor: null,
+          pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+        };
       }
       if (method === 'POST' && path === '/admin/api/announcements') {
         created = body;
@@ -160,7 +173,10 @@ describe('administrator time forms', () => {
     });
     const view = await renderWithProviders(
       <Routes>
-        <Route path="/announcements/:announcementId" element={<AnnouncementDetailPage />} />
+        <Route
+          path="/announcements/:announcementId"
+          element={<AuthenticatedAnnouncementDetail />}
+        />
       </Routes>,
       {
         station: 'admin',
@@ -195,7 +211,11 @@ describe('administrator time forms', () => {
         return { period: periodFixture() };
       }
       if (method === 'GET' && path === '/admin/api/pools') {
-        return { data: [], next_cursor: null };
+        return {
+          data: [],
+          next_cursor: null,
+          pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+        };
       }
       if (method === 'PUT' && path === '/admin/api/activities/thursday/next') {
         saved = body;
@@ -248,7 +268,10 @@ describe('administrator time forms', () => {
     });
     const view = await renderWithProviders(
       <Routes>
-        <Route path="/announcements/:announcementId" element={<AnnouncementDetailPage />} />
+        <Route
+          path="/announcements/:announcementId"
+          element={<AuthenticatedAnnouncementDetail />}
+        />
       </Routes>,
       { station: 'admin', role: 'admin', route: `/announcements/${announcementId}` },
     );

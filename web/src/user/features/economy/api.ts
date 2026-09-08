@@ -200,9 +200,11 @@ export async function getDonations(signal?: AbortSignal): Promise<Donation[]> {
 
 export async function getDonation(id: string, signal?: AbortSignal): Promise<Donation> {
   requireDecimalID(id, 'donation id');
-  return normalizeDonation(
+  const donation = normalizeDonation(
     await apiFetch<unknown>(`/api/donations/${encodeURIComponent(id)}`, { signal }),
   );
+  if (donation.id !== id) throw new ApiError('invalid_response', 'Invalid donation identity.', 200);
+  return donation;
 }
 
 export async function getEndpointChoices(

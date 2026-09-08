@@ -3,11 +3,13 @@ package resources
 import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
 type Page[T any] struct {
-	Data       []T     `json:"data"`
-	NextCursor *string `json:"next_cursor"`
+	Data       []T                  `json:"data"`
+	NextCursor *string              `json:"next_cursor"`
+	Pagination *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 type MutationResult[T any] struct {
@@ -18,16 +20,17 @@ type MutationResult[T any] struct {
 }
 
 type Endpoint struct {
-	ID            string         `json:"id"`
-	ConnectorType string         `json:"connector_type"`
-	BaseURL       string         `json:"base_url"`
-	Origin        EndpointOrigin `json:"origin"`
-	Note          string         `json:"note"`
-	Enabled       bool           `json:"enabled"`
-	Revision      string         `json:"revision"`
-	KeyCount      string         `json:"key_count"`
-	CreatedAt     int64          `json:"created_at"`
-	UpdatedAt     int64          `json:"updated_at"`
+	ID            string          `json:"id"`
+	ConnectorType string          `json:"connector_type"`
+	BaseURL       string          `json:"base_url"`
+	Origin        EndpointOrigin  `json:"origin"`
+	Note          string          `json:"note"`
+	Enabled       bool            `json:"enabled"`
+	Revision      string          `json:"revision"`
+	KeyCount      string          `json:"key_count"`
+	Browse        *EndpointBrowse `json:"browse,omitempty"`
+	CreatedAt     int64           `json:"created_at"`
+	UpdatedAt     int64           `json:"updated_at"`
 }
 
 // EndpointOrigin is deliberately a small, closed public projection. Internal
@@ -65,19 +68,20 @@ type EndpointCreateOptions struct {
 }
 
 type EndpointKey struct {
-	ID              string `json:"id"`
-	EndpointID      string `json:"endpoint_id"`
-	DisplayHead     string `json:"display_head"`
-	DisplayTail     string `json:"display_tail"`
-	Note            string `json:"note"`
-	Enabled         bool   `json:"enabled"`
-	ForceStoreFalse bool   `json:"force_store_false"`
-	MaxConcurrency  int64  `json:"max_concurrency"`
-	MaxRPM          int64  `json:"max_rpm"`
-	SuspensionState string `json:"suspension_state"`
-	Revision        string `json:"revision"`
-	CreatedAt       int64  `json:"created_at"`
-	UpdatedAt       int64  `json:"updated_at"`
+	ID              string             `json:"id"`
+	EndpointID      string             `json:"endpoint_id"`
+	DisplayHead     string             `json:"display_head"`
+	DisplayTail     string             `json:"display_tail"`
+	Note            string             `json:"note"`
+	Enabled         bool               `json:"enabled"`
+	ForceStoreFalse bool               `json:"force_store_false"`
+	MaxConcurrency  int64              `json:"max_concurrency"`
+	MaxRPM          int64              `json:"max_rpm"`
+	SuspensionState string             `json:"suspension_state"`
+	Browse          *EndpointKeyBrowse `json:"browse,omitempty"`
+	Revision        string             `json:"revision"`
+	CreatedAt       int64              `json:"created_at"`
+	UpdatedAt       int64              `json:"updated_at"`
 }
 
 type CallerKeyMetadata struct {
@@ -118,10 +122,11 @@ type CatalogEntry struct {
 }
 
 type CatalogView struct {
-	Evidence         DiscoveryEvidence `json:"evidence"`
-	AutomaticEntries []CatalogEntry    `json:"automatic_entries"`
-	ManualEntries    []CatalogEntry    `json:"manual_entries"`
-	NextCursor       *string           `json:"next_cursor"`
+	Evidence         DiscoveryEvidence    `json:"evidence"`
+	AutomaticEntries []CatalogEntry       `json:"automatic_entries"`
+	ManualEntries    []CatalogEntry       `json:"manual_entries"`
+	NextCursor       *string              `json:"next_cursor"`
+	Pagination       *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 type BindingCandidate struct {
@@ -150,18 +155,19 @@ type Binding struct {
 }
 
 type Model struct {
-	ID               string `json:"id"`
-	Provider         string `json:"provider"`
-	Model            string `json:"model"`
-	FullName         string `json:"full_name"`
-	RouteStrategy    string `json:"route_strategy"`
-	SilentRetry      bool   `json:"silent_retry"`
-	FlattenToolCalls bool   `json:"flatten_tool_calls"`
-	Revision         string `json:"revision"`
-	BindingRevision  string `json:"binding_revision"`
-	BindingCount     string `json:"binding_count"`
-	CreatedAt        int64  `json:"created_at"`
-	UpdatedAt        int64  `json:"updated_at"`
+	ID               string       `json:"id"`
+	Provider         string       `json:"provider"`
+	Model            string       `json:"model"`
+	FullName         string       `json:"full_name"`
+	RouteStrategy    string       `json:"route_strategy"`
+	SilentRetry      bool         `json:"silent_retry"`
+	FlattenToolCalls bool         `json:"flatten_tool_calls"`
+	Revision         string       `json:"revision"`
+	BindingRevision  string       `json:"binding_revision"`
+	BindingCount     string       `json:"binding_count"`
+	Browse           *ModelBrowse `json:"browse,omitempty"`
+	CreatedAt        int64        `json:"created_at"`
+	UpdatedAt        int64        `json:"updated_at"`
 }
 
 type ManualEntriesResponse struct {

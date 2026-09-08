@@ -401,10 +401,14 @@
         "welfareBp": "Welfare share (basis points)"
       },
       "pools": {
+        "allStates": "All pool states",
+        "allTypes": "All pool types",
         "adjust": "Adjust",
         "balance": "Balance",
         "emptyBody": "The authority read returned no pools.",
         "emptyTitle": "No pools",
+        "filterState": "Pool state",
+        "filterType": "Pool type",
         "period": "Period",
         "revision": "Revision",
         "select": "Select",
@@ -765,6 +769,8 @@
     },
     "charity": {
       "nav": "Charity",
+      "donationsTitle": "Donation review queue",
+      "modelsTitle": "Charity models and bindings",
       "title": "Charity and donation management",
       "description": "Review donations, manage shared models and connections, and adjust usage limits.",
       "group": {
@@ -825,7 +831,6 @@
       "discountStart": "Start (optional)",
       "discountEnd": "End (optional)",
       "newModel": "Add charity model",
-      "modelsTitle": "Charity models and bindings",
       "noModels": "No charity models",
       "noModelsBody": "Create a charity model only after its donation resources are ready.",
       "successRate": "{{rate}}% success over {{count}} recent calls",
@@ -834,7 +839,6 @@
       "order": "Order",
       "actions": "Actions",
       "noBindings": "No bindings",
-      "donationsTitle": "Donation review queue",
       "statusFilter": "Donation status",
       "allStatuses": "All statuses",
       "noDonations": "No donations",
@@ -844,8 +848,6 @@
       "reject": "Reject donation",
       "saveKeyLimits": "Save key limits",
       "deleteModelTitle": "Delete this charity model?",
-      "previous": "Previous",
-      "next": "Next",
       "status": {
         "pending": "Pending",
         "approved": "Approved",
@@ -856,6 +858,7 @@
     },
     "legalHolds": {
       "actions": {
+        "close": "Close details",
         "create": "Create legal hold",
         "metadata": "Metadata",
         "release": "Release hold"
@@ -896,7 +899,6 @@
         "released": "Released by an administrator: {{reason}}"
       },
       "errors": {
-        "authorityChanged": "Administrator authority changed.",
         "elevationRequired": "Fresh administrator elevation is required."
       },
       "filters": {

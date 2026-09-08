@@ -11,6 +11,7 @@ import {
   mockPublicConfig,
   mockRoleSession,
 } from './support';
+import { numberedResponse } from './numbered-fixtures';
 
 const NOW = 1_800_000_000;
 const EVIDENCE_DIR = process.env.NONBIRI_VISUAL_DIR
@@ -22,6 +23,15 @@ const STEWARD_MARKER = 'governance-steward-ephemeral-5e9c3b7a';
 const REQUEST_ID = `req_${'A'.repeat(21)}Q`;
 const DISCORD_ID = '1'.repeat(18);
 const CALLER_NICKNAME = 'Ada Example';
+const DONATION_STATES = [
+  'available',
+  'pending',
+  'disabled',
+  'suspended',
+  'exhausted',
+  'expired',
+  'ended',
+] as const;
 
 type JSONRecord = Record<string, unknown>;
 type BrowserContext = Parameters<typeof installURLPersistenceObserver>[0];
@@ -127,6 +137,24 @@ function managedKey(id: string, state: 'pending' | 'available' = 'pending'): JSO
     streak: { generation: '1', count: '0', failure_disabled: false },
     ended_reason: null,
     safe_note: 'Synthetic reviewer note',
+    max_concurrency: 4,
+    max_rpm: 60,
+  };
+}
+
+function managedKeyPageItem(
+  id: string,
+  donation: JSONRecord,
+  state: 'pending' | 'available' = 'pending',
+): JSONRecord {
+  return {
+    ...managedKey(id, state),
+    donation_id: donation.id,
+    key_id: id,
+    donation_revision: donation.revision,
+    rule_count: '0',
+    rules: [],
+    handling: donation.handling,
   };
 }
 
@@ -173,6 +201,56 @@ function stewardDonation(): JSONRecord {
   };
 }
 
+function donationPageItem(donation: JSONRecord, role: 'admin' | 'steward'): JSONRecord {
+  const keys = Array.isArray(donation.keys)
+    ? donation.keys.filter(
+        (key): key is JSONRecord => key !== null && typeof key === 'object' && !Array.isArray(key),
+      )
+    : [];
+  const stateCounts = Object.fromEntries(
+    DONATION_STATES.map((state) => [state, '0']),
+  ) as JSONRecord;
+  const sources: JSONRecord[] = [];
+  for (const key of keys) {
+    if (typeof key.charity_state === 'string' && Object.hasOwn(stateCounts, key.charity_state)) {
+      stateCounts[key.charity_state] = String(Number(stateCounts[key.charity_state]) + 1);
+    }
+    if (
+      key.safe_source !== null &&
+      typeof key.safe_source === 'object' &&
+      !Array.isArray(key.safe_source) &&
+      !sources.some((source) => JSON.stringify(source) === JSON.stringify(key.safe_source))
+    ) {
+      sources.push(key.safe_source as JSONRecord);
+    }
+  }
+  const owner = donation.owner;
+  return {
+    id: donation.id,
+    status: donation.status,
+    revision: donation.revision,
+    description: donation.description,
+    review_result: donation.review_result,
+    created_at: donation.created_at,
+    updated_at: donation.updated_at,
+    key_count: String(keys.length),
+    state_counts: stateCounts,
+    source_count: String(sources.length),
+    sources,
+    handling: donation.handling,
+    reviewer: donation.reviewer ?? null,
+    owner:
+      owner === null || typeof owner !== 'object' || Array.isArray(owner)
+        ? null
+        : role === 'admin'
+          ? owner
+          : {
+              user_id: (owner as JSONRecord).user_id,
+              display_name: (owner as JSONRecord).display_name,
+            },
+  };
+}
+
 function capabilityModel(model: string): JSONRecord {
   return {
     id: '1',
@@ -198,6 +276,7 @@ function catalogModel(id: string, model: string, overrides: JSONRecord = {}): JS
     enabled: true,
     allowed_levels: [1, 3, 5],
     level_allowed: true,
+    currently_available: true,
     availability: 'available',
     ...overrides,
   };
@@ -240,6 +319,7 @@ test('admin pending badge opens the shared queue and processing survives refresh
   let processed = false;
   const listReads: string[] = [];
   const detailReads: string[] = [];
+  const donationKeyReads: string[] = [];
   const processRequests: Array<{ body: JSONRecord; idempotencyKey: string }> = [];
   await page.route('**/*', async (route) => {
     const request = route.request();
@@ -251,7 +331,14 @@ test('admin pending badge opens the shared queue and processing survives refresh
     if (request.method() === 'GET') {
       listReads.push(url.search);
       const filteredOut = url.searchParams.get('handling') === 'pending' && processed;
-      await fulfillJSON(route, { data: filteredOut ? [] : [current], next_cursor: null });
+      await fulfillJSON(
+        route,
+        numberedResponse(
+          filteredOut ? [] : [donationPageItem(current, 'admin')],
+          url.searchParams.get('page') ?? '1',
+          Number(url.searchParams.get('page_size') ?? '20'),
+        ),
+      );
       return;
     }
     await route.fallback();
@@ -270,6 +357,21 @@ test('admin pending badge opens the shared queue and processing survives refresh
     if (request.method() === 'GET' && url.pathname === '/admin/api/donations/7') {
       detailReads.push(url.search);
       await fulfillJSON(route, current);
+      return;
+    }
+    if (request.method() === 'GET' && url.pathname === '/admin/api/donations/7/keys') {
+      if (url.searchParams.get('page') !== '1' || url.searchParams.get('page_size') !== '20') {
+        throw new Error(`Unexpected donation-key page request: ${request.method()} ${url.href}`);
+      }
+      donationKeyReads.push(url.search);
+      await fulfillJSON(
+        route,
+        numberedResponse(
+          [managedKeyPageItem('11', current)],
+          url.searchParams.get('page') ?? '1',
+          Number(url.searchParams.get('page_size') ?? '20'),
+        ),
+      );
       return;
     }
     if (
@@ -305,17 +407,21 @@ test('admin pending badge opens the shared queue and processing survives refresh
     page.locator('.status-badge').filter({ hasText: 'Pending follow-up' }).first(),
   ).toBeVisible();
   await expect(page.getByText('Synthetic pending donation', { exact: true })).toBeVisible();
-  expect(listReads).toContain('?limit=50');
-  expect(listReads).toContain('?handling=pending&limit=50');
+  expect(listReads).toContain('?page=1&page_size=20');
+  expect(listReads).toContain('?handling=pending&page=1&page_size=20');
   await saveScreenshot(page, 'admin-pending-queue-1280-light-en');
 
   await page.getByRole('button', { name: 'Review', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Donation #7', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Key 11 · sk-live…fixture', exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Mark as processed', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Mark as processed', exact: true }).click();
   await expect.poll(() => processRequests.length).toBe(1);
   await expect.poll(() => listReads.length).toBeGreaterThanOrEqual(3);
   await expect.poll(() => detailReads.length).toBeGreaterThanOrEqual(2);
+  await expect.poll(() => donationKeyReads.length).toBeGreaterThanOrEqual(2);
   expect(processRequests[0]).toEqual({
     body: { expected_handling_revision: '7' },
     idempotencyKey: expect.stringMatching(/^[A-Za-z0-9_-]{22,128}$/),
@@ -348,16 +454,29 @@ test('admin pending badge opens the shared queue and processing survives refresh
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await saveScreenshot(page, 'admin-processed-320-light-en');
   await page.reload();
+  await expect(page).toHaveURL(`${ADMIN_ORIGIN}/charity?handling=pending&donation_id=7`);
+  await expect(page.getByRole('combobox', { name: 'Follow-up status', exact: true })).toHaveValue(
+    'pending',
+  );
+  await expect(page.getByRole('heading', { name: 'Donation #7', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Key 11 · sk-live…fixture', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/Processed by an administrator/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Review', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Return to list', exact: true }).click();
   await expect(page).toHaveURL(`${ADMIN_ORIGIN}/charity?handling=pending`);
   await expect(page.getByRole('combobox', { name: 'Follow-up status', exact: true })).toHaveValue(
     'pending',
   );
-  await expect(page.getByRole('button', { name: 'Review', exact: true })).toHaveCount(0);
+  await expect(page.getByText('No donations', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Donation #7', exact: true })).toHaveCount(0);
   await page.getByRole('combobox', { name: 'Follow-up status', exact: true }).selectOption('');
   await expect(page.getByText('Synthetic pending donation', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Review', exact: true }).click();
   await expect(page.getByText(/Processed by an administrator/)).toBeVisible();
   expect(processRequests).toHaveLength(1);
+  expect(donationKeyReads).toContain('?page=1&page_size=20');
   await assertPagePresentation(page, setup);
 });
 
@@ -378,8 +497,8 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/donations?limit=100',
-    body: { data: [], next_cursor: null },
+    path: '/api/donations?page=1&page_size=20',
+    body: numberedResponse([], '1', 20),
   });
   const firstModels = Array.from({ length: 20 }, (_, index) =>
     catalogModel(
@@ -474,9 +593,11 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
   expect(catalogRequests).toHaveLength(requestCountBeforeTyping);
   await search.press('Enter');
   await expect(page.getByText('[公益]provider/needle', { exact: true })).toBeVisible();
-  expect(catalogRequests).toContain('/api/charity/models?view=catalog&page=2&page_size=20');
   expect(catalogRequests).toContain(
-    '/api/charity/models?view=catalog&page=1&page_size=20&q=needle',
+    '/api/charity/models?view=catalog&page=2&page_size=20&allowed_for_me=true&currently_available=true',
+  );
+  expect(catalogRequests).toContain(
+    '/api/charity/models?view=catalog&page=1&page_size=20&q=needle&allowed_for_me=true&currently_available=true',
   );
 
   await page.getByRole('combobox', { name: '本人访问权限', exact: true }).selectOption('false');
@@ -486,14 +607,14 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
   );
   await expect(page.getByText('本人等级不允许', { exact: true })).toBeVisible();
   expect(catalogRequests).toContain(
-    '/api/charity/models?view=catalog&page=1&page_size=20&q=needle&allowed_for_me=false',
+    '/api/charity/models?view=catalog&page=1&page_size=20&q=needle&allowed_for_me=false&currently_available=true',
   );
 
   await page.getByRole('combobox', { name: '每页条数', exact: true }).selectOption('50');
   await expect(page.getByRole('combobox', { name: '每页条数', exact: true })).toHaveValue('50');
   await expect.poll(() => catalogRequests.length).toBeGreaterThanOrEqual(4);
   expect(catalogRequests).toContain(
-    '/api/charity/models?view=catalog&page=1&page_size=50&q=needle&allowed_for_me=false',
+    '/api/charity/models?view=catalog&page=1&page_size=50&q=needle&allowed_for_me=false&currently_available=true',
   );
   await page.setViewportSize({ width: 1_280, height: 900 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -526,6 +647,7 @@ test('level-five stewardship hides another donor and shows caller identity safel
   const currentDonation = stewardDonation();
   const donationListReads: string[] = [];
   const donationDetailReads: string[] = [];
+  const donationKeyReads: string[] = [];
   const logListReads: string[] = [];
   const logDetailReads: string[] = [];
   const usage = {
@@ -559,7 +681,14 @@ test('level-five stewardship hides another donor and shows caller identity safel
     }
     if (request.method() === 'GET' && url.pathname === '/api/steward/donations') {
       donationListReads.push(url.search);
-      await fulfillJSON(route, { data: [currentDonation], next_cursor: null });
+      await fulfillJSON(
+        route,
+        numberedResponse(
+          [donationPageItem(currentDonation, 'steward')],
+          url.searchParams.get('page') ?? '1',
+          Number(url.searchParams.get('page_size') ?? '20'),
+        ),
+      );
       return;
     }
     if (request.method() === 'GET' && url.pathname === '/api/steward/donations/8') {
@@ -567,9 +696,31 @@ test('level-five stewardship hides another donor and shows caller identity safel
       await fulfillJSON(route, currentDonation);
       return;
     }
+    if (request.method() === 'GET' && url.pathname === '/api/steward/donations/8/keys') {
+      if (url.searchParams.get('page') !== '1' || url.searchParams.get('page_size') !== '20') {
+        throw new Error(`Unexpected donation-key page request: ${request.method()} ${url.href}`);
+      }
+      donationKeyReads.push(url.search);
+      await fulfillJSON(
+        route,
+        numberedResponse(
+          [managedKeyPageItem('12', currentDonation, 'available')],
+          url.searchParams.get('page') ?? '1',
+          Number(url.searchParams.get('page_size') ?? '20'),
+        ),
+      );
+      return;
+    }
     if (request.method() === 'GET' && url.pathname === '/api/steward/logs') {
       logListReads.push(url.search);
-      await fulfillJSON(route, { data: [logRow], next_cursor: null });
+      await fulfillJSON(
+        route,
+        numberedResponse(
+          [logRow],
+          url.searchParams.get('page') ?? '1',
+          Number(url.searchParams.get('page_size') ?? '20'),
+        ),
+      );
       return;
     }
     if (request.method() === 'GET' && url.pathname === `/api/steward/logs/${REQUEST_ID}`) {
@@ -577,6 +728,7 @@ test('level-five stewardship hides another donor and shows caller identity safel
       await fulfillJSON(route, {
         request: logRow,
         attempts: { data: [], next_cursor: null },
+        attempt_pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
       });
       return;
     }
@@ -589,18 +741,22 @@ test('level-five stewardship hides another donor and shows caller identity safel
     'true',
   );
   await expect(page.getByText('Donor details are hidden', { exact: true }).first()).toBeVisible();
-  expect(donationListReads).toContain('?handling=pending&limit=50');
+  expect(donationListReads).toContain('?handling=pending&page=1&page_size=20');
   await page.getByRole('button', { name: 'Review', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Donation #8', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Key 12 · sk-live…fixture', exact: true }),
+  ).toBeVisible();
   await expect(page.getByText('Donor details are hidden', { exact: true })).toHaveCount(2);
   expect(donationDetailReads).toContain('');
+  expect(donationKeyReads).toContain('?page=1&page_size=20');
   await saveScreenshot(page, 'steward-other-donor-320-dark-en');
 
   await page.getByRole('tab', { name: 'Request logs', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Request logs', exact: true })).toBeVisible();
   await expect(page.getByText(CALLER_NICKNAME, { exact: true })).toBeVisible();
   await expect(page.getByText(DISCORD_ID, { exact: true })).toBeVisible();
-  expect(logListReads).toContain('?limit=20');
+  expect(logListReads).toContain('?page=1&page_size=20');
   const copyButton = page.getByRole('button', { name: 'Copy Discord ID', exact: true }).first();
   await copyButton.click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(DISCORD_ID);
@@ -609,7 +765,7 @@ test('level-five stewardship hides another donor and shows caller identity safel
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText(CALLER_NICKNAME, { exact: true })).toBeVisible();
   await expect(dialog.getByText(DISCORD_ID, { exact: true })).toBeVisible();
-  expect(logDetailReads).toContain('?attempt_limit=50');
+  expect(logDetailReads).toContain('?attempt_page=1&attempt_page_size=20');
   await saveScreenshot(page, 'steward-caller-detail-320-dark-en');
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await assertResponsiveOperationTables(page);

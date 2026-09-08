@@ -54,7 +54,7 @@ var historyCategories = map[string][]Kind{
 }
 
 func ValidateHistoryFilter(filter HistoryFilter) error {
-	if filter.Page < 1 || (filter.PageSize != 20 && filter.PageSize != 50 && filter.PageSize != 100) ||
+	if filter.Page < 1 || (filter.PageSize != 10 && filter.PageSize != 20 && filter.PageSize != 50 && filter.PageSize != 100) ||
 		(filter.From != nil && !validUnix(*filter.From)) || (filter.To != nil && !validUnix(*filter.To)) ||
 		(filter.From != nil && filter.To != nil && *filter.From >= *filter.To) ||
 		(filter.Direction != "" && filter.Direction != "income" && filter.Direction != "expense") ||

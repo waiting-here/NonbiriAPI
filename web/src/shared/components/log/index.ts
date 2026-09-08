@@ -8,6 +8,23 @@ export { TokenBuckets, type TokenBucketValues } from './TokenBuckets';
 export { useLogUrlState, type LogUrlState } from './useLogUrlState';
 export { RoleLogPanel } from './RoleLogPanel';
 export {
+  getRoleLogDetailPage,
+  getRoleLogPage,
+  getRoleLogsPage,
+  normalizeRoleLogDetail,
+  normalizeRoleLogPage,
+  numberedLogKeys,
+  useRoleLogDetailPage,
+  useRoleLogPage,
+  useRoleLogsPage,
+  type LogPageWindow,
+  type NumberedAdminLogDetail,
+  type NumberedLogPage,
+  type NumberedRoleLogDetail,
+  type NumberedStewardLogDetail,
+  type NumberedUserLogDetail,
+} from './numberedQueries';
+export {
   adminLogExportPath,
   roleLogKeys,
   normalizeAdminLogDetail,

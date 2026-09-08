@@ -3,7 +3,6 @@ import { clearManagementSession, clearStationSession } from '@shared/charityMana
 import { ApiError } from '@shared/query/http';
 import { userKeys } from '../../data';
 import {
-  collectAllModels,
   getBindings,
   getBindingCandidates,
   getCallerKey,
@@ -396,58 +395,6 @@ export function useCallerKey(accountId: string, enabled = true) {
   });
 }
 
-export interface EndpointRoutingProjection {
-  byKey: Record<
-    string,
-    Array<{
-      model: { id: string; full_name: string };
-      binding: BindingsResponse['bindings'][number];
-    }>
-  >;
-}
-
-export function useEndpointRoutingProjection(
-  accountId: string,
-  endpointId: string | undefined,
-  keyIds: readonly string[],
-  enabled = true,
-) {
-  return useQuery({
-    queryKey: endpointId
-      ? coreKeys.endpointRouting(accountId, endpointId, keyIds)
-      : [...coreKeys.endpointsRoot(accountId), 'routing', 'none'],
-    queryFn: async ({ signal }): Promise<EndpointRoutingProjection> => {
-      const models = await collectAllModels(signal);
-      const responses: Array<{ model: Model; bindings: BindingsResponse }> = [];
-      for (let offset = 0; offset < models.length; offset += 4) {
-        const batch = await Promise.all(
-          models.slice(offset, offset + 4).map(async (model) => ({
-            model,
-            bindings: await getBindings(model.id, signal),
-          })),
-        );
-        responses.push(...batch);
-      }
-      const expected = new Set(keyIds);
-      const byKey: EndpointRoutingProjection['byKey'] = Object.fromEntries(
-        keyIds.map((keyId) => [keyId, []]),
-      );
-      for (const { model, bindings } of responses) {
-        for (const binding of bindings.bindings) {
-          if (!expected.has(binding.endpoint_key_id)) continue;
-          byKey[binding.endpoint_key_id]?.push({
-            model: { id: model.id, full_name: model.full_name },
-            binding,
-          });
-        }
-      }
-      return { byKey };
-    },
-    enabled: enabled && Boolean(endpointId) && keyIds.length > 0,
-    staleTime: 5_000,
-  });
-}
-
 function replaceModelInPage(page: Page<Model> | undefined, model: Model): Page<Model> | undefined {
   if (!page) return page;
   let found = false;
@@ -492,7 +439,7 @@ export function applyBindingsResponse(
       }),
     );
   }
-  void queryClient.invalidateQueries({ queryKey: coreKeys.endpointRoutingAll(accountId) });
+  void invalidateResourceDependents(queryClient, accountId);
   return true;
 }
 
@@ -518,7 +465,7 @@ export function applyManualUpdateToCache(
       );
     }
   }
-  void queryClient.invalidateQueries({ queryKey: coreKeys.endpointRoutingAll(accountId) });
+  void invalidateResourceDependents(queryClient, accountId);
   return true;
 }
 
@@ -540,6 +487,13 @@ export async function invalidateResourceDependents(
   if (!coreSessionMatchesAccount(queryClient, accountId)) return false;
 
   const invalidations = [
+    queryClient.invalidateQueries({ queryKey: coreKeys.endpointsRoot(accountId) }),
+    queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
+    queryClient.invalidateQueries({
+      queryKey: options.endpointId
+        ? coreKeys.endpointKeysRoot(accountId, options.endpointId)
+        : [...coreKeys.account(accountId), 'endpoint-keys'],
+    }),
     queryClient.invalidateQueries({ queryKey: userKeys.endpoints }),
     queryClient.invalidateQueries({
       queryKey: options.endpointId

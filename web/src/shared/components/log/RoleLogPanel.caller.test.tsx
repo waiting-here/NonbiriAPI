@@ -39,6 +39,11 @@ function installFixtures(
   const prefix = role === 'admin' ? '/admin/api' : '/api';
   const logPath =
     role === 'admin' ? '/admin/api/logs' : role === 'user' ? '/api/logs' : '/api/steward/logs';
+  const pageBody = {
+    data: [row],
+    next_cursor: null,
+    pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+  };
   const fixtures: JsonFetchFixture[] = [
     {
       method: 'GET',
@@ -47,15 +52,18 @@ function installFixtures(
     },
     {
       method: 'GET',
-      path: `${logPath}?limit=20`,
-      body: { data: [row], next_cursor: null },
+      path: `${logPath}?page=1&page_size=20`,
+      body: pageBody,
     },
   ];
   if (detail !== undefined) {
     fixtures.push({
       method: 'GET',
-      path: `${logPath}/${encodeURIComponent(requestID)}?attempt_limit=50`,
-      body: detail,
+      path: `${logPath}/${encodeURIComponent(requestID)}?attempt_page=1&attempt_page_size=20`,
+      body: {
+        ...(detail as Record<string, unknown>),
+        attempt_pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+      },
     });
   }
   return installJsonFetchFixtures(fixtures);
@@ -83,7 +91,7 @@ describe('steward caller identity', () => {
       attempts: { data: [], next_cursor: null },
     });
     const writeText = vi.fn().mockResolvedValue(undefined);
-    const view = await renderWithProviders(<RoleLogPanel role="steward" />, {
+    const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="steward" />, {
       station: 'user',
       role: 'level5',
     });
@@ -91,7 +99,7 @@ describe('steward caller identity', () => {
 
     await waitFor(() =>
       expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
-        '/api/steward/logs?limit=20',
+        '/api/steward/logs?page=1&page_size=20',
       ),
     );
     await waitFor(() => expect(screen.getByText('Ada Example', { exact: true })).toBeVisible());
@@ -109,7 +117,7 @@ describe('steward caller identity', () => {
     );
     expect(within(dialog).getByText(discordID, { exact: true })).toBeVisible();
     expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
-      `/api/steward/logs/${requestID}?attempt_limit=50`,
+      `/api/steward/logs/${requestID}?attempt_page=1&attempt_page_size=20`,
     );
   });
 
@@ -119,7 +127,7 @@ describe('steward caller identity', () => {
       'steward',
       stewardRow({ discord_nickname: null, discord_id: discordID }),
     );
-    await renderWithProviders(<RoleLogPanel role="steward" />, {
+    await renderWithProviders(<RoleLogPanel accountId="viewer" role="steward" />, {
       station: 'user',
       role: 'level5',
     });
@@ -133,7 +141,7 @@ describe('steward caller identity', () => {
 
   it('shows detached identities as unavailable without a copy button', async () => {
     const detachedFetch = installFixtures('steward', stewardRow(null));
-    await renderWithProviders(<RoleLogPanel role="steward" />, {
+    await renderWithProviders(<RoleLogPanel accountId="viewer" role="steward" />, {
       station: 'user',
       role: 'level5',
     });
@@ -151,7 +159,7 @@ describe('steward caller identity', () => {
       stewardRow({ discord_nickname: 'Ada Example', discord_id: discordID }),
     );
     const writeText = vi.fn().mockRejectedValue(new Error('clipboard unavailable'));
-    const view = await renderWithProviders(<RoleLogPanel role="steward" />, {
+    const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="steward" />, {
       station: 'user',
       role: 'level5',
     });
@@ -174,7 +182,7 @@ describe('steward caller identity', () => {
       'steward',
       stewardRow({ discord_nickname: nickname, discord_id: discordID }),
     );
-    await renderWithProviders(<RoleLogPanel role="steward" />, {
+    await renderWithProviders(<RoleLogPanel accountId="viewer" role="steward" />, {
       station: 'user',
       role: 'level5',
     });
@@ -225,7 +233,10 @@ describe('steward caller identity', () => {
     'does not render a caller block for the $role station',
     async ({ role, station, testRole, row }) => {
       const fetchMock = installFixtures(role, row);
-      await renderWithProviders(<RoleLogPanel role={role} />, { station, role: testRole });
+      await renderWithProviders(<RoleLogPanel accountId="viewer" role={role} />, {
+        station,
+        role: testRole,
+      });
       await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(0));
       await waitFor(() => expect(screen.getByRole('button', { name: 'Details' })).toBeVisible());
       expect(screen.queryByText('Caller identity', { exact: true })).toBeNull();

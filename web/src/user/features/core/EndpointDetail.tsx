@@ -1,10 +1,14 @@
 import { useEffect, useReducer, useRef, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { KeyLimitFields, KeyLimitSummary } from '@shared/components/KeyRoutingLimits';
 import { PageHeader } from '@shared/components/States';
-import { isNotFoundError } from '@shared/query/http';
+import { PagePagination } from '@shared/operations/PagePagination';
+import { listReturnPath } from '@shared/operations/listReturn';
+import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
+import { usePagePager } from '@shared/operations/usePagePager';
+import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import {
   createEndpointKey,
   createManualEntries,
@@ -27,20 +31,19 @@ import {
   StatusPill,
 } from './components';
 import { useCoreCopy } from './copy';
-import { CORE_ROUTE_PATHS } from './descriptors';
 import {
   applyManualUpdateToCache,
   coreKeys,
   coreSessionMatchesAccount,
   invalidateResourceDependents,
-  useCatalog,
   useEndpoint,
-  useEndpointKeysPage,
-  useEndpointRoutingProjection,
 } from './queries';
+import { useNumberedCatalog, useNumberedEndpointKeys } from './numberedQueries';
+import { useManualImpacts } from './manualImpacts';
+import { KeyBrowseSummary } from './ResourceBrowse';
 import { createOperationIdentity, isConflict, isOutcomeUnknown } from './request';
 import { endpointSecretDraftReducer, initialEndpointSecretDraftState } from './stateMachines';
-import { validateEndpointSecret, validateManualValue } from './normalizers';
+import { validateEndpointSecret, validateManualValue, validateResourceId } from './normalizers';
 import type {
   BindingReplacement,
   CatalogEntry,
@@ -53,6 +56,17 @@ import type {
 } from './types';
 
 type ActionOutcome = 'conflict' | 'unknown' | 'error' | null;
+
+function manualCatalogPagerParams(keyId: string): {
+  pageParam: string;
+  pageSizeParam: string;
+} {
+  const safeKeyId = validateResourceId(keyId, 'endpoint key id');
+  return {
+    pageParam: `manual_${safeKeyId}_page`,
+    pageSizeParam: `manual_${safeKeyId}_page_size`,
+  };
+}
 
 function actionOutcome(error: unknown): ActionOutcome {
   if (isConflict(error)) return 'conflict';
@@ -325,21 +339,41 @@ function ManualEntryRow({
   endpointId,
   keyId,
   entry,
-  impacts,
-  impactsKnown,
   onChanged,
 }: {
   accountId: string;
   endpointId: string;
   keyId: string;
   entry: CatalogEntry;
-  impacts: Array<{ bindingId: string; modelId: string; modelName: string }>;
-  impactsKnown: boolean;
   onChanged: () => Promise<boolean>;
 }) {
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
+  const impactQuery = useManualImpacts(
+    accountId,
+    endpointId,
+    keyId,
+    entry.upstream_model_id,
+    entry.pair_revision,
+    editing,
+  );
+  const impacts =
+    !impactQuery.error && impactQuery.data?.state === 'complete' ? impactQuery.data.impacts : [];
+  const impactsKnown =
+    !impactQuery.error && !impactQuery.isFetching && impactQuery.data?.state === 'complete';
+  const impactPager = usePagePager({
+    station: 'user',
+    listType: 'manual-impact',
+    scopeKey: `${accountId}:${endpointId}:${keyId}:${entry.id}`,
+    resetKey: entry.pair_revision,
+  });
+  const impactPages = Math.max(1, Math.ceil(impacts.length / impactPager.pageSize));
+  const impactPage = Math.min(Number(impactPager.page), impactPages);
+  const visibleImpacts = impacts.slice(
+    (impactPage - 1) * impactPager.pageSize,
+    impactPage * impactPager.pageSize,
+  );
   const [model, setModel] = useState(entry.upstream_model_id);
   const [provider, setProvider] = useState(entry.provider);
   const [replacements, setReplacements] = useState<Record<string, string>>({});
@@ -410,6 +444,11 @@ function ManualEntryRow({
 
   const update = async () => {
     if (busy || deleteAttemptRef.current) return;
+    if (
+      !updateAttemptRef.current &&
+      (updateImpactUnknown || (updateNeedsReplacements && !replacementsReady))
+    )
+      return;
     if (!coreSessionMatchesAccount(queryClient, accountId)) {
       discardStaleMutation();
       return;
@@ -496,6 +535,8 @@ function ManualEntryRow({
 
   const remove = async () => {
     if (busy || updateAttemptRef.current) return;
+    if (!impactsKnown || (!deleteAttemptRef.current && impacts.length > 0 && !replacementsReady))
+      return;
     if (!coreSessionMatchesAccount(queryClient, accountId)) {
       discardStaleMutation();
       return;
@@ -577,6 +618,17 @@ function ManualEntryRow({
     }
   };
 
+  if (isForbidden(impactQuery.error) || isUnauthorized(impactQuery.error))
+    return (
+      <li>
+        <CoreErrorPanel
+          compact
+          error={impactQuery.error}
+          onRetry={() => void impactQuery.refetch()}
+        />
+      </li>
+    );
+
   return (
     <li className="core-manual-row">
       <div className="core-binding-row__top">
@@ -593,20 +645,31 @@ function ManualEntryRow({
           {editing ? t('common.close') : t('common.edit')}
         </button>
       </div>
-      {impacts.length > 0 ? (
+      {editing && impacts.length > 0 ? (
         <div className="core-inline-warning">
           <p>{t('endpoints.manualImpact', { count: impacts.length })}</p>
-          <ul className="core-impact-list">
-            {impacts.map((impact) => (
-              <li key={impact.bindingId}>{impact.modelName}</li>
-            ))}
-          </ul>
         </div>
       ) : null}
-      {!impactsKnown ? (
+      {editing && impactQuery.data?.state === 'too_many' ? (
         <p className="core-inline-warning" role="alert">
-          {t('endpoints.manualImpactUnknown')}
+          {t('endpoints.manualImpactTooMany', { count: impactQuery.data.count })}
         </p>
+      ) : null}
+      {editing && impactQuery.isFetching ? <CoreLoading compact /> : null}
+      {editing &&
+      !impactsKnown &&
+      !impactQuery.isFetching &&
+      impactQuery.data?.state !== 'too_many' ? (
+        <div className="core-inline-warning" role="alert">
+          <p>{t('endpoints.manualImpactUnknown')}</p>
+          <button
+            className="btn btn-secondary"
+            type="button"
+            onClick={() => void impactQuery.refetch()}
+          >
+            {t('common.retry')}
+          </button>
+        </div>
       ) : null}
       {editing ? (
         <div className="core-form">
@@ -629,7 +692,7 @@ function ManualEntryRow({
                 onChange={(event) => setProvider(event.target.value)}
               />
             </label>
-            {impacts.map((impact) => (
+            {visibleImpacts.map((impact) => (
               <label key={impact.bindingId}>
                 <span>
                   {t('endpoints.replacement', { id: impact.bindingId, model: impact.modelName })}
@@ -649,6 +712,20 @@ function ManualEntryRow({
               </label>
             ))}
           </div>
+          {impactsKnown && impacts.length > 0 ? (
+            <PagePagination
+              metadata={{
+                page: String(impactPage),
+                page_size: impactPager.pageSize,
+                total_items: String(impacts.length),
+                total_pages: String(impactPages),
+              }}
+              requestedPage={impactPager.page}
+              busy={busy}
+              onPageChange={impactPager.setPage}
+              onPageSizeChange={impactPager.setPageSize}
+            />
+          ) : null}
           <OutcomeNotice outcome={outcome} />
           <div className="core-form-actions">
             <button
@@ -692,23 +769,34 @@ function ManualCatalog({
   accountId,
   endpointId,
   keyId,
-  routingEntries,
-  routingKnown,
 }: {
   accountId: string;
   endpointId: string;
   keyId: string;
-  routingEntries: Array<{
-    model: { id: string; full_name: string };
-    binding: { id: string; upstream_model_id: string };
-  }>;
-  routingKnown: boolean;
 }) {
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
-  const [cursorStack, setCursorStack] = useState<Array<string | undefined>>([undefined]);
-  const cursor = cursorStack.at(-1);
-  const catalog = useCatalog(accountId, endpointId, keyId, cursor);
+  const { pageParam, pageSizeParam } = manualCatalogPagerParams(keyId);
+  const pager = useUrlPagePager({
+    station: 'user',
+    listType: 'manual-catalog',
+    scopeKey: `${accountId}:${endpointId}:${keyId}`,
+    scopeReady: true,
+    pageParam,
+    pageSizeParam,
+  });
+  const { page, pageSize, setPage, setPageSize } = pager;
+  const catalog = useNumberedCatalog(
+    accountId,
+    endpointId,
+    keyId,
+    'manual',
+    {
+      page,
+      pageSize,
+    },
+    Boolean(accountId && endpointId && keyId),
+  );
   const [upstreamModel, setUpstreamModel] = useState('');
   const [provider, setProvider] = useState('');
   const [busy, setBusy] = useState(false);
@@ -817,8 +905,11 @@ function ManualCatalog({
     }
   };
 
+  if (isForbidden(catalog.error) || isUnauthorized(catalog.error) || isNotFoundError(catalog.error))
+    return <CoreErrorPanel compact error={catalog.error} onRetry={() => void catalog.refetch()} />;
+
   return (
-    <section className="core-card">
+    <section className="core-card" aria-busy={busy || catalog.isFetching}>
       <div className="core-card__header">
         <div>
           <h3>{t('endpoints.manualTitle')}</h3>
@@ -887,45 +978,18 @@ function ManualCatalog({
                   endpointId={endpointId}
                   keyId={keyId}
                   entry={entry}
-                  impactsKnown={routingKnown}
-                  impacts={routingEntries
-                    .filter(
-                      (projection) =>
-                        projection.binding.upstream_model_id === entry.upstream_model_id,
-                    )
-                    .map((projection) => ({
-                      bindingId: projection.binding.id,
-                      modelId: projection.model.id,
-                      modelName: projection.model.full_name,
-                    }))}
                   onChanged={refresh}
                 />
               ))}
             </ul>
           )}
-          {cursorStack.length > 1 || catalog.data.next_cursor ? (
-            <div className="core-pagination">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={cursorStack.length <= 1}
-                onClick={() => setCursorStack((current) => current.slice(0, -1))}
-              >
-                {t('common.previous')}
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={!catalog.data.next_cursor}
-                onClick={() =>
-                  catalog.data.next_cursor &&
-                  setCursorStack((current) => [...current, catalog.data.next_cursor ?? undefined])
-                }
-              >
-                {t('common.next')}
-              </button>
-            </div>
-          ) : null}
+          <PagePagination
+            metadata={catalog.data.pagination}
+            requestedPage={pager.page}
+            busy={busy || catalog.isFetching}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </>
       )}
     </section>
@@ -936,25 +1000,16 @@ function EndpointKeyCard({
   accountId,
   endpoint,
   keyData,
-  routingEntries,
-  routingPending,
-  routingError,
-  onRetryRouting,
+  onRefresh,
 }: {
   accountId: string;
   endpoint: Endpoint;
   keyData: EndpointKey;
-  routingEntries: Array<{
-    model: { id: string; full_name: string };
-    binding: { id: string; upstream_model_id: string };
-  }>;
-  routingPending: boolean;
-  routingError: unknown;
-  onRetryRouting: () => void;
+  onRefresh: () => void;
 }) {
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
-  const catalog = useCatalog(accountId, endpoint.id, keyData.id);
+  const evidence = keyData.browse?.discovery;
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<ActionOutcome>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -964,6 +1019,7 @@ function EndpointKeyCard({
   const [maxConcurrency, setMaxConcurrency] = useState(String(keyData.max_concurrency));
   const [maxRPM, setMaxRPM] = useState(String(keyData.max_rpm));
   const [reconciliationRequired, setReconciliationRequired] = useState(false);
+  const [manualCatalogOpen, setManualCatalogOpen] = useState(false);
   const [replayAttempt, setReplayAttempt] = useState<
     | { kind: 'refresh'; evidenceRevision: string; operation: OperationIdentity }
     | { kind: 'patch'; input: EndpointKeyPatchInput; operation: OperationIdentity }
@@ -1001,10 +1057,7 @@ function EndpointKeyCard({
       }
       const confirmed =
         replayAttempt.kind === 'refresh'
-          ? Boolean(
-              catalog.data &&
-              BigInt(catalog.data.evidence.revision) > BigInt(replayAttempt.evidenceRevision),
-            )
+          ? Boolean(evidence && BigInt(evidence.revision) > BigInt(replayAttempt.evidenceRevision))
           : replayAttempt.kind === 'patch'
             ? BigInt(keyData.revision) > BigInt(replayAttempt.input.expected_revision) &&
               (replayAttempt.input.note === undefined ||
@@ -1028,7 +1081,7 @@ function EndpointKeyCard({
       active = false;
     };
   }, [
-    catalog.data,
+    evidence,
     keyData.enabled,
     keyData.force_store_false,
     keyData.max_concurrency,
@@ -1129,30 +1182,6 @@ function EndpointKeyCard({
   const display =
     `${keyData.display_head}${keyData.display_head && keyData.display_tail ? '…' : ''}${keyData.display_tail}` ||
     t('common.notSet');
-  const projectedRoutes = routingEntries.map((projection) => {
-    if (!physicalAvailable) return { ...projection, status: 'blocked' as const };
-    if (catalog.isPending || catalog.error) return { ...projection, status: 'unknown' as const };
-    const manuallySupported = catalog.data.manual_entries.some(
-      (entry) => entry.upstream_model_id === projection.binding.upstream_model_id,
-    );
-    const automaticallySupported =
-      catalog.data.evidence.state === 'succeeded' &&
-      catalog.data.automatic_entries.some(
-        (entry) =>
-          entry.upstream_model_id === projection.binding.upstream_model_id &&
-          entry.source_revision === catalog.data.evidence.revision,
-      );
-    if (manuallySupported || automaticallySupported)
-      return { ...projection, status: 'available' as const };
-    return {
-      ...projection,
-      status: catalog.data.next_cursor ? ('unknown' as const) : ('blocked' as const),
-    };
-  });
-  const availableRoutes = projectedRoutes.filter(
-    (projection) => projection.status === 'available',
-  ).length;
-  const hasUnknownRoute = projectedRoutes.some((projection) => projection.status === 'unknown');
 
   return (
     <li className="core-key-card">
@@ -1163,7 +1192,9 @@ function EndpointKeyCard({
             <SafeCopyValue value={display} label={t('endpoints.key')} />
           </div>
         </div>
-        {keyData.suspension_state === 'security_processing' ? (
+        {!endpoint.enabled ? (
+          <StatusPill tone="warning">{t('browse.state.endpoint_disabled')}</StatusPill>
+        ) : keyData.suspension_state === 'security_processing' ? (
           <StatusPill tone="danger">{t('endpoints.securityProcessing')}</StatusPill>
         ) : (
           <StatusPill tone={keyData.enabled ? 'success' : 'neutral'}>
@@ -1172,6 +1203,7 @@ function EndpointKeyCard({
         )}
       </div>
       <KeyLimitSummary concurrency={keyData.max_concurrency} rpm={keyData.max_rpm} />
+      <p className="core-muted">{t('browse.personalLimits')}</p>
       <dl className="core-detail-list">
         <div>
           <dt>{t('endpoints.storePolicy')}</dt>
@@ -1189,17 +1221,15 @@ function EndpointKeyCard({
         <div className="core-card__header">
           <h3>{t('endpoints.discovery')}</h3>
         </div>
-        {catalog.isPending ? (
-          <CoreLoading compact />
-        ) : catalog.error ? (
-          <CoreErrorPanel compact error={catalog.error} onRetry={() => void catalog.refetch()} />
+        {!evidence ? (
+          <p className="core-muted">{t('common.unknown')}</p>
         ) : (
           <>
-            <DiscoveryStatus evidence={catalog.data.evidence} />
-            {catalog.data.evidence.observed_at !== null ? (
+            <DiscoveryStatus evidence={evidence} />
+            {evidence.observed_at !== null ? (
               <p>
                 <span className="core-muted">{t('endpoints.observedAt')}: </span>
-                <CoreTime value={catalog.data.evidence.observed_at} />
+                <CoreTime value={evidence.observed_at} />
               </p>
             ) : null}
           </>
@@ -1209,7 +1239,8 @@ function EndpointKeyCard({
           className="btn btn-secondary"
           disabled={
             busy ||
-            catalog.data?.evidence.state === 'checking' ||
+            !evidence ||
+            evidence.state === 'checking' ||
             reconciliationRequired ||
             !physicalAvailable ||
             Boolean(replayAttempt)
@@ -1217,7 +1248,7 @@ function EndpointKeyCard({
           onClick={() =>
             void run({
               kind: 'refresh',
-              evidenceRevision: catalog.data?.evidence.revision ?? '0',
+              evidenceRevision: evidence?.revision ?? '0',
               operation: createOperationIdentity(),
             })
           }
@@ -1226,68 +1257,21 @@ function EndpointKeyCard({
         </button>
       </section>
 
-      <section className="core-card">
-        <div className="core-card__header">
-          <h3>{t('endpoints.routing')}</h3>
-        </div>
-        {routingPending ? (
-          <CoreLoading compact />
-        ) : routingError ? (
-          <CoreErrorPanel compact error={routingError} onRetry={onRetryRouting} />
-        ) : routingEntries.length === 0 ? (
-          <p className="core-muted">{t('endpoints.routingNone')}</p>
-        ) : (
-          <>
-            <p
-              className={
-                availableRoutes > 0 && !hasUnknownRoute
-                  ? 'core-inline-success'
-                  : 'core-inline-warning'
-              }
-            >
-              {hasUnknownRoute
-                ? t('endpoints.routingUnknown')
-                : availableRoutes > 0
-                  ? t('endpoints.routingAvailable', { count: availableRoutes })
-                  : t('endpoints.routingBlocked')}
-            </p>
-            <ul className="core-routing-list">
-              {projectedRoutes.map((projection) => (
-                <li key={projection.binding.id}>
-                  <span className="core-mono">
-                    {projection.model.full_name} → {projection.binding.upstream_model_id}
-                  </span>
-                  <StatusPill
-                    tone={
-                      projection.status === 'available'
-                        ? 'success'
-                        : projection.status === 'blocked'
-                          ? 'warning'
-                          : 'neutral'
-                    }
-                  >
-                    {projection.status === 'available'
-                      ? t('common.available')
-                      : projection.status === 'blocked'
-                        ? t('common.blocked')
-                        : t('common.unknown')}
-                  </StatusPill>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </section>
+      <KeyBrowseSummary
+        accountId={accountId}
+        endpointId={endpoint.id}
+        keyData={keyData}
+        onRefresh={onRefresh}
+      />
 
-      <details className="core-manual-details">
+      <details
+        className="core-manual-details"
+        onToggle={(event) => setManualCatalogOpen(event.currentTarget.open)}
+      >
         <summary>{t('endpoints.manualTitle')}</summary>
-        <ManualCatalog
-          accountId={accountId}
-          endpointId={endpoint.id}
-          keyId={keyData.id}
-          routingEntries={routingEntries}
-          routingKnown={!routingPending && !routingError}
-        />
+        {manualCatalogOpen ? (
+          <ManualCatalog accountId={accountId} endpointId={endpoint.id} keyId={keyData.id} />
+        ) : null}
       </details>
       <OutcomeNotice outcome={outcome} />
       {reconciliationRequired ? (
@@ -1489,13 +1473,28 @@ export function EndpointDetail({
   endpointId: string;
 }) {
   const { t } = useCoreCopy();
+  const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [keyCursors, setKeyCursors] = useState<Array<string | undefined>>([undefined]);
-  const endpoint = useEndpoint(accountId, endpointId);
-  const keys = useEndpointKeysPage(accountId, endpointId, keyCursors.at(-1));
-  const keyIds = keys.data?.data.map((key) => key.id) ?? [];
-  const routing = useEndpointRoutingProjection(accountId, endpointId, keyIds, Boolean(keys.data));
+  const keyPager = useUrlPagePager({
+    station: 'user',
+    listType: 'endpoint-keys',
+    scopeKey: `${accountId}:${endpointId}`,
+    scopeReady: true,
+    pageParam: 'keys_page',
+    pageSizeParam: 'keys_page_size',
+  });
+  const { page, pageSize, setPage, setPageSize } = keyPager;
+  const endpoint = useEndpoint(accountId, endpointId, Boolean(accountId && endpointId));
+  const keys = useNumberedEndpointKeys(
+    accountId,
+    endpointId,
+    {
+      page,
+      pageSize,
+    },
+    Boolean(accountId && endpointId),
+  );
   const [addingKey, setAddingKey] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1508,6 +1507,7 @@ export function EndpointDetail({
     | { kind: 'delete'; expectedRevision: string; operation: OperationIdentity }
     | null
   >(null);
+  const returnTo = listReturnPath(location.state, '/endpoints');
 
   const discardStaleEndpointMutation = () => {
     setReplayAttempt(null);
@@ -1560,7 +1560,7 @@ export function EndpointDetail({
         return false;
       }
       queryClient.removeQueries({ queryKey: coreKeys.endpoint(accountId, endpointId) });
-      navigate(CORE_ROUTE_PATHS.endpoints);
+      navigate(returnTo);
       return true;
     }
     const ready =
@@ -1596,11 +1596,19 @@ export function EndpointDetail({
         <CoreLoading />
       </div>
     );
-  if (!endpoint.data)
+  if (
+    !endpoint.data ||
+    isForbidden(endpoint.error) ||
+    isUnauthorized(endpoint.error) ||
+    (endpoint.error && !replayAttempt) ||
+    isForbidden(keys.error) ||
+    isUnauthorized(keys.error) ||
+    (isNotFoundError(keys.error) && replayAttempt?.kind !== 'delete')
+  )
     return (
       <div className="page core-page">
         <CoreErrorPanel
-          error={endpoint.error ?? new Error('The endpoint details are unavailable.')}
+          error={endpoint.error ?? keys.error ?? new Error('The endpoint details are unavailable.')}
           onRetry={() => void endpoint.refetch()}
         />
       </div>
@@ -1643,7 +1651,7 @@ export function EndpointDetail({
           return;
         }
         queryClient.removeQueries({ queryKey: coreKeys.endpoint(accountId, endpoint.data.id) });
-        navigate(CORE_ROUTE_PATHS.endpoints);
+        navigate(returnTo);
       } else {
         if (attempt.input.note !== undefined) setEditing(false);
         await reconcile();
@@ -1683,7 +1691,7 @@ export function EndpointDetail({
         icon="endpoints"
         title={t('endpoints.detailsTitle')}
         description={t('endpoints.detailsDescription')}
-        back={<Link to={CORE_ROUTE_PATHS.endpoints}>{t('common.back')}</Link>}
+        back={<Link to={returnTo}>{t('common.back')}</Link>}
       />
       <section className="core-card">
         <div className="core-card__header">
@@ -1819,7 +1827,7 @@ export function EndpointDetail({
         )}
       </section>
 
-      <section className="core-card">
+      <section className="core-card" aria-busy={keys.isFetching}>
         <div className="core-card__header">
           <h2>{t('endpoints.key')}</h2>
           <button
@@ -1858,36 +1866,19 @@ export function EndpointDetail({
                 accountId={accountId}
                 endpoint={endpoint.data}
                 keyData={keyData}
-                routingEntries={routing.data?.byKey[keyData.id] ?? []}
-                routingPending={routing.isPending}
-                routingError={routing.error}
-                onRetryRouting={() => void routing.refetch()}
+                onRefresh={() => void keys.refetch()}
               />
             ))}
           </ul>
         )}
-        {keys.data && (keyCursors.length > 1 || keys.data.next_cursor) ? (
-          <nav className="core-pagination" aria-label={t('endpoints.key')}>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              disabled={keyCursors.length <= 1}
-              onClick={() => setKeyCursors((current) => current.slice(0, -1))}
-            >
-              {t('common.previous')}
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              disabled={!keys.data.next_cursor}
-              onClick={() =>
-                keys.data.next_cursor &&
-                setKeyCursors((current) => [...current, keys.data.next_cursor ?? undefined])
-              }
-            >
-              {t('common.next')}
-            </button>
-          </nav>
+        {keys.data ? (
+          <PagePagination
+            metadata={keys.data.pagination}
+            requestedPage={keyPager.page}
+            busy={keys.isFetching || addingKey || busy}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         ) : null}
       </section>
 

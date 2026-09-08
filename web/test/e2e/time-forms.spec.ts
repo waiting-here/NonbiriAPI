@@ -112,7 +112,11 @@ for (const scenario of cases) {
           await route.fulfill({
             json: path.endsWith(announcementID)
               ? authority
-              : { data: [authority], next_cursor: null },
+              : {
+                  data: [authority],
+                  next_cursor: null,
+                  pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+                },
           });
         } else if (request.method() === 'PATCH' && path.endsWith(announcementID)) {
           const body = request.postDataJSON();
@@ -259,6 +263,9 @@ for (const scenario of cases) {
           exact: true,
         })
         .click();
+      await expect(from).toHaveValue('');
+      expect(new URL(page.url()).searchParams.has('from')).toBe(false);
+      await page.reload();
       await expect(from).toHaveValue('');
       await expect.poll(() => queries.at(-1)?.has('from')).toBe(false);
       guard.assertNone();

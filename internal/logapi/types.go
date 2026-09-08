@@ -10,6 +10,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -57,8 +58,9 @@ type LogUsage struct {
 }
 
 type Page[T any] struct {
-	Data       []T     `json:"data"`
-	NextCursor *string `json:"next_cursor"`
+	Data       []T                  `json:"data"`
+	NextCursor *string              `json:"next_cursor"`
+	Pagination *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 // UserLogRow is a closed implementation interface. Only UserSelfLogRow and
@@ -115,8 +117,9 @@ type UserSelfLogAttempt struct {
 }
 
 type UserSelfLogDetail struct {
-	Request  UserSelfLogRow           `json:"request"`
-	Attempts Page[UserSelfLogAttempt] `json:"attempts"`
+	Request           UserSelfLogRow           `json:"request"`
+	Attempts          Page[UserSelfLogAttempt] `json:"attempts"`
+	AttemptPagination *pagination.Metadata     `json:"attempt_pagination,omitempty"`
 }
 
 type CallerSafeResult struct {
@@ -164,8 +167,9 @@ type AdminLogAttempt struct {
 }
 
 type AdminLogDetail struct {
-	Request  AdminLogRow           `json:"request"`
-	Attempts Page[AdminLogAttempt] `json:"attempts"`
+	Request           AdminLogRow           `json:"request"`
+	Attempts          Page[AdminLogAttempt] `json:"attempts"`
+	AttemptPagination *pagination.Metadata  `json:"attempt_pagination,omitempty"`
 }
 
 // Steward types repeat every allowed field. They intentionally do not embed,
@@ -205,8 +209,9 @@ type StewardLogAttempt struct {
 }
 
 type StewardLogDetail struct {
-	Request  StewardLogRow           `json:"request"`
-	Attempts Page[StewardLogAttempt] `json:"attempts"`
+	Request           StewardLogRow           `json:"request"`
+	Attempts          Page[StewardLogAttempt] `json:"attempts"`
+	AttemptPagination *pagination.Metadata    `json:"attempt_pagination,omitempty"`
 }
 
 type ListFilter struct {
@@ -220,11 +225,13 @@ type ListFilter struct {
 	To              *int64
 	Cursor          string
 	Limit           int
+	Page            *pagination.Request
 }
 
 type AttemptFilter struct {
 	Cursor string
 	Limit  int
+	Page   *pagination.Request
 }
 
 type UserPrincipal = resources.UserPrincipal

@@ -55,7 +55,7 @@ test('credit history filters, jumps between stable pages and fits a mobile viewp
   await page.getByRole('textbox', { name: 'Go to page', exact: true }).fill('3');
   await page.getByRole('button', { name: 'Go', exact: true }).click();
   await expect(page.locator('.credit-history__table tbody tr')).toHaveCount(15);
-  await page.getByRole('combobox', { name: 'Rows per page' }).selectOption('50');
+  await page.getByRole('combobox', { name: 'Items per page', exact: true }).selectOption('50');
   await expect(page.locator('.credit-history__table tbody tr')).toHaveCount(50);
   await page.getByRole('combobox', { name: 'Reason', exact: true }).selectOption('charity');
   await page.getByRole('combobox', { name: 'Money in / out' }).selectOption('expense');

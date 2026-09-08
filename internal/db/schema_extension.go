@@ -19,6 +19,10 @@ const preResponseStartsManifestHash = "8fb054cef12ae7316f80d40994d9091a84b983a79
 // seeding default sidecar rows in a single transaction.
 const preBetaTwoManifestHash = "32d3e952512b7eb5c452e478eb9990b0518d51502d70bd93c195273980ba365d"
 
+// The deployed recurring-limit schema already contains populated sidecars.
+// Its extension adds only browse indexes and preserves every existing value.
+const preBrowseManifestHash = "862d6c208018d2033c57bd8b87e3b324be5d83b2f2bd6729a7ce8cf9b4c96b9e"
+
 func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) {
 	if GenerationTwoSchemaHash() != PinnedGenerationTwoSchemaHash {
 		return false, errors.New("generation-two schema hash drift")
@@ -34,7 +38,7 @@ func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) 
 	switch generationManifestDigest(actual) {
 	case expected:
 		return false, nil
-	case preRoutingManifestHash, preKeyLimitsManifestHash, preResponseStartsManifestHash, preBetaTwoManifestHash:
+	case preRoutingManifestHash, preKeyLimitsManifestHash, preResponseStartsManifestHash, preBetaTwoManifestHash, preBrowseManifestHash:
 		return true, nil
 	default:
 		return false, errors.New("generation-two schema manifest mismatch")
@@ -75,11 +79,16 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) error
 			return err
 		}
 	}
-	// Apply the beta.2 additive schema and seed default sidecar rows.
-	if _, err := tx.ExecContext(ctx, betaTwoAdditiveSchema); err != nil {
-		return err
+	if digest != preBrowseManifestHash {
+		// Prior schemas have no recurring-limit or presentation sidecars.
+		if _, err := tx.ExecContext(ctx, betaTwoAdditiveSchema); err != nil {
+			return err
+		}
+		if err := migrateBetaTwoDefaults(ctx, tx); err != nil {
+			return err
+		}
 	}
-	if err := migrateBetaTwoDefaults(ctx, tx); err != nil {
+	if _, err := tx.ExecContext(ctx, browseIndexesSchema); err != nil {
 		return err
 	}
 	if err := validateGenerationTwoManifest(ctx, tx); err != nil {

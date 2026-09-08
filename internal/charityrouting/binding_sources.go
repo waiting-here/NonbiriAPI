@@ -145,6 +145,24 @@ func (api *httpAPI) bindingSources(w http.ResponseWriter, r *http.Request, role 
 	if !ok {
 		return
 	}
+	page, numbered, pageErr := parseNumberedQuery(values)
+	if pageErr != nil {
+		writeRoutingError(w, pageErr)
+		return
+	}
+	if numbered {
+		donations, sourceKeys, err := api.service.bindingSourcesPage(r.Context(), role, actorID, modelID, donationID, page)
+		if err != nil {
+			writeRoutingError(w, err)
+			return
+		}
+		if keys {
+			writeJSON(w, sourceKeys)
+		} else {
+			writeJSON(w, donations)
+		}
+		return
+	}
 	limit, cursor, ok := parsePage(values, "cursor", "limit")
 	if !ok {
 		writeRoutingError(w, ErrInvalidRequest)

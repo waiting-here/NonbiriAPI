@@ -13,6 +13,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -59,8 +60,9 @@ type DonationStateOwner interface {
 }
 
 type Page[T any] struct {
-	Data       []T     `json:"data"`
-	NextCursor *string `json:"next_cursor"`
+	Data       []T                  `json:"data"`
+	NextCursor *string              `json:"next_cursor"`
+	Pagination *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 type CapabilityTokenPrices struct {

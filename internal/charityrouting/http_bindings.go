@@ -32,6 +32,15 @@ func (api *httpAPI) candidates(writer http.ResponseWriter, request *http.Request
 	if !ok {
 		return
 	}
+	numberedPage, numbered, pageErr := parseNumberedQuery(values, "donation_id", "donation_key_id", "source", "q")
+	if pageErr != nil {
+		writeRoutingError(writer, pageErr)
+		return
+	}
+	if numbered {
+		api.numberedCandidates(writer, request, role, actorID, modelID, values, numberedPage)
+		return
+	}
 	limit, cursor, ok := parsePage(values, "donation_id", "donation_key_id", "source", "q", "cursor", "limit")
 	if !ok {
 		writeRoutingError(writer, ErrInvalidRequest)

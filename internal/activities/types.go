@@ -1,6 +1,9 @@
 package activities
 
-import "github.com/waiting-here/NonbiriAPI/internal/accountstream"
+import (
+	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
+)
 
 const (
 	PoolTypeWelfare  = "welfare"
@@ -46,8 +49,9 @@ const (
 )
 
 type Page[T any] struct {
-	Data       []T     `json:"data"`
-	NextCursor *string `json:"next_cursor"`
+	Data       []T                  `json:"data"`
+	NextCursor *string              `json:"next_cursor"`
+	Pagination *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 type Pool struct {
@@ -209,10 +213,12 @@ type PoolAdjustment struct {
 }
 
 type PoolListQuery struct {
+	AdminID  int64
 	PoolType string
 	State    string
 	Cursor   string
 	Limit    int
+	Page     *pagination.Request
 }
 
 type WelfareClaimResult struct {

@@ -1,4 +1,6 @@
 import { decoded, queryPath } from '@shared/operations/api';
+import { PAGE_SIZES, type PageSize } from '@shared/operations/pageNumbers';
+import { ApiError } from '@shared/query/http';
 import {
   amount,
   array,
@@ -52,6 +54,8 @@ export const HISTORY_KINDS = [
   'rps_round_cut',
   'rps_terminal',
 ] as const;
+export const MAX_HISTORY_PAGE = 9_223_372_036_854_775_807n;
+export const MAX_HISTORY_UNIX_SECOND = 253_402_300_799;
 export type HistoryKind = (typeof HISTORY_KINDS)[number];
 export interface HistoryEntry {
   operation_id: string;
@@ -64,7 +68,7 @@ export interface HistoryEntry {
 export interface HistoryPage {
   data: HistoryEntry[];
   page: string;
-  page_size: number;
+  page_size: PageSize;
   total: string;
   total_pages: string;
   anchor: string | null;
@@ -73,7 +77,7 @@ export interface HistoryPage {
 }
 export interface HistoryFilter {
   page: string;
-  page_size: number;
+  page_size: PageSize;
   anchor?: string;
   from?: number;
   to?: number;
@@ -96,8 +100,8 @@ export function normalizeHistory(value: unknown): HistoryPage {
     ],
     'credit history',
   );
-  const size = integer(root.page_size, 'credit history page size', 20, 100);
-  if (![20, 50, 100].includes(size)) invalidResponse('credit history page size');
+  const size = integer(root.page_size, 'credit history page size', 10, 100) as PageSize;
+  if (!PAGE_SIZES.includes(size)) invalidResponse('credit history page size');
   const data = array(root.data, 'credit history entries', size).map((raw): HistoryEntry => {
     const entry = record(
       raw,
@@ -159,6 +163,93 @@ export function normalizeHistory(value: unknown): HistoryPage {
   };
 }
 
+function invalidHistoryFilter(): never {
+  throw new ApiError('invalid_request', 'Invalid credit history filter.', 400);
+}
+
+export function isHistoryPage(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^[1-9][0-9]{0,18}$/.test(value)) return false;
+  try {
+    return BigInt(value) <= MAX_HISTORY_PAGE;
+  } catch {
+    return false;
+  }
+}
+
+export function isHistoryAnchor(value: unknown): value is string {
+  return typeof value === 'string' && /^op_[A-Za-z0-9_-]{21}[AQgw]$/.test(value);
+}
+
+function isHistoryUnixSecond(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= MAX_HISTORY_UNIX_SECOND
+  );
+}
+
+function isHistoryCategory(value: unknown): value is (typeof HISTORY_CATEGORIES)[number] {
+  return typeof value === 'string' && HISTORY_CATEGORIES.some((category) => category === value);
+}
+
+function isHistoryDirection(value: unknown): value is 'income' | 'expense' {
+  return value === 'income' || value === 'expense';
+}
+
+export function normalizeHistoryFilter(filter: HistoryFilter): HistoryFilter {
+  if (filter === null || typeof filter !== 'object' || Array.isArray(filter)) {
+    return invalidHistoryFilter();
+  }
+  const allowed = new Set(['page', 'page_size', 'anchor', 'from', 'to', 'category', 'direction']);
+  if (Object.keys(filter).some((key) => !allowed.has(key))) return invalidHistoryFilter();
+  if (!isHistoryPage(filter.page) || !PAGE_SIZES.includes(filter.page_size)) {
+    return invalidHistoryFilter();
+  }
+  if (filter.anchor !== undefined && !isHistoryAnchor(filter.anchor)) return invalidHistoryFilter();
+  if (filter.from !== undefined && !isHistoryUnixSecond(filter.from)) {
+    return invalidHistoryFilter();
+  }
+  if (filter.to !== undefined && !isHistoryUnixSecond(filter.to)) return invalidHistoryFilter();
+  if (filter.from !== undefined && filter.to !== undefined && filter.from >= filter.to) {
+    return invalidHistoryFilter();
+  }
+  if (filter.category !== undefined && !isHistoryCategory(filter.category)) {
+    return invalidHistoryFilter();
+  }
+  if (filter.direction !== undefined && !isHistoryDirection(filter.direction)) {
+    return invalidHistoryFilter();
+  }
+  return {
+    page: filter.page,
+    page_size: filter.page_size,
+    ...(filter.anchor !== undefined ? { anchor: filter.anchor } : {}),
+    ...(filter.from !== undefined ? { from: filter.from } : {}),
+    ...(filter.to !== undefined ? { to: filter.to } : {}),
+    ...(filter.category !== undefined ? { category: filter.category } : {}),
+    ...(filter.direction !== undefined ? { direction: filter.direction } : {}),
+  };
+}
+
+function validateHistoryResponse(page: HistoryPage, filter: HistoryFilter): HistoryPage {
+  const requested = BigInt(filter.page);
+  const totalPages = BigInt(page.total_pages);
+  const expected = requested > totalPages ? totalPages : requested;
+  if (
+    page.page_size !== filter.page_size ||
+    page.page !== expected.toString() ||
+    (filter.anchor !== undefined && page.anchor !== filter.anchor)
+  ) {
+    invalidResponse('credit history page window');
+  }
+  return page;
+}
+
 export function loadHistory(filter: HistoryFilter, signal?: AbortSignal): Promise<HistoryPage> {
-  return decoded(queryPath('/api/credits/history', { ...filter }), normalizeHistory, { signal });
+  const normalizedFilter = normalizeHistoryFilter(filter);
+  return decoded(
+    queryPath('/api/credits/history', { ...normalizedFilter }),
+    (value) => validateHistoryResponse(normalizeHistory(value), normalizedFilter),
+    { signal },
+  );
 }

@@ -41,6 +41,15 @@ function anchorFor(key, defaultAnchor) {
 }
 
 const dynamicCopyKeys = [
+  ...['pending', 'disabled', 'suspended', 'exhausted', 'expired', 'ended'].map((state) =>
+    entry(
+      'common',
+      `common.operations.charity.sourceBrowser.stateReason.${state}`,
+      'src/shared/components/CharitySourceBrowser.tsx',
+      't(`common.operations.charity.sourceBrowser.stateReason.${key.charity_state}`)',
+      'The normalized donation key state is closed; available returns no blocking reason.',
+    ),
+  ),
   // Common charity state/decision/validation domains are finite typed unions.
   ...[
     'common.operations.charity.charityState.pending',
@@ -157,12 +166,9 @@ const dynamicCopyKeys = [
     'admin.charity.discountPercent',
     'admin.charity.discountStart',
     'admin.charity.donationNumber',
-    'admin.charity.donationsTitle',
     'admin.charity.flattenExperimental',
     'admin.charity.model',
-    'admin.charity.modelsTitle',
     'admin.charity.newModel',
-    'admin.charity.next',
     'admin.charity.noBindings',
     'admin.charity.noDonations',
     'admin.charity.noDonationsBody',
@@ -171,7 +177,6 @@ const dynamicCopyKeys = [
     'admin.charity.order',
     'admin.charity.perRequest',
     'admin.charity.perToken',
-    'admin.charity.previous',
     'admin.charity.pricingMode',
     'admin.charity.provider',
     'admin.charity.request_donor_reward_milli',
@@ -207,12 +212,9 @@ const dynamicCopyKeys = [
     'user.steward.discountPercent',
     'user.steward.discountStart',
     'user.steward.donationNumber',
-    'user.steward.donationsTitle',
     'user.steward.flattenExperimental',
     'user.steward.model',
-    'user.steward.modelsTitle',
     'user.steward.newModel',
-    'user.steward.next',
     'user.steward.noBindings',
     'user.steward.noDonations',
     'user.steward.noDonationsBody',
@@ -221,7 +223,6 @@ const dynamicCopyKeys = [
     'user.steward.order',
     'user.steward.perRequest',
     'user.steward.perToken',
-    'user.steward.previous',
     'user.steward.pricingMode',
     'user.steward.provider',
     'user.steward.request_donor_reward_milli',
@@ -370,15 +371,15 @@ const dynamicCopyKeys = [
   ),
   // User charity key-eligibility results are finite.
   ...[
-    'user.charity.keyEligibility.eligible',
-    'user.charity.keyEligibility.already_donated',
-    'user.charity.keyEligibility.security_processing',
+    'user.charity.resourcePicker.eligibility.eligible',
+    'user.charity.resourcePicker.eligibility.already_donated',
+    'user.charity.resourcePicker.eligibility.security_processing',
   ].map((key) =>
     entry(
       'user',
       key,
-      charityPanels,
-      't(`user.charity.keyEligibility.${choice.eligibility}`)',
+      'src/user/features/economy/DonationResourcePicker.tsx',
+      '`user.charity.resourcePicker.eligibility.${eligibility}`',
       'Eligibility is normalized to the explicit eligible/already_donated/security_processing union.',
     ),
   ),

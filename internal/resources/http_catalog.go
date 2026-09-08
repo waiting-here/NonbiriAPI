@@ -1,6 +1,12 @@
 package resources
 
-import "net/http"
+import (
+	"context"
+	"net/http"
+	"net/url"
+
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
+)
 
 type manualCatalogEntryRequest struct {
 	UpstreamModelID requestField[string] `json:"upstream_model_id"`
@@ -56,6 +62,14 @@ func (api *httpAPI) getCatalog(writer http.ResponseWriter, request *http.Request
 	}
 	keyID, ok := parsePathID(writer, request, "keyId")
 	if !ok || !requireNoBody(writer, request) {
+		return
+	}
+	if serveNumberedPage(writer, request, []string{"source"}, func(ctx context.Context, values url.Values, page pagination.Request) (CatalogView, error) {
+		if entries, present := values["source"]; present && entries[0] != "automatic" && entries[0] != "manual" {
+			return CatalogView{}, ErrInvalidRequest
+		}
+		return api.repository.GetCatalogPage(ctx, principal.UserID, endpointID, keyID, values.Get("source"), page)
+	}) {
 		return
 	}
 	limit, cursor, ok := parsePageQuery(writer, request)

@@ -10,7 +10,30 @@ package db
 // generationTwoSchema is deliberately non-idempotent. Keep all scalar
 // constraints in this source so that the startup manifest is an exact lock,
 // rather than a best-effort list of tables.
-const generationTwoSchema = generationTwoBaseSchema + charityModelRoutingSchema + endpointKeyLimitsSchema + dispatchResponseStartsSchema + betaTwoAdditiveSchema
+const generationTwoSchema = generationTwoBaseSchema + charityModelRoutingSchema + endpointKeyLimitsSchema + dispatchResponseStartsSchema + betaTwoAdditiveSchema + browseIndexesSchema
+
+// Source grouping uses only native SQLite expressions so external database
+// verification tools can still check the stored indexes without extensions.
+const browseIndexesSchema = `
+CREATE INDEX idx_report_cases_created ON report_cases(created_at,id);
+CREATE INDEX idx_report_materials_created ON report_materials(case_id,created_at,id);
+CREATE INDEX idx_legal_holds_created ON legal_holds(created_at,id);
+CREATE INDEX idx_endpoints_base_users ON endpoints(base_url,user_id,id);
+CREATE INDEX idx_shared_pools_created ON shared_pools(created_at,id);
+CREATE INDEX idx_request_logs_started ON request_logs(started_at,id);
+CREATE INDEX idx_models_user_updated ON models(user_id,updated_at,id);
+CREATE INDEX idx_model_bindings_key_browse ON model_bindings(endpoint_key_id,upstream_model_id,id);
+CREATE INDEX idx_model_catalog_key_source ON model_catalog_entries(endpoint_key_id,source_type,id);
+CREATE INDEX idx_mainstream_channels_updated ON mainstream_channels(updated_at,id);
+CREATE INDEX idx_donations_owner_page ON donations(user_id,id);
+CREATE INDEX idx_charity_bindings_key ON charity_model_bindings(donation_key_id,id);
+CREATE INDEX idx_donation_keys_source_page ON donation_keys(
+ COALESCE(mainstream_channel_id,''),
+ CASE WHEN mainstream_channel_id IS NULL THEN connector_type ELSE '' END,
+ CASE WHEN mainstream_channel_id IS NULL THEN canonical_base_url ELSE '' END,
+ id
+);
+`
 
 const dispatchResponseStartsSchema = `
 CREATE TABLE dispatch_response_starts (

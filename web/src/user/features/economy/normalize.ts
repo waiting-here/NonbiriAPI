@@ -236,7 +236,7 @@ function normalizeEndpointOrigin(value: unknown): EndpointOrigin {
   invalid('endpoint origin kind');
 }
 
-function normalizeDonationSafeSource(value: unknown): DonationKeySource {
+export function normalizeDonationSafeSource(value: unknown): DonationKeySource {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     invalid('donation key safe source');
   }

@@ -3,6 +3,17 @@
   gap: 0.65rem;
   align-items: end;
 }
+.page-pagination__overview,
+.page-pagination__navigation {
+  display: flex;
+  gap: 0.65rem;
+  align-items: end;
+  min-width: 0;
+}
+.page-pagination__overview > span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
 .page-pagination__size,
 .page-pagination__jump {
   display: grid;
@@ -20,4 +31,34 @@
 .page-pagination > span {
   overflow-wrap: anywhere;
   max-width: 100%;
+}
+
+@media (max-width: 640px) {
+  .page-pagination__overview,
+  .page-pagination__navigation {
+    display: grid;
+    width: 100%;
+    gap: 0.4rem;
+  }
+  .page-pagination__overview {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .page-pagination__navigation {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+  }
+  .page-pagination__navigation .btn {
+    padding-inline: 0.5rem;
+  }
+  .page-pagination__jump input {
+    width: 100%;
+  }
+  .page-pagination__jump > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }

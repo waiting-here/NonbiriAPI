@@ -6,20 +6,27 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 )
 
 func (service *Service) List(ctx context.Context, userID int64, query ListQuery) (Page, error) {
 	empty := Page{Data: []Issue{}}
 	if service == nil || service.repository == nil || userID <= 0 || !validLimit(query.Limit) ||
-		(query.State != "current" && query.State != "closed") {
+		(query.State != "current" && query.State != "closed") ||
+		(query.Numbered != nil && (!query.Numbered.Valid() || query.Cursor != "" || query.Limit != 0)) {
 		return empty, ErrInvalidRequest
 	}
+	if ctx == nil {
+		return empty, ErrUnavailable
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	repository := service.repository
 	now, err := repository.nowUnix()
 	if err != nil {
 		return empty, err
 	}
-	tx, err := beginTx(ctx, repository.db)
+	tx, err := repository.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return empty, err
 	}
@@ -42,6 +49,27 @@ func (service *Service) List(ctx context.Context, userID int64, query ListQuery)
 	empty.ProjectionIncomplete = incomplete == 1
 	limit := normalizedLimit(query.Limit)
 	args := []any{userID, query.State, now}
+	const filtered = ` FROM user_issues i
+WHERE i.user_id=? AND i.state=?
+  AND (i.state<>'closed' OR i.retain_until>?)
+  AND (i.state<>'current' OR i.resource_kind<>'endpoint_key' OR NOT EXISTS(
+    SELECT 1 FROM endpoint_key_suspensions s
+    WHERE CAST(s.endpoint_key_id AS TEXT)=i.resource_ref AND s.reason_type='report_case'
+  ))`
+	readLimit := limit + 1
+	offset := int64(0)
+	if query.Numbered != nil {
+		var total int64
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*)`+filtered, args...).Scan(&total); err != nil {
+			return empty, fmt.Errorf("issues: count projection: %w", err)
+		}
+		metadata, pageOffset, err := query.Numbered.Window(total)
+		if err != nil {
+			return empty, ErrUnavailable
+		}
+		empty.Pagination = &metadata
+		limit, readLimit, offset = query.Numbered.Size, query.Numbered.Size, pageOffset
+	}
 	cursorPredicate := ""
 	if query.Cursor != "" {
 		payload, err := repository.cursors.decode(query.Cursor, "issues:"+query.State, issueCursorOwner(userID, query.State), now)
@@ -51,21 +79,14 @@ func (service *Service) List(ctx context.Context, userID int64, query ListQuery)
 		cursorPredicate = " AND (last_seen_at<? OR (last_seen_at=? AND id>?))"
 		args = append(args, payload.LastSeen, payload.LastSeen, payload.ID)
 	}
-	args = append(args, limit+1)
-	rows, err := tx.QueryContext(ctx, `SELECT `+issueSelectColumns+`
-FROM user_issues i
-WHERE i.user_id=? AND i.state=?
-	  AND (i.state<>'closed' OR i.retain_until>?)
-	  AND (i.state<>'current' OR i.resource_kind<>'endpoint_key' OR NOT EXISTS(
-    SELECT 1 FROM endpoint_key_suspensions s
-    WHERE CAST(s.endpoint_key_id AS TEXT)=i.resource_ref AND s.reason_type='report_case'
-  ))`+cursorPredicate+`
-ORDER BY i.last_seen_at DESC,i.id ASC LIMIT ?`, args...)
+	args = append(args, readLimit, offset)
+	rows, err := tx.QueryContext(ctx, `SELECT `+issueSelectColumns+filtered+cursorPredicate+`
+ORDER BY i.last_seen_at DESC,i.id ASC LIMIT ? OFFSET ?`, args...)
 	if err != nil {
 		return empty, fmt.Errorf("issues: list projection: %w", err)
 	}
 	defer rows.Close()
-	rawRows := make([]rawIssue, 0, limit+1)
+	rawRows := make([]rawIssue, 0, readLimit)
 	for rows.Next() {
 		issue, err := scanIssue(rows)
 		if err != nil {
@@ -80,7 +101,7 @@ ORDER BY i.last_seen_at DESC,i.id ASC LIMIT ?`, args...)
 	if hasMore {
 		rawRows = rawRows[:limit]
 	}
-	out := Page{Data: make([]Issue, 0, len(rawRows)), ProjectionIncomplete: incomplete == 1}
+	out := Page{Data: make([]Issue, 0, len(rawRows)), ProjectionIncomplete: incomplete == 1, Pagination: empty.Pagination}
 	for _, raw := range rawRows {
 		value, err := issueDTO(raw)
 		if err != nil {

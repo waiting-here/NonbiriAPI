@@ -38,6 +38,7 @@ func RegisterRoutes(registrar UserRouteRegistrar, repository *Repository) error 
 		{http.MethodDelete, routeEndpoint, api.deleteEndpoint},
 		{http.MethodGet, routeEndpointKeys, api.listEndpointKeys},
 		{http.MethodPost, routeEndpointKeys, api.createEndpointKey},
+		{http.MethodGet, routeKeyBindings, api.listKeyBindings},
 		{http.MethodPatch, routeEndpointKey, api.patchEndpointKey},
 		{http.MethodDelete, routeEndpointKey, api.deleteEndpointKey},
 		{http.MethodGet, routeCatalog, api.getCatalog},

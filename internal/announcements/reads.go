@@ -5,15 +5,19 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
 func (service *Service) ListUser(ctx context.Context, userID int64, query PageQuery) (Page[AnnouncementSummary], error) {
 	empty := Page[AnnouncementSummary]{Data: []AnnouncementSummary{}}
-	if service == nil || service.repository == nil || userID <= 0 || !validLimit(query.Limit) {
+	if ctx == nil || service == nil || service.repository == nil || userID <= 0 || !validListWindow(query.Cursor, query.Limit, query.Numbered) {
 		return empty, ErrInvalidRequest
 	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	repository := service.repository
 	now, err := repository.nowUnix()
 	if err != nil {
@@ -46,10 +50,26 @@ func (service *Service) ListUser(ctx context.Context, userID int64, query PageQu
 		cursorPredicate = ` AND (pinned<? OR (pinned=? AND (published_at<? OR (published_at=? AND id>?))))`
 		args = append(args, payload.Pinned, payload.Pinned, payload.Time, payload.Time, payload.ID)
 	}
-	args = append(args, limit+1)
+	var meta *pagination.Metadata
+	suffix := " LIMIT ?"
+	if query.Numbered != nil {
+		var total int64
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM announcements WHERE state='published' AND (expires_at IS NULL OR expires_at>?)`, now).Scan(&total); err != nil {
+			return empty, err
+		}
+		value, offset, err := query.Numbered.Window(total)
+		if err != nil {
+			return empty, ErrInvalidRequest
+		}
+		meta, limit = &value, query.Numbered.Size
+		suffix += " OFFSET ?"
+		args = append(args, limit, offset)
+	} else {
+		args = append(args, limit+1)
+	}
 	rows, err := tx.QueryContext(ctx, `SELECT `+announcementSelectColumns+`
 FROM announcements WHERE state='published' AND (expires_at IS NULL OR expires_at>?)`+cursorPredicate+`
-ORDER BY pinned DESC,published_at DESC,id ASC LIMIT ?`, args...)
+ORDER BY pinned DESC,published_at DESC,id ASC`+suffix, args...)
 	if err != nil {
 		return empty, fmt.Errorf("announcements: list user announcements: %w", err)
 	}
@@ -69,7 +89,7 @@ ORDER BY pinned DESC,published_at DESC,id ASC LIMIT ?`, args...)
 	if hasMore {
 		rawRows = rawRows[:limit]
 	}
-	out := Page[AnnouncementSummary]{Data: make([]AnnouncementSummary, 0, len(rawRows))}
+	out := Page[AnnouncementSummary]{Data: make([]AnnouncementSummary, 0, len(rawRows)), Pagination: meta}
 	for _, row := range rawRows {
 		summary, err := repository.userSummary(row, epoch, language)
 		if err != nil {
@@ -139,11 +159,13 @@ FROM announcements WHERE id=? AND state='published' AND (expires_at IS NULL OR e
 
 func (service *Service) ListAdmin(ctx context.Context, adminID int64, query AdminListQuery) (Page[AdminAnnouncement], error) {
 	empty := Page[AdminAnnouncement]{Data: []AdminAnnouncement{}}
-	if service == nil || service.repository == nil || !validLimit(query.Limit) ||
+	if ctx == nil || service == nil || service.repository == nil || !validListWindow(query.Cursor, query.Limit, query.Numbered) ||
 		(query.State != "" && query.State != "draft" && query.State != "published" && query.State != "withdrawn" && query.State != "expired") ||
 		(query.Severity != "" && !validSeverity(query.Severity)) {
 		return empty, ErrInvalidRequest
 	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	repository := service.repository
 	tx, now, err := repository.beginAuthorizedAdminTx(ctx, adminID)
 	if err != nil {
@@ -174,9 +196,25 @@ func (service *Service) ListAdmin(ctx context.Context, adminID int64, query Admi
 		where += " AND (updated_at<? OR (updated_at=? AND id>?))"
 		args = append(args, payload.Time, payload.Time, payload.ID)
 	}
-	args = append(args, limit+1)
+	var meta *pagination.Metadata
+	suffix := " LIMIT ?"
+	if query.Numbered != nil {
+		var total int64
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM announcements`+where, args...).Scan(&total); err != nil {
+			return empty, err
+		}
+		value, offset, err := query.Numbered.Window(total)
+		if err != nil {
+			return empty, ErrInvalidRequest
+		}
+		meta, limit = &value, query.Numbered.Size
+		suffix += " OFFSET ?"
+		args = append(args, limit, offset)
+	} else {
+		args = append(args, limit+1)
+	}
 	rows, err := tx.QueryContext(ctx, `SELECT `+announcementSelectColumns+` FROM announcements`+where+`
-ORDER BY updated_at DESC,id ASC LIMIT ?`, args...)
+ORDER BY updated_at DESC,id ASC`+suffix, args...)
 	if err != nil {
 		return empty, fmt.Errorf("announcements: list administrator announcements: %w", err)
 	}
@@ -199,7 +237,7 @@ ORDER BY updated_at DESC,id ASC LIMIT ?`, args...)
 	if hasMore {
 		rawRows = rawRows[:limit]
 	}
-	out := Page[AdminAnnouncement]{Data: make([]AdminAnnouncement, 0, len(rawRows))}
+	out := Page[AdminAnnouncement]{Data: make([]AdminAnnouncement, 0, len(rawRows)), Pagination: meta}
 	for _, row := range rawRows {
 		value, err := repository.adminDTO(row)
 		if err != nil {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
+import { listReturnPath } from '@shared/operations/listReturn';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { clearStationSession } from '@shared/charityManagement';
@@ -60,6 +61,8 @@ const fromAuthority = (item: AdminAnnouncement): DraftState => ({
 });
 
 export function AnnouncementDetailPage() {
+  const location = useLocation();
+  const backTo = listReturnPath(location.state, '/announcements');
   const { t } = useTranslation();
   const { announcementId = '' } = useParams();
   const navigate = useNavigate();
@@ -106,6 +109,7 @@ export function AnnouncementDetailPage() {
       ),
     async (_input, error) => {
       if (error) setConflict(true);
+      await client.invalidateQueries({ queryKey: adminAnnouncementKeys.pages });
       await authority.refetch();
     },
   );
@@ -121,12 +125,13 @@ export function AnnouncementDetailPage() {
       return deleteAnnouncement(announcementId, input.revision, input.reason, key);
     },
     async (input, error) => {
+      await client.invalidateQueries({ queryKey: adminAnnouncementKeys.pages });
       if (!error && input.action === 'delete') {
         client.removeQueries({
           queryKey: adminAnnouncementKeys.detail(announcementId),
           exact: true,
         });
-        navigate('/announcements', { replace: true });
+        navigate(backTo, { replace: true });
         return;
       }
       const refreshed = await authority.refetch();
@@ -135,7 +140,7 @@ export function AnnouncementDetailPage() {
           queryKey: adminAnnouncementKeys.detail(announcementId),
           exact: true,
         });
-        navigate('/announcements', { replace: true });
+        navigate(backTo, { replace: true });
       }
     },
   );
@@ -198,7 +203,7 @@ export function AnnouncementDetailPage() {
         <PageHeader
           title={t('admin.announcements.detail.loadingTitle')}
           description={t('admin.announcements.detail.loadingDescription')}
-          back={<Link to="/announcements">{t('admin.announcements.detail.back')}</Link>}
+          back={<Link to={backTo}>{t('admin.announcements.detail.back')}</Link>}
         />
         {authority.error ? (
           <ErrorState error={authority.error} onRetry={() => void authority.refetch()} />
@@ -257,7 +262,7 @@ export function AnnouncementDetailPage() {
       <PageHeader
         title={draft.title_en || draft.title_zh || t('admin.announcements.detail.untitled')}
         description={t('admin.announcements.detail.description')}
-        back={<Link to="/announcements">{t('admin.announcements.detail.back')}</Link>}
+        back={<Link to={backTo}>{t('admin.announcements.detail.back')}</Link>}
       />
       <Card>
         <div className="ops-toolbar">
