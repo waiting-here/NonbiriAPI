@@ -11,6 +11,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/charity"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
+	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 )
 
@@ -223,7 +224,8 @@ func mapDonationKeys(values []donation.ExportDonationKey) []lifecycle.DonationKe
 	out := make([]lifecycle.DonationKeyExport, len(values))
 	for index, value := range values {
 		out[index] = lifecycle.DonationKeyExport{
-			ID: value.ID, EndpointKeyID: cloneString(value.EndpointKeyID),
+			RecurringLimits: mapRecurringLimits(value.RecurringLimits),
+			ID:              value.ID, EndpointKeyID: cloneString(value.EndpointKeyID),
 			DisplayHead: value.DisplayHead, DisplayTail: value.DisplayTail,
 			SafeSource: lifecycle.DonationSafeSourceExport{
 				Kind: value.SafeSource.Kind, ConnectorType: value.SafeSource.ConnectorType,
@@ -249,6 +251,26 @@ func mapDonationKeys(values []donation.ExportDonationKey) []lifecycle.DonationKe
 			},
 			EndedReason: cloneString(value.EndedReason),
 		}
+	}
+	return out
+}
+
+func mapRecurringLimits(values []donationquota.RuleView) []lifecycle.RecurringLimitExport {
+	out := make([]lifecycle.RecurringLimitExport, len(values))
+	for index, v := range values {
+		id := ""
+		if v.ID != nil {
+			id = *v.ID
+		}
+		var week *int
+		if v.WeekStartsOn != nil {
+			n := *v.WeekStartsOn
+			week = &n
+		}
+		out[index] = lifecycle.RecurringLimitExport{ID: id, Mode: v.Mode, Interval: v.Interval,
+			Alignment: cloneString(v.Alignment), TimeZone: v.TimeZone, WeekStartsOn: week, Metric: v.Metric,
+			Limit: v.Limit, Used: v.Used, Reserved: v.Reserved, Remaining: v.Remaining, State: v.State,
+			PeriodStart: cloneInt64(v.PeriodStart), PeriodEnd: cloneInt64(v.PeriodEnd), NextTransitionAt: cloneInt64(v.NextTransitionAt)}
 	}
 	return out
 }

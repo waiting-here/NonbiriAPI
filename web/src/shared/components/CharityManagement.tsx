@@ -14,6 +14,7 @@ import { useCursorPager } from '@shared/operations/useCursorPager';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { formatDateTime } from '@shared/utils/datetime';
 import { TimeInput } from './TimeInput';
+import { RecurringLimitsDisclosure } from './RecurringLimitsDisclosure';
 import { createTimeDraft, timeDraftValue, type TimeDraft, type TimeStation } from '@shared/time';
 import {
   addManagedBindings,
@@ -901,9 +902,11 @@ function DonationDetail({
 
 function DonationsPanel({
   role,
+  accountId,
   onCapabilityLoss,
 }: {
   role: CharityRole;
+  accountId?: string;
   onCapabilityLoss?: () => void;
 }) {
   const [searchParams] = useSearchParams();
@@ -917,6 +920,7 @@ function DonationsPanel({
     <DonationsPanelContents
       key={`${handling}\0${query}`}
       role={role}
+      accountId={accountId}
       onCapabilityLoss={onCapabilityLoss}
       handling={handling}
       query={query}
@@ -928,6 +932,7 @@ function DonationsPanel({
 
 function DonationsPanelContents({
   role,
+  accountId,
   onCapabilityLoss,
   handling,
   query,
@@ -935,6 +940,7 @@ function DonationsPanelContents({
   setStatus,
 }: {
   role: CharityRole;
+  accountId?: string;
   onCapabilityLoss?: () => void;
   handling: string;
   query: string;
@@ -1159,13 +1165,42 @@ function DonationsPanelContents({
         ) : detail.error ? (
           <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
         ) : (
-          <DonationDetail
-            key={`${detail.data.id}:${detail.data.revision}`}
-            item={detail.data}
-            role={role}
-            refresh={refresh}
-            onCapabilityLoss={onCapabilityLoss}
-          />
+          <>
+            <DonationDetail
+              key={`${detail.data.id}:${detail.data.revision}`}
+              item={detail.data}
+              role={role}
+              refresh={refresh}
+              onCapabilityLoss={onCapabilityLoss}
+            />
+            {accountId ? (
+              <Card>
+                <div className="ops-stack">
+                  {detail.data.keys.map((entry) => (
+                    <RecurringLimitsDisclosure
+                      key={`${accountId}:${detail.data.id}:${entry.id}`}
+                      accountId={accountId}
+                      role={role}
+                      donationId={detail.data.id}
+                      keyId={entry.id}
+                      label={t('common.operations.charity.keyHeading', {
+                        id: entry.id,
+                        head: entry.display_head,
+                        tail: entry.display_tail,
+                      })}
+                      readOnly={
+                        entry.charity_state === 'ended' || entry.charity_state === 'expired'
+                      }
+                      onSaved={() => {
+                        void refresh();
+                      }}
+                      onCapabilityLoss={onCapabilityLoss}
+                    />
+                  ))}
+                </div>
+              </Card>
+            ) : null}
+          </>
         )
       ) : null}
     </div>
@@ -2086,10 +2121,12 @@ function ModelsPanel({
 
 export function CharityManagement({
   frame,
+  accountId,
   onCapabilityLoss,
   sourceGroups,
 }: {
   frame: CharityRole;
+  accountId?: string;
   onCapabilityLoss?: () => void;
   sourceGroups?: ReactNode;
 }) {
@@ -2158,7 +2195,7 @@ export function CharityManagement({
         ) : null}
       </div>
       {section === 'donations' ? (
-        <DonationsPanel role={frame} onCapabilityLoss={clearCapability} />
+        <DonationsPanel role={frame} accountId={accountId} onCapabilityLoss={clearCapability} />
       ) : section === 'models' ? (
         <ModelsPanel role={frame} onCapabilityLoss={clearCapability} />
       ) : frame === 'admin' ? (

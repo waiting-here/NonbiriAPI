@@ -14,6 +14,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 )
 
 const (
@@ -206,7 +207,7 @@ JOIN charity_model_access a ON a.model_id=cm.id WHERE cm.enabled=1 AND (a.allowe
 	for _, model := range models {
 		if _, err := s.snapshot(ctx, model.ModelID, decisionNow, false, nil); err == nil {
 			available = append(available, model)
-		} else if !errors.Is(err, ErrUnavailable) && !errors.Is(err, ErrNotFound) {
+		} else if !errors.Is(err, ErrUnavailable) && !errors.Is(err, ErrNotFound) && !errors.Is(err, donationquota.ErrLimited) {
 			return nil, err
 		}
 	}
@@ -327,6 +328,7 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, maxBindingBatch+1)
 	weighted := make([]weightedRuntimeCandidate, 0, MaxRuntimeCandidates)
 	sawRuntimeCandidate := false
 	sawSupportedCandidate := false
+	sawRecurringLimit := false
 	for rows.Next() {
 		var candidate RuntimeCandidate
 		var connector string
@@ -377,6 +379,23 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, maxBindingBatch+1)
 			continue
 		}
 		candidate.Policy.ForceStoreFalse = forceStore == 1
+		quotaPrice, err := db.U128FromBig(big.NewInt(priceReserve))
+		if err != nil {
+			return RuntimeSnapshot{}, ErrInvariant
+		}
+		quotaTokens, err := db.U128FromBig(big.NewInt(tokenReserve))
+		if err != nil {
+			return RuntimeSnapshot{}, ErrInvariant
+		}
+		quotaCalls, _ := db.U128FromBig(big.NewInt(1))
+		eligible, err = donationquota.Available(ctx, tx, candidate.DonationKeyID, decisionNow, donationquota.Amounts{Calls: quotaCalls, Tokens: quotaTokens, Credits: quotaPrice})
+		if err != nil {
+			return RuntimeSnapshot{}, err
+		}
+		if !eligible {
+			sawRecurringLimit = true
+			continue
+		}
 		candidate.Policy.FlattenToolCalls = snapshot.FlattenToolCalls
 		weighted = append(weighted, weightedRuntimeCandidate{candidate: candidate, weight: weight})
 		if len(weighted) > MaxRuntimeCandidates {
@@ -397,6 +416,9 @@ ORDER BY b.ord,b.id LIMIT ?`, modelID, maxBindingBatch+1)
 		return RuntimeSnapshot{}, ErrInvalidRequest
 	}
 	if len(weighted) == 0 {
+		if sawRecurringLimit {
+			return RuntimeSnapshot{}, donationquota.ErrLimited
+		}
 		return RuntimeSnapshot{}, ErrUnavailable
 	}
 	if freezeOrder {
@@ -543,7 +565,7 @@ WHERE enabled=1 ORDER BY id`)
 		}
 		if _, err := s.snapshot(ctx, id, decisionNow, false, nil); err == nil {
 			available = append(available, models[index])
-		} else if !errors.Is(err, ErrUnavailable) && !errors.Is(err, ErrNotFound) {
+		} else if !errors.Is(err, ErrUnavailable) && !errors.Is(err, ErrNotFound) && !errors.Is(err, donationquota.ErrLimited) {
 			return Capability{}, err
 		}
 	}

@@ -151,17 +151,19 @@ Use separate `server` blocks/certificates for user and administrator hosts so th
 
 Model calls allow up to 900 seconds for upstream response headers and 1200 seconds for the whole logical request, including retries and streaming. Keep proxy timeouts at least 1200 seconds. These are application defaults, not editable site settings. Model discovery retains its separate five-minute worker budget.
 
-## Beta.1 database compatibility and version changes
+<a id="beta1-database-compatibility-and-version-changes"></a>
 
-Beta.1 accepts only a completely absent database set or a validated Generation 2 database whose SQLite header contains `application_id=0x4E425249` and `user_version=2`. Three exact earlier Generation 2 manifests are supported: the schema before charity routing, before key request limits, and before successful-response checkpoints. A single transaction adds the missing `charity_model_routing`, `endpoint_key_limits`, dispatch lookup indexes, and `dispatch_response_starts` as needed, then validates the new full manifest. Existing tables, business rows, routing strategies and key limits are preserved. Older models without routing configuration retain expiry-weighted routing; older keys without limits remain unlimited. No historical response-start evidence is invented. It does not run `ALTER`, arbitrary schema repair, or old-generation data import. Before a writable source open, an existing database is copied through no-follow read-only handles to a private validation directory; header, schema, foreign keys, indexes, sidecars, and contextual credential envelopes are checked there. An alpha or Generation 1 file, empty file, unknown generation, corrupt or unexpected schema, unsafe file shape, rollback journal, or anomalous sidecar is refused without modifying the source set or creating a new source-side WAL/SHM.
+## Database compatibility and version changes
+
+The current source accepts only a completely absent database set or a validated Generation 2 database whose SQLite header contains `application_id=0x4E425249` and `user_version=2`. Four exact earlier Generation 2 manifests are supported: the schema before charity routing, before key request limits, before successful-response checkpoints, and the complete beta.1 schema. A single transaction adds the missing routing, key limits, dispatch indexes and checkpoints, donation handling, model access, recurring quota, and game presentation tables as needed, then validates the complete manifest. Existing business rows, routing strategies, key limits, historical times, accounting, and custom legal settings are preserved. Older models without routing configuration retain expiry-weighted routing; older keys without limits remain unlimited. Existing models initially allow all five levels and have empty public descriptions; existing donations receive the legacy handling state. Recurring rule sets begin empty. No historical response-start evidence, recurring consumption, or game presentation values are invented. Before a writable source open, an existing database is copied through no-follow read-only handles to a private validation directory; header, schema, foreign keys, indexes, sidecars, and contextual credential envelopes are checked there. Alpha/Generation 1 files, empty files, unknown generations, unexpected or corrupt schemas, unsafe file shapes, rollback journals, and anomalous sidecars are refused without modifying the source set or creating source-side WAL/SHM files. Arbitrary schema repair and old-generation data import remain unsupported.
 
 Therefore:
 
-- installing a beta.1 binary over an alpha or Generation 1 database does not upgrade it;
+- installing the current binary over an alpha or Generation 1 database does not upgrade it;
 - switching only the binary to an older version is never a supported downgrade;
 - a stateful rollback must restore a complete compatible snapshot, not combine an old binary with the current database;
 - a cutover from an alpha release deliberately starts with an empty Generation 2 database and loses active application state unless the operator later re-enters it manually;
-- a fresh beta.1 database starts with maintenance on and registration, activities, charity, donation intake, and games off. Keep those gates closed until instance legal text, required configuration, initialization, and smoke tests pass.
+- a fresh Generation 2 database starts with maintenance on and registration, activities, charity, donation intake, and games off. Keep those gates closed until instance legal text, required configuration, initialization, and smoke tests pass.
 
 Beta.1 adds no startup environment-variable names relative to alpha.3. An existing environment file must still satisfy the current validation rules and is retained by the separately maintained helper, but every database-backed runtime setting is reset by a destructive fresh cutover and must be reviewed or re-entered through the administrator station.
 
@@ -225,9 +227,9 @@ There is no in-place path. With a separately reviewed compatible helper and expl
 
 If the cutover fails before the target passes local health and reaches its recorded commit point, restore the complete source snapshot and old release. After that commit point, a failure limited to public proxy, DNS, or TLS checks keeps the new service and source snapshot in place and reports the external fault; it does not automatically roll back the database. If the source snapshot is missing, corrupt, incompatible, or has been cleaned up, stateful rollback is unavailable: the safe choices are to keep the current compatible deployment, repair/restore from another verified complete snapshot, or perform a separately confirmed destructive fresh deployment. The helper must never offer a binary-only downgrade or fabricate a database for the old version.
 
-## Beta.1 limitations
+## Deployment limitations
 
-- Beta.1 requires a fresh Generation 2 database when coming from alpha. Current Generation 2 databases are validated; exact supported predecessors receive only the additive tables and indexes described above. A completely absent main/WAL/SHM path set permits fresh creation, while every unsupported existing state is rejected without repair.
+- A deployment coming from alpha requires a fresh Generation 2 database. Current Generation 2 databases are validated; exact supported predecessors receive the additive tables, indexes, and defaults described above. A completely absent main/WAL/SHM path set permits fresh creation, while every unsupported existing state is rejected without repair.
 - The release target is Linux/amd64 and the release process is source-first.
 - SMTP settings are reserved and do not send alert email in the current prereleases.
 - Real Discord OAuth and upstream success flows must be tested with disposable staging credentials before public operation.

@@ -30,6 +30,8 @@ function validDonationID(value: string): boolean {
 
 function DonationDetailContent({ donationID }: { donationID: string }) {
   const { t } = useTranslation();
+  const session = useUserSession();
+  const accountID = session.data?.user.id;
   const valid = validDonationID(donationID);
   const donation = useDonation(valid ? donationID : undefined, valid);
   return (
@@ -68,7 +70,12 @@ function DonationDetailContent({ donationID }: { donationID: string }) {
       ) : (
         <>
           <CharitySafetyNotice />
-          <DonationCard donation={donation.data} showDetailLink={false} />
+          <DonationCard
+            key={accountID}
+            donation={donation.data}
+            accountID={accountID}
+            showDetailLink={false}
+          />
         </>
       )}
     </div>
@@ -178,7 +185,7 @@ function CharityContent() {
             }
           />
         ) : (
-          <DonationKeyOverview donations={donations.data} />
+          <DonationKeyOverview key={accountID} accountID={accountID} donations={donations.data} />
         )}
       </section>
       <section

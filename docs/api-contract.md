@@ -67,9 +67,9 @@ An owner-visible upstream 4xx may retain its HTTP status. Other upstream failure
 
 ### 1.4 Database and export versions
 
-Beta.1 uses database Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. Only a completely absent main/WAL/SHM set or a validated Generation 2 set is accepted. Empty, alpha/Generation 1, unknown, corrupt, structurally unexpected, unsafe, or anomalous-sidecar sources are rejected before a writable open or source-side change. Three exact earlier Generation 2 manifests are supported: before charity routing, before per-key request limits, and before successful-response checkpoints. After read-only validation, one transaction adds only the missing tables and indexes, validates the complete current manifest, and preserves existing data. No historical successful-response evidence is invented. Alpha/Generation 1 requires a fresh database; arbitrary schema repair and old-generation import remain unsupported. See the [deployment compatibility matrix](deployment.md#beta1-database-compatibility-and-version-changes).
+The database remains Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. Only a completely absent main/WAL/SHM set or a validated Generation 2 set is accepted. Empty, alpha/Generation 1, unknown, corrupt, structurally unexpected, unsafe, or anomalous-sidecar sources are rejected before a writable open or source-side change. Four exact earlier Generation 2 manifests are supported: before charity routing, before per-key request limits, before successful-response checkpoints, and the complete beta.1 schema. After read-only validation, one transaction adds the missing tables, indexes, and default sidecar rows, validates the complete current manifest, and preserves existing business data and custom legal settings. No historical successful-response evidence, recurring usage, or game presentation values are invented. Alpha/Generation 1 requires a fresh database; arbitrary schema repair and old-generation import remain unsupported. See the [deployment compatibility matrix](deployment.md#database-compatibility-and-version-changes).
 
-Account export `schema_version=4` is independent of SQLite `user_version`.
+Account export `schema_version=5` is independent of SQLite `user_version`.
 
 ## 2. OpenAI-compatible ingress
 
@@ -126,7 +126,7 @@ All routes in this section require a user session unless marked anonymous.
 | `GET /api/logs/{id}` | `attempt_cursor,attempt_limit`; returns owner detail. |
 | `GET /api/logs/options` | Closed query; returns retained owner model-name options. |
 | `GET /api/issues` | Required `state=current|closed`, plus `cursor,limit`; returns the owner's bounded issue page. |
-| `POST /api/account/export` | Fresh elevation; bounded schema-v4 JSON attachment. |
+| `POST /api/account/export` | Fresh elevation; bounded schema-v5 JSON attachment. |
 | `POST /api/account/delete` | Fresh elevation and confirmation; synchronous coordinated deletion; 204. |
 
 `UserEnvelope` contains safe identity/profile, raw and effective resource limits, balances, resolved level/display name, language, suspension/ban state, and game-public preference. It contains no manual-level provenance, credential, session token, or internal ledger encoding.
@@ -420,7 +420,21 @@ Review and key-management requests include expected revisions and the complete e
 | `PUT /admin/api/charity-models/{id}/bindings/order` | `{expected_binding_revision,order}` with the exact current binding-ID permutation. |
 | `DELETE /admin/api/charity-models/{id}/bindings/{bindingId}` | `{expected_binding_revision}`. |
 
-### 7.5 Reports and legal holds
+### 7.5 Recurring donation-key limits
+
+`GET /admin/api/donations/{id}/keys/{keyId}/recurring-limits` and the matching `/api/steward/` path return `{donation_id,key_id,donation_revision,server_now,rules}`. The owner-only `/api/donations/{id}/keys/{keyId}/recurring-limits` path reads the same safe rule projection for the caller's own donation. GET accepts no query or body. Administrator and current level-5 stewards can also PUT the complete set on their management paths; ordinary owners cannot write it. Pending keys may be configured, while ended or expired keys cannot.
+
+PUT requires `Idempotency-Key`, has a 16 KiB body limit, and accepts exactly `{expected_revision,rules}`. Up to 16 rules are replaced atomically under the donation revision; the response is `{donation_id,key_id,donation_revision}`. Each input explicitly contains all eight fields: `{id,mode,interval,alignment,time_zone,week_starts_on,metric,limit}`. New IDs are `null`; saved IDs are canonical `qlr_` opaque IDs. Omitted old IDs remove those rules. Duplicate IDs or IDs belonging to another key are rejected.
+
+`mode` is `reset|sliding`; `interval` is `5h|day|week|month`. Reset alignment is `first_success|calendar`, and calendar disallows `5h`. Sliding alignment is `null`. `week_starts_on` is 1–7 only for calendar weeks, otherwise `null`. `time_zone` comes from the server's time-zone registry. `metric` is `calls|tokens|credits`. Limits, used, reserved and remaining are canonical U128 decimal strings; credits use at most three fractional digits with no redundant trailing zeroes and must fit U128 after conversion to millicredits. A zero limit blocks new charity calls.
+
+Each rule view adds `{used,reserved,remaining,state,period_start,period_end,next_transition_at}`. Remaining is clamped at zero. State is `limited` if no capacity remains, otherwise `waiting_first_success` for an unstarted first-success period, or `available`; it is not a guarantee that a particular request fits. Period and transition fields are nullable Unix seconds. Natural periods expose the later of the calendar boundary and rule activation as their start. Sliding rules have no fixed reset; an unproven next transition is `null`.
+
+All current recurring rules and total limits apply together to charity calls, including charity live calls. Personal calls, personal live calls, discovery and dry previews do not consume these rules. Claims reserve one call, the current per-key Token fallback and the existing undiscounted price reservation. Dispatch atomically rechecks current configuration and replaces its own old reservations. Calls already dispatched finish under their captured rules; later sends recheck the new set. Changing only a limit or display order preserves usage; changing mode, interval, alignment, zone, week start or metric starts a new counting period for subsequent sends without altering historical total usage or balances.
+
+Only validated successful output establishes the durable first-success time. Calls become used once at that checkpoint; tokens and credits remain reserved until terminal settlement records their full actual or existing conservative amount. Usage exceeding the reservation is never truncated. No validated output means zero recurring consumption. If every unsent candidate is blocked by quota, the caller receives `429 rate_limited`; storage-capacity exhaustion returns `503 service_unavailable` and a deduplicated administrator alert. These failures do not count as upstream failures or disclose physical resources. Later admission failures do not replace the outcome of an earlier dispatched attempt.
+
+### 7.6 Reports and legal holds
 
 | Method and path | Request / response |
 | --- | --- |
@@ -448,7 +462,7 @@ Lineage items are exactly `{donation_id,donation_key_id,donation_status,key_stat
 
 ## 9. Export, privacy, and account deletion
 
-Export v4 contains the user's safe identity/profile, effective level, endpoints and key metadata, endpoint origins, discovery evidence, catalogs, personal models/bindings, CallerKey metadata/generation, issues, wallet and private ledger slice, welfare/Thursday participation, donation and per-key status/limits/usage/authorized-effective expiry/safe source, charity-consumer summary, and the documented game state and retained results. It includes `schema_version:4` and the generation time.
+Export v5 contains the user's safe identity/profile, effective level, endpoints and key metadata, endpoint origins, discovery evidence, catalogs, personal models/bindings, CallerKey metadata/generation, issues, wallet and private ledger slice, welfare/Thursday participation, donation and per-key status/limits/usage/authorized-effective expiry/safe source, charity-consumer summary, and the documented game state and retained results. It includes `schema_version:5` and the generation time. Each donated key adds `recurring_limits`, containing the current safe RuleView values from that same export snapshot; it excludes internal receipts, buckets and claim identities. Private RPS result and own-seat exports include nullable `own_buy_in` and `own_cash_out`; unrecorded values remain `null`.
 
 Secrets, ciphertext, fingerprints, request/response bodies, report data, IP material, other identities, complete pool ledgers, announcement copies, anti-collusion values, workers/checkpoints/replay internals, management notes, channel category/revision, internal source IDs, and administrator/steward audit material are excluded. If the result exceeds 16 MiB or any collection exceeds 10,000 rows, export fails atomically with 413; it is never silently truncated.
 
@@ -468,6 +482,7 @@ Principal retention periods are:
 | Idempotency replays and accepted-operation technical records | 24 hours after a queryable domain result; non-terminal work remains |
 | Closed issues | 90 days, at most 1,000 per account |
 | Donation/review/reservation records | 400 days after terminal/finalized state |
+| Recurring donation usage | Sliding aggregates at most 35 actual days; reset keeps the current period and older periods still required by unfinished work. Minimal unfinished receipts survive until settlement. No caller identity or request content is stored in these aggregates. |
 | Report cases | 90 days from creation; approved processing may cross only until deletion completes |
 | Donation report fingerprint | Until exactly 90 days after that key instance ends; the deadline never moves |
 | Fishing terminal batches/outcomes | 30 days after settlement |

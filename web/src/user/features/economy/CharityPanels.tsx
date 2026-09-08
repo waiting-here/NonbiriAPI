@@ -9,6 +9,7 @@ import { CharityPriceTable, type CharityPriceRow } from '@shared/components/Char
 import { Card, EmptyState, ErrorState, StatusBadge } from '@shared/components/States';
 import { formatDateTime } from '@shared/utils/datetime';
 import { TimeInput } from '@shared/components/TimeInput';
+import { RecurringLimitsDisclosure } from '@shared/components/RecurringLimitsDisclosure';
 import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
 import { isConflictError, isResponseUnknown, type CreateDonationInput } from './api';
 import { CreditAmount, ExactCount } from './ExactValue';
@@ -666,11 +667,13 @@ function LimitValue({
 
 export function DonationKeyPanel({
   donationKey,
+  accountID,
   donationId,
   donationStatus,
   compact = false,
 }: {
   donationKey: DonationKey;
+  accountID?: string;
   donationId?: string;
   donationStatus?: Donation['status'];
   compact?: boolean;
@@ -814,16 +817,27 @@ export function DonationKeyPanel({
           </div>
         </dl>
       </details>
+      {accountID && donationId ? (
+        <RecurringLimitsDisclosure
+          key={`${accountID}:${donationId}:${donationKey.id}`}
+          role="owner"
+          accountId={accountID}
+          donationId={donationId}
+          keyId={donationKey.id}
+        />
+      ) : null}
     </article>
   );
 }
 
 export function DonationCard({
   donation,
+  accountID,
   showDetailLink = true,
   visibleKeys,
 }: {
   donation: Donation;
+  accountID?: string;
   showDetailLink?: boolean;
   visibleKeys?: readonly DonationKey[];
 }) {
@@ -981,7 +995,13 @@ export function DonationCard({
       {visibleKeys ? (
         <div className="economy-donation-key-list">
           {visibleKeys.map((key) => (
-            <DonationKeyPanel key={key.id} donationKey={key} compact />
+            <DonationKeyPanel
+              key={key.id}
+              donationKey={key}
+              donationId={donation.id}
+              accountID={accountID}
+              compact
+            />
           ))}
           {visibleKeys.length === 0 ? (
             <p className="muted">{t('user.charity.noRemainingKeys')}</p>
@@ -993,7 +1013,12 @@ export function DonationCard({
           {donation.keys.length > 0 ? (
             <div className="economy-donation-key-list">
               {donation.keys.map((key) => (
-                <DonationKeyPanel key={key.id} donationKey={key} />
+                <DonationKeyPanel
+                  key={key.id}
+                  donationKey={key}
+                  donationId={donation.id}
+                  accountID={accountID}
+                />
               ))}
             </div>
           ) : (
@@ -1086,7 +1111,13 @@ function matchesDonationOverviewFilter(key: DonationKey, filter: DonationOvervie
   );
 }
 
-export function DonationKeyOverview({ donations }: { donations: readonly Donation[] }) {
+export function DonationKeyOverview({
+  donations,
+  accountID,
+}: {
+  donations: readonly Donation[];
+  accountID?: string;
+}) {
   const { t } = useTranslation();
   const [filter, setFilter] = useState<DonationOverviewFilter>('all');
   const totalKeys = donations.reduce((total, donation) => total + donation.keys.length, 0);
@@ -1129,7 +1160,12 @@ export function DonationKeyOverview({ donations }: { donations: readonly Donatio
       ) : (
         <div className="item-list economy-donation-overview-list">
           {groups.map(({ donation, keys }) => (
-            <DonationCard donation={donation} visibleKeys={keys} key={donation.id} />
+            <DonationCard
+              donation={donation}
+              visibleKeys={keys}
+              accountID={accountID}
+              key={donation.id}
+            />
           ))}
         </div>
       )}

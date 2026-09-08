@@ -8,7 +8,7 @@ import (
 )
 
 func TestFrozenBoundsAndHeldObjectKinds(t *testing.T) {
-	if SchemaVersion != 4 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
+	if SchemaVersion != 5 || CollectionLimit != 10_000 || MaxExportBytes != 16<<20 || WorkerBatchLimit != 100 {
 		t.Fatalf("frozen bounds changed: schema=%d collection=%d bytes=%d batch=%d",
 			SchemaVersion, CollectionLimit, MaxExportBytes, WorkerBatchLimit)
 	}
@@ -56,7 +56,7 @@ func TestExportDocumentHasClosedTopLevel(t *testing.T) {
 	}
 }
 
-func TestExportV4EndpointAndDonationSchemasAreClosed(t *testing.T) {
+func TestExportV5EndpointAndDonationSchemasAreClosed(t *testing.T) {
 	assertClosedJSONKeys(t, EndpointExport{},
 		"id", "connector_type", "base_url", "origin", "note", "enabled", "created_at", "updated_at", "keys")
 	assertClosedJSONKeys(t, EndpointOriginExport{Kind: "custom"}, "kind")
@@ -69,7 +69,8 @@ func TestExportV4EndpointAndDonationSchemasAreClosed(t *testing.T) {
 	assertClosedJSONKeys(t, DonationKeyExport{},
 		"id", "endpoint_key_id", "display_head", "display_tail", "safe_source",
 		"physical_enabled", "charity_state", "limits", "usage", "token_reserve",
-		"authorized_expires_at", "expires_at", "streak", "ended_reason")
+		"authorized_expires_at", "expires_at", "streak", "ended_reason", "recurring_limits")
+	assertClosedJSONKeys(t, RecurringLimitExport{}, "id", "mode", "interval", "alignment", "time_zone", "week_starts_on", "metric", "limit", "used", "reserved", "remaining", "state", "period_start", "period_end", "next_transition_at")
 	assertClosedJSONKeys(t, DonationSafeSourceExport{Kind: "custom"},
 		"kind", "connector_type", "base_url")
 	channelID, name := "mch_safe", "Safe channel"

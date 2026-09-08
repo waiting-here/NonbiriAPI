@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -291,18 +292,19 @@ type ExportDonation struct {
 // ExportDonationKey is deliberately independent from owner and administrator
 // projections so future role-only fields cannot widen the personal export.
 type ExportDonationKey struct {
-	ID                  string         `json:"id"`
-	EndpointKeyID       *string        `json:"endpoint_key_id"`
-	DisplayHead         string         `json:"display_head"`
-	DisplayTail         string         `json:"display_tail"`
-	SafeSource          SafeSource     `json:"safe_source"`
-	PhysicalEnabled     bool           `json:"physical_enabled"`
-	CharityState        string         `json:"charity_state"`
-	Limits              DonationLimits `json:"limits"`
-	Usage               DonationUsage  `json:"usage"`
-	TokenReserve        int64          `json:"token_reserve"`
-	AuthorizedExpiresAt *int64         `json:"authorized_expires_at"`
-	ExpiresAt           *int64         `json:"expires_at"`
-	Streak              DonationStreak `json:"streak"`
-	EndedReason         *string        `json:"ended_reason"`
+	RecurringLimits     []donationquota.RuleView `json:"recurring_limits"`
+	ID                  string                   `json:"id"`
+	EndpointKeyID       *string                  `json:"endpoint_key_id"`
+	DisplayHead         string                   `json:"display_head"`
+	DisplayTail         string                   `json:"display_tail"`
+	SafeSource          SafeSource               `json:"safe_source"`
+	PhysicalEnabled     bool                     `json:"physical_enabled"`
+	CharityState        string                   `json:"charity_state"`
+	Limits              DonationLimits           `json:"limits"`
+	Usage               DonationUsage            `json:"usage"`
+	TokenReserve        int64                    `json:"token_reserve"`
+	AuthorizedExpiresAt *int64                   `json:"authorized_expires_at"`
+	ExpiresAt           *int64                   `json:"expires_at"`
+	Streak              DonationStreak           `json:"streak"`
+	EndedReason         *string                  `json:"ended_reason"`
 }
