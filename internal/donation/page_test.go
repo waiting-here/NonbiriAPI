@@ -214,6 +214,18 @@ func TestSourceUsabilityUsesUndiscountedReserveAndCurrentRules(t *testing.T) {
 		}
 	}
 	assertUsable("1")
+	// A newer pending donation supplies the source preview, while the older
+	// approved key still makes the complete group usable.
+	pending, _ := createBrowseDonation(t, e, owner, 'p', "https://k.example.test/v1")
+	out, err := e.service.SourcesAdminPage(ctx, SourceFilter{}, pagination.Default())
+	if err != nil || len(out.Data) != 1 || out.Data[0].DonationCount != "2" || out.Data[0].KeyCount != "2" || out.Data[0].UsableKeyCount != "1" {
+		t.Fatalf("mixed approval group=%+v err=%v", out, err)
+	}
+	if _, err := e.store.DB().Exec(`UPDATE donations SET status='approved' WHERE id=?`, parseTestID(t, pending.ID)); err != nil {
+		t.Fatal(err)
+	}
+	// Approval alone does not make an unbound key available.
+	assertUsable("1")
 	for _, test := range []struct {
 		query string
 		value any

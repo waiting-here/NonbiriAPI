@@ -34,7 +34,7 @@ func validSourceFilter(filter SourceFilter, keys bool) bool {
 // This query contains only management-visible source/key metadata. It never
 // joins private endpoint notes or donor identities for filtering or counting.
 func sourceSelectionSQL(filter SourceFilter, source *sourceIdentity, now int64) (string, []any) {
-	query := `SELECT dk.id AS id,d.id AS donation_id,` + sourceChannelSQL + ` AS source_channel,` + sourceConnectorSQL + ` AS source_connector,` + sourceURLSQL + ` AS source_url,
+	query := `SELECT dk.id AS id,d.id AS donation_id,d.status AS donation_status,` + sourceChannelSQL + ` AS source_channel,` + sourceConnectorSQL + ` AS source_connector,` + sourceURLSQL + ` AS source_url,
 CASE WHEN h.state='pending' AND ` + logicallyActiveDonationSQL + ` THEN 1 ELSE 0 END AS pending
 FROM donation_keys dk INDEXED BY idx_donation_keys_source_page CROSS JOIN donations d ON d.id=dk.donation_id
 JOIN donation_handling h ON h.donation_id=d.id
@@ -137,9 +137,10 @@ func (s *Service) sourcesPage(ctx context.Context, role reviewerRole, userID int
 		return empty, err
 	}
 	selection, args := sourceSelectionSQL(filter, nil, now)
-	grouped := `SELECT ` + sourceGroupColumns + `,COUNT(DISTINCT donation_id),COUNT(*),COUNT(DISTINCT CASE WHEN pending=1 THEN donation_id END),MAX(id) FROM (` + selection + `) GROUP BY ` + sourceGroupColumns
+	grouped := `SELECT ` + sourceGroupColumns + `,COUNT(DISTINCT donation_id),COUNT(*),COUNT(DISTINCT CASE WHEN pending=1 THEN donation_id END),MAX(id),MAX(CASE WHEN donation_status='approved' THEN 1 ELSE 0 END) FROM (` + selection + `) GROUP BY ` + sourceGroupColumns
 	var total int64
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+grouped+`)`, args...).Scan(&total); err != nil {
+	groupCount := `SELECT COUNT(*) FROM (SELECT ` + sourceGroupColumns + ` FROM (` + selection + `) GROUP BY ` + sourceGroupColumns + `)`
+	if err := tx.QueryRowContext(ctx, groupCount, args...).Scan(&total); err != nil {
 		return empty, fmt.Errorf("donation: count sources: %w", err)
 	}
 	metadata, offset, err := page.Window(total)
@@ -153,11 +154,13 @@ func (s *Service) sourcesPage(ctx context.Context, role reviewerRole, userID int
 	result := Page[DonationSource]{Data: make([]DonationSource, 0), Pagination: &metadata}
 	previews := make([]int64, 0)
 	identities := make([]sourceIdentity, 0)
+	usableCandidates := make([]bool, 0)
 	for rows.Next() {
 		var item DonationSource
 		var donations, keys, pending, preview int64
+		var hasApproved bool
 		var identity sourceIdentity
-		if err := rows.Scan(&identity.channel, &identity.connector, &identity.url, &donations, &keys, &pending, &preview); err != nil {
+		if err := rows.Scan(&identity.channel, &identity.connector, &identity.url, &donations, &keys, &pending, &preview, &hasApproved); err != nil {
 			rows.Close()
 			return empty, err
 		}
@@ -167,6 +170,7 @@ func (s *Service) sourcesPage(ctx context.Context, role reviewerRole, userID int
 		result.Data = append(result.Data, item)
 		previews = append(previews, preview)
 		identities = append(identities, identity)
+		usableCandidates = append(usableCandidates, hasApproved)
 	}
 	err = rows.Err()
 	rows.Close()
@@ -182,11 +186,19 @@ func (s *Service) sourcesPage(ctx context.Context, role reviewerRole, userID int
 		if err := tx.QueryRowContext(ctx, `SELECT `+sourceIdentitySQL+` FROM donation_keys dk WHERE dk.id=?`, previews[i]).Scan(&item.SourceKey); err != nil {
 			return empty, err
 		}
+		if !usableCandidates[i] {
+			item.UsableKeyCount = "0"
+			continue
+		}
 		filtered, values := sourceSelectionSQL(filter, &identities[i], now)
 		// Replace the selected key placeholder with the correlated safe ID. No
 		// user input is interpolated; all filters stay bound parameters.
 		usable := strings.Replace(sourceUsableSQL(), "WHERE dk.id=?", "WHERE dk.id=selected.id", 1)
-		query := `SELECT COALESCE(SUM((` + usable + `)),0) FROM (` + filtered + `) selected`
+		// Pending and unbound keys cannot serve a model. Avoid constructing
+		// their reservation and catalog checks for every key in a large source.
+		query := `SELECT COALESCE(SUM(CASE WHEN selected.donation_status='approved'
+AND EXISTS(SELECT 1 FROM charity_model_bindings binding WHERE binding.donation_key_id=selected.id)
+THEN (` + usable + `) ELSE 0 END),0) FROM (` + filtered + `) selected`
 		var count int64
 		if err := tx.QueryRowContext(ctx, query, append([]any{now, now}, values...)...).Scan(&count); err != nil {
 			return empty, fmt.Errorf("donation: count usable source keys: %w", err)
