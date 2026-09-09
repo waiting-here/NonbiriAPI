@@ -119,6 +119,16 @@ func (s *Service) GetSteward(ctx context.Context, userID, donationID int64) (Ste
 		return StewardDonation{}, err
 	}
 	if !visible {
+		held, err := s.managementHeldRead(ctx, tx, reviewerSteward, userID, donationID, now)
+		if err != nil {
+			return StewardDonation{}, err
+		}
+		visible = visible || held
+	}
+	if !visible {
+		if err := tx.Commit(); err != nil {
+			return StewardDonation{}, fmt.Errorf("donation: commit steward retention read: %w", err)
+		}
 		return StewardDonation{}, ErrNotFound
 	}
 	value, err := getAdminDonationTx(ctx, tx, donationID, now)
@@ -585,23 +595,16 @@ WHERE `+where+` ORDER BY dk.id`, args...)
 	return items, nil
 }
 
-func stewardFromAdmin(value AdminDonation, viewerID int64) StewardDonation {
+func stewardFromAdmin(value AdminDonation, _ int64) StewardDonation {
 	var owner *StewardDonationOwner
-	if value.Owner != nil && value.Owner.UserID == strconv.FormatInt(viewerID, 10) {
-		owner = &StewardDonationOwner{UserID: value.Owner.UserID, DisplayName: value.Owner.DisplayName}
-	}
-	var reviewer *DonationReviewer
-	if value.Reviewer != nil {
-		copy := *value.Reviewer
-		if copy.UserID != nil && *copy.UserID != strconv.FormatInt(viewerID, 10) {
-			copy.UserID = nil
-		}
-		reviewer = &copy
+	if value.Owner != nil {
+		copy := StewardDonationOwner(*value.Owner)
+		owner = &copy
 	}
 	return StewardDonation{
 		ID: value.ID, Status: value.Status, Revision: value.Revision, Description: value.Description,
 		ReviewResult: value.ReviewResult, Keys: stewardKeys(value.Keys),
-		Owner: owner, Reviewer: reviewer, Handling: value.Handling, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt,
+		Owner: owner, Reviewer: value.Reviewer, Handling: value.Handling, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt,
 	}
 }
 
@@ -616,10 +619,7 @@ func ownerKeys(values []AdminDonationKey) []DonationKey {
 func stewardKeys(values []AdminDonationKey) []StewardDonationKey {
 	out := make([]StewardDonationKey, len(values))
 	for index := range values {
-		out[index] = StewardDonationKey{DonationKey: ownerKey(values[index]),
-			AuthorizedExpiresAt: values[index].AuthorizedExpiresAt, SafeNote: values[index].SafeNote,
-			MaxConcurrency: values[index].MaxConcurrency, MaxRPM: values[index].MaxRPM,
-			BindingCount: values[index].BindingCount, Idle: values[index].Idle}
+		out[index] = StewardDonationKey(values[index])
 	}
 	return out
 }

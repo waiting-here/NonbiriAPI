@@ -23,7 +23,7 @@ import { LogFilters, type LogFilterField } from './LogFilters';
 import { LogTable, type LogColumn } from './LogTable';
 import { TokenBuckets } from './TokenBuckets';
 import {
-  adminLogExportPath,
+  roleLogExportPath,
   validateLogFilter,
   type LogFiltersValue,
   type LogResultClass,
@@ -166,6 +166,10 @@ function AttemptTable({
                   </div>
                 ) : null}
                 <div>
+                  <dt>{t('common.operations.logs.endpointKeyId')}</dt>
+                  <dd className="mono">{attempt.endpoint_key_id ?? '—'}</dd>
+                </div>
+                <div>
                   <dt>{t('common.operations.logs.connectorModel')}</dt>
                   <dd>
                     {attempt.connector_type}
@@ -198,10 +202,6 @@ function AttemptTable({
                   <dd>
                     <TokenBuckets row={attempt.usage} />
                   </dd>
-                </div>
-                <div>
-                  <dt>{t('common.operations.logs.charge')}</dt>
-                  <dd>{attempt.usage.charge}</dd>
                 </div>
                 <div>
                   <dt>{t('logs.diag')}</dt>
@@ -277,9 +277,7 @@ function ScopedRoleLogPanel({
     () =>
       role === 'user'
         ? (['model', 'error_code', 'status'] as const)
-        : role === 'admin'
-          ? (['user_id', 'endpoint_base_url', 'upstream_model', 'error_code', 'status'] as const)
-          : (['endpoint_base_url', 'upstream_model', 'error_code', 'status'] as const),
+        : (['user_id', 'endpoint_base_url', 'upstream_model', 'error_code', 'status'] as const),
     [role],
   );
   const { state: urlState, patch: patchUrlState } = useLogUrlState(
@@ -384,7 +382,7 @@ function ScopedRoleLogPanel({
         ariaLabel: t('common.model'),
         maxLength: 133,
       });
-    if (role === 'admin')
+    if (role !== 'user')
       values.push({
         name: 'user_id',
         label: t('common.userId'),
@@ -481,7 +479,7 @@ function ScopedRoleLogPanel({
           },
         ]
       : []),
-    ...(role === 'admin'
+    ...(role !== 'user'
       ? [
           {
             key: 'user',
@@ -490,13 +488,17 @@ function ScopedRoleLogPanel({
           },
         ]
       : []),
-    ...(role === 'steward'
+    ...(role !== 'user'
       ? [
           {
             key: 'caller',
             header: t('logs.caller'),
             render: (row: RoleLogRow) =>
-              row.role === 'steward' ? <CallerIdentity identity={row.caller_identity} /> : '—',
+              row.role === 'admin' || row.role === 'steward' ? (
+                <CallerIdentity identity={row.caller_identity} />
+              ) : (
+                '—'
+              ),
           },
         ]
       : []),
@@ -534,8 +536,13 @@ function ScopedRoleLogPanel({
             label: t('common.operations.logs.request'),
             value: <span className="mono">{detailRequest.id}</span>,
           },
-          ...(role === 'steward' && detailRequest.role === 'steward'
+          ...(role !== 'user' &&
+          (detailRequest.role === 'admin' || detailRequest.role === 'steward')
             ? [
+                {
+                  label: t('common.userId'),
+                  value: detailRequest.user_id ?? '—',
+                },
                 {
                   label: t('logs.caller'),
                   value: <CallerIdentity identity={detailRequest.caller_identity} />,
@@ -552,6 +559,10 @@ function ScopedRoleLogPanel({
             value: <span className="mono">{detailRequest.caller_error_code ?? '—'}</span>,
           },
           { label: t('logs.tokens'), value: <TokenBuckets row={detailRequest.usage} /> },
+          {
+            label: t('common.operations.logs.charge'),
+            value: <span className="mono">{detailRequest.usage.charge}</span>,
+          },
           ...('attempts' in detailData
             ? [
                 {
@@ -622,13 +633,17 @@ function ScopedRoleLogPanel({
     <Card className="ops-stack">
       <div className="card-title-row">
         <h2>{title}</h2>
-        {role === 'admin' ? (
+        {role !== 'user' ? (
           <div className="ops-actions">
-            <a className="btn btn-secondary" href={adminLogExportPath(filter, 'csv')} download>
-              {t('admin.logs.exportCsv')}
+            <a className="btn btn-secondary" href={roleLogExportPath(role, filter, 'csv')} download>
+              {t('common.operations.logs.exportCsv')}
             </a>
-            <a className="btn btn-secondary" href={adminLogExportPath(filter, 'json')} download>
-              {t('admin.logs.exportJson')}
+            <a
+              className="btn btn-secondary"
+              href={roleLogExportPath(role, filter, 'json')}
+              download
+            >
+              {t('common.operations.logs.exportJson')}
             </a>
           </div>
         ) : null}

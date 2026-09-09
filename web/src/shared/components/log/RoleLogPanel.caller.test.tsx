@@ -27,6 +27,7 @@ const stewardRow = (caller_identity: unknown) => ({
   started_at: 1,
   completed_at: 2,
   usage,
+  user_id: '7',
   caller_identity,
   attempt_count: '1',
 });
@@ -209,6 +210,7 @@ describe('steward caller identity', () => {
         completed_at: 2,
         usage,
         user_id: null,
+        caller_identity: null,
         attempt_count: '1',
       },
     },
@@ -230,7 +232,7 @@ describe('steward caller identity', () => {
       },
     },
   ])(
-    'does not render a caller block for the $role station',
+    'renders the management caller field and keeps it off the user station',
     async ({ role, station, testRole, row }) => {
       const fetchMock = installFixtures(role, row);
       await renderWithProviders(<RoleLogPanel accountId="viewer" role={role} />, {
@@ -239,7 +241,11 @@ describe('steward caller identity', () => {
       });
       await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(0));
       await waitFor(() => expect(screen.getByRole('button', { name: 'Details' })).toBeVisible());
-      expect(screen.queryByText('Caller identity', { exact: true })).toBeNull();
+      if (role === 'admin') {
+        expect(screen.getByText('Caller identity', { exact: true })).toBeVisible();
+      } else {
+        expect(screen.queryByText('Caller identity', { exact: true })).toBeNull();
+      }
       expect(screen.queryByRole('button', { name: 'Copy Discord ID' })).toBeNull();
     },
   );

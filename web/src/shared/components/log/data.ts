@@ -71,11 +71,13 @@ export type UserLogRow = UserSelfLogRow | UserCharityLogRow;
 export interface AdminLogRow extends LogRowCommon {
   role: 'admin';
   user_id: string | null;
+  caller_identity: CallerIdentity | null;
   attempt_count: string;
 }
 
 export interface StewardLogRow extends LogRowCommon {
   role: 'steward';
+  user_id: string | null;
   caller_identity: CallerIdentity | null;
   attempt_count: string;
 }
@@ -283,13 +285,19 @@ export function normalizeUserLogRow(value: unknown): UserLogRow {
 export function normalizeAdminLogRow(value: unknown): AdminLogRow {
   const root = record(
     value,
-    [...COMMON_ROW_FIELDS, 'user_id', 'attempt_count'],
+    [...COMMON_ROW_FIELDS, 'user_id', 'caller_identity', 'attempt_count'],
     'administrator log row',
   );
+  const common = commonRow(root);
+  const callerIdentity = normalizeCallerIdentity(root.caller_identity);
+  if (common.route_kind !== 'charity_chat_completions' && callerIdentity !== null) {
+    invalidResponse('administrator caller identity');
+  }
   return {
-    ...commonRow(root),
+    ...common,
     role: 'admin',
     user_id: nullableDecimalID(root.user_id, 'log user id'),
+    caller_identity: callerIdentity,
     attempt_count: decimal(root.attempt_count, 'attempt count'),
   };
 }
@@ -314,7 +322,7 @@ function normalizeCallerIdentity(value: unknown): CallerIdentity | null {
 export function normalizeStewardLogRow(value: unknown): StewardLogRow {
   const root = record(
     value,
-    [...COMMON_ROW_FIELDS, 'caller_identity', 'attempt_count'],
+    [...COMMON_ROW_FIELDS, 'user_id', 'caller_identity', 'attempt_count'],
     'steward log row',
   );
   const common = commonRow(root);
@@ -325,6 +333,7 @@ export function normalizeStewardLogRow(value: unknown): StewardLogRow {
   return {
     ...common,
     role: 'steward',
+    user_id: nullableDecimalID(root.user_id, 'log user id'),
     caller_identity: callerIdentity,
     attempt_count: decimal(root.attempt_count, 'attempt count'),
   };
@@ -518,10 +527,19 @@ export function useRoleLogDetail(
   });
 }
 
+export function roleLogExportPath(
+  role: Extract<LogRole, 'admin' | 'steward'>,
+  filter: LogFiltersValue,
+  format: 'csv' | 'json',
+): string {
+  const managementFilter = { ...filter };
+  delete managementFilter.model;
+  const root = role === 'admin' ? '/admin/api/logs' : '/api/steward/logs';
+  return queryPath(`${root}/export.${format}`, managementFilter);
+}
+
 export function adminLogExportPath(filter: LogFiltersValue, format: 'csv' | 'json'): string {
-  const adminFilter = { ...filter };
-  delete adminFilter.model;
-  return queryPath(`/admin/api/logs/export.${format}`, adminFilter);
+  return roleLogExportPath('admin', filter, format);
 }
 
 export function validateLogFilter(role: LogRole, raw: Record<string, string>): LogFiltersValue {
@@ -531,7 +549,7 @@ export function validateLogFilter(role: LogRole, raw: Record<string, string>): L
     if (value) result[key] = Array.from(value).slice(0, max).join('') as never;
   };
   if (role === 'user') assign('model', 133);
-  if (role === 'admin') {
+  if (role !== 'user') {
     const userID = raw.user_id?.trim();
     if (userID && /^[1-9][0-9]*$/.test(userID))
       result.user_id = decimalID(userID, 'user id filter');

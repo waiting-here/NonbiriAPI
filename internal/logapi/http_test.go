@@ -128,18 +128,13 @@ func TestLogRouteRegistrationClosedSetsAndFailures(t *testing.T) {
 	if err := RegisterStewardRoutes(steward, fixture.repo, authorizer); err != nil {
 		t.Fatalf("RegisterStewardRoutes: %v", err)
 	}
-	wantSteward := []string{"GET /api/steward/logs", "GET /api/steward/logs/{id}"}
+	wantSteward := []string{"GET /api/steward/logs", "GET /api/steward/logs/{id}", "GET /api/steward/logs/export.csv", "GET /api/steward/logs/export.json"}
 	if len(steward.handlers) != len(wantSteward) {
 		t.Fatalf("steward route count = %d", len(steward.handlers))
 	}
 	for _, key := range wantSteward {
 		if steward.handlers[key] == nil {
 			t.Fatalf("missing steward route %q", key)
-		}
-	}
-	for key := range steward.handlers {
-		if strings.Contains(key, "export") {
-			t.Fatalf("steward export route registered: %q", key)
 		}
 	}
 
@@ -337,7 +332,7 @@ func TestLogQueryParsersRejectUnknownDuplicateAndNonCanonicalValues(t *testing.T
 	}{
 		{"bad=%zz", "user", false}, {"status=099", "user", false}, {"status=600", "admin", false},
 		{"from=+1", "admin", false}, {"to=-1", "admin", false}, {"user_id=01", "admin", false},
-		{"model=x", "admin", false}, {"user_id=1", "steward", false}, {"cursor=x", "admin", true},
+		{"model=x", "admin", false}, {"user_id=01", "steward", false}, {"cursor=x", "admin", true},
 		{"limit=1", "admin", true}, {"error_code=A", "user", false},
 	} {
 		filter, err := parseListFilter(test.query, test.role, test.export)

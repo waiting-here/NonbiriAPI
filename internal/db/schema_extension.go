@@ -27,6 +27,9 @@ const preBrowseManifestHash = "862d6c208018d2033c57bd8b87e3b324be5d83b2f2bd6729a
 // recurring-limit facts and counters must remain unchanged.
 const preQuotaCleanupManifestHash = "e9d0e725597515a9cfcb7a0463a636ecd179dca619cc9524a2db95d258a20aaa"
 
+// The deployed schema before steward held-object read auditing.
+const preStewardHoldReadManifestHash = "5a339c17dd63b975cd17f1bc946f0c799b46a68ce2d2576b8fa10b042315b3d1"
+
 func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) {
 	if GenerationTwoSchemaHash() != PinnedGenerationTwoSchemaHash {
 		return false, errors.New("generation-two schema hash drift")
@@ -42,7 +45,7 @@ func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) 
 	switch generationManifestDigest(actual) {
 	case expected:
 		return false, nil
-	case preRoutingManifestHash, preKeyLimitsManifestHash, preResponseStartsManifestHash, preBetaTwoManifestHash, preBrowseManifestHash, preQuotaCleanupManifestHash:
+	case preRoutingManifestHash, preKeyLimitsManifestHash, preResponseStartsManifestHash, preBetaTwoManifestHash, preBrowseManifestHash, preQuotaCleanupManifestHash, preStewardHoldReadManifestHash:
 		return true, nil
 	default:
 		return false, errors.New("generation-two schema manifest mismatch")
@@ -83,7 +86,7 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) error
 			return err
 		}
 	}
-	if digest != preBrowseManifestHash && digest != preQuotaCleanupManifestHash {
+	if digest != preBrowseManifestHash && digest != preQuotaCleanupManifestHash && digest != preStewardHoldReadManifestHash {
 		// Prior schemas have no recurring-limit or presentation sidecars.
 		if _, err := tx.ExecContext(ctx, betaTwoAdditiveSchema); err != nil {
 			return err
@@ -92,12 +95,17 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) error
 			return err
 		}
 	}
-	if digest != preQuotaCleanupManifestHash {
+	if digest != preQuotaCleanupManifestHash && digest != preStewardHoldReadManifestHash {
 		if _, err := tx.ExecContext(ctx, browseIndexesSchema); err != nil {
 			return err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, quotaCleanupIndexesSchema); err != nil {
+	if digest != preStewardHoldReadManifestHash {
+		if _, err := tx.ExecContext(ctx, quotaCleanupIndexesSchema); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, stewardHoldReadSchema); err != nil {
 		return err
 	}
 	if err := validateGenerationTwoManifest(ctx, tx); err != nil {

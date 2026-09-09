@@ -3,6 +3,7 @@ package donation
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 )
@@ -56,6 +57,22 @@ func TestManualReviewerRolesRoundTripAcrossManagementProjections(t *testing.T) {
 			}
 			if len(adminPage) != 1 || len(stewardPage) != 1 {
 				t.Fatal("approved donation missing from lists")
+			}
+			adminJSON, err := json.Marshal(adminView)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stewardJSON, err := json.Marshal(stewardView)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(adminJSON, stewardJSON) {
+				t.Fatalf("management detail parity: %s / %s", adminJSON, stewardJSON)
+			}
+			adminJSON, _ = json.Marshal(adminPage)
+			stewardJSON, _ = json.Marshal(stewardPage)
+			if !bytes.Equal(adminJSON, stewardJSON) {
+				t.Fatalf("management list parity: %s / %s", adminJSON, stewardJSON)
 			}
 			for _, reviewer := range []*DonationReviewer{adminView.Reviewer, stewardView.Reviewer, adminPage[0].Reviewer, stewardPage[0].Reviewer} {
 				if reviewer == nil || reviewer.Role != role {

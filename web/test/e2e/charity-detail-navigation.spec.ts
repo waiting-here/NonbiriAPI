@@ -147,7 +147,7 @@ function stateCounts(): JSONRecord {
   };
 }
 
-function donationSummary(index: number, role: Frame): JSONRecord {
+function donationSummary(index: number): JSONRecord {
   const id = String(index + 1);
   return {
     id,
@@ -163,10 +163,7 @@ function donationSummary(index: number, role: Frame): JSONRecord {
     source_count: '1',
     sources: [safeSource(index)],
     reviewer: { user_id: '9', role: 'admin' },
-    owner:
-      role === 'admin'
-        ? { user_id: '42', discord_id: null, display_name: 'Fixture donor ' + id }
-        : { user_id: '42', display_name: 'Fixture donor ' + id },
+    owner: { user_id: '42', discord_id: null, display_name: 'Fixture donor ' + id },
   };
 }
 
@@ -174,8 +171,8 @@ const LONG_DETAIL_TEXT =
   'A deliberately long detail description that must wrap across the narrow layout. ' +
   'The shared resource remains visible while its detail is open. '.repeat(9);
 
-function donationDetail(index: number, role: Frame): JSONRecord {
-  const summary = donationSummary(index, role);
+function donationDetail(index: number): JSONRecord {
+  const summary = donationSummary(index);
   return {
     id: summary.id,
     status: summary.status,
@@ -292,8 +289,8 @@ async function fulfillJSON(route: Route, value: unknown, status = 200): Promise<
   });
 }
 
-function listRows(role: Frame): JSONRecord[] {
-  return Array.from({ length: 21 }, (_, index) => donationSummary(index, role));
+function listRows(): JSONRecord[] {
+  return Array.from({ length: 21 }, (_, index) => donationSummary(index));
 }
 
 function modelRows(): JSONRecord[] {
@@ -310,7 +307,7 @@ async function installManagementRoutes(
   state: FixtureState,
 ): Promise<void> {
   const config = stationConfig(station);
-  const rows = listRows(config.frame);
+  const rows = listRows();
   const models = modelRows();
   const sources = sourceRows();
   await page.route('**/*', async (route) => {
@@ -327,9 +324,7 @@ async function installManagementRoutes(
       await fulfillJSON(route, numberedPage(rows, url.searchParams));
       return;
     }
-    const donationMatch = path.match(
-      new RegExp('^' + config.root + '/donations/([1-9][0-9]*)$'),
-    );
+    const donationMatch = path.match(new RegExp('^' + config.root + '/donations/([1-9][0-9]*)$'));
     if (donationMatch) {
       state.detailReads.push(url.search);
       if (state.detailMode === 'slow') await state.detailGate?.promise;
@@ -349,7 +344,7 @@ async function installManagementRoutes(
         );
         return;
       }
-      await fulfillJSON(route, donationDetail(Number(donationMatch[1]) - 1, config.frame));
+      await fulfillJSON(route, donationDetail(Number(donationMatch[1]) - 1));
       return;
     }
     const donationKeysMatch = path.match(
@@ -365,9 +360,7 @@ async function installManagementRoutes(
       await fulfillJSON(route, numberedPage(models, url.searchParams));
       return;
     }
-    const modelMatch = path.match(
-      new RegExp('^' + config.root + '/charity-models/([1-9][0-9]*)$'),
-    );
+    const modelMatch = path.match(new RegExp('^' + config.root + '/charity-models/([1-9][0-9]*)$'));
     if (modelMatch) {
       state.detailReads.push(url.search);
       if (state.detailMode === 'slow') await state.detailGate?.promise;
@@ -395,9 +388,7 @@ async function installManagementRoutes(
       return;
     }
     if (
-      path.match(
-        new RegExp('^' + config.root + '/charity-models/[1-9][0-9]*/binding-candidates$'),
-      )
+      path.match(new RegExp('^' + config.root + '/charity-models/[1-9][0-9]*/binding-candidates$'))
     ) {
       await fulfillJSON(route, numberedPage([], url.searchParams));
       return;
@@ -420,11 +411,7 @@ async function installManagementRoutes(
         (entry) => entry.source_key === decodeURIComponent(sourceKeysMatch[1]),
       );
       if (index < 0) {
-        await fulfillJSON(
-          route,
-          { error: { code: 'not_found', message: 'Unknown source.' } },
-          404,
-        );
+        await fulfillJSON(route, { error: { code: 'not_found', message: 'Unknown source.' } }, 404);
         return;
       }
       await fulfillJSON(route, numberedPage([sourceKeyPageItem(index)], url.searchParams));
@@ -476,7 +463,12 @@ async function assertDetailFocusAndViewport(
   }
   const metrics = await target.evaluate((element) => {
     const rect = element.getBoundingClientRect();
-    return { top: rect.top, right: rect.right, viewportWidth: innerWidth, viewportHeight: innerHeight };
+    return {
+      top: rect.top,
+      right: rect.right,
+      viewportWidth: innerWidth,
+      viewportHeight: innerHeight,
+    };
   });
   if (options.requireViewport !== false) {
     expect(metrics.top, 'detail top must be in the viewport').toBeGreaterThanOrEqual(-2);
@@ -530,16 +522,21 @@ async function exerciseDonationNavigation(
   const row = donationListRow(page);
   const openButton = row.getByRole('button', { name: 'Review', exact: true });
   await expect(openButton).toBeVisible();
-  expect(await openButton.evaluate((button) => {
-    const range = document.createRange();
-    range.selectNodeContents(button);
-    return range.getClientRects().length;
-  }), 'the short review label must stay on one line').toBe(1);
+  expect(
+    await openButton.evaluate((button) => {
+      const range = document.createRange();
+      range.selectNodeContents(button);
+      return range.getClientRects().length;
+    }),
+    'the short review label must stay on one line',
+  ).toBe(1);
   await openButton.click();
   await expect
     .poll(() => new URL(page.url()).searchParams.get('donation_id'))
     .toBe(DETAIL_DONATION_ID);
-  await expect(page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID }),
+  ).toBeVisible();
   const detailTarget = page.locator('.ops-detail-target');
   await expect(detailTarget).toHaveCount(1);
   await assertDetailFocusAndViewport(page, detailTarget);
@@ -597,7 +594,9 @@ async function exerciseDonationNavigation(
   });
 
   await page.goForward();
-  await expect(page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID }),
+  ).toBeVisible();
   await assertDetailFocusAndViewport(page, page.locator('.ops-detail-target'));
   await assertURLState(page, {
     pageParam: 'donations_page',
@@ -741,7 +740,9 @@ async function exerciseSourceToDonationNavigation(
   await expect(page).not.toHaveURL(/donation_id=/);
   const returnedSourceDetail = page.locator('.charity-source-browser__keys.ops-detail-target');
   await expect(returnedSourceDetail).toBeVisible();
-  await expect(returnedSourceDetail.getByRole('heading', { name: /detail-source-20/ })).toBeVisible();
+  await expect(
+    returnedSourceDetail.getByRole('heading', { name: /detail-source-20/ }),
+  ).toBeVisible();
   await assertDetailFocusAndViewport(page, returnedSourceDetail);
   await assertURLState(page, {
     pageParam: 'sources_page',
@@ -954,19 +955,19 @@ for (const scenario of [
   { order: 'list-first' as const, width: 1_280 },
   { order: 'detail-first' as const, width: 390 },
 ]) {
-  test(
-    `source key to donation detail remains positioned when ${scenario.order} response arrives at ${scenario.width}px`,
-    async ({ context, page }) => {
-      const setup = await prepareStation(context, page, 'admin', scenario.width);
-      const state = initialState(
-        scenario.order === 'list-first'
-          ? { detailMode: 'slow', detailGate: detailGate() }
-          : { listGate: detailGate() },
-      );
-      await installManagementRoutes(page, 'admin', state);
-      await exerciseSourceToDonationNavigation(page, setup, state, scenario.order);
-    },
-  );
+  test(`source key to donation detail remains positioned when ${scenario.order} response arrives at ${scenario.width}px`, async ({
+    context,
+    page,
+  }) => {
+    const setup = await prepareStation(context, page, 'admin', scenario.width);
+    const state = initialState(
+      scenario.order === 'list-first'
+        ? { detailMode: 'slow', detailGate: detailGate() }
+        : { listGate: detailGate() },
+    );
+    await installManagementRoutes(page, 'admin', state);
+    await exerciseSourceToDonationNavigation(page, setup, state, scenario.order);
+  });
 }
 
 test('semantic donation detail navigation leaves the trigger and enters the viewport', async ({
@@ -992,12 +993,14 @@ test('semantic donation detail navigation leaves the trigger and enters the view
       headingTop: rect?.top ?? Number.POSITIVE_INFINITY,
       headingBottom: rect?.bottom ?? Number.NEGATIVE_INFINITY,
       viewport: innerHeight,
-      focusInList: active instanceof HTMLElement && active.closest('tbody')?.contains(active) === true,
+      focusInList:
+        active instanceof HTMLElement && active.closest('tbody')?.contains(active) === true,
     };
   });
-  expect(behavior.headingTop, 'semantic detail heading must enter the viewport').toBeGreaterThanOrEqual(
-    -2,
-  );
+  expect(
+    behavior.headingTop,
+    'semantic detail heading must enter the viewport',
+  ).toBeGreaterThanOrEqual(-2);
   expect(behavior.headingTop, 'semantic detail heading must be visible after opening').toBeLessThan(
     behavior.viewport,
   );
@@ -1008,86 +1011,88 @@ test('semantic donation detail navigation leaves the trigger and enters the view
   await assertStationClean(page, setup);
 });
 
-test(
-  'slow detail loading defers focus until the complete detail layout is ready',
-  async ({ context, page }) => {
-    const setup = await prepareStation(context, page, 'admin');
-    const state = initialState({ detailMode: 'slow', detailGate: detailGate() });
-    await installManagementRoutes(page, 'admin', state);
-    await page.goto(
-      ADMIN_ORIGIN + '/charity?handling=pending&donations_page=2&donations_page_size=10',
-    );
-    const openButton = donationListRow(page).getByRole('button', { name: 'Review', exact: true });
-    await expect(openButton).toBeVisible();
-    await openButton.click();
-    const detailTarget = page.locator('.ops-detail-target');
-    await expect(detailTarget).toHaveCount(1);
-    await expect
-      .poll(() => detailTarget.evaluate((element) => document.activeElement === element))
-      .toBe(false);
-    state.detailGate!.release();
-    await expect(page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID })).toBeVisible();
-    await assertDetailFocusAndViewport(page, detailTarget);
-    await assertStationClean(page, setup);
-  },
-);
+test('slow detail loading defers focus until the complete detail layout is ready', async ({
+  context,
+  page,
+}) => {
+  const setup = await prepareStation(context, page, 'admin');
+  const state = initialState({ detailMode: 'slow', detailGate: detailGate() });
+  await installManagementRoutes(page, 'admin', state);
+  await page.goto(
+    ADMIN_ORIGIN + '/charity?handling=pending&donations_page=2&donations_page_size=10',
+  );
+  const openButton = donationListRow(page).getByRole('button', { name: 'Review', exact: true });
+  await expect(openButton).toBeVisible();
+  await openButton.click();
+  const detailTarget = page.locator('.ops-detail-target');
+  await expect(detailTarget).toHaveCount(1);
+  await expect
+    .poll(() => detailTarget.evaluate((element) => document.activeElement === element))
+    .toBe(false);
+  state.detailGate!.release();
+  await expect(
+    page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID }),
+  ).toBeVisible();
+  await assertDetailFocusAndViewport(page, detailTarget);
+  await assertStationClean(page, setup);
+});
 
-test(
-  'detail errors remain reachable and retry can recover the selected resource',
-  async ({ context, page }) => {
-    const setup = await prepareStation(context, page, 'admin');
-    const state = initialState({ detailMode: 'error' });
-    await installManagementRoutes(page, 'admin', state);
-    await page.goto(ADMIN_ORIGIN + '/charity?donations_page=2&donations_page_size=10');
-    await donationListRow(page).getByRole('button', { name: 'Review', exact: true }).click();
-    const detailTarget = page.locator('.ops-detail-target');
-    await expect(detailTarget).toHaveCount(1);
-    await assertDetailFocusAndViewport(page, detailTarget);
-    await expect(detailTarget.getByRole('alert')).toBeVisible();
-    state.detailMode = 'ok';
-    await detailTarget.getByRole('button', { name: 'Retry', exact: true }).click();
-    await expect(
-      detailTarget.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID }),
-    ).toBeVisible();
-    await assertDetailFocusAndViewport(page, detailTarget, { requireFocus: false });
-    await assertStationClean(page, setup);
-  },
-);
+test('detail errors remain reachable and retry can recover the selected resource', async ({
+  context,
+  page,
+}) => {
+  const setup = await prepareStation(context, page, 'admin');
+  const state = initialState({ detailMode: 'error' });
+  await installManagementRoutes(page, 'admin', state);
+  await page.goto(ADMIN_ORIGIN + '/charity?donations_page=2&donations_page_size=10');
+  await donationListRow(page).getByRole('button', { name: 'Review', exact: true }).click();
+  const detailTarget = page.locator('.ops-detail-target');
+  await expect(detailTarget).toHaveCount(1);
+  await assertDetailFocusAndViewport(page, detailTarget);
+  await expect(detailTarget.getByRole('alert')).toBeVisible();
+  state.detailMode = 'ok';
+  await detailTarget.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(
+    detailTarget.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID }),
+  ).toBeVisible();
+  await assertDetailFocusAndViewport(page, detailTarget, { requireFocus: false });
+  await assertStationClean(page, setup);
+});
 
-test(
-  'steward detail permission loss clears the visible private projection',
-  async ({ context, page }) => {
-    const setup = await prepareStation(context, page, 'user');
-    const state = initialState({ detailMode: 'forbidden' });
-    await installManagementRoutes(page, 'user', state);
-    const consoleMessages: { type: string; text: string }[] = [];
-    const forbiddenResponses: string[] = [];
-    page.on('console', (message) => {
-      if (message.type() === 'error' || message.type() === 'warning') {
-        consoleMessages.push({ type: message.type(), text: message.text() });
-      }
-    });
-    page.on('response', (response) => {
-      const url = new URL(response.url());
-      if (response.status() === 403 && url.origin === USER_ORIGIN) {
-        forbiddenResponses.push(url.pathname);
-      }
-    });
-    await page.goto(
-      USER_ORIGIN +
-        '/steward?tab=charity&charity_section=donations&donations_page=2&donations_page_size=10',
-    );
-    await donationListRow(page).getByRole('button', { name: 'Review', exact: true }).click();
-    await expect.poll(() => state.detailReads.length).toBeGreaterThan(0);
-    await expect(page).toHaveURL(/tab=logs/);
-    await expect(
-      page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID }),
-    ).toHaveCount(0);
-    await expect(page.getByText('Synthetic detail note', { exact: true })).toHaveCount(0);
-    await assertNoSensitiveBrowserPersistence(page, [setup.marker]);
-    expect(forbiddenResponses).toEqual(['/api/steward/donations/20']);
-    expect(consoleMessages).toHaveLength(1);
-    expect(consoleMessages[0]).toMatchObject({ type: 'error' });
-    expect(consoleMessages[0].text).toMatch(/Failed to load resource:.*403/);
-  },
-);
+test('steward detail permission loss clears the visible private projection', async ({
+  context,
+  page,
+}) => {
+  const setup = await prepareStation(context, page, 'user');
+  const state = initialState({ detailMode: 'forbidden' });
+  await installManagementRoutes(page, 'user', state);
+  const consoleMessages: { type: string; text: string }[] = [];
+  const forbiddenResponses: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning') {
+      consoleMessages.push({ type: message.type(), text: message.text() });
+    }
+  });
+  page.on('response', (response) => {
+    const url = new URL(response.url());
+    if (response.status() === 403 && url.origin === USER_ORIGIN) {
+      forbiddenResponses.push(url.pathname);
+    }
+  });
+  await page.goto(
+    USER_ORIGIN +
+      '/steward?tab=charity&charity_section=donations&donations_page=2&donations_page_size=10',
+  );
+  await donationListRow(page).getByRole('button', { name: 'Review', exact: true }).click();
+  await expect.poll(() => state.detailReads.length).toBeGreaterThan(0);
+  await expect(page).toHaveURL(/tab=logs/);
+  await expect(page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID })).toHaveCount(
+    0,
+  );
+  await expect(page.getByText('Synthetic detail note', { exact: true })).toHaveCount(0);
+  await assertNoSensitiveBrowserPersistence(page, [setup.marker]);
+  expect(forbiddenResponses).toEqual(['/api/steward/donations/20']);
+  expect(consoleMessages).toHaveLength(1);
+  expect(consoleMessages[0]).toMatchObject({ type: 'error' });
+  expect(consoleMessages[0].text).toMatch(/Failed to load resource:.*403/);
+});

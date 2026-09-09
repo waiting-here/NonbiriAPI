@@ -88,6 +88,7 @@ export interface AdminDonationPageOwner {
 
 export interface StewardDonationPageOwner {
   user_id: string;
+  discord_id: string | null;
   display_name: string;
 }
 
@@ -438,9 +439,14 @@ function adminOwner(value: unknown, label: string): AdminDonationPageOwner | nul
 
 function stewardOwner(value: unknown, label: string): StewardDonationPageOwner | null {
   if (value === null) return null;
-  const root = record(value, ['user_id', 'display_name'], label);
+  const root = record(value, ['user_id', 'discord_id', 'display_name'], label);
   return {
     user_id: decimalID(root.user_id, `${label} id`),
+    discord_id: nullableString(root.discord_id, `${label} Discord id`, {
+      max: 128,
+      bytes: 128,
+      ascii: true,
+    }),
     display_name: string(root.display_name, `${label} display`, { min: 1, max: 128, bytes: 512 }),
   };
 }

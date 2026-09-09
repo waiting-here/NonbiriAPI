@@ -21,6 +21,7 @@ var retainedSourceManifests = []struct{ name, hash string }{
 	{"complete", preBetaTwoManifestHash},
 	{"recurring_limits", preBrowseManifestHash},
 	{"browse_indexes", preQuotaCleanupManifestHash},
+	{"quota_cleanup_indexes", preStewardHoldReadManifestHash},
 }
 
 // The fixture uses only synthetic identities and a credential sealed by the
@@ -141,8 +142,10 @@ VALUES(?,?,'10x10',0,'completed',101,1101,201,50,99)`, hostileOID("ll_"), users[
 
 func makeRetainedSource(t *testing.T, database *sql.DB, want string) {
 	t.Helper()
-	if want == preBrowseManifestHash || want == preQuotaCleanupManifestHash {
-		if want == preBrowseManifestHash {
+	if want == preBrowseManifestHash || want == preQuotaCleanupManifestHash || want == preStewardHoldReadManifestHash {
+		if want == preStewardHoldReadManifestHash {
+			hostileMustExec(t, database, `DROP TABLE legal_hold_steward_reads`)
+		} else if want == preBrowseManifestHash {
 			dropBrowseIndexes(t, database)
 		} else {
 			dropQuotaCleanupIndexes(t, database)
@@ -324,7 +327,12 @@ func TestRetainedExtensionRollsBackWhenStorageFills(t *testing.T) {
 			if err := store.DB().QueryRow(`PRAGMA page_count`).Scan(&pages); err != nil {
 				t.Fatal(err)
 			}
-			hostileMustExec(t, store.DB(), fmt.Sprintf(`PRAGMA max_page_count=%d`, pages+5))
+			extraPages := 5
+			if source.hash == preStewardHoldReadManifestHash {
+				// This source adds only one audit table and its indexes.
+				extraPages = 1
+			}
+			hostileMustExec(t, store.DB(), fmt.Sprintf(`PRAGMA max_page_count=%d`, pages+extraPages))
 			err := extendKnownGenerationTwoSchema(context.Background(), store.DB())
 			if err == nil || !strings.Contains(err.Error(), "full") {
 				t.Fatalf("expected storage-full failure, got %v", err)

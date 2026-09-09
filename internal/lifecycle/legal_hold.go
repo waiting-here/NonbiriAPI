@@ -542,6 +542,34 @@ func (coordinator *Coordinator) AuthorizeHeldObjectRead(ctx context.Context, tx 
 	if err := coordinator.adminAuth.AuthorizeAdmin(ctx, tx, adminID); err != nil {
 		return false, err
 	}
+	return coordinator.readHeldObject(ctx, tx, adminID, kind, objectRef, decisionNow, false)
+}
+
+type StewardHeldObjectAuthorizer interface {
+	AuthorizeStewardRead(context.Context, *sql.Tx, int64) error
+}
+
+// AuthorizeStewardHeldObjectRead permits only the two steward-managed domains.
+// It cannot list hold metadata or grant hold creation/release permissions.
+func (coordinator *Coordinator) AuthorizeStewardHeldObjectRead(ctx context.Context, tx *sql.Tx, userID int64,
+	kind HeldObjectKind, objectRef string, decisionNow int64, authorizer StewardHeldObjectAuthorizer) (bool, error) {
+	if coordinator == nil || ctx == nil || tx == nil || authorizer == nil || !validDecision(userID, decisionNow) || !validHeldObjectRef(kind, objectRef) {
+		return false, ErrInvalid
+	}
+	if kind != HeldDonation && kind != HeldRequestLog {
+		return false, ErrForbidden
+	}
+	if coordinator.closed.Load() {
+		return false, ErrClosed
+	}
+	if err := authorizer.AuthorizeStewardRead(ctx, tx, userID); err != nil {
+		return false, err
+	}
+	return coordinator.readHeldObject(ctx, tx, userID, kind, objectRef, decisionNow, true)
+}
+
+func (coordinator *Coordinator) readHeldObject(ctx context.Context, tx *sql.Tx, actorID int64,
+	kind HeldObjectKind, objectRef string, decisionNow int64, steward bool) (bool, error) {
 	var holdID string
 	if err := tx.QueryRowContext(ctx, `
 SELECT id FROM legal_holds WHERE object_kind=? AND object_ref=?`, string(kind), objectRef).Scan(&holdID); err != nil {
@@ -564,7 +592,13 @@ SELECT id FROM legal_holds WHERE object_kind=? AND object_ref=?`, string(kind), 
 	if err != nil || !exists {
 		return false, err
 	}
-	if err := upsertHoldReadAudit(ctx, tx, row, adminID, "object", decisionNow); err != nil {
+	if steward {
+		_, err = tx.ExecContext(ctx, `INSERT INTO legal_hold_steward_reads(hold_id_text,user_id,first_read_at,last_read_at,read_count)
+VALUES(?,?,?,?,1) ON CONFLICT(hold_id_text,user_id) DO UPDATE SET last_read_at=excluded.last_read_at,read_count=legal_hold_steward_reads.read_count+1`, row.id, actorID, decisionNow, decisionNow)
+	} else {
+		err = upsertHoldReadAudit(ctx, tx, row, actorID, "object", decisionNow)
+	}
+	if err != nil {
 		return false, err
 	}
 	return true, nil

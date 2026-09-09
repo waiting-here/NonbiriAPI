@@ -119,8 +119,6 @@
       "nav": "Logs & usage",
       "description": "Metadata-only request logs and aggregate usage. Request and response content is not shown here.",
       "logsTitle": "Request logs",
-      "exportCsv": "Export CSV",
-      "exportJson": "Export JSON",
       "noLogs": "No log records",
       "noLogsBody": "No logs match the current filters."
     },

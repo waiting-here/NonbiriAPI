@@ -112,7 +112,7 @@ export interface AdminDonation extends DonationCommon {
 }
 
 export interface StewardDonation extends DonationCommon {
-  owner: { user_id: string; display_name: string } | null;
+  owner: { user_id: string; discord_id: string | null; display_name: string } | null;
 }
 
 function containsForbiddenControl(value: string): boolean {
@@ -364,11 +364,7 @@ export function normalizeDonationHandling(value: unknown): DonationHandling {
   };
 }
 
-function normalizeDonationCommon(
-  root: ReturnType<typeof record>,
-  label: string,
-  role: CharityRole,
-): DonationCommon {
+function normalizeDonationCommon(root: ReturnType<typeof record>, label: string): DonationCommon {
   const status = oneOf(
     root.status,
     ['pending', 'approved', 'rejected', 'deleted', 'expired'] as const,
@@ -434,7 +430,7 @@ function normalizeDonationCommon(
     }),
     review_result: review,
     keys: array(root.keys, `${label} keys`, 100).map((item) =>
-      normalizeManagedKey(item, `${label} key`, role),
+      normalizeManagedKey(item, `${label} key`, 'admin'),
     ),
     reviewer,
     created_at: unixSecond(root.created_at, `${label} creation time`),
@@ -457,7 +453,7 @@ export function normalizeAdminDonation(value: unknown): AdminDonation {
     'updated_at',
   ] as const;
   const root = record(value, fields, 'administrator donation');
-  const common = normalizeDonationCommon(root, 'administrator donation', 'admin');
+  const common = normalizeDonationCommon(root, 'administrator donation');
   let owner: AdminDonation['owner'] = null;
   if (root.owner !== null) {
     const item = record(
@@ -497,13 +493,22 @@ export function normalizeStewardDonation(value: unknown): StewardDonation {
     'updated_at',
   ] as const;
   const root = record(value, fields, 'steward donation');
-  const common = normalizeDonationCommon(root, 'steward donation', 'steward');
+  const common = normalizeDonationCommon(root, 'steward donation');
   if (root.owner === null) return { ...common, owner: null };
-  const item = record(root.owner, ['user_id', 'display_name'], 'steward donation owner');
+  const item = record(
+    root.owner,
+    ['user_id', 'discord_id', 'display_name'],
+    'steward donation owner',
+  );
   return {
     ...common,
     owner: {
       user_id: decimalID(item.user_id, 'steward owner id'),
+      discord_id: nullableString(item.discord_id, 'steward owner Discord id', {
+        max: 128,
+        bytes: 128,
+        ascii: true,
+      }),
       display_name: string(item.display_name, 'steward owner display', {
         min: 1,
         max: 128,

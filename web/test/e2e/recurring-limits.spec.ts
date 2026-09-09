@@ -144,15 +144,7 @@ function donationPageItem(
     ...common,
     handling: value.handling,
     reviewer: value.reviewer ?? null,
-    owner:
-      owner === null || typeof owner !== 'object' || Array.isArray(owner)
-        ? null
-        : role === 'admin'
-          ? owner
-          : {
-              user_id: (owner as Record<string, unknown>).user_id,
-              display_name: (owner as Record<string, unknown>).display_name,
-            },
+    owner: owner === null || typeof owner !== 'object' || Array.isArray(owner) ? null : owner,
   };
 }
 

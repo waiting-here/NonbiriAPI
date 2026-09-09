@@ -79,7 +79,7 @@ const ROLE_PATHS: Record<LogRole, string> = {
 
 const LOG_FILTER_KEYS: Record<LogRole, readonly (keyof LogFiltersValue)[]> = {
   user: ['model', 'error_code', 'status', 'from', 'to'],
-  steward: ['endpoint_base_url', 'upstream_model', 'error_code', 'status', 'from', 'to'],
+  steward: ['user_id', 'endpoint_base_url', 'upstream_model', 'error_code', 'status', 'from', 'to'],
   admin: ['user_id', 'endpoint_base_url', 'upstream_model', 'error_code', 'status', 'from', 'to'],
 };
 const MAX_LOG_UNIX_SECOND = 253_402_300_799;

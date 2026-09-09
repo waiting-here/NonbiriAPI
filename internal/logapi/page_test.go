@@ -72,7 +72,7 @@ func TestLogNumberedListsCountOnlyAuthorizedFilteredRows(t *testing.T) {
 			if len(admin.Data) != wantLength || len(steward.Data) != wantLength || admin.NextCursor != nil || steward.NextCursor != nil {
 				t.Fatal("role page differed")
 			}
-			requireNoJSONKeys(t, steward, "user_id", "model", "endpoint_note", "key_note")
+			requireNoJSONKeys(t, steward, "model", "endpoint_note", "key_note")
 			noLogSentinel(t, page, "OTHER-", "RAW-")
 		})
 	}
@@ -136,7 +136,7 @@ func TestLogNumberedAttemptsRemainRoleSafeAndIndependentlyPaged(t *testing.T) {
 			t.Fatal(err)
 		}
 		requireLogPagination(t, steward.AttemptPagination, last, size, 23)
-		requireNoJSONKeys(t, steward, "user_id", "model", "endpoint_note", "key_note")
+		requireNoJSONKeys(t, steward, "model", "endpoint_note", "key_note")
 		noLogSentinel(t, detail, "OTHER-", "RAW-")
 	}
 	filter := AttemptFilter{Page: &pagination.Request{Page: 1, Size: 10}}
@@ -282,7 +282,7 @@ func TestLogNumberedRetentionAndHeldOnlyKnownID(t *testing.T) {
 	if _, err := f.repo.GetUser(ctx, user, expired, attempts); !errors.Is(err, ErrNotFound) {
 		t.Fatal(err)
 	}
-	if _, err := f.repo.GetSteward(ctx, user, expired, attempts, allowLogStewardRead{}); !errors.Is(err, ErrNotFound) {
+	if _, err := f.repo.GetSteward(ctx, user, expired, attempts, allowLogStewardRead{}); err != nil {
 		t.Fatal(err)
 	}
 	detail, err := f.repo.GetAdmin(ctx, expired, attempts)
@@ -290,7 +290,7 @@ func TestLogNumberedRetentionAndHeldOnlyKnownID(t *testing.T) {
 		t.Fatal(err)
 	}
 	requireLogPagination(t, detail.AttemptPagination, 1, 10, 0)
-	if hold.calls != 1 {
+	if hold.calls != 2 {
 		t.Fatal("known-ID hold check missing")
 	}
 	hold.allow = false

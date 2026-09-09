@@ -26,6 +26,7 @@ export {
 } from './numberedQueries';
 export {
   adminLogExportPath,
+  roleLogExportPath,
   roleLogKeys,
   normalizeAdminLogDetail,
   normalizeAdminLogRow,

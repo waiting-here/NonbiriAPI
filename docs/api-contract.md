@@ -69,7 +69,7 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. Only a completely absent main/WAL/SHM set or a validated Generation 2 set is accepted. Empty, alpha/Generation 1, unknown, corrupt, structurally unexpected, unsafe, or anomalous-sidecar sources are rejected before a writable open or source-side change. Four exact earlier Generation 2 manifests are supported: before charity routing, before per-key request limits, before successful-response checkpoints, and the complete beta.1 schema. Two exact deployed intermediate manifests that already contain the beta.2 sidecars are also supported and receive only missing browse and quota-cleanup indexes. After read-only validation, one transaction adds the missing tables, indexes, and default sidecar rows, validates the complete current manifest, and preserves existing business data and custom legal settings. No historical successful-response evidence, recurring usage, or game presentation values are invented. Alpha/Generation 1 requires a fresh database; arbitrary schema repair and old-generation import remain unsupported. See the [deployment compatibility matrix](deployment.md#database-compatibility-and-version-changes).
+The database remains Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. Only a completely absent main/WAL/SHM set or a validated Generation 2 set is accepted. Empty, alpha/Generation 1, unknown, corrupt, structurally unexpected, unsafe, or anomalous-sidecar sources are rejected before a writable open or source-side change. Four exact earlier Generation 2 manifests are supported: before charity routing, before per-key request limits, before successful-response checkpoints, and the complete beta.1 schema. Three exact deployed intermediate manifests that already contain the beta.2 sidecars are also supported. They receive missing browse and quota-cleanup indexes and an initially empty steward held-record read audit table. After read-only validation, one transaction adds the missing tables, indexes, and default sidecar rows, validates the complete current manifest, and preserves existing business data and custom legal settings. No historical successful-response evidence, recurring usage, or game presentation values are invented. Alpha/Generation 1 requires a fresh database; arbitrary schema repair and old-generation import remain unsupported. See the [deployment compatibility matrix](deployment.md#database-compatibility-and-version-changes).
 
 Account export `schema_version=5` is independent of SQLite `user_version`.
 
@@ -210,7 +210,7 @@ Pass the returned nullable `anchor` operation ID to subsequent pages to keep new
 
 Each donation key has immutable `authorized_expires_at` and an effective `expires_at`, equal at creation. A reviewer may shorten the effective expiry or restore it only up to the donor's authorization; an unlimited effective value is permitted only when the authorization is unlimited. One key expiring removes only that key's membership and bindings and blocks new claims. The donation becomes expired only when its last live key ends. Accepted claims and reservations complete normally.
 
-Management projections identify a reviewer with `role: admin|steward`. A manual review may have an empty reason. Automatic approval has no reviewer and uses an empty reason. The steward projection shows `owner` only for the steward's own donation; otherwise it is null. A reviewer's `user_id` is present only when it is that steward's own ID; another reviewer's role remains visible with a null ID.
+Administrator and current level-5 steward donation projections contain the same management information. `owner` contains `user_id,discord_id,display_name` for any surviving donor; an absent owner remains null. `reviewer` contains `user_id` and `role: admin|steward`, with a null ID after that actor's identity is removed. Manual review may have an empty reason; automatic approval has no reviewer and an empty reason. Detailed management key sources include channel category/revision when recorded. Ordinary owner projections remain separate. Historical idempotent responses may lack newly authorized information; the current detail read provides the authoritative projection without rewriting stored receipts.
 
 Every owner-visible key carries `safe_source`: a custom Connector/base URL or a mainstream channel/name/Connector/base URL. Internal source IDs, channel category/revision, report fingerprints, secrets, and management notes are excluded. A donation containing only keys from one immutable mainstream channel is approved atomically at creation. A fully custom donation remains pending. Mixed custom/mainstream or multiple-channel submissions are `invalid_request`.
 
@@ -314,16 +314,16 @@ Dry mode intercepts before upstream dispatch. Live mode captures bounded safe pr
 
 ### 6.2 Steward
 
-Level-5 steward routes are user-host routes and require a currently effective L5 user session. Final mutations recheck that role in the write transaction. List/detail DTOs are separately compiled allowlists and do not inherit administrator fields.
+Level-5 steward routes are user-host routes and require a currently effective L5 user session. Reads and final mutations recheck that role in their transaction. Log and donation management expose the same information as administrator views; ordinary user projections and unrelated administrator capabilities remain separate.
 
 | Surface | Routes |
 | --- | --- |
-| Logs | `GET /api/steward/logs`, `GET /api/steward/logs/{id}` |
+| Logs | `GET /api/steward/logs`, `GET /api/steward/logs/{id}`, `GET /api/steward/logs/export.csv`, `GET /api/steward/logs/export.json` |
 | Maintenance | `GET /api/steward/maintenance`, `POST /api/steward/maintenance/enable` |
 | Shared donation management | `GET /api/steward/donations`, `GET /api/steward/donations/{id}`, `POST /api/steward/donations/{id}/review`, `PATCH /api/steward/donations/{id}/keys/{keyId}` |
 | Charity models | Exact route family in the table below |
 
-Stewards can review and manage charity settings across donations. They can enable but cannot disable maintenance. They have no report route, legal-hold route, account-export route, user-account mutation route, or administrator audit identity. Held-only donation history remains administrator-only; shared management does not widen an account's owner export.
+Stewards can review and manage charity settings across donations. They can enable but cannot disable maintenance. They have no report route, legal-hold route, account-export route, user-account mutation route, or administrator audit identity. Known-ID donation and request-log details under an active legal hold are available to both management roles, with a separate steward read audit. Shared management does not widen an account's owner export.
 
 Both management prefixes (`/admin/api` and `/api/steward`) provide `GET {prefix}/donations/badge`, with no query or body. The no-store response is `{pending_count,server_now}` with an exact decimal-string count. Only logically active donations with pending handling count; expiration is reflected even before cleanup runs.
 
@@ -331,9 +331,11 @@ Both management prefixes (`/admin/api` and `/api/steward`) provide `GET {prefix}
 
 Management donation lists accept `status=pending|approved|rejected|deleted|expired`, `handling=legacy|pending|processed|closed`, and `q` alongside legacy `cursor,limit` or numbered `page,page_size`, and bind cursors to their filters. `handling` is not accepted on the owner list. Search uses donation ID and description, with the same 128-code-point/512-byte/no-NUL limit. Each management key adds decimal-string `binding_count` and boolean `idle`. All actual bindings count, including bindings to disabled models; zero bindings means idle. Owner donation DTOs and exports omit handling and these management fields. Historical management receipts add safe handling/count fields when replayed without rewriting the stored immutable result.
 
-Steward charity log list/detail entries add nullable `caller_identity: {discord_nickname,discord_id}`. Both members are nullable, with UTF-8 byte limits of 256 and 128 respectively. The name uses the current guild nickname, falling back to the stored username. Data comes from the account's latest synced profile, not a historical identity snapshot. Unlinked/deleted callers produce null, the existing 30-day visibility limit still applies, and stewards gain no log export.
+Administrator and steward log list/detail/export entries contain nullable `user_id` and `caller_identity: {discord_nickname,discord_id}`. Caller identity is present only for charity requests with a surviving caller account. Both members are nullable, with UTF-8 byte limits of 256 and 128 respectively. The name uses the current guild nickname, falling back to the stored username, from the latest synced profile. Unlinked/deleted callers produce null. Both roles can read known-ID details retained by an active legal hold; ordinary lists and exports remain limited to 30 days. This grants no legal-hold management permission.
 
-`GET /api/steward/logs` accepts `error_code,status,from,to,endpoint_base_url,upstream_model` plus legacy `cursor,limit` or numbered `page,page_size`; `GET /api/steward/logs/{id}` accepts the corresponding `attempt_cursor,attempt_limit` or `attempt_page,attempt_page_size`. The numbered list/detail responses carry `pagination`/`attempt_pagination`; the ordinary log filters and visibility rules remain unchanged.
+Each management attempt displays its persisted nullable `endpoint_key_id` routing snapshot, including separate IDs for retries. It never returns the key secret. The logical request's `usage.charge` is the authoritative total charge shown in both list and detail. Attempt `usage.charge` remains a compatibility zero, not an independently settled fee; the page does not present it as a charge. CSV and JSON exports share the management row fields and existing 10,000-row/16 MiB all-or-error limits. CSV additionally includes `caller_discord_nickname,caller_discord_id` with spreadsheet-safe escaping. Steward export reads recheck authority in the export snapshot, and all exports are no-store.
+
+`GET /api/steward/logs` accepts `user_id,error_code,status,from,to,endpoint_base_url,upstream_model` plus legacy `cursor,limit` or numbered `page,page_size`; `GET /api/steward/logs/{id}` accepts the corresponding `attempt_cursor,attempt_limit` or `attempt_page,attempt_page_size`. The numbered list/detail responses carry `pagination`/`attempt_pagination`. Export accepts the same filters without pagination; cursors remain bound to role, actor and filters.
 
 | Method and path | Request / response |
 | --- | --- |
@@ -474,7 +476,7 @@ Only validated successful output establishes the durable first-success time. Cal
 | `GET /admin/api/legal-holds/{id}` | Elevated hold detail. |
 | `POST /admin/api/legal-holds/{id}/release` | Elevated release. |
 
-Lineage items are exactly `{donation_id,donation_key_id,donation_status,key_state,expires_at,ended_reason,ended_at}`. They exclude donor identity, descriptions, safe notes, fingerprint, source key ID, and provenance. Legal holds cover only the documented object roots, never identity/session/account deletion, last at most 365 days, and do not extend an object's original retention clock.
+Lineage items are exactly `{donation_id,donation_key_id,donation_status,key_state,expires_at,ended_reason,ended_at}`. They exclude donor identity, descriptions, safe notes, fingerprint, source key ID, and provenance. Legal holds cover only the documented object roots, never identity/session/account deletion, and last at most 365 days. The ordinary list/export window and new-report matching period do not change. An active hold can retain its object beyond ordinary expiry for authorized reads by known ID until the hold ends.
 
 ## 8. Server-sent events
 

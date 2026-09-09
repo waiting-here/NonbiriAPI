@@ -312,7 +312,7 @@ const managedKeyFixture = {
   safe_note: 'reviewer-safe',
 };
 
-function pendingDonationFixture(frame: 'admin' | 'steward', id: string, description: string) {
+function pendingDonationFixture(id: string, description: string) {
   return {
     id,
     status: 'pending',
@@ -328,10 +328,7 @@ function pendingDonationFixture(frame: 'admin' | 'steward', id: string, descript
     description,
     review_result: null,
     keys: [managedKeyFixture],
-    owner:
-      frame === 'admin'
-        ? { user_id: '1', discord_id: null, display_name: 'fixture-user' }
-        : { user_id: '1', display_name: 'fixture-user' },
+    owner: { user_id: '1', discord_id: null, display_name: 'fixture-user' },
     reviewer: null,
     created_at: 1,
     updated_at: 2,
@@ -346,10 +343,7 @@ function managementNumberedPage<T>(data: T[]) {
   };
 }
 
-function managedDonationPageSummary(
-  donation: ReturnType<typeof pendingDonationFixture>,
-  frame: 'admin' | 'steward',
-) {
+function managedDonationPageSummary(donation: ReturnType<typeof pendingDonationFixture>) {
   const stateCounts: Record<string, string> = {
     available: '0',
     pending: '0',
@@ -377,12 +371,7 @@ function managedDonationPageSummary(
     sources: source ? [source] : [],
     handling: donation.handling,
     reviewer: donation.reviewer,
-    owner:
-      donation.owner === null
-        ? null
-        : frame === 'admin'
-          ? donation.owner
-          : { user_id: donation.owner.user_id, display_name: donation.owner.display_name },
+    owner: donation.owner,
   };
 }
 
@@ -1550,7 +1539,7 @@ describe('experimental policy and charity controls', () => {
   });
 
   test('rejects a non-empty invalid reviewer expiry and sends no PATCH', async () => {
-    const detailDonation = pendingDonationFixture('admin', '20', 'review expiry fixture');
+    const detailDonation = pendingDonationFixture('20', 'review expiry fixture');
     const fetchMock = installJsonFetchFixtures([
       { method: 'GET', path: '/admin/api/session', body: { admin: { username: 'fixture-admin' } } },
       {
@@ -1564,7 +1553,7 @@ describe('experimental policy and charity controls', () => {
       {
         method: 'GET',
         path: '/admin/api/donations?page=1&page_size=20',
-        body: managementNumberedPage([managedDonationPageSummary(detailDonation, 'admin')]),
+        body: managementNumberedPage([managedDonationPageSummary(detailDonation)]),
       },
       { method: 'GET', path: '/admin/api/donations/20', body: detailDonation },
       {
@@ -1623,7 +1612,7 @@ describe('experimental policy and charity controls', () => {
   });
 
   test('keeps management actions disabled on detail failure and enables them after retry', async () => {
-    const detailDonation = pendingDonationFixture('admin', '21', 'detail retry fixture');
+    const detailDonation = pendingDonationFixture('21', 'detail retry fixture');
     let detailReads = 0;
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const requestURL = new URL(
@@ -1641,9 +1630,7 @@ describe('experimental policy and charity controls', () => {
           zones: ['America/Indianapolis', 'UTC'],
         });
       if (method === 'GET' && requestURL.pathname === '/admin/api/donations')
-        return jsonResponse(
-          managementNumberedPage([managedDonationPageSummary(detailDonation, 'admin')]),
-        );
+        return jsonResponse(managementNumberedPage([managedDonationPageSummary(detailDonation)]));
       if (method === 'GET' && requestURL.pathname === '/admin/api/donations/21') {
         detailReads += 1;
         return detailReads === 1
@@ -1942,7 +1929,7 @@ describe('experimental policy and charity controls', () => {
   ])(
     'keeps the physical source read-only for the $frame review role and preserves donation-key ids',
     async ({ frame, basePath, station, role }) => {
-      const detailDonation = pendingDonationFixture(frame, '9', 'review fixture');
+      const detailDonation = pendingDonationFixture('9', 'review fixture');
       const reviewedDonation = {
         ...detailDonation,
         status: 'approved',
@@ -1972,7 +1959,7 @@ describe('experimental policy and charity controls', () => {
         {
           method: 'GET',
           path: `${basePath}/donations?page=1&page_size=20`,
-          body: managementNumberedPage([managedDonationPageSummary(detailDonation, frame)]),
+          body: managementNumberedPage([managedDonationPageSummary(detailDonation)]),
         },
         { method: 'GET', path: `${basePath}/donations/9`, body: detailDonation },
         {

@@ -148,8 +148,8 @@ func (s *Service) keysPage(ctx context.Context, role reviewerRole, userID, donat
 	if err != nil {
 		return empty, err
 	}
-	if !visible && role == reviewerAdmin && s.heldRead != nil {
-		visible, err = s.heldRead.AuthorizeHeldDonationRead(ctx, tx, donationID, now)
+	if !visible && (role == reviewerAdmin || role == reviewerSteward) {
+		visible, err = s.managementHeldRead(ctx, tx, role, userID, donationID, now)
 		if err != nil {
 			return empty, err
 		}

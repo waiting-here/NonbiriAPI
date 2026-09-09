@@ -69,8 +69,8 @@ func TestDonationNumberedSummariesOwnerIsolationAndLogicalExpiry(t *testing.T) {
 		t.Fatal(out, err)
 	}
 	for _, row := range out.Data {
-		if row.Owner != nil {
-			t.Fatal("foreign identity", row)
+		if row.Owner == nil || row.Owner.DiscordID == nil {
+			t.Fatal("management identity absent", row)
 		}
 	}
 	if _, err := e.store.DB().Exec(`UPDATE donation_keys SET expires_at=? WHERE donation_id=?`, e.clock.Load(), first.ID); err != nil {

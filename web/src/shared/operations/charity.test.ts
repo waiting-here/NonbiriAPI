@@ -57,6 +57,8 @@ const managedKey = {
     kind: 'mainstream',
     channel_id: `mch_${'A'.repeat(22)}`,
     name: 'Frozen channel',
+    channel_revision: '1',
+    category: 'subscription',
     connector_type: 'openai-compatible',
     base_url: 'https://example.test/v1',
   },
@@ -94,7 +96,7 @@ describe('role-safe charity wire', () => {
       expect(
         normalizeStewardDonation({
           ...reviewed,
-          owner: { user_id: '2', display_name: 'Owner' },
+          owner: { user_id: '2', discord_id: 'steward-discord', display_name: 'Owner' },
         }).reviewer?.role,
       ).toBe(expected);
       expect(() =>
@@ -103,11 +105,14 @@ describe('role-safe charity wire', () => {
     },
   );
 
-  it('accepts hidden owners in role-safe management views', () => {
+  it('accepts deidentified and full owner projections in management views', () => {
     expect(normalizeAdminDonation({ ...common, owner: null }).owner).toBeNull();
     expect(
-      normalizeStewardDonation({ ...common, owner: { user_id: '2', display_name: 'Owner' } }).owner,
-    ).toEqual({ user_id: '2', display_name: 'Owner' });
+      normalizeStewardDonation({
+        ...common,
+        owner: { user_id: '2', discord_id: 'steward-discord', display_name: 'Owner' },
+      }).owner,
+    ).toEqual({ user_id: '2', discord_id: 'steward-discord', display_name: 'Owner' });
     expect(normalizeStewardDonation({ ...common, owner: null }).owner).toBeNull();
   });
 
@@ -115,10 +120,16 @@ describe('role-safe charity wire', () => {
     expect(() =>
       normalizeAdminDonation({ ...common, owner: null, secret: 'sk-never-project' }),
     ).toThrow(/invalid administrator donation/i);
-    expect(() =>
+    expect(
       normalizeStewardDonation({
         ...common,
         owner: { user_id: '2', display_name: 'Owner', discord_id: 'private' },
+      }).owner?.discord_id,
+    ).toBe('private');
+    expect(() =>
+      normalizeStewardDonation({
+        ...common,
+        owner: { user_id: '2', display_name: 'Owner', discord_id: 'private', email: 'secret' },
       }),
     ).toThrow(/invalid steward donation owner/i);
     expect(() =>
@@ -129,7 +140,7 @@ describe('role-safe charity wire', () => {
     );
   });
 
-  it('keeps provenance role-specific and enforces the donor expiry ceiling', () => {
+  it('keeps full management provenance and enforces the donor expiry ceiling', () => {
     const adminSource = {
       ...managedKey.safe_source,
       channel_revision: '3',
@@ -147,18 +158,18 @@ describe('role-safe charity wire', () => {
       safe_source: { kind: 'mainstream', channel_revision: '3', category: 'subscription' },
     });
 
-    const stewardOwner = { user_id: '2', display_name: 'Owner' };
+    const stewardOwner = { user_id: '2', discord_id: 'steward-discord', display_name: 'Owner' };
     expect(
       normalizeStewardDonation({ ...common, keys: [managedKey], owner: stewardOwner }).keys[0]
         .safe_source,
-    ).not.toHaveProperty('category');
-    expect(() =>
+    ).toMatchObject({ channel_revision: '1', category: 'subscription' });
+    expect(
       normalizeStewardDonation({
         ...common,
         keys: [{ ...managedKey, safe_source: adminSource }],
         owner: stewardOwner,
-      }),
-    ).toThrow(/source/i);
+      }).keys[0]?.safe_source,
+    ).toMatchObject({ channel_revision: '3', category: 'subscription' });
     expect(() =>
       normalizeAdminDonation({
         ...common,
@@ -180,6 +191,30 @@ describe('role-safe charity wire', () => {
         owner: null,
       }),
     ).toThrow(/ended reason/i);
+  });
+
+  it('preserves multiple steward keys and an absent endpoint snapshot', () => {
+    const result = normalizeStewardDonation({
+      ...common,
+      keys: [
+        managedKey,
+        {
+          ...managedKey,
+          id: '12',
+          endpoint_key_id: null,
+          safe_source: {
+            kind: 'custom',
+            connector_type: 'anthropic-compatible',
+            base_url: 'https://custom.example.test/v1',
+          },
+        },
+      ],
+      owner: { user_id: '2', discord_id: null, display_name: 'Owner' },
+    });
+    expect(result.keys.map((key) => [key.id, key.endpoint_key_id])).toEqual([
+      ['11', '21'],
+      ['12', null],
+    ]);
   });
 
   it('accepts an automatic mainstream approval with an empty system review reason', () => {
@@ -206,7 +241,7 @@ describe('role-safe charity wire', () => {
       review_result: { decision: 'approve', reason: 'accepted', reviewed_at: 1 },
       reviewer: { user_id: '9', role: 'admin' },
       keys: [{ ...managedKey, charity_state: 'expired', ended_reason: null }],
-      owner: { user_id: '2', display_name: 'Owner' },
+      owner: { user_id: '2', discord_id: 'steward-discord', display_name: 'Owner' },
     });
     expect(result.keys[0]).toMatchObject({ charity_state: 'expired', ended_reason: null });
   });

@@ -143,10 +143,7 @@ function catalogPage(
   };
 }
 
-function donationPageItem(
-  donation: Record<string, unknown>,
-  role: 'admin' | 'steward',
-): Record<string, unknown> {
+function donationPageItem(donation: Record<string, unknown>): Record<string, unknown> {
   const keys = Array.isArray(donation.keys)
     ? donation.keys.filter(
         (entry): entry is Record<string, unknown> =>
@@ -186,15 +183,7 @@ function donationPageItem(
     sources,
     handling: donation.handling,
     reviewer: donation.reviewer ?? null,
-    owner:
-      owner === null || typeof owner !== 'object' || Array.isArray(owner)
-        ? null
-        : role === 'admin'
-          ? owner
-          : {
-              user_id: (owner as Record<string, unknown>).user_id,
-              display_name: (owner as Record<string, unknown>).display_name,
-            },
+    owner: owner === null || typeof owner !== 'object' || Array.isArray(owner) ? null : owner,
   };
 }
 
@@ -403,13 +392,13 @@ test('administrator source grouping accepts current key limits on narrow and wid
   page,
 }) => {
   const guard = await prepare(page, 'admin');
-  const donation = managedDonation(9, 'admin');
+  const donation = managedDonation(9);
   const donationKey = donation.keys[0] as Record<string, unknown>;
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
     path: '/admin/api/donations?page=1&page_size=20',
-    body: numberedResponse([donationPageItem(donation, 'admin')], '1', 20),
+    body: numberedResponse([donationPageItem(donation)], '1', 20),
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
@@ -876,7 +865,7 @@ function sourceManagedKey(
   };
 }
 
-function managedDonation(id: number, role: 'admin' | 'steward') {
+function managedDonation(id: number) {
   return {
     id: String(id),
     status: 'pending',
@@ -927,8 +916,8 @@ function managedDonation(id: number, role: 'admin' | 'steward') {
     ],
     owner: {
       user_id: '1',
+      discord_id: '123456789012345678',
       display_name: 'A donor with a long display name',
-      ...(role === 'admin' ? { discord_id: '123456789012345678' } : {}),
     },
     reviewer: null,
     created_at: 1,
@@ -946,7 +935,7 @@ for (const role of ['admin', 'steward'] as const)
     const guard = await prepare(page, station, 'en', role === 'steward');
     let submitted: Record<string, unknown> | undefined;
     let bindings: Array<Record<string, unknown>> = [];
-    const donation = managedDonation(9, role);
+    const donation = managedDonation(9);
     const sourceRows = Array.from({ length: 61 }, (_, index) => sourceSummary(index + 1));
     const sourceKeys = (sourceID: number) =>
       Array.from({ length: 61 }, (_, index) => sourceManagedKey(donation, sourceID, index + 1));
@@ -962,7 +951,7 @@ for (const role of ['admin', 'steward'] as const)
       if (path === '/logs') return route.fulfill({ json: numberedFixturePage([], url) });
       if (path === '/donations')
         return route.fulfill({
-          json: numberedFixturePage([donationPageItem(donation, role)], url),
+          json: numberedFixturePage([donationPageItem(donation)], url),
         });
       if (path === '/donations/9') return route.fulfill({ json: donation });
       if (path === '/charity-models')
@@ -1144,7 +1133,7 @@ test.describe('donation selection expiry in UTC', () => {
           endpoint_key_id: string;
           expires_at: number | null;
         }>;
-        const template = managedDonation(99, 'admin');
+        const template = managedDonation(99);
         saved = {
           id: '99',
           status: 'pending',

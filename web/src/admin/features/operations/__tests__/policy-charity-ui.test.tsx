@@ -133,7 +133,7 @@ function stewardDonation(): StewardDonation {
     description: 'My donation',
     review_result: null,
     keys: [managedKey({ id: '12', endpoint_key_id: '22' })],
-    owner: { user_id: '8', display_name: 'Current steward' },
+    owner: { user_id: '8', discord_id: 'steward-discord-8', display_name: 'Current steward' },
     reviewer: null,
     created_at: 1_735_689_600,
     updated_at: 1_735_689_600,
@@ -153,10 +153,7 @@ function expectNumberedPageQuery(url: URL) {
   expect(url.searchParams.get('page_size')).toBe('20');
 }
 
-function donationPageSummary(
-  donation: AdminDonation | StewardDonation,
-  frame: 'admin' | 'steward',
-) {
+function donationPageSummary(donation: AdminDonation | StewardDonation) {
   const stateCounts: Record<string, string> = {
     available: '0',
     pending: '0',
@@ -185,14 +182,7 @@ function donationPageSummary(
     source_count: source ? '1' : '0',
     sources: source ? [source] : [],
     reviewer: donation.reviewer,
-    owner:
-      owner === null
-        ? null
-        : frame === 'admin'
-          ? 'discord_id' in owner
-            ? owner
-            : { user_id: owner.user_id, discord_id: null, display_name: owner.display_name }
-          : { user_id: owner.user_id, display_name: owner.display_name },
+    owner: owner === null ? null : owner,
   };
 }
 
@@ -277,7 +267,7 @@ describe('Generation 2 charity management policy', () => {
         });
       if (method === 'GET' && path === '/admin/api/donations') {
         expectNumberedPageQuery(url);
-        return jsonResponse(managementNumberedPage([donationPageSummary(current, 'admin')]));
+        return jsonResponse(managementNumberedPage([donationPageSummary(current)]));
       }
       if (method === 'GET' && path === '/admin/api/donations/1') return jsonResponse(current);
       if (method === 'GET' && path === '/admin/api/donations/1/keys') {
@@ -337,7 +327,7 @@ describe('Generation 2 charity management policy', () => {
         });
       if (method === 'GET' && path === '/admin/api/donations') {
         expectNumberedPageQuery(url);
-        return jsonResponse(managementNumberedPage([donationPageSummary(current, 'admin')]));
+        return jsonResponse(managementNumberedPage([donationPageSummary(current)]));
       }
       if (method === 'GET' && path === '/admin/api/donations/1') return jsonResponse(current);
       if (method === 'GET' && path === '/admin/api/donations/1/keys') {
@@ -503,11 +493,16 @@ describe('Generation 2 charity management policy', () => {
     );
   });
 
-  it('fails closed when a steward response contains administrator-only identity fields', async () => {
+  it('fails closed when a steward response contains an unknown owner field', async () => {
     const donation = stewardDonation();
     const invalid = {
-      ...donationPageSummary(donation, 'steward'),
-      owner: { user_id: '8', display_name: 'Current steward', discord_id: 'forbidden' },
+      ...donationPageSummary(donation),
+      owner: {
+        user_id: '8',
+        display_name: 'Current steward',
+        discord_id: 'steward-discord-8',
+        email: 'forbidden',
+      },
     };
     const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
       const url = new URL(String(input), 'https://example.test');
@@ -545,7 +540,7 @@ describe('Generation 2 charity management policy', () => {
         });
       if (method === 'GET' && path === '/api/steward/donations') {
         expectNumberedPageQuery(url);
-        return jsonResponse(managementNumberedPage([donationPageSummary(item, 'steward')]));
+        return jsonResponse(managementNumberedPage([donationPageSummary(item)]));
       }
       if (method === 'GET' && path === '/api/steward/donations/2') {
         return errorResponse(403, 'forbidden');

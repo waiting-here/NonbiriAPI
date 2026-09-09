@@ -39,6 +39,7 @@ function adminRow(index: number) {
   return {
     ...commonRow(index),
     user_id: String(index + 1),
+    caller_identity: null,
     attempt_count: '1',
   };
 }
@@ -202,7 +203,14 @@ describe('numbered role log panel', () => {
       {
         method: 'GET',
         path: `/admin/api/logs/${requestID(20)}?attempt_page=1&attempt_page_size=20`,
-        body: detailBody(clampedRow, [attempt(1)]),
+        body: detailBody(
+          { ...clampedRow, usage: { ...usage, charge: '123.45' } },
+          [
+            { ...attempt(1), usage: { ...usage, charge: '999.99' } },
+            { ...attempt(2), endpoint_key_id: null },
+          ],
+          pagination('1', 20, 2, 1),
+        ),
       },
     ]);
 
@@ -251,7 +259,17 @@ describe('numbered role log panel', () => {
         `/admin/api/logs/${requestID(20)}?attempt_page=1&attempt_page_size=20`,
       ),
     );
-    await waitFor(() => expect(within(dialog).getByText('upstream-model')).toBeVisible());
+    await waitFor(() =>
+      expect(within(dialog).getAllByText('upstream-model', { exact: true })).toHaveLength(2),
+    );
+    expect(within(dialog).getByText('123.45', { exact: true })).toBeVisible();
+    expect(within(dialog).queryByText('999.99', { exact: true })).toBeNull();
+    const attemptItems = Array.from(dialog.querySelectorAll('.log-attempt')) as HTMLElement[];
+    expect(attemptItems).toHaveLength(2);
+    expect(within(attemptItems[0]!).getByText('2', { exact: true })).toBeVisible();
+    expect(
+      within(attemptItems[1]!).getByText('Endpoint key ID', { exact: true }).parentElement,
+    ).toHaveTextContent('—');
     const detailQuery = queryFromProbe(view.container);
     expect(detailQuery.get('request_id')).toBe(requestID(20));
     expect(detailQuery.get('page')).toBe('2');
@@ -315,6 +333,41 @@ describe('numbered role log panel', () => {
     expect(query.get('page')).toBe('1');
     expect(query.get('user_id')).toBe('7');
     expect(query.get('anchor')).toBe('keep');
+  });
+
+  it('submits the user filter from the steward management station', async () => {
+    const row = adminRow(7);
+    const fetchMock = installJsonFetchFixtures([
+      timeZoneFixture('/api/time-zones'),
+      {
+        method: 'GET',
+        path: '/api/steward/logs?page=1&page_size=20',
+        body: listBody([row], pagination('1', 20, 1, 1)),
+      },
+      {
+        method: 'GET',
+        path: '/api/steward/logs?user_id=8&page=1&page_size=20',
+        body: listBody([row], pagination('1', 20, 1, 1)),
+      },
+    ]);
+    const view = await renderWithProviders(<RoleLogPanel accountId="viewer" role="steward" />, {
+      station: 'user',
+      role: 'level5',
+      route: '/logs?page=1&page_size=20',
+    });
+
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
+        '/api/steward/logs?page=1&page_size=20',
+      ),
+    );
+    await view.user.type(screen.getByLabelText('User ID'), '8');
+    await view.user.click(screen.getByRole('button', { name: 'Apply filter' }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
+        '/api/steward/logs?user_id=8&page=1&page_size=20',
+      ),
+    );
   });
 
   it('keeps charity details without attempts or a fabricated count', async () => {

@@ -112,8 +112,8 @@ func (repository *Repository) GetAdmin(ctx context.Context, requestID string, fi
 		}
 	}
 	var userID sql.NullInt64
-	record, err := scanCommon(tx.QueryRowContext(ctx,
-		`SELECT `+commonListColumns+`,l.user_id FROM request_logs l WHERE l.logical_request_id=?`, requestID), &userID)
+	record, identity, err := scanManagementCommon(tx.QueryRowContext(ctx,
+		`SELECT `+commonListColumns+`,`+callerIdentityColumns+`,l.user_id FROM request_logs l`+callerIdentityJoin+`WHERE l.logical_request_id=?`, requestID), &userID)
 	if err != nil {
 		return AdminLogDetail{}, translateSQLError(err)
 	}
@@ -140,7 +140,7 @@ func (repository *Repository) GetAdmin(ctx context.Context, requestID string, fi
 		CallerResultClass: resultClassPointer(record.callerResultClass),
 		CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 		StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-		UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10),
+		UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity,
 	}
 	attempts, err := repository.listAdminAttemptsTx(ctx, tx, record.rowID, requestID, filter)
 	if err != nil {
@@ -183,13 +183,24 @@ func (repository *Repository) GetSteward(
 		return StewardLogDetail{}, err
 	}
 	defer tx.Rollback()
-	// Only the current charity caller's two authorized identity fields are joined.
-	record, identity, err := scanStewardCommon(tx.QueryRowContext(ctx,
-		`SELECT `+commonListColumns+`,`+callerIdentityColumns+` FROM request_logs l`+callerIdentityJoin+`WHERE l.logical_request_id=?`, requestID))
+	var userID sql.NullInt64
+	record, identity, err := scanManagementCommon(tx.QueryRowContext(ctx,
+		`SELECT `+commonListColumns+`,`+callerIdentityColumns+`,l.user_id FROM request_logs l`+callerIdentityJoin+`WHERE l.logical_request_id=?`, requestID), &userID)
 	if err != nil {
 		return StewardLogDetail{}, translateSQLError(err)
 	}
-	if !requestLogOrdinarilyVisible(record.completedAt, now) {
+	visible := requestLogOrdinarilyVisible(record.completedAt, now)
+	if hook, ok := repository.heldRead.(StewardHeldReadAuthorizer); !visible && ok {
+		held, err := hook.AuthorizeStewardHeldRequestLogRead(ctx, tx, stewardUserID, record.rowID, now)
+		if err != nil {
+			return StewardLogDetail{}, err
+		}
+		visible = visible || held
+	}
+	if !visible {
+		if err := tx.Commit(); err != nil {
+			return StewardLogDetail{}, translateSQLError(err)
+		}
 		return StewardLogDetail{}, ErrNotFound
 	}
 	usage, err := usageFromRecord(record)
@@ -201,7 +212,7 @@ func (repository *Repository) GetSteward(
 		CallerResultClass: resultClassPointer(record.callerResultClass),
 		CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 		StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-		AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity,
+		UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity,
 	}
 	attempts, err := repository.listStewardAttempts(ctx, tx, stewardUserID, record.rowID, requestID, filter)
 	if err != nil {
