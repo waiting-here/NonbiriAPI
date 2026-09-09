@@ -248,6 +248,7 @@
           "handlingFilter": "Follow-up filter",
           "pendingOnly": "Pending only",
           "idleFilter": "Binding filter",
+          "allBindingStates": "All binding states",
           "idleOnly": "Idle only",
           "boundOnly": "Bound only",
           "searchSources": "Search sources",

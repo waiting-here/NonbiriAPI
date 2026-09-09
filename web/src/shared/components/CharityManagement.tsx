@@ -13,6 +13,7 @@ import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { usePagePager } from '@shared/operations/usePagePager';
+import { useDetailNavigation } from '@shared/operations/useDetailNavigation';
 import { type PageSize } from '@shared/operations/pageNumbers';
 import {
   getManagedDonationsPage,
@@ -1132,6 +1133,7 @@ function DonationsPanel({
     ? rawStatus
     : '';
   const selected = selectedID(searchParams, 'donation_id');
+  const { listRef, detailRef, remember } = useDetailNavigation(selected);
   const [draft, setDraft] = useState({ query, text: query });
   const queryDraft = draft.query === query ? draft.text : query;
   const setQueryDraft = (text: string) => setDraft({ query, text });
@@ -1159,6 +1161,7 @@ function DonationsPanel({
     });
   };
   const setSelected = (id: string) => {
+    if (id) remember();
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       if (id) next.set('donation_id', id);
@@ -1238,7 +1241,7 @@ function DonationsPanel({
     );
   }
   return (
-    <div className="ops-stack">
+    <div className="ops-stack" ref={listRef} tabIndex={-1}>
       <Card>
         <div className="ops-toolbar">
           <label>
@@ -1390,7 +1393,7 @@ function DonationsPanel({
                         data-label={t('common.operations.charity.open')}
                       >
                         <button
-                          className="btn btn-secondary"
+                          className="btn btn-secondary ops-row-action"
                           type="button"
                           disabled={list.isFetching}
                           onClick={() => setSelected(item.id)}
@@ -1416,28 +1419,28 @@ function DonationsPanel({
         ) : null}
       </Card>
       {selected ? (
-        <button className="btn btn-quiet" type="button" onClick={() => setSelected('')}>
-          {t('common.operations.charity.returnToList')}
-        </button>
-      ) : null}
-      {selected ? (
-        detail.isPending ? (
-          <LoadingState />
-        ) : detail.error ? (
-          <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
-        ) : (
-          <>
-            <DonationDetail
-              key={detail.data.id}
-              item={detail.data}
-              accountId={accountId}
-              busy={detail.isFetching || list.isFetching || Boolean(list.error)}
-              role={role}
-              refresh={refresh}
-              onCapabilityLoss={onCapabilityLoss}
-            />
-          </>
-        )
+        <div className="ops-stack ops-detail-target" ref={detailRef} tabIndex={-1}>
+          <button className="btn btn-quiet" type="button" onClick={() => setSelected('')}>
+            {t('common.operations.charity.returnToList')}
+          </button>
+          {detail.isPending ? (
+            <LoadingState />
+          ) : detail.error ? (
+            <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
+          ) : (
+            <>
+              <DonationDetail
+                key={detail.data.id}
+                item={detail.data}
+                accountId={accountId}
+                busy={detail.isFetching || list.isFetching || Boolean(list.error)}
+                role={role}
+                refresh={refresh}
+                onCapabilityLoss={onCapabilityLoss}
+              />
+            </>
+          )}
+        </div>
       ) : null}
     </div>
   );
@@ -2222,6 +2225,7 @@ function ModelsPanel({
   const rawEnabled = oneParam(params, 'model_enabled');
   const enabled = ['true', 'false'].includes(rawEnabled) ? rawEnabled : '';
   const selectedId = selectedID(params, 'charity_model');
+  const { listRef, detailRef, remember } = useDetailNavigation(selectedId);
   const [draft, setDraft] = useState({ query, text: query });
   const queryDraft = draft.query === query ? draft.text : query;
   const setQueryDraft = (text: string) => setDraft({ query, text });
@@ -2246,13 +2250,15 @@ function ModelsPanel({
       return next;
     });
   };
-  const setSelected = (id: string) =>
+  const setSelected = (id: string) => {
+    if (id) remember();
     setParams((current) => {
       const next = new URLSearchParams(current);
       if (id) next.set('charity_model', id);
       else next.delete('charity_model');
       return next;
     });
+  };
   useEffect(() => {
     const desired = { model_q: query, model_enabled: enabled, charity_model: selectedId };
     if (
@@ -2314,7 +2320,7 @@ function ModelsPanel({
     );
   }
   return (
-    <div className="ops-stack">
+    <div className="ops-stack" ref={listRef} tabIndex={-1}>
       <ModelForm role={role} refresh={refresh} onCapabilityLoss={onCapabilityLoss} />
       <Card>
         <form
@@ -2419,7 +2425,7 @@ function ModelsPanel({
                         data-label={t('common.operations.charity.open')}
                       >
                         <button
-                          className="btn btn-secondary"
+                          className="btn btn-secondary ops-row-action"
                           type="button"
                           disabled={models.isFetching}
                           onClick={() => setSelected(model.id)}
@@ -2445,36 +2451,38 @@ function ModelsPanel({
         ) : null}
       </Card>
       {selectedId ? (
-        <button className="btn btn-quiet" type="button" onClick={() => setSelected('')}>
-          {t('common.operations.charity.returnToList')}
-        </button>
-      ) : null}
-      {selectedId && detail.isPending ? (
-        <LoadingState />
-      ) : selectedId && detail.error ? (
-        <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
-      ) : selected ? (
-        <fieldset
-          className="ops-stack ops-unframed"
-          disabled={detail.isFetching || models.isFetching || Boolean(models.error)}
-        >
-          <ModelForm
-            key={`model:${selected.id}`}
-            role={role}
-            model={selected}
-            refresh={refresh}
-            onDeleted={() => setSelected('')}
-            onCapabilityLoss={onCapabilityLoss}
-          />
-          <BindingsPanel
-            key={`bindings:${selected.id}`}
-            role={role}
-            accountId={accountId}
-            model={selected}
-            refresh={refresh}
-            onCapabilityLoss={onCapabilityLoss}
-          />
-        </fieldset>
+        <div className="ops-stack ops-detail-target" ref={detailRef} tabIndex={-1}>
+          <button className="btn btn-quiet" type="button" onClick={() => setSelected('')}>
+            {t('common.operations.charity.returnToList')}
+          </button>
+          {detail.isPending ? (
+            <LoadingState />
+          ) : detail.error ? (
+            <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
+          ) : selected ? (
+            <fieldset
+              className="ops-stack ops-unframed"
+              disabled={detail.isFetching || models.isFetching || Boolean(models.error)}
+            >
+              <ModelForm
+                key={`model:${selected.id}`}
+                role={role}
+                model={selected}
+                refresh={refresh}
+                onDeleted={() => setSelected('')}
+                onCapabilityLoss={onCapabilityLoss}
+              />
+              <BindingsPanel
+                key={`bindings:${selected.id}`}
+                role={role}
+                accountId={accountId}
+                model={selected}
+                refresh={refresh}
+                onCapabilityLoss={onCapabilityLoss}
+              />
+            </fieldset>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

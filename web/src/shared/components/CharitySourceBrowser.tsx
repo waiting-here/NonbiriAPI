@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useDetailNavigation } from '@shared/operations/useDetailNavigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
@@ -471,6 +472,7 @@ export function CharitySourceBrowser({
   const idle = readEnumParameter(searchParams, IDLE_PARAM, ['yes', 'no'] as const);
   const rawSourceKey = singleParameter(searchParams, SOURCE_KEY_PARAM) ?? '';
   const sourceKey = isCanonicalSourceKey(rawSourceKey) ? rawSourceKey : '';
+  const { listRef, detailRef, remember } = useDetailNavigation<HTMLElement, HTMLElement>(sourceKey);
   const sourceKeyNeedsNormalization =
     searchParams.getAll(SOURCE_KEY_PARAM).length > 0 && sourceKey === '';
   const station = stationForRole(role);
@@ -743,6 +745,7 @@ export function CharitySourceBrowser({
 
   const selectSource = useCallback(
     (nextSourceKey: string) => {
+      remember();
       setSearchParams((previous) => {
         const next = new URLSearchParams(previous);
         next.delete(SOURCE_KEY_PARAM);
@@ -756,7 +759,7 @@ export function CharitySourceBrowser({
         return next;
       });
     },
-    [setSearchParams, sourceKeysPager.pageSize],
+    [setSearchParams, sourceKeysPager.pageSize, remember],
   );
 
   const sourceBusy = sources.isFetching;
@@ -877,6 +880,8 @@ export function CharitySourceBrowser({
       <div className={`charity-source-browser__columns${sourceKey ? ' has-selection' : ''}`}>
         <section
           className="charity-source-browser__sources"
+          ref={listRef}
+          tabIndex={-1}
           aria-label={t('common.operations.charity.sourceBrowser.sources')}
         >
           <h3>{t('common.operations.charity.sourceBrowser.sources')}</h3>
@@ -913,7 +918,9 @@ export function CharitySourceBrowser({
           ) : null}
         </section>
         <section
-          className="charity-source-browser__keys"
+          className="charity-source-browser__keys ops-detail-target"
+          ref={detailRef}
+          tabIndex={-1}
           aria-label={t('common.operations.charity.sourceBrowser.sourceKeys')}
         >
           {!sourceKey ? (
@@ -997,7 +1004,9 @@ export function CharitySourceBrowser({
                     value={idle.value}
                     onChange={(event) => updateSearch(IDLE_PARAM, event.target.value, false, true)}
                   >
-                    <option value="">{t('common.donationHandling.all')}</option>
+                    <option value="">
+                      {t('common.operations.charity.sourceBrowser.allBindingStates')}
+                    </option>
                     <option value="yes">
                       {t('common.operations.charity.sourceBrowser.idleOnly')}
                     </option>

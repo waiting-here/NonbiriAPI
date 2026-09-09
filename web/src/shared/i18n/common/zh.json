@@ -248,6 +248,7 @@
           "handlingFilter": "待办筛选",
           "pendingOnly": "仅待处理",
           "idleFilter": "绑定筛选",
+          "allBindingStates": "全部绑定状态",
           "idleOnly": "仅闲置",
           "boundOnly": "仅已绑定",
           "searchSources": "搜索来源",
