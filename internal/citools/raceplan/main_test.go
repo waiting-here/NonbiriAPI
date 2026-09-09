@@ -58,6 +58,7 @@ func TestLoadTimingHintsRejectsMalformedOrInconsistentFiles(t *testing.T) {
   "default_package_seconds": 60,
   "split_packages": ["example/slow"],
   "split_test_counts": {"example/slow": 2},
+  "test_seconds": {"example/slow": {"TestOne": 90}},
   "package_seconds": {"example/slow": 120}
 }`
 	path := writeTimingHints(t, valid)
@@ -65,7 +66,7 @@ func TestLoadTimingHintsRejectsMalformedOrInconsistentFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load valid hints: %v", err)
 	}
-	if hints.Shards != 6 || hints.SplitTestCounts["example/slow"] != 2 {
+	if hints.Shards != 6 || hints.SplitTestCounts["example/slow"] != 2 || hints.TestSeconds["example/slow"]["TestOne"] != 90 {
 		t.Fatalf("loaded hints = %#v", hints)
 	}
 
@@ -78,6 +79,10 @@ func TestLoadTimingHintsRejectsMalformedOrInconsistentFiles(t *testing.T) {
 		{name: "missing split count", content: strings.Replace(valid, `{"example/slow": 2}`, `{}`, 1)},
 		{name: "extra split count", content: strings.Replace(valid, `{"example/slow": 2}`, `{"example/slow": 2, "example/other": 1}`, 1)},
 		{name: "missing split weight", content: strings.Replace(valid, `{"example/slow": 120}`, `{}`, 1)},
+		{name: "invalid test name", content: strings.Replace(valid, `{"TestOne": 90}`, `{"helper": 90}`, 1)},
+		{name: "invalid test weight", content: strings.Replace(valid, `{"TestOne": 90}`, `{"TestOne": 0}`, 1)},
+		{name: "unsplit test weights", content: strings.Replace(valid, `{"example/slow": {"TestOne": 90}}`, `{"example/whole": {"TestOne": 90}}`, 1)},
+		{name: "empty test weights", content: strings.Replace(valid, `{"example/slow": {"TestOne": 90}}`, `{"example/slow": {}}`, 1)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -85,6 +90,50 @@ func TestLoadTimingHintsRejectsMalformedOrInconsistentFiles(t *testing.T) {
 				t.Fatal("loadTimingHints unexpectedly succeeded")
 			}
 		})
+	}
+}
+
+func TestBuildPlansUseMeasuredWeightsAndConservativeNewTestWeight(t *testing.T) {
+	t.Parallel()
+
+	hints := plannerTestHints()
+	hints.TestSeconds = map[string]map[string]float64{
+		"example/slow": {"TestOne": 90, "TestTwo": 80},
+	}
+	catalog := []catalogPackage{
+		{ImportPath: "example/known"},
+		{ImportPath: "example/new"},
+		{ImportPath: "example/slow", Tests: []string{"TestOne", "TestTwo", "TestNew"}},
+	}
+	plans, err := buildPlans(catalog, hints, 3)
+	if err != nil {
+		t.Fatalf("build plans: %v", err)
+	}
+
+	shardFor := make(map[string]int)
+	for _, plan := range plans {
+		for _, testName := range plan.SplitTests["example/slow"] {
+			shardFor[testName] = plan.Index
+		}
+	}
+	if shardFor["TestOne"] == 0 || shardFor["TestTwo"] == 0 || shardFor["TestNew"] == 0 {
+		t.Fatalf("measured/fallback tests missing from plan: %#v", shardFor)
+	}
+	if shardFor["TestOne"] == shardFor["TestTwo"] {
+		t.Fatalf("measured heavy tests share a shard: %#v", shardFor)
+	}
+
+	var estimated float64
+	for _, plan := range plans {
+		estimated += plan.EstimatedSeconds
+	}
+	// 90 + 80 are measured overrides; TestNew keeps the 100/2 fallback,
+	// while the two whole packages contribute 10 and the default 60.
+	if estimated != 290 {
+		t.Fatalf("estimated total = %.1f, want 290.0", estimated)
+	}
+	if plans[2].EstimatedSeconds != 110 {
+		t.Fatalf("fallback placement estimate = %.1f, want 110.0", plans[2].EstimatedSeconds)
 	}
 }
 
