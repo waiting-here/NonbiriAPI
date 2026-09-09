@@ -379,13 +379,20 @@ describe('managed donation page integration', () => {
     fireEvent.change(lastNote, { target: { value: 'second page note' } });
     await view.user.click(within(card).getByText('Previous', { selector: 'button', exact: true }));
     expect(firstReviewNote()).toHaveValue('first page note');
-    fireEvent.change(within(card).getByLabelText('Reason'), {
-      target: { value: 'Reviewed all pages' },
+    const reviewFields = [...card.children].find((child) => child.matches('div.ops-field-grid'));
+    if (!(reviewFields instanceof HTMLElement)) throw new Error('Review fields missing');
+    const reason = within(reviewFields).getByLabelText('Reason');
+    const confirmationLabel = [...card.children].find((child) =>
+      child.matches('label.checkbox-label'),
+    );
+    if (!(confirmationLabel instanceof HTMLElement)) throw new Error('Review confirmation missing');
+    const confirmation = within(confirmationLabel).getByRole('checkbox', {
+      name: 'I confirm this review result and its per-key consequences.',
     });
-    const confirmation = within(card)
-      .getByText('I confirm this review result and its per-key consequences.', { selector: 'span' })
-      .closest('label')!;
-    await view.user.click(within(confirmation).getByRole('checkbox'));
+    act(() => {
+      fireEvent.change(reason, { target: { value: 'Reviewed all pages' } });
+      fireEvent.click(confirmation);
+    });
     await view.user.click(
       within(card).getByText('Approve donation', { selector: 'button', exact: true }),
     );
