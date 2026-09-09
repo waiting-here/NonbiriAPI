@@ -118,6 +118,8 @@ curl https://api.example.com/v1/chat/completions \
   -d '{"model":"provider/model","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
+The complete CallerKey is shown only once after creation or replacement. Save it immediately; if it was not saved, replace it to receive a new value.
+
 Treat caller keys and upstream credentials as secrets. Do not put them in URLs, issue reports, notes, shell history, screenshots, or logs.
 
 Errors contain stable `error.code`, `source`, and `message` fields. Platform messages start with `[NonbiriAPI]`; upstream messages do not. Common outcomes are:

@@ -570,7 +570,7 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
   await expect(firstCard).toContainText('<b>plain</b>');
   expect(await firstCard.locator('b').count()).toBe(0);
   await expect(firstCard.getByText('L1, L3, L5', { exact: true })).toBeVisible();
-  await expect(firstCard.getByText('本等级允许', { exact: true })).toBeVisible();
+  await expect(firstCard.getByText('当前等级可访问', { exact: true })).toBeVisible();
   await expect(firstCard.getByText('当前可用', { exact: true })).toBeVisible();
   const priceTable = firstCard.getByRole('table', { name: '公益模型价格', exact: true });
   await expect(priceTable).toBeVisible();
@@ -603,7 +603,7 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
   await page.getByRole('combobox', { name: '本人访问权限', exact: true }).selectOption('false');
   await expect(page.getByText('[公益]provider/denied', { exact: true })).toBeVisible();
   await expect(page.locator('.economy-catalog-item').first().locator('dd').nth(1)).toHaveText(
-    '本等级不允许',
+    '当前等级不可访问',
   );
   await expect(page.getByText('本人等级不允许', { exact: true })).toBeVisible();
   expect(catalogRequests).toContain(

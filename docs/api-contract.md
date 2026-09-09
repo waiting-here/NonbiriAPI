@@ -121,8 +121,8 @@ All routes in this section require a user session unless marked anonymous.
 | `POST /api/auth/logout` | Clears the user session; 204. Available during maintenance. |
 | `POST /api/auth/elevate` | Starts the bound two-step elevation flow. |
 | `GET /api/me/usage` | Four-bucket and request usage summary. |
-| `GET /api/caller-key` | Null or safe metadata and the generation header. |
-| `POST /api/caller-key/regenerate` | `{expected_generation}`; returns plaintext once plus metadata and increments generation. |
+| `GET /api/caller-key` | Returns null or `{display,created_at,updated_at,generation}`, plus `X-Nonbiri-CallerKey-Generation`; the body generation must match the header. `display` is masked and cannot be used for calls, and GET never returns the full secret. |
+| `POST /api/caller-key/regenerate` | Accepts `{expected_generation}`; on success returns `{secret,metadata}` once, with `metadata.generation = expected_generation + 1`. The full secret is present only in this successful response; generate a replacement again if it was not saved. |
 | `GET /api/home/game-summary` | Safe resumable-game and pending-result route identities. No arbitrary URL is returned. |
 | `GET /api/logs` | Filters `model,error_code,status,from,to,cursor,limit`; returns owner rows. |
 | `GET /api/logs/{id}` | `attempt_cursor,attempt_limit`; returns owner detail. |
@@ -217,9 +217,9 @@ Every owner-visible key carries `safe_source`: a custom Connector/base URL or a 
 
 `discount` contains `enabled,percent,start_at,end_at`; the interval is `[start_at,end_at)`, nullable at either end. Effective prices use the same integer ceiling rule as billing. `server_now` is the single decision time used for availability and promotion status. No donated-resource identity is exposed.
 
-The web directory uses `GET /api/charity/models?view=catalog`. Optional single-value parameters are `q` (at most 128 Unicode code points and 512 UTF-8 bytes, no NUL), `allowed_for_me=true|false`, `page`, and `page_size`. It rejects cursor/limit and unknown or repeated parameters. Page numbers are canonical decimal strings from 1 to 2147483647; sizes are 10, 20, 50, or 100, with defaults 1 and 20. The response is `{models,pagination,donation_intake,server_now}`. Pagination contains decimal-string `page,total_items,total_pages` and integer `page_size`; empty results use page 1 of 1, and an excessive requested page is clamped to the last page.
+The web directory uses `GET /api/charity/models?view=catalog`. Optional single-value parameters are `q` (at most 128 Unicode code points and 512 UTF-8 bytes, no NUL), `allowed_for_me=true|false`, `allowed_level=1|2|3|4|5`, `currently_available=true|false`, `page`, and `page_size`. Omit a filter to apply no restriction; the filters are combined as an intersection. The web UI initially sends `allowed_for_me=true` and `currently_available=true`, while omitting `allowed_level`. It rejects cursor/limit and unknown or repeated parameters. Page numbers are canonical decimal strings from 1 to 2147483647; sizes are 10, 20, 50, or 100, with defaults 1 and 20. The response is `{models,pagination,donation_intake,server_now}`. Pagination contains decimal-string `page,total_items,total_pages` and integer `page_size`; empty results use page 1 of 1, and an excessive requested page is clamped to the last page.
 
-Catalog entries contain the six capability fields plus `public_description,enabled,allowed_levels,level_allowed,availability`. They include unavailable models so users can understand the reason. Availability is `feature_disabled|model_disabled|level_denied|no_usable_key|available`, in that precedence. Search, count, ordered page, pricing and availability share one read-only snapshot and a five-second query budget. No donor rewards, bindings, physical resources or private notes appear in the directory.
+Catalog entries contain the six capability fields plus `public_description,enabled,allowed_levels,level_allowed,currently_available,availability`. They include unavailable models so users can understand the reason. Availability is `feature_disabled|model_disabled|level_denied|no_usable_key|available`, in that precedence. `currently_available` reports the current charity resource state independently of the caller's level; `availability` remains the caller-facing explanation. Search, count, ordered page, pricing and availability share one read-only snapshot and a five-second query budget. No donor rewards, bindings, physical resources or private notes appear in the directory.
 
 Administrator and steward model create/patch bodies accept `allowed_levels` and `public_description` within a 16 KiB request limit. Levels are unique integers 1–5, returned sorted. Omitted creation fields mean all five levels and an empty description; omitted patch fields remain unchanged. An explicit empty array blocks every ordinary caller, including L5. Null and duplicate/out-of-range levels are invalid. Descriptions are plain text, at most 1,024 code points and 4,096 UTF-8 bytes after CRLF-to-LF normalization; controls other than LF and TAB, including lone CR, are rejected. These fields use the existing model revision and idempotency rules.
 
@@ -247,6 +247,8 @@ Indexing searches live endpoint keys first, then donation tombstones whose irrev
 | `POST /api/checkin` | Business-unique per account/site day; `{award,balance}`. |
 | `GET /api/events` | Shared user SSE for activities and RPS; see §8. |
 | `GET /api/games` | Complete game availability, balance, tutorial state, prices, timers, and mode configuration. |
+
+The home page shows at most three visible announcement summaries, with pinned items first and then publish time descending. Hiding an item affects only the current browser home page; it does not remove the item from the full announcements page.
 
 Announcement bodies use a fixed Markdown subset: paragraphs, headings h2–h4, emphasis, lists, blockquotes, inline/fenced code, and HTTP(S) links. Raw HTML, images, embedded media, forms, frames, scripts, styles, and unsafe schemes are rejected by the same parser used for preview, publish, and read.
 

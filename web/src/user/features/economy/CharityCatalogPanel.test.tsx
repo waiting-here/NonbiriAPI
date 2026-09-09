@@ -147,7 +147,7 @@ describe('charity catalog panel', () => {
     expect(screen.getAllByText('Applied')).toHaveLength(2);
     expect(screen.getByText(/<b>plain<\/b>/)).toBeVisible();
     expect(screen.getByText('L1, L3, L5')).toBeVisible();
-    expect(screen.getByText('Allowed for me', { selector: 'dd' })).toBeVisible();
+    expect(screen.getByText('Allowed for my current level', { selector: 'dd' })).toBeVisible();
     expect(screen.getAllByText('Available now').length).toBeGreaterThanOrEqual(1);
     const table = screen.getByRole('table', { name: 'Charity model prices' });
     expect(within(table).getByLabelText('Original price: 3')).toBeVisible();
@@ -206,7 +206,7 @@ describe('charity catalog panel', () => {
     );
     await screen.findByText('[公益]provider/initial');
 
-    await rendered.user.selectOptions(screen.getByLabelText('Accessible to level'), '3');
+    await rendered.user.selectOptions(screen.getByLabelText('Allowed for level'), '3');
     expect(await screen.findByText('[公益]provider/level-3')).toBeVisible();
     expect(screen.getByLabelText('Your access')).toHaveValue('true');
     expect(screen.getByLabelText('Currently available')).toHaveValue('true');
@@ -216,19 +216,19 @@ describe('charity catalog panel', () => {
 
     await rendered.user.selectOptions(screen.getByLabelText('Your access'), 'false');
     expect(await screen.findByText('[公益]provider/denied-level-3')).toBeVisible();
-    expect(screen.getByLabelText('Accessible to level')).toHaveValue('3');
+    expect(screen.getByLabelText('Allowed for level')).toHaveValue('3');
     expect(screen.getByLabelText('Currently available')).toHaveValue('true');
     expect(screen.getAllByText('Resource available now')).not.toHaveLength(0);
 
     await rendered.user.selectOptions(screen.getByLabelText('Currently available'), 'all');
     expect(await screen.findByText('[公益]provider/unavailable')).toBeVisible();
-    expect(screen.getByLabelText('Accessible to level')).toHaveValue('3');
+    expect(screen.getByLabelText('Allowed for level')).toHaveValue('3');
     expect(screen.getByLabelText('Your access')).toHaveValue('false');
 
-    await rendered.user.selectOptions(screen.getByLabelText('Accessible to level'), 'all');
+    await rendered.user.selectOptions(screen.getByLabelText('Allowed for level'), 'all');
     expect(screen.getByLabelText('Currently available')).toHaveValue('all');
     await rendered.user.click(screen.getByRole('button', { name: 'Reset filters' }));
-    expect(screen.getByLabelText('Accessible to level')).toHaveValue('all');
+    expect(screen.getByLabelText('Allowed for level')).toHaveValue('all');
     expect(screen.getByLabelText('Your access')).toHaveValue('true');
     expect(screen.getByLabelText('Currently available')).toHaveValue('true');
     expect(screen.getByLabelText('Current catalog URL')).toHaveTextContent(
@@ -283,7 +283,7 @@ describe('charity catalog panel', () => {
       locale: 'zh',
     });
     expect(await screen.findByText('[公益]provider/中文')).toBeVisible();
-    expect(screen.getByLabelText('可访问的等级')).toHaveValue('all');
+    expect(screen.getByLabelText('某等级可访问')).toHaveValue('all');
     expect(screen.getByLabelText('本人访问权限')).toHaveValue('true');
     expect(screen.getByLabelText('当前是否可用')).toHaveValue('true');
     expect(screen.getAllByText('已应用')).toHaveLength(2);
@@ -325,7 +325,7 @@ describe('charity catalog panel', () => {
       { station: 'user', role: 'user', route },
     );
     expect(await screen.findByText('[公益]provider/saved')).toBeVisible();
-    expect(screen.getByLabelText('Accessible to level')).toHaveValue('3');
+    expect(screen.getByLabelText('Allowed for level')).toHaveValue('3');
     expect(screen.getByLabelText('Your access')).toHaveValue('false');
     expect(screen.getByLabelText('Currently available')).toHaveValue('all');
     expect(screen.getByRole('button', { name: 'Previous' })).not.toBeDisabled();
@@ -336,7 +336,7 @@ describe('charity catalog panel', () => {
 
     await rendered.user.click(screen.getByRole('button', { name: 'Back to saved catalog' }));
     expect(await screen.findByText('[公益]provider/saved')).toBeVisible();
-    expect(screen.getByLabelText('Accessible to level')).toHaveValue('3');
+    expect(screen.getByLabelText('Allowed for level')).toHaveValue('3');
     expect(screen.getByLabelText('Your access')).toHaveValue('false');
     expect(screen.getByLabelText('Currently available')).toHaveValue('all');
     expect(screen.getByLabelText('Current catalog URL')).toHaveTextContent('page=2');
@@ -350,7 +350,7 @@ describe('charity catalog panel', () => {
       { station: 'user', role: 'user', route },
     );
     expect(await screen.findByText('[公益]provider/saved')).toBeVisible();
-    expect(screen.getByLabelText('Accessible to level')).toHaveValue('3');
+    expect(screen.getByLabelText('Allowed for level')).toHaveValue('3');
     expect(screen.getByLabelText('Your access')).toHaveValue('false');
     expect(screen.getByLabelText('Currently available')).toHaveValue('all');
     expect(screen.getByLabelText('Current catalog URL')).toHaveTextContent('page=2');
@@ -434,7 +434,7 @@ describe('charity catalog panel', () => {
 
     fireEvent.change(screen.getByLabelText('Your access'), { target: { value: 'false' } });
     expect(await screen.findByText('[公益]provider/denied')).toBeVisible();
-    expect(screen.getByText('Not allowed for me', { selector: 'dd' })).toBeVisible();
+    expect(screen.getByText('Not allowed for my current level', { selector: 'dd' })).toBeVisible();
 
     fireEvent.change(screen.getByLabelText('Items per page'), { target: { value: '50' } });
     await waitFor(() =>
