@@ -374,8 +374,9 @@ func (adapter *LifecycleAdapter) ExportTx(
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT s.session_id,s.mode,s.terminal_reason,s.started_at,s.terminal_at,
 seat.seat_no,seat.input,seat.returned,seat.wallet_net_sign,seat.wallet_net_mag,seat.timeout_count,
-seat.rock_count,seat.scissors_count,seat.paper_count
+seat.rock_count,seat.scissors_count,seat.paper_count,presentation.own_buy_in,presentation.own_cash_out
 FROM game_rps_summaries s JOIN game_rps_summary_seats seat ON seat.session_id=s.session_id
+	LEFT JOIN game_rps_summary_presentation presentation ON presentation.session_id=seat.session_id AND presentation.seat_no=seat.seat_no
 	WHERE seat.user_id=? AND s.delete_at>? ORDER BY s.terminal_at,s.session_id LIMIT ?`, userID, decisionNow, limit+1)
 	if err != nil {
 		return UserExport{}, nil, classifyDB(err)
@@ -383,10 +384,10 @@ FROM game_rps_summaries s JOIN game_rps_summary_seats seat ON seat.session_id=s.
 	for rows.Next() {
 		var summary SummaryExport
 		var seat SummarySeatExport
-		var inputRaw, returnedRaw, walletRaw, timeoutRaw, rockRaw, scissorsRaw, paperRaw []byte
+		var inputRaw, returnedRaw, walletRaw, timeoutRaw, rockRaw, scissorsRaw, paperRaw, buyInRaw, cashOutRaw []byte
 		var sign int
 		if err := rows.Scan(&summary.SessionID, &summary.Mode, &summary.TerminalReason, &summary.StartedAt, &summary.TerminalAt,
-			&seat.SeatNo, &inputRaw, &returnedRaw, &sign, &walletRaw, &timeoutRaw, &rockRaw, &scissorsRaw, &paperRaw); err != nil {
+			&seat.SeatNo, &inputRaw, &returnedRaw, &sign, &walletRaw, &timeoutRaw, &rockRaw, &scissorsRaw, &paperRaw, &buyInRaw, &cashOutRaw); err != nil {
 			_ = rows.Close()
 			return UserExport{}, nil, classifyDB(err)
 		}
@@ -415,6 +416,11 @@ FROM game_rps_summaries s JOIN game_rps_summary_seats seat ON seat.session_id=s.
 		}
 		seat.Input, seat.Returned = formatMilli(input.Big()), formatMilli(returned.Big())
 		seat.WalletNet = formatSignedMilli(sign, wide[0].Big())
+		seat.OwnBuyIn, seat.OwnCashOut, err = presentationTransfers(buyInRaw, cashOutRaw, sign, wide[0])
+		if err != nil {
+			_ = rows.Close()
+			return UserExport{}, nil, err
+		}
 		seat.TimeoutCount, seat.RockCount = wide[1].Decimal(), wide[2].Decimal()
 		seat.ScissorsCount, seat.PaperCount = wide[3].Decimal(), wide[4].Decimal()
 		summary.OwnSeat = seat

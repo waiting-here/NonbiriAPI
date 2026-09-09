@@ -220,7 +220,10 @@ test('RPS separates past reveals from hidden choices and keeps its hidden ending
           own_input: '10',
           own_returned: '9',
           own_wallet_net: '-1',
-          seats: [0, 1, 2].map((seat_no) => ({ seat_no, result: 'loss' })),
+          // Historical pending results did not expose transfer or gesture details.
+          own_buy_in: null,
+          own_cash_out: null,
+          seats: [0, 1, 2].map((seat_no) => ({ seat_no, result: 'loss', gesture: null })),
           created_at: 1_800_000_011,
         },
       };
@@ -246,6 +249,7 @@ test('RPS separates past reveals from hidden choices and keeps its hidden ending
     .toBe(true);
   const actions = await page.locator('.rps-actions').boundingBox();
   const seats = await page.locator('.rps-seats').boundingBox();
+  await page.screenshot({ path: '../tmp/rps-mobile-actions.png', fullPage: false });
   expect(actions!.y).toBeLessThan(seats!.y);
   expect(actions!.y + actions!.height).toBeLessThan(844);
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -260,8 +264,13 @@ test('RPS separates past reveals from hidden choices and keeps its hidden ending
   await expect(page.getByText('The service returned an invalid response.')).toHaveCount(0);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: '../tmp/rps-mobile-ending.png', fullPage: true });
+  const raysAnimation = () =>
+    page.locator('.rps-result-hero').evaluate((element) =>
+      getComputedStyle(element, '::before').animationName,
+    );
+  await expect.poll(raysAnimation).toBe('rps-ascend-rays');
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await expect(page.locator('.rps-result-orbit')).toHaveCSS('animation-name', 'none');
+  await expect.poll(raysAnimation).toBe('none');
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: '../tmp/rps-desktop-ending.png', fullPage: true });

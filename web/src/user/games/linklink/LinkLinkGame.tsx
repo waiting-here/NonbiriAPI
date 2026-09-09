@@ -15,6 +15,8 @@ import {
 } from '../common/request';
 import { creditsToMilli, formatCredits } from '../common/strict';
 import { useAuthoritativeCountdown } from '../common/countdown';
+import { useGameSound } from '../common/useGameSound';
+import { GameSoundButton } from '../common/GameSoundButton';
 import { LINKLINK_SPECS, type LinkLinkSpec } from '../common/types';
 import { gameKeys, useGamesSnapshot } from '../common/snapshot';
 import {
@@ -185,6 +187,7 @@ function LinkBoard({
               aria-colindex={tile.col + 1}
               aria-selected={isSelected}
               className={`linklink-tile${isSelected ? ' is-selected' : ''}${tile.removed ? ' is-removed' : ''}${vanishing ? ' is-vanishing' : ''}`}
+              style={{ gridRow: tile.row + 1, gridColumn: tile.col + 1 }}
               disabled={tile.removed || busy}
               tabIndex={!tile.removed && key === effectiveFocus ? 0 : -1}
               key={key}
@@ -274,10 +277,38 @@ function SummaryCard({
 
 export function LinkLinkGame() {
   const { text } = useGameCopy();
+  const sound = useGameSound('linklink');
+  const playSound = sound.play;
   const queryClient = useQueryClient();
   const snapshot = useGamesSnapshot();
   const maintenance = isMaintenance(snapshot.error);
   const current = useLinkLinkCurrent(Boolean(snapshot.data));
+  const previousSoundState = useRef<{
+    readonly value: LinkLinkCurrent | undefined;
+    readonly fetched: boolean;
+  } | null>(null);
+  useEffect(() => {
+    const previous = previousSoundState.current;
+    previousSoundState.current = { value: current.data, fetched: current.isFetchedAfterMount };
+    const before = previous?.value;
+    const next = current.data;
+    if (
+      !previous?.fetched ||
+      !current.isFetchedAfterMount ||
+      before?.kind !== 'active' ||
+      !next ||
+      before.sessionID !== next.sessionID
+    )
+      return;
+    if (next.kind === 'summary') {
+      playSound(next.terminalReason === 'completed' ? 'win' : 'end');
+    } else if (
+      BigInt(next.revision) > BigInt(before.revision) &&
+      next.pairsRemoved > before.pairsRemoved
+    ) {
+      playSound(boardWasRearranged(before, next) ? 'link_shuffle' : 'link_match');
+    }
+  }, [current.data, current.isFetchedAfterMount, playSound]);
   const [selectedSpec, setSelectedSpec] = useState<LinkLinkSpec>('6x8');
   const [rulesOpen, setRulesOpen] = useState(false);
   const [review, setReview] = useState(false);
@@ -435,7 +466,8 @@ export function LinkLinkGame() {
   );
 
   const chooseTile = (coordinate: LinkLinkCoordinate) => {
-    if (!state || mutationState !== 'idle') return;
+    if (!state || mutationState !== 'idle' || lease !== 'active') return;
+    playSound('select');
     if (!selected) {
       setSelection({ identity: `${state.sessionID}:${state.revision}`, coordinate });
       return;
@@ -469,7 +501,10 @@ export function LinkLinkGame() {
   const canStart = current.isSuccess && gateOpen && affordable;
   const closeRules = useCallback(() => setRulesOpen(false), []);
   const rulesButton = (
-    <GameRulesButton label={text('common.rulesButton')} onClick={() => setRulesOpen(true)} />
+    <>
+      <GameRulesButton label={text('common.rulesButton')} onClick={() => setRulesOpen(true)} />
+      <GameSoundButton sound={sound} />
+    </>
   );
   const rulesDialog = <LinkLinkRules open={rulesOpen} onClose={closeRules} />;
 

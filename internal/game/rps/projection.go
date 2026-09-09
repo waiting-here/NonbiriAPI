@@ -146,6 +146,7 @@ func projectState(record sessionRecord, userID int64, now int64) (State, error) 
 			FreeTieCount: record.FreeTieCount.Decimal(), PaidPoolStreak: record.PaidPoolStreak.Decimal(),
 			FreePoolStreak: record.FreePoolStreak.Decimal(), ReminderActive: record.ReminderState == "active",
 			LastRevealResult: lastResult,
+			PoolTieCount:     stringU128(record.Presentation.PoolTieCount),
 		},
 		RecentEvents: append([]RecentEvent(nil), record.RecentEvents...), FirstAvailableSeq: record.RecentFirstSeq.Decimal(),
 		EventsTruncated: record.RecentFirstSeq.Big().Cmp(big.NewInt(1)) > 0,
@@ -176,14 +177,18 @@ func projectState(record sessionRecord, userID int64, now int64) (State, error) 
 
 func loadPending(ctx context.Context, tx *sql.Tx, userID int64) (PendingResult, bool, error) {
 	var record PendingResult
-	var inputRaw, returnedRaw, walletRaw []byte
+	var inputRaw, returnedRaw, walletRaw, buyInRaw, cashOutRaw []byte
+	var gesturesRaw [3]sql.NullString
 	var sign int
 	var outcomes [3]string
 	err := tx.QueryRowContext(ctx, `SELECT session_id_text,mode,terminal_reason,own_seat_no,own_input,own_returned,
-own_wallet_net_sign,own_wallet_net_mag,seat0_result,seat1_result,seat2_result,created_at
-FROM game_rps_pending_results WHERE user_id=?`, userID).Scan(
+own_wallet_net_sign,own_wallet_net_mag,seat0_result,seat1_result,seat2_result,created_at,
+own_buy_in,own_cash_out,quick_seat0_gesture,quick_seat1_gesture,quick_seat2_gesture
+FROM game_rps_pending_results p LEFT JOIN game_rps_pending_presentation presentation ON presentation.user_id=p.user_id
+WHERE p.user_id=?`, userID).Scan(
 		&record.SessionID, &record.Mode, &record.TerminalReason, &record.OwnSeatNo, &inputRaw, &returnedRaw,
-		&sign, &walletRaw, &outcomes[0], &outcomes[1], &outcomes[2], &record.CreatedAt)
+		&sign, &walletRaw, &outcomes[0], &outcomes[1], &outcomes[2], &record.CreatedAt,
+		&buyInRaw, &cashOutRaw, &gesturesRaw[0], &gesturesRaw[1], &gesturesRaw[2])
 	if errors.Is(err, sql.ErrNoRows) {
 		return PendingResult{}, false, nil
 	}
@@ -204,11 +209,19 @@ FROM game_rps_pending_results WHERE user_id=?`, userID).Scan(
 	}
 	record.OwnInput, record.OwnReturned = formatMilli(input.Big()), formatMilli(returned.Big())
 	record.OwnWalletNet = formatSignedMilli(sign, wallet.Big())
+	record.OwnBuyIn, record.OwnCashOut, err = presentationTransfers(buyInRaw, cashOutRaw, sign, wallet)
+	if err != nil {
+		return PendingResult{}, false, err
+	}
+	gestures, err := readPresentationGestures(gesturesRaw, record.Mode, record.TerminalReason)
+	if err != nil {
+		return PendingResult{}, false, err
+	}
 	for seat, outcome := range outcomes {
 		if outcome != "win" && outcome != "loss" && outcome != "tie" && outcome != "deidentified" {
 			return PendingResult{}, false, ErrInvariant
 		}
-		record.Seats = append(record.Seats, PendingSeat{SeatNo: seat, Result: outcome})
+		record.Seats = append(record.Seats, PendingSeat{SeatNo: seat, Result: outcome, Gesture: gestures[seat]})
 	}
 	return record, true, nil
 }
@@ -399,8 +412,39 @@ func decodeHomeState(body []byte) (HomeState, error) {
 		return HomeState{}, ErrInvariant
 	}
 	canonical, err := json.Marshal(result)
-	if err != nil || len(canonical) > maxProjectedStateBytes || !bytes.Equal(canonical, body) {
+	if err != nil || len(canonical) > maxProjectedStateBytes || !matchesCanonicalHomeState(canonical, body, result) {
 		return HomeState{}, ErrInvariant
 	}
 	return result, nil
+}
+
+// Durable receipts may have the exact previous shape without presentation
+// members. Accept that shape only when every added value is unknown; partial
+// omission and changes to any pre-existing member remain invalid.
+func matchesCanonicalHomeState(canonical, body []byte, home HomeState) bool {
+	if bytes.Equal(canonical, body) {
+		return true
+	}
+	switch home.Kind {
+	case "session":
+		if home.Session == nil || home.Session.RoundSummary.PoolTieCount != nil {
+			return false
+		}
+		canonical = bytes.Replace(canonical, []byte(`,"pool_tie_count":null`), nil, 1)
+	case "pending_result":
+		if home.Result == nil || home.Result.OwnBuyIn != nil || home.Result.OwnCashOut != nil {
+			return false
+		}
+		for _, seat := range home.Result.Seats {
+			if seat.Gesture != nil {
+				return false
+			}
+		}
+		canonical = bytes.ReplaceAll(canonical, []byte(`,"gesture":null`), nil)
+		canonical = bytes.Replace(canonical, []byte(`,"own_buy_in":null`), nil, 1)
+		canonical = bytes.Replace(canonical, []byte(`,"own_cash_out":null`), nil, 1)
+	default:
+		return false
+	}
+	return bytes.Equal(canonical, body)
 }

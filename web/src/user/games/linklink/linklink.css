@@ -37,8 +37,9 @@
   background: color-mix(in srgb, var(--nb-color-accent) 6%, var(--nb-color-surface));
 }
 .linklink-board {
-  --linklink-gap: 0.3rem;
-  --linklink-tile: clamp(1.7rem, calc((100cqw - 3.4rem) / (var(--linklink-cols) + 1.5)), 4.25rem);
+  --linklink-denominator: calc(var(--linklink-cols) + 1.5 + (var(--linklink-cols) + 1) * 0.08);
+  --linklink-tile: min(68px, calc(100cqw / var(--linklink-denominator)));
+  --linklink-gap: calc(var(--linklink-tile) * 0.08);
   position: relative;
   display: grid;
   grid-template-columns: repeat(var(--linklink-cols), var(--linklink-tile));
@@ -81,20 +82,21 @@
 }
 .linklink-match-beam {
   stroke: currentColor;
-  stroke-width: 4;
-  filter: drop-shadow(0 0 5px currentColor);
+  stroke-width: max(1px, calc(var(--linklink-tile) * 0.06));
+  filter: drop-shadow(0 0 max(1px, calc(var(--linklink-tile) * 0.073529)) currentColor);
   animation: linklink-beam 650ms ease-out both;
 }
 .linklink-match-ring {
   stroke: currentColor;
-  stroke-width: 2;
+  stroke-width: max(1px, calc(var(--linklink-tile) * 0.03));
+  r: clamp(4px, calc(var(--linklink-tile) * 0.18), 12px);
   transform-box: fill-box;
   transform-origin: center;
   animation: linklink-ring 650ms ease-out both;
 }
 .linklink-match-sparks {
   stroke: currentColor;
-  stroke-width: 3;
+  stroke-width: max(1px, calc(var(--linklink-tile) * 0.04));
   animation: linklink-sparks 650ms ease-out both;
 }
 .linklink-tile.is-vanishing {
@@ -159,7 +161,7 @@
   height: var(--linklink-tile);
   padding: 0.2rem;
   border: 1px solid var(--nb-color-border);
-  border-radius: 0.7rem;
+  border-radius: min(0.7rem, calc(var(--linklink-tile) * 0.12));
   background: var(--nb-color-surface);
   color: var(--nb-color-text);
   touch-action: manipulation;
@@ -179,7 +181,8 @@
 }
 .linklink-tile.is-selected {
   border-color: var(--nb-color-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--nb-color-accent) 25%, transparent);
+  box-shadow: 0 0 0 max(1px, calc(var(--linklink-tile) * 0.044))
+    color-mix(in srgb, var(--nb-color-accent) 25%, transparent);
   background: var(--nb-color-accent-soft);
 }
 .linklink-tile.is-removed {
@@ -264,23 +267,9 @@
   .linklink-board {
     margin-inline: auto;
   }
-  .linklink-board-scroll--10x10 .linklink-board {
-    --linklink-tile: 3.1rem;
-  }
   .linklink-abandon {
     width: 100%;
     justify-content: center;
-  }
-}
-@media (max-width: 420px) {
-  .linklink-board {
-    --linklink-gap: 0.25rem;
-  }
-  .linklink-board-scroll--10x10 .linklink-board {
-    --linklink-tile: 3rem;
-  }
-  .linklink-tile {
-    border-radius: 0.55rem;
   }
 }
 @media (prefers-reduced-motion: reduce) {

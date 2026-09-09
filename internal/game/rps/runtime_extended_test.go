@@ -276,6 +276,12 @@ func TestTerminalRetryIsAtomicAndConverges(t *testing.T) {
 	if !found || processing.TerminalRetryAttemptCount.Decimal() != "1" || processing.TerminalNextRetryAt == nil {
 		t.Fatalf("processing=%+v found=%v", processing, found)
 	}
+	for seat, expected := range []string{GestureRock, GestureScissors, GestureScissors} {
+		gesture := processing.Presentation.QuickGestures[seat]
+		if gesture == nil || *gesture != expected {
+			t.Fatalf("durable revealed gesture %d=%v", seat, gesture)
+		}
+	}
 	if fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='rps_terminal' AND source_id=?`, record.ID) != 0 ||
 		fixture.scalar(`SELECT COUNT(*) FROM game_rps_summaries WHERE session_id=?`, record.ID) != 0 ||
 		fixture.scalar(`SELECT COUNT(*) FROM game_rps_summary_presentation WHERE session_id=?`, record.ID) != 0 ||
@@ -297,6 +303,24 @@ func TestTerminalRetryIsAtomicAndConverges(t *testing.T) {
 	}
 	if completed, err := fixture.service.runTerminalOne(context.Background(), record.ID, fixture.clock.Load()); err != nil || completed {
 		t.Fatalf("terminal replay=(%v,%v)", completed, err)
+	}
+	for _, userID := range users {
+		tx := fixture.mustReadTx()
+		pending, found, err := loadPending(context.Background(), tx, userID)
+		_ = tx.Rollback()
+		if err != nil || !found {
+			t.Fatalf("recovered pending: found=%v err=%v", found, err)
+		}
+		seat := processing.Seats[pending.OwnSeatNo]
+		if pending.OwnBuyIn == nil || *pending.OwnBuyIn != formatMilli(seat.StartingBalance.Big()) ||
+			pending.OwnCashOut == nil || *pending.OwnCashOut != formatMilli(seat.TerminalReturn.Big()) {
+			t.Fatalf("recovered transfers=%+v", pending)
+		}
+		for seat, expected := range []string{GestureRock, GestureScissors, GestureScissors} {
+			if pending.Seats[seat].Gesture == nil || *pending.Seats[seat].Gesture != expected {
+				t.Fatalf("recovered gesture %d=%v", seat, pending.Seats[seat].Gesture)
+			}
+		}
 	}
 }
 

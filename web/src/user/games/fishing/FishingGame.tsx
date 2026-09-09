@@ -4,6 +4,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { useUserSession } from '../../data';
 import { useGameCopy } from '../copy';
+import { useGameSound } from '../common/useGameSound';
+import { GameSoundButton } from '../common/GameSoundButton';
 import { GameRulesButton, GameRulesDialog, type GameRulesSection } from '../common/GameRulesDialog';
 import {
   createIdempotencyKey,
@@ -346,6 +348,8 @@ function LeaderboardCard({
 
 export function FishingGame() {
   const { text } = useGameCopy();
+  const sound = useGameSound('fishing');
+  const playSound = sound.play;
   const queryClient = useQueryClient();
   const snapshot = useGamesSnapshot();
   const maintenance = isMaintenance(snapshot.error);
@@ -369,10 +373,10 @@ export function FishingGame() {
     readonly batchID: string;
     readonly state: 'sending' | 'failed';
   } | null>(null);
-  const [sound, setSound] = useState(false);
   const [viewedResult, setViewedResult] = useState<FishingBatchResult | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
-  const audioRef = useRef<AudioContext | null>(null);
+  const soundBatch = useRef<{ readonly id: string; through: number } | null>(null);
+  const startedHere = useRef(false);
   const resultRef = useRef<HTMLElement | null>(null);
   const ackAttempted = useRef<string | null>(null);
   const authoritative = state.data;
@@ -394,12 +398,10 @@ export function FishingGame() {
   const shownResult = result ?? (!pending && effectiveActionState === 'idle' ? viewedResult : null);
   const shownRevealed = result ? revealed : (shownResult?.outcomes.length ?? 0);
 
-  useEffect(
-    () => () => {
-      void audioRef.current?.close();
-    },
-    [],
-  );
+  useEffect(() => {
+    if (pending && soundBatch.current?.id !== pending.batchID)
+      soundBatch.current = { id: pending.batchID, through: 0 };
+  }, [pending]);
   useEffect(() => {
     if (!result || reducedMotion) return undefined;
     const timer = window.setInterval(() => {
@@ -415,17 +417,26 @@ export function FishingGame() {
   }, [reducedMotion, result]);
 
   useEffect(() => {
-    if (!sound || revealed === 0 || !audioRef.current) return;
-    const context = audioRef.current;
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    oscillator.frequency.value = 420 + revealed * 24;
-    gain.gain.setValueAtTime(0.035, context.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.09);
-    oscillator.connect(gain).connect(context.destination);
-    oscillator.start();
-    oscillator.stop(context.currentTime + 0.1);
-  }, [revealed, sound]);
+    if (!result) return;
+    if (soundBatch.current?.id !== result.batchID) {
+      soundBatch.current = {
+        id: result.batchID,
+        through: startedHere.current ? 0 : result.outcomes.length,
+      };
+    }
+    startedHere.current = false;
+    const previous = soundBatch.current.through;
+    if (revealed <= previous) return;
+    soundBatch.current.through = revealed;
+    const tiers = result.outcomes.slice(previous, revealed).map((outcome) => outcome.tier);
+    playSound(
+      tiers.some((tier) => tier === 'legend' || tier === 'treasure')
+        ? 'fishing_epic'
+        : tiers.some((tier) => tier === 'big' || tier === 'giant')
+          ? 'fishing_rare'
+          : 'fishing_common',
+    );
+  }, [playSound, result, revealed]);
 
   const refreshAfterMutation = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: fishingKeys.state });
@@ -471,6 +482,8 @@ export function FishingGame() {
       setActionError(null);
       try {
         const response = await startFishing(intent);
+        if (soundBatch.current?.id !== response.batchID)
+          soundBatch.current = { id: response.batchID, through: 0 };
         setOperation(null);
         setActionState('idle');
         queryClient.setQueryData(
@@ -499,6 +512,8 @@ export function FishingGame() {
       count,
       idempotencyKey: createIdempotencyKey(),
     };
+    startedHere.current = true;
+    playSound('select');
     setOperation(intent);
     void adoptStart(intent);
   };
@@ -513,6 +528,8 @@ export function FishingGame() {
     setActionError(null);
     try {
       const response = await recoverFishing(pending.batchID, key);
+      if (soundBatch.current?.id !== response.batchID)
+        soundBatch.current = { id: response.batchID, through: 0 };
       queryClient.setQueryData(
         fishingKeys.state,
         isFishingResult(response)
@@ -541,14 +558,6 @@ export function FishingGame() {
     }
   };
 
-  const toggleSound = () => {
-    if (!sound) {
-      audioRef.current ??= new AudioContext();
-      void audioRef.current.resume();
-    }
-    setSound((value) => !value);
-  };
-
   const prices = snapshot.data?.fishing.baitPrices;
   const unit = prices?.[selectedBait] ?? '0';
   const frozenTotal = multiplyCredits(unit, count);
@@ -569,7 +578,10 @@ export function FishingGame() {
   });
   const closeRules = useCallback(() => setRulesOpen(false), []);
   const rulesButton = (
-    <GameRulesButton label={text('common.rulesButton')} onClick={() => setRulesOpen(true)} />
+    <>
+      <GameRulesButton label={text('common.rulesButton')} onClick={() => setRulesOpen(true)} />
+      <GameSoundButton sound={sound} />
+    </>
   );
   const rulesDialog = <FishingRules open={rulesOpen} onClose={closeRules} />;
 
@@ -641,19 +653,7 @@ export function FishingGame() {
         eyebrow={text('fishing.eyebrow')}
         title={text('fishing.title')}
         description={text('fishing.description')}
-        actions={
-          <>
-            {rulesButton}
-            <button
-              type="button"
-              className="btn btn-secondary"
-              aria-pressed={sound}
-              onClick={toggleSound}
-            >
-              {text(sound ? 'fishing.sound.on' : 'fishing.sound.off')}
-            </button>
-          </>
-        }
+        actions={rulesButton}
       />
       <div className="fishing-layout">
         <div className="fishing-main">

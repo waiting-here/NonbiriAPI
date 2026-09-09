@@ -380,6 +380,7 @@ func (service *Service) startMatchTx(ctx context.Context, tx *sql.Tx, selected [
 		Pumps: PumpsBP(config.PumpsBP), GestureSeconds: config.GestureSeconds, DealerSeconds: config.DealerSeconds,
 		FollowerSeconds: config.FollowerSeconds, PermanentMultiplier: one, CurrentPlanMultiplier: &one,
 		ReminderState: "none", PhaseDeadline: &deadline, HealthEpoch: service.healthEpoch, StartedAt: now,
+		Presentation: sessionPresentation{PoolTieCount: new(db.U128)},
 	}
 	if dealer >= 0 {
 		record.DealerSeat = &dealer
