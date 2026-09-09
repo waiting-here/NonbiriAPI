@@ -108,6 +108,12 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) error
 	if _, err := tx.ExecContext(ctx, stewardHoldReadSchema); err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, fishingLengthSchema); err != nil {
+		return err
+	}
+	if err := migrateFishingLengthFacts(ctx, tx); err != nil {
+		return err
+	}
 	if err := validateGenerationTwoManifest(ctx, tx); err != nil {
 		return err
 	}

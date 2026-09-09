@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router';
 import { GamePrivacyControl } from '../common/GamePrivacyControl';
 import { useQueryClient } from '@tanstack/react-query';
-import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
+import { Card, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { useGameCopy } from '../copy';
-import { GameRulesButton, GameRulesDialog, type GameRulesSection } from '../common/GameRulesDialog';
+import { GameRulesDialog, type GameRulesSection } from '../common/GameRulesDialog';
 import {
   createIdempotencyKey,
   createOpaqueID,
@@ -19,7 +18,8 @@ import { gameKeys, useGamesSnapshot } from '../common/snapshot';
 import { useAuthoritativeCountdown } from '../common/countdown';
 import { useGameVisibility } from '../common/visibility';
 import { useGameSound } from '../common/useGameSound';
-import { GameSoundButton } from '../common/GameSoundButton';
+import { GameHeader } from '../common/GameHeader';
+import { GameMoney } from '../common/GameMoney';
 import {
   acknowledgeRPSResult,
   cancelRPSQueue,
@@ -67,15 +67,6 @@ type Operation =
       readonly key: string;
     }
   | { readonly kind: 'action'; readonly intent: RPSActionIntent };
-
-function Money({ value }: { readonly value: string }) {
-  const { text } = useGameCopy();
-  return (
-    <span className="game-money">
-      {formatCredits(value)} <span className="game-money__unit">{text('common.credits')}</span>
-    </span>
-  );
-}
 
 function RPSRules({ open, onClose }: { readonly open: boolean; readonly onClose: () => void }) {
   const { text } = useGameCopy();
@@ -259,13 +250,13 @@ function SeatCard({ seat }: { readonly seat: RPSSeat }) {
         <div>
           <dt>{text('rps.seat.balance')}</dt>
           <dd>
-            <Money value={seat.currentBalance} />
+            <GameMoney value={seat.currentBalance} />
           </dd>
         </div>
         <div>
           <dt>{text('rps.seat.input')}</dt>
           <dd>
-            <Money value={seat.currentRoundInput} />
+            <GameMoney value={seat.currentRoundInput} />
           </dd>
         </div>
       </dl>
@@ -420,7 +411,7 @@ function Match({
         <div>
           <span>{text('rps.pool')}</span>
           <strong key={state.economy.playerPool}>
-            <Money value={state.economy.playerPool} />
+            <GameMoney value={state.economy.playerPool} />
           </strong>
         </div>
         <div>
@@ -463,13 +454,13 @@ function Match({
           <div>
             <dt>{text('rps.base')}</dt>
             <dd>
-              <Money value={state.ruleSnapshot.base} />
+              <GameMoney value={state.ruleSnapshot.base} />
             </dd>
           </div>
           <div>
             <dt>{text('rps.pool')}</dt>
             <dd>
-              <Money value={state.economy.playerPool} />
+              <GameMoney value={state.economy.playerPool} />
             </dd>
           </div>
           <div>
@@ -492,7 +483,7 @@ function Match({
             <div>
               <dt>{text('rps.raiseAmount')}</dt>
               <dd>
-                <Money value={state.economy.dealerRaise} />
+                <GameMoney value={state.economy.dealerRaise} />
               </dd>
             </div>
           ) : null}
@@ -638,7 +629,7 @@ function PendingResult({
               {result.ownBuyIn === null ? (
                 text('rps.result.unrecorded')
               ) : (
-                <Money value={result.ownBuyIn} />
+                <GameMoney value={result.ownBuyIn} />
               )}
             </dd>
           </div>
@@ -648,26 +639,26 @@ function PendingResult({
               {result.ownCashOut === null ? (
                 text('rps.result.unrecorded')
               ) : (
-                <Money value={result.ownCashOut} />
+                <GameMoney value={result.ownCashOut} />
               )}
             </dd>
           </div>
           <div>
             <dt>{text('rps.result.input')}</dt>
             <dd>
-              <Money value={result.ownInput} />
+              <GameMoney value={result.ownInput} />
             </dd>
           </div>
           <div>
             <dt>{text('rps.result.returned')}</dt>
             <dd>
-              <Money value={result.ownReturned} />
+              <GameMoney value={result.ownReturned} />
             </dd>
           </div>
           <div>
             <dt>{text('rps.result.net')}</dt>
             <dd>
-              <Money value={result.ownWalletNet} />
+              <GameMoney value={result.ownWalletNet} />
             </dd>
           </div>
         </dl>
@@ -732,7 +723,7 @@ function Leaderboard({
                       `${row.profitRate}% · ${text('rps.leaderboard.sessions', { count: row.sessionCount })}`
                     ) : (
                       <>
-                        <Money value={row.netProfit} /> ·{' '}
+                        <GameMoney value={row.netProfit} /> ·{' '}
                         {text('rps.leaderboard.sessions', { count: row.sessionCount })}
                       </>
                     )}
@@ -1076,27 +1067,12 @@ export function RPSGame() {
   const canQueueDeathmatch =
     deathmatchGateOpen && deathmatchAffordable && homeQuery.isSuccess && !homeQuery.error;
   const closeRules = useCallback(() => setRulesOpen(false), []);
-  const rulesButton = (
-    <>
-      <GameRulesButton label={text('common.rulesButton')} onClick={() => setRulesOpen(true)} />
-      <GameSoundButton sound={sound} />
-    </>
-  );
+  const header = <GameHeader game="rps" sound={sound} onRules={() => setRulesOpen(true)} />;
   const rulesDialog = <RPSRules open={rulesOpen} onClose={closeRules} />;
   if (snapshot.isPending)
     return (
       <main className="game-page rps-page">
-        <PageHeader
-          back={
-            <Link className="game-back-link" to="/games">
-              {text('common.back')}
-            </Link>
-          }
-          eyebrow={text('rps.eyebrow')}
-          title={text('rps.title')}
-          description={text('rps.description')}
-          actions={rulesButton}
-        />
+        {header}
         <LoadingState label={text('common.loading')} />
         {rulesDialog}
       </main>
@@ -1104,17 +1080,7 @@ export function RPSGame() {
   if (snapshot.error && !maintenance)
     return (
       <main className="game-page rps-page">
-        <PageHeader
-          back={
-            <Link className="game-back-link" to="/games">
-              {text('common.back')}
-            </Link>
-          }
-          eyebrow={text('rps.eyebrow')}
-          title={text('rps.title')}
-          description={text('rps.description')}
-          actions={rulesButton}
-        />
+        {header}
         <ErrorState error={snapshot.error} onRetry={() => void snapshot.refetch()} />
         {rulesDialog}
       </main>
@@ -1122,17 +1088,7 @@ export function RPSGame() {
   if ((!snapshot.data || maintenance) && !session && !showPendingResult)
     return (
       <main className="game-page rps-page">
-        <PageHeader
-          back={
-            <Link className="game-back-link" to="/games">
-              {text('common.back')}
-            </Link>
-          }
-          eyebrow={text('rps.eyebrow')}
-          title={text('rps.title')}
-          description={text('rps.description')}
-          actions={rulesButton}
-        />
+        {header}
         <p className="game-inline-notice game-inline-notice--warning">
           {text('common.maintenance')}
         </p>
@@ -1141,33 +1097,25 @@ export function RPSGame() {
     );
   return (
     <main className={`game-page rps-page${session ? ' is-playing' : ''}`}>
-      <PageHeader
-        back={
-          <Link className="game-back-link" to="/games">
-            {text('common.back')}
-          </Link>
-        }
-        eyebrow={session ? undefined : text('rps.eyebrow')}
-        title={text(session ? 'rps.eyebrow' : 'rps.title')}
-        description={session ? undefined : text('rps.description')}
-        actions={
-          <>
-            {rulesButton}
-            {!session ? (
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => {
-                  setTutorialPage(0);
-                  setTutorialVisibility('open');
-                }}
-              >
-                {text('rps.tutorial.replay')}
-              </button>
-            ) : null}
-          </>
-        }
-      />
+      <GameHeader
+        game="rps"
+        sound={sound}
+        onRules={() => setRulesOpen(true)}
+        compact={Boolean(session)}
+      >
+        {!session ? (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => {
+              setTutorialPage(0);
+              setTutorialVisibility('open');
+            }}
+          >
+            {text('rps.tutorial.replay')}
+          </button>
+        ) : null}
+      </GameHeader>
       {maintenance ? (
         <p className="game-inline-notice game-inline-notice--warning">
           {text('common.maintenanceContinuation')}
@@ -1267,10 +1215,10 @@ export function RPSGame() {
                   {config ? (
                     <>
                       <span>
-                        {text('rps.base')}: <Money value={config.base} />
+                        {text('rps.base')}: <GameMoney value={config.base} />
                       </span>
                       <span>
-                        {text('rps.entry')}: <Money value={commitment!} />
+                        {text('rps.entry')}: <GameMoney value={commitment!} />
                       </span>
                       <span>{text('rps.queueTime', { seconds: config.queueSeconds })}</span>
                     </>
@@ -1346,7 +1294,7 @@ export function RPSGame() {
             <p>{text('rps.deathmatchReview')}</p>
             {deathmatchCommitment ? (
               <p>
-                <strong>{text('rps.entry')}:</strong> <Money value={deathmatchCommitment} />
+                <strong>{text('rps.entry')}:</strong> <GameMoney value={deathmatchCommitment} />
               </p>
             ) : null}
             <div className="game-state-actions">

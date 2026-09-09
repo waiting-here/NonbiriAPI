@@ -17,6 +17,8 @@ export interface FishingOutcome {
   readonly speciesKey: string;
   readonly tier: FishingTier;
   readonly sizeCM: number;
+  /** A display-only blue fat fish length; kept as a decimal string for arbitrary precision. */
+  readonly blueFatFishLengthCM: string | null;
   readonly reward: string;
 }
 
@@ -58,6 +60,8 @@ interface FishingLeaderboardBase {
 export interface FishingSingleRow extends FishingLeaderboardBase {
   readonly speciesKey: string;
   readonly sizeCM: number;
+  /** A display-only blue fat fish length; kept as a decimal string for arbitrary precision. */
+  readonly blueFatFishLengthCM: string | null;
 }
 
 export interface FishingTotalRow extends FishingLeaderboardBase {
@@ -72,11 +76,19 @@ export type FishingLeaderboard =
       readonly me: FishingSingleRow | null;
     }
   | {
+      readonly board: 'recent_single';
+      readonly windowStart: number;
+      readonly entries: readonly FishingSingleRow[];
+      readonly me: FishingSingleRow | null;
+    }
+  | {
       readonly board: 'total';
       readonly windowStart: number;
       readonly entries: readonly FishingTotalRow[];
       readonly me: FishingTotalRow | null;
     };
+
+export type FishingLeaderboardBoard = FishingLeaderboard['board'];
 
 export interface FishingStartIntent {
   readonly bait: Bait;

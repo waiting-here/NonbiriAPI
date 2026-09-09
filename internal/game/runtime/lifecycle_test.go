@@ -13,7 +13,7 @@ import (
 
 func TestFishingDeletionDualOrderConverges(t *testing.T) {
 	t.Run("delete wins reserved race", func(t *testing.T) {
-		fixture := newGameFixture(t, &scriptedSource{})
+		fixture := newGameFixture(t, legendSource(2, 100, 0, 0))
 		userID := fixture.seedUser("delete-first", fixtureFunding)
 		fixture.service.beforeSettlement = func(string) error { return errInjected }
 		_, pending, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(300)})
@@ -48,6 +48,9 @@ func TestFishingDeletionDualOrderConverges(t *testing.T) {
 		if fixture.scalar(`SELECT COUNT(*) FROM game_fishing_batches WHERE id=?`, pending.BatchID) != 0 {
 			t.Fatal("delete-first left batch")
 		}
+		if fixture.scalar(`SELECT COUNT(*) FROM game_fishing_outcome_lengths`) != 0 {
+			t.Fatal("delete-first left presentation")
+		}
 		if fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='fishing_release' AND source_id=?`, pending.BatchID) != 1 || fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='fishing_settle' AND source_id=?`, pending.BatchID) != 0 {
 			t.Fatal("delete-first chose an invalid terminal operation")
 		}
@@ -71,7 +74,7 @@ func TestFishingDeletionDualOrderConverges(t *testing.T) {
 	})
 
 	t.Run("settle wins before deletion", func(t *testing.T) {
-		fixture := newGameFixture(t, &scriptedSource{max: true})
+		fixture := newGameFixture(t, legendSource(0, 137, 0, 0))
 		userID := fixture.seedUser("settle-first", fixtureFunding)
 		result, pending, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(302)})
 		if err != nil || pending != nil || result == nil {
@@ -100,6 +103,11 @@ func TestFishingDeletionDualOrderConverges(t *testing.T) {
 				t.Fatalf("settle-first left %s", table)
 			}
 		}
+		for _, table := range []string{"game_fishing_outcome_lengths", "game_fishing_best_lengths", "game_fishing_length_facts"} {
+			if fixture.scalar(`SELECT COUNT(*) FROM `+table) != 0 {
+				t.Fatalf("settle-first left %s", table)
+			}
+		}
 		if fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='fishing_settle' AND source_id=?`, result.BatchID) != 1 || fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='fishing_release' AND source_id=?`, result.BatchID) != 0 {
 			t.Fatal("settle-first changed the terminal winner")
 		}
@@ -110,7 +118,7 @@ func TestFishingDeletionDualOrderConverges(t *testing.T) {
 }
 
 func TestFishingSettlementAndDeletionPrepareRaceConverges(t *testing.T) {
-	fixture := newGameFixture(t, &scriptedSource{})
+	fixture := newGameFixture(t, legendSource(1, 150, 0, 1, 0))
 	userID := fixture.seedUser("delete-settle-race", fixtureFunding)
 	fixture.service.beforeSettlement = func(string) error { return errInjected }
 	_, pending, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(305)})

@@ -240,6 +240,11 @@ func (adapter *LifecycleAdapter) ExportTx(
 		return result, err
 	}
 	result.Total = ownLeaderboardRow(total)
+	recent, err := queryRecentSingleLeaderboard(ctx, tx, userID, decisionNow)
+	if err != nil {
+		return result, err
+	}
+	result.RollingBest = ownLeaderboardRow(recent)
 	return result, nil
 }
 

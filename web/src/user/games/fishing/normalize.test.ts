@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { startFishing } from './api';
+import { readFishingLeaderboard, startFishing } from './api';
 import {
   normalizeFishingLeaderboard,
   normalizeFishingPending,
@@ -20,6 +20,7 @@ function resultWire(count: 1 | 10 = 1) {
       species_key: 'whitebait',
       tier: 'small',
       size_cm: 5 + ordinal,
+      blue_fat_fish_length_cm: undefined as string | null | undefined,
       reward: '0.5',
     })),
     payout_total: count === 1 ? '0.5' : '5',
@@ -150,6 +151,120 @@ describe('Fishing beta.1 wire', () => {
     expect(normalizeFishingResult(boundary).balance).toBe(boundary.balance);
     boundary.balance = '170141183460469231731687303715884105.728';
     expect(() => normalizeFishingResult(boundary)).toThrow(/fishing balance/i);
+  });
+
+  it('normalizes the optional blue fat fish length without JavaScript number conversion', () => {
+    const old = resultWire();
+    Reflect.deleteProperty(old.outcomes[0], 'blue_fat_fish_length_cm');
+    expect(normalizeFishingResult(old).outcomes[0].blueFatFishLengthCM).toBeNull();
+
+    const blue = resultWire();
+    blue.outcomes[0] = {
+      ordinal: 0,
+      species_key: 'koi',
+      tier: 'legend',
+      size_cm: 100,
+      blue_fat_fish_length_cm: `201${'9'.repeat(125)}`,
+      reward: '0.5',
+    };
+    const normalized = normalizeFishingResult(blue).outcomes[0];
+    expect(normalized.blueFatFishLengthCM).toBe(`201${'9'.repeat(125)}`);
+    expect(normalized.sizeCM).toBe(100);
+    expect(normalized.speciesKey).toBe('koi');
+
+    for (const invalidLength of ['200', '0201', '201.5', `2${'0'.repeat(128)}`]) {
+      const invalid = resultWire();
+      invalid.outcomes[0] = {
+        ordinal: 0,
+        species_key: 'koi',
+        tier: 'legend',
+        size_cm: 100,
+        blue_fat_fish_length_cm: invalidLength,
+        reward: '0.5',
+      };
+      expect(() => normalizeFishingResult(invalid)).toThrow(/blue fat fish length/i);
+    }
+
+    const nonLegend = resultWire();
+    nonLegend.outcomes[0].blue_fat_fish_length_cm = '201';
+    expect(() => normalizeFishingResult(nonLegend)).toThrow(/blue fat fish length/i);
+  });
+
+  it('accepts recent_single with a long display length and keeps old single rows nullable', () => {
+    const length = `201${'8'.repeat(125)}`;
+    const recent = normalizeFishingLeaderboard(
+      {
+        board: 'recent_single',
+        window_start: 1_799_000_000,
+        entries: [
+          {
+            rank: '1',
+            species_key: 'taimen',
+            size_cm: 120,
+            blue_fat_fish_length_cm: length,
+            identity: { kind: 'anonymous' },
+            is_me: false,
+          },
+        ],
+        me: null,
+      },
+      'recent_single',
+    );
+    expect(recent.board).toBe('recent_single');
+    expect(recent.windowStart).toBe(1_799_000_000);
+    if (recent.board !== 'recent_single') throw new Error('Expected recent single board.');
+    expect(recent.entries[0].blueFatFishLengthCM).toBe(length);
+
+    const historical = normalizeFishingLeaderboard(
+      {
+        board: 'single',
+        window_start: null,
+        entries: [
+          {
+            rank: '1',
+            species_key: 'koi',
+            size_cm: 100,
+            identity: { kind: 'anonymous' },
+            is_me: false,
+          },
+        ],
+        me: null,
+      },
+      'single',
+    );
+    if (historical.board !== 'single') throw new Error('Expected historical single board.');
+    expect(historical.entries[0].blueFatFishLengthCM).toBeNull();
+  });
+
+  it('requests each fishing board with its exact board discriminator', async () => {
+    const boardWire = (board: 'single' | 'recent_single' | 'total') =>
+      board === 'total'
+        ? { board, window_start: 1_799_000_000, entries: [], me: null }
+        : {
+            board,
+            window_start: board === 'single' ? null : 1_799_000_000,
+            entries: [],
+            me: null,
+          };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const board = new URL(String(input), 'https://example.test').searchParams.get('board') as
+        'single' | 'recent_single' | 'total';
+      return new Response(JSON.stringify(boardWire(board)), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await Promise.all([
+      readFishingLeaderboard('single'),
+      readFishingLeaderboard('recent_single'),
+      readFishingLeaderboard('total'),
+    ]);
+
+    expect(
+      fetchMock.mock.calls.map(([input]) => new URL(String(input), 'https://example.test').search),
+    ).toEqual(['?board=single', '?board=recent_single', '?board=total']);
   });
 
   it('preserves a JSON body on HTTP 202 instead of treating it as empty', async () => {
