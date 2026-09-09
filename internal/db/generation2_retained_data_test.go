@@ -132,6 +132,8 @@ VALUES(?,?,'quick','quick_resolved',?,?,?,0,?,'tie','tie','tie',200)`, user, fin
 	hostileInsertFishingBatch(t, database, batch, users[0], hostileOIDVariant("op_", 'F', 'Q'))
 	hostileMustExec(t, database, `INSERT INTO game_fishing_outcomes(batch_id,ordinal,species_key,tier,size_cm,payout_milli) VALUES(?,0,'boot','junk',0,0)`, batch)
 	hostileMustExec(t, database, `UPDATE game_fishing_batches SET state='committed',payout_total_milli=0,ledger_rows_remaining=?,next_attempt_at=NULL,settled_at=105,revealed_at=106 WHERE id=?`, zero, batch)
+	hostileMustExec(t, database, `INSERT INTO game_fishing_rank_facts(batch_id_text,user_id,settled_at,expires_at,payout_total,aggregate_applied) VALUES(?,?,105,2592105,?,1)`, batch, users[0], zero)
+	hostileMustExec(t, database, `INSERT INTO game_fishing_rank_aggregates(user_id,batch_count,total_payout,score_achieved_at,public_tie_key,revision,updated_at) VALUES(?,?,?,105,?,?,105)`, users[0], one, zero, hostileBlob32(21), one)
 	hostileMustExec(t, database, `INSERT INTO game_linklink_summaries(session_id,user_id,spec,price_milli,terminal_reason,started_at,deadline,terminal_at,pairs_removed,score)
 VALUES(?,?,'10x10',0,'completed',101,1101,201,50,99)`, hostileOID("ll_"), users[0])
 	hostileMustExec(t, database, `UPDATE credit_capacity SET last_ledger_seq=2,reserved_future_rows=?,revision=? WHERE id=1`, hostileBlob16(3), hostileBlob16(7))
@@ -144,6 +146,7 @@ func makeRetainedSource(t *testing.T, database *sql.DB, want string) {
 	t.Helper()
 	if want == preBrowseManifestHash || want == preQuotaCleanupManifestHash || want == preStewardHoldReadManifestHash {
 		if want == preStewardHoldReadManifestHash {
+			dropFishingLengthObjects(t, database)
 			hostileMustExec(t, database, `DROP TABLE legal_hold_steward_reads`)
 		} else if want == preBrowseManifestHash {
 			dropBrowseIndexes(t, database)
@@ -306,6 +309,11 @@ func TestRetainedBusinessDataAcrossEverySupportedSource(t *testing.T) {
 						t.Fatalf("old game received guessed values in %s", table)
 					}
 				}
+				if countRows(t, store, `SELECT COUNT(*) FROM game_fishing_length_facts WHERE species_key='boot' AND size_cm=0 AND blue_fat_fish_length_cm IS NULL`) != 1 ||
+					countRows(t, store, `SELECT COUNT(*) FROM game_fishing_outcome_lengths`) != 0 ||
+					countRows(t, store, `SELECT COUNT(*) FROM game_fishing_best_lengths`) != 0 {
+					t.Fatal("retained fishing maximum missing or an Easter egg was invented")
+				}
 				if err := store.Close(); err != nil {
 					t.Fatal(err)
 				}
@@ -329,7 +337,7 @@ func TestRetainedExtensionRollsBackWhenStorageFills(t *testing.T) {
 			}
 			extraPages := 5
 			if source.hash == preStewardHoldReadManifestHash {
-				// This source adds only one audit table and its indexes.
+				// This source needs a tight bound to fail inside the additions.
 				extraPages = 1
 			}
 			hostileMustExec(t, store.DB(), fmt.Sprintf(`PRAGMA max_page_count=%d`, pages+extraPages))

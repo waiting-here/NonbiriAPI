@@ -10,6 +10,7 @@ This section describes the unreleased `1.0.0-beta.2` candidate.
 
 ### Added
 
+- Fishing now has an independent rolling 30-day largest-length board alongside lifetime records and the existing rolling payout board. Legendary catches can become a white-rice-themed blue fat fish Easter egg with exponentially rarer lengths, while preserving the original fish species, reward and payout rate.
 - Bounded numbered pagination across the resource, activity, log, donation, model, report, legal-hold and administration lists, with 10/20/50/100 page sizes, direct page navigation, preserved filters, filter and page restoration after returning or refreshing, and a separate browser-local preference for each list.
 - A complete charity model catalog with optional plain-text descriptions, arbitrary allowed-level sets including an empty set, explicit enabled/availability reasons, and a public API projection that contains only currently usable models. Authorized administrators and level-5 stewards can browse donation sources and keys within the existing field whitelist.
 - Independent donation-key recurring quota rules for calls, tokens, or credits, using reset or sliding windows over 5 hours, days, weeks, or months in a selected business time zone. Reservations, successful-response settlement, edits, expiry, recovery, and deletion remain transactionally bounded.
@@ -21,7 +22,7 @@ This section describes the unreleased `1.0.0-beta.2` candidate.
 - The daily check-in balance threshold now applies to every level. Zero still disables the threshold, and the level-gated mode still requires level 3 or above.
 - Current level-5 stewards can read the same request logs and donation review information as administrators, including donor identities, routing key identifiers, user filters and bounded log exports. Credentials and ordinary-user projections remain protected.
 
-- Account export is schema version 5. It adds safe projections of donation-key recurring rules and the requester's own RPS buy-in/cash-out values while continuing to exclude secrets, other users, reports, holds, and internal scheduling data.
+- Account export is schema version 5. It adds safe projections of donation-key recurring rules, Fishing display lengths and the requester's rolling best, and the requester's own RPS buy-in/cash-out values while continuing to exclude secrets, other users, reports, holds, and internal scheduling data.
 - Generation 2 browsing indexes and beta.2 sidecars are added only through the exact validated additive update paths; existing data and historical facts are preserved and unsupported schemas remain zero-write refusals.
 
 ### Fixed

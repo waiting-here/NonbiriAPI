@@ -17,6 +17,7 @@ import {
 import {
   FISHING_TIERS,
   type FishingBatchResult,
+  type FishingLeaderboardBoard,
   type FishingLeaderboard,
   type FishingSettlementPending,
   type FishingSingleRow,
@@ -81,6 +82,28 @@ function count(value: unknown, field: string): 1 | 10 {
   return parsed;
 }
 
+/**
+ * The blue fat fish length is display-only data. Keep it as a canonical decimal
+ * string so a 128-character value cannot lose precision in a JavaScript number.
+ */
+function blueFatFishLength(
+  value: unknown,
+  tier: (typeof FISHING_TIERS)[number],
+  field: string,
+): string | null {
+  if (value === undefined || value === null) return null;
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.length > 128 ||
+    !/^(0|[1-9][0-9]*)$/.test(value)
+  ) {
+    invalidResponse(field);
+  }
+  if (tier !== 'legend' || BigInt(value) < 201n) invalidResponse(field);
+  return value;
+}
+
 export function normalizeFishingPending(value: unknown): FishingSettlementPending {
   const record = exactRecord(
     value,
@@ -142,7 +165,7 @@ export function normalizeFishingResult(value: unknown): FishingBatchResult {
     const outcome = exactRecord(
       value,
       ['ordinal', 'species_key', 'tier', 'size_cm', 'reward'],
-      [],
+      ['blue_fat_fish_length_cm'],
       `fishing outcome ${index}`,
     );
     const ordinal = safeInteger(outcome.ordinal, index, index, `fishing outcome ${index} ordinal`);
@@ -151,11 +174,17 @@ export function normalizeFishingResult(value: unknown): FishingBatchResult {
     if (SPECIES_TIER.get(speciesKey) !== tier) invalidResponse(`fishing outcome ${index} roster`);
     const [minimum, maximum] = TIER_SIZE[tier];
     const sizeCM = safeInteger(outcome.size_cm, minimum, maximum, `fishing outcome ${index} size`);
+    const blueFatFishLengthCM = blueFatFishLength(
+      outcome.blue_fat_fish_length_cm,
+      tier,
+      `fishing outcome ${index} blue fat fish length`,
+    );
     return {
       ordinal,
       speciesKey,
       tier,
       sizeCM,
+      blueFatFishLengthCM,
       reward: creditsValue(outcome.reward, {}, `fishing outcome ${index} reward`),
     };
   });
@@ -229,7 +258,8 @@ function rowBase(value: unknown, expected: 'single' | 'total', field: string) {
     expected === 'single'
       ? ['rank', 'species_key', 'size_cm', 'identity', 'is_me']
       : ['rank', 'total_credits', 'identity', 'is_me'];
-  const record = exactRecord(value, required, [], field);
+  const optional = expected === 'single' ? ['blue_fat_fish_length_cm'] : [];
+  const record = exactRecord(value, required, optional, field);
   return {
     record,
     rank: decimalValue(record.rank, { bits: 256, positive: true }, `${field} rank`),
@@ -244,10 +274,16 @@ function singleRow(value: unknown, field: string): FishingSingleRow {
   const tier = SPECIES_TIER.get(speciesKey);
   if (!tier) invalidResponse(`${field} species roster`);
   const [minimum, maximum] = TIER_SIZE[tier];
+  const blueFatFishLengthCM = blueFatFishLength(
+    base.record.blue_fat_fish_length_cm,
+    tier,
+    `${field} blue fat fish length`,
+  );
   return {
     ...base,
     speciesKey,
     sizeCM: safeInteger(base.record.size_cm, minimum, maximum, `${field} size`),
+    blueFatFishLengthCM,
   };
 }
 
@@ -261,7 +297,7 @@ function totalRow(value: unknown, field: string): FishingTotalRow {
 
 export function normalizeFishingLeaderboard(
   value: unknown,
-  expectedBoard: 'single' | 'total',
+  expectedBoard: FishingLeaderboardBoard,
 ): FishingLeaderboard {
   const record = exactRecord(
     value,
@@ -269,12 +305,17 @@ export function normalizeFishingLeaderboard(
     [],
     'fishing leaderboard',
   );
-  const board = enumValue(record.board, ['single', 'total'] as const, 'fishing leaderboard board');
+  const board = enumValue(
+    record.board,
+    ['single', 'recent_single', 'total'] as const,
+    'fishing leaderboard board',
+  );
   if (board !== expectedBoard || !Array.isArray(record.entries) || record.entries.length > 20) {
     invalidResponse('fishing leaderboard shape');
   }
-  if (board === 'single') {
-    if (record.window_start !== null) invalidResponse('single leaderboard window');
+  if (board !== 'total') {
+    if (board === 'single' && record.window_start !== null)
+      invalidResponse('single leaderboard window');
     const entries = record.entries.map((row, index) => singleRow(row, `single row ${index}`));
     const me = record.me === null ? null : singleRow(record.me, 'single me row');
     if (
@@ -282,7 +323,14 @@ export function normalizeFishingLeaderboard(
       (me && (!me.isMe || entries.some((row) => row.isMe)))
     )
       invalidResponse('single me row');
-    return { board, windowStart: null, entries, me };
+    return board === 'single'
+      ? { board, windowStart: null, entries, me }
+      : {
+          board,
+          windowStart: unixTime(record.window_start, 'recent fishing leaderboard window'),
+          entries,
+          me,
+        };
   }
   const windowStart = unixTime(record.window_start, 'total leaderboard window');
   const entries = record.entries.map((row, index) => totalRow(row, `total row ${index}`));

@@ -12,20 +12,14 @@ const copy = {
   'common.partial': ['Partly open', '部分开放'],
   'common.closed': ['Closed', '关闭'],
   'common.maintenance': ['Maintenance', '维护中'],
-  'common.unavailable': ['Temporarily unavailable', '暂时不可用'],
   'common.responseUnknown': [
     'The result could not be confirmed. No new action can start until the latest status is checked.',
     '暂时无法确认结果。检查最新状态前，不能开始新的操作。',
-  ],
-  'common.conflict': [
-    'The game changed. The latest status is shown; review it before trying again.',
-    '游戏状态已经变化。页面已显示最新状态，请重新确认后再操作。',
   ],
   'common.serviceStopped': [
     'The game service is recovering. Timers and results remain unchanged.',
     '游戏服务正在恢复；计时与结果不会改变。',
   ],
-  'common.leaseActive': ['This page can continue the current game.', '当前页面可以继续本局。'],
   'common.leaseRenewing': [
     'Confirming that this page can continue the game…',
     '正在确认当前页面能否继续本局…',
@@ -82,7 +76,6 @@ const copy = {
   'fishing.stage.result': ['Catch revealed', '收获已揭晓'],
   'fishing.sound.on': ['Sound on', '声音已开启'],
   'fishing.sound.off': ['Sound off', '声音已关闭'],
-  'fishing.sound.hint': ['Use the sound button to turn audio on.', '点击按钮可开启声音。'],
   'fishing.bait.worm': ['Worm', '蚯蚓'],
   'fishing.bait.lure': ['Lure', '拟饵'],
   'fishing.bait.premium': ['Premium bait', '高级鱼饵'],
@@ -144,18 +137,30 @@ const copy = {
   'fishing.tier.big': ['Big catch', '大鱼'],
   'fishing.tier.giant': ['Giant', '巨物'],
   'fishing.tier.legend': ['Legendary', '传说'],
-  'fishing.tier.common': ['Common', '普通'],
-  'fishing.tier.rare': ['Rare', '稀有'],
-  'fishing.tier.legendary': ['Legendary', '传说'],
   'fishing.tier.junk': ['Pond find', '池塘杂物'],
   'fishing.tier.treasure': ['Treasure', '宝物'],
   'fishing.size': ['{{size}} cm', '{{size}} 厘米'],
   'fishing.reward': ['{{amount}} credits', '{{amount}} 积分'],
+  'fishing.blueFatFish': ['Blue fat fish', '蓝色大肥鱼'],
+  'fishing.blueFatFish.original': [
+    'Original legendary species: {{species}}',
+    '原传奇鱼种：{{species}}',
+  ],
   'fishing.leaderboard.single': ['Largest single catch', '单次最大收获'],
+  'fishing.leaderboard.recentSingle': [
+    'Largest single catch · last 30 days',
+    '近 30 天单次最大收获',
+  ],
   'fishing.leaderboard.total': ['30-day total catch', '近 30 天总收获'],
+  'fishing.leaderboard.windowHistorical': ['Historical board', '历史榜'],
+  'fishing.leaderboard.windowRecent': ['Rolling 30-day window', '近 30 天窗口'],
   'fishing.leaderboard.helpSingle': [
-    'Largest single catches, showing the top 20 and your position.',
-    '最大的单次收获，展示前 20 名和你的排名。',
+    'Historical largest single catches, showing the top 20 and your position.',
+    '历史单次最大收获，展示前 20 名和你的排名。',
+  ],
+  'fishing.leaderboard.helpRecentSingle': [
+    'Largest single catches from the last 30 days, showing the top 20 and your position.',
+    '近 30 天内的单次最大收获，展示前 20 名和你的排名。',
   ],
   'fishing.leaderboard.helpTotal': [
     'Rolling 30-day Top 20 plus your row.',
@@ -167,6 +172,8 @@ const copy = {
   'fishing.leaderboard.angler': ['Angler', '垂钓者'],
   'fishing.leaderboard.anonymous': ['Anonymous angler', '匿名垂钓者'],
   'fishing.leaderboard.me': ['You', '本人'],
+  'fishing.leaderboard.refresh': ['Refresh board', '刷新榜单'],
+  'fishing.leaderboard.refreshing': ['Refreshing…', '正在刷新…'],
   'fishing.rules.title': ['How pond fishing works', '池塘垂钓怎么玩'],
   'fishing.rules.chooseTitle': ['Choose your bait', '先选鱼饵'],
   'fishing.rules.chooseBody': [
@@ -180,8 +187,8 @@ const copy = {
   ],
   'fishing.rules.resultTitle': ['What you receive', '你会看到什么'],
   'fishing.rules.resultBody': [
-    'Each result appears automatically when it is ready. You may find a common, rare, or legendary fish, a pond find, or a treasure. The result shows the catch, its size when applicable, and the credits received.',
-    '每个结果准备好后会自动出现。你可能钓到普通、稀有或传说鱼，也可能发现池塘杂物或宝物；结果会展示收获、适用时的尺寸以及获得的积分。',
+    'Results show the catch, length and credits. Legendary fish have a 10% chance of the blue fat fish egg: 201 cm or longer, with exponentially decreasing odds and no gameplay limit. Only artwork and length rankings change; original species and rewards stay unchanged.',
+    '结果展示收获、长度和积分。传奇鱼有 10% 概率成为蓝色大肥鱼：201 厘米起，长度概率指数衰减，不设玩法上限。彩蛋只改变图案和长度榜，结果及榜单保留原鱼种，奖励不变。',
   ],
   'fishing.rules.recoveryTitle': ['If you leave or refresh', '离开或刷新后怎么办'],
   'fishing.rules.recoveryBody': [
@@ -207,7 +214,6 @@ const copy = {
   'linklink.playing': ['Playing', '游玩中'],
   'linklink.spec': ['{{spec}} board', '{{spec}} 棋盘'],
   'linklink.seconds': ['{{seconds}} second time limit', '{{seconds}} 秒时限'],
-  'linklink.price': ['{{amount}} credits', '{{amount}} 积分'],
   'linklink.specClosed': ['This size is closed', '该规格已关闭'],
   'linklink.startReview': ['Review paid start', '确认付费开始'],
   'linklink.startConsequences': [
@@ -215,24 +221,16 @@ const copy = {
     '确认后扣除下方门票并开始计时。离开页面后计时继续，门票不退还。',
   ],
   'linklink.start': ['Start {{spec}}', '开始 {{spec}}'],
-  'linklink.starting': ['Starting or restoring…', '正在开始或恢复…'],
   'linklink.active': ['Active board', '进行中的棋盘'],
   'linklink.progress': [
     '{{removed}} / {{total}} pairs removed',
     '已消除 {{removed}} / {{total}} 对',
   ],
-  'linklink.deadline': ['End time', '结束时间'],
   'linklink.remaining': ['{{seconds}} seconds remaining', '剩余 {{seconds}} 秒'],
   'linklink.selectFirst': [
     'Connect identical pictures with no more than two turns.',
     '点击两个相同图案，连线最多转弯两次。',
   ],
-  'linklink.selectSecond': [
-    'Select a matching tile. The game will check whether they can connect.',
-    '请选择配对图块；游戏会检查两者能否连通。',
-  ],
-  'linklink.matching': ['Checking this pair…', '正在检查这一对…'],
-  'linklink.matchAccepted': ['Pair removed.', '这一对已消除。'],
   'linklink.matchRejected': ['This pair could not be removed.', '这一对无法消除。'],
   'linklink.rearranged': [
     'No moves remained, so the game rearranged the tiles for free.',

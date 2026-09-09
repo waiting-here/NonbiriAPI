@@ -24,7 +24,7 @@ const audio = vi.hoisted(() => ({
 }));
 vi.mock('./common/sound', () => ({ createGameSound: () => audio }));
 
-function emptyFishingBoard(board: 'single' | 'total') {
+function emptyFishingBoard(board: 'single' | 'recent_single' | 'total') {
   return { board, window_start: board === 'single' ? null : 1_700_000_000, entries: [], me: null };
 }
 function fishingResult() {
@@ -34,7 +34,16 @@ function fishingResult() {
     count: 1,
     unit_price: '1',
     entry_total: '1',
-    outcomes: [{ ordinal: 0, species_key: 'whitebait', tier: 'small', size_cm: 12, reward: '2' }],
+    outcomes: [
+      {
+        ordinal: 0,
+        species_key: 'whitebait',
+        tier: 'small',
+        size_cm: 12,
+        blue_fat_fish_length_cm: undefined as string | null | undefined,
+        reward: '2',
+      },
+    ],
     payout_total: '2',
     balance: '12345678901234567891.125',
     settled_at: 1_800_000_000,
@@ -215,7 +224,7 @@ describe('beta.1 game pages', () => {
         path: '/api/games/fishing/state',
         body: { settlement_pending: null, unrevealed: fishingResult(), has_more_unrevealed: false },
       },
-      ...(['single', 'total'] as const).map((board) => ({
+      ...(['single', 'recent_single', 'total'] as const).map((board) => ({
         method: 'GET',
         path: `/api/games/fishing/leaderboard?board=${board}`,
         body: emptyFishingBoard(board),
@@ -442,6 +451,11 @@ describe('beta.1 game pages', () => {
       },
       {
         method: 'GET',
+        path: '/api/games/fishing/leaderboard?board=recent_single',
+        body: emptyFishingBoard('recent_single'),
+      },
+      {
+        method: 'GET',
         path: '/api/games/fishing/leaderboard?board=total',
         body: emptyFishingBoard('total'),
       },
@@ -486,6 +500,11 @@ describe('beta.1 game pages', () => {
         method: 'GET',
         path: '/api/games/fishing/leaderboard?board=single',
         body: emptyFishingBoard('single'),
+      },
+      {
+        method: 'GET',
+        path: '/api/games/fishing/leaderboard?board=recent_single',
+        body: emptyFishingBoard('recent_single'),
       },
       {
         method: 'GET',
@@ -553,6 +572,11 @@ describe('beta.1 game pages', () => {
       },
       {
         method: 'GET',
+        path: '/api/games/fishing/leaderboard?board=recent_single',
+        body: emptyFishingBoard('recent_single'),
+      },
+      {
+        method: 'GET',
         path: '/api/games/fishing/leaderboard?board=total',
         body: emptyFishingBoard('total'),
       },
@@ -587,6 +611,106 @@ describe('beta.1 game pages', () => {
     );
   });
 
+  it('renders the blue fat fish label and switches between historical and recent boards', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    const length = `201${'9'.repeat(125)}`;
+    const result = fishingResult();
+    result.outcomes[0] = {
+      ordinal: 0,
+      species_key: 'koi',
+      tier: 'legend',
+      size_cm: 100,
+      blue_fat_fish_length_cm: length,
+      reward: '2',
+    };
+    const blueRow = {
+      rank: '1',
+      species_key: 'koi',
+      size_cm: 100,
+      blue_fat_fish_length_cm: length,
+      identity: { kind: 'anonymous' },
+      is_me: false,
+    };
+    const fetchMock = installJsonFetchFixtures([
+      { method: 'GET', path: '/api/games', body: gamesSnapshotWire() },
+      {
+        method: 'GET',
+        path: '/api/games/fishing/state',
+        body: { settlement_pending: null, unrevealed: result, has_more_unrevealed: false },
+      },
+      {
+        method: 'GET',
+        path: '/api/games/fishing/leaderboard?board=single',
+        body: {
+          board: 'single',
+          window_start: null,
+          entries: [blueRow],
+          me: {
+            rank: '21',
+            species_key: 'whitebait',
+            size_cm: 12,
+            identity: { kind: 'public', display_name: 'Me', avatar_url: null },
+            is_me: true,
+          },
+        },
+      },
+      {
+        method: 'GET',
+        path: '/api/games/fishing/leaderboard?board=recent_single',
+        body: {
+          board: 'recent_single',
+          window_start: 1_799_000_000,
+          entries: [blueRow],
+          me: null,
+        },
+      },
+      {
+        method: 'GET',
+        path: '/api/games/fishing/leaderboard?board=total',
+        body: emptyFishingBoard('total'),
+      },
+      {
+        method: 'POST',
+        path: '/api/games/fishing/batches/fb_AAAAAAAAAAAAAAAAAAAAAA/ack',
+        status: 204,
+        body: undefined,
+      },
+    ]);
+    const rendered = await renderWithProviders(<FishingGame />, {
+      station: 'user',
+      route: '/games/fishing',
+      role: 'user',
+    });
+
+    expect(await screen.findByRole('list')).toHaveTextContent('Blue fat fish');
+    expect(screen.getAllByText(/Original legendary species: Koi/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(`${length} cm`).length).toBeGreaterThan(0);
+    expect(screen.getByRole('tab', { name: 'Rolling 30-day window' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Historical largest single catches, showing the top 20 and your position.'),
+    ).toBeInTheDocument();
+
+    await rendered.user.click(screen.getByRole('tab', { name: 'Rolling 30-day window' }));
+    expect(
+      await screen.findByRole('heading', { name: 'Largest single catch · last 30 days' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Largest single catches from the last 30 days, showing the top 20 and your position.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith('/api/games/fishing/leaderboard?board=recent_single'),
+      ),
+    ).toBe(true);
+  });
+
   it('keeps the Fishing result visible after an ACK failure and unlocks another batch after retry', async () => {
     vi.stubGlobal('matchMedia', (query: string) => ({
       matches: query === '(prefers-reduced-motion: reduce)',
@@ -613,6 +737,11 @@ describe('beta.1 game pages', () => {
         method: 'GET',
         path: '/api/games/fishing/leaderboard?board=single',
         body: emptyFishingBoard('single'),
+      },
+      {
+        method: 'GET',
+        path: '/api/games/fishing/leaderboard?board=recent_single',
+        body: emptyFishingBoard('recent_single'),
       },
       {
         method: 'GET',
@@ -696,6 +825,11 @@ describe('beta.1 game pages', () => {
       },
       {
         method: 'GET',
+        path: '/api/games/fishing/leaderboard?board=recent_single',
+        body: emptyFishingBoard('recent_single'),
+      },
+      {
+        method: 'GET',
         path: '/api/games/fishing/leaderboard?board=total',
         body: emptyFishingBoard('total'),
       },
@@ -776,6 +910,7 @@ describe('beta.1 game pages', () => {
     });
     const cells = await screen.findAllByRole('gridcell');
     expect(cells).toHaveLength(48);
+    expect(screen.getByRole('heading', { level: 1, name: 'LinkLink' })).toBeInTheDocument();
     expect(within(cells[0]).getByRole('img', { name: 'Apple' })).toBeInTheDocument();
     expect(cells[0]).toHaveTextContent('');
     await waitFor(() => expect(cells[0]).toBeEnabled());

@@ -111,7 +111,12 @@ async function installFishingRoutes(
       return;
     }
     if (requestURL.pathname === '/api/games/fishing/leaderboard' && request.method() === 'GET') {
-      if (requestURL.searchParams.get('board') === 'total') {
+      const board = requestURL.searchParams.get('board');
+      if (board !== 'single' && board !== 'recent_single' && board !== 'total') {
+        await route.fallback();
+        return;
+      }
+      if (board === 'total') {
         await route.fulfill(
           jsonResponse({
             board: 'total',
@@ -123,8 +128,8 @@ async function installFishingRoutes(
       } else {
         await route.fulfill(
           jsonResponse({
-            board: 'single',
-            window_start: null,
+            board,
+            window_start: board === 'single' ? null : 1_787_000_000,
             entries: [
               {
                 rank: '1',
@@ -452,7 +457,9 @@ test('Fishing recovery is identical across a second page and leaderboard identit
     await expect(secondPage.getByRole('button', { name: 'Retry marking as viewed' })).toBeVisible();
     fixture.failACK = false;
     await secondPage.getByRole('button', { name: 'Retry marking as viewed' }).click();
-    await expect(secondPage.getByRole('heading', { name: 'Total catch', exact: true })).toBeVisible();
+    await expect(
+      secondPage.getByRole('heading', { name: 'Total catch', exact: true }),
+    ).toBeVisible();
     await secondPage.close();
   } finally {
     await secondContext.close();

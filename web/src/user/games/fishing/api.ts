@@ -8,6 +8,7 @@ import {
 } from './normalize';
 import type {
   FishingBatchResult,
+  FishingLeaderboardBoard,
   FishingLeaderboard,
   FishingStartIntent,
   FishingStartResult,
@@ -16,7 +17,7 @@ import type {
 
 export const fishingKeys = {
   state: ['user', 'games', 'fishing', 'state', 'beta1'] as const,
-  leaderboard: (board: 'single' | 'total') =>
+  leaderboard: (board: FishingLeaderboardBoard) =>
     ['user', 'games', 'fishing', 'leaderboard', board, 'beta1'] as const,
 };
 
@@ -112,7 +113,7 @@ export async function acknowledgeFishing(batchID: string, signal?: AbortSignal):
 }
 
 export async function readFishingLeaderboard(
-  board: 'single' | 'total',
+  board: FishingLeaderboardBoard,
   signal?: AbortSignal,
 ): Promise<FishingLeaderboard> {
   return normalizeFishingLeaderboard(
@@ -138,7 +139,7 @@ export function useFishingState(enabled: boolean) {
   });
 }
 
-export function useFishingLeaderboard(board: 'single' | 'total', enabled: boolean) {
+export function useFishingLeaderboard(board: FishingLeaderboardBoard, enabled: boolean) {
   return useQuery({
     queryKey: fishingKeys.leaderboard(board),
     queryFn: ({ signal }) => readFishingLeaderboard(board, signal),

@@ -39,7 +39,7 @@ function emptyStateWire() {
   return stateWire(null);
 }
 
-function emptyBoard(board: 'single' | 'total') {
+function emptyBoard(board: 'single' | 'recent_single' | 'total') {
   return { board, window_start: board === 'single' ? null : 1_700_000_000, entries: [], me: null };
 }
 
@@ -51,6 +51,11 @@ function fishingFixtures(state: unknown) {
       method: 'GET',
       path: '/api/games/fishing/leaderboard?board=single',
       body: emptyBoard('single'),
+    },
+    {
+      method: 'GET',
+      path: '/api/games/fishing/leaderboard?board=recent_single',
+      body: emptyBoard('recent_single'),
     },
     {
       method: 'GET',

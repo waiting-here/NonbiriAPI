@@ -521,17 +521,20 @@ interface VanishingGeometry {
 }
 
 async function readVanishingGeometry(page: Page): Promise<VanishingGeometry> {
-  return page.locator('.linklink-tile.is-vanishing').first().evaluate((tile) => {
-    const style = getComputedStyle(tile);
-    const rect = tile.getBoundingClientRect();
-    return {
-      rectWidth: rect.width,
-      rectHeight: rect.height,
-      layoutWidth: parseFloat(style.width),
-      layoutHeight: parseFloat(style.height),
-      transform: style.transform,
-    };
-  });
+  return page
+    .locator('.linklink-tile.is-vanishing')
+    .first()
+    .evaluate((tile) => {
+      const style = getComputedStyle(tile);
+      const rect = tile.getBoundingClientRect();
+      return {
+        rectWidth: rect.width,
+        rectHeight: rect.height,
+        layoutWidth: parseFloat(style.width),
+        layoutHeight: parseFloat(style.height),
+        transform: style.transform,
+      };
+    });
 }
 
 function assertEffectMetrics(effect: EffectMetrics, path: MatchPath): void {
@@ -746,6 +749,9 @@ for (const spec of ['6x8', '8x8', '10x10'] as const) {
     await signedIn(page, VIEWPORTS[0]!);
     await page.goto(`${USER_ORIGIN}/games/linklink`);
     await expect(page.locator('.linklink-tile')).toHaveCount(rows * cols);
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'LinkLink', exact: true }),
+    ).toBeVisible();
 
     for (const viewport of VIEWPORTS) {
       await applyViewport(page, viewport);
@@ -842,7 +848,9 @@ test('LinkLink effect uses layout coordinates while a vanishing tile is paused a
   const vanishingBeforeResize = await readVanishingGeometry(page);
   expect(vanishingBeforeResize.transform).not.toBe('none');
   expect(vanishingBeforeResize.rectWidth - vanishingBeforeResize.layoutWidth).toBeGreaterThan(0.5);
-  expect(vanishingBeforeResize.rectHeight - vanishingBeforeResize.layoutHeight).toBeGreaterThan(0.5);
+  expect(vanishingBeforeResize.rectHeight - vanishingBeforeResize.layoutHeight).toBeGreaterThan(
+    0.5,
+  );
 
   const effectBeforeResize = await readEffect(page);
   assertEffectMetrics(effectBeforeResize, pair.path);

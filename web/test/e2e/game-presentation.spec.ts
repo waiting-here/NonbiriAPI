@@ -254,7 +254,7 @@ function fishingState(unrevealed: unknown = null) {
   };
 }
 
-function fishingLeaderboard(board: 'single' | 'total') {
+function fishingLeaderboard(board: 'single' | 'recent_single' | 'total') {
   return {
     board,
     window_start: board === 'single' ? null : NOW - 30 * 24 * 60 * 60,
@@ -414,8 +414,9 @@ async function emitRPSFrame(
   };
   await page.evaluate(
     ({ type: eventType, frame: rawFrame }) => {
-      const emit = (window as Window & { __rpsEmit?: (name: string, data: string, id: string) => void })
-        .__rpsEmit;
+      const emit = (
+        window as Window & { __rpsEmit?: (name: string, data: string, id: string) => void }
+      ).__rpsEmit;
       emit?.(eventType, JSON.stringify(rawFrame), 'sse_AAAAAAAAAAAAAAAAAAAAAA');
     },
     { type, frame },
@@ -458,8 +459,7 @@ async function installGameRoutes(
     if (url.pathname.includes('/rps/leaderboard') && method === 'GET') {
       const mode = (url.searchParams.get('mode') ?? 'quick') as RPSMode;
       const board = (url.searchParams.get('board') ?? 'profit_rate') as
-        | 'profit_rate'
-        | 'net_profit';
+        'profit_rate' | 'net_profit';
       await route.fulfill({ json: leaderboard(mode, board) });
       return;
     }
@@ -504,7 +504,8 @@ async function installGameRoutes(
         return;
       }
       linkHome =
-        options.onLinkMatch?.(body, linkMatchNumber) ?? linkActive(String(linkMatchNumber + 1), 1, false);
+        options.onLinkMatch?.(body, linkMatchNumber) ??
+        linkActive(String(linkMatchNumber + 1), 1, false);
       await route.fulfill({ json: linkHome });
       return;
     }
@@ -562,7 +563,11 @@ async function installGameRoutes(
       return;
     }
     if (url.pathname.endsWith('/fishing/leaderboard') && method === 'GET') {
-      const board = url.searchParams.get('board') === 'total' ? 'total' : 'single';
+      const board = url.searchParams.get('board');
+      if (board !== 'single' && board !== 'recent_single' && board !== 'total') {
+        await route.fallback();
+        return;
+      }
       await route.fulfill({ json: fishingLeaderboard(board) });
       return;
     }
@@ -634,7 +639,9 @@ async function saveJsonArtifact(name: string, value: unknown) {
 
 test.describe('RPS result presentation and amount lifecycle', () => {
   for (const known of [true, false] as const) {
-    test(`quick terminal reveals all three gestures and ${known ? 'shows' : 'preserves'} transfer values${known ? '' : ' in a static no-ACK fixture'}`, async ({ page }) => {
+    test(`quick terminal reveals all three gestures and ${known ? 'shows' : 'preserves'} transfer values${known ? '' : ' in a static no-ACK fixture'}`, async ({
+      page,
+    }) => {
       const errors = collectConsoleViolations(page);
       await signedIn(page);
       await page.setViewportSize({ width: 390, height: 844 });
@@ -674,7 +681,9 @@ test.describe('RPS result presentation and amount lifecycle', () => {
         await expect(resultText).toContainText('9,876,543,210,123,456,789.125');
       } else {
         await expect(resultText).toHaveText(/Not recorded for this historical result/);
-        await expect(resultText.locator('text=Not recorded for this historical result')).toHaveCount(5);
+        await expect(
+          resultText.locator('text=Not recorded for this historical result'),
+        ).toHaveCount(5);
       }
       await assertNoHorizontalOverflow(page);
       await saveScreenshot(page, `rps-result-${known ? 'known' : 'legacy'}-390.png`);
@@ -698,7 +707,9 @@ test.describe('RPS result presentation and amount lifecycle', () => {
     });
   }
 
-  test('historical null transfer values are acknowledged after real result visibility', async ({ page }) => {
+  test('historical null transfer values are acknowledged after real result visibility', async ({
+    page,
+  }) => {
     const errors = collectConsoleViolations(page);
     await signedIn(page);
     await page.setViewportSize({ width: 390, height: 844 });
@@ -753,7 +764,9 @@ test.describe('RPS result presentation and amount lifecycle', () => {
     });
   }
 
-  test('quick gesture action posts the selected gesture before displaying the authoritative terminal result', async ({ page }) => {
+  test('quick gesture action posts the selected gesture before displaying the authoritative terminal result', async ({
+    page,
+  }) => {
     const errors = collectConsoleViolations(page);
     await signedIn(page);
     const sessionHome = { kind: 'session', session: rpsState({ mode: 'quick', phase: 'gesture' }) };
@@ -791,7 +804,9 @@ test.describe('RPS result presentation and amount lifecycle', () => {
   });
 });
 
-test('RPS result follows the real language and theme settings on a narrow phone viewport', async ({ page }) => {
+test('RPS result follows the real language and theme settings on a narrow phone viewport', async ({
+  page,
+}) => {
   const errors = collectConsoleViolations(page);
   await signedIn(page);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -827,7 +842,9 @@ test('RPS result follows the real language and theme settings on a narrow phone 
 });
 
 test.describe('RPS dealer and follower controls', () => {
-  test('shortcuts are local drafts, clamp fractional balances, and submit the latest integer only', async ({ page }) => {
+  test('shortcuts are local drafts, clamp fractional balances, and submit the latest integer only', async ({
+    page,
+  }) => {
     const errors = collectConsoleViolations(page);
     await signedIn(page);
     const actions: unknown[] = [];
@@ -835,7 +852,15 @@ test.describe('RPS dealer and follower controls', () => {
       rpsHome: { kind: 'session', session: rpsState({ phase: 'dealer_raise' }) },
       onRPSAction: (body) => {
         actions.push(body);
-        return { kind: 'session', session: rpsState({ phase: 'followers', revision: '2', phaseSeq: '2', dealerRaise: '10' }) };
+        return {
+          kind: 'session',
+          session: rpsState({
+            phase: 'followers',
+            revision: '2',
+            phaseSeq: '2',
+            dealerRaise: '10',
+          }),
+        };
       },
     });
     await page.goto(`${USER_ORIGIN}/games/rps`);
@@ -868,7 +893,9 @@ test.describe('RPS dealer and follower controls', () => {
     errors.assertNone();
   });
 
-  test('labels a complete whole-credit remainder as all in and shows the authoritative follower raise', async ({ page }) => {
+  test('labels a complete whole-credit remainder as all in and shows the authoritative follower raise', async ({
+    page,
+  }) => {
     const errors = collectConsoleViolations(page);
     await signedIn(page);
     const routes = await installGameRoutes(page, {
@@ -889,20 +916,37 @@ test.describe('RPS dealer and follower controls', () => {
   });
 });
 
-test('RPS stream transitions emphasize a new phase, disable during a gap, and recover on a full snapshot', async ({ page }) => {
+test('RPS stream transitions emphasize a new phase, disable during a gap, and recover on a full snapshot', async ({
+  page,
+}) => {
   const errors = collectConsoleViolations(page);
   await signedIn(page);
   const initial = rpsState({ phase: 'gesture', revision: '1', phaseSeq: '1' });
   await installGameRoutes(page, { rpsHome: { kind: 'session', session: initial } });
   await page.goto(`${USER_ORIGIN}/games/rps`);
   await expect(page.getByRole('button', { name: 'Rock' })).toBeEnabled();
-  await emitRPSFrame(page, 'snapshot', { kind: 'session', session: initial }, { revision: '1', identityEpoch: '1' });
+  await emitRPSFrame(
+    page,
+    'snapshot',
+    { kind: 'session', session: initial },
+    { revision: '1', identityEpoch: '1' },
+  );
   const dealer = rpsState({ phase: 'dealer_raise', revision: '2', phaseSeq: '2' });
-  await emitRPSFrame(page, 'delta', { kind: 'session', session: dealer }, { revision: '2', identityEpoch: '1' });
+  await emitRPSFrame(
+    page,
+    'delta',
+    { kind: 'session', session: dealer },
+    { revision: '2', identityEpoch: '1' },
+  );
   await expect(page.locator('.rps-phase-flash')).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Do not raise' })).toBeEnabled();
   const flash = page.locator('.rps-phase-flash');
-  await emitRPSFrame(page, 'delta', { kind: 'session', session: dealer }, { revision: '2', identityEpoch: '1' });
+  await emitRPSFrame(
+    page,
+    'delta',
+    { kind: 'session', session: dealer },
+    { revision: '2', identityEpoch: '1' },
+  );
   await expect(page.locator('.rps-phase-flash')).toHaveCount(1);
   await expect(page.locator('.rps-phase-flash')).toHaveAttribute('aria-hidden', 'true');
   await emitRPSFrame(
@@ -913,13 +957,20 @@ test('RPS stream transitions emphasize a new phase, disable during a gap, and re
   );
   await expect(page.getByRole('button', { name: 'Do not raise' })).toBeDisabled();
   await expect(page.getByText('Waiting for the current decision to sync…')).toBeVisible();
-  await emitRPSFrame(page, 'snapshot', { kind: 'session', session: dealer }, { revision: '2', identityEpoch: '1' });
+  await emitRPSFrame(
+    page,
+    'snapshot',
+    { kind: 'session', session: dealer },
+    { revision: '2', identityEpoch: '1' },
+  );
   await expect(page.getByRole('button', { name: 'Do not raise' })).toBeEnabled();
   await expect(flash).toHaveCount(0);
   errors.assertNone();
 });
 
-test('RPS atmosphere uses authoritative pool tie bands, particle caps, reduced motion, and background pause', async ({ page }) => {
+test('RPS atmosphere uses authoritative pool tie bands, particle caps, reduced motion, and background pause', async ({
+  page,
+}) => {
   const errors = collectConsoleViolations(page);
   await signedIn(page);
   const initial = rpsState({ poolTieCount: '0', revision: '1' });
@@ -935,7 +986,12 @@ test('RPS atmosphere uses authoritative pool tie bands, particle caps, reduced m
   for (const [count, particles] of expectedDesktop) {
     const revision = String(Number(count) + 1);
     const next = rpsState({ poolTieCount: count, revision });
-    await emitRPSFrame(page, 'delta', { kind: 'session', session: next }, { revision, identityEpoch: '1' });
+    await emitRPSFrame(
+      page,
+      'delta',
+      { kind: 'session', session: next },
+      { revision, identityEpoch: '1' },
+    );
     await expect(page.locator('.rps-atmosphere')).toHaveAttribute(
       'data-level',
       Number(count) >= 5 ? '3' : Number(count) >= 3 ? '2' : '1',
@@ -975,14 +1031,19 @@ test('RPS atmosphere uses authoritative pool tie bands, particle caps, reduced m
   await saveJsonArtifact('rps-atmosphere-metrics.json', metrics);
   await page.setViewportSize({ width: 390, height: 844 });
   const mobile = rpsState({ poolTieCount: '5', revision: '7' });
-  await emitRPSFrame(page, 'delta', { kind: 'session', session: mobile }, { revision: '7', identityEpoch: '1' });
+  await emitRPSFrame(
+    page,
+    'delta',
+    { kind: 'session', session: mobile },
+    { revision: '7', identityEpoch: '1' },
+  );
   await expect(page.locator('.rps-atmosphere i')).toHaveCount(12);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await expect
     .poll(() =>
-      page.locator('.rps-atmosphere i').evaluateAll((items) =>
-        items.every((item) => getComputedStyle(item).display === 'none'),
-      ),
+      page
+        .locator('.rps-atmosphere i')
+        .evaluateAll((items) => items.every((item) => getComputedStyle(item).display === 'none')),
     )
     .toBe(true);
   await page.emulateMedia({ reducedMotion: 'no-preference' });
@@ -998,7 +1059,11 @@ test('RPS atmosphere uses authoritative pool tie bands, particle caps, reduced m
   });
   await expect(page.locator('.rps-match')).toHaveClass(/is-background/);
   await expect
-    .poll(() => page.locator('.rps-atmosphere i').evaluateAll((items) => items.map((item) => getComputedStyle(item).animationPlayState)))
+    .poll(() =>
+      page
+        .locator('.rps-atmosphere i')
+        .evaluateAll((items) => items.map((item) => getComputedStyle(item).animationPlayState)),
+    )
     .toEqual(new Array(12).fill('paused'));
   errors.assertNone();
 });
@@ -1021,13 +1086,17 @@ type AudioContextProbe = {
 
 function voiceCount(voices: readonly AudioVoice[], frequencies: readonly number[]) {
   return voices.filter((voice) =>
-    frequencies.some((frequency) => voice.frequencyValues.some((value) => Math.abs(value - frequency) < 0.01)),
+    frequencies.some((frequency) =>
+      voice.frequencyValues.some((value) => Math.abs(value - frequency) < 0.01),
+    ),
   ).length;
 }
 
 function assertEnvelopedCue(voices: readonly AudioVoice[], frequencies: readonly number[]) {
   const selected = voices.filter((voice) =>
-    frequencies.some((frequency) => voice.frequencyValues.some((value) => Math.abs(value - frequency) < 0.01)),
+    frequencies.some((frequency) =>
+      voice.frequencyValues.some((value) => Math.abs(value - frequency) < 0.01),
+    ),
   );
   expect(selected, `expected a cue with frequencies ${frequencies.join(', ')}`).not.toHaveLength(0);
   for (const voice of selected) {
@@ -1039,7 +1108,9 @@ function assertEnvelopedCue(voices: readonly AudioVoice[], frequencies: readonly
   }
 }
 
-test('game sound uses one real AudioContext per mounted game, remembers each game boolean, cleans up, and recovers without replay', async ({ page }) => {
+test('game sound uses one real AudioContext per mounted game, remembers each game boolean, cleans up, and recovers without replay', async ({
+  page,
+}) => {
   const consoleErrors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
@@ -1064,7 +1135,10 @@ test('game sound uses one real AudioContext per mounted game, remembers each gam
       }>,
     };
     if (typeof OriginalAudioContext === 'function') {
-      function WrappedAudioContext(this: unknown, ...args: ConstructorParameters<typeof OriginalAudioContext>) {
+      function WrappedAudioContext(
+        this: unknown,
+        ...args: ConstructorParameters<typeof OriginalAudioContext>
+      ) {
         const context = new OriginalAudioContext(...args);
         const record = {
           state: context.state,
@@ -1183,19 +1257,55 @@ test('game sound uses one real AudioContext per mounted game, remembers each gam
     );
   await page.goto(`${USER_ORIGIN}/games/rps`);
   await expect(page.getByRole('button', { name: 'Sound off' })).toBeVisible();
-  expect(await page.evaluate(() => (window as Window & { __audioProbe?: { contexts: unknown[] } }).__audioProbe?.contexts.length)).toBe(0);
+  expect(
+    await page.evaluate(
+      () =>
+        (window as Window & { __audioProbe?: { contexts: unknown[] } }).__audioProbe?.contexts
+          .length,
+    ),
+  ).toBe(0);
   await page.getByRole('button', { name: 'Sound off' }).click();
-  await expect.poll(() => page.evaluate(() => (window as Window & { __audioProbe?: { contexts: Array<{ resumeCalls: number }> } }).__audioProbe?.contexts.length)).toBe(1);
-  await expect.poll(() => page.evaluate(() => (window as Window & { __audioProbe?: { contexts: Array<{ resumeCalls: number }> } }).__audioProbe?.contexts[0]?.resumeCalls ?? 0)).toBeGreaterThan(0);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __audioProbe?: { contexts: Array<{ resumeCalls: number }> } })
+            .__audioProbe?.contexts.length,
+      ),
+    )
+    .toBe(1);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __audioProbe?: { contexts: Array<{ resumeCalls: number }> } })
+            .__audioProbe?.contexts[0]?.resumeCalls ?? 0,
+      ),
+    )
+    .toBeGreaterThan(0);
   const rpsContext = (await readAudioContexts())[0];
   expect(rpsContext).toBeDefined();
   const rpsStartsBeforePaper = rpsContext.oscillatorStarts;
   await page.getByRole('button', { name: 'Paper' }).click();
-  await expect.poll(() => page.evaluate(() => (window as Window & { __audioProbe?: { contexts: Array<{ oscillatorStarts: number }> } }).__audioProbe?.contexts[0]?.oscillatorStarts ?? 0)).toBeGreaterThan(0);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __audioProbe?: { contexts: Array<{ oscillatorStarts: number }> } })
+            .__audioProbe?.contexts[0]?.oscillatorStarts ?? 0,
+      ),
+    )
+    .toBeGreaterThan(0);
   const rpsAfterPaper = (await readAudioContexts())[0];
-  const paperVoices = rpsAfterPaper.voices.slice(rpsAfterPaper.voices.length - (rpsAfterPaper.oscillatorStarts - rpsStartsBeforePaper));
+  const paperVoices = rpsAfterPaper.voices.slice(
+    rpsAfterPaper.voices.length - (rpsAfterPaper.oscillatorStarts - rpsStartsBeforePaper),
+  );
   assertEnvelopedCue(paperVoices, [440]);
-  const startsBeforeHidden = await page.evaluate(() => (window as Window & { __audioProbe?: { contexts: Array<{ oscillatorStarts: number }> } }).__audioProbe?.contexts[0]?.oscillatorStarts ?? 0);
+  const startsBeforeHidden = await page.evaluate(
+    () =>
+      (window as Window & { __audioProbe?: { contexts: Array<{ oscillatorStarts: number }> } })
+        .__audioProbe?.contexts[0]?.oscillatorStarts ?? 0,
+  );
   await page.evaluate(() => {
     let visible = true;
     Object.defineProperty(document, 'visibilityState', {
@@ -1207,25 +1317,59 @@ test('game sound uses one real AudioContext per mounted game, remembers each gam
   });
   await page.getByRole('button', { name: 'Rock' }).click();
   await page.waitForTimeout(100);
-  const startsWhileHidden = await page.evaluate(() => (window as Window & { __audioProbe?: { contexts: Array<{ oscillatorStarts: number }> } }).__audioProbe?.contexts[0]?.oscillatorStarts ?? 0);
+  const startsWhileHidden = await page.evaluate(
+    () =>
+      (window as Window & { __audioProbe?: { contexts: Array<{ oscillatorStarts: number }> } })
+        .__audioProbe?.contexts[0]?.oscillatorStarts ?? 0,
+  );
   expect(startsWhileHidden).toBe(startsBeforeHidden);
   await page.evaluate(() => {
-    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
     document.dispatchEvent(new Event('visibilitychange'));
   });
   await page.getByRole('button', { name: 'Scissors' }).click();
-  await expect.poll(() => page.evaluate(() => (window as Window & { __audioProbe?: { contexts: Array<{ oscillatorStarts: number }> } }).__audioProbe?.contexts[0]?.oscillatorStarts ?? 0)).toBeGreaterThan(startsWhileHidden);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __audioProbe?: { contexts: Array<{ oscillatorStarts: number }> } })
+            .__audioProbe?.contexts[0]?.oscillatorStarts ?? 0,
+      ),
+    )
+    .toBeGreaterThan(startsWhileHidden);
   await page.getByRole('link', { name: 'Back to game center' }).click();
   await expect(page).toHaveURL(/\/games$/);
   await page.locator('a[href="/games/linklink"]').click();
   await expect(page.getByRole('button', { name: 'Sound off' })).toBeVisible();
-  await expect.poll(() => page.evaluate(() => (window as Window & { __audioProbe?: { contexts: Array<{ closeCalls: number }> } }).__audioProbe?.contexts[0]?.closeCalls ?? 0)).toBe(1);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __audioProbe?: { contexts: Array<{ closeCalls: number }> } })
+            .__audioProbe?.contexts[0]?.closeCalls ?? 0,
+      ),
+    )
+    .toBe(1);
   await page.getByRole('button', { name: 'Sound off' }).click();
-  await expect.poll(() => page.evaluate(() => (window as Window & { __audioProbe?: { contexts: unknown[] } }).__audioProbe?.contexts.length)).toBe(2);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __audioProbe?: { contexts: unknown[] } }).__audioProbe?.contexts
+            .length,
+      ),
+    )
+    .toBe(2);
   await expect(page.getByRole('button', { name: 'Start 6x8', exact: true }).first()).toBeEnabled();
   await page.getByRole('button', { name: 'Start 6x8', exact: true }).first().click();
   await expect(page.getByRole('alertdialog')).toBeVisible();
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Start 6x8', exact: true }).click();
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Start 6x8', exact: true })
+    .click();
   await expect(page.locator('.linklink-board')).toBeVisible();
   const linkTiles = page.locator('.linklink-tile:not(.is-removed)');
   await expect(linkTiles.first()).toBeEnabled();
@@ -1271,20 +1415,32 @@ test('game sound uses one real AudioContext per mounted game, remembers each gam
   const linkAfterSummaryRecovery = await readAudioContexts();
   expect(linkAfterSummaryRecovery).toHaveLength(2);
   expect(linkAfterSummaryRecovery[1].closeCalls).toBe(1);
-  expect(voiceCount(linkAfterSummaryRecovery[1].voices, [523.25, 659.25, 783.99])).toBe(winCueCount);
+  expect(voiceCount(linkAfterSummaryRecovery[1].voices, [523.25, 659.25, 783.99])).toBe(
+    winCueCount,
+  );
   await page.getByRole('link', { name: 'Back to game center' }).click();
   await expect(page).toHaveURL(/\/games$/);
   await page.locator('a[href="/games/fishing"]').click();
   await expect(page.getByRole('button', { name: 'Sound off' })).toBeVisible();
   await page.getByRole('button', { name: 'Sound off' }).click();
-  await expect.poll(() => page.evaluate(() => (window as Window & { __audioProbe?: { contexts: unknown[] } }).__audioProbe?.contexts.length)).toBe(4);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __audioProbe?: { contexts: unknown[] } }).__audioProbe?.contexts
+            .length,
+      ),
+    )
+    .toBe(4);
   await expect(page.locator('.fishing-start')).toBeEnabled();
   const fishingContextIndex = (await readAudioContexts()).length - 1;
   const fishingStartsBeforeCast = (await readAudioContexts())[fishingContextIndex].oscillatorStarts;
   const fishingGetsBeforeStart = routes.getFishingGetCount();
   await page.locator('.fishing-start').click();
   await expect
-    .poll(() => readAudioContexts().then((contexts) => contexts[fishingContextIndex].oscillatorStarts))
+    .poll(() =>
+      readAudioContexts().then((contexts) => contexts[fishingContextIndex].oscillatorStarts),
+    )
     .toBeGreaterThan(fishingStartsBeforeCast);
   const fishingAfterCast = await readAudioContexts();
   const castVoices = fishingAfterCast[fishingContextIndex].voices.slice(
@@ -1295,21 +1451,32 @@ test('game sound uses one real AudioContext per mounted game, remembers each gam
   await expect(page.locator('[data-ordinal="0"]')).toBeVisible({ timeout: 5_000 });
   const fishingRare = [392, 587.33, 783.99] as const;
   await expect
-    .poll(async () => voiceCount((await readAudioContexts())[fishingContextIndex].voices, fishingRare))
+    .poll(async () =>
+      voiceCount((await readAudioContexts())[fishingContextIndex].voices, fishingRare),
+    )
     .toBe(3);
   const fishingAfterResult = await readAudioContexts();
   assertEnvelopedCue(fishingAfterResult[fishingContextIndex].voices, fishingRare);
-  const fishingRareCueCount = voiceCount(fishingAfterResult[fishingContextIndex].voices, fishingRare);
-  await expect(page.getByRole('button', { name: 'Retry marking as viewed' })).toBeVisible({ timeout: 5_000 });
+  const fishingRareCueCount = voiceCount(
+    fishingAfterResult[fishingContextIndex].voices,
+    fishingRare,
+  );
+  await expect(page.getByRole('button', { name: 'Retry marking as viewed' })).toBeVisible({
+    timeout: 5_000,
+  });
   expect(routes.getFishingGetCount()).toBeGreaterThan(fishingGetsBeforeStart);
   const fishingAfterRecovery = await readAudioContexts();
-  expect(voiceCount(fishingAfterRecovery[fishingContextIndex].voices, fishingRare)).toBe(fishingRareCueCount);
+  expect(voiceCount(fishingAfterRecovery[fishingContextIndex].voices, fishingRare)).toBe(
+    fishingRareCueCount,
+  );
   const fishingGetsBeforeACK = routes.getFishingGetCount();
   await page.getByRole('button', { name: 'Retry marking as viewed' }).click();
   await expect(page.getByRole('button', { name: 'Retry marking as viewed' })).toHaveCount(0);
   await expect.poll(() => routes.getFishingGetCount()).toBeGreaterThan(fishingGetsBeforeACK);
   const fishingAfterACKRecovery = await readAudioContexts();
-  expect(voiceCount(fishingAfterACKRecovery[fishingContextIndex].voices, fishingRare)).toBe(fishingRareCueCount);
+  expect(voiceCount(fishingAfterACKRecovery[fishingContextIndex].voices, fishingRare)).toBe(
+    fishingRareCueCount,
+  );
   const preferences = await page.evaluate(() => ({
     rps: localStorage.getItem('nonbiri.games.sound.v1.rps'),
     linklink: localStorage.getItem('nonbiri.games.sound.v1.linklink'),
@@ -1332,14 +1499,19 @@ test('game sound uses one real AudioContext per mounted game, remembers each gam
   );
 });
 
-test('a real AudioContext resume refusal leaves the authoritative game action usable', async ({ page }) => {
+test('a real AudioContext resume refusal leaves the authoritative game action usable', async ({
+  page,
+}) => {
   const errors = collectConsoleViolations(page);
   await signedIn(page);
   await page.addInitScript(() => {
     const OriginalAudioContext = window.AudioContext;
     const probe = { resumeAttempts: 0 };
     if (typeof OriginalAudioContext === 'function') {
-      function RefusingAudioContext(this: unknown, ...args: ConstructorParameters<typeof OriginalAudioContext>) {
+      function RefusingAudioContext(
+        this: unknown,
+        ...args: ConstructorParameters<typeof OriginalAudioContext>
+      ) {
         const context = new OriginalAudioContext(...args);
         context.resume = (() => {
           probe.resumeAttempts += 1;
@@ -1368,7 +1540,13 @@ test('a real AudioContext resume refusal leaves the authoritative game action us
   await page.goto(`${USER_ORIGIN}/games/rps`);
   await page.getByRole('button', { name: 'Sound off' }).click();
   await expect
-    .poll(() => page.evaluate(() => (window as Window & { __audioRefusalProbe?: { resumeAttempts: number } }).__audioRefusalProbe?.resumeAttempts ?? 0))
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __audioRefusalProbe?: { resumeAttempts: number } })
+            .__audioRefusalProbe?.resumeAttempts ?? 0,
+      ),
+    )
     .toBe(1);
   await page.getByRole('button', { name: 'Paper' }).click();
   await expect(page.locator('.rps-result')).toBeVisible();

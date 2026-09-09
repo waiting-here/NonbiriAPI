@@ -312,6 +312,7 @@ type FishingExport struct {
 	Terminal     []FishingBatchExport   `json:"terminal"`
 	SingleBest   *FishingRankExport     `json:"single_best"`
 	RollingTotal *FishingRankExport     `json:"rolling_total"`
+	RollingBest  *FishingRankExport     `json:"rolling_best"`
 }
 
 type FishingPendingExport struct {
@@ -337,18 +338,20 @@ type FishingBatchExport struct {
 }
 
 type FishingOutcomeExport struct {
-	Ordinal    int    `json:"ordinal"`
-	SpeciesKey string `json:"species_key"`
-	Tier       string `json:"tier"`
-	SizeCM     int    `json:"size_cm"`
-	Reward     string `json:"reward"`
+	Ordinal             int     `json:"ordinal"`
+	SpeciesKey          string  `json:"species_key"`
+	Tier                string  `json:"tier"`
+	SizeCM              int     `json:"size_cm"`
+	Reward              string  `json:"reward"`
+	BlueFatFishLengthCM *string `json:"blue_fat_fish_length_cm"`
 }
 
 type FishingRankExport struct {
-	Rank         string  `json:"rank"`
-	SpeciesKey   *string `json:"species_key"`
-	SizeCM       *int    `json:"size_cm"`
-	TotalCredits *string `json:"total_credits"`
+	Rank                string  `json:"rank"`
+	SpeciesKey          *string `json:"species_key"`
+	SizeCM              *int    `json:"size_cm"`
+	TotalCredits        *string `json:"total_credits"`
+	BlueFatFishLengthCM *string `json:"blue_fat_fish_length_cm,omitempty"`
 }
 
 type LinkLinkExport struct {

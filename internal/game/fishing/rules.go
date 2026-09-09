@@ -103,6 +103,9 @@ type Outcome struct {
 	Key            string
 	Tier           Tier
 	SizeCentimetre int
+	// BlueFatFishLengthCM is a presentation-only decimal length. The original
+	// species and SizeCentimetre remain the inputs to the economic rules.
+	BlueFatFishLengthCM string
 }
 
 // SettlementIntent contains only checked milli-credit amounts. The central

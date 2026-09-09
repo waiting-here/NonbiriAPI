@@ -9,6 +9,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
@@ -113,6 +114,9 @@ func (service *Service) settle(ctx context.Context, batchID string, expectedUser
 		if err := service.applyRankFact(ctx, tx, record, decisionNow); err != nil {
 			return err
 		}
+		if err := applyLengthFact(ctx, tx, record); err != nil {
+			return err
+		}
 		result, updateErr := tx.ExecContext(ctx, `UPDATE game_fishing_batches SET state='committed',ledger_rows_remaining=?,attempt_count=0,next_attempt_at=NULL,last_error_class=NULL,retry_exhausted=0,settled_at=? WHERE id=? AND user_id=? AND state='reserved'`, zero, decisionNow, record.ID, record.UserID)
 		if updateErr != nil {
 			return classifyDB(updateErr)
@@ -141,42 +145,38 @@ func (service *Service) settle(ctx context.Context, batchID string, expectedUser
 }
 
 func (service *Service) applyBest(ctx context.Context, tx *sql.Tx, record batchRecord, caughtAt int64) error {
+	value, err := batchLengthMaximum(ctx, tx, record)
+	if err != nil {
+		return err
+	}
+	var previousLength string
+	err = tx.QueryRowContext(ctx, `SELECT COALESCE(l.length_cm,CAST(b.size_cm AS TEXT))
+FROM game_fishing_best b LEFT JOIN game_fishing_best_lengths l ON l.user_id=b.user_id WHERE b.user_id=?`, record.UserID).
+		Scan(&previousLength)
+	if err == nil {
+		// Equal lifetime catches retain the first accepted historical record.
+		if fishing.CompareLengths(value.displayLength(), previousLength) <= 0 {
+			return nil
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return classifyDB(err)
+	}
 	tie, err := db.ComputeGameLeaderboardTieKeyFromDerivedKey(service.leaderboardTieKey, game.FishingID, "single", "", record.UserID)
 	if err != nil {
 		return ErrInvariant
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT ordinal,species_key,tier,size_cm FROM game_fishing_outcomes WHERE batch_id=? ORDER BY ordinal`, record.ID)
+	// Remove the old dependent snapshot before replacing its parent. A failed
+	// write rolls both operations back with the enclosing ledger transaction.
+	if _, err = tx.ExecContext(ctx, `DELETE FROM game_fishing_best_lengths WHERE user_id=?`, record.UserID); err != nil {
+		return classifyDB(err)
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO game_fishing_best(user_id,batch_id,ordinal,species_key,tier,size_cm,caught_at,public_tie_key) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET batch_id=excluded.batch_id,ordinal=excluded.ordinal,species_key=excluded.species_key,tier=excluded.tier,size_cm=excluded.size_cm,caught_at=excluded.caught_at,public_tie_key=excluded.public_tie_key`, record.UserID, record.ID, value.ordinal, value.species, value.tier, value.size, caughtAt, tie[:])
 	if err != nil {
 		return classifyDB(err)
 	}
-	type candidate struct {
-		ordinal int
-		size    int
-		species string
-		tier    string
-	}
-	candidates := make([]candidate, 0, record.Count)
-	for rows.Next() {
-		var value candidate
-		if err = rows.Scan(&value.ordinal, &value.species, &value.tier, &value.size); err != nil {
-			rows.Close()
-			return classifyDB(err)
-		}
-		candidates = append(candidates, value)
-	}
-	if err = rows.Err(); err != nil {
-		rows.Close()
+	if value.blueLength != nil {
+		_, err = tx.ExecContext(ctx, `INSERT INTO game_fishing_best_lengths(user_id,length_cm) VALUES(?,?)`, record.UserID, *value.blueLength)
 		return classifyDB(err)
-	}
-	if err = rows.Close(); err != nil {
-		return classifyDB(err)
-	}
-	for _, value := range candidates {
-		result, writeErr := tx.ExecContext(ctx, `INSERT INTO game_fishing_best(user_id,batch_id,ordinal,species_key,tier,size_cm,caught_at,public_tie_key) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET batch_id=excluded.batch_id,ordinal=excluded.ordinal,species_key=excluded.species_key,tier=excluded.tier,size_cm=excluded.size_cm,caught_at=excluded.caught_at,public_tie_key=excluded.public_tie_key WHERE excluded.size_cm>game_fishing_best.size_cm`, record.UserID, record.ID, value.ordinal, value.species, value.tier, value.size, caughtAt, tie[:])
-		if writeErr != nil {
-			return classifyDB(writeErr)
-		}
-		_ = result
 	}
 	return nil
 }
@@ -240,7 +240,9 @@ func loadResultTx(ctx context.Context, tx *sql.Tx, record batchRecord, replay bo
 	if err != nil {
 		return nil, ErrInvariant
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT ordinal,species_key,tier,size_cm,payout_milli FROM game_fishing_outcomes WHERE batch_id=? ORDER BY ordinal`, record.ID)
+	rows, err := tx.QueryContext(ctx, `SELECT o.ordinal,o.species_key,o.tier,o.size_cm,o.payout_milli,l.length_cm
+FROM game_fishing_outcomes o LEFT JOIN game_fishing_outcome_lengths l ON l.batch_id=o.batch_id AND l.ordinal=o.ordinal
+WHERE o.batch_id=? ORDER BY o.ordinal`, record.ID)
 	if err != nil {
 		return nil, classifyDB(err)
 	}
@@ -249,8 +251,11 @@ func loadResultTx(ctx context.Context, tx *sql.Tx, record batchRecord, replay bo
 	for rows.Next() {
 		var outcome FishingOutcome
 		var payout int64
-		if err = rows.Scan(&outcome.Ordinal, &outcome.SpeciesKey, &outcome.Tier, &outcome.SizeCM, &payout); err != nil {
+		if err = rows.Scan(&outcome.Ordinal, &outcome.SpeciesKey, &outcome.Tier, &outcome.SizeCM, &payout, &outcome.BlueFatFishLengthCM); err != nil {
 			return nil, classifyDB(err)
+		}
+		if outcome.BlueFatFishLengthCM != nil && (outcome.Tier != string(fishing.TierLegend) || !fishing.ValidBlueFatFishLength(*outcome.BlueFatFishLengthCM)) {
+			return nil, ErrInvariant
 		}
 		outcome.Reward = game.FormatAmount(payout)
 		outcomes = append(outcomes, outcome)

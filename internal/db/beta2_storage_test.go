@@ -53,6 +53,7 @@ DROP INDEX IF EXISTS idx_donation_keys_source_page;`); err != nil {
 
 func dropQuotaCleanupIndexes(t *testing.T, database *sql.DB) {
 	t.Helper()
+	dropFishingLengthObjects(t, database)
 	if _, err := database.Exec(`
 DROP TABLE IF EXISTS legal_hold_steward_reads;
 DROP INDEX IF EXISTS idx_donation_quota_buckets_cleanup;
@@ -63,6 +64,15 @@ DROP INDEX IF EXISTS idx_donation_quota_receipts_period;
 DROP INDEX IF EXISTS idx_donation_quota_rules_retired;`); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func dropFishingLengthObjects(t *testing.T, database *sql.DB) {
+	t.Helper()
+	hostileMustExec(t, database, `DROP TRIGGER IF EXISTS fishing_presented_best_update_guard;
+DROP TRIGGER IF EXISTS fishing_presented_outcome_update_guard;
+DROP TABLE IF EXISTS game_fishing_length_facts;
+DROP TABLE IF EXISTS game_fishing_best_lengths;
+DROP TABLE IF EXISTS game_fishing_outcome_lengths;`)
 }
 
 // TestBetaTwoExtensionSeedsSidecarDefaultsFromBeta1 verifies that opening a
