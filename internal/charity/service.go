@@ -15,10 +15,12 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -95,6 +97,9 @@ func (s *Service) AcceptRequest(ctx context.Context, tx *sql.Tx, input claim.Cha
 
 	pricing, err := readAcceptancePricing(ctx, tx, input.CharityModelID, input.AcceptedAt)
 	if err != nil {
+		return err
+	}
+	if err := requireModelAccess(ctx, tx, input.UserID, input.CharityModelID); err != nil {
 		return err
 	}
 	expectedReserve := pricing.tokenReserve
@@ -229,6 +234,9 @@ func (s *Service) Claim(ctx context.Context, tx *sql.Tx, input claim.CharityClai
 
 	row, err := readClaimKey(ctx, tx, input)
 	if err != nil {
+		return claim.CharityReservation{}, err
+	}
+	if err := requireModelAccess(ctx, tx, input.ActorUserID, row.modelID); err != nil {
 		return claim.CharityReservation{}, err
 	}
 	if row.status != "approved" || row.endedReason != "" || row.keyEnabled != 1 || row.failureDisabled != 0 ||
@@ -378,6 +386,17 @@ LIMIT 1`, input.DonationKeyID, input.UpstreamModelID, input.UpstreamModelID,
 	return row, nil
 }
 
+func requireModelAccess(ctx context.Context, tx *sql.Tx, userID, modelID int64) error {
+	err := charityaccess.Require(ctx, tx, userID, modelID)
+	if errors.Is(err, charityaccess.ErrForbidden) {
+		return claim.ErrForbidden
+	}
+	if errors.Is(err, charityaccess.ErrUnavailable) {
+		return claim.ErrModelUnavailable
+	}
+	return err
+}
+
 func validUpstreamModelID(value string) bool {
 	if !utf8.ValidString(value) || utf8.RuneCountInString(value) < 1 || utf8.RuneCountInString(value) > 512 {
 		return false
@@ -429,6 +448,9 @@ func (s *Service) ReleaseUndispatched(ctx context.Context, tx *sql.Tx, input cla
 	}
 	if row.state != "reserved" {
 		return claim.ErrConflict
+	}
+	if err := donationquota.Settle(ctx, tx, input.ClaimID, input.ReleasedAt, donationquota.Amounts{}, false); err != nil {
+		return err
 	}
 	if row.keyID != nil {
 		if err := releaseKeyCapacity(ctx, tx, *row.keyID, row.priceReserved, row.callsReserved, row.tokensReserved, input.ReleasedAt); err != nil {
@@ -647,6 +669,22 @@ func (s *Service) CompleteAttempt(ctx context.Context, tx *sql.Tx, completion cl
 	callsActual := 0
 	if input.ResponseStarted {
 		callsActual = 1
+	}
+	quotaPrice, err := db.U128FromBig(big.NewInt(completion.Actual.PriceMilli))
+	if err != nil {
+		return claim.ErrInvariant
+	}
+	quotaCalls, err := db.U128FromBig(big.NewInt(int64(callsActual)))
+	if err != nil {
+		return claim.ErrInvariant
+	}
+	quotaTokens, err := db.U128FromBig(big.NewInt(tokensActual))
+	if err != nil {
+		return claim.ErrInvariant
+	}
+	if err := donationquota.Settle(ctx, tx, input.ClaimID, input.CompletedAt,
+		donationquota.Amounts{Calls: quotaCalls, Tokens: quotaTokens, Credits: quotaPrice}, input.ResponseStarted); err != nil {
+		return err
 	}
 
 	if err := settleKeyCapacity(ctx, tx, *row.keyID, row, completion.Actual, callsActual, tokensActual, input.CompletedAt); err != nil {

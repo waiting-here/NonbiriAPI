@@ -20,7 +20,37 @@ type AdminLogExport struct {
 // (started_at,id) order. Cursor/limit are rejected; exceeding either export
 // bound fails the whole operation without truncating a seemingly complete file.
 func (repository *Repository) ExportAdmin(ctx context.Context, filter ListFilter) ([]AdminLogRow, error) {
-	if repository == nil || ctx == nil || filter.Cursor != "" || filter.Limit != 0 || filter.Model != nil {
+	if repository == nil || ctx == nil {
+		return nil, ErrInvalid
+	}
+	return repository.exportManagement(ctx, repository.db, filter)
+}
+
+// ExportSteward authorizes and reads the complete bounded file in one snapshot.
+// It shares the management projection without sharing administrator authority.
+func (repository *Repository) ExportSteward(ctx context.Context, userID int64, filter ListFilter, authorizer StewardAuthorizer) ([]AdminLogRow, error) {
+	if repository == nil || ctx == nil || userID <= 0 || authorizer == nil {
+		return nil, ErrInvalid
+	}
+	ctx, cancel := context.WithTimeout(ctx, logPageTimeout)
+	defer cancel()
+	tx, err := repository.beginStewardRead(ctx, userID, authorizer)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	rows, err := repository.exportManagement(ctx, tx, filter)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, translateSQLError(err)
+	}
+	return rows, nil
+}
+
+func (repository *Repository) exportManagement(ctx context.Context, reader logReadQueryer, filter ListFilter) ([]AdminLogRow, error) {
+	if filter.Cursor != "" || filter.Limit != 0 || filter.Model != nil || filter.Page != nil {
 		return nil, ErrInvalid
 	}
 	normalized, err := normalizeListFilter(ListFilter{
@@ -35,7 +65,7 @@ func (repository *Repository) ExportAdmin(ctx context.Context, filter ListFilter
 	if err != nil {
 		return nil, err
 	}
-	query := `SELECT ` + commonListColumns + `,l.user_id FROM request_logs l
+	query := `SELECT ` + commonListColumns + `,` + callerIdentityColumns + `,l.user_id FROM request_logs l` + callerIdentityJoin + `
 WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args := make([]any, 0, 16)
 	args = append(args, now-requestLogRetentionSeconds)
@@ -69,7 +99,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	}
 	query += ` ORDER BY l.started_at ASC,l.id ASC LIMIT ?`
 	args = append(args, maxExportRows+1)
-	rows, err := repository.db.QueryContext(ctx, query, args...)
+	rows, err := reader.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, translateSQLError(err)
 	}
@@ -77,7 +107,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	result := make([]AdminLogRow, 0, 256)
 	for rows.Next() {
 		var userID sql.NullInt64
-		record, scanErr := scanCommon(rows, &userID)
+		record, identity, scanErr := scanManagementCommon(rows, &userID)
 		if scanErr != nil {
 			return nil, translateSQLError(scanErr)
 		}
@@ -93,7 +123,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 			CallerResultClass: resultClassPointer(record.callerResultClass),
 			CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 			StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-			UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10),
+			UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -130,17 +160,23 @@ func MarshalAdminCSV(rows []AdminLogRow) ([]byte, error) {
 		"started_at", "completed_at", "user_id", "attempt_count",
 		"uncached_input_tokens", "cache_write_input_tokens", "cache_read_input_tokens",
 		"output_tokens", "total_tokens", "usage_unknown", "charge",
+		"caller_discord_nickname", "caller_discord_id",
 	}
 	if err := writer.Write(header); err != nil {
 		return nil, ErrUnavailable
 	}
 	for _, row := range rows {
+		var nickname, discordID *string
+		if row.CallerIdentity != nil {
+			nickname, discordID = row.CallerIdentity.DiscordNickname, row.CallerIdentity.DiscordID
+		}
 		record := []string{
 			csvSafe(row.ID), csvSafe(string(row.RouteKind)), csvResultClass(row.CallerResultClass),
 			csvInt(row.CallerStatus), csvString(row.CallerErrorCode), strconv.FormatInt(row.StartedAt, 10),
 			csvInt64(row.CompletedAt), csvString(row.UserID), row.AttemptCount,
 			row.Usage.UncachedInputTokens, row.Usage.CacheWriteInputTokens, row.Usage.CacheReadInputTokens,
 			row.Usage.OutputTokens, row.Usage.TotalTokens, strconv.FormatBool(row.Usage.UsageUnknown), row.Usage.Charge,
+			csvString(nickname), csvString(discordID),
 		}
 		if err := writer.Write(record); err != nil {
 			return nil, ErrUnavailable

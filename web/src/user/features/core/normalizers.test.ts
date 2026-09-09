@@ -147,7 +147,7 @@ describe('core wire normalizers', () => {
     );
   });
 
-  it('validates the complete announcement summary before projecting the home card', () => {
+  it('retains the complete announcement summary for the home card', () => {
     const suffix = 'A'.repeat(22);
     const announcement = {
       epoch: `b1e_${suffix}`,
@@ -164,13 +164,7 @@ describe('core wire normalizers', () => {
       excerpt: 'A strict projection.',
     };
     expect(normalizeHomeAnnouncementPage({ data: [announcement], next_cursor: 'next' })).toEqual({
-      data: [
-        {
-          id: announcement.id,
-          title: announcement.title,
-          excerpt: announcement.excerpt,
-        },
-      ],
+      data: [announcement],
       next_cursor: 'next',
     });
     expect(() =>

@@ -68,6 +68,8 @@ func (s *Service) RecordShort(ctx context.Context, userID int64, model string, a
 	return s.record(ctx, userID, true, model, actual)
 }
 
+// RPMDenied records an already classified charity request. The ingress observer
+// must establish its resource scope; downstream or shared-key 429s are not events.
 func (s *Service) RPMDenied(ctx context.Context, userID int64, reason ratelimit.RPMReason) {
 	if reason != ratelimit.RPMUserLimit {
 		return

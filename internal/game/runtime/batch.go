@@ -146,6 +146,9 @@ func (service *Service) StartFishing(ctx context.Context, input StartInput) (*Fi
 	}
 	service.rngMu.Lock()
 	draws, drawErr := snapshot.Rules.RollBatch(bait, input.Count, service.random)
+	if drawErr == nil {
+		draws, drawErr = fishing.DecorateBatch(ctx, draws, service.random)
+	}
 	service.rngMu.Unlock()
 	if drawErr != nil {
 		return nil, nil, ErrServiceUnavailable
@@ -186,6 +189,11 @@ func (service *Service) StartFishing(ctx context.Context, input StartInput) (*Fi
 		for ordinal, draw := range draws {
 			if _, insertErr = tx.ExecContext(ctx, `INSERT INTO game_fishing_outcomes(batch_id,ordinal,species_key,tier,size_cm,payout_milli) VALUES(?,?,?,?,?,?)`, batchID, ordinal, draw.Outcome.Key, string(draw.Outcome.Tier), draw.Outcome.SizeCentimetre, draw.Settlement.PayoutMilli); insertErr != nil {
 				return classifyDB(insertErr)
+			}
+			if draw.Outcome.BlueFatFishLengthCM != "" {
+				if _, insertErr = tx.ExecContext(ctx, `INSERT INTO game_fishing_outcome_lengths(batch_id,ordinal,length_cm) VALUES(?,?,?)`, batchID, ordinal, draw.Outcome.BlueFatFishLengthCM); insertErr != nil {
+					return classifyDB(insertErr)
+				}
 			}
 		}
 		return service.recordGameActivity(ctx, tx, input.UserID, decisionNow)

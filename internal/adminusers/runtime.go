@@ -227,9 +227,14 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 }
 
 func (service *Service) ListUsers(ctx context.Context, adminID int64, query UserListQuery) (Page[AdminUser], error) {
-	limit := normalizeLimit(query.Limit)
+	limit := normalizePageLimit(query.Page, query.Cursor, query.Limit)
 	if limit == 0 {
 		return Page[AdminUser]{}, ErrInvalidRequest
+	}
+	if query.Page != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, pageReadTimeout)
+		defer cancel()
 	}
 	now := service.now().Unix()
 	if !validNow(now) {
@@ -243,7 +248,7 @@ func (service *Service) ListUsers(ctx context.Context, adminID int64, query User
 	if query.Cursor != "" && (after == 0 || after > math.MaxInt64) {
 		return Page[AdminUser]{}, ErrInvalidRequest
 	}
-	tx, err := service.beginAuthorized(ctx, adminID)
+	tx, err := service.beginListRead(ctx, adminID, query.Page != nil)
 	if err != nil {
 		return Page[AdminUser]{}, err
 	}
@@ -259,13 +264,15 @@ func (service *Service) ListUsers(ctx context.Context, adminID int64, query User
 		}
 		args = append(args, now, want)
 	}
-	args = append(args, limit+1)
-	rows, err := tx.QueryContext(ctx, `
+	selection, args, metadata, err := listPageQuery(ctx, tx, `
 SELECT id FROM users
 WHERE is_admin=0
  AND (?='' OR instr(username,?)>0 OR instr(COALESCE(discord_id,''),?)>0)
- AND id>?`+filter+`
-ORDER BY id ASC LIMIT ?`, args...)
+ AND id>?`+filter, ` ORDER BY id ASC`, args, query.Page, limit)
+	if err != nil {
+		return Page[AdminUser]{}, err
+	}
+	rows, err := tx.QueryContext(ctx, selection, args...)
 	if err != nil {
 		return Page[AdminUser]{}, classifyDatabaseError("list users", err)
 	}
@@ -278,6 +285,10 @@ ORDER BY id ASC LIMIT ?`, args...)
 		}
 		ids = append(ids, id)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return Page[AdminUser]{}, classifyDatabaseError("iterate user list", err)
+	}
 	if err := rows.Close(); err != nil {
 		return Page[AdminUser]{}, classifyDatabaseError("close user list", err)
 	}
@@ -289,7 +300,7 @@ ORDER BY id ASC LIMIT ?`, args...)
 	if hasMore {
 		ids = ids[:limit]
 	}
-	page := Page[AdminUser]{Data: make([]AdminUser, 0, len(ids))}
+	page := Page[AdminUser]{Data: make([]AdminUser, 0, len(ids)), Pagination: metadata}
 	for _, id := range ids {
 		row, err := readUserRow(ctx, tx, id)
 		if err != nil {
@@ -374,9 +385,14 @@ FROM site_usage_totals WHERE id=1`).Scan(&raw[0], &raw[1], &raw[2], &raw[3], &ra
 }
 
 func (service *Service) UserUsage(ctx context.Context, adminID int64, query PageQuery) (Page[AdminUserUsage], error) {
-	limit := normalizeLimit(query.Limit)
+	limit := normalizePageLimit(query.Page, query.Cursor, query.Limit)
 	if limit == 0 {
 		return Page[AdminUserUsage]{}, ErrInvalidRequest
+	}
+	if query.Page != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, pageReadTimeout)
+		defer cancel()
 	}
 	now := service.now().Unix()
 	if !validNow(now) {
@@ -389,16 +405,20 @@ func (service *Service) UserUsage(ctx context.Context, adminID int64, query Page
 	if query.Cursor != "" && (after == 0 || after > math.MaxInt64) {
 		return Page[AdminUserUsage]{}, ErrInvalidRequest
 	}
-	tx, err := service.beginAuthorized(ctx, adminID)
+	tx, err := service.beginListRead(ctx, adminID, query.Page != nil)
 	if err != nil {
 		return Page[AdminUserUsage]{}, err
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
-	rows, err := tx.QueryContext(ctx, `
+	selection, args, metadata, err := listPageQuery(ctx, tx, `
 SELECT id,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,
  total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests
-FROM users WHERE is_admin=0 AND id>? ORDER BY id ASC LIMIT ?`, after, limit+1)
+FROM users WHERE is_admin=0 AND id>?`, ` ORDER BY id ASC`, []any{after}, query.Page, limit)
+	if err != nil {
+		return Page[AdminUserUsage]{}, err
+	}
+	rows, err := tx.QueryContext(ctx, selection, args...)
 	if err != nil {
 		return Page[AdminUserUsage]{}, classifyDatabaseError("list user usage", err)
 	}
@@ -419,6 +439,10 @@ FROM users WHERE is_admin=0 AND id>? ORDER BY id ASC LIMIT ?`, after, limit+1)
 		data = append(data, AdminUserUsage{UserID: strconv.FormatInt(id, 10), Usage: usage})
 		last = id
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return Page[AdminUserUsage]{}, classifyDatabaseError("iterate user usage", err)
+	}
 	if err := rows.Close(); err != nil {
 		return Page[AdminUserUsage]{}, classifyDatabaseError("close user usage", err)
 	}
@@ -427,7 +451,7 @@ FROM users WHERE is_admin=0 AND id>? ORDER BY id ASC LIMIT ?`, after, limit+1)
 		data = data[:limit]
 		last, _ = strconv.ParseInt(data[len(data)-1].UserID, 10, 64)
 	}
-	page := Page[AdminUserUsage]{Data: data}
+	page := Page[AdminUserUsage]{Data: data, Pagination: metadata}
 	if hasMore {
 		page.NextCursor, err = service.encodeCursor(cursorScopeUsage, "", now, db.CursorAtom{Kind: db.CursorUint, Uint: uint64(last)})
 		if err != nil {
@@ -442,9 +466,14 @@ FROM users WHERE is_admin=0 AND id>? ORDER BY id ASC LIMIT ?`, after, limit+1)
 }
 
 func (service *Service) Activity(ctx context.Context, adminID int64, query PageQuery) (ActivityPage, error) {
-	limit := normalizeLimit(query.Limit)
+	limit := normalizePageLimit(query.Page, query.Cursor, query.Limit)
 	if limit == 0 {
 		return ActivityPage{}, ErrInvalidRequest
+	}
+	if query.Page != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, pageReadTimeout)
+		defer cancel()
 	}
 	now := service.now().Unix()
 	if !validNow(now) {
@@ -457,7 +486,7 @@ func (service *Service) Activity(ctx context.Context, adminID int64, query PageQ
 	if query.Cursor != "" && after > uint64(maxUnixSecond) {
 		return ActivityPage{}, ErrInvalidRequest
 	}
-	tx, err := service.beginAuthorized(ctx, adminID)
+	tx, err := service.beginListRead(ctx, adminID, query.Page != nil)
 	if err != nil {
 		return ActivityPage{}, err
 	}
@@ -472,6 +501,13 @@ func (service *Service) Activity(ctx context.Context, adminID int64, query PageQ
 	}
 	page := ActivityPage{Enabled: enabled == "1", Data: []ActivityDay{}}
 	if !page.Enabled {
+		if query.Page != nil {
+			meta, _, err := query.Page.Window(0)
+			if err != nil {
+				return ActivityPage{}, ErrInvariant
+			}
+			page.Pagination = &meta
+		}
 		if err := commitTx(tx, "commit disabled activity"); err != nil {
 			return ActivityPage{}, err
 		}
@@ -485,10 +521,15 @@ func (service *Service) Activity(ctx context.Context, adminID int64, query PageQ
 		}
 		upper = int64(after)
 	}
-	rows, err := tx.QueryContext(ctx, `
+	selection, args, metadata, err := listPageQuery(ctx, tx, `
 SELECT day,product_active,api_requests,uncached_input_tokens,cache_write_input_tokens,
  cache_read_input_tokens,output_tokens,checkins,console_writes,game_active,game_rounds,distinct_product_users
-FROM site_activity_daily WHERE day<? ORDER BY day DESC LIMIT ?`, upper, limit+1)
+FROM site_activity_daily WHERE day<?`, ` ORDER BY day DESC`, []any{upper}, query.Page, limit)
+	if err != nil {
+		return ActivityPage{}, err
+	}
+	page.Pagination = metadata
+	rows, err := tx.QueryContext(ctx, selection, args...)
 	if err != nil {
 		return ActivityPage{}, classifyDatabaseError("list activity", err)
 	}
@@ -518,6 +559,10 @@ FROM site_activity_daily WHERE day<? ORDER BY day DESC LIMIT ?`, upper, limit+1)
 		}
 		page.Data = append(page.Data, day)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return ActivityPage{}, classifyDatabaseError("iterate activity", err)
+	}
 	if err := rows.Close(); err != nil {
 		return ActivityPage{}, classifyDatabaseError("close activity", err)
 	}
@@ -541,9 +586,14 @@ FROM site_activity_daily WHERE day<? ORDER BY day DESC LIMIT ?`, upper, limit+1)
 }
 
 func (service *Service) EndpointOverview(ctx context.Context, adminID int64, query EndpointOverviewQuery) (Page[EndpointOverview], error) {
-	limit := normalizeLimit(query.Limit)
+	limit := normalizePageLimit(query.Page, query.Cursor, query.Limit)
 	if limit == 0 {
 		return Page[EndpointOverview]{}, ErrInvalidRequest
+	}
+	if query.Page != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, pageReadTimeout)
+		defer cancel()
 	}
 	now := service.now().Unix()
 	if !validNow(now) {
@@ -554,22 +604,21 @@ func (service *Service) EndpointOverview(ctx context.Context, adminID int64, que
 	if err != nil {
 		return Page[EndpointOverview]{}, err
 	}
-	tx, err := service.beginAuthorized(ctx, adminID)
+	tx, err := service.beginListRead(ctx, adminID, query.Page != nil)
 	if err != nil {
 		return Page[EndpointOverview]{}, err
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
-	rows, err := tx.QueryContext(ctx, `
-SELECT e.base_url,COUNT(DISTINCT e.user_id),COUNT(*),
- COALESCE(SUM((SELECT COUNT(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id)),0)
-FROM endpoints e JOIN users u ON u.id=e.user_id AND u.is_admin=0
-WHERE (?='' OR instr(e.base_url,?)>0) AND e.base_url>?
-GROUP BY e.base_url ORDER BY e.base_url ASC LIMIT ?`, query.Q, query.Q, after, limit+1)
+	selection, args, metadata, err := endpointOverviewPageQuery(ctx, tx, query.Q, after, query.Page, limit)
+	if err != nil {
+		return Page[EndpointOverview]{}, err
+	}
+	rows, err := tx.QueryContext(ctx, selection, args...)
 	if err != nil {
 		return Page[EndpointOverview]{}, classifyDatabaseError("list endpoint overview", err)
 	}
-	page := Page[EndpointOverview]{Data: make([]EndpointOverview, 0, limit+1)}
+	page := Page[EndpointOverview]{Data: make([]EndpointOverview, 0, limit+1), Pagination: metadata}
 	for rows.Next() {
 		var item EndpointOverview
 		var users, endpoints, keys int64
@@ -580,6 +629,10 @@ GROUP BY e.base_url ORDER BY e.base_url ASC LIMIT ?`, query.Q, query.Q, after, l
 		item.UserCount, item.EndpointCount, item.KeyCount = strconv.FormatInt(users, 10), strconv.FormatInt(endpoints, 10), strconv.FormatInt(keys, 10)
 		item.Users = []EndpointOverviewUser{}
 		page.Data = append(page.Data, item)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return Page[EndpointOverview]{}, classifyDatabaseError("iterate endpoint overview", err)
 	}
 	if err := rows.Close(); err != nil {
 		return Page[EndpointOverview]{}, classifyDatabaseError("close endpoint overview", err)
@@ -593,33 +646,18 @@ GROUP BY e.base_url ORDER BY e.base_url ASC LIMIT ?`, query.Q, query.Q, after, l
 		if err != nil || userCount < 0 {
 			return Page[EndpointOverview]{}, fmt.Errorf("%w: endpoint overview user count", ErrInvariant)
 		}
-		if userCount > 100 {
+		if query.Page == nil && userCount > 100 {
 			return Page[EndpointOverview]{}, ErrPayloadTooLarge
 		}
-		detailRows, err := tx.QueryContext(ctx, `
-SELECT e.user_id,COUNT(*),
- COALESCE(SUM((SELECT COUNT(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id)),0),
- COALESCE(SUM(e.enabled),0)
-FROM endpoints e JOIN users u ON u.id=e.user_id AND u.is_admin=0
-WHERE e.base_url=? GROUP BY e.user_id ORDER BY e.user_id ASC`, page.Data[index].BaseURL)
+		previewLimit := 100
+		if query.Page != nil {
+			previewLimit = 3
+		}
+		page.Data[index].Users, err = readEndpointOverviewUsers(ctx, tx, endpointOverviewUsersSelection+` ORDER BY e.user_id ASC LIMIT ?`, []any{page.Data[index].BaseURL, previewLimit})
 		if err != nil {
-			return Page[EndpointOverview]{}, classifyDatabaseError("list endpoint overview users", err)
+			return Page[EndpointOverview]{}, err
 		}
-		for detailRows.Next() {
-			var userID, endpoints, keys, enabled int64
-			if err := detailRows.Scan(&userID, &endpoints, &keys, &enabled); err != nil {
-				_ = detailRows.Close()
-				return Page[EndpointOverview]{}, classifyDatabaseError("scan endpoint overview user", err)
-			}
-			page.Data[index].Users = append(page.Data[index].Users, EndpointOverviewUser{
-				UserID: strconv.FormatInt(userID, 10), EndpointCount: strconv.FormatInt(endpoints, 10),
-				KeyCount: strconv.FormatInt(keys, 10), EnabledCount: strconv.FormatInt(enabled, 10),
-			})
-		}
-		if err := detailRows.Close(); err != nil {
-			return Page[EndpointOverview]{}, classifyDatabaseError("close endpoint overview users", err)
-		}
-		if len(page.Data[index].Users) > 100 || strconv.Itoa(len(page.Data[index].Users)) != page.Data[index].UserCount {
+		if len(page.Data[index].Users) != min(userCount, previewLimit) {
 			return Page[EndpointOverview]{}, fmt.Errorf("%w: endpoint overview user cardinality", ErrInvariant)
 		}
 	}

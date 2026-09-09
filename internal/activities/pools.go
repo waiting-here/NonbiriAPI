@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
 const (
@@ -93,7 +95,15 @@ func (r *Repository) ListPools(ctx context.Context, query PoolListQuery) (Page[P
 		return Page[Pool]{}, ErrInvalidRequest
 	}
 	limit := query.Limit
-	if limit == 0 {
+	if query.Page != nil {
+		if !query.Page.Valid() || query.Cursor != "" || query.Limit != 0 {
+			return Page[Pool]{}, ErrInvalidRequest
+		}
+		limit = query.Page.Size
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+	} else if limit == 0 {
 		limit = defaultPoolPageLimit
 	}
 	if limit < 1 || limit > maxPoolPageLimit {
@@ -129,16 +139,37 @@ func (r *Repository) ListPools(ctx context.Context, query PoolListQuery) (Page[P
 		clauses = append(clauses, "(created_at>? OR (created_at=? AND id>?))")
 		arguments = append(arguments, int64(afterCreated), int64(afterCreated), afterID)
 	}
-	arguments = append(arguments, limit+1)
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	var tx *sql.Tx
+	if query.Page != nil || query.AdminID != 0 {
+		tx, err = r.beginAdminRead(ctx, query.AdminID)
+	} else {
+		tx, err = r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	}
 	if err != nil {
 		return Page[Pool]{}, classifyDatabaseError("begin pool list", err)
 	}
 	defer tx.Rollback()
+	var metadata *pagination.Metadata
+	limitSQL := ` LIMIT ?`
+	if query.Page != nil {
+		var total int64
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM shared_pools WHERE `+strings.Join(clauses, " AND "), arguments...).Scan(&total); err != nil {
+			return Page[Pool]{}, classifyDatabaseError("count shared pools", err)
+		}
+		value, offset, err := query.Page.Window(total)
+		if err != nil {
+			return Page[Pool]{}, ErrInvariant
+		}
+		metadata = &value
+		limitSQL += ` OFFSET ?`
+		arguments = append(arguments, limit, offset)
+	} else {
+		arguments = append(arguments, limit+1)
+	}
 	rows, err := tx.QueryContext(ctx, `
 SELECT id,pool_type,period_id,account_id,state,revision,created_at,closed_at
 FROM shared_pools WHERE `+strings.Join(clauses, " AND ")+`
-ORDER BY created_at,id LIMIT ?`, arguments...)
+ORDER BY created_at,id`+limitSQL, arguments...)
 	if err != nil {
 		return Page[Pool]{}, classifyDatabaseError("list shared pools", err)
 	}
@@ -162,7 +193,7 @@ ORDER BY created_at,id LIMIT ?`, arguments...)
 	if more {
 		records = records[:limit]
 	}
-	page := Page[Pool]{Data: make([]Pool, 0, len(records))}
+	page := Page[Pool]{Data: make([]Pool, 0, len(records)), Pagination: metadata}
 	for _, record := range records {
 		pool, err := projectPoolTx(ctx, tx, record)
 		if err != nil {

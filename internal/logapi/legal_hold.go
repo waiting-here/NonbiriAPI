@@ -14,6 +14,10 @@ type AdminHeldReadAuthorizer interface {
 	AuthorizeHeldRequestLogRead(context.Context, *sql.Tx, int64, int64) (bool, error)
 }
 
+type StewardHeldReadAuthorizer interface {
+	AuthorizeStewardHeldRequestLogRead(context.Context, *sql.Tx, int64, int64, int64) (bool, error)
+}
+
 func (repository *Repository) AttachAdminHeldReadAuthorizer(authorizer AdminHeldReadAuthorizer) error {
 	if repository == nil || authorizer == nil {
 		return ErrInvalid

@@ -29,6 +29,8 @@ const (
 var (
 	ErrInvalidInput          = errors.New("claim: invalid input")
 	ErrNotFound              = errors.New("claim: resource is unavailable")
+	ErrForbidden             = errors.New("claim: caller level is not allowed")
+	ErrModelUnavailable      = errors.New("claim: charity model is unavailable")
 	ErrConflict              = errors.New("claim: state conflict")
 	ErrAlreadyDispatched     = errors.New("claim: attempt was already dispatched")
 	ErrNotDispatched         = errors.New("claim: attempt was not dispatched")
@@ -405,6 +407,7 @@ type RequestAccounting struct {
 type Charity interface {
 	AcceptRequest(context.Context, *sql.Tx, CharityAcceptance) error
 	Claim(context.Context, *sql.Tx, CharityClaimInput) (CharityReservation, error)
+	PrepareDispatch(context.Context, *sql.Tx, CharityDispatch) error
 	ReleaseUndispatched(context.Context, *sql.Tx, CharityRelease) error
 	PrepareAttempt(context.Context, *sql.Tx, CharityAttemptInput) (CharityActual, error)
 	CompleteAttempt(context.Context, *sql.Tx, CharityAttemptCompletion) error
@@ -450,6 +453,15 @@ type CharityRelease struct {
 	ClaimID       string
 	DonationKeyID *int64
 	ReleasedAt    int64
+}
+
+// CharityDispatch revalidates mutable admission in the transaction that marks
+// an attempt dispatched. Previously dispatched attempts keep their frozen facts.
+type CharityDispatch struct {
+	RequestID    string
+	ClaimID      string
+	ActorUserID  int64
+	DispatchedAt int64
 }
 
 type CharityAttemptInput struct {

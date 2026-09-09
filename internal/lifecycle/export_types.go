@@ -230,6 +230,7 @@ type DonationReviewExport struct {
 }
 
 type DonationKeyExport struct {
+	RecurringLimits     []RecurringLimitExport   `json:"recurring_limits"`
 	ID                  string                   `json:"id"`
 	EndpointKeyID       *string                  `json:"endpoint_key_id"`
 	DisplayHead         string                   `json:"display_head"`
@@ -244,6 +245,24 @@ type DonationKeyExport struct {
 	ExpiresAt           *int64                   `json:"expires_at"`
 	Streak              DonationStreakExport     `json:"streak"`
 	EndedReason         *string                  `json:"ended_reason"`
+}
+
+type RecurringLimitExport struct {
+	ID               string  `json:"id"`
+	Mode             string  `json:"mode"`
+	Interval         string  `json:"interval"`
+	Alignment        *string `json:"alignment"`
+	TimeZone         string  `json:"time_zone"`
+	WeekStartsOn     *int    `json:"week_starts_on"`
+	Metric           string  `json:"metric"`
+	Limit            string  `json:"limit"`
+	Used             string  `json:"used"`
+	Reserved         string  `json:"reserved"`
+	Remaining        string  `json:"remaining"`
+	State            string  `json:"state"`
+	PeriodStart      *int64  `json:"period_start"`
+	PeriodEnd        *int64  `json:"period_end"`
+	NextTransitionAt *int64  `json:"next_transition_at"`
 }
 
 type DonationSafeSourceExport struct {
@@ -293,6 +312,7 @@ type FishingExport struct {
 	Terminal     []FishingBatchExport   `json:"terminal"`
 	SingleBest   *FishingRankExport     `json:"single_best"`
 	RollingTotal *FishingRankExport     `json:"rolling_total"`
+	RollingBest  *FishingRankExport     `json:"rolling_best"`
 }
 
 type FishingPendingExport struct {
@@ -318,18 +338,20 @@ type FishingBatchExport struct {
 }
 
 type FishingOutcomeExport struct {
-	Ordinal    int    `json:"ordinal"`
-	SpeciesKey string `json:"species_key"`
-	Tier       string `json:"tier"`
-	SizeCM     int    `json:"size_cm"`
-	Reward     string `json:"reward"`
+	Ordinal             int     `json:"ordinal"`
+	SpeciesKey          string  `json:"species_key"`
+	Tier                string  `json:"tier"`
+	SizeCM              int     `json:"size_cm"`
+	Reward              string  `json:"reward"`
+	BlueFatFishLengthCM *string `json:"blue_fat_fish_length_cm"`
 }
 
 type FishingRankExport struct {
-	Rank         string  `json:"rank"`
-	SpeciesKey   *string `json:"species_key"`
-	SizeCM       *int    `json:"size_cm"`
-	TotalCredits *string `json:"total_credits"`
+	Rank                string  `json:"rank"`
+	SpeciesKey          *string `json:"species_key"`
+	SizeCM              *int    `json:"size_cm"`
+	TotalCredits        *string `json:"total_credits"`
+	BlueFatFishLengthCM *string `json:"blue_fat_fish_length_cm,omitempty"`
 }
 
 type LinkLinkExport struct {
@@ -379,6 +401,8 @@ type RPSCurrentExport struct {
 }
 
 type RPSPendingExport struct {
+	OwnBuyIn       *string                `json:"own_buy_in"`
+	OwnCashOut     *string                `json:"own_cash_out"`
 	SessionID      string                 `json:"session_id"`
 	Mode           string                 `json:"mode"`
 	TerminalReason string                 `json:"terminal_reason"`
@@ -405,14 +429,16 @@ type RPSSummaryExport struct {
 }
 
 type RPSSeatExport struct {
-	SeatNo        int    `json:"seat_no"`
-	Input         string `json:"input"`
-	Returned      string `json:"returned"`
-	WalletNet     string `json:"wallet_net"`
-	TimeoutCount  string `json:"timeout_count"`
-	RockCount     string `json:"rock_count"`
-	ScissorsCount string `json:"scissors_count"`
-	PaperCount    string `json:"paper_count"`
+	OwnBuyIn      *string `json:"own_buy_in"`
+	OwnCashOut    *string `json:"own_cash_out"`
+	SeatNo        int     `json:"seat_no"`
+	Input         string  `json:"input"`
+	Returned      string  `json:"returned"`
+	WalletNet     string  `json:"wallet_net"`
+	TimeoutCount  string  `json:"timeout_count"`
+	RockCount     string  `json:"rock_count"`
+	ScissorsCount string  `json:"scissors_count"`
+	PaperCount    string  `json:"paper_count"`
 }
 
 type RPSFunStatsExport struct {

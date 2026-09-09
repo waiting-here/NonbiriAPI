@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, QueryObserver, useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -16,7 +16,6 @@ import {
   useContributeThursday,
   useCreateDonation,
   useEditDonation,
-  useEndpointKeyChoices,
   useTerminateDonation,
   useWithdrawDonation,
 } from './queries';
@@ -113,6 +112,23 @@ const DONATION: Donation = {
   updatedAt: 1_788_100_010,
 };
 
+const OWNER_ACCOUNT_ID = '7';
+
+function ownerDonationsPageKey(page: string, pageSize = 20) {
+  return [...economyKeys.donations, 'pages', OWNER_ACCOUNT_ID, '', '', page, pageSize] as const;
+}
+
+function endpointChoicesPageKey(page: string, pageSize = 20) {
+  return [
+    ...economyKeys.endpointChoicesRoot,
+    OWNER_ACCOUNT_ID,
+    'endpoints',
+    '',
+    page,
+    pageSize,
+  ] as const;
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((complete) => {
@@ -150,6 +166,22 @@ describe('activity query authority recovery', () => {
 
   function wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  }
+
+  function activePageFixture<T>(
+    queryKey: readonly unknown[],
+    initialData: T,
+    read: () => Promise<T>,
+  ) {
+    const observer = new QueryObserver<T>(queryClient, {
+      queryKey,
+      queryFn: () => read(),
+      initialData,
+      staleTime: Infinity,
+      retry: false,
+    });
+    const unsubscribe = observer.subscribe(() => undefined);
+    return { observer, unsubscribe };
   }
 
   it('reconnects with renewed session authority and ignores callbacks from the closed stream', async () => {
@@ -273,8 +305,14 @@ describe('activity query authority recovery', () => {
   ])(
     'reconciles a donation %s with one GET and never resubmits the mutation',
     async (_name, rejected) => {
+      const refreshedPage = { marker: 'refreshed donation page' };
+      const donationPageRead = vi.fn().mockResolvedValue(refreshedPage);
+      const donationPage = activePageFixture(
+        ownerDonationsPageKey('1'),
+        { marker: 'old donation page' },
+        donationPageRead,
+      );
       mocks.createDonation.mockRejectedValue(rejected);
-      mocks.getDonations.mockResolvedValue([]);
       mocks.getCharityCapability.mockResolvedValue(CHARITY_CAPABILITY);
       const rendered = renderHook(() => useCreateDonation(), { wrapper });
       await act(async () => {
@@ -286,16 +324,19 @@ describe('activity query authority recovery', () => {
           }),
         ).rejects.toBe(rejected);
       });
-      await waitFor(() => expect(mocks.getDonations).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(donationPageRead).toHaveBeenCalledTimes(1));
       await waitFor(() => expect(rendered.result.current.reconcileGeneration).toBe(1));
       expect(rendered.result.current.reconcileError).toBeNull();
       expect(mocks.createDonation).toHaveBeenCalledTimes(1);
       expect(mocks.getCharityCapability).toHaveBeenCalledTimes(1);
-      expect(queryClient.getQueryData(economyKeys.donations)).toEqual([]);
+      expect(mocks.getDonations).not.toHaveBeenCalled();
+      expect(donationPageRead).toHaveBeenCalledTimes(1);
+      expect(queryClient.getQueryData(ownerDonationsPageKey('1'))).toEqual(refreshedPage);
       expect(queryClient.getQueryData(economyKeys.charityCapability)).toEqual(CHARITY_CAPABILITY);
       rendered.rerender();
       expect(mocks.createDonation).toHaveBeenCalledTimes(1);
       rendered.unmount();
+      donationPage.unsubscribe();
     },
   );
 
@@ -345,8 +386,13 @@ describe('activity query authority recovery', () => {
   it('requires both donation and capability GET success before create reconcile advances', async () => {
     const rejected = new ApiError('conflict', 'final gate rejected', 409);
     const refreshFailure = new ApiError('network_error', 'capability refresh failed', 0);
+    const donationPageRead = vi.fn().mockResolvedValue({ marker: 'refreshed donation page' });
+    const donationPage = activePageFixture(
+      ownerDonationsPageKey('1'),
+      { marker: 'old donation page' },
+      donationPageRead,
+    );
     mocks.createDonation.mockRejectedValue(rejected);
-    mocks.getDonations.mockResolvedValue([]);
     mocks.getCharityCapability
       .mockRejectedValueOnce(refreshFailure)
       .mockResolvedValueOnce(CHARITY_CAPABILITY);
@@ -363,35 +409,48 @@ describe('activity query authority recovery', () => {
     await waitFor(() => expect(rendered.result.current.reconcileError).toBe(refreshFailure));
     expect(rendered.result.current.reconcileGeneration).toBe(0);
     expect(mocks.createDonation).toHaveBeenCalledTimes(1);
+    expect(donationPageRead).not.toHaveBeenCalled();
+    expect(queryClient.getQueryData(ownerDonationsPageKey('1'))).toEqual({
+      marker: 'old donation page',
+    });
 
     await act(async () => rendered.result.current.retryReconcile());
     await waitFor(() => expect(rendered.result.current.reconcileGeneration).toBe(1));
     expect(rendered.result.current.reconcileError).toBeNull();
-    expect(mocks.getDonations).toHaveBeenCalledTimes(2);
+    expect(mocks.getDonations).not.toHaveBeenCalled();
+    expect(donationPageRead).toHaveBeenCalledTimes(1);
     expect(mocks.getCharityCapability).toHaveBeenCalledTimes(2);
     expect(mocks.createDonation).toHaveBeenCalledTimes(1);
     expect(queryClient.getQueryData(economyKeys.charityCapability)).toEqual(CHARITY_CAPABILITY);
     rendered.unmount();
+    donationPage.unsubscribe();
   });
 
   it('keeps the composer mounted and blocked until its endpoint-choice GET succeeds', async () => {
     const rejected = new ApiError('network_error', 'response lost', 0);
     const refreshFailure = new ApiError('network_error', 'choice refresh failed', 0);
-    mocks.createDonation.mockRejectedValue(rejected);
-    mocks.getDonations.mockResolvedValue([]);
-    mocks.getCharityCapability.mockResolvedValue(CHARITY_CAPABILITY);
-    mocks.getEndpointChoices
-      .mockResolvedValueOnce([])
+    const oldChoicesPage = { marker: 'old endpoint choices' };
+    const refreshedChoicesPage = { marker: 'refreshed endpoint choices' };
+    const choicesPageRead = vi
+      .fn<() => Promise<typeof oldChoicesPage>>()
       .mockRejectedValueOnce(refreshFailure)
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce(refreshedChoicesPage);
+    mocks.createDonation.mockRejectedValue(rejected);
+    mocks.getCharityCapability.mockResolvedValue(CHARITY_CAPABILITY);
     const rendered = renderHook(
-      () => ({
-        choices: useEndpointKeyChoices([], true),
-        create: useCreateDonation(),
-      }),
+      () => {
+        const choices = useQuery({
+          queryKey: endpointChoicesPageKey('1'),
+          queryFn: () => choicesPageRead(),
+          initialData: oldChoicesPage,
+          staleTime: Infinity,
+          retry: false,
+        });
+        return { choices, create: useCreateDonation() };
+      },
       { wrapper },
     );
-    await waitFor(() => expect(rendered.result.current.choices.isSuccess).toBe(true));
+    expect(rendered.result.current.choices.data).toEqual(oldChoicesPage);
 
     await act(async () => {
       await expect(
@@ -404,20 +463,92 @@ describe('activity query authority recovery', () => {
     });
     await waitFor(() => expect(rendered.result.current.create.reconcileError).toBe(refreshFailure));
     expect(rendered.result.current.create.reconcileGeneration).toBe(0);
-    expect(rendered.result.current.choices.error).toBeNull();
+    expect(rendered.result.current.choices.isError).toBe(true);
+    expect(rendered.result.current.choices.error).toBe(refreshFailure);
+    expect(rendered.result.current.choices.data).toEqual(oldChoicesPage);
+    expect(mocks.getDonations).not.toHaveBeenCalled();
+    expect(mocks.getEndpointChoices).not.toHaveBeenCalled();
+    expect(choicesPageRead).toHaveBeenCalledTimes(1);
     expect(mocks.createDonation).toHaveBeenCalledTimes(1);
 
     await act(async () => rendered.result.current.create.retryReconcile());
     await waitFor(() => expect(rendered.result.current.create.reconcileGeneration).toBe(1));
     expect(rendered.result.current.create.reconcileError).toBeNull();
-    expect(mocks.getEndpointChoices).toHaveBeenCalledTimes(3);
+    expect(rendered.result.current.choices.isSuccess).toBe(true);
+    expect(rendered.result.current.choices.error).toBeNull();
+    expect(rendered.result.current.choices.data).toEqual(refreshedChoicesPage);
+    expect(choicesPageRead).toHaveBeenCalledTimes(2);
     expect(mocks.createDonation).toHaveBeenCalledTimes(1);
     rendered.unmount();
   });
 
+  it('refreshes each active donation page once and only marks the inactive page stale', async () => {
+    const firstRead = vi.fn().mockResolvedValue({ marker: 'refreshed first page' });
+    const secondRead = vi.fn().mockResolvedValue({ marker: 'refreshed second page' });
+    const inactiveRead = vi.fn().mockResolvedValue({ marker: 'unexpected inactive request' });
+    const firstPage = activePageFixture(
+      ownerDonationsPageKey('1'),
+      { marker: 'old first page' },
+      firstRead,
+    );
+    const secondPage = activePageFixture(
+      ownerDonationsPageKey('2'),
+      { marker: 'old second page' },
+      secondRead,
+    );
+    const inactiveKey = ownerDonationsPageKey('3');
+    const inactivePage = new QueryObserver(queryClient, {
+      queryKey: inactiveKey,
+      queryFn: () => inactiveRead(),
+      initialData: { marker: 'cached inactive page' },
+      staleTime: Infinity,
+      retry: false,
+    });
+    const rejected = new ApiError('network_error', 'response lost', 0);
+    mocks.editDonation.mockRejectedValue(rejected);
+    mocks.getDonation.mockResolvedValue(DONATION);
+    const rendered = renderHook(() => useEditDonation(), { wrapper });
+
+    await act(async () => {
+      await expect(
+        rendered.result.current.mutateAsync({
+          id: DONATION.id,
+          description: DONATION.description,
+          expectedRevision: DONATION.revision,
+        }),
+      ).rejects.toBe(rejected);
+    });
+    await waitFor(() => expect(rendered.result.current.reconcileGeneration).toBe(1));
+
+    expect(firstRead).toHaveBeenCalledTimes(1);
+    expect(secondRead).toHaveBeenCalledTimes(1);
+    expect(inactiveRead).not.toHaveBeenCalled();
+    expect(queryClient.getQueryData(ownerDonationsPageKey('1'))).toEqual({
+      marker: 'refreshed first page',
+    });
+    expect(queryClient.getQueryData(ownerDonationsPageKey('2'))).toEqual({
+      marker: 'refreshed second page',
+    });
+    expect(queryClient.getQueryData(inactiveKey)).toEqual({ marker: 'cached inactive page' });
+    expect(queryClient.getQueryState(inactiveKey)?.isInvalidated).toBe(true);
+    expect(rendered.result.current.reconcileError).toBeNull();
+    expect(mocks.getDonation).toHaveBeenCalledTimes(1);
+    expect(mocks.editDonation).toHaveBeenCalledTimes(1);
+
+    rendered.unmount();
+    firstPage.unsubscribe();
+    secondPage.unsubscribe();
+    inactivePage.destroy();
+  });
+
   it('advances edit, withdraw, and terminate only from their successful list/detail GETs', async () => {
     const rejected = new ApiError('network_error', 'response lost', 0);
-    mocks.getDonations.mockResolvedValue([DONATION]);
+    const donationPageRead = vi.fn().mockResolvedValue({ marker: 'refreshed donation page' });
+    const donationPage = activePageFixture(
+      ownerDonationsPageKey('1'),
+      { marker: 'old donation page' },
+      donationPageRead,
+    );
     mocks.getDonation.mockResolvedValue(DONATION);
 
     mocks.editDonation.mockRejectedValue(rejected);
@@ -464,9 +595,11 @@ describe('activity query authority recovery', () => {
     await waitFor(() => expect(terminate.result.current.reconcileGeneration).toBe(1));
     expect(terminate.result.current.reconcileError).toBeNull();
     expect(mocks.terminateDonation).toHaveBeenCalledTimes(1);
-    expect(mocks.getDonations).toHaveBeenCalledTimes(3);
+    expect(mocks.getDonations).not.toHaveBeenCalled();
+    expect(donationPageRead).toHaveBeenCalledTimes(3);
     expect(mocks.getDonation).toHaveBeenCalledTimes(3);
     terminate.unmount();
+    donationPage.unsubscribe();
   });
 
   it('closes the station on a true forbidden authentication boundary', async () => {

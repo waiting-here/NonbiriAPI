@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { NavLink, Outlet } from 'react-router';
+import { Fragment } from 'react';
+import { DonationPendingBadge } from '@shared/components/DonationPendingBadge';
 import { useTranslation } from 'react-i18next';
 import { Brand, useBrandFavicon } from '@shared/components/Brand';
 import { AccountMenu } from '@shared/components/AccountMenu';
@@ -25,7 +27,17 @@ const ADMIN_GROUP_LABEL_KEYS: Record<(typeof ADMIN_NAV_GROUPS)[number], string> 
   content: 'admin.navigation.content',
 };
 
-function AdminLogin({ onSignedIn, notice, siteName, siteLogoURL }: { onSignedIn: () => Promise<void>; notice?: unknown; siteName: string; siteLogoURL?: string }) {
+function AdminLogin({
+  onSignedIn,
+  notice,
+  siteName,
+  siteLogoURL,
+}: {
+  onSignedIn: () => Promise<void>;
+  notice?: unknown;
+  siteName: string;
+  siteLogoURL?: string;
+}) {
   const { t } = useTranslation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -60,7 +72,16 @@ function AdminLogin({ onSignedIn, notice, siteName, siteLogoURL }: { onSignedIn:
   return (
     <div className="auth-shell">
       <header className="site-header nb-admin-header">
-        <Brand siteName={siteName} siteLogoURL={siteLogoURL} className="brand nb-admin-header__brand" suffix={<span className="brand-suffix nb-admin-header__suffix">{t('admin.shell.brandSuffix')}</span>} />
+        <Brand
+          siteName={siteName}
+          siteLogoURL={siteLogoURL}
+          className="brand nb-admin-header__brand"
+          suffix={
+            <span className="brand-suffix nb-admin-header__suffix">
+              {t('admin.shell.brandSuffix')}
+            </span>
+          }
+        />
         <div className="site-actions">
           <LanguageSwitcher />
           <ThemeToggle />
@@ -93,9 +114,19 @@ function AdminLogin({ onSignedIn, notice, siteName, siteLogoURL }: { onSignedIn:
                 required
               />
             </label>
-            {validationError ? <p className="field-error" role="alert">{validationError}</p> : null}
+            {validationError ? (
+              <p className="field-error" role="alert">
+                {validationError}
+              </p>
+            ) : null}
             {notice ? (
-              isApiError(notice) ? <p className="field-error" role="alert">{notice.message}</p> : <ErrorState error={notice} />
+              isApiError(notice) ? (
+                <p className="field-error" role="alert">
+                  {notice.message}
+                </p>
+              ) : (
+                <ErrorState error={notice} />
+              )
             ) : null}
             {error ? <ErrorState error={error} /> : null}
             <button type="submit" className="btn btn-primary" disabled={busy}>
@@ -134,9 +165,11 @@ export function AdminLayout() {
   const restoreMenuFocus = useCallback(() => {
     // The menu button is hidden on desktop; only restore focus when the
     // responsive drawer is available.
-    if (typeof window !== 'undefined'
-      && typeof window.matchMedia === 'function'
-      && window.matchMedia(SHELL_DRAWER_MEDIA_QUERY.admin).matches) {
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia(SHELL_DRAWER_MEDIA_QUERY.admin).matches
+    ) {
       menuButtonRef.current?.focus();
     }
   }, []);
@@ -150,7 +183,8 @@ export function AdminLayout() {
   }, [t, siteName]);
 
   useEffect(() => {
-    if (previousToastIdentityRef.current && previousToastIdentityRef.current !== toastIdentity) clearToasts?.();
+    if (previousToastIdentityRef.current && previousToastIdentityRef.current !== toastIdentity)
+      clearToasts?.();
     previousToastIdentityRef.current = toastIdentity;
   }, [clearToasts, toastIdentity]);
 
@@ -158,7 +192,9 @@ export function AdminLayout() {
 
   useEffect(() => {
     if (!menuOpen) return;
-    const firstLink = sidebarRef.current?.querySelector<HTMLElement>('a[href], button:not([disabled])');
+    const firstLink = sidebarRef.current?.querySelector<HTMLElement>(
+      'a[href], button:not([disabled])',
+    );
     firstLink?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -167,9 +203,11 @@ export function AdminLayout() {
         return;
       }
       if (event.key !== 'Tab') return;
-      const focusable = Array.from(sidebarRef.current?.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), select:not([disabled])',
-      ) ?? []);
+      const focusable = Array.from(
+        sidebarRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), select:not([disabled])',
+        ) ?? [],
+      );
       if (focusable.length === 0) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
@@ -186,7 +224,8 @@ export function AdminLayout() {
   }, [closeMenu, menuOpen]);
 
   useEffect(() => {
-    if (!menuOpen || typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    if (!menuOpen || typeof window === 'undefined' || typeof window.matchMedia !== 'function')
+      return;
     const media = window.matchMedia(SHELL_DRAWER_MEDIA_QUERY.admin);
     const closeForDesktop = (event?: MediaQueryListEvent) => {
       if (event && event.matches) return;
@@ -201,7 +240,8 @@ export function AdminLayout() {
     if (logoutBusy) return <LoadingState />;
     return (
       <AdminLogin
-        siteName={siteName} siteLogoURL={siteLogoURL}
+        siteName={siteName}
+        siteLogoURL={siteLogoURL}
         notice={logoutError}
         onSignedIn={async () => {
           const result = await session.refetch();
@@ -218,7 +258,8 @@ export function AdminLayout() {
   if (session.error || !session.data) {
     return (
       <AdminLogin
-        siteName={siteName} siteLogoURL={siteLogoURL}
+        siteName={siteName}
+        siteLogoURL={siteLogoURL}
         onSignedIn={async () => {
           const result = await session.refetch();
           if (result.error) throw result.error;
@@ -230,10 +271,22 @@ export function AdminLayout() {
   // Only an authenticated admin may reach the protected bootstrap. Do not
   // mount the normal sidebar/content until its closed DTO has resolved.
   if (config.isPending && !config.data) {
-    return <PublicShell station="admin" siteName={siteName}><div className="nb-page nb-page--readable"><LoadingState /></div></PublicShell>;
+    return (
+      <PublicShell station="admin" siteName={siteName}>
+        <div className="nb-page nb-page--readable">
+          <LoadingState />
+        </div>
+      </PublicShell>
+    );
   }
   if (config.error && !config.data) {
-    return <PublicShell station="admin" siteName={siteName}><div className="nb-page nb-page--readable"><ErrorState error={config.error} onRetry={() => void config.refetch()} /></div></PublicShell>;
+    return (
+      <PublicShell station="admin" siteName={siteName}>
+        <div className="nb-page nb-page--readable">
+          <ErrorState error={config.error} onRetry={() => void config.refetch()} />
+        </div>
+      </PublicShell>
+    );
   }
 
   const logout = async () => {
@@ -263,7 +316,16 @@ export function AdminLayout() {
         {t('shell.skipToContent')}
       </a>
       <header className="site-header nb-admin-header">
-        <Brand siteName={siteName} siteLogoURL={siteLogoURL} className="brand nb-admin-header__brand" suffix={<span className="brand-suffix nb-admin-header__suffix">{t('admin.shell.brandSuffix')}</span>} />
+        <Brand
+          siteName={siteName}
+          siteLogoURL={siteLogoURL}
+          className="brand nb-admin-header__brand"
+          suffix={
+            <span className="brand-suffix nb-admin-header__suffix">
+              {t('admin.shell.brandSuffix')}
+            </span>
+          }
+        />
         <button
           type="button"
           ref={menuButtonRef}
@@ -305,19 +367,40 @@ export function AdminLayout() {
             {ADMIN_NAV_GROUPS.map((group) => {
               const items = ADMIN_PRIMARY_NAV.filter((item) => item.group === group);
               if (items.length === 0) return null;
-              const groupTitle = t(ADMIN_GROUP_LABEL_KEYS[group], { defaultValue: t('admin.settings.nav') });
+              const groupTitle = t(ADMIN_GROUP_LABEL_KEYS[group], {
+                defaultValue: t('admin.settings.nav'),
+              });
               return (
                 <section className="nb-admin-sidebar__group" key={group}>
                   <h2 className="nb-admin-sidebar__group-title">{groupTitle}</h2>
                   {items.map((item) => {
                     const label = item.labelKey
-                      ? t(item.labelKey, { defaultValue: item.fallbackLabelKey ? t(item.fallbackLabelKey) : item.labelKey })
+                      ? t(item.labelKey, {
+                          defaultValue: item.fallbackLabelKey
+                            ? t(item.fallbackLabelKey)
+                            : item.labelKey,
+                        })
                       : t(`admin.${item.key}.nav`);
                     return (
-                      <NavLink className="nb-admin-sidebar__link" key={item.key} to={item.to} end={item.end} onClick={closeMenu}>
-                        {item.icon ? <Icon name={item.icon} /> : null}
-                        <span className="nb-admin-sidebar__label">{label}</span>
-                      </NavLink>
+                      <Fragment key={item.key}>
+                        <NavLink
+                          className="nb-admin-sidebar__link"
+                          to={item.to}
+                          end={item.end}
+                          onClick={closeMenu}
+                        >
+                          {item.icon ? <Icon name={item.icon} /> : null}
+                          <span className="nb-admin-sidebar__label">{label}</span>
+                        </NavLink>
+                        {item.to === '/charity' ? (
+                          <DonationPendingBadge
+                            key={toastIdentity}
+                            role="admin"
+                            accountID={toastIdentity}
+                            onNavigate={closeMenu}
+                          />
+                        ) : null}
+                      </Fragment>
                     );
                   })}
                 </section>

@@ -13,6 +13,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -59,8 +60,9 @@ type DonationStateOwner interface {
 }
 
 type Page[T any] struct {
-	Data       []T     `json:"data"`
-	NextCursor *string `json:"next_cursor"`
+	Data       []T                  `json:"data"`
+	NextCursor *string              `json:"next_cursor"`
+	Pagination *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 type CapabilityTokenPrices struct {
@@ -130,21 +132,23 @@ type AdminRollingSuccess struct {
 }
 
 type AdminCharityModel struct {
-	RouteStrategy    string              `json:"route_strategy"`
-	ID               string              `json:"id"`
-	Provider         string              `json:"provider"`
-	Model            string              `json:"model"`
-	FullName         string              `json:"full_name"`
-	Enabled          bool                `json:"enabled"`
-	Pricing          AdminPricing        `json:"pricing"`
-	Discount         AdminDiscount       `json:"discount"`
-	FlattenToolCalls bool                `json:"flatten_tool_calls"`
-	Revision         string              `json:"revision"`
-	BindingRevision  string              `json:"binding_revision"`
-	BindingCount     string              `json:"binding_count"`
-	RollingSuccess   AdminRollingSuccess `json:"rolling_success"`
-	CreatedAt        int64               `json:"created_at"`
-	UpdatedAt        int64               `json:"updated_at"`
+	AllowedLevels     []int               `json:"allowed_levels"`
+	PublicDescription string              `json:"public_description"`
+	RouteStrategy     string              `json:"route_strategy"`
+	ID                string              `json:"id"`
+	Provider          string              `json:"provider"`
+	Model             string              `json:"model"`
+	FullName          string              `json:"full_name"`
+	Enabled           bool                `json:"enabled"`
+	Pricing           AdminPricing        `json:"pricing"`
+	Discount          AdminDiscount       `json:"discount"`
+	FlattenToolCalls  bool                `json:"flatten_tool_calls"`
+	Revision          string              `json:"revision"`
+	BindingRevision   string              `json:"binding_revision"`
+	BindingCount      string              `json:"binding_count"`
+	RollingSuccess    AdminRollingSuccess `json:"rolling_success"`
+	CreatedAt         int64               `json:"created_at"`
+	UpdatedAt         int64               `json:"updated_at"`
 }
 
 // Steward DTOs are deliberately independently compiled, including nested
@@ -178,21 +182,23 @@ type StewardRollingSuccess struct {
 }
 
 type StewardCharityModel struct {
-	RouteStrategy    string                `json:"route_strategy"`
-	ID               string                `json:"id"`
-	Provider         string                `json:"provider"`
-	Model            string                `json:"model"`
-	FullName         string                `json:"full_name"`
-	Enabled          bool                  `json:"enabled"`
-	Pricing          StewardPricing        `json:"pricing"`
-	Discount         StewardDiscount       `json:"discount"`
-	FlattenToolCalls bool                  `json:"flatten_tool_calls"`
-	Revision         string                `json:"revision"`
-	BindingRevision  string                `json:"binding_revision"`
-	BindingCount     string                `json:"binding_count"`
-	RollingSuccess   StewardRollingSuccess `json:"rolling_success"`
-	CreatedAt        int64                 `json:"created_at"`
-	UpdatedAt        int64                 `json:"updated_at"`
+	AllowedLevels     []int                 `json:"allowed_levels"`
+	PublicDescription string                `json:"public_description"`
+	RouteStrategy     string                `json:"route_strategy"`
+	ID                string                `json:"id"`
+	Provider          string                `json:"provider"`
+	Model             string                `json:"model"`
+	FullName          string                `json:"full_name"`
+	Enabled           bool                  `json:"enabled"`
+	Pricing           StewardPricing        `json:"pricing"`
+	Discount          StewardDiscount       `json:"discount"`
+	FlattenToolCalls  bool                  `json:"flatten_tool_calls"`
+	Revision          string                `json:"revision"`
+	BindingRevision   string                `json:"binding_revision"`
+	BindingCount      string                `json:"binding_count"`
+	RollingSuccess    StewardRollingSuccess `json:"rolling_success"`
+	CreatedAt         int64                 `json:"created_at"`
+	UpdatedAt         int64                 `json:"updated_at"`
 }
 
 type CandidateSource struct {
@@ -289,24 +295,28 @@ type DiscountPatchInput struct {
 }
 
 type ModelCreate struct {
-	RouteStrategy    string        `json:"route_strategy,omitempty"`
-	Provider         string        `json:"provider"`
-	Model            string        `json:"model"`
-	Enabled          bool          `json:"enabled"`
-	Pricing          PricingInput  `json:"pricing"`
-	Discount         DiscountInput `json:"discount"`
-	FlattenToolCalls bool          `json:"flatten_tool_calls"`
+	AllowedLevels     []int         `json:"allowed_levels,omitempty"`
+	PublicDescription string        `json:"public_description,omitempty"`
+	RouteStrategy     string        `json:"route_strategy,omitempty"`
+	Provider          string        `json:"provider"`
+	Model             string        `json:"model"`
+	Enabled           bool          `json:"enabled"`
+	Pricing           PricingInput  `json:"pricing"`
+	Discount          DiscountInput `json:"discount"`
+	FlattenToolCalls  bool          `json:"flatten_tool_calls"`
 }
 
 type ModelPatch struct {
-	RouteStrategy    *string       `json:"route_strategy,omitempty"`
-	ExpectedRevision string        `json:"expected_revision"`
-	Provider         *string       `json:"provider,omitempty"`
-	Model            *string       `json:"model,omitempty"`
-	Enabled          *bool         `json:"enabled,omitempty"`
-	Pricing          *PricingInput `json:"pricing,omitempty"`
-	Discount         *DiscountPatchInput
-	FlattenToolCalls *bool `json:"flatten_tool_calls,omitempty"`
+	AllowedLevels     *[]int        `json:"allowed_levels,omitempty"`
+	PublicDescription *string       `json:"public_description,omitempty"`
+	RouteStrategy     *string       `json:"route_strategy,omitempty"`
+	ExpectedRevision  string        `json:"expected_revision"`
+	Provider          *string       `json:"provider,omitempty"`
+	Model             *string       `json:"model,omitempty"`
+	Enabled           *bool         `json:"enabled,omitempty"`
+	Pricing           *PricingInput `json:"pricing,omitempty"`
+	Discount          *DiscountPatchInput
+	FlattenToolCalls  *bool `json:"flatten_tool_calls,omitempty"`
 }
 
 type ModelDelete struct {

@@ -471,11 +471,11 @@ func TestSnapshotEntropyFailureRollsBackAndPropagates(t *testing.T) {
 	}
 
 	environment.state.dueHook = nil
-	models, err := environment.service.ListAvailableModels(context.Background(), routingTestNow, 10)
+	models, err := environment.service.ListAvailableModels(context.Background(), environment.caller, routingTestNow, 10)
 	if err != nil || len(models) != 1 || models[0].ModelID != modelID {
 		t.Fatalf("available models changed by ordering entropy = %+v, %v", models, err)
 	}
-	capability, err := environment.service.Capability(context.Background(), routingTestNow)
+	capability, err := environment.service.Capability(context.Background(), environment.caller, routingTestNow)
 	if err != nil || capability.State != "available" || len(capability.Models) != 1 ||
 		capability.Models[0].ID != model.ID {
 		t.Fatalf("capability changed by ordering entropy = %+v, %v", capability, err)

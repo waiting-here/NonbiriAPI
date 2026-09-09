@@ -12,12 +12,24 @@ import {
   useNarrowReducedMotion as configureNarrowReducedMotion,
 } from './support';
 import { expect, test } from './test';
+import { numberedResponse } from './numbered-fixtures';
 
 const backendCatalogCore = JSON.parse(
   readFileSync(new URL('../fixtures/site-config-catalog-core.json', import.meta.url), 'utf8'),
 ) as { data: Array<Record<string, unknown>> };
 
 const EPHEMERAL_MARKER = 'configuration-browser-ephemeral-marker';
+const SOURCE_KEY = `dsg_${'A'.repeat(43)}`;
+
+const DONATION_STATES = [
+  'available',
+  'pending',
+  'disabled',
+  'suspended',
+  'exhausted',
+  'expired',
+  'ended',
+] as const;
 
 const user = {
   id: '1',
@@ -57,6 +69,8 @@ const user = {
 
 const pendingKey = {
   id: '6',
+  binding_count: '0',
+  idle: true,
   endpoint_key_id: '2',
   display_head: 'sk-a',
   display_tail: 'tail',
@@ -87,6 +101,14 @@ const pendingKey = {
 const pendingAdminDonation = {
   id: '9',
   status: 'pending',
+  handling: {
+    state: 'pending',
+    revision: '1',
+    processed_at: null,
+    processed_by_role: null,
+    closed_at: null,
+    closed_reason: null,
+  },
   revision: '1',
   description: 'Fixture donation',
   review_result: null,
@@ -99,15 +121,18 @@ const pendingAdminDonation = {
 
 const pendingStewardDonation = {
   ...pendingAdminDonation,
-  owner: { user_id: '1', display_name: 'Fixture donor' },
+  owner: { user_id: '1', discord_id: '123456789', display_name: 'Fixture donor' },
 };
 
 const currentCharityModel = {
+  route_strategy: 'expiry_weighted',
   id: '7',
   provider: 'provider',
   model: 'charity-model',
   full_name: '[公益]provider/charity-model',
   enabled: true,
+  allowed_levels: [1, 2, 3, 4, 5],
+  public_description: '',
   pricing: { mode: 'per_request', user_price: '0', donor_reward: '0' },
   discount: { enabled: false, percent: 100, start_at: null, end_at: null },
   flatten_tool_calls: false,
@@ -118,6 +143,69 @@ const currentCharityModel = {
   created_at: 1,
   updated_at: 2,
 };
+
+function managedDonationPageItem(donation: Record<string, unknown>): Record<string, unknown> {
+  const keys = Array.isArray(donation.keys)
+    ? donation.keys.filter(
+        (key): key is Record<string, unknown> =>
+          key !== null && typeof key === 'object' && !Array.isArray(key),
+      )
+    : [];
+  const stateCounts = Object.fromEntries(DONATION_STATES.map((state) => [state, '0'])) as Record<
+    string,
+    string
+  >;
+  const sources: Record<string, unknown>[] = [];
+  for (const key of keys) {
+    const state = key.charity_state;
+    if (typeof state === 'string' && Object.hasOwn(stateCounts, state)) {
+      stateCounts[state] = String(Number(stateCounts[state]) + 1);
+    }
+    const source = key.safe_source;
+    if (
+      source !== null &&
+      typeof source === 'object' &&
+      !Array.isArray(source) &&
+      !sources.some((entry) => JSON.stringify(entry) === JSON.stringify(source))
+    ) {
+      sources.push(source as Record<string, unknown>);
+    }
+  }
+  const owner = donation.owner;
+  return {
+    id: donation.id,
+    status: donation.status,
+    revision: donation.revision,
+    description: donation.description,
+    review_result: donation.review_result,
+    created_at: donation.created_at,
+    updated_at: donation.updated_at,
+    key_count: String(keys.length),
+    state_counts: stateCounts,
+    source_count: String(sources.length),
+    sources,
+    handling: donation.handling,
+    reviewer: donation.reviewer ?? null,
+    owner: owner === null || typeof owner !== 'object' || Array.isArray(owner) ? null : owner,
+  };
+}
+
+function managedKeyPageItem(
+  donation: Record<string, unknown>,
+  key: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    max_concurrency: 0,
+    max_rpm: 0,
+    ...key,
+    donation_id: donation.id,
+    key_id: key.id,
+    donation_revision: donation.revision,
+    rule_count: '0',
+    rules: [],
+    handling: donation.handling,
+  };
+}
 
 function catalogEntry(key: string, options: Record<string, unknown> = {}) {
   return {
@@ -180,8 +268,8 @@ async function prepare(
     await mockJson(page, {
       origin: ADMIN_ORIGIN,
       method: 'GET',
-      path: '/admin/api/legal-holds?limit=50',
-      body: { data: [], next_cursor: null },
+      path: '/admin/api/legal-holds?page=1&page_size=20',
+      body: numberedResponse([], '1', 20),
     });
   }
   return consoleGuard;
@@ -231,7 +319,7 @@ test('reachable user home keeps level state but removes the implementation hint'
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/announcements?limit=20',
+    path: '/api/announcements?limit=100',
     body: { data: [], next_cursor: null },
   });
 
@@ -281,8 +369,19 @@ test('reachable user charity shows the neutral upstream warning without the stat
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/donations?limit=100',
-    body: { data: [], next_cursor: null },
+    path: '/api/charity/models?view=catalog&page=1&page_size=20&allowed_for_me=true&currently_available=true',
+    body: {
+      models: [],
+      pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+      donation_intake: 'closed',
+      server_now: 1_788_100_000,
+    },
+  });
+  await mockJson(page, {
+    origin: USER_ORIGIN,
+    method: 'GET',
+    path: '/api/donations?page=1&page_size=20',
+    body: numberedResponse([], '1', 20),
   });
 
   await page.goto(`${USER_ORIGIN}/charity`);
@@ -290,7 +389,7 @@ test('reachable user charity shows the neutral upstream warning without the stat
   await expect(page.getByRole('note')).toContainText('第三方 AI 服务');
   await expect(page.getByRole('note')).toContainText('账户日志可能看到完整请求内容');
   await expect(page.getByText('调用状态说明')).toHaveCount(0);
-  await expect(page.getByText('当前没有启用的公益模型。')).toBeVisible();
+  await expect(page.getByText('没有匹配的公益模型')).toBeVisible();
   await page.getByRole('tab', { name: '我的捐赠', exact: true }).click();
   await expect(page.getByText('还没有捐赠记录')).toBeVisible();
   await assertResponsiveAndClean(page, guard);
@@ -316,8 +415,8 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/endpoints?limit=50',
-    body: { data: [endpoint], next_cursor: null },
+    path: '/api/endpoints?page=1&page_size=20',
+    body: numberedResponse([endpoint], '1', 20),
   });
   await mockJson(page, {
     origin: USER_ORIGIN,
@@ -328,36 +427,33 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/endpoints/1/keys?limit=50',
+    path: '/api/endpoints/1/keys?page=1&page_size=20',
     body: {
-      data: [
-        {
-          id: '2',
-          endpoint_id: '1',
-          display_head: 'sk-a',
-          display_tail: 'tail',
-          note: 'key note',
-          enabled: true,
-          force_store_false: true,
-          suspension_state: 'none',
-          revision: '1',
-          created_at: 1_700_000_000,
-          updated_at: 1_700_000_001,
-        },
-      ],
-      next_cursor: null,
+      ...numberedResponse(
+        [
+          {
+            id: '2',
+            endpoint_id: '1',
+            display_head: 'sk-a',
+            display_tail: 'tail',
+            note: 'key note',
+            enabled: true,
+            force_store_false: true,
+            suspension_state: 'none',
+            revision: '1',
+            created_at: 1_700_000_000,
+            updated_at: 1_700_000_001,
+          },
+        ],
+        '1',
+        20,
+      ),
     },
   });
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/models?limit=100',
-    body: { data: [], next_cursor: null },
-  });
-  await mockJson(page, {
-    origin: USER_ORIGIN,
-    method: 'GET',
-    path: '/api/endpoints/1/keys/2/models?limit=50',
+    path: '/api/endpoints/1/keys/2/models?page=1&page_size=20&source=manual',
     body: {
       evidence: {
         state: 'unknown',
@@ -370,6 +466,7 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
       automatic_entries: [],
       manual_entries: [],
       next_cursor: null,
+      pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
     },
   });
 
@@ -586,14 +683,20 @@ test('reachable admin charity opens the corrected pending review query without i
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/donations?limit=50',
-    body: { data: [pendingAdminDonation], next_cursor: null },
+    path: '/admin/api/donations?page=1&page_size=20',
+    body: numberedResponse([managedDonationPageItem(pendingAdminDonation)], '1', 20),
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
     path: '/admin/api/donations/9',
     body: pendingAdminDonation,
+  });
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN,
+    method: 'GET',
+    path: '/admin/api/donations/9/keys?page=1&page_size=20',
+    body: numberedResponse([managedKeyPageItem(pendingAdminDonation, pendingKey)], '1', 20),
   });
 
   await page.goto(`${ADMIN_ORIGIN}/charity`);
@@ -612,17 +715,18 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
   page,
 }) => {
   const guard = await prepare(context, page, 'admin', 'admin', 'en', 'dark');
+  let savedModel = currentCharityModel;
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/donations?limit=50',
-    body: { data: [], next_cursor: null },
+    path: '/admin/api/donations?page=1&page_size=20',
+    body: numberedResponse([], '1', 20),
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/charity-models?limit=50',
-    body: { data: [currentCharityModel], next_cursor: null },
+    path: '/admin/api/charity-models?page=1&page_size=20',
+    body: numberedResponse([currentCharityModel], '1', 20),
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
@@ -630,35 +734,52 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
     path: '/admin/api/charity-models/7/bindings',
     body: { bindings: [], binding_revision: '0' },
   });
-  await mockJson(page, {
-    origin: ADMIN_ORIGIN,
-    method: 'GET',
-    path: '/admin/api/charity-models/7/binding-donations?limit=50',
-    body: {
-      data: [
-        {
-          id: '9',
-          description: 'Shared donation instructions\nReview the limits before use.',
-          key_count: 1,
-        },
-      ],
-      next_cursor: null,
-    },
-  });
   const sharedSource = {
     connector_type: 'openai-compatible',
     canonical_base_url: 'https://shared.example.test/v1',
     display_head: 'head',
     display_tail: 'tail',
   };
+  const safeSharedSource = {
+    kind: 'custom',
+    connector_type: 'openai-compatible',
+    base_url: 'https://shared.example.test/v1',
+  };
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/charity-models/7/binding-donations/9/keys?limit=50',
+    path: `/admin/api/donation-sources?scope=active&page=1&page_size=20`,
     body: {
-      data: [{ donation_key_id: '6', source: sharedSource, note: 'Reviewed key note' }],
+      data: [
+        {
+          source_key: SOURCE_KEY,
+          safe_source: safeSharedSource,
+          donation_count: '1',
+          key_count: '1',
+          usable_key_count: '0',
+          pending_donation_count: '1',
+        },
+      ],
       next_cursor: null,
+      pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
     },
+  });
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN,
+    method: 'GET',
+    path: `/admin/api/donation-sources/${SOURCE_KEY}/keys?scope=active&page=1&page_size=20`,
+    body: numberedResponse(
+      [
+        managedKeyPageItem(pendingAdminDonation, {
+          ...pendingKey,
+          charity_state: 'available',
+          safe_source: safeSharedSource,
+          safe_note: 'Reviewed key note',
+        }),
+      ],
+      '1',
+      20,
+    ),
   });
   await page.route(
     `${ADMIN_ORIGIN}/admin/api/charity-models/7/binding-candidates?*`,
@@ -678,6 +799,7 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
             },
           ],
           next_cursor: null,
+          pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
         },
       });
     },
@@ -689,16 +811,18 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
       patchBody = request.postDataJSON() as Record<string, unknown>;
     }
   });
-  await mockJson(page, {
-    origin: ADMIN_ORIGIN,
-    method: 'PATCH',
-    path: '/admin/api/charity-models/7',
-    body: {
-      ...currentCharityModel,
-      flatten_tool_calls: true,
-      revision: '2',
-      updated_at: 3,
-    },
+  await page.route(`${ADMIN_ORIGIN}/admin/api/charity-models/7`, async (route) => {
+    if (route.request().method() === 'PATCH') {
+      savedModel = {
+        ...currentCharityModel,
+        flatten_tool_calls: true,
+        revision: '2',
+        updated_at: 3,
+      };
+    } else if (route.request().method() !== 'GET') {
+      return route.fallback();
+    }
+    return route.fulfill({ json: savedModel });
   });
 
   await page.goto(`${ADMIN_ORIGIN}/charity`);
@@ -716,13 +840,18 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
   await page.keyboard.press('Space');
   await expect(flatten).toBeChecked();
   await editor.getByRole('button', { name: 'Save model' }).click();
-  await expect.poll(() => patchBody).toMatchObject({ flatten_tool_calls: true });
+  await expect
+    .poll(() => patchBody)
+    .toMatchObject({ expected_revision: '1', flatten_tool_calls: true });
+  await expect(flatten).toBeChecked();
   const picker = page.locator('.ops-binding-picker');
-  await picker.getByRole('button', { name: /Donation #9/ }).click();
-  await expect(picker.getByText(/Shared donation instructions/)).toBeVisible();
+  await picker.getByRole('button', { name: /https:\/\/shared.example.test\/v1/ }).click();
+  await expect(picker.locator('.ops-picker-context')).toContainText(
+    'https://shared.example.test/v1',
+  );
   await picker.getByRole('button', { name: /Reviewed key note/ }).click();
   await picker.getByRole('checkbox', { name: /upstream-model/ }).check();
-  await picker.getByRole('button', { name: '1 · Choose donation' }).click();
+  await picker.getByRole('button', { name: '1 · Choose source', exact: true }).click();
   await expect(picker.locator('.ops-picker-selection')).toContainText('upstream-model');
   await expect(picker.locator('.ops-picker-selection')).toContainText('Reviewed key note');
   await assertResponsiveAndClean(page, guard);
@@ -736,20 +865,26 @@ test('reachable level-5 steward page keeps its bounded log projection usable', a
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/steward/logs?limit=20',
-    body: { data: [], next_cursor: null },
+    path: '/api/steward/logs?page=1&page_size=20',
+    body: numberedResponse([], '1', 20),
   });
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/steward/donations?limit=50',
-    body: { data: [pendingStewardDonation], next_cursor: null },
+    path: '/api/steward/donations?page=1&page_size=20',
+    body: numberedResponse([managedDonationPageItem(pendingStewardDonation)], '1', 20),
   });
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
     path: '/api/steward/donations/9',
     body: pendingStewardDonation,
+  });
+  await mockJson(page, {
+    origin: USER_ORIGIN,
+    method: 'GET',
+    path: '/api/steward/donations/9/keys?page=1&page_size=20',
+    body: numberedResponse([managedKeyPageItem(pendingStewardDonation, pendingKey)], '1', 20),
   });
 
   await page.goto(`${USER_ORIGIN}/steward`);

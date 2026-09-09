@@ -260,7 +260,7 @@ func validDecision(userID, decisionNow int64) bool {
 	return userID > 0 && decisionNow >= 0 && decisionNow <= maximumUnixSecond
 }
 
-// Export builds and commits one authoritative schema-v4 snapshot. The encoded
+// Export builds and commits one authoritative schema-v5 snapshot. The encoded
 // bytes are finalized before commit so an oversized document never commits a
 // lazy-expiry write performed by a domain exporter.
 func (coordinator *Coordinator) Export(ctx context.Context, userID, decisionNow int64) ([]byte, error) {

@@ -9,12 +9,17 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
 type donationHeldReadStub struct {
 	allow bool
 	calls int
 	id    int64
+}
+
+func (stub *donationHeldReadStub) AuthorizeStewardHeldDonationRead(ctx context.Context, tx *sql.Tx, _ int64, id, now int64) (bool, error) {
+	return stub.AuthorizeHeldDonationRead(ctx, tx, id, now)
 }
 
 func (stub *donationHeldReadStub) AuthorizeHeldDonationRead(
@@ -30,6 +35,9 @@ func (stub *donationHeldReadStub) AuthorizeHeldDonationRead(
 
 func TestDonationOrdinaryCutoffAndKnownIDHeldRead(t *testing.T) {
 	environment := newDonationTestEnv(t)
+	environment.seedUser(t, "", nil, true)
+	level := int64(5)
+	steward := environment.seedUser(t, "held-donation-steward", &level, false)
 	owner := environment.seedUser(t, "held-read-donation-owner", nil, false)
 	_, endpointKeyID := environment.seedEndpointKey(t, owner, 'j')
 	donation := environment.createDonation(t, owner, endpointKeyID)
@@ -63,7 +71,19 @@ func TestDonationOrdinaryCutoffAndKnownIDHeldRead(t *testing.T) {
 	if hook.calls != 1 || hook.id != donationID {
 		t.Fatalf("held read hook calls=%d id=%d", hook.calls, hook.id)
 	}
+	if _, err := environment.service.GetSteward(context.Background(), steward, donationID); err != nil {
+		t.Fatalf("steward held donation: %v", err)
+	}
+	if _, err := environment.service.KeysStewardPage(context.Background(), steward, donationID, pagination.Default()); err != nil {
+		t.Fatalf("steward held donation keys: %v", err)
+	}
 	hook.allow = false
+	if _, err := environment.service.GetSteward(context.Background(), steward, donationID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("steward read released donation hold: %v", err)
+	}
+	if _, err := environment.service.KeysStewardPage(context.Background(), steward, donationID, pagination.Default()); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("steward read released donation keys: %v", err)
+	}
 	if _, err := environment.service.GetAdmin(context.Background(), donationID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unheld known-ID read at retention boundary = %v, want not found", err)
 	}

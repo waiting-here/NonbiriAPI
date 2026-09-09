@@ -3,6 +3,8 @@ package issues
 import (
 	"context"
 	"database/sql"
+
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
 type Source string
@@ -50,15 +52,17 @@ type Issue struct {
 }
 
 type Page struct {
-	Data                 []Issue `json:"data"`
-	NextCursor           *string `json:"next_cursor"`
-	ProjectionIncomplete bool    `json:"projection_incomplete"`
+	Data                 []Issue              `json:"data"`
+	NextCursor           *string              `json:"next_cursor"`
+	ProjectionIncomplete bool                 `json:"projection_incomplete"`
+	Pagination           *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 type ListQuery struct {
-	State  string
-	Cursor string
-	Limit  int
+	State    string
+	Cursor   string
+	Limit    int
+	Numbered *pagination.Request
 }
 
 // ResourceValidationState is returned by the resource-validator authority.

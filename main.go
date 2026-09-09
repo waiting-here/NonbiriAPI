@@ -53,6 +53,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/resourcebridge"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/timeapi"
 	"github.com/waiting-here/NonbiriAPI/web"
 )
 
@@ -1204,6 +1205,10 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("register account lifecycle routes: %w", err)
 	}
+	if err := timeapi.RegisterRoutes(authRuntime, resourceAdminRouteRegistrar{runtime: authRuntime}); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register time API routes: %w", err)
+	}
 	if err := registerAccountEventRoute(authRuntime, gate, gameRuntimes.rps, activityEvents, accountConnections); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("register account event route: %w", err)
@@ -1223,6 +1228,10 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err := gameRuntimes.fishing.ValidatePersistedState(startupContext); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("validate Fishing persisted state: %w", err)
+	}
+	if err := charityService.ValidateRecurringState(startupContext); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("validate recurring charity limits: %w", err)
 	}
 	if err := lifecycleCoordinator.RecoverBeforeListener(startupContext); err != nil {
 		cleanup()

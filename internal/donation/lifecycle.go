@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -123,6 +124,11 @@ WHERE id=? AND status IN ('pending','approved')`
 		if err := requireOne(result); err != nil {
 			return ErrInvariant
 		}
+		if remaining == 0 {
+			if err := closePendingHandlingTx(ctx, tx, donationID, decisionNow, "member_removed"); err != nil {
+				return err
+			}
+		}
 		var revision int64
 		if err := tx.QueryRowContext(ctx, `SELECT revision FROM donations WHERE id=?`, donationID).Scan(&revision); err != nil {
 			return fmt.Errorf("donation: read deletion revision: %w", err)
@@ -164,6 +170,9 @@ WHERE id=? AND user_id=? AND status=? AND revision=?`, finalStatus, now, now, do
 		return fmt.Errorf("donation: terminalize submission: %w", err)
 	}
 	if err := requireOne(result); err != nil {
+		return err
+	}
+	if err := closePendingHandlingTx(ctx, tx, donationID, now, endedReason); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO donation_reviews(
@@ -371,6 +380,11 @@ WHERE id=? AND status=? AND revision=?`, newStatus, now, terminalAt, donationID,
 	if err := requireOne(result); err != nil {
 		return expiryMaterialization{}, err
 	}
+	if terminal {
+		if err := closePendingHandlingTx(ctx, tx, donationID, now, "expired"); err != nil {
+			return expiryMaterialization{}, err
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO donation_reviews(
 donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at)
 VALUES(?,?,NULL,'','expire','',?)`, donationID, revision+1, now); err != nil {
@@ -502,6 +516,9 @@ description='',review_note='',user_id=NULL,updated_at=?,terminal_at=? WHERE id=?
 			if err := requireOne(result); err != nil {
 				return err
 			}
+			if err := closePendingHandlingTx(ctx, tx, value.id, decisionNow, "account_deleted"); err != nil {
+				return err
+			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO donation_reviews(
 donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at)
 VALUES(?,?,NULL,'','terminate','',?)`, value.id, value.revision+1, decisionNow); err != nil {
@@ -585,9 +602,20 @@ ORDER BY id LIMIT ?`, userID, cutoff, limit+1)
 		if projection.Owner == nil || projection.Owner.UserID != strconv.FormatInt(userID, 10) {
 			return nil, ErrNotFound
 		}
+		keys := exportDonationKeys(projection.Keys)
+		for index := range keys {
+			keyID, err := strconv.ParseInt(keys[index].ID, 10, 64)
+			if err != nil {
+				return nil, ErrInvariant
+			}
+			keys[index].RecurringLimits, err = donationquota.Views(ctx, tx, keyID, decisionNow)
+			if err != nil {
+				return nil, quotaError(err)
+			}
+		}
 		items = append(items, ExportDonation{
 			ID: projection.ID, Status: projection.Status, Description: projection.Description,
-			ReviewResult: projection.ReviewResult, Keys: exportDonationKeys(projection.Keys),
+			ReviewResult: projection.ReviewResult, Keys: keys,
 			CreatedAt: projection.CreatedAt, UpdatedAt: projection.UpdatedAt,
 		})
 	}
@@ -646,6 +674,9 @@ func (s *Service) CleanupTx(ctx context.Context, tx *sql.Tx, decisionNow int64, 
 WHERE d.status IN ('rejected','deleted','expired') AND d.terminal_at IS NOT NULL AND d.terminal_at<=?
 AND NOT EXISTS(SELECT 1 FROM donation_keys dk JOIN donation_usage_reservations r
  ON r.donation_key_id=dk.id AND r.state='reserved' WHERE dk.donation_id=d.id)
+AND NOT EXISTS(SELECT 1 FROM donation_keys dk JOIN donation_quota_rules q ON q.donation_key_id=dk.id JOIN donation_quota_receipts r ON r.rule_id=q.id WHERE dk.donation_id=d.id AND r.state<>'settled')
+AND (NOT EXISTS(SELECT 1 FROM donation_keys dk JOIN donation_quota_rules q ON q.donation_key_id=dk.id WHERE dk.donation_id=d.id)
+ OR EXISTS(SELECT 1 FROM donation_keys dk JOIN donation_quota_rules q ON q.donation_key_id=dk.id WHERE dk.donation_id=d.id AND q.current_epoch IS NOT NULL))
 AND NOT EXISTS(SELECT 1 FROM legal_holds h WHERE h.object_kind='donation'
  AND h.object_ref=CAST(d.id AS TEXT) AND h.state='active')
 ORDER BY d.terminal_at,d.id LIMIT ?`, cutoff, limit)
@@ -656,7 +687,22 @@ ORDER BY d.terminal_at,d.id LIMIT ?`, cutoff, limit)
 	if err != nil {
 		return 0, err
 	}
+	// Each retired rule updates its epoch and its current pointer. Share one
+	// mutation budget across the batch, even for donations with many keys.
+	remainingRules, processed := donationquota.CleanupBatch/2, 0
 	for _, id := range ids {
+		if remainingRules == 0 {
+			break
+		}
+		ready, retired, err := donationquota.RetireDonation(ctx, tx, id, decisionNow, remainingRules)
+		if err != nil {
+			return 0, err
+		}
+		remainingRules -= retired
+		processed++
+		if !ready {
+			continue
+		}
 		result, err := tx.ExecContext(ctx, `DELETE FROM donations WHERE id=? AND status IN ('rejected','deleted','expired')`, id)
 		if err != nil {
 			return 0, fmt.Errorf("donation: delete retained aggregate: %w", err)
@@ -665,7 +711,7 @@ ORDER BY d.terminal_at,d.id LIMIT ?`, cutoff, limit)
 			return 0, ErrInvariant
 		}
 	}
-	return len(ids), nil
+	return processed, nil
 }
 
 func incrementU128(value db.U128) (db.U128, error) {

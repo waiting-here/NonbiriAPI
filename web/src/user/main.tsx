@@ -6,6 +6,7 @@ import { ThemeProvider } from '@shared/theme/ThemeProvider';
 import { ToastProvider } from '@shared/components/Toast';
 import { createQueryClient } from '@shared/query/client';
 import '@shared/styles/index.css';
+import '@shared/styles/stations/user-shell.css';
 import './i18n';
 import { router } from './routes';
 

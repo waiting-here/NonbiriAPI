@@ -1,22 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { clearStationSession } from '@shared/charityManagement';
+import { useSearchState } from '@shared/operations/useSearchState';
+import {
+  captureStationSession,
+  clearStationSession,
+  stationSessionMatches,
+  StationSessionChangedError,
+  type StationSessionSnapshot,
+} from '@shared/charityManagement';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
-import { CursorPagination } from '@shared/operations/CursorPagination';
+import { PagePagination } from '@shared/operations/PagePagination';
 import { elevateAdmin } from '@shared/operations/api';
-import { useCursorPager } from '@shared/operations/useCursorPager';
 import { ApiError, isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import { formatDateTime } from '@shared/utils/datetime';
+import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
+import { useAdminSession } from '../../data';
+import { createLegalHold, releaseLegalHold, type HeldObjectKind } from './core';
 import {
-  adminCoreKeys,
-  createLegalHold,
-  getLegalHold,
-  getLegalHolds,
-  releaseLegalHold,
-  type HeldObjectKind,
-} from './core';
+  isLegalHoldID,
+  type LegalHoldKindFilter,
+  type LegalHoldStateFilter,
+  useLegalHoldDetail,
+  useLegalHoldPage,
+} from './legalHoldPages';
 import { useRetainedOperation } from './useRetainedOperation';
 
 const KINDS: HeldObjectKind[] = [
@@ -41,6 +49,43 @@ const STATE_LABEL_KEYS: Record<'active' | 'released' | 'expired', string> = {
   expired: 'admin.legalHolds.state.expired',
 };
 
+const HOLD_LIST_TYPE = 'legal-holds';
+const STATE_PARAM = 'hold_state';
+const KIND_PARAM = 'hold_kind';
+const ID_PARAM = 'hold_id';
+const PAGE_PARAM = 'hold_page';
+const PAGE_SIZE_PARAM = 'hold_page_size';
+const STATES: readonly LegalHoldStateFilter[] = ['', 'active', 'released', 'expired'];
+const FILTER_KINDS: readonly LegalHoldKindFilter[] = ['', ...KINDS];
+
+function singleSearchValue(searchParams: URLSearchParams, name: string): string | undefined {
+  const values = searchParams.getAll(name);
+  return values.length === 1 ? values[0] : undefined;
+}
+
+function readFilter<T extends string>(
+  searchParams: URLSearchParams,
+  name: string,
+  allowed: readonly T[],
+): T {
+  const value = singleSearchValue(searchParams, name);
+  return value !== undefined && allowed.includes(value as T) ? (value as T) : allowed[0];
+}
+
+function filterNeedsNormalization<T extends string>(
+  searchParams: URLSearchParams,
+  name: string,
+  allowed: readonly T[],
+): boolean {
+  const values = searchParams.getAll(name);
+  return values.length > 0 && (values.length !== 1 || !allowed.includes(values[0] as T));
+}
+
+function selectedHoldID(searchParams: URLSearchParams): string {
+  const value = singleSearchValue(searchParams, ID_PARAM);
+  return value && isLegalHoldID(value) ? value : '';
+}
+
 function isFinalAuthorityLoss(error: unknown): boolean {
   return (
     isUnauthorized(error) ||
@@ -48,16 +93,83 @@ function isFinalAuthorityLoss(error: unknown): boolean {
   );
 }
 
+function isInvalidResponse(error: unknown): boolean {
+  return error instanceof ApiError && error.code === 'invalid_response';
+}
+
 export function LegalHoldPanel() {
+  const session = useAdminSession();
+  const [closedError, setClosedError] = useState<unknown>(null);
+  const [, setSearchParams] = useSearchState();
+  const account = session.data?.admin.username;
+  const [observedAccount, setObservedAccount] = useState(account);
+  const transitioning = observedAccount !== undefined && observedAccount !== account;
+  /* eslint-disable react-hooks/set-state-in-effect -- Reset deep links when the authoritative account changes, before mounting its private panel. */
+  useEffect(() => {
+    if (observedAccount === account) return;
+    if (observedAccount !== undefined) setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete(ID_PARAM);
+      next.delete(PAGE_PARAM);
+      return next;
+    }, { replace: true });
+    setObservedAccount(account);
+  }, [account, observedAccount, setSearchParams]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+  if (session.error)
+    return <ErrorState error={session.error} onRetry={() => void session.refetch()} />;
+  if (!session.data && closedError) return <ErrorState error={closedError} />;
+  if (!session.data || session.isPending || transitioning) return <LoadingState />;
+  return (
+    <LegalHoldSessionPanel
+      key={session.data.admin.username}
+      session={session}
+      onAuthorityLoss={setClosedError}
+    />
+  );
+}
+
+function LegalHoldSessionPanel({
+  session,
+  onAuthorityLoss,
+}: {
+  session: ReturnType<typeof useAdminSession>;
+  onAuthorityLoss: (error: unknown) => void;
+}) {
   const { t } = useTranslation();
   const client = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchState();
   const authorityEpoch = useRef(0);
   const createElevationToken = useRef<string | null>(null);
   const releaseElevationToken = useRef<string | null>(null);
-  const pager = useCursorPager();
-  const [state, setState] = useState('');
-  const [kind, setKind] = useState('');
-  const [selected, setSelected] = useState('');
+  const createSession = useRef<StationSessionSnapshot | null>(null);
+  const releaseSession = useRef<StationSessionSnapshot | null>(null);
+  const handledAuthorityError = useRef<unknown>(null);
+  const [previousAccountID, setPreviousAccountID] = useState<string | undefined>(undefined);
+  const [authorityError, setAuthorityError] = useState<unknown>(null);
+  const state = readFilter(searchParams, STATE_PARAM, STATES);
+  const kind = readFilter(searchParams, KIND_PARAM, FILTER_KINDS);
+  const selected = selectedHoldID(searchParams);
+  const accountID = session.data ? `admin:${session.data.admin.username}` : undefined;
+  const accountTransitioning =
+    previousAccountID !== undefined && accountID !== undefined && previousAccountID !== accountID;
+  const scopeReady = Boolean(accountID) && !session.error;
+  const filtersReady =
+    !filterNeedsNormalization(searchParams, STATE_PARAM, STATES) &&
+    !filterNeedsNormalization(searchParams, KIND_PARAM, FILTER_KINDS);
+  const selectedParamValues = searchParams.getAll(ID_PARAM);
+  const selectedParamReady =
+    selectedParamValues.length === 0 ||
+    (selectedParamValues.length === 1 && isLegalHoldID(selectedParamValues[0] ?? ''));
+  const pager = useUrlPagePager({
+    station: 'admin',
+    listType: HOLD_LIST_TYPE,
+    scopeKey: accountID ?? 'anonymous',
+    scopeReady,
+    resetKey: `${state}\u0000${kind}`,
+    pageParam: PAGE_PARAM,
+    pageSizeParam: PAGE_SIZE_PARAM,
+  });
   const [createDraft, setCreateDraft] = useState({
     object_kind: 'report_case' as HeldObjectKind,
     object_ref: '',
@@ -71,19 +183,38 @@ export function LegalHoldPanel() {
   const [confirmation, setConfirmation] = useState<'create' | 'release' | null>(null);
   const [elevating, setElevating] = useState(false);
   const [elevationError, setElevationError] = useState<unknown>(null);
-  const list = useQuery({
-    queryKey: adminCoreKeys.holds(state, kind, pager.cursor),
-    queryFn: ({ signal }) => getLegalHolds(state, kind, pager.cursor, signal),
-    retry: false,
-  });
-  const detail = useQuery({
-    queryKey: adminCoreKeys.hold(selected),
-    queryFn: ({ signal }) => getLegalHold(selected, signal),
-    retry: false,
-    enabled: Boolean(selected),
-  });
+  const list = useLegalHoldPage(
+    accountID,
+    state,
+    kind,
+    pager.page,
+    pager.pageSize,
+    scopeReady &&
+      !accountTransitioning &&
+      filtersReady &&
+      !session.isPending &&
+      !session.isFetching,
+  );
+  const detail = useLegalHoldDetail(
+    accountID,
+    selected,
+    scopeReady &&
+      !accountTransitioning &&
+      selectedParamReady &&
+      !session.isPending &&
+      !session.isFetching,
+  );
   const reconcile = async () => {
+    if (!session.data || !client.getQueryData(['admin', 'session'])) return;
     await Promise.all([list.refetch(), selected ? detail.refetch() : Promise.resolve()]);
+  };
+  const assertAuthority = (epoch: number, snapshot: StationSessionSnapshot | null) => {
+    if (
+      epoch !== authorityEpoch.current ||
+      !snapshot ||
+      !stationSessionMatches(client, 'admin', snapshot)
+    )
+      throw new StationSessionChangedError();
   };
   const create = useRetainedOperation(
     async (
@@ -92,6 +223,7 @@ export function LegalHoldPanel() {
     ) => {
       const epoch = authorityEpoch.current;
       const token = createElevationToken.current;
+      const snapshot = createSession.current;
       createElevationToken.current = null;
       if (!token)
         throw new ApiError(
@@ -99,20 +231,25 @@ export function LegalHoldPanel() {
           t('admin.legalHolds.errors.elevationRequired'),
           403,
         );
-      const hold = await createLegalHold(
-        {
-          object_kind: input.object_kind,
-          object_ref: input.object_ref,
-          basis: input.basis,
-          expires_at: input.expires_at,
-          confirmation: true,
-        },
-        key,
-        token,
-      );
-      if (epoch !== authorityEpoch.current)
-        throw new ApiError('authority_changed', t('admin.legalHolds.errors.authorityChanged'), 401);
-      return hold;
+      assertAuthority(epoch, snapshot);
+      try {
+        const hold = await createLegalHold(
+          {
+            object_kind: input.object_kind,
+            object_ref: input.object_ref,
+            basis: input.basis,
+            expires_at: input.expires_at,
+            confirmation: true,
+          },
+          key,
+          token,
+        );
+        assertAuthority(epoch, snapshot);
+        return hold;
+      } catch (error) {
+        assertAuthority(epoch, snapshot);
+        throw error;
+      }
     },
     reconcile,
   );
@@ -120,6 +257,7 @@ export function LegalHoldPanel() {
     async (input: { id: string; revision: string; reason: string }, key) => {
       const epoch = authorityEpoch.current;
       const token = releaseElevationToken.current;
+      const snapshot = releaseSession.current;
       releaseElevationToken.current = null;
       if (!token)
         throw new ApiError(
@@ -127,15 +265,20 @@ export function LegalHoldPanel() {
           t('admin.legalHolds.errors.elevationRequired'),
           403,
         );
-      const hold = await releaseLegalHold(
-        input.id,
-        { expected_revision: input.revision, reason: input.reason, confirmation: true },
-        key,
-        token,
-      );
-      if (epoch !== authorityEpoch.current)
-        throw new ApiError('authority_changed', t('admin.legalHolds.errors.authorityChanged'), 401);
-      return hold;
+      assertAuthority(epoch, snapshot);
+      try {
+        const hold = await releaseLegalHold(
+          input.id,
+          { expected_revision: input.revision, reason: input.reason, confirmation: true },
+          key,
+          token,
+        );
+        assertAuthority(epoch, snapshot);
+        return hold;
+      } catch (error) {
+        assertAuthority(epoch, snapshot);
+        throw error;
+      }
     },
     reconcile,
   );
@@ -146,14 +289,37 @@ export function LegalHoldPanel() {
 
   /* eslint-disable react-hooks/set-state-in-effect -- External authority failures must purge fresh-elevation secrets and irreversible confirmations. */
   useEffect(() => {
-    const error = list.error ?? detail.error ?? createError ?? releaseError;
-    // Fresh-elevation passwords and irreversible confirmations must be erased on authority loss.
-    if (isFinalAuthorityLoss(error)) {
+    const invalidState = filterNeedsNormalization(searchParams, STATE_PARAM, STATES);
+    const invalidKind = filterNeedsNormalization(searchParams, KIND_PARAM, FILTER_KINDS);
+    const invalidID = selectedParamValues.length > 0 && !selectedParamReady;
+    if (!invalidState && !invalidKind && !invalidID) return;
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        if (invalidState) next.delete(STATE_PARAM);
+        if (invalidKind) next.delete(KIND_PARAM);
+        if (invalidID) next.delete(ID_PARAM);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [searchParams, selectedParamReady, selectedParamValues.length, setSearchParams]);
+
+  useEffect(() => {
+    const previous = previousAccountID;
+    if (!previous && accountID && !session.error) setAuthorityError(null);
+    if (previous && accountID && previous !== accountID) {
       authorityEpoch.current += 1;
       createElevationToken.current = null;
       releaseElevationToken.current = null;
-      clearStationSession(client, 'admin');
-      setSelected('');
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.delete(ID_PARAM);
+          return next;
+        },
+        { replace: true },
+      );
       setCreateDraft({
         object_kind: 'report_case',
         object_ref: '',
@@ -166,17 +332,90 @@ export function LegalHoldPanel() {
       setReleaseDraft({ reason: '', password: '', confirmed: false });
       setConfirmation(null);
       setElevationError(null);
+      setAuthorityError(null);
       resetCreate();
       resetRelease();
     }
-  }, [client, createError, detail.error, list.error, releaseError, resetCreate, resetRelease]);
+    setPreviousAccountID(accountID);
+  }, [accountID, previousAccountID, resetCreate, resetRelease, session.error, setSearchParams]);
 
   useEffect(() => {
-    if (!selected || !isNotFoundError(detail.error)) return;
-    setSelected('');
+    const error = [
+      session.error,
+      list.error,
+      detail.error,
+      createError,
+      releaseError,
+      elevationError,
+    ].find(isFinalAuthorityLoss);
+    // Fresh-elevation passwords and irreversible confirmations must be erased on authority loss.
+    if (!isFinalAuthorityLoss(error)) {
+      if (!error) handledAuthorityError.current = null;
+      return;
+    }
+    if (handledAuthorityError.current === error) return;
+    handledAuthorityError.current = error;
+    authorityEpoch.current += 1;
+    createElevationToken.current = null;
+    releaseElevationToken.current = null;
+    onAuthorityLoss(error);
+    clearStationSession(client, 'admin');
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete(ID_PARAM);
+        return next;
+      },
+      { replace: true },
+    );
+    setAuthorityError(error);
+    setCreateDraft({
+      object_kind: 'report_case',
+      object_ref: '',
+      basis: '',
+      days: '30',
+      password: '',
+      confirmed: false,
+    });
+    setCreateExpiry(null);
     setReleaseDraft({ reason: '', password: '', confirmed: false });
     setConfirmation(null);
-  }, [detail.error, selected]);
+    setElevationError(null);
+    resetCreate();
+    resetRelease();
+  }, [
+    client,
+    createError,
+    detail.error,
+    elevationError,
+    list.error,
+    onAuthorityLoss,
+    releaseError,
+    resetCreate,
+    resetRelease,
+    session.error,
+    setSearchParams,
+  ]);
+
+  useEffect(() => {
+    if (!selected || (!isNotFoundError(detail.error) && !isInvalidResponse(detail.error))) return;
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete(ID_PARAM);
+        return next;
+      },
+      { replace: true },
+    );
+    setReleaseDraft({ reason: '', password: '', confirmed: false });
+    setConfirmation(null);
+  }, [detail.error, selected, setSearchParams]);
+  useEffect(() => {
+    setReleaseDraft({ reason: '', password: '', confirmed: false });
+    setConfirmation(null);
+    releaseElevationToken.current = null;
+    resetRelease();
+  }, [selected, resetRelease]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(
@@ -189,8 +428,18 @@ export function LegalHoldPanel() {
   );
 
   const submitCreate = async () => {
-    if (createExpiry === null || !createDraft.password) return;
+    if (
+      createExpiry === null ||
+      !createDraft.password ||
+      elevating ||
+      create.isPending ||
+      release.isPending ||
+      session.isFetching ||
+      list.error
+    )
+      return;
     const epoch = authorityEpoch.current;
+    const snapshot = captureStationSession(client, 'admin');
     const password = createDraft.password;
     const input = {
       object_kind: createDraft.object_kind,
@@ -204,8 +453,9 @@ export function LegalHoldPanel() {
     setElevating(true);
     try {
       const elevation = await elevateAdmin(password);
-      if (epoch !== authorityEpoch.current) return;
+      assertAuthority(epoch, snapshot);
       createElevationToken.current = elevation.token;
+      createSession.current = snapshot;
       create.mutate(input, {
         onSuccess: (hold) => {
           setSelected(hold.id);
@@ -221,15 +471,27 @@ export function LegalHoldPanel() {
         },
       });
     } catch (error) {
-      if (epoch === authorityEpoch.current) setElevationError(error);
+      if (epoch === authorityEpoch.current && stationSessionMatches(client, 'admin', snapshot)) setElevationError(error);
     } finally {
       if (epoch === authorityEpoch.current) setElevating(false);
     }
   };
 
   const submitRelease = async () => {
-    if (!detail.data || !releaseDraft.password) return;
+    if (
+      !detail.data ||
+      !releaseDraft.password ||
+      elevating ||
+      create.isPending ||
+      release.isPending ||
+      session.isFetching ||
+      detail.isFetching ||
+      detail.error ||
+      list.error
+    )
+      return;
     const epoch = authorityEpoch.current;
+    const snapshot = captureStationSession(client, 'admin');
     const password = releaseDraft.password;
     const input = {
       id: detail.data.id,
@@ -242,13 +504,14 @@ export function LegalHoldPanel() {
     setElevating(true);
     try {
       const elevation = await elevateAdmin(password);
-      if (epoch !== authorityEpoch.current) return;
+      assertAuthority(epoch, snapshot);
       releaseElevationToken.current = elevation.token;
+      releaseSession.current = snapshot;
       release.mutate(input, {
         onSuccess: () => setReleaseDraft({ reason: '', password: '', confirmed: false }),
       });
     } catch (error) {
-      if (epoch === authorityEpoch.current) setElevationError(error);
+      if (epoch === authorityEpoch.current && stationSessionMatches(client, 'admin', snapshot)) setElevationError(error);
     } finally {
       if (epoch === authorityEpoch.current) setElevating(false);
     }
@@ -256,6 +519,56 @@ export function LegalHoldPanel() {
 
   const days = Number(createDraft.days);
   const validDays = Number.isSafeInteger(days) && days >= 1 && days <= 365;
+  const setFilter = (parameter: typeof STATE_PARAM | typeof KIND_PARAM, value: string) => {
+    if (
+      parameter === STATE_PARAM
+        ? !STATES.includes(value as LegalHoldStateFilter)
+        : !FILTER_KINDS.includes(value as LegalHoldKindFilter)
+    ) {
+      return;
+    }
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (value) next.set(parameter, value);
+      else next.delete(parameter);
+      next.delete(PAGE_PARAM);
+      next.set(PAGE_PARAM, '1');
+      next.delete(PAGE_SIZE_PARAM);
+      next.set(PAGE_SIZE_PARAM, String(pager.pageSize));
+      return next;
+    });
+  };
+  const setSelected = (id: string) => {
+    if (!isLegalHoldID(id)) return;
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete(ID_PARAM);
+      next.set(ID_PARAM, id);
+      return next;
+    });
+  };
+  const closeDetail = () => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete(ID_PARAM);
+      return next;
+    });
+    setReleaseDraft({ reason: '', password: '', confirmed: false });
+    setConfirmation(null);
+  };
+  const pageData = list.data;
+  const busy = session.isFetching || list.isFetching;
+  const sessionError = session.error ?? (!session.data ? authorityError : null);
+  const finalAuthorityError = [
+    sessionError,
+    authorityError,
+    list.error,
+    detail.error,
+    create.error,
+    release.error,
+    elevationError,
+  ].find(isFinalAuthorityLoss);
+  if (finalAuthorityError) return <ErrorState error={finalAuthorityError} />;
   return (
     <div className="ops-stack">
       <Card className="ops-danger">
@@ -264,13 +577,7 @@ export function LegalHoldPanel() {
         <div className="ops-toolbar">
           <label>
             <span>{t('admin.legalHolds.filters.state')}</span>
-            <select
-              value={state}
-              onChange={(event) => {
-                pager.reset();
-                setState(event.target.value);
-              }}
-            >
+            <select value={state} onChange={(event) => setFilter(STATE_PARAM, event.target.value)}>
               <option value="">{t('admin.legalHolds.filters.all')}</option>
               <option value="active">{t(STATE_LABEL_KEYS.active)}</option>
               <option value="released">{t(STATE_LABEL_KEYS.released)}</option>
@@ -279,13 +586,7 @@ export function LegalHoldPanel() {
           </label>
           <label>
             <span>{t('admin.legalHolds.filters.objectKind')}</span>
-            <select
-              value={kind}
-              onChange={(event) => {
-                pager.reset();
-                setKind(event.target.value);
-              }}
-            >
+            <select value={kind} onChange={(event) => setFilter(KIND_PARAM, event.target.value)}>
               <option value="">{t('admin.legalHolds.filters.all')}</option>
               {KINDS.map((value) => (
                 <option key={value} value={value}>
@@ -295,70 +596,82 @@ export function LegalHoldPanel() {
             </select>
           </label>
         </div>
-        {list.isPending ? (
+        {sessionError ? (
+          <ErrorState error={sessionError} onRetry={() => void session.refetch()} />
+        ) : !session.data || session.isPending ? (
           <LoadingState />
         ) : list.error ? (
           <ErrorState error={list.error} onRetry={() => void list.refetch()} />
-        ) : list.data.data.length === 0 ? (
-          <EmptyState
-            title={t('admin.legalHolds.empty.title')}
-            body={t('admin.legalHolds.empty.body')}
-          />
+        ) : !pageData ? (
+          <LoadingState />
         ) : (
-          <>
-            <div className="ops-table-scroll">
-              <table className="ops-table ops-table--responsive">
-                <thead>
-                  <tr>
-                    <th>{t('admin.legalHolds.table.object')}</th>
-                    <th>{t('admin.legalHolds.create.objectReference')}</th>
-                    <th>{t('admin.legalHolds.table.state')}</th>
-                    <th>{t('admin.legalHolds.table.window')}</th>
-                    <th>{t('admin.legalHolds.table.detail')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {list.data.data.map((hold) => (
-                    <tr key={hold.id}>
-                      <td data-label={t('admin.legalHolds.table.object')}>
-                        {t(KIND_LABEL_KEYS[hold.object_kind])}
-                      </td>
-                      <td
-                        className="ops-id ops-cell-wide"
-                        data-label={t('admin.legalHolds.create.objectReference')}
-                      >
-                        {hold.object_ref}
-                      </td>
-                      <td data-label={t('admin.legalHolds.table.state')}>
-                        <StatusBadge
-                          active={hold.state === 'active'}
-                          label={t(STATE_LABEL_KEYS[hold.state])}
-                        />
-                      </td>
-                      <td data-label={t('admin.legalHolds.table.window')}>
-                        {formatDateTime(hold.created_at)} — {formatDateTime(hold.expires_at)}
-                      </td>
-                      <td className="ops-cell-wide" data-label={t('admin.legalHolds.table.detail')}>
-                        <button
-                          className="btn btn-secondary"
-                          type="button"
-                          onClick={() => setSelected(hold.id)}
-                        >
-                          {t('admin.legalHolds.actions.metadata')}
-                        </button>
-                      </td>
+          <div aria-busy={busy}>
+            {busy ? <LoadingState /> : null}
+            {pageData.data.length === 0 ? (
+              <EmptyState
+                title={t('admin.legalHolds.empty.title')}
+                body={t('admin.legalHolds.empty.body')}
+              />
+            ) : (
+              <div className="ops-table-scroll">
+                <table className="ops-table ops-table--responsive">
+                  <thead>
+                    <tr>
+                      <th>{t('admin.legalHolds.table.object')}</th>
+                      <th>{t('admin.legalHolds.create.objectReference')}</th>
+                      <th>{t('admin.legalHolds.table.state')}</th>
+                      <th>{t('admin.legalHolds.table.window')}</th>
+                      <th>{t('admin.legalHolds.table.detail')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <CursorPagination
-              page={pager.page}
-              nextCursor={list.data.next_cursor}
-              onPrevious={pager.previous}
-              onNext={pager.next}
+                  </thead>
+                  <tbody>
+                    {pageData.data.map((hold) => (
+                      <tr key={hold.id}>
+                        <td data-label={t('admin.legalHolds.table.object')}>
+                          {t(KIND_LABEL_KEYS[hold.object_kind])}
+                        </td>
+                        <td
+                          className="ops-id ops-cell-wide"
+                          data-label={t('admin.legalHolds.create.objectReference')}
+                        >
+                          {hold.object_ref}
+                        </td>
+                        <td data-label={t('admin.legalHolds.table.state')}>
+                          <StatusBadge
+                            active={hold.state === 'active'}
+                            label={t(STATE_LABEL_KEYS[hold.state])}
+                          />
+                        </td>
+                        <td data-label={t('admin.legalHolds.table.window')}>
+                          {formatDateTime(hold.created_at)} — {formatDateTime(hold.expires_at)}
+                        </td>
+                        <td
+                          className="ops-cell-wide"
+                          data-label={t('admin.legalHolds.table.detail')}
+                        >
+                          <button
+                            className="btn btn-secondary"
+                            type="button"
+                            disabled={busy}
+                            onClick={() => setSelected(hold.id)}
+                          >
+                            {t('admin.legalHolds.actions.metadata')}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <PagePagination
+              metadata={pageData.pagination}
+              requestedPage={pager.page}
+              busy={busy}
+              onPageChange={pager.setPage}
+              onPageSizeChange={pager.setPageSize}
             />
-          </>
+          </div>
         )}
       </Card>
       {selected ? (
@@ -369,7 +682,12 @@ export function LegalHoldPanel() {
             <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />
           ) : (
             <>
-              <h3>{t('admin.legalHolds.detail.title')}</h3>
+              <div className="dialog-title-row">
+                <h3>{t('admin.legalHolds.detail.title')}</h3>
+                <button className="btn btn-quiet" type="button" onClick={closeDetail}>
+                  {t('admin.legalHolds.actions.close')}
+                </button>
+              </div>
               <dl className="ops-kv">
                 <dt>{t('admin.legalHolds.detail.idRevision')}</dt>
                 <dd>
@@ -438,7 +756,12 @@ export function LegalHoldPanel() {
                       !releaseDraft.reason.trim() ||
                       !releaseDraft.password ||
                       !releaseDraft.confirmed ||
-                      release.isPending
+                      release.isPending ||
+                      create.isPending ||
+                      elevating ||
+                      busy ||
+                      detail.isFetching ||
+                      Boolean(list.error)
                     }
                     onClick={() => setConfirmation('release')}
                   >
@@ -543,6 +866,9 @@ export function LegalHoldPanel() {
             !createDraft.confirmed ||
             !validDays ||
             create.isPending ||
+            release.isPending ||
+            busy ||
+            Boolean(list.error) ||
             elevating
           }
           onClick={() => {

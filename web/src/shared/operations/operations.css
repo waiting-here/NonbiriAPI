@@ -36,6 +36,10 @@ form.ops-toolbar > label {
   margin-block: 0;
 }
 
+.ops-subcard > :where(h2, h3, h4, p) {
+  overflow-wrap: anywhere;
+}
+
 .ops-page .card > .card-title-row,
 .ops-subcard > .card-title-row {
   margin-bottom: 0;
@@ -50,6 +54,13 @@ form.ops-toolbar > label {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
   gap: var(--space-4, 1rem);
+}
+
+fieldset.ops-field-grid {
+  min-inline-size: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
 }
 
 .ops-field-grid {
@@ -457,4 +468,35 @@ form.ops-toolbar > label {
   .ops-users-table .ops-users-discord {
     grid-column: 1 / -1;
   }
+}
+.ops-unframed,
+.charity-management .ops-unframed {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ops-summary-part {
+  display: inline-block;
+  margin-inline-end: 0.65em;
+}
+
+.charity-management .ops-subcard.is-selected {
+  outline: 2px solid var(--nb-color-accent);
+  outline-offset: 2px;
+}
+
+.ops-source-preview {
+  padding-inline-start: 1.1em;
+  margin-block: 0.5em 0;
+  overflow-wrap: anywhere;
+}
+
+.ops-detail-target {
+  scroll-margin-block-start: 6rem;
+}
+
+.ops-row-action {
+  overflow-wrap: normal;
 }

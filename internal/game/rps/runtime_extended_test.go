@@ -276,8 +276,16 @@ func TestTerminalRetryIsAtomicAndConverges(t *testing.T) {
 	if !found || processing.TerminalRetryAttemptCount.Decimal() != "1" || processing.TerminalNextRetryAt == nil {
 		t.Fatalf("processing=%+v found=%v", processing, found)
 	}
+	for seat, expected := range []string{GestureRock, GestureScissors, GestureScissors} {
+		gesture := processing.Presentation.QuickGestures[seat]
+		if gesture == nil || *gesture != expected {
+			t.Fatalf("durable revealed gesture %d=%v", seat, gesture)
+		}
+	}
 	if fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='rps_terminal' AND source_id=?`, record.ID) != 0 ||
 		fixture.scalar(`SELECT COUNT(*) FROM game_rps_summaries WHERE session_id=?`, record.ID) != 0 ||
+		fixture.scalar(`SELECT COUNT(*) FROM game_rps_summary_presentation WHERE session_id=?`, record.ID) != 0 ||
+		fixture.scalar(`SELECT COUNT(*) FROM game_rps_pending_presentation`) != 0 ||
 		fixture.scalar(`SELECT COUNT(*) FROM game_rps_pending_results WHERE session_id_text=?`, record.ID) != 0 {
 		t.Fatal("failed terminal left partial terminal facts")
 	}
@@ -295,6 +303,24 @@ func TestTerminalRetryIsAtomicAndConverges(t *testing.T) {
 	}
 	if completed, err := fixture.service.runTerminalOne(context.Background(), record.ID, fixture.clock.Load()); err != nil || completed {
 		t.Fatalf("terminal replay=(%v,%v)", completed, err)
+	}
+	for _, userID := range users {
+		tx := fixture.mustReadTx()
+		pending, found, err := loadPending(context.Background(), tx, userID)
+		_ = tx.Rollback()
+		if err != nil || !found {
+			t.Fatalf("recovered pending: found=%v err=%v", found, err)
+		}
+		seat := processing.Seats[pending.OwnSeatNo]
+		if pending.OwnBuyIn == nil || *pending.OwnBuyIn != formatMilli(seat.StartingBalance.Big()) ||
+			pending.OwnCashOut == nil || *pending.OwnCashOut != formatMilli(seat.TerminalReturn.Big()) {
+			t.Fatalf("recovered transfers=%+v", pending)
+		}
+		for seat, expected := range []string{GestureRock, GestureScissors, GestureScissors} {
+			if pending.Seats[seat].Gesture == nil || *pending.Seats[seat].Gesture != expected {
+				t.Fatalf("recovered gesture %d=%v", seat, pending.Seats[seat].Gesture)
+			}
+		}
 	}
 }
 
@@ -708,6 +734,11 @@ func TestLifecycleDeleteBeforeActionDefaultsAndTerminalizesForSurvivors(t *testi
 	if outcome != "deidentified" {
 		t.Fatalf("deleted outcome=%s", outcome)
 	}
+	if fixture.scalar(`SELECT COUNT(*) FROM game_rps_summary_presentation WHERE session_id=?`, record.ID) != 2 ||
+		fixture.scalar(`SELECT COUNT(*) FROM game_rps_summary_presentation WHERE session_id=? AND seat_no=?`, record.ID, deletedSeat) != 0 ||
+		fixture.scalar(`SELECT COUNT(*) FROM game_rps_pending_presentation WHERE user_id=?`, users[0]) != 0 {
+		t.Fatal("terminal callback recreated deleted participant presentation")
+	}
 }
 
 func TestLifecycleDeleteAfterTerminalPurgesPrivateAndRankFacts(t *testing.T) {
@@ -741,6 +772,7 @@ func TestLifecycleDeleteAfterTerminalPurgesPrivateAndRankFacts(t *testing.T) {
 	}
 	for _, query := range []string{
 		`SELECT COUNT(*) FROM game_rps_pending_results WHERE user_id=?`,
+		`SELECT COUNT(*) FROM game_rps_pending_presentation WHERE user_id=?`,
 		`SELECT COUNT(*) FROM game_rps_rank_facts WHERE user_id=?`,
 		`SELECT COUNT(*) FROM game_rps_rank_aggregates WHERE user_id=?`,
 		`SELECT COUNT(*) FROM game_rps_fun_stats WHERE user_id=?`,
@@ -753,6 +785,10 @@ func TestLifecycleDeleteAfterTerminalPurgesPrivateAndRankFacts(t *testing.T) {
 		fixture.scalar(`SELECT COUNT(*) FROM game_rps_summary_seats WHERE session_id=? AND user_id IS NOT NULL`, record.ID) != 2 {
 		t.Fatal("shared summary identity was not selectively deidentified")
 	}
+	if fixture.scalar(`SELECT COUNT(*) FROM game_rps_summary_presentation WHERE session_id=?`, record.ID) != 2 ||
+		fixture.scalar(`SELECT COUNT(*) FROM game_rps_summary_presentation WHERE session_id=? AND seat_no=?`, record.ID, deletedSeat) != 0 {
+		t.Fatal("private summary presentation was not selectively removed")
+	}
 	column := []string{"seat0_result", "seat1_result", "seat2_result"}[deletedSeat]
 	var nonDeidentified int
 	if err := fixture.database.QueryRow(`SELECT COUNT(*) FROM game_rps_pending_results
@@ -761,6 +797,40 @@ WHERE session_id_text=? AND `+column+`<>'deidentified'`, record.ID).Scan(&nonDei
 	}
 	if nonDeidentified != 0 {
 		t.Fatalf("survivor pending results retained deleted seat outcome: %d", nonDeidentified)
+	}
+}
+
+func TestLifecycleDeletionRollbackPreservesTerminalPresentation(t *testing.T) {
+	fixture := newRPSFixture(t)
+	users, bindings := fixture.startThree(game.RPSModeQuick, 100_000, 1440)
+	record := fixture.sessionForUser(users[0])
+	key := 1445
+	fixture.playGestures(record.ID, bindings, [3]string{GestureRock, GestureScissors, GestureScissors}, &key)
+	tx, err := fixture.database.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	finalizer, err := fixture.service.Lifecycle().PrepareUserDeletion(context.Background(), tx, users[0], fixture.clock.Load())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Account deletion can fail after the game participant has prepared its
+	// writes. Aborting the outer transaction must restore all private facts.
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	if !finalizer.Abort() || finalizer.Commit() {
+		t.Fatal("aborted finalizer committed")
+	}
+	for _, table := range []string{"game_rps_pending_results", "game_rps_pending_presentation"} {
+		if fixture.scalar(`SELECT COUNT(*) FROM `+table+` WHERE user_id=?`, users[0]) != 1 {
+			t.Fatalf("rollback lost %s", table)
+		}
+	}
+	if fixture.scalar(`SELECT COUNT(*) FROM game_rps_summary_presentation WHERE session_id=?`, record.ID) != 3 ||
+		fixture.scalar(`SELECT COUNT(*) FROM game_rps_summary_seats WHERE session_id=? AND user_id IS NOT NULL`, record.ID) != 3 {
+		t.Fatal("rollback lost summary presentation or identity")
 	}
 }
 
@@ -781,6 +851,9 @@ func TestLifecycleTerminalFirstDeletionPurgesAllSummarySurvivorsAfterPeerACK(t *
 	}
 	if fixture.scalar(`SELECT COUNT(*) FROM game_rps_pending_results WHERE session_id_text=?`, record.ID) != 2 {
 		t.Fatal("peer ACK did not remove exactly one pending result")
+	}
+	if fixture.scalar(`SELECT COUNT(*) FROM game_rps_pending_presentation WHERE user_id=?`, users[1]) != 0 {
+		t.Fatal("peer ACK retained private presentation")
 	}
 
 	tx, err := fixture.database.BeginTx(context.Background(), nil)
@@ -825,6 +898,10 @@ func TestLifecycleTerminalFirstDeletionPurgesAllSummarySurvivorsAfterPeerACK(t *
 	if outcome != "deidentified" {
 		t.Fatalf("surviving pending result=%s", outcome)
 	}
+	if fixture.scalar(`SELECT COUNT(*) FROM game_rps_summary_presentation WHERE session_id=?`, record.ID) != 2 ||
+		fixture.scalar(`SELECT COUNT(*) FROM game_rps_summary_presentation WHERE session_id=? AND seat_no=?`, record.ID, deletedSeat) != 0 {
+		t.Fatal("peer ACK prevented private summary cleanup")
+	}
 }
 
 func TestLifecycleRetentionIsBoundedAndExactAtDeadline(t *testing.T) {
@@ -849,7 +926,8 @@ func TestLifecycleRetentionIsBoundedAndExactAtDeadline(t *testing.T) {
 		}
 	}
 	if fixture.scalar(`SELECT COUNT(*) FROM game_rps_rank_facts WHERE session_id_text=?`, record.ID) != 0 ||
-		fixture.scalar(`SELECT COUNT(*) FROM game_rps_summaries WHERE session_id=?`, record.ID) != 0 {
+		fixture.scalar(`SELECT COUNT(*) FROM game_rps_summaries WHERE session_id=?`, record.ID) != 0 ||
+		fixture.scalar(`SELECT COUNT(*) FROM game_rps_summary_presentation WHERE session_id=?`, record.ID) != 0 {
 		t.Fatal("bounded retention left due facts or summary")
 	}
 }

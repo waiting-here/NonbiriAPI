@@ -354,8 +354,12 @@ test('user announcements render English safe content on the real list and detail
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/announcements?limit=20',
-    body: { data: [userAnnouncement('en', { detail: false })], next_cursor: null },
+    path: '/api/announcements?page=1&page_size=20',
+    body: {
+      data: [userAnnouncement('en', { detail: false })],
+      next_cursor: null,
+      pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+    },
   });
   await mockJson(page, {
     origin: USER_ORIGIN,
@@ -520,7 +524,7 @@ test('administrator activities route reads the singleton and unbound Thursday po
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/pools?limit=50',
+    path: '/admin/api/pools?page=1&page_size=20',
     body: {
       data: [
         {
@@ -535,6 +539,7 @@ test('administrator activities route reads the singleton and unbound Thursday po
         },
       ],
       next_cursor: null,
+      pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
     },
   });
 
@@ -570,20 +575,33 @@ test('administrator report inbox opens an authoritative empty case detail', asyn
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/reports?limit=50',
-    body: { data: [reportSummary], next_cursor: null },
+    path: '/admin/api/reports?page=1&page_size=20',
+    body: {
+      data: [reportSummary],
+      next_cursor: null,
+      pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+    },
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: `/admin/api/reports/${REPORT_ID}?materials_limit=50`,
-    body: { ...reportSummary, materials: { data: [], next_cursor: null }, decision: null },
+    path: `/admin/api/reports/${REPORT_ID}?materials_page=1&materials_page_size=20`,
+    body: {
+      ...reportSummary,
+      materials: { data: [], next_cursor: null },
+      materials_pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+      decision: null,
+    },
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: `/admin/api/reports/${REPORT_ID}/targets?limit=50`,
-    body: { data: [], next_cursor: null },
+    path: `/admin/api/reports/${REPORT_ID}/targets?page=1&page_size=20`,
+    body: {
+      data: [],
+      next_cursor: null,
+      pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+    },
   });
 
   await page.goto(`${ADMIN_ORIGIN}/reports`);
@@ -610,8 +628,12 @@ test('administrator announcement list opens the strict published authority detai
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/announcements?limit=50',
-    body: { data: [adminAnnouncement], next_cursor: null },
+    path: '/admin/api/announcements?page=1&page_size=20',
+    body: {
+      data: [adminAnnouncement],
+      next_cursor: null,
+      pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+    },
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN,

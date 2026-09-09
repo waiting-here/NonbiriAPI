@@ -1,4 +1,6 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import { useAdminSession } from '../../src/admin/data';
 import { describe, expect, test, vi, type Mock } from 'vitest';
 import { SettingsPage } from '../../src/admin/pages/SettingsPage';
 import { GamesPage } from '../../src/admin/pages/GamesPage';
@@ -39,6 +41,19 @@ function jsonResponse(body: unknown, status = 200): Response {
     status,
     headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
   });
+}
+
+function emptyLegalHoldPage() {
+  return {
+    data: [],
+    next_cursor: null,
+    pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+  };
+}
+
+function AdminSessionFixture({ children }: { children: ReactNode }) {
+  const session = useAdminSession();
+  return session.data ? children : null;
 }
 
 function catalogEntry(
@@ -92,13 +107,17 @@ function installSiteConfigServer(
   const state = structuredClone(initial);
   const patches: Array<{ path: string; value: unknown }> = [];
   const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-    const path = new URL(
+    const target = new URL(
       input instanceof Request ? input.url : String(input),
       window.location.origin,
-    ).pathname;
+    );
+    const path = target.pathname;
     const method = (
       init?.method ?? (input instanceof Request ? input.method : 'GET')
     ).toUpperCase();
+    if (method === 'GET' && path === '/admin/api/session') {
+      return jsonResponse({ admin: { username: 'fixture-admin' } });
+    }
     if (method === 'GET' && path === '/admin/api/site-config') return jsonResponse(state);
     if (method === 'GET' && path === '/admin/api/site-config/catalog') {
       return jsonResponse(catalogResponse);
@@ -106,8 +125,12 @@ function installSiteConfigServer(
     if (method === 'GET' && path === '/admin/api/maintenance') {
       return jsonResponse({ enabled: false, revision: '1' });
     }
-    if (method === 'GET' && path === '/admin/api/legal-holds') {
-      return jsonResponse({ data: [], next_cursor: null });
+    if (
+      method === 'GET' &&
+      path === '/admin/api/legal-holds' &&
+      target.search === '?page=1&page_size=20'
+    ) {
+      return jsonResponse(emptyLegalHoldPage());
     }
     if (method === 'PATCH' && path === '/admin/api/site-config') {
       const body = JSON.parse(String(init?.body)) as {
@@ -201,6 +224,16 @@ describe('screenshot-facing configuration pages', () => {
           server_now: 1_788_100_000,
         },
       },
+      {
+        method: 'GET',
+        path: '/api/charity/models?view=catalog&page=1&page_size=20&allowed_for_me=true&currently_available=true',
+        body: {
+          models: [],
+          pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+          donation_intake: 'closed',
+          server_now: 1_788_100_000,
+        },
+      },
       { method: 'GET', path: '/api/donations', body: [] },
       { method: 'GET', path: '/api/endpoints', body: [] },
     ]);
@@ -219,14 +252,16 @@ describe('screenshot-facing configuration pages', () => {
 
 describe('authoritative site-config frontend', () => {
   async function renderSettings() {
-    const rendered = await renderWithProviders(<SettingsPage />, {
-      station: 'admin',
-      locale: 'en',
-      role: 'admin',
-    });
-    rendered.queryClient.setQueryData(['admin', 'session'], {
-      admin: { username: 'fixture-admin' },
-    });
+    const rendered = await renderWithProviders(
+      <AdminSessionFixture>
+        <SettingsPage />
+      </AdminSessionFixture>,
+      {
+        station: 'admin',
+        locale: 'en',
+        role: 'admin',
+      },
+    );
     return rendered;
   }
 
@@ -394,16 +429,22 @@ describe('authoritative site-config frontend', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: string | URL | Request) => {
-        const path = new URL(
+        const target = new URL(
           input instanceof Request ? input.url : String(input),
           window.location.origin,
-        ).pathname;
+        );
+        const path = target.pathname;
+        if (path === '/admin/api/session') {
+          return jsonResponse({ admin: { username: 'fixture-admin' } });
+        }
         if (path === '/admin/api/site-config/catalog') return jsonResponse({ data: [siteName] });
         if (path === '/admin/api/site-config') return jsonResponse({ site_name: 'Alpha fixture' });
         if (path === '/admin/api/maintenance') {
           return jsonResponse({ enabled: false, revision: '1' });
         }
-        if (path === '/admin/api/legal-holds') return jsonResponse({ data: [], next_cursor: null });
+        if (path === '/admin/api/legal-holds' && target.search === '?page=1&page_size=20') {
+          return jsonResponse(emptyLegalHoldPage());
+        }
         throw new Error(`Unexpected fixture request: GET ${path}`);
       }),
     );
@@ -524,13 +565,17 @@ describe('authoritative site-config frontend', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-        const path = new URL(
+        const target = new URL(
           input instanceof Request ? input.url : String(input),
           window.location.origin,
-        ).pathname;
+        );
+        const path = target.pathname;
         const method = (
           init?.method ?? (input instanceof Request ? input.method : 'GET')
         ).toUpperCase();
+        if (method === 'GET' && path === '/admin/api/session') {
+          return jsonResponse({ admin: { username: 'fixture-admin' } });
+        }
         if (method === 'GET' && path === '/admin/api/site-config/catalog') {
           return jsonResponse({ data: [timezone] });
         }
@@ -549,8 +594,12 @@ describe('authoritative site-config frontend', () => {
         if (method === 'GET' && path === '/admin/api/maintenance') {
           return jsonResponse({ enabled: false, revision: '1' });
         }
-        if (method === 'GET' && path === '/admin/api/legal-holds') {
-          return jsonResponse({ data: [], next_cursor: null });
+        if (
+          method === 'GET' &&
+          path === '/admin/api/legal-holds' &&
+          target.search === '?page=1&page_size=20'
+        ) {
+          return jsonResponse(emptyLegalHoldPage());
         }
         if (method === 'PATCH' && path === '/admin/api/site-config') {
           patchWrites += 1;
@@ -595,13 +644,17 @@ describe('authoritative site-config frontend', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-        const path = new URL(
+        const target = new URL(
           input instanceof Request ? input.url : String(input),
           window.location.origin,
-        ).pathname;
+        );
+        const path = target.pathname;
         const method = (
           init?.method ?? (input instanceof Request ? input.method : 'GET')
         ).toUpperCase();
+        if (method === 'GET' && path === '/admin/api/session') {
+          return jsonResponse({ admin: { username: 'fixture-admin' } });
+        }
         if (method === 'GET' && path === '/admin/api/site-config/catalog') {
           return jsonResponse({ data: [siteName] });
         }
@@ -609,8 +662,12 @@ describe('authoritative site-config frontend', () => {
         if (method === 'GET' && path === '/admin/api/maintenance') {
           return jsonResponse({ enabled: false, revision: '1' });
         }
-        if (method === 'GET' && path === '/admin/api/legal-holds') {
-          return jsonResponse({ data: [], next_cursor: null });
+        if (
+          method === 'GET' &&
+          path === '/admin/api/legal-holds' &&
+          target.search === '?page=1&page_size=20'
+        ) {
+          return jsonResponse(emptyLegalHoldPage());
         }
         if (method === 'PATCH' && path === '/admin/api/site-config') {
           patchBody = JSON.parse(String(init?.body));
@@ -682,8 +739,17 @@ describe('admin per-user limit explanations', () => {
     installJsonFetchFixtures([
       {
         method: 'GET',
-        path: '/admin/api/users?limit=50',
-        body: { data: [adminUser], next_cursor: null },
+        path: '/admin/api/session',
+        body: { admin: { username: 'fixture-admin' } },
+      },
+      {
+        method: 'GET',
+        path: '/admin/api/users?page=1&page_size=20',
+        body: {
+          data: [adminUser],
+          next_cursor: null,
+          pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+        },
       },
       { method: 'GET', path: '/admin/api/users/7', body: adminUser },
     ]);
@@ -795,6 +861,9 @@ function installGameServer(options: { rejectPatch?: boolean } = {}) {
     const method = (
       init?.method ?? (input instanceof Request ? input.method : 'GET')
     ).toUpperCase();
+    if (method === 'GET' && path === '/admin/api/session') {
+      return jsonResponse({ admin: { username: 'fixture-admin' } });
+    }
     if (method === 'GET' && path === '/admin/api/games/config') return jsonResponse(state);
     if (method === 'GET' && path === '/admin/api/games/active-counts') {
       return jsonResponse(activeGameCounts);
@@ -861,11 +930,16 @@ function installGameServer(options: { rejectPatch?: boolean } = {}) {
 describe('standalone Admin Games feature', () => {
   test('sends the frozen full mutable PATCH, excludes queue capacity, and renders exact active counts', async () => {
     const server = installGameServer();
-    const rendered = await renderWithProviders(<GamesPage />, {
-      station: 'admin',
-      locale: 'en',
-      role: 'admin',
-    });
+    const rendered = await renderWithProviders(
+      <AdminSessionFixture>
+        <GamesPage />
+      </AdminSessionFixture>,
+      {
+        station: 'admin',
+        locale: 'en',
+        role: 'admin',
+      },
+    );
     const save = await screen.findByRole('button', { name: 'Save game configuration' });
     expect(screen.getByText(/Phase: Unknown value \(casting\) · 9007199254740993/)).toBeVisible();
     expect(
@@ -930,11 +1004,16 @@ describe('standalone Admin Games feature', () => {
 
   test('blocks local range violations but leaves full economy compilation authoritative', async () => {
     const server = installGameServer({ rejectPatch: true });
-    const rendered = await renderWithProviders(<GamesPage />, {
-      station: 'admin',
-      locale: 'en',
-      role: 'admin',
-    });
+    const rendered = await renderWithProviders(
+      <AdminSessionFixture>
+        <GamesPage />
+      </AdminSessionFixture>,
+      {
+        station: 'admin',
+        locale: 'en',
+        role: 'admin',
+      },
+    );
     const save = await screen.findByRole('button', { name: 'Save game configuration' });
     const quickPlatform = screen.getByLabelText(/quick platform cut/i);
     fireEvent.change(quickPlatform, { target: { value: '9999' } });
@@ -972,6 +1051,9 @@ describe('standalone Admin Games feature', () => {
         const method = (
           init?.method ?? (input instanceof Request ? input.method : 'GET')
         ).toUpperCase();
+        if (method === 'GET' && path === '/admin/api/session') {
+          return jsonResponse({ admin: { username: 'fixture-admin' } });
+        }
         if (method === 'GET' && path === '/admin/api/games/config') return jsonResponse(state);
         if (method === 'GET' && path === '/admin/api/games/active-counts') {
           return jsonResponse(activeGameCounts);
@@ -980,11 +1062,16 @@ describe('standalone Admin Games feature', () => {
         throw new Error(`Unexpected fixture request: ${method} ${path}`);
       }),
     );
-    const rendered = await renderWithProviders(<GamesPage />, {
-      station: 'admin',
-      locale: 'en',
-      role: 'admin',
-    });
+    const rendered = await renderWithProviders(
+      <AdminSessionFixture>
+        <GamesPage />
+      </AdminSessionFixture>,
+      {
+        station: 'admin',
+        locale: 'en',
+        role: 'admin',
+      },
+    );
     const worm = await screen.findByLabelText(/worm bait price/i);
     fireEvent.change(worm, { target: { value: '3' } });
     await rendered.user.click(screen.getByRole('button', { name: 'Save game configuration' }));
@@ -1344,7 +1431,7 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
     ).toThrow(/upstream model status/i);
   });
 
-  test('normalizes omitted reviews to an empty list but rejects invalid or zero timestamps', () => {
+  test('normalizes omitted reviews and Unix zero but rejects invalid timestamps', () => {
     const donation = {
       id: 1,
       endpoint_id: 2,
@@ -1365,12 +1452,20 @@ describe('B1 and U3-U5 additive wire normalizers', () => {
     expect(() => normalizeManagementDonation({ ...donation, reviews: {} }, true)).toThrow(
       /review list/i,
     );
-    expect(() =>
-      normalizeDonation({ ...donation, created_at: 0 }, true, 'openai-compatible'),
-    ).toThrow(/created timestamp/i);
-    expect(() =>
-      normalizeDonation({ ...donation, expires_at: 0 }, true, 'openai-compatible'),
-    ).toThrow(/expiry timestamp/i);
+    expect(
+      normalizeDonation({ ...donation, created_at: 0 }, true, 'openai-compatible').created_at,
+    ).toBe(0);
+    expect(
+      normalizeDonation({ ...donation, expires_at: 0 }, true, 'openai-compatible').expires_at,
+    ).toBe(0);
+    for (const invalid of [-1, 253402300800, 0.5]) {
+      expect(() =>
+        normalizeDonation({ ...donation, created_at: invalid }, true, 'openai-compatible'),
+      ).toThrow(/created timestamp/i);
+      expect(() =>
+        normalizeDonation({ ...donation, expires_at: invalid }, true, 'openai-compatible'),
+      ).toThrow(/expiry timestamp/i);
+    }
     expect(() =>
       normalizeDonation(
         { ...donation, reviewed_at: '2026-08-23T00:00:00Z' },

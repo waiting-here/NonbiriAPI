@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { clearStationSession } from '@shared/charityManagement';
 import { CharityManagement } from '@shared/components/CharityManagement';
 import { RoleLogPanel } from '@shared/components/log';
@@ -15,7 +15,7 @@ export function StewardPage() {
   const client = useQueryClient();
   const authority = useUserAuthority();
   const refetchAuthority = authority.refetch;
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
   const section =
     searchParams.get('tab') === 'charity'
       ? 'charity'
@@ -104,22 +104,25 @@ export function StewardPage() {
       </div>
       {section === 'logs' ? (
         <RoleLogPanel
-          key={`logs:${authority.dataUpdatedAt}`}
+          key={`logs:${authority.data.id}`}
           role="steward"
+          accountId={authority.data.id}
+          scopeReady={allowed}
           enabled
           onAuthorityLoss={authorityLoss}
         />
       ) : null}
       {section === 'charity' ? (
         <CharityManagement
-          key={`charity:${authority.dataUpdatedAt}`}
+          key={`charity:${authority.data.id}`}
           frame="steward"
+          accountId={authority.data.id}
           onCapabilityLoss={authorityLoss}
         />
       ) : null}
       {section === 'maintenance' ? (
         <MaintenancePanel
-          key={`maintenance:${authority.dataUpdatedAt}`}
+          key={`maintenance:${authority.data.id}`}
           role="steward"
           onAuthorityLoss={authorityLoss}
         />

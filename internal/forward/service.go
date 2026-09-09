@@ -24,6 +24,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/diagnostic"
+	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
@@ -183,7 +184,7 @@ func (service *Service) ListModels(ctx context.Context, userID int64) (ModelList
 	if err != nil {
 		return ModelList{}, err
 	}
-	charityModels, err := service.charity.ListAvailableModels(ctx, now, MaxCallerModels)
+	charityModels, err := service.charity.ListAvailableModels(ctx, userID, now, MaxCallerModels)
 	if err != nil {
 		return ModelList{}, err
 	}
@@ -533,12 +534,24 @@ func (service *Service) runAttempts(
 			DonationKeyID: candidate.DonationKeyID,
 		})
 		if err != nil {
-			if errors.Is(err, claim.ErrKeyRateLimited) {
+			if plan.charity && (errors.Is(err, claim.ErrForbidden) || errors.Is(err, claim.ErrModelUnavailable)) {
+				value := failureForError(err, true)
+				run.failure = &value
+				break
+			}
+			if errors.Is(err, claim.ErrKeyRateLimited) || errors.Is(err, donationquota.ErrLimited) {
 				keyLimited = true
 				continue
 			}
 			if errors.Is(err, claim.ErrNotFound) {
 				continue
+			}
+			if errors.Is(err, donationquota.ErrCapacity) {
+				if !run.dispatched {
+					value := failureForError(err, plan.charity)
+					run.failure = &value
+				}
+				break
 			}
 			run.err = err
 			break
@@ -546,7 +559,12 @@ func (service *Service) runAttempts(
 
 		dispatch, err := service.claims.TakeForDispatch(executionContext, handle)
 		if err != nil {
-			run.handleDispatchFailure(parent, service, handle, err)
+			released := run.handleDispatchFailure(parent, service, handle, err)
+			if released && (errors.Is(err, donationquota.ErrLimited) || errors.Is(err, claim.ErrKeyRateLimited) || (plan.charity && errors.Is(err, claim.ErrNotFound))) {
+				keyLimited = keyLimited || errors.Is(err, donationquota.ErrLimited) || errors.Is(err, claim.ErrKeyRateLimited)
+				run.err = nil
+				continue
+			}
 			break
 		}
 		if dispatch == nil {
@@ -641,7 +659,7 @@ func (service *Service) runAttempts(
 			break
 		}
 	}
-	if !run.dispatched && run.err == nil {
+	if !run.dispatched && run.err == nil && run.failure == nil {
 		if executionContext.Err() != nil {
 			if errors.Is(executionContext.Err(), context.DeadlineExceeded) {
 				value := platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
@@ -661,13 +679,25 @@ func (service *Service) runAttempts(
 	return run
 }
 
-func (run *attemptRun) handleDispatchFailure(parent context.Context, service *Service, handle claim.Handle, dispatchErr error) {
+func (run *attemptRun) handleDispatchFailure(parent context.Context, service *Service, handle claim.Handle, dispatchErr error) bool {
 	settleContext, cancel := context.WithTimeout(context.WithoutCancel(parent), service.settlement)
 	defer cancel()
 	_, releaseErr := service.claims.ReleaseUndispatched(settleContext, handle)
 	if releaseErr == nil {
+		if errors.Is(dispatchErr, claim.ErrForbidden) || errors.Is(dispatchErr, claim.ErrModelUnavailable) {
+			value := failureForError(dispatchErr, true)
+			run.failure = &value
+			return true
+		}
+		if errors.Is(dispatchErr, donationquota.ErrCapacity) {
+			if !run.dispatched {
+				value := failureForError(dispatchErr, true)
+				run.failure = &value
+			}
+			return true
+		}
 		run.err = dispatchErr
-		return
+		return true
 	}
 	if errors.Is(releaseErr, claim.ErrAlreadyDispatched) {
 		run.dispatched = true
@@ -680,10 +710,11 @@ func (run *attemptRun) handleDispatchFailure(parent context.Context, service *Se
 		} else {
 			run.err = dispatchErr
 		}
-		return
+		return false
 	}
 	run.err = releaseErr
 	run.terminalBlocked = true
+	return false
 }
 
 func (run *attemptRun) completeSynthetic(parent context.Context, service *Service, handle claim.Handle, diagnosticText string) {
@@ -923,7 +954,8 @@ func attemptOutcome(result connectorcontract.AttemptResult) claim.AttemptOutcome
 	}
 	return claim.AttemptOutcome{
 		Kind: kind, UpstreamStatus: result.UpstreamStatus, Diagnostic: result.Diagnostic,
-		Usage: result.Usage, ProtocolSuccess: result.Success, ResponseStarted: result.Committed,
+		UpstreamCode: result.ErrorDetail.Code(),
+		Usage:        result.Usage, ProtocolSuccess: result.Success, ResponseStarted: result.Committed,
 	}
 }
 
@@ -1042,13 +1074,17 @@ func failureForError(err error, charity bool) wireFailure {
 		return platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
 	case errors.Is(err, maintenance.ErrMaintenanceOn):
 		return platformFailure(httperr.CodeMaintenance, "maintenance mode is active")
-	case errors.Is(err, routing.ErrNotFound), errors.Is(err, charityrouting.ErrNotFound):
+	case errors.Is(err, routing.ErrNotFound), errors.Is(err, charityrouting.ErrNotFound), errors.Is(err, claim.ErrModelUnavailable):
 		return platformFailure(httperr.CodeNotFound, "model not found")
+	case errors.Is(err, charityrouting.ErrForbidden), errors.Is(err, claim.ErrForbidden):
+		return platformFailure(httperr.CodeForbidden, "your account level is not allowed to call this model")
 	case errors.Is(err, routing.ErrAmbiguousIdentity), errors.Is(err, routing.ErrInvalidIdentity),
 		errors.Is(err, openai.ErrInvalidRequest), errors.Is(err, charityrouting.ErrInvalidRequest):
 		return platformFailure(httperr.CodeInvalidRequest, "invalid request")
 	case errors.Is(err, charityrouting.ErrEntropyUnavailable):
 		return platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
+	case errors.Is(err, donationquota.ErrLimited):
+		return platformFailure(httperr.CodeRateLimited, "charity candidates are temporarily at capacity")
 	case errors.Is(err, routing.ErrUnbound), errors.Is(err, charityrouting.ErrUnavailable):
 		return platformFailure(httperr.CodeUnboundModel, "model has no usable binding")
 	case errors.Is(err, routing.ErrResourceLimit), errors.Is(err, charityrouting.ErrResourceLimit):
@@ -1061,7 +1097,7 @@ func failureForError(err error, charity bool) wireFailure {
 		return platformFailure(httperr.CodeInsufficientCredits, "insufficient credits")
 	case errors.Is(err, ledger.ErrInsufficientBalance):
 		return platformFailure(httperr.CodeInsufficientCredits, "insufficient credits")
-	case errors.Is(err, ledger.ErrCapacityExhausted), errors.Is(err, ledger.ErrRetryable):
+	case errors.Is(err, ledger.ErrCapacityExhausted), errors.Is(err, ledger.ErrRetryable), errors.Is(err, donationquota.ErrCapacity):
 		return platformFailure(httperr.CodeServiceUnavailable, "service unavailable")
 	case errors.Is(err, charityrouting.ErrContentTooShort):
 		message := "charity content is too short"
@@ -1085,19 +1121,29 @@ func failureForError(err error, charity bool) wireFailure {
 }
 
 func failureForAttempt(result connectorcontract.AttemptResult, charity bool) wireFailure {
-	if charity {
-		return upstreamWireFailure(http.StatusBadGateway, "upstream request failed", "", false)
-	}
 	if result.Failure == connectorcontract.FailureInternal {
+		if charity {
+			return upstreamWireFailure(http.StatusBadGateway, "upstream request failed", "", false)
+		}
 		return platformFailure(httperr.CodeInternal, "internal error")
 	}
 	status := http.StatusBadGateway
-	if result.UpstreamStatus >= http.StatusBadRequest && result.UpstreamStatus <= 499 {
+	if result.UpstreamStatus >= http.StatusBadRequest && result.UpstreamStatus <= 599 {
 		status = result.UpstreamStatus
 	} else if result.ClientStatus == http.StatusGatewayTimeout || isTimeoutResult(result) {
 		status = http.StatusGatewayTimeout
 	}
-	return upstreamWireFailure(status, "upstream request failed", result.Diagnostic, true)
+	message := result.ErrorDetail.Message()
+	if message == "" {
+		message = "upstream request failed"
+	}
+	diagnostic := result.Diagnostic
+	if charity {
+		diagnostic = ""
+	}
+	failure := upstreamWireFailure(status, message, diagnostic, true)
+	failure.upstreamCode = result.ErrorDetail.Code()
+	return failure
 }
 
 func callerFromFailure(failure wireFailure) claim.CallerResult {

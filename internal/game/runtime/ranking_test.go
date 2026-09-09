@@ -32,7 +32,7 @@ func TestZeroSizeOutcomeCreatesSingleBestAndExplicitWireSize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"rank":"1","species_key":"boot","size_cm":0,"identity":{"kind":"anonymous"},"is_me":true}`
+	want := `{"rank":"1","species_key":"boot","size_cm":0,"blue_fat_fish_length_cm":null,"identity":{"kind":"anonymous"},"is_me":true}`
 	if string(wire) != want || bytes.Contains(wire, []byte("total_credits")) {
 		t.Fatalf("single row wire = %s, want %s", wire, want)
 	}
@@ -105,6 +105,7 @@ func TestFishingLeaderboardHiddenTieIsStable(t *testing.T) {
 		tieTable string
 	}{
 		{name: "single", board: "single", tieTable: "game_fishing_best"},
+		{name: "recent_single", board: "recent_single", tieTable: "game_fishing_best"},
 		{name: "total", board: "total", tieTable: "game_fishing_rank_aggregates"},
 	} {
 		t.Run(test.name, func(t *testing.T) {

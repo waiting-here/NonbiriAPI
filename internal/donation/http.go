@@ -1,7 +1,9 @@
 package donation
 
 import (
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"net/http"
 )
 
@@ -19,6 +21,8 @@ func RegisterOwnerRoutes(registrar UserRouteRegistrar, service *Service) error {
 		{http.MethodGet, routeDonations, api.listOwner},
 		{http.MethodPost, routeDonations, api.createOwner},
 		{http.MethodGet, routeDonation, api.getOwner},
+		{http.MethodGet, routeOwnerKeys, api.keysOwner},
+		{http.MethodGet, routeOwnerRecurring, api.recurringOwner},
 		{http.MethodPatch, routeDonation, api.editOwner},
 		{http.MethodPost, routeWithdraw, api.withdrawOwner},
 		{http.MethodPost, routeTerminate, api.terminateOwner},
@@ -41,7 +45,14 @@ func RegisterAdminRoutes(registrar AdminRouteRegistrar, service *Service) error 
 		handler         http.HandlerFunc
 	}{
 		{http.MethodGet, routeAdminDonations, api.listAdmin},
+		{http.MethodGet, routeAdminSources, api.sourcesAdmin},
+		{http.MethodGet, routeAdminSourceKeys, api.sourceKeysAdmin},
+		{http.MethodGet, routeAdminKeys, api.keysAdmin},
+		{http.MethodGet, routeAdminBadge, api.badgeAdmin},
+		{http.MethodPost, routeAdminProcessed, api.processAdmin},
 		{http.MethodGet, routeAdminDonation, api.getAdmin},
+		{http.MethodGet, routeAdminRecurring, api.recurringAdmin},
+		{http.MethodPut, routeAdminRecurring, api.replaceRecurringAdmin},
 		{http.MethodPost, routeAdminReview, api.reviewAdmin},
 		{http.MethodPatch, routeAdminKey, api.manageKeyAdmin},
 	}
@@ -63,7 +74,14 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, service *Service) error
 		handler         AuthorizedUserHandler
 	}{
 		{http.MethodGet, routeStewardDonations, api.listSteward},
+		{http.MethodGet, routeStewardSources, api.sourcesSteward},
+		{http.MethodGet, routeStewardSourceKeys, api.sourceKeysSteward},
+		{http.MethodGet, routeStewardKeys, api.keysSteward},
+		{http.MethodGet, routeStewardBadge, api.badgeSteward},
+		{http.MethodPost, routeStewardProcessed, api.processSteward},
 		{http.MethodGet, routeStewardDonation, api.getSteward},
+		{http.MethodGet, routeStewardRecurring, api.recurringSteward},
+		{http.MethodPut, routeStewardRecurring, api.replaceRecurringSteward},
 		{http.MethodPost, routeStewardReview, api.reviewSteward},
 		{http.MethodPatch, routeStewardKey, api.manageKeySteward},
 	}
@@ -81,6 +99,9 @@ func (api *httpAPI) listOwner(writer http.ResponseWriter, request *http.Request,
 	}
 	values, ok := requestQuery(writer, request)
 	if !ok {
+		return
+	}
+	if api.listNumbered(writer, request, principal, recurringOwner, values) {
 		return
 	}
 	limit, cursor, ok := parsePage(values, "cursor", "limit")
@@ -292,13 +313,16 @@ func (api *httpAPI) listRole(writer http.ResponseWriter, request *http.Request, 
 	if !ok {
 		return
 	}
-	limit, cursor, ok := parsePage(values, "status", "cursor", "limit")
+	if api.listNumbered(writer, request, principal, role, values) {
+		return
+	}
+	limit, cursor, ok := parsePage(values, "status", "handling", "q", "cursor", "limit")
 	if !ok {
 		writeDonationError(writer, ErrInvalidRequest)
 		return
 	}
-	status := values.Get("status")
-	if !validStatusFilter(status) {
+	filter := ManagementFilter{Status: values.Get("status"), Handling: values.Get("handling"), Query: values.Get("q")}
+	if !validManagementFilter(filter) {
 		writeDonationError(writer, ErrInvalidRequest)
 		return
 	}
@@ -307,10 +331,13 @@ func (api *httpAPI) listRole(writer http.ResponseWriter, request *http.Request, 
 		writeDonationError(writer, err)
 		return
 	}
-	scope, owner := "admin-donations", "admin:status="+status
+	scope, owner := "admin-donations", "admin:status="+filter.Status
 	if role == reviewerSteward {
 		scope = "steward-donations"
-		owner = pageOwner(principal.UserID, "steward:status="+status)
+		owner = pageOwner(principal.UserID, "steward:status="+filter.Status)
+	}
+	if filter.Handling != "" || filter.Query != "" {
+		owner += fmt.Sprintf(":filter=%x", sha256.Sum256([]byte(filter.Handling+"\x00"+filter.Query)))
 	}
 	after, err := api.service.decodeCursor(cursor, scope, owner, now)
 	if err != nil {
@@ -318,7 +345,7 @@ func (api *httpAPI) listRole(writer http.ResponseWriter, request *http.Request, 
 		return
 	}
 	if role == reviewerAdmin {
-		items, next, err := api.service.ListAdmin(request.Context(), status, after, limit)
+		items, next, err := api.service.ListAdminFiltered(request.Context(), filter, after, limit)
 		if err != nil {
 			writeDonationError(writer, err)
 			return
@@ -330,7 +357,7 @@ func (api *httpAPI) listRole(writer http.ResponseWriter, request *http.Request, 
 		writeJSON(writer, page)
 		return
 	}
-	items, next, err := api.service.ListSteward(request.Context(), principal.UserID, status, after, limit)
+	items, next, err := api.service.ListStewardFiltered(request.Context(), principal.UserID, filter, after, limit)
 	if err != nil {
 		writeDonationError(writer, err)
 		return

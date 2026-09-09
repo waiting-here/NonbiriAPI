@@ -71,6 +71,50 @@ export interface EndpointCreateOptions {
   mainstream_channels: MainstreamChannelOption[];
 }
 
+export type EndpointBrowseState = 'available' | 'endpoint_disabled' | 'no_keys' | 'no_usable_key';
+
+export type KeyBindingState =
+  'available' | 'endpoint_disabled' | 'key_disabled' | 'key_suspended' | 'unsupported';
+
+export interface EndpointBrowse {
+  model_count: string;
+  available_key_count: string;
+  state: EndpointBrowseState;
+}
+
+export interface EndpointKeyBrowse {
+  donation_eligibility: 'eligible' | 'already_donated' | 'security_processing';
+  model_count: string;
+  binding_count: string;
+  available_binding_count: string;
+  discovery: DiscoveryEvidence;
+  preview: KeyBindingView[];
+}
+
+export interface ModelBrowse {
+  available_binding_count: string;
+  preview: KeyBindingView[];
+}
+
+export interface KeyBindingView {
+  id: string;
+  model_id: string;
+  model_full_name: string;
+  endpoint_id: string;
+  endpoint_key_id: string;
+  endpoint_base_url: string;
+  connector_type: ConnectorType;
+  endpoint_note: string;
+  display_head: string;
+  display_tail: string;
+  key_note: string;
+  upstream_model_id: string;
+  ord: number;
+  max_concurrency: number;
+  max_rpm: number;
+  state: KeyBindingState;
+}
+
 export interface Endpoint {
   id: string;
   connector_type: ConnectorType;
@@ -82,6 +126,7 @@ export interface Endpoint {
   key_count: string;
   created_at: number;
   updated_at: number;
+  browse?: EndpointBrowse;
 }
 
 export interface EndpointKey {
@@ -98,6 +143,7 @@ export interface EndpointKey {
   revision: string;
   created_at: number;
   updated_at: number;
+  browse?: EndpointKeyBrowse;
 }
 
 export interface CallerKeyMetadata {
@@ -162,6 +208,7 @@ export interface Model {
   binding_count: string;
   created_at: number;
   updated_at: number;
+  browse?: ModelBrowse;
 }
 
 export interface BindingCandidate {
@@ -358,31 +405,42 @@ export type HomeGameSummary =
       created_at: number;
     };
 
-export interface HomeAnnouncementSummary {
-  id: string;
-  title: string;
-  excerpt: string;
+export type HomeAnnouncementSummary = import('../operations/data').AnnouncementSummary;
+
+export interface HomeAnnouncementPage {
+  data: HomeAnnouncementSummary[];
+  next_cursor: string | null;
 }
+
+export type HomeAnnouncementLoadResult = HomeAnnouncementPage;
+
+export type HomeAnnouncementLoader = (
+  cursor: string | null,
+  signal?: AbortSignal,
+) => Promise<HomeAnnouncementLoadResult>;
+
+export type HomeAnnouncementCapability =
+  { state: 'available'; load: HomeAnnouncementLoader } | { state: 'unavailable' };
 
 export interface HomeAdapters {
   checkin: HomeCheckinCapability;
   games: HomeCapability<HomeGameSummary[]>;
-  announcements: HomeCapability<HomeAnnouncementSummary[]>;
+  announcements: HomeAnnouncementCapability;
 }
 
 export type LifecycleIntent = 'export' | 'delete';
 
 export interface AccountExportAttachment {
   blob: Blob;
-  schemaVersion: 4;
+  schemaVersion: 5;
 }
 
 export type AccountAuthority = 'active' | 'deleted';
 
 export interface AccountLifecycleAdapter {
-  capabilities: Readonly<{ exportV4: boolean; deleteAccount: boolean }>;
+  capabilities: Readonly<{ exportV5: boolean; deleteAccount: boolean }>;
   beginElevation(intent: LifecycleIntent, accountId: string): Promise<string>;
-  exportV4(input: { accountId: string; elevatedToken: string }): Promise<AccountExportAttachment>;
+  exportV5(input: { accountId: string; elevatedToken: string }): Promise<AccountExportAttachment>;
   deleteAccount(input: {
     accountId: string;
     elevatedToken: string;

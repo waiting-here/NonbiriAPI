@@ -114,10 +114,10 @@ func TestUpstreamErrorStatusOverride(t *testing.T) {
 		// A platform error cannot borrow an upstream status. It keeps its
 		// code-derived status, even when the requested value is otherwise legal.
 		{name: "platform code", code: CodeForbidden, override: http.StatusTeapot, wantStatus: http.StatusForbidden, wantCode: CodeForbidden},
-		// 5xx statuses other than 502/504 are not legal overrides, so the
-		// upstream code falls back to its ordinary 502 status.
-		{name: "upstream 500", code: CodeUpstream, override: http.StatusInternalServerError, wantStatus: http.StatusBadGateway, wantCode: CodeUpstream},
-		{name: "upstream 501", code: CodeUpstream, override: http.StatusNotImplemented, wantStatus: http.StatusBadGateway, wantCode: CodeUpstream},
+		{name: "upstream 500", code: CodeUpstream, override: http.StatusInternalServerError, wantStatus: http.StatusInternalServerError, wantCode: CodeUpstream},
+		{name: "upstream 501", code: CodeUpstream, override: http.StatusNotImplemented, wantStatus: http.StatusNotImplemented, wantCode: CodeUpstream},
+		{name: "upper 5xx", code: CodeUpstream, override: 599, wantStatus: 599, wantCode: CodeUpstream},
+		{name: "invalid 600", code: CodeUpstream, override: 600, wantStatus: http.StatusBadGateway, wantCode: CodeUpstream},
 		{name: "upstream success", code: CodeUpstream, override: http.StatusOK, wantStatus: http.StatusBadGateway, wantCode: CodeUpstream},
 		{name: "upstream zero", code: CodeUpstream, override: 0, wantStatus: http.StatusBadGateway, wantCode: CodeUpstream},
 		{name: "unknown code", code: "future_code", override: http.StatusTeapot, wantStatus: http.StatusInternalServerError, wantCode: CodeInternal},

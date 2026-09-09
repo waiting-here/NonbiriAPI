@@ -11,6 +11,8 @@ import { normalizeUserEnvelope } from './normalizers';
 import type {
   AccountLifecycleAdapter,
   HomeAdapters,
+  HomeAnnouncementPage,
+  HomeAnnouncementSummary,
   HomeCheckinStatus,
   UserEnvelope,
 } from './types';
@@ -42,6 +44,43 @@ function sharedSession(user: UserEnvelope['user']) {
   };
 }
 
+const HOME_EPOCH = `b1e_${'A'.repeat(21)}Q`;
+
+function opaqueAnnouncementId(label: string): string {
+  const suffix = label
+    .replace(/[^A-Za-z0-9_-]/g, 'A')
+    .slice(0, 21)
+    .padEnd(21, 'A');
+  return `ann_${suffix}Q`;
+}
+
+function homeAnnouncementSummary(
+  label: string,
+  overrides: Partial<HomeAnnouncementSummary> = {},
+): HomeAnnouncementSummary {
+  return {
+    epoch: HOME_EPOCH,
+    id: opaqueAnnouncementId(label),
+    revision: '1',
+    severity: 'info',
+    pinned: false,
+    dismissible: true,
+    published_at: 1_700_000_000,
+    expires_at: null,
+    effective_language: 'en',
+    fallback_from: null,
+    title: `Announcement ${label}`,
+    excerpt: `Excerpt ${label}`,
+    ...overrides,
+  };
+}
+
+function homeAnnouncementPage(data: HomeAnnouncementSummary[] = []): HomeAnnouncementPage {
+  return { data, next_cursor: null };
+}
+
+type RenderedProviders = Awaited<ReturnType<typeof renderWithProviders>>;
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -49,13 +88,39 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+async function renderHomeDashboard(
+  user: UserEnvelope['user'],
+  adapters: HomeAdapters,
+  locale: 'en' | 'zh' = 'en',
+): Promise<RenderedProviders> {
+  const rendered = await renderWithProviders(<HomeDashboard user={user} adapters={adapters} />, {
+    station: 'user',
+    role: 'user',
+    locale,
+  });
+  act(() => {
+    rendered.queryClient.setQueryData(coreKeys.session, sharedSession(user));
+  });
+  return rendered;
+}
+
 describe('home independent capability states', () => {
   it('keeps confirmed profile, economy, usage, and announcement data when the game summary fails', async () => {
     const envelope = canonicalEnvelope();
+    const announcement = homeAnnouncementSummary('planned', {
+      title: 'Planned maintenance',
+      excerpt: 'A short confirmed summary.',
+    });
+    const { excerpt, ...announcementDetail } = announcement;
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: string | URL | Request) => {
         if (String(input) === '/api/me') return jsonResponse(envelope);
+        if (String(input) === `/api/announcements/${announcement.id}`)
+          return jsonResponse({
+            ...announcementDetail,
+            rendered_body: `<p>${excerpt}</p>`,
+          });
         throw new Error(`Unexpected request: ${String(input)}`);
       }),
     );
@@ -69,17 +134,11 @@ describe('home independent capability states', () => {
       },
       announcements: {
         state: 'available',
-        load: async () => [
-          { id: '41', title: 'Planned maintenance', excerpt: 'A short confirmed summary.' },
-        ],
+        load: async () => homeAnnouncementPage([announcement]),
       },
     };
 
-    await renderWithProviders(<HomeDashboard user={envelope.user} adapters={adapters} />, {
-      station: 'user',
-      role: 'user',
-      locale: 'en',
-    });
+    await renderHomeDashboard(envelope.user, adapters);
 
     expect(screen.getByText('Guild Alice')).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Lifetime usage' })).toBeVisible();
@@ -88,6 +147,11 @@ describe('home independent capability states', () => {
     expect(screen.getByText('Could not load this section')).toBeVisible();
     expect(await screen.findByText('Planned maintenance')).toBeVisible();
     expect(screen.getByText('A short confirmed summary.')).toBeVisible();
+    await waitFor(() =>
+      expect(
+        screen.getByText('A short confirmed summary.').closest('.ops-announcement-body'),
+      ).not.toBeNull(),
+    );
   });
 
   it('hides successful empty game and announcement summaries', async () => {
@@ -99,14 +163,10 @@ describe('home independent capability states', () => {
     const adapters: HomeAdapters = {
       checkin: { state: 'unavailable' },
       games: { state: 'available', load: async () => [] },
-      announcements: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => homeAnnouncementPage() },
     };
 
-    await renderWithProviders(<HomeDashboard user={envelope.user} adapters={adapters} />, {
-      station: 'user',
-      role: 'user',
-      locale: 'en',
-    });
+    await renderHomeDashboard(envelope.user, adapters);
 
     await waitFor(() => {
       expect(
@@ -119,28 +179,28 @@ describe('home independent capability states', () => {
 
   it('does not turn an available capability with no loader into a successful empty summary', async () => {
     const envelope = canonicalEnvelope();
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(envelope)),
+    );
     const adapters = {
       checkin: { state: 'unavailable' },
       games: { state: 'available' },
       announcements: { state: 'unavailable' },
     } as unknown as HomeAdapters;
 
-    await renderWithProviders(<HomeDashboard user={envelope.user} adapters={adapters} />, {
-      station: 'user',
-      role: 'user',
-      locale: 'en',
-    });
+    await renderHomeDashboard(envelope.user, adapters);
 
-    expect(
-      await screen.findByRole('heading', { name: 'Continue or view results' }),
-    ).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Continue or view results' })).toBeVisible();
     expect(await screen.findByText('Could not load this section')).toBeVisible();
   });
 
   it('GET-reconciles an unknown check-in response without automatically resubmitting', async () => {
     const envelope = canonicalEnvelope();
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(envelope)),
+    );
     const reconciliation = deferred<HomeCheckinStatus>();
     const initial: HomeCheckinStatus = {
       enabled: true,
@@ -161,13 +221,10 @@ describe('home independent capability states', () => {
     const adapters: HomeAdapters = {
       checkin: { state: 'available', load, submit },
       games: { state: 'available', load: async () => [] },
-      announcements: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => homeAnnouncementPage() },
     };
 
-    const rendered = await renderWithProviders(
-      <HomeDashboard user={envelope.user} adapters={adapters} />,
-      { station: 'user', role: 'user', locale: 'en' },
-    );
+    const rendered = await renderHomeDashboard(envelope.user, adapters);
     await rendered.user.click(await screen.findByRole('button', { name: 'Check in' }));
 
     expect(await screen.findByText(/response was lost/i)).toBeVisible();
@@ -190,7 +247,10 @@ describe('home independent capability states', () => {
 
   it('preserves exact check-in amounts and refreshes authority after a committed response', async () => {
     const envelope = canonicalEnvelope();
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(envelope)),
+    );
     const maximum = '340282366920938463463374607431768211.455';
     const initial: HomeCheckinStatus = {
       enabled: true,
@@ -208,13 +268,10 @@ describe('home independent capability states', () => {
     const adapters: HomeAdapters = {
       checkin: { state: 'available', load, submit },
       games: { state: 'available', load: async () => [] },
-      announcements: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => homeAnnouncementPage() },
     };
 
-    const rendered = await renderWithProviders(
-      <HomeDashboard user={envelope.user} adapters={adapters} />,
-      { station: 'user', role: 'user', locale: 'en' },
-    );
+    const rendered = await renderHomeDashboard(envelope.user, adapters);
     await rendered.user.click(await screen.findByRole('button', { name: 'Check in' }));
 
     await waitFor(() => expect(document.body.textContent).toContain(maximum));
@@ -223,9 +280,12 @@ describe('home independent capability states', () => {
     expect(screen.getByText('Checked in')).toBeVisible();
   });
 
-  it('disables capped lower-level check-in while preserving the level-three bypass', async () => {
+  it('disables capped check-in for every level', async () => {
     const envelope = canonicalEnvelope();
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(envelope)),
+    );
     const load = vi.fn(async (): Promise<HomeCheckinStatus> => ({
       enabled: true,
       checked_in_today: false,
@@ -238,26 +298,27 @@ describe('home independent capability states', () => {
     const adapters: HomeAdapters = {
       checkin: { state: 'available', load, submit },
       games: { state: 'available', load: async () => [] },
-      announcements: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => homeAnnouncementPage() },
     };
     const lowerLevel = { ...envelope.user, effective_level: 2 as const };
-    const rendered = await renderWithProviders(
-      <HomeDashboard user={lowerLevel} adapters={adapters} />,
-      { station: 'user', role: 'user', locale: 'en' },
-    );
+    const rendered = await renderHomeDashboard(lowerLevel, adapters);
 
     expect(await screen.findByRole('button', { name: 'Check in' })).toBeDisabled();
-    expect(screen.getByText(/limit only decides whether you can check in/i)).toBeVisible();
+    expect(screen.getByText(/applies to every level/i)).toBeVisible();
 
     rendered.rerender(
       <HomeDashboard user={{ ...lowerLevel, effective_level: 3 as const }} adapters={adapters} />,
     );
-    expect(screen.getByRole('button', { name: 'Check in' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Check in' })).toBeDisabled();
+    expect(screen.getByText(/applies to every level/i)).toBeVisible();
   });
 
   it('keeps a committed receipt visible when its follow-up GET fails and retries only the read', async () => {
     const envelope = canonicalEnvelope();
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(envelope)),
+    );
     const initial: HomeCheckinStatus = {
       enabled: true,
       checked_in_today: false,
@@ -277,13 +338,10 @@ describe('home independent capability states', () => {
     const adapters: HomeAdapters = {
       checkin: { state: 'available', load, submit },
       games: { state: 'available', load: async () => [] },
-      announcements: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => homeAnnouncementPage() },
     };
 
-    const rendered = await renderWithProviders(
-      <HomeDashboard user={envelope.user} adapters={adapters} />,
-      { station: 'user', role: 'user', locale: 'en' },
-    );
+    const rendered = await renderHomeDashboard(envelope.user, adapters);
     await rendered.user.click(await screen.findByRole('button', { name: 'Check in' }));
 
     expect(await screen.findByText(/Checked in: awarded 2 credits/)).toBeVisible();
@@ -307,7 +365,10 @@ describe('home independent capability states', () => {
 
   it('uses a successful post-midnight authority read for the next day without losing the receipt', async () => {
     const envelope = canonicalEnvelope();
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(envelope)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(envelope)),
+    );
     const initial: HomeCheckinStatus = {
       enabled: true,
       checked_in_today: false,
@@ -324,12 +385,9 @@ describe('home independent capability states', () => {
     const adapters: HomeAdapters = {
       checkin: { state: 'available', load, submit },
       games: { state: 'available', load: async () => [] },
-      announcements: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => homeAnnouncementPage() },
     };
-    const rendered = await renderWithProviders(
-      <HomeDashboard user={envelope.user} adapters={adapters} />,
-      { station: 'user', role: 'user', locale: 'en' },
-    );
+    const rendered = await renderHomeDashboard(envelope.user, adapters);
 
     await rendered.user.click(await screen.findByRole('button', { name: 'Check in' }));
     expect(await screen.findByText(/Checked in: awarded 1 credit/)).toBeVisible();
@@ -343,7 +401,10 @@ describe('home independent capability states', () => {
       user: { ...first.user, id: '2', username: 'second-user', guild_nick: null },
     };
     let current = first;
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(current)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(current)),
+    );
     const lateGames = deferred<
       Array<{
         game: 'linklink';
@@ -361,17 +422,17 @@ describe('home independent capability states', () => {
     const adapters: HomeAdapters = {
       checkin: { state: 'unavailable' },
       games: { state: 'available', load: loadGames },
-      announcements: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => homeAnnouncementPage() },
     };
     const rendered = await renderWithProviders(
       <HomeDashboard key={first.user.id} user={first.user} adapters={adapters} />,
       { station: 'user', role: 'user', locale: 'en' },
     );
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: first.user.id } });
+    rendered.queryClient.setQueryData(coreKeys.session, sharedSession(first.user));
     await waitFor(() => expect(loadGames).toHaveBeenCalledTimes(1));
 
     current = second;
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: second.user.id } });
+    rendered.queryClient.setQueryData(coreKeys.session, sharedSession(second.user));
     rendered.rerender(
       <HomeDashboard key={second.user.id} user={second.user} adapters={adapters} />,
     );
@@ -391,7 +452,9 @@ describe('home independent capability states', () => {
     });
 
     await waitFor(() =>
-      expect(rendered.queryClient.getQueryData(coreKeys.home(first.user.id, 'games'))).toBeUndefined(),
+      expect(
+        rendered.queryClient.getQueryData(coreKeys.home(first.user.id, 'games')),
+      ).toBeUndefined(),
     );
     expect(rendered.queryClient.getQueryData(coreKeys.home(second.user.id, 'games'))).toEqual([]);
   });
@@ -632,9 +695,9 @@ describe('account deletion confirmation', () => {
     document.cookie = 'nb_elevated=elevated_token; Path=/; SameSite=Lax';
     const deleteAccount = vi.fn(async () => undefined);
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV4: false, deleteAccount: true },
+      capabilities: { exportV5: false, deleteAccount: true },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportV4: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 4 }) as const),
+      exportV5: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 5 }) as const),
       deleteAccount,
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -682,9 +745,9 @@ describe('account deletion confirmation', () => {
     const completion = deferred<void>();
     const deleteAccount = vi.fn(() => completion.promise);
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV4: false, deleteAccount: true },
+      capabilities: { exportV5: false, deleteAccount: true },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportV4: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 4 }) as const),
+      exportV5: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 5 }) as const),
       deleteAccount,
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -728,9 +791,9 @@ describe('account deletion confirmation', () => {
       .mockResolvedValueOnce('active')
       .mockResolvedValueOnce('deleted');
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV4: false, deleteAccount: true },
+      capabilities: { exportV5: false, deleteAccount: true },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportV4: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 4 }) as const),
+      exportV5: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 5 }) as const),
       deleteAccount,
       readAccountAuthority,
     };
@@ -768,13 +831,13 @@ describe('account deletion confirmation', () => {
     window.sessionStorage.setItem('nb.pending.elevation.account', '1');
     document.cookie = 'nb_elevated=unknown_export_token; Path=/; SameSite=Lax';
     const beginElevation = vi.fn(async () => 'https://identity.example.test/elevate');
-    const exportV4 = vi.fn(async () => {
+    const exportV5 = vi.fn(async () => {
       throw new ApiError('network_error', 'The network request failed.', 0);
     });
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV4: true, deleteAccount: false },
+      capabilities: { exportV5: true, deleteAccount: false },
       beginElevation,
-      exportV4,
+      exportV5,
       deleteAccount: vi.fn(async () => undefined),
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -787,9 +850,11 @@ describe('account deletion confirmation', () => {
     const dialog = await screen.findByRole('alertdialog');
     await rendered.user.click(within(dialog).getByRole('button', { name: 'Create export' }));
 
-    expect(await screen.findByText(/verify your Discord identity again to create a new export/i)).toBeVisible();
-    expect(exportV4).toHaveBeenCalledTimes(1);
-    expect(exportV4).toHaveBeenCalledWith({
+    expect(
+      await screen.findByText(/verify your Discord identity again to create a new export/i),
+    ).toBeVisible();
+    expect(exportV5).toHaveBeenCalledTimes(1);
+    expect(exportV5).toHaveBeenCalledWith({
       accountId: '1',
       elevatedToken: 'unknown_export_token',
     });

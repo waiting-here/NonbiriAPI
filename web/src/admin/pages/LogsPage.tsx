@@ -2,9 +2,11 @@ import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@shared/components/States';
 import { RoleLogPanel } from '@shared/components/log';
 import '@shared/operations/operations.css';
+import { useAdminSession } from '../data';
 
 export function LogsPage() {
   const { t, i18n } = useTranslation();
+  const session = useAdminSession();
   return (
     <div className="page ops-stack">
       <PageHeader
@@ -12,7 +14,13 @@ export function LogsPage() {
         title={t('admin.logs.logsTitle')}
         description={t('admin.logs.description')}
       />
-      <RoleLogPanel role="admin" language={i18n.resolvedLanguage} />
+      <RoleLogPanel
+        role="admin"
+        language={i18n.resolvedLanguage}
+        accountId={session.data?.admin.username}
+        scopeReady={!session.isPending && !session.error && Boolean(session.data?.admin.username)}
+        enabled={!session.isPending && !session.error}
+      />
     </div>
   );
 }

@@ -194,7 +194,8 @@ func TestEconomyAdaptersMapClosedExportDTOs(t *testing.T) {
 		ID: "donation", Status: "approved", Description: "description",
 		ReviewResult: &lifecycle.DonationReviewExport{Decision: "approve", Reason: "accepted", ReviewedAt: 80},
 		Keys: []lifecycle.DonationKeyExport{{
-			ID: "donation-key", EndpointKeyID: &endpointKeyID, DisplayHead: "sk-a", DisplayTail: "tail",
+			RecurringLimits: []lifecycle.RecurringLimitExport{},
+			ID:              "donation-key", EndpointKeyID: &endpointKeyID, DisplayHead: "sk-a", DisplayTail: "tail",
 			SafeSource: lifecycle.DonationSafeSourceExport{
 				Kind: "mainstream", BaseURL: "https://example.invalid", ConnectorType: "openai-compatible",
 				ChannelID: &channelID, Name: &channelName,

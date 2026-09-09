@@ -15,6 +15,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,12 +30,13 @@ import (
 const testListPattern = `^(Test|Fuzz|Example)`
 
 type timingHints struct {
-	Version               int                `json:"version"`
-	Shards                int                `json:"shards"`
-	DefaultPackageSeconds float64            `json:"default_package_seconds"`
-	SplitPackages         []string           `json:"split_packages"`
-	SplitTestCounts       map[string]int     `json:"split_test_counts"`
-	PackageSeconds        map[string]float64 `json:"package_seconds"`
+	Version               int                           `json:"version"`
+	Shards                int                           `json:"shards"`
+	DefaultPackageSeconds float64                       `json:"default_package_seconds"`
+	SplitPackages         []string                      `json:"split_packages"`
+	SplitTestCounts       map[string]int                `json:"split_test_counts"`
+	TestSeconds           map[string]map[string]float64 `json:"test_seconds,omitempty"`
+	PackageSeconds        map[string]float64            `json:"package_seconds"`
 }
 
 type listedPackage struct {
@@ -86,15 +88,23 @@ func runCLI(args []string, stdout, stderr io.Writer) error {
 	shardSpec := flags.String("shard", "", "one-based shard in N/TOTAL form")
 	timeout := flags.String("timeout", "30m", "per-command go test timeout")
 	hintsPath := flags.String("hints", "scripts/race-timings.json", "timing hints JSON")
+	planOnly := flags.Bool("plan-only", false, "print the complete deterministic plan without running tests")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(flags.Args(), " "))
 	}
-	index, total, err := parseShardSpec(*shardSpec)
-	if err != nil {
-		return err
+	if !*planOnly && *shardSpec == "" {
+		return errors.New("shard is required unless -plan-only is set")
+	}
+	index, total := 0, 0
+	if *shardSpec != "" {
+		var err error
+		index, total, err = parseShardSpec(*shardSpec)
+		if err != nil {
+			return err
+		}
 	}
 	duration, err := time.ParseDuration(*timeout)
 	if err != nil || duration <= 0 {
@@ -104,7 +114,9 @@ func runCLI(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if hints.Shards != total {
+	if total == 0 {
+		total = hints.Shards
+	} else if hints.Shards != total {
 		return fmt.Errorf("shard total %d does not match timing hints total %d", total, hints.Shards)
 	}
 	listed, err := listPackages(*goTool)
@@ -120,6 +132,10 @@ func runCLI(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	digest := planDigest(plans)
+	if *planOnly {
+		printPlans(stdout, plans, digest)
+		return nil
+	}
 	selected := plans[index-1]
 	testCount := 0
 	for _, tests := range selected.SplitTests {
@@ -193,6 +209,25 @@ func loadTimingHints(path string) (timingHints, error) {
 	for packagePath, seconds := range hints.PackageSeconds {
 		if packagePath == "" || seconds <= 0 {
 			return timingHints{}, fmt.Errorf("timing hints contain invalid package weight %q=%v", packagePath, seconds)
+		}
+	}
+	for packagePath, tests := range hints.TestSeconds {
+		if packagePath == "" {
+			return timingHints{}, errors.New("timing hints contain an empty test-weight package")
+		}
+		if _, split := seenSplit[packagePath]; !split {
+			return timingHints{}, fmt.Errorf("timing hints contain test weights for unsplit package %s", packagePath)
+		}
+		if len(tests) == 0 {
+			return timingHints{}, fmt.Errorf("timing hints contain no test weights for %s", packagePath)
+		}
+		for testName, seconds := range tests {
+			if !validTopLevelTestName(testName) {
+				return timingHints{}, fmt.Errorf("timing hints contain invalid test name %q for %s", testName, packagePath)
+			}
+			if seconds <= 0 || math.IsNaN(seconds) || math.IsInf(seconds, 0) {
+				return timingHints{}, fmt.Errorf("timing hints contain invalid test weight %s/%s=%v", packagePath, testName, seconds)
+			}
 		}
 	}
 	return hints, nil
@@ -368,7 +403,6 @@ func buildPlans(catalog []catalogPackage, hints timingHints, total int) ([]shard
 		}
 		// Keep the prior per-test average when the live catalog grows. New tests
 		// therefore add conservative weight instead of diluting the package total.
-		testWeight := packageWeight / float64(baselineCount)
 		for _, testName := range item.Tests {
 			if !validTopLevelTestName(testName) {
 				return nil, fmt.Errorf("split package %s has invalid test name %q", item.ImportPath, testName)
@@ -377,6 +411,10 @@ func buildPlans(catalog []catalogPackage, hints timingHints, total int) ([]shard
 				return nil, fmt.Errorf("split package %s repeats test %s", item.ImportPath, testName)
 			}
 			seenTests[testName] = struct{}{}
+			testWeight := packageWeight / float64(baselineCount)
+			if measured, ok := hints.TestSeconds[item.ImportPath][testName]; ok {
+				testWeight = measured
+			}
 			units = append(units, planUnit{Package: item.ImportPath, Test: testName, Weight: testWeight})
 		}
 	}
@@ -503,6 +541,29 @@ func planDigest(plans []shardPlan) string {
 		}
 	}
 	return hex.EncodeToString(hash.Sum(nil))[:16]
+}
+
+func printPlans(output io.Writer, plans []shardPlan, digest string) {
+	fmt.Fprintf(output, "raceplan: plan=%s shards=%d\n", digest, len(plans))
+	for _, plan := range plans {
+		testCount := 0
+		for _, tests := range plan.SplitTests {
+			testCount += len(tests)
+		}
+		fmt.Fprintf(output, "raceplan: shard %d/%d estimated=%.1fs whole_packages=%d split_tests=%d\n",
+			plan.Index, len(plans), plan.EstimatedSeconds, len(plan.WholePackages), testCount)
+		for _, packagePath := range plan.WholePackages {
+			fmt.Fprintf(output, "raceplan: shard %d whole %s\n", plan.Index, packagePath)
+		}
+		packages := make([]string, 0, len(plan.SplitTests))
+		for packagePath := range plan.SplitTests {
+			packages = append(packages, packagePath)
+		}
+		sort.Strings(packages)
+		for _, packagePath := range packages {
+			fmt.Fprintf(output, "raceplan: shard %d split %s tests=%s\n", plan.Index, packagePath, strings.Join(plan.SplitTests[packagePath], ","))
+		}
+	}
 }
 
 func executionGroups(plan shardPlan, timeout string) []commandGroup {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
 	"github.com/waiting-here/NonbiriAPI/internal/game/linklink"
 	"github.com/waiting-here/NonbiriAPI/internal/game/rps"
 	fishingruntime "github.com/waiting-here/NonbiriAPI/internal/game/runtime"
@@ -63,10 +64,14 @@ func (adapter *FishingAdapter) ExportFishing(
 	if err != nil {
 		return lifecycle.FishingExport{}, nil, err
 	}
+	recent, err := mapFishingRank(value.RollingBest)
+	if err != nil {
+		return lifecycle.FishingExport{}, nil, err
+	}
 	out := lifecycle.FishingExport{
 		Pending:    make([]lifecycle.FishingPendingExport, len(value.Pending)),
 		Terminal:   make([]lifecycle.FishingBatchExport, len(value.Terminal)),
-		SingleBest: single, RollingTotal: total,
+		SingleBest: single, RollingTotal: total, RollingBest: recent,
 	}
 	for index, pending := range value.Pending {
 		out.Pending[index] = lifecycle.FishingPendingExport{
@@ -78,9 +83,12 @@ func (adapter *FishingAdapter) ExportFishing(
 	for index, batch := range value.Terminal {
 		outcomes := make([]lifecycle.FishingOutcomeExport, len(batch.Outcomes))
 		for outcomeIndex, outcome := range batch.Outcomes {
+			if outcome.BlueFatFishLengthCM != nil && (outcome.Tier != "legend" || !fishing.ValidBlueFatFishLength(*outcome.BlueFatFishLengthCM)) {
+				return lifecycle.FishingExport{}, nil, lifecycle.ErrInvariant
+			}
 			outcomes[outcomeIndex] = lifecycle.FishingOutcomeExport{
 				Ordinal: outcome.Ordinal, SpeciesKey: outcome.SpeciesKey, Tier: outcome.Tier,
-				SizeCM: outcome.SizeCM, Reward: outcome.Reward,
+				SizeCM: outcome.SizeCM, Reward: outcome.Reward, BlueFatFishLengthCM: cloneString(outcome.BlueFatFishLengthCM),
 			}
 		}
 		out.Terminal[index] = lifecycle.FishingBatchExport{
@@ -104,6 +112,12 @@ func mapFishingRank(value *fishingruntime.FishingLeaderboardRow) (*lifecycle.Fis
 	if value.SpeciesKey != "" {
 		species, size := value.SpeciesKey, value.SizeCM
 		out.SpeciesKey, out.SizeCM = &species, &size
+	}
+	if value.BlueFatFishLengthCM != nil {
+		if !fishing.ValidBlueFatFishLength(*value.BlueFatFishLengthCM) || value.SpeciesKey != "koi" && value.SpeciesKey != "taimen" && value.SpeciesKey != "yellowcheek" {
+			return nil, lifecycle.ErrInvariant
+		}
+		out.BlueFatFishLengthCM = cloneString(value.BlueFatFishLengthCM)
 	}
 	if value.TotalCredits != "" {
 		total := value.TotalCredits
@@ -232,6 +246,7 @@ func (adapter *RPSAdapter) ExportRPS(
 				Returned: summary.OwnSeat.Returned, WalletNet: summary.OwnSeat.WalletNet,
 				TimeoutCount: summary.OwnSeat.TimeoutCount, RockCount: summary.OwnSeat.RockCount,
 				ScissorsCount: summary.OwnSeat.ScissorsCount, PaperCount: summary.OwnSeat.PaperCount,
+				OwnBuyIn: cloneString(summary.OwnSeat.OwnBuyIn), OwnCashOut: cloneString(summary.OwnSeat.OwnCashOut),
 			},
 		}
 	}
@@ -278,6 +293,7 @@ func mapRPSPending(value *rps.PendingResult) *lifecycle.RPSPendingExport {
 		SessionID: value.SessionID, Mode: value.Mode, TerminalReason: value.TerminalReason,
 		OwnSeatNo: value.OwnSeatNo, OwnInput: value.OwnInput, OwnReturned: value.OwnReturned,
 		OwnWalletNet: value.OwnWalletNet, Seats: seats, CreatedAt: value.CreatedAt,
+		OwnBuyIn: cloneString(value.OwnBuyIn), OwnCashOut: cloneString(value.OwnCashOut),
 	}
 }
 

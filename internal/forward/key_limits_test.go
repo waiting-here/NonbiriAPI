@@ -9,8 +9,46 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
+	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
+
+func TestSharedKeyLimitResponsesDoNotNotifyIngressRPMPolicy(t *testing.T) {
+	f := newServiceFixture(t, nil)
+	f.claims.claimErrors = map[int]error{0: claim.ErrKeyRateLimited, 1: claim.ErrKeyRateLimited, 2: claim.ErrKeyRateLimited}
+	denials := 0
+	flow, err := flowcontrol.New(flowcontrol.Config{
+		RPM:      ratelimit.RPMConfig{GlobalLimit: 100, PerUserLimit: 100},
+		OnDenied: func(context.Context, int64, ratelimit.RPMReason) { denials++ },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer flow.Close()
+	middleware, err := flowcontrol.NewMiddleware(flow, CallerIdentity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := WithRPMDenialScope(middleware.Wrap(NewHandler(f.service)))
+	for i := 0; i < 3; i++ {
+		request := withCallerIdentity(httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"[公益]care/model","messages":[]}`)), resources.CallerIdentity{UserID: 1, Generation: 1})
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusTooManyRequests {
+			t.Fatalf("request %d status=%d", i, recorder.Code)
+		}
+	}
+	if denials != 0 || f.openAI.calls != 0 || len(f.claims.requestResults) != 3 {
+		t.Fatal("shared key rejection entered ingress RPM policy or upstream")
+	}
+	for _, result := range f.claims.requestResults {
+		if result.Disposition != claim.AccountingRelease || result.ActualChargeMilli != 0 {
+			t.Fatal("undispatched key rejection consumed credit")
+		}
+	}
+}
 
 func TestKeyLimitSkipsWithoutRequiringSilentRetry(t *testing.T) {
 	for _, charity := range []bool{false, true} {
@@ -76,11 +114,14 @@ func TestLaterKeyLimitKeepsDispatchedFailureAndSettlement(t *testing.T) {
 	f.personal.snapshot.Candidates = append(f.personal.snapshot.Candidates, second)
 	f.addDispatch(first)
 	f.claims.claimErrors = map[int]error{1: claim.ErrKeyRateLimited}
-	f.openAI.results = []connectorcontract.AttemptResult{{Failure: connectorcontract.FailureUpstream, UpstreamStatus: 503}}
+	f.openAI.results = []connectorcontract.AttemptResult{{Failure: connectorcontract.FailureUpstream, UpstreamStatus: 503, ErrorDetail: reportedErrorForTest()}}
 	request := decodeChatForTest(t, `{"model":"provider/model","messages":[]}`)
 	recorder := httptest.NewRecorder()
 	f.service.Chat(context.Background(), recorder, 1, request, []byte(`{}`), "application/json", "en")
-	if recorder.Code != 502 || len(f.claims.claims) != 2 || len(f.claims.outcomes) != 1 || f.claims.requestResults[0].Disposition != claim.AccountingCommit {
+	if recorder.Code != 503 || len(f.claims.claims) != 2 || len(f.claims.outcomes) != 1 || f.claims.requestResults[0].Disposition != claim.AccountingCommit {
 		t.Fatalf("response=%d claims=%d terminal=%+v", recorder.Code, len(f.claims.claims), f.claims.requestResults)
+	}
+	if !strings.Contains(recorder.Body.String(), "Capacity exhausted; retry later.") || !strings.Contains(recorder.Body.String(), `"upstream_code":"overloaded"`) || f.claims.outcomes[0].UpstreamCode != "overloaded" {
+		t.Fatal("later unsent key limit replaced the reported error")
 	}
 }

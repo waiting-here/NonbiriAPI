@@ -9,6 +9,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 )
 
 const maxConsumerExportRows = 10_000
@@ -130,6 +131,14 @@ func (s *Service) CleanupTx(ctx context.Context, tx *sql.Tx, decisionNow int64, 
 	if s == nil || ctx == nil || tx == nil || !validTime(decisionNow) || limit < 1 || limit > 100 {
 		return 0, claim.ErrInvalidInput
 	}
+	quotaCount, err := donationquota.Cleanup(ctx, tx, decisionNow, limit)
+	if err != nil {
+		return 0, err
+	}
+	if quotaCount == limit {
+		return quotaCount, nil
+	}
+	limit -= quotaCount
 	cutoff := decisionNow - terminalRetention
 	if cutoff < 0 {
 		cutoff = 0
@@ -158,7 +167,7 @@ WHERE state IN ('committed','released') AND finalized_at<=? ORDER BY finalized_a
 		}
 		count += requestCount
 	}
-	return int(count), nil
+	return quotaCount + int(count), nil
 }
 
 func addConsumerExportValue(total, value *big.Int) error {

@@ -2,7 +2,7 @@
   "board": "single",
   "window_start": null,
   "entries": [
-    {"rank": "1", "species_key": "boot", "size_cm": 0, "identity": {"kind": "public", "display_name": "Angler", "avatar_url": null}, "is_me": true}
+    {"rank": "1", "species_key": "boot", "size_cm": 0, "blue_fat_fish_length_cm": null, "identity": {"kind": "public", "display_name": "Angler", "avatar_url": null}, "is_me": true}
   ],
   "me": null
 }

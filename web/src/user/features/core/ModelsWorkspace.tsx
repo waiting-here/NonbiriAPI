@@ -8,19 +8,25 @@ import {
   type FormEvent,
 } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ChoiceList } from '@shared/components/ChoiceList';
 import { PageHeader } from '@shared/components/States';
-import { isNotFoundError } from '@shared/query/http';
+import { PagePagination } from '@shared/operations/PagePagination';
+import { usePagePager, type PagePager } from '@shared/operations/usePagePager';
+import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
+import { isForbidden, isNotFoundError, isUnauthorized } from '@shared/query/http';
 import {
   addBindings,
   createModel,
   deleteBinding,
   deleteModel,
-  getBindingCandidates,
   orderBindings,
   patchModel,
 } from './api';
+import { getBindingCandidatesPage } from './pageApi';
+import { ModelBrowseSummary } from './ResourceBrowse';
+import { validateResourceId } from './normalizers';
 import {
   ConnectorLabel,
   CoreEmpty,
@@ -37,13 +43,13 @@ import {
   applyBindingsResponse,
   coreKeys,
   coreSessionMatchesAccount,
-  useBindingCandidates,
+  invalidateResourceDependents,
+  useCoreSession,
   useBindings,
-  useEndpointKeysPage,
-  useEndpointsPage,
   useModel,
-  useModelsPage,
 } from './queries';
+import { useNumberedBindingCandidates, useNumberedModels } from './modelNumberedQueries';
+import { useNumberedEndpointKeys, useNumberedEndpoints } from './numberedQueries';
 import { createOperationIdentity, isConflict, isOutcomeUnknown } from './request';
 import {
   bindingDraftReducer,
@@ -59,12 +65,14 @@ import type {
   ModelCreateInput,
   ModelPatchInput,
   OperationIdentity,
-  Page,
   RouteStrategy,
   UserProfile,
 } from './types';
+import type { PageMetadata, PageSize } from '@shared/operations/pageNumbers';
+import type { NumberedPage } from './pageTypes';
 
 type VisibleOutcome = 'conflict' | 'unknown' | 'error' | null;
+type PermissionLoss = { scope: string; error: unknown };
 
 function visibleOutcome(error: unknown): VisibleOutcome {
   if (isConflict(error)) return 'conflict';
@@ -76,16 +84,32 @@ function asNotice(outcome: VisibleOutcome) {
   return outcome ? <MutationNotice outcome={outcome} /> : null;
 }
 
+function isAccessLoss(error: unknown): boolean {
+  return isUnauthorized(error) || isForbidden(error);
+}
+
+function selectedModelID(searchParams: URLSearchParams): string | null {
+  const values = searchParams.getAll('model_id');
+  if (values.length !== 1 || !values[0]) return null;
+  try {
+    return validateResourceId(values[0], 'model id');
+  } catch {
+    return null;
+  }
+}
+
 function ModelEditor({
   accountId,
   initial,
   onCancel,
   onSaved,
+  onCapabilityLoss,
 }: {
   accountId: string;
   initial?: Model;
   onCancel: () => void;
   onSaved: (model: Model) => void;
+  onCapabilityLoss?: (error: unknown) => void;
 }) {
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
@@ -97,6 +121,7 @@ function ModelEditor({
   const [busy, setBusy] = useState(false);
   const [validation, setValidation] = useState(false);
   const [outcome, setOutcome] = useState<VisibleOutcome>(null);
+  const [permissionLost, setPermissionLost] = useState<unknown>(null);
   const attemptRef = useRef<{
     operation: OperationIdentity;
     input: ModelCreateInput | ModelPatchInput;
@@ -167,7 +192,7 @@ function ModelEditor({
       }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
-        queryClient.invalidateQueries({ queryKey: coreKeys.endpointRoutingAll(accountId) }),
+        invalidateResourceDependents(queryClient, accountId),
       ]);
       if (!coreSessionMatchesAccount(queryClient, accountId)) {
         discardStaleMutation();
@@ -176,6 +201,12 @@ function ModelEditor({
       onSaved(saved);
     } catch (error) {
       if (!coreSessionMatchesAccount(queryClient, accountId)) {
+        discardStaleMutation();
+        return;
+      }
+      if (isAccessLoss(error)) {
+        setPermissionLost(error);
+        onCapabilityLoss?.(error);
         discardStaleMutation();
         return;
       }
@@ -207,6 +238,14 @@ function ModelEditor({
       setBusy(false);
     }
   };
+
+  if (permissionLost) {
+    return (
+      <section className="core-card">
+        <CoreErrorPanel compact error={permissionLost} />
+      </section>
+    );
+  }
 
   return (
     <form className="core-card core-wizard core-form" onSubmit={(event) => void submit(event)}>
@@ -305,34 +344,30 @@ function CandidateSource({
   source,
   page,
   pending,
+  busy,
   error,
   selected,
   bound,
   onToggle,
   onRetry,
-  canPrevious,
-  canNext,
-  onPrevious,
-  onNext,
+  pager,
   locked = false,
 }: {
   source: CatalogSourceType;
-  page: Page<BindingCandidate> | undefined;
+  page: NumberedPage<BindingCandidate> | undefined;
   pending: boolean;
+  busy: boolean;
   error: unknown;
   selected: ReadonlySet<string>;
   bound: ReadonlySet<string>;
   onToggle: (candidate: BindingCandidate) => void;
   onRetry: () => void;
-  canPrevious: boolean;
-  canNext: boolean;
-  onPrevious: () => void;
-  onNext: () => void;
+  pager: PagePager;
   locked?: boolean;
 }) {
   const { t } = useCoreCopy();
   return (
-    <section className="core-selector__level">
+    <section className="core-selector__level" aria-busy={busy}>
       <div className="core-card__header">
         <h3>{source === 'automatic' ? t('models.automatic') : t('models.manual')}</h3>
       </div>
@@ -360,7 +395,7 @@ function CandidateSource({
                 type="button"
                 className={`core-choice${isSelected ? ' is-selected' : ''}`}
                 aria-pressed={isSelected}
-                disabled={isBound || locked}
+                disabled={isBound || locked || busy}
                 onClick={() => onToggle(candidate)}
               >
                 <strong className="core-mono">{candidate.upstream_model_id}</strong>
@@ -383,25 +418,14 @@ function CandidateSource({
           }}
         </ChoiceList>
       )}
-      {canPrevious || canNext ? (
-        <div className="core-pagination">
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={locked || !canPrevious}
-            onClick={onPrevious}
-          >
-            {t('models.previousCandidates')}
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={locked || !canNext}
-            onClick={onNext}
-          >
-            {t('models.nextCandidates')}
-          </button>
-        </div>
+      {page ? (
+        <PagePagination
+          metadata={page.pagination}
+          requestedPage={pager.page}
+          busy={busy || locked}
+          onPageChange={pager.setPage}
+          onPageSizeChange={pager.setPageSize}
+        />
       ) : null}
     </section>
   );
@@ -411,10 +435,7 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
   const bindings = useBindings(accountId, model.id);
-  const [endpointCursors, setEndpointCursors] = useState<Array<string | undefined>>([undefined]);
-  const [keyCursors, setKeyCursors] = useState<Array<string | undefined>>([undefined]);
-  const [automaticCursors, setAutomaticCursors] = useState<Array<string | undefined>>([undefined]);
-  const [manualCursors, setManualCursors] = useState<Array<string | undefined>>([undefined]);
+  const permissionScope = `${accountId}\u0000${model.id}`;
   const [endpointId, setEndpointId] = useState('');
   const [keyId, setKeyId] = useState('');
   const [modelQuery, setModelQuery] = useState('');
@@ -426,14 +447,41 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
     selections: BindingSelection[];
     operation: OperationIdentity;
   } | null>(null);
-  const endpoints = useEndpointsPage(accountId, endpointCursors.at(-1));
-  const keys = useEndpointKeysPage(
+  const [permissionLost, setPermissionLost] = useState<PermissionLoss | null>(null);
+  const endpointPager = usePagePager({
+    station: 'user',
+    listType: 'models-binding-endpoints',
+    scopeKey: accountId,
+  });
+  const keyPager = usePagePager({
+    station: 'user',
+    listType: 'models-binding-keys',
+    scopeKey: `${accountId}\u0000${model.id}`,
+    resetKey: endpointId,
+  });
+  const automaticPager = usePagePager({
+    station: 'user',
+    listType: 'models-binding-candidates-automatic',
+    scopeKey: `${accountId}\u0000${model.id}`,
+    resetKey: `${endpointId}\u0000${keyId}\u0000${modelQuery}`,
+  });
+  const manualPager = usePagePager({
+    station: 'user',
+    listType: 'models-binding-candidates-manual',
+    scopeKey: `${accountId}\u0000${model.id}`,
+    resetKey: `${endpointId}\u0000${keyId}\u0000${modelQuery}`,
+  });
+  const endpoints = useNumberedEndpoints(accountId, {
+    page: endpointPager.page,
+    pageSize: endpointPager.pageSize,
+  });
+  const keys = useNumberedEndpointKeys(
     accountId,
     endpointId || undefined,
-    keyCursors.at(-1),
+    { page: keyPager.page, pageSize: keyPager.pageSize },
     Boolean(endpointId),
   );
-  const automatic = useBindingCandidates(
+  const automatic = useNumberedBindingCandidates(
     accountId,
     model.id,
     {
@@ -441,11 +489,11 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
       keyId: keyId || undefined,
       source: 'automatic',
       query: modelQuery,
-      cursor: automaticCursors.at(-1),
     },
+    { page: automaticPager.page, pageSize: automaticPager.pageSize },
     Boolean(endpointId && keyId),
   );
-  const manual = useBindingCandidates(
+  const manual = useNumberedBindingCandidates(
     accountId,
     model.id,
     {
@@ -453,14 +501,25 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
       keyId: keyId || undefined,
       source: 'manual',
       query: modelQuery,
-      cursor: manualCursors.at(-1),
     },
+    { page: manualPager.page, pageSize: manualPager.pageSize },
     Boolean(endpointId && keyId),
   );
   const [draft, dispatch] = useReducer(bindingDraftReducer, undefined, () =>
     initialBindingDraftState(accountId, model.id, model.binding_revision),
   );
   const bindingsKnown = Boolean(bindings.data);
+  const queryPermissionError = [
+    bindings.error,
+    endpoints.error,
+    keys.error,
+    automatic.error,
+    manual.error,
+  ].find((error) => isAccessLoss(error));
+  const accessLossError =
+    (permissionLost?.scope === permissionScope ? permissionLost.error : null) ??
+    queryPermissionError ??
+    null;
 
   const discardStaleMutation = () => {
     setReplayAttempt(null);
@@ -483,10 +542,6 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
     let active = true;
     queueMicrotask(() => {
       if (!active) return;
-      setEndpointCursors([undefined]);
-      setKeyCursors([undefined]);
-      setAutomaticCursors([undefined]);
-      setManualCursors([undefined]);
       setEndpointId('');
       setKeyId('');
       setModelQuery('');
@@ -519,17 +574,12 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
   const chooseEndpoint = (next: string) => {
     setEndpointId(next);
     setKeyId('');
-    setKeyCursors([undefined]);
-    setAutomaticCursors([undefined]);
-    setManualCursors([undefined]);
     setModelQuery('');
     setQueryDraft('');
   };
 
   const chooseKey = (next: string) => {
     setKeyId(next);
-    setAutomaticCursors([undefined]);
-    setManualCursors([undefined]);
     setModelQuery('');
     setQueryDraft('');
   };
@@ -547,11 +597,14 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
     let removed = false;
     for (const selection of draft.selections) {
       try {
-        const page = await getBindingCandidates(model.id, {
-          keyId: selection.endpoint_key_id,
-          query: selection.upstream_model_id,
-          limit: 100,
-        });
+        const page = await getBindingCandidatesPage(
+          model.id,
+          {
+            keyId: selection.endpoint_key_id,
+            query: selection.upstream_model_id,
+          },
+          { page: '1', pageSize: 100 },
+        );
         if (!coreSessionMatchesAccount(queryClient, accountId)) {
           discardStaleMutation();
           return false;
@@ -559,7 +612,7 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
         const stillValid = page.data.some(
           (candidate) => candidateIdentity(candidate) === candidateIdentity(selection),
         );
-        if (!stillValid) {
+        if (!stillValid && page.pagination.total_pages === '1') {
           removed = true;
           dispatch({
             type: 'candidate-invalid',
@@ -568,7 +621,12 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
             candidate: selection,
           });
         }
-      } catch {
+      } catch (error) {
+        if (isAccessLoss(error)) {
+          setPermissionLost({ scope: permissionScope, error });
+          discardStaleMutation();
+          return false;
+        }
         // A failed verifier is not evidence that a selection disappeared.
       }
     }
@@ -582,6 +640,11 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
     }
     const refreshed = await bindings.refetch();
     if (!coreSessionMatchesAccount(queryClient, accountId)) {
+      discardStaleMutation();
+      return false;
+    }
+    if (isAccessLoss(refreshed.error)) {
+      setPermissionLost({ scope: permissionScope, error: refreshed.error });
       discardStaleMutation();
       return false;
     }
@@ -654,6 +717,11 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
         discardStaleMutation();
         return;
       }
+      if (isAccessLoss(error)) {
+        setPermissionLost({ scope: permissionScope, error });
+        discardStaleMutation();
+        return;
+      }
       const outcome: Exclude<MutationOutcome, 'idle' | 'pending' | 'success'> = isConflict(error)
         ? 'conflict'
         : isOutcomeUnknown(error)
@@ -690,6 +758,17 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
       });
     }
   };
+
+  if (accessLossError) {
+    return (
+      <section className="core-card">
+        <div className="core-card__header">
+          <h2>{t('models.selectorTitle')}</h2>
+        </div>
+        <CoreErrorPanel compact error={accessLossError} />
+      </section>
+    );
+  }
 
   return (
     <section className="core-card">
@@ -753,7 +832,6 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
             <p className="core-muted">{t('models.endpointEmpty')}</p>
           ) : (
             <ChoiceList
-              key={endpointCursors.at(-1) ?? 'first'}
               items={endpoints.data.data}
               getKey={(endpoint) => endpoint.id}
               getSearchText={(endpoint) =>
@@ -766,7 +844,12 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
                   key={endpoint.id}
                   type="button"
                   className={`core-choice${endpointId === endpoint.id ? ' is-selected' : ''}`}
-                  disabled={!bindingsKnown || Boolean(replayAttempt) || !endpoint.enabled}
+                  disabled={
+                    !bindingsKnown ||
+                    Boolean(replayAttempt) ||
+                    !endpoint.enabled ||
+                    endpoints.isFetching
+                  }
                   onClick={() => chooseEndpoint(endpoint.id)}
                 >
                   <strong>{endpoint.note || endpoint.base_url}</strong>
@@ -779,31 +862,14 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
               )}
             </ChoiceList>
           )}
-          {endpoints.data && (endpointCursors.length > 1 || endpoints.data.next_cursor) ? (
-            <div className="core-pagination">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={endpointCursors.length <= 1}
-                onClick={() => setEndpointCursors((current) => current.slice(0, -1))}
-              >
-                {t('common.previous')}
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={!endpoints.data.next_cursor}
-                onClick={() =>
-                  endpoints.data.next_cursor &&
-                  setEndpointCursors((current) => [
-                    ...current,
-                    endpoints.data.next_cursor ?? undefined,
-                  ])
-                }
-              >
-                {t('common.next')}
-              </button>
-            </div>
+          {endpoints.data ? (
+            <PagePagination
+              metadata={endpoints.data.pagination}
+              requestedPage={endpointPager.page}
+              busy={endpoints.isFetching || Boolean(replayAttempt)}
+              onPageChange={endpointPager.setPage}
+              onPageSizeChange={endpointPager.setPageSize}
+            />
           ) : null}
         </section>
 
@@ -819,7 +885,6 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
             <p className="core-muted">{t('models.keyEmpty')}</p>
           ) : (
             <ChoiceList
-              key={`${endpointId}:${keyCursors.at(-1) ?? 'first'}`}
               items={keys.data.data}
               getKey={(key) => key.id}
               getSearchText={(key) => `${key.note} ${key.display_head} ${key.display_tail}`}
@@ -832,7 +897,9 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
                     key={key.id}
                     type="button"
                     className={`core-choice${keyId === key.id ? ' is-selected' : ''}`}
-                    disabled={!bindingsKnown || Boolean(replayAttempt) || unavailable}
+                    disabled={
+                      !bindingsKnown || Boolean(replayAttempt) || unavailable || keys.isFetching
+                    }
                     onClick={() => chooseKey(key.id)}
                   >
                     <strong>{key.note || `${key.display_head}…${key.display_tail}`}</strong>
@@ -851,28 +918,14 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
               }}
             </ChoiceList>
           )}
-          {keys.data && (keyCursors.length > 1 || keys.data.next_cursor) ? (
-            <div className="core-pagination">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={keyCursors.length <= 1}
-                onClick={() => setKeyCursors((current) => current.slice(0, -1))}
-              >
-                {t('common.previous')}
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={!keys.data.next_cursor}
-                onClick={() =>
-                  keys.data.next_cursor &&
-                  setKeyCursors((current) => [...current, keys.data.next_cursor ?? undefined])
-                }
-              >
-                {t('common.next')}
-              </button>
-            </div>
+          {keys.data ? (
+            <PagePagination
+              metadata={keys.data.pagination}
+              requestedPage={keyPager.page}
+              busy={keys.isFetching || Boolean(replayAttempt)}
+              onPageChange={keyPager.setPage}
+              onPageSizeChange={keyPager.setPageSize}
+            />
           ) : null}
         </section>
 
@@ -883,8 +936,6 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
             onSubmit={(event) => {
               event.preventDefault();
               setModelQuery(queryDraft.trim());
-              setAutomaticCursors([undefined]);
-              setManualCursors([undefined]);
             }}
           >
             <label>
@@ -893,9 +944,14 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
                 value={queryDraft}
                 onChange={(event) => setQueryDraft(event.target.value)}
                 maxLength={256}
+                disabled={!bindingsKnown || Boolean(replayAttempt)}
               />
             </label>
-            <button type="submit" className="btn btn-secondary">
+            <button
+              type="submit"
+              className="btn btn-secondary"
+              disabled={!bindingsKnown || Boolean(replayAttempt)}
+            >
               {t('common.search')}
             </button>
           </form>
@@ -907,39 +963,26 @@ function BindingSelector({ accountId, model }: { accountId: string; model: Model
                 source="automatic"
                 page={automatic.data}
                 pending={automatic.isPending}
+                busy={automatic.isFetching}
                 error={automatic.error}
                 selected={selected}
                 bound={bound}
                 onToggle={toggleCandidate}
                 onRetry={() => void automatic.refetch()}
-                canPrevious={automaticCursors.length > 1}
-                canNext={Boolean(automatic.data?.next_cursor)}
-                onPrevious={() => setAutomaticCursors((current) => current.slice(0, -1))}
-                onNext={() =>
-                  automatic.data?.next_cursor &&
-                  setAutomaticCursors((current) => [
-                    ...current,
-                    automatic.data?.next_cursor ?? undefined,
-                  ])
-                }
+                pager={automaticPager}
                 locked={!bindingsKnown || Boolean(replayAttempt)}
               />
               <CandidateSource
                 source="manual"
                 page={manual.data}
                 pending={manual.isPending}
+                busy={manual.isFetching}
                 error={manual.error}
                 selected={selected}
                 bound={bound}
                 onToggle={toggleCandidate}
                 onRetry={() => void manual.refetch()}
-                canPrevious={manualCursors.length > 1}
-                canNext={Boolean(manual.data?.next_cursor)}
-                onPrevious={() => setManualCursors((current) => current.slice(0, -1))}
-                onNext={() =>
-                  manual.data?.next_cursor &&
-                  setManualCursors((current) => [...current, manual.data?.next_cursor ?? undefined])
-                }
+                pager={manualPager}
                 locked={!bindingsKnown || Boolean(replayAttempt)}
               />
             </div>
@@ -1034,10 +1077,33 @@ function moveBinding(order: string[], from: number, to: number): string[] {
   return next;
 }
 
+function localBindingPagination(
+  totalItems: number,
+  requestedPage: string,
+  pageSize: PageSize,
+): PageMetadata {
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const requested = BigInt(requestedPage);
+  const page = requested > BigInt(totalPages) ? BigInt(totalPages) : requested;
+  return {
+    page: page.toString(),
+    page_size: pageSize,
+    total_items: String(totalItems),
+    total_pages: String(totalPages),
+  };
+}
+
 function BindingOrder({ accountId, model }: { accountId: string; model: Model }) {
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
   const bindings = useBindings(accountId, model.id);
+  const permissionScope = `${accountId}\u0000${model.id}`;
+  const pager = usePagePager({
+    station: 'user',
+    listType: 'models-binding-order',
+    scopeKey: `${accountId}\u0000${model.id}`,
+    resetKey: model.binding_revision,
+  });
   const [order, setOrder] = useState<string[]>([]);
   const [dragged, setDragged] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1049,6 +1115,7 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
     | { kind: 'delete'; expectedRevision: string; bindingId: string; operation: OperationIdentity }
     | null
   >(null);
+  const [permissionLost, setPermissionLost] = useState<PermissionLoss | null>(null);
 
   const discardStaleMutation = () => {
     setReplayAttempt(null);
@@ -1074,9 +1141,17 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
     [bindings.data?.bindings],
   );
   const authoritativeOrder = bindings.data?.bindings.map((binding) => binding.id) ?? [];
+  const pagination = localBindingPagination(order.length, pager.page, pager.pageSize);
+  const visiblePage = Number(BigInt(pagination.page));
+  const visibleStart = (visiblePage - 1) * pager.pageSize;
+  const visibleOrder = order.slice(visibleStart, visibleStart + pager.pageSize);
   const dirty =
     order.length === authoritativeOrder.length &&
     order.some((id, index) => id !== authoritativeOrder[index]);
+
+  useEffect(() => {
+    if (BigInt(pager.page) > BigInt(pagination.total_pages)) pager.setPage(pagination.page);
+  }, [pager, pagination.page, pagination.total_pages]);
 
   const reconcile = async (attempt = replayAttempt) => {
     if (!coreSessionMatchesAccount(queryClient, accountId)) {
@@ -1089,6 +1164,11 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
       queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
     ]);
     if (!coreSessionMatchesAccount(queryClient, accountId)) {
+      discardStaleMutation();
+      return false;
+    }
+    if (isAccessLoss(refreshed.error)) {
+      setPermissionLost({ scope: permissionScope, error: refreshed.error });
       discardStaleMutation();
       return false;
     }
@@ -1163,6 +1243,11 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
         discardStaleMutation();
         return;
       }
+      if (isAccessLoss(error)) {
+        setPermissionLost({ scope: permissionScope, error });
+        discardStaleMutation();
+        return;
+      }
       const nextOutcome = visibleOutcome(error);
       setReplayAttempt(nextOutcome === 'unknown' ? attempt : null);
       setOutcome(nextOutcome);
@@ -1227,6 +1312,11 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
         discardStaleMutation();
         return;
       }
+      if (isAccessLoss(error)) {
+        setPermissionLost({ scope: permissionScope, error });
+        discardStaleMutation();
+        return;
+      }
       const nextOutcome = visibleOutcome(error);
       setReplayAttempt(nextOutcome === 'unknown' ? attempt : null);
       setOutcome(nextOutcome);
@@ -1246,6 +1336,20 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
     setDragged(null);
   };
 
+  const accessLossError =
+    (permissionLost?.scope === permissionScope ? permissionLost.error : null) ??
+    (isAccessLoss(bindings.error) ? bindings.error : null);
+  if (accessLossError) {
+    return (
+      <section className="core-card">
+        <div className="core-card__header">
+          <h2>{t('models.bindingsTitle')}</h2>
+        </div>
+        <CoreErrorPanel compact error={accessLossError} />
+      </section>
+    );
+  }
+
   return (
     <section className="core-card">
       <div className="core-card__header">
@@ -1258,79 +1362,102 @@ function BindingOrder({ accountId, model }: { accountId: string; model: Model })
           error={bindings.error ?? new Error('The model connections are unavailable.')}
           onRetry={() => void bindings.refetch()}
         />
-      ) : bindings.data.bindings.length === 0 ? (
-        <p className="core-muted">{t('models.noBindings')}</p>
       ) : (
-        <ul className="core-binding-list">
-          {order.map((bindingId, index) => {
-            const binding = byId.get(bindingId);
-            if (!binding) return null;
-            return (
-              <li
-                key={binding.id}
-                className={`core-binding-row${dragged === binding.id ? ' is-dragging' : ''}`}
-                draggable={!busy && !reconciliationRequired && !replayAttempt}
-                onDragStart={() => setDragged(binding.id)}
-                onDragEnd={() => setDragged(null)}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => drop(event, binding.id)}
-              >
-                <div className="core-binding-row__top">
-                  <div>
-                    <strong className="core-mono">{binding.upstream_model_id}</strong>
-                    <div className="core-muted">
-                      <ConnectorLabel value={binding.connector_type} /> ·{' '}
-                      {binding.endpoint_base_url}
-                    </div>
-                  </div>
-                  <StatusPill tone="neutral">#{index + 1}</StatusPill>
-                </div>
-                <div className="core-muted core-mono">
-                  {binding.endpoint_key_display_head}…{binding.endpoint_key_display_tail}
-                </div>
-                {binding.endpoint_key_note ? <div>{binding.endpoint_key_note}</div> : null}
-                {binding.endpoint_note ? (
-                  <div className="core-muted">{binding.endpoint_note}</div>
-                ) : null}
-                <div className="core-row-actions">
-                  <div className="core-order-controls">
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      disabled={
-                        busy || reconciliationRequired || Boolean(replayAttempt) || index === 0
-                      }
-                      onClick={() => setOrder((current) => moveBinding(current, index, index - 1))}
-                    >
-                      {t('models.moveUp')}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      disabled={
-                        busy ||
-                        reconciliationRequired ||
-                        Boolean(replayAttempt) ||
-                        index === order.length - 1
-                      }
-                      onClick={() => setOrder((current) => moveBinding(current, index, index + 1))}
-                    >
-                      {t('models.moveDown')}
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    disabled={busy || reconciliationRequired || Boolean(replayAttempt)}
-                    onClick={() => setRemoving(binding)}
+        <>
+          {visibleOrder.length === 0 ? (
+            <p className="core-muted">{t('models.noBindings')}</p>
+          ) : (
+            <ul className="core-binding-list">
+              {visibleOrder.map((bindingId, index) => {
+                const absoluteIndex = visibleStart + index;
+                const binding = byId.get(bindingId);
+                if (!binding) return null;
+                return (
+                  <li
+                    key={binding.id}
+                    className={`core-binding-row${dragged === binding.id ? ' is-dragging' : ''}`}
+                    draggable={!busy && !reconciliationRequired && !replayAttempt}
+                    onDragStart={() => setDragged(binding.id)}
+                    onDragEnd={() => setDragged(null)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => drop(event, binding.id)}
                   >
-                    {t('models.removeBinding')}
-                  </button>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+                    <div className="core-binding-row__top">
+                      <div>
+                        <strong className="core-mono">{binding.upstream_model_id}</strong>
+                        <div className="core-muted">
+                          <ConnectorLabel value={binding.connector_type} /> ·{' '}
+                          {binding.endpoint_base_url}
+                        </div>
+                      </div>
+                      <StatusPill tone="neutral">#{absoluteIndex + 1}</StatusPill>
+                    </div>
+                    <div className="core-muted core-mono">
+                      {binding.endpoint_key_display_head}…{binding.endpoint_key_display_tail}
+                    </div>
+                    {binding.endpoint_key_note ? <div>{binding.endpoint_key_note}</div> : null}
+                    {binding.endpoint_note ? (
+                      <div className="core-muted">{binding.endpoint_note}</div>
+                    ) : null}
+                    <div className="core-row-actions">
+                      <div className="core-order-controls">
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          disabled={
+                            busy ||
+                            reconciliationRequired ||
+                            Boolean(replayAttempt) ||
+                            absoluteIndex === 0
+                          }
+                          onClick={() =>
+                            setOrder((current) =>
+                              moveBinding(current, absoluteIndex, absoluteIndex - 1),
+                            )
+                          }
+                        >
+                          {t('models.moveUp')}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          disabled={
+                            busy ||
+                            reconciliationRequired ||
+                            Boolean(replayAttempt) ||
+                            absoluteIndex === order.length - 1
+                          }
+                          onClick={() =>
+                            setOrder((current) =>
+                              moveBinding(current, absoluteIndex, absoluteIndex + 1),
+                            )
+                          }
+                        >
+                          {t('models.moveDown')}
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-danger"
+                        disabled={busy || reconciliationRequired || Boolean(replayAttempt)}
+                        onClick={() => setRemoving(binding)}
+                      >
+                        {t('models.removeBinding')}
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <PagePagination
+            metadata={pagination}
+            requestedPage={pager.page}
+            busy={bindings.isFetching || busy || reconciliationRequired || Boolean(replayAttempt)}
+            onPageChange={pager.setPage}
+            onPageSizeChange={pager.setPageSize}
+          />
+        </>
       )}
       {asNotice(outcome)}
       <div className="core-form-actions">
@@ -1405,6 +1532,12 @@ function ModelDetail({
     expectedRevision: string;
     operation: OperationIdentity;
   } | null>(null);
+  const permissionScope = `${accountId}\u0000${modelId}`;
+  const [permissionLost, setPermissionLost] = useState<PermissionLoss | null>(null);
+
+  const accessLossError =
+    (permissionLost?.scope === permissionScope ? permissionLost.error : null) ??
+    (isAccessLoss(model.error) ? model.error : null);
 
   const discardStaleMutation = () => {
     setReplayAttempt(null);
@@ -1415,6 +1548,22 @@ function ModelDetail({
     setEditing(false);
   };
 
+  if (accessLossError)
+    return (
+      <div className="page core-page core-stack">
+        <PageHeader
+          icon="models"
+          title={t('models.detailTitle')}
+          description={t('models.detailDescription')}
+          back={
+            <button type="button" className="btn btn-quiet" onClick={onBack}>
+              {t('common.back')}
+            </button>
+          }
+        />
+        <CoreErrorPanel error={accessLossError} />
+      </div>
+    );
   if (model.isPending && !model.data)
     return (
       <div className="page core-page">
@@ -1441,13 +1590,15 @@ function ModelDetail({
       discardStaleMutation();
       return;
     }
+    if (isAccessLoss(result.error)) {
+      setPermissionLost({ scope: permissionScope, error: result.error });
+      discardStaleMutation();
+      return;
+    }
     if (result.error && isNotFoundError(result.error)) {
-      queryClient.removeQueries({ queryKey: coreKeys.model(accountId, model.data.id) });
-      queryClient.removeQueries({ queryKey: coreKeys.bindings(accountId, model.data.id) });
-      queryClient.removeQueries({ queryKey: coreKeys.candidatesRoot(accountId, model.data.id) });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
-        queryClient.invalidateQueries({ queryKey: coreKeys.endpointRoutingAll(accountId) }),
+        invalidateResourceDependents(queryClient, accountId),
       ]);
       setReplayAttempt(null);
       if (!coreSessionMatchesAccount(queryClient, accountId)) {
@@ -1480,16 +1631,13 @@ function ModelDetail({
         return;
       }
       setReplayAttempt(null);
-      queryClient.removeQueries({ queryKey: coreKeys.model(accountId, model.data.id) });
-      queryClient.removeQueries({ queryKey: coreKeys.bindings(accountId, model.data.id) });
-      queryClient.removeQueries({ queryKey: coreKeys.candidatesRoot(accountId, model.data.id) });
       if (!coreSessionMatchesAccount(queryClient, accountId)) {
         discardStaleMutation();
         return;
       }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
-        queryClient.invalidateQueries({ queryKey: coreKeys.endpointRoutingAll(accountId) }),
+        invalidateResourceDependents(queryClient, accountId),
       ]);
       if (!coreSessionMatchesAccount(queryClient, accountId)) {
         discardStaleMutation();
@@ -1498,6 +1646,11 @@ function ModelDetail({
       onDeleted();
     } catch (error) {
       if (!coreSessionMatchesAccount(queryClient, accountId)) {
+        discardStaleMutation();
+        return;
+      }
+      if (isAccessLoss(error)) {
+        setPermissionLost({ scope: permissionScope, error });
         discardStaleMutation();
         return;
       }
@@ -1515,16 +1668,9 @@ function ModelDetail({
           return;
         }
         if (refreshed.error && isNotFoundError(refreshed.error)) {
-          queryClient.removeQueries({ queryKey: coreKeys.model(accountId, model.data.id) });
-          queryClient.removeQueries({ queryKey: coreKeys.bindings(accountId, model.data.id) });
-          queryClient.removeQueries({
-            queryKey: coreKeys.candidatesRoot(accountId, model.data.id),
-          });
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: coreKeys.modelsRoot(accountId) }),
-            queryClient.invalidateQueries({
-              queryKey: coreKeys.endpointRoutingAll(accountId),
-            }),
+            invalidateResourceDependents(queryClient, accountId),
           ]);
           setReplayAttempt(null);
           if (!coreSessionMatchesAccount(queryClient, accountId)) {
@@ -1571,6 +1717,7 @@ function ModelDetail({
           initial={model.data}
           onCancel={() => setEditing(false)}
           onSaved={() => setEditing(false)}
+          onCapabilityLoss={(error) => setPermissionLost({ scope: permissionScope, error })}
         />
       ) : (
         <section className="core-card">
@@ -1670,19 +1817,92 @@ function ModelDetail({
 
 export function ModelsWorkspace({ user }: { user: UserProfile }) {
   const { t } = useCoreCopy();
-  const [cursorStack, setCursorStack] = useState<Array<string | undefined>>([undefined]);
+  const queryClient = useQueryClient();
+  const session = useCoreSession(false);
+  const [searchParams, setSearchParams] = useSearchState();
   const [creating, setCreating] = useState(false);
-  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
-  const models = useModelsPage(user.id, cursorStack.at(-1));
+  const [permissionLost, setPermissionLost] = useState<PermissionLoss | null>(null);
+  const deletedModelRef = useRef<{ accountId: string; id: string } | null>(null);
+  const selectedModelId = selectedModelID(searchParams);
+  useEffect(() => {
+    const deletedModel = deletedModelRef.current;
+    if (
+      !deletedModel ||
+      (deletedModel.accountId === user.id && deletedModel.id === selectedModelId)
+    )
+      return;
+    // The detail has unmounted before eviction, so its observer cannot start
+    // another request for a model whose deletion has already been confirmed.
+    for (const queryKey of [
+      coreKeys.model(deletedModel.accountId, deletedModel.id),
+      coreKeys.bindings(deletedModel.accountId, deletedModel.id),
+      coreKeys.candidatesRoot(deletedModel.accountId, deletedModel.id),
+    ])
+      queryClient.removeQueries({ queryKey, type: 'inactive' });
+    deletedModelRef.current = null;
+  }, [queryClient, selectedModelId, user.id]);
+  const scopeReady = !session.error && session.data?.accountId === user.id;
+  const pager = useUrlPagePager({
+    station: 'user',
+    listType: 'models',
+    scopeKey: user.id,
+    scopeReady,
+    resetKey: undefined,
+    pageParam: 'page',
+    pageSizeParam: 'page_size',
+  });
+  const models = useNumberedModels(
+    user.id,
+    { page: pager.page, pageSize: pager.pageSize },
+    scopeReady && !selectedModelId,
+  );
+  const accessLossError =
+    (permissionLost?.scope === user.id ? permissionLost.error : null) ??
+    (isAccessLoss(models.error) ? models.error : null);
+
+  const setSelectedModelID = (modelId: string | null) => {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.delete('model_id');
+      if (modelId) next.set('model_id', modelId);
+      return next;
+    });
+  };
+
+  if (!scopeReady) {
+    return (
+      <div className="page core-page">
+        {session.error ? <CoreErrorPanel error={session.error} /> : <CoreLoading />}
+      </div>
+    );
+  }
 
   if (selectedModelId) {
     return (
       <ModelDetail
+        key={`${user.id}:${selectedModelId}`}
         accountId={user.id}
         modelId={selectedModelId}
-        onBack={() => setSelectedModelId(null)}
-        onDeleted={() => setSelectedModelId(null)}
+        onBack={() => setSelectedModelID(null)}
+        onDeleted={() => {
+          deletedModelRef.current = { accountId: user.id, id: selectedModelId };
+          setSearchParams((previous) => {
+            if (selectedModelID(previous) !== selectedModelId) return previous;
+            const next = new URLSearchParams(previous);
+            next.delete('model_id');
+            return next;
+          });
+        }}
       />
+    );
+  }
+
+  if (accessLossError) {
+    return (
+      <div className="page core-page core-stack">
+        <PageHeader icon="models" title={t('models.title')} description={t('models.description')} />
+        <CoreErrorPanel error={accessLossError} />
+      </div>
     );
   }
 
@@ -1700,99 +1920,91 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
       />
       {creating ? (
         <ModelEditor
+          key={user.id}
           accountId={user.id}
           onCancel={() => setCreating(false)}
+          onCapabilityLoss={(error) => setPermissionLost({ scope: user.id, error })}
           onSaved={(saved) => {
             setCreating(false);
-            setSelectedModelId(saved.id);
+            setSelectedModelID(saved.id);
           }}
         />
       ) : null}
-      {models.isPending ? (
+      {models.isPending && !models.data ? (
         <CoreLoading />
-      ) : models.error ? (
+      ) : models.error && !models.data ? (
         <CoreErrorPanel error={models.error} onRetry={() => void models.refetch()} />
-      ) : models.data.data.length === 0 && cursorStack.length === 1 ? (
-        <CoreEmpty
-          title={t('models.emptyTitle')}
-          body={t('models.emptyBody')}
-          action={
-            <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
-              {t('models.create')}
-            </button>
-          }
-        />
-      ) : (
+      ) : models.data ? (
         <section className="core-card">
-          <ul className="core-endpoint-list">
-            {models.data.data.map((model) => (
-              <li key={model.id} className="core-endpoint-card">
-                <div className="core-endpoint-card__top">
-                  <div>
-                    <strong className="core-mono">{model.full_name}</strong>
-                    <div className="core-muted">
-                      {model.route_strategy === 'ordered'
-                        ? t('models.ordered')
-                        : t('models.random')}
+          {models.error ? (
+            <CoreErrorPanel compact error={models.error} onRetry={() => void models.refetch()} />
+          ) : null}
+          {models.data.data.length === 0 ? (
+            <CoreEmpty
+              title={t('models.emptyTitle')}
+              body={t('models.emptyBody')}
+              action={
+                <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
+                  {t('models.create')}
+                </button>
+              }
+            />
+          ) : (
+            <ul className="core-endpoint-list">
+              {models.data.data.map((model) => (
+                <li key={model.id} className="core-endpoint-card">
+                  <div className="core-endpoint-card__top">
+                    <div>
+                      <strong className="core-mono">{model.full_name}</strong>
+                      <div className="core-muted">
+                        {model.route_strategy === 'ordered'
+                          ? t('models.ordered')
+                          : t('models.random')}
+                      </div>
                     </div>
                   </div>
-                  <StatusPill tone={model.binding_count === '0' ? 'warning' : 'success'}>
-                    {t('models.bindingCount')}: {model.binding_count}
-                  </StatusPill>
-                </div>
-                <dl className="core-detail-list">
-                  <div>
-                    <dt>{t('models.silentRetry')}</dt>
-                    <dd>{model.silent_retry ? t('common.yes') : t('common.no')}</dd>
+                  <ModelBrowseSummary model={model} />
+                  <dl className="core-detail-list">
+                    <div>
+                      <dt>{t('models.silentRetry')}</dt>
+                      <dd>{model.silent_retry ? t('common.yes') : t('common.no')}</dd>
+                    </div>
+                    <div>
+                      <dt>{t('models.flattenTools')}</dt>
+                      <dd>{model.flatten_tool_calls ? t('common.yes') : t('common.no')}</dd>
+                    </div>
+                    <div>
+                      <dt>{t('common.updated')}</dt>
+                      <dd>
+                        <CoreTime value={model.updated_at} />
+                      </dd>
+                    </div>
+                  </dl>
+                  <div className="core-row-actions">
+                    <span />
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={models.isFetching || Boolean(models.error)}
+                      onClick={() => setSelectedModelID(model.id)}
+                    >
+                      {t('models.manage')}
+                    </button>
                   </div>
-                  <div>
-                    <dt>{t('models.flattenTools')}</dt>
-                    <dd>{model.flatten_tool_calls ? t('common.yes') : t('common.no')}</dd>
-                  </div>
-                  <div>
-                    <dt>{t('common.updated')}</dt>
-                    <dd>
-                      <CoreTime value={model.updated_at} />
-                    </dd>
-                  </div>
-                </dl>
-                <div className="core-row-actions">
-                  <span />
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setSelectedModelId(model.id)}
-                  >
-                    {t('models.manage')}
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-          {cursorStack.length > 1 || models.data.next_cursor ? (
-            <div className="core-pagination">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={cursorStack.length <= 1}
-                onClick={() => setCursorStack((current) => current.slice(0, -1))}
-              >
-                {t('common.previous')}
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={!models.data.next_cursor}
-                onClick={() =>
-                  models.data.next_cursor &&
-                  setCursorStack((current) => [...current, models.data.next_cursor ?? undefined])
-                }
-              >
-                {t('common.next')}
-              </button>
-            </div>
-          ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          <PagePagination
+            metadata={models.data.pagination}
+            requestedPage={pager.page}
+            busy={models.isFetching}
+            onPageChange={pager.setPage}
+            onPageSizeChange={pager.setPageSize}
+          />
         </section>
+      ) : (
+        <CoreLoading />
       )}
     </div>
   );

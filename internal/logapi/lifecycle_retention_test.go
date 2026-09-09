@@ -17,6 +17,10 @@ type requestLogHeldReadStub struct {
 	id    int64
 }
 
+func (stub *requestLogHeldReadStub) AuthorizeStewardHeldRequestLogRead(ctx context.Context, tx *sql.Tx, _ int64, id, now int64) (bool, error) {
+	return stub.AuthorizeHeldRequestLogRead(ctx, tx, id, now)
+}
+
 func (stub *requestLogHeldReadStub) AuthorizeHeldRequestLogRead(
 	_ context.Context,
 	_ *sql.Tx,
@@ -66,7 +70,13 @@ func TestRequestLogOrdinaryCutoffAndKnownIDHeldRead(t *testing.T) {
 	if hook.calls != 1 || hook.id != logID {
 		t.Fatalf("held request-log hook calls=%d id=%d", hook.calls, hook.id)
 	}
+	if _, err := fixture.repo.GetSteward(context.Background(), userID, requestID, AttemptFilter{Limit: 10}, allowLogStewardRead{}); err != nil {
+		t.Fatalf("steward held detail: %v", err)
+	}
 	hook.allow = false
+	if _, err := fixture.repo.GetSteward(context.Background(), userID, requestID, AttemptFilter{Limit: 10}, allowLogStewardRead{}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("steward read released hold: %v", err)
+	}
 	if _, err := fixture.repo.GetAdmin(context.Background(), requestID, AttemptFilter{Limit: 10}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unheld known-ID request-log read at retention boundary = %v, want not found", err)
 	}

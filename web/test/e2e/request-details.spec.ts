@@ -27,14 +27,30 @@ for (const station of ['user', 'admin'] as const) {
     const prefix = station === 'admin' ? '/admin/api/logs' : '/api/logs';
     let detailReads = 0;
     await page.route(`**${prefix}**`, async (route) => {
-      const path = new URL(route.request().url()).pathname;
+      const url = new URL(route.request().url());
+      const path = url.pathname;
       if (path === prefix) {
-        await route.fulfill({ json: { data: [detail.request], next_cursor: null } });
+        expect(url.searchParams.get('page')).toBe('1');
+        expect(url.searchParams.get('page_size')).toBe('20');
+        await route.fulfill({
+          json: {
+            data: [detail.request],
+            next_cursor: null,
+            pagination: { page: '1', page_size: 20, total_items: '1', total_pages: '1' },
+          },
+        });
         return;
       }
       if (path === `${prefix}/${detail.request.id}`) {
         detailReads++;
-        await route.fulfill({ json: detail });
+        expect(url.searchParams.get('attempt_page')).toBe('1');
+        expect(url.searchParams.get('attempt_page_size')).toBe('20');
+        await route.fulfill({
+          json: {
+            ...detail,
+            attempt_pagination: { page: '1', page_size: 20, total_items: '2', total_pages: '1' },
+          },
+        });
         return;
       }
       await route.fallback();
@@ -63,6 +79,10 @@ for (const station of ['user', 'admin'] as const) {
       await expect
         .poll(() => drawer.evaluate((node) => node.getBoundingClientRect().left))
         .toBeGreaterThanOrEqual(0);
+      const pageLabel = drawer.locator('.page-pagination__jump > span');
+      await expect(pageLabel).toHaveCSS('clip-path', 'inset(50%)');
+      await expect(pageLabel).toHaveCSS('overflow', 'hidden');
+      await expect(drawer.getByRole('textbox', { name: 'Go to page' })).toBeVisible();
       await expect
         .poll(() =>
           drawer.evaluate((node) =>
@@ -71,7 +91,8 @@ for (const station of ['user', 'admin'] as const) {
                 (element) =>
                   element.clientWidth > 0 &&
                   element.scrollWidth > element.clientWidth + 1 &&
-                  !element.classList.contains('visually-hidden'),
+                  !element.classList.contains('visually-hidden') &&
+                  !element.matches('.page-pagination__jump > span'),
               )
               .map((element) => ({
                 element: `${element.tagName}.${element.className}`,
@@ -105,7 +126,13 @@ test('an expired or foreign request link stays unavailable in the current accoun
   await page.route('**/api/logs**', (route) =>
     new URL(route.request().url()).pathname.endsWith(id)
       ? route.fulfill({ status: 404, json: { error: { code: 'not_found', message: 'not found' } } })
-      : route.fulfill({ json: { data: [], next_cursor: null } }),
+      : route.fulfill({
+          json: {
+            data: [],
+            next_cursor: null,
+            pagination: { page: '1', page_size: 20, total_items: '0', total_pages: '1' },
+          },
+        }),
   );
   await page.goto(`${USER_ORIGIN}/logs?request_id=${id}`);
   await expect(page.getByRole('dialog')).toContainText(/no longer available|unavailable|expired/i);

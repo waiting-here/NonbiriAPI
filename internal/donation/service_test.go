@@ -138,8 +138,13 @@ revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 
 func (environment *donationTestEnv) seedEndpointKey(t *testing.T, userID int64, suffix byte) (int64, int64) {
 	t.Helper()
-	now := environment.clock.Load()
 	baseURL := fmt.Sprintf("https://%c.example.test/v1", suffix)
+	return environment.seedEndpointKeyAt(t, userID, suffix, baseURL)
+}
+
+func (environment *donationTestEnv) seedEndpointKeyAt(t *testing.T, userID int64, suffix byte, baseURL string) (int64, int64) {
+	t.Helper()
+	now := environment.clock.Load()
 	result, err := environment.store.DB().Exec(`INSERT INTO endpoints(
 user_id,connector_type,base_url,note,enabled,revision,created_at,updated_at)
 VALUES(?,'openai-compatible',?,'private endpoint note',1,1,?,?)`, userID, baseURL, now, now)
@@ -255,6 +260,104 @@ func TestCreateMembershipIsolationAndSequenceStartsAtOne(t *testing.T) {
 	}
 	if seen != 2 {
 		t.Fatalf("sequence rows = %d, want 2", seen)
+	}
+}
+
+func TestCreateDonationInitializesPendingHandling(t *testing.T) {
+	environment := newDonationTestEnv(t)
+	owner := environment.seedUser(t, "handling-owner", nil, false)
+	_, keyA := environment.seedEndpointKey(t, owner, 'h')
+	donation := environment.createDonation(t, owner, keyA)
+	donationID := parseTestID(t, donation.ID)
+	var state string
+	var revision int64
+	if err := environment.store.DB().QueryRow(`SELECT state, revision FROM donation_handling WHERE donation_id=?`, donationID).Scan(&state, &revision); err != nil {
+		t.Fatalf("read donation_handling: %v", err)
+	}
+	if state != "pending" || revision != 1 {
+		t.Fatalf("donation_handling = (%q,%d), want (pending,1)", state, revision)
+	}
+}
+
+func TestCreateDonationSidecarFailureRollsBackAndCanRetry(t *testing.T) {
+	environment := newDonationTestEnv(t)
+	owner := environment.seedUser(t, "handling-rollback-owner", nil, false)
+	_, keyID := environment.seedEndpointKey(t, owner, 'r')
+	input := CreateInput{
+		Description:         "rollback donation",
+		Keys:                []CreateKeyInput{{EndpointKeyID: keyID}},
+		OwnershipAuthorized: true,
+	}
+	mutation := donationMutation(t, 'R', http.MethodPost, routeDonations, nil, map[string]any{
+		"description":          input.Description,
+		"keys":                 []map[string]any{{"endpoint_key_id": fmt.Sprintf("%d", keyID), "expires_at": nil}},
+		"ownership_authorized": true,
+	})
+
+	tables := []string{
+		"donations", "donation_handling", "donation_keys", "donation_key_memberships",
+		"donation_reviews", "idempotency_records",
+	}
+	counts := func() map[string]int {
+		t.Helper()
+		out := make(map[string]int, len(tables))
+		for _, table := range tables {
+			var count int
+			if err := environment.store.DB().QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&count); err != nil {
+				t.Fatalf("count %s: %v", table, err)
+			}
+			out[table] = count
+		}
+		return out
+	}
+	before := counts()
+
+	if _, err := environment.store.DB().Exec(`
+CREATE TRIGGER test_reject_donation_handling_insert
+BEFORE INSERT ON donation_handling
+BEGIN
+ SELECT RAISE(ABORT, 'test sidecar insertion rejected');
+END`); err != nil {
+		t.Fatalf("create donation handling trigger: %v", err)
+	}
+	if _, err := environment.service.Create(context.Background(), owner, mutation, input); err == nil {
+		t.Fatal("Create succeeded while donation handling insertion was rejected")
+	}
+	afterFailure := counts()
+	for table, want := range before {
+		if got := afterFailure[table]; got != want {
+			t.Fatalf("%s rows after rejected create = %d, want %d", table, got, want)
+		}
+	}
+
+	if _, err := environment.store.DB().Exec(`DROP TRIGGER test_reject_donation_handling_insert`); err != nil {
+		t.Fatalf("remove donation handling trigger: %v", err)
+	}
+	result, err := environment.service.Create(context.Background(), owner, mutation, input)
+	if err != nil {
+		t.Fatalf("Create after removing trigger: %v", err)
+	}
+	if result.Replayed || result.Status != http.StatusCreated {
+		t.Fatalf("recovered create result = replayed:%v status:%d, want new 201", result.Replayed, result.Status)
+	}
+	donationID := parseTestID(t, result.Value.ID)
+	var state string
+	var handlingRevision int64
+	if err := environment.store.DB().QueryRow(`SELECT state,revision FROM donation_handling WHERE donation_id=?`, donationID).Scan(&state, &handlingRevision); err != nil {
+		t.Fatalf("read recovered donation handling: %v", err)
+	}
+	if state != "pending" || handlingRevision != 1 {
+		t.Fatalf("recovered donation_handling = (%q,%d), want (pending,1)", state, handlingRevision)
+	}
+	after := counts()
+	wantCounts := map[string]int{
+		"donations": 1, "donation_handling": 1, "donation_keys": 1,
+		"donation_key_memberships": 1, "donation_reviews": 0, "idempotency_records": 1,
+	}
+	for table, want := range wantCounts {
+		if got := after[table]; got != want {
+			t.Fatalf("%s rows after recovered create = %d, want %d", table, got, want)
+		}
 	}
 }
 
@@ -444,7 +547,7 @@ endpoint_key_id,reason_type,report_case_id,created_at) VALUES(?,'report_case',?,
 		t.Fatal(err)
 	}
 	stewardJSON, _ := json.Marshal(stewardView)
-	if bytes.Contains(stewardJSON, []byte("discord_id")) || !bytes.Contains(stewardJSON, []byte("reviewer label")) {
+	if !bytes.Contains(stewardJSON, []byte(`"discord_id":"123456789"`)) || !bytes.Contains(stewardJSON, []byte("reviewer label")) {
 		t.Fatalf("steward privacy projection mismatch: %s", stewardJSON)
 	}
 
@@ -557,7 +660,7 @@ func testU128Decimal(t *testing.T, value []byte) string {
 	return decoded.Decimal()
 }
 
-func TestStewardOwnershipPrecedesDueExpiryAndMutationAcceptance(t *testing.T) {
+func TestStewardCrossDonorExpiryPrecedesMutationAcceptance(t *testing.T) {
 	environment := newDonationTestEnv(t)
 	levelFive := int64(5)
 	owner := environment.seedUser(t, "due-owner", &levelFive, false)
@@ -586,15 +689,15 @@ func TestStewardOwnershipPrecedesDueExpiryAndMutationAcceptance(t *testing.T) {
 	foreignReview := ReviewInput{Decision: "approve", ExpectedRevision: 2, Reason: "foreign",
 		KeySettings: []KeySetting{{DonationKeyID: donationKeyID, Enabled: false}}}
 	if _, err := environment.service.ReviewSteward(context.Background(), foreignSteward, donationID,
-		reviewMutation, foreignReview); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("foreign due review error = %v, want not found", err)
+		reviewMutation, foreignReview); !errors.Is(err, ErrConflict) {
+		t.Fatalf("cross-donor due review error = %v, want conflict", err)
 	}
 	disable := false
 	keyMutation := donationMutation(t, 'P', http.MethodPatch, routeStewardKey, []int64{donationID, donationKeyID},
 		map[string]any{"foreign_key": true})
 	if _, err := environment.service.ManageKeySteward(context.Background(), foreignSteward, donationID, donationKeyID,
-		keyMutation, KeyManagementInput{ExpectedRevision: 2, Enabled: &disable}); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("foreign due key mutation error = %v, want not found", err)
+		keyMutation, KeyManagementInput{ExpectedRevision: 2, Enabled: &disable}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("cross-donor due key mutation error = %v, want conflict", err)
 	}
 
 	var status string
@@ -615,8 +718,8 @@ func TestStewardOwnershipPrecedesDueExpiryAndMutationAcceptance(t *testing.T) {
 		Scan(&reviewsAfter); err != nil {
 		t.Fatal(err)
 	}
-	if status != "approved" || revision != 2 || memberships != 1 || enabled != 1 || reviewsAfter != reviewsBefore {
-		t.Fatalf("foreign requests changed donation: status=%q revision=%d memberships=%d enabled=%d reviews=%d/%d",
+	if status != "expired" || revision != 3 || memberships != 0 || enabled != 0 || reviewsAfter != reviewsBefore+1 {
+		t.Fatalf("cross-donor expiry was not materialized once: status=%q revision=%d memberships=%d enabled=%d reviews=%d/%d",
 			status, revision, memberships, enabled, reviewsBefore, reviewsAfter)
 	}
 	if count := mutationRecordCount(t, environment.store.DB(), idempotency.ScopeControlMutation,

@@ -32,10 +32,13 @@ function pendingHome() {
       own_input: '5',
       own_returned: '6',
       own_wallet_net: '1',
+      // Historical pending results did not expose transfer or gesture details.
+      own_buy_in: null,
+      own_cash_out: null,
       seats: [
-        { seat_no: 0, result: 'win' },
-        { seat_no: 1, result: 'loss' },
-        { seat_no: 2, result: 'tie' },
+        { seat_no: 0, result: 'win', gesture: null },
+        { seat_no: 1, result: 'loss', gesture: null },
+        { seat_no: 2, result: 'tie', gesture: null },
       ],
       created_at: 1_800_000_000,
     },
@@ -362,10 +365,13 @@ describe('RPS strict viewer projection', () => {
         own_input: '1',
         own_returned: '0',
         own_wallet_net: '-1',
+        // Historical pending results did not expose transfer or gesture details.
+        own_buy_in: null,
+        own_cash_out: null,
         seats: [
-          { seat_no: 0, result: 'win' },
-          { seat_no: 1, result: 'loss' },
-          { seat_no: 2, result: 'tie' },
+          { seat_no: 0, result: 'win', gesture: null },
+          { seat_no: 1, result: 'loss', gesture: null },
+          { seat_no: 2, result: 'tie', gesture: null },
         ],
         created_at: 1_800_000_000,
       },

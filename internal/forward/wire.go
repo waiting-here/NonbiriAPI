@@ -12,6 +12,7 @@ type wireFailure struct {
 	message         string
 	status          int
 	diagnostic      string
+	upstreamCode    string
 	upstreamContext bool
 }
 
@@ -20,7 +21,7 @@ func platformFailure(code, message string) wireFailure {
 }
 
 func upstreamWireFailure(status int, message, diagnostic string, exposeContext bool) wireFailure {
-	if status < http.StatusBadRequest || status > 499 && status != http.StatusBadGateway && status != http.StatusGatewayTimeout {
+	if status < http.StatusBadRequest || status > 599 {
 		status = http.StatusBadGateway
 	}
 	return wireFailure{
@@ -34,6 +35,9 @@ func writeFailure(writer http.ResponseWriter, failure wireFailure) {
 		return
 	}
 	value := httperr.New(failure.code, failure.message)
+	if failure.upstreamContext {
+		value = value.WithUpstreamCode(failure.upstreamCode)
+	}
 	if failure.upstreamContext && failure.diagnostic != "" {
 		value = value.WithDiag(failure.diagnostic)
 	}

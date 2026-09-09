@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 )
@@ -59,9 +60,9 @@ func (s *Service) GetAdmin(ctx context.Context, donationID int64) (AdminDonation
 	if err != nil {
 		return AdminDonation{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, _, err := s.beginRoleTx(ctx, reviewerAdmin, 0)
 	if err != nil {
-		return AdminDonation{}, fmt.Errorf("donation: begin admin read: %w", err)
+		return AdminDonation{}, err
 	}
 	defer tx.Rollback()
 	if _, err := materializeDonationExpiryTx(ctx, tx, donationID, now); err != nil {
@@ -118,19 +119,26 @@ func (s *Service) GetSteward(ctx context.Context, userID, donationID int64) (Ste
 		return StewardDonation{}, err
 	}
 	if !visible {
+		held, err := s.managementHeldRead(ctx, tx, reviewerSteward, userID, donationID, now)
+		if err != nil {
+			return StewardDonation{}, err
+		}
+		visible = visible || held
+	}
+	if !visible {
+		if err := tx.Commit(); err != nil {
+			return StewardDonation{}, fmt.Errorf("donation: commit steward retention read: %w", err)
+		}
 		return StewardDonation{}, ErrNotFound
 	}
 	value, err := getAdminDonationTx(ctx, tx, donationID, now)
 	if err != nil {
 		return StewardDonation{}, err
 	}
-	if value.Owner == nil || value.Owner.UserID != strconv.FormatInt(userID, 10) {
-		return StewardDonation{}, ErrNotFound
-	}
 	if err := tx.Commit(); err != nil {
 		return StewardDonation{}, fmt.Errorf("donation: commit steward read: %w", err)
 	}
-	return stewardFromAdmin(value), nil
+	return stewardFromAdmin(value, userID), nil
 }
 
 // ListOwner uses an explicit stable ID cursor. HTTP adapters bind this atom to
@@ -182,58 +190,50 @@ ORDER BY id LIMIT ?`, userID, afterID, now-terminalRetention, limit+1)
 }
 
 func (s *Service) ListAdmin(ctx context.Context, status string, afterID int64, limit int) ([]AdminDonation, int64, error) {
-	return s.listRole(ctx, 0, status, afterID, limit, false)
+	return s.listRole(ctx, 0, ManagementFilter{Status: status}, afterID, limit, reviewerAdmin)
 }
 
 func (s *Service) ListSteward(ctx context.Context, userID int64, status string, afterID int64, limit int) ([]StewardDonation, int64, error) {
-	items, next, err := s.listRole(ctx, userID, status, afterID, limit, true)
+	return s.ListStewardFiltered(ctx, userID, ManagementFilter{Status: status}, afterID, limit)
+}
+
+func (s *Service) ListAdminFiltered(ctx context.Context, filter ManagementFilter, afterID int64, limit int) ([]AdminDonation, int64, error) {
+	return s.listRole(ctx, 0, filter, afterID, limit, reviewerAdmin)
+}
+
+func (s *Service) ListStewardFiltered(ctx context.Context, userID int64, filter ManagementFilter, afterID int64, limit int) ([]StewardDonation, int64, error) {
+	items, next, err := s.listRole(ctx, userID, filter, afterID, limit, reviewerSteward)
 	if err != nil {
 		return nil, 0, err
 	}
 	out := make([]StewardDonation, len(items))
 	for index := range items {
-		out[index] = stewardFromAdmin(items[index])
+		out[index] = stewardFromAdmin(items[index], userID)
 	}
 	return out, next, nil
 }
 
-func (s *Service) listRole(ctx context.Context, userID int64, status string, afterID int64, limit int, own bool) ([]AdminDonation, int64, error) {
+func (s *Service) listRole(ctx context.Context, userID int64, filter ManagementFilter, afterID int64, limit int, role reviewerRole) ([]AdminDonation, int64, error) {
 	if s == nil || s.db == nil || ctx == nil || afterID < 0 || limit < 1 || limit > 100 ||
-		own && userID <= 0 || !validStatusFilter(status) {
+		!validManagementFilter(filter) {
 		return nil, 0, ErrInvalidRequest
 	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	now, err := s.nowUnix()
 	if err != nil {
 		return nil, 0, err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, _, err := s.beginRoleTx(ctx, role, userID)
 	if err != nil {
 		return nil, 0, fmt.Errorf("donation: begin role list: %w", err)
 	}
 	defer tx.Rollback()
-	if own {
-		if nilDependency(s.roleAuth) {
-			return nil, 0, ErrUnavailable
-		}
-		if err := s.roleAuth.AuthorizeStewardMutation(ctx, tx, userID); err != nil {
-			return nil, 0, mapAuthorization(err)
-		}
-	}
-	if err := materializeProjectionExpiriesTx(ctx, tx, now); err != nil {
-		return nil, 0, err
-	}
-	query := `SELECT id FROM donations WHERE id>?
- AND (status IN ('pending','approved') OR terminal_at>?)`
+	query := `SELECT d.id FROM donations d JOIN donation_handling h ON h.donation_id=d.id WHERE d.id>?
+ AND (d.status IN ('pending','approved') OR d.terminal_at>?)`
 	args := []any{afterID, now - terminalRetention}
-	if own {
-		query += ` AND user_id=?`
-		args = append(args, userID)
-	}
-	if status != "" {
-		query += ` AND status=?`
-		args = append(args, status)
-	}
-	query += ` ORDER BY id LIMIT ?`
+	query, args = appendManagementFilter(query, args, filter, now)
+	query += ` ORDER BY d.id LIMIT ?`
 	args = append(args, limit+1)
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -250,6 +250,9 @@ func (s *Service) listRole(ctx context.Context, userID int64, status string, aft
 	}
 	items := make([]AdminDonation, 0, len(ids))
 	for _, id := range ids {
+		if _, err := materializeDonationExpiryTx(ctx, tx, id, now); err != nil {
+			return nil, 0, err
+		}
 		item, err := getAdminDonationTx(ctx, tx, id, now)
 		if err != nil {
 			return nil, 0, err
@@ -346,6 +349,16 @@ func getAdminDonationTx(ctx context.Context, tx *sql.Tx, donationID, now int64) 
 }
 
 func getDonationProjectionTx(ctx context.Context, tx *sql.Tx, donationID, now int64) (AdminDonation, error) {
+	out, err := getDonationHeaderTx(ctx, tx, donationID)
+	if err != nil {
+		return AdminDonation{}, err
+	}
+	out.Keys, err = readDonationKeysTx(ctx, tx, donationID, out.Status, now)
+	return out, err
+}
+
+// Header reads deliberately avoid loading a donation's complete key collection.
+func getDonationHeaderTx(ctx context.Context, tx *sql.Tx, donationID int64) (AdminDonation, error) {
 	var out AdminDonation
 	var id, revision int64
 	var userID, reviewedBy sql.NullInt64
@@ -397,15 +410,42 @@ FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, donationID).
 		}
 		out.Reviewer = &reviewer
 	}
-	keys, err := readDonationKeysTx(ctx, tx, donationID, out.Status, now)
+	out.Handling, err = readHandlingTx(ctx, tx, donationID)
 	if err != nil {
 		return AdminDonation{}, err
 	}
-	out.Keys = keys
 	return out, nil
 }
 
 func readDonationKeysTx(ctx context.Context, tx *sql.Tx, donationID int64, donationStatus string, now int64) ([]AdminDonationKey, error) {
+	return readDonationKeySelectionTx(ctx, tx, donationID, donationStatus, now, nil)
+}
+
+// selectedIDs, when present, were obtained from an authorized page in this
+// transaction. The parent condition is retained for every projected key.
+func readDonationKeySelectionTx(ctx context.Context, tx *sql.Tx, donationID int64, donationStatus string, now int64, selectedIDs []int64) ([]AdminDonationKey, error) {
+	where := `dk.donation_id=?`
+	args := []any{donationID}
+	if selectedIDs != nil {
+		if len(selectedIDs) == 0 {
+			return []AdminDonationKey{}, nil
+		}
+		if len(selectedIDs) > 100 {
+			return nil, ErrInvalidRequest
+		}
+		where += ` AND dk.id IN (`
+		for index, id := range selectedIDs {
+			if id <= 0 {
+				return nil, ErrInvalidRequest
+			}
+			if index > 0 {
+				where += ","
+			}
+			where += "?"
+			args = append(args, id)
+		}
+		where += ")"
+	}
 	rows, err := tx.QueryContext(ctx, `SELECT dk.id,dk.endpoint_key_id,dk.display_head,dk.display_tail,
 dk.canonical_base_url,dk.connector_type,dk.mainstream_channel_id,dk.mainstream_channel_revision,
 dk.mainstream_channel_name,dk.mainstream_channel_category,COALESCE(e.enabled,0),COALESCE(k.enabled,0),
@@ -416,12 +456,13 @@ dk.authorized_expires_at,dk.expires_at,dk.ended_reason,
 EXISTS(SELECT 1 FROM endpoint_key_suspensions s WHERE s.endpoint_key_id=dk.endpoint_key_id),
 EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id),
 CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.max_concurrency,0) END,
-CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.max_rpm,0) END
+CASE WHEN k.id IS NOT NULL THEN COALESCE(kl.max_rpm,0) END,
+(SELECT COUNT(*) FROM charity_model_bindings b WHERE b.donation_key_id=dk.id)
 FROM donation_keys dk
 LEFT JOIN endpoint_keys k ON k.id=dk.endpoint_key_id
 LEFT JOIN endpoint_key_limits kl ON kl.endpoint_key_id=k.id
 LEFT JOIN endpoints e ON e.id=k.endpoint_id
-WHERE dk.donation_id=? ORDER BY dk.id`, donationID)
+WHERE `+where+` ORDER BY dk.id`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("donation: read key projections: %w", err)
 	}
@@ -439,15 +480,18 @@ WHERE dk.donation_id=? ORDER BY dk.id`, donationID)
 		var authorizedExpires, expires sql.NullInt64
 		var channelID, channelName, channelCategory sql.NullString
 		var channelRevision sql.NullInt64
+		var bindingCount int64
 		if err := rows.Scan(&id, &endpointKeyID, &item.DisplayHead, &item.DisplayTail,
 			&item.SafeSource.BaseURL, &item.SafeSource.ConnectorType, &channelID, &channelRevision,
 			&channelName, &channelCategory, &endpointEnabled, &keyPhysicalEnabled,
 			&priceLimit, &callLimit, &tokenLimit, &priceUsed, &priceReserved, &callsUsed, &callsReserved,
 			&tokensUsed, &tokensReserved, &item.TokenReserve, &enabled, &failureDisabled, &streak,
-			&generation, &item.SafeNote, &authorizedExpires, &expires, &ended, &suspended, &member, &item.MaxConcurrency, &item.MaxRPM); err != nil {
+			&generation, &item.SafeNote, &authorizedExpires, &expires, &ended, &suspended, &member, &item.MaxConcurrency, &item.MaxRPM, &bindingCount); err != nil {
 			return nil, fmt.Errorf("donation: scan key projection: %w", err)
 		}
 		item.ID = strconv.FormatInt(id, 10)
+		item.BindingCount = strconv.FormatInt(bindingCount, 10)
+		item.Idle = bindingCount == 0
 		if endpointKeyID.Valid {
 			value := strconv.FormatInt(endpointKeyID.Int64, 10)
 			item.EndpointKeyID = &value
@@ -551,15 +595,16 @@ WHERE dk.donation_id=? ORDER BY dk.id`, donationID)
 	return items, nil
 }
 
-func stewardFromAdmin(value AdminDonation) StewardDonation {
-	owner := StewardDonationOwner{}
+func stewardFromAdmin(value AdminDonation, _ int64) StewardDonation {
+	var owner *StewardDonationOwner
 	if value.Owner != nil {
-		owner = StewardDonationOwner{UserID: value.Owner.UserID, DisplayName: value.Owner.DisplayName}
+		copy := StewardDonationOwner(*value.Owner)
+		owner = &copy
 	}
 	return StewardDonation{
 		ID: value.ID, Status: value.Status, Revision: value.Revision, Description: value.Description,
 		ReviewResult: value.ReviewResult, Keys: stewardKeys(value.Keys),
-		Owner: owner, Reviewer: value.Reviewer, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt,
+		Owner: owner, Reviewer: value.Reviewer, Handling: value.Handling, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt,
 	}
 }
 
@@ -574,9 +619,7 @@ func ownerKeys(values []AdminDonationKey) []DonationKey {
 func stewardKeys(values []AdminDonationKey) []StewardDonationKey {
 	out := make([]StewardDonationKey, len(values))
 	for index := range values {
-		out[index] = StewardDonationKey{DonationKey: ownerKey(values[index]),
-			AuthorizedExpiresAt: values[index].AuthorizedExpiresAt, SafeNote: values[index].SafeNote,
-			MaxConcurrency: values[index].MaxConcurrency, MaxRPM: values[index].MaxRPM}
+		out[index] = StewardDonationKey(values[index])
 	}
 	return out
 }

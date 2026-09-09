@@ -105,6 +105,12 @@ type listCursor struct {
 }
 
 func normalizeListFilter(filter ListFilter, role string) (ListFilter, error) {
+	if filter.Page != nil {
+		if !filter.Page.Valid() || filter.Cursor != "" || filter.Limit != 0 {
+			return ListFilter{}, ErrInvalid
+		}
+		filter.Limit = filter.Page.Size
+	}
 	if filter.Limit == 0 {
 		filter.Limit = defaultLimit
 	}
@@ -137,12 +143,8 @@ func normalizeListFilter(filter ListFilter, role string) (ListFilter, error) {
 		if filter.UserID != nil || filter.EndpointBaseURL != nil || filter.UpstreamModel != nil {
 			return ListFilter{}, ErrInvalid
 		}
-	case "admin":
+	case "admin", "steward":
 		if filter.Model != nil {
-			return ListFilter{}, ErrInvalid
-		}
-	case "steward":
-		if filter.UserID != nil || filter.Model != nil {
 			return ListFilter{}, ErrInvalid
 		}
 	default:
@@ -152,6 +154,12 @@ func normalizeListFilter(filter ListFilter, role string) (ListFilter, error) {
 }
 
 func normalizeAttemptFilter(filter AttemptFilter) (AttemptFilter, error) {
+	if filter.Page != nil {
+		if !filter.Page.Valid() || filter.Cursor != "" || filter.Limit != 0 {
+			return AttemptFilter{}, ErrInvalid
+		}
+		filter.Limit = filter.Page.Size
+	}
 	if filter.Limit == 0 {
 		filter.Limit = defaultLimit
 	}

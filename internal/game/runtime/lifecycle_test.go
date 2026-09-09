@@ -13,7 +13,7 @@ import (
 
 func TestFishingDeletionDualOrderConverges(t *testing.T) {
 	t.Run("delete wins reserved race", func(t *testing.T) {
-		fixture := newGameFixture(t, &scriptedSource{})
+		fixture := newGameFixture(t, legendSource(2, 100, 0, 0))
 		userID := fixture.seedUser("delete-first", fixtureFunding)
 		fixture.service.beforeSettlement = func(string) error { return errInjected }
 		_, pending, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(300)})
@@ -48,6 +48,9 @@ func TestFishingDeletionDualOrderConverges(t *testing.T) {
 		if fixture.scalar(`SELECT COUNT(*) FROM game_fishing_batches WHERE id=?`, pending.BatchID) != 0 {
 			t.Fatal("delete-first left batch")
 		}
+		if fixture.scalar(`SELECT COUNT(*) FROM game_fishing_outcome_lengths`) != 0 {
+			t.Fatal("delete-first left presentation")
+		}
 		if fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='fishing_release' AND source_id=?`, pending.BatchID) != 1 || fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='fishing_settle' AND source_id=?`, pending.BatchID) != 0 {
 			t.Fatal("delete-first chose an invalid terminal operation")
 		}
@@ -71,7 +74,7 @@ func TestFishingDeletionDualOrderConverges(t *testing.T) {
 	})
 
 	t.Run("settle wins before deletion", func(t *testing.T) {
-		fixture := newGameFixture(t, &scriptedSource{max: true})
+		fixture := newGameFixture(t, legendSource(0, 137, 0, 0))
 		userID := fixture.seedUser("settle-first", fixtureFunding)
 		result, pending, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(302)})
 		if err != nil || pending != nil || result == nil {
@@ -100,6 +103,11 @@ func TestFishingDeletionDualOrderConverges(t *testing.T) {
 				t.Fatalf("settle-first left %s", table)
 			}
 		}
+		for _, table := range []string{"game_fishing_outcome_lengths", "game_fishing_best_lengths", "game_fishing_length_facts"} {
+			if fixture.scalar(`SELECT COUNT(*) FROM `+table) != 0 {
+				t.Fatalf("settle-first left %s", table)
+			}
+		}
 		if fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='fishing_settle' AND source_id=?`, result.BatchID) != 1 || fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='fishing_release' AND source_id=?`, result.BatchID) != 0 {
 			t.Fatal("settle-first changed the terminal winner")
 		}
@@ -110,7 +118,16 @@ func TestFishingDeletionDualOrderConverges(t *testing.T) {
 }
 
 func TestFishingSettlementAndDeletionPrepareRaceConverges(t *testing.T) {
-	fixture := newGameFixture(t, &scriptedSource{})
+	for _, order := range []string{"concurrent", "settlement first", "deletion first"} {
+		t.Run(order, func(t *testing.T) {
+			testFishingSettlementAndDeletionPrepare(t, order)
+		})
+	}
+}
+
+func testFishingSettlementAndDeletionPrepare(t *testing.T, order string) {
+	t.Helper()
+	fixture := newGameFixture(t, legendSource(1, 150, 0, 1, 0))
 	userID := fixture.seedUser("delete-settle-race", fixtureFunding)
 	fixture.service.beforeSettlement = func(string) error { return errInjected }
 	_, pending, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(305)})
@@ -118,16 +135,30 @@ func TestFishingSettlementAndDeletionPrepareRaceConverges(t *testing.T) {
 		t.Fatalf("pending = (%#v,%v)", pending, err)
 	}
 	fixture.service.beforeSettlement = nil
+	// The 150 cm taimen retains its original reward despite the 202 cm variant.
+	const entryMilli, payoutMilli int64 = 2_500_000, 54_671_120
+	var entry, payout int64
+	var species, length string
+	if err = fixture.database.QueryRow(`SELECT b.entry_total_milli,b.payout_total_milli,o.species_key,l.length_cm
+FROM game_fishing_batches b JOIN game_fishing_outcomes o ON o.batch_id=b.id
+JOIN game_fishing_outcome_lengths l ON l.batch_id=o.batch_id AND l.ordinal=o.ordinal
+WHERE b.id=? AND b.state='reserved'`, pending.BatchID).Scan(&entry, &payout, &species, &length); err != nil {
+		t.Fatal(err)
+	}
+	if entry != entryMilli || payout != payoutMilli || species != "taimen" || length != "202" {
+		t.Fatalf("reserved catch: entry=%d payout=%d species=%s length=%s", entry, payout, species, length)
+	}
 
 	guard, err := fixture.service.Lifecycle().BeginUserDeletion(userID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	start := make(chan struct{})
+	settleStart := make(chan struct{})
+	deleteStart := make(chan struct{})
 	settleDone := make(chan error, 1)
 	deleteDone := make(chan error, 1)
 	go func() {
-		<-start
+		<-settleStart
 		for attempt := 0; attempt < 20; attempt++ {
 			result, settleErr := fixture.service.settle(context.Background(), pending.BatchID, userID, fixture.clock.Load()+1, false)
 			if settleErr == nil {
@@ -151,7 +182,7 @@ func TestFishingSettlementAndDeletionPrepareRaceConverges(t *testing.T) {
 		settleDone <- errors.New("settlement BUSY retry budget exhausted")
 	}()
 	go func(initial *DeletionGuard) {
-		<-start
+		<-deleteStart
 		current := initial
 		for attempt := 0; attempt < 20; attempt++ {
 			tx, beginErr := fixture.database.BeginTx(context.Background(), nil)
@@ -200,8 +231,24 @@ func TestFishingSettlementAndDeletionPrepareRaceConverges(t *testing.T) {
 		_ = current.Abort()
 		deleteDone <- errors.New("deletion BUSY retry budget exhausted")
 	}(guard)
-	close(start)
-	if settleErr, deleteErr := <-settleDone, <-deleteDone; settleErr != nil || deleteErr != nil {
+	var settleErr, deleteErr error
+	switch order {
+	case "settlement first":
+		close(settleStart)
+		settleErr = <-settleDone
+		close(deleteStart)
+		deleteErr = <-deleteDone
+	case "deletion first":
+		close(deleteStart)
+		deleteErr = <-deleteDone
+		close(settleStart)
+		settleErr = <-settleDone
+	default:
+		close(settleStart)
+		close(deleteStart)
+		settleErr, deleteErr = <-settleDone, <-deleteDone
+	}
+	if settleErr != nil || deleteErr != nil {
 		t.Fatalf("race errors: settlement=%v deletion=%v", settleErr, deleteErr)
 	}
 
@@ -210,6 +257,9 @@ func TestFishingSettlementAndDeletionPrepareRaceConverges(t *testing.T) {
 	if settled+released != 1 {
 		t.Fatalf("terminal operations: settle=%d release=%d", settled, released)
 	}
+	if order == "settlement first" && settled != 1 || order == "deletion first" && released != 1 {
+		t.Fatalf("%s: terminal operations settle=%d release=%d", order, settled, released)
+	}
 	for _, table := range []string{"game_fishing_batches", "game_fishing_outcomes"} {
 		if fixture.scalar(fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE %s=?`, table, map[string]string{"game_fishing_batches": "id", "game_fishing_outcomes": "batch_id"}[table]), pending.BatchID) != 0 {
 			t.Fatalf("race left %s rows", table)
@@ -217,6 +267,11 @@ func TestFishingSettlementAndDeletionPrepareRaceConverges(t *testing.T) {
 	}
 	if fixture.scalar(`SELECT COUNT(*) FROM game_fishing_best WHERE user_id=?`, userID) != 0 || fixture.scalar(`SELECT COUNT(*) FROM game_fishing_rank_facts WHERE user_id=?`, userID) != 0 || fixture.scalar(`SELECT COUNT(*) FROM game_fishing_rank_aggregates WHERE user_id=?`, userID) != 0 {
 		t.Fatal("race left leaderboard state")
+	}
+	for _, table := range []string{"game_fishing_outcome_lengths", "game_fishing_best_lengths", "game_fishing_length_facts"} {
+		if fixture.scalar(`SELECT COUNT(*) FROM `+table) != 0 {
+			t.Fatalf("race left %s rows", table)
+		}
 	}
 
 	tx, err := fixture.database.BeginTx(context.Background(), nil)
@@ -241,7 +296,7 @@ func TestFishingSettlementAndDeletionPrepareRaceConverges(t *testing.T) {
 	}
 	wantWallet := int64(fixtureFunding)
 	if settled == 1 {
-		wantWallet -= 2_500_000
+		wantWallet += payoutMilli - entryMilli
 	}
 	if wallet.Balance.Decimal() != fmt.Sprintf("%d", wantWallet) {
 		t.Fatalf("wallet after race = %s, want %d", wallet.Balance.Decimal(), wantWallet)
@@ -250,6 +305,7 @@ func TestFishingSettlementAndDeletionPrepareRaceConverges(t *testing.T) {
 	if err != nil || reserve.Balance.Decimal() != "0" {
 		t.Fatalf("fishing reserve after race = %#v, %v", reserve, err)
 	}
+	t.Logf("settle=%d release=%d wallet=%s; reservation and leaderboard state cleared", settled, released, wallet.Balance.Decimal())
 }
 
 func TestFishingPrepareDeleteTxUsesCoordinatorOwnedRetirement(t *testing.T) {

@@ -2,9 +2,9 @@
 
 NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网关。用户可以管理自己持有的上游端点和凭据，拉取上游模型，创建用户自己的平台模型名称，并通过一个 `CallerKey` 调用这些模型。
 
-> **源码版本：** `v1.0.0-beta.1`。正式开放给用户前，请先阅读部署、备份、隐私和安全文档。
+> **当前候选版本：** `1.0.0-beta.2`（未发布）。正式开放给用户前，请先阅读部署、备份、隐私和安全文档。
 >
-> **兼容边界：** beta.1 采用数据库 Generation 2，以 Linux/amd64 源码构建为发布边界。alpha 部署必须使用全新数据库；通过校验的当前结构及明确支持的旧 beta.1 结构可在普通更新中保留数据。
+> **兼容边界：** beta.2 继续采用数据库 Generation 2（`application_id=0x4E425249`、`user_version=2`），以 Linux/amd64 源码构建为发布边界。完全不存在的数据库文件集合可以全新创建；alpha 和 Generation 1 部署必须显式全新切换。四个精确的旧 Generation 2 manifest，以及两个已经带有 beta.2 sidecar 的已部署中间 manifest，可以在增量更新中保留现有数据。
 >
 > 源码仓库：[github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
@@ -17,7 +17,11 @@ NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网
 - SSRF、DNS 重绑定、重定向、代理、响应大小、超时、取消、并发和流式安全边界。
 - 上游密钥加密保存；明文凭据不会出现在列表、日志、告警或账号导出中。
 - 请求元数据、用量统计、留存清理、账号导出/删除、问题中心、告警中心和运行时限制。
+- 账号导出 schema 5 增加安全的循环限量和本人猜拳结果投影，同时继续排除密钥、其他用户、举报、保留案件和内部调度数据。
 - 悠哉积分、签到、本人积分流水、基于捐赠密钥的公益路由、逐密钥捐赠有效期和用量限制，以及 level-5 协管能力。管理员与协管可在授权日志中查看固定范围的安全上游资源信息，普通公益调用者不会收到这些信息。
+- 用户站与管理站资源列表使用有界的服务端分页，支持 10/20/50/100 条、直接跳页、返回或刷新后恢复筛选与页码，以及按列表分别保存的浏览器本地条数偏好。
+- beta.2 候选包含完整公益模型目录、纯文本说明、允许等级集合、明确的可用性原因，以及授权管理者可用的来源／密钥浏览。目录可以展示已配置但当前调用者不能使用的模型；公开 API 仍只返回当前可调用模型。
+- 时间点表单按浏览器时区解析和显示已保存的时间点，由服务端解决夏令时缺失和重复钟点。循环限量规则保存自己的业务时区，与普通时间戳显示分开。
 - 《从头再来》低保、《疯狂星期四》共享池活动、中英文公告，以及由管理员受理的公共凭据防盗举报。
 - 默认关闭并明确标注风险的两项 OpenAI-only 实验策略：物理密钥级 `store:false` 和逻辑模型级工具调用展平。
 - 只驻留内存的调试中心：新会话始终 dry run，明确确认后才发送到真实上游。实发结果由调试页捕获，API 调用者收到专用的 HTTP 422 调试响应。
@@ -25,7 +29,7 @@ NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网
 - 服务端生成的上游安全伪名只在“同一用户 + 同一规范化上游 origin”范围内稳定；轮换与隐私边界见 [API 契约](docs/api-contract.md#22-post-v1chatcompletions)。
 - 重新设计的中英文 React 双站，包含响应式导航、连续资源操作、安全 Markdown 说明与自定义站点品牌，并嵌入一个 Go 单二进制。
 
-Beta.1 只暴露上述两个 OpenAI-compatible 入站接口。`anthropic-compatible` 端点在网关内部完成转换，NonbiriAPI 不暴露 Anthropic 原生公共入口。其他 OpenAI API 家族和连接器类型仍留待后续版本；严格的 Anthropic 子集与 token 上限规则见 [API 契约](docs/api-contract.md)。
+1.0.0-beta.2 候选只暴露上述两个 OpenAI-compatible 入站接口。`anthropic-compatible` 端点在网关内部完成转换，NonbiriAPI 不暴露 Anthropic 原生公共入口。其他 OpenAI API 家族和连接器类型仍留待后续版本；严格的 Anthropic 子集与 token 上限规则见 [API 契约](docs/api-contract.md)。
 
 ## 站点结构
 
@@ -87,9 +91,9 @@ set +a
 - [环境变量示例](admin.env.example)
 - [systemd 单元示例](deploy/nonbiriapi.service.example)
 
-Beta.1 采用数据库 Generation 2（`user_version=2`）：不会原地迁移 alpha 数据库或 Generation 1；对不支持或异常的现有数据库会在零写入前提下拒绝启动。三个精确的旧 beta.1 结构可以普通更新：启动时在单个事务中补齐公益调度、每把密钥限额和成功回传检查点所需的表与索引，保留现有账号、资源、余额、配置、调度策略和密钥限额。仅替换二进制降级到不兼容结构不安全。必须停止服务并保留经过恢复验证的完整快照（数据库/sidecar、release、配置、主密钥和 unit），再按[部署指南](docs/deployment.md)操作。从 alpha 切换到 beta.1 必须显式执行全新切换；新库默认维护开启，注册、活动、公益、捐赠入口和游戏关闭。
+Beta.2 采用数据库 Generation 2（`application_id=0x4E425249`、`user_version=2`）：不会原地迁移 alpha 数据库或 Generation 1；对不支持或异常的现有数据库会在零写入前提下拒绝启动。四个精确的旧 Generation 2 manifest 可以普通更新，分别对应公益调度、每把密钥限额、成功回传检查点之前的结构及完整 beta.1 结构；两个已经包含 beta.2 sidecar 的已部署中间 manifest 也被接受，但只补缺少的浏览和配额清理索引。单个原子更新按来源补齐缺少的调度、密钥限额、检查点、捐赠处理、模型准入、循环限量、游戏呈现和索引结构，写入契约规定的默认值，再校验完整 manifest 与外键。现有账号、资源、余额、配置、调度策略、密钥限额和历史事实均保留，不虚构历史响应开始、循环用量或游戏呈现值。仅替换二进制降级到不兼容结构不安全。必须停止服务并保留经过恢复验证的完整快照（数据库/sidecar、release、配置、主密钥和 unit），再按[部署指南](docs/deployment.md)操作。从 alpha 切换到 beta.2 必须显式执行全新切换；新库默认维护开启，注册、活动、公益、捐赠入口和游戏关闭。
 
-Beta.1 采用源码优先方式，生产支持平台为 Linux/amd64。运营方应在该目标上从精确 tag 源码构建，或使用等价的受控构建流水线。本次预发布不提供官方预编译二进制、容器镜像或安装包，其他生产平台尚不支持。
+Beta.2 采用源码优先方式，生产支持平台为 Linux/amd64。运营方应在该目标上从精确候选源码 commit 构建，或使用等价的受控构建流水线。本次未发布的候选版本不提供官方预编译二进制、容器镜像或安装包，其他生产平台尚不支持。
 
 ## GitHub 自动化
 
@@ -115,6 +119,8 @@ curl https://api.example.com/v1/chat/completions \
   -d '{"model":"provider/model","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
+CallerKey 完整内容只在创建或更换成功后显示一次，请立即保存；未保存时请再次更换以取得新值。
+
 CallerKey 和上游凭据都必须按密钥保护。不要把它们放入 URL、问题反馈、备注、命令历史、截图或日志。
 
 错误响应包含稳定的 `error.code`、`source` 和 `message`。平台错误文案以 `[NonbiriAPI]` 开头，上游错误不加此前缀。常见结果如下：
@@ -132,10 +138,10 @@ CallerKey 和上游凭据都必须按密钥保护。不要把它们放入 URL、
 | 429 | `rate_limited` | `platform` | 速率或并发限制阻止本次准入。 |
 | 500 | `internal` | `platform` | 内部错误。 |
 | 503 | `maintenance`, `service_unavailable`, `unbound_model` | `platform` | 维护中、服务暂不可用或模型无可用连接。 |
-| 上游 4xx | `upstream` | `upstream` | 自用调用可能保留上游 HTTP 状态。 |
-| 502 / 504 | `upstream` | `upstream` | 上游调用失败，或对自用调用者可见的上游超时。 |
+| 上游 4xx / 5xx | `upstream` | `upstream` | 自用和公益调用均保留上游 HTTP 错误状态。 |
+| 502 / 504 | `upstream` | `upstream` | 上游传输或协议失败，或上游超时。 |
 
-公益请求发出后，上游失败统一返回不含提供方详情的 `502 upstream`。SSE 响应头发出后无法改写 HTTP 状态，失败会通过有界错误事件或关闭连接表达。公益 attempt 在没有有效成功回传时失败，不收积分、不消耗捐赠额度；成功回传开始后的中断按已公布的用量与结算规则处理。完整规则见 [API 错误与收费契约](docs/api-contract.md)。
+自用和公益调用会保留可识别的上游报错信息，以及可选的 `upstream_code`，并清除来源地址和敏感值。无法读取、过大或无法安全呈现的错误使用通用提示。SSE 响应头发出后无法改写 HTTP 状态，失败会通过有界错误事件或关闭连接表达。公益 attempt 在没有有效成功回传时失败，不收积分、不消耗捐赠额度；成功回传开始后的中断按已公布的用量与结算规则处理。完整规则见 [API 错误与收费契约](docs/api-contract.md)。
 
 ## 开发门禁
 

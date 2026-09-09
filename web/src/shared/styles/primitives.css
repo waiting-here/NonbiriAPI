@@ -65,16 +65,6 @@
   box-shadow: none;
 }
 
-.nb-button--danger {
-  border-color: transparent;
-  background: var(--nb-color-danger);
-  color: var(--nb-color-on-danger);
-}
-
-.nb-button--danger:hover:not(:disabled) {
-  background: var(--nb-color-danger-hover);
-}
-
 .nb-button--small {
   min-height: 2.25rem;
   padding: 0.42rem 0.7rem;
@@ -96,170 +86,6 @@
   flex: 0 0 auto;
   width: 1.15em;
   height: 1.15em;
-}
-
-.nb-card {
-  min-width: 0;
-  border: 1px solid var(--nb-color-border);
-  border-radius: var(--nb-radius-lg);
-  background: var(--nb-color-surface);
-  box-shadow: var(--nb-elevation-1);
-}
-
-.nb-card--flat {
-  box-shadow: none;
-}
-
-.nb-card__header,
-.nb-card__body,
-.nb-card__footer {
-  padding: calc(var(--nb-space-5) * var(--nb-density-factor));
-}
-
-.nb-card__header {
-  border-bottom: 1px solid var(--nb-color-border);
-}
-
-.nb-card__footer {
-  border-top: 1px solid var(--nb-color-border);
-}
-
-.nb-field {
-  display: grid;
-  gap: var(--nb-space-2);
-}
-
-.nb-field__label {
-  color: var(--nb-color-text);
-  font-size: var(--nb-font-size-sm);
-  font-weight: var(--nb-font-weight-semibold);
-}
-
-.nb-field__hint {
-  margin: 0;
-  color: var(--nb-color-text-muted);
-  font-size: var(--nb-font-size-sm);
-}
-
-.nb-field__error {
-  margin: 0;
-  color: var(--nb-color-danger);
-  font-size: var(--nb-font-size-sm);
-  overflow-wrap: anywhere;
-}
-
-.nb-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--nb-space-1);
-  min-height: 1.5rem;
-  max-width: 100%;
-  border: 1px solid transparent;
-  border-radius: var(--nb-radius-pill);
-  padding: 0.2rem 0.55rem;
-  color: var(--nb-color-text);
-  font-size: var(--nb-font-size-xs);
-  font-weight: var(--nb-font-weight-bold);
-  line-height: 1.15;
-  overflow-wrap: anywhere;
-}
-
-.nb-badge--info {
-  border-color: color-mix(in srgb, var(--nb-color-info) 30%, transparent);
-  background: var(--nb-color-info-soft);
-  color: var(--nb-color-info);
-}
-
-.nb-badge--success {
-  border-color: color-mix(in srgb, var(--nb-color-success) 30%, transparent);
-  background: var(--nb-color-success-soft);
-  color: var(--nb-color-success);
-}
-
-.nb-badge--warning {
-  border-color: color-mix(in srgb, var(--nb-color-warning) 30%, transparent);
-  background: var(--nb-color-warning-soft);
-  color: var(--nb-color-warning);
-}
-
-.nb-badge--danger {
-  border-color: color-mix(in srgb, var(--nb-color-danger) 30%, transparent);
-  background: var(--nb-color-danger-soft);
-  color: var(--nb-color-danger);
-}
-
-.nb-badge--accent {
-  border-color: color-mix(in srgb, var(--nb-color-accent) 30%, transparent);
-  background: var(--nb-color-accent-soft);
-  color: var(--nb-color-accent);
-}
-
-.nb-status-dot {
-  display: inline-block;
-  width: 0.45rem;
-  height: 0.45rem;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.nb-table-wrap {
-  width: 100%;
-  overflow-x: auto;
-  border: 1px solid var(--nb-color-border);
-  border-radius: var(--nb-radius-md);
-  background: var(--nb-color-surface);
-}
-
-.nb-table {
-  width: 100%;
-  min-width: 38rem;
-  border-collapse: collapse;
-  text-align: left;
-}
-
-.nb-table th,
-.nb-table td {
-  padding: 0.75rem 0.9rem;
-  border-bottom: 1px solid var(--nb-color-border);
-  vertical-align: top;
-  overflow-wrap: anywhere;
-}
-
-.nb-table th {
-  background: var(--nb-color-surface-muted);
-  color: var(--nb-color-text-muted);
-  font-size: var(--nb-font-size-xs);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.nb-table tr:last-child td {
-  border-bottom: 0;
-}
-
-.nb-tabs {
-  display: flex;
-  gap: var(--nb-space-1);
-  min-width: 0;
-  overflow-x: auto;
-  border-bottom: 1px solid var(--nb-color-border);
-}
-
-.nb-tabs__tab {
-  flex: 0 0 auto;
-  min-height: 2.75rem;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  padding: 0.7rem 0.8rem;
-  background: transparent;
-  color: var(--nb-color-text-muted);
-  font-weight: var(--nb-font-weight-semibold);
-  cursor: pointer;
-}
-
-.nb-tabs__tab[aria-selected='true'] {
-  border-bottom-color: var(--nb-color-accent);
-  color: var(--nb-color-accent);
 }
 
 .nb-skeleton {
@@ -520,4 +346,18 @@
   gap: 0.3rem 1rem;
   font-size: 0.875rem;
   overflow-wrap: anywhere;
+}
+/* Time hints stay attached to their input, including in narrow nested forms. */
+.time-input-field,
+.time-input-hint {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.time-input-field > input {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }

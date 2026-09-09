@@ -91,6 +91,8 @@ func parseFilter(raw string) (ledger.HistoryFilter, error) {
 				f.Page = n
 			case "page_size":
 				switch n {
+				case 10:
+					f.PageSize = 10
 				case 20:
 					f.PageSize = 20
 				case 50:

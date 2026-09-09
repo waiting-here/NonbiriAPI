@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { clearStationSession } from '@shared/charityManagement';
+import { TimeInput } from '@shared/components/TimeInput';
 import {
   Card,
   EmptyState,
@@ -11,35 +13,71 @@ import {
   PageHeader,
   StatusBadge,
 } from '@shared/components/States';
-import { CursorPagination } from '@shared/operations/CursorPagination';
-import { useCursorPager } from '@shared/operations/useCursorPager';
+import { PagePagination } from '@shared/operations/PagePagination';
+import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
+import { createTimeDraft, timeDraftValue, type TimeDraft } from '@shared/time';
 import { formatDateTime } from '@shared/utils/datetime';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
+import { useAdminSession } from '../data';
 import {
   adminAnnouncementKeys,
   createAnnouncement,
-  getAdminAnnouncements,
+  getAdminAnnouncementsPage,
   type AnnouncementSeverity,
   type AnnouncementState,
 } from '../features/operations/announcements';
 import { useRetainedOperation } from '../features/operations/useRetainedOperation';
 import '@shared/operations/operations.css';
 
-function optionalUnix(value: string): number | null {
-  if (!value) return null;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? Math.floor(parsed / 1_000) : -1;
+interface AnnouncementDraft {
+  title_zh: string;
+  body_zh: string;
+  title_en: string;
+  body_en: string;
+  severity: string;
+  pinned: boolean;
+  dismissible: boolean;
+  expires: TimeDraft;
+}
+
+interface AnnouncementCreateInput {
+  title_zh: string;
+  body_zh: string;
+  title_en: string;
+  body_en: string;
+  severity: string;
+  pinned: boolean;
+  dismissible: boolean;
+  expires_at: number | null;
 }
 
 export function AnnouncementsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [params, setParams] = useSearchState();
   const client = useQueryClient();
-  const pager = useCursorPager();
-  const [state, setState] = useState('');
-  const [severity, setSeverity] = useState('');
+  const session = useAdminSession();
+  const state =
+    params.getAll('state').length === 1 &&
+    ['draft', 'published', 'withdrawn', 'expired'].includes(params.get('state') ?? '')
+      ? params.get('state')!
+      : '';
+  const severity =
+    params.getAll('severity').length === 1 &&
+    ['info', 'warning', 'important'].includes(params.get('severity') ?? '')
+      ? params.get('severity')!
+      : '';
+  const accountID = session.data ? `admin:${session.data.admin.username}` : undefined;
+  const pager = useUrlPagePager({
+    station: 'admin',
+    listType: 'announcements',
+    scopeKey: accountID ?? 'anonymous',
+    scopeReady: Boolean(accountID) && !session.error,
+    resetKey: `${state}\u0000${severity}`,
+  });
   const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState({
+  const [draft, setDraft] = useState<AnnouncementDraft>(() => ({
     title_zh: '',
     body_zh: '',
     title_en: '',
@@ -47,40 +85,73 @@ export function AnnouncementsPage() {
     severity: 'info',
     pinned: false,
     dismissible: true,
-    expires: '',
-  });
+    expires: createTimeDraft(null, 'minute'),
+  }));
   const list = useQuery({
-    queryKey: adminAnnouncementKeys.list(state, severity, pager.cursor),
-    queryFn: () => getAdminAnnouncements(state, severity, pager.cursor),
+    queryKey: adminAnnouncementKeys.page(
+      accountID ?? 'none',
+      state,
+      severity,
+      pager.page,
+      pager.pageSize,
+    ),
+    queryFn: ({ signal }) =>
+      getAdminAnnouncementsPage(state, severity, pager.page, pager.pageSize, signal),
+    enabled: Boolean(accountID) && !session.error,
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[3] === accountID ? previous : undefined,
     retry: false,
   });
   const create = useRetainedOperation(
-    (input: typeof draft, key) =>
-      createAnnouncement(
-        {
-          title_zh: input.title_zh,
-          body_zh: input.body_zh,
-          title_en: input.title_en,
-          body_en: input.body_en,
-          severity: input.severity,
-          pinned: input.pinned,
-          dismissible: input.dismissible,
-          expires_at: optionalUnix(input.expires),
-        },
-        key,
-      ),
+    (input: AnnouncementCreateInput, key) => createAnnouncement(input, key),
     async () => {
       await list.refetch();
     },
   );
-  const expiry = optionalUnix(draft.expires);
+  const expiry = timeDraftValue(draft.expires);
   const zhBodyBytes = new TextEncoder().encode(draft.body_zh).byteLength;
   const enBodyBytes = new TextEncoder().encode(draft.body_en).byteLength;
+  const pageData = list.data;
+  const busy = list.isFetching;
+  const returnParams = new URLSearchParams(location.search);
+  returnParams.set('page', pageData?.pagination.page ?? pager.page);
+  returnParams.set('page_size', String(pager.pageSize));
+  const returnTo = `/announcements?${returnParams.toString()}`;
+  const setFilter = (name: 'state' | 'severity', value: string) => {
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete(name);
+      if (value) next.set(name, value);
+      next.set('page', '1');
+      next.set('page_size', String(pager.pageSize));
+      return next;
+    });
+  };
   const languagePairsValid =
     Boolean(draft.title_zh.trim()) === Boolean(draft.body_zh.trim()) &&
     Boolean(draft.title_en.trim()) === Boolean(draft.body_en.trim());
   const draftValid =
-    languagePairsValid && zhBodyBytes <= 65_536 && enBodyBytes <= 65_536 && expiry !== -1;
+    languagePairsValid && zhBodyBytes <= 65_536 && enBodyBytes <= 65_536 && expiry !== undefined;
+  const submitCreate = () => {
+    const expiresAt = timeDraftValue(draft.expires);
+    if (expiresAt === undefined) return;
+    create.mutate(
+      {
+        title_zh: draft.title_zh,
+        body_zh: draft.body_zh,
+        title_en: draft.title_en,
+        body_en: draft.body_en,
+        severity: draft.severity,
+        pinned: draft.pinned,
+        dismissible: draft.dismissible,
+        expires_at: expiresAt,
+      },
+      {
+        onSuccess: (receipt) =>
+          navigate(`/announcements/${encodeURIComponent(receipt.id)}`, { state: { returnTo } }),
+      },
+    );
+  };
   useEffect(() => {
     if (isUnauthorized(list.error) || isForbidden(list.error)) clearStationSession(client, 'admin');
   }, [client, list.error]);
@@ -167,14 +238,17 @@ export function AnnouncementsPage() {
                 <option value="important">{severityLabels.important}</option>
               </select>
             </label>
-            <label>
-              <span>{t('admin.announcements.expiryOptional')}</span>
-              <input
-                type="datetime-local"
-                value={draft.expires}
-                onChange={(event) => setDraft({ ...draft, expires: event.target.value })}
-              />
-            </label>
+            <TimeInput
+              station="admin"
+              label={t('admin.announcements.expiryOptional')}
+              draft={draft.expires}
+              onChange={(update) =>
+                setDraft((current) => ({
+                  ...current,
+                  expires: update(current.expires),
+                }))
+              }
+            />
             <label className="checkbox-label">
               <input
                 type="checkbox"
@@ -197,12 +271,7 @@ export function AnnouncementsPage() {
             className="btn btn-primary"
             type="button"
             disabled={create.isPending || !draftValid}
-            onClick={() =>
-              create.mutate(draft, {
-                onSuccess: (receipt) =>
-                  navigate(`/announcements/${encodeURIComponent(receipt.id)}`),
-              })
-            }
+            onClick={submitCreate}
           >
             {t('admin.announcements.createPrivateDraft')}
           </button>
@@ -215,8 +284,7 @@ export function AnnouncementsPage() {
             <select
               value={state}
               onChange={(event) => {
-                setState(event.target.value);
-                pager.reset();
+                setFilter('state', event.target.value);
               }}
             >
               <option value="">{t('admin.announcements.all')}</option>
@@ -231,8 +299,7 @@ export function AnnouncementsPage() {
             <select
               value={severity}
               onChange={(event) => {
-                setSeverity(event.target.value);
-                pager.reset();
+                setFilter('severity', event.target.value);
               }}
             >
               <option value="">{t('admin.announcements.all')}</option>
@@ -242,85 +309,96 @@ export function AnnouncementsPage() {
             </select>
           </label>
         </div>
-        {list.isPending ? (
+        {session.error ? (
+          <ErrorState error={session.error} onRetry={() => void session.refetch()} />
+        ) : list.isPending ? (
           <LoadingState />
         ) : list.error ? (
           <ErrorState error={list.error} onRetry={() => void list.refetch()} />
-        ) : list.data.data.length === 0 ? (
-          <EmptyState
-            title={t('admin.announcements.emptyTitle')}
-            body={t('admin.announcements.emptyBody')}
-          />
-        ) : (
+        ) : pageData ? (
           <>
-            <div className="ops-table-scroll">
-              <table className="ops-table ops-table--responsive">
-                <thead>
-                  <tr>
-                    <th>{t('admin.announcements.table.state')}</th>
-                    <th>{t('admin.announcements.table.draftTitle')}</th>
-                    <th>{t('admin.announcements.table.severity')}</th>
-                    <th>{t('admin.announcements.table.publication')}</th>
-                    <th>{t('admin.announcements.table.updated')}</th>
-                    <th>{t('admin.announcements.table.open')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {list.data.data.map((item) => (
-                    <tr key={item.id}>
-                      <td data-label={t('admin.announcements.table.state')}>
-                        <StatusBadge
-                          active={item.state === 'published'}
-                          label={stateLabels[item.state]}
-                        />
-                      </td>
-                      <td
-                        className="ops-cell-wide"
-                        data-label={t('admin.announcements.table.draftTitle')}
-                      >
-                        {item.draft.en?.title ??
-                          item.draft.zh?.title ??
-                          t('admin.announcements.emptyDraft')}
-                      </td>
-                      <td data-label={t('admin.announcements.table.severity')}>
-                        {severityLabels[item.severity]}
-                        {item.pinned ? ` · ${t('admin.announcements.pinned')}` : ''}
-                      </td>
-                      <td data-label={t('admin.announcements.table.publication')}>
-                        {item.published
-                          ? t('admin.announcements.publicationValue', {
-                              revision: item.published.revision,
-                              date: formatDateTime(item.published.published_at),
-                            })
-                          : t('admin.announcements.neverPublished')}
-                      </td>
-                      <td data-label={t('admin.announcements.table.updated')}>
-                        {formatDateTime(item.updated_at)}
-                      </td>
-                      <td
-                        className="ops-cell-wide"
-                        data-label={t('admin.announcements.table.open')}
-                      >
-                        <button
-                          className="btn btn-secondary"
-                          type="button"
-                          onClick={() => navigate(`/announcements/${encodeURIComponent(item.id)}`)}
-                        >
-                          {t('admin.announcements.edit')}
-                        </button>
-                      </td>
+            {pageData.data.length === 0 ? (
+              <EmptyState
+                title={t('admin.announcements.emptyTitle')}
+                body={t('admin.announcements.emptyBody')}
+              />
+            ) : (
+              <div className="ops-table-scroll" aria-busy={busy}>
+                <table className="ops-table ops-table--responsive">
+                  <thead>
+                    <tr>
+                      <th>{t('admin.announcements.table.state')}</th>
+                      <th>{t('admin.announcements.table.draftTitle')}</th>
+                      <th>{t('admin.announcements.table.severity')}</th>
+                      <th>{t('admin.announcements.table.publication')}</th>
+                      <th>{t('admin.announcements.table.updated')}</th>
+                      <th>{t('admin.announcements.table.open')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <CursorPagination
-              page={pager.page}
-              nextCursor={list.data.next_cursor}
-              onPrevious={pager.previous}
-              onNext={pager.next}
+                  </thead>
+                  <tbody>
+                    {pageData.data.map((item) => (
+                      <tr key={item.id}>
+                        <td data-label={t('admin.announcements.table.state')}>
+                          <StatusBadge
+                            active={item.state === 'published'}
+                            label={stateLabels[item.state]}
+                          />
+                        </td>
+                        <td
+                          className="ops-cell-wide"
+                          data-label={t('admin.announcements.table.draftTitle')}
+                        >
+                          {item.draft.en?.title ??
+                            item.draft.zh?.title ??
+                            t('admin.announcements.emptyDraft')}
+                        </td>
+                        <td data-label={t('admin.announcements.table.severity')}>
+                          {severityLabels[item.severity]}
+                          {item.pinned ? ` · ${t('admin.announcements.pinned')}` : ''}
+                        </td>
+                        <td data-label={t('admin.announcements.table.publication')}>
+                          {item.published
+                            ? t('admin.announcements.publicationValue', {
+                                revision: item.published.revision,
+                                date: formatDateTime(item.published.published_at),
+                              })
+                            : t('admin.announcements.neverPublished')}
+                        </td>
+                        <td data-label={t('admin.announcements.table.updated')}>
+                          {formatDateTime(item.updated_at)}
+                        </td>
+                        <td
+                          className="ops-cell-wide"
+                          data-label={t('admin.announcements.table.open')}
+                        >
+                          <button
+                            className="btn btn-secondary"
+                            type="button"
+                            onClick={() =>
+                              navigate(`/announcements/${encodeURIComponent(item.id)}`, {
+                                state: { returnTo },
+                              })
+                            }
+                          >
+                            {t('admin.announcements.edit')}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <PagePagination
+              metadata={pageData.pagination}
+              requestedPage={pager.page}
+              busy={busy}
+              onPageChange={pager.setPage}
+              onPageSizeChange={pager.setPageSize}
             />
           </>
+        ) : (
+          <LoadingState />
         )}
       </Card>
     </div>

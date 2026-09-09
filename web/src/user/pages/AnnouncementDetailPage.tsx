@@ -1,4 +1,5 @@
-import { Link, useParams } from 'react-router';
+import { Link, useLocation, useParams } from 'react-router';
+import { listReturnPath } from '@shared/operations/listReturn';
 import { useTranslation } from 'react-i18next';
 import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
 import { formatDateTime } from '@shared/utils/datetime';
@@ -19,17 +20,38 @@ const LANGUAGE_LABEL_KEYS = {
 
 export function AnnouncementDetailPage() {
   const { announcementId } = useParams();
+  const location = useLocation();
+  const backTo = listReturnPath(location.state, '/announcements');
   const { t } = useTranslation();
   const announcement = useAnnouncement(announcementId);
   if (announcement.isPending) return <LoadingState />;
-  if (announcement.error) return <ErrorState error={announcement.error} onRetry={() => void announcement.refetch()} />;
-  return <div className="page ops-stack">
-    <PageHeader eyebrow={t('user.announcements.eyebrow')} title={announcement.data.title} back={<Link to="/announcements">{t('user.announcements.backToList')}</Link>} />
-    <Card className="ops-stack">
-      <div className="ops-actions"><StatusBadge active={announcement.data.severity === 'info'} danger={announcement.data.severity === 'important'} label={t(SEVERITY_LABEL_KEYS[announcement.data.severity])} />
-        <span>{formatDateTime(announcement.data.published_at)}</span></div>
-      {announcement.data.fallback_from ? <p className="inline-notice">{t('user.announcements.fallbackNotice', { language: t(LANGUAGE_LABEL_KEYS[announcement.data.effective_language]) })}</p> : null}
-      <SafeAnnouncementBody html={announcement.data.rendered_body} />
-    </Card>
-  </div>;
+  if (announcement.error)
+    return <ErrorState error={announcement.error} onRetry={() => void announcement.refetch()} />;
+  return (
+    <div className="page ops-stack">
+      <PageHeader
+        eyebrow={t('user.announcements.eyebrow')}
+        title={announcement.data.title}
+        back={<Link to={backTo}>{t('user.announcements.backToList')}</Link>}
+      />
+      <Card className="ops-stack">
+        <div className="ops-actions">
+          <StatusBadge
+            active={announcement.data.severity === 'info'}
+            danger={announcement.data.severity === 'important'}
+            label={t(SEVERITY_LABEL_KEYS[announcement.data.severity])}
+          />
+          <span>{formatDateTime(announcement.data.published_at)}</span>
+        </div>
+        {announcement.data.fallback_from ? (
+          <p className="inline-notice">
+            {t('user.announcements.fallbackNotice', {
+              language: t(LANGUAGE_LABEL_KEYS[announcement.data.effective_language]),
+            })}
+          </p>
+        ) : null}
+        <SafeAnnouncementBody html={announcement.data.rendered_body} />
+      </Card>
+    </div>
+  );
 }

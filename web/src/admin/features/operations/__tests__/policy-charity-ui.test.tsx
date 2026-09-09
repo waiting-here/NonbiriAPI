@@ -1,4 +1,6 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { useAdminSession } from '../../../data';
+import { useUserSession } from '../../../../user/data';
 import { describe, expect, it, vi } from 'vitest';
 import { CharityManagement } from '@shared/components/CharityManagement';
 import type {
@@ -20,8 +22,50 @@ function errorResponse(status: number, code: string): Response {
   return jsonResponse({ error: { code, message: `request failed: ${code}` } }, status);
 }
 
+const adminSession = { admin: { username: 'fixture-admin' } };
+
+const stewardSession = {
+  user: {
+    id: '1',
+    username: 'fixture-steward',
+    avatar: null,
+    avatar_url: null,
+    guild_nick: null,
+    guild_avatar_url: null,
+    lang: 'en',
+    is_banned: false,
+    banned_until: null,
+    charity_suspended_until: null,
+    endpoint_limit: null,
+    effective_endpoint_limit: '10',
+    rpm_limit: null,
+    effective_rpm_limit: '60',
+    concurrency_limit: null,
+    effective_concurrency_limit: '5',
+    balance: '0',
+    donation_credit: '0',
+    effective_level: 5,
+    level_display_name: 'Lv5',
+    game_profile_public: false,
+    created_at: 1,
+    updated_at: 1,
+    usage: {
+      total_requests: '0',
+      total_uncached_input_tokens: '0',
+      total_cache_write_input_tokens: '0',
+      total_cache_read_input_tokens: '0',
+      total_output_tokens: '0',
+      total_prompt_tokens: '0',
+      total_completion_tokens: '0',
+      total_unknown_usage_requests: '0',
+    },
+  },
+};
+
 const managedKey = (overrides: Partial<ManagedDonationKey> = {}): ManagedDonationKey => ({
   id: '11',
+  binding_count: '0',
+  idle: true,
   endpoint_key_id: '21',
   display_head: 'head',
   display_tail: 'tail',
@@ -55,6 +99,14 @@ function pendingAdminDonation(expiresAt: number | null = null): AdminDonation {
     id: '1',
     status: 'pending',
     revision: '7',
+    handling: {
+      state: 'pending',
+      revision: '1',
+      processed_at: null,
+      processed_by_role: null,
+      closed_at: null,
+      closed_reason: null,
+    },
     description: 'Generation 2 donor submission',
     review_result: null,
     keys: [managedKey({ authorized_expires_at: expiresAt, expires_at: expiresAt })],
@@ -70,14 +122,102 @@ function stewardDonation(): StewardDonation {
     id: '2',
     status: 'pending',
     revision: '3',
+    handling: {
+      state: 'pending',
+      revision: '1',
+      processed_at: null,
+      processed_by_role: null,
+      closed_at: null,
+      closed_reason: null,
+    },
     description: 'My donation',
     review_result: null,
     keys: [managedKey({ id: '12', endpoint_key_id: '22' })],
-    owner: { user_id: '8', display_name: 'Current steward' },
+    owner: { user_id: '8', discord_id: 'steward-discord-8', display_name: 'Current steward' },
     reviewer: null,
     created_at: 1_735_689_600,
     updated_at: 1_735_689_600,
   };
+}
+
+function managementNumberedPage<T>(data: T[]) {
+  return {
+    data,
+    next_cursor: null,
+    pagination: { page: '1', page_size: 20, total_items: String(data.length), total_pages: '1' },
+  };
+}
+
+function expectNumberedPageQuery(url: URL) {
+  expect(url.searchParams.get('page')).toBe('1');
+  expect(url.searchParams.get('page_size')).toBe('20');
+}
+
+function donationPageSummary(donation: AdminDonation | StewardDonation) {
+  const stateCounts: Record<string, string> = {
+    available: '0',
+    pending: '0',
+    disabled: '0',
+    suspended: '0',
+    exhausted: '0',
+    expired: '0',
+    ended: '0',
+  };
+  for (const key of donation.keys) {
+    stateCounts[key.charity_state] = String(Number(stateCounts[key.charity_state]) + 1);
+  }
+  const source = donation.keys[0]?.safe_source;
+  const owner = donation.owner;
+  return {
+    id: donation.id,
+    status: donation.status,
+    revision: donation.revision,
+    handling: donation.handling,
+    description: donation.description,
+    review_result: donation.review_result,
+    created_at: donation.created_at,
+    updated_at: donation.updated_at,
+    key_count: String(donation.keys.length),
+    state_counts: stateCounts,
+    source_count: source ? '1' : '0',
+    sources: source ? [source] : [],
+    reviewer: donation.reviewer,
+    owner: owner === null ? null : owner,
+  };
+}
+
+function keyPageSummary(donation: AdminDonation | StewardDonation, key: ManagedDonationKey) {
+  return {
+    ...key,
+    donation_id: donation.id,
+    key_id: key.id,
+    donation_revision: donation.revision,
+    rule_count: '0',
+    rules: [],
+    handling: donation.handling,
+    max_concurrency: key.max_concurrency ?? null,
+    max_rpm: key.max_rpm ?? null,
+  };
+}
+
+function SessionBackedManagement({
+  frame,
+  onCapabilityLoss,
+}: {
+  frame: 'admin' | 'steward';
+  onCapabilityLoss?: () => void;
+}) {
+  const admin = useAdminSession(frame === 'admin');
+  const user = useUserSession(frame === 'steward');
+  const accountId =
+    frame === 'admin'
+      ? admin.data
+        ? `admin:${admin.data.admin.username}`
+        : undefined
+      : user.data?.user.id;
+  return accountId ? (
+    <CharityManagement frame={frame} accountId={accountId} onCapabilityLoss={onCapabilityLoss} />
+  ) : null;
 }
 
 const datePart = (value: number) => String(value).padStart(2, '0');
@@ -116,12 +256,26 @@ describe('Generation 2 charity management policy', () => {
     let current = pendingAdminDonation(expiresAt);
     const reviewRequests: RequestInit[] = [];
     const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
-      const path = String(input);
+      const url = new URL(String(input), 'https://example.test');
+      const path = url.pathname;
       const method = init?.method ?? 'GET';
-      if (method === 'GET' && path.startsWith('/admin/api/donations?')) {
-        return jsonResponse({ data: [current], next_cursor: null });
+      if (method === 'GET' && path === '/admin/api/session') return jsonResponse(adminSession);
+      if (method === 'GET' && path === '/admin/api/time-zones')
+        return jsonResponse({
+          version: 'go1.26.6-zoneinfo',
+          zones: ['America/Indianapolis', 'UTC'],
+        });
+      if (method === 'GET' && path === '/admin/api/donations') {
+        expectNumberedPageQuery(url);
+        return jsonResponse(managementNumberedPage([donationPageSummary(current)]));
       }
       if (method === 'GET' && path === '/admin/api/donations/1') return jsonResponse(current);
+      if (method === 'GET' && path === '/admin/api/donations/1/keys') {
+        expectNumberedPageQuery(url);
+        return jsonResponse(
+          managementNumberedPage(current.keys.map((key) => keyPageSummary(current, key))),
+        );
+      }
       if (method === 'POST' && path === '/admin/api/donations/1/review') {
         reviewRequests.push(init ?? {});
         const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
@@ -131,7 +285,7 @@ describe('Generation 2 charity management policy', () => {
       throw new Error(`Unexpected request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    const view = await renderWithProviders(<CharityManagement frame="admin" />, {
+    const view = await renderWithProviders(<SessionBackedManagement frame="admin" />, {
       station: 'admin',
       role: 'admin',
     });
@@ -162,12 +316,26 @@ describe('Generation 2 charity management policy', () => {
     let current = pendingAdminDonation();
     const reviewRequests: RequestInit[] = [];
     const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
-      const path = String(input);
+      const url = new URL(String(input), 'https://example.test');
+      const path = url.pathname;
       const method = init?.method ?? 'GET';
-      if (method === 'GET' && path.startsWith('/admin/api/donations?')) {
-        return jsonResponse({ data: [current], next_cursor: null });
+      if (method === 'GET' && path === '/admin/api/session') return jsonResponse(adminSession);
+      if (method === 'GET' && path === '/admin/api/time-zones')
+        return jsonResponse({
+          version: 'go1.26.6-zoneinfo',
+          zones: ['America/Indianapolis', 'UTC'],
+        });
+      if (method === 'GET' && path === '/admin/api/donations') {
+        expectNumberedPageQuery(url);
+        return jsonResponse(managementNumberedPage([donationPageSummary(current)]));
       }
       if (method === 'GET' && path === '/admin/api/donations/1') return jsonResponse(current);
+      if (method === 'GET' && path === '/admin/api/donations/1/keys') {
+        expectNumberedPageQuery(url);
+        return jsonResponse(
+          managementNumberedPage(current.keys.map((key) => keyPageSummary(current, key))),
+        );
+      }
       if (method === 'POST' && path === '/admin/api/donations/1/review') {
         reviewRequests.push(init ?? {});
         const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
@@ -177,7 +345,7 @@ describe('Generation 2 charity management policy', () => {
       throw new Error(`Unexpected request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    const view = await renderWithProviders(<CharityManagement frame="admin" />, {
+    const view = await renderWithProviders(<SessionBackedManagement frame="admin" />, {
       station: 'admin',
       role: 'admin',
     });
@@ -249,13 +417,22 @@ describe('Generation 2 charity management policy', () => {
     let models: CharityModel[] = [];
     const createRequests: RequestInit[] = [];
     const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
-      const path = String(input);
+      const url = new URL(String(input), 'https://example.test');
+      const path = url.pathname;
       const method = init?.method ?? 'GET';
-      if (method === 'GET' && path.startsWith('/admin/api/donations?')) {
-        return jsonResponse({ data: [], next_cursor: null });
+      if (method === 'GET' && path === '/admin/api/session') return jsonResponse(adminSession);
+      if (method === 'GET' && path === '/admin/api/time-zones')
+        return jsonResponse({
+          version: 'go1.26.6-zoneinfo',
+          zones: ['America/Indianapolis', 'UTC'],
+        });
+      if (method === 'GET' && path === '/admin/api/donations') {
+        expectNumberedPageQuery(url);
+        return jsonResponse(managementNumberedPage([]));
       }
-      if (method === 'GET' && path.startsWith('/admin/api/charity-models?')) {
-        return jsonResponse({ data: models, next_cursor: null });
+      if (method === 'GET' && path === '/admin/api/charity-models') {
+        expectNumberedPageQuery(url);
+        return jsonResponse(managementNumberedPage(models));
       }
       if (method === 'POST' && path === '/admin/api/charity-models') {
         createRequests.push(init ?? {});
@@ -267,6 +444,8 @@ describe('Generation 2 charity management policy', () => {
           model: String(body.model),
           full_name: `[公益]${String(body.provider)}/${String(body.model)}`,
           enabled: true,
+          allowed_levels: body.allowed_levels as number[],
+          public_description: String(body.public_description),
           pricing: body.pricing as CharityModel['pricing'],
           discount: body.discount as CharityModel['discount'],
           flatten_tool_calls: false,
@@ -283,12 +462,12 @@ describe('Generation 2 charity management policy', () => {
       throw new Error(`Unexpected request: ${method} ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    const view = await renderWithProviders(<CharityManagement frame="admin" />, {
+    const view = await renderWithProviders(<SessionBackedManagement frame="admin" />, {
       station: 'admin',
       role: 'admin',
     });
 
-    await view.user.click(screen.getByRole('tab', { name: 'Charity models and bindings' }));
+    await view.user.click(await screen.findByRole('tab', { name: 'Charity models and bindings' }));
     await view.user.type(screen.getByLabelText('Provider'), 'provider');
     await view.user.type(screen.getByLabelText('Model'), 'model');
     fireEvent.change(screen.getByLabelText('Request user price'), {
@@ -305,6 +484,8 @@ describe('Generation 2 charity management policy', () => {
     await waitFor(() => expect(createRequests).toHaveLength(1));
     const body = JSON.parse(String(createRequests[0].body)) as Record<string, unknown>;
     expect(body).toMatchObject({
+      allowed_levels: [1, 2, 3, 4, 5],
+      public_description: '',
       pricing: { mode: 'per_request', user_price: '1.001', donor_reward: '0' },
     });
     expect(new Headers(createRequests[0].headers).get('Idempotency-Key')).toMatch(
@@ -312,15 +493,29 @@ describe('Generation 2 charity management policy', () => {
     );
   });
 
-  it('fails closed when a steward response contains administrator-only identity fields', async () => {
-    const invalid = stewardDonation() as unknown as Record<string, unknown>;
-    invalid.owner = { user_id: '8', display_name: 'Current steward', discord_id: 'forbidden' };
-    const fetchMock = vi.fn<typeof fetch>(async (input) => {
-      expect(String(input)).toMatch(/^\/api\/steward\/donations\?/);
-      return jsonResponse({ data: [invalid], next_cursor: null });
+  it('fails closed when a steward response contains an unknown owner field', async () => {
+    const donation = stewardDonation();
+    const invalid = {
+      ...donationPageSummary(donation),
+      owner: {
+        user_id: '8',
+        display_name: 'Current steward',
+        discord_id: 'steward-discord-8',
+        email: 'forbidden',
+      },
+    };
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input), 'https://example.test');
+      const method = init?.method ?? 'GET';
+      if (method === 'GET' && url.pathname === '/api/session') return jsonResponse(stewardSession);
+      if (method === 'GET' && url.pathname === '/api/steward/donations') {
+        expectNumberedPageQuery(url);
+        return jsonResponse(managementNumberedPage([invalid]));
+      }
+      throw new Error(`Unexpected request: ${method} ${url.pathname}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    await renderWithProviders(<CharityManagement frame="steward" />, {
+    await renderWithProviders(<SessionBackedManagement frame="steward" />, {
       station: 'user',
       role: 'user',
     });
@@ -334,10 +529,18 @@ describe('Generation 2 charity management policy', () => {
     const item = stewardDonation();
     const onCapabilityLoss = vi.fn();
     const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
-      const path = String(input);
+      const url = new URL(String(input), 'https://example.test');
+      const path = url.pathname;
       const method = init?.method ?? 'GET';
-      if (method === 'GET' && path.startsWith('/api/steward/donations?')) {
-        return jsonResponse({ data: [item], next_cursor: null });
+      if (method === 'GET' && path === '/api/session') return jsonResponse(stewardSession);
+      if (method === 'GET' && path === '/api/time-zones')
+        return jsonResponse({
+          version: 'go1.26.6-zoneinfo',
+          zones: ['America/Indianapolis', 'UTC'],
+        });
+      if (method === 'GET' && path === '/api/steward/donations') {
+        expectNumberedPageQuery(url);
+        return jsonResponse(managementNumberedPage([donationPageSummary(item)]));
       }
       if (method === 'GET' && path === '/api/steward/donations/2') {
         return errorResponse(403, 'forbidden');
@@ -346,7 +549,7 @@ describe('Generation 2 charity management policy', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const view = await renderWithProviders(
-      <CharityManagement frame="steward" onCapabilityLoss={onCapabilityLoss} />,
+      <SessionBackedManagement frame="steward" onCapabilityLoss={onCapabilityLoss} />,
       { station: 'user', role: 'user' },
     );
 

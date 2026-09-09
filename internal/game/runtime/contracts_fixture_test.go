@@ -23,6 +23,7 @@ func TestContractFixturesStrictRoundTrip(t *testing.T) {
 		{name: "fishing-pending.json", target: &FishingSettlementPending{}},
 		{name: "fishing-state.json", target: &FishingState{}},
 		{name: "fishing-leaderboard-single.json", target: &FishingLeaderboard{}},
+		{name: "fishing-leaderboard-recent-single.json", target: &FishingLeaderboard{}},
 		{name: "fishing-leaderboard-total.json", target: &FishingLeaderboard{}},
 	}
 	for _, test := range tests {

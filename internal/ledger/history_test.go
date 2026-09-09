@@ -117,6 +117,11 @@ func TestUserHistoryFiltersSnapshotPagesAndOwnerIsolation(t *testing.T) {
 	if last.Page != "2" || len(last.Data) != 5 {
 		t.Fatalf("page size: %+v", last)
 	}
+	f.PageSize = 10
+	last, err = read(owner, f)
+	if err != nil || last.Page != "6" || last.Total != "55" || len(last.Data) != 5 || last.Anchor == nil || *last.Anchor != *first.Anchor || last.CurrentBalance != "9000000000000.007" {
+		t.Fatalf("ten-item page lost anchor or current balance: %+v %v", last, err)
+	}
 	from, to := ledgerTestNow+1, ledgerTestNow+7
 	f = HistoryFilter{Page: 1, PageSize: 100, From: &from, To: &to, Direction: "expense", Category: "penalty"}
 	filtered, err := read(owner, f)

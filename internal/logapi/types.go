@@ -1,6 +1,7 @@
 // Package logapi projects persisted logical request facts into three distinct
 // role-safe read models. It never reads credentials, ciphertext, request or
-// response bodies, raw upstream errors, Discord identity, or donor material.
+// response bodies, raw upstream errors, or donor material. Authorized stewards
+// can read a charity caller's current account identity through a separate join.
 package logapi
 
 import (
@@ -9,6 +10,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -56,8 +58,9 @@ type LogUsage struct {
 }
 
 type Page[T any] struct {
-	Data       []T     `json:"data"`
-	NextCursor *string `json:"next_cursor"`
+	Data       []T                  `json:"data"`
+	NextCursor *string              `json:"next_cursor"`
+	Pagination *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 // UserLogRow is a closed implementation interface. Only UserSelfLogRow and
@@ -114,8 +117,9 @@ type UserSelfLogAttempt struct {
 }
 
 type UserSelfLogDetail struct {
-	Request  UserSelfLogRow           `json:"request"`
-	Attempts Page[UserSelfLogAttempt] `json:"attempts"`
+	Request           UserSelfLogRow           `json:"request"`
+	Attempts          Page[UserSelfLogAttempt] `json:"attempts"`
+	AttemptPagination *pagination.Metadata     `json:"attempt_pagination,omitempty"`
 }
 
 type CallerSafeResult struct {
@@ -135,16 +139,17 @@ func (UserSelfLogDetail) userLogDetail()    {}
 func (UserCharityLogDetail) userLogDetail() {}
 
 type AdminLogRow struct {
-	ID                string       `json:"id"`
-	RouteKind         RouteKind    `json:"route_kind"`
-	CallerResultClass *ResultClass `json:"caller_result_class"`
-	CallerStatus      *int         `json:"caller_status"`
-	CallerErrorCode   *string      `json:"caller_error_code"`
-	StartedAt         int64        `json:"started_at"`
-	CompletedAt       *int64       `json:"completed_at"`
-	Usage             LogUsage     `json:"usage"`
-	UserID            *string      `json:"user_id"`
-	AttemptCount      string       `json:"attempt_count"`
+	ID                string          `json:"id"`
+	RouteKind         RouteKind       `json:"route_kind"`
+	CallerResultClass *ResultClass    `json:"caller_result_class"`
+	CallerStatus      *int            `json:"caller_status"`
+	CallerErrorCode   *string         `json:"caller_error_code"`
+	StartedAt         int64           `json:"started_at"`
+	CompletedAt       *int64          `json:"completed_at"`
+	Usage             LogUsage        `json:"usage"`
+	UserID            *string         `json:"user_id"`
+	AttemptCount      string          `json:"attempt_count"`
+	CallerIdentity    *CallerIdentity `json:"caller_identity"`
 }
 
 type AdminLogAttempt struct {
@@ -163,23 +168,30 @@ type AdminLogAttempt struct {
 }
 
 type AdminLogDetail struct {
-	Request  AdminLogRow           `json:"request"`
-	Attempts Page[AdminLogAttempt] `json:"attempts"`
+	Request           AdminLogRow           `json:"request"`
+	Attempts          Page[AdminLogAttempt] `json:"attempts"`
+	AttemptPagination *pagination.Metadata  `json:"attempt_pagination,omitempty"`
 }
 
-// Steward types repeat every allowed field. They intentionally do not embed,
-// alias, or convert through Admin DTOs, so future Admin additions cannot cross
-// the L5 boundary by construction.
+// Management projections expose the same facts to administrators and stewards.
+// Separate DTOs retain explicit role boundaries and independently bound cursors.
 type StewardLogRow struct {
-	ID                string       `json:"id"`
-	RouteKind         RouteKind    `json:"route_kind"`
-	CallerResultClass *ResultClass `json:"caller_result_class"`
-	CallerStatus      *int         `json:"caller_status"`
-	CallerErrorCode   *string      `json:"caller_error_code"`
-	StartedAt         int64        `json:"started_at"`
-	CompletedAt       *int64       `json:"completed_at"`
-	Usage             LogUsage     `json:"usage"`
-	AttemptCount      string       `json:"attempt_count"`
+	ID                string          `json:"id"`
+	RouteKind         RouteKind       `json:"route_kind"`
+	CallerResultClass *ResultClass    `json:"caller_result_class"`
+	CallerStatus      *int            `json:"caller_status"`
+	CallerErrorCode   *string         `json:"caller_error_code"`
+	StartedAt         int64           `json:"started_at"`
+	CompletedAt       *int64          `json:"completed_at"`
+	Usage             LogUsage        `json:"usage"`
+	UserID            *string         `json:"user_id"`
+	AttemptCount      string          `json:"attempt_count"`
+	CallerIdentity    *CallerIdentity `json:"caller_identity"`
+}
+
+type CallerIdentity struct {
+	DiscordNickname *string `json:"discord_nickname"`
+	DiscordID       *string `json:"discord_id"`
 }
 
 type StewardLogAttempt struct {
@@ -198,8 +210,9 @@ type StewardLogAttempt struct {
 }
 
 type StewardLogDetail struct {
-	Request  StewardLogRow           `json:"request"`
-	Attempts Page[StewardLogAttempt] `json:"attempts"`
+	Request           StewardLogRow           `json:"request"`
+	Attempts          Page[StewardLogAttempt] `json:"attempts"`
+	AttemptPagination *pagination.Metadata    `json:"attempt_pagination,omitempty"`
 }
 
 type ListFilter struct {
@@ -213,11 +226,13 @@ type ListFilter struct {
 	To              *int64
 	Cursor          string
 	Limit           int
+	Page            *pagination.Request
 }
 
 type AttemptFilter struct {
 	Cursor string
 	Limit  int
+	Page   *pagination.Request
 }
 
 type UserPrincipal = resources.UserPrincipal

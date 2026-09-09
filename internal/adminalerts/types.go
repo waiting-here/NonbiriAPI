@@ -1,5 +1,7 @@
 package adminalerts
 
+import "github.com/waiting-here/NonbiriAPI/internal/pagination"
+
 type Kind string
 
 const (
@@ -41,12 +43,14 @@ type AdminAlert struct {
 }
 
 type Page[T any] struct {
-	Data       []T     `json:"data"`
-	NextCursor *string `json:"next_cursor"`
+	Data       []T                  `json:"data"`
+	NextCursor *string              `json:"next_cursor"`
+	Pagination *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 type ListQuery struct {
 	Resolved *bool
 	Cursor   string
 	Limit    int
+	Numbered *pagination.Request
 }

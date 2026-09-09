@@ -1,26 +1,21 @@
 import { useTranslation } from 'react-i18next';
-import { Link, useParams, useSearchParams } from 'react-router';
+import { Link, useLocation, useParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { isNotFoundError } from '@shared/query/http';
 import { usePublicConfig } from '@shared/query/publicConfig';
+import { listReturnPath } from '@shared/operations/listReturn';
 import { UserPageGate } from '../components/UserPageGate';
 import { useUserSession } from '../data';
+import { CharityCatalogPanel } from '../features/economy/CharityCatalogPanel';
 import {
-  CharityCapabilityPanel,
   CharitySafetyNotice,
   DonationCard,
   DonationComposer,
-  DonationKeyOverview,
-  DonationOverviewPartialError,
   DonationIntakePanel,
 } from '../features/economy/CharityPanels';
-import { isDonationCollectionIncomplete } from '../features/economy/api';
-import {
-  useCharityCapability,
-  useDonation,
-  useDonations,
-  useEndpointKeyChoices,
-} from '../features/economy/queries';
+import { OwnerDonationKeys, OwnerDonationsPanel } from '../features/economy/OwnerDonationsPanel';
+import { useCharityCapability, useDonation } from '../features/economy/queries';
 import '../features/economy/economy.css';
 
 function validDonationID(value: string): boolean {
@@ -30,6 +25,10 @@ function validDonationID(value: string): boolean {
 
 function DonationDetailContent({ donationID }: { donationID: string }) {
   const { t } = useTranslation();
+  const session = useUserSession();
+  const accountID = session.data?.user.id;
+  const location = useLocation();
+  const returnTo = listReturnPath(location.state, '/charity');
   const valid = validDonationID(donationID);
   const donation = useDonation(valid ? donationID : undefined, valid);
   return (
@@ -39,7 +38,11 @@ function DonationDetailContent({ donationID }: { donationID: string }) {
         title={t('user.charity.donationDetailTitle')}
         description={t('user.charity.donationDetailDescription')}
         icon="charity"
-        back={<Link to="/charity?tab=donations">{t('user.charity.backToDonations')}</Link>}
+        back={
+          <Link to={returnTo === '/charity' ? '/charity?tab=donations' : returnTo}>
+            {t('user.charity.backToDonations')}
+          </Link>
+        }
       />
       {!valid ? (
         <EmptyState
@@ -68,7 +71,24 @@ function DonationDetailContent({ donationID }: { donationID: string }) {
       ) : (
         <>
           <CharitySafetyNotice />
-          <DonationCard donation={donation.data} showDetailLink={false} />
+          <DonationCard
+            key={accountID}
+            donation={donation.data}
+            accountID={accountID}
+            showDetailLink={false}
+            disabled={donation.isFetching}
+            keysContent={
+              accountID ? (
+                <OwnerDonationKeys
+                  key={`${accountID}:${donationID}`}
+                  accountID={accountID}
+                  donationID={donationID}
+                />
+              ) : (
+                <LoadingState />
+              )
+            }
+          />
         </>
       )}
     </div>
@@ -77,7 +97,7 @@ function DonationDetailContent({ donationID }: { donationID: string }) {
 
 function CharityContent() {
   const { t, i18n } = useTranslation();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
   const tab =
     searchParams.get('tab') === 'donations'
       ? 'donations'
@@ -85,20 +105,17 @@ function CharityContent() {
         ? 'donate'
         : 'models';
   const selectTab = (value: string) => {
-    const next = new URLSearchParams(searchParams);
-    next.set('tab', value);
-    setSearchParams(next);
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set('tab', value);
+      return next;
+    });
   };
   const session = useUserSession();
   const publicConfig = usePublicConfig();
   const capability = useCharityCapability();
-  const donations = useDonations();
   const accountID = session.data?.user.id;
   const intake = capability.data?.donationIntake;
-  const choices = useEndpointKeyChoices(
-    donations.data ?? [],
-    tab === 'donate' && intake === 'open' && donations.isSuccess,
-  );
   const configuredDonationNotice = (i18n.resolvedLanguage ?? i18n.language).startsWith('zh')
     ? publicConfig.data?.charityDonationNoticeZh
     : publicConfig.data?.charityDonationNoticeEn;
@@ -145,48 +162,16 @@ function CharityContent() {
       <section
         hidden={tab !== 'models'}
         className="economy-model-workspace"
-        aria-label={t('user.charity.availableModels')}
+        aria-label={t('user.charity.catalog.modelsList')}
       >
-        {capability.isPending ? (
-          <LoadingState />
-        ) : capability.error ? (
-          <ErrorState error={capability.error} onRetry={() => void capability.refetch()} />
-        ) : capability.data ? (
-          <CharityCapabilityPanel capability={capability.data} />
-        ) : (
-          <LoadingState />
-        )}
+        <CharityCatalogPanel key={accountID ?? 'no-account'} accountID={accountID} />
         <CharitySafetyNotice />
       </section>
       <section hidden={tab !== 'donations'} aria-label={t('user.charity.donationsTitle')}>
-        {donations.isPending ? (
-          <LoadingState />
-        ) : donations.error ? (
-          isDonationCollectionIncomplete(donations.error) ? (
-            <DonationOverviewPartialError onRetry={() => void donations.refetch()} />
-          ) : (
-            <ErrorState error={donations.error} onRetry={() => void donations.refetch()} />
-          )
-        ) : !donations.data ? (
-          <LoadingState />
-        ) : donations.data.length === 0 ? (
-          <EmptyState
-            title={t('user.charity.noDonations')}
-            body={t('user.charity.noDonationsBody')}
-            action={
-              intake === 'open' ? (
-                <button
-                  className="btn btn-primary"
-                  type="button"
-                  onClick={() => selectTab('donate')}
-                >
-                  {t('user.charity.submitDonation')}
-                </button>
-              ) : undefined
-            }
-          />
+        {accountID ? (
+          <OwnerDonationsPanel accountID={accountID} enabled={tab === 'donations'} />
         ) : (
-          <DonationKeyOverview donations={donations.data} />
+          <LoadingState />
         )}
       </section>
       <section
@@ -201,25 +186,13 @@ function CharityContent() {
         ) : (
           <LoadingState />
         )}
-        {intake === 'open' && donations.isSuccess && accountID ? (
-          <>
-            {choices.isPending ? (
-              <LoadingState />
-            ) : choices.error ? (
-              <ErrorState error={choices.error} onRetry={() => void choices.refetch()} />
-            ) : (
-              <DonationComposer
-                key={accountID}
-                choices={choices.data}
-                draftNamespace={accountID}
-                notice={configuredDonationNotice}
-              />
-            )}
-          </>
-        ) : donations.error ? (
-          <ErrorState error={donations.error} onRetry={() => void donations.refetch()} />
-        ) : donations.isPending ? (
-          <LoadingState />
+        {intake === 'open' && accountID ? (
+          <DonationComposer
+            key={accountID}
+            draftNamespace={accountID}
+            notice={configuredDonationNotice}
+            enabled={tab === 'donate' && !capability.error && !capability.isFetching}
+          />
         ) : null}
       </section>
     </div>

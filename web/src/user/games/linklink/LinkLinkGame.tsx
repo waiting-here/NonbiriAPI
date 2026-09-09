@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
-import { Card, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
+import { Card, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { useGameCopy } from '../copy';
-import { GameRulesButton, GameRulesDialog, type GameRulesSection } from '../common/GameRulesDialog';
+import { GameRulesDialog, type GameRulesSection } from '../common/GameRulesDialog';
 import {
   createIdempotencyKey,
   createOpaqueID,
@@ -15,6 +14,9 @@ import {
 } from '../common/request';
 import { creditsToMilli, formatCredits } from '../common/strict';
 import { useAuthoritativeCountdown } from '../common/countdown';
+import { useGameSound } from '../common/useGameSound';
+import { GameHeader } from '../common/GameHeader';
+import { GameMoney } from '../common/GameMoney';
 import { LINKLINK_SPECS, type LinkLinkSpec } from '../common/types';
 import { gameKeys, useGamesSnapshot } from '../common/snapshot';
 import {
@@ -56,15 +58,6 @@ function isLinkLinkSummary(value: LinkLinkCurrent | undefined): value is LinkLin
   return value?.kind === 'summary';
 }
 
-function Money({ value }: { readonly value: string }) {
-  const { text } = useGameCopy();
-  return (
-    <span className="game-money">
-      {formatCredits(value)} <span className="game-money__unit">{text('common.credits')}</span>
-    </span>
-  );
-}
-
 function LinkLinkRules({
   open,
   onClose,
@@ -73,40 +66,12 @@ function LinkLinkRules({
   readonly onClose: () => void;
 }) {
   const { text } = useGameCopy();
-  const sections: readonly GameRulesSection[] = [
-    {
-      title: text('linklink.rules.goalTitle'),
-      paragraphs: [text('linklink.rules.goalBody')],
-    },
-    {
-      title: text('linklink.rules.boardTitle'),
-      paragraphs: [text('linklink.rules.boardBody')],
-    },
-    {
-      title: text('linklink.rules.pathTitle'),
-      paragraphs: [text('linklink.rules.pathBody')],
-    },
-    {
-      title: text('linklink.rules.scoreTitle'),
-      paragraphs: [text('linklink.rules.scoreBody')],
-    },
-    {
-      title: text('linklink.rules.shuffleTitle'),
-      paragraphs: [text('linklink.rules.shuffleBody')],
-    },
-    {
-      title: text('linklink.rules.clockTitle'),
-      paragraphs: [text('linklink.rules.clockBody')],
-    },
-    {
-      title: text('linklink.rules.recoveryTitle'),
-      paragraphs: [text('linklink.rules.recoveryBody')],
-    },
-    {
-      title: text('linklink.rules.abandonTitle'),
-      paragraphs: [text('linklink.rules.abandonBody')],
-    },
-  ];
+  const sections: readonly GameRulesSection[] = (
+    ['goal', 'board', 'path', 'score', 'shuffle', 'clock', 'recovery', 'abandon'] as const
+  ).map((section) => ({
+    title: text(`linklink.rules.${section}Title`),
+    paragraphs: [text(`linklink.rules.${section}Body`)],
+  }));
   return (
     <GameRulesDialog
       open={open}
@@ -185,6 +150,7 @@ function LinkBoard({
               aria-colindex={tile.col + 1}
               aria-selected={isSelected}
               className={`linklink-tile${isSelected ? ' is-selected' : ''}${tile.removed ? ' is-removed' : ''}${vanishing ? ' is-vanishing' : ''}`}
+              style={{ gridRow: tile.row + 1, gridColumn: tile.col + 1 }}
               disabled={tile.removed || busy}
               tabIndex={!tile.removed && key === effectiveFocus ? 0 : -1}
               key={key}
@@ -274,10 +240,38 @@ function SummaryCard({
 
 export function LinkLinkGame() {
   const { text } = useGameCopy();
+  const sound = useGameSound('linklink');
+  const playSound = sound.play;
   const queryClient = useQueryClient();
   const snapshot = useGamesSnapshot();
   const maintenance = isMaintenance(snapshot.error);
   const current = useLinkLinkCurrent(Boolean(snapshot.data));
+  const previousSoundState = useRef<{
+    readonly value: LinkLinkCurrent | undefined;
+    readonly fetched: boolean;
+  } | null>(null);
+  useEffect(() => {
+    const previous = previousSoundState.current;
+    previousSoundState.current = { value: current.data, fetched: current.isFetchedAfterMount };
+    const before = previous?.value;
+    const next = current.data;
+    if (
+      !previous?.fetched ||
+      !current.isFetchedAfterMount ||
+      before?.kind !== 'active' ||
+      !next ||
+      before.sessionID !== next.sessionID
+    )
+      return;
+    if (next.kind === 'summary') {
+      playSound(next.terminalReason === 'completed' ? 'win' : 'end');
+    } else if (
+      BigInt(next.revision) > BigInt(before.revision) &&
+      next.pairsRemoved > before.pairsRemoved
+    ) {
+      playSound(boardWasRearranged(before, next) ? 'link_shuffle' : 'link_match');
+    }
+  }, [current.data, current.isFetchedAfterMount, playSound]);
   const [selectedSpec, setSelectedSpec] = useState<LinkLinkSpec>('6x8');
   const [rulesOpen, setRulesOpen] = useState(false);
   const [review, setReview] = useState(false);
@@ -435,7 +429,8 @@ export function LinkLinkGame() {
   );
 
   const chooseTile = (coordinate: LinkLinkCoordinate) => {
-    if (!state || mutationState !== 'idle') return;
+    if (!state || mutationState !== 'idle' || lease !== 'active') return;
+    playSound('select');
     if (!selected) {
       setSelection({ identity: `${state.sessionID}:${state.revision}`, coordinate });
       return;
@@ -468,25 +463,13 @@ export function LinkLinkGame() {
   );
   const canStart = current.isSuccess && gateOpen && affordable;
   const closeRules = useCallback(() => setRulesOpen(false), []);
-  const rulesButton = (
-    <GameRulesButton label={text('common.rulesButton')} onClick={() => setRulesOpen(true)} />
-  );
+  const header = <GameHeader game="linklink" sound={sound} onRules={() => setRulesOpen(true)} />;
   const rulesDialog = <LinkLinkRules open={rulesOpen} onClose={closeRules} />;
 
   if (snapshot.isPending)
     return (
       <main className="game-page linklink-page">
-        <PageHeader
-          back={
-            <Link className="game-back-link" to="/games">
-              {text('common.back')}
-            </Link>
-          }
-          eyebrow={text('linklink.eyebrow')}
-          title={text('linklink.title')}
-          description={text('linklink.description')}
-          actions={rulesButton}
-        />
+        {header}
         <LoadingState label={text('common.loading')} />
         {rulesDialog}
       </main>
@@ -494,17 +477,7 @@ export function LinkLinkGame() {
   if (snapshot.error && !maintenance)
     return (
       <main className="game-page linklink-page">
-        <PageHeader
-          back={
-            <Link className="game-back-link" to="/games">
-              {text('common.back')}
-            </Link>
-          }
-          eyebrow={text('linklink.eyebrow')}
-          title={text('linklink.title')}
-          description={text('linklink.description')}
-          actions={rulesButton}
-        />
+        {header}
         <ErrorState error={snapshot.error} onRetry={() => void snapshot.refetch()} />
         {rulesDialog}
       </main>
@@ -512,17 +485,7 @@ export function LinkLinkGame() {
   if ((!snapshot.data || maintenance) && !state)
     return (
       <main className="game-page linklink-page">
-        <PageHeader
-          back={
-            <Link className="game-back-link" to="/games">
-              {text('common.back')}
-            </Link>
-          }
-          eyebrow={text('linklink.eyebrow')}
-          title={text('linklink.title')}
-          description={text('linklink.description')}
-          actions={rulesButton}
-        />
+        {header}
         <p className="game-inline-notice game-inline-notice--warning">
           {text('common.maintenance')}
         </p>
@@ -532,16 +495,11 @@ export function LinkLinkGame() {
 
   return (
     <main className={`game-page linklink-page${state ? ' is-playing' : ''}`}>
-      <PageHeader
-        back={
-          <Link className="game-back-link" to="/games">
-            {text('common.back')}
-          </Link>
-        }
-        eyebrow={state ? undefined : text('linklink.eyebrow')}
-        title={text(state ? 'linklink.eyebrow' : 'linklink.title')}
-        description={state ? undefined : text('linklink.description')}
-        actions={rulesButton}
+      <GameHeader
+        game="linklink"
+        sound={sound}
+        onRules={() => setRulesOpen(true)}
+        compact={Boolean(state)}
       />
       {maintenance ? (
         <p className="game-inline-notice game-inline-notice--warning">
@@ -652,7 +610,7 @@ export function LinkLinkGame() {
                   onClick={() => setSelectedSpec(value)}
                 >
                   <strong>{text('linklink.spec', { spec: value })}</strong>
-                  <span>{valueSpec ? <Money value={valueSpec.price} /> : '—'}</span>
+                  <span>{valueSpec ? <GameMoney value={valueSpec.price} /> : '—'}</span>
                   <span>
                     {valueSpec ? text('linklink.seconds', { seconds: valueSpec.seconds }) : '—'}
                   </span>
@@ -700,7 +658,7 @@ export function LinkLinkGame() {
       >
         <p>
           <strong>{text('linklink.spec', { spec: selectedSpec })}</strong> ·{' '}
-          {spec ? <Money value={spec.price} /> : null}
+          {spec ? <GameMoney value={spec.price} /> : null}
         </p>
       </ConfirmDialog>
       {abandonReview && state ? (

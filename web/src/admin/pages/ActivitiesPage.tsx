@@ -1,6 +1,8 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
+import { clearStationSession } from '@shared/charityManagement';
 import {
   Card,
   EmptyState,
@@ -9,16 +11,20 @@ import {
   PageHeader,
   StatusBadge,
 } from '@shared/components/States';
-import { CursorPagination } from '@shared/operations/CursorPagination';
-import { useCursorPager } from '@shared/operations/useCursorPager';
+import { TimeInput } from '@shared/components/TimeInput';
+import { PagePagination } from '@shared/operations/PagePagination';
+import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
+import { isForbidden, isUnauthorized } from '@shared/query/http';
 import { formatDateTime } from '@shared/utils/datetime';
 import { amount } from '@shared/operations/wire';
 import {
+  createTimeDraft,
+  timeDraftValue,
+  type TimeDraft,
+  type TimeDraftUpdate,
+} from '@shared/time';
+import {
   adjustPool,
-  adminEconomyKeys,
-  getActivitiesConfig,
-  getAdminThursday,
-  getPools,
   patchActivitiesConfig,
   putThursdayNext,
   resumeThursday,
@@ -27,6 +33,13 @@ import {
   type Period,
   type Pool,
 } from '../features/operations/economy';
+import {
+  adminPageKeys,
+  getAdminActivitiesConfig,
+  getAdminPoolsPage,
+  getAdminThursday,
+} from '../features/operations/adminPages';
+import { useAdminSession } from '../data';
 import { useRetainedOperation } from '../features/operations/useRetainedOperation';
 import '@shared/operations/operations.css';
 
@@ -40,7 +53,7 @@ function validPositiveAmount(value: string): boolean {
 
 interface PeriodDraft {
   period_key: string;
-  opens_at: string;
+  opens_at: TimeDraft;
   literature: string;
   entry: string;
   per_user_limit: string;
@@ -49,11 +62,14 @@ interface PeriodDraft {
   next_pool: string;
 }
 
-type PeriodMutation = PeriodDraft & { expected_revision: string };
+type PeriodMutation = Omit<PeriodDraft, 'opens_at'> & {
+  opens_at: number;
+  expected_revision: string;
+};
 
 const emptyPeriodDraft = (): PeriodDraft => ({
   period_key: '',
-  opens_at: '',
+  opens_at: createTimeDraft(null, 'minute'),
   literature: '',
   entry: '',
   per_user_limit: '1',
@@ -62,18 +78,11 @@ const emptyPeriodDraft = (): PeriodDraft => ({
   next_pool: '0',
 });
 
-function localDateTime(seconds: number): string {
-  const instant = new Date(seconds * 1_000);
-  return new Date(instant.getTime() - instant.getTimezoneOffset() * 60_000)
-    .toISOString()
-    .slice(0, 16);
-}
-
 const draftForPeriod = (period: Period | null): PeriodDraft =>
   period
     ? {
         period_key: period.period_key,
-        opens_at: localDateTime(period.opens_at),
+        opens_at: createTimeDraft(period.opens_at, 'minute'),
         literature: period.literature,
         entry: period.entry,
         per_user_limit: String(period.per_user_limit),
@@ -83,23 +92,53 @@ const draftForPeriod = (period: Period | null): PeriodDraft =>
       }
     : emptyPeriodDraft();
 
-export function ActivitiesPage() {
+interface ActivitiesPageContentProps {
+  account: string;
+  scopeReady: boolean;
+  sessionError: unknown;
+}
+
+function ActivitiesPageContent({ account, scopeReady, sessionError }: ActivitiesPageContentProps) {
   const { t } = useTranslation();
-  const poolPager = useCursorPager();
+  const client = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchState();
+  const rawPoolType = searchParams.get('pool_type');
+  const poolType: '' | Pool['pool_type'] =
+    rawPoolType === 'welfare' || rawPoolType === 'thursday' ? rawPoolType : '';
+  const rawPoolState = searchParams.get('state');
+  const poolState: '' | Pool['state'] =
+    rawPoolState === 'open' || rawPoolState === 'closed' ? rawPoolState : '';
+  const poolPager = useUrlPagePager({
+    station: 'admin',
+    listType: 'admin.pools',
+    scopeKey: account,
+    scopeReady,
+    resetKey: `${poolType}|${poolState}`,
+  });
   const config = useQuery({
-    queryKey: adminEconomyKeys.activities,
-    queryFn: getActivitiesConfig,
+    queryKey: adminPageKeys.activitiesConfig(account),
+    queryFn: ({ signal }) => getAdminActivitiesConfig(signal),
     retry: false,
+    enabled: scopeReady,
   });
   const thursday = useQuery({
-    queryKey: adminEconomyKeys.thursday,
-    queryFn: getAdminThursday,
+    queryKey: adminPageKeys.thursday(account),
+    queryFn: ({ signal }) => getAdminThursday(signal),
     retry: false,
+    enabled: scopeReady,
   });
   const pools = useQuery({
-    queryKey: adminEconomyKeys.pools('', '', poolPager.cursor),
-    queryFn: () => getPools('', '', poolPager.cursor),
+    queryKey: adminPageKeys.pools(account, poolType, poolState, poolPager.page, poolPager.pageSize),
+    queryFn: ({ signal }) =>
+      getAdminPoolsPage(poolType, poolState, poolPager.page, poolPager.pageSize, signal),
     retry: false,
+    enabled: scopeReady,
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[3] === account &&
+      previousQuery.queryKey[4] === poolType &&
+      previousQuery.queryKey[5] === poolState
+        ? previous
+        : undefined,
   });
   const [configOverride, setConfigOverride] = useState<ActivitiesConfig | null>(null);
   const [periodOverride, setPeriodOverride] = useState<PeriodDraft | null>(null);
@@ -116,6 +155,7 @@ export function ActivitiesPage() {
   const authorityPeriodRevision = thursday.data?.period?.revision ?? (thursday.data ? 'none' : '');
   const configDraft = config.data ? (configOverride ? configOverride : config.data) : null;
   const periodDraft = periodOverride ?? draftForPeriod(period);
+  const opensAt = timeDraftValue(periodDraft.opens_at);
   const configUnchanged = JSON.stringify(configDraft) === JSON.stringify(config.data);
   const configStale = configDraft?.revision !== config.data?.revision;
   const configDependency =
@@ -150,7 +190,7 @@ export function ActivitiesPage() {
         {
           expected_revision: input.expected_revision,
           period_key: input.period_key,
-          opens_at: Math.floor(Date.parse(input.opens_at) / 1_000),
+          opens_at: input.opens_at,
           literature: input.literature,
           entry: input.entry,
           per_user_limit: Number(input.per_user_limit),
@@ -194,13 +234,29 @@ export function ActivitiesPage() {
     !thursday.isFetching &&
     thursdayMutationRevision(config.data, period) !== null &&
     (!periodNeedsConfigRevision || (!config.error && !config.isFetching));
-  const poolAuthorityBlocked = Boolean(pools.error) || pools.isFetching;
+  const poolAuthorityBlocked = !scopeReady || Boolean(pools.error) || pools.isFetching;
   const currentPoolDecreaseBlocked =
     adjustment.direction === 'decrease' &&
     period?.current_pool_id === adjustment.poolId &&
     (period.state === 'open' || period.state === 'settling');
   const editPeriod = (patch: Partial<PeriodDraft>) => {
     setPeriodOverride((current) => ({ ...(current ?? periodDraft), ...patch }));
+  };
+  const editPeriodTime = (update: TimeDraftUpdate) => {
+    setPeriodOverride((current) => {
+      const base = current ?? periodDraft;
+      const opensAt = update(base.opens_at);
+      return opensAt === base.opens_at ? current : { ...base, opens_at: opensAt };
+    });
+  };
+  const submitPeriod = () => {
+    const nextOpensAt = timeDraftValue(periodDraft.opens_at);
+    const revision = thursdayMutationRevision(config.data, period);
+    if (nextOpensAt === undefined || nextOpensAt === null || revision === null) return;
+    savePeriod.mutate(
+      { ...periodDraft, opens_at: nextOpensAt, expected_revision: revision },
+      { onSuccess: () => setPeriodOverride(null) },
+    );
   };
   const editConfig = (next: ActivitiesConfig) => {
     setConfigOverride(next);
@@ -220,6 +276,45 @@ export function ActivitiesPage() {
     open: t('admin.activities.states.pool.open'),
     closed: t('admin.activities.states.pool.closed'),
   };
+  useEffect(() => {
+    if (
+      isUnauthorized(config.error) ||
+      isForbidden(config.error) ||
+      isUnauthorized(thursday.error) ||
+      isForbidden(thursday.error) ||
+      isUnauthorized(pools.error) ||
+      isForbidden(pools.error)
+    ) {
+      clearStationSession(client, 'admin');
+    }
+  }, [client, config.error, pools.error, thursday.error]);
+  const commitPoolFilters = (nextType: '' | Pool['pool_type'], nextState: '' | Pool['state']) => {
+    setAdjustment({
+      poolId: '',
+      revision: '',
+      authorityRevision: '',
+      direction: 'increase',
+      amount: '',
+      reason: '',
+      confirmed: false,
+    });
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (nextType) next.set('pool_type', nextType);
+      else next.delete('pool_type');
+      if (nextState) next.set('state', nextState);
+      else next.delete('state');
+      next.delete('page');
+      next.set('page', '1');
+      next.delete('page_size');
+      next.set('page_size', String(poolPager.pageSize));
+      return next;
+    });
+  };
+  const authorityError = [sessionError, config.error, thursday.error, pools.error].find(
+    (error) => isUnauthorized(error) || isForbidden(error),
+  );
+  if (authorityError) return <ErrorState error={authorityError} />;
   return (
     <div className="page ops-page">
       <PageHeader
@@ -228,7 +323,9 @@ export function ActivitiesPage() {
       />
       <Card>
         <h2>{t('admin.activities.config.title')}</h2>
-        {config.error ? (
+        {sessionError ? (
+          <ErrorState error={sessionError} />
+        ) : config.error ? (
           <ErrorState error={config.error} onRetry={() => void config.refetch()} />
         ) : config.isPending || !configDraft ? (
           <LoadingState />
@@ -240,7 +337,7 @@ export function ActivitiesPage() {
                 <input
                   type="checkbox"
                   checked={configDraft.master_enabled}
-                  disabled={saveConfig.isPending}
+                  disabled={!scopeReady || saveConfig.isPending}
                   onChange={(event) =>
                     editConfig({ ...configDraft, master_enabled: event.target.checked })
                   }
@@ -251,7 +348,7 @@ export function ActivitiesPage() {
                 <input
                   type="checkbox"
                   checked={configDraft.welfare.enabled}
-                  disabled={saveConfig.isPending}
+                  disabled={!scopeReady || saveConfig.isPending}
                   onChange={(event) =>
                     editConfig({
                       ...configDraft,
@@ -265,7 +362,7 @@ export function ActivitiesPage() {
                 <span>{t('admin.activities.config.welfareThreshold')}</span>
                 <input
                   value={configDraft.welfare.threshold}
-                  disabled={saveConfig.isPending}
+                  disabled={!scopeReady || saveConfig.isPending}
                   onChange={(event) =>
                     editConfig({
                       ...configDraft,
@@ -278,7 +375,7 @@ export function ActivitiesPage() {
                 <span>{t('admin.activities.config.welfareCap')}</span>
                 <input
                   value={configDraft.welfare.cap}
-                  disabled={saveConfig.isPending}
+                  disabled={!scopeReady || saveConfig.isPending}
                   onChange={(event) =>
                     editConfig({
                       ...configDraft,
@@ -291,7 +388,7 @@ export function ActivitiesPage() {
                 <input
                   type="checkbox"
                   checked={configDraft.thursday.enabled}
-                  disabled={saveConfig.isPending}
+                  disabled={!scopeReady || saveConfig.isPending}
                   onChange={(event) =>
                     editConfig({ ...configDraft, thursday: { enabled: event.target.checked } })
                   }
@@ -314,7 +411,11 @@ export function ActivitiesPage() {
               className="btn btn-primary"
               type="button"
               disabled={
-                saveConfig.isPending || configUnchanged || configStale || Boolean(configDependency)
+                !scopeReady ||
+                saveConfig.isPending ||
+                configUnchanged ||
+                configStale ||
+                Boolean(configDependency)
               }
               onClick={() =>
                 saveConfig.mutate(configDraft, { onSuccess: () => setConfigOverride(null) })
@@ -326,7 +427,7 @@ export function ActivitiesPage() {
               <button
                 type="button"
                 className="btn btn-secondary"
-                disabled={saveConfig.isPending}
+                disabled={!scopeReady || saveConfig.isPending}
                 onClick={() => setConfigOverride(null)}
               >
                 {t('common.cancel')}
@@ -337,7 +438,9 @@ export function ActivitiesPage() {
       </Card>
       <Card>
         <h2>{t('admin.activities.thursday.title')}</h2>
-        {thursday.isPending ? (
+        {sessionError ? (
+          <ErrorState error={sessionError} />
+        ) : thursday.isPending ? (
           <LoadingState />
         ) : thursday.error ? (
           <ErrorState error={thursday.error} onRetry={() => void thursday.refetch()} />
@@ -383,7 +486,7 @@ export function ActivitiesPage() {
               <button
                 className="btn btn-danger"
                 type="button"
-                disabled={resume.isPending}
+                disabled={!scopeReady || resume.isPending}
                 onClick={() => resume.mutate({ id: period.id, revision: period.revision })}
               >
                 {t('admin.activities.thursday.resume')}
@@ -403,110 +506,154 @@ export function ActivitiesPage() {
             ? t('admin.activities.period.updateTitle')
             : t('admin.activities.period.createTitle')}
         </h2>
-        <p>
-          {periodLocked
-            ? t('admin.activities.period.lockedHint')
-            : t('admin.activities.period.authorityHint')}
-        </p>
-        <div className="ops-field-grid">
-          <label>
-            <span>{t('admin.activities.period.key')}</span>
-            <input
-              value={periodDraft.period_key}
-              onChange={(event) => editPeriod({ period_key: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>{t('admin.activities.period.opensAt')}</span>
-            <input
-              type="datetime-local"
-              value={periodDraft.opens_at}
-              onChange={(event) => editPeriod({ opens_at: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>{t('admin.activities.period.entry')}</span>
-            <input
-              value={periodDraft.entry}
-              onChange={(event) => editPeriod({ entry: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>{t('admin.activities.period.perUserLimit')}</span>
-            <input
-              type="number"
-              min="1"
-              max="1000"
-              value={periodDraft.per_user_limit}
-              onChange={(event) => editPeriod({ per_user_limit: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>{t('admin.activities.period.platformBp')}</span>
-            <input
-              type="number"
-              min="0"
-              max="9999"
-              value={periodDraft.platform}
-              onChange={(event) => editPeriod({ platform: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>{t('admin.activities.period.welfareBp')}</span>
-            <input
-              type="number"
-              min="0"
-              max="9999"
-              value={periodDraft.welfare}
-              onChange={(event) => editPeriod({ welfare: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>{t('admin.activities.period.nextPoolBp')}</span>
-            <input
-              type="number"
-              min="0"
-              max="9999"
-              value={periodDraft.next_pool}
-              onChange={(event) => editPeriod({ next_pool: event.target.value })}
-            />
-          </label>
-        </div>
-        <label className="ops-form-field">
-          <span>{t('admin.activities.period.literature')}</span>
-          <textarea
-            value={periodDraft.literature}
-            onChange={(event) => editPeriod({ literature: event.target.value })}
-          />
-        </label>
-        {savePeriod.error ? <ErrorState error={savePeriod.error} /> : null}
-        <button
-          className="btn btn-primary"
-          type="button"
-          disabled={
-            !periodAuthorityReady ||
-            periodLocked ||
-            savePeriod.isPending ||
-            !periodDraft.period_key ||
-            !periodDraft.opens_at ||
-            !periodDraft.literature ||
-            !validPositiveAmount(periodDraft.entry)
-          }
-          onClick={() => {
-            const revision = thursdayMutationRevision(config.data, period);
-            if (revision !== null)
-              savePeriod.mutate(
-                { ...periodDraft, expected_revision: revision },
-                { onSuccess: () => setPeriodOverride(null) },
-              );
-          }}
-        >
-          {t('admin.activities.period.save')}
-        </button>
+        {sessionError ? (
+          <ErrorState error={sessionError} />
+        ) : !scopeReady ? (
+          <LoadingState />
+        ) : (
+          <>
+            <p>
+              {periodLocked
+                ? t('admin.activities.period.lockedHint')
+                : t('admin.activities.period.authorityHint')}
+            </p>
+            <fieldset className="ops-field-grid" disabled={savePeriod.isPending}>
+              <label>
+                <span>{t('admin.activities.period.key')}</span>
+                <input
+                  value={periodDraft.period_key}
+                  onChange={(event) => editPeriod({ period_key: event.target.value })}
+                />
+              </label>
+              <TimeInput
+                station="admin"
+                label={t('admin.activities.period.opensAt')}
+                draft={periodDraft.opens_at}
+                onChange={editPeriodTime}
+              />
+              <label>
+                <span>{t('admin.activities.period.entry')}</span>
+                <input
+                  value={periodDraft.entry}
+                  onChange={(event) => editPeriod({ entry: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>{t('admin.activities.period.perUserLimit')}</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="1000"
+                  value={periodDraft.per_user_limit}
+                  onChange={(event) => editPeriod({ per_user_limit: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>{t('admin.activities.period.platformBp')}</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="9999"
+                  value={periodDraft.platform}
+                  onChange={(event) => editPeriod({ platform: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>{t('admin.activities.period.welfareBp')}</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="9999"
+                  value={periodDraft.welfare}
+                  onChange={(event) => editPeriod({ welfare: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>{t('admin.activities.period.nextPoolBp')}</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="9999"
+                  value={periodDraft.next_pool}
+                  onChange={(event) => editPeriod({ next_pool: event.target.value })}
+                />
+              </label>
+            </fieldset>
+            <label className="ops-form-field">
+              <span>{t('admin.activities.period.literature')}</span>
+              <textarea
+                disabled={savePeriod.isPending}
+                value={periodDraft.literature}
+                onChange={(event) => editPeriod({ literature: event.target.value })}
+              />
+            </label>
+            {savePeriod.error ? <ErrorState error={savePeriod.error} /> : null}
+            <button
+              className="btn btn-primary"
+              type="button"
+              disabled={
+                !scopeReady ||
+                !periodAuthorityReady ||
+                periodLocked ||
+                savePeriod.isPending ||
+                !periodDraft.period_key ||
+                opensAt === undefined ||
+                opensAt === null ||
+                !periodDraft.literature ||
+                !validPositiveAmount(periodDraft.entry)
+              }
+              onClick={submitPeriod}
+            >
+              {t('admin.activities.period.save')}
+            </button>
+            {periodOverride ? (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={!scopeReady || savePeriod.isPending}
+                onClick={() => setPeriodOverride(null)}
+              >
+                {t('common.cancel')}
+              </button>
+            ) : null}
+          </>
+        )}
       </Card>
       <Card>
         <h2>{t('admin.activities.pools.title')}</h2>
-        {pools.isPending ? (
+        <div className="ops-toolbar">
+          <label>
+            <span>{t('admin.activities.pools.filterType')}</span>
+            <select
+              value={poolType}
+              disabled={!scopeReady}
+              onChange={(event) =>
+                commitPoolFilters(event.target.value as '' | Pool['pool_type'], poolState)
+              }
+            >
+              <option value="">{t('admin.activities.pools.allTypes')}</option>
+              <option value="welfare">{poolTypeLabels.welfare}</option>
+              <option value="thursday">{poolTypeLabels.thursday}</option>
+            </select>
+          </label>
+          <label>
+            <span>{t('admin.activities.pools.filterState')}</span>
+            <select
+              value={poolState}
+              disabled={!scopeReady}
+              onChange={(event) =>
+                commitPoolFilters(poolType, event.target.value as '' | Pool['state'])
+              }
+            >
+              <option value="">{t('admin.activities.pools.allStates')}</option>
+              <option value="open">{poolStateLabels.open}</option>
+              <option value="closed">{poolStateLabels.closed}</option>
+            </select>
+          </label>
+        </div>
+        {sessionError ? (
+          <ErrorState error={sessionError} />
+        ) : pools.isPending ? (
           <LoadingState />
         ) : pools.error ? (
           <ErrorState error={pools.error} onRetry={() => void pools.refetch()} />
@@ -516,7 +663,8 @@ export function ActivitiesPage() {
             body={t('admin.activities.pools.emptyBody')}
           />
         ) : (
-          <>
+          <div aria-busy={pools.isFetching}>
+            {pools.isFetching ? <LoadingState /> : null}
             <div className="ops-table-scroll">
               <table className="ops-table ops-table--responsive">
                 <thead>
@@ -550,7 +698,7 @@ export function ActivitiesPage() {
                         <button
                           className="btn btn-secondary"
                           type="button"
-                          disabled={pool.state !== 'open'}
+                          disabled={!scopeReady || pool.state !== 'open'}
                           onClick={() =>
                             setAdjustment({
                               poolId: pool.id,
@@ -571,16 +719,19 @@ export function ActivitiesPage() {
                 </tbody>
               </table>
             </div>
-            <CursorPagination
-              page={poolPager.page}
-              nextCursor={pools.data.next_cursor}
-              onPrevious={poolPager.previous}
-              onNext={poolPager.next}
-            />
-          </>
+          </div>
         )}
+        {scopeReady && !sessionError && !pools.error && pools.data ? (
+          <PagePagination
+            metadata={pools.data.pagination}
+            requestedPage={poolPager.page}
+            busy={pools.isFetching}
+            onPageChange={poolPager.setPage}
+            onPageSizeChange={poolPager.setPageSize}
+          />
+        ) : null}
       </Card>
-      {adjustment.poolId ? (
+      {scopeReady && adjustment.poolId ? (
         <Card className={adjustment.direction === 'decrease' ? 'ops-danger' : ''}>
           <h2>{t('admin.activities.adjustment.title')}</h2>
           <p>
@@ -703,5 +854,19 @@ export function ActivitiesPage() {
         </Card>
       ) : null}
     </div>
+  );
+}
+
+export function ActivitiesPage() {
+  const session = useAdminSession();
+  const account = session.data?.admin.username;
+  const scopeReady = Boolean(account) && !session.error;
+  return (
+    <ActivitiesPageContent
+      key={account ?? 'anonymous'}
+      account={account ?? ''}
+      scopeReady={scopeReady}
+      sessionError={session.error}
+    />
   );
 }

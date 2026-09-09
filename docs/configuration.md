@@ -30,7 +30,7 @@ The database directory and file hold encrypted upstream credentials and private 
 
 ## Runtime administrator settings
 
-The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values below describe `v1.0.0-beta.1`. A fresh Generation 2 database explicitly seeds maintenance on and registration, activities, charity, donation intake, and all games off; these safety seeds take precedence over generic code fallbacks.
+The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values below describe the unreleased `1.0.0-beta.2` candidate. A fresh Generation 2 database explicitly seeds maintenance on and registration, activities, charity, donation intake, and all games off; these safety seeds take precedence over generic code fallbacks.
 
 | Key | Type / range | Default and effect |
 | --- | --- | --- |
@@ -59,7 +59,7 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | `charity_enabled` | boolean | `false`; charity system master switch — while off, no new charity routing happens and the price table is hidden; in-flight reservations still settle |
 | `donation_accept_enabled` | boolean | `false`; gates new donation submissions only; review/routing of existing donations is unaffected |
 | `charity_token_reserve_milli` | nullable canonical positive decimal milli-credit string | **null (default) = not configured** — distinct from an explicit value; while unset, per-token charity models cannot be enabled or routed (fail closed); PATCH rejects `null` and non-positive values |
-| `rpm_ban_threshold` | integer `[0,4096]` | `5`; count of effective per-user RPM denials before an automatic 24-hour ban; `0` disables |
+| `rpm_ban_threshold` | integer `[0,4096]` | `5`; charity requests denied by the site's per-user RPM limit before an automatic ban; personal calls, global limits, shared key limits and upstream `429` do not count; `0` disables |
 | `rpm_ban_window_seconds` | integer `[1,316224000]` | `86400`; in-memory RPM violation window |
 | `rpm_ban_duration_seconds` | integer `[1,316224000]` | `86400`; automatic ban duration |
 | `charity_min_chars` | integer `[0,1048576]` | `20`; counted Unicode message runes before a charity request is dispatched; `0` disables |
@@ -74,12 +74,12 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | `registration_open` | boolean | fresh Generation 2 seed `false`; when false, new registration is refused while existing accounts may sign in |
 | `site_timezone_offset_minutes` | nullable integer; multiple of 30 in `[-720,+840]` | **null (default) = not configured** — distinct from an explicit `0` (UTC). While unset, site-day-key features (check-in, activity) are force-disabled for normal users behind the ordinary feature-disabled error without revealing why. Once any check-in or activity row exists, the value is frozen: every further write is refused with `conflict`, even rewriting the identical value or after those rows are later cleaned up. The offset is read authoritatively per business transaction; there is no runtime singleton |
 | `level_threshold_2_milli` | canonical non-negative decimal milli-credit string | `"0"`; donation-credit threshold for automatic promotion to level 2; `"0"` disables that level's promotion; enabled thresholds must be strictly increasing in level order and are cross-validated in the same transaction as the write |
-| `level_threshold_3_milli` | canonical non-negative decimal milli-credit string | `"0"`; same rules as `level_threshold_2_milli`, for level 3; level 3 also bypasses the check-in credits cap |
+| `level_threshold_3_milli` | canonical non-negative decimal milli-credit string | `"0"`; same rules as `level_threshold_2_milli`, for level 3 |
 | `level_threshold_4_milli` | canonical non-negative decimal milli-credit string | `"0"`; same rules as `level_threshold_2_milli`, for level 4; level 5 steward access remains manual-only |
 | `checkin_mode` | enum: `enabled` / `level_gated` / `disabled` | `disabled`; `level_gated` admits only effective level ≥3; an unset timezone or any other unavailable cause returns the identical feature-disabled error |
 | `checkin_award_min_milli` | canonical non-negative decimal milli-credit string | `"40000000"`; inclusive lower bound of the uniformly drawn daily award; cross-validated `min ≤ max` against `checkin_award_max_milli` in one transaction |
 | `checkin_award_max_milli` | canonical non-negative decimal milli-credit string | `"60000000"`; inclusive upper bound of the daily award |
-| `credits_cap_milli` | canonical non-negative decimal milli-credit string | `"250000000"`; check-in admission threshold: a user below level 3 whose balance has reached the cap is refused (`checkin_cap_reached`) without consuming the day; `"0"` disables the threshold; level ≥3 always bypasses; it is never a truncation of awards |
+| `credits_cap_milli` | canonical non-negative decimal milli-credit string | `"250000000"`; check-in admission threshold: every effective level whose balance has reached the cap is refused (`checkin_cap_reached`) without consuming the day; `"0"` disables the threshold; it is never a truncation of awards |
 | `level_display_name_1` … `level_display_name_5` | text, ≤64 runes, blank allowed | built-in `Lv. 1` … `Lv. 5`; blank restores the built-in display name |
 | `activities_enabled` | boolean | `false`; master admission switch for new activity operations |
 | `activity_welfare_enabled` | boolean | `false`; enables daily welfare only when the site timezone and positive threshold/cap compile successfully |

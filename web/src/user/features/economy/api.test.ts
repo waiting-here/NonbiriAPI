@@ -3,6 +3,7 @@ import { ApiError } from '@shared/query/http';
 import {
   createDonation,
   contributeThursday,
+  getDonation,
   getDonations,
   isDonationCollectionIncomplete,
   isResponseUnknown,
@@ -54,6 +55,17 @@ function jsonResponse(value: unknown): Response {
 }
 
 describe('economy mutation boundary', () => {
+  it('rejects a donation detail returned for a different requested identity', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => jsonResponse(DONATION_RESPONSE));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(getDonation('42')).rejects.toMatchObject({
+      code: 'invalid_response',
+      status: 200,
+    });
+    expect(fetchMock).toHaveBeenCalledWith('/api/donations/42', expect.anything());
+    await expect(getDonation('41')).resolves.toMatchObject({ id: '41' });
+  });
+
   it('distinguishes an explicit server rejection from a genuinely unknown response', () => {
     expect(isResponseUnknown(new ApiError('service_unavailable', 'try later', 503))).toBe(false);
     expect(isResponseUnknown(new ApiError('network_error', 'response lost', 0))).toBe(true);

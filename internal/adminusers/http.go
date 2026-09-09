@@ -16,18 +16,20 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
 const (
-	routeUsers            = "/admin/api/users"
-	routeUser             = "/admin/api/users/{id}"
-	routeBan              = "/admin/api/users/{id}/ban"
-	routeUnban            = "/admin/api/users/{id}/unban"
-	routeUsage            = "/admin/api/usage"
-	routeActivity         = "/admin/api/activity"
-	routeEndpointOverview = "/admin/api/overview/endpoints"
-	maxRawQueryBytes      = 8192
+	routeUsers                 = "/admin/api/users"
+	routeUser                  = "/admin/api/users/{id}"
+	routeBan                   = "/admin/api/users/{id}/ban"
+	routeUnban                 = "/admin/api/users/{id}/unban"
+	routeUsage                 = "/admin/api/usage"
+	routeActivity              = "/admin/api/activity"
+	routeEndpointOverview      = "/admin/api/overview/endpoints"
+	routeEndpointOverviewUsers = "/admin/api/overview/endpoints/users"
+	maxRawQueryBytes           = 8192
 )
 
 type httpAPI struct{ service *Service }
@@ -49,6 +51,7 @@ func RegisterRoutes(registrar AdminRouteRegistrar, service *Service) error {
 		{http.MethodGet, routeUsage, api.getUsage},
 		{http.MethodGet, routeActivity, api.getActivity},
 		{http.MethodGet, routeEndpointOverview, api.getEndpointOverview},
+		{http.MethodGet, routeEndpointOverviewUsers, api.getEndpointOverviewUsers},
 	}
 	for _, route := range routes {
 		if err := registrar.RegisterAdminRoute(route.method, route.pattern, route.handler); err != nil {
@@ -62,7 +65,7 @@ func (api *httpAPI) listUsers(writer http.ResponseWriter, request *http.Request,
 	if !requireNoBody(writer, request) {
 		return
 	}
-	values, ok := strictQuery(writer, request, "is_banned", "q", "cursor", "limit")
+	values, ok := strictQuery(writer, request, "is_banned", "q", "cursor", "limit", "page", "page_size")
 	if !ok {
 		return
 	}
@@ -82,7 +85,7 @@ func (api *httpAPI) listUsers(writer http.ResponseWriter, request *http.Request,
 		}
 		query.Q = raw
 	}
-	if !parsePageQuery(writer, values, &query.Cursor, &query.Limit) {
+	if !parsePageQuery(writer, values, &query.Cursor, &query.Limit, &query.Page) {
 		return
 	}
 	page, err := api.service.ListUsers(request.Context(), principal.UserID, query)
@@ -240,7 +243,7 @@ func (api *httpAPI) getUsage(writer http.ResponseWriter, request *http.Request, 
 	if !requireNoBody(writer, request) {
 		return
 	}
-	values, ok := strictQuery(writer, request, "group_by", "cursor", "limit")
+	values, ok := strictQuery(writer, request, "group_by", "cursor", "limit", "page", "page_size")
 	if !ok {
 		return
 	}
@@ -250,7 +253,7 @@ func (api *httpAPI) getUsage(writer http.ResponseWriter, request *http.Request, 
 		return
 	}
 	if groupBy == "site" {
-		if _, cursor := values["cursor"]; cursor || values["limit"] != nil {
+		if _, cursor := values["cursor"]; cursor || values["limit"] != nil || values["page"] != nil || values["page_size"] != nil {
 			writeError(writer, ErrInvalidRequest)
 			return
 		}
@@ -263,7 +266,7 @@ func (api *httpAPI) getUsage(writer http.ResponseWriter, request *http.Request, 
 		return
 	}
 	query := PageQuery{}
-	if !parsePageQuery(writer, values, &query.Cursor, &query.Limit) {
+	if !parsePageQuery(writer, values, &query.Cursor, &query.Limit, &query.Page) {
 		return
 	}
 	page, err := api.service.UserUsage(request.Context(), principal.UserID, query)
@@ -278,12 +281,12 @@ func (api *httpAPI) getActivity(writer http.ResponseWriter, request *http.Reques
 	if !requireNoBody(writer, request) {
 		return
 	}
-	values, ok := strictQuery(writer, request, "cursor", "limit")
+	values, ok := strictQuery(writer, request, "cursor", "limit", "page", "page_size")
 	if !ok {
 		return
 	}
 	query := PageQuery{}
-	if !parsePageQuery(writer, values, &query.Cursor, &query.Limit) {
+	if !parsePageQuery(writer, values, &query.Cursor, &query.Limit, &query.Page) {
 		return
 	}
 	page, err := api.service.Activity(request.Context(), principal.UserID, query)
@@ -298,7 +301,7 @@ func (api *httpAPI) getEndpointOverview(writer http.ResponseWriter, request *htt
 	if !requireNoBody(writer, request) {
 		return
 	}
-	values, ok := strictQuery(writer, request, "q", "cursor", "limit")
+	values, ok := strictQuery(writer, request, "q", "cursor", "limit", "page", "page_size")
 	if !ok {
 		return
 	}
@@ -310,7 +313,7 @@ func (api *httpAPI) getEndpointOverview(writer http.ResponseWriter, request *htt
 		}
 		query.Q = raw
 	}
-	if !parsePageQuery(writer, values, &query.Cursor, &query.Limit) {
+	if !parsePageQuery(writer, values, &query.Cursor, &query.Limit, &query.Page) {
 		return
 	}
 	page, err := api.service.EndpointOverview(request.Context(), principal.UserID, query)
@@ -662,7 +665,11 @@ func pathUserID(request *http.Request) (int64, bool) {
 }
 
 func strictQuery(writer http.ResponseWriter, request *http.Request, allowed ...string) (url.Values, bool) {
-	if request == nil || request.URL == nil || len(request.URL.RawQuery) > maxRawQueryBytes {
+	return strictQueryLimit(writer, request, maxRawQueryBytes, allowed...)
+}
+
+func strictQueryLimit(writer http.ResponseWriter, request *http.Request, maxBytes int, allowed ...string) (url.Values, bool) {
+	if request == nil || request.URL == nil || len(request.URL.RawQuery) > maxBytes {
 		writeError(writer, ErrInvalidRequest)
 		return nil, false
 	}
@@ -692,7 +699,16 @@ func singleQuery(values url.Values, key string) (string, bool) {
 	return entries[0], true
 }
 
-func parsePageQuery(writer http.ResponseWriter, values url.Values, cursor *string, limit *int) bool {
+func parsePageQuery(writer http.ResponseWriter, values url.Values, cursor *string, limit *int, page **pagination.Request) bool {
+	requested, selected, err := pagination.Parse(values)
+	if err != nil {
+		writeError(writer, ErrInvalidRequest)
+		return false
+	}
+	if selected {
+		*page = &requested
+		return true
+	}
 	if raw, set := singleQuery(values, "cursor"); set {
 		if raw == "" {
 			writeError(writer, ErrInvalidRequest)

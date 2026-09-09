@@ -1,24 +1,167 @@
-import { Fragment, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { Fragment, useEffect, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
+import { clearStationSession } from '@shared/charityManagement';
 import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
-import { CursorPagination } from '@shared/operations/CursorPagination';
-import { useCursorPager } from '@shared/operations/useCursorPager';
-import { adminCoreKeys, getAdminEndpoints } from '../features/operations/core';
+import { PagePagination } from '@shared/operations/PagePagination';
+import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
+import { isForbidden, isUnauthorized } from '@shared/query/http';
+import {
+  adminPageKeys,
+  getAdminEndpointUsersPage,
+  getAdminEndpointsPage,
+} from '../features/operations/adminPages';
+import { useAdminSession } from '../data';
 import '@shared/operations/operations.css';
 
-export function EndpointsPage() {
+interface EndpointUsersPanelProps {
+  account: string;
+  scopeReady: boolean;
+  baseURL: string;
+}
+
+function EndpointUsersPanel({ account, scopeReady, baseURL }: EndpointUsersPanelProps) {
   const { t } = useTranslation();
-  const pager = useCursorPager();
-  const [draft, setDraft] = useState('');
-  const [query, setQuery] = useState('');
-  const [queryError, setQueryError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
-  const result = useQuery({
-    queryKey: adminCoreKeys.endpoints(query, pager.cursor),
-    queryFn: () => getAdminEndpoints(query, pager.cursor),
-    retry: false,
+  const client = useQueryClient();
+  const pager = useUrlPagePager({
+    station: 'admin',
+    listType: 'admin.endpoint-users',
+    scopeKey: account,
+    scopeReady,
+    resetKey: baseURL,
+    pageParam: 'endpoint_user_page',
+    pageSizeParam: 'endpoint_user_page_size',
   });
+  const result = useQuery({
+    queryKey: adminPageKeys.endpointUsers(account, baseURL, pager.page, pager.pageSize),
+    queryFn: ({ signal }) => getAdminEndpointUsersPage(baseURL, pager.page, pager.pageSize, signal),
+    retry: false,
+    enabled: scopeReady,
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[3] === account && previousQuery.queryKey[4] === baseURL
+        ? previous
+        : undefined,
+  });
+  useEffect(() => {
+    if (isUnauthorized(result.error) || isForbidden(result.error)) {
+      clearStationSession(client, 'admin');
+    }
+  }, [client, result.error]);
+  return (
+    <>
+      {result.isPending ? (
+        <LoadingState />
+      ) : result.error ? (
+        <ErrorState error={result.error} onRetry={() => void result.refetch()} />
+      ) : result.data.data.length === 0 ? (
+        <EmptyState title={t('common.noResults')} body={t('common.noResultsBody')} />
+      ) : (
+        <div aria-busy={result.isFetching}>
+          {result.isFetching ? <LoadingState /> : null}
+          <div className="ops-table-scroll">
+            <table className="ops-table ops-table--responsive">
+              <thead>
+                <tr>
+                  <th>{t('common.userId')}</th>
+                  <th>{t('admin.endpoints.endpointCount')}</th>
+                  <th>{t('admin.endpoints.keys')}</th>
+                  <th>{t('admin.endpoints.enabledCount')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.data.data.map((user) => (
+                  <tr key={user.user_id}>
+                    <td data-label={t('common.userId')}>{user.user_id}</td>
+                    <td data-label={t('admin.endpoints.endpointCount')}>{user.endpoint_count}</td>
+                    <td data-label={t('admin.endpoints.keys')}>{user.key_count}</td>
+                    <td data-label={t('admin.endpoints.enabledCount')}>{user.enabled_count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      {scopeReady && !result.error && result.data ? (
+        <PagePagination
+          metadata={result.data.pagination}
+          requestedPage={pager.page}
+          busy={result.isFetching}
+          onPageChange={pager.setPage}
+          onPageSizeChange={pager.setPageSize}
+        />
+      ) : null}
+    </>
+  );
+}
+
+interface EndpointsPageContentProps {
+  account: string;
+  scopeReady: boolean;
+  sessionError: unknown;
+}
+
+function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPageContentProps) {
+  const { t } = useTranslation();
+  const client = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchState();
+  const query = searchParams.get('q') ?? '';
+  const expanded = searchParams.get('expanded_base_url');
+  const [draft, setDraft] = useState(query);
+  const [queryError, setQueryError] = useState<string | null>(null);
+  const pager = useUrlPagePager({
+    station: 'admin',
+    listType: 'admin.endpoints',
+    scopeKey: account,
+    scopeReady,
+    resetKey: query,
+  });
+  const result = useQuery({
+    queryKey: adminPageKeys.endpoints(account, query, pager.page, pager.pageSize),
+    queryFn: ({ signal }) => getAdminEndpointsPage(query, pager.page, pager.pageSize, signal),
+    retry: false,
+    enabled: scopeReady,
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[3] === account && previousQuery.queryKey[4] === query
+        ? previous
+        : undefined,
+  });
+  useEffect(() => {
+    // POP navigation restores the committed search value while this input is
+    // still mounted.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDraft(query);
+  }, [query]);
+  useEffect(() => {
+    if (isUnauthorized(result.error) || isForbidden(result.error)) {
+      clearStationSession(client, 'admin');
+    }
+  }, [client, result.error]);
+  const commitFilter = (nextQuery: string) => {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (nextQuery) next.set('q', nextQuery);
+      else next.delete('q');
+      next.delete('page');
+      next.set('page', '1');
+      next.delete('page_size');
+      next.set('page_size', String(pager.pageSize));
+      next.delete('expanded_base_url');
+      next.delete('endpoint_user_page');
+      return next;
+    });
+  };
+  const toggleExpanded = (baseURL: string) => {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (result.data) next.set('page', result.data.pagination.page);
+      if (next.get('expanded_base_url') === baseURL) next.delete('expanded_base_url');
+      else next.set('expanded_base_url', baseURL);
+      next.delete('endpoint_user_page');
+      return next;
+    });
+  };
   return (
     <div className="page ops-page">
       <PageHeader
@@ -37,9 +180,7 @@ export function EndpointsPage() {
               return;
             }
             setQueryError(null);
-            setQuery(draft);
-            pager.reset();
-            setExpanded(new Set());
+            commitFilter(draft);
           }}
         >
           <label className="ops-form-field">
@@ -65,9 +206,8 @@ export function EndpointsPage() {
             type="button"
             onClick={() => {
               setDraft('');
-              setQuery('');
-              pager.reset();
-              setExpanded(new Set());
+              setQueryError(null);
+              commitFilter('');
             }}
           >
             {t('common.resetFilter')}
@@ -78,7 +218,9 @@ export function EndpointsPage() {
             {queryError}
           </p>
         ) : null}
-        {result.isPending ? (
+        {sessionError ? (
+          <ErrorState error={sessionError} />
+        ) : result.isPending ? (
           <LoadingState />
         ) : result.error ? (
           <ErrorState error={result.error} onRetry={() => void result.refetch()} />
@@ -88,7 +230,8 @@ export function EndpointsPage() {
             body={query ? t('common.noResultsBody') : t('admin.endpoints.emptyBody')}
           />
         ) : (
-          <>
+          <div aria-busy={result.isFetching}>
+            {result.isFetching ? <LoadingState /> : null}
             <div className="ops-table-scroll">
               <table className="ops-table ops-table--responsive">
                 <thead>
@@ -102,7 +245,7 @@ export function EndpointsPage() {
                 </thead>
                 <tbody>
                   {result.data.data.map((group) => {
-                    const open = expanded.has(group.base_url);
+                    const open = expanded === group.base_url;
                     return (
                       <Fragment key={group.base_url}>
                         <tr>
@@ -122,14 +265,8 @@ export function EndpointsPage() {
                               className="btn btn-secondary"
                               type="button"
                               aria-expanded={open}
-                              onClick={() =>
-                                setExpanded((current) => {
-                                  const next = new Set(current);
-                                  if (next.has(group.base_url)) next.delete(group.base_url);
-                                  else next.add(group.base_url);
-                                  return next;
-                                })
-                              }
+                              disabled={!scopeReady || result.isFetching}
+                              onClick={() => toggleExpanded(group.base_url)}
                             >
                               {open
                                 ? t('admin.endpoints.hideUsers')
@@ -140,32 +277,11 @@ export function EndpointsPage() {
                         {open ? (
                           <tr>
                             <td colSpan={5}>
-                              <table className="ops-table ops-table--responsive">
-                                <thead>
-                                  <tr>
-                                    <th>{t('common.userId')}</th>
-                                    <th>{t('admin.endpoints.endpointCount')}</th>
-                                    <th>{t('admin.endpoints.keys')}</th>
-                                    <th>{t('admin.endpoints.enabledCount')}</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {group.users.map((user) => (
-                                    <tr key={user.user_id}>
-                                      <td data-label={t('common.userId')}>{user.user_id}</td>
-                                      <td data-label={t('admin.endpoints.endpointCount')}>
-                                        {user.endpoint_count}
-                                      </td>
-                                      <td data-label={t('admin.endpoints.keys')}>
-                                        {user.key_count}
-                                      </td>
-                                      <td data-label={t('admin.endpoints.enabledCount')}>
-                                        {user.enabled_count}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                              <EndpointUsersPanel
+                                account={account}
+                                scopeReady={scopeReady}
+                                baseURL={group.base_url}
+                              />
                             </td>
                           </tr>
                         ) : null}
@@ -175,16 +291,49 @@ export function EndpointsPage() {
                 </tbody>
               </table>
             </div>
-            <CursorPagination
-              page={pager.page}
-              nextCursor={result.data.next_cursor}
-              onPrevious={pager.previous}
-              onNext={pager.next}
-            />
-          </>
+          </div>
         )}
+        {scopeReady && !sessionError && !result.error && result.data ? (
+          <PagePagination
+            metadata={result.data.pagination}
+            requestedPage={pager.page}
+            busy={result.isFetching}
+            onPageChange={pager.setPage}
+            onPageSizeChange={pager.setPageSize}
+          />
+        ) : null}
         <p className="inline-notice">{t('admin.endpoints.noProbeNotice')}</p>
       </Card>
     </div>
+  );
+}
+
+export function EndpointsPage() {
+  const [, setSearchParams] = useSearchState();
+  const session = useAdminSession();
+  const account = session.data?.admin.username;
+  const scopeReady = Boolean(account) && !session.error;
+  const previousAccount = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (previousAccount.current !== undefined && previousAccount.current !== account) {
+      setSearchParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+          next.delete('expanded_base_url');
+          next.delete('endpoint_user_page');
+          return next;
+        },
+        { replace: true },
+      );
+    }
+    previousAccount.current = account;
+  }, [account, setSearchParams]);
+  return (
+    <EndpointsPageContent
+      key={account ?? 'anonymous'}
+      account={account ?? ''}
+      scopeReady={scopeReady}
+      sessionError={session.error}
+    />
   );
 }

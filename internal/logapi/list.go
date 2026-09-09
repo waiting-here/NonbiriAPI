@@ -31,6 +31,19 @@ func (repository *Repository) ListUser(ctx context.Context, userID int64, filter
 		return Page[UserLogRow]{}, err
 	}
 	owner := filterOwner("user", userID, filter)
+	var tx *sql.Tx
+	var reader logReadQueryer = repository.db
+	if filter.Page != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, logPageTimeout)
+		defer cancel()
+		tx, err = repository.beginPageRead(ctx, "user", userID, now)
+		if err != nil {
+			return Page[UserLogRow]{}, err
+		}
+		defer tx.Rollback()
+		reader = tx
+	}
 	cursor, err := repository.decodeListCursor(filter.Cursor, "logapi-user-list-v1", owner)
 	if err != nil {
 		return Page[UserLogRow]{}, err
@@ -63,16 +76,21 @@ WHERE l.user_id=? AND (l.completed_at IS NULL OR l.completed_at>?)`
 		query += ` AND (l.started_at<? OR (l.started_at=? AND l.id<?))`
 		args = append(args, cursor.startedAt, cursor.startedAt, cursor.rowID)
 	}
-	query += ` ORDER BY l.started_at DESC,l.id DESC LIMIT ?`
-	args = append(args, filter.Limit+1)
-
-	rows, err := repository.db.QueryContext(ctx, query, args...)
+	query, args, metadata, err := logPageQuery(ctx, reader, query, ` ORDER BY l.started_at DESC,l.id DESC`, args, filter.Page, filter.Limit)
+	if err != nil {
+		return Page[UserLogRow]{}, err
+	}
+	rows, err := reader.QueryContext(ctx, query, args...)
 	if err != nil {
 		return Page[UserLogRow]{}, translateSQLError(err)
 	}
 	defer rows.Close()
-	page := Page[UserLogRow]{Data: make([]UserLogRow, 0, filter.Limit)}
-	positions := make([]listCursor, 0, filter.Limit+1)
+	capacity := filter.Limit
+	if capacity < 1 || capacity > maximumLimit {
+		return Page[UserLogRow]{}, ErrInvalid
+	}
+	page := Page[UserLogRow]{Data: make([]UserLogRow, 0, capacity), Pagination: metadata}
+	positions := make([]listCursor, 0, capacity+1)
 	for rows.Next() {
 		var model string
 		record, scanErr := scanCommon(rows, &model)
@@ -116,6 +134,14 @@ WHERE l.user_id=? AND (l.completed_at IS NULL OR l.completed_at>?)`
 		}
 		page.NextCursor = &next
 	}
+	if tx != nil {
+		if err := rows.Close(); err != nil {
+			return Page[UserLogRow]{}, translateSQLError(err)
+		}
+		if err := tx.Commit(); err != nil {
+			return Page[UserLogRow]{}, translateSQLError(err)
+		}
+	}
 	return page, nil
 }
 
@@ -132,11 +158,24 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 		return Page[AdminLogRow]{}, err
 	}
 	owner := filterOwner("admin", 0, filter)
+	var tx *sql.Tx
+	var reader logReadQueryer = repository.db
+	if filter.Page != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, logPageTimeout)
+		defer cancel()
+		tx, err = repository.beginPageRead(ctx, "admin", 0, now)
+		if err != nil {
+			return Page[AdminLogRow]{}, err
+		}
+		defer tx.Rollback()
+		reader = tx
+	}
 	cursor, err := repository.decodeListCursor(filter.Cursor, "logapi-admin-list-v1", owner)
 	if err != nil {
 		return Page[AdminLogRow]{}, err
 	}
-	query := `SELECT ` + commonListColumns + `,l.user_id FROM request_logs l
+	query := `SELECT ` + commonListColumns + `,` + callerIdentityColumns + `,l.user_id FROM request_logs l` + callerIdentityJoin + `
 WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args := make([]any, 0, 16)
 	args = append(args, now-requestLogRetentionSeconds)
@@ -172,19 +211,24 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 		query += ` AND (l.started_at<? OR (l.started_at=? AND l.id<?))`
 		args = append(args, cursor.startedAt, cursor.startedAt, cursor.rowID)
 	}
-	query += ` ORDER BY l.started_at DESC,l.id DESC LIMIT ?`
-	args = append(args, filter.Limit+1)
-
-	rows, err := repository.db.QueryContext(ctx, query, args...)
+	query, args, metadata, err := logPageQuery(ctx, reader, query, ` ORDER BY l.started_at DESC,l.id DESC`, args, filter.Page, filter.Limit)
+	if err != nil {
+		return Page[AdminLogRow]{}, err
+	}
+	rows, err := reader.QueryContext(ctx, query, args...)
 	if err != nil {
 		return Page[AdminLogRow]{}, translateSQLError(err)
 	}
 	defer rows.Close()
-	page := Page[AdminLogRow]{Data: make([]AdminLogRow, 0, filter.Limit)}
-	positions := make([]listCursor, 0, filter.Limit+1)
+	capacity := filter.Limit
+	if capacity < 1 || capacity > maximumLimit {
+		return Page[AdminLogRow]{}, ErrInvalid
+	}
+	page := Page[AdminLogRow]{Data: make([]AdminLogRow, 0, capacity), Pagination: metadata}
+	positions := make([]listCursor, 0, capacity+1)
 	for rows.Next() {
 		var userID sql.NullInt64
-		record, scanErr := scanCommon(rows, &userID)
+		record, identity, scanErr := scanManagementCommon(rows, &userID)
 		if scanErr != nil {
 			return Page[AdminLogRow]{}, translateSQLError(scanErr)
 		}
@@ -198,7 +242,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 				CallerResultClass: resultClassPointer(record.callerResultClass),
 				CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 				StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-				UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10),
+				UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity,
 			})
 		}
 		positions = append(positions, listCursor{startedAt: record.startedAt, rowID: record.rowID})
@@ -212,6 +256,14 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 			return Page[AdminLogRow]{}, err
 		}
 		page.NextCursor = &next
+	}
+	if tx != nil {
+		if err := rows.Close(); err != nil {
+			return Page[AdminLogRow]{}, translateSQLError(err)
+		}
+		if err := tx.Commit(); err != nil {
+			return Page[AdminLogRow]{}, translateSQLError(err)
+		}
 	}
 	return page, nil
 }
@@ -234,6 +286,11 @@ func (repository *Repository) ListSteward(
 		return Page[StewardLogRow]{}, err
 	}
 	owner := filterOwner("steward", stewardUserID, filter)
+	if filter.Page != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, logPageTimeout)
+		defer cancel()
+	}
 	cursor, err := repository.decodeListCursor(filter.Cursor, "logapi-steward-list-v1", owner)
 	if err != nil {
 		return Page[StewardLogRow]{}, err
@@ -243,12 +300,15 @@ func (repository *Repository) ListSteward(
 		return Page[StewardLogRow]{}, err
 	}
 	defer tx.Rollback()
-	// This query is deliberately independent from Admin list SQL. Its SELECT
-	// omits identity/model/note columns before filtering or scanning.
-	query := `SELECT ` + commonListColumns + ` FROM request_logs l
+	// Keep the steward projection independent from the administrator DTO.
+	query := `SELECT ` + commonListColumns + `,` + callerIdentityColumns + `,l.user_id FROM request_logs l` + callerIdentityJoin + `
 WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args := make([]any, 0, 16)
 	args = append(args, now-requestLogRetentionSeconds)
+	if filter.UserID != nil {
+		query += ` AND l.user_id=?`
+		args = append(args, *filter.UserID)
+	}
 	if filter.EndpointBaseURL != nil {
 		query += ` AND EXISTS(SELECT 1 FROM request_attempts sa WHERE sa.request_log_id=l.id AND sa.canonical_base_url=?)`
 		args = append(args, *filter.EndpointBaseURL)
@@ -277,18 +337,25 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 		query += ` AND (l.started_at<? OR (l.started_at=? AND l.id<?))`
 		args = append(args, cursor.startedAt, cursor.startedAt, cursor.rowID)
 	}
-	query += ` ORDER BY l.started_at DESC,l.id DESC LIMIT ?`
-	args = append(args, filter.Limit+1)
+	query, args, metadata, err := logPageQuery(ctx, tx, query, ` ORDER BY l.started_at DESC,l.id DESC`, args, filter.Page, filter.Limit)
+	if err != nil {
+		return Page[StewardLogRow]{}, err
+	}
 
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return Page[StewardLogRow]{}, translateSQLError(err)
 	}
 	defer rows.Close()
-	page := Page[StewardLogRow]{Data: make([]StewardLogRow, 0, filter.Limit)}
-	positions := make([]listCursor, 0, filter.Limit+1)
+	capacity := filter.Limit
+	if capacity < 1 || capacity > maximumLimit {
+		return Page[StewardLogRow]{}, ErrInvalid
+	}
+	page := Page[StewardLogRow]{Data: make([]StewardLogRow, 0, capacity), Pagination: metadata}
+	positions := make([]listCursor, 0, capacity+1)
 	for rows.Next() {
-		record, scanErr := scanCommon(rows)
+		var userID sql.NullInt64
+		record, identity, scanErr := scanManagementCommon(rows, &userID)
 		if scanErr != nil {
 			return Page[StewardLogRow]{}, translateSQLError(scanErr)
 		}
@@ -304,7 +371,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 				CallerResultClass: resultClassPointer(record.callerResultClass),
 				CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 				StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-				AttemptCount: strconv.FormatInt(record.attemptCount, 10),
+				UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity,
 			})
 		}
 		positions = append(positions, listCursor{startedAt: record.startedAt, rowID: record.rowID})

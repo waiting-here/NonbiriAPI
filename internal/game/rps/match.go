@@ -380,6 +380,7 @@ func (service *Service) startMatchTx(ctx context.Context, tx *sql.Tx, selected [
 		Pumps: PumpsBP(config.PumpsBP), GestureSeconds: config.GestureSeconds, DealerSeconds: config.DealerSeconds,
 		FollowerSeconds: config.FollowerSeconds, PermanentMultiplier: one, CurrentPlanMultiplier: &one,
 		ReminderState: "none", PhaseDeadline: &deadline, HealthEpoch: service.healthEpoch, StartedAt: now,
+		Presentation: sessionPresentation{PoolTieCount: new(db.U128)},
 	}
 	if dealer >= 0 {
 		record.DealerSeat = &dealer
@@ -477,6 +478,9 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
 		db.EncodeU128(record.WelfareCarryTotal), record.ReminderState, nullableInt64(record.PhaseDeadline), record.HealthEpoch,
 		events, db.EncodeU128(record.RecentFirstSeq), db.EncodeU128(record.RecentLastSeq), len(record.RecentEvents), nil,
 		db.EncodeU128(record.TerminalRetryAttemptCount), nil, nil, record.StartedAt, nil); err != nil {
+		return classifyDB(err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO game_rps_presentation(session_id, pool_tie_count, quick_seat0_gesture, quick_seat1_gesture, quick_seat2_gesture) VALUES(?, ?, NULL, NULL, NULL)`, record.ID, db.EncodeU128(db.U128{})); err != nil {
 		return classifyDB(err)
 	}
 	for seat, value := range record.Seats {

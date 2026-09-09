@@ -178,6 +178,7 @@ nginx/*.local.conf
 # ===== Exported files =====
 
 *.zip
+!internal/calendar/zoneinfo.zip
 
 # ===== Migration scripts (manual, version-specific, not for git) =====
 

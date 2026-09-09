@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -43,8 +45,9 @@ type UserPrincipal = resources.UserPrincipal
 type AuthorizedUserHandler = resources.AuthorizedUserHandler
 
 type Page[T any] struct {
-	Data       []T     `json:"data"`
-	NextCursor *string `json:"next_cursor"`
+	Data       []T                  `json:"data"`
+	NextCursor *string              `json:"next_cursor"`
+	Pagination *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 type SafeSource struct {
@@ -56,8 +59,8 @@ type SafeSource struct {
 }
 
 // AdminSafeSource is intentionally independent from SafeSource. Channel
-// revision and category are administration-only snapshot facts and must not
-// become reachable through the owner or steward projections.
+// revision and category are management snapshot facts and must not become
+// reachable through the ordinary owner projection.
 type AdminSafeSource struct {
 	Kind            string  `json:"kind"`
 	ConnectorType   string  `json:"connector_type"`
@@ -126,15 +129,11 @@ type AdminDonationKey struct {
 	SafeNote            string          `json:"safe_note"`
 	MaxConcurrency      *int64          `json:"max_concurrency"`
 	MaxRPM              *int64          `json:"max_rpm"`
+	BindingCount        string          `json:"binding_count"`
+	Idle                bool            `json:"idle"`
 }
 
-type StewardDonationKey struct {
-	DonationKey
-	AuthorizedExpiresAt *int64 `json:"authorized_expires_at"`
-	SafeNote            string `json:"safe_note"`
-	MaxConcurrency      *int64 `json:"max_concurrency"`
-	MaxRPM              *int64 `json:"max_rpm"`
-}
+type StewardDonationKey AdminDonationKey
 
 type ReviewResult struct {
 	Decision   string `json:"decision"`
@@ -159,18 +158,35 @@ type DonationOwner struct {
 	DisplayName string  `json:"display_name"`
 }
 
-type StewardDonationOwner struct {
-	UserID      string `json:"user_id"`
-	DisplayName string `json:"display_name"`
-}
+type StewardDonationOwner DonationOwner
 
 type DonationReviewer struct {
 	UserID *string `json:"user_id"`
 	Role   string  `json:"role"`
 }
 
-// AdminDonation and StewardDonation intentionally do not alias one another.
-// This keeps later role-specific expansion from accidentally widening L5.
+// DonationHandling is shared management state; it deliberately omits actor IDs.
+type DonationHandling struct {
+	State           string  `json:"state"`
+	Revision        string  `json:"revision"`
+	ProcessedAt     *int64  `json:"processed_at"`
+	ProcessedByRole *string `json:"processed_by_role"`
+	ClosedAt        *int64  `json:"closed_at"`
+	ClosedReason    *string `json:"closed_reason"`
+}
+
+type HandlingReceipt struct {
+	DonationID string           `json:"donation_id"`
+	Handling   DonationHandling `json:"handling"`
+}
+
+type DonationBadge struct {
+	PendingCount string `json:"pending_count"`
+	ServerNow    int64  `json:"server_now"`
+}
+
+// Management roles expose identical donation facts after role authorization.
+// The ordinary owner's projection remains separate.
 type AdminDonation struct {
 	ID           string             `json:"id"`
 	Status       string             `json:"status"`
@@ -180,21 +196,23 @@ type AdminDonation struct {
 	Keys         []AdminDonationKey `json:"keys"`
 	Owner        *DonationOwner     `json:"owner"`
 	Reviewer     *DonationReviewer  `json:"reviewer"`
+	Handling     DonationHandling   `json:"handling"`
 	CreatedAt    int64              `json:"created_at"`
 	UpdatedAt    int64              `json:"updated_at"`
 }
 
 type StewardDonation struct {
-	ID           string               `json:"id"`
-	Status       string               `json:"status"`
-	Revision     string               `json:"revision"`
-	Description  string               `json:"description"`
-	ReviewResult *ReviewResult        `json:"review_result"`
-	Keys         []StewardDonationKey `json:"keys"`
-	Owner        StewardDonationOwner `json:"owner"`
-	Reviewer     *DonationReviewer    `json:"reviewer"`
-	CreatedAt    int64                `json:"created_at"`
-	UpdatedAt    int64                `json:"updated_at"`
+	ID           string                `json:"id"`
+	Status       string                `json:"status"`
+	Revision     string                `json:"revision"`
+	Description  string                `json:"description"`
+	ReviewResult *ReviewResult         `json:"review_result"`
+	Keys         []StewardDonationKey  `json:"keys"`
+	Owner        *StewardDonationOwner `json:"owner"`
+	Reviewer     *DonationReviewer     `json:"reviewer"`
+	Handling     DonationHandling      `json:"handling"`
+	CreatedAt    int64                 `json:"created_at"`
+	UpdatedAt    int64                 `json:"updated_at"`
 }
 
 type CreateKeyInput struct {
@@ -265,18 +283,19 @@ type ExportDonation struct {
 // ExportDonationKey is deliberately independent from owner and administrator
 // projections so future role-only fields cannot widen the personal export.
 type ExportDonationKey struct {
-	ID                  string         `json:"id"`
-	EndpointKeyID       *string        `json:"endpoint_key_id"`
-	DisplayHead         string         `json:"display_head"`
-	DisplayTail         string         `json:"display_tail"`
-	SafeSource          SafeSource     `json:"safe_source"`
-	PhysicalEnabled     bool           `json:"physical_enabled"`
-	CharityState        string         `json:"charity_state"`
-	Limits              DonationLimits `json:"limits"`
-	Usage               DonationUsage  `json:"usage"`
-	TokenReserve        int64          `json:"token_reserve"`
-	AuthorizedExpiresAt *int64         `json:"authorized_expires_at"`
-	ExpiresAt           *int64         `json:"expires_at"`
-	Streak              DonationStreak `json:"streak"`
-	EndedReason         *string        `json:"ended_reason"`
+	RecurringLimits     []donationquota.RuleView `json:"recurring_limits"`
+	ID                  string                   `json:"id"`
+	EndpointKeyID       *string                  `json:"endpoint_key_id"`
+	DisplayHead         string                   `json:"display_head"`
+	DisplayTail         string                   `json:"display_tail"`
+	SafeSource          SafeSource               `json:"safe_source"`
+	PhysicalEnabled     bool                     `json:"physical_enabled"`
+	CharityState        string                   `json:"charity_state"`
+	Limits              DonationLimits           `json:"limits"`
+	Usage               DonationUsage            `json:"usage"`
+	TokenReserve        int64                    `json:"token_reserve"`
+	AuthorizedExpiresAt *int64                   `json:"authorized_expires_at"`
+	ExpiresAt           *int64                   `json:"expires_at"`
+	Streak              DonationStreak           `json:"streak"`
+	EndedReason         *string                  `json:"ended_reason"`
 }

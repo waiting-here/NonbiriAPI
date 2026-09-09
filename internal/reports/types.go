@@ -11,6 +11,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/connector"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
 const (
@@ -125,8 +126,9 @@ type BadgeResponse struct {
 }
 
 type Page[T any] struct {
-	Data       []T     `json:"data"`
-	NextCursor *string `json:"next_cursor"`
+	Data       []T                  `json:"data"`
+	NextCursor *string              `json:"next_cursor"`
+	Pagination *pagination.Metadata `json:"pagination,omitempty"`
 }
 
 type CaseSummary struct {
@@ -174,8 +176,9 @@ type Material struct {
 
 type CaseDetail struct {
 	CaseSummary
-	Materials Page[Material] `json:"materials"`
-	Decision  *Decision      `json:"decision"`
+	Materials           Page[Material]       `json:"materials"`
+	Decision            *Decision            `json:"decision"`
+	MaterialsPagination *pagination.Metadata `json:"materials_pagination,omitempty"`
 }
 
 type Decision struct {

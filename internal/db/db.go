@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 
@@ -18,8 +20,10 @@ import (
 // caller owns the codec lifecycle; typed repositories use it internally so
 // plaintext never has to become a database argument or a Store field.
 type Store struct {
-	db      *sql.DB
-	secrets secret.GenerationTwoContextCodec
+	db        *sql.DB
+	secrets   secret.GenerationTwoContextCodec
+	closeOnce sync.Once
+	closeErr  error
 }
 
 // Open classifies path as either completely fresh or current Generation 2.
@@ -135,4 +139,19 @@ func (s *Store) DB() *sql.DB { return s.db }
 
 // Close closes the database handle. The injected secret codec remains owned
 // by the caller.
-func (s *Store) Close() error { return s.db.Close() }
+func (s *Store) Close() error {
+	s.closeOnce.Do(func() {
+		s.closeErr = s.db.Close()
+		// database/sql may return before a cancelled transaction releases its
+		// connection. SQLite must finish rollback and close its files before
+		// a subsequent startup can capture a stable database snapshot.
+		if s.db.Stats().OpenConnections != 0 {
+			ticker := time.NewTicker(time.Millisecond)
+			defer ticker.Stop()
+			for s.db.Stats().OpenConnections != 0 {
+				<-ticker.C
+			}
+		}
+	})
+	return s.closeErr
+}

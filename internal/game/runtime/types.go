@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
 )
 
 const (
@@ -44,11 +45,12 @@ var (
 )
 
 type FishingOutcome struct {
-	Ordinal    int    `json:"ordinal"`
-	SpeciesKey string `json:"species_key"`
-	Tier       string `json:"tier"`
-	SizeCM     int    `json:"size_cm"`
-	Reward     string `json:"reward"`
+	Ordinal             int     `json:"ordinal"`
+	SpeciesKey          string  `json:"species_key"`
+	Tier                string  `json:"tier"`
+	SizeCM              int     `json:"size_cm"`
+	Reward              string  `json:"reward"`
+	BlueFatFishLengthCM *string `json:"blue_fat_fish_length_cm"`
 }
 
 type FishingBatchResult struct {
@@ -110,12 +112,13 @@ func (identity Identity) MarshalJSON() ([]byte, error) {
 }
 
 type FishingLeaderboardRow struct {
-	Rank         string   `json:"rank"`
-	SpeciesKey   string   `json:"species_key,omitempty"`
-	SizeCM       int      `json:"size_cm,omitempty"`
-	TotalCredits string   `json:"total_credits,omitempty"`
-	Identity     Identity `json:"identity"`
-	IsMe         bool     `json:"is_me"`
+	Rank                string   `json:"rank"`
+	SpeciesKey          string   `json:"species_key,omitempty"`
+	SizeCM              int      `json:"size_cm,omitempty"`
+	TotalCredits        string   `json:"total_credits,omitempty"`
+	Identity            Identity `json:"identity"`
+	IsMe                bool     `json:"is_me"`
+	BlueFatFishLengthCM *string  `json:"blue_fat_fish_length_cm,omitempty"`
 }
 
 // MarshalJSON enforces the board-specific row union. In particular, zero is
@@ -127,14 +130,19 @@ func (row FishingLeaderboardRow) MarshalJSON() ([]byte, error) {
 	if single == total || row.Rank == "" {
 		return nil, errors.New("game runtime: invalid leaderboard row union")
 	}
+	if row.BlueFatFishLengthCM != nil && (!single || !fishing.ValidBlueFatFishLength(*row.BlueFatFishLengthCM) ||
+		row.SizeCM < 100 || row.SizeCM > 200 || row.SpeciesKey != "koi" && row.SpeciesKey != "taimen" && row.SpeciesKey != "yellowcheek") {
+		return nil, errors.New("game runtime: invalid leaderboard presentation")
+	}
 	if single {
 		return json.Marshal(struct {
-			Rank       string   `json:"rank"`
-			SpeciesKey string   `json:"species_key"`
-			SizeCM     int      `json:"size_cm"`
-			Identity   Identity `json:"identity"`
-			IsMe       bool     `json:"is_me"`
-		}{Rank: row.Rank, SpeciesKey: row.SpeciesKey, SizeCM: row.SizeCM, Identity: row.Identity, IsMe: row.IsMe})
+			Rank                string   `json:"rank"`
+			SpeciesKey          string   `json:"species_key"`
+			SizeCM              int      `json:"size_cm"`
+			BlueFatFishLengthCM *string  `json:"blue_fat_fish_length_cm"`
+			Identity            Identity `json:"identity"`
+			IsMe                bool     `json:"is_me"`
+		}{Rank: row.Rank, SpeciesKey: row.SpeciesKey, SizeCM: row.SizeCM, BlueFatFishLengthCM: row.BlueFatFishLengthCM, Identity: row.Identity, IsMe: row.IsMe})
 	}
 	return json.Marshal(struct {
 		Rank         string   `json:"rank"`
@@ -168,10 +176,11 @@ type AdminQueueCount struct {
 }
 
 type UserExport struct {
-	Pending  []FishingSettlementPending `json:"fishing_pending"`
-	Terminal []FishingTerminalExport    `json:"fishing_terminal"`
-	Single   *FishingLeaderboardRow     `json:"fishing_single_best"`
-	Total    *FishingLeaderboardRow     `json:"fishing_rolling_total"`
+	Pending     []FishingSettlementPending `json:"fishing_pending"`
+	Terminal    []FishingTerminalExport    `json:"fishing_terminal"`
+	Single      *FishingLeaderboardRow     `json:"fishing_single_best"`
+	Total       *FishingLeaderboardRow     `json:"fishing_rolling_total"`
+	RollingBest *FishingLeaderboardRow     `json:"fishing_rolling_best"`
 }
 
 // FishingTerminalExport is the lifecycle-only terminal projection. RevealedAt

@@ -63,6 +63,43 @@ func TestCharityDryCaptureUsesCandidateFreePolicyOnly(t *testing.T) {
 	}
 }
 
+func TestPersonalShortRequestsNeverEnterCharityPolicy(t *testing.T) {
+	for _, live := range []bool{false, true} {
+		t.Run(fmt.Sprintf("live=%v", live), func(t *testing.T) {
+			var capture DebugCapture
+			if live {
+				hub, err := debug.NewHub(activeIdentityVerifier{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = hub.Close() })
+				metadata, _, err := hub.Start(1, "browser-binding")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := hub.ChangeMode(1, metadata.Revision, debug.ModeLive, true); err != nil {
+					t.Fatal(err)
+				}
+				capture = hub
+			}
+			f := newServiceFixture(t, capture)
+			f.charity.preErr = &charityrouting.ContentTooShortError{Actual: 1, Minimum: 50}
+			f.addDispatch(f.personal.snapshot.Candidates[0])
+			f.openAI.results = []connectorcontract.AttemptResult{{Success: true, Committed: true, Failure: connectorcontract.FailureNone, UpstreamStatus: 200, ClientStatus: 200}}
+			request := decodeChatForTest(t, `{"model":"provider/model","messages":[{"role":"user","content":"x"}]}`)
+			recorder := httptest.NewRecorder()
+			f.service.Chat(context.Background(), recorder, 1, request, []byte(`{}`), "application/json", "en")
+			want := http.StatusOK
+			if live {
+				want = http.StatusUnprocessableEntity
+			}
+			if recorder.Code != want || f.charity.preCalls != 0 || f.personal.preCalls != 1 || f.openAI.calls != 1 || f.charges.calls != 0 {
+				t.Fatalf("personal short call crossed charity policy: status=%d charity=%d personal=%d connector=%d charges=%d", recorder.Code, f.charity.preCalls, f.personal.preCalls, f.openAI.calls, f.charges.calls)
+			}
+		})
+	}
+}
+
 func TestDispatchMarkerPrecedesCredentialAndConnectorAndTerminalizes(t *testing.T) {
 	fixture := newServiceFixture(t, nil)
 	candidate := fixture.personal.snapshot.Candidates[0]
@@ -259,7 +296,7 @@ func TestSelfUpstream4xxPreservesStatusAndSafeDiagnostic(t *testing.T) {
 	}
 }
 
-func TestCharityUsesCharityPurposeAndSafe502AfterDispatch(t *testing.T) {
+func TestCharityUsesCharityPurposeAndPreservesUpstreamStatusAfterDispatch(t *testing.T) {
 	fixture := newServiceFixture(t, nil)
 	fixture.charges.charge = 7
 	fixture.addDispatch(fixture.charity.snapshot.Candidates[0])
@@ -272,7 +309,7 @@ func TestCharityUsesCharityPurposeAndSafe502AfterDispatch(t *testing.T) {
 
 	fixture.service.Chat(context.Background(), recorder, 1, request, []byte(`{}`), "application/json", "en")
 
-	if recorder.Code != http.StatusBadGateway {
+	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("status=%d body=%q", recorder.Code, recorder.Body.String())
 	}
 	if strings.Contains(recorder.Body.String(), "HTTP 404") || strings.Contains(recorder.Body.String(), "diag") {
@@ -283,7 +320,7 @@ func TestCharityUsesCharityPurposeAndSafe502AfterDispatch(t *testing.T) {
 		t.Fatalf("charity rail accept=%+v claim=%+v", fixture.claims.accepts[0], fixture.claims.claims[0])
 	}
 	terminal := fixture.claims.requestResults[0]
-	if terminal.Disposition != claim.AccountingCommit || terminal.ActualChargeMilli != 7 || terminal.Caller.Status != http.StatusBadGateway {
+	if terminal.Disposition != claim.AccountingCommit || terminal.ActualChargeMilli != 7 || terminal.Caller.Status != http.StatusNotFound {
 		t.Fatalf("terminal=%+v", terminal)
 	}
 }

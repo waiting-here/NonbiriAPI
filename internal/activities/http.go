@@ -13,6 +13,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
@@ -141,7 +142,7 @@ func (api *httpAPI) contributeThursday(writer http.ResponseWriter, request *http
 	writeActivitiesMutation(writer, result.Status, result.Body)
 }
 
-func (api *httpAPI) listPools(writer http.ResponseWriter, request *http.Request, _ AdminPrincipal) {
+func (api *httpAPI) listPools(writer http.ResponseWriter, request *http.Request, principal AdminPrincipal) {
 	if !requireNoBody(writer, request) {
 		return
 	}
@@ -149,11 +150,19 @@ func (api *httpAPI) listPools(writer http.ResponseWriter, request *http.Request,
 	if !ok {
 		return
 	}
-	if !exactQuery(values, "pool_type", "state", "cursor", "limit") {
+	if !exactQuery(values, "pool_type", "state", "cursor", "limit", "page", "page_size") {
 		writeActivitiesError(writer, ErrInvalidRequest)
 		return
 	}
-	query := PoolListQuery{}
+	query := PoolListQuery{AdminID: principal.UserID}
+	requested, selected, err := pagination.Parse(values)
+	if err != nil {
+		writeActivitiesError(writer, ErrInvalidRequest)
+		return
+	}
+	if selected {
+		query.Page = &requested
+	}
 	if entries, set := values["pool_type"]; set {
 		if entries[0] != PoolTypeWelfare && entries[0] != PoolTypeThursday {
 			writeActivitiesError(writer, ErrInvalidRequest)

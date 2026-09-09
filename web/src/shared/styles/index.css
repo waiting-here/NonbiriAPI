@@ -5,9 +5,4 @@
 @import './charity-management.css';
 @import './primitives.css';
 @import './patterns.css';
-@import './stations/user-shell.css';
-@import './stations/admin-shell.css';
-@import './games/base.css';
-@import './games/fishing.css';
-@import './games/linklink.css';
-@import './games/rps.css';
+@import './shell-components.css';

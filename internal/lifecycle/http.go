@@ -15,6 +15,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/authz"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
+	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 	"github.com/waiting-here/NonbiriAPI/internal/strictjson"
 )
 
@@ -91,7 +92,7 @@ func (api *lifecycleHTTP) exportAccount(writer http.ResponseWriter, request *htt
 	}
 	writer.Header().Set("Cache-Control", "no-store")
 	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-	writer.Header().Set("Content-Disposition", `attachment; filename="nonbiriapi-account-export-v4.json"`)
+	writer.Header().Set("Content-Disposition", `attachment; filename="nonbiriapi-account-export-v5.json"`)
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write(payload)
 }
@@ -124,11 +125,19 @@ func (api *lifecycleHTTP) listLegalHolds(writer http.ResponseWriter, request *ht
 	if !requireLifecycleNoBody(writer, request) {
 		return
 	}
-	values, ok := lifecycleQuery(writer, request, "state", "object_kind", "cursor", "limit")
+	values, ok := lifecycleQuery(writer, request, "state", "object_kind", "cursor", "limit", "page", "page_size")
 	if !ok {
 		return
 	}
 	filter := LegalHoldListFilter{AdminID: principal.UserID, DecisionNow: api.decisionNow()}
+	requested, selected, err := pagination.Parse(values)
+	if err != nil {
+		writeLifecycleError(writer, ErrInvalid)
+		return
+	}
+	if selected {
+		filter.Page = &requested
+	}
 	if entries, present := values["state"]; present {
 		if entries[0] == "" {
 			writeLifecycleError(writer, ErrInvalid)

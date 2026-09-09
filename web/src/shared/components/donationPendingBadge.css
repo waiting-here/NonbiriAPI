@@ -1,0 +1,26 @@
+.donation-pending-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  min-width: 0;
+}
+.donation-pending-badge a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: inherit;
+  white-space: nowrap;
+}
+.donation-pending-badge__count {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  min-width: 1.5rem;
+  padding: 0 0.25rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.nb-admin-sidebar__group > .donation-pending-badge {
+  padding: 0 1rem 0.5rem;
+}

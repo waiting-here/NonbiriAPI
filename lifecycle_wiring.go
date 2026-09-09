@@ -84,7 +84,26 @@ func (registrar lifecycleRouteRegistrar) RegisterUserRoute(
 		})
 }
 
-type productionHeldReadAuthorizer struct{ coordinator *lifecycle.Coordinator }
+type productionHeldReadAuthorizer struct {
+	coordinator *lifecycle.Coordinator
+	steward     logapi.StewardAuthorizer
+}
+
+func (authorizer productionHeldReadAuthorizer) AuthorizeStewardHeldDonationRead(ctx context.Context, tx *sql.Tx, userID, donationID, now int64) (bool, error) {
+	allowed, err := authorizer.coordinator.AuthorizeStewardHeldObjectRead(ctx, tx, userID, lifecycle.HeldDonation, strconv.FormatInt(donationID, 10), now, authorizer.steward)
+	if err != nil {
+		return false, translateDonationHeldReadError(err)
+	}
+	return allowed, nil
+}
+
+func (authorizer productionHeldReadAuthorizer) AuthorizeStewardHeldRequestLogRead(ctx context.Context, tx *sql.Tx, userID, requestLogID, now int64) (bool, error) {
+	allowed, err := authorizer.coordinator.AuthorizeStewardHeldObjectRead(ctx, tx, userID, lifecycle.HeldRequestLog, strconv.FormatInt(requestLogID, 10), now, authorizer.steward)
+	if err != nil {
+		return false, translateLogHeldReadError(err)
+	}
+	return allowed, nil
+}
 
 func (authorizer productionHeldReadAuthorizer) AuthorizeHeldDonationRead(
 	ctx context.Context,
@@ -387,7 +406,7 @@ func newLifecycleCoordinator(
 	if err != nil {
 		return nil, err
 	}
-	heldRead := productionHeldReadAuthorizer{coordinator: coordinator}
+	heldRead := productionHeldReadAuthorizer{coordinator: coordinator, steward: roleAuthorizer}
 	if err := donationService.AttachAdminHeldReadAuthorizer(heldRead); err != nil {
 		_ = coordinator.Close()
 		return nil, err

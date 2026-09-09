@@ -9,9 +9,20 @@ import {
   mockRoleSession,
   userSession,
 } from './support';
+import { numberedPage, numberedResponse } from './numbered-fixtures';
 
 type Locale = 'en' | 'zh';
 const NOW = 1_800_000_000;
+const DONATION_STATES = [
+  'available',
+  'pending',
+  'disabled',
+  'suspended',
+  'exhausted',
+  'expired',
+  'ended',
+] as const;
+const SOURCE_KEY = `dsg_${'A'.repeat(43)}`;
 
 async function prepare(
   page: Page,
@@ -101,6 +112,136 @@ function publicModel(index: number) {
   };
 }
 
+function catalogModel(model: Record<string, unknown>, levelAllowed = true) {
+  return {
+    ...model,
+    public_description: '',
+    enabled: true,
+    allowed_levels: levelAllowed ? [1, 2, 3, 4, 5] : [2, 3, 4, 5],
+    level_allowed: levelAllowed,
+    availability: levelAllowed ? 'available' : 'level_denied',
+    currently_available: true,
+  };
+}
+
+function catalogPage(
+  models: Record<string, unknown>[],
+  donationIntake: 'open' | 'closed',
+  serverNow = NOW,
+  levelAllowed: (model: Record<string, unknown>) => boolean = () => true,
+) {
+  return {
+    models: models.map((model) => catalogModel(model, levelAllowed(model))),
+    pagination: {
+      page: '1',
+      page_size: 20,
+      total_items: String(models.length),
+      total_pages: '1',
+    },
+    donation_intake: donationIntake,
+    server_now: serverNow,
+  };
+}
+
+function donationPageItem(donation: Record<string, unknown>): Record<string, unknown> {
+  const keys = Array.isArray(donation.keys)
+    ? donation.keys.filter(
+        (entry): entry is Record<string, unknown> =>
+          entry !== null && typeof entry === 'object' && !Array.isArray(entry),
+      )
+    : [];
+  const stateCounts = Object.fromEntries(DONATION_STATES.map((state) => [state, '0'])) as Record<
+    string,
+    string
+  >;
+  const sources: Record<string, unknown>[] = [];
+  for (const key of keys) {
+    if (typeof key.charity_state === 'string' && Object.hasOwn(stateCounts, key.charity_state)) {
+      stateCounts[key.charity_state] = String(Number(stateCounts[key.charity_state]) + 1);
+    }
+    if (
+      key.safe_source !== null &&
+      typeof key.safe_source === 'object' &&
+      !Array.isArray(key.safe_source) &&
+      !sources.some((source) => JSON.stringify(source) === JSON.stringify(key.safe_source))
+    ) {
+      sources.push(key.safe_source as Record<string, unknown>);
+    }
+  }
+  const owner = donation.owner;
+  return {
+    id: donation.id,
+    status: donation.status,
+    revision: donation.revision,
+    description: donation.description,
+    review_result: donation.review_result,
+    created_at: donation.created_at,
+    updated_at: donation.updated_at,
+    key_count: String(keys.length),
+    state_counts: stateCounts,
+    source_count: String(sources.length),
+    sources,
+    handling: donation.handling,
+    reviewer: donation.reviewer ?? null,
+    owner: owner === null || typeof owner !== 'object' || Array.isArray(owner) ? null : owner,
+  };
+}
+
+function donationKeyPageItem(
+  donation: Record<string, unknown>,
+  key: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    ...key,
+    donation_id: donation.id,
+    key_id: key.id,
+    donation_revision: donation.revision,
+    rule_count: '0',
+    rules: [],
+    handling: donation.handling,
+  };
+}
+
+function ownerDonationPageItem(donation: Record<string, unknown>): Record<string, unknown> {
+  const keys = Array.isArray(donation.keys)
+    ? donation.keys.filter(
+        (entry): entry is Record<string, unknown> =>
+          entry !== null && typeof entry === 'object' && !Array.isArray(entry),
+      )
+    : [];
+  const stateCounts = Object.fromEntries(DONATION_STATES.map((state) => [state, '0'])) as Record<
+    string,
+    string
+  >;
+  const sources: Record<string, unknown>[] = [];
+  for (const key of keys) {
+    if (typeof key.charity_state === 'string' && Object.hasOwn(stateCounts, key.charity_state)) {
+      stateCounts[key.charity_state] = String(Number(stateCounts[key.charity_state]) + 1);
+    }
+    if (
+      key.safe_source !== null &&
+      typeof key.safe_source === 'object' &&
+      !Array.isArray(key.safe_source) &&
+      !sources.some((source) => JSON.stringify(source) === JSON.stringify(key.safe_source))
+    ) {
+      sources.push(key.safe_source as Record<string, unknown>);
+    }
+  }
+  return {
+    id: donation.id,
+    status: donation.status,
+    revision: donation.revision,
+    description: donation.description,
+    review_result: donation.review_result,
+    created_at: donation.created_at,
+    updated_at: donation.updated_at,
+    key_count: String(keys.length),
+    state_counts: stateCounts,
+    source_count: String(sources.length),
+    sources,
+  };
+}
+
 for (const [timezoneId, expectedTime] of [
   ['America/New_York', '08:30 AM'],
   ['Asia/Shanghai', '08:30 PM'],
@@ -118,8 +259,8 @@ for (const [timezoneId, expectedTime] of [
       await mockJson(page, {
         origin: USER_ORIGIN,
         method: 'GET',
-        path: '/api/donations?limit=100',
-        body: { data: [], next_cursor: null },
+        path: '/api/donations?page=1&page_size=20',
+        body: numberedResponse([], '1', 20),
       });
       await mockJson(page, {
         origin: USER_ORIGIN,
@@ -131,6 +272,12 @@ for (const [timezoneId, expectedTime] of [
           server_now: endAt - 120,
           models: [model],
         },
+      });
+      await mockJson(page, {
+        origin: USER_ORIGIN,
+        method: 'GET',
+        path: '/api/charity/models?view=catalog&page=1&page_size=20&allowed_for_me=true&currently_available=true',
+        body: catalogPage([model], 'closed', endAt - 120),
       });
       await page.goto(`${USER_ORIGIN}/charity`);
       const deadline = page.locator(`time[datetime="2026-09-07T12:30:00.000Z"]`);
@@ -156,9 +303,9 @@ test('mainstream resources retain their channel name and protocol in the list', 
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/endpoints?limit=50',
-    body: {
-      data: [
+    path: '/api/endpoints?page=1&page_size=20',
+    body: numberedResponse(
+      [
         {
           ...endpoint(1),
           key_count: '0',
@@ -170,8 +317,9 @@ test('mainstream resources retain their channel name and protocol in the list', 
         },
         endpoint(2),
       ],
-      next_cursor: null,
-    },
+      '1',
+      20,
+    ),
   });
   await page.goto(`${USER_ORIGIN}/endpoints`);
   const cards = page.locator('.core-endpoint-card');
@@ -209,12 +357,18 @@ test('donation guidance renders Markdown without overflowing mobile or desktop p
       models: [publicModel(1)],
     },
   });
-  for (const path of ['/api/donations?limit=100', '/api/endpoints?limit=100'])
+  await mockJson(page, {
+    origin: USER_ORIGIN,
+    method: 'GET',
+    path: '/api/charity/models?view=catalog&page=1&page_size=20&allowed_for_me=true&currently_available=true',
+    body: catalogPage([publicModel(1)], 'open'),
+  });
+  for (const path of ['/api/donations?page=1&page_size=20', '/api/endpoints?page=1&page_size=20'])
     await mockJson(page, {
       origin: USER_ORIGIN,
       method: 'GET',
       path,
-      body: { data: [], next_cursor: null },
+      body: numberedResponse([], '1', 20),
     });
   await page.goto(`${USER_ORIGIN}/charity?tab=donate`);
   await expect(page.getByRole('heading', { name: 'Donation guide', exact: true })).toBeVisible();
@@ -238,14 +392,42 @@ test('administrator source grouping accepts current key limits on narrow and wid
   page,
 }) => {
   const guard = await prepare(page, 'admin');
+  const donation = managedDonation(9);
+  const donationKey = donation.keys[0] as Record<string, unknown>;
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
     method: 'GET',
-    path: '/admin/api/donations?limit=50',
-    body: { data: [managedDonation(9, 'admin')], next_cursor: null },
+    path: '/admin/api/donations?page=1&page_size=20',
+    body: numberedResponse([donationPageItem(donation)], '1', 20),
+  });
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN,
+    method: 'GET',
+    path: '/admin/api/donation-sources?scope=active&page=1&page_size=20',
+    body: numberedResponse(
+      [
+        {
+          source_key: SOURCE_KEY,
+          safe_source: donationKey.safe_source,
+          donation_count: '1',
+          key_count: '1',
+          usable_key_count: '0',
+          pending_donation_count: '1',
+        },
+      ],
+      '1',
+      20,
+    ),
+  });
+  await mockJson(page, {
+    origin: ADMIN_ORIGIN,
+    method: 'GET',
+    path: `/admin/api/donation-sources/${SOURCE_KEY}/keys?scope=active&page=1&page_size=20`,
+    body: numberedResponse([donationKeyPageItem(donation, donationKey)], '1', 20),
   });
   await page.goto(`${ADMIN_ORIGIN}/charity`);
   await page.getByRole('tab', { name: 'Browse by source' }).click();
+  await page.locator('.charity-source-browser__source-button').click();
   await expect(page.getByText('Maximum RPM: 45', { exact: true })).toBeVisible();
   for (const width of [320, 1935]) {
     await page.setViewportSize({ width, height: 1000 });
@@ -280,12 +462,44 @@ for (const locale of ['en', 'zh'] as const) {
     await mockJson(page, {
       origin: USER_ORIGIN,
       method: 'GET',
-      path: '/api/donations?limit=100',
-      body: { data: [], next_cursor: null },
+      path: '/api/charity/models?view=catalog&page=1&page_size=20',
+      body: catalogPage(
+        [unlimited, ...models.slice(1)],
+        'closed',
+        NOW,
+        (model) => Number(model.id) % 2 === 0,
+      ),
+    });
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/charity/models?view=catalog&page=1&page_size=20&q=MODEL-12-',
+      body: catalogPage([models[11]], 'closed'),
+    });
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/charity/models?view=catalog&page=1&page_size=20&q=does-not-exist',
+      body: catalogPage([], 'closed'),
+    });
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/charity/models?view=catalog&page=1&page_size=20&allowed_for_me=true',
+      body: catalogPage(
+        [unlimited, ...models.slice(1)].filter((model) => Number(model.id) % 2 === 0),
+        'closed',
+      ),
+    });
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/donations?page=1&page_size=20',
+      body: numberedResponse([], '1', 20),
     });
     await page.setViewportSize({ width: 1935, height: 1000 });
-    await page.goto(`${USER_ORIGIN}/charity`);
-    const cards = page.locator('.economy-model-list > li');
+    await page.goto(`${USER_ORIGIN}/charity?allowed_for_me=all&currently_available=all`);
+    const cards = page.locator('.economy-catalog-list > li');
     await expect(cards).toHaveCount(12);
     await expect(cards.first().locator('.charity-discount')).toHaveText(
       locale === 'zh' ? '立减 20%' : '20% off',
@@ -293,7 +507,7 @@ for (const locale of ['en', 'zh'] as const) {
     await expect(cards.first().locator('time')).toHaveCount(0);
     await screenshot(page, `prices-${locale}-desktop`);
     expect((await cards.first().boundingBox())!.height).toBeLessThan(400);
-    const heading = (await cards.first().locator('.economy-model-heading').boundingBox())!;
+    const heading = (await cards.first().locator('.economy-catalog-item__heading').boundingBox())!;
     const prices = (await cards.first().locator('.charity-price-wrap').boundingBox())!;
     expect(prices.y - heading.y - heading.height).toBeLessThanOrEqual(20);
     const firstRow = cards.first().locator('tbody tr');
@@ -328,17 +542,30 @@ for (const locale of ['en', 'zh'] as const) {
       if (width === 390) await screenshot(page, `prices-${locale}-mobile`);
     }
     const search = page.getByRole('searchbox', {
-      name: locale === 'zh' ? '搜索模型名称' : 'Search model names',
+      name: locale === 'zh' ? '搜索模型名称或公开说明' : 'Search model name or public description',
     });
     await search.fill('MODEL-12-');
+    await page
+      .getByRole('button', { name: locale === 'zh' ? '搜索' : 'Search', exact: true })
+      .click();
     await expect(cards).toHaveCount(1);
     await expect(cards).toContainText(models[11].full_name);
     await search.fill('does-not-exist');
+    await page
+      .getByRole('button', { name: locale === 'zh' ? '搜索' : 'Search', exact: true })
+      .click();
     await expect(cards).toHaveCount(0);
     await search.fill('');
     await page
-      .getByLabel(locale === 'zh' ? '计价方式' : 'Pricing method', { exact: true })
-      .selectOption('per_token');
+      .getByRole('button', { name: locale === 'zh' ? '搜索' : 'Search', exact: true })
+      .click();
+    await expect(cards).toHaveCount(12);
+    await page
+      .getByRole('combobox', {
+        name: locale === 'zh' ? '本人访问权限' : 'Your access',
+        exact: true,
+      })
+      .selectOption('true');
     await expect(cards).toHaveCount(6);
     await expect(cards.first().locator('tbody tr')).toHaveCount(4);
     guard.assertNone();
@@ -388,11 +615,8 @@ function candidate(endpointId: string, keyId: string, index: number) {
     source_types: ['automatic'],
   };
 }
-function paged<T>(items: T[], url: URL) {
-  return {
-    data: url.searchParams.has('cursor') ? items.slice(50) : items.slice(0, 50),
-    next_cursor: url.searchParams.has('cursor') || items.length <= 50 ? null : 'bmV4dA',
-  };
+function numberedFixturePage<T>(items: T[], url: URL) {
+  return numberedPage(items, url.searchParams);
 }
 
 test('many personal endpoints, keys and models preserve cross-page selections without oversized tiles', async ({
@@ -447,14 +671,14 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
           : Array.from({ length: 61 }, (_, i) => candidate(endpointId, keyId, i + 1));
       const query = url.searchParams.get('q');
       if (query) items = items.filter((item) => item.upstream_model_id.includes(query));
-      await route.fulfill({ json: paged(items, url) });
+      await route.fulfill({ json: numberedFixturePage(items, url) });
     } else if (url.pathname.endsWith('/bindings'))
       await route.fulfill({
         json: { bindings: savedBindings, binding_revision: model.binding_revision },
       });
     else if (url.pathname === '/api/models/7') await route.fulfill({ json: model });
     else if (url.pathname === '/api/models')
-      await route.fulfill({ json: { data: [model], next_cursor: null } });
+      await route.fulfill({ json: numberedFixturePage([model], url) });
     else await route.fallback();
   });
   await page.route(`${USER_ORIGIN}/api/endpoints**`, async (route) => {
@@ -462,19 +686,29 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
     const keyMatch = url.pathname.match(/^\/api\/endpoints\/(\d+)\/keys$/);
     if (keyMatch)
       await route.fulfill({
-        json: paged(
+        json: numberedFixturePage(
           Array.from({ length: 61 }, (_, i) => endpointKey(keyMatch[1], i + 1)),
           url,
         ),
       });
     else if (url.pathname === '/api/endpoints')
       await route.fulfill({
-        json: paged(
+        json: numberedFixturePage(
           Array.from({ length: 61 }, (_, i) => endpoint(i + 1)),
           url,
         ),
       });
     else await route.fallback();
+  });
+  await page.addInitScript(() => {
+    for (const listType of [
+      'models',
+      'models-binding-endpoints',
+      'models-binding-keys',
+      'models-binding-candidates-automatic',
+      'models-binding-candidates-manual',
+    ])
+      localStorage.setItem(`nonbiri:user:${listType}-page-size:v1`, '50');
   });
   await page.setViewportSize({ width: 1935, height: 1000 });
   await page.goto(`${USER_ORIGIN}/models`);
@@ -496,7 +730,7 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
   const automatic = page.locator('.core-selector__sources > section').first();
   await expect(automatic.locator('.core-choice')).toHaveCount(50);
   await automatic.getByRole('button', { name: /^model-1-/ }).click();
-  await automatic.getByRole('button', { name: 'Next models', exact: true }).click();
+  await automatic.getByRole('button', { name: 'Next', exact: true }).click();
   await automatic.getByRole('button', { name: /^model-61-/ }).click();
   await page.locator('.core-selector-path button').first().click();
   await level.getByRole('button', { name: 'Next', exact: true }).click();
@@ -537,10 +771,13 @@ test('many personal endpoints, keys and models preserve cross-page selections wi
 
 const managedModel = {
   id: '7',
+  route_strategy: 'expiry_weighted',
   provider: 'provider',
   model: 'shared',
   full_name: '[公益]provider/shared',
   enabled: true,
+  allowed_levels: [1, 2, 3, 4, 5],
+  public_description: '',
   pricing: { mode: 'per_request', user_price: '1', donor_reward: '0.1' },
   discount: { enabled: false, percent: 100, start_at: null, end_at: null },
   flatten_tool_calls: false,
@@ -561,15 +798,92 @@ function sharedSource(id: number) {
     max_rpm: 45,
   };
 }
-function managedDonation(id: number, role: 'admin' | 'steward') {
+
+function sourceKeyFor(id: number): string {
+  return `dsg_${String(id).padStart(2, '0')}${'A'.repeat(41)}`;
+}
+
+function safeSource(id: number): Record<string, unknown> {
+  const source = sharedSource(id);
+  return {
+    kind: 'custom',
+    connector_type: source.connector_type,
+    base_url: source.canonical_base_url,
+  };
+}
+
+function sourceSummary(id: number): Record<string, unknown> {
+  return {
+    source_key: sourceKeyFor(id),
+    safe_source: safeSource(id),
+    donation_count: '1',
+    key_count: '61',
+    usable_key_count: '0',
+    pending_donation_count: '1',
+  };
+}
+
+function sourceManagedKey(
+  donation: Record<string, unknown>,
+  sourceID: number,
+  index: number,
+): Record<string, unknown> {
+  const keyID = String(sourceID * 1000 + index);
+  return {
+    id: keyID,
+    binding_count: '0',
+    idle: true,
+    endpoint_key_id: keyID,
+    display_head: 'head',
+    display_tail: String(index).padStart(4, '0'),
+    safe_source: safeSource(sourceID),
+    physical_enabled: true,
+    charity_state: 'available',
+    limits: { price: null, calls: null, tokens: null },
+    usage: {
+      price_used: '0',
+      price_inflight: '0',
+      calls_used: '0',
+      calls_inflight: '0',
+      tokens_used: '0',
+      tokens_inflight: '0',
+    },
+    token_reserve: 32,
+    authorized_expires_at: null,
+    expires_at: null,
+    streak: { generation: '1', count: '0', failure_disabled: false },
+    ended_reason: null,
+    safe_note: `Reviewed key ${index} — ${'long note '.repeat(12)}`,
+    max_concurrency: 3,
+    max_rpm: 45,
+    donation_id: String(sourceID),
+    key_id: keyID,
+    donation_revision: donation.revision,
+    rule_count: '0',
+    rules: [],
+    handling: donation.handling,
+  };
+}
+
+function managedDonation(id: number) {
   return {
     id: String(id),
     status: 'pending',
+    handling: {
+      state: 'pending',
+      revision: '1',
+      processed_at: null,
+      processed_by_role: null,
+      closed_at: null,
+      closed_reason: null,
+    },
     revision: '1',
     description: `Donation ${id} — ${'Shared instructions with a long description. '.repeat(6)}`,
     review_result: null,
     keys: [
       {
+        binding_count: '0',
+        idle: true,
         id: String(id * 1000 + 1),
         endpoint_key_id: String(id),
         display_head: 'head',
@@ -602,8 +916,8 @@ function managedDonation(id: number, role: 'admin' | 'steward') {
     ],
     owner: {
       user_id: '1',
+      discord_id: '123456789012345678',
       display_name: 'A donor with a long display name',
-      ...(role === 'admin' ? { discord_id: '123456789012345678' } : {}),
     },
     reviewer: null,
     created_at: 1,
@@ -621,7 +935,10 @@ for (const role of ['admin', 'steward'] as const)
     const guard = await prepare(page, station, 'en', role === 'steward');
     let submitted: Record<string, unknown> | undefined;
     let bindings: Array<Record<string, unknown>> = [];
-    const donation = managedDonation(9, role);
+    const donation = managedDonation(9);
+    const sourceRows = Array.from({ length: 61 }, (_, index) => sourceSummary(index + 1));
+    const sourceKeys = (sourceID: number) =>
+      Array.from({ length: 61 }, (_, index) => sourceManagedKey(donation, sourceID, index + 1));
     await page.route(`${origin}${base}/**`, async (route) => {
       const request = route.request();
       const url = new URL(request.url());
@@ -631,45 +948,37 @@ for (const role of ['admin', 'steward'] as const)
         binding_count: String(bindings.length),
         binding_revision: bindings.length ? '1' : '0',
       };
-      if (path === '/logs') return route.fulfill({ json: { data: [], next_cursor: null } });
+      if (path === '/logs') return route.fulfill({ json: numberedFixturePage([], url) });
       if (path === '/donations')
-        return route.fulfill({ json: { data: [donation], next_cursor: null } });
+        return route.fulfill({
+          json: numberedFixturePage([donationPageItem(donation)], url),
+        });
       if (path === '/donations/9') return route.fulfill({ json: donation });
       if (path === '/charity-models')
-        return route.fulfill({ json: { data: [currentModel], next_cursor: null } });
+        return route.fulfill({ json: numberedFixturePage([currentModel], url) });
       if (path === '/charity-models/7') return route.fulfill({ json: currentModel });
       if (path === '/charity-models/7/bindings')
         return route.fulfill({ json: { bindings, binding_revision: bindings.length ? '1' : '0' } });
-      if (path === '/charity-models/7/binding-donations')
+      if (path === '/donation-sources')
         return route.fulfill({
-          json: paged(
-            Array.from({ length: 61 }, (_, i) => ({
-              id: String(i + 1),
-              description: `Donation ${i + 1} — ${'Clear instructions. '.repeat(12)}`,
-              key_count: 61,
-            })),
-            url,
-          ),
+          json: numberedFixturePage(sourceRows, url),
         });
-      const keysMatch = path.match(/^\/charity-models\/7\/binding-donations\/(\d+)\/keys$/);
-      if (keysMatch)
+      const sourceKeysMatch = path.match(/^\/donation-sources\/(dsg_[A-Za-z0-9_-]{43})\/keys$/);
+      if (sourceKeysMatch) {
+        const sourceID =
+          sourceRows.findIndex((entry) => entry.source_key === sourceKeysMatch[1]) + 1;
+        if (sourceID < 1) return route.fallback();
         return route.fulfill({
-          json: paged(
-            Array.from({ length: 61 }, (_, i) => ({
-              donation_key_id: String(Number(keysMatch[1]) * 1000 + i + 1),
-              source: sharedSource(Number(keysMatch[1])),
-              note: `Reviewed key ${i + 1} — ${'long note '.repeat(12)}`,
-            })),
-            url,
-          ),
+          json: numberedFixturePage(sourceKeys(sourceID), url),
         });
+      }
       if (path === '/charity-models/7/binding-candidates') {
         const donationId = url.searchParams.get('donation_id')!;
         const keyId = url.searchParams.get('donation_key_id')!;
         expect(donationId).toBeTruthy();
         expect(keyId).toBeTruthy();
         return route.fulfill({
-          json: paged(
+          json: numberedFixturePage(
             Array.from({ length: 61 }, (_, i) => ({
               donation_id: donationId,
               donation_key_id: keyId,
@@ -699,6 +1008,17 @@ for (const role of ['admin', 'steward'] as const)
       }
       return route.fallback();
     });
+    await page.addInitScript(
+      ({ station }) => {
+        for (const listType of [
+          'charity-binding-sources',
+          'charity-binding-source-keys',
+          'charity-binding-candidates',
+        ])
+          localStorage.setItem(`nonbiri:${station}:${listType}-page-size:v1`, '50');
+      },
+      { station: role === 'admin' ? 'admin' : 'user' },
+    );
     await page.setViewportSize({ width: 1935, height: 1000 });
     await page.goto(`${origin}/${role === 'admin' ? 'charity' : 'steward'}`);
     if (role === 'steward') await page.getByRole('tab', { name: 'Charity management' }).click();
@@ -707,7 +1027,10 @@ for (const role of ['admin', 'steward'] as const)
       .filter({ has: page.getByText(donation.description, { exact: true }) });
     await expect(reviewRow).toBeVisible();
     await expect(reviewRow.locator('td').first()).toHaveText('9');
-    await expect(reviewRow.locator('td').nth(1)).toHaveText(donation.description);
+    await expect(
+      reviewRow.locator('td').nth(1).getByText(donation.description, { exact: true }),
+    ).toBeVisible();
+    await expect(reviewRow.locator('td').nth(1)).toContainText('https://example.test/v1');
     for (const width of [320, 390, 768, 959, 960, 961, 1935]) {
       await page.setViewportSize({ width, height: 1000 });
       await fitsPage(page);
@@ -726,17 +1049,21 @@ for (const role of ['admin', 'steward'] as const)
       .getByRole('button', { name: 'Manage', exact: true })
       .click();
     const picker = page.locator('.ops-binding-picker');
+    const currentPage = picker.getByRole('navigation', { name: 'Pagination', exact: true }).first();
     await expect(picker.locator('.ops-picker-choice')).toHaveCount(50);
-    await picker.getByRole('button', { name: /Donation #1 / }).click();
+    await picker.getByRole('button', { name: /endpoint-1\.example\.test/ }).click();
+    await expect(picker.locator('.ops-picker-choice')).toHaveCount(50);
     await picker.getByRole('button', { name: /^Reviewed key 1 —/ }).click();
     await picker.getByRole('checkbox', { name: /shared-model-1-/ }).check();
-    await picker.getByRole('button', { name: 'Next', exact: true }).click();
+    await currentPage.getByRole('button', { name: 'Next', exact: true }).click();
     await picker.getByRole('checkbox', { name: /shared-model-61-/ }).check();
-    await picker.getByRole('button', { name: '1 · Choose donation' }).click();
-    await picker.getByRole('button', { name: 'Next', exact: true }).click();
-    await picker.getByRole('button', { name: /Donation #61 / }).click();
-    await picker.getByRole('button', { name: 'Next', exact: true }).click();
+    await picker.getByRole('button', { name: '1 · Choose source', exact: true }).click();
+    await currentPage.getByRole('button', { name: 'Next', exact: true }).click();
+    await picker.getByRole('button', { name: /endpoint-61\.example\.test/ }).click();
+    await expect(picker.locator('.ops-picker-choice')).toHaveCount(50);
+    await currentPage.getByRole('button', { name: 'Next', exact: true }).click();
     await picker.getByRole('button', { name: /^Reviewed key 61 —/ }).click();
+    await expect(currentPage.getByRole('button', { name: 'Previous', exact: true })).toBeDisabled();
     await picker.getByRole('checkbox', { name: /shared-model-2-/ }).check();
     await expect(picker.locator('.ops-picker-selection li')).toHaveCount(3);
     for (const width of [320, 390, 768, 1935]) {
@@ -761,115 +1088,191 @@ for (const role of ['admin', 'steward'] as const)
     guard.assertNone();
   });
 
-test('donation resources can be filtered across many endpoints without losing selected keys or expiry', async ({
-  page,
-}) => {
-  const guard = await prepare(page, 'user');
-  let submitted: Record<string, unknown> | undefined;
-  let saved: Record<string, unknown> | undefined;
-  await mockJson(page, {
-    origin: USER_ORIGIN,
-    method: 'GET',
-    path: '/api/charity/models',
-    body: {
-      state: 'available',
-      donation_intake: 'open',
-      server_now: NOW,
-      models: [publicModel(1)],
-    },
-  });
-  await page.route(`${USER_ORIGIN}/api/donations**`, async (route) => {
-    if (route.request().method() === 'POST') {
-      submitted = route.request().postDataJSON();
-      const selections = submitted!.keys as Array<{
-        endpoint_key_id: string;
-        expires_at: number | null;
-      }>;
-      const template = managedDonation(99, 'admin');
-      saved = {
-        id: '99',
-        status: 'pending',
-        revision: '1',
-        description: submitted!.description,
-        review_result: null,
-        created_at: NOW,
-        updated_at: NOW,
-        keys: selections.map((selection, i) => ({
-          ...Object.fromEntries(
-            Object.entries(template.keys[0]).filter(
-              ([key]) =>
-                !['safe_note', 'authorized_expires_at', 'max_concurrency', 'max_rpm'].includes(key),
+test.describe('donation selection expiry in UTC', () => {
+  test.use({ timezoneId: 'UTC' });
+  test('donation resources can be filtered across many endpoints without losing selected keys or expiry', async ({
+    page,
+  }) => {
+    const guard = await prepare(page, 'user');
+    let submitted: Record<string, unknown> | undefined;
+    let saved: Record<string, unknown> | undefined;
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: `/api/time/resolve?${new URLSearchParams({ local: '2027-02-01T12:00:00', time_zone: 'UTC' })}`,
+      body: {
+        instant: 1_801_483_200,
+        local: '2027-02-01T12:00:00',
+        time_zone: 'UTC',
+        offset_seconds: 0,
+        adjustment: 'none',
+      },
+    });
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/charity/models',
+      body: {
+        state: 'available',
+        donation_intake: 'open',
+        server_now: NOW,
+        models: [publicModel(1)],
+      },
+    });
+    await mockJson(page, {
+      origin: USER_ORIGIN,
+      method: 'GET',
+      path: '/api/charity/models?view=catalog&page=1&page_size=20&allowed_for_me=true&currently_available=true',
+      body: catalogPage([publicModel(1)], 'open'),
+    });
+    await page.route(`${USER_ORIGIN}/api/donations**`, async (route) => {
+      const url = new URL(route.request().url());
+      if (route.request().method() === 'POST') {
+        submitted = route.request().postDataJSON();
+        const selections = submitted!.keys as Array<{
+          endpoint_key_id: string;
+          expires_at: number | null;
+        }>;
+        const template = managedDonation(99);
+        saved = {
+          id: '99',
+          status: 'pending',
+          revision: '1',
+          description: submitted!.description,
+          review_result: null,
+          created_at: NOW,
+          updated_at: NOW,
+          keys: selections.map((selection, i) => ({
+            ...Object.fromEntries(
+              Object.entries(template.keys[0]).filter(
+                ([key]) =>
+                  ![
+                    'binding_count',
+                    'idle',
+                    'safe_note',
+                    'authorized_expires_at',
+                    'max_concurrency',
+                    'max_rpm',
+                  ].includes(key),
+              ),
             ),
-          ),
-          id: String(i + 1),
-          endpoint_key_id: selection.endpoint_key_id,
-          expires_at: selection.expires_at,
-          token_reserve: 0,
-        })),
-      };
-      return route.fulfill({ status: 201, json: saved });
-    }
-    return route.fulfill({ json: { data: saved ? [saved] : [], next_cursor: null } });
-  });
-  await page.route(`${USER_ORIGIN}/api/endpoints**`, async (route) => {
-    const url = new URL(route.request().url());
-    const match = url.pathname.match(/^\/api\/endpoints\/(\d+)\/keys$/);
-    const data = match
-      ? Array.from({ length: 3 }, (_, i) => ({
+            id: String(i + 1),
+            endpoint_key_id: selection.endpoint_key_id,
+            expires_at: selection.expires_at,
+            token_reserve: 0,
+          })),
+        };
+        return route.fulfill({ status: 201, json: saved });
+      }
+      return route.fulfill({
+        json: numberedResponse(
+          saved ? [ownerDonationPageItem(saved)] : [],
+          url.searchParams.get('page') ?? '1',
+          Number(url.searchParams.get('page_size') ?? '20'),
+        ),
+      });
+    });
+    await page.route(`${USER_ORIGIN}/api/endpoints**`, async (route) => {
+      const url = new URL(route.request().url());
+      const match = url.pathname.match(/^\/api\/endpoints\/(\d+)\/keys$/);
+      if (match) {
+        const data = Array.from({ length: 3 }, (_, i) => ({
           ...endpointKey(match[1], i + 1),
           max_concurrency: 2,
           max_rpm: 12,
-        }))
-      : Array.from({ length: 20 }, (_, i) => ({ ...endpoint(i + 1), key_count: '3' }));
-    return route.fulfill({ json: { data, next_cursor: null } });
-  });
-  await page.setViewportSize({ width: 1935, height: 1000 });
-  await page.goto(`${USER_ORIGIN}/charity?tab=donate`);
-  const groups = page.locator('.economy-key-group');
-  await expect(groups).toHaveCount(20);
-  await expect(groups.locator('input[type=checkbox]:visible')).toHaveCount(0);
-  const filter = page.getByRole('searchbox', { name: 'Find endpoints or key notes' });
-  await filter.fill('Endpoint 20 —');
-  await expect(groups).toHaveCount(1);
-  const choice = page.locator('.economy-key-choice').first();
-  await choice.getByRole('checkbox').check();
-  const expiry = choice.locator('input[type=datetime-local]');
-  await expiry.fill('2027-02-01T12:00');
-  await expect(choice.getByRole('checkbox')).toBeChecked();
-  await filter.fill('Endpoint 1 —');
-  await page.locator('.economy-key-choice').nth(1).getByRole('checkbox').check();
-  await filter.fill('Endpoint 20 —');
-  await expect(page.locator('.economy-key-choice').first().getByRole('checkbox')).toBeChecked();
-  await expect(
-    page.locator('.economy-key-choice').first().locator('input[type=datetime-local]'),
-  ).toHaveValue('2027-02-01T12:00');
-  await filter.fill('');
-  for (const width of [320, 390, 768, 1935]) {
-    await page.setViewportSize({ width, height: 1000 });
-    await fitsPage(page);
-    expect(
-      (await page.locator('.economy-resource-groups').boundingBox())!.height,
-    ).toBeLessThanOrEqual(602);
-  }
-  await page.setViewportSize({ width: 390, height: 1000 });
-  await screenshot(page, 'donation-resources-mobile');
-  await page
-    .getByLabel('Donation description')
-    .fill('A helpful description for the shared resources');
-  await page.locator('.economy-authorization input').check();
-  await page.getByRole('button', { name: 'Submit for review', exact: true }).click();
-  await expect
-    .poll(() => submitted)
-    .toEqual({
-      description: 'A helpful description for the shared resources',
-      keys: [
-        { endpoint_key_id: '20001', expires_at: Date.parse('2027-02-01T12:00:00Z') / 1000 },
-        { endpoint_key_id: '1002', expires_at: null },
-      ],
-      ownership_authorized: true,
+          browse: {
+            donation_eligibility:
+              saved && ['20001', '1002'].includes(String(Number(match[1]) * 1000 + i + 1))
+                ? 'already_donated'
+                : 'eligible',
+            model_count: '0',
+            binding_count: '0',
+            available_binding_count: '0',
+            preview: [],
+            discovery: {
+              state: 'unknown',
+              revision: '1',
+              result: null,
+              safe_class: 'none',
+              observed_at: null,
+              count: null,
+            },
+          },
+        }));
+        return route.fulfill({ json: numberedFixturePage(data, url) });
+      }
+      const detail = /^\/api\/endpoints\/(\d+)$/.exec(url.pathname);
+      if (detail)
+        return route.fulfill({ json: { ...endpoint(Number(detail[1])), key_count: '3' } });
+      const query = url.searchParams.get('q') ?? '';
+      const data = Array.from({ length: 20 }, (_, i) => ({
+        ...endpoint(i + 1),
+        key_count: '3',
+      })).filter((item) => item.note.includes(query));
+      return route.fulfill({ json: numberedFixturePage(data, url) });
     });
-  await expect(page.getByText('Donation submitted for review.', { exact: true })).toBeVisible();
-  guard.assertNone();
+    await page.setViewportSize({ width: 1935, height: 1000 });
+    await page.goto(`${USER_ORIGIN}/charity?tab=donate`);
+    const picker = page.locator('.donation-resource-picker');
+    const sources = picker.locator('.donation-resource-picker__section').first();
+    const groups = picker.locator('.donation-resource-picker__endpoint-list > li');
+    await expect(groups).toHaveCount(20);
+    await expect(picker.getByRole('checkbox')).toHaveCount(0);
+    const filter = sources.getByRole('searchbox', { name: 'Search endpoints', exact: true });
+    await filter.fill('Endpoint 20 —');
+    await filter.press('Enter');
+    await expect(groups).toHaveCount(1);
+    await sources.getByRole('button', { name: /^Endpoint 20 —/ }).click();
+    const keys = picker.locator('.donation-resource-picker__section').nth(1);
+    const choice = keys.getByRole('checkbox').first();
+    await choice.check();
+    const expiry = picker
+      .locator('.donation-resource-picker__selected-list input[type=datetime-local]')
+      .first();
+    await expiry.fill('2027-02-01T12:00');
+    await expect(choice).toBeChecked();
+    await filter.fill('Endpoint 1 —');
+    await filter.press('Enter');
+    await expect(groups).toHaveCount(1);
+    await sources.getByRole('button', { name: /^Endpoint 1 —/ }).click();
+    await keys.getByRole('checkbox').nth(1).check();
+    await filter.fill('Endpoint 20 —');
+    await filter.press('Enter');
+    await expect(groups).toHaveCount(1);
+    await sources.getByRole('button', { name: /^Endpoint 20 —/ }).click();
+    await expect(keys.getByRole('checkbox').first()).toBeChecked();
+    await expect(expiry).toHaveValue('2027-02-01T12:00');
+    await expect(picker.locator('.donation-resource-picker__selected-list > li')).toHaveCount(2);
+    await filter.fill('');
+    await filter.press('Enter');
+    await expect(groups).toHaveCount(20);
+    for (const width of [320, 390, 768, 1935]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await fitsPage(page);
+      expect(
+        (await picker.locator('.donation-resource-picker__endpoint-list').boundingBox())!.height,
+      ).toBeLessThanOrEqual(602);
+    }
+    await page.setViewportSize({ width: 390, height: 1000 });
+    await screenshot(page, 'donation-resources-mobile');
+    await page
+      .getByRole('textbox', { name: 'Donation description', exact: true })
+      .fill('A helpful description for the shared resources');
+    await page.locator('.economy-authorization input').check();
+    await page.getByRole('button', { name: 'Submit for review', exact: true }).click();
+    await expect
+      .poll(() => submitted)
+      .toEqual({
+        description: 'A helpful description for the shared resources',
+        keys: [
+          { endpoint_key_id: '20001', expires_at: Date.parse('2027-02-01T12:00:00Z') / 1000 },
+          { endpoint_key_id: '1002', expires_at: null },
+        ],
+        ownership_authorized: true,
+      });
+    await expect(page.getByText('Donation submitted for review.', { exact: true })).toBeVisible();
+    guard.assertNone();
+  });
 });
 
 for (const locale of ['en', 'zh'] as const)
@@ -881,9 +1284,9 @@ for (const locale of ['en', 'zh'] as const)
     await mockJson(page, {
       origin: ADMIN_ORIGIN,
       method: 'GET',
-      path: '/admin/api/overview/endpoints?limit=50',
-      body: {
-        data: [
+      path: '/admin/api/overview/endpoints?page=1&page_size=20',
+      body: numberedResponse(
+        [
           {
             base_url: endpointURL,
             user_count: '2',
@@ -900,8 +1303,27 @@ for (const locale of ['en', 'zh'] as const)
             ],
           },
         ],
-        next_cursor: null,
-      },
+        '1',
+        20,
+      ),
+    });
+    await mockJson(page, {
+      origin: ADMIN_ORIGIN,
+      method: 'GET',
+      path: `/admin/api/overview/endpoints/users?${new URLSearchParams({ base_url: endpointURL, page: '1', page_size: '20' })}`,
+      body: numberedResponse(
+        [
+          {
+            user_id: '9223372036854775807',
+            endpoint_count: '6',
+            key_count: '60',
+            enabled_count: '5',
+          },
+          { user_id: '2', endpoint_count: '6', key_count: '60', enabled_count: '6' },
+        ],
+        '1',
+        20,
+      ),
     });
     await page.goto(`${ADMIN_ORIGIN}/endpoints`);
     await page.locator('.ops-table tbody button').first().click();
@@ -910,9 +1332,9 @@ for (const locale of ['en', 'zh'] as const)
     await mockJson(page, {
       origin: ADMIN_ORIGIN,
       method: 'GET',
-      path: '/admin/api/alerts?resolved=false&limit=50',
-      body: {
-        data: [
+      path: '/admin/api/alerts?resolved=false&page=1&page_size=20',
+      body: numberedResponse(
+        [
           {
             id: '1',
             kind: 'forward_error',
@@ -924,8 +1346,9 @@ for (const locale of ['en', 'zh'] as const)
             resolved_at: null,
           },
         ],
-        next_cursor: null,
-      },
+        '1',
+        20,
+      ),
     });
     await page.goto(`${ADMIN_ORIGIN}/alerts`);
     await expect(page.locator('.ops-table tbody tr')).toHaveCount(1);
@@ -946,9 +1369,9 @@ for (const locale of ['en', 'zh'] as const)
     await mockJson(page, {
       origin: ADMIN_ORIGIN,
       method: 'GET',
-      path: '/admin/api/legal-holds?limit=50',
-      body: {
-        data: [
+      path: '/admin/api/legal-holds?page=1&page_size=20',
+      body: numberedResponse(
+        [
           {
             id: `lgh_${'A'.repeat(22)}`,
             object_kind: 'report_case',
@@ -960,8 +1383,9 @@ for (const locale of ['en', 'zh'] as const)
             ended_at: null,
           },
         ],
-        next_cursor: null,
-      },
+        '1',
+        20,
+      ),
     });
     await page.goto(`${ADMIN_ORIGIN}/settings`);
     await expect(page.locator('td').filter({ hasText: objectRef })).toHaveText(objectRef);

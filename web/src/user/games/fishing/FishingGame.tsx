@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
+import { Card, ErrorState, LoadingState } from '@shared/components/States';
 import { useUserSession } from '../../data';
 import { useGameCopy } from '../copy';
-import { GameRulesButton, GameRulesDialog, type GameRulesSection } from '../common/GameRulesDialog';
+import { useGameSound } from '../common/useGameSound';
+import { GameHeader } from '../common/GameHeader';
+import { GameMoney } from '../common/GameMoney';
+import { GameRulesDialog, type GameRulesSection } from '../common/GameRulesDialog';
 import {
   createIdempotencyKey,
   isConflict,
@@ -16,6 +18,7 @@ import { creditsToMilli, formatCredits, multiplyCredits } from '../common/strict
 import { BAITS, type Bait } from '../common/types';
 import { gameKeys, useGamesSnapshot } from '../common/snapshot';
 import { FishingArtwork } from './FishingArtwork';
+import blueFatFish from '@shared/assets/game-fishing/blue-fat-fish.png';
 import fishingScene from '@shared/assets/game-heroes/fishing.webp';
 import { GamePrivacyControl } from '../common/GamePrivacyControl';
 import {
@@ -32,8 +35,11 @@ import type {
   FishingBatchResult,
   FishingLeaderboard,
   FishingLeaderboard as Leaderboard,
+  FishingLeaderboardBoard,
   FishingSingleRow,
   FishingStartIntent,
+  FishingStartResult,
+  FishingState,
   FishingTotalRow,
 } from './types';
 import { fishingItemName } from './text';
@@ -52,43 +58,65 @@ function useReducedMotion(): boolean {
   return reduced;
 }
 
-function Money({ value }: { readonly value: string }) {
-  const { text } = useGameCopy();
+type LeaderboardQuery = {
+  readonly data?: FishingLeaderboard;
+  readonly error: unknown;
+  readonly isPending: boolean;
+  readonly isFetching: boolean;
+  readonly refetch: () => unknown;
+};
+
+function BlueFatFishImage({
+  label,
+  className,
+}: {
+  readonly label: string;
+  readonly className?: string;
+}) {
   return (
-    <span className="game-money">
-      {formatCredits(value)} <span className="game-money__unit">{text('common.credits')}</span>
-    </span>
+    <img
+      className={className ?? 'fishing-blue-fat-fish'}
+      src={blueFatFish}
+      alt={label}
+      decoding="async"
+    />
+  );
+}
+
+function outcomeDisplayLength(outcome: FishingBatchResult['outcomes'][number]): string | null {
+  if (outcome.blueFatFishLengthCM !== null) return outcome.blueFatFishLengthCM;
+  return outcome.sizeCM > 0 ? String(outcome.sizeCM) : null;
+}
+
+function OutcomeName({
+  outcome,
+  language,
+}: {
+  readonly outcome: FishingBatchResult['outcomes'][number];
+  readonly language: string;
+}) {
+  const { text } = useGameCopy();
+  const species = fishingItemName(outcome.speciesKey, language);
+  if (outcome.blueFatFishLengthCM === null) return <strong>{species}</strong>;
+  return (
+    <>
+      <strong>{text('fishing.blueFatFish')}</strong>
+      <span>
+        {' · '}
+        {text('fishing.blueFatFish.original', { species })}
+      </span>
+    </>
   );
 }
 
 function FishingRules({ open, onClose }: { readonly open: boolean; readonly onClose: () => void }) {
   const { text } = useGameCopy();
-  const sections: readonly GameRulesSection[] = [
-    {
-      title: text('fishing.rules.chooseTitle'),
-      paragraphs: [text('fishing.rules.chooseBody')],
-    },
-    {
-      title: text('fishing.rules.batchTitle'),
-      paragraphs: [text('fishing.rules.batchBody')],
-    },
-    {
-      title: text('fishing.rules.resultTitle'),
-      paragraphs: [text('fishing.rules.resultBody')],
-    },
-    {
-      title: text('fishing.rules.recoveryTitle'),
-      paragraphs: [text('fishing.rules.recoveryBody')],
-    },
-    {
-      title: text('fishing.rules.scoresTitle'),
-      paragraphs: [text('fishing.rules.scoresBody')],
-    },
-    {
-      title: text('fishing.rules.startTitle'),
-      paragraphs: [text('fishing.rules.startBody')],
-    },
-  ];
+  const sections: readonly GameRulesSection[] = (
+    ['choose', 'batch', 'result', 'recovery', 'scores', 'start'] as const
+  ).map((section) => ({
+    title: text(`fishing.rules.${section}Title`),
+    paragraphs: [text(`fishing.rules.${section}Body`)],
+  }));
   return (
     <GameRulesDialog
       open={open}
@@ -111,8 +139,10 @@ function FishingStage({
 }) {
   const { text, language } = useGameCopy();
   const rarity = ['junk', 'small', 'regular', 'big', 'giant', 'treasure', 'legend'];
+  const priority = (outcome: FishingBatchResult['outcomes'][number]) =>
+    rarity.indexOf(outcome.tier) + (outcome.blueFatFishLengthCM === null ? 0 : 1);
   const highlight = catchResult?.outcomes.reduce((best, outcome) =>
-    rarity.indexOf(outcome.tier) > rarity.indexOf(best.tier) ? outcome : best,
+    priority(outcome) > priority(best) ? outcome : best,
   );
   return (
     <div className={`fishing-stage${level4 ? ' fishing-stage--l4' : ''}`} data-phase={phase}>
@@ -142,10 +172,17 @@ function FishingStage({
               />
             ))}
           </div>
-          <FishingArtwork
-            itemKey={highlight.speciesKey}
-            label={fishingItemName(highlight.speciesKey, language)}
-          />
+          {highlight.blueFatFishLengthCM !== null ? (
+            <BlueFatFishImage
+              label={text('fishing.blueFatFish')}
+              className="fishing-blue-fat-fish"
+            />
+          ) : (
+            <FishingArtwork
+              itemKey={highlight.speciesKey}
+              label={fishingItemName(highlight.speciesKey, language)}
+            />
+          )}
         </div>
       ) : null}
       <strong className="fishing-stage__label" role="status">
@@ -187,27 +224,29 @@ function ResultPanel({
           {result.outcomes.slice(0, revealed).map((outcome) => (
             <article
               className={`fishing-outcome fishing-outcome--${outcome.tier} fishing-rarity--${outcome.tier}`}
+              data-blue-fat-fish={outcome.blueFatFishLengthCM !== null ? 'true' : undefined}
               key={`${result.batchID}:${outcome.ordinal}`}
               role="listitem"
               data-ordinal={outcome.ordinal}
             >
-              <FishingArtwork
-                itemKey={outcome.speciesKey}
-                label={fishingItemName(outcome.speciesKey, language)}
-              />
+              {outcome.blueFatFishLengthCM !== null ? (
+                <BlueFatFishImage label={text('fishing.blueFatFish')} />
+              ) : (
+                <FishingArtwork
+                  itemKey={outcome.speciesKey}
+                  label={fishingItemName(outcome.speciesKey, language)}
+                  showLabel={false}
+                />
+              )}
               <div>
                 <span className="fishing-rarity-label">
                   {text(`fishing.tier.${outcome.tier}` as Parameters<typeof text>[0])}
                 </span>
-                <strong>{fishingItemName(outcome.speciesKey, language)}</strong>
+                <OutcomeName outcome={outcome} language={language} />
                 <span>
-                  {outcome.sizeCM > 0
-                    ? text('fishing.size', { size: outcome.sizeCM })
-                    : text(
-                        `fishing.tier.${outcome.tier === 'legend' ? 'legendary' : outcome.tier === 'junk' || outcome.tier === 'treasure' ? outcome.tier : outcome.tier === 'small' || outcome.tier === 'regular' ? 'common' : 'rare'}` as Parameters<
-                          typeof text
-                        >[0],
-                      )}
+                  {outcomeDisplayLength(outcome) !== null
+                    ? text('fishing.size', { size: outcomeDisplayLength(outcome)! })
+                    : text(`fishing.tier.${outcome.tier}`)}
                 </span>
                 <span>{text('fishing.reward', { amount: formatCredits(outcome.reward) })}</span>
               </div>
@@ -216,24 +255,20 @@ function ResultPanel({
         </div>
         {revealed === result.outcomes.length ? (
           <dl className="fishing-totals">
-            <div>
-              <dt>{text('fishing.result.entry')}</dt>
-              <dd>
-                <Money value={result.entryTotal} />
-              </dd>
-            </div>
-            <div>
-              <dt>{text('fishing.result.payout')}</dt>
-              <dd>
-                <Money value={result.payoutTotal} />
-              </dd>
-            </div>
-            <div>
-              <dt>{text('fishing.result.balance')}</dt>
-              <dd>
-                <Money value={result.balance} />
-              </dd>
-            </div>
+            {(
+              [
+                ['entry', result.entryTotal],
+                ['payout', result.payoutTotal],
+                ['balance', result.balance],
+              ] as const
+            ).map(([label, value]) => (
+              <div key={label}>
+                <dt>{text(`fishing.result.${label}`)}</dt>
+                <dd>
+                  <GameMoney value={value} />
+                </dd>
+              </div>
+            ))}
           </dl>
         ) : null}
         {hasMore && revealed === result.outcomes.length ? (
@@ -257,15 +292,23 @@ function LeaderboardCard({
   board,
   query,
 }: {
-  readonly board: 'single' | 'total';
-  readonly query: {
-    readonly data?: FishingLeaderboard;
-    readonly error: unknown;
-    readonly isPending: boolean;
-    readonly refetch: () => unknown;
-  };
+  readonly board: FishingLeaderboardBoard;
+  readonly query: LeaderboardQuery;
 }) {
   const { language, text } = useGameCopy();
+  const isSingleBoard = board !== 'total';
+  const titleKey =
+    board === 'recent_single'
+      ? 'fishing.leaderboard.recentSingle'
+      : board === 'single'
+        ? 'fishing.leaderboard.single'
+        : 'fishing.leaderboard.total';
+  const helpKey =
+    board === 'recent_single'
+      ? 'fishing.leaderboard.helpRecentSingle'
+      : board === 'single'
+        ? 'fishing.leaderboard.helpSingle'
+        : 'fishing.leaderboard.helpTotal';
   if (query.isPending)
     return (
       <Card className="fishing-board">
@@ -290,12 +333,21 @@ function LeaderboardCard({
   const missingMe = data?.me && !rows.some((row) => row.isMe) ? [data.me] : [];
   return (
     <Card className="fishing-board">
-      <h2>{text(`fishing.leaderboard.${board}`)}</h2>
-      <p>
-        {text(
-          board === 'single' ? 'fishing.leaderboard.helpSingle' : 'fishing.leaderboard.helpTotal',
-        )}
-      </p>
+      <div className="fishing-board__heading">
+        <h2>{text(titleKey)}</h2>
+        <button
+          type="button"
+          className="btn btn-secondary fishing-board__refresh"
+          aria-label={text('fishing.leaderboard.refresh')}
+          disabled={query.isFetching}
+          onClick={() => void query.refetch()}
+        >
+          {text(
+            query.isFetching ? 'fishing.leaderboard.refreshing' : 'fishing.leaderboard.refresh',
+          )}
+        </button>
+      </div>
+      <p>{text(helpKey)}</p>
       {rows.length === 0 && missingMe.length === 0 ? (
         <p>{text('fishing.leaderboard.empty')}</p>
       ) : (
@@ -306,9 +358,7 @@ function LeaderboardCard({
                 <th>#</th>
                 <th>{text('fishing.leaderboard.angler')}</th>
                 <th>
-                  {text(
-                    board === 'single' ? 'fishing.leaderboard.catch' : 'fishing.leaderboard.score',
-                  )}
+                  {text(isSingleBoard ? 'fishing.leaderboard.catch' : 'fishing.leaderboard.score')}
                 </th>
               </tr>
             </thead>
@@ -318,10 +368,40 @@ function LeaderboardCard({
                   row.identity.kind === 'public'
                     ? row.identity.displayName
                     : text('fishing.leaderboard.anonymous');
-                const score =
-                  board === 'single'
-                    ? `${fishingItemName((row as FishingSingleRow).speciesKey, language)} · ${(row as FishingSingleRow).sizeCM} cm`
-                    : `${formatCredits((row as FishingTotalRow).totalCredits)} ${text('common.credits')}`;
+                const score = isSingleBoard ? (
+                  <span className="fishing-board__catch">
+                    {(row as FishingSingleRow).blueFatFishLengthCM !== null ? (
+                      <BlueFatFishImage
+                        label={text('fishing.blueFatFish')}
+                        className="fishing-blue-fat-fish fishing-blue-fat-fish--board"
+                      />
+                    ) : null}
+                    <span>
+                      {(row as FishingSingleRow).blueFatFishLengthCM !== null
+                        ? text('fishing.blueFatFish')
+                        : fishingItemName((row as FishingSingleRow).speciesKey, language)}
+                      {(row as FishingSingleRow).blueFatFishLengthCM !== null ? (
+                        <>
+                          {' · '}
+                          {text('fishing.blueFatFish.original', {
+                            species: fishingItemName(
+                              (row as FishingSingleRow).speciesKey,
+                              language,
+                            ),
+                          })}
+                        </>
+                      ) : null}
+                      {' · '}
+                      {text('fishing.size', {
+                        size:
+                          (row as FishingSingleRow).blueFatFishLengthCM ??
+                          String((row as FishingSingleRow).sizeCM),
+                      })}
+                    </span>
+                  </span>
+                ) : (
+                  `${formatCredits((row as FishingTotalRow).totalCredits)} ${text('common.credits')}`
+                );
                 return (
                   <tr
                     key={`${row.rank}-${row.isMe ? 'me' : 'row'}`}
@@ -344,14 +424,78 @@ function LeaderboardCard({
   );
 }
 
+function FishingSingleBoards({
+  historical,
+  recent,
+}: {
+  readonly historical: LeaderboardQuery;
+  readonly recent: LeaderboardQuery;
+}) {
+  const { text } = useGameCopy();
+  const [board, setBoard] = useState<'single' | 'recent_single'>('single');
+  const selected = board === 'single' ? historical : recent;
+  return (
+    <div className="fishing-board-switch">
+      <div
+        className="fishing-board-switch__tabs"
+        role="tablist"
+        aria-label={text('fishing.leaderboard.single')}
+        onKeyDown={(event) => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          const next =
+            event.key === 'Home'
+              ? 'single'
+              : event.key === 'End'
+                ? 'recent_single'
+                : board === 'single'
+                  ? 'recent_single'
+                  : 'single';
+          setBoard(next);
+          event.currentTarget.querySelector<HTMLButtonElement>(`#fishing-tab-${next}`)?.focus();
+        }}
+      >
+        {(['single', 'recent_single'] as const).map((value) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            id={`fishing-tab-${value}`}
+            aria-controls="fishing-length-board"
+            tabIndex={board === value ? 0 : -1}
+            aria-selected={board === value}
+            className={board === value ? 'is-selected' : undefined}
+            onClick={() => setBoard(value)}
+          >
+            {text(
+              value === 'single'
+                ? 'fishing.leaderboard.windowHistorical'
+                : 'fishing.leaderboard.windowRecent',
+            )}
+          </button>
+        ))}
+      </div>
+      <div role="tabpanel" id="fishing-length-board" aria-labelledby={`fishing-tab-${board}`}>
+        <LeaderboardCard board={board} query={selected} />
+      </div>
+    </div>
+  );
+}
+
 export function FishingGame() {
   const { text } = useGameCopy();
+  const sound = useGameSound('fishing');
+  const playSound = sound.play;
   const queryClient = useQueryClient();
   const snapshot = useGamesSnapshot();
   const maintenance = isMaintenance(snapshot.error);
   const state = useFishingState(Boolean(snapshot.data) && !maintenance);
   const runtimeMaintenance = maintenance || isMaintenance(state.error);
   const single = useFishingLeaderboard('single', Boolean(snapshot.data) && !maintenance);
+  const recentSingle = useFishingLeaderboard(
+    'recent_single',
+    Boolean(snapshot.data) && !maintenance,
+  );
   const total = useFishingLeaderboard('total', Boolean(snapshot.data) && !maintenance);
   const session = useUserSession(false);
   const reducedMotion = useReducedMotion();
@@ -369,19 +513,22 @@ export function FishingGame() {
     readonly batchID: string;
     readonly state: 'sending' | 'failed';
   } | null>(null);
-  const [sound, setSound] = useState(false);
   const [viewedResult, setViewedResult] = useState<FishingBatchResult | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
-  const audioRef = useRef<AudioContext | null>(null);
+  const soundBatch = useRef<{ readonly id: string; through: number } | null>(null);
+  const audibleBatch = useRef<string | null>(null);
   const resultRef = useRef<HTMLElement | null>(null);
   const ackAttempted = useRef<string | null>(null);
+  const ackInFlight = useRef<string | null>(null);
+  const requestInFlight = useRef(false);
   const authoritative = state.data;
   const refetchState = state.refetch;
   const result = authoritative?.unrevealed ?? null;
   const pending = authoritative?.settlementPending ?? null;
-  const authorityResolvedStart = Boolean(operation && (pending || result));
-  const effectiveActionState = authorityResolvedStart ? 'idle' : actionState;
-  const replayOperation = authorityResolvedStart ? null : operation;
+  const effectiveActionState = actionState;
+  const replayOperation = operation;
+  const resultID = result?.batchID ?? null;
+  const outcomeCount = result?.outcomes.length ?? 0;
   const revealed = result
     ? reducedMotion
       ? result.outcomes.length
@@ -394,38 +541,45 @@ export function FishingGame() {
   const shownResult = result ?? (!pending && effectiveActionState === 'idle' ? viewedResult : null);
   const shownRevealed = result ? revealed : (shownResult?.outcomes.length ?? 0);
 
-  useEffect(
-    () => () => {
-      void audioRef.current?.close();
-    },
-    [],
-  );
   useEffect(() => {
-    if (!result || reducedMotion) return undefined;
+    if (pending && soundBatch.current?.id !== pending.batchID)
+      audibleBatch.current = pending.batchID;
+  }, [pending]);
+  useEffect(() => {
+    if (!resultID || reducedMotion) return undefined;
     const timer = window.setInterval(() => {
       setRevealClock((current) => {
-        const count = current?.batchID === result.batchID ? current.count : 0;
-        const next = nextRevealCount(count, result);
-        return next === count && current?.batchID === result.batchID
+        const count = current?.batchID === resultID ? current.count : 0;
+        const next = nextRevealCount(count, outcomeCount);
+        return next === count && current?.batchID === resultID
           ? current
-          : { batchID: result.batchID, count: next };
+          : { batchID: resultID, count: next };
       });
     }, FISHING_REVEAL_MS);
     return () => window.clearInterval(timer);
-  }, [reducedMotion, result]);
+  }, [reducedMotion, resultID, outcomeCount]);
 
   useEffect(() => {
-    if (!sound || revealed === 0 || !audioRef.current) return;
-    const context = audioRef.current;
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    oscillator.frequency.value = 420 + revealed * 24;
-    gain.gain.setValueAtTime(0.035, context.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.09);
-    oscillator.connect(gain).connect(context.destination);
-    oscillator.start();
-    oscillator.stop(context.currentTime + 0.1);
-  }, [revealed, sound]);
+    if (!result) return;
+    if (soundBatch.current?.id !== result.batchID) {
+      soundBatch.current = {
+        id: result.batchID,
+        through: audibleBatch.current === result.batchID ? 0 : result.outcomes.length,
+      };
+    }
+    if (audibleBatch.current === result.batchID) audibleBatch.current = null;
+    const previous = soundBatch.current.through;
+    if (revealed <= previous) return;
+    soundBatch.current.through = revealed;
+    const tiers = result.outcomes.slice(previous, revealed).map((outcome) => outcome.tier);
+    playSound(
+      tiers.some((tier) => tier === 'legend' || tier === 'treasure')
+        ? 'fishing_epic'
+        : tiers.some((tier) => tier === 'big' || tier === 'giant')
+          ? 'fishing_rare'
+          : 'fishing_common',
+    );
+  }, [playSound, result, revealed]);
 
   const refreshAfterMutation = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: fishingKeys.state });
@@ -434,10 +588,19 @@ export function FishingGame() {
 
   const sendACK = useCallback(
     async (batchID: string) => {
+      if (ackInFlight.current) return;
+      const displayed = queryClient.getQueryData<FishingState>(fishingKeys.state)?.unrevealed;
+      if (displayed?.batchID !== batchID) return;
+      ackInFlight.current = batchID;
       setAckStatus({ batchID, state: 'sending' });
       try {
         await acknowledgeFishing(batchID);
-        if (result?.batchID === batchID) setViewedResult(result);
+        setViewedResult(displayed);
+        await queryClient.cancelQueries({ queryKey: fishingKeys.state });
+        queryClient.setQueryData<FishingState>(fishingKeys.state, (current) =>
+          current?.unrevealed?.batchID === batchID ? { ...current, unrevealed: null } : current,
+        );
+        ackInFlight.current = null;
         setAckStatus(null);
         await refreshAfterMutation();
         await queryClient.invalidateQueries({
@@ -446,40 +609,52 @@ export function FishingGame() {
       } catch {
         setAckStatus({ batchID, state: 'failed' });
         await refetchState();
+      } finally {
+        if (ackInFlight.current === batchID) ackInFlight.current = null;
       }
     },
-    [queryClient, refetchState, refreshAfterMutation, result],
+    [queryClient, refetchState, refreshAfterMutation],
   );
 
   useEffect(() => {
-    if (!result || revealed !== result.outcomes.length || ackAttempted.current === result.batchID)
-      return;
-    if (resultRef.current?.querySelectorAll('[data-ordinal]').length !== result.outcomes.length)
-      return;
+    if (!resultID || revealed !== outcomeCount || ackAttempted.current === resultID) return;
+    if (resultRef.current?.querySelectorAll('[data-ordinal]').length !== outcomeCount) return;
     const timer = window.setTimeout(() => {
-      ackAttempted.current = result.batchID;
-      void sendACK(result.batchID);
+      ackAttempted.current = resultID;
+      void sendACK(resultID);
     }, 650);
     return () => {
       window.clearTimeout(timer);
     };
-  }, [result, revealed, sendACK]);
+  }, [resultID, outcomeCount, revealed, sendACK]);
+
+  const adoptResponse = useCallback(
+    async (response: FishingStartResult) => {
+      await queryClient.cancelQueries({ queryKey: fishingKeys.state });
+      queryClient.setQueryData<FishingState>(fishingKeys.state, (current) => {
+        // Finish presenting the oldest unacknowledged batch before a newer response.
+        if (current?.unrevealed && current.unrevealed.batchID !== response.batchID) return current;
+        return isFishingResult(response)
+          ? { settlementPending: null, unrevealed: response, hasMoreUnrevealed: false }
+          : { settlementPending: response, unrevealed: null, hasMoreUnrevealed: false };
+      });
+    },
+    [queryClient],
+  );
 
   const adoptStart = useCallback(
     async (intent: FishingStartIntent) => {
+      if (requestInFlight.current) return;
+      requestInFlight.current = true;
       setActionState('sending');
       setActionError(null);
       try {
         const response = await startFishing(intent);
+        audibleBatch.current = response.batchID;
+        await adoptResponse(response);
+        await refreshAfterMutation();
         setOperation(null);
         setActionState('idle');
-        queryClient.setQueryData(
-          fishingKeys.state,
-          isFishingResult(response)
-            ? { settlementPending: null, unrevealed: response, hasMoreUnrevealed: false }
-            : { settlementPending: response, unrevealed: null, hasMoreUnrevealed: false },
-        );
-        await refreshAfterMutation();
       } catch (error) {
         setActionError(error);
         if (isResponseUnknown(error)) setActionState('unknown');
@@ -488,23 +663,28 @@ export function FishingGame() {
           setActionState('idle');
           if (isConflict(error)) await refetchState();
         }
+      } finally {
+        requestInFlight.current = false;
       }
     },
-    [queryClient, refetchState, refreshAfterMutation],
+    [adoptResponse, refetchState, refreshAfterMutation],
   );
 
   const start = () => {
+    if (requestInFlight.current || locked || !startsOpen || !affordable) return;
     const intent = operation ?? {
       bait: selectedBait,
       count,
       idempotencyKey: createIdempotencyKey(),
     };
+    playSound('select');
     setOperation(intent);
     void adoptStart(intent);
   };
 
   const recover = async () => {
-    if (!pending || pending.state !== 'recovery_required') return;
+    if (requestInFlight.current || !pending || pending.state !== 'recovery_required') return;
+    requestInFlight.current = true;
     setOperation(null);
     const key = recoverKeys[pending.batchID] ?? createIdempotencyKey();
     if (!recoverKeys[pending.batchID])
@@ -513,12 +693,8 @@ export function FishingGame() {
     setActionError(null);
     try {
       const response = await recoverFishing(pending.batchID, key);
-      queryClient.setQueryData(
-        fishingKeys.state,
-        isFishingResult(response)
-          ? { settlementPending: null, unrevealed: response, hasMoreUnrevealed: false }
-          : { settlementPending: response, unrevealed: null, hasMoreUnrevealed: false },
-      );
+      audibleBatch.current = response.batchID;
+      await adoptResponse(response);
       setRecoverKeys((value) => {
         const next = { ...value };
         delete next[pending.batchID];
@@ -538,15 +714,9 @@ export function FishingGame() {
           return next;
         });
       if (isConflict(error)) await refetchState();
+    } finally {
+      requestInFlight.current = false;
     }
-  };
-
-  const toggleSound = () => {
-    if (!sound) {
-      audioRef.current ??= new AudioContext();
-      void audioRef.current.resume();
-    }
-    setSound((value) => !value);
   };
 
   const prices = snapshot.data?.fishing.baitPrices;
@@ -559,7 +729,12 @@ export function FishingGame() {
     snapshot.data?.gamesEnabled && snapshot.data.fishing.enabled && snapshot.data.fishing.available,
   );
   const locked = Boolean(
-    state.isPending || state.error || pending || replayOperation || effectiveActionState !== 'idle',
+    state.isPending ||
+    state.error ||
+    pending ||
+    replayOperation ||
+    effectiveActionState !== 'idle' ||
+    (result && (revealed < outcomeCount || ackState === 'sending')),
   );
   const phase = fishingPresentationPhase({
     submitting: effectiveActionState === 'sending' && !pending,
@@ -568,25 +743,13 @@ export function FishingGame() {
     revealed,
   });
   const closeRules = useCallback(() => setRulesOpen(false), []);
-  const rulesButton = (
-    <GameRulesButton label={text('common.rulesButton')} onClick={() => setRulesOpen(true)} />
-  );
+  const header = <GameHeader game="fishing" sound={sound} onRules={() => setRulesOpen(true)} />;
   const rulesDialog = <FishingRules open={rulesOpen} onClose={closeRules} />;
 
   if (snapshot.isPending)
     return (
       <main className="game-page fishing-page">
-        <PageHeader
-          back={
-            <Link className="game-back-link" to="/games">
-              {text('common.back')}
-            </Link>
-          }
-          eyebrow={text('fishing.eyebrow')}
-          title={text('fishing.title')}
-          description={text('fishing.description')}
-          actions={rulesButton}
-        />
+        {header}
         <LoadingState label={text('common.loading')} />
         {rulesDialog}
       </main>
@@ -594,17 +757,7 @@ export function FishingGame() {
   if (snapshot.error && !maintenance)
     return (
       <main className="game-page fishing-page">
-        <PageHeader
-          back={
-            <Link className="game-back-link" to="/games">
-              {text('common.back')}
-            </Link>
-          }
-          eyebrow={text('fishing.eyebrow')}
-          title={text('fishing.title')}
-          description={text('fishing.description')}
-          actions={rulesButton}
-        />
+        {header}
         <ErrorState error={snapshot.error} onRetry={() => void snapshot.refetch()} />
         {rulesDialog}
       </main>
@@ -612,17 +765,7 @@ export function FishingGame() {
   if (runtimeMaintenance || !snapshot.data)
     return (
       <main className="game-page fishing-page">
-        <PageHeader
-          back={
-            <Link className="game-back-link" to="/games">
-              {text('common.back')}
-            </Link>
-          }
-          eyebrow={text('fishing.eyebrow')}
-          title={text('fishing.title')}
-          description={text('fishing.description')}
-          actions={rulesButton}
-        />
+        {header}
         <p className="game-inline-notice game-inline-notice--warning" role="status">
           {text('common.maintenance')}
         </p>
@@ -632,29 +775,7 @@ export function FishingGame() {
 
   return (
     <main className="game-page fishing-page">
-      <PageHeader
-        back={
-          <Link className="game-back-link" to="/games">
-            {text('common.back')}
-          </Link>
-        }
-        eyebrow={text('fishing.eyebrow')}
-        title={text('fishing.title')}
-        description={text('fishing.description')}
-        actions={
-          <>
-            {rulesButton}
-            <button
-              type="button"
-              className="btn btn-secondary"
-              aria-pressed={sound}
-              onClick={toggleSound}
-            >
-              {text(sound ? 'fishing.sound.on' : 'fishing.sound.off')}
-            </button>
-          </>
-        }
-      />
+      {header}
       <div className="fishing-layout">
         <div className="fishing-main">
           <FishingStage
@@ -688,7 +809,7 @@ export function FishingGame() {
                 <div>
                   <dt>{text('fishing.totalPrice')}</dt>
                   <dd>
-                    <Money value={pending.entryTotal} />
+                    <GameMoney value={pending.entryTotal} />
                   </dd>
                 </div>
               </dl>
@@ -781,7 +902,7 @@ export function FishingGame() {
                   onClick={() => setSelectedBait(bait)}
                 >
                   <strong>{text(`fishing.bait.${bait}`)}</strong>
-                  <Money value={prices?.[bait] ?? '0'} />
+                  <GameMoney value={prices?.[bait] ?? '0'} />
                 </button>
               ))}
             </div>
@@ -811,19 +932,19 @@ export function FishingGame() {
             <div>
               <dt>{text('fishing.unitPrice')}</dt>
               <dd>
-                <Money value={unit} />
+                <GameMoney value={unit} />
               </dd>
             </div>
             <div>
               <dt>{text('fishing.totalPrice')}</dt>
               <dd>
-                <Money value={frozenTotal} />
+                <GameMoney value={frozenTotal} />
               </dd>
             </div>
             <div>
               <dt>{text('fishing.balance')}</dt>
               <dd>
-                <Money value={snapshot.data.balance} />
+                <GameMoney value={snapshot.data.balance} />
               </dd>
             </div>
           </dl>
@@ -844,7 +965,7 @@ export function FishingGame() {
       </div>
       <GamePrivacyControl />
       <section className="fishing-leaderboards" aria-label={text('fishing.leaderboard.single')}>
-        <LeaderboardCard board="single" query={single} />
+        <FishingSingleBoards historical={single} recent={recentSingle} />
         <LeaderboardCard board="total" query={total} />
       </section>
       {rulesDialog}
