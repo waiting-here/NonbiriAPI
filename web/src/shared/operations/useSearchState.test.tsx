@@ -1,6 +1,12 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StrictMode, useEffect } from 'react';
-import { createMemoryRouter, RouterProvider, useNavigate } from 'react-router';
+import {
+  createMemoryRouter,
+  RouterProvider,
+  useLocation,
+  useNavigate,
+  useNavigationType,
+} from 'react-router';
 import { describe, expect, it } from 'vitest';
 import { useSearchState } from './useSearchState';
 import { useUrlPagePager } from './useUrlPagePager';
@@ -57,6 +63,80 @@ function Probe({ name = 'one', nested = false }: { name?: string; nested?: boole
   );
 }
 
+function StateProbe() {
+  const [, setSearch] = useSearchState();
+  const location = useLocation();
+  const navigationType = useNavigationType();
+  return (
+    <section aria-label="state">
+      <output data-testid="state-search">{location.search}</output>
+      <output data-testid="state-value">{JSON.stringify(location.state ?? null)}</output>
+      <output data-testid="navigation-type">{navigationType}</output>
+      <button
+        onClick={() =>
+          setSearch((previous) => {
+            previous.set('page', '2');
+            return previous;
+          })
+        }
+      >
+        Preserve
+      </button>
+      <button
+        onClick={() => {
+          setSearch((previous) => {
+            previous.set('page', '2');
+            return previous;
+          });
+          setSearch((previous) => {
+            previous.set('page_size', '10');
+            return previous;
+          });
+        }}
+      >
+        Batch
+      </button>
+      <button
+        onClick={() =>
+          setSearch(
+            (previous) => {
+              previous.set('page', '3');
+              return previous;
+            },
+            { replace: true, preventScrollReset: true, state: null },
+          )
+        }
+      >
+        Clear
+      </button>
+      <button
+        onClick={() =>
+          setSearch(
+            (previous) => {
+              previous.set('page', '4');
+              return previous;
+            },
+            { replace: true, preventScrollReset: true, state: { returnTo: '/replacement' } },
+          )
+        }
+      >
+        Replace state
+      </button>
+      <button
+        onClick={() => {
+          setSearch('page=1', { state: undefined });
+          setSearch((previous) => {
+            previous.set('page_size', '10');
+            return previous;
+          });
+        }}
+      >
+        Clear and batch
+      </button>
+    </section>
+  );
+}
+
 function mount(search: string, name = 'one', nested = false) {
   const router = createMemoryRouter(
     [{ path: '*', element: <Probe name={name} nested={nested} /> }],
@@ -72,11 +152,59 @@ function mount(search: string, name = 'one', nested = false) {
   return within(screen.getByRole('region', { name }));
 }
 
+function mountWithState(search: string, state: unknown) {
+  const router = createMemoryRouter(
+    [{ path: '*', element: <StateProbe /> }],
+    {
+      initialEntries: [{ pathname: '/list', search: `?${search}`, state }],
+    },
+  );
+  render(
+    <StrictMode>
+      <RouterProvider router={router} />
+    </StrictMode>,
+  );
+  return { router, view: within(screen.getByRole('region', { name: 'state' })) };
+}
+
 function params(name = 'one') {
   return new URLSearchParams(screen.getByTestId(name).textContent ?? '');
 }
 
 describe('shared URL control updates', () => {
+  it('preserves location state for default and consecutive query updates', async () => {
+    const { view } = mountWithState('page=1', { returnTo: '/endpoints?page=2&page_size=10' });
+    act(() => fireEvent.click(view.getByRole('button', { name: 'Batch' })));
+    await waitFor(() =>
+      expect(view.getByTestId('state-search')).toHaveTextContent('?page=2&page_size=10'),
+    );
+    expect(JSON.parse(view.getByTestId('state-value').textContent ?? '')).toEqual({
+      returnTo: '/endpoints?page=2&page_size=10',
+    });
+  });
+
+  it('honors explicit state clearing and replacement while retaining replace navigation', async () => {
+    const { view } = mountWithState('page=1', { returnTo: '/endpoints?page=2&page_size=10' });
+    fireEvent.click(view.getByRole('button', { name: 'Clear' }));
+    await waitFor(() => expect(view.getByTestId('navigation-type')).toHaveTextContent('REPLACE'));
+    expect(view.getByTestId('state-value')).toHaveTextContent('null');
+    fireEvent.click(view.getByRole('button', { name: 'Replace state' }));
+    await waitFor(() => expect(view.getByTestId('state-search')).toHaveTextContent('?page=4'));
+    expect(view.getByTestId('navigation-type')).toHaveTextContent('REPLACE');
+    expect(JSON.parse(view.getByTestId('state-value').textContent ?? '')).toEqual({
+      returnTo: '/replacement',
+    });
+  });
+
+  it('does not restore cleared state during a consecutive query update', async () => {
+    const { view } = mountWithState('page=1', { returnTo: '/endpoints?page=2' });
+    fireEvent.click(view.getByRole('button', { name: 'Clear and batch' }));
+    await waitFor(() =>
+      expect(view.getByTestId('state-search')).toHaveTextContent('?page=1&page_size=10'),
+    );
+    expect(view.getByTestId('state-value')).toHaveTextContent('null');
+  });
+
   it('does not navigate repeatedly when an effect writes an unchanged query', async () => {
     let effects = 0;
     function Normalize() {
