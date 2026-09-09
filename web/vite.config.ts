@@ -15,6 +15,35 @@ interface StationConfig {
   previewPort: number;
 }
 
+function normalized(id: string): string {
+  return id.replaceAll('\\', '/');
+}
+
+function isCopyModule(id: string): boolean {
+  const value = normalized(id);
+  return (
+    value.endsWith('/src/user/games/copy.ts') ||
+    value.endsWith('/src/user/features/core/copy.ts') ||
+    value.endsWith('/src/user/features/credits/copy.ts') ||
+    value.includes('nonbiri-catalog-pair:') ||
+    value.includes('nonbiri-catalog-wrapper:')
+  );
+}
+
+const copyGroups = {
+  includeDependenciesRecursively: false,
+  groups: [
+    {
+      name: 'copy-combined',
+      test: isCopyModule,
+      minSize: 0,
+      minModuleSize: 0,
+      minShareCount: 1,
+      entriesAware: false,
+    },
+  ],
+};
+
 const STATIONS: Record<'admin' | 'user', StationConfig> = {
   admin: { root: 'src/admin', distDir: 'admin', devPort: 5173, previewPort: 4173 },
   user: { root: 'src/user', distDir: 'user', devPort: 5174, previewPort: 4174 },
@@ -53,6 +82,11 @@ export default defineConfig(({ mode, command }: ConfigEnv): UserConfig => {
       outDir: fileURLToPath(new URL(`./dist/${station.distDir}`, import.meta.url)),
       emptyOutDir: true,
       sourcemap: false,
+      rolldownOptions: {
+        output: {
+          codeSplitting: copyGroups,
+        },
+      },
     },
   };
 });
