@@ -85,8 +85,12 @@ WHERE l.user_id=? AND (l.completed_at IS NULL OR l.completed_at>?)`
 		return Page[UserLogRow]{}, translateSQLError(err)
 	}
 	defer rows.Close()
-	page := Page[UserLogRow]{Data: make([]UserLogRow, 0, filter.Limit), Pagination: metadata}
-	positions := make([]listCursor, 0, filter.Limit+1)
+	capacity := filter.Limit
+	if capacity < 1 || capacity > maximumLimit {
+		return Page[UserLogRow]{}, ErrInvalid
+	}
+	page := Page[UserLogRow]{Data: make([]UserLogRow, 0, capacity), Pagination: metadata}
+	positions := make([]listCursor, 0, capacity+1)
 	for rows.Next() {
 		var model string
 		record, scanErr := scanCommon(rows, &model)
@@ -216,8 +220,12 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 		return Page[AdminLogRow]{}, translateSQLError(err)
 	}
 	defer rows.Close()
-	page := Page[AdminLogRow]{Data: make([]AdminLogRow, 0, filter.Limit), Pagination: metadata}
-	positions := make([]listCursor, 0, filter.Limit+1)
+	capacity := filter.Limit
+	if capacity < 1 || capacity > maximumLimit {
+		return Page[AdminLogRow]{}, ErrInvalid
+	}
+	page := Page[AdminLogRow]{Data: make([]AdminLogRow, 0, capacity), Pagination: metadata}
+	positions := make([]listCursor, 0, capacity+1)
 	for rows.Next() {
 		var userID sql.NullInt64
 		record, scanErr := scanCommon(rows, &userID)
@@ -335,8 +343,12 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 		return Page[StewardLogRow]{}, translateSQLError(err)
 	}
 	defer rows.Close()
-	page := Page[StewardLogRow]{Data: make([]StewardLogRow, 0, filter.Limit), Pagination: metadata}
-	positions := make([]listCursor, 0, filter.Limit+1)
+	capacity := filter.Limit
+	if capacity < 1 || capacity > maximumLimit {
+		return Page[StewardLogRow]{}, ErrInvalid
+	}
+	page := Page[StewardLogRow]{Data: make([]StewardLogRow, 0, capacity), Pagination: metadata}
+	positions := make([]listCursor, 0, capacity+1)
 	for rows.Next() {
 		record, identity, scanErr := scanStewardCommon(rows)
 		if scanErr != nil {
