@@ -943,9 +943,11 @@ func TestConcurrentShuffleExactOnce(t *testing.T) {
 			wg.Add(1)
 			go func(plan Plan) {
 				defer wg.Done()
+				var lastErr error
 				for attempt := 0; attempt < 100; attempt++ {
 					tx, err := store.DB().BeginTx(ctx, nil)
 					if err != nil {
+						t.Errorf("begin concurrent transaction (attempt %d): %v", attempt, err)
 						failures.Add(1)
 						return
 					}
@@ -959,11 +961,14 @@ func TestConcurrentShuffleExactOnce(t *testing.T) {
 						return
 					}
 					if !errors.Is(err, ErrRetryable) {
+						t.Errorf("concurrent apply/commit (attempt %d): %v", attempt, err)
 						failures.Add(1)
 						return
 					}
+					lastErr = err
 					time.Sleep(time.Duration(attempt%3+1) * time.Millisecond)
 				}
+				t.Errorf("concurrent transaction exhausted retries: %v", lastErr)
 				failures.Add(1)
 			}(plan)
 		}
