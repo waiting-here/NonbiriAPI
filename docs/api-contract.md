@@ -1,6 +1,6 @@
-# NonbiriAPI HTTP API Contract (`v1.0.0-beta.1`)
+# NonbiriAPI HTTP API Contract (`v1.0.0-beta.2`)
 
-- Status: **v1.0.0-beta.1 release contract**.
+- Status: **v1.0.0-beta.2 Unreleased contract**.
 - Scope: the only OpenAI-compatible ingress routes are `GET /v1/models` and `POST /v1/chat/completions`. OpenAI-compatible and Anthropic-compatible upstream connectors sit behind that ingress; there is no public Anthropic-native API.
 - Authority: this document reflects the production route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically.
 
@@ -26,9 +26,11 @@ Account export/deletion and selected administrator legal-hold/user actions requi
 - Credit amounts are canonical decimal strings: `0|[1-9][0-9]*` with an optional 1–3 decimal places. A leading `-` is permitted only for fields explicitly described as signed. Floating point is never used for accounting.
 - Revisions, generations, sequences, exact counts, and values that may exceed the JSON safe-integer range are canonical decimal strings.
 - New opaque IDs use a documented prefix plus 22 canonical raw-base64url characters. Important prefixes include `ann_`, `op_`, `req_`, `clm_`, `pol_`, `thu_`, `fb_`, `ll_`, `rpsq_`, `rps_`, `rpc_`, `rpt_`, `iss_`, `lgh_`, `sse_`, `gle_`, `dbs_`, `dbt_`, `dbe_`, and `mch_`.
-- List endpoints use `cursor` and `limit` and return `{data:[...],next_cursor:null|string}` unless a section states a different closed envelope. Cursors are authenticated, route/owner/filter-bound, expiring, and at most 512 bytes. A malformed, expired, or cross-scope cursor is `400 invalid_request`.
+- List endpoints retain the legacy `cursor` and `limit` mode and return `{data:[...],next_cursor:null|string}` unless a section states a different closed envelope. Numbered mode is selected by `page` or `page_size`; `page` is a canonical positive decimal from 1 through 2147483647 and `page_size` is 10, 20, 50, or 100, defaulting to 1 and 20. The modes are mutually exclusive, repeated/unknown values are rejected, and numbered responses add the route's `pagination` metadata with `next_cursor:null`; an excessive page clamps to the last page (empty results use page 1 of 1). Count, filters, decision time, and rows come from one authorized read snapshot. Cursors are authenticated, route/owner/filter-bound, expiring, and at most 512 bytes. A malformed, expired, or cross-scope cursor is `400 invalid_request`.
 - State-changing routes require `Idempotency-Key` unless they are authentication/session/elevation/logout, CallerKey plaintext mutation, an explicitly business-unique ACK/lease/check-in/tutorial mutation, or alert set-state. A key is 1–128 bytes. Same key and same canonical request replay the stored status/body; the same key with a different request is `409 conflict`. Replay records last 24 hours.
 - Dynamic API responses and every error carry `Cache-Control: no-store`.
+
+Shared numbered-page metadata is `{page:string,page_size:number,total_items:string,total_pages:string}`. `page`, `total_items`, and `total_pages` use exact canonical decimal strings; only `total_items` may be zero. Nested `attempt_pagination` and `materials_pagination` use the same shape. Credit history retains its separately documented top-level pagination envelope.
 
 ### 1.3 Error envelope
 
@@ -124,10 +126,10 @@ All routes in this section require a user session unless marked anonymous.
 | `GET /api/caller-key` | Returns null or `{display,created_at,updated_at,generation}`, plus `X-Nonbiri-CallerKey-Generation`; the body generation must match the header. `display` is masked and cannot be used for calls, and GET never returns the full secret. |
 | `POST /api/caller-key/regenerate` | Accepts `{expected_generation}`; on success returns `{secret,metadata}` once, with `metadata.generation = expected_generation + 1`. The full secret is present only in this successful response; generate a replacement again if it was not saved. |
 | `GET /api/home/game-summary` | Safe resumable-game and pending-result route identities. No arbitrary URL is returned. |
-| `GET /api/logs` | Filters `model,error_code,status,from,to,cursor,limit`; returns owner rows. |
-| `GET /api/logs/{id}` | `attempt_cursor,attempt_limit`; returns owner detail. |
+| `GET /api/logs` | Filters `model,error_code,status,from,to`; legacy `cursor,limit` or numbered `page,page_size`; returns owner rows and numbered `pagination`. |
+| `GET /api/logs/{id}` | Legacy `attempt_cursor,attempt_limit` or numbered `attempt_page,attempt_page_size`; numbered detail returns `attempt_pagination`. |
 | `GET /api/logs/options` | Closed query; returns retained owner model-name options. |
-| `GET /api/issues` | Required `state=current|closed`, plus `cursor,limit`; returns the owner's bounded issue page. |
+| `GET /api/issues` | Required `state=current|closed`, plus legacy `cursor,limit` or numbered `page,page_size`; returns the owner's bounded issue page and numbered `pagination`. |
 | `POST /api/account/export` | Fresh elevation; bounded schema-v5 JSON attachment. |
 | `POST /api/account/delete` | Fresh elevation and confirmation; synchronous coordinated deletion; 204. |
 
@@ -138,16 +140,17 @@ All routes in this section require a user session unless marked anonymous.
 | Method and path | Request / response |
 | --- | --- |
 | `GET /api/endpoint-create-options` | `{base_connector_types,mainstream_channels}`; channels are active and enabled. |
-| `GET /api/endpoints` | `cursor,limit`; page of `Endpoint`. |
+| `GET /api/endpoints` | Legacy `cursor,limit` or numbered `page,page_size`; numbered mode optionally accepts `q` and returns `Endpoint` with `pagination`. |
 | `POST /api/endpoints` | Strict union `{source:"mainstream",channel_id,note,enabled}` or `{source:"custom",connector_type,base_url,note,enabled}`; returns 201. |
 | `GET /api/endpoints/{id}` | One owner endpoint. |
 | `PATCH /api/endpoints/{id}` | `{note?,enabled?,expected_revision}`; origin and Connector are immutable. |
 | `DELETE /api/endpoints/{id}` | `{expected_revision}`; 204. Report locks return `resource_locked`. |
-| `GET /api/endpoints/{id}/keys` | `cursor,limit`; page of safe `EndpointKey`. |
+| `GET /api/endpoints/{id}/keys` | Legacy `cursor,limit` or numbered `page,page_size`; numbered mode optionally accepts `q` and returns safe `EndpointKey` with `pagination`. |
 | `POST /api/endpoints/{id}/keys` | `{secret,note,enabled,force_store_false,ownership_confirmed:true,max_concurrency?,max_rpm?}`; returns 201 safe metadata. |
 | `PATCH /api/endpoints/{id}/keys/{keyId}` | `{note?,enabled?,force_store_false?,max_concurrency?,max_rpm?,expected_revision}`. |
 | `DELETE /api/endpoints/{id}/keys/{keyId}` | `{expected_revision}`; claim-first deletion; 204. |
-| `GET /api/endpoints/{id}/keys/{keyId}/models` | Cursor page with discovery `evidence`, automatic and manual entries. |
+| `GET /api/endpoints/{id}/keys/{keyId}/bindings` | Numbered `page,page_size` only (default 1/20), with optional exact `upstream_model_id` (1–512 Unicode code points); returns the owner-safe binding page and `pagination`. |
+| `GET /api/endpoints/{id}/keys/{keyId}/models` | Legacy `cursor,limit` or numbered `page,page_size`; numbered mode optionally accepts `source=automatic|manual`; returns discovery `evidence`, automatic/manual entries and numbered `pagination`. |
 | `POST /api/endpoints/{id}/keys/{keyId}/models/refresh` | Idempotency key; 202 accepted operation and evidence. |
 | `POST /api/endpoints/{id}/keys/{keyId}/models/manual` | Batch of `{upstream_model_id,provider}`; returns entries. |
 | `PATCH /api/endpoints/{id}/keys/{keyId}/models/manual/{entryId}` | Pair revision plus complete binding replacements; returns changed entry and affected model snapshots. |
@@ -157,7 +160,7 @@ All routes in this section require a user session unless marked anonymous.
 
 `EndpointKey` exposes display fragments, note, enabled state, `force_store_false`, safe suspension state, revision, and times; never plaintext/ciphertext/fingerprint. Discovery evidence is the closed `unknown|checking|succeeded|failed` union with a safe failure class. Successful empty discovery is explicit and distinct from failure.
 
-`EndpointKey` also returns numeric `max_concurrency` and `max_rpm`. Both accept whole numbers from 0 to 2147483647; 0 disables that key's additional limit. Omitted creation values default to 0; omitted patch values remain unchanged. Null, strings, negative numbers, fractions and out-of-range values are rejected. Only the owner can edit them, using the existing revision and idempotency contract. Existing site and endpoint safeguards still apply.
+`EndpointKey` also returns numeric `max_concurrency` and `max_rpm`. Both accept whole numbers from 0 to 2147483647; 0 disables that key's additional limit. Omitted creation values default to 0; omitted patch values remain unchanged. Null, strings, negative numbers, fractions and out-of-range values are rejected. Only the owner can edit them, using the existing revision and idempotency contract. Existing site and endpoint safeguards still apply. Numbered endpoint, key, and model rows add the corresponding `browse` summary; legacy cursor rows and single-item/mutation responses keep the existing resource shape. Endpoint/key `q` filters are single-value literal text searches of at most 128 Unicode code points (and no more than 512 UTF-8 bytes), with controls rejected.
 
 All personal, charity and live diagnostic model calls using the same EndpointKey share these limits across bindings. Discovery requests use their separate safeguards. Concurrency includes admitted work until its attempt finishes or is canceled, including the full streaming lifetime. RPM uses a rolling 60-second window with server-second precision. Undispatched claims reserve a slot until dispatch or release; a released undispatched attempt returns the slot. A dispatch consumes one slot even on failure, and each retry counts separately. Pending work cannot age out of its reservation. Lowering limits affects new admissions without canceling already admitted work. Recent dispatch counts survive process restarts.
 
@@ -169,12 +172,12 @@ Administrator and level-5 steward donation-key projections include read-only `ma
 
 | Method and path | Request / response |
 | --- | --- |
-| `GET /api/models` | `cursor,limit`; page of owner models. |
+| `GET /api/models` | Legacy `cursor,limit` or numbered `page,page_size`; numbered response includes `pagination` and the owner models. |
 | `POST /api/models` | Provider/model, strategy, retry and flatten policy; returns 201 model. |
 | `GET /api/models/{id}` | One owner model. |
 | `PATCH /api/models/{id}` | Partial business fields plus `expected_revision`. |
 | `DELETE /api/models/{id}` | `{expected_revision}`; 204. |
-| `GET /api/models/{id}/binding-candidates` | `endpoint_id,key_id,source,q,cursor,limit`; safe candidate page. |
+| `GET /api/models/{id}/binding-candidates` | `endpoint_id,key_id,source=automatic|manual,q` plus legacy `cursor,limit` or numbered `page,page_size`; safe candidate page, with numbered `pagination`. |
 | `GET /api/models/{id}/bindings` | Complete bindings plus `binding_revision`. |
 | `POST /api/models/{id}/bindings/batch` | Expected binding revision and selections; all-or-nothing 201. |
 | `PUT /api/models/{id}/bindings/order` | Exact current ID permutation and expected binding revision. |
@@ -184,7 +187,7 @@ Provider/model parts are bounded opaque strings and form the external `provider/
 
 ### 3.3 Credit history
 
-`GET /api/credits/history` returns the signed-in user's credit history. Optional single-value filters are `category=checkin|welfare|thursday|fishing|linklink|rps|api|charity|donation|admin|penalty`, `direction=income|expense`, and Unix-second `from,to` using `[from,to)`. `page` is a positive decimal integer, default 1; `page_size` is 20, 50, or 100, default 20. An out-of-range page returns the last page.
+`GET /api/credits/history` returns the signed-in user's credit history. Optional single-value filters are `category=checkin|welfare|thursday|fishing|linklink|rps|api|charity|donation|admin|penalty`, `direction=income|expense`, and Unix-second `from,to` using `[from,to)`. `page` is a positive decimal integer, default 1; `page_size` is 10, 20, 50, or 100, default 20. An out-of-range page returns the last page.
 
 The response is `{data:[{operation_id,line,kind,delta,created_at,request_id}],page,page_size,total,total_pages,anchor,current_balance,server_now}`. Amounts and page/count fields are exact decimal strings; `line`, `page_size`, and times are bounded numbers. Only nonzero changes to the current user's wallet appear. Reasons use the stable ledger `kind`; private management notes, actor identities, source IDs, other wallets, and historical post-balances are omitted. `current_balance` is the balance at this read, including any changes after the browsing anchor.
 
@@ -196,7 +199,8 @@ Pass the returned nullable `anchor` operation ID to subsequent pages to keep new
 
 | Method and path | Request / response |
 | --- | --- |
-| `GET /api/donations` | `cursor,limit`; owner donation page. |
+| `GET /api/donations` | Legacy `cursor,limit` or numbered `page,page_size`; numbered mode also accepts `status,q` and returns donation summaries with `pagination`. |
+| `GET /api/donations/{id}/keys` | Numbered `page,page_size` only; owner key-level donation projection with `pagination`. |
 | `GET /api/donations/{id}` | Owner detail with key states and review history. |
 | `POST /api/donations` | `{description,keys:[{endpoint_key_id,expires_at}],ownership_authorized:true}`; 1–100 unique keys; returns 201. |
 | `PATCH /api/donations/{id}` | Pending-only `{description,expected_revision}`. |
@@ -237,7 +241,7 @@ Indexing searches live endpoint keys first, then donation tombstones whose irrev
 
 | Method and path | Request / response |
 | --- | --- |
-| `GET /api/announcements` | `cursor,limit`; published summary page. |
+| `GET /api/announcements` | Legacy `cursor,limit` or numbered `page,page_size`; published summary page with numbered `pagination`. |
 | `GET /api/announcements/{id}` | Localized rendered detail using the fixed safe Markdown profile. |
 | `GET /api/activities` | Complete safe activity snapshot with site totals and the caller's state. |
 | `POST /api/activities/welfare/claims` | Idempotency key; one admitted daily welfare claim. |
@@ -325,22 +329,27 @@ Both management prefixes (`/admin/api` and `/api/steward`) provide `GET {prefix}
 
 `POST {prefix}/donations/{id}/handling/processed` accepts `{expected_handling_revision}` and an idempotency key, with a 16 KiB body limit. It returns `{donation_id,handling}`. Processing is a shared action with one winner, not a per-person read flag. Approval, model binding and key edits do not mark it processed. Handling has `state=legacy|pending|processed|closed`, its own decimal-string `revision`, and nullable `processed_at,processed_by_role,closed_at,closed_reason`. Only actor role and time are public. Terminal pending donations close automatically; closed reasons are `rejected|withdrawn|terminated|expired|member_removed|account_deleted`. Existing processed or legacy handling remains unchanged at termination.
 
-Management donation lists accept `status`, `handling`, and `q` alongside cursor/limit, and bind cursors to their filters. Search uses donation ID and description, with the same 128-code-point/512-byte/no-NUL limit. Each management key adds decimal-string `binding_count` and boolean `idle`. All actual bindings count, including bindings to disabled models; zero bindings means idle. Owner donation DTOs and exports omit handling and these management fields. Historical management receipts add safe handling/count fields when replayed without rewriting the stored immutable result.
+Management donation lists accept `status=pending|approved|rejected|deleted|expired`, `handling=legacy|pending|processed|closed`, and `q` alongside legacy `cursor,limit` or numbered `page,page_size`, and bind cursors to their filters. `handling` is not accepted on the owner list. Search uses donation ID and description, with the same 128-code-point/512-byte/no-NUL limit. Each management key adds decimal-string `binding_count` and boolean `idle`. All actual bindings count, including bindings to disabled models; zero bindings means idle. Owner donation DTOs and exports omit handling and these management fields. Historical management receipts add safe handling/count fields when replayed without rewriting the stored immutable result.
 
 Steward charity log list/detail entries add nullable `caller_identity: {discord_nickname,discord_id}`. Both members are nullable, with UTF-8 byte limits of 256 and 128 respectively. The name uses the current guild nickname, falling back to the stored username. Data comes from the account's latest synced profile, not a historical identity snapshot. Unlinked/deleted callers produce null, the existing 30-day visibility limit still applies, and stewards gain no log export.
 
+`GET /api/steward/logs` accepts `error_code,status,from,to,endpoint_base_url,upstream_model` plus legacy `cursor,limit` or numbered `page,page_size`; `GET /api/steward/logs/{id}` accepts the corresponding `attempt_cursor,attempt_limit` or `attempt_page,attempt_page_size`. The numbered list/detail responses carry `pagination`/`attempt_pagination`; the ordinary log filters and visibility rules remain unchanged.
+
 | Method and path | Request / response |
 | --- | --- |
-| `GET /api/steward/charity-models` | `q,enabled,cursor,limit`; steward-safe model page. |
+| `GET /api/steward/charity-models` | `q,enabled` plus legacy `cursor,limit` or numbered `page,page_size`; steward-safe model page. |
 | `POST /api/steward/charity-models` | Complete provider/model, enabled, tagged pricing, discount and flatten policy; 201. |
 | `GET /api/steward/charity-models/{id}` | Steward-safe model detail. |
 | `PATCH /api/steward/charity-models/{id}` | `expected_revision` plus a non-empty partial business-field patch. |
 | `DELETE /api/steward/charity-models/{id}` | `{expected_revision,confirmation}`. |
-| `GET /api/steward/charity-models/{id}/binding-candidates` | `donation_id,donation_key_id,source=automatic|manual,q,cursor,limit`; safe candidate page. |
+| `GET /api/steward/charity-models/{id}/binding-candidates` | `donation_id,donation_key_id,source=automatic|manual,q` plus legacy `cursor,limit` or numbered `page,page_size`; safe candidate page. |
 | `GET /api/steward/charity-models/{id}/bindings` | Complete ordered bindings and `binding_revision`. |
 | `POST /api/steward/charity-models/{id}/bindings/batch` | `{expected_binding_revision,selections:[{donation_key_id,upstream_model_id}]}`. |
 | `PUT /api/steward/charity-models/{id}/bindings/order` | `{expected_binding_revision,order}` with the exact current binding-ID permutation. |
 | `DELETE /api/steward/charity-models/{id}/bindings/{bindingId}` | `{expected_binding_revision}`. |
+| `GET /api/steward/donations/{id}/keys` | Numbered `page,page_size` only; steward donation-key page with `pagination`. |
+| `GET /api/steward/donation-sources` | Numbered `page,page_size` only; filters `q,scope=active|all` (default `active`), `handling=pending`. |
+| `GET /api/steward/donation-sources/{source_key}/keys` | Numbered `page,page_size` only; filters `q,scope=active|all` (default `active`), `handling=pending`, `idle=yes|no`. |
 
 ## 7. Administrator API
 
@@ -348,7 +357,7 @@ The administrator login shell reads anonymous `GET /admin/api/branding` on the a
 
 Both administrator and steward charity model projections include `route_strategy`: `ordered`, `random`, or `expiry_weighted`. Creation may omit it to keep the expiry-weighted default; a patch may omit it to leave the setting unchanged. Explicit null, empty, and unknown values are invalid. Ordered routing uses saved binding order; uniform random gives every eligible connection equal weight; expiry-weighted routing uses weights 8/4/2/1 for expiry within 1/7/30 days/later, with unlimited expiry weighted 1. Each request freezes a candidate order without replacement. Strategy changes use the model revision and existing idempotency rules.
 
-Each role also has `GET {prefix}/charity-models/{id}/binding-donations` and `GET {prefix}/charity-models/{id}/binding-donations/{donationId}/keys`, where `{prefix}` is `/admin/api` or `/api/steward`. Both use `cursor,limit` pagination. Donation menu entries contain only `{id,description,key_count}`. Key menu entries contain only `{donation_key_id,source,note}`; `source` has the same safe address, connector and masked fragments as binding candidates, and `note` is the reviewed shared note. They list approved, unexpired shared resources with at least one unbound catalog model. Cursors are bound to the role, actor, model, and donation. These menus never expose donor account identity or private endpoint/key notes and do not expand the steward's donation management permissions.
+Each role also has `GET {prefix}/charity-models/{id}/binding-donations` and `GET {prefix}/charity-models/{id}/binding-donations/{donationId}/keys`, where `{prefix}` is `/admin/api` or `/api/steward`. Both retain legacy `cursor,limit` and accept numbered `page,page_size`; numbered responses include `pagination` and `next_cursor:null`. Donation menu entries contain only `{id,description,key_count}`. Key menu entries contain only `{donation_key_id,source,note}`; `source` has the same safe address, connector and masked fragments as binding candidates, and `note` is the reviewed shared note. They list approved, unexpired shared resources with at least one unbound catalog model. Cursors are bound to the role, actor, model, and donation. These menus never expose donor account identity or private endpoint/key notes and do not expand the steward's donation management permissions.
 
 All routes below are available only on the administrator host with an administrator session. Mutations use idempotency and expected revisions as specified by §1.2, and sensitive final transactions reauthenticate the actor.
 
@@ -366,13 +375,17 @@ All routes below are available only on the administrator host with an administra
 
 The generic site-config patch rejects maintenance, announcement epoch, and all activity/game economic keys; those use their typed domain routes. User patch is a tagged operation for profile, limits/level, or economy and never returns credentials. Log exports retain their fixed privacy projections and spreadsheet-safe encoding.
 
+The administrator list reads retain cursor mode and also accept numbered `page,page_size` with the shared metadata, except where noted: `GET /admin/api/users` accepts `is_banned=true|false` and `q`; `GET /admin/api/usage?group_by=user` is paginated, while `group_by=site` is a complete non-paginated snapshot and rejects all page/cursor parameters; `GET /admin/api/activity` is paginated; and `GET /admin/api/overview/endpoints` accepts `q` and is paginated. Numbered endpoint-overview rows contain at most three user previews; the complete group can be read with `GET /admin/api/overview/endpoints/users?base_url=<exact>&page=<page>&page_size=<size>`, which is numbered-only and returns `{data,next_cursor:null,pagination}`. `base_url` is an exact canonical value, not a pattern.
+
+`GET /admin/api/logs` accepts `error_code,status,from,to,user_id,endpoint_base_url,upstream_model` plus cursor or numbered page parameters; `GET /admin/api/logs/{id}` accepts `attempt_cursor,attempt_limit` or `attempt_page,attempt_page_size` and returns `attempt_pagination` in numbered mode. `GET /admin/api/alerts` accepts `resolved=true|false` plus either pagination mode. Log exports accept the same role-scoped non-pagination filters but reject `cursor,limit,page,page_size`.
+
 `PATCH /admin/api/site-config` accepts the closed body `{expected_revision:string,values:object}` with 1–64 known generic configuration keys and a 256 KiB request limit. Values use the catalog's scalar types. It validates the combined configuration and commits all changes with one site revision increment and one idempotency receipt. Stale revisions return `409`; invalid combinations return an actionable dependency error. Unchanged values do not advance the revision. The response is `{revision:string,changed_keys:string[]}`; clients may read the complete configuration after saving. The existing single-key route remains available.
 
 ### 7.2 Mainstream channels
 
 | Method and path | Request / response |
 | --- | --- |
-| `GET /admin/api/mainstream-channels` | `state=active|retired|all,cursor,limit`; administrator page. |
+| `GET /admin/api/mainstream-channels` | `state=active|retired|all` plus legacy `cursor,limit` or numbered `page,page_size`; administrator page. |
 | `POST /admin/api/mainstream-channels` | `{name,category,connector_type,base_url,enabled}`; 201. |
 | `GET /admin/api/mainstream-channels/{id}` | Complete channel DTO. |
 | `PATCH /admin/api/mainstream-channels/{id}` | Partial business fields plus `expected_revision`. |
@@ -391,9 +404,11 @@ Category is `subscription|api_platform`. At most 100 active channels may be enab
 
 Announcement mutations return a bounded receipt and the detail is fetched separately. Published content and drafts are isolated. Activity/game configuration reads a complete typed snapshot, merges a strict patch, validates all dependent values and checked arithmetic, then commits atomically. Existing accepted work retains its frozen configuration.
 
+`GET /admin/api/pools` accepts `pool_type=welfare|thursday` and `state=open|closed`, plus legacy `cursor,limit` or numbered `page,page_size`; the response keeps the pool page envelope and adds `pagination` only in numbered mode. The page filters are independent and exact.
+
 | Method and path | Request / response |
 | --- | --- |
-| `GET /admin/api/announcements` | `state,severity,cursor,limit`; administrator page. |
+| `GET /admin/api/announcements` | `state,severity` plus legacy `cursor,limit` or numbered `page,page_size`; administrator page with numbered `pagination`. |
 | `POST /admin/api/announcements` | Complete bilingual draft fields, severity, pin/dismiss policy and nullable expiry; 201 receipt. |
 | `GET /admin/api/announcements/{id}` | Administrator draft/published detail. |
 | `PATCH /admin/api/announcements/{id}` | `expected_revision` plus a non-empty partial draft patch. |
@@ -406,19 +421,24 @@ Announcement mutations return a bounded receipt and the detail is fetched separa
 
 | Surface | Routes |
 | --- | --- |
-| Donations | `GET /admin/api/donations`; `GET /admin/api/donations/{id}`; `POST /admin/api/donations/{id}/review`; `PATCH /admin/api/donations/{id}/keys/{keyId}` |
+| Donations | `GET /admin/api/donations`; `GET /admin/api/donations/{id}`; `GET /admin/api/donations/{id}/keys`; `GET /admin/api/donation-sources`; `GET /admin/api/donation-sources/{source_key}/keys`; `POST /admin/api/donations/{id}/review`; `PATCH /admin/api/donations/{id}/keys/{keyId}` |
 | Charity models | Exact route family in the table below |
 
 Review and key-management requests include expected revisions and the complete effective limits/expiry needed for that decision. Administrator donation keys add authorized expiry and an administrator-safe provenance snapshot. Charity candidates and bindings omit donor identity, private notes, endpoint-key IDs, and secrets. A model supports per-request or four-bucket per-token prices, donor rewards, a bounded promotion interval, visibility, flattening, rolling success over the most recent 100 completed calls, and ordered bindings.
 
+Administrator donation and source reads use the management filters and pagination contract above: donation lists accept `status`, `handling`, and `q` in either legacy or numbered mode, while source groups and source-key lists are numbered-only with `q`, `scope`, `handling`, and (for keys) `idle`.
+
 | Method and path | Request / response |
 | --- | --- |
-| `GET /admin/api/charity-models` | `q,enabled,cursor,limit`; administrator model page. |
+| `GET /admin/api/charity-models` | `q,enabled` plus legacy `cursor,limit` or numbered `page,page_size`; administrator model page. |
+| `GET /admin/api/donations/{id}/keys` | Numbered `page,page_size` only; administrator-safe donation-key page with `pagination`. |
+| `GET /admin/api/donation-sources` | Numbered `page,page_size` only; filters `q,scope=active|all` (default `active`), `handling=pending`. |
+| `GET /admin/api/donation-sources/{source_key}/keys` | Numbered `page,page_size` only; filters `q,scope=active|all` (default `active`), `handling=pending`, `idle=yes|no`. |
 | `POST /admin/api/charity-models` | Complete provider/model, enabled, tagged pricing, discount and flatten policy; 201. |
 | `GET /admin/api/charity-models/{id}` | Administrator model detail. |
 | `PATCH /admin/api/charity-models/{id}` | `expected_revision` plus a non-empty partial business-field patch. |
 | `DELETE /admin/api/charity-models/{id}` | `{expected_revision,confirmation}`. |
-| `GET /admin/api/charity-models/{id}/binding-candidates` | `donation_id,donation_key_id,source=automatic|manual,q,cursor,limit`; safe candidate page. |
+| `GET /admin/api/charity-models/{id}/binding-candidates` | `donation_id,donation_key_id,source=automatic|manual,q` plus legacy `cursor,limit` or numbered `page,page_size`; safe candidate page. |
 | `GET /admin/api/charity-models/{id}/bindings` | Complete ordered bindings and `binding_revision`. |
 | `POST /admin/api/charity-models/{id}/bindings/batch` | `{expected_binding_revision,selections:[{donation_key_id,upstream_model_id}]}`. |
 | `PUT /admin/api/charity-models/{id}/bindings/order` | `{expected_binding_revision,order}` with the exact current binding-ID permutation. |
@@ -443,14 +463,14 @@ Only validated successful output establishes the durable first-success time. Cal
 | Method and path | Request / response |
 | --- | --- |
 | `GET /admin/api/reports/badge` | Pending badge count. |
-| `GET /admin/api/reports` | State/filter cursor page. |
-| `GET /admin/api/reports/{id}` | Case detail and safe material metadata. |
-| `GET /admin/api/reports/{id}/targets` | Target cursor page; each target includes canonical `donation_match_count`. |
-| `GET /admin/api/reports/{id}/targets/{targetId}/donations` | Lineage cursor page. |
+| `GET /admin/api/reports` | Optional `status` plus legacy `cursor,limit` or numbered `page,page_size`; case page with numbered `pagination`. |
+| `GET /admin/api/reports/{id}` | Optional `materials_cursor,materials_limit` or numbered `materials_page,materials_page_size`; case detail, bounded material page, and numbered `materials_pagination`. |
+| `GET /admin/api/reports/{id}/targets` | Legacy `cursor,limit` or numbered `page,page_size`; target page, each target includes canonical `donation_match_count`. |
+| `GET /admin/api/reports/{id}/targets/{targetId}/donations` | Legacy `cursor,limit` or numbered `page,page_size`; donation lineage page. |
 | `POST /admin/api/reports/{id}/approve` | Material/target versions, reason, and confirmation. |
 | `POST /admin/api/reports/{id}/reject` | Material/target versions and reason. |
 | `POST /admin/api/reports/{id}/resume` | Restarts an approved-processing checkpoint. |
-| `GET|POST /admin/api/legal-holds` | Filtered list or elevated create. |
+| `GET|POST /admin/api/legal-holds` | GET filters `state,object_kind` plus legacy `cursor,limit` or numbered `page,page_size`; POST is an elevated create. |
 | `GET /admin/api/legal-holds/{id}` | Elevated hold detail. |
 | `POST /admin/api/legal-holds/{id}/release` | Elevated release. |
 
