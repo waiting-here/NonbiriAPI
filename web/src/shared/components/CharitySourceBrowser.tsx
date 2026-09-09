@@ -472,7 +472,6 @@ export function CharitySourceBrowser({
   const idle = readEnumParameter(searchParams, IDLE_PARAM, ['yes', 'no'] as const);
   const rawSourceKey = singleParameter(searchParams, SOURCE_KEY_PARAM) ?? '';
   const sourceKey = isCanonicalSourceKey(rawSourceKey) ? rawSourceKey : '';
-  const { listRef, detailRef, remember } = useDetailNavigation<HTMLElement, HTMLElement>(sourceKey);
   const sourceKeyNeedsNormalization =
     searchParams.getAll(SOURCE_KEY_PARAM).length > 0 && sourceKey === '';
   const station = stationForRole(role);
@@ -581,6 +580,16 @@ export function CharitySourceBrowser({
   });
   const authorityError = [sources.error, sourceKeys.error].find(
     (error) => isUnauthorized(error) || isForbidden(error),
+  );
+  const navigationReady = sourceKey
+    ? !sources.isPending &&
+      !sources.isFetching &&
+      !sourceKeys.isPending &&
+      !sourceKeys.isFetching
+    : !sources.isPending && !sources.isFetching;
+  const { listRef, detailRef, remember } = useDetailNavigation<HTMLElement, HTMLElement>(
+    sourceKey,
+    navigationReady,
   );
 
   useEffect(() => {

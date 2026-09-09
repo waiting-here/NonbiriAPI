@@ -40,6 +40,7 @@ interface DetailGate {
 interface FixtureState {
   detailMode: DetailMode;
   detailGate?: DetailGate;
+  listGate?: DetailGate;
   detailReads: string[];
   listReads: string[];
   sourceReads: string[];
@@ -322,6 +323,7 @@ async function installManagementRoutes(
     const path = url.pathname;
     if (path === config.root + '/donations') {
       state.listReads.push(url.search);
+      await state.listGate?.promise;
       await fulfillJSON(route, numberedPage(rows, url.searchParams));
       return;
     }
@@ -606,6 +608,150 @@ async function exerciseDonationNavigation(
   await assertStationClean(page, setup);
 }
 
+type DonationArrivalOrder = 'list-first' | 'detail-first';
+
+async function exerciseSourceToDonationNavigation(
+  page: Page,
+  setup: StationSetup,
+  state: FixtureState,
+  order: DonationArrivalOrder,
+): Promise<void> {
+  const path =
+    '/charity?charity_section=sources&source_scope=active&sources_page=2&sources_page_size=10' +
+    '&donations_page=2&donations_page_size=10';
+  await page.goto(setup.origin + path);
+
+  const sourceButton = sourceListItem(page).getByRole('button');
+  await expect(sourceButton).toBeVisible();
+  await sourceButton.click();
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get('source_key'))
+    .toBe(DETAIL_SOURCE_KEY);
+  const sourceDetail = page.locator('.charity-source-browser__keys.ops-detail-target');
+  await expect(sourceDetail).toBeVisible();
+  await expect(sourceDetail.getByRole('heading', { name: /detail-source-20/ })).toBeVisible();
+
+  const manageKey = sourceDetail.getByRole('button', {
+    name: 'Manage key #1019',
+    exact: true,
+  });
+  await expect(manageKey).toBeVisible();
+  await manageKey.click();
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get('donation_id'))
+    .toBe(DETAIL_DONATION_ID);
+  await expect(page).toHaveURL(/charity_section=donations/);
+
+  const detailTarget = page.locator('.ops-detail-target');
+  await expect(detailTarget).toHaveCount(1);
+  if (order === 'list-first') {
+    await expect.poll(() => state.listReads.length).toBeGreaterThan(0);
+    await expect(donationListRow(page)).toBeVisible();
+    await expect.poll(() => state.detailReads.length).toBeGreaterThan(0);
+    state.detailGate!.release();
+  } else {
+    await expect.poll(() => state.detailReads.length).toBeGreaterThan(0);
+    await expect.poll(() => state.listReads.length).toBeGreaterThan(0);
+    await expect(donationListRow(page)).toHaveCount(0);
+    await expect(
+      detailTarget.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID }),
+    ).toBeVisible();
+    state.listGate!.release();
+  }
+
+  await expect(donationListRow(page)).toBeVisible();
+  const donationHeading = detailTarget.getByRole('heading', {
+    name: 'Donation #' + DETAIL_DONATION_ID,
+  });
+  const returnToList = detailTarget.getByRole('button', {
+    name: 'Return to list',
+    exact: true,
+  });
+  await expect(donationHeading).toBeVisible();
+  await expect(returnToList).toBeVisible();
+  await expect(donationHeading).toBeInViewport();
+  await expect(returnToList).toBeInViewport();
+  await assertDetailFocusAndViewport(page, detailTarget);
+  await assertURLState(page, {
+    pageParam: 'donations_page',
+    pageSizeParam: 'donations_page_size',
+    page: '2',
+    pageSize: String(PAGE_SIZE),
+  });
+  expect(state.listReads).toContain('?page=2&page_size=10');
+
+  if (order === 'detail-first') {
+    const manualScroll = await page.evaluate(() => {
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' });
+      return window.scrollY;
+    });
+    expect(manualScroll).toBeGreaterThan(0);
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        }),
+    );
+    expect(await page.evaluate(() => window.scrollY)).toBe(manualScroll);
+  }
+
+  await returnToList.click();
+  await expect(page).toHaveURL(/charity_section=sources/);
+  await expect(page).not.toHaveURL(/donation_id=/);
+  const returnedByButton = page.locator('.charity-source-browser__keys.ops-detail-target');
+  await expect(returnedByButton).toBeVisible();
+  await expect(returnedByButton.getByRole('heading', { name: /detail-source-20/ })).toBeVisible();
+  await assertDetailFocusAndViewport(page, returnedByButton);
+  await assertURLState(page, {
+    pageParam: 'sources_page',
+    pageSizeParam: 'sources_page_size',
+    page: '2',
+    pageSize: String(PAGE_SIZE),
+  });
+
+  await page.goto(
+    setup.origin +
+      '/charity?charity_section=donations&donation_id=20&donation_from=sources' +
+      '&source_key=' +
+      encodeURIComponent(DETAIL_SOURCE_KEY) +
+      '&sources_page=2&sources_page_size=10&donations_page=2&donations_page_size=10',
+  );
+  await expect(page).toHaveURL(/charity_section=donations/);
+  await expect(page).toHaveURL(/donation_id=20/);
+  await expect(
+    page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID }),
+  ).toBeVisible();
+
+  await page.reload();
+  await expect(
+    page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID }),
+  ).toBeVisible();
+  await assertDetailFocusAndViewport(page, page.locator('.ops-detail-target'), {
+    requireViewport: false,
+  });
+  await assertURLState(page, {
+    pageParam: 'donations_page',
+    pageSizeParam: 'donations_page_size',
+    page: '2',
+    pageSize: String(PAGE_SIZE),
+  });
+
+  await page.goBack();
+  await expect(page).toHaveURL(/charity_section=sources/);
+  await expect(page).not.toHaveURL(/donation_id=/);
+  const returnedSourceDetail = page.locator('.charity-source-browser__keys.ops-detail-target');
+  await expect(returnedSourceDetail).toBeVisible();
+  await expect(returnedSourceDetail.getByRole('heading', { name: /detail-source-20/ })).toBeVisible();
+  await assertDetailFocusAndViewport(page, returnedSourceDetail);
+  await assertURLState(page, {
+    pageParam: 'sources_page',
+    pageSizeParam: 'sources_page_size',
+    page: '2',
+    pageSize: String(PAGE_SIZE),
+  });
+  await assertStationClean(page, setup);
+}
+
 async function exerciseSourceNavigation(
   page: Page,
   setup: StationSetup,
@@ -804,6 +950,25 @@ for (const station of ['admin', 'user'] as const) {
   );
 }
 
+for (const scenario of [
+  { order: 'list-first' as const, width: 1_280 },
+  { order: 'detail-first' as const, width: 390 },
+]) {
+  test(
+    `source key to donation detail remains positioned when ${scenario.order} response arrives at ${scenario.width}px`,
+    async ({ context, page }) => {
+      const setup = await prepareStation(context, page, 'admin', scenario.width);
+      const state = initialState(
+        scenario.order === 'list-first'
+          ? { detailMode: 'slow', detailGate: detailGate() }
+          : { listGate: detailGate() },
+      );
+      await installManagementRoutes(page, 'admin', state);
+      await exerciseSourceToDonationNavigation(page, setup, state, scenario.order);
+    },
+  );
+}
+
 test('semantic donation detail navigation leaves the trigger and enters the viewport', async ({
   context,
   page,
@@ -844,7 +1009,7 @@ test('semantic donation detail navigation leaves the trigger and enters the view
 });
 
 test(
-  'slow detail loading focuses the detail target before the response arrives',
+  'slow detail loading defers focus until the complete detail layout is ready',
   async ({ context, page }) => {
     const setup = await prepareStation(context, page, 'admin');
     const state = initialState({ detailMode: 'slow', detailGate: detailGate() });
@@ -857,9 +1022,12 @@ test(
     await openButton.click();
     const detailTarget = page.locator('.ops-detail-target');
     await expect(detailTarget).toHaveCount(1);
-    await assertDetailFocusAndViewport(page, detailTarget);
+    await expect
+      .poll(() => detailTarget.evaluate((element) => document.activeElement === element))
+      .toBe(false);
     state.detailGate!.release();
     await expect(page.getByRole('heading', { name: 'Donation #' + DETAIL_DONATION_ID })).toBeVisible();
+    await assertDetailFocusAndViewport(page, detailTarget);
     await assertStationClean(page, setup);
   },
 );

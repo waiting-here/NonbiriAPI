@@ -1133,7 +1133,6 @@ function DonationsPanel({
     ? rawStatus
     : '';
   const selected = selectedID(searchParams, 'donation_id');
-  const { listRef, detailRef, remember } = useDetailNavigation(selected);
   const [draft, setDraft] = useState({ query, text: query });
   const queryDraft = draft.query === query ? draft.text : query;
   const setQueryDraft = (text: string) => setDraft({ query, text });
@@ -1224,6 +1223,10 @@ function DonationsPanel({
     enabled: Boolean(selected),
     retry: false,
   });
+  const navigationReady = selected
+    ? !list.isPending && !list.isFetching && !detail.isPending && !detail.isFetching
+    : !list.isPending && !list.isFetching;
+  const { listRef, detailRef, remember } = useDetailNavigation(selected, navigationReady);
   const capabilityLost = [list.error, detail.error].some(
     (error) => isUnauthorized(error) || isForbidden(error),
   );
@@ -2225,7 +2228,6 @@ function ModelsPanel({
   const rawEnabled = oneParam(params, 'model_enabled');
   const enabled = ['true', 'false'].includes(rawEnabled) ? rawEnabled : '';
   const selectedId = selectedID(params, 'charity_model');
-  const { listRef, detailRef, remember } = useDetailNavigation(selectedId);
   const [draft, setDraft] = useState({ query, text: query });
   const queryDraft = draft.query === query ? draft.text : query;
   const setQueryDraft = (text: string) => setDraft({ query, text });
@@ -2303,6 +2305,10 @@ function ModelsPanel({
     enabled: Boolean(selectedId),
   });
   const selected = detail.data;
+  const navigationReady = selectedId
+    ? !models.isPending && !models.isFetching && !detail.isPending && !detail.isFetching
+    : !models.isPending && !models.isFetching;
+  const { listRef, detailRef, remember } = useDetailNavigation(selectedId, navigationReady);
   const capabilityLost = [models.error, detail.error].some(
     (error) => isUnauthorized(error) || isForbidden(error),
   );
