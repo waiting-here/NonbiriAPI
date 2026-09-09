@@ -1188,8 +1188,9 @@ function EndpointKeyCard({
       <div className="core-key-card__top">
         <div>
           <strong>{keyData.note || t('endpoints.key')}</strong>
+          <div className="core-muted">{t('endpoints.keyIdentifier')}</div>
           <div>
-            <SafeCopyValue value={display} label={t('endpoints.key')} />
+            <SafeCopyValue value={display} label={t('endpoints.keyIdentifier')} />
           </div>
         </div>
         {!endpoint.enabled ? (
