@@ -1,6 +1,6 @@
 # VPS deployment with systemd
 
-This guide describes the supported single-instance operating model for `v1.0.0-beta.1`: one Linux/amd64 binary built from the exact source commit, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS. Alpha deployments require a fresh cutover; validated current and explicitly supported earlier Generation 2 schemas can be updated normally with existing data preserved. Verify compatibility, backups, configuration, legal text, and smoke tests before opening any deployment. See [configuration.md](configuration.md) for the full environment and runtime-settings reference.
+This guide describes the supported single-instance operating model for the unreleased `1.0.0-beta.2` candidate: one Linux/amd64 binary built from the exact source commit, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS. Alpha deployments require a fresh cutover; validated current and explicitly supported earlier Generation 2 schemas can be updated normally with existing data preserved. Verify compatibility, backups, configuration, legal text, and smoke tests before opening any deployment. See [configuration.md](configuration.md) for the full environment and runtime-settings reference.
 
 The commands are examples. Replace paths, hostnames, users, and package-manager commands for the target VPS. Do not copy real secrets into a Git checkout.
 
@@ -71,7 +71,7 @@ The `dist` build tag is required for the real frontend. An untagged binary conta
 Install into a versioned directory and publish the symlink with a same-filesystem rename. Set `version` to the release being installed:
 
 ```sh
-version=1.0.0-beta.1
+version=1.0.0-beta.2
 release=/opt/nonbiriapi/releases/$version
 sudo install -d -o root -g root -m 0755 "$release"
 sudo install -o root -g root -m 0755 nonbiriapi "$release/nonbiriapi"
@@ -155,7 +155,7 @@ Model calls allow up to 900 seconds for upstream response headers and 1200 secon
 
 ## Database compatibility and version changes
 
-The current source accepts only a completely absent database set or a validated Generation 2 database whose SQLite header contains `application_id=0x4E425249` and `user_version=2`. Four exact earlier Generation 2 manifests are supported: the schema before charity routing, before key request limits, before successful-response checkpoints, and the complete beta.1 schema. A single transaction adds the missing routing, key limits, dispatch indexes and checkpoints, donation handling, model access, recurring quota, and game presentation tables as needed, then validates the complete manifest. Existing business rows, routing strategies, key limits, historical times, accounting, and custom legal settings are preserved. Older models without routing configuration retain expiry-weighted routing; older keys without limits remain unlimited. Existing models initially allow all five levels and have empty public descriptions; existing donations receive the legacy handling state. Recurring rule sets begin empty. No historical response-start evidence, recurring consumption, or game presentation values are invented. Before a writable source open, an existing database is copied through no-follow read-only handles to a private validation directory; header, schema, foreign keys, indexes, sidecars, and contextual credential envelopes are checked there. Alpha/Generation 1 files, empty files, unknown generations, unexpected or corrupt schemas, unsafe file shapes, rollback journals, and anomalous sidecars are refused without modifying the source set or creating source-side WAL/SHM files. Arbitrary schema repair and old-generation data import remain unsupported.
+The current source accepts only a completely absent database set or a validated Generation 2 database whose SQLite header contains `application_id=0x4E425249` and `user_version=2`. Four exact earlier Generation 2 manifests are supported: the schema before charity routing, before key request limits, before successful-response checkpoints, and the complete beta.1 schema. The deployed intermediate recurring-limit manifest, which already contains the populated beta.2 sidecars, is also supported and receives only the missing browse indexes. For the four earlier manifests, one transaction adds the missing routing, key limits, dispatch indexes and checkpoints, donation handling, model access, recurring quota, and game presentation tables as needed, seeds only defined defaults, and then adds browse indexes; the intermediate manifest takes only the browse-index path. The complete manifest and foreign keys are validated before commit. Existing business rows, routing strategies, key limits, historical times, accounting, and custom legal settings are preserved. Older models without routing configuration retain expiry-weighted routing; older keys without limits remain unlimited. Existing models initially allow all five levels and have empty public descriptions; existing donations receive the legacy handling state. Recurring rule sets begin empty. No historical response-start evidence, recurring consumption, or game presentation values are invented. Before a writable source open, an existing database is copied through no-follow read-only handles to a private validation directory; header, schema, foreign keys, indexes, sidecars, and contextual credential envelopes are checked there. Alpha/Generation 1 files, empty files, unknown generations, unexpected or corrupt schemas, unsafe file shapes, rollback journals, and anomalous sidecars are refused without modifying the source set or creating source-side WAL/SHM files. Arbitrary schema repair and old-generation data import remain unsupported.
 
 Therefore:
 
@@ -165,7 +165,7 @@ Therefore:
 - a cutover from an alpha release deliberately starts with an empty Generation 2 database and loses active application state unless the operator later re-enters it manually;
 - a fresh Generation 2 database starts with maintenance on and registration, activities, charity, donation intake, and games off. Keep those gates closed until instance legal text, required configuration, initialization, and smoke tests pass.
 
-Beta.1 adds no startup environment-variable names relative to alpha.3. An existing environment file must still satisfy the current validation rules and is retained by the separately maintained helper, but every database-backed runtime setting is reset by a destructive fresh cutover and must be reviewed or re-entered through the administrator station.
+Beta.2 adds no startup environment-variable names relative to alpha.3. An existing environment file must still satisfy the current validation rules and is retained by the separately maintained helper, but every database-backed runtime setting is reset by a destructive fresh cutover and must be reviewed or re-entered through the administrator station.
 
 The companion deployment helper is maintained separately and is **not shipped by this repository**. Any helper used for this cutover must expose exactly four operator entry classes:
 
@@ -206,7 +206,7 @@ A destructive fresh cutover deletes the active database set and therefore remove
 6. Point `/opt/nonbiriapi/current` at the new compatible release and start the service:
 
    ```sh
-   version=1.0.0-beta.1  # replace with the compatible release being installed
+   version=1.0.0-beta.2  # replace with the compatible candidate being installed
    sudo ln -sfn "/opt/nonbiriapi/releases/$version" /opt/nonbiriapi/current.next
    sudo mv -Tf /opt/nonbiriapi/current.next /opt/nonbiriapi/current
    sudo systemctl start nonbiriapi.service

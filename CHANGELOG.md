@@ -6,6 +6,30 @@ Each version entry describes its source and compatibility boundary; a release ta
 
 ## [Unreleased]
 
+This section describes the unreleased `1.0.0-beta.2` candidate.
+
+### Added
+
+- Bounded numbered pagination across the resource, activity, log, donation, model, report, legal-hold and administration lists, with 10/20/50/100 page sizes, direct page navigation, preserved filters, filter and page restoration after returning or refreshing, and a separate browser-local preference for each list.
+- A complete charity model catalog with optional plain-text descriptions, arbitrary allowed-level sets including an empty set, explicit enabled/availability reasons, and a public API projection that contains only currently usable models. Authorized administrators and level-5 stewards can browse donation sources and keys within the existing field whitelist.
+- Independent donation-key recurring quota rules for calls, tokens, or credits, using reset or sliding windows over 5 hours, days, weeks, or months in a selected business time zone. Reservations, successful-response settlement, edits, expiry, recovery, and deletion remain transactionally bounded.
+- Browser-local time-point parsing and display with a server-resolved daylight-saving gap/fold policy, while recurring-rule time zones remain separate from ordinary timestamp display.
+- Home announcement summaries with severity and safe Markdown detail handling, plus the beta.2 candidate's expanded game presentation, responsive LinkLink layout, and generated short sound cues.
+
+### Changed
+
+- Account export is schema version 5. It adds safe projections of donation-key recurring rules and the requester's own RPS buy-in/cash-out values while continuing to exclude secrets, other users, reports, holds, and internal scheduling data.
+- Generation 2 browsing indexes and beta.2 sidecars are added only through the exact validated additive update paths; existing data and historical facts are preserved and unsupported schemas remain zero-write refusals.
+
+### Fixed
+
+- Fishing keeps the oldest unacknowledged catch visible until confirmation, blocks repeated starts while revealing, and preserves reveal and acknowledgement timing across balance refreshes.
+
+### Compatibility and deployment
+
+- Beta.2 continues Generation 2 (`application_id=0x4E425249`, `user_version=2`). A fresh deployment requires an absent database/WAL/SHM set; four exact earlier Generation 2 manifests and the deployed intermediate manifest with beta.2 sidecars are the only additive update sources. Alpha and Generation 1 require a fresh cutover, and an incompatible binary-only downgrade remains unsupported.
+- The candidate remains source-first for Linux/amd64 and has no official precompiled binary, container image, or installer.
+
 ### Fixed
 
 - Automatic RPM bans apply only to charity requests exceeding the site's per-user limit. Rate-limited personal resource calls, shared key limits and upstream rate-limit responses do not trigger this policy.
