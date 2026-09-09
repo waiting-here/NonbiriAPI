@@ -106,6 +106,12 @@
   flex: 1 1 14rem;
 }
 
+.economy-catalog-item__name .nb-copy-value {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
 .economy-catalog-item__name .nb-copy-value,
 .economy-catalog-item__name .nb-copy-value code {
   min-width: 0;
