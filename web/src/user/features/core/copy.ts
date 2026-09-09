@@ -99,8 +99,8 @@ const copy = {
   'home.checkin.threshold': ['Check-in threshold (credits)', '签到门槛（积分）'],
   'home.checkin.thresholdNone': ['No limit', '无上限'],
   'home.checkin.thresholdHint': [
-    'This limit only decides whether you can check in. Once reached, no new check-in is allowed; rewards already granted do not change.',
-    '此上限只决定还能否签到；达到后不能再签到，已发放的奖励不会减少。',
+    'This limit applies to every level and only decides whether you can check in. Once reached, no new check-in is allowed; rewards already granted do not change.',
+    '此上限适用于所有等级，只决定还能否签到；达到后不能再签到，已发放的奖励不会减少。',
   ],
   'home.checkin.submit': ['Check in', '立即签到'],
   'home.checkin.done': [
