@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
 import { CharityBindingPicker, type CharitySelection } from './CharityBindingPicker';
 import { CharitySourceBrowser } from './CharitySourceBrowser';
@@ -989,7 +989,7 @@ function DonationKeyPages({
   onCapabilityLoss?: () => void;
 }) {
   const { t } = useTranslation();
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useSearchState();
   const pager = useUrlPagePager({
     station: role === 'admin' ? 'admin' : 'user',
     listType: 'managed-donation-keys',
@@ -1120,7 +1120,7 @@ function DonationsPanel({
 }) {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
   const rawHandling = oneParam(searchParams, 'handling');
   const handling = ['pending', 'processed', 'legacy', 'closed'].includes(rawHandling)
     ? rawHandling
@@ -2216,7 +2216,7 @@ function ModelsPanel({
 }) {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useSearchState();
   const rawQuery = oneParam(params, 'model_q');
   const query = validManagementSearch(rawQuery) ? rawQuery : '';
   const rawEnabled = oneParam(params, 'model_enabled');
@@ -2505,7 +2505,7 @@ function CharityManagementAccount({
   onCapabilityLoss?: () => void;
 }) {
   const { t } = useTranslation();
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useSearchState();
   const rawSection = oneParam(params, 'charity_section');
   const section = rawSection === 'models' || rawSection === 'sources' ? rawSection : 'donations';
   const setSection = (nextSection: 'donations' | 'models' | 'sources') =>

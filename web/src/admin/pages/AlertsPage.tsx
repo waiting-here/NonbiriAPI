@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { clearStationSession } from '@shared/charityManagement';
 import {
   Card,
@@ -49,7 +49,7 @@ export function AlertsPage() {
   const { t } = useTranslation();
   const client = useQueryClient();
   const session = useAdminSession();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
   const resolved = resolvedFilter(searchParams);
   const accountID = session.data ? `admin:${session.data.admin.username}` : undefined;
   const scopeReady = Boolean(accountID) && !session.error;

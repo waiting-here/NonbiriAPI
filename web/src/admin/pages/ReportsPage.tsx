@@ -1,4 +1,5 @@
-import { Link, useLocation, useSearchParams } from 'react-router';
+import { Link, useLocation } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
@@ -32,7 +33,7 @@ function selectedStatus(values: string[]): string {
 export function ReportsPage() {
   const { t } = useTranslation();
   const location = useLocation();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
   const session = useAdminSession();
   const accountId = session.data?.admin.username ?? '';
   const scopeReady = !session.isPending && !session.error && Boolean(accountId);

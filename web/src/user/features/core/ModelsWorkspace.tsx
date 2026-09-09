@@ -8,7 +8,7 @@ import {
   type FormEvent,
 } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { ChoiceList } from '@shared/components/ChoiceList';
 import { PageHeader } from '@shared/components/States';
@@ -1819,7 +1819,7 @@ export function ModelsWorkspace({ user }: { user: UserProfile }) {
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
   const session = useCoreSession(false);
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
   const [creating, setCreating] = useState(false);
   const [permissionLost, setPermissionLost] = useState<PermissionLoss | null>(null);
   const deletedModelRef = useRef<{ accountId: string; id: string } | null>(null);

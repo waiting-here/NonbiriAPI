@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
 import { clearStationSession } from '@shared/charityManagement';
 import { isApiError } from '@shared/query/http';
@@ -271,7 +271,7 @@ function ScopedRoleLogPanel({
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
   const station = role === 'admin' ? 'admin' : 'user';
   const textParams = useMemo(
     () =>

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
 import { clearStationSession } from '@shared/charityManagement';
 import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
@@ -105,7 +105,7 @@ interface EndpointsPageContentProps {
 function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPageContentProps) {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
   const query = searchParams.get('q') ?? '';
   const expanded = searchParams.get('expanded_base_url');
   const [draft, setDraft] = useState(query);
@@ -309,7 +309,7 @@ function EndpointsPageContent({ account, scopeReady, sessionError }: EndpointsPa
 }
 
 export function EndpointsPage() {
-  const [, setSearchParams] = useSearchParams();
+  const [, setSearchParams] = useSearchState();
   const session = useAdminSession();
   const account = session.data?.admin.username;
   const scopeReady = Boolean(account) && !session.error;

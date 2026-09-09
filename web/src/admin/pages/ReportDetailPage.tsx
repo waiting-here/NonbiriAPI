@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link, useLocation, useParams, useSearchParams } from 'react-router';
+import { Link, useLocation, useParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { clearStationSession, stationSessionWrite } from '@shared/charityManagement';
@@ -58,7 +59,7 @@ export function ReportDetailPage() {
 function ReportDetail({ accountId, caseId }: { accountId: string; caseId: string }) {
   const { t } = useTranslation();
   const location = useLocation();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
   const client = useQueryClient();
   const scopeReady = Boolean(accountId);
   const lineageTargetValues = searchParams.getAll('lineage_target');

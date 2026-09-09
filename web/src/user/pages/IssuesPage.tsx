@@ -1,4 +1,5 @@
-import { Link, useSearchParams } from 'react-router';
+import { Link } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
 import {
   Card,
@@ -39,7 +40,7 @@ const RESOURCE_LABEL_KEYS: Record<Issue['resource_kind'], string> = {
 
 export function IssuesPage() {
   const { t } = useTranslation();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
   const state: IssueState = searchParams.get(ISSUE_STATE_PARAM) === 'closed' ? 'closed' : 'current';
   const session = useUserAuthority();
   const accountID = session.data?.id;

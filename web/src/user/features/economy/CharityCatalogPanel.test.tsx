@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useNavigate, useSearchParams } from 'react-router';
 import { CharityCatalogPanel } from './CharityCatalogPanel';
@@ -106,6 +106,30 @@ function HistoryProbe() {
 }
 
 describe('charity catalog panel', () => {
+  it('retains a just-selected availability filter when page size changes immediately', async () => {
+    const rows = Array.from({ length: 20 }, (_, index) => catalogModel(String(index + 1)));
+    const result = (size: number, total: number) => catalogPage(rows.slice(0, size), {
+      page: '1', page_size: size, total_items: String(total), total_pages: String(Math.ceil(total / size)),
+    });
+    installJsonFetchFixtures([
+      { method: 'GET', path: catalogPath('1', 20, '', 'all', 'all', 'true'), body: result(20, 22) },
+      { method: 'GET', path: catalogPath('1', 20, '', 'all', 'all', 'all'), body: result(20, 26) },
+      { method: 'GET', path: catalogPath('1', 10, '', 'all', 'all', 'true'), body: result(10, 22) },
+      { method: 'GET', path: catalogPath('1', 10, '', 'all', 'all', 'all'), body: result(10, 26) },
+    ]);
+    await renderWithProviders(<><CharityCatalogPanel accountID="7" /><SearchProbe /></>, {
+      station: 'user', role: 'user', route: '/charity?allowed_for_me=all&allowed_level=all&currently_available=true&page=1&page_size=20',
+    });
+    await screen.findByText('Page 1 of 2 · 22 items');
+    act(() => {
+      fireEvent.change(screen.getByLabelText('Currently available'), { target: { value: 'all' } });
+      fireEvent.change(screen.getByLabelText('Items per page'), { target: { value: '10' } });
+    });
+    await screen.findByText('Page 1 of 3 · 26 items');
+    expect(screen.getByLabelText('Currently available')).toHaveValue('all');
+    expect(screen.getByLabelText('Current catalog URL')).toHaveTextContent('currently_available=all');
+  });
+
   it('renders public descriptions as text with access, availability, and exact prices', async () => {
     const model = catalogModel('1', 'plain', {
       public_description: '<b>plain</b>\nsecond line',

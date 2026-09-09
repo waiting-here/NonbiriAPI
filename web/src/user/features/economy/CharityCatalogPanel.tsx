@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { CharityPriceTable, type CharityPriceRow } from '@shared/components/CharityPriceTable';
 import { CopyValue } from '@shared/components/CopyValue';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
@@ -291,7 +291,7 @@ function CatalogFilters({
 
 export function CharityCatalogPanel({ accountID }: { accountID: string | undefined }) {
   const { t } = useTranslation();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
   const urlState = readCharityCatalogUrlState(searchParams);
   const pager = useUrlPagePager({
     station: 'user',
@@ -312,7 +312,7 @@ export function CharityCatalogPanel({ accountID }: { accountID: string | undefin
     if (!urlState.needsNormalization) return;
     const canonical = canonicalCharityCatalogSearch(searchParams);
     if (canonical.toString() !== searchParams.toString()) {
-      setSearchParams(canonical, { replace: true });
+      setSearchParams(canonicalCharityCatalogSearch, { replace: true });
     }
   }, [searchParams, setSearchParams, urlState.needsNormalization]);
 
@@ -331,7 +331,7 @@ export function CharityCatalogPanel({ accountID }: { accountID: string | undefin
     setSearchParams(
       (previous) => {
         const next = writeCharityCatalogFilters(previous, {
-          ...urlState.filters,
+          ...readCharityCatalogUrlState(previous).filters,
           query,
         });
         next.delete('page');

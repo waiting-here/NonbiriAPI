@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import {
   DEFAULT_PAGE,
   DEFAULT_PAGE_SIZE,
@@ -222,7 +222,7 @@ function validDraft(draft: CreditHistoryFilterDraft): boolean {
 }
 
 export function useCreditHistoryUrl(scopeReset = false): CreditHistoryUrlController {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
   const [refreshRevision, setRefreshRevision] = useState(0);
   const [pendingScopeReset, setPendingScopeReset] = useState(scopeReset);
   if (scopeReset && !pendingScopeReset) setPendingScopeReset(true);

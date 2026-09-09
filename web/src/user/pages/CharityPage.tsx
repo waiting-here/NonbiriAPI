@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { Link, useLocation, useParams, useSearchParams } from 'react-router';
+import { Link, useLocation, useParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { isNotFoundError } from '@shared/query/http';
 import { usePublicConfig } from '@shared/query/publicConfig';
@@ -96,7 +97,7 @@ function DonationDetailContent({ donationID }: { donationID: string }) {
 
 function CharityContent() {
   const { t, i18n } = useTranslation();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
   const tab =
     searchParams.get('tab') === 'donations'
       ? 'donations'
@@ -104,9 +105,11 @@ function CharityContent() {
         ? 'donate'
         : 'models';
   const selectTab = (value: string) => {
-    const next = new URLSearchParams(searchParams);
-    next.set('tab', value);
-    setSearchParams(next);
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set('tab', value);
+      return next;
+    });
   };
   const session = useUserSession();
   const publicConfig = usePublicConfig();

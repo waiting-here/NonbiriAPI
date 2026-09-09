@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
 import { clearStationSession } from '@shared/charityManagement';
 import {
@@ -101,7 +101,7 @@ interface ActivitiesPageContentProps {
 function ActivitiesPageContent({ account, scopeReady, sessionError }: ActivitiesPageContentProps) {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
   const rawPoolType = searchParams.get('pool_type');
   const poolType: '' | Pool['pool_type'] =
     rawPoolType === 'welfare' || rawPoolType === 'thursday' ? rawPoolType : '';
