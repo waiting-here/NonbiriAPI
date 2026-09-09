@@ -139,7 +139,7 @@ describe('credit history numbered page controls', () => {
     );
 
     expect((await screen.findAllByText('+1')).length).toBeGreaterThan(0);
-    expect(screen.getByText('Page 1 of 2 · 21 items')).toBeVisible();
+    expect(screen.getByText('Page 1 of 2 · Total: 21')).toBeVisible();
     const size = screen.getByRole('combobox', { name: 'Items per page' });
     expect(Array.from(size.querySelectorAll('option')).map((option) => option.value)).toEqual([
       '10',
@@ -155,7 +155,7 @@ describe('credit history numbered page controls', () => {
     );
     expect(size).toHaveValue('10');
     await view.user.click(screen.getByRole('button', { name: 'Next' }));
-    expect(await screen.findByText('Page 2 of 3 · 21 items')).toBeVisible();
+    expect(await screen.findByText('Page 2 of 3 · Total: 21')).toBeVisible();
     expect(requests).toContain(`/api/credits/history?page=2&page_size=10&anchor=${anchor}`);
     expect(screen.getByTestId('location')).toHaveTextContent(
       `/credits?page=2&page_size=10&anchor=${anchor}`,
@@ -177,7 +177,7 @@ describe('credit history numbered page controls', () => {
       </>,
       { station: 'user', role: 'user', route: '/credits' },
     );
-    expect(await screen.findByText('Page 1 of 3 · 21 items')).toBeVisible();
+    expect(await screen.findByText('Page 1 of 3 · Total: 21')).toBeVisible();
     expect(
       requests.filter((path) => path === '/api/credits/history?page=1&page_size=10'),
     ).toHaveLength(2);
@@ -318,7 +318,7 @@ describe('credit history numbered page controls', () => {
     );
     expect((await screen.findAllByText('+1')).length).toBeGreaterThan(0);
     await view.user.click(screen.getByRole('button', { name: 'Next' }));
-    expect(await screen.findByText('Page 2 of 2 · 21 items')).toBeVisible();
+    expect(await screen.findByText('Page 2 of 2 · Total: 21')).toBeVisible();
     await view.user.click(screen.getByRole('button', { name: 'Go back' }));
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/credits'));
     expect((await screen.findAllByText('+1')).length).toBeGreaterThan(0);
@@ -428,7 +428,7 @@ describe('credit history numbered page controls', () => {
     });
 
     expect(await screen.findByText('No credit changes found')).toBeVisible();
-    expect(screen.getByText('Page 1 of 1 · 0 items')).toBeVisible();
+    expect(screen.getByText('Page 1 of 1 · Total: 0')).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Items per page' })).toHaveValue('20');
     expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
@@ -466,7 +466,7 @@ describe('credit history numbered page controls', () => {
       role: 'user',
       route: '/credits',
     });
-    await screen.findByText('Page 1 of 1 · 1 items');
+    await screen.findByText('Page 1 of 1 · Total: 1');
     const size = screen.getByRole('combobox', { name: 'Items per page' });
     await view.user.selectOptions(size, '10');
     await waitFor(() => expect(size).toHaveValue('10'));
@@ -477,7 +477,7 @@ describe('credit history numbered page controls', () => {
       role: 'user',
       route: '/credits',
     });
-    expect(await screen.findByText('Page 1 of 1 · 1 items')).toBeVisible();
+    expect(await screen.findByText('Page 1 of 1 · Total: 1')).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Items per page' })).toHaveValue('10');
     expect(requests).toContain('/api/credits/history?page=1&page_size=10');
     remounted.unmount();

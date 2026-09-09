@@ -150,7 +150,7 @@ describe('administrator announcements page', () => {
     await rendered.user.selectOptions(screen.getByRole('combobox', { name: 'State' }), 'published');
 
     expect(await screen.findByRole('heading', { name: 'No announcements' })).toBeVisible();
-    expect(screen.getByText('Page 1 of 1 · 0 items')).toBeVisible();
+    expect(screen.getByText('Page 1 of 1 · Total: 0')).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Items per page' })).toBeVisible();
   });
 });

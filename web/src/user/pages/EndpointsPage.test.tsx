@@ -104,17 +104,17 @@ describe('user endpoint list page', () => {
     });
     expect(await screen.findByText('endpoint-1')).toBeVisible();
     expect(requests).toContain('/api/endpoints?page=1&page_size=20');
-    expect(screen.getByText('Page 1 of 2 · 21 items')).toBeVisible();
+    expect(screen.getByText('Page 1 of 2 · Total: 21')).toBeVisible();
     expect(document.querySelector('section.core-card[aria-busy="false"]')).not.toBeNull();
 
     await rendered.user.click(screen.getByRole('button', { name: 'Next' }));
     expect(screen.getByText('endpoint-1')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
-    expect(screen.getByText('Page 1 of 2 · 21 items')).toBeVisible();
+    expect(screen.getByText('Page 1 of 2 · Total: 21')).toBeVisible();
     expect(document.querySelector('section.core-card[aria-busy="true"]')).not.toBeNull();
     resolveSecond(jsonResponse(endpointPage(secondPage, '2', 20, 21)));
     expect(await screen.findByText('endpoint-21')).toBeVisible();
-    expect(screen.getByText('Page 2 of 2 · 21 items')).toBeVisible();
+    expect(screen.getByText('Page 2 of 2 · Total: 21')).toBeVisible();
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Items per page' }), {
       target: { value: '50' },
@@ -146,7 +146,7 @@ describe('user endpoint list page', () => {
       route: '/endpoints',
     });
     expect(await screen.findByText('No endpoints yet')).toBeVisible();
-    expect(screen.getByText('Page 1 of 1 · 0 items')).toBeVisible();
+    expect(screen.getByText('Page 1 of 1 · Total: 0')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
     expect(screen.getByRole('combobox', { name: 'Items per page' })).toHaveValue('20');

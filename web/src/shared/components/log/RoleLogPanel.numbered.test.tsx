@@ -227,8 +227,8 @@ describe('numbered role log panel', () => {
     await waitFor(() =>
       expect(screen.getByText('That page is no longer available. Showing page 2.')).toBeVisible(),
     );
-    expect(screen.getByText('Page 2 of 2 · 21 items')).toBeVisible();
-    const listResult = screen.getByText('Page 2 of 2 · 21 items').closest('.ops-stack');
+    expect(screen.getByText('Page 2 of 2 · Total: 21')).toBeVisible();
+    const listResult = screen.getByText('Page 2 of 2 · Total: 21').closest('.ops-stack');
     expect(listResult?.getAttribute('aria-busy')).toBe('false');
     expect(
       within(screen.getByRole('navigation', { name: 'Pagination' })).getByRole('combobox'),
