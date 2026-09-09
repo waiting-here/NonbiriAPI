@@ -203,6 +203,12 @@ export function callerKeyMachineReducer(
     return { ...state, readState: 'error', readError: event.message };
   }
   if (event.type === 'read-success') {
+    if (
+      state.authority &&
+      BigInt(event.authority.generation) < BigInt(state.authority.generation)
+    ) {
+      return { ...state, readState: 'ready', readError: null };
+    }
     const reveal =
       state.reveal && state.reveal.generation === event.authority.generation ? state.reveal : null;
     return {
@@ -241,6 +247,19 @@ export function callerKeyMachineReducer(
     return state;
   }
   if (event.type === 'regenerate-success') {
+    if (
+      !state.authority ||
+      (state.authority.generation !== event.expectedGeneration &&
+        state.authority.generation !== event.metadata.generation)
+    ) {
+      return {
+        ...state,
+        mutation: 'conflict',
+        activeAction: null,
+        reveal: null,
+        mutationError: null,
+      };
+    }
     return {
       ...state,
       authority: { generation: event.metadata.generation, metadata: event.metadata },
