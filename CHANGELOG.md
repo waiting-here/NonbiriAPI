@@ -27,7 +27,7 @@ This section describes the unreleased `1.0.0-beta.2` candidate.
 
 ### Compatibility and deployment
 
-- Beta.2 continues Generation 2 (`application_id=0x4E425249`, `user_version=2`). A fresh deployment requires an absent database/WAL/SHM set; four exact earlier Generation 2 manifests and the deployed intermediate manifest with beta.2 sidecars are the only additive update sources. Alpha and Generation 1 require a fresh cutover, and an incompatible binary-only downgrade remains unsupported.
+- Beta.2 continues Generation 2 (`application_id=0x4E425249`, `user_version=2`). A fresh deployment requires an absent database/WAL/SHM set; four exact earlier Generation 2 manifests and the two deployed intermediate manifests with beta.2 sidecars are the only additive update sources. Alpha and Generation 1 require a fresh cutover, and an incompatible binary-only downgrade remains unsupported.
 - The candidate remains source-first for Linux/amd64 and has no official precompiled binary, container image, or installer.
 
 ### Fixed
