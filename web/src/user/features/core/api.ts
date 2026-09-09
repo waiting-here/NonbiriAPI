@@ -1,4 +1,5 @@
 import { ApiError, isApiError } from '@shared/query/http';
+import { queryPath } from '@shared/operations/api';
 import {
   canonicalBaseURLPreview,
   canonicalCandidateFilters,
@@ -14,10 +15,10 @@ import {
   normalizeEndpointKey,
   normalizeEndpointKeyPage,
   normalizeEndpointPage,
-  normalizeHomeAnnouncementPage,
   normalizeHomeCheckinResult,
   normalizeHomeCheckinStatus,
   normalizeHomeGameSummary,
+  normalizeHomeAnnouncementPage,
   normalizeManualEntriesResponse,
   normalizeManualUpdateResponse,
   normalizeModel,
@@ -55,7 +56,7 @@ import {
   type EndpointKeyPatchInput,
   type EndpointPatchInput,
   type ExplicitLanguage,
-  type HomeAnnouncementSummary,
+  type HomeAnnouncementPage,
   type HomeCheckinResult,
   type HomeCheckinStatus,
   type HomeGameSummary,
@@ -180,11 +181,14 @@ export async function getHomeGameSummary(signal?: AbortSignal): Promise<HomeGame
 }
 
 export async function getHomeAnnouncements(
+  cursor: string | null = null,
   signal?: AbortSignal,
-): Promise<HomeAnnouncementSummary[]> {
-  const response = await coreRequest('/api/announcements?limit=20', { signal });
+): Promise<HomeAnnouncementPage> {
+  const response = await coreRequest(queryPath('/api/announcements', { cursor, limit: 100 }), {
+    signal,
+  });
   expectedStatus(response.status, 200, 'home announcements');
-  return normalizeHomeAnnouncementPage(response.payload).data;
+  return normalizeHomeAnnouncementPage(response.payload);
 }
 
 export async function patchLanguage(

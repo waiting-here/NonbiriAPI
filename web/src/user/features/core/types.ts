@@ -405,16 +405,27 @@ export type HomeGameSummary =
       created_at: number;
     };
 
-export interface HomeAnnouncementSummary {
-  id: string;
-  title: string;
-  excerpt: string;
+export type HomeAnnouncementSummary = import('../operations/data').AnnouncementSummary;
+
+export interface HomeAnnouncementPage {
+  data: HomeAnnouncementSummary[];
+  next_cursor: string | null;
 }
+
+export type HomeAnnouncementLoadResult = HomeAnnouncementPage;
+
+export type HomeAnnouncementLoader = (
+  cursor: string | null,
+  signal?: AbortSignal,
+) => Promise<HomeAnnouncementLoadResult>;
+
+export type HomeAnnouncementCapability =
+  { state: 'available'; load: HomeAnnouncementLoader } | { state: 'unavailable' };
 
 export interface HomeAdapters {
   checkin: HomeCheckinCapability;
   games: HomeCapability<HomeGameSummary[]>;
-  announcements: HomeCapability<HomeAnnouncementSummary[]>;
+  announcements: HomeAnnouncementCapability;
 }
 
 export type LifecycleIntent = 'export' | 'delete';

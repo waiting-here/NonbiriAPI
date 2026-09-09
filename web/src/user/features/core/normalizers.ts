@@ -1,3 +1,4 @@
+import { normalizeAnnouncementSummary } from '../operations/data';
 import { ApiError } from '@shared/query/http';
 import {
   CONNECTOR_TYPES,
@@ -251,18 +252,6 @@ function opaqueID(value: unknown, prefix: string, label: string): string {
   return candidate;
 }
 
-function wireText(
-  value: unknown,
-  maximumScalars: number,
-  maximumBytes: number,
-  label: string,
-  allowEmpty = false,
-): string {
-  const candidate = scalarString(value, maximumScalars, label, { allowEmpty });
-  if (new TextEncoder().encode(candidate).byteLength > maximumBytes) invalid(label);
-  return candidate;
-}
-
 export function normalizePage<T>(
   value: unknown,
   normalize: (item: unknown) => T,
@@ -402,52 +391,8 @@ export function normalizeHomeGameSummary(value: unknown): HomeGameSummary[] {
   return result;
 }
 
-function normalizeHomeAnnouncement(value: unknown): HomeAnnouncementSummary {
-  const record = exactRecord(
-    value,
-    [
-      'epoch',
-      'id',
-      'revision',
-      'severity',
-      'pinned',
-      'dismissible',
-      'published_at',
-      'expires_at',
-      'effective_language',
-      'fallback_from',
-      'title',
-      'excerpt',
-    ],
-    [],
-    'announcement summary',
-  );
-  if (!['info', 'warning', 'important'].includes(record.severity as string))
-    invalid('announcement severity');
-  if (record.effective_language !== 'zh' && record.effective_language !== 'en')
-    invalid('announcement language');
-  if (
-    record.fallback_from !== null &&
-    record.fallback_from !== 'zh' &&
-    record.fallback_from !== 'en'
-  ) {
-    invalid('announcement fallback language');
-  }
-  opaqueID(record.epoch, 'b1e_', 'announcement epoch');
-  decimal(record.revision, 'announcement revision', true);
-  exactBoolean(record.pinned, 'announcement pinned state');
-  exactBoolean(record.dismissible, 'announcement dismissible state');
-  unixTime(record.published_at, 'announcement publish time');
-  nullableTime(record.expires_at, 'announcement expiry');
-  return {
-    id: opaqueID(record.id, 'ann_', 'announcement id'),
-    title: wireText(record.title, 160, 640, 'announcement title'),
-    excerpt: wireText(record.excerpt, 240, 960, 'announcement excerpt', true),
-  };
-}
-
 export function normalizeHomeAnnouncementPage(value: unknown): Page<HomeAnnouncementSummary> {
-  const result = normalizePage(value, normalizeHomeAnnouncement, 'announcements');
+  const result = normalizePage(value, normalizeAnnouncementSummary, 'announcements');
   uniqueBy(result.data, (item) => item.id, 'announcement page');
   return result;
 }
