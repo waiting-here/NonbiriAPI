@@ -133,6 +133,107 @@ describe('core state machines', () => {
     ).toBe('account-b');
   });
 
+  it('rejects a successful response when authority changed during the operation', () => {
+    let state = initialCallerKeyMachineState('account-a', 'page-a');
+    state = callerKeyMachineReducer(state, {
+      type: 'read-success',
+      accountId: 'account-a',
+      pageInstanceId: 'page-a',
+      authority: authority('0'),
+    });
+    state = callerKeyMachineReducer(state, {
+      type: 'regenerate-start',
+      accountId: 'account-a',
+      pageInstanceId: 'page-a',
+      actionId: 'action-a',
+      expectedGeneration: '0',
+    });
+    state = callerKeyMachineReducer(state, {
+      type: 'read-success',
+      accountId: 'account-a',
+      pageInstanceId: 'page-a',
+      authority: authority('2'),
+    });
+    state = callerKeyMachineReducer(state, {
+      type: 'regenerate-success',
+      accountId: 'account-a',
+      pageInstanceId: 'page-a',
+      actionId: 'action-a',
+      expectedGeneration: '0',
+      secret: 'synthetic-secret',
+      metadata: authority('1').metadata!,
+    });
+
+    expect(state).toMatchObject({ mutation: 'conflict', activeAction: null, reveal: null });
+    expect(state.authority?.generation).toBe('2');
+  });
+
+  it('accepts the matching generation already observed before its plaintext response', () => {
+    const boundary = { accountId: 'account-a', pageInstanceId: 'page-a' };
+    let state = callerKeyMachineReducer(initialCallerKeyMachineState('account-a', 'page-a'), {
+      type: 'read-success',
+      ...boundary,
+      authority: authority('0'),
+    });
+    state = callerKeyMachineReducer(state, {
+      type: 'regenerate-start',
+      ...boundary,
+      actionId: 'action-a',
+      expectedGeneration: '0',
+    });
+    state = callerKeyMachineReducer(state, {
+      type: 'read-success',
+      ...boundary,
+      authority: authority('1'),
+    });
+    state = callerKeyMachineReducer(state, {
+      type: 'regenerate-success',
+      ...boundary,
+      actionId: 'action-a',
+      expectedGeneration: '0',
+      secret: 'synthetic-secret',
+      metadata: authority('1').metadata!,
+    });
+    expect(state.mutation).toBe('success');
+    expect(state.reveal).toEqual({
+      secret: 'synthetic-secret',
+      actionId: 'action-a',
+      generation: '1',
+    });
+  });
+
+  it('keeps a known generation and its plaintext when an older read arrives later', () => {
+    const boundary = { accountId: 'account-a', pageInstanceId: 'page-a' };
+    let state = callerKeyMachineReducer(initialCallerKeyMachineState('account-a', 'page-a'), {
+      type: 'read-success',
+      ...boundary,
+      authority: authority('0'),
+    });
+    state = callerKeyMachineReducer(state, {
+      type: 'regenerate-start',
+      ...boundary,
+      actionId: 'action-a',
+      expectedGeneration: '0',
+    });
+    state = callerKeyMachineReducer(state, {
+      type: 'regenerate-success',
+      ...boundary,
+      actionId: 'action-a',
+      expectedGeneration: '0',
+      secret: 'synthetic-secret',
+      metadata: authority('1').metadata!,
+    });
+    state = callerKeyMachineReducer(state, { type: 'read-start', ...boundary });
+    state = callerKeyMachineReducer(state, {
+      type: 'read-success',
+      ...boundary,
+      authority: authority('0'),
+    });
+    expect(state.authority).toEqual(authority('1'));
+    expect(state.readState).toBe('ready');
+    expect(state.reveal?.secret).toBe('synthetic-secret');
+  });
+
   it('keeps binding selections exact by key/model pair and ignores late action results', () => {
     let state = initialBindingDraftState('account-a', 'model-a', '0');
     state = bindingDraftReducer(state, {

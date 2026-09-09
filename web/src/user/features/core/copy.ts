@@ -343,7 +343,7 @@ const copy = {
     'The previous key stops working immediately. Update every client that uses it.',
     '旧密钥会立即失效，请更新所有使用它的程序。',
   ],
-  'keys.display': ['Key preview', '密钥预览'],
+  'keys.display': ['Key identifier (cannot be used for calls)', '密钥标识（不能用于调用）'],
   'keys.oneTimeTitle': ['Copy this API key now', '请立即复制此 API 密钥'],
   'keys.oneTimeBody': [
     'It will never be shown again after you close it or leave this page.',

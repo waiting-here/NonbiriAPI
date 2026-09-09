@@ -23,6 +23,7 @@ import {
   type CanonicalCandidateFilters,
 } from './normalizers';
 import type {
+  CallerKeyAuthority,
   BindingsResponse,
   CandidateFilters,
   ExplicitLanguage,
@@ -386,10 +387,17 @@ export function useBindingCandidates(
 }
 
 export function useCallerKey(accountId: string, enabled = true) {
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: coreKeys.callerKey(accountId),
-    queryFn: ({ signal }) => getCallerKey(signal),
-    enabled,
+    queryFn: async ({ signal }) => {
+      const received = await getCallerKey(signal);
+      const current = queryClient.getQueryData<CallerKeyAuthority>(coreKeys.callerKey(accountId));
+      return current && BigInt(current.generation) > BigInt(received.generation)
+        ? current
+        : received;
+    },
+    enabled: enabled && Boolean(accountId),
     staleTime: 5_000,
     retry: false,
   });

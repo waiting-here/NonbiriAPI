@@ -2,27 +2,39 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { PageHeader } from '@shared/components/States';
-import { copyText } from '@shared/utils/clipboard';
 import { regenerateCallerKey } from '../features/core/api';
-import {
-  CoreErrorPanel,
-  CoreLoading,
-  CoreTime,
-  CoreUserGate,
-  SafeCopyValue,
-} from '../features/core/components';
+import { CoreErrorPanel, CoreLoading, CoreTime, CoreUserGate } from '../features/core/components';
 import { useCoreCopy } from '../features/core/copy';
 import { coreKeys, coreSessionMatchesAccount, useCallerKey } from '../features/core/queries';
 import { createOperationIdentity, isConflict, isOutcomeUnknown } from '../features/core/request';
 import {
   callerKeyMachineReducer,
   initialCallerKeyMachineState,
+  type CallerKeyReveal,
 } from '../features/core/stateMachines';
+import type { CallerKeyAuthority } from '../features/core/types';
 import '../features/core/core.css';
 
 function pageInstanceIdentity(): string {
   return createOperationIdentity().actionId;
 }
+
+async function copyCallerKeySecret(secret: string): Promise<boolean> {
+  if (!secret || typeof navigator === 'undefined') return false;
+  try {
+    const clipboard = navigator.clipboard;
+    if (!clipboard?.writeText) return false;
+    await clipboard.writeText(secret);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+type SecretCopyResult = {
+  actionId: string;
+  status: 'copied' | 'failed';
+};
 
 export function CallerKeyPanel({ accountId }: { accountId: string }) {
   const { t } = useCoreCopy();
@@ -35,7 +47,15 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
     initialCallerKeyMachineState(accountId, pageInstanceId),
   );
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copyResult, setCopyResult] = useState<SecretCopyResult | null>(null);
+  const revealActionRef = useRef<string | null>(null);
+  const copyAttemptRef = useRef(0);
+
+  const clearCopyFeedback = () => {
+    copyAttemptRef.current += 1;
+    revealActionRef.current = null;
+    setCopyResult(null);
+  };
 
   const discardStaleMutation = () => {
     abortRef.current?.abort();
@@ -43,7 +63,7 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
     busyRef.current = false;
     dispatch({ type: 'boundary', accountId, pageInstanceId });
     setConfirmOpen(false);
-    setCopied(false);
+    clearCopyFeedback();
   };
 
   useEffect(() => {
@@ -55,7 +75,7 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
     queueMicrotask(() => {
       if (!active) return;
       setConfirmOpen(false);
-      setCopied(false);
+      clearCopyFeedback();
     });
     return () => {
       active = false;
@@ -79,10 +99,17 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
     }
   }, [accountId, authority.error, pageInstanceId, t]);
 
+  useEffect(() => {
+    revealActionRef.current = state.reveal?.actionId ?? null;
+    copyAttemptRef.current += 1;
+  }, [state.reveal?.actionId]);
+
   useEffect(
     () => () => {
       abortRef.current?.abort();
       busyRef.current = false;
+      revealActionRef.current = null;
+      copyAttemptRef.current += 1;
     },
     [],
   );
@@ -114,6 +141,37 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
         discardStaleMutation();
         return;
       }
+      let cacheWasStale = false;
+      queryClient.setQueryData<CallerKeyAuthority | undefined>(
+        coreKeys.callerKey(accountId),
+        (cached) => {
+          if (
+            cached &&
+            cached.generation !== expectedGeneration &&
+            cached.generation !== result.metadata.generation
+          ) {
+            cacheWasStale = true;
+            return cached;
+          }
+          return {
+            generation: result.metadata.generation,
+            metadata: result.metadata,
+          };
+        },
+      );
+      if (cacheWasStale) {
+        dispatch({
+          type: 'regenerate-failure',
+          accountId,
+          pageInstanceId,
+          actionId,
+          expectedGeneration,
+          outcome: 'conflict',
+        });
+        dispatch({ type: 'read-start', accountId, pageInstanceId });
+        if (coreSessionMatchesAccount(queryClient, accountId)) void authority.refetch();
+        return;
+      }
       dispatch({
         type: 'regenerate-success',
         accountId,
@@ -123,15 +181,7 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
         secret: result.secret,
         metadata: result.metadata,
       });
-      if (!coreSessionMatchesAccount(queryClient, accountId)) {
-        discardStaleMutation();
-        return;
-      }
-      queryClient.setQueryData(coreKeys.callerKey(accountId), {
-        generation: result.metadata.generation,
-        metadata: result.metadata,
-      });
-      setCopied(false);
+      setCopyResult(null);
       setConfirmOpen(false);
       if (coreSessionMatchesAccount(queryClient, accountId)) void authority.refetch();
     } catch (error) {
@@ -174,7 +224,23 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
 
   const closeReveal = () => {
     dispatch({ type: 'close-reveal', accountId, pageInstanceId });
-    setCopied(false);
+    clearCopyFeedback();
+  };
+
+  const copyReveal = (reveal: CallerKeyReveal) => {
+    const current = queryClient.getQueryData<CallerKeyAuthority>(coreKeys.callerKey(accountId));
+    if (
+      !coreSessionMatchesAccount(queryClient, accountId) ||
+      current?.generation !== reveal.generation
+    )
+      return;
+    const attempt = copyAttemptRef.current + 1;
+    copyAttemptRef.current = attempt;
+    setCopyResult(null);
+    void copyCallerKeySecret(reveal.secret).then((ok) => {
+      if (revealActionRef.current !== reveal.actionId || copyAttemptRef.current !== attempt) return;
+      setCopyResult({ actionId: reveal.actionId, status: ok ? 'copied' : 'failed' });
+    });
   };
 
   const metadata = state.authority?.metadata ?? null;
@@ -203,15 +269,22 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
               type="button"
               className="btn btn-secondary"
               onClick={() => {
-                void copyText(state.reveal?.secret ?? '').then((ok) => setCopied(ok));
+                if (state.reveal) copyReveal(state.reveal);
               }}
             >
-              {copied ? t('common.copied') : t('common.copy')}
+              {copyResult?.actionId === state.reveal.actionId && copyResult.status === 'copied'
+                ? t('common.copied')
+                : t('common.copy')}
             </button>
             <button type="button" className="btn btn-danger" onClick={closeReveal}>
               {t('keys.closeReveal')}
             </button>
           </div>
+          {copyResult?.actionId === state.reveal.actionId && copyResult.status === 'failed' ? (
+            <p role="status" className="core-inline-warning">
+              {t('common.copyFailed')}
+            </p>
+          ) : null}
         </section>
       ) : null}
 
@@ -244,7 +317,7 @@ export function CallerKeyPanel({ accountId }: { accountId: string }) {
             <div>
               <dt>{t('keys.display')}</dt>
               <dd>
-                <SafeCopyValue value={metadata.display} label={t('keys.display')} />
+                <code className="core-mono">{metadata.display}</code>
               </dd>
             </div>
             <div>
