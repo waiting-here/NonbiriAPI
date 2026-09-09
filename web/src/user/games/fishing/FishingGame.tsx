@@ -36,6 +36,8 @@ import type {
   FishingLeaderboard as Leaderboard,
   FishingSingleRow,
   FishingStartIntent,
+  FishingStartResult,
+  FishingState,
   FishingTotalRow,
 } from './types';
 import { fishingItemName } from './text';
@@ -376,16 +378,19 @@ export function FishingGame() {
   const [viewedResult, setViewedResult] = useState<FishingBatchResult | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const soundBatch = useRef<{ readonly id: string; through: number } | null>(null);
-  const startedHere = useRef(false);
+  const audibleBatch = useRef<string | null>(null);
   const resultRef = useRef<HTMLElement | null>(null);
   const ackAttempted = useRef<string | null>(null);
+  const ackInFlight = useRef<string | null>(null);
+  const requestInFlight = useRef(false);
   const authoritative = state.data;
   const refetchState = state.refetch;
   const result = authoritative?.unrevealed ?? null;
   const pending = authoritative?.settlementPending ?? null;
-  const authorityResolvedStart = Boolean(operation && (pending || result));
-  const effectiveActionState = authorityResolvedStart ? 'idle' : actionState;
-  const replayOperation = authorityResolvedStart ? null : operation;
+  const effectiveActionState = actionState;
+  const replayOperation = operation;
+  const resultID = result?.batchID ?? null;
+  const outcomeCount = result?.outcomes.length ?? 0;
   const revealed = result
     ? reducedMotion
       ? result.outcomes.length
@@ -400,31 +405,31 @@ export function FishingGame() {
 
   useEffect(() => {
     if (pending && soundBatch.current?.id !== pending.batchID)
-      soundBatch.current = { id: pending.batchID, through: 0 };
+      audibleBatch.current = pending.batchID;
   }, [pending]);
   useEffect(() => {
-    if (!result || reducedMotion) return undefined;
+    if (!resultID || reducedMotion) return undefined;
     const timer = window.setInterval(() => {
       setRevealClock((current) => {
-        const count = current?.batchID === result.batchID ? current.count : 0;
-        const next = nextRevealCount(count, result);
-        return next === count && current?.batchID === result.batchID
+        const count = current?.batchID === resultID ? current.count : 0;
+        const next = nextRevealCount(count, outcomeCount);
+        return next === count && current?.batchID === resultID
           ? current
-          : { batchID: result.batchID, count: next };
+          : { batchID: resultID, count: next };
       });
     }, FISHING_REVEAL_MS);
     return () => window.clearInterval(timer);
-  }, [reducedMotion, result]);
+  }, [reducedMotion, resultID, outcomeCount]);
 
   useEffect(() => {
     if (!result) return;
     if (soundBatch.current?.id !== result.batchID) {
       soundBatch.current = {
         id: result.batchID,
-        through: startedHere.current ? 0 : result.outcomes.length,
+        through: audibleBatch.current === result.batchID ? 0 : result.outcomes.length,
       };
     }
-    startedHere.current = false;
+    if (audibleBatch.current === result.batchID) audibleBatch.current = null;
     const previous = soundBatch.current.through;
     if (revealed <= previous) return;
     soundBatch.current.through = revealed;
@@ -445,10 +450,19 @@ export function FishingGame() {
 
   const sendACK = useCallback(
     async (batchID: string) => {
+      if (ackInFlight.current) return;
+      const displayed = queryClient.getQueryData<FishingState>(fishingKeys.state)?.unrevealed;
+      if (displayed?.batchID !== batchID) return;
+      ackInFlight.current = batchID;
       setAckStatus({ batchID, state: 'sending' });
       try {
         await acknowledgeFishing(batchID);
-        if (result?.batchID === batchID) setViewedResult(result);
+        setViewedResult(displayed);
+        await queryClient.cancelQueries({ queryKey: fishingKeys.state });
+        queryClient.setQueryData<FishingState>(fishingKeys.state, (current) =>
+          current?.unrevealed?.batchID === batchID ? { ...current, unrevealed: null } : current,
+        );
+        ackInFlight.current = null;
         setAckStatus(null);
         await refreshAfterMutation();
         await queryClient.invalidateQueries({
@@ -457,42 +471,52 @@ export function FishingGame() {
       } catch {
         setAckStatus({ batchID, state: 'failed' });
         await refetchState();
+      } finally {
+        if (ackInFlight.current === batchID) ackInFlight.current = null;
       }
     },
-    [queryClient, refetchState, refreshAfterMutation, result],
+    [queryClient, refetchState, refreshAfterMutation],
   );
 
   useEffect(() => {
-    if (!result || revealed !== result.outcomes.length || ackAttempted.current === result.batchID)
-      return;
-    if (resultRef.current?.querySelectorAll('[data-ordinal]').length !== result.outcomes.length)
-      return;
+    if (!resultID || revealed !== outcomeCount || ackAttempted.current === resultID) return;
+    if (resultRef.current?.querySelectorAll('[data-ordinal]').length !== outcomeCount) return;
     const timer = window.setTimeout(() => {
-      ackAttempted.current = result.batchID;
-      void sendACK(result.batchID);
+      ackAttempted.current = resultID;
+      void sendACK(resultID);
     }, 650);
     return () => {
       window.clearTimeout(timer);
     };
-  }, [result, revealed, sendACK]);
+  }, [resultID, outcomeCount, revealed, sendACK]);
+
+  const adoptResponse = useCallback(
+    async (response: FishingStartResult) => {
+      await queryClient.cancelQueries({ queryKey: fishingKeys.state });
+      queryClient.setQueryData<FishingState>(fishingKeys.state, (current) => {
+        // Finish presenting the oldest unacknowledged batch before a newer response.
+        if (current?.unrevealed && current.unrevealed.batchID !== response.batchID) return current;
+        return isFishingResult(response)
+          ? { settlementPending: null, unrevealed: response, hasMoreUnrevealed: false }
+          : { settlementPending: response, unrevealed: null, hasMoreUnrevealed: false };
+      });
+    },
+    [queryClient],
+  );
 
   const adoptStart = useCallback(
     async (intent: FishingStartIntent) => {
+      if (requestInFlight.current) return;
+      requestInFlight.current = true;
       setActionState('sending');
       setActionError(null);
       try {
         const response = await startFishing(intent);
-        if (soundBatch.current?.id !== response.batchID)
-          soundBatch.current = { id: response.batchID, through: 0 };
+        audibleBatch.current = response.batchID;
+        await adoptResponse(response);
+        await refreshAfterMutation();
         setOperation(null);
         setActionState('idle');
-        queryClient.setQueryData(
-          fishingKeys.state,
-          isFishingResult(response)
-            ? { settlementPending: null, unrevealed: response, hasMoreUnrevealed: false }
-            : { settlementPending: response, unrevealed: null, hasMoreUnrevealed: false },
-        );
-        await refreshAfterMutation();
       } catch (error) {
         setActionError(error);
         if (isResponseUnknown(error)) setActionState('unknown');
@@ -501,25 +525,28 @@ export function FishingGame() {
           setActionState('idle');
           if (isConflict(error)) await refetchState();
         }
+      } finally {
+        requestInFlight.current = false;
       }
     },
-    [queryClient, refetchState, refreshAfterMutation],
+    [adoptResponse, refetchState, refreshAfterMutation],
   );
 
   const start = () => {
+    if (requestInFlight.current || locked || !startsOpen || !affordable) return;
     const intent = operation ?? {
       bait: selectedBait,
       count,
       idempotencyKey: createIdempotencyKey(),
     };
-    startedHere.current = true;
     playSound('select');
     setOperation(intent);
     void adoptStart(intent);
   };
 
   const recover = async () => {
-    if (!pending || pending.state !== 'recovery_required') return;
+    if (requestInFlight.current || !pending || pending.state !== 'recovery_required') return;
+    requestInFlight.current = true;
     setOperation(null);
     const key = recoverKeys[pending.batchID] ?? createIdempotencyKey();
     if (!recoverKeys[pending.batchID])
@@ -528,14 +555,8 @@ export function FishingGame() {
     setActionError(null);
     try {
       const response = await recoverFishing(pending.batchID, key);
-      if (soundBatch.current?.id !== response.batchID)
-        soundBatch.current = { id: response.batchID, through: 0 };
-      queryClient.setQueryData(
-        fishingKeys.state,
-        isFishingResult(response)
-          ? { settlementPending: null, unrevealed: response, hasMoreUnrevealed: false }
-          : { settlementPending: response, unrevealed: null, hasMoreUnrevealed: false },
-      );
+      audibleBatch.current = response.batchID;
+      await adoptResponse(response);
       setRecoverKeys((value) => {
         const next = { ...value };
         delete next[pending.batchID];
@@ -555,6 +576,8 @@ export function FishingGame() {
           return next;
         });
       if (isConflict(error)) await refetchState();
+    } finally {
+      requestInFlight.current = false;
     }
   };
 
@@ -568,7 +591,12 @@ export function FishingGame() {
     snapshot.data?.gamesEnabled && snapshot.data.fishing.enabled && snapshot.data.fishing.available,
   );
   const locked = Boolean(
-    state.isPending || state.error || pending || replayOperation || effectiveActionState !== 'idle',
+    state.isPending ||
+    state.error ||
+    pending ||
+    replayOperation ||
+    effectiveActionState !== 'idle' ||
+    (result && (revealed < outcomeCount || ackState === 'sending')),
   );
   const phase = fishingPresentationPhase({
     submitting: effectiveActionState === 'sending' && !pending,
