@@ -11,6 +11,8 @@ import { normalizeUserEnvelope } from './normalizers';
 import type {
   AccountLifecycleAdapter,
   HomeAdapters,
+  HomeAnnouncementPage,
+  HomeAnnouncementSummary,
   HomeCheckinStatus,
   UserEnvelope,
 } from './types';
@@ -42,6 +44,43 @@ function sharedSession(user: UserEnvelope['user']) {
   };
 }
 
+const HOME_EPOCH = `b1e_${'A'.repeat(21)}Q`;
+
+function opaqueAnnouncementId(label: string): string {
+  const suffix = label
+    .replace(/[^A-Za-z0-9_-]/g, 'A')
+    .slice(0, 21)
+    .padEnd(21, 'A');
+  return `ann_${suffix}Q`;
+}
+
+function homeAnnouncementSummary(
+  label: string,
+  overrides: Partial<HomeAnnouncementSummary> = {},
+): HomeAnnouncementSummary {
+  return {
+    epoch: HOME_EPOCH,
+    id: opaqueAnnouncementId(label),
+    revision: '1',
+    severity: 'info',
+    pinned: false,
+    dismissible: true,
+    published_at: 1_700_000_000,
+    expires_at: null,
+    effective_language: 'en',
+    fallback_from: null,
+    title: `Announcement ${label}`,
+    excerpt: `Excerpt ${label}`,
+    ...overrides,
+  };
+}
+
+function homeAnnouncementPage(data: HomeAnnouncementSummary[] = []): HomeAnnouncementPage {
+  return { data, next_cursor: null };
+}
+
+type RenderedProviders = Awaited<ReturnType<typeof renderWithProviders>>;
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -49,13 +88,39 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+async function renderHomeDashboard(
+  user: UserEnvelope['user'],
+  adapters: HomeAdapters,
+  locale: 'en' | 'zh' = 'en',
+): Promise<RenderedProviders> {
+  const rendered = await renderWithProviders(<HomeDashboard user={user} adapters={adapters} />, {
+    station: 'user',
+    role: 'user',
+    locale,
+  });
+  act(() => {
+    rendered.queryClient.setQueryData(coreKeys.session, sharedSession(user));
+  });
+  return rendered;
+}
+
 describe('home independent capability states', () => {
   it('keeps confirmed profile, economy, usage, and announcement data when the game summary fails', async () => {
     const envelope = canonicalEnvelope();
+    const announcement = homeAnnouncementSummary('planned', {
+      title: 'Planned maintenance',
+      excerpt: 'A short confirmed summary.',
+    });
+    const { excerpt, ...announcementDetail } = announcement;
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: string | URL | Request) => {
         if (String(input) === '/api/me') return jsonResponse(envelope);
+        if (String(input) === `/api/announcements/${announcement.id}`)
+          return jsonResponse({
+            ...announcementDetail,
+            rendered_body: `<p>${excerpt}</p>`,
+          });
         throw new Error(`Unexpected request: ${String(input)}`);
       }),
     );
@@ -69,17 +134,11 @@ describe('home independent capability states', () => {
       },
       announcements: {
         state: 'available',
-        load: async () => [
-          { id: '41', title: 'Planned maintenance', excerpt: 'A short confirmed summary.' },
-        ],
+        load: async () => homeAnnouncementPage([announcement]),
       },
     };
 
-    await renderWithProviders(<HomeDashboard user={envelope.user} adapters={adapters} />, {
-      station: 'user',
-      role: 'user',
-      locale: 'en',
-    });
+    await renderHomeDashboard(envelope.user, adapters);
 
     expect(screen.getByText('Guild Alice')).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Lifetime usage' })).toBeVisible();
@@ -88,6 +147,11 @@ describe('home independent capability states', () => {
     expect(screen.getByText('Could not load this section')).toBeVisible();
     expect(await screen.findByText('Planned maintenance')).toBeVisible();
     expect(screen.getByText('A short confirmed summary.')).toBeVisible();
+    await waitFor(() =>
+      expect(
+        screen.getByText('A short confirmed summary.').closest('.ops-announcement-body'),
+      ).not.toBeNull(),
+    );
   });
 
   it('hides successful empty game and announcement summaries', async () => {
@@ -99,14 +163,10 @@ describe('home independent capability states', () => {
     const adapters: HomeAdapters = {
       checkin: { state: 'unavailable' },
       games: { state: 'available', load: async () => [] },
-      announcements: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => homeAnnouncementPage() },
     };
 
-    await renderWithProviders(<HomeDashboard user={envelope.user} adapters={adapters} />, {
-      station: 'user',
-      role: 'user',
-      locale: 'en',
-    });
+    await renderHomeDashboard(envelope.user, adapters);
 
     await waitFor(() => {
       expect(
@@ -129,11 +189,7 @@ describe('home independent capability states', () => {
       announcements: { state: 'unavailable' },
     } as unknown as HomeAdapters;
 
-    await renderWithProviders(<HomeDashboard user={envelope.user} adapters={adapters} />, {
-      station: 'user',
-      role: 'user',
-      locale: 'en',
-    });
+    await renderHomeDashboard(envelope.user, adapters);
 
     expect(await screen.findByRole('heading', { name: 'Continue or view results' })).toBeVisible();
     expect(await screen.findByText('Could not load this section')).toBeVisible();
@@ -165,13 +221,10 @@ describe('home independent capability states', () => {
     const adapters: HomeAdapters = {
       checkin: { state: 'available', load, submit },
       games: { state: 'available', load: async () => [] },
-      announcements: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => homeAnnouncementPage() },
     };
 
-    const rendered = await renderWithProviders(
-      <HomeDashboard user={envelope.user} adapters={adapters} />,
-      { station: 'user', role: 'user', locale: 'en' },
-    );
+    const rendered = await renderHomeDashboard(envelope.user, adapters);
     await rendered.user.click(await screen.findByRole('button', { name: 'Check in' }));
 
     expect(await screen.findByText(/response was lost/i)).toBeVisible();
@@ -215,13 +268,10 @@ describe('home independent capability states', () => {
     const adapters: HomeAdapters = {
       checkin: { state: 'available', load, submit },
       games: { state: 'available', load: async () => [] },
-      announcements: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => homeAnnouncementPage() },
     };
 
-    const rendered = await renderWithProviders(
-      <HomeDashboard user={envelope.user} adapters={adapters} />,
-      { station: 'user', role: 'user', locale: 'en' },
-    );
+    const rendered = await renderHomeDashboard(envelope.user, adapters);
     await rendered.user.click(await screen.findByRole('button', { name: 'Check in' }));
 
     await waitFor(() => expect(document.body.textContent).toContain(maximum));
@@ -248,13 +298,10 @@ describe('home independent capability states', () => {
     const adapters: HomeAdapters = {
       checkin: { state: 'available', load, submit },
       games: { state: 'available', load: async () => [] },
-      announcements: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => homeAnnouncementPage() },
     };
     const lowerLevel = { ...envelope.user, effective_level: 2 as const };
-    const rendered = await renderWithProviders(
-      <HomeDashboard user={lowerLevel} adapters={adapters} />,
-      { station: 'user', role: 'user', locale: 'en' },
-    );
+    const rendered = await renderHomeDashboard(lowerLevel, adapters);
 
     expect(await screen.findByRole('button', { name: 'Check in' })).toBeDisabled();
     expect(screen.getByText(/limit only decides whether you can check in/i)).toBeVisible();
@@ -290,13 +337,10 @@ describe('home independent capability states', () => {
     const adapters: HomeAdapters = {
       checkin: { state: 'available', load, submit },
       games: { state: 'available', load: async () => [] },
-      announcements: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => homeAnnouncementPage() },
     };
 
-    const rendered = await renderWithProviders(
-      <HomeDashboard user={envelope.user} adapters={adapters} />,
-      { station: 'user', role: 'user', locale: 'en' },
-    );
+    const rendered = await renderHomeDashboard(envelope.user, adapters);
     await rendered.user.click(await screen.findByRole('button', { name: 'Check in' }));
 
     expect(await screen.findByText(/Checked in: awarded 2 credits/)).toBeVisible();
@@ -340,12 +384,9 @@ describe('home independent capability states', () => {
     const adapters: HomeAdapters = {
       checkin: { state: 'available', load, submit },
       games: { state: 'available', load: async () => [] },
-      announcements: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => homeAnnouncementPage() },
     };
-    const rendered = await renderWithProviders(
-      <HomeDashboard user={envelope.user} adapters={adapters} />,
-      { station: 'user', role: 'user', locale: 'en' },
-    );
+    const rendered = await renderHomeDashboard(envelope.user, adapters);
 
     await rendered.user.click(await screen.findByRole('button', { name: 'Check in' }));
     expect(await screen.findByText(/Checked in: awarded 1 credit/)).toBeVisible();
@@ -380,17 +421,17 @@ describe('home independent capability states', () => {
     const adapters: HomeAdapters = {
       checkin: { state: 'unavailable' },
       games: { state: 'available', load: loadGames },
-      announcements: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => homeAnnouncementPage() },
     };
     const rendered = await renderWithProviders(
       <HomeDashboard key={first.user.id} user={first.user} adapters={adapters} />,
       { station: 'user', role: 'user', locale: 'en' },
     );
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: first.user.id } });
+    rendered.queryClient.setQueryData(coreKeys.session, sharedSession(first.user));
     await waitFor(() => expect(loadGames).toHaveBeenCalledTimes(1));
 
     current = second;
-    rendered.queryClient.setQueryData(coreKeys.session, { user: { id: second.user.id } });
+    rendered.queryClient.setQueryData(coreKeys.session, sharedSession(second.user));
     rendered.rerender(
       <HomeDashboard key={second.user.id} user={second.user} adapters={adapters} />,
     );

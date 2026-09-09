@@ -96,21 +96,35 @@ describe('core API wire contract', () => {
     await expect(getHomeGameSummary()).resolves.toEqual([
       expect.objectContaining({ game: 'linklink', kind: 'continue' }),
     ]);
-    await expect(getHomeAnnouncements()).resolves.toEqual([
-      { id: announcement.id, title: announcement.title, excerpt: announcement.excerpt },
-    ]);
+    await expect(getHomeAnnouncements()).resolves.toEqual({
+      data: [announcement],
+      next_cursor: null,
+    });
 
     expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
       '/api/checkin',
       '/api/checkin',
       '/api/home/game-summary',
-      '/api/announcements?limit=20',
+      '/api/announcements?limit=100',
     ]);
     const [, post] = fetchMock.mock.calls[1] ?? [];
     expect(post?.method).toBe('POST');
     expect(post?.body).toBeUndefined();
     expect(new Headers(post?.headers).has('Content-Type')).toBe(false);
     expect(new Headers(post?.headers).has('Idempotency-Key')).toBe(false);
+  });
+
+  it('passes the cursor through the bounded home announcement page request', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ data: [], next_cursor: null }, 200));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(getHomeAnnouncements('YQ')).resolves.toEqual({ data: [], next_cursor: null });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/announcements?cursor=YQ&limit=100',
+      expect.objectContaining({ signal: undefined }),
+    );
   });
 
   it('sends control mutations with one idempotency identity and exact body', async () => {

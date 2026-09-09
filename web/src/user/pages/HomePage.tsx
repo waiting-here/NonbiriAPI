@@ -36,6 +36,7 @@ import type {
   HomeGameSummary,
   UserProfile,
 } from '../features/core/types';
+import { HomeAnnouncements } from '../features/operations/HomeAnnouncements';
 import '../features/core/core.css';
 
 const GAME_PATHS: Record<HomeGameSummary['route_id'], string> = {
@@ -150,7 +151,9 @@ function EconomyCard({ accountId }: { accountId: string }) {
     <section className="core-card">
       <div className="core-card__header">
         <h2>{t('home.economyTitle')}</h2>
-        <Link className="btn btn-secondary" to="/credits">{t('home.creditHistory')}</Link>
+        <Link className="btn btn-secondary" to="/credits">
+          {t('home.creditHistory')}
+        </Link>
       </div>
       {me.isPending ? (
         <CoreLoading compact />
@@ -438,8 +441,6 @@ function CapabilitySections({
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
   const gamesLoader = adapters.games.state === 'available' ? adapters.games.load : null;
-  const announcementsLoader =
-    adapters.announcements.state === 'available' ? adapters.announcements.load : null;
   const games = useQuery({
     queryKey: coreKeys.home(accountId, 'games'),
     queryFn: ({ signal }) => {
@@ -447,15 +448,6 @@ function CapabilitySections({
       return accountScopedHomeLoad(queryClient, accountId, gamesLoader, signal);
     },
     enabled: adapters.games.state === 'available',
-    retry: false,
-  });
-  const announcements = useQuery({
-    queryKey: coreKeys.home(accountId, 'announcements'),
-    queryFn: ({ signal }) => {
-      if (!announcementsLoader) throw new CapabilityUnavailableError();
-      return accountScopedHomeLoad(queryClient, accountId, announcementsLoader, signal);
-    },
-    enabled: adapters.announcements.state === 'available',
     retry: false,
   });
   return (
@@ -499,41 +491,6 @@ function CapabilitySections({
           )}
         </section>
       )}
-
-      {adapters.announcements.state === 'unavailable' ? (
-        <section className="core-card">
-          <div className="core-card__header">
-            <h2>{t('home.announcementsTitle')}</h2>
-          </div>
-          <CoreUnavailable compact />
-        </section>
-      ) : announcements.isSuccess && announcements.data.length === 0 ? null : (
-        <section className="core-card">
-          <div className="core-card__header">
-            <h2>{t('home.announcementsTitle')}</h2>
-          </div>
-          {announcements.isPending ? (
-            <CoreLoading compact />
-          ) : announcements.error ? (
-            <CoreErrorPanel
-              compact
-              error={announcements.error}
-              onRetry={() => void announcements.refetch()}
-            />
-          ) : (
-            <ul className="core-endpoint-list">
-              {announcements.data.map((item) => (
-                <li key={item.id} className="core-endpoint-card">
-                  <Link to={`/announcements/${encodeURIComponent(item.id)}`}>
-                    <strong>{item.title}</strong>
-                  </Link>
-                  <p>{item.excerpt}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
     </>
   );
 }
@@ -541,9 +498,11 @@ function CapabilitySections({
 export function HomeDashboard({
   user,
   adapters = productionHomeAdapters,
+  sessionReady = true,
 }: {
   user: UserProfile;
   adapters?: HomeAdapters;
+  sessionReady?: boolean;
 }) {
   const { t } = useCoreCopy();
   return (
@@ -552,6 +511,12 @@ export function HomeDashboard({
         icon="home"
         title={t('home.title', { name: user.guild_nick || user.username })}
         description={t('home.description')}
+      />
+      <HomeAnnouncements
+        accountId={user.id}
+        language={user.lang}
+        capability={adapters.announcements}
+        sessionReady={sessionReady}
       />
       <div className="core-grid core-grid--wide">
         <ProfileCard user={user} />
@@ -612,7 +577,7 @@ export function HomePage() {
       session={session.data}
       signedOut={<SignedOutHome />}
     >
-      {(user) => <HomeDashboard key={user.id} user={user} />}
+      {(user) => <HomeDashboard key={user.id} user={user} sessionReady />}
     </CoreProfileGate>
   );
 }
