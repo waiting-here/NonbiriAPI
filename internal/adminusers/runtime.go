@@ -610,12 +610,7 @@ func (service *Service) EndpointOverview(ctx context.Context, adminID int64, que
 	}
 	done := false
 	defer rollbackUnlessDone(tx, &done)
-	selection, args, metadata, err := listPageQuery(ctx, tx, `
-SELECT e.base_url,COUNT(DISTINCT e.user_id),COUNT(*),
- COALESCE(SUM((SELECT COUNT(*) FROM endpoint_keys k WHERE k.endpoint_id=e.id)),0)
-FROM endpoints e JOIN users u ON u.id=e.user_id AND u.is_admin=0
-WHERE (?='' OR instr(e.base_url,?)>0) AND e.base_url>?
-GROUP BY e.base_url`, ` ORDER BY e.base_url ASC`, []any{query.Q, query.Q, after}, query.Page, limit)
+	selection, args, metadata, err := endpointOverviewPageQuery(ctx, tx, query.Q, after, query.Page, limit)
 	if err != nil {
 		return Page[EndpointOverview]{}, err
 	}

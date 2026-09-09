@@ -56,7 +56,7 @@ func (service *Service) EndpointOverviewUsers(ctx context.Context, adminID int64
 		return Page[EndpointOverviewUser]{}, err
 	}
 	defer tx.Rollback()
-	selection, args, metadata, err := listPageQuery(ctx, tx, endpointOverviewUsersSelection, ` ORDER BY e.user_id ASC`, []any{baseURL}, &requested, requested.Size)
+	selection, args, metadata, err := endpointOverviewUsersPageQuery(ctx, tx, baseURL, requested)
 	if err != nil {
 		return Page[EndpointOverviewUser]{}, err
 	}
