@@ -4,7 +4,8 @@
   width: min(100%, var(--nb-content-wide));
   min-width: 0;
   margin: 0 auto;
-  padding: clamp(var(--nb-space-5), 4vw, var(--nb-space-10)) clamp(var(--nb-space-4), 4vw, var(--nb-space-8));
+  padding: clamp(var(--nb-space-5), 4vw, var(--nb-space-10))
+    clamp(var(--nb-space-4), 4vw, var(--nb-space-8));
 }
 
 .nb-standalone-state {
@@ -91,36 +92,6 @@
   scrollbar-width: thin;
 }
 
-.nb-section-nav__link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--nb-space-2);
-  flex: 0 0 auto;
-  min-height: 2.5rem;
-  border: 1px solid transparent;
-  border-radius: var(--nb-radius-pill);
-  padding: 0.48rem 0.8rem;
-  color: var(--nb-color-text-muted);
-  font-size: var(--nb-font-size-sm);
-  font-weight: var(--nb-font-weight-semibold);
-  text-decoration: none;
-}
-
-.nb-section-nav__link:hover,
-.nb-section-nav__link[aria-current='page'] {
-  border-color: var(--nb-color-border);
-  background: var(--nb-color-surface);
-  color: var(--nb-color-accent);
-  box-shadow: var(--nb-elevation-1);
-}
-
-.nb-metric-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--nb-space-4);
-  min-width: 0;
-}
-
 .nb-metric-card {
   display: grid;
   gap: var(--nb-space-2);
@@ -174,36 +145,10 @@
   gap: var(--nb-space-3) var(--nb-space-5);
 }
 
-.nb-confirm-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--nb-space-4);
-  margin-top: var(--nb-space-5);
-  padding: var(--nb-space-4);
-  border: 1px solid var(--nb-color-warning);
-  border-radius: var(--nb-radius-md);
-  background: var(--nb-color-warning-soft);
-  overflow-wrap: anywhere;
-}
-
-.nb-confirm-bar__actions {
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  gap: var(--nb-space-2);
-}
-
 .nb-shell-status {
   max-width: var(--nb-content-wide);
   margin: var(--nb-space-4) auto 0;
   padding: 0 clamp(var(--nb-space-4), 4vw, var(--nb-space-8));
-}
-
-@media (max-width: 70rem) {
-  .nb-metric-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 48rem) {
@@ -212,19 +157,6 @@
   }
 
   .nb-page-header__actions {
-    justify-content: flex-start;
-  }
-
-  .nb-metric-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .nb-confirm-bar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .nb-confirm-bar__actions {
     justify-content: flex-start;
   }
 }
