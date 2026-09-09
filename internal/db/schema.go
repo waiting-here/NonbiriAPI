@@ -10,7 +10,18 @@ package db
 // generationTwoSchema is deliberately non-idempotent. Keep all scalar
 // constraints in this source so that the startup manifest is an exact lock,
 // rather than a best-effort list of tables.
-const generationTwoSchema = generationTwoBaseSchema + charityModelRoutingSchema + endpointKeyLimitsSchema + dispatchResponseStartsSchema + betaTwoAdditiveSchema + browseIndexesSchema
+const generationTwoSchema = generationTwoBaseSchema + charityModelRoutingSchema + endpointKeyLimitsSchema + dispatchResponseStartsSchema + betaTwoAdditiveSchema + browseIndexesSchema + quotaCleanupIndexesSchema
+
+// Cleanup selects expired facts by time and retired state independently, so
+// an exhausted capacity check never walks every still-current aggregate row.
+const quotaCleanupIndexesSchema = `
+CREATE INDEX idx_donation_quota_buckets_cleanup ON donation_quota_buckets(success_at,rule_id,epoch);
+CREATE INDEX idx_donation_quota_periods_cleanup ON donation_quota_periods(end_at,rule_id,epoch,start_at);
+CREATE INDEX idx_donation_quota_epochs_clock ON donation_quota_epochs(COALESCE(last_observed_at,effective_at),rule_id,epoch) WHERE mode='reset';
+CREATE INDEX idx_donation_quota_receipts_settled ON donation_quota_receipts(claim_id,rule_id,epoch) WHERE state='settled';
+CREATE INDEX idx_donation_quota_receipts_period ON donation_quota_receipts(rule_id,epoch,period_start) WHERE period_start IS NOT NULL;
+CREATE INDEX idx_donation_quota_rules_retired ON donation_quota_rules(id) WHERE current_epoch IS NULL;
+`
 
 // Source grouping uses only native SQLite expressions so external database
 // verification tools can still check the stored indexes without extensions.
