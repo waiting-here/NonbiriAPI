@@ -15,24 +15,29 @@ export function MatchEffect({ animation }: { readonly animation: MatchAnimation 
     const board = svg?.parentElement;
     if (!svg || !board) return;
     const position = () => {
-      const tileAt = (row: number, col: number) =>
-        board.querySelector<HTMLButtonElement>(
-          `[aria-rowindex="${row + 1}"][aria-colindex="${col + 1}"]`,
-        );
-      const origin = tileAt(0, 0)?.getBoundingClientRect();
-      const right = tileAt(0, 1)?.getBoundingClientRect();
-      const below = tileAt(1, 0)?.getBoundingClientRect();
-      if (!origin || !right || !below) return;
+      const tile = board.querySelector<HTMLButtonElement>(
+        '[aria-rowindex="1"][aria-colindex="1"]',
+      );
+      if (!tile) return;
+      // Vanishing tiles scale and rotate; anchor effects to the unchanged grid layout.
+      const tileStyle = getComputedStyle(tile);
+      const boardStyle = getComputedStyle(board);
+      const width = parseFloat(tileStyle.width);
+      const height = parseFloat(tileStyle.height);
+      const originX = parseFloat(boardStyle.paddingLeft) + width / 2;
+      const originY = parseFloat(boardStyle.paddingTop) + height / 2;
+      const pitchX = width + parseFloat(boardStyle.columnGap);
+      const pitchY = height + parseFloat(boardStyle.rowGap);
       const bounds = board.getBoundingClientRect();
       svg.setAttribute('viewBox', `0 0 ${bounds.width} ${bounds.height}`);
-      const sparkStart = -(origin.width * 18) / 68;
-      const sparkLength = -(origin.width * 7) / 68;
+      const sparkStart = -(width * 18) / 68;
+      const sparkLength = -(width * 7) / 68;
       svg.querySelectorAll<SVGPathElement>('.linklink-match-sparks path').forEach((spark) => {
         spark.setAttribute('d', `M0 ${sparkStart}v${sparkLength}`);
       });
       const point = (value: LinkLinkCoordinate) => [
-        origin.left - bounds.left + origin.width / 2 + value.col * (right.left - origin.left),
-        origin.top - bounds.top + origin.height / 2 + value.row * (below.top - origin.top),
+        originX + value.col * pitchX,
+        originY + value.row * pitchY,
       ];
       svg
         .querySelector('polyline')

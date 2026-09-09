@@ -457,15 +457,24 @@ async function readEffect(page: Page): Promise<EffectMetrics> {
   return page.locator('.linklink-match-effect').evaluate((svg) => {
     const node = svg as SVGSVGElement;
     const board = svg.parentElement!;
-    const origin = board
-      .querySelector<HTMLButtonElement>('[aria-rowindex="1"][aria-colindex="1"]')!
-      .getBoundingClientRect();
-    const right = board
-      .querySelector<HTMLButtonElement>('[aria-rowindex="1"][aria-colindex="2"]')!
-      .getBoundingClientRect();
-    const below = board
-      .querySelector<HTMLButtonElement>('[aria-rowindex="2"][aria-colindex="1"]')!
-      .getBoundingClientRect();
+    const originTile = board.querySelector<HTMLButtonElement>(
+      '[aria-rowindex="1"][aria-colindex="1"]',
+    )!;
+    const tileStyle = getComputedStyle(originTile);
+    const tileWidth = parseFloat(tileStyle.width);
+    const tileHeight = parseFloat(tileStyle.height);
+    const rows = Number(board.getAttribute('aria-rowcount'));
+    const cols = Number(board.getAttribute('aria-colcount'));
+    const lastColumn = board.querySelector<HTMLButtonElement>(
+      `[aria-rowindex="1"][aria-colindex="${cols}"]`,
+    )!;
+    const lastRow = board.querySelector<HTMLButtonElement>(
+      `[aria-rowindex="${rows}"][aria-colindex="1"]`,
+    )!;
+    // Measure independent DOM layout positions across the whole grid so
+    // integer offset rounding does not accumulate once per row or column.
+    const pitchX = (lastColumn.offsetLeft - originTile.offsetLeft) / (cols - 1);
+    const pitchY = (lastRow.offsetTop - originTile.offsetTop) / (rows - 1);
     const bounds = board.getBoundingClientRect();
     const points = svg
       .querySelector('polyline')!
@@ -487,18 +496,40 @@ async function readEffect(page: Page): Promise<EffectMetrics> {
       boardHeight: bounds.height,
       viewBoxWidth: node.viewBox.baseVal.width,
       viewBoxHeight: node.viewBox.baseVal.height,
-      tileWidth: origin.width,
-      tileHeight: origin.height,
-      originX: origin.left - bounds.left + origin.width / 2,
-      originY: origin.top - bounds.top + origin.height / 2,
-      pitchX: right.left - origin.left,
-      pitchY: below.top - origin.top,
+      tileWidth,
+      tileHeight,
+      originX: originTile.offsetLeft + tileWidth / 2,
+      originY: originTile.offsetTop + tileHeight / 2,
+      pitchX,
+      pitchY,
       sparkPath,
       sparkStart: sparkValues && sparkValues.length >= 3 ? Number(sparkValues[1]) : null,
       sparkLength: sparkValues && sparkValues.length >= 3 ? Number(sparkValues[2]) : null,
       beamFilter,
       beamBlur: beamPixels.at(-1) ?? null,
       points,
+    };
+  });
+}
+
+interface VanishingGeometry {
+  readonly rectWidth: number;
+  readonly rectHeight: number;
+  readonly layoutWidth: number;
+  readonly layoutHeight: number;
+  readonly transform: string;
+}
+
+async function readVanishingGeometry(page: Page): Promise<VanishingGeometry> {
+  return page.locator('.linklink-tile.is-vanishing').first().evaluate((tile) => {
+    const style = getComputedStyle(tile);
+    const rect = tile.getBoundingClientRect();
+    return {
+      rectWidth: rect.width,
+      rectHeight: rect.height,
+      layoutWidth: parseFloat(style.width),
+      layoutHeight: parseFloat(style.height),
+      transform: style.transform,
     };
   });
 }
@@ -525,6 +556,17 @@ function assertEffectMetrics(effect: EffectMetrics, path: MatchPath): void {
     expect(point[0]).toBeLessThanOrEqual(effect.viewBoxWidth + 1);
     expect(point[1]).toBeLessThanOrEqual(effect.viewBoxHeight + 1);
   }
+}
+
+async function pauseVanishingAnimation(page: Page): Promise<void> {
+  await page.addStyleTag({
+    content: `
+      .linklink-tile.is-vanishing {
+        animation-delay: -220ms !important;
+        animation-play-state: paused !important;
+      }
+    `,
+  });
 }
 
 function tileLocator(page: Page, coordinate: Coordinate) {
@@ -774,6 +816,77 @@ for (const spec of ['6x8', '8x8', '10x10'] as const) {
     assertExpectedNetworkErrors(errors, []);
   });
 }
+
+test('LinkLink effect uses layout coordinates while a vanishing tile is paused and resized', async ({
+  page,
+}) => {
+  const errors: Array<{ readonly type: string; readonly text: string }> = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning')
+      errors.push({ type: message.type(), text: message.text() });
+  });
+  page.on('pageerror', (error) => errors.push({ type: 'pageerror', text: error.message }));
+  const spec = '10x10' as const;
+  const [rows, cols] = dimensions(spec);
+  const fixture = await installStandardFixture(page, spec);
+  await signedIn(page, VIEWPORTS[0]!);
+  await page.goto(`${USER_ORIGIN}/games/linklink`);
+  await expect(page.locator('.linklink-tile')).toHaveCount(rows * cols);
+  await applyViewport(page, VIEWPORTS[0]!);
+  await pauseVanishingAnimation(page);
+
+  const pair = fixture.pairs[0]!;
+  await clickPair(page, pair);
+  await expect(page.locator('.linklink-match-effect')).toHaveCount(1);
+  await expect(page.locator('.linklink-tile.is-vanishing')).toHaveCount(2);
+  const vanishingBeforeResize = await readVanishingGeometry(page);
+  expect(vanishingBeforeResize.transform).not.toBe('none');
+  expect(vanishingBeforeResize.rectWidth - vanishingBeforeResize.layoutWidth).toBeGreaterThan(0.5);
+  expect(vanishingBeforeResize.rectHeight - vanishingBeforeResize.layoutHeight).toBeGreaterThan(0.5);
+
+  const effectBeforeResize = await readEffect(page);
+  assertEffectMetrics(effectBeforeResize, pair.path);
+  await expect
+    .poll(async () => {
+      const effect = await readEffect(page);
+      return effect.sparkStart === null
+        ? Number.POSITIVE_INFINITY
+        : Math.abs(effect.sparkStart - -(effect.tileWidth * 18) / 68);
+    })
+    .toBeLessThan(0.05);
+
+  await applyViewport(page, VIEWPORTS[2]!, { switchLanguage: false, switchTheme: false });
+  await expect
+    .poll(async () => {
+      const effect = await readEffect(page);
+      return effect.sparkStart === null
+        ? Number.POSITIVE_INFINITY
+        : Math.abs(effect.sparkStart - -(effect.tileWidth * 18) / 68);
+    })
+    .toBeLessThan(0.05);
+  const effectAfterResize = await readEffect(page);
+  assertEffectMetrics(effectAfterResize, pair.path);
+  expect(effectAfterResize.sparkPath).not.toBe(effectBeforeResize.sparkPath);
+  const vanishingAfterResize = await readVanishingGeometry(page);
+  expect(vanishingAfterResize.transform).not.toBe('none');
+  expect(vanishingAfterResize.rectWidth - vanishingAfterResize.layoutWidth).toBeGreaterThan(0.5);
+  expect(vanishingAfterResize.rectHeight - vanishingAfterResize.layoutHeight).toBeGreaterThan(0.5);
+  await screenshot(page, spec, 'paused-vanishing-resized');
+
+  writeGeometryEvidence('10x10:paused-vanishing-effect-before-resize', {
+    effect: effectBeforeResize,
+    vanishing: vanishingBeforeResize,
+  });
+  writeGeometryEvidence('10x10:paused-vanishing-effect-after-resize', {
+    effect: effectAfterResize,
+    vanishing: vanishingAfterResize,
+  });
+  expect(fixture.matches).toHaveLength(1);
+  expect(fixture.current.revision).toBe('2');
+  expect(fixture.current.pairs_removed).toBe(1);
+  expect(fixture.current.deadline).toBe(1_800_000_000 + DEADLINES[spec]);
+  assertExpectedNetworkErrors(errors, []);
+});
 
 test('LinkLink places shuffled wire tiles by coordinates before posting their coordinates', async ({
   page,
