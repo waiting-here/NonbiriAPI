@@ -295,7 +295,7 @@ test('catalog filters use a counted complete sample and restore URL-backed state
   );
   await page.goto(`${USER_ORIGIN}/charity`);
 
-  const level = page.getByRole('combobox', { name: 'Accessible to level', exact: true });
+  const level = page.getByRole('combobox', { name: 'Allowed for level', exact: true });
   const access = page.getByRole('combobox', { name: 'Your access', exact: true });
   const availability = page.getByRole('combobox', {
     name: 'Currently available',
@@ -428,13 +428,13 @@ for (const locale of ['en', 'zh'] as const) {
         const copy =
           locale === 'zh'
             ? {
-                level: '可访问的等级',
+                level: '某等级可访问',
                 access: '本人访问权限',
                 availability: '当前是否可用',
                 applied: '已应用',
               }
             : {
-                level: 'Accessible to level',
+                level: 'Allowed for level',
                 access: 'Your access',
                 availability: 'Currently available',
                 applied: 'Applied',

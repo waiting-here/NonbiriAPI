@@ -115,6 +115,8 @@ curl https://api.example.com/v1/chat/completions \
   -d '{"model":"provider/model","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
+CallerKey 完整内容只在创建或更换成功后显示一次，请立即保存；未保存时请再次更换以取得新值。
+
 CallerKey 和上游凭据都必须按密钥保护。不要把它们放入 URL、问题反馈、备注、命令历史、截图或日志。
 
 错误响应包含稳定的 `error.code`、`source` 和 `message`。平台错误文案以 `[NonbiriAPI]` 开头，上游错误不加此前缀。常见结果如下：
