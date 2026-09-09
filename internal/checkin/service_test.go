@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"reflect"
@@ -190,27 +191,57 @@ func TestCheckinCommitsLedgerActivityAndLocalDayAtomically(t *testing.T) {
 	}
 }
 
-func TestBalanceCapAndHighLevelBypass(t *testing.T) {
+func TestBalanceCapRejectsEveryLevelWithoutSideEffects(t *testing.T) {
+	for _, level := range []int{1, 2, 3, 4, 5} {
+		t.Run(fmt.Sprintf("level %d", level), func(t *testing.T) {
+			fixture := newCheckinFixture(t)
+			fixture.configure(db.CheckinModeEnabled, "0", 250, 250, 1_000)
+			userID := fixture.seedUser(fmt.Sprintf("cap-%d", level))
+			fixture.fundUser(userID, 1_000)
+			if level != 1 {
+				if _, err := fixture.database.Exec(`UPDATE users SET level=? WHERE id=?`, level, userID); err != nil {
+					t.Fatal(err)
+				}
+			}
+			beforeOperations := fixture.scalar(`SELECT COUNT(*) FROM credit_operations`)
+			if _, err := fixture.service.Checkin(context.Background(), userID); !errors.Is(err, ErrBalanceCap) {
+				t.Fatalf("cap error = %v", err)
+			}
+			if fixture.scalar(`SELECT COUNT(*) FROM checkins`) != 0 || fixture.scalar(`SELECT COUNT(*) FROM credit_operations`) != beforeOperations {
+				t.Fatal("cap refusal wrote domain or ledger facts")
+			}
+			if fixture.balance(userID).Cmp(big.NewInt(1_000)) != 0 {
+				t.Fatalf("cap refusal changed balance to %s", fixture.balance(userID))
+			}
+		})
+	}
+}
+
+func TestBalanceCapRollsBackLazyPromotionAndAllowsSameDayRetry(t *testing.T) {
 	fixture := newCheckinFixture(t)
-	fixture.configure(db.CheckinModeEnabled, "0", 250, 250, 1_000)
-	userID := fixture.seedUser("cap")
-	fixture.fundUser(userID, 1_000)
-	beforeOperations := fixture.scalar(`SELECT COUNT(*) FROM credit_operations`)
-	if _, err := fixture.service.Checkin(context.Background(), userID); !errors.Is(err, ErrBalanceCap) {
-		t.Fatalf("cap error = %v", err)
-	}
-	if fixture.scalar(`SELECT COUNT(*) FROM checkins`) != 0 || fixture.scalar(`SELECT COUNT(*) FROM credit_operations`) != beforeOperations {
-		t.Fatal("cap refusal wrote domain or ledger facts")
-	}
-	if _, err := fixture.database.Exec(`UPDATE users SET level=3 WHERE id=?`, userID); err != nil {
+	fixture.configure(db.CheckinModeLevelGated, "0", 250, 250, 1_000)
+	fixture.setConfig(levelThreshold2Key, "100")
+	fixture.setConfig(levelThreshold3Key, "200")
+	userID := fixture.seedUser("cap-promotion")
+	fixture.fundUser(userID, 1_001)
+	credit, err := db.U128FromBig(big.NewInt(200))
+	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := fixture.service.Checkin(context.Background(), userID)
-	if err != nil {
-		t.Fatalf("level 3 bypass: %v", err)
+	if _, err := fixture.database.Exec(`UPDATE users SET donation_credit_mag=? WHERE id=?`, db.EncodeU128(credit), userID); err != nil {
+		t.Fatal(err)
 	}
-	if result.Balance != "1.25" {
-		t.Fatalf("level 3 balance = %q", result.Balance)
+	if _, err := fixture.service.Checkin(context.Background(), userID); !errors.Is(err, ErrBalanceCap) {
+		t.Fatalf("promoted account bypassed cap: %v", err)
+	}
+	if fixture.scalar(`SELECT auto_level FROM users WHERE id=?`, userID) != 1 || fixture.u128(`SELECT revision FROM users WHERE id=?`, userID).Sign() != 0 || fixture.scalar(`SELECT COUNT(*) FROM checkins`) != 0 {
+		t.Fatal("rejection committed part of the lazy promotion or consumed the day")
+	}
+	// A subsequent configuration change permits the same day's first award.
+	fixture.setConfig(balanceCapKey, "0")
+	result, err := fixture.service.Checkin(context.Background(), userID)
+	if err != nil || result.Balance != "1.251" || fixture.scalar(`SELECT auto_level FROM users WHERE id=?`, userID) != 3 {
+		t.Fatalf("same-day retry after cap removal: %+v %v", result, err)
 	}
 }
 

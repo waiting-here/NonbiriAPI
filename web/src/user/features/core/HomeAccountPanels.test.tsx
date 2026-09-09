@@ -280,7 +280,7 @@ describe('home independent capability states', () => {
     expect(screen.getByText('Checked in')).toBeVisible();
   });
 
-  it('disables capped lower-level check-in while preserving the level-three bypass', async () => {
+  it('disables capped check-in for every level', async () => {
     const envelope = canonicalEnvelope();
     vi.stubGlobal(
       'fetch',
@@ -304,12 +304,13 @@ describe('home independent capability states', () => {
     const rendered = await renderHomeDashboard(lowerLevel, adapters);
 
     expect(await screen.findByRole('button', { name: 'Check in' })).toBeDisabled();
-    expect(screen.getByText(/limit only decides whether you can check in/i)).toBeVisible();
+    expect(screen.getByText(/applies to every level/i)).toBeVisible();
 
     rendered.rerender(
       <HomeDashboard user={{ ...lowerLevel, effective_level: 3 as const }} adapters={adapters} />,
     );
-    expect(screen.getByRole('button', { name: 'Check in' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Check in' })).toBeDisabled();
+    expect(screen.getByText(/applies to every level/i)).toBeVisible();
   });
 
   it('keeps a committed receipt visible when its follow-up GET fails and retries only the read', async () => {

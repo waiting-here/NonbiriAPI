@@ -229,11 +229,9 @@ function UsageCard({ user }: { user: UserProfile }) {
 
 function CheckinCard({
   accountId,
-  effectiveLevel,
   capability,
 }: {
   accountId: string;
-  effectiveLevel: number;
   capability: HomeAdapters['checkin'];
 }) {
   const { t } = useCoreCopy();
@@ -312,7 +310,6 @@ function CheckinCard({
       : (enabledAuthority?.checked_in_today ?? committed !== null);
   const capReached =
     displayedAuthority !== null &&
-    effectiveLevel < 3 &&
     displayedAuthority.balance_cap !== '0' &&
     checkinMilli(displayedAuthority.balance) >= checkinMilli(displayedAuthority.balance_cap);
   return (
@@ -376,7 +373,7 @@ function CheckinCard({
               </strong>
             </div>
           </div>
-          {effectiveLevel < 3 && displayedAuthority.balance_cap !== '0' ? (
+          {displayedAuthority.balance_cap !== '0' ? (
             <p className="core-muted">{t('home.checkin.thresholdHint')}</p>
           ) : null}
           {committed ? (
@@ -431,11 +428,9 @@ function CheckinCard({
 
 function CapabilitySections({
   accountId,
-  effectiveLevel,
   adapters,
 }: {
   accountId: string;
-  effectiveLevel: number;
   adapters: HomeAdapters;
 }) {
   const { t } = useCoreCopy();
@@ -455,7 +450,6 @@ function CapabilitySections({
       <CheckinCard
         key={accountId}
         accountId={accountId}
-        effectiveLevel={effectiveLevel}
         capability={adapters.checkin}
       />
 
@@ -525,7 +519,6 @@ export function HomeDashboard({
       <UsageCard user={user} />
       <CapabilitySections
         accountId={user.id}
-        effectiveLevel={user.effective_level}
         adapters={adapters}
       />
       <section className="core-card">

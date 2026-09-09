@@ -175,7 +175,7 @@ func (service *Service) Checkin(ctx context.Context, userID int64) (Result, erro
 	if err != nil {
 		return Result{}, mapLedgerError("read check-in account", err)
 	}
-	if config.balanceCap > 0 && level < 3 && wallet.Balance.Big().Cmp(big.NewInt(config.balanceCap)) >= 0 {
+	if config.balanceCap > 0 && wallet.Balance.Big().Cmp(big.NewInt(config.balanceCap)) >= 0 {
 		return Result{}, ErrBalanceCap
 	}
 	external, err := ledger.CodedAccount(ctx, tx, "external")
