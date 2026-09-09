@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
 import { clearStationSession } from '@shared/charityManagement';
 import { charityKeys } from '@shared/operations/charity';
@@ -463,7 +463,7 @@ export function CharitySourceBrowser({
 }: CharitySourceBrowserProps) {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
   const sourceSearch = readSearchParameter(searchParams, SOURCE_QUERY_PARAM);
   const keySearch = readSearchParameter(searchParams, KEY_QUERY_PARAM);
   const scope = readScopeParameter(searchParams);

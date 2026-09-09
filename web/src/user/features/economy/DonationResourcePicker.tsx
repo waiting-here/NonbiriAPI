@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import {
   captureStationSession,
   clearStationSession,
@@ -302,7 +302,7 @@ export function DonationResourcePicker({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const session = useCoreSession(false);
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
   const [endpointSearchDraft, dispatchEndpointSearchDraft] = useReducer(
     searchDraftReducer,
     searchParams.get(ENDPOINT_SEARCH_PARAM) ?? '',

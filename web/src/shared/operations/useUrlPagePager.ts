@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigationType, useSearchParams } from 'react-router';
+import { useLocation, useNavigationType } from 'react-router';
+import { useSearchState } from './useSearchState';
 import { isPageNumber, isPageSize, PAGE_SIZES, type PageSize } from './pageNumbers';
 import {
   DEFAULT_PAGE,
@@ -124,7 +125,7 @@ export function useUrlPagePager({
   const resolvedPageSizeParam = resolvedParamName(pageSizeParam, DEFAULT_PAGE_SIZE_PARAM);
   const location = useLocation();
   const navigationType = useNavigationType();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
   const currentIdentity = {
     station,
     listType,
@@ -247,7 +248,8 @@ export function useUrlPagePager({
         next.delete(resolvedPageParam);
         next.set(resolvedPageParam, nextPage);
         next.delete(resolvedPageSizeParam);
-        next.set(resolvedPageSizeParam, String(parsed.pageSize));
+        const pendingSize = parsePageSize(previous.get(resolvedPageSizeParam) ?? undefined);
+        next.set(resolvedPageSizeParam, String(pendingSize ?? parsed.pageSize));
         return next;
       });
     },

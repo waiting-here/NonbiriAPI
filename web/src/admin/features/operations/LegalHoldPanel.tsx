@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import {
   captureStationSession,
   clearStationSession,
@@ -100,7 +100,7 @@ function isInvalidResponse(error: unknown): boolean {
 export function LegalHoldPanel() {
   const session = useAdminSession();
   const [closedError, setClosedError] = useState<unknown>(null);
-  const [, setSearchParams] = useSearchParams();
+  const [, setSearchParams] = useSearchState();
   const account = session.data?.admin.username;
   const [observedAccount, setObservedAccount] = useState(account);
   const transitioning = observedAccount !== undefined && observedAccount !== account;
@@ -138,7 +138,7 @@ function LegalHoldSessionPanel({
 }) {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
   const authorityEpoch = useRef(0);
   const createElevationToken = useRef<string | null>(null);
   const releaseElevationToken = useRef<string | null>(null);

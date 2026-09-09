@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
-import { Link, useLocation, useSearchParams } from 'react-router';
+import { Link, useLocation } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
 import { Card, EmptyState, ErrorState, LoadingState, StatusBadge } from '@shared/components/States';
 import { PagePagination } from '@shared/operations/PagePagination';
@@ -58,7 +59,7 @@ export function OwnerDonationsPanel({
   enabled?: boolean;
 }) {
   const [contextAccount, setContextAccount] = useState(accountID);
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useSearchState();
   const changingAccount = contextAccount !== accountID;
   const accountParameters = [
     'donation_q',
@@ -90,7 +91,7 @@ function OwnerDonationsAccount({ accountID, enabled }: { accountID: string; enab
   const { t } = useTranslation();
   const client = useQueryClient();
   const location = useLocation();
-  const [params, setParams] = useSearchParams();
+  const [params, setParams] = useSearchState();
   const rawQ = single(params, 'donation_q');
   const q = searchValid(rawQ) ? rawQ : '';
   const rawStatus = single(params, 'donation_status');

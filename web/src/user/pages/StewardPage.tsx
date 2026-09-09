@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 import { clearStationSession } from '@shared/charityManagement';
 import { CharityManagement } from '@shared/components/CharityManagement';
 import { RoleLogPanel } from '@shared/components/log';
@@ -15,7 +15,7 @@ export function StewardPage() {
   const client = useQueryClient();
   const authority = useUserAuthority();
   const refetchAuthority = authority.refetch;
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
   const section =
     searchParams.get('tab') === 'charity'
       ? 'charity'

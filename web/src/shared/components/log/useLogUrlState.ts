@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { useSearchParams } from 'react-router';
+import { useSearchState } from '@shared/operations/useSearchState';
 
 // URL-backed state for the shared log screens. Page, page size, text filters,
 // and the unix-second time range live in the query string so a filtered view
@@ -74,7 +74,7 @@ export function useLogUrlState(
     options?: { clearDetail?: boolean; replace?: boolean },
   ) => void;
 } {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchState();
 
   const state = useMemo(
     () => parseState(searchParams, textParams, defaultPageSize),
