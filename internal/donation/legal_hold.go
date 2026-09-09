@@ -14,6 +14,20 @@ type AdminHeldReadAuthorizer interface {
 	AuthorizeHeldDonationRead(context.Context, *sql.Tx, int64, int64) (bool, error)
 }
 
+type StewardHeldReadAuthorizer interface {
+	AuthorizeStewardHeldDonationRead(context.Context, *sql.Tx, int64, int64, int64) (bool, error)
+}
+
+func (s *Service) managementHeldRead(ctx context.Context, tx *sql.Tx, role reviewerRole, actorID, donationID, now int64) (bool, error) {
+	if role == reviewerAdmin && s.heldRead != nil {
+		return s.heldRead.AuthorizeHeldDonationRead(ctx, tx, donationID, now)
+	}
+	if hook, ok := s.heldRead.(StewardHeldReadAuthorizer); role == reviewerSteward && ok {
+		return hook.AuthorizeStewardHeldDonationRead(ctx, tx, actorID, donationID, now)
+	}
+	return false, nil
+}
+
 func (s *Service) AttachAdminHeldReadAuthorizer(authorizer AdminHeldReadAuthorizer) error {
 	if s == nil || nilDependency(authorizer) {
 		return ErrInvalidRequest

@@ -194,14 +194,18 @@ function stewardDonation(): JSONRecord {
     description: 'Another donor shared resource',
     review_result: { decision: 'approve', reason: 'Synthetic approval', reviewed_at: NOW },
     keys: [managedKey('12', 'available')],
-    owner: null,
-    reviewer: { user_id: null, role: 'admin' },
+    owner: {
+      user_id: '43',
+      discord_id: '222222222222222222',
+      display_name: 'Synthetic other donor',
+    },
+    reviewer: { user_id: '9', role: 'admin' },
     created_at: NOW - 60,
     updated_at: NOW,
   };
 }
 
-function donationPageItem(donation: JSONRecord, role: 'admin' | 'steward'): JSONRecord {
+function donationPageItem(donation: JSONRecord): JSONRecord {
   const keys = Array.isArray(donation.keys)
     ? donation.keys.filter(
         (key): key is JSONRecord => key !== null && typeof key === 'object' && !Array.isArray(key),
@@ -239,15 +243,7 @@ function donationPageItem(donation: JSONRecord, role: 'admin' | 'steward'): JSON
     sources,
     handling: donation.handling,
     reviewer: donation.reviewer ?? null,
-    owner:
-      owner === null || typeof owner !== 'object' || Array.isArray(owner)
-        ? null
-        : role === 'admin'
-          ? owner
-          : {
-              user_id: (owner as JSONRecord).user_id,
-              display_name: (owner as JSONRecord).display_name,
-            },
+    owner: owner === null || typeof owner !== 'object' || Array.isArray(owner) ? null : owner,
   };
 }
 
@@ -334,7 +330,7 @@ test('admin pending badge opens the shared queue and processing survives refresh
       await fulfillJSON(
         route,
         numberedResponse(
-          filteredOut ? [] : [donationPageItem(current, 'admin')],
+          filteredOut ? [] : [donationPageItem(current)],
           url.searchParams.get('page') ?? '1',
           Number(url.searchParams.get('page_size') ?? '20'),
         ),
@@ -622,7 +618,7 @@ test('user catalog searches, filters levels, paginates, and expands plain descri
   await assertPagePresentation(page, setup);
 });
 
-test('level-five stewardship hides another donor and shows caller identity safely', async ({
+test('level-five stewardship shows the shared owner projection and caller identity safely', async ({
   context,
   page,
 }) => {
@@ -668,6 +664,7 @@ test('level-five stewardship hides another donor and shows caller identity safel
     started_at: NOW,
     completed_at: NOW + 1,
     usage,
+    user_id: '42',
     caller_identity: { discord_nickname: CALLER_NICKNAME, discord_id: DISCORD_ID },
     attempt_count: '1',
   };
@@ -684,7 +681,7 @@ test('level-five stewardship hides another donor and shows caller identity safel
       await fulfillJSON(
         route,
         numberedResponse(
-          [donationPageItem(currentDonation, 'steward')],
+          [donationPageItem(currentDonation)],
           url.searchParams.get('page') ?? '1',
           Number(url.searchParams.get('page_size') ?? '20'),
         ),
@@ -740,14 +737,16 @@ test('level-five stewardship hides another donor and shows caller identity safel
     'aria-selected',
     'true',
   );
-  await expect(page.getByText('Donor details are hidden', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Synthetic other donor', { exact: true })).toBeVisible();
   expect(donationListReads).toContain('?handling=pending&page=1&page_size=20');
   await page.getByRole('button', { name: 'Review', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Donation #8', exact: true })).toBeVisible();
   await expect(
     page.getByRole('heading', { name: 'Key 12 · sk-live…fixture', exact: true }),
   ).toBeVisible();
-  await expect(page.getByText('Donor details are hidden', { exact: true })).toHaveCount(2);
+  await expect(
+    page.getByText('Synthetic other donor · 43 · 222222222222222222', { exact: true }),
+  ).toBeVisible();
   expect(donationDetailReads).toContain('');
   expect(donationKeyReads).toContain('?page=1&page_size=20');
   await saveScreenshot(page, 'steward-other-donor-320-dark-en');

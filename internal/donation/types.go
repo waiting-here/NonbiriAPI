@@ -59,8 +59,8 @@ type SafeSource struct {
 }
 
 // AdminSafeSource is intentionally independent from SafeSource. Channel
-// revision and category are administration-only snapshot facts and must not
-// become reachable through the owner or steward projections.
+// revision and category are management snapshot facts and must not become
+// reachable through the ordinary owner projection.
 type AdminSafeSource struct {
 	Kind            string  `json:"kind"`
 	ConnectorType   string  `json:"connector_type"`
@@ -133,15 +133,7 @@ type AdminDonationKey struct {
 	Idle                bool            `json:"idle"`
 }
 
-type StewardDonationKey struct {
-	DonationKey
-	AuthorizedExpiresAt *int64 `json:"authorized_expires_at"`
-	SafeNote            string `json:"safe_note"`
-	MaxConcurrency      *int64 `json:"max_concurrency"`
-	MaxRPM              *int64 `json:"max_rpm"`
-	BindingCount        string `json:"binding_count"`
-	Idle                bool   `json:"idle"`
-}
+type StewardDonationKey AdminDonationKey
 
 type ReviewResult struct {
 	Decision   string `json:"decision"`
@@ -166,10 +158,7 @@ type DonationOwner struct {
 	DisplayName string  `json:"display_name"`
 }
 
-type StewardDonationOwner struct {
-	UserID      string `json:"user_id"`
-	DisplayName string `json:"display_name"`
-}
+type StewardDonationOwner DonationOwner
 
 type DonationReviewer struct {
 	UserID *string `json:"user_id"`
@@ -196,8 +185,8 @@ type DonationBadge struct {
 	ServerNow    int64  `json:"server_now"`
 }
 
-// AdminDonation and StewardDonation intentionally do not alias one another.
-// This keeps later role-specific expansion from accidentally widening L5.
+// Management roles expose identical donation facts after role authorization.
+// The ordinary owner's projection remains separate.
 type AdminDonation struct {
 	ID           string             `json:"id"`
 	Status       string             `json:"status"`

@@ -175,7 +175,7 @@ func (repository *Repository) ListAdmin(ctx context.Context, filter ListFilter) 
 	if err != nil {
 		return Page[AdminLogRow]{}, err
 	}
-	query := `SELECT ` + commonListColumns + `,l.user_id FROM request_logs l
+	query := `SELECT ` + commonListColumns + `,` + callerIdentityColumns + `,l.user_id FROM request_logs l` + callerIdentityJoin + `
 WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args := make([]any, 0, 16)
 	args = append(args, now-requestLogRetentionSeconds)
@@ -228,7 +228,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	positions := make([]listCursor, 0, capacity+1)
 	for rows.Next() {
 		var userID sql.NullInt64
-		record, scanErr := scanCommon(rows, &userID)
+		record, identity, scanErr := scanManagementCommon(rows, &userID)
 		if scanErr != nil {
 			return Page[AdminLogRow]{}, translateSQLError(scanErr)
 		}
@@ -242,7 +242,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 				CallerResultClass: resultClassPointer(record.callerResultClass),
 				CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 				StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-				UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10),
+				UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity,
 			})
 		}
 		positions = append(positions, listCursor{startedAt: record.startedAt, rowID: record.rowID})
@@ -301,10 +301,14 @@ func (repository *Repository) ListSteward(
 	}
 	defer tx.Rollback()
 	// Keep the steward projection independent from the administrator DTO.
-	query := `SELECT ` + commonListColumns + `,` + callerIdentityColumns + ` FROM request_logs l` + callerIdentityJoin + `
+	query := `SELECT ` + commonListColumns + `,` + callerIdentityColumns + `,l.user_id FROM request_logs l` + callerIdentityJoin + `
 WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	args := make([]any, 0, 16)
 	args = append(args, now-requestLogRetentionSeconds)
+	if filter.UserID != nil {
+		query += ` AND l.user_id=?`
+		args = append(args, *filter.UserID)
+	}
 	if filter.EndpointBaseURL != nil {
 		query += ` AND EXISTS(SELECT 1 FROM request_attempts sa WHERE sa.request_log_id=l.id AND sa.canonical_base_url=?)`
 		args = append(args, *filter.EndpointBaseURL)
@@ -350,7 +354,8 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 	page := Page[StewardLogRow]{Data: make([]StewardLogRow, 0, capacity), Pagination: metadata}
 	positions := make([]listCursor, 0, capacity+1)
 	for rows.Next() {
-		record, identity, scanErr := scanStewardCommon(rows)
+		var userID sql.NullInt64
+		record, identity, scanErr := scanManagementCommon(rows, &userID)
 		if scanErr != nil {
 			return Page[StewardLogRow]{}, translateSQLError(scanErr)
 		}
@@ -366,7 +371,7 @@ WHERE (l.completed_at IS NULL OR l.completed_at>?)`
 				CallerResultClass: resultClassPointer(record.callerResultClass),
 				CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 				StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
-				AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity,
+				UserID: nullableDecimal(userID), AttemptCount: strconv.FormatInt(record.attemptCount, 10), CallerIdentity: identity,
 			})
 		}
 		positions = append(positions, listCursor{startedAt: record.startedAt, rowID: record.rowID})

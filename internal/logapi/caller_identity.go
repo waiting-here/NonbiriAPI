@@ -9,10 +9,11 @@ import "database/sql"
 const callerIdentityColumns = `u.id IS NOT NULL,COALESCE(NULLIF(u.guild_nick,''),NULLIF(u.username,'')),NULLIF(u.discord_id,'')`
 const callerIdentityJoin = ` LEFT JOIN users u ON u.id=l.user_id AND u.is_admin=0 AND l.route_kind='charity_chat_completions' `
 
-func scanStewardCommon(scanner rowScanner) (commonLogRecord, *CallerIdentity, error) {
+func scanManagementCommon(scanner rowScanner, extra ...any) (commonLogRecord, *CallerIdentity, error) {
 	var present bool
 	var nickname, discordID sql.NullString
-	record, err := scanCommon(scanner, &present, &nickname, &discordID)
+	targets := append([]any{&present, &nickname, &discordID}, extra...)
+	record, err := scanCommon(scanner, targets...)
 	if err != nil {
 		return commonLogRecord{}, nil, err
 	}

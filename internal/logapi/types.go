@@ -139,16 +139,17 @@ func (UserSelfLogDetail) userLogDetail()    {}
 func (UserCharityLogDetail) userLogDetail() {}
 
 type AdminLogRow struct {
-	ID                string       `json:"id"`
-	RouteKind         RouteKind    `json:"route_kind"`
-	CallerResultClass *ResultClass `json:"caller_result_class"`
-	CallerStatus      *int         `json:"caller_status"`
-	CallerErrorCode   *string      `json:"caller_error_code"`
-	StartedAt         int64        `json:"started_at"`
-	CompletedAt       *int64       `json:"completed_at"`
-	Usage             LogUsage     `json:"usage"`
-	UserID            *string      `json:"user_id"`
-	AttemptCount      string       `json:"attempt_count"`
+	ID                string          `json:"id"`
+	RouteKind         RouteKind       `json:"route_kind"`
+	CallerResultClass *ResultClass    `json:"caller_result_class"`
+	CallerStatus      *int            `json:"caller_status"`
+	CallerErrorCode   *string         `json:"caller_error_code"`
+	StartedAt         int64           `json:"started_at"`
+	CompletedAt       *int64          `json:"completed_at"`
+	Usage             LogUsage        `json:"usage"`
+	UserID            *string         `json:"user_id"`
+	AttemptCount      string          `json:"attempt_count"`
+	CallerIdentity    *CallerIdentity `json:"caller_identity"`
 }
 
 type AdminLogAttempt struct {
@@ -172,9 +173,8 @@ type AdminLogDetail struct {
 	AttemptPagination *pagination.Metadata  `json:"attempt_pagination,omitempty"`
 }
 
-// Steward types repeat every allowed field. They intentionally do not embed,
-// alias, or convert through Admin DTOs, so future Admin additions cannot cross
-// the L5 boundary by construction.
+// Management projections expose the same facts to administrators and stewards.
+// Separate DTOs retain explicit role boundaries and independently bound cursors.
 type StewardLogRow struct {
 	ID                string          `json:"id"`
 	RouteKind         RouteKind       `json:"route_kind"`
@@ -184,6 +184,7 @@ type StewardLogRow struct {
 	StartedAt         int64           `json:"started_at"`
 	CompletedAt       *int64          `json:"completed_at"`
 	Usage             LogUsage        `json:"usage"`
+	UserID            *string         `json:"user_id"`
 	AttemptCount      string          `json:"attempt_count"`
 	CallerIdentity    *CallerIdentity `json:"caller_identity"`
 }

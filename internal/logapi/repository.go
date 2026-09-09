@@ -143,12 +143,8 @@ func normalizeListFilter(filter ListFilter, role string) (ListFilter, error) {
 		if filter.UserID != nil || filter.EndpointBaseURL != nil || filter.UpstreamModel != nil {
 			return ListFilter{}, ErrInvalid
 		}
-	case "admin":
+	case "admin", "steward":
 		if filter.Model != nil {
-			return ListFilter{}, ErrInvalid
-		}
-	case "steward":
-		if filter.UserID != nil || filter.Model != nil {
 			return ListFilter{}, ErrInvalid
 		}
 	default:

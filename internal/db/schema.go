@@ -10,7 +10,37 @@ package db
 // generationTwoSchema is deliberately non-idempotent. Keep all scalar
 // constraints in this source so that the startup manifest is an exact lock,
 // rather than a best-effort list of tables.
-const generationTwoSchema = generationTwoBaseSchema + charityModelRoutingSchema + endpointKeyLimitsSchema + dispatchResponseStartsSchema + betaTwoAdditiveSchema + browseIndexesSchema + quotaCleanupIndexesSchema
+const generationTwoSchema = generationTwoBaseSchema + charityModelRoutingSchema + endpointKeyLimitsSchema + dispatchResponseStartsSchema + betaTwoAdditiveSchema + browseIndexesSchema + quotaCleanupIndexesSchema + stewardHoldReadSchema
+
+// Steward reads use their own audit so account deletion can remove the actor
+// link without changing immutable administrator audit identities.
+const stewardHoldReadSchema = `
+CREATE TABLE legal_hold_steward_reads (
+ id INTEGER PRIMARY KEY,
+ hold_id_text TEXT NOT NULL REFERENCES legal_holds(id) ON DELETE CASCADE,
+ user_id INTEGER REFERENCES users(id) ON DELETE SET NULL CHECK(user_id IS NULL OR (typeof(user_id)='integer' AND user_id>0)),
+ first_read_at INTEGER NOT NULL CHECK(typeof(first_read_at)='integer' AND first_read_at BETWEEN 0 AND 253402300799),
+ last_read_at INTEGER NOT NULL CHECK(typeof(last_read_at)='integer' AND last_read_at BETWEEN first_read_at AND 253402300799),
+ read_count INTEGER NOT NULL CHECK(typeof(read_count)='integer' AND read_count BETWEEN 1 AND 9223372036854775807),
+ UNIQUE(hold_id_text,user_id)
+);
+CREATE INDEX idx_legal_hold_steward_reads_user ON legal_hold_steward_reads(user_id);
+CREATE TRIGGER legal_hold_steward_read_insert_guard BEFORE INSERT ON legal_hold_steward_reads
+WHEN NOT EXISTS(SELECT 1 FROM users u WHERE u.id=NEW.user_id AND u.is_admin=0 AND u.is_banned=0 AND u.level=5)
+ OR NEW.read_count<>1 OR NEW.first_read_at<>NEW.last_read_at
+ OR NOT EXISTS(SELECT 1 FROM legal_holds h WHERE h.id=NEW.hold_id_text AND h.object_kind IN ('donation','request_log') AND h.state='active' AND NEW.first_read_at>=h.created_at AND NEW.last_read_at<h.expires_at)
+BEGIN SELECT RAISE(ABORT,'steward held read is inconsistent'); END;
+CREATE TRIGGER legal_hold_steward_read_update_guard BEFORE UPDATE ON legal_hold_steward_reads
+WHEN NEW.id IS NOT OLD.id OR NEW.hold_id_text IS NOT OLD.hold_id_text OR NEW.first_read_at IS NOT OLD.first_read_at
+ OR NOT (
+  (NEW.user_id IS OLD.user_id AND NEW.last_read_at>=OLD.last_read_at AND NEW.read_count=OLD.read_count+1
+   AND EXISTS(SELECT 1 FROM users u WHERE u.id=NEW.user_id AND u.is_admin=0 AND u.is_banned=0 AND u.level=5)
+   AND EXISTS(SELECT 1 FROM legal_holds h WHERE h.id=NEW.hold_id_text AND h.state='active' AND NEW.last_read_at<h.expires_at))
+  OR (NEW.user_id IS NULL AND OLD.user_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM users u WHERE u.id=OLD.user_id)
+   AND NEW.last_read_at=OLD.last_read_at AND NEW.read_count=OLD.read_count)
+ )
+BEGIN SELECT RAISE(ABORT,'steward held read is inconsistent'); END;
+`
 
 // Cleanup selects expired facts by time and retired state independently, so
 // an exhausted capacity check never walks every still-current aggregate row.

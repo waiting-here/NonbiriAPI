@@ -42,7 +42,12 @@ const adminRow = {
   completed_at: row.completed_at,
   usage: row.usage,
   user_id: '7',
+  caller_identity: null,
   attempt_count: row.attempt_count,
+};
+
+const stewardRow = {
+  ...adminRow,
 };
 
 const attempt = {
@@ -197,6 +202,21 @@ describe('numbered log requests', () => {
       expect.objectContaining({ signal: undefined }),
     );
     expect(String(fetchMock.mock.calls[0]?.[0])).not.toMatch(/cursor|limit/);
+  });
+
+  it('sends the user filter for the steward management station', async () => {
+    const fetchMock = installJsonFetchFixtures([
+      {
+        method: 'GET',
+        path: '/api/steward/logs?user_id=7&page=1&page_size=20',
+        body: list([stewardRow]),
+      },
+    ]);
+    await getRoleLogsPage('steward', '1', 20, { user_id: '7' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/steward/logs?user_id=7&page=1&page_size=20',
+      expect.objectContaining({ signal: undefined }),
+    );
   });
 
   it.each([

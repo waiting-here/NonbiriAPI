@@ -321,7 +321,6 @@ const endedReasonKey: Record<DonationEndedReason, string> = {
 
 function safeSourceLabel(
   source: ManagedSafeSource,
-  role: CharityRole,
   t: (key: string, options?: Record<string, unknown>) => string,
 ): string {
   if (source.kind === 'custom') {
@@ -330,10 +329,10 @@ function safeSourceLabel(
       baseUrl: source.base_url,
     });
   }
-  if (role === 'admin' && source.category === 'subscription') {
+  if (source.category === 'subscription') {
     return t('common.operations.charity.mainstreamSubscription', { name: source.name });
   }
-  if (role === 'admin' && source.category === 'api_platform') {
+  if (source.category === 'api_platform') {
     return t('common.operations.charity.mainstreamApiPlatform', { name: source.name });
   }
   return t('common.operations.charity.mainstreamSource', { name: source.name });
@@ -452,7 +451,7 @@ function DonationKeyEditor({
           tail: item.display_tail,
         })}
       </h4>
-      <p>{safeSourceLabel(item.safe_source, role, t)}</p>
+      <p>{safeSourceLabel(item.safe_source, t)}</p>
       <p className="muted">
         {item.safe_source.connector_type} · {item.safe_source.base_url}
       </p>
@@ -766,12 +765,8 @@ function DonationReview({
           <dd>
             {owner
               ? `${owner.display_name} · ${owner.user_id}`
-              : t(
-                  role === 'steward'
-                    ? 'common.donationHandling.ownerHidden'
-                    : 'common.operations.charity.deidentified',
-                )}
-            {role === 'admin' && owner && 'discord_id' in owner
+              : t('common.operations.charity.deidentified')}
+            {owner
               ? ` · ${owner.discord_id ?? t('common.operations.charity.discordDetached')}`
               : ''}
           </dd>
@@ -1363,12 +1358,7 @@ function DonationsPanel({
                         className="ops-cell-wide"
                         data-label={t('common.operations.charity.owner')}
                       >
-                        {item.owner?.display_name ??
-                          t(
-                            role === 'steward'
-                              ? 'common.donationHandling.ownerHidden'
-                              : 'common.operations.charity.deidentified',
-                          )}
+                        {item.owner?.display_name ?? t('common.operations.charity.deidentified')}
                       </td>
                       <td data-label={t('common.status')}>
                         <StatusBadge

@@ -54,6 +54,7 @@ DROP INDEX IF EXISTS idx_donation_keys_source_page;`); err != nil {
 func dropQuotaCleanupIndexes(t *testing.T, database *sql.DB) {
 	t.Helper()
 	if _, err := database.Exec(`
+DROP TABLE IF EXISTS legal_hold_steward_reads;
 DROP INDEX IF EXISTS idx_donation_quota_buckets_cleanup;
 DROP INDEX IF EXISTS idx_donation_quota_periods_cleanup;
 DROP INDEX IF EXISTS idx_donation_quota_epochs_clock;

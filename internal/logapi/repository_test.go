@@ -43,7 +43,7 @@ func TestRoleSpecificLogDTOGoldenAndForbiddenFields(t *testing.T) {
 		"RAW-PRIVATE-NOTE", "RAW-CIPHERTEXT", "RAW-UPSTREAM", "RAW-RESPONSE-BODY", "RAW-SET-COOKIE")
 	noLogSentinel(t, admin, "SELF-LOGICAL-MODEL", "OWNER-ENDPOINT-NOTE", "OWNER-KEY-NOTE")
 	noLogSentinel(t, steward, "SELF-LOGICAL-MODEL", "OWNER-ENDPOINT-NOTE", "OWNER-KEY-NOTE")
-	requireNoJSONKeys(t, steward, "user_id", "model", "endpoint_note", "key_note", "attempts_export",
+	requireNoJSONKeys(t, steward, "model", "endpoint_note", "key_note", "attempts_export",
 		"authorization", "cookie", "body", "secret", "ciphertext")
 	requireNoJSONKeys(t, admin, "model", "endpoint_note", "key_note", "authorization", "cookie", "body", "secret")
 
@@ -144,7 +144,7 @@ func TestOwnerIsolationDeletionAndRoleProjection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	requireNoJSONKeys(t, steward, "user_id", "model", "discord_id", "private_note")
+	requireNoJSONKeys(t, steward, "model", "discord_id", "private_note")
 
 	fixture.mustExec(`DELETE FROM endpoint_keys WHERE id=301`)
 	fixture.mustExec(`DELETE FROM endpoints WHERE id=201`)

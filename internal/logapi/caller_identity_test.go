@@ -42,7 +42,7 @@ func TestStewardCallerIdentityUsesCurrentAccountOnly(t *testing.T) {
 		if !found {
 			t.Fatal("charity request absent from list")
 		}
-		requireNoJSONKeys(t, detail, "user_id", "model", "guild_avatar_url", "avatar", "endpoint_note", "key_note")
+		requireNoJSONKeys(t, detail, "model", "guild_avatar_url", "avatar", "endpoint_note", "key_note")
 		noLogSentinel(t, detail, "RAW-DISCORD", "RAW-PRIVATE-NOTE")
 	}
 	nickname, id := "server nickname", "123456789012345678901234567890"

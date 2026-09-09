@@ -745,13 +745,6 @@ func replayRoleDonation(ctx context.Context, tx *sql.Tx, decision idempotency.De
 		if err := json.Unmarshal(decision.ResponseBody, &result.steward); err != nil {
 			return roleDonationMutation{}, ErrInvariant
 		}
-		viewer := strconv.FormatInt(actorID, 10)
-		if result.steward.Owner != nil && result.steward.Owner.UserID != viewer {
-			result.steward.Owner = nil
-		}
-		if result.steward.Reviewer != nil && result.steward.Reviewer.UserID != nil && *result.steward.Reviewer.UserID != viewer {
-			result.steward.Reviewer.UserID = nil
-		}
 		if result.steward.Handling.State == "" {
 			var err error
 			result.steward.Handling, err = readHandlingTx(ctx, tx, donationID)

@@ -119,8 +119,6 @@
       "nav": "日志与用量",
       "description": "仅查看请求元数据和汇总用量，不显示请求与响应内容。",
       "logsTitle": "请求日志",
-      "exportCsv": "导出 CSV",
-      "exportJson": "导出 JSON",
       "noLogs": "没有日志记录",
       "noLogsBody": "当前筛选条件下没有返回日志记录。"
     },

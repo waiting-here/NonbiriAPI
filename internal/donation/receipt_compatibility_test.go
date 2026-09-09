@@ -79,8 +79,8 @@ func TestManagementReceiptAddsSafeFieldsWithoutChangingStoredResult(t *testing.T
 				}
 			}
 			if role == reviewerSteward {
-				if got.steward.Owner != nil || got.steward.Reviewer.UserID != nil || bytes.Contains(got.body, []byte("private historical owner")) {
-					t.Fatal("legacy receipt exposed another user's identity")
+				if got.steward.Owner == nil || got.steward.Owner.UserID != strconv.FormatInt(owner, 10) || got.steward.Owner.DiscordID != nil || got.steward.Reviewer.UserID == nil || !bytes.Contains(got.body, []byte("private historical owner")) {
+					t.Fatal("legacy receipt lost authorized identity or invented a missing Discord ID")
 				}
 				if got.steward.Handling.State != "pending" || got.steward.Keys[0].BindingCount != "0" || !got.steward.Keys[0].Idle {
 					t.Fatalf("missing safe fields: %+v", got.steward)

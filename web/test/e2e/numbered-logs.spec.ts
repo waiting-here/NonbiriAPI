@@ -51,10 +51,12 @@ function row(role: Role, index: number, charity = false) {
     completed_at: 1_800_000_001,
     usage,
   };
-  if (role === 'admin') return { ...common, user_id: '7', attempt_count: '23' };
+  if (role === 'admin')
+    return { ...common, user_id: '7', caller_identity: null, attempt_count: '23' };
   if (role === 'steward')
     return {
       ...common,
+      user_id: '7',
       caller_identity: { discord_nickname: 'Shared caller', discord_id: '111111111111111111' },
       attempt_count: '23',
     };

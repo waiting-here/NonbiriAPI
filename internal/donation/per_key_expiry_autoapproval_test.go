@@ -209,7 +209,7 @@ AND submission_revision=1 AND reviewer_user_id IS NULL AND reviewer_role='' AND 
 	}
 	requireJSONFields(t, ownerView.Keys[0].SafeSource, "base_url", "channel_id", "connector_type", "kind", "name")
 	requireJSONFields(t, adminView.Keys[0].SafeSource, "base_url", "category", "channel_id", "channel_revision", "connector_type", "kind", "name")
-	requireJSONFields(t, stewardView.Keys[0].SafeSource, "base_url", "channel_id", "connector_type", "kind", "name")
+	requireJSONFields(t, stewardView.Keys[0].SafeSource, "base_url", "category", "channel_id", "channel_revision", "connector_type", "kind", "name")
 	ownerJSON, _ := json.Marshal(ownerView)
 	adminJSON, _ := json.Marshal(adminView)
 	stewardJSON, _ := json.Marshal(stewardView)
@@ -220,7 +220,7 @@ AND submission_revision=1 AND reviewer_user_id IS NULL AND reviewer_role='' AND 
 		}
 	}
 	if bytes.Contains(ownerJSON, []byte("channel_revision")) || bytes.Contains(ownerJSON, []byte("category")) ||
-		bytes.Contains(stewardJSON, []byte("channel_revision")) || bytes.Contains(stewardJSON, []byte("category")) ||
+		!bytes.Contains(stewardJSON, []byte(`"channel_revision":"1"`)) || !bytes.Contains(stewardJSON, []byte(`"category":"subscription"`)) ||
 		!bytes.Contains(adminJSON, []byte(`"channel_revision":"1"`)) || !bytes.Contains(adminJSON, []byte(`"category":"subscription"`)) {
 		t.Fatalf("role-specific channel projection mismatch owner=%s admin=%s steward=%s", ownerJSON, adminJSON, stewardJSON)
 	}

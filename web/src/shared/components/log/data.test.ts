@@ -5,6 +5,7 @@ import {
   normalizeStewardLogDetail,
   normalizeStewardLogRow,
   normalizeUserLogRow,
+  roleLogExportPath,
   roleLogKeys,
 } from './data';
 
@@ -34,6 +35,7 @@ const commonRow = {
 const row = {
   ...commonRow,
   user_id: '1',
+  caller_identity: null,
   attempt_count: '1',
 };
 
@@ -45,6 +47,7 @@ const userRow = {
 
 const stewardRow = {
   ...commonRow,
+  user_id: '1',
   caller_identity: null,
   attempt_count: '1',
 };
@@ -83,6 +86,15 @@ describe('role log wire', () => {
       null,
       50,
     ]);
+  });
+
+  it('builds management exports with the active role and filters', () => {
+    expect(
+      roleLogExportPath('admin', { user_id: '7', status: '500', from: 10, to: 20 }, 'csv'),
+    ).toBe('/admin/api/logs/export.csv?user_id=7&status=500&from=10&to=20');
+    expect(
+      roleLogExportPath('steward', { user_id: '7', status: '500', from: 10, to: 20 }, 'json'),
+    ).toBe('/api/steward/logs/export.json?user_id=7&status=500&from=10&to=20');
   });
 
   it('enforces the logical caller terminal matrix', () => {
@@ -175,7 +187,7 @@ describe('role log wire', () => {
         caller_identity: { discord_nickname: 'Ada Example', discord_id: syntheticDiscordID },
       }),
     ).toThrow(/steward caller identity/i);
-    expect(() => normalizeAdminLogRow({ ...row, caller_identity: null })).toThrow(
+    expect(() => normalizeAdminLogRow({ ...row, caller_identity: null, secret: 'never' })).toThrow(
       /administrator log row/i,
     );
     expect(() => normalizeUserLogRow({ ...userRow, caller_identity: null })).toThrow(

@@ -1,6 +1,8 @@
 {
   "user": {
-    "keys": { "nav": "API access" },
+    "keys": {
+      "nav": "API access"
+    },
     "resources": {
       "nav": "Resources"
     },
@@ -322,7 +324,7 @@
         "en": "English"
       },
       "privacy": {
-        "charityManagementBody": "Administrators and current level-5 users can review all donations and manage their charity settings. Key owners can view their own limits. Key secrets are never shown to managers, and steward donation views omit other donors' account details. Public model descriptions and allowed levels belong to the shared model, not its creator's private export.",
+        "charityManagementBody": "Administrators and current level-5 stewards can review all donations and see the same management information, including the donor’s site ID, Discord ID, display name and recorded source details. Key owners can view their own limits. Key secrets are never shown to managers. Public model descriptions and allowed levels belong to the shared model, not its creator’s private export.",
         "keyLimitsBody": "The concurrency and RPM limits you set for a service key apply to both personal and charity model calls. Your account export includes these settings. Administrators and level-5 stewards can read them on resources they are authorized to manage, but cannot change them. The settings are deleted with the key.",
         "nav": "Privacy",
         "title": "Privacy policy",
@@ -340,7 +342,7 @@
         "credentialsTitle": "Secrets and browser handling",
         "credentialsBody": "Service keys are never returned in ordinary lists, logs, alerts, errors, exports, or URLs. The browser receives only the information needed to describe a key and does not save the full service key or account API key. Deleting a key or account immediately stops future calls through it. Encrypted key content that no longer belongs to any resource is cleared within one hour. An OpenAI-compatible key can ask the connected service not to store requests (store=false), but that service may ignore or reject the request. This is not a promise of zero retention and does not control the provider's abuse monitoring. Operators must still protect the server, complete backups, and master-key file.",
         "trafficTitle": "Requests and diagnostics",
-        "trafficBody": "Forwarded requests create limited records such as the account, model, service used, time, status, duration, and available token usage. Ordinary request and response content is not stored long term. Debug starts in preview mode: it does not access a key, send a request outside the site, set aside charity credits, or record usage. Each real send requires separate confirmation and may use provider quota or charity credits. Request and response summaries with sensitive content removed exist only in the current process and page memory. They are not written to the database, ordinary logs, alerts, exports, backups, URLs, or browser storage, and are cleared when the session closes, is replaced, or expires, and on sign-out, restriction, account deletion, or service restart. Disconnecting the Debug page does not cancel an original request made with an account API key. Administrators and authorized level-5 stewards can see the charity caller's current Discord name and ID to manage shared resources. Names use the latest profile synced by this site; cleared identity data is not restored after account deletion.",
+        "trafficBody": "Forwarded requests create limited records such as the account, model, service used, time, status, duration, and available token usage. Ordinary request and response content is not stored long term. Debug starts in preview mode: it does not access a key, send a request outside the site, set aside charity credits, or record usage. Each real send requires separate confirmation and may use provider quota or charity credits. Request and response summaries with sensitive content removed exist only in the current process and page memory. They are not written to the database, ordinary logs, alerts, exports, backups, URLs, or browser storage, and are cleared when the session closes, is replaced, or expires, and on sign-out, restriction, account deletion, or service restart. Disconnecting the Debug page does not cancel an original request made with an account API key. Administrators and current level-5 stewards can read and export the same limited request logs, including the caller’s site ID and actual charges. Details also show routing key identifiers for each attempt. Their charity logs also show the caller’s latest synced Discord name and ID. Deleted identity data is not restored. An active legal preservation requirement may allow these managers to read an older record by its ID; it does not extend ordinary lists or exports. Steward reads of these held records retain first and last access times and a count with the preservation record. Account deletion removes the steward identity from that audit.",
         "sharingTitle": "Providers and disclosures",
         "sharingBody": "Request content may be sent to OpenAI-compatible or Anthropic-compatible services selected by the account owner, including donor-provided charity resources operated by OpenAI, Anthropic, or another independent third party. A third party may process or retain request content, account logs, or abuse-monitoring data under its own policy, which the instance operator cannot control. A charity donor controls the related third-party account or key and may therefore see full request content in that service's account logs. Donating a key alone does not give access to caller identity or request content in this site's interface; authorized steward access is described separately. Each forwarded request also includes a system-generated safety code that can be linked only for the same user, deployment, and third-party service. It hides direct identity but is not fully anonymous. Discord processes sign-in activity under its own policy. The operator may disclose data when required by law or needed to protect the service, users, or public safety, and must describe access by other data processors, hosting providers, and support staff.",
         "retentionTitle": "Retention and deletion",
@@ -550,7 +552,7 @@
         "rulesPreview": "Showing {{shown}} of {{total}} rules. Open recurring limits for the complete details."
       },
       "disclosureTitle": "Before you submit",
-      "disclosureManagement": "Administrators and current level-5 users can review and manage this donation's charity settings. Key secrets are not shown; steward views omit other donors' account details.",
+      "disclosureManagement": "Administrators and current level-5 stewards can review and manage this donation with the same information, including your site ID, Discord ID, display name and source details. Key secrets are not shown.",
       "disclosureLimitCounts": "Donation limits count charity calls only. Personal calls are not included and can cause actual usage of a shared key to exceed the site's charity totals. We recommend separate keys for donations and personal use.",
       "disclosureMasked": "The page displays only masked key fragments; it never asks you to enter a new key here.",
       "disclosureThirdParty": "Charity requests may be sent through the selected third-party AI service.",

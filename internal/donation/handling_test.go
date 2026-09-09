@@ -28,11 +28,11 @@ func TestSharedHandlingAndCrossDonorManagement(t *testing.T) {
 	id := parseTestID(t, d.ID)
 	for _, actor := range []int64{steward, other} {
 		view, err := e.service.GetSteward(ctx, actor, id)
-		if err != nil || view.Owner != nil || view.Handling.State != "pending" || view.Handling.Revision != "1" || !view.Keys[0].Idle || view.Keys[0].BindingCount != "0" {
+		if err != nil || view.Owner == nil || view.Owner.UserID != fmt.Sprint(owner) || view.Owner.DiscordID == nil || *view.Owner.DiscordID != "private-donor-discord" || view.Handling.State != "pending" || view.Handling.Revision != "1" || !view.Keys[0].Idle || view.Keys[0].BindingCount != "0" {
 			t.Fatalf("cross-donor detail=%+v err=%v", view, err)
 		}
 		page, _, err := e.service.ListSteward(ctx, actor, "", 0, 20)
-		if err != nil || len(page) != 1 || page[0].Owner != nil {
+		if err != nil || len(page) != 1 || page[0].Owner == nil || page[0].Owner.UserID != fmt.Sprint(owner) {
 			t.Fatalf("cross-donor list=%+v %v", page, err)
 		}
 	}
@@ -45,15 +45,19 @@ func TestSharedHandlingAndCrossDonorManagement(t *testing.T) {
 	input := ReviewInput{Decision: "approve", ExpectedRevision: 1, Reason: "shared review", KeySettings: []KeySetting{{DonationKeyID: parseTestID(t, d.Keys[0].ID), Enabled: true}}}
 	mutation := donationMutation(t, 'H', http.MethodPost, routeStewardReview, []int64{id}, input)
 	approved, err := e.service.ReviewSteward(ctx, steward, id, mutation, input)
-	if err != nil || approved.Value.Owner != nil || approved.Value.Reviewer == nil || approved.Value.Reviewer.UserID == nil || *approved.Value.Reviewer.UserID != fmt.Sprint(steward) || approved.Value.Handling.State != "pending" {
+	if err != nil || approved.Value.Owner == nil || approved.Value.Owner.UserID != fmt.Sprint(owner) || approved.Value.Reviewer == nil || approved.Value.Reviewer.UserID == nil || *approved.Value.Reviewer.UserID != fmt.Sprint(steward) || approved.Value.Handling.State != "pending" {
 		t.Fatalf("cross-donor approval=%+v %v", approved, err)
 	}
 	view, err := e.service.GetSteward(ctx, other, id)
-	if err != nil || view.Reviewer == nil || view.Reviewer.UserID != nil || view.Reviewer.Role != "steward" {
-		t.Fatalf("reviewer identity leaked: %+v %v", view, err)
+	if err != nil || view.Reviewer == nil || view.Reviewer.UserID == nil || *view.Reviewer.UserID != fmt.Sprint(steward) || view.Reviewer.Role != "steward" {
+		t.Fatalf("reviewer identity missing: %+v %v", view, err)
 	}
-	if bytes.Contains(approved.Body, []byte("private-donor-discord")) || bytes.Contains(approved.Body, []byte("private endpoint note")) || bytes.Contains(approved.Body, []byte("private key note")) {
-		t.Fatal("private donor fields leaked")
+	if !bytes.Contains(approved.Body, []byte("private-donor-discord")) || bytes.Contains(approved.Body, []byte("private endpoint note")) || bytes.Contains(approved.Body, []byte("private key note")) {
+		t.Fatal("management donor projection crossed its field boundary")
+	}
+	approvalReplay, err := e.service.ReviewSteward(ctx, steward, id, mutation, input)
+	if err != nil || !approvalReplay.Replayed || !bytes.Equal(approved.Body, approvalReplay.Body) {
+		t.Fatalf("approval replay lost management information: %s %v", approvalReplay.Body, err)
 	}
 	enabled := false
 	managed, err := e.service.ManageKeySteward(ctx, other, id, parseTestID(t, d.Keys[0].ID), donationMutation(t, 'I', http.MethodPatch, routeStewardKey, []int64{id, parseTestID(t, d.Keys[0].ID)}, map[string]any{"enabled": false}), KeyManagementInput{ExpectedRevision: 2, Enabled: &enabled})

@@ -208,8 +208,9 @@ WHERE donation_id=? AND state='pending' AND revision=? AND revision<922337203685
 	return out, nil
 }
 
-// Management authority is global for both roles, while only administrators may
-// read held-only history. Actor authentication must precede this object check.
+// Management authority is global for both roles. Steward mutations remain
+// limited to ordinary history; held-only read permission does not widen writes.
+// Actor authentication must precede this object check.
 func requireManagedDonationTx(ctx context.Context, tx *sql.Tx, role reviewerRole, donationID, now int64) error {
 	var exists int
 	query := `SELECT 1 FROM donations WHERE id=?`

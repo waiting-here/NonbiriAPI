@@ -63,7 +63,7 @@ func (s *Service) recurring(ctx context.Context, role reviewerRole, userID, dona
 	if err != nil {
 		return RecurringLimits{}, err
 	}
-	revision, err := s.recurringScope(ctx, tx, role, userID, donationID, keyID, now)
+	revision, err := s.recurringScope(ctx, tx, role, userID, donationID, keyID, now, true)
 	if err != nil {
 		return RecurringLimits{}, err
 	}
@@ -77,7 +77,7 @@ func (s *Service) recurring(ctx context.Context, role reviewerRole, userID, dona
 	return RecurringLimits{RecurringReceipt: recurringReceipt(donationID, keyID, revision), ServerNow: now, Rules: rules}, nil
 }
 
-func (s *Service) recurringScope(ctx context.Context, tx *sql.Tx, role reviewerRole, userID, donationID, keyID, now int64) (int64, error) {
+func (s *Service) recurringScope(ctx context.Context, tx *sql.Tx, role reviewerRole, userID, donationID, keyID, now int64, readOnly bool) (int64, error) {
 	if role == recurringOwner {
 		var owned bool
 		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM donations WHERE id=? AND user_id=?)`, donationID, userID).Scan(&owned); err != nil {
@@ -93,19 +93,18 @@ func (s *Service) recurringScope(ctx context.Context, tx *sql.Tx, role reviewerR
 		if !visible {
 			return 0, ErrNotFound
 		}
-	} else if err := requireManagedDonationTx(ctx, tx, role, donationID, now); err != nil {
-		return 0, err
+	} else if !(role == reviewerSteward && readOnly) {
+		if err := requireManagedDonationTx(ctx, tx, role, donationID, now); err != nil {
+			return 0, err
+		}
 	}
-	if role == reviewerAdmin {
+	if role == reviewerAdmin || (role == reviewerSteward && readOnly) {
 		ordinary, err := donationOrdinarilyVisibleTx(ctx, tx, donationID, now)
 		if err != nil {
 			return 0, err
 		}
 		if !ordinary {
-			if s.heldRead == nil {
-				return 0, ErrNotFound
-			}
-			held, err := s.heldRead.AuthorizeHeldDonationRead(ctx, tx, donationID, now)
+			held, err := s.managementHeldRead(ctx, tx, role, userID, donationID, now)
 			if err != nil {
 				return 0, err
 			}
@@ -157,7 +156,7 @@ func (s *Service) replaceRecurring(ctx context.Context, role reviewerRole, userI
 	if err != nil {
 		return empty, err
 	}
-	if _, err := s.recurringScope(ctx, tx, role, userID, donationID, keyID, now); err != nil {
+	if _, err := s.recurringScope(ctx, tx, role, userID, donationID, keyID, now, false); err != nil {
 		return empty, err
 	}
 	decision, err := beginMutation(ctx, tx, string(role), actorID, idempotency.ScopeControlMutation, mutation, now)

@@ -234,6 +234,29 @@ describe('donation page operations', () => {
     expect(result.data[0]).toMatchObject({ status: 'approved', owner: null });
   });
 
+  it('preserves the same owner identity fields for admin and steward pages', () => {
+    const owner = { user_id: '7', discord_id: 'donor-discord', display_name: 'Donor' };
+    const admin = normalizeManagedDonationsPage(page([donation({ owner })]), 'admin', {}, '1', 20);
+    const steward = normalizeManagedDonationsPage(
+      page([donation({ owner })]),
+      'steward',
+      {},
+      '1',
+      20,
+    );
+    expect(admin.data[0]?.owner).toEqual(owner);
+    expect(steward.data[0]?.owner).toEqual(owner);
+    expect(() =>
+      normalizeManagedDonationsPage(
+        page([donation({ owner: { ...owner, email: 'private' } })]),
+        'steward',
+        {},
+        '1',
+        20,
+      ),
+    ).toThrow(ApiError);
+  });
+
   it('uses the steward key path, preserves wide decimal fields, and matches donation id', async () => {
     const donationID = '123456789012345678901234567890';
     const keyID = '987654321098765432109876543210';

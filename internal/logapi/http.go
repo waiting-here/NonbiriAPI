@@ -50,6 +50,12 @@ func RegisterStewardRoutes(registrar UserRouteRegistrar, repository *Repository,
 	if err := registrar.RegisterUserRoute(http.MethodGet, "/api/steward/logs", api.stewardList); err != nil {
 		return err
 	}
+	if err := registrar.RegisterUserRoute(http.MethodGet, "/api/steward/logs/export.csv", api.stewardExportCSV); err != nil {
+		return err
+	}
+	if err := registrar.RegisterUserRoute(http.MethodGet, "/api/steward/logs/export.json", api.stewardExportJSON); err != nil {
+		return err
+	}
 	return registrar.RegisterUserRoute(http.MethodGet, "/api/steward/logs/{id}", api.stewardDetail)
 }
 
@@ -207,6 +213,22 @@ func (api *HTTPAPI) adminExportCSV(writer http.ResponseWriter, request *http.Req
 }
 
 func (api *HTTPAPI) adminExport(writer http.ResponseWriter, request *http.Request, csv bool) {
+	api.managementExport(writer, request, csv, 0)
+}
+
+func (api *HTTPAPI) stewardExportCSV(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
+	if api.authorizeSteward(writer, request, principal.UserID) {
+		api.managementExport(writer, request, true, principal.UserID)
+	}
+}
+
+func (api *HTTPAPI) stewardExportJSON(writer http.ResponseWriter, request *http.Request, principal UserPrincipal) {
+	if api.authorizeSteward(writer, request, principal.UserID) {
+		api.managementExport(writer, request, false, principal.UserID)
+	}
+}
+
+func (api *HTTPAPI) managementExport(writer http.ResponseWriter, request *http.Request, csv bool, stewardID int64) {
 	if !requireNoBody(writer, request) {
 		return
 	}
@@ -215,7 +237,12 @@ func (api *HTTPAPI) adminExport(writer http.ResponseWriter, request *http.Reques
 		writeLogError(writer, err)
 		return
 	}
-	rows, err := api.repository.ExportAdmin(request.Context(), filter)
+	var rows []AdminLogRow
+	if stewardID > 0 {
+		rows, err = api.repository.ExportSteward(request.Context(), stewardID, filter, api.steward)
+	} else {
+		rows, err = api.repository.ExportAdmin(request.Context(), filter)
+	}
 	if err != nil {
 		writeLogError(writer, err)
 		return
@@ -254,11 +281,8 @@ func parseListFilter(rawQuery, role string, export bool) (ListFilter, error) {
 	switch role {
 	case "user":
 		allowed["model"] = true
-	case "admin":
+	case "admin", "steward":
 		allowed["user_id"] = true
-		allowed["endpoint_base_url"] = true
-		allowed["upstream_model"] = true
-	case "steward":
 		allowed["endpoint_base_url"] = true
 		allowed["upstream_model"] = true
 	default:

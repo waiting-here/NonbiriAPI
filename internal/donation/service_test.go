@@ -547,7 +547,7 @@ endpoint_key_id,reason_type,report_case_id,created_at) VALUES(?,'report_case',?,
 		t.Fatal(err)
 	}
 	stewardJSON, _ := json.Marshal(stewardView)
-	if bytes.Contains(stewardJSON, []byte("discord_id")) || !bytes.Contains(stewardJSON, []byte("reviewer label")) {
+	if !bytes.Contains(stewardJSON, []byte(`"discord_id":"123456789"`)) || !bytes.Contains(stewardJSON, []byte("reviewer label")) {
 		t.Fatalf("steward privacy projection mismatch: %s", stewardJSON)
 	}
 

@@ -121,7 +121,7 @@ const pendingAdminDonation = {
 
 const pendingStewardDonation = {
   ...pendingAdminDonation,
-  owner: { user_id: '1', display_name: 'Fixture donor' },
+  owner: { user_id: '1', discord_id: '123456789', display_name: 'Fixture donor' },
 };
 
 const currentCharityModel = {
@@ -144,10 +144,7 @@ const currentCharityModel = {
   updated_at: 2,
 };
 
-function managedDonationPageItem(
-  donation: Record<string, unknown>,
-  role: 'admin' | 'steward',
-): Record<string, unknown> {
+function managedDonationPageItem(donation: Record<string, unknown>): Record<string, unknown> {
   const keys = Array.isArray(donation.keys)
     ? donation.keys.filter(
         (key): key is Record<string, unknown> =>
@@ -189,15 +186,7 @@ function managedDonationPageItem(
     sources,
     handling: donation.handling,
     reviewer: donation.reviewer ?? null,
-    owner:
-      owner === null || typeof owner !== 'object' || Array.isArray(owner)
-        ? null
-        : role === 'admin'
-          ? owner
-          : {
-              user_id: (owner as Record<string, unknown>).user_id,
-              display_name: (owner as Record<string, unknown>).display_name,
-            },
+    owner: owner === null || typeof owner !== 'object' || Array.isArray(owner) ? null : owner,
   };
 }
 
@@ -695,7 +684,7 @@ test('reachable admin charity opens the corrected pending review query without i
     origin: ADMIN_ORIGIN,
     method: 'GET',
     path: '/admin/api/donations?page=1&page_size=20',
-    body: numberedResponse([managedDonationPageItem(pendingAdminDonation, 'admin')], '1', 20),
+    body: numberedResponse([managedDonationPageItem(pendingAdminDonation)], '1', 20),
   });
   await mockJson(page, {
     origin: ADMIN_ORIGIN,
@@ -883,7 +872,7 @@ test('reachable level-5 steward page keeps its bounded log projection usable', a
     origin: USER_ORIGIN,
     method: 'GET',
     path: '/api/steward/donations?page=1&page_size=20',
-    body: numberedResponse([managedDonationPageItem(pendingStewardDonation, 'steward')], '1', 20),
+    body: numberedResponse([managedDonationPageItem(pendingStewardDonation)], '1', 20),
   });
   await mockJson(page, {
     origin: USER_ORIGIN,

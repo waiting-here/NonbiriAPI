@@ -18,16 +18,21 @@ This section describes the unreleased `1.0.0-beta.2` candidate.
 
 ### Changed
 
+- The daily check-in balance threshold now applies to every level. Zero still disables the threshold, and the level-gated mode still requires level 3 or above.
+- Current level-5 stewards can read the same request logs and donation review information as administrators, including donor identities, routing key identifiers, user filters and bounded log exports. Credentials and ordinary-user projections remain protected.
+
 - Account export is schema version 5. It adds safe projections of donation-key recurring rules and the requester's own RPS buy-in/cash-out values while continuing to exclude secrets, other users, reports, holds, and internal scheduling data.
 - Generation 2 browsing indexes and beta.2 sidecars are added only through the exact validated additive update paths; existing data and historical facts are preserved and unsupported schemas remain zero-write refusals.
 
 ### Fixed
 
+- Request log details show the actual logical-request charge and each attempt's routed key identifier; attempts no longer display a misleading zero charge.
+
 - Fishing keeps the oldest unacknowledged catch visible until confirmation, blocks repeated starts while revealing, and preserves reveal and acknowledgement timing across balance refreshes.
 
 ### Compatibility and deployment
 
-- Beta.2 continues Generation 2 (`application_id=0x4E425249`, `user_version=2`). A fresh deployment requires an absent database/WAL/SHM set; four exact earlier Generation 2 manifests and the two deployed intermediate manifests with beta.2 sidecars are the only additive update sources. Alpha and Generation 1 require a fresh cutover, and an incompatible binary-only downgrade remains unsupported.
+- Beta.2 continues Generation 2 (`application_id=0x4E425249`, `user_version=2`). A fresh deployment requires an absent database/WAL/SHM set; four exact earlier Generation 2 manifests and three deployed intermediate manifests with beta.2 sidecars are the only additive update sources. Alpha and Generation 1 require a fresh cutover, and an incompatible binary-only downgrade remains unsupported.
 - The candidate remains source-first for Linux/amd64 and has no official precompiled binary, container image, or installer.
 
 ### Fixed
