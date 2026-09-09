@@ -634,6 +634,10 @@ FROM report_targets WHERE case_id=? AND source_endpoint_key_id=?`, caseID, sourc
 
 func TestReportWorkerRestoreFindsLiveTargetsAfterRestart(t *testing.T) {
 	environment := newReportTestEnvironment(t)
+	// This test checks persisted cursors across bounded indexing phases.
+	// Give race instrumentation a bounded budget independent of machine speed;
+	// the production deadline and its rollback path have a separate regression.
+	environment.repository.workerLimit = 30 * time.Second
 	owner := environment.seedActor(t, false, 1)
 	fingerprint := fingerprintForSecret(t, environment, "restore-secret")
 	// This donation-key id is deliberately lower than every live endpoint-key
@@ -653,7 +657,15 @@ func TestReportWorkerRestoreFindsLiveTargetsAfterRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !first.More {
-		t.Fatalf("first pass result=%+v", first)
+		var state, progress string
+		var attempt int64
+		var nextRetry sql.NullInt64
+		var errorClass sql.NullString
+		stateErr := environment.store.DB().QueryRow(`SELECT status,progress_state,
+retry_attempt_count,next_retry_at,last_error_class FROM report_cases WHERE id=?`, caseID).
+			Scan(&state, &progress, &attempt, &nextRetry, &errorClass)
+		t.Fatalf("first pass result=%+v state=%s/%s retry=%d/%v/%v state error=%v",
+			first, state, progress, attempt, nextRetry, errorClass, stateErr)
 	}
 	var cursorSource *string
 	var cursorID *int64
