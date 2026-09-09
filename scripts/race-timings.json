@@ -30,6 +30,21 @@
     "github.com/waiting-here/NonbiriAPI/internal/checkin": 18,
     "github.com/waiting-here/NonbiriAPI/internal/resourcebridge": 33
   },
+  "test_seconds": {
+    "github.com/waiting-here/NonbiriAPI/internal/activities": {
+      "TestAcceptedPeriodFinalizesAtCapacityMaximum": 3.260,
+      "TestActivitiesProjectionAndGlobalPublisherAreCompleteAndPrivate": 3.242,
+      "TestActivityExportAndDeleteDeidentifiesWithoutRecomputing": 4.012,
+      "TestAmountIdempotencyDigestBindsOriginalPointsString": 8.998,
+      "TestExportUserTxUsesCallerSnapshotAndWrapper": 3.370,
+      "TestPoolNumberedPagesCountWindowAndStableOrder": 627.635,
+      "TestPoolProjectionFormatsAggregateBeyondInt64": 44.173,
+      "TestSettlementCheckpointRollbackReplaysExactlyOnce": 3.756,
+      "TestThursdayDestinationUsesExclusiveCloseAndRejectsConflictingDuplicate": 3.190,
+      "TestThursdayPeriodCapacityFailureLeavesNoDomainRows": 3.077,
+      "TestWelfareLogicalHoldConversionCountsExactlyOnce": 3.370
+    }
+  },
   "package_seconds": {
     "github.com/waiting-here/NonbiriAPI": 35.827,
     "github.com/waiting-here/NonbiriAPI/internal/accountstream": 2.120,
@@ -57,7 +72,7 @@
     "github.com/waiting-here/NonbiriAPI/internal/dbtest": 1,
     "github.com/waiting-here/NonbiriAPI/internal/debug": 3.161,
     "github.com/waiting-here/NonbiriAPI/internal/diagnostic": 1.993,
-    "github.com/waiting-here/NonbiriAPI/internal/donation": 227.771,
+    "github.com/waiting-here/NonbiriAPI/internal/donation": 365.821,
     "github.com/waiting-here/NonbiriAPI/internal/egress": 3.581,
     "github.com/waiting-here/NonbiriAPI/internal/elevation": 1.299,
     "github.com/waiting-here/NonbiriAPI/internal/flowcontrol": 2.669,
