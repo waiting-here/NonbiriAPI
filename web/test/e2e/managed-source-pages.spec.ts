@@ -17,6 +17,7 @@ const TARGET_DONATION_ID = '7';
 const TARGET_KEY_ID = '99';
 const ORIGINAL_NOTE = 'Synthetic reviewer-safe note';
 const UPDATED_NOTE = 'Updated reviewer-safe note';
+const SYNTHETIC_DISCORD_ID = '1'.repeat(18);
 const LONG_BASE_URL =
   'https://donor.example.test/v1/tenant/long-segment-long-segment-long-segment-long-segment/keys/21';
 const ADMIN_MARKER = 'managed-source-admin-ephemeral-7c4a1f9e';
@@ -161,7 +162,7 @@ function donationKeys(note: string): JSONRecord[] {
   ];
 }
 
-function donation(role: 'admin' | 'steward', patched: boolean): JSONRecord {
+function donation(patched: boolean): JSONRecord {
   const revision = patched ? '8' : '7';
   const note = patched ? UPDATED_NOTE : ORIGINAL_NOTE;
   return {
@@ -176,10 +177,7 @@ function donation(role: 'admin' | 'steward', patched: boolean): JSONRecord {
       reviewed_at: NOW - 60,
     },
     keys: donationKeys(note),
-    owner:
-      role === 'admin'
-        ? { user_id: '42', discord_id: null, display_name: 'Synthetic donor' }
-        : null,
+    owner: { user_id: '42', discord_id: SYNTHETIC_DISCORD_ID, display_name: 'Synthetic donor' },
     reviewer: { user_id: '42', role: 'admin' },
     created_at: NOW - 120,
     updated_at: patched ? NOW + 1 : NOW,
@@ -363,10 +361,7 @@ function createManagedSourceFixture(setup: StationSetup): ManagedSourceFixture {
             throw new Error(`Unexpected donation detail request: ${request.method()} ${url.href}`);
           }
           fixture.donationDetailReads.push(url.search);
-          await fulfillJSON(
-            route,
-            donation(setup.role === 'admin' ? 'admin' : 'steward', fixture.patched),
-          );
+          await fulfillJSON(route, donation(fixture.patched));
           return;
         }
 
@@ -405,7 +400,7 @@ function createManagedSourceFixture(setup: StationSetup): ManagedSourceFixture {
           idempotencyKey: request.headers()['idempotency-key'] ?? '',
         });
         fixture.patched = true;
-        await fulfillJSON(route, donation(setup.role === 'admin' ? 'admin' : 'steward', true));
+        await fulfillJSON(route, donation(true));
       });
     },
   };
@@ -708,9 +703,8 @@ async function exerciseManagedSourceBrowser(
   await expect(page.getByRole('heading', { name: /捐赠 #7|Donation #7/ })).toBeVisible();
   const note = page.getByLabel(setup.safeNote, { exact: true });
   await expect(note).toHaveValue(ORIGINAL_NOTE);
-  if (setup.role === 'level5') {
-    await expect(page.getByText('捐赠者资料不显示', { exact: true })).toBeVisible();
-  }
+  await expect(page.getByText('Synthetic donor', { exact: false })).toBeVisible();
+  await expect(page.getByText(SYNTHETIC_DISCORD_ID, { exact: false })).toBeVisible();
 
   await note.fill(UPDATED_NOTE);
   await expect(page.getByRole('button', { name: setup.saveKeyLimits, exact: true })).toBeVisible();
@@ -777,7 +771,7 @@ test('administrator can browse a paged source, edit one key, and return with con
   await exerciseManagedSourceBrowser(context, page, setupFor('admin'));
 });
 
-test('level-five steward can browse a paged source without donor-private fields', async ({
+test('level-five steward can browse a paged source with complete donor review information', async ({
   context,
   page,
 }) => {
