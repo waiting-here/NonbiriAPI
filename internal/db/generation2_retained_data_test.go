@@ -20,6 +20,7 @@ var retainedSourceManifests = []struct{ name, hash string }{
 	{"before_response_starts", preResponseStartsManifestHash},
 	{"complete", preBetaTwoManifestHash},
 	{"recurring_limits", preBrowseManifestHash},
+	{"browse_indexes", preQuotaCleanupManifestHash},
 }
 
 // The fixture uses only synthetic identities and a credential sealed by the
@@ -140,8 +141,12 @@ VALUES(?,?,'10x10',0,'completed',101,1101,201,50,99)`, hostileOID("ll_"), users[
 
 func makeRetainedSource(t *testing.T, database *sql.DB, want string) {
 	t.Helper()
-	if want == preBrowseManifestHash {
-		dropBrowseIndexes(t, database)
+	if want == preBrowseManifestHash || want == preQuotaCleanupManifestHash {
+		if want == preBrowseManifestHash {
+			dropBrowseIndexes(t, database)
+		} else {
+			dropQuotaCleanupIndexes(t, database)
+		}
 		tx, err := database.BeginTx(context.Background(), nil)
 		if err != nil {
 			t.Fatal(err)

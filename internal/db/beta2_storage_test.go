@@ -32,6 +32,7 @@ PRAGMA foreign_keys=ON;`); err != nil {
 
 func dropBrowseIndexes(t *testing.T, database *sql.DB) {
 	t.Helper()
+	dropQuotaCleanupIndexes(t, database)
 	if _, err := database.Exec(`
 DROP INDEX IF EXISTS idx_request_logs_started;
 DROP INDEX IF EXISTS idx_report_cases_created;
@@ -46,6 +47,19 @@ DROP INDEX IF EXISTS idx_mainstream_channels_updated;
 DROP INDEX IF EXISTS idx_donations_owner_page;
 DROP INDEX IF EXISTS idx_charity_bindings_key;
 DROP INDEX IF EXISTS idx_donation_keys_source_page;`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func dropQuotaCleanupIndexes(t *testing.T, database *sql.DB) {
+	t.Helper()
+	if _, err := database.Exec(`
+DROP INDEX IF EXISTS idx_donation_quota_buckets_cleanup;
+DROP INDEX IF EXISTS idx_donation_quota_periods_cleanup;
+DROP INDEX IF EXISTS idx_donation_quota_epochs_clock;
+DROP INDEX IF EXISTS idx_donation_quota_receipts_settled;
+DROP INDEX IF EXISTS idx_donation_quota_receipts_period;
+DROP INDEX IF EXISTS idx_donation_quota_rules_retired;`); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -23,6 +23,10 @@ const preBetaTwoManifestHash = "32d3e952512b7eb5c452e478eb9990b0518d51502d70bd93
 // Its extension adds only browse indexes and preserves every existing value.
 const preBrowseManifestHash = "862d6c208018d2033c57bd8b87e3b324be5d83b2f2bd6729a7ce8cf9b4c96b9e"
 
+// The deployed browse schema is extended by indexes only. Its populated
+// recurring-limit facts and counters must remain unchanged.
+const preQuotaCleanupManifestHash = "e9d0e725597515a9cfcb7a0463a636ecd179dca619cc9524a2db95d258a20aaa"
+
 func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) {
 	if GenerationTwoSchemaHash() != PinnedGenerationTwoSchemaHash {
 		return false, errors.New("generation-two schema hash drift")
@@ -38,7 +42,7 @@ func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) 
 	switch generationManifestDigest(actual) {
 	case expected:
 		return false, nil
-	case preRoutingManifestHash, preKeyLimitsManifestHash, preResponseStartsManifestHash, preBetaTwoManifestHash, preBrowseManifestHash:
+	case preRoutingManifestHash, preKeyLimitsManifestHash, preResponseStartsManifestHash, preBetaTwoManifestHash, preBrowseManifestHash, preQuotaCleanupManifestHash:
 		return true, nil
 	default:
 		return false, errors.New("generation-two schema manifest mismatch")
@@ -79,7 +83,7 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) error
 			return err
 		}
 	}
-	if digest != preBrowseManifestHash {
+	if digest != preBrowseManifestHash && digest != preQuotaCleanupManifestHash {
 		// Prior schemas have no recurring-limit or presentation sidecars.
 		if _, err := tx.ExecContext(ctx, betaTwoAdditiveSchema); err != nil {
 			return err
@@ -88,7 +92,12 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) error
 			return err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, browseIndexesSchema); err != nil {
+	if digest != preQuotaCleanupManifestHash {
+		if _, err := tx.ExecContext(ctx, browseIndexesSchema); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, quotaCleanupIndexesSchema); err != nil {
 		return err
 	}
 	if err := validateGenerationTwoManifest(ctx, tx); err != nil {

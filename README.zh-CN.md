@@ -4,7 +4,7 @@ NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网
 
 > **当前候选版本：** `1.0.0-beta.2`（未发布）。正式开放给用户前，请先阅读部署、备份、隐私和安全文档。
 >
-> **兼容边界：** beta.2 继续采用数据库 Generation 2（`application_id=0x4E425249`、`user_version=2`），以 Linux/amd64 源码构建为发布边界。完全不存在的数据库文件集合可以全新创建；alpha 和 Generation 1 部署必须显式全新切换。四个精确的旧 Generation 2 manifest，以及已经带有 beta.2 sidecar 的已部署中间 manifest，可以在增量更新中保留现有数据。
+> **兼容边界：** beta.2 继续采用数据库 Generation 2（`application_id=0x4E425249`、`user_version=2`），以 Linux/amd64 源码构建为发布边界。完全不存在的数据库文件集合可以全新创建；alpha 和 Generation 1 部署必须显式全新切换。四个精确的旧 Generation 2 manifest，以及两个已经带有 beta.2 sidecar 的已部署中间 manifest，可以在增量更新中保留现有数据。
 >
 > 源码仓库：[github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
@@ -91,7 +91,7 @@ set +a
 - [环境变量示例](admin.env.example)
 - [systemd 单元示例](deploy/nonbiriapi.service.example)
 
-Beta.2 采用数据库 Generation 2（`application_id=0x4E425249`、`user_version=2`）：不会原地迁移 alpha 数据库或 Generation 1；对不支持或异常的现有数据库会在零写入前提下拒绝启动。四个精确的旧 Generation 2 manifest 可以普通更新，分别对应公益调度、每把密钥限额、成功回传检查点之前的结构及完整 beta.1 结构；已经包含 beta.2 sidecar 的已部署中间 manifest 也被接受，但只补缺少的浏览索引。单个原子更新按来源补齐缺少的调度、密钥限额、检查点、捐赠处理、模型准入、循环限量、游戏呈现和浏览索引结构，写入契约规定的默认值，再校验完整 manifest 与外键。现有账号、资源、余额、配置、调度策略、密钥限额和历史事实均保留，不虚构历史响应开始、循环用量或游戏呈现值。仅替换二进制降级到不兼容结构不安全。必须停止服务并保留经过恢复验证的完整快照（数据库/sidecar、release、配置、主密钥和 unit），再按[部署指南](docs/deployment.md)操作。从 alpha 切换到 beta.2 必须显式执行全新切换；新库默认维护开启，注册、活动、公益、捐赠入口和游戏关闭。
+Beta.2 采用数据库 Generation 2（`application_id=0x4E425249`、`user_version=2`）：不会原地迁移 alpha 数据库或 Generation 1；对不支持或异常的现有数据库会在零写入前提下拒绝启动。四个精确的旧 Generation 2 manifest 可以普通更新，分别对应公益调度、每把密钥限额、成功回传检查点之前的结构及完整 beta.1 结构；两个已经包含 beta.2 sidecar 的已部署中间 manifest 也被接受，但只补缺少的浏览和配额清理索引。单个原子更新按来源补齐缺少的调度、密钥限额、检查点、捐赠处理、模型准入、循环限量、游戏呈现和索引结构，写入契约规定的默认值，再校验完整 manifest 与外键。现有账号、资源、余额、配置、调度策略、密钥限额和历史事实均保留，不虚构历史响应开始、循环用量或游戏呈现值。仅替换二进制降级到不兼容结构不安全。必须停止服务并保留经过恢复验证的完整快照（数据库/sidecar、release、配置、主密钥和 unit），再按[部署指南](docs/deployment.md)操作。从 alpha 切换到 beta.2 必须显式执行全新切换；新库默认维护开启，注册、活动、公益、捐赠入口和游戏关闭。
 
 Beta.2 采用源码优先方式，生产支持平台为 Linux/amd64。运营方应在该目标上从精确候选源码 commit 构建，或使用等价的受控构建流水线。本次未发布的候选版本不提供官方预编译二进制、容器镜像或安装包，其他生产平台尚不支持。
 
