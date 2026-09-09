@@ -330,7 +330,7 @@ test('reachable user home keeps level state but removes the implementation hint'
   await mockJson(page, {
     origin: USER_ORIGIN,
     method: 'GET',
-    path: '/api/announcements?limit=20',
+    path: '/api/announcements?limit=100',
     body: { data: [], next_cursor: null },
   });
 
