@@ -7,10 +7,6 @@ import { ToastProvider } from '@shared/components/Toast';
 import { createQueryClient } from '@shared/query/client';
 import '@shared/styles/index.css';
 import '@shared/styles/stations/user-shell.css';
-import '@shared/styles/games/base.css';
-import '@shared/styles/games/fishing.css';
-import '@shared/styles/games/linklink.css';
-import '@shared/styles/games/rps.css';
 import './i18n';
 import { router } from './routes';
 
