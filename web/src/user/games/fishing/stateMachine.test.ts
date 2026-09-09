@@ -14,7 +14,7 @@ describe('Fishing presentation clock', () => {
     expect(
       fishingPresentationPhase({ submitting: false, pending: true, result: null, revealed: 0 }),
     ).toBe('pending');
-    expect(nextRevealCount(2, result)).toBe(3);
-    expect(nextRevealCount(3, result)).toBe(3);
+    expect(nextRevealCount(2, result.outcomes.length)).toBe(3);
+    expect(nextRevealCount(3, result.outcomes.length)).toBe(3);
   });
 });
