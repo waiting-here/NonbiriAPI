@@ -16,6 +16,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
+	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
 const (
@@ -221,6 +222,14 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 	semanticGuard := wireGuard.clone()
 	defer wireGuard.Clear()
 	defer semanticGuard.Clear()
+	errorContext := upstreamerror.Context{
+		BaseURL: target.baseURL, PrivateModel: target.upstreamModel,
+		ContainsSecret: func(value []byte) bool {
+			scanner := wireGuard.clone()
+			defer scanner.Clear()
+			return scanner.Contains(value)
+		},
+	}
 	httpRequest.Header.Set("X-Api-Key", string(target.credential.apiKey))
 	target.credential.clear()
 
@@ -240,25 +249,27 @@ func (a *Adapter) attempt(ctx context.Context, writer http.ResponseWriter, targe
 	if ctx.Err() != nil {
 		return canceledFailure()
 	}
-	if request.Stream {
-		if response.StatusCode != http.StatusOK {
-			return upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode)
+	if response.StatusCode < http.StatusOK || response.StatusCode > 299 || request.Stream && response.StatusCode != http.StatusOK {
+		result := upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode)
+		result.ErrorDetail = errorContext.Read(response.Body, a.maxJSONResponseBytes)
+		if ctx.Err() != nil {
+			return canceledFailure()
 		}
+		return result
+	}
+	if request.Stream {
 		if !validResponseMediaType(response, "text/event-stream") {
 			return upstreamFailure("upstream stream content type was invalid", response.StatusCode)
 		}
-		return a.stream(ctx, writer, response, request.Model, attemptStarted, wireGuard, semanticGuard)
-	}
-	if response.StatusCode < http.StatusOK || response.StatusCode > 299 {
-		return upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode)
+		return a.stream(ctx, writer, response, request.Model, attemptStarted, wireGuard, semanticGuard, errorContext)
 	}
 	if !validResponseMediaType(response, "application/json") {
 		return upstreamFailure("upstream response content type was invalid", response.StatusCode)
 	}
-	return a.nonStream(ctx, writer, response, request.Model, attemptStarted, wireGuard, semanticGuard)
+	return a.nonStream(ctx, writer, response, request.Model, attemptStarted, wireGuard, semanticGuard, errorContext)
 }
 
-func (a *Adapter) nonStream(ctx context.Context, writer http.ResponseWriter, response *http.Response, publicModel string, attemptStarted time.Time, wireGuard, semanticGuard *sensitiveGuard) connectorcontract.AttemptResult {
+func (a *Adapter) nonStream(ctx context.Context, writer http.ResponseWriter, response *http.Response, publicModel string, attemptStarted time.Time, wireGuard, semanticGuard *sensitiveGuard, errorContext upstreamerror.Context) connectorcontract.AttemptResult {
 	if response.ContentLength > a.maxJSONResponseBytes {
 		return upstreamFailure("upstream response exceeded its limit", response.StatusCode)
 	}
@@ -270,6 +281,11 @@ func (a *Adapter) nonStream(ctx context.Context, writer http.ResponseWriter, res
 		return upstreamFailure(classifyReadFailure(err), response.StatusCode)
 	}
 	defer clear(body)
+	if upstreamerror.IsEvent(body) {
+		result := upstreamFailure("upstream response reported an error", response.StatusCode)
+		result.ErrorDetail = errorContext.Parse(body)
+		return result
+	}
 	reflected, scanErr := semanticGuard.ContainsJSONStrings(body)
 	if scanErr != nil {
 		return upstreamFailure("upstream response was invalid", response.StatusCode)

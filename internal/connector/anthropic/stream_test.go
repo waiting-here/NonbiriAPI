@@ -10,6 +10,7 @@ import (
 	"time"
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
 func namedEvent(name, data string) string {
@@ -59,7 +60,7 @@ func runStreamFixture(t *testing.T, ctx context.Context, input string, credentia
 	recorder := httptest.NewRecorder()
 	guard := newSensitiveGuard(credentials...)
 	semantic := guard.clone()
-	result := adapter.stream(ctx, recorder, response, "public/model", time.Unix(123, 0), guard, semantic)
+	result := adapter.stream(ctx, recorder, response, "public/model", time.Unix(123, 0), guard, semantic, upstreamerror.Context{})
 	guard.Clear()
 	semantic.Clear()
 	_ = response.Body.Close()
@@ -301,7 +302,7 @@ func TestStreamRejectsConfiguredAggregateStreamLimit(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	guard := newSensitiveGuard()
 	semantic := guard.clone()
-	result := adapter.stream(context.Background(), recorder, response, "public/model", time.Unix(123, 0), guard, semantic)
+	result := adapter.stream(context.Background(), recorder, response, "public/model", time.Unix(123, 0), guard, semantic, upstreamerror.Context{})
 	guard.Clear()
 	semantic.Clear()
 	_ = response.Body.Close()

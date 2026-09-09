@@ -9,6 +9,7 @@ Each version entry describes its source and compatibility boundary; a release ta
 ### Fixed
 
 - Automatic RPM bans apply only to charity requests exceeding the site's per-user limit. Rate-limited personal resource calls, shared key limits and upstream rate-limit responses do not trigger this policy.
+- Personal and charity calls preserve recognizable upstream error messages, safe machine codes and HTTP error statuses while hiding source addresses and sensitive values. Errors after streaming starts use a single bounded error frame; unreadable or unsafe bodies retain a generic fallback.
 
 ## [1.0.0-beta.1] - 2026-09-06
 

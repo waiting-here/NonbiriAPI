@@ -954,7 +954,8 @@ func attemptOutcome(result connectorcontract.AttemptResult) claim.AttemptOutcome
 	}
 	return claim.AttemptOutcome{
 		Kind: kind, UpstreamStatus: result.UpstreamStatus, Diagnostic: result.Diagnostic,
-		Usage: result.Usage, ProtocolSuccess: result.Success, ResponseStarted: result.Committed,
+		UpstreamCode: result.ErrorDetail.Code(),
+		Usage:        result.Usage, ProtocolSuccess: result.Success, ResponseStarted: result.Committed,
 	}
 }
 
@@ -1120,19 +1121,29 @@ func failureForError(err error, charity bool) wireFailure {
 }
 
 func failureForAttempt(result connectorcontract.AttemptResult, charity bool) wireFailure {
-	if charity {
-		return upstreamWireFailure(http.StatusBadGateway, "upstream request failed", "", false)
-	}
 	if result.Failure == connectorcontract.FailureInternal {
+		if charity {
+			return upstreamWireFailure(http.StatusBadGateway, "upstream request failed", "", false)
+		}
 		return platformFailure(httperr.CodeInternal, "internal error")
 	}
 	status := http.StatusBadGateway
-	if result.UpstreamStatus >= http.StatusBadRequest && result.UpstreamStatus <= 499 {
+	if result.UpstreamStatus >= http.StatusBadRequest && result.UpstreamStatus <= 599 {
 		status = result.UpstreamStatus
 	} else if result.ClientStatus == http.StatusGatewayTimeout || isTimeoutResult(result) {
 		status = http.StatusGatewayTimeout
 	}
-	return upstreamWireFailure(status, "upstream request failed", result.Diagnostic, true)
+	message := result.ErrorDetail.Message()
+	if message == "" {
+		message = "upstream request failed"
+	}
+	diagnostic := result.Diagnostic
+	if charity {
+		diagnostic = ""
+	}
+	failure := upstreamWireFailure(status, message, diagnostic, true)
+	failure.upstreamCode = result.ErrorDetail.Code()
+	return failure
 }
 
 func callerFromFailure(failure wireFailure) claim.CallerResult {

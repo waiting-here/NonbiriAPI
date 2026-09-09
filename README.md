@@ -137,10 +137,10 @@ Errors contain stable `error.code`, `source`, and `message` fields. Platform mes
 | 429 | `rate_limited` | `platform` | A rate or concurrency limit prevents admission. |
 | 500 | `internal` | `platform` | An internal error. |
 | 503 | `maintenance`, `service_unavailable`, `unbound_model` | `platform` | Maintenance, unavailable service, or no usable model binding. |
-| Upstream 4xx | `upstream` | `upstream` | Personal calls may preserve the upstream HTTP status. |
-| 502 / 504 | `upstream` | `upstream` | An upstream failure or an owner-visible upstream timeout. |
+| Upstream 4xx / 5xx | `upstream` | `upstream` | Personal and charity calls preserve the upstream HTTP error status. |
+| 502 / 504 | `upstream` | `upstream` | An upstream transport/protocol failure or timeout. |
 
-After a charity call is dispatched, upstream failures use a generic `502 upstream` response without provider details. Once SSE headers are sent, the HTTP status cannot change; failures use a bounded error event or close the connection. A failed charity attempt with no validated successful output costs no credits or donation quota; interruption after successful output starts follows the documented usage and settlement rules. See the [full error and billing contract](docs/api-contract.md).
+Personal and charity calls return recognizable upstream error messages and an optional `upstream_code` after removing source addresses and sensitive values. Unreadable, oversized or unsafe errors use a generic message. Once SSE headers are sent, the HTTP status cannot change; failures use a bounded error event or close the connection. A failed charity attempt with no validated successful output costs no credits or donation quota; interruption after successful output starts follows the documented usage and settlement rules. See the [full error and billing contract](docs/api-contract.md).
 
 ## Development checks
 

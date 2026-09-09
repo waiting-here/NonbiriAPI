@@ -134,10 +134,10 @@ CallerKey 和上游凭据都必须按密钥保护。不要把它们放入 URL、
 | 429 | `rate_limited` | `platform` | 速率或并发限制阻止本次准入。 |
 | 500 | `internal` | `platform` | 内部错误。 |
 | 503 | `maintenance`, `service_unavailable`, `unbound_model` | `platform` | 维护中、服务暂不可用或模型无可用连接。 |
-| 上游 4xx | `upstream` | `upstream` | 自用调用可能保留上游 HTTP 状态。 |
-| 502 / 504 | `upstream` | `upstream` | 上游调用失败，或对自用调用者可见的上游超时。 |
+| 上游 4xx / 5xx | `upstream` | `upstream` | 自用和公益调用均保留上游 HTTP 错误状态。 |
+| 502 / 504 | `upstream` | `upstream` | 上游传输或协议失败，或上游超时。 |
 
-公益请求发出后，上游失败统一返回不含提供方详情的 `502 upstream`。SSE 响应头发出后无法改写 HTTP 状态，失败会通过有界错误事件或关闭连接表达。公益 attempt 在没有有效成功回传时失败，不收积分、不消耗捐赠额度；成功回传开始后的中断按已公布的用量与结算规则处理。完整规则见 [API 错误与收费契约](docs/api-contract.md)。
+自用和公益调用会保留可识别的上游报错信息，以及可选的 `upstream_code`，并清除来源地址和敏感值。无法读取、过大或无法安全呈现的错误使用通用提示。SSE 响应头发出后无法改写 HTTP 状态，失败会通过有界错误事件或关闭连接表达。公益 attempt 在没有有效成功回传时失败，不收积分、不消耗捐赠额度；成功回传开始后的中断按已公布的用量与结算规则处理。完整规则见 [API 错误与收费契约](docs/api-contract.md)。
 
 ## 开发门禁
 

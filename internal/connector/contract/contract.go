@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/waiting-here/NonbiriAPI/internal/backend"
+	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
 // Type is one closed-world connector identifier admitted by the process
@@ -91,6 +92,7 @@ type AttemptResult struct {
 	SinkFailed      bool
 	Failure         FailureKind
 	Diagnostic      string
+	ErrorDetail     upstreamerror.Detail
 	UpstreamStatus  int
 	ClientStatus    int
 	EndpointBaseURL string

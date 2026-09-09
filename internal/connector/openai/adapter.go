@@ -17,6 +17,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
 const (
@@ -239,6 +240,18 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 
 	guard := newResponseGuard(target.credential.bearer, target.credential.ciphertext)
 	defer guard.Clear()
+	safetyMaterial := []byte(policy.SafetyIdentifier)
+	errorGuard := newSensitiveGuard(target.credential.bearer, target.credential.ciphertext, safetyMaterial)
+	clear(safetyMaterial)
+	defer errorGuard.Clear()
+	errorContext := upstreamerror.Context{
+		BaseURL: target.baseURL, PrivateModel: target.upstreamModel,
+		ContainsSecret: func(value []byte) bool {
+			scanner := errorGuard.clone()
+			defer scanner.Clear()
+			return scanner.Contains(value)
+		},
+	}
 	var sourceGuard *responseGuard
 	if request.Stream && policy.FlattenToolCalls {
 		sourceGuard = newResponseGuard(target.credential.bearer, target.credential.ciphertext)
@@ -267,33 +280,35 @@ func (a *Adapter) AttemptWithPolicy(ctx context.Context, writer http.ResponseWri
 		return canceledFailure()
 	}
 
-	if request.Stream {
-		if response.StatusCode != http.StatusOK {
-			return upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode)
+	if response.StatusCode < http.StatusOK || response.StatusCode > 299 || request.Stream && response.StatusCode != http.StatusOK {
+		result := upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode)
+		result.ErrorDetail = errorContext.Read(response.Body, a.maxJSONResponseBytes)
+		if ctx.Err() != nil {
+			return canceledFailure()
 		}
+		return result
+	}
+	if request.Stream {
 		if !validResponseMediaType(response, "text/event-stream") {
 			return upstreamFailure("upstream stream content type was invalid", response.StatusCode)
 		}
 		if policy.FlattenToolCalls {
-			return a.flattenStream(ctx, writer, response, guard, sourceGuard)
+			return a.flattenStream(ctx, writer, response, guard, sourceGuard, errorContext)
 		}
-		return a.stream(ctx, writer, response, guard)
+		return a.stream(ctx, writer, response, guard, errorContext)
 	}
 
-	if response.StatusCode < http.StatusOK || response.StatusCode > 299 {
-		return upstreamFailure(statusDiagnostic(response.StatusCode), response.StatusCode)
-	}
 	if !validResponseMediaType(response, "application/json") {
 		return upstreamFailure("upstream response content type was invalid", response.StatusCode)
 	}
-	return a.nonStreamWithPolicy(ctx, writer, response, guard, policy)
+	return a.nonStreamWithPolicy(ctx, writer, response, guard, policy, errorContext)
 }
 
 func (a *Adapter) nonStream(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard *responseGuard) AttemptResult {
-	return a.nonStreamWithPolicy(ctx, writer, response, guard, connectorcontract.AttemptPolicy{})
+	return a.nonStreamWithPolicy(ctx, writer, response, guard, connectorcontract.AttemptPolicy{}, upstreamerror.Context{})
 }
 
-func (a *Adapter) nonStreamWithPolicy(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard *responseGuard, policy connectorcontract.AttemptPolicy) AttemptResult {
+func (a *Adapter) nonStreamWithPolicy(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard *responseGuard, policy connectorcontract.AttemptPolicy, errorContext upstreamerror.Context) AttemptResult {
 	if response.ContentLength > a.maxJSONResponseBytes {
 		return upstreamFailure("upstream response exceeded its limit", response.StatusCode)
 	}
@@ -307,6 +322,11 @@ func (a *Adapter) nonStreamWithPolicy(ctx context.Context, writer http.ResponseW
 	defer clear(body)
 	if !validProtocolBytes(body) {
 		return upstreamFailure("upstream response was invalid", response.StatusCode)
+	}
+	if upstreamerror.IsEvent(body) {
+		result := upstreamFailure("upstream response reported an error", response.StatusCode)
+		result.ErrorDetail = errorContext.Parse(body)
+		return result
 	}
 	usage, err := validateCompletion(body)
 	if err != nil {
@@ -353,7 +373,7 @@ func (a *Adapter) nonStreamWithPolicy(ctx context.Context, writer http.ResponseW
 	}
 }
 
-func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard *responseGuard) AttemptResult {
+func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard *responseGuard, errorContext upstreamerror.Context) AttemptResult {
 	// Do not drive parser delivery from response.Request.Context: the egress
 	// managed body cancels that internal context on ordinary EOF to release its
 	// permit. A caller-derived parser context lets already-parsed events drain
@@ -386,6 +406,9 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 				return result
 			}
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream ended before completion")
+		}
+		if event.Event == "error" || event.Event == "message" && upstreamerror.IsEvent([]byte(event.Data)) {
+			return a.streamReportedFailure(writer, controller, committed, usage, guard, errorContext.Parse([]byte(event.Data)))
 		}
 		if event.Event != "message" {
 			return a.streamProtocolFailure(writer, controller, committed, usage, "upstream stream event type was invalid")
@@ -443,7 +466,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 // flattenStream forwards ordinary content as soon as it has passed the
 // protocol and leak guards, while retaining only tool deltas until a valid
 // terminal marker proves that the whole call set is complete.
-func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard, sourceGuard *responseGuard) AttemptResult {
+func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter, response *http.Response, guard, sourceGuard *responseGuard, errorContext upstreamerror.Context) AttemptResult {
 	streamCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
 	events, errs := egress.StreamSSE(streamCtx, response.Body, egress.SSEOptions{
@@ -491,6 +514,9 @@ func (a *Adapter) flattenStream(ctx context.Context, writer http.ResponseWriter,
 				return result
 			}
 			return failure("upstream stream ended before completion")
+		}
+		if event.Event == "error" || event.Event == "message" && upstreamerror.IsEvent([]byte(event.Data)) {
+			return a.streamReportedFailure(writer, controller, committed, usage, guard, errorContext.Parse([]byte(event.Data)))
 		}
 		if event.Event != "message" {
 			return failure("upstream stream event type was invalid")
@@ -707,6 +733,28 @@ func accumulateStreamState(frames [][]byte, states map[int]*streamChoiceState) (
 		hasTools = hasTools || tools
 	}
 	return first, hasTools, nil
+}
+
+func (a *Adapter) streamReportedFailure(writer http.ResponseWriter, controller *http.ResponseController, committed bool, usage Usage, guard *responseGuard, detail upstreamerror.Detail) AttemptResult {
+	result := upstreamFailure("upstream stream reported an error", http.StatusOK)
+	result.Usage, result.ErrorDetail = usage, detail
+	if !committed {
+		return result
+	}
+	message := detail.Message()
+	if message == "" {
+		message = "upstream stream failed"
+	}
+	frame := httperr.SSEUpstreamErrorFrame(httperr.New(httperr.CodeUpstream, message).WithUpstreamCode(detail.Code()))
+	if guard.ContainsJSON(frame, frame[6:len(frame)-2]) {
+		result.ErrorDetail = upstreamerror.Detail{}
+		frame = httperr.SSEErrorFrame(httperr.New(httperr.CodeUpstream, "upstream stream failed"))
+	}
+	if _, err := a.writeStreamFrame(writer, controller, frame); err != nil {
+		return sinkFailureWithCommit(true, usage)
+	}
+	result.Committed, result.ClientStatus = true, http.StatusOK
+	return result
 }
 
 func (a *Adapter) streamProtocolFailure(writer http.ResponseWriter, controller *http.ResponseController, committed bool, usage Usage, diagnostic string) AttemptResult {
