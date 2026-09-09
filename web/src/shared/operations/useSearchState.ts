@@ -6,7 +6,12 @@ import {
   type SetURLSearchParams,
 } from 'react-router';
 
-const pending = new WeakMap<ReturnType<typeof useLocation>, URLSearchParams>();
+interface PendingSearchUpdate {
+  params: URLSearchParams;
+  state: unknown;
+}
+
+const pending = new WeakMap<ReturnType<typeof useLocation>, PendingSearchUpdate>();
 
 /** Compose successive control edits before a router transition has rendered. */
 export function useSearchState(): readonly [URLSearchParams, SetURLSearchParams] {
@@ -14,13 +19,21 @@ export function useSearchState(): readonly [URLSearchParams, SetURLSearchParams]
   const [params, setParams] = useSearchParams();
   const update = useCallback<SetURLSearchParams>(
     (value, options) => {
-      const previous = pending.get(location) ?? params;
+      const pendingUpdate = pending.get(location);
+      const previous = pendingUpdate?.params ?? params;
       const next = createSearchParams(
         typeof value === 'function' ? value(new URLSearchParams(previous)) : value,
       );
-      if (next.toString() === previous.toString() && options?.state === undefined) return;
-      pending.set(location, next);
-      setParams(next, options);
+      const hasExplicitState =
+        options !== undefined && Object.prototype.hasOwnProperty.call(options, 'state');
+      if (next.toString() === previous.toString() && !hasExplicitState) return;
+      const state = hasExplicitState
+        ? options?.state
+        : pendingUpdate
+          ? pendingUpdate.state
+          : location.state;
+      pending.set(location, { params: next, state });
+      setParams(next, { ...(options ?? {}), state });
     },
     [location, params, setParams],
   );
