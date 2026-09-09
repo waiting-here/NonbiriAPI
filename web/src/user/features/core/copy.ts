@@ -178,6 +178,7 @@ const copy = {
     '添加你拥有的密钥后，即可检查模型并创建模型连接。',
   ],
   'endpoints.key': ['Key', '密钥'],
+  'endpoints.keyIdentifier': ['Key identifier (partial key)', '密钥标识（非完整密钥）'],
   'endpoints.keyState': ['Key status', '密钥状态'],
   'endpoints.storePolicy': ['Do not save requests (store=false)', '不保存请求（store=false）'],
   'endpoints.securityProcessing': [
