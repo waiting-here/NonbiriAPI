@@ -258,7 +258,7 @@ describe('endpoint detail numbered resource panels', () => {
     ).getByRole('button', { name: 'Next' });
     expect(manual21Next).toBeEnabled();
     await rendered.user.click(manual21Next);
-    expect(await screen.findByText('Page 2 of 2 · 21 items')).toBeVisible();
+    expect(await screen.findByText('Page 2 of 2 · Total: 21')).toBeVisible();
     let search = new URL(`https://example.test${screen.getByTestId('location').textContent ?? ''}`)
       .searchParams;
     expect(search.get('manual_21_page')).toBe('2');

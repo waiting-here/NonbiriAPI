@@ -120,12 +120,12 @@ describe('charity catalog panel', () => {
     await renderWithProviders(<><CharityCatalogPanel accountID="7" /><SearchProbe /></>, {
       station: 'user', role: 'user', route: '/charity?allowed_for_me=all&allowed_level=all&currently_available=true&page=1&page_size=20',
     });
-    await screen.findByText('Page 1 of 2 · 22 items');
+    await screen.findByText('Page 1 of 2 · Total: 22');
     act(() => {
       fireEvent.change(screen.getByLabelText('Currently available'), { target: { value: 'all' } });
       fireEvent.change(screen.getByLabelText('Items per page'), { target: { value: '10' } });
     });
-    await screen.findByText('Page 1 of 3 · 26 items');
+    await screen.findByText('Page 1 of 3 · Total: 26');
     expect(screen.getByLabelText('Currently available')).toHaveValue('all');
     expect(screen.getByLabelText('Current catalog URL')).toHaveTextContent('currently_available=all');
   });
