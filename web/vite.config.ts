@@ -1,6 +1,7 @@
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig, type ConfigEnv, type UserConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
+import catalogPairPlugin from './scripts/catalogPairPlugin.mjs';
 
 /**
  * Two independent stations, each a separate Vite build producing its own
@@ -28,11 +29,11 @@ function stationFor(mode: string): StationConfig {
   );
 }
 
-export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
+export default defineConfig(({ mode, command }: ConfigEnv): UserConfig => {
   const station = stationFor(mode);
   return {
     root: station.root,
-    plugins: [react()],
+    plugins: [react(), ...(command === 'build' ? [catalogPairPlugin()] : [])],
     resolve: {
       alias: {
         '@shared': fileURLToPath(new URL('./src/shared', import.meta.url)),
