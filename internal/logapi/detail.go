@@ -308,7 +308,11 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 		return Page[UserSelfLogAttempt]{}, translateSQLError(err)
 	}
 	defer rows.Close()
-	page := Page[UserSelfLogAttempt]{Data: make([]UserSelfLogAttempt, 0, filter.Limit), Pagination: metadata}
+	capacity := filter.Limit
+	if capacity < 1 || capacity > maximumLimit {
+		return Page[UserSelfLogAttempt]{}, ErrInvalid
+	}
+	page := Page[UserSelfLogAttempt]{Data: make([]UserSelfLogAttempt, 0, capacity), Pagination: metadata}
 	var last int64
 	more := false
 	for rows.Next() {
@@ -383,7 +387,11 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 		return Page[AdminLogAttempt]{}, translateSQLError(err)
 	}
 	defer rows.Close()
-	page := Page[AdminLogAttempt]{Data: make([]AdminLogAttempt, 0, filter.Limit), Pagination: metadata}
+	capacity := filter.Limit
+	if capacity < 1 || capacity > maximumLimit {
+		return Page[AdminLogAttempt]{}, ErrInvalid
+	}
+	page := Page[AdminLogAttempt]{Data: make([]AdminLogAttempt, 0, capacity), Pagination: metadata}
 	var last int64
 	more := false
 	for rows.Next() {
@@ -458,7 +466,11 @@ WHERE a.request_log_id=? AND a.attempt_seq>?`
 		return Page[StewardLogAttempt]{}, translateSQLError(err)
 	}
 	defer rows.Close()
-	page := Page[StewardLogAttempt]{Data: make([]StewardLogAttempt, 0, filter.Limit), Pagination: metadata}
+	capacity := filter.Limit
+	if capacity < 1 || capacity > maximumLimit {
+		return Page[StewardLogAttempt]{}, ErrInvalid
+	}
+	page := Page[StewardLogAttempt]{Data: make([]StewardLogAttempt, 0, capacity), Pagination: metadata}
 	var last int64
 	more := false
 	for rows.Next() {
