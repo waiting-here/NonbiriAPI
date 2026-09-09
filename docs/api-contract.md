@@ -37,14 +37,12 @@ Account export/deletion and selected administrator legal-hold/user actions requi
   "error": {
     "code": "conflict",
     "source": "platform",
-    "message": "[NonbiriAPI] resource revision changed",
-    "upstream_code": "optional-safe-code",
-    "diag": "optional bounded diagnostic"
+    "message": "[NonbiriAPI] resource revision changed"
   }
 }
 ```
 
-`code`, `source`, and `message` are always present. `source` is `upstream` only for code `upstream`; it is `platform` otherwise. Platform messages receive the prefix exactly once and are bounded to 1,024 UTF-8 bytes. `upstream_code` (printable ASCII, at most 64 bytes) and `diag` (sanitized, at most 4,096 bytes) appear only on explicitly allowed owner-visible upstream failures. Public charity, platform, and Debug errors omit them.
+`code`, `source`, and `message` are always present. `source` is `upstream` only for code `upstream`; it is `platform` otherwise. Platform messages receive the prefix exactly once. Messages are bounded to 1,024 UTF-8 bytes. Personal and charity upstream errors may include `upstream_code`, extracted from the upstream `code` or `type` and restricted to 1–64 ASCII letters, digits, underscores, dots, colons or hyphens. A bounded integer code is represented as a string. The optional `diag` remains limited to explicitly allowed owner-visible failures, sanitized to at most 4,096 bytes; charity errors omit it. Platform and Debug errors omit both context fields.
 
 | HTTP | Stable code |
 | ---: | --- |
@@ -60,10 +58,12 @@ Account export/deletion and selected administrator legal-hold/user actions requi
 | 429 | `rate_limited` |
 | 502 | `upstream` |
 | 503 | `maintenance`, `service_unavailable`, `unbound_model` |
-| 504 | `upstream` for an owner-visible upstream timeout |
+| 504 | `upstream` for an upstream timeout |
 | 500 | `internal` |
 
-An owner-visible upstream 4xx may retain its HTTP status. Other upstream failures use 502, with timeouts using 504. A started SSE response emits one bounded `data: {"error":...}\n\n` frame and never fabricates `[DONE]`.
+Before a response starts, personal and charity calls preserve actual upstream error statuses in 400–599, with `code=upstream` and `source=upstream`. Transport or protocol failures use 502, with timeouts using 504. An HTTP success containing an explicit error envelope is also a failure and uses 502. After an SSE response starts, its HTTP status stays 200; an upstream failure emits one bounded `data: {"error":...}\n\n` frame and never fabricates `[DONE]`.
+
+Recognizable JSON errors and plain-text errors retain a useful message after removing source URLs, domains, IP addresses, reflected credentials, private upstream model names and request identity markers. Common JSON, percent and HTML character encodings are normalized before removal. Only selected message/code fields are exposed; upstream headers and arbitrary nested diagnostics are never forwarded. Error-body reading is capped at 64 KiB or the smaller configured response limit. Empty, unreadable, oversized, HTML, malformed or ambiguous error bodies use a generic message. Sanitization may also omit a machine code or message that cannot be safely represented.
 
 ### 1.4 Database and export versions
 
@@ -103,7 +103,7 @@ The OpenAI-only physical-key policy `force_store_false` overwrites/inserts top-l
 
 Charity names use the reserved `[公益]` prefix. Charity admission checks the feature and caller state and uses only approved, enabled, unexpired donation keys whose physical claim and catalog binding are still valid. After eligibility and Connector capability filtering, at most 100 candidates follow the model's `ordered`, `random`, or `expiry_weighted` strategy. Ordered routing uses saved binding order; uniform random gives each eligible connection equal weight; expiry weighting uses `8/4/2/1` for remaining lifetimes of at most 1 day, 7 days, 30 days, or longer/unlimited. Random strategies use a CSPRNG rejection sampler. The attempt order is frozen without replacement before any logical-request, ledger, reservation, or claim write, and entropy failure is `503 service_unavailable` with zero writes. Caller credit is reserved before dispatch. Each attempt rechecks expiry/capacity but never redraws or adds candidates.
 
-Charity upstream details are private: after a real dispatch, failure is the fixed `502 upstream` charity projection. The client never receives the donation/key/base URL/upstream-model identity, raw status, diagnostic, or retry count.
+Charity resource identities remain private. A failed call may expose the sanitized upstream message, machine code and HTTP error status described above, but never the donation/key/base URL/upstream-model identity, private diagnostic, or retry count. A later candidate rejected before dispatch does not replace an earlier dispatched upstream failure. Successful-response detection, retries and settlement are unchanged by error reporting.
 
 Charity credit is reserved before dispatch and charged only after the upstream returns a validated successful payload: a complete valid JSON response or the first valid success frame in a stream. HTTP headers, heartbeat comments, empty/invalid responses and error responses alone do not qualify. A failed attempt with no successful output consumes no donation price/call/token quota and earns no donation reward; its entire caller reservation is refunded if no other attempt started successfully. Actual dispatches still count toward RPM and failure tracking. Once output starts, interruption or client disconnect does not undo the charge: known usage is priced normally, and unknown usage follows the frozen conservative reserve and discount. Retries aggregate billable usage only from attempts with successful output. This applies to live diagnostics and buffered tool conversion as well. A minimal durable start marker lets recovery apply the same rule without storing response content.
 

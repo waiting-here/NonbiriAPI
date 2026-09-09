@@ -114,11 +114,14 @@ func TestLaterKeyLimitKeepsDispatchedFailureAndSettlement(t *testing.T) {
 	f.personal.snapshot.Candidates = append(f.personal.snapshot.Candidates, second)
 	f.addDispatch(first)
 	f.claims.claimErrors = map[int]error{1: claim.ErrKeyRateLimited}
-	f.openAI.results = []connectorcontract.AttemptResult{{Failure: connectorcontract.FailureUpstream, UpstreamStatus: 503}}
+	f.openAI.results = []connectorcontract.AttemptResult{{Failure: connectorcontract.FailureUpstream, UpstreamStatus: 503, ErrorDetail: reportedErrorForTest()}}
 	request := decodeChatForTest(t, `{"model":"provider/model","messages":[]}`)
 	recorder := httptest.NewRecorder()
 	f.service.Chat(context.Background(), recorder, 1, request, []byte(`{}`), "application/json", "en")
-	if recorder.Code != 502 || len(f.claims.claims) != 2 || len(f.claims.outcomes) != 1 || f.claims.requestResults[0].Disposition != claim.AccountingCommit {
+	if recorder.Code != 503 || len(f.claims.claims) != 2 || len(f.claims.outcomes) != 1 || f.claims.requestResults[0].Disposition != claim.AccountingCommit {
 		t.Fatalf("response=%d claims=%d terminal=%+v", recorder.Code, len(f.claims.claims), f.claims.requestResults)
+	}
+	if !strings.Contains(recorder.Body.String(), "Capacity exhausted; retry later.") || !strings.Contains(recorder.Body.String(), `"upstream_code":"overloaded"`) || f.claims.outcomes[0].UpstreamCode != "overloaded" {
+		t.Fatal("later unsent key limit replaced the reported error")
 	}
 }

@@ -13,6 +13,7 @@ import (
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/upstreamerror"
 )
 
 type streamEnvelope struct {
@@ -77,8 +78,7 @@ type callerStreamWriter struct {
 func (w *callerStreamWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 func newCallerStreamBudget() callerStreamBudget {
-	frame := httperr.SSEErrorFrame(httperr.New(httperr.CodeUpstream, "upstream stream failed"))
-	return callerStreamBudget{errorFrameSize: int64(len(frame))}
+	return callerStreamBudget{errorFrameSize: httperr.MaxSSEErrorFrameBytes}
 }
 
 func (b *callerStreamBudget) consume(size int, errorFrame bool) error {
@@ -101,7 +101,7 @@ func (b *callerStreamBudget) consume(size int, errorFrame bool) error {
 	return nil
 }
 
-func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, response *http.Response, publicModel string, started time.Time, wireGuard, semanticGuard *sensitiveGuard) connectorcontract.AttemptResult {
+func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, response *http.Response, publicModel string, started time.Time, wireGuard, semanticGuard *sensitiveGuard, errorContext upstreamerror.Context) connectorcontract.AttemptResult {
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	events, errs := egress.StreamSSE(streamCtx, response.Body, egress.SSEOptions{
@@ -169,7 +169,7 @@ func (a *Adapter) stream(ctx context.Context, writer http.ResponseWriter, respon
 			}
 			continue
 		case "error":
-			return a.streamProtocolFailure(writer, controller, committed, usageState.final(), "upstream stream reported an error")
+			return a.streamReportedFailure(writer, controller, committed, usageState.final(), wireGuard, semanticGuard, errorContext.Parse([]byte(event.Data)))
 		case "message_start":
 			if seenStart || !onlyKeys(root, "type", "message") {
 				return a.streamProtocolFailure(writer, controller, committed, usageState.final(), "upstream stream start was invalid")
@@ -541,6 +541,29 @@ func marshalStreamFrame(envelope streamEnvelope) ([]byte, error) {
 	frame = append(frame, '\n', '\n')
 	clear(data)
 	return frame, nil
+}
+
+func (a *Adapter) streamReportedFailure(writer http.ResponseWriter, controller *http.ResponseController, committed bool, usage connectorcontract.Usage, wireGuard, semanticGuard *sensitiveGuard, detail upstreamerror.Detail) connectorcontract.AttemptResult {
+	result := upstreamFailure("upstream stream reported an error", http.StatusOK)
+	result.Usage, result.ErrorDetail = usage, detail
+	if !committed {
+		return result
+	}
+	message := detail.Message()
+	if message == "" {
+		message = "upstream stream failed"
+	}
+	frame := httperr.SSEUpstreamErrorFrame(httperr.New(httperr.CodeUpstream, message).WithUpstreamCode(detail.Code()))
+	reflected, scanErr := semanticGuard.ContainsJSONStrings(frame[6 : len(frame)-2])
+	if wireGuard.Contains(frame) || reflected || scanErr != nil {
+		result.ErrorDetail = upstreamerror.Detail{}
+		frame = httperr.SSEErrorFrame(httperr.New(httperr.CodeUpstream, "upstream stream failed"))
+	}
+	if _, err := a.writeStreamErrorFrame(writer, controller, frame); err != nil {
+		return sinkFailure(true, usage)
+	}
+	result.Committed, result.ClientStatus = true, http.StatusOK
+	return result
 }
 
 func (a *Adapter) streamProtocolFailure(writer http.ResponseWriter, controller *http.ResponseController, committed bool, usage connectorcontract.Usage, diagnostic string) connectorcontract.AttemptResult {

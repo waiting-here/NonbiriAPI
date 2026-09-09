@@ -296,7 +296,7 @@ func TestSelfUpstream4xxPreservesStatusAndSafeDiagnostic(t *testing.T) {
 	}
 }
 
-func TestCharityUsesCharityPurposeAndSafe502AfterDispatch(t *testing.T) {
+func TestCharityUsesCharityPurposeAndPreservesUpstreamStatusAfterDispatch(t *testing.T) {
 	fixture := newServiceFixture(t, nil)
 	fixture.charges.charge = 7
 	fixture.addDispatch(fixture.charity.snapshot.Candidates[0])
@@ -309,7 +309,7 @@ func TestCharityUsesCharityPurposeAndSafe502AfterDispatch(t *testing.T) {
 
 	fixture.service.Chat(context.Background(), recorder, 1, request, []byte(`{}`), "application/json", "en")
 
-	if recorder.Code != http.StatusBadGateway {
+	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("status=%d body=%q", recorder.Code, recorder.Body.String())
 	}
 	if strings.Contains(recorder.Body.String(), "HTTP 404") || strings.Contains(recorder.Body.String(), "diag") {
@@ -320,7 +320,7 @@ func TestCharityUsesCharityPurposeAndSafe502AfterDispatch(t *testing.T) {
 		t.Fatalf("charity rail accept=%+v claim=%+v", fixture.claims.accepts[0], fixture.claims.claims[0])
 	}
 	terminal := fixture.claims.requestResults[0]
-	if terminal.Disposition != claim.AccountingCommit || terminal.ActualChargeMilli != 7 || terminal.Caller.Status != http.StatusBadGateway {
+	if terminal.Disposition != claim.AccountingCommit || terminal.ActualChargeMilli != 7 || terminal.Caller.Status != http.StatusNotFound {
 		t.Fatalf("terminal=%+v", terminal)
 	}
 }

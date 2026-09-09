@@ -116,12 +116,15 @@ func TestLaterRecurringRejectionPreservesEarlierUpstreamFailure(t *testing.T) {
 			} else {
 				f.claims.claimErrors = map[int]error{1: rejected}
 			}
-			f.openAI.results = []connectorcontract.AttemptResult{{Failure: connectorcontract.FailureUpstream, UpstreamStatus: 503}}
+			f.openAI.results = []connectorcontract.AttemptResult{{Failure: connectorcontract.FailureUpstream, UpstreamStatus: 503, ErrorDetail: reportedErrorForTest()}}
 			request := decodeChatForTest(t, `{"model":"[公益]care/model","messages":[]}`)
 			response := httptest.NewRecorder()
 			f.service.Chat(context.Background(), response, 1, request, []byte(`{}`), "application/json", "en")
-			if response.Code != 502 || len(f.claims.claims) != 2 || len(f.claims.outcomes) != 1 || len(f.claims.requestResults) != 1 || f.claims.requestResults[0].Disposition != claim.AccountingCommit {
+			if response.Code != 503 || len(f.claims.claims) != 2 || len(f.claims.outcomes) != 1 || len(f.claims.requestResults) != 1 || f.claims.requestResults[0].Disposition != claim.AccountingCommit {
 				t.Fatal(response.Code, response.Body.String(), f.claims.events)
+			}
+			if !strings.Contains(response.Body.String(), "Capacity exhausted; retry later.") || !strings.Contains(response.Body.String(), `"upstream_code":"overloaded"`) || f.claims.outcomes[0].UpstreamCode != "overloaded" {
+				t.Fatal("later unsent quota rejection replaced the reported error")
 			}
 		}
 	}

@@ -213,8 +213,8 @@ func WriteError(w http.ResponseWriter, e Error) {
 }
 
 // WriteUpstreamError writes a CodeUpstream envelope while allowing the
-// caller-facing status to preserve a self-route upstream 4xx or timeout. Only
-// statuses 400..499, 502, and 504 are valid overrides, and only an exact
+// caller-facing status to preserve an upstream 4xx or 5xx. Only
+// statuses 400..599 are valid overrides, and only an exact
 // CodeUpstream error may use them. Any other combination falls back to the
 // ordinary code-derived status, so an invalid caller-supplied status can never
 // reach the wire.
@@ -227,8 +227,7 @@ func WriteUpstreamError(w http.ResponseWriter, e Error, status int) {
 }
 
 func validUpstreamStatusOverride(status int) bool {
-	return status >= http.StatusBadRequest && status <= 499 ||
-		status == http.StatusBadGateway || status == http.StatusGatewayTimeout
+	return status >= http.StatusBadRequest && status <= 599
 }
 
 func writeError(w http.ResponseWriter, e Error, statusOverride *int, allowUpstreamContext bool) {
@@ -254,8 +253,8 @@ func sanitizeError(e Error, allowUpstreamContext bool) Error {
 	e.Diag = sanitizeDiag(e.Diag)
 	// Connector-owned context is opt-in at the sink. Ordinary WriteError and
 	// the default SSE path are fail-closed, even for CodeUpstream; only an
-	// explicit self/owner upstream API may opt in. Platform, public, and debug
-	// errors can never expose upstream_code/diag.
+	// explicit upstream sink may opt in after source and secret removal.
+	// Platform errors can never expose upstream_code/diag.
 	if !allowUpstreamContext || e.Code != CodeUpstream || e.Source != SourceUpstream {
 		e.UpstreamCode = ""
 		e.Diag = ""
@@ -282,6 +281,10 @@ type sseErrorPayload struct {
 	Error sseErrorBody `json:"error"`
 }
 
+// MaxSSEErrorFrameBytes is the reserve required for a terminal error after
+// successful caller frames have consumed most of a finite stream budget.
+const MaxSSEErrorFrameBytes = sseErrorFrameBound
+
 type sseErrorBody struct {
 	Code         string `json:"code"`
 	Source       string `json:"source"`
@@ -302,7 +305,7 @@ func SSEErrorFrame(e Error) []byte {
 }
 
 // SSEUpstreamErrorFrame returns an in-stream upstream error frame for an
-// explicitly self/owner-owned upstream route. The default SSEErrorFrame is
+// explicitly sanitized upstream response. The default SSEErrorFrame is
 // fail-closed and strips upstream_code even for CodeUpstream.
 func SSEUpstreamErrorFrame(e Error) []byte {
 	return sseErrorFrame(e, true)
