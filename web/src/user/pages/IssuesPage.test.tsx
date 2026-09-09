@@ -186,7 +186,7 @@ describe('user issues page', () => {
 
     expect(await screen.findByRole('heading', { name: 'No issues returned' })).toBeVisible();
     expect(screen.getByText('Updating the list…')).toBeVisible();
-    expect(screen.getByText('Page 1 of 1 · 0 items')).toBeVisible();
+    expect(screen.getByText('Page 1 of 1 · Total: 0')).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Items per page' })).toBeVisible();
   });
 

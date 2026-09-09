@@ -65,7 +65,7 @@ export function parseRPSStreamEvent(
 }
 
 export function connectRPSStream(options: {
-  readonly onReplace: (home: RPSHomeState) => void;
+  readonly onReplace: (home: RPSHomeState, isDelta: boolean) => void;
   readonly onResync: (reason: 'gap' | 'malformed' | 'disconnect') => void;
   readonly onConnection: (state: 'connecting' | 'connected' | 'disconnected') => void;
   readonly EventSourceImpl?: typeof EventSource;
@@ -82,7 +82,7 @@ export function connectRPSStream(options: {
     source.addEventListener(name, (raw) => {
       const event = raw as MessageEvent<string>;
       const result = parseRPSStreamEvent(name, event.data, event.lastEventId);
-      if (result.kind === 'replace') options.onReplace(result.home);
+      if (result.kind === 'replace') options.onReplace(result.home, name === 'delta');
       else if (result.kind === 'resync') options.onResync(result.reason);
     });
   listen('snapshot');

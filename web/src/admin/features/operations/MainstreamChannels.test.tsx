@@ -133,7 +133,7 @@ describe('administrator mainstream channels page', () => {
 
     expect(await screen.findByText('Active first')).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Items per page' })).toHaveValue('20');
-    expect(screen.getByText('Page 1 of 2 · 21 items')).toBeVisible();
+    expect(screen.getByText('Page 1 of 2 · Total: 21')).toBeVisible();
     await waitFor(() => {
       const params = new URLSearchParams(screen.getByTestId('location-search').textContent ?? '');
       expect(params.get('state')).toBe('active');

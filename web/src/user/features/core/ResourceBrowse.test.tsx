@@ -90,10 +90,10 @@ describe('resource connection browsing', () => {
     expect(screen.getAllByRole('link')).toHaveLength(3);
     expect(fetchMock).not.toHaveBeenCalled();
     await rendered.user.click(screen.getByRole('button', { name: 'Browse all 21 connections' }));
-    expect(await screen.findByText('Page 1 of 2 · 21 items')).toBeVisible();
+    expect(await screen.findByText('Page 1 of 2 · Total: 21')).toBeVisible();
     expect(screen.getAllByRole('link')).toHaveLength(20);
     await rendered.user.click(screen.getByRole('button', { name: 'Next' }));
-    expect(await screen.findByText('Page 2 of 2 · 21 items')).toBeVisible();
+    expect(await screen.findByText('Page 2 of 2 · Total: 21')).toBeVisible();
     expect(screen.getByRole('link', { name: 'owner/model-21' })).toHaveAttribute(
       'href',
       '/models?model_id=21',
@@ -103,7 +103,7 @@ describe('resource connection browsing', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('?keys_page=3&keys_page_size=50');
     expect(screen.getByTestId('location')).not.toHaveTextContent('routes_');
     await rendered.user.click(screen.getByRole('button', { name: 'Browser back' }));
-    expect(await screen.findByText('Page 2 of 2 · 21 items')).toBeVisible();
+    expect(await screen.findByText('Page 2 of 2 · Total: 21')).toBeVisible();
     await rendered.user.click(screen.getByRole('button', { name: 'Browser forward' }));
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Browse all 21 connections' })).toHaveAttribute(

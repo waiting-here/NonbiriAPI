@@ -1,7 +1,6 @@
 package rps
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -145,7 +144,7 @@ FROM game_rps_summary_seats WHERE session_id=?`, input.SessionID).Scan(&seats, &
 		if err != nil {
 			return ErrInvariant
 		}
-		if !bytes.Equal(canonical, body) {
+		if !matchesCanonicalHomeState(canonical, body, HomeState{Kind: "pending_result", Result: &pending}) {
 			return ErrConflict
 		}
 		return nil

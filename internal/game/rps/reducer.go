@@ -122,6 +122,7 @@ func (value *reducer) nextBase() error {
 	if value.record.DealerSeat == nil {
 		return ErrInvariant
 	}
+	value.record.Presentation.PoolTieCount = new(db.U128)
 	dealer := (*value.record.DealerSeat + 1) % 3
 	value.record.DealerSeat = &dealer
 	value.record.PoolBaseMultiplier = nil
@@ -249,6 +250,7 @@ func (value *reducer) applyPayout(weights [3]int) ([3]*big.Int, error) {
 		return [3]*big.Int{}, err
 	}
 	value.record.PlayerPool = pool
+	value.record.Presentation.PoolTieCount = new(db.U128)
 	return payout, nil
 }
 
@@ -334,9 +336,19 @@ func (value *reducer) revealAndReduce() error {
 	}
 	clearCurrentActions(value.record)
 	if value.record.Mode == game.RPSModeQuick {
+		for index, gesture := range gestures {
+			value.record.Presentation.QuickGestures[index] = &gesture
+		}
 		return value.finish(TerminalQuickResolved)
 	}
 	if evaluation.Tie {
+		if count := value.record.Presentation.PoolTieCount; count != nil {
+			next, err := addCounter(*count, 1)
+			if err != nil {
+				return err
+			}
+			value.record.Presentation.PoolTieCount = &next
+		}
 		switch revealedPhase {
 		case PhaseGesture, PhaseDealerRaise, PhaseFollowers:
 			value.record.PaidPoolStreak, value.record.FreePoolStreak = db.U128{}, db.U128{}

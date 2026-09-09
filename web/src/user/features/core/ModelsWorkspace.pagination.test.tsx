@@ -225,7 +225,7 @@ describe('ModelsWorkspace numbered pagination', () => {
 
     const rendered = await renderWorkspace('/models?page=9&page_size=10');
     expect(await screen.findByText('provider-21/model-21')).toBeInTheDocument();
-    expect(screen.getByText('Page 3 of 3 · 25 items')).toBeInTheDocument();
+    expect(screen.getByText('Page 3 of 3 · Total: 25')).toBeInTheDocument();
     expect(
       screen.getByText('That page is no longer available. Showing page 3.'),
     ).toBeInTheDocument();
@@ -251,7 +251,7 @@ describe('ModelsWorkspace numbered pagination', () => {
       expect(screen.getByTestId('location-search')).not.toHaveTextContent('model_id'),
     );
     expect(calls).toContain('DELETE /api/models/21');
-    await screen.findByText('Page 3 of 3 · 24 items');
+    await screen.findByText('Page 3 of 3 · Total: 24');
     expect(screen.queryByText('provider-21/model-21')).not.toBeInTheDocument();
     expect(calls.filter((path) => path === 'GET /api/models/21')).toHaveLength(1);
     expect(rendered.queryClient.getQueryData(coreKeys.model(account.id, '21'))).toBeUndefined();
@@ -675,6 +675,6 @@ describe('ModelsWorkspace numbered pagination', () => {
 
     resolveSearch!(jsonResponse(numbered([searchedCandidate], '1', 10, 1)));
     await within(automaticSection!).findByText('needle-result');
-    expect(within(automaticSection!).getByText('Page 1 of 1 · 1 items')).toBeInTheDocument();
+    expect(within(automaticSection!).getByText('Page 1 of 1 · Total: 1')).toBeInTheDocument();
   });
 });

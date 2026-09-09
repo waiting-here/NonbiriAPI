@@ -17,6 +17,6 @@ export function fishingPresentationPhase(options: {
   return 'idle';
 }
 
-export function nextRevealCount(current: number, result: FishingBatchResult): number {
-  return Math.min(result.outcomes.length, current + 1);
+export function nextRevealCount(current: number, outcomeCount: number): number {
+  return Math.min(outcomeCount, current + 1);
 }

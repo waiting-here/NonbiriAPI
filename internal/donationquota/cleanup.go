@@ -7,6 +7,53 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/calendar"
 )
 
+const cleanupReceiptsQuery = `DELETE FROM donation_quota_receipts WHERE (claim_id,rule_id,epoch) IN (
+SELECT r.claim_id,r.rule_id,r.epoch FROM donation_quota_receipts r INDEXED BY idx_donation_quota_receipts_settled JOIN dispatch_claims c ON c.id=r.claim_id
+WHERE r.state='settled' AND c.state IN ('committed','released') ORDER BY r.claim_id,r.rule_id,r.epoch LIMIT ?)`
+
+type cleanupSelection struct {
+	sql  string
+	args []any
+}
+
+func cleanupAggregateQueries(kind string, now int64) []cleanupSelection {
+	table, column := "donation_quota_periods", "start_at"
+	if kind == "bucket" {
+		table, column = "donation_quota_buckets", "success_at"
+	}
+	projection := `SELECT a.rule_id,a.epoch,a.` + column
+	unreferenced := ` AND NOT EXISTS(SELECT 1 FROM donation_quota_receipts r WHERE r.rule_id=a.rule_id AND r.epoch=a.epoch AND r.`
+	var selections []cleanupSelection
+	if kind == "bucket" {
+		unreferenced += `success_at=a.success_at)`
+		selections = append(selections, cleanupSelection{
+			sql:  projection + ` FROM donation_quota_buckets a INDEXED BY idx_donation_quota_buckets_cleanup WHERE a.success_at<=?` + unreferenced + ` LIMIT ?`,
+			args: []any{now - calendar.MaxLookbackSeconds},
+		})
+	} else {
+		unreferenced += `period_start=a.start_at)`
+		selections = append(selections, cleanupSelection{
+			sql:  projection + ` FROM donation_quota_periods a INDEXED BY idx_donation_quota_periods_cleanup WHERE a.end_at<=?` + unreferenced + ` LIMIT ?`,
+			args: []any{now},
+		}, cleanupSelection{
+			// A clock rollback must not revive periods already expired at a
+			// persisted observation. Visit only reset epochs ahead of now,
+			// then their expired period range; never scan current aggregates.
+			sql: projection + ` FROM donation_quota_epochs e INDEXED BY idx_donation_quota_epochs_clock
+CROSS JOIN donation_quota_periods a INDEXED BY idx_donation_quota_periods_end
+WHERE e.mode='reset' AND COALESCE(e.last_observed_at,e.effective_at)>?
+AND a.rule_id=e.rule_id AND a.epoch=e.epoch AND a.end_at>? AND a.end_at<=COALESCE(e.last_observed_at,e.effective_at)` + unreferenced + ` LIMIT ?`,
+			args: []any{now, now},
+		})
+	}
+	// Retired epochs are a separate, small indexed set. Combining this branch
+	// with expiration using OR would make SQLite scan all live aggregates.
+	return append(selections, cleanupSelection{sql: projection + ` FROM donation_quota_epochs e INDEXED BY idx_donation_quota_epochs_retired
+CROSS JOIN ` + table + ` a WHERE e.retired_at IS NOT NULL
+AND NOT EXISTS(SELECT 1 FROM donation_quota_receipts r WHERE r.rule_id=e.rule_id AND r.epoch=e.epoch)
+AND a.rule_id=e.rule_id AND a.epoch=e.epoch LIMIT ?`})
+}
+
 // Cleanup removes at most budget quota rows. Unfinished receipts and their
 // aggregate rows remain until normal recovery completes their accounting.
 func Cleanup(ctx context.Context, tx *sql.Tx, now int64, budget int) (int, error) {
@@ -14,9 +61,7 @@ func Cleanup(ctx context.Context, tx *sql.Tx, now int64, budget int) (int, error
 		return 0, ErrInvalid
 	}
 	deleted := 0
-	result, err := tx.ExecContext(ctx, `DELETE FROM donation_quota_receipts WHERE (claim_id,rule_id,epoch) IN (
-SELECT r.claim_id,r.rule_id,r.epoch FROM donation_quota_receipts r JOIN dispatch_claims c ON c.id=r.claim_id
-WHERE r.state='settled' AND c.state IN ('committed','released') ORDER BY r.claim_id,r.rule_id,r.epoch LIMIT ?)`, budget)
+	result, err := tx.ExecContext(ctx, cleanupReceiptsQuery, budget)
 	if err != nil {
 		return deleted, err
 	}
@@ -33,38 +78,38 @@ WHERE r.state='settled' AND c.state IN ('committed','released') ORDER BY r.claim
 		if deleted == budget {
 			return deleted, nil
 		}
-		table, column, age := "donation_quota_periods", "start_at", `a.end_at<=max(?,COALESCE(e.last_observed_at,e.effective_at))`
-		cutoff := now
+		table, column := "donation_quota_periods", "start_at"
 		if kind == "bucket" {
-			table, column, age = "donation_quota_buckets", "success_at", `a.success_at<=?`
-			cutoff = now - calendar.MaxLookbackSeconds
-		}
-		query := `SELECT a.rule_id,a.epoch,a.` + column + ` FROM ` + table + ` a JOIN donation_quota_epochs e ON e.rule_id=a.rule_id AND e.epoch=a.epoch
-WHERE (` + age + ` OR (e.retired_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM donation_quota_receipts r WHERE r.rule_id=e.rule_id AND r.epoch=e.epoch)))
-AND NOT EXISTS(SELECT 1 FROM donation_quota_receipts r WHERE r.rule_id=a.rule_id AND r.epoch=a.epoch AND `
-		if kind == "period" {
-			query += `r.period_start=a.start_at)`
-		} else {
-			query += `r.success_at=a.success_at)`
-		}
-		query += ` ORDER BY a.rule_id,a.epoch,a.` + column + ` LIMIT ?`
-		rows, err := tx.QueryContext(ctx, query, cutoff, budget-deleted)
-		if err != nil {
-			return deleted, err
+			table, column = "donation_quota_buckets", "success_at"
 		}
 		var candidates []candidate
-		for rows.Next() {
-			var c candidate
-			if err := rows.Scan(&c.id, &c.number, &c.at); err != nil {
-				rows.Close()
+		seen := make(map[candidate]bool)
+		for _, selection := range cleanupAggregateQueries(kind, now) {
+			remaining := budget - deleted - len(candidates)
+			if remaining == 0 {
+				break
+			}
+			args := append(selection.args, remaining)
+			rows, err := tx.QueryContext(ctx, selection.sql, args...)
+			if err != nil {
 				return deleted, err
 			}
-			candidates = append(candidates, c)
-		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return deleted, err
+			for rows.Next() {
+				var c candidate
+				if err := rows.Scan(&c.id, &c.number, &c.at); err != nil {
+					rows.Close()
+					return deleted, err
+				}
+				if !seen[c] {
+					seen[c] = true
+					candidates = append(candidates, c)
+				}
+			}
+			err = rows.Err()
+			rows.Close()
+			if err != nil {
+				return deleted, err
+			}
 		}
 		for _, c := range candidates {
 			e, err := readEpoch(ctx, tx, c.id, c.number)
@@ -111,12 +156,12 @@ AND NOT EXISTS(SELECT 1 FROM donation_quota_receipts r WHERE r.rule_id=a.rule_id
 	}
 	if deleted < budget {
 		result, err := tx.ExecContext(ctx, `DELETE FROM donation_quota_epochs WHERE (rule_id,epoch) IN (
-SELECT e.rule_id,e.epoch FROM donation_quota_epochs e JOIN donation_quota_rules q ON q.id=e.rule_id
+SELECT e.rule_id,e.epoch FROM donation_quota_epochs e INDEXED BY idx_donation_quota_epochs_retired JOIN donation_quota_rules q ON q.id=e.rule_id
 WHERE e.retired_at IS NOT NULL AND (q.current_epoch IS NULL OR q.current_epoch<>e.epoch)
 AND NOT EXISTS(SELECT 1 FROM donation_quota_receipts r WHERE r.rule_id=e.rule_id AND r.epoch=e.epoch)
 AND NOT EXISTS(SELECT 1 FROM donation_quota_periods p WHERE p.rule_id=e.rule_id AND p.epoch=e.epoch)
 AND NOT EXISTS(SELECT 1 FROM donation_quota_buckets b WHERE b.rule_id=e.rule_id AND b.epoch=e.epoch)
-ORDER BY e.rule_id,e.epoch LIMIT ?)`, budget-deleted)
+LIMIT ?)`, budget-deleted)
 		if err != nil {
 			return deleted, err
 		}

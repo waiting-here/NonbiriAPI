@@ -164,6 +164,7 @@ type sessionRecord struct {
 	StartedAt                 int64
 	TerminalReason            *string
 	Seats                     [3]seatRecord
+	Presentation              sessionPresentation
 }
 
 const sessionColumns = `id,account_id,mode,rules_version,state,phase,revision,phase_seq,identity_epoch,cut_seq,
@@ -515,6 +516,9 @@ func loadSessionByID(ctx context.Context, tx *sql.Tx, sessionID string) (session
 	if count != 3 {
 		return sessionRecord{}, false, ErrInvariant
 	}
+	if err := loadSessionPresentation(ctx, tx, &record); err != nil {
+		return sessionRecord{}, false, err
+	}
 	if err := validateSession(ctx, tx, &record); err != nil {
 		return sessionRecord{}, false, err
 	}
@@ -548,6 +552,14 @@ func loadSessionByUser(ctx context.Context, tx *sql.Tx, userID int64) (sessionRe
 func validateSessionShape(record *sessionRecord) error {
 	if record == nil {
 		return fmt.Errorf("nil session: %w", ErrInvariant)
+	}
+	reason := ""
+	if record.TerminalReason != nil {
+		reason = *record.TerminalReason
+	}
+	if !validPresentationGestures(record.Presentation.QuickGestures, record.Mode, reason) ||
+		record.Presentation.QuickGestures[0] != nil && record.State != StateTerminalProcessing {
+		return fmt.Errorf("presentation gestures: %w", ErrInvariant)
 	}
 	if record.DealerSeat != nil && (*record.DealerSeat < 0 || *record.DealerSeat > 2) {
 		return fmt.Errorf("dealer seat: %w", ErrInvariant)
@@ -745,7 +757,7 @@ snapshot_scissors_count=?,snapshot_paper_count=?,stats_applied=? WHERE session_i
 			return ErrInvariant
 		}
 	}
-	return nil
+	return persistSessionPresentation(ctx, tx, record)
 }
 
 func persistSessionTx(ctx context.Context, tx *sql.Tx, record *sessionRecord, expectedRevision db.U128) error {

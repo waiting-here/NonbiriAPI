@@ -30,7 +30,7 @@ The database directory and file hold encrypted upstream credentials and private 
 
 ## Runtime administrator settings
 
-The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values below describe `v1.0.0-beta.1`. A fresh Generation 2 database explicitly seeds maintenance on and registration, activities, charity, donation intake, and all games off; these safety seeds take precedence over generic code fallbacks.
+The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values below describe the unreleased `1.0.0-beta.2` candidate. A fresh Generation 2 database explicitly seeds maintenance on and registration, activities, charity, donation intake, and all games off; these safety seeds take precedence over generic code fallbacks.
 
 | Key | Type / range | Default and effect |
 | --- | --- | --- |

@@ -232,6 +232,7 @@ func (adapter *RPSAdapter) ExportRPS(
 				Returned: summary.OwnSeat.Returned, WalletNet: summary.OwnSeat.WalletNet,
 				TimeoutCount: summary.OwnSeat.TimeoutCount, RockCount: summary.OwnSeat.RockCount,
 				ScissorsCount: summary.OwnSeat.ScissorsCount, PaperCount: summary.OwnSeat.PaperCount,
+				OwnBuyIn: cloneString(summary.OwnSeat.OwnBuyIn), OwnCashOut: cloneString(summary.OwnSeat.OwnCashOut),
 			},
 		}
 	}
@@ -278,6 +279,7 @@ func mapRPSPending(value *rps.PendingResult) *lifecycle.RPSPendingExport {
 		SessionID: value.SessionID, Mode: value.Mode, TerminalReason: value.TerminalReason,
 		OwnSeatNo: value.OwnSeatNo, OwnInput: value.OwnInput, OwnReturned: value.OwnReturned,
 		OwnWalletNet: value.OwnWalletNet, Seats: seats, CreatedAt: value.CreatedAt,
+		OwnBuyIn: cloneString(value.OwnBuyIn), OwnCashOut: cloneString(value.OwnCashOut),
 	}
 }
 

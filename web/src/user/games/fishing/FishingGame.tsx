@@ -4,6 +4,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Card, ErrorState, LoadingState, PageHeader } from '@shared/components/States';
 import { useUserSession } from '../../data';
 import { useGameCopy } from '../copy';
+import { useGameSound } from '../common/useGameSound';
+import { GameSoundButton } from '../common/GameSoundButton';
 import { GameRulesButton, GameRulesDialog, type GameRulesSection } from '../common/GameRulesDialog';
 import {
   createIdempotencyKey,
@@ -34,6 +36,8 @@ import type {
   FishingLeaderboard as Leaderboard,
   FishingSingleRow,
   FishingStartIntent,
+  FishingStartResult,
+  FishingState,
   FishingTotalRow,
 } from './types';
 import { fishingItemName } from './text';
@@ -346,6 +350,8 @@ function LeaderboardCard({
 
 export function FishingGame() {
   const { text } = useGameCopy();
+  const sound = useGameSound('fishing');
+  const playSound = sound.play;
   const queryClient = useQueryClient();
   const snapshot = useGamesSnapshot();
   const maintenance = isMaintenance(snapshot.error);
@@ -369,19 +375,22 @@ export function FishingGame() {
     readonly batchID: string;
     readonly state: 'sending' | 'failed';
   } | null>(null);
-  const [sound, setSound] = useState(false);
   const [viewedResult, setViewedResult] = useState<FishingBatchResult | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
-  const audioRef = useRef<AudioContext | null>(null);
+  const soundBatch = useRef<{ readonly id: string; through: number } | null>(null);
+  const audibleBatch = useRef<string | null>(null);
   const resultRef = useRef<HTMLElement | null>(null);
   const ackAttempted = useRef<string | null>(null);
+  const ackInFlight = useRef<string | null>(null);
+  const requestInFlight = useRef(false);
   const authoritative = state.data;
   const refetchState = state.refetch;
   const result = authoritative?.unrevealed ?? null;
   const pending = authoritative?.settlementPending ?? null;
-  const authorityResolvedStart = Boolean(operation && (pending || result));
-  const effectiveActionState = authorityResolvedStart ? 'idle' : actionState;
-  const replayOperation = authorityResolvedStart ? null : operation;
+  const effectiveActionState = actionState;
+  const replayOperation = operation;
+  const resultID = result?.batchID ?? null;
+  const outcomeCount = result?.outcomes.length ?? 0;
   const revealed = result
     ? reducedMotion
       ? result.outcomes.length
@@ -394,38 +403,45 @@ export function FishingGame() {
   const shownResult = result ?? (!pending && effectiveActionState === 'idle' ? viewedResult : null);
   const shownRevealed = result ? revealed : (shownResult?.outcomes.length ?? 0);
 
-  useEffect(
-    () => () => {
-      void audioRef.current?.close();
-    },
-    [],
-  );
   useEffect(() => {
-    if (!result || reducedMotion) return undefined;
+    if (pending && soundBatch.current?.id !== pending.batchID)
+      audibleBatch.current = pending.batchID;
+  }, [pending]);
+  useEffect(() => {
+    if (!resultID || reducedMotion) return undefined;
     const timer = window.setInterval(() => {
       setRevealClock((current) => {
-        const count = current?.batchID === result.batchID ? current.count : 0;
-        const next = nextRevealCount(count, result);
-        return next === count && current?.batchID === result.batchID
+        const count = current?.batchID === resultID ? current.count : 0;
+        const next = nextRevealCount(count, outcomeCount);
+        return next === count && current?.batchID === resultID
           ? current
-          : { batchID: result.batchID, count: next };
+          : { batchID: resultID, count: next };
       });
     }, FISHING_REVEAL_MS);
     return () => window.clearInterval(timer);
-  }, [reducedMotion, result]);
+  }, [reducedMotion, resultID, outcomeCount]);
 
   useEffect(() => {
-    if (!sound || revealed === 0 || !audioRef.current) return;
-    const context = audioRef.current;
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    oscillator.frequency.value = 420 + revealed * 24;
-    gain.gain.setValueAtTime(0.035, context.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.09);
-    oscillator.connect(gain).connect(context.destination);
-    oscillator.start();
-    oscillator.stop(context.currentTime + 0.1);
-  }, [revealed, sound]);
+    if (!result) return;
+    if (soundBatch.current?.id !== result.batchID) {
+      soundBatch.current = {
+        id: result.batchID,
+        through: audibleBatch.current === result.batchID ? 0 : result.outcomes.length,
+      };
+    }
+    if (audibleBatch.current === result.batchID) audibleBatch.current = null;
+    const previous = soundBatch.current.through;
+    if (revealed <= previous) return;
+    soundBatch.current.through = revealed;
+    const tiers = result.outcomes.slice(previous, revealed).map((outcome) => outcome.tier);
+    playSound(
+      tiers.some((tier) => tier === 'legend' || tier === 'treasure')
+        ? 'fishing_epic'
+        : tiers.some((tier) => tier === 'big' || tier === 'giant')
+          ? 'fishing_rare'
+          : 'fishing_common',
+    );
+  }, [playSound, result, revealed]);
 
   const refreshAfterMutation = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: fishingKeys.state });
@@ -434,10 +450,19 @@ export function FishingGame() {
 
   const sendACK = useCallback(
     async (batchID: string) => {
+      if (ackInFlight.current) return;
+      const displayed = queryClient.getQueryData<FishingState>(fishingKeys.state)?.unrevealed;
+      if (displayed?.batchID !== batchID) return;
+      ackInFlight.current = batchID;
       setAckStatus({ batchID, state: 'sending' });
       try {
         await acknowledgeFishing(batchID);
-        if (result?.batchID === batchID) setViewedResult(result);
+        setViewedResult(displayed);
+        await queryClient.cancelQueries({ queryKey: fishingKeys.state });
+        queryClient.setQueryData<FishingState>(fishingKeys.state, (current) =>
+          current?.unrevealed?.batchID === batchID ? { ...current, unrevealed: null } : current,
+        );
+        ackInFlight.current = null;
         setAckStatus(null);
         await refreshAfterMutation();
         await queryClient.invalidateQueries({
@@ -446,40 +471,52 @@ export function FishingGame() {
       } catch {
         setAckStatus({ batchID, state: 'failed' });
         await refetchState();
+      } finally {
+        if (ackInFlight.current === batchID) ackInFlight.current = null;
       }
     },
-    [queryClient, refetchState, refreshAfterMutation, result],
+    [queryClient, refetchState, refreshAfterMutation],
   );
 
   useEffect(() => {
-    if (!result || revealed !== result.outcomes.length || ackAttempted.current === result.batchID)
-      return;
-    if (resultRef.current?.querySelectorAll('[data-ordinal]').length !== result.outcomes.length)
-      return;
+    if (!resultID || revealed !== outcomeCount || ackAttempted.current === resultID) return;
+    if (resultRef.current?.querySelectorAll('[data-ordinal]').length !== outcomeCount) return;
     const timer = window.setTimeout(() => {
-      ackAttempted.current = result.batchID;
-      void sendACK(result.batchID);
+      ackAttempted.current = resultID;
+      void sendACK(resultID);
     }, 650);
     return () => {
       window.clearTimeout(timer);
     };
-  }, [result, revealed, sendACK]);
+  }, [resultID, outcomeCount, revealed, sendACK]);
+
+  const adoptResponse = useCallback(
+    async (response: FishingStartResult) => {
+      await queryClient.cancelQueries({ queryKey: fishingKeys.state });
+      queryClient.setQueryData<FishingState>(fishingKeys.state, (current) => {
+        // Finish presenting the oldest unacknowledged batch before a newer response.
+        if (current?.unrevealed && current.unrevealed.batchID !== response.batchID) return current;
+        return isFishingResult(response)
+          ? { settlementPending: null, unrevealed: response, hasMoreUnrevealed: false }
+          : { settlementPending: response, unrevealed: null, hasMoreUnrevealed: false };
+      });
+    },
+    [queryClient],
+  );
 
   const adoptStart = useCallback(
     async (intent: FishingStartIntent) => {
+      if (requestInFlight.current) return;
+      requestInFlight.current = true;
       setActionState('sending');
       setActionError(null);
       try {
         const response = await startFishing(intent);
+        audibleBatch.current = response.batchID;
+        await adoptResponse(response);
+        await refreshAfterMutation();
         setOperation(null);
         setActionState('idle');
-        queryClient.setQueryData(
-          fishingKeys.state,
-          isFishingResult(response)
-            ? { settlementPending: null, unrevealed: response, hasMoreUnrevealed: false }
-            : { settlementPending: response, unrevealed: null, hasMoreUnrevealed: false },
-        );
-        await refreshAfterMutation();
       } catch (error) {
         setActionError(error);
         if (isResponseUnknown(error)) setActionState('unknown');
@@ -488,23 +525,28 @@ export function FishingGame() {
           setActionState('idle');
           if (isConflict(error)) await refetchState();
         }
+      } finally {
+        requestInFlight.current = false;
       }
     },
-    [queryClient, refetchState, refreshAfterMutation],
+    [adoptResponse, refetchState, refreshAfterMutation],
   );
 
   const start = () => {
+    if (requestInFlight.current || locked || !startsOpen || !affordable) return;
     const intent = operation ?? {
       bait: selectedBait,
       count,
       idempotencyKey: createIdempotencyKey(),
     };
+    playSound('select');
     setOperation(intent);
     void adoptStart(intent);
   };
 
   const recover = async () => {
-    if (!pending || pending.state !== 'recovery_required') return;
+    if (requestInFlight.current || !pending || pending.state !== 'recovery_required') return;
+    requestInFlight.current = true;
     setOperation(null);
     const key = recoverKeys[pending.batchID] ?? createIdempotencyKey();
     if (!recoverKeys[pending.batchID])
@@ -513,12 +555,8 @@ export function FishingGame() {
     setActionError(null);
     try {
       const response = await recoverFishing(pending.batchID, key);
-      queryClient.setQueryData(
-        fishingKeys.state,
-        isFishingResult(response)
-          ? { settlementPending: null, unrevealed: response, hasMoreUnrevealed: false }
-          : { settlementPending: response, unrevealed: null, hasMoreUnrevealed: false },
-      );
+      audibleBatch.current = response.batchID;
+      await adoptResponse(response);
       setRecoverKeys((value) => {
         const next = { ...value };
         delete next[pending.batchID];
@@ -538,15 +576,9 @@ export function FishingGame() {
           return next;
         });
       if (isConflict(error)) await refetchState();
+    } finally {
+      requestInFlight.current = false;
     }
-  };
-
-  const toggleSound = () => {
-    if (!sound) {
-      audioRef.current ??= new AudioContext();
-      void audioRef.current.resume();
-    }
-    setSound((value) => !value);
   };
 
   const prices = snapshot.data?.fishing.baitPrices;
@@ -559,7 +591,12 @@ export function FishingGame() {
     snapshot.data?.gamesEnabled && snapshot.data.fishing.enabled && snapshot.data.fishing.available,
   );
   const locked = Boolean(
-    state.isPending || state.error || pending || replayOperation || effectiveActionState !== 'idle',
+    state.isPending ||
+    state.error ||
+    pending ||
+    replayOperation ||
+    effectiveActionState !== 'idle' ||
+    (result && (revealed < outcomeCount || ackState === 'sending')),
   );
   const phase = fishingPresentationPhase({
     submitting: effectiveActionState === 'sending' && !pending,
@@ -569,7 +606,10 @@ export function FishingGame() {
   });
   const closeRules = useCallback(() => setRulesOpen(false), []);
   const rulesButton = (
-    <GameRulesButton label={text('common.rulesButton')} onClick={() => setRulesOpen(true)} />
+    <>
+      <GameRulesButton label={text('common.rulesButton')} onClick={() => setRulesOpen(true)} />
+      <GameSoundButton sound={sound} />
+    </>
   );
   const rulesDialog = <FishingRules open={rulesOpen} onClose={closeRules} />;
 
@@ -641,19 +681,7 @@ export function FishingGame() {
         eyebrow={text('fishing.eyebrow')}
         title={text('fishing.title')}
         description={text('fishing.description')}
-        actions={
-          <>
-            {rulesButton}
-            <button
-              type="button"
-              className="btn btn-secondary"
-              aria-pressed={sound}
-              onClick={toggleSound}
-            >
-              {text(sound ? 'fishing.sound.on' : 'fishing.sound.off')}
-            </button>
-          </>
-        }
+        actions={rulesButton}
       />
       <div className="fishing-layout">
         <div className="fishing-main">

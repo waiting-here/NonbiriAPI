@@ -83,6 +83,8 @@ export function rpsStateWire(phase: RPSPhase = 'gesture', revision = '1', epoch 
       free_pool_streak: '0',
       reminder_active: false,
       last_reveal_result: null,
+      // This legacy session fixture predates the pool counter and has no historical value.
+      pool_tie_count: null,
     },
     recent_events: [],
     events_truncated: false,

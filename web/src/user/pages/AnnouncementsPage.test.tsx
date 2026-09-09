@@ -178,7 +178,7 @@ describe('user announcements page', () => {
     await renderWithProviders(<AnnouncementsPage />, { station: 'user', role: 'user' });
 
     expect(await screen.findByRole('heading', { name: 'No announcements' })).toBeVisible();
-    expect(screen.getByText('Page 1 of 1 · 0 items')).toBeVisible();
+    expect(screen.getByText('Page 1 of 1 · Total: 0')).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Items per page' })).toBeVisible();
   });
 

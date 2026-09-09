@@ -382,6 +382,11 @@ const copy = {
   'rps.gesture.locked': ['Gesture locked', '手势已锁定'],
   'rps.dealer.noRaise': ['Do not raise', '不加注'],
   'rps.dealer.raise': ['Raise', '加注'],
+  'rps.dealer.adjust': ['Adjust the raise', '快捷调整加注'],
+  'rps.dealer.subtract': ['−{{amount}} credits', '−{{amount}} 积分'],
+  'rps.dealer.add': ['+{{amount}} credits', '+{{amount}} 积分'],
+  'rps.dealer.maximum': ['Max {{amount}} credits', '最大 {{amount}} 积分'],
+  'rps.dealer.allIn': ['All in {{amount}} credits', '全押 {{amount}} 积分'],
   'rps.dealer.integerOnly': [
     'Positive whole credits only. Maximum: {{max}}.',
     '只支持正整数积分；上限 {{max}}。',
@@ -391,6 +396,25 @@ const copy = {
     '上限不足 1 个完整积分，本手只能不加注。',
   ],
   'rps.follower.call': ['Call', '跟注'],
+  'rps.follower.required': ['Required to call: {{amount}} credits', '需跟注 {{amount}} 积分'],
+  'rps.waitingSync': ['Waiting for the current decision to sync…', '正在等待当前决策同步…'],
+  'rps.instruction.gesture': [
+    'Choose your gesture before the deadline.',
+    '请在倒计时结束前选择手势。',
+  ],
+  'rps.instruction.dealer': [
+    'You are the dealer: raise or keep the current stake.',
+    '你是庄家：可以加注，也可以保持当前下注。',
+  ],
+  'rps.instruction.follow': [
+    'Choose whether to call the dealer’s raise or surrender.',
+    '请选择跟注庄家的加注，或认输。',
+  ],
+  'rps.poolTies': ['Ties in this pool: {{count}}', '同一奖池连续平局：{{count}}'],
+  'rps.poolTiesUnknown': [
+    'This ongoing pool has no recorded tie count.',
+    '这份进行中的奖池未记录完整平局数。',
+  ],
   'rps.follower.surrender': ['Surrender', '认输'],
   'rps.actionSending': ['Submitting this decision…', '正在提交本次决定…'],
   'rps.seat.deleted': ['Deleted participant', '已删除参与者'],
@@ -491,6 +515,9 @@ const copy = {
   'rps.result.input': ['Your total input', '本人总投入'],
   'rps.result.returned': ['Your total returned', '本人总返还'],
   'rps.result.net': ['Your wallet net', '本人的钱包净变化'],
+  'rps.result.buyIn': ['Starting buy-in (actual input)', '开局带入（实际投入）'],
+  'rps.result.cashOut': ['Ending cash-out (actual return)', '结束带出（实际返还）'],
+  'rps.result.unrecorded': ['Not recorded for this historical result', '该历史结果未记录'],
   'rps.result.ackWaiting': [
     'The complete private result is shown. Marking it viewed…',
     '正在保存查看状态…',

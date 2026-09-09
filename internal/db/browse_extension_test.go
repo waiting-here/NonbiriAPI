@@ -6,6 +6,13 @@ import (
 )
 
 func TestBrowseExtensionPreservesPopulatedRecurringAndPresentationState(t *testing.T) {
+	for _, hash := range []string{preBrowseManifestHash, preQuotaCleanupManifestHash} {
+		t.Run(hash, func(t *testing.T) { testIndexExtensionPreservesPopulatedState(t, hash) })
+	}
+}
+
+func testIndexExtensionPreservesPopulatedState(t *testing.T, hash string) {
+	t.Helper()
 	path, vault := bootstrapTestPath(t, "browse-retained.sqlite"), bootstrapTestVault(t)
 	store, err := Open(path, vault)
 	if err != nil {
@@ -13,7 +20,7 @@ func TestBrowseExtensionPreservesPopulatedRecurringAndPresentationState(t *testi
 	}
 	defer store.Close()
 	seedRetainedBusinessData(t, store, vault)
-	makeRetainedSource(t, store.DB(), preBrowseManifestHash)
+	makeRetainedSource(t, store.DB(), hash)
 	database := store.DB()
 	hostileMustExec(t, database, `UPDATE donation_handling SET state='processed',revision=7,processed_at=205,processed_by_role='admin',processed_by_user_id=(SELECT id FROM users WHERE is_admin=1),updated_at=205`)
 	hostileMustExec(t, database, `UPDATE charity_model_access SET allowed_level_mask=21,public_description='Retained plain text <b>model</b>'`)

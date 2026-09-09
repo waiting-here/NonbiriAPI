@@ -289,7 +289,7 @@ describe('DonationResourcePicker', () => {
 
     expect(await screen.findByText('No matching endpoints')).toBeVisible();
     const navigation = screen.getByRole('navigation', { name: 'Pagination' });
-    expect(navigation).toHaveTextContent('Page 1 of 1 · 0 items');
+    expect(navigation).toHaveTextContent('Page 1 of 1 · Total: 0');
     expect(within(navigation).getByRole('combobox')).toHaveValue('20');
     expect(within(navigation).getByRole('button', { name: 'Previous' })).toBeDisabled();
     expect(within(navigation).getByRole('button', { name: 'Next' })).toBeDisabled();
@@ -321,7 +321,7 @@ describe('DonationResourcePicker', () => {
     const navigations = screen.getAllByRole('navigation', { name: 'Pagination' });
     expect(navigations).toHaveLength(2);
     const navigation = navigations[1]!;
-    expect(navigation).toHaveTextContent('Page 1 of 1 · 0 items');
+    expect(navigation).toHaveTextContent('Page 1 of 1 · Total: 0');
     expect(within(navigation).getByRole('combobox')).toHaveValue('20');
     expect(within(navigation).getByRole('button', { name: 'Previous' })).toBeDisabled();
     expect(within(navigation).getByRole('button', { name: 'Next' })).toBeDisabled();

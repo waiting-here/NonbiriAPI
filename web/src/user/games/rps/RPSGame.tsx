@@ -17,6 +17,9 @@ import { creditsToMilli, formatCredits, multiplyCredits } from '../common/strict
 import { RPS_MODES, type RPSMode } from '../common/types';
 import { gameKeys, useGamesSnapshot } from '../common/snapshot';
 import { useAuthoritativeCountdown } from '../common/countdown';
+import { useGameVisibility } from '../common/visibility';
+import { useGameSound } from '../common/useGameSound';
+import { GameSoundButton } from '../common/GameSoundButton';
 import {
   acknowledgeRPSResult,
   cancelRPSQueue,
@@ -32,6 +35,9 @@ import { rpsDeviceToken } from './device';
 import { shouldApplyRPSReplacement } from './normalize';
 import { connectRPSStream } from './stream';
 import { GestureArt } from './GestureArt';
+import { ActionControls } from './ActionControls';
+import { Atmosphere } from './Atmosphere';
+import { rpsReplacementCue } from './sound';
 import {
   GESTURES,
   type Gesture,
@@ -295,119 +301,6 @@ function SeatCard({ seat }: { readonly seat: RPSSeat }) {
   );
 }
 
-function ActionControls({
-  state,
-  busy,
-  onAction,
-}: {
-  readonly state: RPSState;
-  readonly busy: boolean;
-  readonly onAction: (value: RPSActionPayload) => void;
-}) {
-  const { text } = useGameCopy();
-  const option = state.currentActorOptions[0];
-  const [raise, setRaise] = useState('1');
-  const maximumMilli =
-    state.seats.reduce(
-      (minimum, seat) => {
-        const value = creditsToMilli(seat.currentBalance);
-        return minimum === null || value < minimum ? value : minimum;
-      },
-      null as bigint | null,
-    ) ?? 0n;
-  const maximumWhole = maximumMilli / 1000n;
-  const raiseValid =
-    raise.length <= 75 && /^(?:[1-9][0-9]*)$/.test(raise) && BigInt(raise) <= maximumWhole;
-  if (!option) return <p className="game-inline-notice">{text('rps.waiting')}</p>;
-  if (option === 'gesture')
-    return (
-      <div className="rps-actions" aria-label={text(`rps.phase.${state.phase}`)}>
-        {GESTURES.map((gesture) => (
-          <button
-            type="button"
-            key={gesture}
-            disabled={busy}
-            onClick={() => onAction({ action: 'gesture', payload: { gesture } })}
-          >
-            <GestureArt gesture={gesture} />
-            <span>{text(`rps.gesture.${gesture}`)}</span>
-          </button>
-        ))}
-      </div>
-    );
-  if (option === 'dealer_decision')
-    return (
-      <div className="rps-dealer">
-        <p>
-          {maximumWhole > 0n
-            ? text('rps.dealer.integerOnly', { max: maximumWhole.toString() })
-            : text('rps.dealer.noCapacity')}
-        </p>
-        <div className="game-state-actions">
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={busy}
-            onClick={() =>
-              onAction({ action: 'dealer_decision', payload: { decision: 'no_raise' } })
-            }
-          >
-            {text('rps.dealer.noRaise')}
-          </button>
-          {maximumWhole > 0n ? (
-            <>
-              <label>
-                <span>{text('rps.raiseAmount')}</span>
-                <input
-                  value={raise}
-                  inputMode="numeric"
-                  pattern="[1-9][0-9]*"
-                  maxLength={75}
-                  onChange={(event) => setRaise(event.target.value)}
-                />
-              </label>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={busy || !raiseValid}
-                onClick={() =>
-                  onAction({
-                    action: 'dealer_decision',
-                    payload: { decision: 'raise', amount: raise },
-                  })
-                }
-              >
-                {text('rps.dealer.raise')}
-              </button>
-            </>
-          ) : null}
-        </div>
-      </div>
-    );
-  return (
-    <div className="game-state-actions">
-      <button
-        type="button"
-        className="btn btn-primary"
-        disabled={busy}
-        onClick={() => onAction({ action: 'follower_decision', payload: { decision: 'call' } })}
-      >
-        {text('rps.follower.call')}
-      </button>
-      <button
-        type="button"
-        className="btn btn-secondary"
-        disabled={busy}
-        onClick={() =>
-          onAction({ action: 'follower_decision', payload: { decision: 'surrender' } })
-        }
-      >
-        {text('rps.follower.surrender')}
-      </button>
-    </div>
-  );
-}
-
 function Match({
   state,
   lease,
@@ -415,6 +308,8 @@ function Match({
   busy,
   onAction,
   onRefresh,
+  phaseEmphasis,
+  onSelection,
 }: {
   readonly state: RPSState;
   readonly lease: string;
@@ -422,8 +317,11 @@ function Match({
   readonly busy: boolean;
   readonly onAction: (value: RPSActionPayload) => void;
   readonly onRefresh: () => void;
+  readonly phaseEmphasis: string | null;
+  readonly onSelection: () => void;
 }) {
   const { text } = useGameCopy();
+  const visible = useGameVisibility();
   const remaining = useAuthoritativeCountdown(
     `${state.phaseSeq}:${state.revision}`,
     state.deadline,
@@ -431,8 +329,14 @@ function Match({
     onRefresh,
   );
   return (
-    <section className={`rps-match${state.phase === 'ultimate_gesture' ? ' is-ultimate' : ''}`}>
+    <section
+      className={`rps-match${state.phase === 'ultimate_gesture' ? ' is-ultimate' : ''}${visible ? '' : ' is-background'}`}
+    >
+      <Atmosphere count={state.roundSummary.poolTieCount} />
       <Card className="rps-match__status">
+        {phaseEmphasis === `${state.sessionID}:${state.identityEpoch}:${state.phaseSeq}` ? (
+          <i className="rps-phase-flash" key={phaseEmphasis} aria-hidden="true" />
+        ) : null}
         <div className="rps-match__heading">
           <div>
             <p className="eyebrow">{text('rps.match.title')}</p>
@@ -459,6 +363,21 @@ function Match({
             ) : null}
           </div>
         </div>
+        <p className="rps-phase-instruction" role="status">
+          {text(
+            stream === 'disconnected' || stream === 'gap'
+              ? 'rps.waitingSync'
+              : state.phase === 'terminal_processing'
+                ? 'rps.phase.terminal_processing'
+                : state.currentActorOptions[0] === 'gesture'
+                  ? 'rps.instruction.gesture'
+                  : state.currentActorOptions[0] === 'dealer_decision'
+                    ? 'rps.instruction.dealer'
+                    : state.currentActorOptions[0] === 'follower_decision'
+                      ? 'rps.instruction.follow'
+                      : 'rps.waiting',
+          )}
+        </p>
         {state.deadline !== null ? (
           <p className={`rps-countdown${remaining !== null && remaining <= 5 ? ' is-urgent' : ''}`}>
             <strong>{text('rps.phaseDeadline')}:</strong>{' '}
@@ -511,9 +430,23 @@ function Match({
           </strong>
         </div>
       </div>
+      {state.mode !== 'quick' ? (
+        <p className="rps-pool-ties">
+          {state.roundSummary.poolTieCount === null
+            ? text('rps.poolTiesUnknown')
+            : text('rps.poolTies', { count: state.roundSummary.poolTieCount })}
+        </p>
+      ) : null}
       <Card className="rps-action-panel">
-        <h2>{text(`rps.phase.${state.phase}`)}</h2>
-        <ActionControls state={state} busy={busy} onAction={onAction} />
+        <h2 className="sr-only">{text(`rps.phase.${state.phase}`)}</h2>
+        <ActionControls
+          key={`${state.sessionID}:${state.phaseSeq}`}
+          state={state}
+          busy={busy}
+          current={stream !== 'disconnected' && stream !== 'gap'}
+          onAction={onAction}
+          onSelection={onSelection}
+        />
         <p className="rps-action-feedback" role="status">
           {busy ? text('rps.actionSending') : '\u00a0'}
         </p>
@@ -652,13 +585,6 @@ function PendingResult({
       <section ref={resultRef} data-session-id={result.sessionID}>
         <p className="eyebrow">{text('rps.result.title')}</p>
         <div className="rps-result-hero" key={result.sessionID}>
-          <div className="rps-result-orbit" aria-hidden="true">
-            {GESTURES.map((gesture) => (
-              <span key={gesture}>
-                <GestureArt gesture={gesture} />
-              </span>
-            ))}
-          </div>
           <h2>
             {text(
               result.terminalReason === 'free_tie_limit'
@@ -674,11 +600,57 @@ function PendingResult({
             <p>{text('rps.result.ascensionBody')}</p>
           ) : null}
         </div>
+        <div className="rps-result__seats" role="list">
+          {result.seats.map((seat) => (
+            <div role="listitem" data-result-seat={seat.seatNo} key={seat.seatNo}>
+              <strong>
+                {seat.seatNo === result.ownSeatNo
+                  ? text('rps.leaderboard.me')
+                  : `#${seat.seatNo + 1}`}
+              </strong>
+              {result.mode === 'quick' ? (
+                seat.gesture !== null ? (
+                  <>
+                    <GestureArt gesture={seat.gesture} />
+                    <span>{text(`rps.gesture.${seat.gesture}`)}</span>
+                  </>
+                ) : (
+                  <span>{text('rps.result.unrecorded')}</span>
+                )
+              ) : null}
+              <span>
+                {seat.result === 'deidentified'
+                  ? text('rps.result.deidentified')
+                  : text(`rps.result.${seat.result}`)}
+              </span>
+            </div>
+          ))}
+        </div>
         <h2>{text(`rps.mode.${result.mode}`)}</h2>
         <dl>
           <div>
             <dt>{text('rps.result.reason')}</dt>
             <dd>{text(`rps.result.reason.${result.terminalReason}`)}</dd>
+          </div>
+          <div>
+            <dt>{text('rps.result.buyIn')}</dt>
+            <dd>
+              {result.ownBuyIn === null ? (
+                text('rps.result.unrecorded')
+              ) : (
+                <Money value={result.ownBuyIn} />
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>{text('rps.result.cashOut')}</dt>
+            <dd>
+              {result.ownCashOut === null ? (
+                text('rps.result.unrecorded')
+              ) : (
+                <Money value={result.ownCashOut} />
+              )}
+            </dd>
           </div>
           <div>
             <dt>{text('rps.result.input')}</dt>
@@ -699,22 +671,6 @@ function PendingResult({
             </dd>
           </div>
         </dl>
-        <div className="rps-result__seats" role="list">
-          {result.seats.map((seat) => (
-            <div role="listitem" data-result-seat={seat.seatNo} key={seat.seatNo}>
-              <strong>
-                {seat.seatNo === result.ownSeatNo
-                  ? text('rps.leaderboard.me')
-                  : `#${seat.seatNo + 1}`}
-              </strong>
-              <span>
-                {seat.result === 'deidentified'
-                  ? text('rps.result.deidentified')
-                  : text(`rps.result.${seat.result}`)}
-              </span>
-            </div>
-          ))}
-        </div>
         {ack === 'sending' ? <p role="status">{text('rps.result.ackWaiting')}</p> : null}
         {ack === 'failed' ? (
           <div className="game-inline-notice game-inline-notice--warning" role="alert">
@@ -793,6 +749,8 @@ function Leaderboard({
 
 export function RPSGame() {
   const { text } = useGameCopy();
+  const sound = useGameSound('rps');
+  const playSound = sound.play;
   const queryClient = useQueryClient();
   const snapshot = useGamesSnapshot();
   const maintenance = isMaintenance(snapshot.error);
@@ -818,6 +776,8 @@ export function RPSGame() {
   const [stream, setStream] = useState<'connecting' | 'connected' | 'disconnected' | 'gap'>(
     'connecting',
   );
+  const [phaseEmphasis, setPhaseEmphasis] = useState<string | null>(null);
+  const streamSynchronized = useRef(false);
   const [ackStatus, setAckStatus] = useState<{
     readonly sessionID: string;
     readonly value: 'sending' | 'failed';
@@ -867,16 +827,54 @@ export function RPSGame() {
   const reconcile = useCallback(() => {
     void refetchHome();
   }, [refetchHome]);
+  const replaceHome = useCallback(
+    (next: RPSHomeState, live: boolean) => {
+      const current = queryClient.getQueryData<RPSHomeState>(rpsKeys.state);
+      if (!shouldApplyRPSReplacement(current, next)) return false;
+      if (live) {
+        const cue = rpsReplacementCue(current, next);
+        if (cue) playSound(cue);
+      }
+      if (
+        live &&
+        document.visibilityState === 'visible' &&
+        current?.kind === 'session' &&
+        next.kind === 'session' &&
+        current.session.sessionID === next.session.sessionID &&
+        current.session.identityEpoch === next.session.identityEpoch &&
+        BigInt(next.session.phaseSeq) > BigInt(current.session.phaseSeq)
+      ) {
+        setPhaseEmphasis(
+          `${next.session.sessionID}:${next.session.identityEpoch}:${next.session.phaseSeq}`,
+        );
+      } else if (!live) setPhaseEmphasis(null);
+      queryClient.setQueryData(rpsKeys.state, next);
+      return true;
+    },
+    [playSound, queryClient],
+  );
+  useEffect(() => {
+    const changed = () => {
+      if (document.visibilityState !== 'visible') setPhaseEmphasis(null);
+    };
+    document.addEventListener('visibilitychange', changed);
+    return () => document.removeEventListener('visibilitychange', changed);
+  }, []);
   const streamEnabled = Boolean(snapshot.data && (!maintenance || session || showPendingResult));
   useEffect(() => {
     if (!streamEnabled || typeof EventSource === 'undefined') return undefined;
     return connectRPSStream({
-      onConnection: setStream,
+      onConnection: (state) => {
+        if (state !== 'connected') streamSynchronized.current = false;
+        setStream(state);
+      },
       onResync: (reason) => {
+        streamSynchronized.current = false;
+        setPhaseEmphasis(null);
         setStream(reason === 'gap' || reason === 'malformed' ? 'gap' : 'disconnected');
         reconcile();
       },
-      onReplace: (next) => {
+      onReplace: (next, isDelta) => {
         if (next.kind === 'queue' && next.queue.id === cancelledQueue.current) return;
         if (
           acked.current &&
@@ -884,11 +882,12 @@ export function RPSGame() {
             (next.kind === 'pending_result' && next.result.sessionID === acked.current))
         )
           return;
-        const current = queryClient.getQueryData<RPSHomeState>(rpsKeys.state);
-        if (shouldApplyRPSReplacement(current, next)) queryClient.setQueryData(rpsKeys.state, next);
+        replaceHome(next, isDelta && streamSynchronized.current);
+        if (!isDelta) streamSynchronized.current = true;
+        setStream('connected');
       },
     });
-  }, [queryClient, reconcile, streamEnabled]);
+  }, [replaceHome, reconcile, streamEnabled]);
   useEffect(() => {
     if (!leaseSessionID) return undefined;
     const leaseID = createOpaqueID('gle_');
@@ -940,10 +939,7 @@ export function RPSGame() {
           await refreshAll();
         } else {
           const next = await sendRPSAction(intent.intent);
-          const current = queryClient.getQueryData<RPSHomeState>(rpsKeys.state);
-          if (shouldApplyRPSReplacement(current, next))
-            queryClient.setQueryData(rpsKeys.state, next);
-          else await refetchHome();
+          if (!replaceHome(next, true)) await refetchHome();
         }
         setOperation(null);
         setOperationState('idle');
@@ -958,10 +954,18 @@ export function RPSGame() {
         }
       }
     },
-    [queryClient, refetchHome, refreshAll],
+    [replaceHome, refetchHome, refreshAll],
   );
   const action = (value: RPSActionPayload) => {
-    if (!session || operationState !== 'idle') return;
+    if (
+      !session ||
+      operationState !== 'idle' ||
+      lease !== 'active' ||
+      stream === 'gap' ||
+      stream === 'disconnected'
+    )
+      return;
+    playSound('select');
     void execute({
       kind: 'action',
       intent: {
@@ -1073,7 +1077,10 @@ export function RPSGame() {
     deathmatchGateOpen && deathmatchAffordable && homeQuery.isSuccess && !homeQuery.error;
   const closeRules = useCallback(() => setRulesOpen(false), []);
   const rulesButton = (
-    <GameRulesButton label={text('common.rulesButton')} onClick={() => setRulesOpen(true)} />
+    <>
+      <GameRulesButton label={text('common.rulesButton')} onClick={() => setRulesOpen(true)} />
+      <GameSoundButton sound={sound} />
+    </>
   );
   const rulesDialog = <RPSRules open={rulesOpen} onClose={closeRules} />;
   if (snapshot.isPending)
@@ -1230,6 +1237,8 @@ export function RPSGame() {
           busy={operationState !== 'idle' || lease !== 'active'}
           onAction={action}
           onRefresh={reconcile}
+          phaseEmphasis={phaseEmphasis}
+          onSelection={() => playSound('select')}
         />
       ) : null}
       {home?.kind === 'idle' ? (

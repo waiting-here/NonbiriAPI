@@ -60,7 +60,7 @@
     },
     "pageControls": {
       "size": "Items per page",
-      "summary": "Page {{page}} of {{pages}} · {{total}} items",
+      "summary": "Page {{page}} of {{pages}} · Total: {{total}}",
       "jump": "Go to page",
       "go": "Go",
       "invalid": "Enter a whole page number from 1 to 2147483647.",

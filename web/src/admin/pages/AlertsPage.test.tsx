@@ -134,7 +134,7 @@ describe('administrator alerts page', () => {
     expect(await screen.findByText('<plain alert>')).toBeVisible();
     expect(screen.getByRole('combobox', { name: 'Resolution status' })).toHaveValue('true');
     expect(screen.getByRole('combobox', { name: 'Items per page' })).toHaveValue('50');
-    expect(screen.getByText('Page 2 of 2 · 51 items')).toBeVisible();
+    expect(screen.getByText('Page 2 of 2 · Total: 51')).toBeVisible();
     expect(screen.getByTestId('location-search')).toHaveTextContent(
       '?resolved=true&page=2&page_size=50',
     );
@@ -208,7 +208,7 @@ describe('administrator alerts page', () => {
     );
 
     expect(await screen.findByText('Alert 21')).toBeVisible();
-    expect(screen.getByText('Page 2 of 2 · 21 items')).toBeVisible();
+    expect(screen.getByText('Page 2 of 2 · Total: 21')).toBeVisible();
     expect(screen.getByText('That page is no longer available. Showing page 2.')).toBeVisible();
     const search = new URLSearchParams(screen.getByTestId('location-search').textContent ?? '');
     expect(search.get('resolved')).toBe('false');
@@ -273,7 +273,7 @@ describe('administrator alerts page', () => {
 
     expect(await screen.findByText('Alert 20')).toBeVisible();
     await waitFor(() => expect(screen.queryByText('Alert 41')).not.toBeInTheDocument());
-    expect(screen.getByText('Page 2 of 2 · 40 items')).toBeVisible();
+    expect(screen.getByText('Page 2 of 2 · Total: 40')).toBeVisible();
     expect(screen.getByText('That page is no longer available. Showing page 2.')).toBeVisible();
     const listRequests = fetchMock.mock.calls
       .filter(([input, init]) => {

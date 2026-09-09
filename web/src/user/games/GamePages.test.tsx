@@ -6,11 +6,23 @@ import { GameCenter } from './GameCenter';
 import { gameKeys } from './common/snapshot';
 import { gamesSnapshotWire } from './common/testFixtures';
 import { FishingGame } from './fishing/FishingGame';
+import { fishingKeys } from './fishing/api';
+import { normalizeFishingState } from './fishing/normalize';
 import { LinkLinkGame } from './linklink/LinkLinkGame';
+import { linkLinkKeys } from './linklink/api';
+import { normalizeLinkLinkCurrent } from './linklink/normalize';
 import { RPSGame } from './rps/RPSGame';
 import { rpsKeys } from './rps/api';
 import { normalizeRPSHome } from './rps/normalize';
 import { rpsStateWire, rpsTestSessionID } from './rps/testFixtures';
+
+const audio = vi.hoisted(() => ({
+  play: vi.fn(),
+  unlock: vi.fn(async () => undefined),
+  silence: vi.fn(),
+  close: vi.fn(),
+}));
+vi.mock('./common/sound', () => ({ createGameSound: () => audio }));
 
 function emptyFishingBoard(board: 'single' | 'total') {
   return { board, window_start: board === 'single' ? null : 1_700_000_000, entries: [], me: null };
@@ -75,10 +87,13 @@ function rpsPendingResult(mode = 'standard') {
       own_input: '1',
       own_returned: '2',
       own_wallet_net: '1',
+      // Historical pending results did not expose transfer or gesture details.
+      own_buy_in: null,
+      own_cash_out: null,
       seats: [
-        { seat_no: 0, result: 'win' },
-        { seat_no: 1, result: 'loss' },
-        { seat_no: 2, result: 'deidentified' },
+        { seat_no: 0, result: 'win', gesture: null },
+        { seat_no: 1, result: 'loss', gesture: null },
+        { seat_no: 2, result: 'deidentified', gesture: null },
       ],
       created_at: 1_800_000_000,
     },
@@ -126,6 +141,165 @@ describe('beta.1 game pages', () => {
     mockResultVisibility();
   });
   afterEach(() => vi.unstubAllGlobals());
+
+  it('sounds only new LinkLink authority and never repeats an accepted revision or disabled selection', async () => {
+    const initial = linkLinkState();
+    installJsonFetchFixtures([
+      { method: 'GET', path: '/api/games', body: gamesSnapshotWire() },
+      { method: 'GET', path: '/api/games/linklink/session', body: initial },
+      {
+        method: 'POST',
+        path: `/api/games/linklink/sessions/${initial.session_id}/lease`,
+        body: { expires_at: 1_800_000_025 },
+      },
+    ]);
+    const view = await renderWithProviders(<LinkLinkGame />, {
+      station: 'user',
+      route: '/games/linklink',
+    });
+    await waitFor(() => expect(screen.getAllByRole('gridcell')[0]).toBeEnabled());
+    await view.user.click(screen.getByRole('button', { name: 'Sound off' }));
+    expect(audio.play).not.toHaveBeenCalled();
+    const next = {
+      ...initial,
+      revision: '2',
+      pairs_removed: 1,
+      board: {
+        ...initial.board,
+        tiles: initial.board.tiles.map((tile, index) => ({ ...tile, removed: index < 2 })),
+      },
+    };
+    act(() => view.queryClient.setQueryData(linkLinkKeys.current, normalizeLinkLinkCurrent(next)));
+    await waitFor(() => expect(audio.play.mock.calls).toEqual([['link_match']]));
+    await view.user.click(screen.getAllByRole('gridcell')[0]);
+    act(() =>
+      view.queryClient.setQueryData(linkLinkKeys.current, normalizeLinkLinkCurrent({ ...next })),
+    );
+    expect(audio.play.mock.calls).toEqual([['link_match']]);
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    const terminal = {
+      session_id: initial.session_id,
+      spec: '6x8',
+      price: '3',
+      terminal_reason: 'timed_out',
+      started_at: initial.started_at,
+      deadline: initial.deadline,
+      terminal_at: initial.deadline,
+      pairs_removed: 1,
+      total_pairs: 24,
+      score: '100',
+    };
+    act(() =>
+      view.queryClient.setQueryData(linkLinkKeys.current, normalizeLinkLinkCurrent(terminal)),
+    );
+    await screen.findByText('Time ran out');
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    expect(audio.play.mock.calls).toEqual([['link_match']]);
+    view.unmount();
+    expect(audio.close).toHaveBeenCalled();
+  });
+
+  it('keeps restored Fishing results silent and consumes each new rarity once even while muted', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    installJsonFetchFixtures([
+      { method: 'GET', path: '/api/games', body: gamesSnapshotWire() },
+      {
+        method: 'GET',
+        path: '/api/games/fishing/state',
+        body: { settlement_pending: null, unrevealed: fishingResult(), has_more_unrevealed: false },
+      },
+      ...(['single', 'total'] as const).map((board) => ({
+        method: 'GET',
+        path: `/api/games/fishing/leaderboard?board=${board}`,
+        body: emptyFishingBoard(board),
+      })),
+    ]);
+    const view = await renderWithProviders(<FishingGame />, {
+      station: 'user',
+      route: '/games/fishing',
+    });
+    await screen.findByRole('list');
+    await view.user.click(screen.getByRole('button', { name: 'Sound off' }));
+    expect(audio.play).not.toHaveBeenCalled();
+    const batch = 'fb_AAAAAAAAAAAAAAAAAAAAAQ';
+    act(() =>
+      view.queryClient.setQueryData(
+        fishingKeys.state,
+        normalizeFishingState({
+          settlement_pending: {
+            batch_id: batch,
+            bait: 'worm',
+            count: 1,
+            entry_total: '1',
+            state: 'settlement_pending',
+            next_attempt_at: 1_800_000_000,
+            retry_exhausted: false,
+          },
+          unrevealed: null,
+          has_more_unrevealed: false,
+        }),
+      ),
+    );
+    await screen.findByText('Your catch is on its way');
+    const result = {
+      ...fishingResult(),
+      batch_id: batch,
+      outcomes: [{ ordinal: 0, species_key: 'koi', tier: 'legend', size_cm: 120, reward: '2' }],
+    };
+    const replace = () =>
+      view.queryClient.setQueryData(
+        fishingKeys.state,
+        normalizeFishingState({
+          settlement_pending: null,
+          unrevealed: result,
+          has_more_unrevealed: false,
+        }),
+      );
+    act(replace);
+    await waitFor(() => expect(audio.play.mock.calls).toEqual([['fishing_epic']]));
+    act(replace);
+    await view.user.click(screen.getByRole('button', { name: 'Sound on' }));
+    const mutedBatch = 'fb_AAAAAAAAAAAAAAAAAAAAAw';
+    act(() =>
+      view.queryClient.setQueryData(
+        fishingKeys.state,
+        normalizeFishingState({
+          settlement_pending: {
+            batch_id: mutedBatch,
+            bait: 'worm',
+            count: 1,
+            entry_total: '1',
+            state: 'settlement_pending',
+            next_attempt_at: 1_800_000_000,
+            retry_exhausted: false,
+          },
+          unrevealed: null,
+          has_more_unrevealed: false,
+        }),
+      ),
+    );
+    await screen.findByText('Your catch is on its way');
+    act(() =>
+      view.queryClient.setQueryData(
+        fishingKeys.state,
+        normalizeFishingState({
+          settlement_pending: null,
+          unrevealed: { ...result, batch_id: mutedBatch },
+          has_more_unrevealed: false,
+        }),
+      ),
+    );
+    await screen.findByRole('list');
+    await view.user.click(screen.getByRole('button', { name: 'Sound off' }));
+    expect(audio.play.mock.calls).toEqual([['fishing_epic']]);
+  });
 
   it('renders three center cards with open, partial, and explicitly closed availability', async () => {
     const snapshot = gamesSnapshotWire();
@@ -1056,10 +1230,13 @@ describe('beta.1 game pages', () => {
         own_input: '1',
         own_returned: '2',
         own_wallet_net: '1',
+        // Historical pending results did not expose transfer or gesture details.
+        own_buy_in: null,
+        own_cash_out: null,
         seats: [
-          { seat_no: 0, result: 'win' },
-          { seat_no: 1, result: 'loss' },
-          { seat_no: 2, result: 'deidentified' },
+          { seat_no: 0, result: 'win', gesture: null },
+          { seat_no: 1, result: 'loss', gesture: null },
+          { seat_no: 2, result: 'deidentified', gesture: null },
         ],
         created_at: 1_800_000_000,
       },
@@ -1223,10 +1400,13 @@ describe('beta.1 game pages', () => {
             own_input: '1',
             own_returned: '2',
             own_wallet_net: '1',
+            // Historical pending results did not expose transfer or gesture details.
+            own_buy_in: null,
+            own_cash_out: null,
             seats: [
-              { seat_no: 0, result: 'win' },
-              { seat_no: 1, result: 'loss' },
-              { seat_no: 2, result: 'loss' },
+              { seat_no: 0, result: 'win', gesture: null },
+              { seat_no: 1, result: 'loss', gesture: null },
+              { seat_no: 2, result: 'loss', gesture: null },
             ],
             created_at: 1_800_000_000,
           },

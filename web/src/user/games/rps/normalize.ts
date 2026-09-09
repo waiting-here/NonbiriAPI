@@ -587,6 +587,7 @@ export function normalizeRPSState(value: unknown): RPSState {
       'free_pool_streak',
       'reminder_active',
       'last_reveal_result',
+      'pool_tie_count',
     ],
     [],
     'RPS round summary',
@@ -602,6 +603,10 @@ export function normalizeRPSState(value: unknown): RPSState {
       round.last_reveal_result === null
         ? null
         : enumValue(round.last_reveal_result, REVEALS, 'RPS reveal result'),
+    poolTieCount:
+      round.pool_tie_count === null
+        ? null
+        : decimalValue(round.pool_tie_count, { bits: 128 }, 'RPS pool ties'),
   };
   const reminderStreak = BigInt(roundSummary.freePoolStreak);
   if (
@@ -674,6 +679,8 @@ export function normalizeRPSPending(value: unknown): RPSPendingResult {
       'own_input',
       'own_returned',
       'own_wallet_net',
+      'own_buy_in',
+      'own_cash_out',
       'seats',
       'created_at',
     ],
@@ -683,7 +690,12 @@ export function normalizeRPSPending(value: unknown): RPSPendingResult {
   if (!Array.isArray(record.seats) || record.seats.length !== 3)
     invalidResponse('RPS result seats');
   const seats = record.seats.map((item, index) => {
-    const seat = exactRecord(item, ['seat_no', 'result'], [], `RPS result seat ${index}`);
+    const seat = exactRecord(
+      item,
+      ['seat_no', 'result', 'gesture'],
+      [],
+      `RPS result seat ${index}`,
+    );
     const seatNo = safeInteger(seat.seat_no, index, index, `RPS result seat ${index} number`);
     return {
       seatNo,
@@ -692,25 +704,50 @@ export function normalizeRPSPending(value: unknown): RPSPendingResult {
         ['win', 'loss', 'tie', 'deidentified'] as const,
         `RPS result seat ${index}`,
       ),
+      gesture:
+        seat.gesture === null
+          ? null
+          : enumValue(seat.gesture, GESTURES, `RPS result gesture ${index}`),
     };
   });
   const ownSeatNo = safeInteger(record.own_seat_no, 0, 2, 'RPS own seat');
-  const ownInput = creditsValue(record.own_input, {}, 'RPS own input');
-  const ownReturned = creditsValue(record.own_returned, {}, 'RPS own returned');
+  const ownInput = creditsValue(record.own_input, { bits: 256 }, 'RPS own input');
+  const ownReturned = creditsValue(record.own_returned, { bits: 256 }, 'RPS own returned');
   const ownWalletNet = creditsValue(record.own_wallet_net, { signed: true }, 'RPS wallet net');
   const ownSign = creditsToMilli(ownWalletNet, true);
-  if (creditsToMilli(ownReturned) - creditsToMilli(ownInput) !== ownSign)
+  if (creditsToMilli(ownReturned, false, 256) - creditsToMilli(ownInput, false, 256) !== ownSign)
     invalidResponse('RPS own result arithmetic');
+  const ownBuyIn =
+    record.own_buy_in === null ? null : creditsValue(record.own_buy_in, {}, 'RPS buy-in');
+  const ownCashOut =
+    record.own_cash_out === null ? null : creditsValue(record.own_cash_out, {}, 'RPS cash-out');
+  if (
+    (ownBuyIn === null) !== (ownCashOut === null) ||
+    (ownBuyIn !== null &&
+      ownCashOut !== null &&
+      creditsToMilli(ownCashOut) - creditsToMilli(ownBuyIn) !== ownSign)
+  )
+    invalidResponse('RPS wallet transfer arithmetic');
+  const resultMode = mode(record.mode, 'RPS result mode');
+  const terminalReason = enumValue(record.terminal_reason, TERMINAL_REASONS, 'RPS terminal reason');
+  const revealed = seats.filter((seat) => seat.gesture !== null).length;
+  if (
+    revealed !== 0 &&
+    (revealed !== 3 || resultMode !== 'quick' || terminalReason !== 'quick_resolved')
+  )
+    invalidResponse('RPS result gesture matrix');
   const expectedOwnResult = ownSign > 0n ? 'win' : ownSign < 0n ? 'loss' : 'tie';
   if (seats[ownSeatNo].result !== expectedOwnResult) invalidResponse('RPS own result');
   return {
     sessionID: opaqueID(record.session_id, 'rps_', 'RPS result session'),
-    mode: mode(record.mode, 'RPS result mode'),
-    terminalReason: enumValue(record.terminal_reason, TERMINAL_REASONS, 'RPS terminal reason'),
+    mode: resultMode,
+    terminalReason,
     ownSeatNo,
     ownInput,
     ownReturned,
     ownWalletNet,
+    ownBuyIn,
+    ownCashOut,
     seats,
     createdAt: unixTime(record.created_at, 'RPS result time'),
   };

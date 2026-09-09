@@ -113,12 +113,14 @@ func moveWindow(ctx context.Context, q Reader, e *epoch, now int64) error {
 	if err != nil || left >= now {
 		return ErrInvariant
 	}
-	if !e.at.Valid {
+	if e.at.Valid && (now < e.at.Int64 || e.left.Int64 >= e.at.Int64) {
+		return ErrInvariant
+	}
+	if !e.at.Valid || left >= e.at.Int64 {
+		// Disjoint windows share no facts. Read the new range directly instead
+		// of scanning and subtracting every expired bucket from the old cache.
 		e.used, e.reserved, err = sumBuckets(ctx, q, *e, left, now)
 	} else {
-		if now < e.at.Int64 || e.left.Int64 >= e.at.Int64 {
-			return ErrInvariant
-		}
 		adjust := func(l, r int64, incoming bool) error {
 			u, res, err := sumBuckets(ctx, q, *e, l, r)
 			if err != nil {
