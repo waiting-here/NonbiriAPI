@@ -175,6 +175,7 @@ func (owner *fakeRPSLifecycle) Retain(context.Context, int64, int, time.Time) (r
 func TestRPSAdapterMapsQueuePendingSummaryAndStats(t *testing.T) {
 	exportFinalizer := &rps.ExportFinalizer{}
 	deleteFinalizer := &rps.DeletionFinalizer{}
+	buyIn, cashOut, gesture := "5", "6", "rock"
 	owner := &fakeRPSLifecycle{
 		exportFinalizer: exportFinalizer, deleteFinalizer: deleteFinalizer,
 		export: rps.UserExport{
@@ -184,7 +185,8 @@ func TestRPSAdapterMapsQueuePendingSummaryAndStats(t *testing.T) {
 			Pending: &rps.PendingResult{
 				SessionID: "rps_AAAAAAAAAAAAAAAAAAAAAA", Mode: "quick", TerminalReason: "quick_resolved",
 				OwnSeatNo: 1, OwnInput: "5", OwnReturned: "6", OwnWalletNet: "1",
-				Seats: []rps.PendingSeat{{SeatNo: 0, Result: "peer"}, {SeatNo: 1, Result: "self"}}, CreatedAt: 180,
+				Seats: []rps.PendingSeat{{SeatNo: 0, Result: "peer", Gesture: &gesture}, {SeatNo: 1, Result: "self", Gesture: &gesture}}, CreatedAt: 180,
+				OwnBuyIn: &buyIn, OwnCashOut: &cashOut,
 			},
 			Summaries: []rps.SummaryExport{{
 				SessionID: "rps_BBBBBBBBBBBBBBBBBBBBBB", Mode: "standard",
@@ -192,6 +194,7 @@ func TestRPSAdapterMapsQueuePendingSummaryAndStats(t *testing.T) {
 				OwnSeat: rps.SummarySeatExport{
 					SeatNo: 2, Input: "10", Returned: "11", WalletNet: "1",
 					TimeoutCount: "0", RockCount: "1", ScissorsCount: "2", PaperCount: "3",
+					OwnBuyIn: &buyIn, OwnCashOut: &cashOut,
 				},
 			}},
 			FunStats: &rps.FunStatsExport{
@@ -207,6 +210,12 @@ func TestRPSAdapterMapsQueuePendingSummaryAndStats(t *testing.T) {
 		len(value.Pending.Seats) != 2 || len(value.Summaries) != 1 || value.Summaries[0].OwnSeat.PaperCount != "3" ||
 		value.FunStats == nil || value.FunStats.CompletedCount != "9" || !value.TutorialSeen {
 		t.Fatalf("RPS export = %#v finalizer=%v err=%v", value, finalizer, err)
+	}
+	if value.Pending.OwnBuyIn == nil || *value.Pending.OwnBuyIn != buyIn || value.Pending.OwnBuyIn == &buyIn ||
+		value.Pending.OwnCashOut == nil || *value.Pending.OwnCashOut != cashOut || value.Pending.OwnCashOut == &cashOut ||
+		value.Summaries[0].OwnSeat.OwnBuyIn == nil || *value.Summaries[0].OwnSeat.OwnBuyIn != buyIn ||
+		value.Summaries[0].OwnSeat.OwnCashOut == nil || *value.Summaries[0].OwnSeat.OwnCashOut != cashOut {
+		t.Fatalf("RPS wallet transfers lost or aliased: %#v", value)
 	}
 	prepared, err := adapter.PrepareDelete(context.Background(), nil, lifecycle.DeleteRequest{})
 	if err != nil || prepared != deleteFinalizer {

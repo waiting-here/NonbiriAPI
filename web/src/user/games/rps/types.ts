@@ -128,6 +128,7 @@ export interface RPSState {
     readonly freePoolStreak: string;
     readonly reminderActive: boolean;
     readonly lastRevealResult: string | null;
+    readonly poolTieCount: string | null;
   };
   readonly recentEvents: readonly RPSRecentEvent[];
   readonly eventsTruncated: boolean;
@@ -141,9 +142,12 @@ export interface RPSPendingResult {
   readonly ownInput: string;
   readonly ownReturned: string;
   readonly ownWalletNet: string;
+  readonly ownBuyIn: string | null;
+  readonly ownCashOut: string | null;
   readonly seats: readonly {
     readonly seatNo: number;
     readonly result: 'win' | 'loss' | 'tie' | 'deidentified';
+    readonly gesture: Gesture | null;
   }[];
   readonly createdAt: number;
 }

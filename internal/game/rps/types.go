@@ -305,6 +305,7 @@ type RoundSummary struct {
 	FreePoolStreak   string  `json:"free_pool_streak"`
 	ReminderActive   bool    `json:"reminder_active"`
 	LastRevealResult *string `json:"last_reveal_result"`
+	PoolTieCount     *string `json:"pool_tie_count"`
 }
 
 type RecentEvent struct {
@@ -336,8 +337,9 @@ type State struct {
 }
 
 type PendingSeat struct {
-	SeatNo int    `json:"seat_no"`
-	Result string `json:"result"`
+	SeatNo  int     `json:"seat_no"`
+	Result  string  `json:"result"`
+	Gesture *string `json:"gesture"`
 }
 
 type PendingResult struct {
@@ -350,6 +352,8 @@ type PendingResult struct {
 	OwnWalletNet   string        `json:"own_wallet_net"`
 	Seats          []PendingSeat `json:"seats"`
 	CreatedAt      int64         `json:"created_at"`
+	OwnBuyIn       *string       `json:"own_buy_in"`
+	OwnCashOut     *string       `json:"own_cash_out"`
 }
 
 type ModeConfig struct {
@@ -594,14 +598,16 @@ type HomeSummary struct {
 }
 
 type SummarySeatExport struct {
-	SeatNo        int    `json:"seat_no"`
-	Input         string `json:"input"`
-	Returned      string `json:"returned"`
-	WalletNet     string `json:"wallet_net"`
-	TimeoutCount  string `json:"timeout_count"`
-	RockCount     string `json:"rock_count"`
-	ScissorsCount string `json:"scissors_count"`
-	PaperCount    string `json:"paper_count"`
+	SeatNo        int     `json:"seat_no"`
+	Input         string  `json:"input"`
+	Returned      string  `json:"returned"`
+	WalletNet     string  `json:"wallet_net"`
+	TimeoutCount  string  `json:"timeout_count"`
+	RockCount     string  `json:"rock_count"`
+	ScissorsCount string  `json:"scissors_count"`
+	PaperCount    string  `json:"paper_count"`
+	OwnBuyIn      *string `json:"own_buy_in"`
+	OwnCashOut    *string `json:"own_cash_out"`
 }
 
 type SummaryExport struct {

@@ -15,13 +15,21 @@ export function MatchEffect({ animation }: { readonly animation: MatchAnimation 
     const board = svg?.parentElement;
     if (!svg || !board) return;
     const position = () => {
-      const tiles = board.querySelectorAll<HTMLButtonElement>('.linklink-tile');
-      const origin = tiles[0]?.getBoundingClientRect();
-      const right = tiles[1]?.getBoundingClientRect();
-      const below = tiles[animation.before.board.cols]?.getBoundingClientRect();
+      const tileAt = (row: number, col: number) =>
+        board.querySelector<HTMLButtonElement>(
+          `[aria-rowindex="${row + 1}"][aria-colindex="${col + 1}"]`,
+        );
+      const origin = tileAt(0, 0)?.getBoundingClientRect();
+      const right = tileAt(0, 1)?.getBoundingClientRect();
+      const below = tileAt(1, 0)?.getBoundingClientRect();
       if (!origin || !right || !below) return;
       const bounds = board.getBoundingClientRect();
       svg.setAttribute('viewBox', `0 0 ${bounds.width} ${bounds.height}`);
+      const sparkStart = -(origin.width * 18) / 68;
+      const sparkLength = -(origin.width * 7) / 68;
+      svg.querySelectorAll<SVGPathElement>('.linklink-match-sparks path').forEach((spark) => {
+        spark.setAttribute('d', `M0 ${sparkStart}v${sparkLength}`);
+      });
       const point = (value: LinkLinkCoordinate) => [
         origin.left - bounds.left + origin.width / 2 + value.col * (right.left - origin.left),
         origin.top - bounds.top + origin.height / 2 + value.row * (below.top - origin.top),
@@ -38,9 +46,23 @@ export function MatchEffect({ animation }: { readonly animation: MatchAnimation 
       });
     };
     position();
-    const observer = new ResizeObserver(position);
+    let frame = 0;
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        position();
+        frame = requestAnimationFrame(position);
+      });
+    };
+    const observer = new ResizeObserver(schedule);
     observer.observe(board);
-    return () => observer.disconnect();
+    if (board.parentElement) observer.observe(board.parentElement);
+    window.addEventListener('resize', schedule);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener('resize', schedule);
+    };
   }, [animation]);
   return (
     <svg ref={ref} className="linklink-match-effect" aria-hidden="true" focusable="false">
@@ -55,12 +77,7 @@ export function MatchEffect({ animation }: { readonly animation: MatchAnimation 
           <circle className="linklink-match-ring" r="12" fill="none" />
           <g className="linklink-match-sparks">
             {Array.from({ length: 8 }, (_, spark) => (
-              <path
-                key={spark}
-                d="M0-18v-7"
-                transform={`rotate(${spark * 45})`}
-                strokeLinecap="round"
-              />
+              <path key={spark} transform={`rotate(${spark * 45})`} strokeLinecap="round" />
             ))}
           </g>
         </g>
