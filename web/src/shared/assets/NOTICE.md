@@ -11,7 +11,7 @@ repository's AGPL-3.0 license. The files are bundled by Vite and may be used
 offline.
 
 The blue fat fish easter-egg illustration adapts the local chibi character into
-a white-rice-themed scene on a cream-colored card. Like the game illustrations
+a white-rice-themed scene with a transparent background. Like the game illustrations
 above, it contains no bundled third-party image, font, or runtime network
 dependency and is distributed under the repository's AGPL-3.0 license.
 
