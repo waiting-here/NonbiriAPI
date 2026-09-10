@@ -29,6 +29,7 @@ This release is source-first for Linux/amd64 and keeps the documented Generation
 
 ### Fixed
 
+- Public configuration, administrator branding and startup remain available after the last Thursday period settles, and when the activity master switch is paused with individual settings preserved. Enabling Thursday still requires a configured period.
 - Request log details show the actual logical-request charge and each attempt's routed key identifier; attempts no longer display a misleading zero charge.
 - Fishing keeps the oldest unacknowledged catch visible until confirmation, blocks repeated starts while revealing, and preserves reveal and acknowledgement timing across balance refreshes.
 - Automatic RPM bans apply only to charity requests exceeding the site's per-user limit. Rate-limited personal resource calls, shared key limits and upstream rate-limit responses do not trigger this policy.

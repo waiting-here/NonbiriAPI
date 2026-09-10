@@ -58,23 +58,10 @@ func generationTwoConfigSnapshotForValidation(values map[string]string) map[stri
 	return clean
 }
 
-func validateGenerationTwoSiteConfigSnapshot(ctx context.Context, q generationTwoConfigQueryer, values map[string]string) error {
-	if err := ValidateGenerationTwoConfigSnapshot(generationTwoConfigSnapshotForValidation(values)); err != nil {
-		return err
-	}
-	clean := generationTwoConfigSnapshotForValidation(values)
-	if generationTwoConfigBoolValue(clean, "activity_thursday_enabled") {
-		var ready int
-		if err := q.QueryRowContext(ctx, `SELECT EXISTS(
-			SELECT 1 FROM thursday_periods WHERE state IN ('configured','open','settling')
-		)`).Scan(&ready); err != nil {
-			return fmt.Errorf("validate Thursday activity health: %w", err)
-		}
-		if err := ValidateGenerationTwoThursdayConfigHealth(clean, ready == 1); err != nil {
-			return err
-		}
-	}
-	return nil
+func validateGenerationTwoSiteConfigSnapshot(values map[string]string) error {
+	// Domain readiness can change during normal operation. Only activation
+	// checks it; an idle activity must not break configuration reads or startup.
+	return ValidateGenerationTwoConfigSnapshot(generationTwoConfigSnapshotForValidation(values))
 }
 
 func bumpGenerationTwoConfigRevisionTx(ctx context.Context, tx *sql.Tx, domain string, at int64) error {
@@ -109,7 +96,7 @@ func validateAndWriteGenerationTwoSiteConfigTx(ctx context.Context, tx *sql.Tx, 
 		return err
 	}
 	values[key] = value
-	if err := validateGenerationTwoSiteConfigSnapshot(ctx, tx, values); err != nil {
+	if err := validateGenerationTwoSiteConfigSnapshot(values); err != nil {
 		return ErrConflict
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO site_config(key,value,updated_at) VALUES(?,?,?)
@@ -124,7 +111,7 @@ func validateCurrentGenerationTwoSiteConfig(ctx context.Context, q generationTwo
 	if err != nil {
 		return nil, err
 	}
-	if err := validateGenerationTwoSiteConfigSnapshot(ctx, q, values); err != nil {
+	if err := validateGenerationTwoSiteConfigSnapshot(values); err != nil {
 		return nil, err
 	}
 	return values, nil
