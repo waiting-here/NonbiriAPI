@@ -192,3 +192,4 @@ nonbiriapi.service
 
 tmp/
 .cache/
+draft/
