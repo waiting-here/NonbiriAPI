@@ -1,6 +1,6 @@
 # NonbiriAPI HTTP API Contract (`v1.0.0-beta.2`)
 
-- Status: **v1.0.0-beta.2 Unreleased contract**.
+- Status: **v1.0.0-beta.2 release contract**.
 - Scope: the only OpenAI-compatible ingress routes are `GET /v1/models` and `POST /v1/chat/completions`. OpenAI-compatible and Anthropic-compatible upstream connectors sit behind that ingress; there is no public Anthropic-native API.
 - Authority: this document reflects the production route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically.
 
@@ -69,7 +69,7 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. Only a completely absent main/WAL/SHM set or a validated Generation 2 set is accepted. Empty, alpha/Generation 1, unknown, corrupt, structurally unexpected, unsafe, or anomalous-sidecar sources are rejected before a writable open or source-side change. Four exact earlier Generation 2 manifests are supported: before charity routing, before per-key request limits, before successful-response checkpoints, and the complete beta.1 schema. Three exact deployed intermediate manifests that already contain the beta.2 sidecars are also supported. They receive missing browse and quota-cleanup indexes, an initially empty steward held-record read audit table, and fishing length sidecars. Fishing length facts are backfilled only from complete retained outcomes with a matching applied rank fact; historical egg lengths are never invented. After read-only validation, one transaction adds the missing tables, indexes, and default sidecar rows, validates the complete current manifest, and preserves existing business data and custom legal settings. No historical successful-response evidence, recurring usage, or unrecorded game presentation values are invented. Alpha/Generation 1 requires a fresh database; arbitrary schema repair and old-generation import remain unsupported. See the [deployment compatibility matrix](deployment.md#database-compatibility-and-version-changes).
+The database remains Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. Only a completely absent main/WAL/SHM set or a validated Generation 2 set is accepted. Empty, alpha/Generation 1, unknown, corrupt, structurally unexpected, unsafe, or anomalous-sidecar sources are rejected before a writable open or source-side change. Four exact earlier Generation 2 manifests are supported: before charity routing, before per-key request limits, before successful-response checkpoints, and the complete beta.1 schema. Four exact deployed beta.2 intermediate manifests are also supported: `preBrowse` with the recurring-quota side table, `preQuotaCleanup` with browse indexes, `preStewardHoldRead` with cleanup indexes, and `preModelTokenReserve` with the steward held-read audit and Fishing length tables. The latest structure adds only the sparse model-level Token reserve override table; existing rows remain unchanged. A missing model-level reserve row means that model inherits the global setting. Fishing length facts are backfilled only from complete retained outcomes with a matching applied rank fact; historical egg lengths are never invented. After read-only validation, one transaction adds the missing tables, indexes, and default sidecar rows, validates the complete current manifest, and preserves existing business data and custom legal settings. No historical successful-response evidence, recurring usage, or unrecorded game presentation values are invented. Alpha/Generation 1 requires a fresh database; arbitrary schema repair and old-generation import remain unsupported. See the [deployment compatibility matrix](deployment.md#database-compatibility-and-version-changes).
 
 Account export `schema_version=5` is independent of SQLite `user_version`.
 
@@ -227,6 +227,8 @@ Catalog entries contain the six capability fields plus `public_description,enabl
 
 Administrator and steward model create/patch bodies accept `allowed_levels` and `public_description` within a 16 KiB request limit. Levels are unique integers 1–5, returned sorted. Omitted creation fields mean all five levels and an empty description; omitted patch fields remain unchanged. An explicit empty array blocks every ordinary caller, including L5. Null and duplicate/out-of-range levels are invalid. Descriptions are plain text, at most 1,024 code points and 4,096 UTF-8 bytes after CRLF-to-LF normalization; controls other than LF and TAB, including lone CR, are rejected. These fields use the existing model revision and idempotency rules.
 
+Management model detail, create, and patch DTOs also carry the top-level `token_reserve_credits` field as a decimal string or `null`. It accepts canonical credit values from `0.001` through `9000000000000` inclusive, with no more than three fractional digits; zero, negative, exponent-form, overprecise, out-of-range, and non-string values are invalid. On create, omission or `null` inherits the global Token reserve. On PATCH, omission preserves the existing override and `null` clears it back to inheritance. The field is effective only for `per_token` pricing: `per_request` keeps its per-request price reserve, and an override is retained when switching back to Token. Runtime preflight, candidate availability, and billing use the model value or the global `charity_token_reserve_milli`; the accepted value is frozen for an admitted request, so in-flight and recovery snapshots remain unchanged. This is a management-only field and is absent from ordinary catalog/API projections and owner exports.
+
 Level permission is rechecked at admission, claim and immediately before the dispatch marker. A denied level returns `403 forbidden`; an unavailable model returns `404 not_found`. A blocked unsent attempt releases its reservations. Already dispatched attempts finish under their accepted accounting, while later sends and retries must pass current access rules. Debug dry and live calls follow the same caller-level restriction.
 
 ### 4.2 Credential-theft reports
@@ -346,9 +348,9 @@ Each management attempt displays its persisted nullable `endpoint_key_id` routin
 | Method and path | Request / response |
 | --- | --- |
 | `GET /api/steward/charity-models` | `q,enabled` plus legacy `cursor,limit` or numbered `page,page_size`; steward-safe model page. |
-| `POST /api/steward/charity-models` | Complete provider/model, enabled, tagged pricing, discount and flatten policy; 201. |
+| `POST /api/steward/charity-models` | Complete provider/model, enabled, tagged pricing, discount and flatten policy, with optional `token_reserve_credits`; 201. |
 | `GET /api/steward/charity-models/{id}` | Steward-safe model detail. |
-| `PATCH /api/steward/charity-models/{id}` | `expected_revision` plus a non-empty partial business-field patch. |
+| `PATCH /api/steward/charity-models/{id}` | `expected_revision` plus a non-empty partial business-field patch, including the optional `token_reserve_credits` override. |
 | `DELETE /api/steward/charity-models/{id}` | `{expected_revision,confirmation}`. |
 | `GET /api/steward/charity-models/{id}/binding-candidates` | `donation_id,donation_key_id,source=automatic|manual,q` plus legacy `cursor,limit` or numbered `page,page_size`; safe candidate page. |
 | `GET /api/steward/charity-models/{id}/bindings` | Complete ordered bindings and `binding_revision`. |
@@ -434,6 +436,8 @@ Announcement mutations return a bounded receipt and the detail is fetched separa
 
 Review and key-management requests include expected revisions and the complete effective limits/expiry needed for that decision. Administrator donation keys add authorized expiry and an administrator-safe provenance snapshot. Charity candidates and bindings omit donor identity, private notes, endpoint-key IDs, and secrets. A model supports per-request or four-bucket per-token prices, donor rewards, a bounded promotion interval, visibility, flattening, rolling success over the most recent 100 completed calls, and ordered bindings.
 
+Administrator and level-5 steward model-management DTOs expose the optional `token_reserve_credits` override described in §4.1; it is a decimal credit string or `null`, and blank/inherited values do not appear in ordinary user catalog, OpenAI-compatible model, or owner export projections.
+
 Administrator donation and source reads use the management filters and pagination contract above: donation lists accept `status`, `handling`, and `q` in either legacy or numbered mode, while source groups and source-key lists are numbered-only with `q`, `scope`, `handling`, and (for keys) `idle`.
 
 | Method and path | Request / response |
@@ -442,9 +446,9 @@ Administrator donation and source reads use the management filters and paginatio
 | `GET /admin/api/donations/{id}/keys` | Numbered `page,page_size` only; administrator-safe donation-key page with `pagination`. |
 | `GET /admin/api/donation-sources` | Numbered `page,page_size` only; filters `q,scope=active|all` (default `active`), `handling=pending`. |
 | `GET /admin/api/donation-sources/{source_key}/keys` | Numbered `page,page_size` only; filters `q,scope=active|all` (default `active`), `handling=pending`, `idle=yes|no`. |
-| `POST /admin/api/charity-models` | Complete provider/model, enabled, tagged pricing, discount and flatten policy; 201. |
+| `POST /admin/api/charity-models` | Complete provider/model, enabled, tagged pricing, discount and flatten policy, with optional `token_reserve_credits`; 201. |
 | `GET /admin/api/charity-models/{id}` | Administrator model detail. |
-| `PATCH /admin/api/charity-models/{id}` | `expected_revision` plus a non-empty partial business-field patch. |
+| `PATCH /admin/api/charity-models/{id}` | `expected_revision` plus a non-empty partial business-field patch, including the optional `token_reserve_credits` override. |
 | `DELETE /admin/api/charity-models/{id}` | `{expected_revision,confirmation}`. |
 | `GET /admin/api/charity-models/{id}/binding-candidates` | `donation_id,donation_key_id,source=automatic|manual,q` plus legacy `cursor,limit` or numbered `page,page_size`; safe candidate page. |
 | `GET /admin/api/charity-models/{id}/bindings` | Complete ordered bindings and `binding_revision`. |
