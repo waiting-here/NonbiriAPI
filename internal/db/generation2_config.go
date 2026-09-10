@@ -548,10 +548,8 @@ func validateGenerationTwoConfigCombinations(values map[string]string) error {
 
 	activitiesEnabled := generationTwoConfigBoolValue(values, "activities_enabled")
 	welfareEnabled := generationTwoConfigBoolValue(values, "activity_welfare_enabled")
-	thursdayEnabled := generationTwoConfigBoolValue(values, "activity_thursday_enabled")
-	if !activitiesEnabled && (welfareEnabled || thursdayEnabled) {
-		return errors.New("activity subfeature requires activities_enabled")
-	}
+	// The master switch pauses admission without rewriting the individual
+	// activity switches. Those stored preferences remain valid while paused.
 	if activitiesEnabled && values["site_timezone_offset_minutes"] == "" {
 		return errors.New("activities require site timezone")
 	}
@@ -565,8 +563,9 @@ func validateGenerationTwoConfigCombinations(values map[string]string) error {
 	return nil
 }
 
-// ValidateGenerationTwoThursdayConfigHealth is the final health gate for the
-// dedicated activity-config service.
+// ValidateGenerationTwoThursdayConfigHealth checks readiness for activity
+// activation. Generic configuration reads and startup must not call it: the
+// last period can settle while the activity switch legitimately stays enabled.
 func ValidateGenerationTwoThursdayConfigHealth(values map[string]string, periodReady bool) error {
 	if generationTwoConfigBoolValue(values, "activity_thursday_enabled") && !periodReady {
 		return errors.New("Thursday activity requires a configured period")
@@ -633,19 +632,5 @@ func validateGenerationTwoConfig(ctx context.Context, q generationTwoConfigQuery
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	if err := ValidateGenerationTwoConfigSnapshot(seen); err != nil {
-		return err
-	}
-	if generationTwoConfigBoolValue(seen, "activity_thursday_enabled") {
-		var ready int
-		if err := q.QueryRowContext(ctx, `SELECT EXISTS(
-			SELECT 1 FROM thursday_periods WHERE state IN ('configured','open','settling')
-		)`).Scan(&ready); err != nil {
-			return err
-		}
-		if err := ValidateGenerationTwoThursdayConfigHealth(seen, ready == 1); err != nil {
-			return err
-		}
-	}
-	return nil
+	return ValidateGenerationTwoConfigSnapshot(seen)
 }

@@ -332,6 +332,10 @@ func TestGenerationTwoConfigCombinationHealth(t *testing.T) {
 		if err := ValidateGenerationTwoThursdayConfigHealth(values, true); err != nil {
 			t.Fatalf("healthy Thursday rejected: %v", err)
 		}
+		values["activities_enabled"] = "0"
+		if err := validateGenerationTwoConfigCombinations(values); err != nil {
+			t.Fatalf("paused activities with preserved subfeature switches rejected: %v", err)
+		}
 	})
 
 	t.Run("LinkLink", func(t *testing.T) {
@@ -505,7 +509,7 @@ func TestGenerationTwoEnabledRPSSnapshotSurvivesCloseReopen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read RPS snapshot after reopen: %v", err)
 	}
-	if err := validateGenerationTwoSiteConfigSnapshot(context.Background(), database, values); err != nil {
+	if err := validateGenerationTwoSiteConfigSnapshot(values); err != nil {
 		t.Fatalf("enabled RPS snapshot was rejected by generic validation: %v", err)
 	}
 	clean := generationTwoConfigSnapshotForValidation(values)

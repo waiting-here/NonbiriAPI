@@ -414,6 +414,8 @@ Category is `subscription|api_platform`. At most 100 active channels may be enab
 
 Announcement mutations return a bounded receipt and the detail is fetched separately. Published content and drafts are isolated. Activity/game configuration reads a complete typed snapshot, merges a strict patch, validates all dependent values and checked arithmetic, then commits atomically. Existing accepted work retains its frozen configuration.
 
+The activity master switch pauses admission while preserving each activity's switch. Thursday may remain enabled after its last period settles; this idle state does not block public configuration, administrator branding, unrelated settings or startup. A change from effectively disabled to enabled still requires a configured, open or settling Thursday period in the same configuration transaction.
+
 `GET /admin/api/pools` accepts `pool_type=welfare|thursday` and `state=open|closed`, plus legacy `cursor,limit` or numbered `page,page_size`; the response keeps the pool page envelope and adds `pagination` only in numbered mode. The page filters are independent and exact.
 
 | Method and path | Request / response |

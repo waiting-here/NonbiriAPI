@@ -171,7 +171,7 @@ func (s *Store) SetSiteTimezoneOffsetMinutes(minutes int) error {
 	if err != nil {
 		return fmt.Errorf("set site timezone: read configuration: %w", err)
 	}
-	if err := validateGenerationTwoSiteConfigSnapshot(context.Background(), tx, values); err != nil {
+	if err := validateGenerationTwoSiteConfigSnapshot(values); err != nil {
 		return fmt.Errorf("set site timezone: validate configuration: %w", err)
 	}
 
