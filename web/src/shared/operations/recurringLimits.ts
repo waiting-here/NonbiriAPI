@@ -17,10 +17,14 @@ import {
 
 export type RecurringLimitRole = 'owner' | 'steward' | 'admin';
 export type RecurringLimitMode = 'reset' | 'sliding';
-export type RecurringLimitInterval = '5h' | 'day' | 'week' | 'month';
+export type RecurringLimitInterval = '1h' | '5h' | 'day' | 'week' | 'month';
 export type RecurringLimitAlignment = 'first_success' | 'calendar';
 export type RecurringLimitMetric = 'calls' | 'tokens' | 'credits';
 export type RecurringLimitState = 'limited' | 'waiting_first_success' | 'available';
+
+export function isHourlyInterval(interval: RecurringLimitInterval): boolean {
+  return interval === '1h' || interval === '5h';
+}
 
 export interface RecurringLimitRuleInput {
   id: string | null;
@@ -100,7 +104,7 @@ function validateCombination(
       invalidResponse(`${label} sliding combination`);
     return;
   }
-  if (alignment === null || (interval === '5h' && alignment === 'calendar')) {
+  if (alignment === null || (isHourlyInterval(interval) && alignment === 'calendar')) {
     invalidResponse(`${label} reset combination`);
   }
   const weekCombination = alignment === 'calendar' && interval === 'week';
@@ -123,7 +127,7 @@ function normalizeRuleInput(value: unknown, label: string): RecurringLimitRuleIn
   const mode = oneOf(root.mode, ['reset', 'sliding'] as const, `${label} mode`);
   const interval = oneOf(
     root.interval,
-    ['5h', 'day', 'week', 'month'] as const,
+    ['1h', '5h', 'day', 'week', 'month'] as const,
     `${label} interval`,
   );
   const alignment =
