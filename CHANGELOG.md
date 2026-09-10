@@ -4,42 +4,40 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## [Unreleased]
+## [1.0.0-beta.2] - 2026-09-10
 
-This section describes the unreleased `1.0.0-beta.2` candidate.
+This release is source-first for Linux/amd64 and keeps the documented Generation 2 compatibility boundary.
 
 ### Added
 
-- Fishing now has an independent rolling 30-day largest-length board alongside lifetime records and the existing rolling payout board. Legendary catches can become a white-rice-themed blue fat fish Easter egg with exponentially rarer lengths, while preserving the original fish species, reward and payout rate.
+- Fishing now opens on an independent rolling 30-day largest-length board, alongside lifetime records and the existing rolling payout board. Legendary catches can become a transparent-background, white-rice-themed blue fat fish Easter egg with exponentially rarer lengths, while preserving the original fish species, reward and payout rate. Length-board rows use a compact original species name; result details retain the original legendary species explanation.
 - Bounded numbered pagination across the resource, activity, log, donation, model, report, legal-hold and administration lists, with 10/20/50/100 page sizes, direct page navigation, preserved filters, filter and page restoration after returning or refreshing, and a separate browser-local preference for each list.
-- A complete charity model catalog with optional plain-text descriptions, arbitrary allowed-level sets including an empty set, explicit enabled/availability reasons, and a public API projection that contains only currently usable models. Authorized administrators and level-5 stewards can browse donation sources and keys within the existing field whitelist.
+- A complete charity model catalog with plain-text descriptions, allowed-level sets and availability reasons. Three independent filters select a level, personal access and current availability; the default shows accessible, available models without a level filter, and active filters are highlighted. The public API returns only usable models. Authorized administrators and level-5 stewards can browse donation sources and keys.
 - Independent donation-key recurring quota rules for calls, tokens, or credits, using reset or sliding windows over 5 hours, days, weeks, or months in a selected business time zone. Reservations, successful-response settlement, edits, expiry, recovery, and deletion remain transactionally bounded.
+- Token-priced charity models can carry an optional per-model credit reserve before a call. Blank inherits the global setting, per-request pricing keeps its existing per-request reserve, and accepted requests retain their chosen reserve through in-flight settlement.
 - Browser-local time-point parsing and display with a server-resolved daylight-saving gap/fold policy, while recurring-rule time zones remain separate from ordinary timestamp display.
-- Home announcement summaries with severity and safe Markdown detail handling, plus the beta.2 candidate's expanded game presentation, responsive LinkLink layout, and generated short sound cues.
+- Home announcement summaries with severity and safe Markdown detail handling, plus beta.2's expanded game presentation, responsive LinkLink layout, and generated short sound cues.
 
 ### Changed
 
 - The daily check-in balance threshold now applies to every level. Zero still disables the threshold, and the level-gated mode still requires level 3 or above.
 - Current level-5 stewards can read the same request logs and donation review information as administrators, including donor identities, routing key identifiers, user filters and bounded log exports. Credentials and ordinary-user projections remain protected.
-
 - Account export is schema version 5. It adds safe projections of donation-key recurring rules, Fishing display lengths and the requester's rolling best, and the requester's own RPS buy-in/cash-out values while continuing to exclude secrets, other users, reports, holds, and internal scheduling data.
 - Generation 2 browsing indexes and beta.2 sidecars are added only through the exact validated additive update paths; existing data and historical facts are preserved and unsupported schemas remain zero-write refusals.
+- The optional model-level Token reserve is sparse: a missing override inherits the global setting, model deletion removes its override, and the setting does not change public catalog/API or owner-export projections or in-flight accounting snapshots.
+- Race checks keep all six shards, complete test coverage, original assertions and timeouts, while redistributing measured test weights to reduce the longest shard's wait.
 
 ### Fixed
 
 - Request log details show the actual logical-request charge and each attempt's routed key identifier; attempts no longer display a misleading zero charge.
-
 - Fishing keeps the oldest unacknowledged catch visible until confirmation, blocks repeated starts while revealing, and preserves reveal and acknowledgement timing across balance refreshes.
+- Automatic RPM bans apply only to charity requests exceeding the site's per-user limit. Rate-limited personal resource calls, shared key limits and upstream rate-limit responses do not trigger this policy.
+- Personal and charity calls preserve recognizable upstream error messages, safe machine codes and HTTP error statuses while hiding source addresses and sensitive values. Errors after streaming starts use a single bounded error frame; unreadable or unsafe bodies retain a generic fallback.
 
 ### Compatibility and deployment
 
-- Beta.2 continues Generation 2 (`application_id=0x4E425249`, `user_version=2`). A fresh deployment requires an absent database/WAL/SHM set; four exact earlier Generation 2 manifests and three deployed intermediate manifests with beta.2 sidecars are the only additive update sources. Alpha and Generation 1 require a fresh cutover, and an incompatible binary-only downgrade remains unsupported.
-- The candidate remains source-first for Linux/amd64 and has no official precompiled binary, container image, or installer.
-
-### Fixed
-
-- Automatic RPM bans apply only to charity requests exceeding the site's per-user limit. Rate-limited personal resource calls, shared key limits and upstream rate-limit responses do not trigger this policy.
-- Personal and charity calls preserve recognizable upstream error messages, safe machine codes and HTTP error statuses while hiding source addresses and sensitive values. Errors after streaming starts use a single bounded error frame; unreadable or unsafe bodies retain a generic fallback.
+- Beta.2 continues Generation 2 (`application_id=0x4E425249`, `user_version=2`). A fresh deployment requires an absent database/WAL/SHM set. Four exact earlier Generation 2 manifests and four exact deployed beta.2 intermediate structures are supported for additive updates; the latest structure adds only the sparse model-level Token reserve override table, with existing rows unchanged. Alpha and Generation 1 require a fresh cutover, and an incompatible binary-only downgrade remains unsupported.
+- The release remains source-first for Linux/amd64 and has no official precompiled binary, container image, or installer.
 
 ## [1.0.0-beta.1] - 2026-09-06
 
@@ -239,6 +237,7 @@ This section describes the unreleased `1.0.0-beta.2` candidate.
 - Purge expired sessions at startup and during the existing six-hour maintenance sweep.
 - Create missing database directories owner-only and align the systemd/key-file guidance with the runtime's strict permission checks.
 
+[1.0.0-beta.2]: https://github.com/waiting-here/NonbiriAPI/compare/v1.0.0-beta.1...v1.0.0-beta.2
 [1.0.0-beta.1]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-beta.1
 [1.0.0-alpha.3]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.3
 [1.0.0-alpha.2]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.2

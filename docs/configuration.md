@@ -30,7 +30,7 @@ The database directory and file hold encrypted upstream credentials and private 
 
 ## Runtime administrator settings
 
-The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values below describe the unreleased `1.0.0-beta.2` candidate. A fresh Generation 2 database explicitly seeds maintenance on and registration, activities, charity, donation intake, and all games off; these safety seeds take precedence over generic code fallbacks.
+The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values below describe the `1.0.0-beta.2` release. A fresh Generation 2 database explicitly seeds maintenance on and registration, activities, charity, donation intake, and all games off; these safety seeds take precedence over generic code fallbacks.
 
 | Key | Type / range | Default and effect |
 | --- | --- | --- |
@@ -58,7 +58,7 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | `maintenance_mode` | boolean | fresh Generation 2 seed `true`; server-side authoritative admission gate — while on, ordinary user-station `/api/*` and `/v1/*` admission is refused with `503 maintenance` except the documented bootstrap/logout and accepted-continuation routes; already-issued credentials are affected immediately; the admin station remains available. Route matrix in [api-contract.md](api-contract.md#10-maintenance-recovery-and-retention) |
 | `charity_enabled` | boolean | `false`; charity system master switch — while off, no new charity routing happens and the price table is hidden; in-flight reservations still settle |
 | `donation_accept_enabled` | boolean | `false`; gates new donation submissions only; review/routing of existing donations is unaffected |
-| `charity_token_reserve_milli` | nullable canonical positive decimal milli-credit string | **null (default) = not configured** — distinct from an explicit value; while unset, per-token charity models cannot be enabled or routed (fail closed); PATCH rejects `null` and non-positive values |
+| `charity_token_reserve_milli` | nullable canonical positive decimal milli-credit string | **null (default) = not configured** — distinct from an explicit value; while unset, per-token charity models without a model-level override cannot be routed (fail closed), although an enabled model record may still be saved; PATCH rejects `null` and non-positive values |
 | `rpm_ban_threshold` | integer `[0,4096]` | `5`; charity requests denied by the site's per-user RPM limit before an automatic ban; personal calls, global limits, shared key limits and upstream `429` do not count; `0` disables |
 | `rpm_ban_window_seconds` | integer `[1,316224000]` | `86400`; in-memory RPM violation window |
 | `rpm_ban_duration_seconds` | integer `[1,316224000]` | `86400`; automatic ban duration |
