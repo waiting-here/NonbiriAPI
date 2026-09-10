@@ -464,6 +464,57 @@ test.describe('recurring limits in the complete charity pages', () => {
     expect(flow.state.writes).toHaveLength(1);
   });
 
+  test('admin adds a one-hour rule while preserving the 5h default and legal mode switches', async ({
+    context,
+    page,
+  }) => {
+    const flow = await prepare(context, page, 'admin', 'en', 'light', 1280);
+    await flow.open();
+    await flow.expand();
+    const editor = page.locator('.recurring-limits');
+    await editor.getByRole('button', { name: 'Add recurring rule', exact: true }).click();
+
+    const newRule = editor.locator('.recurring-limits__rule').last();
+    const interval = newRule.getByRole('combobox', { name: 'Period', exact: true });
+    const mode = newRule.getByRole('combobox', { name: 'Mode', exact: true });
+    await expect(interval).toHaveValue('5h');
+    await expect(newRule.getByRole('combobox', { name: 'Starts at', exact: true })).toHaveValue(
+      'first_success',
+    );
+
+    await interval.selectOption('1h');
+    await expect(newRule.getByRole('combobox', { name: 'Starts at', exact: true })).toHaveValue(
+      'first_success',
+    );
+    await expect(
+      newRule.getByRole('option', { name: 'Calendar boundary', exact: true }),
+    ).toHaveCount(0);
+    await mode.selectOption('sliding');
+    await expect(newRule.getByRole('combobox', { name: 'Starts at', exact: true })).toHaveCount(0);
+    await mode.selectOption('reset');
+    await expect(newRule.getByRole('combobox', { name: 'Starts at', exact: true })).toHaveValue(
+      'first_success',
+    );
+
+    await newRule.getByLabel('Time zone', { exact: true }).fill('UTC');
+    await newRule.getByLabel('Limit', { exact: true }).fill('20');
+    await editor.getByRole('button', { name: 'Save recurring limits', exact: true }).click();
+    await expect(editor).toContainText('Recurring limits saved.');
+
+    expect(flow.state.writes).toHaveLength(1);
+    expect(flow.state.writes[0]?.payload.rules.at(-1)).toEqual({
+      id: null,
+      mode: 'reset',
+      interval: '1h',
+      alignment: 'first_success',
+      time_zone: 'UTC',
+      week_starts_on: null,
+      metric: 'calls',
+      limit: '20',
+    });
+    await flow.check('quota-admin-1280-light-en-1h');
+  });
+
   test('admin folds an unknown save and safely retries the original command', async ({
     context,
     page,

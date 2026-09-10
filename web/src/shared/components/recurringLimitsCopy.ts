@@ -183,7 +183,13 @@ const en: RecurringLimitsCopy = {
     available: 'Available',
   },
   modeValue: { reset: 'Reset', sliding: 'Sliding window' },
-  intervalValue: { '5h': '5 hours', day: 'Day', week: 'Week', month: 'Month' },
+  intervalValue: {
+    '1h': '1 hour',
+    '5h': '5 hours',
+    day: 'Day',
+    week: 'Week',
+    month: 'Month',
+  },
   alignmentValue: { first_success: 'First successful call', calendar: 'Calendar boundary' },
   metricValue: { calls: 'Calls', tokens: 'Tokens', credits: 'Credits' },
   weekValue: (day) =>
@@ -294,7 +300,7 @@ const zh: RecurringLimitsCopy = {
     available: '可用',
   },
   modeValue: { reset: '刷新', sliding: '滑动窗口' },
-  intervalValue: { '5h': '5 小时', day: '日', week: '周', month: '月' },
+  intervalValue: { '1h': '1 小时', '5h': '5 小时', day: '日', week: '周', month: '月' },
   alignmentValue: { first_success: '首次成功调用', calendar: '自然边界' },
   metricValue: { calls: '调用次数', tokens: 'Token 数', credits: '积分' },
   weekValue: (day) =>
