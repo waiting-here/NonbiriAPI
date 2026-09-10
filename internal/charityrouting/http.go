@@ -310,15 +310,16 @@ func parseDiscount(wire discountWire) (DiscountInput, map[string]any, error) {
 }
 
 type modelCreateWire struct {
-	AllowedLevels     requiredField[[]int]        `json:"allowed_levels"`
-	PublicDescription requiredField[string]       `json:"public_description"`
-	RouteStrategy     requiredField[string]       `json:"route_strategy"`
-	Provider          requiredField[string]       `json:"provider"`
-	Model             requiredField[string]       `json:"model"`
-	Enabled           requiredField[bool]         `json:"enabled"`
-	Pricing           requiredField[pricingWire]  `json:"pricing"`
-	Discount          requiredField[discountWire] `json:"discount"`
-	FlattenToolCalls  requiredField[bool]         `json:"flatten_tool_calls"`
+	TokenReserveCredits nullableField[string]       `json:"token_reserve_credits"`
+	AllowedLevels       requiredField[[]int]        `json:"allowed_levels"`
+	PublicDescription   requiredField[string]       `json:"public_description"`
+	RouteStrategy       requiredField[string]       `json:"route_strategy"`
+	Provider            requiredField[string]       `json:"provider"`
+	Model               requiredField[string]       `json:"model"`
+	Enabled             requiredField[bool]         `json:"enabled"`
+	Pricing             requiredField[pricingWire]  `json:"pricing"`
+	Discount            requiredField[discountWire] `json:"discount"`
+	FlattenToolCalls    requiredField[bool]         `json:"flatten_tool_calls"`
 }
 
 func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error) {
@@ -337,6 +338,10 @@ func parseModelCreate(wire modelCreateWire) (ModelCreate, map[string]any, error)
 		Pricing: pricing, Discount: discount, FlattenToolCalls: wire.FlattenToolCalls.Value}
 	canonical := map[string]any{"provider": input.Provider, "model": input.Model, "enabled": input.Enabled,
 		"pricing": pricingJSON, "discount": discountJSON, "flatten_tool_calls": input.FlattenToolCalls}
+	if wire.TokenReserveCredits.Set {
+		input.TokenReserveCredits = wire.TokenReserveCredits.Value
+		canonical["token_reserve_credits"] = wire.TokenReserveCredits.Value
+	}
 	if wire.RouteStrategy.Set {
 		if !validRouteStrategy(wire.RouteStrategy.Value) {
 			return ModelCreate{}, nil, ErrInvalidRequest
@@ -441,16 +446,17 @@ func parseDiscountPatch(wire discountPatchWire) (*DiscountPatchInput, map[string
 }
 
 type modelPatchWire struct {
-	AllowedLevels     requiredField[[]int]             `json:"allowed_levels"`
-	PublicDescription requiredField[string]            `json:"public_description"`
-	RouteStrategy     requiredField[string]            `json:"route_strategy"`
-	ExpectedRevision  requiredField[string]            `json:"expected_revision"`
-	Provider          requiredField[string]            `json:"provider"`
-	Model             requiredField[string]            `json:"model"`
-	Enabled           requiredField[bool]              `json:"enabled"`
-	Pricing           requiredField[pricingWire]       `json:"pricing"`
-	Discount          requiredField[discountPatchWire] `json:"discount"`
-	FlattenToolCalls  requiredField[bool]              `json:"flatten_tool_calls"`
+	TokenReserveCredits nullableField[string]            `json:"token_reserve_credits"`
+	AllowedLevels       requiredField[[]int]             `json:"allowed_levels"`
+	PublicDescription   requiredField[string]            `json:"public_description"`
+	RouteStrategy       requiredField[string]            `json:"route_strategy"`
+	ExpectedRevision    requiredField[string]            `json:"expected_revision"`
+	Provider            requiredField[string]            `json:"provider"`
+	Model               requiredField[string]            `json:"model"`
+	Enabled             requiredField[bool]              `json:"enabled"`
+	Pricing             requiredField[pricingWire]       `json:"pricing"`
+	Discount            requiredField[discountPatchWire] `json:"discount"`
+	FlattenToolCalls    requiredField[bool]              `json:"flatten_tool_calls"`
 }
 
 func parseModelPatch(wire modelPatchWire) (ModelPatch, map[string]any, error) {
@@ -462,6 +468,10 @@ func parseModelPatch(wire modelPatchWire) (ModelPatch, map[string]any, error) {
 	}
 	input := ModelPatch{ExpectedRevision: wire.ExpectedRevision.Value}
 	canonical := map[string]any{"expected_revision": wire.ExpectedRevision.Value}
+	if wire.TokenReserveCredits.Set {
+		input.TokenReserveCredits = &wire.TokenReserveCredits.Value
+		canonical["token_reserve_credits"] = wire.TokenReserveCredits.Value
+	}
 	if wire.AllowedLevels.Set {
 		mask, err := charityaccess.Mask(wire.AllowedLevels.Value)
 		if err != nil {

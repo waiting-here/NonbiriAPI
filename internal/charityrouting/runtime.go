@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
+	"github.com/waiting-here/NonbiriAPI/internal/charityreserve"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
@@ -109,15 +110,11 @@ FROM charity_models WHERE full_name=?`, fullName).Scan(&preflight.ModelID, &pref
 			return RuntimePreflight{}, ErrInvariant
 		}
 	} else if pricingMode == "per_token" {
-		var stored sql.NullString
-		if err := tx.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key='charity_token_reserve_milli'`).Scan(&stored); err != nil {
-			return RuntimePreflight{}, fmt.Errorf("charity routing: read preflight token reserve: %w", err)
-		}
-		if !stored.Valid {
+		preflight.ReservedMilli, err = charityreserve.Resolve(ctx, tx, preflight.ModelID)
+		if errors.Is(err, charityreserve.ErrNotConfigured) {
 			return RuntimePreflight{}, ErrNotFound
 		}
-		preflight.ReservedMilli, err = strconv.ParseInt(stored.String, 10, 64)
-		if err != nil || preflight.ReservedMilli < 1 || preflight.ReservedMilli > db.MaxMoneyMilli {
+		if err != nil {
 			return RuntimePreflight{}, ErrInvariant
 		}
 	} else {
@@ -293,12 +290,8 @@ FROM charity_models WHERE id=?`, modelID).Scan(&snapshot.ModelID, &snapshot.Prov
 			return RuntimeSnapshot{}, ErrInvariant
 		}
 	} else if pricingMode == "per_token" {
-		var stored string
-		if err := tx.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key='charity_token_reserve_milli'`).Scan(&stored); err != nil {
-			return RuntimeSnapshot{}, fmt.Errorf("charity routing: read token reserve: %w", err)
-		}
-		snapshot.ReservedMilli, err = strconv.ParseInt(stored, 10, 64)
-		if err != nil || snapshot.ReservedMilli < 1 || snapshot.ReservedMilli > db.MaxMoneyMilli {
+		snapshot.ReservedMilli, err = charityreserve.Resolve(ctx, tx, modelID)
+		if err != nil {
 			return RuntimeSnapshot{}, ErrInvariant
 		}
 	} else {

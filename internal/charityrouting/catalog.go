@@ -76,14 +76,17 @@ func (s *Service) Catalog(ctx context.Context, userID int64, filter CatalogFilte
 	if charityGate == "0" && donationGate == "1" {
 		return Catalog{}, ErrInvariant
 	}
-	var tokenReserveText string
+	var tokenReserveText sql.NullString
 	if err := tx.QueryRowContext(ctx, `SELECT CASE WHEN EXISTS(SELECT 1 FROM charity_models WHERE pricing_mode='per_token')
 THEN (SELECT value FROM site_config WHERE key='charity_token_reserve_milli') ELSE '1' END`).Scan(&tokenReserveText); err != nil {
 		return Catalog{}, fmt.Errorf("charity routing: read catalog reserve: %w", err)
 	}
-	tokenReserve, err := strconv.ParseInt(tokenReserveText, 10, 64)
-	if err != nil || tokenReserve < 1 || tokenReserve > db.MaxMoneyMilli {
-		return Catalog{}, ErrInvariant
+	var tokenReserve int64
+	if tokenReserveText.Valid {
+		tokenReserve, err = strconv.ParseInt(tokenReserveText.String, 10, 64)
+		if err != nil || tokenReserve < 1 || tokenReserve > db.MaxMoneyMilli {
+			return Catalog{}, ErrInvariant
+		}
 	}
 	from := ` FROM charity_models cm JOIN charity_model_access a ON a.model_id=cm.id
 CROSS JOIN (SELECT ? AS decision_now,? AS token_reserve,? AS charity_enabled) cx WHERE 1=1`

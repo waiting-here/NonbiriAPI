@@ -82,7 +82,8 @@ func sourceUsableSQL() string {
  EXISTS(SELECT 1 FROM donation_key_memberships m WHERE m.donation_key_id=dk.id AND m.endpoint_key_id=k.id) AS member,
  EXISTS(SELECT 1 FROM endpoint_key_suspensions x WHERE x.endpoint_key_id=k.id) AS suspended,
  (SELECT MIN(CASE cm.pricing_mode WHEN 'per_request' THEN cm.request_user_price
- WHEN 'per_token' THEN CAST((SELECT value FROM site_config WHERE key='charity_token_reserve_milli') AS INTEGER) END)
+ WHEN 'per_token' THEN COALESCE((SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),
+ CAST((SELECT value FROM site_config WHERE key='charity_token_reserve_milli') AS INTEGER)) END)
  FROM charity_model_bindings b JOIN charity_models cm ON cm.id=b.charity_model_id
 JOIN charity_model_access a ON a.model_id=cm.id
  JOIN model_pair_catalog pc ON pc.endpoint_key_id=b.endpoint_key_id AND pc.normalized_model_id=b.upstream_model_id

@@ -13,8 +13,8 @@ import (
 // cannot be dispatched, even when it contains individually eligible keys.
 // Only repository-owned SQL expressions are interpolated here.
 func catalogAvailableSQL() string {
-	price := `(CASE cm.pricing_mode WHEN 'per_request' THEN cm.request_user_price ELSE cx.token_reserve END)`
-	return `(CASE WHEN cx.charity_enabled=1 AND cm.enabled=1 THEN (SELECT COUNT(*) FROM (
+	price := `(CASE cm.pricing_mode WHEN 'per_request' THEN cm.request_user_price ELSE COALESCE((SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id),cx.token_reserve) END)`
+	return `(CASE WHEN cx.charity_enabled=1 AND cm.enabled=1 AND (cm.pricing_mode='per_request' OR ` + price + `>0) THEN (SELECT COUNT(*) FROM (
  SELECT 1 FROM charity_model_bindings b
  JOIN donation_keys dk ON dk.id=b.donation_key_id
  JOIN donations d ON d.id=dk.donation_id
