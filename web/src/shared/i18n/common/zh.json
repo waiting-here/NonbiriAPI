@@ -427,6 +427,8 @@
         "state": "状态",
         "tokenLimit": "Token 上限",
         "tokenReserve": "Token 预留量",
+        "tokenReserveCredits": "调用前预留积分",
+        "tokenReserveCreditsHelp": "留空继承全局配置。",
         "tokens": "Token 数",
         "effectiveExpiry": "当前有效期",
         "authorizedExpiry": "捐赠者授权上限",
@@ -448,6 +450,7 @@
           "modelLevels": "请选择 L1 至 L5 中的任意等级，也可以全部清空。",
           "publicDescription": "公开说明最多 1,024 个字符、4,096 个 UTF-8 字节，除换行和制表符外不能包含控制字符。",
           "modelPrices": "每项价格都必须是精确的非负积分金额，最多三位小数。",
+          "tokenReserveCredits": "预留积分范围：0.001～9,000,000,000,000，最多三位小数。",
           "discountPercent": "折扣百分比必须是 0 至 100 的整数。",
           "discountDates": "折扣日期必须有效，且结束时间必须晚于开始时间。"
         }

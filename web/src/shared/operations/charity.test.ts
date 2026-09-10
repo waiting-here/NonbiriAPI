@@ -35,6 +35,7 @@ const model = {
   enabled: true,
   allowed_levels: [1, 2, 3, 4, 5],
   public_description: '',
+  token_reserve_credits: null,
   pricing: { mode: 'per_request', user_price: '1', donor_reward: '0' },
   discount: { enabled: true, percent: 10, start_at: null, end_at: null },
   flatten_tool_calls: false,
@@ -348,6 +349,40 @@ describe('charity model wire', () => {
         discount: { ...model.discount, start_at: 11, end_at: 10 },
       }),
     ).toThrow(/discount window/i);
+  });
+
+  it('normalizes an optional per-token reserve without losing decimal precision', () => {
+    for (const token_reserve_credits of [
+      '9000000000000.001',
+      '0',
+      '0.000',
+      '1.000',
+      '1e3',
+      '-1',
+      1,
+      '9000000000001',
+    ]) {
+      expect(() => normalizeAdminCharityModel({ ...model, token_reserve_credits })).toThrow(
+        /token reserve credits/i,
+      );
+    }
+    for (const token_reserve_credits of ['0.001', '0.01', '1.234']) {
+      expect(
+        normalizeAdminCharityModel({ ...model, token_reserve_credits }).token_reserve_credits,
+      ).toBe(token_reserve_credits);
+    }
+    expect(
+      normalizeAdminCharityModel({ ...model, token_reserve_credits: '9000000000000' })
+        .token_reserve_credits,
+    ).toBe('9000000000000');
+    expect(
+      normalizeStewardCharityModel({ ...model, token_reserve_credits: '1.234' })
+        .token_reserve_credits,
+    ).toBe('1.234');
+    const legacyModel = Object.fromEntries(
+      Object.entries(model).filter(([key]) => key !== 'token_reserve_credits'),
+    );
+    expect(normalizeAdminCharityModel(legacyModel).token_reserve_credits).toBeNull();
   });
 
   it('accepts binding revision zero from the bindings API', async () => {

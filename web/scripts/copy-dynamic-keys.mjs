@@ -116,6 +116,7 @@ const dynamicCopyKeys = [
     'common.operations.charity.validation.completeSettings',
     'common.operations.charity.validation.modelIdentity',
     'common.operations.charity.validation.modelPrices',
+    'common.operations.charity.validation.tokenReserveCredits',
     'common.operations.charity.validation.discountPercent',
     'common.operations.charity.validation.discountDates',
   ].map((key) =>
