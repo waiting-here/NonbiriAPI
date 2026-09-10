@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 )
 
 // This is the exact deployed schema immediately before per-model routing.
@@ -33,6 +34,9 @@ const preStewardHoldReadManifestHash = "5a339c17dd63b975cd17f1bc946f0c799b46a68c
 // The deployed fishing-length schema before per-model credit reservations.
 const preModelTokenReserveManifestHash = "e6e10f9c37f0dff0ea9507173d48808aea6d448f05c9812cdb4ee5d3cc97ea36"
 
+// The released schema before the one-hour recurring quota interval.
+const preHourlyQuotaManifestHash = "8c0c7dc160170bae72e388c3f7b9c8cb15a756f867af92fa2644d2afd48a2550"
+
 func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) {
 	if GenerationTwoSchemaHash() != PinnedGenerationTwoSchemaHash {
 		return false, errors.New("generation-two schema hash drift")
@@ -48,15 +52,28 @@ func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) 
 	switch generationManifestDigest(actual) {
 	case expected:
 		return false, nil
-	case preRoutingManifestHash, preKeyLimitsManifestHash, preResponseStartsManifestHash, preBetaTwoManifestHash, preBrowseManifestHash, preQuotaCleanupManifestHash, preStewardHoldReadManifestHash, preModelTokenReserveManifestHash:
+	case preRoutingManifestHash, preKeyLimitsManifestHash, preResponseStartsManifestHash, preBetaTwoManifestHash, preBrowseManifestHash, preQuotaCleanupManifestHash, preStewardHoldReadManifestHash, preModelTokenReserveManifestHash, preHourlyQuotaManifestHash:
 		return true, nil
 	default:
 		return false, errors.New("generation-two schema manifest mismatch")
 	}
 }
 
-func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) error {
-	tx, err := database.BeginTx(ctx, nil)
+func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) (result error) {
+	conn, err := database.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	// Schema editing is connection-local. Clear it even if cancellation rolls
+	// back the transaction before the interval extension can reset it itself.
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, err := conn.ExecContext(cleanup, `PRAGMA writable_schema=RESET`)
+		result = errors.Join(result, err)
+	}()
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -73,7 +90,7 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) error
 		return err
 	}
 	digest := generationManifestDigest(manifest)
-	if digest != preModelTokenReserveManifestHash {
+	if digest != preModelTokenReserveManifestHash && digest != preHourlyQuotaManifestHash {
 		// Extend any pre-beta.1 structure to the complete beta.1 schema first.
 		if digest == preRoutingManifestHash || digest == preKeyLimitsManifestHash || digest == preResponseStartsManifestHash {
 			if digest == preRoutingManifestHash {
@@ -119,7 +136,12 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) error
 			return err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, charityModelReserveSchema); err != nil {
+	if digest != preHourlyQuotaManifestHash {
+		if _, err := tx.ExecContext(ctx, charityModelReserveSchema); err != nil {
+			return err
+		}
+	}
+	if err := extendHourlyQuotaInterval(ctx, tx); err != nil {
 		return err
 	}
 	if err := validateGenerationTwoManifest(ctx, tx); err != nil {

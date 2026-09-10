@@ -6,7 +6,7 @@ import (
 )
 
 func TestBrowseExtensionPreservesPopulatedRecurringAndPresentationState(t *testing.T) {
-	for _, hash := range []string{preBrowseManifestHash, preQuotaCleanupManifestHash, preStewardHoldReadManifestHash} {
+	for _, hash := range []string{preBrowseManifestHash, preQuotaCleanupManifestHash, preStewardHoldReadManifestHash, preHourlyQuotaManifestHash} {
 		t.Run(hash, func(t *testing.T) { testIndexExtensionPreservesPopulatedState(t, hash) })
 	}
 }

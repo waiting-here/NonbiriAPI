@@ -666,8 +666,19 @@ func TestRuleReplacementPreservesLimitChangesAndRetiresStructuralEpochs(t *testi
 }
 
 func TestFirstSuccessReservationAccountingAndExpiredIdlePeriod(t *testing.T) {
+	for interval, seconds := range map[string]int64{"1h": 3600, "5h": 18000} {
+		t.Run(interval, func(t *testing.T) { testFirstSuccessPeriod(t, interval, seconds) })
+	}
+}
+
+func testFirstSuccessPeriod(t *testing.T, interval string, seconds int64) {
+	t.Helper()
 	q := newQuotaDB(t)
-	replace(t, q, testNow, rule("calls", "2"), rule("tokens", "10"), rule("credits", "0.01"))
+	rules := []RuleInput{rule("calls", "2"), rule("tokens", "10"), rule("credits", "0.01")}
+	for i := range rules {
+		rules[i].Interval = interval
+	}
+	replace(t, q, testNow, rules...)
 	a := Amounts{Calls: mag(1), Tokens: mag(5), Credits: mag(5)}
 	id, err := newClaim(t, q, testNow, a)
 	if err != nil {
@@ -682,24 +693,27 @@ func TestFirstSuccessReservationAccountingAndExpiredIdlePeriod(t *testing.T) {
 	v = views(t, q, testNow+1)
 	requireUsage(t, v[0], "1", "0", "1", "available")
 	requireUsage(t, v[1], "0", "5", "5", "available")
-	if v[0].PeriodStart == nil || *v[0].PeriodStart != success || *v[0].PeriodEnd != success+18000 {
+	if v[0].PeriodStart == nil || *v[0].PeriodStart != success || *v[0].PeriodEnd != success+seconds {
 		t.Fatal(v[0])
 	}
 	terminal(t, q, id, testNow+2, Amounts{Calls: mag(1), Tokens: mag(15), Credits: mag(20)}, true)
 	v = views(t, q, testNow+2)
 	requireUsage(t, v[1], "15", "0", "0", "limited")
 	requireUsage(t, v[2], "0.02", "0", "0", "limited")
-	v = views(t, q, testNow+18001)
+	v = views(t, q, success+seconds-1)
+	requireUsage(t, v[1], "15", "0", "0", "limited")
+	v = views(t, q, success+seconds)
 	requireUsage(t, v[0], "0", "0", "2", "waiting_first_success")
-	id, err = newClaim(t, q, testNow+24000, a)
+	next := testNow + seconds + 6000
+	id, err = newClaim(t, q, next, a)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := dispatch(t, q, id, testNow+24000); err != nil {
+	if err := dispatch(t, q, id, next); err != nil {
 		t.Fatal(err)
 	}
-	start(t, q, id, testNow+24000)
-	if v := views(t, q, testNow+24000); *v[0].PeriodEnd != testNow+42000 {
+	start(t, q, id, next)
+	if v := views(t, q, next); *v[0].PeriodEnd != next+seconds {
 		t.Fatal(v)
 	}
 }
@@ -800,8 +814,16 @@ func TestNaturalMidnightKeepsUnstartedReservationsAndOriginalSuccessPeriod(t *te
 }
 
 func TestSlidingExactLeftBoundaryAndClockRollback(t *testing.T) {
+	for interval, seconds := range map[string]int64{"1h": 3600, "5h": 18000} {
+		t.Run(interval, func(t *testing.T) { testSlidingHourlyBoundary(t, interval, seconds) })
+	}
+}
+
+func testSlidingHourlyBoundary(t *testing.T, interval string, seconds int64) {
+	t.Helper()
 	q := newQuotaDB(t)
 	r := rule("calls", "1")
+	r.Interval = interval
 	r.Mode = "sliding"
 	r.Alignment = nil
 	replace(t, q, testNow, r)
@@ -815,16 +837,16 @@ func TestSlidingExactLeftBoundaryAndClockRollback(t *testing.T) {
 	}
 	start(t, q, id, testNow)
 	terminal(t, q, id, testNow+1, a, true)
-	requireUsage(t, views(t, q, testNow+17999)[0], "1", "0", "0", "limited")
-	requireUsage(t, views(t, q, testNow+18000)[0], "0", "0", "1", "available")
-	id, err = newClaim(t, q, testNow+18000, a)
+	requireUsage(t, views(t, q, testNow+seconds-1)[0], "1", "0", "0", "limited")
+	requireUsage(t, views(t, q, testNow+seconds)[0], "0", "0", "1", "available")
+	id, err = newClaim(t, q, testNow+seconds, a)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := dispatch(t, q, id, testNow+18000); err != nil {
+	if err := dispatch(t, q, id, testNow+seconds); err != nil {
 		t.Fatal(err)
 	}
-	if at := start(t, q, id, testNow+10); at != testNow+18000 {
+	if at := start(t, q, id, testNow+10); at != testNow+seconds {
 		t.Fatal("clock rollback escaped clamp", at)
 	}
 	requireUsage(t, views(t, q, testNow+10)[0], "1", "0", "0", "limited")

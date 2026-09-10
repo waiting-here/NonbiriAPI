@@ -71,6 +71,38 @@ describe('recurring limits operations', () => {
     );
   });
 
+  it('accepts the one-hour reset and sliding intervals while rejecting calendar alignment', () => {
+    const slidingRuleID = `qlr_${'B'.repeat(21)}Q`;
+    const normalized = normalizeRecurringLimitsResponse(
+      response({
+        rules: [
+          rule({ interval: '1h', alignment: 'first_success', week_starts_on: null }),
+          rule({
+            id: slidingRuleID,
+            mode: 'sliding',
+            interval: '1h',
+            alignment: null,
+            week_starts_on: null,
+            period_start: null,
+            period_end: null,
+          }),
+        ],
+      }),
+    );
+
+    expect(
+      normalized.rules.map(({ interval, mode, alignment }) => [interval, mode, alignment]),
+    ).toEqual([
+      ['1h', 'reset', 'first_success'],
+      ['1h', 'sliding', null],
+    ]);
+    expect(() =>
+      normalizeRecurringLimitsResponse(
+        response({ rules: [rule({ interval: '1h', alignment: 'calendar' })] }),
+      ),
+    ).toThrow(ApiError);
+  });
+
   it('submits all eight rule fields with the captured revision and idempotency key', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () =>
       jsonResponse({ donation_id: '7', key_id: '8', donation_revision: '10' }),
@@ -168,6 +200,36 @@ describe('recurring limits operations', () => {
       ),
     ).toThrow(ApiError);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('writes a one-hour reset rule with the exact wire interval', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ donation_id: '7', key_id: '8', donation_revision: '10' }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const input: RecurringLimitRuleInput = {
+      id: RULE_ID,
+      mode: 'reset',
+      interval: '1h',
+      alignment: 'first_success',
+      time_zone: 'UTC',
+      week_starts_on: null,
+      metric: 'calls',
+      limit: '12',
+    };
+
+    await putRecurringLimits(
+      'steward',
+      '7',
+      '8',
+      { expected_revision: '9', rules: [input] },
+      'EEEEEEEEEEEEEEEEEEEEEE',
+    );
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      expected_revision: '9',
+      rules: [input],
+    });
   });
 
   it('does not expose a write path for key owners', () => {

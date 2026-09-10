@@ -276,6 +276,69 @@ describe('RecurringLimits', () => {
     expect(screen.getAllByText(/offset unavailable/).length).toBeGreaterThan(0);
   });
 
+  it('reads and saves a one-hour reset rule in the exact English wire shape', async () => {
+    const { requests } = installQuotaFetch({
+      reads: [response({ rules: [rule({ interval: '1h' })] })],
+    });
+    const rendered = await renderAdmin();
+    await screen.findByRole('heading', { name: 'Recurring charity limits' });
+
+    const interval = await screen.findByLabelText('Period');
+    expect(interval).toHaveValue('1h');
+    expect(screen.queryByRole('option', { name: 'Calendar boundary' })).not.toBeInTheDocument();
+
+    const limit = screen.getByLabelText('Limit');
+    await rendered.user.clear(limit);
+    await rendered.user.type(limit, '101');
+    await rendered.user.click(screen.getByRole('button', { name: 'Save recurring limits' }));
+    await waitFor(() => expect(screen.getByText('Recurring limits saved.')).toBeVisible());
+
+    expect(JSON.parse(String(putRequests(requests)[0]?.init?.body))).toEqual({
+      expected_revision: '9',
+      rules: [
+        {
+          id: RULE_ID,
+          mode: 'reset',
+          interval: '1h',
+          alignment: 'first_success',
+          time_zone: 'UTC',
+          week_starts_on: null,
+          metric: 'calls',
+          limit: '101',
+        },
+      ],
+    });
+  });
+
+  it('keeps the 5h new-rule default and legalizes one-hour mode switches in Chinese', async () => {
+    installQuotaFetch({ reads: [response({ rules: [] })] });
+    const rendered = await renderAdmin({}, { locale: 'zh' });
+    await screen.findByRole('heading', { name: '公益循环限量' });
+    await rendered.user.click(screen.getByRole('button', { name: '添加循环规则' }));
+
+    const interval = screen.getByLabelText('周期');
+    const alignment = screen.getByLabelText('起算方式');
+    expect(interval).toHaveValue('5h');
+    expect(alignment).toHaveValue('first_success');
+    expect(screen.getAllByText(/周期: 5 小时/).length).toBeGreaterThan(0);
+
+    await rendered.user.selectOptions(interval, 'week');
+    await rendered.user.selectOptions(alignment, 'calendar');
+    expect(screen.getByLabelText('周起始日')).toHaveValue('1');
+
+    await rendered.user.selectOptions(interval, '1h');
+    expect(interval).toHaveValue('1h');
+    expect(screen.getByLabelText('起算方式')).toHaveValue('first_success');
+    expect(screen.queryByLabelText('周起始日')).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '自然边界' })).not.toBeInTheDocument();
+    expect(screen.getAllByText(/周期: 1 小时/).length).toBeGreaterThan(0);
+
+    await rendered.user.selectOptions(screen.getByLabelText('模式'), 'sliding');
+    expect(screen.queryByLabelText('起算方式')).not.toBeInTheDocument();
+    await rendered.user.selectOptions(screen.getByLabelText('模式'), 'reset');
+    expect(screen.getByLabelText('起算方式')).toHaveValue('first_success');
+  });
+
   it('shows the read error and retry when the initial single-key GET fails', async () => {
     installQuotaFetch({
       reads: [

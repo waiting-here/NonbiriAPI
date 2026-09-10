@@ -57,6 +57,12 @@ func TestCalendarShiftClampAndActualHours(t *testing.T) {
 		{"America/New_York", "2026-03-07T17:00:23Z", "day", "2026-03-08T16:00:23Z", false},
 		{"America/New_York", "2026-10-31T16:00:23Z", "day", "2026-11-01T17:00:23Z", false},
 		{"America/New_York", "2026-03-08T06:00:23Z", "5h", "2026-03-08T11:00:23Z", false},
+		{"America/New_York", "2026-03-08T06:30:23Z", "1h", "2026-03-08T07:30:23Z", false},
+		{"America/New_York", "2026-11-01T05:30:23Z", "1h", "2026-11-01T06:30:23Z", false},
+		{"America/New_York", "2026-11-01T06:30:23Z", "1h", "2026-11-01T05:30:23Z", true},
+		{"Australia/Lord_Howe", "2026-10-03T15:15:23Z", "1h", "2026-10-03T16:15:23Z", false},
+		{"Pacific/Apia", "2011-12-30T09:30:23Z", "1h", "2011-12-30T10:30:23Z", false},
+		{"UTC", "1970-01-01T00:00:00Z", "1h", "1969-12-31T23:00:00Z", true},
 		{"America/New_York", "2026-03-15T16:00:23Z", "week", "2026-03-08T16:00:23Z", true},
 		{"Pacific/Apia", "2011-12-29T22:34:56Z", "day", "2011-12-30T22:34:56Z", false},
 		{"UTC", "1970-01-01T00:00:00Z", "day", "1969-12-31T00:00:00Z", true},
@@ -99,7 +105,7 @@ func TestNaturalPeriodsUseCalendarAnchors(t *testing.T) {
 	for _, tc := range []struct {
 		interval string
 		day      int
-	}{{"5h", 0}, {"week", 0}, {"week", 8}, {"day", 1}, {"unknown", 0}} {
+	}{{"1h", 0}, {"5h", 0}, {"week", 0}, {"week", 8}, {"day", 1}, {"unknown", 0}} {
 		if _, err := NaturalPeriod(0, tc.interval, "UTC", tc.day); err == nil {
 			t.Errorf("accepted invalid natural interval %+v", tc)
 		}

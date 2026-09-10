@@ -8,6 +8,7 @@ import { responseOutcomeUnknown } from '@shared/operations/api';
 import { amount } from '@shared/operations/wire';
 import {
   getRecurringLimits,
+  isHourlyInterval,
   putRecurringLimits,
   recurringLimitsDraftKey,
   recurringLimitsKeys,
@@ -141,7 +142,7 @@ function validTimeZone(value: string, zones: readonly string[]): boolean {
 
 function validCombination(rule: RecurringLimitRuleInput): boolean {
   if (rule.mode === 'sliding') return rule.alignment === null && rule.week_starts_on === null;
-  if (rule.alignment === null || (rule.interval === '5h' && rule.alignment === 'calendar'))
+  if (rule.alignment === null || (isHourlyInterval(rule.interval) && rule.alignment === 'calendar'))
     return false;
   if (rule.alignment === 'calendar' && rule.interval === 'week') {
     return rule.week_starts_on !== null && rule.week_starts_on >= 1 && rule.week_starts_on <= 7;
@@ -413,9 +414,10 @@ function RuleCard({
   const ruleLabel = copy.rule(index + 1);
   const summaryState = view?.state;
   const summary = ruleSummary(copy, ruleLabel, draft, view);
-  const alignmentOptions: RecurringLimitAlignment[] =
-    draft.interval === '5h' ? ['first_success'] : ['first_success', 'calendar'];
-  const intervalOptions: RecurringLimitInterval[] = ['5h', 'day', 'week', 'month'];
+  const alignmentOptions: RecurringLimitAlignment[] = isHourlyInterval(draft.interval)
+    ? ['first_success']
+    : ['first_success', 'calendar'];
+  const intervalOptions: RecurringLimitInterval[] = ['1h', '5h', 'day', 'week', 'month'];
   const metricOptions: RecurringLimitMetric[] = ['calls', 'tokens', 'credits'];
   const modeOptions: RecurringLimitMode[] = ['reset', 'sliding'];
   const firstSuccess = draft.alignment === 'first_success';
@@ -523,7 +525,7 @@ function RuleCard({
                     const alignment =
                       draft.mode === 'sliding'
                         ? null
-                        : interval === '5h'
+                        : isHourlyInterval(interval)
                           ? 'first_success'
                           : (draft.alignment ?? 'first_success');
                     onChange({
