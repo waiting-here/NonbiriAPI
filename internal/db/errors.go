@@ -52,10 +52,8 @@ var (
 	// refused because a pending or approved+enabled donation still references
 	// it. The API boundary maps it to a stable conflict envelope.
 	ErrResourceInActiveDonation = errors.New("db: resource is referenced by an active donation")
-	// ErrCharityTokenReserveMissing reports that a per-token charity model was
-	// enabled (or created enabled) while charity_token_reserve_milli is unset
-	// or non-positive: the token mode fails closed until the administrator
-	// configures an explicit reserve price.
+	// ErrCharityTokenReserveMissing reports that a per-token charity model has
+	// neither a custom reserve nor a valid global default.
 	ErrCharityTokenReserveMissing = errors.New("db: charity token reserve price is not configured")
 
 	// ErrInvalidSiteConfig is returned when a site_config value used by a

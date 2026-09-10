@@ -92,6 +92,14 @@ function boardBody(board: Board) {
       entries: [
         {
           rank: '1',
+          species_key: 'koi',
+          size_cm: 122,
+          blue_fat_fish_length_cm: '262',
+          identity: { kind: 'anonymous' },
+          is_me: false,
+        },
+        {
+          rank: '2',
           species_key: 'taimen',
           size_cm: 121,
           identity: { kind: 'anonymous' },
@@ -235,6 +243,14 @@ async function assertImageLoaded(image: ReturnType<Page['locator']>): Promise<vo
   expect(dimensions.currentSrc).toContain(BLUE_IMAGE_PATH);
   expect(dimensions.naturalWidth).toBeGreaterThan(0);
   expect(dimensions.naturalHeight).toBeGreaterThan(0);
+  const cornerAlpha = await image.evaluate((node) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 1;
+    const context = canvas.getContext('2d')!;
+    context.drawImage(node as HTMLImageElement, 0, 0);
+    return context.getImageData(0, 0, 1, 1).data[3];
+  });
+  expect(cornerAlpha).toBe(0);
 }
 
 const SCENARIOS = [
@@ -332,6 +348,7 @@ for (const scenario of SCENARIOS) {
     await expect(result).toContainText(scenario.originalName);
     await expect(result).toContainText(LONG_BLUE_LENGTH);
     await assertImageLoaded(result.locator('.fishing-outcome[data-blue-fat-fish="true"] > img'));
+    await assertImageLoaded(page.locator('.fishing-catch-celebration .fishing-blue-fat-fish'));
     expect(LONG_BLUE_LENGTH).toHaveLength(128);
     expect(BigInt(LONG_BLUE_LENGTH)).toBeGreaterThan(BigInt(Number.MAX_SAFE_INTEGER));
     expect(BigInt(UNSAFE_BLUE_LENGTH)).toBeGreaterThan(BigInt(Number.MAX_SAFE_INTEGER));
@@ -362,6 +379,14 @@ for (const scenario of SCENARIOS) {
 
     const singleBoard = page.locator('.fishing-board-switch .fishing-board');
     const totalBoard = page.locator('.fishing-leaderboards > .fishing-board');
+    const recentTab = page.getByRole('tab', { name: scenario.recentTab });
+    const historicalTab = page.getByRole('tab', { name: scenario.historicalTab });
+    const originalSpecies = scenario.language === 'zh' ? '锦鲤' : 'Koi';
+    const unit = scenario.language === 'zh' ? '厘米' : 'cm';
+    await expect(page.getByRole('tab').first()).toHaveText(scenario.recentTab);
+    await expect(recentTab).toHaveAttribute('aria-selected', 'true');
+    await expect(singleBoard.getByRole('heading', { name: scenario.recentTitle })).toBeVisible();
+    await historicalTab.click();
     await expect(
       singleBoard.getByRole('heading', { name: scenario.historicalTitle }),
     ).toBeVisible();
@@ -369,6 +394,11 @@ for (const scenario of SCENARIOS) {
     const historicalBeforeRefresh = fixture.boardRequests.single;
     await singleBoard.getByRole('button', { name: scenario.refresh }).click();
     await expect.poll(() => fixture.boardRequests.single).toBe(historicalBeforeRefresh + 1);
+    await expect(historicalTab).toHaveAttribute('aria-selected', 'true');
+    await expect(singleBoard).toContainText(
+      `${scenario.blueName} · ${originalSpecies} · 262 ${unit}`,
+    );
+    await expect(singleBoard).not.toContainText(scenario.originalName);
 
     await page.getByRole('tab', { name: scenario.recentTab }).click();
     await expect(singleBoard.getByRole('heading', { name: scenario.recentTitle })).toBeVisible();
@@ -377,17 +407,25 @@ for (const scenario of SCENARIOS) {
     await expect(
       singleBoard.getByRole('heading', { name: scenario.historicalTitle, exact: true }),
     ).toBeVisible();
-    await page.getByRole('tab', { name: scenario.historicalTab }).press('End');
+    await page.getByRole('tab', { name: scenario.historicalTab }).press('Home');
     await expect(page.getByRole('tab', { name: scenario.recentTab })).toBeFocused();
+    await recentTab.press('End');
+    await expect(historicalTab).toBeFocused();
+    await historicalTab.press('ArrowRight');
+    await expect(recentTab).toBeFocused();
     await expect(singleBoard.getByRole('heading', { name: scenario.recentTitle })).toBeVisible();
     await expect(singleBoard).toContainText(scenario.blueName);
-    await expect(singleBoard).toContainText(scenario.originalName);
+    await expect(singleBoard).toContainText(
+      `${scenario.blueName} · ${originalSpecies} · ${LONG_BLUE_LENGTH} ${unit}`,
+    );
+    await expect(singleBoard).not.toContainText(scenario.originalName);
     await expect(singleBoard).toContainText(LONG_BLUE_LENGTH);
     await expect(singleBoard).toContainText(UNSAFE_BLUE_LENGTH);
     await assertImageLoaded(singleBoard.locator('.fishing-blue-fat-fish--board').first());
     const recentBeforeRefresh = fixture.boardRequests.recent_single;
     await singleBoard.getByRole('button', { name: scenario.refresh }).click();
     await expect.poll(() => fixture.boardRequests.recent_single).toBe(recentBeforeRefresh + 1);
+    await expect(recentTab).toHaveAttribute('aria-selected', 'true');
 
     await expect(totalBoard.getByRole('heading', { name: scenario.totalTitle })).toBeVisible();
     const totalBeforeRefresh = fixture.boardRequests.total;
@@ -413,6 +451,11 @@ for (const scenario of SCENARIOS) {
     for (const width of [320, 360, 430]) {
       await assertNoHorizontalOverflow(page, width);
     }
+    await historicalTab.click();
+    await page.goto(`${USER_ORIGIN}/games`);
+    await page.goto(`${USER_ORIGIN}/games/fishing`);
+    await expect(recentTab).toHaveAttribute('aria-selected', 'true');
+    await expect(singleBoard.getByRole('heading', { name: scenario.recentTitle })).toBeVisible();
     consoleGuard.assertNone();
   });
 }

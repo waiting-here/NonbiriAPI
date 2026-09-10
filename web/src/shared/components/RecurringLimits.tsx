@@ -5,6 +5,7 @@ import { useRetainedOperation } from '../../admin/features/operations/useRetaine
 import { clearStationSession, type CharityManagementFrame } from '@shared/charityManagement';
 import { ApiError, isForbidden, isUnauthorized } from '@shared/query/http';
 import { responseOutcomeUnknown } from '@shared/operations/api';
+import { amount } from '@shared/operations/wire';
 import {
   getRecurringLimits,
   putRecurringLimits,
@@ -34,7 +35,6 @@ import './recurringLimits.css';
 
 const MAX_RULES = 16;
 const U128_MAX = (1n << 128n) - 1n;
-const CREDIT_AMOUNT = /^(0|[1-9][0-9]*)(?:\.([0-9]{0,2}[1-9]))?$/;
 const DECIMAL = /^(0|[1-9][0-9]*)$/;
 const TIME_ZONE = /^[A-Za-z0-9_+/-]{1,64}$/;
 
@@ -121,10 +121,9 @@ function canonicalDecimal(value: string): boolean {
 }
 
 function canonicalCredits(value: string): boolean {
-  const match = CREDIT_AMOUNT.exec(value);
-  if (!match) return false;
   try {
-    return BigInt(match[1]) * 1_000n + BigInt((match[2] ?? '').padEnd(3, '0') || '0') <= U128_MAX;
+    amount(value, 'credits', false, U128_MAX);
+    return true;
   } catch {
     return false;
   }
@@ -184,15 +183,7 @@ function newDraftRule(id: string, zone: string): DraftRule {
 function displayInteger(value: string | null | undefined): string {
   if (value === null || value === undefined) return '—';
   try {
-    const parsed = BigInt(value);
-    const negative = parsed < 0n;
-    const digits = (negative ? -parsed : parsed).toString();
-    let grouped = '';
-    for (let end = digits.length; end > 0; end -= 3) {
-      const start = Math.max(0, end - 3);
-      grouped = `${digits.slice(start, end)}${grouped ? `,${grouped}` : ''}`;
-    }
-    return `${negative ? '-' : ''}${grouped}`;
+    return BigInt(value).toLocaleString('en-US');
   } catch {
     return '—';
   }
@@ -218,21 +209,14 @@ function metricWithUnit(
 function progressPercent(view: RecurringLimitRuleView | undefined): number {
   if (!view) return 0;
   try {
-    const limit =
-      view.metric === 'credits'
-        ? BigInt(view.limit.split('.')[0] ?? '0') * 1_000n +
-          BigInt((view.limit.split('.')[1] ?? '').padEnd(3, '0') || '0')
-        : BigInt(view.limit);
-    const used =
-      view.metric === 'credits'
-        ? BigInt(view.used.split('.')[0] ?? '0') * 1_000n +
-          BigInt((view.used.split('.')[1] ?? '').padEnd(3, '0') || '0')
-        : BigInt(view.used);
-    const reserved =
-      view.metric === 'credits'
-        ? BigInt(view.reserved.split('.')[0] ?? '0') * 1_000n +
-          BigInt((view.reserved.split('.')[1] ?? '').padEnd(3, '0') || '0')
-        : BigInt(view.reserved);
+    const parse = (value: string) => {
+      if (view.metric !== 'credits') return BigInt(value);
+      const [whole = '0', fraction = ''] = value.split('.');
+      return BigInt(whole) * 1_000n + BigInt(fraction.padEnd(3, '0') || '0');
+    };
+    const limit = parse(view.limit);
+    const used = parse(view.used);
+    const reserved = parse(view.reserved);
     if (limit <= 0n) return used + reserved > 0n ? 100 : 0;
     const hundredths = Number(((used + reserved) * 10_000n) / limit) / 100;
     return Math.min(100, Math.max(0, Number.isFinite(hundredths) ? hundredths : 0));

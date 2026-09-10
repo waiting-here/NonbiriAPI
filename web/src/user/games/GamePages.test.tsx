@@ -690,12 +690,11 @@ describe('beta.1 game pages', () => {
     expect(await screen.findByRole('list')).toHaveTextContent('Blue fat fish');
     expect(screen.getAllByText(/Original legendary species: Koi/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(`${length} cm`).length).toBeGreaterThan(0);
-    expect(screen.getByRole('tab', { name: 'Rolling 30-day window' })).toBeInTheDocument();
-    expect(
-      screen.getByText('Historical largest single catches, showing the top 20 and your position.'),
-    ).toBeInTheDocument();
-
-    await rendered.user.click(screen.getByRole('tab', { name: 'Rolling 30-day window' }));
+    expect(screen.getAllByRole('tab')[0]).toHaveTextContent('Rolling 30-day window');
+    expect(screen.getByRole('tab', { name: 'Rolling 30-day window' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     expect(
       await screen.findByRole('heading', { name: 'Largest single catch · last 30 days' }),
     ).toBeInTheDocument();
@@ -709,6 +708,15 @@ describe('beta.1 game pages', () => {
         String(input).endsWith('/api/games/fishing/leaderboard?board=recent_single'),
       ),
     ).toBe(true);
+    expect(screen.getByRole('tabpanel')).toHaveTextContent(`Blue fat fish · Koi · ${length} cm`);
+    expect(screen.getByRole('tabpanel')).not.toHaveTextContent('Original legendary species:');
+
+    await rendered.user.click(screen.getByRole('tab', { name: 'Historical board' }));
+    expect(
+      screen.getByText('Historical largest single catches, showing the top 20 and your position.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('tabpanel')).toHaveTextContent(`Blue fat fish · Koi · ${length} cm`);
+    expect(screen.getByRole('tabpanel')).not.toHaveTextContent('Original legendary species:');
   });
 
   it('keeps the Fishing result visible after an ACK failure and unlocks another batch after retry', async () => {

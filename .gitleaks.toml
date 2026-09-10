@@ -39,7 +39,7 @@ description = "Exact previous database schema fingerprint"
 targetRules = ["generic-api-key"]
 condition = "AND"
 paths = ['''^internal[\\/]db[\\/]schema_extension\.go$''']
-regexes = ['''^8d39bd424d9df29960c6c113fd874833615de1d95e0f820042bb8b60d7678400$''']
+regexes = ['''^(8d39bd424d9df29960c6c113fd874833615de1d95e0f820042bb8b60d7678400|e6e10f9c37f0dff0ea9507173d48808aea6d448f05c9812cdb4ee5d3cc97ea36)$''']
 
 [[allowlists]]
 description = "Fixed Discord identifier in the donation review browser fixture"

@@ -133,6 +133,7 @@ const currentCharityModel = {
   enabled: true,
   allowed_levels: [1, 2, 3, 4, 5],
   public_description: '',
+  token_reserve_credits: null,
   pricing: { mode: 'per_request', user_price: '0', donor_reward: '0' },
   discount: { enabled: false, percent: 100, start_at: null, end_at: null },
   flatten_tool_calls: false,

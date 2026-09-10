@@ -1,6 +1,7 @@
 import { ApiError } from '@shared/query/http';
 import { decoded, idempotentOptions } from './api';
 import {
+  amount,
   array,
   decimal,
   decimalID,
@@ -65,7 +66,6 @@ const U128_MAX = (1n << 128n) - 1n;
 const MIN_PERIOD_SECOND = -62_167_219_200;
 const MAX_PERIOD_SECOND = 253_402_300_799;
 const TIME_ZONE = /^[A-Za-z0-9_+/-]{1,64}$/;
-const CREDIT_AMOUNT = /^(0|[1-9][0-9]*)(?:\.([0-9]{0,2}[1-9]))?$/;
 
 function canonicalUnsignedDecimal(value: unknown, label: string): string {
   return decimal(value, label, { u128: true });
@@ -73,16 +73,7 @@ function canonicalUnsignedDecimal(value: unknown, label: string): string {
 
 /** Credits are sent as credits with at most three fractional digits. */
 function canonicalCredits(value: unknown, label: string): string {
-  if (typeof value !== 'string' || !CREDIT_AMOUNT.test(value)) invalidResponse(label);
-  const [whole, fraction = ''] = value.split('.');
-  let milli: bigint;
-  try {
-    milli = BigInt(whole) * 1_000n + BigInt(fraction.padEnd(3, '0') || '0');
-  } catch {
-    return invalidResponse(label);
-  }
-  if (milli > U128_MAX) invalidResponse(label);
-  return value;
+  return amount(value, label, false, U128_MAX);
 }
 
 function wireTimeZone(value: unknown, label: string): string {

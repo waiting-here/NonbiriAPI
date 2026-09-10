@@ -119,9 +119,9 @@ export function signedDecimal(value: unknown, label: string): string {
 }
 
 /** Canonical credit string: signed integer with at most three fractional digits. */
-export function amount(value: unknown, label: string, signed = true): string {
-  if (typeof value !== 'string' || !/^-?(0|[1-9][0-9]*)(\.[0-9]{1,3})?$/.test(value)
-    || /^-0(?:\.0{1,3})?$/.test(value) || (value.includes('.') && value.endsWith('0'))) {
+export function amount(value: unknown, label: string, signed = true, maximumMilli = SM128_MAX): string {
+  if (typeof value !== 'string' || !/^-?(0|[1-9][0-9]*)(?:\.[0-9]{0,2}[1-9])?$/.test(value)
+    || value === '-0' || value.trim() !== value) {
     invalidResponse(label);
   }
   if (!signed && value.startsWith('-')) invalidResponse(label);
@@ -130,7 +130,7 @@ export function amount(value: unknown, label: string, signed = true): string {
   const [whole, fraction = ''] = unsigned.split('.');
   const magnitude = BigInt(whole) * 1_000n + BigInt(fraction.padEnd(3, '0') || '0');
   const milli = negative ? -magnitude : magnitude;
-  if (milli < -SM128_MAX || milli > SM128_MAX) invalidResponse(label);
+  if (milli < -maximumMilli || milli > maximumMilli) invalidResponse(label);
   return value;
 }
 

@@ -10,12 +10,12 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"strconv"
 	"time"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/waiting-here/NonbiriAPI/internal/charityaccess"
+	"github.com/waiting-here/NonbiriAPI/internal/charityreserve"
 	"github.com/waiting-here/NonbiriAPI/internal/claim"
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
@@ -174,12 +174,8 @@ FROM charity_models WHERE id=?`, modelID).Scan(
 		return p, nil
 	}
 	p.requestUser, p.requestReward = 0, 0
-	var tokenReserve string
-	if err := tx.QueryRowContext(ctx, `SELECT value FROM site_config WHERE key='charity_token_reserve_milli'`).Scan(&tokenReserve); err != nil {
-		return frozenPricing{}, fmt.Errorf("charity: read token reservation: %w", err)
-	}
-	value, err := strconv.ParseInt(tokenReserve, 10, 64)
-	if err != nil || value < 1 || value > claim.MaxMoneyMilli {
+	value, err := charityreserve.Resolve(ctx, tx, modelID)
+	if err != nil {
 		return frozenPricing{}, claim.ErrInvariant
 	}
 	p.tokenReserve = value

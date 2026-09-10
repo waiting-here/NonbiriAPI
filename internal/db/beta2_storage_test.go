@@ -68,6 +68,7 @@ DROP INDEX IF EXISTS idx_donation_quota_rules_retired;`); err != nil {
 
 func dropFishingLengthObjects(t *testing.T, database *sql.DB) {
 	t.Helper()
+	hostileMustExec(t, database, `DROP TABLE IF EXISTS charity_model_token_reserves`)
 	hostileMustExec(t, database, `DROP TRIGGER IF EXISTS fishing_presented_best_update_guard;
 DROP TRIGGER IF EXISTS fishing_presented_outcome_update_guard;
 DROP TABLE IF EXISTS game_fishing_length_facts;

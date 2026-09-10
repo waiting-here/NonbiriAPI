@@ -383,12 +383,7 @@ function LeaderboardCard({
                       {(row as FishingSingleRow).blueFatFishLengthCM !== null ? (
                         <>
                           {' · '}
-                          {text('fishing.blueFatFish.original', {
-                            species: fishingItemName(
-                              (row as FishingSingleRow).speciesKey,
-                              language,
-                            ),
-                          })}
+                          {fishingItemName((row as FishingSingleRow).speciesKey, language)}
                         </>
                       ) : null}
                       {' · '}
@@ -432,7 +427,7 @@ function FishingSingleBoards({
   readonly recent: LeaderboardQuery;
 }) {
   const { text } = useGameCopy();
-  const [board, setBoard] = useState<'single' | 'recent_single'>('single');
+  const [board, setBoard] = useState<'single' | 'recent_single'>('recent_single');
   const selected = board === 'single' ? historical : recent;
   return (
     <div className="fishing-board-switch">
@@ -445,9 +440,9 @@ function FishingSingleBoards({
           event.preventDefault();
           const next =
             event.key === 'Home'
-              ? 'single'
+              ? 'recent_single'
               : event.key === 'End'
-                ? 'recent_single'
+                ? 'single'
                 : board === 'single'
                   ? 'recent_single'
                   : 'single';
@@ -455,7 +450,7 @@ function FishingSingleBoards({
           event.currentTarget.querySelector<HTMLButtonElement>(`#fishing-tab-${next}`)?.focus();
         }}
       >
-        {(['single', 'recent_single'] as const).map((value) => (
+        {(['recent_single', 'single'] as const).map((value) => (
           <button
             key={value}
             type="button"
