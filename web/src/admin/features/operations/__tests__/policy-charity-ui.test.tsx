@@ -446,6 +446,8 @@ describe('Generation 2 charity management policy', () => {
           enabled: true,
           allowed_levels: body.allowed_levels as number[],
           public_description: String(body.public_description),
+          token_reserve_credits:
+            typeof body.token_reserve_credits === 'string' ? body.token_reserve_credits : null,
           pricing: body.pricing as CharityModel['pricing'],
           discount: body.discount as CharityModel['discount'],
           flatten_tool_calls: false,

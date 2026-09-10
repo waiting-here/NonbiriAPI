@@ -427,6 +427,8 @@
         "state": "State",
         "tokenLimit": "Token limit",
         "tokenReserve": "Token reserve",
+        "tokenReserveCredits": "Call reservation (credits)",
+        "tokenReserveCreditsHelp": "Leave blank to inherit the global configuration.",
         "tokens": "Tokens",
         "effectiveExpiry": "Effective expiry",
         "authorizedExpiry": "Donor-authorized expiry",
@@ -448,6 +450,7 @@
           "modelLevels": "Choose zero or more levels from L1 through L5.",
           "publicDescription": "Public description must be at most 1,024 characters and 4,096 UTF-8 bytes, with no control characters except line breaks and tabs.",
           "modelPrices": "Every price must be an exact non-negative credit amount with at most three decimal places.",
+          "tokenReserveCredits": "Reserve 0.001–9,000,000,000,000 credits, with up to three decimal places.",
           "discountPercent": "Discount percent must be an integer from 0 through 100.",
           "discountDates": "Discount dates must be valid and the end must be later than the start."
         }

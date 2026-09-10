@@ -115,7 +115,7 @@ export interface StewardDonation extends DonationCommon {
   owner: { user_id: string; discord_id: string | null; display_name: string } | null;
 }
 
-function containsForbiddenControl(value: string): boolean {
+export function containsForbiddenControl(value: string): boolean {
   return Array.from(value).some((character) => {
     const point = character.codePointAt(0) ?? 0;
     return point < 0x20 || (point >= 0x7f && point <= 0x9f);
@@ -527,6 +527,7 @@ export interface CharityModel {
   enabled: boolean;
   allowed_levels: number[];
   public_description: string;
+  token_reserve_credits: string | null;
   pricing:
     | { mode: 'per_request'; user_price: string; donor_reward: string }
     | { mode: 'per_token'; user_prices: TokenPrices; donor_rewards: TokenPrices };
@@ -597,7 +598,12 @@ function normalizeModel(value: unknown, label: string): CharityModel {
     'created_at',
     'updated_at',
   ];
-  const root = record(value, [...required, 'route_strategy'], label, required);
+  const root = record(
+    value,
+    [...required, 'route_strategy', 'token_reserve_credits'],
+    label,
+    required,
+  );
   const provider = string(root.provider, `${label} provider`, { min: 1, max: 64, bytes: 256 });
   const model = string(root.model, `${label} model`, { min: 1, max: 64, bytes: 256 });
   const fullName = string(root.full_name, `${label} full name`, { min: 7, max: 133, bytes: 521 });
@@ -689,6 +695,10 @@ function normalizeModel(value: unknown, label: string): CharityModel {
     enabled: boolean(root.enabled, `${label} enabled`),
     allowed_levels: allowedLevels,
     public_description: publicDescription,
+    token_reserve_credits: normalizeTokenReserveCredits(
+      root.token_reserve_credits,
+      `${label} token reserve credits`,
+    ),
     pricing,
     discount: {
       enabled: boolean(discount.enabled, `${label} discount enabled`),
@@ -706,6 +716,14 @@ function normalizeModel(value: unknown, label: string): CharityModel {
   };
 }
 
+const MAX_TOKEN_RESERVE_CREDITS_MILLI = 9_000_000_000_000_000n;
+
+function normalizeTokenReserveCredits(value: unknown, label: string): string | null {
+  if (value === undefined || value === null) return null;
+  if (value === '0') invalidResponse(label);
+  return amount(value, label, false, MAX_TOKEN_RESERVE_CREDITS_MILLI);
+}
+
 function normalizeAllowedLevels(value: unknown, label: string): number[] {
   const levels = array(value, label, 5).map((entry, index) =>
     integer(entry, `${label} item ${index + 1}`, 1, 5),
@@ -716,7 +734,7 @@ function normalizeAllowedLevels(value: unknown, label: string): number[] {
   return levels;
 }
 
-function normalizePublicDescription(value: unknown, label: string): string {
+export function normalizePublicDescription(value: unknown, label: string): string {
   if (typeof value !== 'string') invalidResponse(label);
   const normalized = value.replace(/\r\n/g, '\n');
   if (

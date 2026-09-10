@@ -35,11 +35,13 @@ import {
   addManagedBindings,
   charityKeys,
   createManagedCharityModel,
+  containsForbiddenControl as hasForbiddenControl,
   deleteManagedBinding,
   deleteManagedCharityModel,
   getManagedBindings,
   getManagedDonation,
   orderManagedBindings,
+  normalizePublicDescription,
   patchManagedCharityModel,
   patchManagedDonationKey,
   reviewManagedDonation,
@@ -56,6 +58,7 @@ import {
 } from '@shared/operations/charity';
 import { useRetainedOperation } from '../../admin/features/operations/useRetainedOperation';
 import { responseOutcomeUnknown } from '@shared/operations/api';
+import { amount } from '@shared/operations/wire';
 import '@shared/operations/operations.css';
 
 type ManagedDonation = AdminDonation | StewardDonation;
@@ -122,15 +125,7 @@ const MAX_MONEY_MILLI = 9_000_000_000_000_000n;
 const MAX_TOKEN_RESERVE = 2_147_483_647;
 const MAX_UNIX_SECOND = 253_402_300_799;
 const CANONICAL_DECIMAL = /^(0|[1-9][0-9]*)$/;
-const CANONICAL_AMOUNT = /^(0|[1-9][0-9]*)(?:\.([0-9]{0,2}[1-9]))?$/;
 const MODEL_LEVELS = [1, 2, 3, 4, 5] as const;
-
-function hasForbiddenControl(value: string): boolean {
-  return Array.from(value).some((character) => {
-    const point = character.codePointAt(0) ?? 0;
-    return point < 0x20 || (point >= 0x7f && point <= 0x9f);
-  });
-}
 
 function validText(value: string, maximum: number, required = false): boolean {
   return (
@@ -145,15 +140,12 @@ function normalizePublicDescriptionInput(value: string): string {
 }
 
 function validPublicDescription(value: string): boolean {
-  const normalized = normalizePublicDescriptionInput(value);
-  return (
-    Array.from(normalized).length <= 1_024 &&
-    new TextEncoder().encode(normalized).byteLength <= 4_096 &&
-    !Array.from(normalized).some((character) => {
-      const point = character.codePointAt(0) ?? 0;
-      return (point < 0x20 && point !== 0x09 && point !== 0x0a) || (point >= 0x7f && point <= 0x9f);
-    })
-  );
+  try {
+    normalizePublicDescription(value, 'description');
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function validCount(value: string | null): boolean {
@@ -168,15 +160,16 @@ function validCount(value: string | null): boolean {
 
 function validAmount(value: string | null): boolean {
   if (value === null) return true;
-  const match = CANONICAL_AMOUNT.exec(value);
-  if (!match) return false;
   try {
-    const whole = BigInt(match[1]);
-    const fraction = BigInt((match[2] ?? '').padEnd(3, '0') || '0');
-    return whole * 1_000n + fraction <= MAX_MONEY_MILLI;
+    amount(value, 'credits', false, MAX_MONEY_MILLI);
+    return true;
   } catch {
     return false;
   }
+}
+
+function validTokenReserveCredits(value: string | null): boolean {
+  return value === null || (value !== '0' && validAmount(value));
 }
 
 function validTokenReserve(value: number): boolean {
@@ -1446,6 +1439,7 @@ interface ModelDraft {
   enabled: boolean;
   allowedLevels: number[];
   publicDescription: string;
+  tokenReserveCredits: string | null;
   mode: 'per_request' | 'per_token';
   requestUser: string;
   requestDonor: string;
@@ -1472,6 +1466,7 @@ function modelDraft(model?: CharityModel): ModelDraft {
     enabled: model?.enabled ?? true,
     allowedLevels: model ? [...model.allowed_levels] : [...MODEL_LEVELS],
     publicDescription: model ? model.public_description : '',
+    tokenReserveCredits: model?.token_reserve_credits ?? null,
     mode: model?.pricing.mode ?? 'per_request',
     requestUser: model?.pricing.mode === 'per_request' ? model.pricing.user_price : '0',
     requestDonor: model?.pricing.mode === 'per_request' ? model.pricing.donor_reward : '0',
@@ -1484,11 +1479,11 @@ function modelDraft(model?: CharityModel): ModelDraft {
     flatten: model?.flatten_tool_calls ?? false,
   };
 }
-function modelBody(draft: ModelDraft) {
+function modelBody(draft: ModelDraft, includeTokenReserveCredits: boolean) {
   const start = timeDraftValue(draft.discountStart);
   const end = timeDraftValue(draft.discountEnd);
   if (start === undefined || end === undefined) throw new Error('Time is not ready');
-  return {
+  const body = {
     route_strategy: draft.routeStrategy,
     provider: draft.provider.trim(),
     model: draft.model.trim(),
@@ -1507,6 +1502,9 @@ function modelBody(draft: ModelDraft) {
     },
     flatten_tool_calls: draft.flatten,
   };
+  return includeTokenReserveCredits
+    ? { ...body, token_reserve_credits: draft.tokenReserveCredits }
+    : body;
 }
 
 type ModelValidation =
@@ -1514,6 +1512,7 @@ type ModelValidation =
   | 'modelLevels'
   | 'publicDescription'
   | 'modelPrices'
+  | 'tokenReserveCredits'
   | 'discountPercent'
   | 'discountDates';
 
@@ -1543,6 +1542,8 @@ function modelDraftError(draft: ModelDraft): ModelValidation | null {
   if (prices.some((value) => !validAmount(value))) {
     return 'modelPrices';
   }
+  if (draft.mode === 'per_token' && !validTokenReserveCredits(draft.tokenReserveCredits))
+    return 'tokenReserveCredits';
   if (
     !Number.isInteger(draft.discountPercent) ||
     draft.discountPercent < 0 ||
@@ -1800,26 +1801,45 @@ function ModelForm({
           </label>
         </div>
       ) : (
-        <div className="ops-grid">
-          {(['userPrices', 'donorRewards'] as const).map((side) => (
-            <section key={side} className="ops-subcard">
-              <h4>
-                {t(
-                  `common.operations.charity.${side === 'userPrices' ? 'userPrices' : 'donorRewards'}`,
-                )}
-              </h4>
-              {(Object.keys(draft[side]) as (keyof TokenPrices)[]).map((field) => (
-                <label key={field}>
-                  <span>{t(tokenPriceCopyKey(role, side, field))}</span>
-                  <input
-                    value={draft[side][field]}
-                    onChange={(event) => setPrice(side, field, event.target.value)}
-                  />
-                </label>
-              ))}
-            </section>
-          ))}
-        </div>
+        <>
+          <div className="ops-field-grid">
+            <label>
+              <span>{t('common.operations.charity.tokenReserveCredits')}</span>
+              <input
+                aria-label={t('common.operations.charity.tokenReserveCredits')}
+                inputMode="decimal"
+                value={draft.tokenReserveCredits ?? ''}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    tokenReserveCredits: event.target.value || null,
+                  }))
+                }
+              />
+              <small>{t('common.operations.charity.tokenReserveCreditsHelp')}</small>
+            </label>
+          </div>
+          <div className="ops-grid">
+            {(['userPrices', 'donorRewards'] as const).map((side) => (
+              <section key={side} className="ops-subcard">
+                <h4>
+                  {t(
+                    `common.operations.charity.${side === 'userPrices' ? 'userPrices' : 'donorRewards'}`,
+                  )}
+                </h4>
+                {(Object.keys(draft[side]) as (keyof TokenPrices)[]).map((field) => (
+                  <label key={field}>
+                    <span>{t(tokenPriceCopyKey(role, side, field))}</span>
+                    <input
+                      value={draft[side][field]}
+                      onChange={(event) => setPrice(side, field, event.target.value)}
+                    />
+                  </label>
+                ))}
+              </section>
+            ))}
+          </div>
+        </>
       )}
       <div className="ops-field-grid">
         <label className="checkbox-label">
@@ -1885,7 +1905,14 @@ function ModelForm({
           }
           onClick={() => {
             if (!modelDraftError(draft))
-              save.mutate({ body: modelBody(draft), revision: baseRevision });
+              save.mutate({
+                body: modelBody(
+                  draft,
+                  draft.mode === 'per_token' &&
+                    (!model || draft.tokenReserveCredits !== (model.token_reserve_credits ?? null)),
+                ),
+                revision: baseRevision,
+              });
           }}
         >
           {model ? t('common.operations.charity.saveModel') : t(charityCopyKey(role, 'newModel'))}
