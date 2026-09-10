@@ -81,9 +81,8 @@ const (
 	KeyCharityEnabled        = "charity_enabled"
 	KeyDonationAcceptEnabled = "donation_accept_enabled"
 	// KeyCharityTokenReserveMilli is OPTIONAL like the timezone offset: unset
-	// (JSON null) means "no reserve price configured", which keeps every
-	// per-token charity model disabled (fail closed). It must never be
-	// mistaken for an explicit 0.
+	// (JSON null) means no global default. Per-token models without a custom
+	// reserve then fail closed at routing. It must never be mistaken for 0.
 	KeyCharityTokenReserveMilli    = "charity_token_reserve_milli"
 	KeyAnthropicDefaultMaxTokens   = "anthropic_default_max_tokens"
 	KeyAnnouncementEpoch           = "announcement_epoch"

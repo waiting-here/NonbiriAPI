@@ -245,6 +245,28 @@ func TestSourceUsabilityUsesUndiscountedReserveAndCurrentRules(t *testing.T) {
 		}
 		assertUsable(test.want)
 	}
+	// Source aggregates must use the same per-model reserve as admission and
+	// the public catalog, including an override without a global default.
+	for _, step := range []struct {
+		query string
+		args  []any
+		want  string
+	}{
+		{`UPDATE charity_models SET pricing_mode='per_token' WHERE id=?`, []any{modelID}, "0"},
+		{`INSERT OR REPLACE INTO site_config(key,value,updated_at) VALUES('charity_token_reserve_milli','6000',?)`, []any{e.clock.Load()}, "0"},
+		{`INSERT INTO charity_model_token_reserves(model_id,amount_milli) VALUES(?,2500)`, []any{modelID}, "1"},
+		{`UPDATE charity_model_token_reserves SET amount_milli=4000 WHERE model_id=?`, []any{modelID}, "0"},
+		{`UPDATE site_config SET value='2000',updated_at=? WHERE key='charity_token_reserve_milli'`, []any{e.clock.Load()}, "0"},
+		{`DELETE FROM charity_model_token_reserves WHERE model_id=?`, []any{modelID}, "1"},
+		{`DELETE FROM site_config WHERE key='charity_token_reserve_milli'`, nil, "0"},
+		{`INSERT INTO charity_model_token_reserves(model_id,amount_milli) VALUES(?,3000)`, []any{modelID}, "1"},
+		{`UPDATE charity_models SET pricing_mode='per_request' WHERE id=?`, []any{modelID}, "1"},
+	} {
+		if _, err := e.store.DB().Exec(step.query, step.args...); err != nil {
+			t.Fatal(err)
+		}
+		assertUsable(step.want)
+	}
 	rules := []donationquota.RuleInput{recurringRule(), recurringRule(), recurringRule(), recurringRule()}
 	for i := range rules {
 		rules[i].Limit = fmt.Sprint(i + 1)

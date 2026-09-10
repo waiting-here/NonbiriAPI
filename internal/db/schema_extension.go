@@ -30,6 +30,9 @@ const preQuotaCleanupManifestHash = "e9d0e725597515a9cfcb7a0463a636ecd179dca619c
 // The deployed schema before steward held-object read auditing.
 const preStewardHoldReadManifestHash = "5a339c17dd63b975cd17f1bc946f0c799b46a68ce2d2576b8fa10b042315b3d1"
 
+// The deployed fishing-length schema before per-model credit reservations.
+const preModelTokenReserveManifestHash = "e6e10f9c37f0dff0ea9507173d48808aea6d448f05c9812cdb4ee5d3cc97ea36"
+
 func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) {
 	if GenerationTwoSchemaHash() != PinnedGenerationTwoSchemaHash {
 		return false, errors.New("generation-two schema hash drift")
@@ -45,7 +48,7 @@ func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) 
 	switch generationManifestDigest(actual) {
 	case expected:
 		return false, nil
-	case preRoutingManifestHash, preKeyLimitsManifestHash, preResponseStartsManifestHash, preBetaTwoManifestHash, preBrowseManifestHash, preQuotaCleanupManifestHash, preStewardHoldReadManifestHash:
+	case preRoutingManifestHash, preKeyLimitsManifestHash, preResponseStartsManifestHash, preBetaTwoManifestHash, preBrowseManifestHash, preQuotaCleanupManifestHash, preStewardHoldReadManifestHash, preModelTokenReserveManifestHash:
 		return true, nil
 	default:
 		return false, errors.New("generation-two schema manifest mismatch")
@@ -70,48 +73,53 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) error
 		return err
 	}
 	digest := generationManifestDigest(manifest)
-	// Extend any pre-beta.1 structure to the complete beta.1 schema first.
-	if digest == preRoutingManifestHash || digest == preKeyLimitsManifestHash || digest == preResponseStartsManifestHash {
-		if digest == preRoutingManifestHash {
-			if _, err := tx.ExecContext(ctx, charityModelRoutingSchema); err != nil {
+	if digest != preModelTokenReserveManifestHash {
+		// Extend any pre-beta.1 structure to the complete beta.1 schema first.
+		if digest == preRoutingManifestHash || digest == preKeyLimitsManifestHash || digest == preResponseStartsManifestHash {
+			if digest == preRoutingManifestHash {
+				if _, err := tx.ExecContext(ctx, charityModelRoutingSchema); err != nil {
+					return err
+				}
+			}
+			if digest != preResponseStartsManifestHash {
+				if _, err := tx.ExecContext(ctx, endpointKeyLimitsSchema); err != nil {
+					return err
+				}
+			}
+			if _, err := tx.ExecContext(ctx, dispatchResponseStartsSchema); err != nil {
 				return err
 			}
 		}
-		if digest != preResponseStartsManifestHash {
-			if _, err := tx.ExecContext(ctx, endpointKeyLimitsSchema); err != nil {
+		if digest != preBrowseManifestHash && digest != preQuotaCleanupManifestHash && digest != preStewardHoldReadManifestHash {
+			// Prior schemas have no recurring-limit or presentation sidecars.
+			if _, err := tx.ExecContext(ctx, betaTwoAdditiveSchema); err != nil {
+				return err
+			}
+			if err := migrateBetaTwoDefaults(ctx, tx); err != nil {
 				return err
 			}
 		}
-		if _, err := tx.ExecContext(ctx, dispatchResponseStartsSchema); err != nil {
+		if digest != preQuotaCleanupManifestHash && digest != preStewardHoldReadManifestHash {
+			if _, err := tx.ExecContext(ctx, browseIndexesSchema); err != nil {
+				return err
+			}
+		}
+		if digest != preStewardHoldReadManifestHash {
+			if _, err := tx.ExecContext(ctx, quotaCleanupIndexesSchema); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, stewardHoldReadSchema); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, fishingLengthSchema); err != nil {
+			return err
+		}
+		if err := migrateFishingLengthFacts(ctx, tx); err != nil {
 			return err
 		}
 	}
-	if digest != preBrowseManifestHash && digest != preQuotaCleanupManifestHash && digest != preStewardHoldReadManifestHash {
-		// Prior schemas have no recurring-limit or presentation sidecars.
-		if _, err := tx.ExecContext(ctx, betaTwoAdditiveSchema); err != nil {
-			return err
-		}
-		if err := migrateBetaTwoDefaults(ctx, tx); err != nil {
-			return err
-		}
-	}
-	if digest != preQuotaCleanupManifestHash && digest != preStewardHoldReadManifestHash {
-		if _, err := tx.ExecContext(ctx, browseIndexesSchema); err != nil {
-			return err
-		}
-	}
-	if digest != preStewardHoldReadManifestHash {
-		if _, err := tx.ExecContext(ctx, quotaCleanupIndexesSchema); err != nil {
-			return err
-		}
-	}
-	if _, err := tx.ExecContext(ctx, stewardHoldReadSchema); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, fishingLengthSchema); err != nil {
-		return err
-	}
-	if err := migrateFishingLengthFacts(ctx, tx); err != nil {
+	if _, err := tx.ExecContext(ctx, charityModelReserveSchema); err != nil {
 		return err
 	}
 	if err := validateGenerationTwoManifest(ctx, tx); err != nil {

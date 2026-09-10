@@ -167,6 +167,9 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0,?,?)`,
 	if _, err := tx.ExecContext(ctx, `INSERT INTO charity_model_access(model_id, allowed_level_mask, public_description) VALUES(?, ?, ?)`, modelID, mask, description); err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, fmt.Errorf("charity routing: initialize access: %w", err)
 	}
+	if err := setModelTokenReserve(ctx, tx, modelID, input.TokenReserveCredits); err != nil {
+		return resources.MutationResult[AdminCharityModel]{}, err
+	}
 	if err := setRoutingStrategy(ctx, tx, modelID, defaultRouteStrategy(input.RouteStrategy)); err != nil {
 		return resources.MutationResult[AdminCharityModel]{}, err
 	}
@@ -318,6 +321,11 @@ revision=revision+1,updated_at=? WHERE id=? AND revision=?`,
 	}
 	if current.flatten != updated.flatten {
 		if err := insertPolicyAudit(ctx, tx, actorID, string(role), modelID, current.flatten == 1, updated.flatten == 1, now); err != nil {
+			return resources.MutationResult[AdminCharityModel]{}, err
+		}
+	}
+	if input.TokenReserveCredits != nil {
+		if err := setModelTokenReserve(ctx, tx, modelID, *input.TokenReserveCredits); err != nil {
 			return resources.MutationResult[AdminCharityModel]{}, err
 		}
 	}
@@ -569,7 +577,8 @@ cm.discount_start_at,cm.discount_end_at,cm.flatten_tool_calls,cm.revision,cm.bin
 COALESCE(s.sample_count,0),COALESCE(s.success_count,0),cm.created_at,cm.updated_at,
 COALESCE((SELECT strategy FROM charity_model_routing WHERE model_id=cm.id),'expiry_weighted'),
 (SELECT allowed_level_mask FROM charity_model_access WHERE model_id=cm.id),
-(SELECT public_description FROM charity_model_access WHERE model_id=cm.id)
+(SELECT public_description FROM charity_model_access WHERE model_id=cm.id),
+(SELECT amount_milli FROM charity_model_token_reserves WHERE model_id=cm.id)
 FROM charity_models cm LEFT JOIN charity_model_stats s ON s.model_id=cm.id WHERE cm.id=?`
 
 type rowScanner interface{ Scan(...any) error }
@@ -581,14 +590,14 @@ func scanAdminModel(row rowScanner) (AdminCharityModel, error) {
 	var mode string
 	var requestUser, requestReward int64
 	var user, reward [4]int64
-	var start, end sql.NullInt64
+	var start, end, tokenReserve sql.NullInt64
 	var samples, successes int
 	var mask int
 	err := row.Scan(&id, &value.Provider, &value.Model, &value.FullName, &enabled, &mode,
 		&requestUser, &requestReward, &user[0], &user[1], &user[2], &user[3],
 		&reward[0], &reward[1], &reward[2], &reward[3], &discountEnabled, &value.Discount.Percent,
 		&start, &end, &flatten, &revision, &bindingRevision, &bindingCount, &samples, &successes,
-		&value.CreatedAt, &value.UpdatedAt, &value.RouteStrategy, &mask, &value.PublicDescription)
+		&value.CreatedAt, &value.UpdatedAt, &value.RouteStrategy, &mask, &value.PublicDescription, &tokenReserve)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AdminCharityModel{}, ErrNotFound
 	}
@@ -596,6 +605,12 @@ func scanAdminModel(row rowScanner) (AdminCharityModel, error) {
 		return AdminCharityModel{}, fmt.Errorf("charity routing: scan model: %w", err)
 	}
 	value.ID = strconv.FormatInt(id, 10)
+	if tokenReserve.Valid {
+		if tokenReserve.Int64 < 1 || tokenReserve.Int64 > db.MaxMoneyMilli {
+			return AdminCharityModel{}, ErrInvariant
+		}
+		value.TokenReserveCredits = new(formatWireAmount(tokenReserve.Int64))
+	}
 	value.AllowedLevels, err = charityaccess.Levels(mask)
 	if err != nil {
 		return AdminCharityModel{}, ErrInvariant
@@ -657,7 +672,8 @@ func stewardModel(value AdminCharityModel) StewardCharityModel {
 		}
 	}
 	return StewardCharityModel{
-		AllowedLevels: append([]int{}, value.AllowedLevels...), PublicDescription: value.PublicDescription,
+		TokenReserveCredits: copyString(value.TokenReserveCredits),
+		AllowedLevels:       append([]int{}, value.AllowedLevels...), PublicDescription: value.PublicDescription,
 		RouteStrategy: defaultRouteStrategy(value.RouteStrategy),
 		ID:            value.ID, Provider: value.Provider, Model: value.Model, FullName: value.FullName,
 		Enabled: value.Enabled, Pricing: pricing,
@@ -677,6 +693,9 @@ type validatedPricing struct {
 }
 
 func validateModelCreate(input ModelCreate) (validatedPricing, error) {
+	if !validModelTokenReserve(input.TokenReserveCredits) {
+		return validatedPricing{}, ErrInvalidRequest
+	}
 	if !validRouteStrategy(defaultRouteStrategy(input.RouteStrategy)) {
 		return validatedPricing{}, ErrInvalidRequest
 	}
@@ -687,11 +706,14 @@ func validateModelCreate(input ModelCreate) (validatedPricing, error) {
 }
 
 func validateModelPatch(input ModelPatch) bool {
+	if input.TokenReserveCredits != nil && !validModelTokenReserve(*input.TokenReserveCredits) {
+		return false
+	}
 	if input.RouteStrategy != nil && !validRouteStrategy(*input.RouteStrategy) {
 		return false
 	}
 	if input.ExpectedRevision == "" || input.Provider == nil && input.Model == nil && input.Enabled == nil &&
-		input.Pricing == nil && input.Discount == nil && input.FlattenToolCalls == nil && input.RouteStrategy == nil && input.AllowedLevels == nil && input.PublicDescription == nil {
+		input.Pricing == nil && input.Discount == nil && input.FlattenToolCalls == nil && input.RouteStrategy == nil && input.AllowedLevels == nil && input.PublicDescription == nil && input.TokenReserveCredits == nil {
 		return false
 	}
 	if input.Provider != nil && !validModelName(*input.Provider) || input.Model != nil && !validModelName(*input.Model) ||
@@ -699,6 +721,31 @@ func validateModelPatch(input ModelPatch) bool {
 		return false
 	}
 	return true
+}
+
+func validModelTokenReserve(value *string) bool {
+	if value == nil {
+		return true
+	}
+	amount, err := parseWireAmount(*value)
+	return err == nil && amount > 0
+}
+
+func setModelTokenReserve(ctx context.Context, tx *sql.Tx, modelID int64, value *string) error {
+	if value == nil {
+		_, err := tx.ExecContext(ctx, `DELETE FROM charity_model_token_reserves WHERE model_id=?`, modelID)
+		return err
+	}
+	amount, err := parseWireAmount(*value)
+	if err != nil || amount < 1 {
+		return ErrInvalidRequest
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO charity_model_token_reserves(model_id,amount_milli) VALUES(?,?)
+ON CONFLICT(model_id) DO UPDATE SET amount_milli=excluded.amount_milli`, modelID, amount)
+	if err != nil {
+		return fmt.Errorf("charity routing: save model reservation: %w", err)
+	}
+	return nil
 }
 
 func validDiscountPatch(input DiscountPatchInput) bool {

@@ -104,7 +104,7 @@ var catalogMetadataByKey = map[string]catalogMetadata{
 	KeyDonationAcceptEnabled:    {"charity", catalogText("接受公益捐赠", "Donation intake"), catalogText("只控制新捐赠提交，不影响既有资源管理。", "Controls new donation submissions only; existing resources remain manageable."), unitNone, nil},
 	KeyCharityDonationNoticeZh:  {"charity", catalogText("捐赠说明（中文）", "Donation notice (Chinese)"), catalogText("显示在用户提交捐赠的位置；留空使用内置中文说明。", "Shown where users submit donations; empty uses the built-in Chinese notice."), unitNone, nil},
 	KeyCharityDonationNoticeEn:  {"charity", catalogText("捐赠说明（英文）", "Donation notice (English)"), catalogText("显示在用户提交捐赠的位置；留空使用内置英文说明。", "Shown where users submit donations; empty uses the built-in English notice."), unitNone, nil},
-	KeyCharityTokenReserveMilli: {"charity", catalogText("公益 Token 预留单价", "Charity token reserve price"), catalogText("用于按 Token 计价的公益模型在调用前预留积分。", "Price used to reserve credits before a call to a per-token charity model."), unitMilli, []string{"charity_model_pricing"}},
+	KeyCharityTokenReserveMilli: {"charity", catalogText("公益 Token 默认预留积分", "Default charity token credit reserve"), catalogText("按 Token 计价的公益模型未设置独立预留积分时，调用前使用此金额。", "Amount reserved before a per-token charity call when the model has no custom credit reserve."), unitMilli, []string{"charity_model_pricing"}},
 
 	KeyRPMBanThreshold:                  {"abuse", catalogText("公益 RPM 自动封禁阈值", "Charity RPM auto-ban threshold"), catalogText("仅统计公益请求超过站点对单用户的 RPM 限额；自用请求、站点总量及密钥共享限额不计入。窗口内达到该次数后自动封禁。", "Counts only charity requests denied by the site's per-user RPM limit. Personal requests, site-wide limits, and shared key limits are excluded. Bans the account at this count within the window."), unitCount, nil},
 	KeyRPMBanWindowSeconds:              {"abuse", catalogText("RPM 违规窗口", "RPM violation window"), catalogText("统计单用户 RPM 拒绝的滚动窗口。", "Rolling window used to count per-user RPM denials."), unitSecond, nil},
@@ -309,7 +309,7 @@ func catalogSemantics(key string, spec keySpec) (zero *localizedCatalogText, nul
 		zero = catalogTextPtr("停止接收新捐赠，不删除已有资源。", "Stops new donation intake without deleting existing resources.")
 	case KeyCharityTokenReserveMilli:
 		zero = catalogTextPtr("0 被拒绝；正数才能与未配置 null 区分。", "Zero is rejected; only a positive amount stays distinct from unconfigured null.")
-		nullValue = catalogText("原始 null 表示未配置预留单价并使按 Token 计价 fail closed；PATCH null 被拒绝。", "Raw null means no reserve price and keeps per-token pricing fail-closed; PATCH null is rejected.")
+		nullValue = catalogText("原始 null 表示未配置默认值；未设置独立预留积分的 Token 模型无法调用。PATCH null 被拒绝。", "Raw null means no default; per-token models without a custom reserve cannot be called. PATCH null is rejected.")
 	case KeyAnthropicDefaultMaxTokens:
 		zero = nil
 		nullValue = catalogText("JSON null 删除显式覆盖并使用内建 65536。", "JSON null deletes the explicit override and uses the built-in 65536.")
