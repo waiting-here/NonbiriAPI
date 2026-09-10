@@ -14,11 +14,13 @@ func TestBrowsePredicateMatchesAdmissionAcrossReservationsAndCalendarWindows(t *
 		week                                  *int
 		at                                    int64
 	}{
-		{"first-hour", "reset", "5h", "first_success", "UTC", nil, testNow},
+		{"first-five-hours", "reset", "5h", "first_success", "UTC", nil, testNow},
+		{"first-hour", "reset", "1h", "first_success", "UTC", nil, testNow},
 		{"spring-day", "reset", "day", "calendar", "America/New_York", nil, time.Date(2027, 3, 14, 6, 30, 0, 0, time.UTC).Unix()},
 		{"natural-week", "reset", "week", "calendar", "Asia/Kolkata", ptr(7), testNow},
 		{"natural-month", "reset", "month", "calendar", "Asia/Kolkata", nil, testNow},
-		{"sliding-hour", "sliding", "5h", "", "UTC", nil, testNow},
+		{"sliding-five-hours", "sliding", "5h", "", "UTC", nil, testNow},
+		{"sliding-hour", "sliding", "1h", "", "UTC", nil, testNow},
 		{"sliding-fold", "sliding", "day", "", "America/New_York", nil, time.Date(2027, 11, 7, 5, 30, 0, 0, time.UTC).Unix()},
 		{"sliding-date-skip", "sliding", "week", "", "Pacific/Apia", nil, time.Date(2011, 12, 29, 12, 0, 0, 0, time.UTC).Unix()},
 		{"sliding-month-end", "sliding", "month", "", "Asia/Kolkata", nil, time.Date(2027, 1, 31, 12, 0, 0, 0, time.UTC).Unix()},
@@ -48,12 +50,12 @@ func TestBrowsePredicateMatchesAdmissionAcrossReservationsAndCalendarWindows(t *
 				t.Fatal(err)
 			}
 			assertBrowseAvailability(t, q, tc.at, probe, false)
-				if err := dispatch(t, q, first, tc.at); err != nil {
-					t.Fatal(err)
-				}
-				if err := dispatch(t, q, second, tc.at); err != nil {
-					t.Fatal(err)
-				}
+			if err := dispatch(t, q, first, tc.at); err != nil {
+				t.Fatal(err)
+			}
+			if err := dispatch(t, q, second, tc.at); err != nil {
+				t.Fatal(err)
+			}
 			start(t, q, first, tc.at)
 			terminal(t, q, first, tc.at+1, Amounts{Calls: mag(1), Tokens: mag(9), Credits: mag(15)}, true)
 			terminal(t, q, second, tc.at+1, Amounts{}, false)

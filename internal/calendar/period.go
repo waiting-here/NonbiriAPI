@@ -7,7 +7,7 @@ const MaxLookbackSeconds = int64(35 * 24 * 60 * 60)
 type Period struct{ Start, End int64 }
 
 // Add advances one interval while preserving the local clock. A month clamps
-// the day to the target month's last day; five hours is always 18,000 seconds.
+// the day to the target month's last day; hourly intervals use actual seconds.
 func Add(instant int64, interval, zone string) (int64, error) {
 	return shift(instant, interval, zone, 1)
 }
@@ -34,8 +34,12 @@ func shift(instant int64, interval, name string, direction int) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	if interval == "5h" {
-		result := instant + int64(direction)*18000
+	if interval == "1h" || interval == "5h" {
+		seconds := int64(3600)
+		if interval == "5h" {
+			seconds = 18000
+		}
+		result := instant + int64(direction)*seconds
 		if result < MinInternalInstant || result > MaxInstant {
 			return 0, ErrInvalidTime
 		}

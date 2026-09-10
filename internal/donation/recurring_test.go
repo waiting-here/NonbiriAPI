@@ -152,7 +152,9 @@ func TestRecurringHTTPStrictFieldsAndBodyBudget(t *testing.T) {
 	_, key := e.seedEndpointKey(t, actor, 'c')
 	d := e.createDonation(t, actor, key)
 	api := &httpAPI{service: e.service}
-	ruleBytes, _ := json.Marshal(recurringRule())
+	hourly := recurringRule()
+	hourly.Interval = "1h"
+	ruleBytes, _ := json.Marshal(hourly)
 	var rule map[string]json.RawMessage
 	json.Unmarshal(ruleBytes, &rule)
 	var bodies []string
@@ -206,6 +208,10 @@ func TestRecurringHTTPStrictFieldsAndBodyBudget(t *testing.T) {
 	api.replaceRecurringSteward(w, r, UserPrincipal{UserID: actor})
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
+	}
+	view, err := e.service.RecurringOwner(context.Background(), actor, parseTestID(t, d.ID), parseTestID(t, d.Keys[0].ID))
+	if err != nil || len(view.Rules) != 1 || view.Rules[0].Interval != "1h" {
+		t.Fatalf("hourly rule was not retained: %+v %v", view, err)
 	}
 	if err := func() error {
 		tx, err := e.store.DB().BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})

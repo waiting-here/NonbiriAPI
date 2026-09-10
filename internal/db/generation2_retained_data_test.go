@@ -144,6 +144,13 @@ VALUES(?,?,'10x10',0,'completed',101,1101,201,50,99)`, hostileOID("ll_"), users[
 
 func makeRetainedSource(t *testing.T, database *sql.DB, want string) {
 	t.Helper()
+	if want == preHourlyQuotaManifestHash || want == preModelTokenReserveManifestHash || want == preBrowseManifestHash || want == preQuotaCleanupManifestHash || want == preStewardHoldReadManifestHash {
+		makePreHourlyQuotaFixture(t, database)
+	}
+	if want == preHourlyQuotaManifestHash {
+		assertRetainedManifest(t, database, want)
+		return
+	}
 	if want == preModelTokenReserveManifestHash {
 		hostileMustExec(t, database, `DROP TABLE charity_model_token_reserves`)
 		assertRetainedManifest(t, database, want)

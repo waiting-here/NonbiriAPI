@@ -74,7 +74,7 @@ func Validate(input RuleInput) error {
 		return ErrInvalid
 	}
 	switch input.Interval {
-	case "5h", "day", "week", "month":
+	case "1h", "5h", "day", "week", "month":
 	default:
 		return ErrInvalid
 	}
@@ -93,7 +93,7 @@ func Validate(input RuleInput) error {
 				return ErrInvalid
 			}
 		case "calendar":
-			if input.Interval == "5h" {
+			if input.Interval == "1h" || input.Interval == "5h" {
 				return ErrInvalid
 			}
 			if input.Interval == "week" {

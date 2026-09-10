@@ -62,6 +62,7 @@ func TestQuotaRejectsInvalidStateCombinations(t *testing.T) {
 		{"reset-null-alignment", `UPDATE donation_quota_epochs SET alignment=NULL`},
 		{"calendar-week-null-start", `UPDATE donation_quota_epochs SET alignment='calendar',interval='week',week_starts_on=NULL`},
 		{"calendar-five-hours", `UPDATE donation_quota_epochs SET alignment='calendar',interval='5h'`},
+		{"calendar-one-hour", `UPDATE donation_quota_epochs SET alignment='calendar',interval='1h'`},
 		{"nonweekly-week-start", `UPDATE donation_quota_epochs SET week_starts_on=1`},
 		{"sliding-half-cache", `UPDATE donation_quota_epochs SET mode='sliding',alignment=NULL,window_left=0`},
 		{"dangling-current-period", `UPDATE donation_quota_epochs SET current_period_start=1234`},
