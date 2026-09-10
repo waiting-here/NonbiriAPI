@@ -414,8 +414,10 @@ function normalizeDonationCommon(root: ReturnType<typeof record>, label: string)
     invalidResponse(`${label} attributed review`);
   }
   if (status === 'pending' && review !== null) invalidResponse(`${label} pending review`);
-  if ((status === 'approved' || status === 'expired') && review?.decision !== 'approve')
+  if (status === 'approved' && review?.decision !== 'approve')
     invalidResponse(`${label} approved review`);
+  if ((status === 'expired' || status === 'deleted') && review?.decision === 'reject')
+    invalidResponse(`${label} terminal review`);
   if (status === 'rejected' && review?.decision !== 'reject')
     invalidResponse(`${label} rejected review`);
   return {

@@ -27,6 +27,55 @@ const common = {
   updated_at: 1,
 };
 
+describe.each([normalizeAdminDonation, normalizeStewardDonation])(
+  'terminal donation review',
+  (normalize) => {
+    it.each(['expired', 'deleted'])(
+      'preserves absent, automatic and manual reviews for %s',
+      (status) => {
+        const review = { decision: 'approve', reason: '', reviewed_at: 1 };
+        for (const fields of [
+          { reviewer: null, review_result: null },
+          { reviewer: null, review_result: review },
+          {
+            reviewer: { role: 'admin', user_id: '2' },
+            review_result: { ...review, reason: 'accepted' },
+          },
+          { reviewer: { role: 'steward', user_id: null }, review_result: review },
+        ]) {
+          const out = normalize({ ...common, owner: null, status, ...fields });
+          expect(out.review_result).toEqual(fields.review_result);
+          expect(out.reviewer).toEqual(fields.reviewer);
+        }
+      },
+    );
+
+    it.each(['pending', 'approved', 'rejected', 'expired', 'deleted'])(
+      'rejects contradictory %s reviews',
+      (status) => {
+        const review = { decision: 'reject', reason: 'rejected', reviewed_at: 1 };
+        expect(() => normalize({ ...common, owner: null, status, review_result: review })).toThrow(
+          /review/i,
+        );
+        expect(() =>
+          normalize({ ...common, owner: null, status, reviewer: { role: 'admin', user_id: '2' } }),
+        ).toThrow(/review/i);
+        if (status !== 'rejected') {
+          expect(() =>
+            normalize({
+              ...common,
+              owner: null,
+              status,
+              review_result: review,
+              reviewer: { role: 'admin', user_id: '2' },
+            }),
+          ).toThrow(/review/i);
+        }
+      },
+    );
+  },
+);
+
 const model = {
   id: '1',
   provider: 'provider',

@@ -193,6 +193,60 @@ function page(data: unknown[], pagination: Record<string, unknown> = {}): Record
 afterEach(() => vi.unstubAllGlobals());
 
 describe('donation page operations', () => {
+  it.each(['admin', 'steward'] as const)(
+    'accepts mixed review histories and filtered terminal pages for %s',
+    (role) => {
+      const review = { decision: 'approve', reason: '', reviewed_at: 1_800_000_002 };
+      const rows = ['expired', 'deleted'].flatMap((status, index) => [
+        donation({ id: String(index * 4 + 1), status }),
+        donation({ id: String(index * 4 + 2), status, review_result: review }),
+        donation({
+          id: String(index * 4 + 3),
+          status,
+          review_result: { ...review, reason: 'accepted' },
+          reviewer: { user_id: '2', role: 'admin' },
+        }),
+        donation({
+          id: String(index * 4 + 4),
+          status,
+          review_result: review,
+          reviewer: { user_id: null, role: 'steward' },
+        }),
+      ]);
+      const mixed = normalizeManagedDonationsPage(page(rows), role, {}, '1', 20);
+      expect(
+        mixed.data.map(({ review_result, reviewer }) => ({ review_result, reviewer })),
+      ).toEqual(rows.map(({ review_result, reviewer }) => ({ review_result, reviewer })));
+      const expired = normalizeManagedDonationsPage(
+        page(rows.slice(0, 4)),
+        role,
+        { status: 'expired' },
+        '1',
+        20,
+      );
+      expect(expired.data).toHaveLength(4);
+      expect(expired.data[0]?.review_result).toBeNull();
+    },
+  );
+
+  it.each(['expired', 'deleted'])('rejects a rejected review attached to %s', (status) => {
+    expect(() =>
+      normalizeManagedDonationsPage(
+        page([
+          donation({
+            status,
+            review_result: { decision: 'reject', reason: 'rejected', reviewed_at: 1 },
+            reviewer: { user_id: '2', role: 'admin' },
+          }),
+        ]),
+        'admin',
+        {},
+        '1',
+        20,
+      ),
+    ).toThrow(ApiError);
+  });
+
   it('uses the admin donation path, encodes all filters, and forwards AbortSignal', async () => {
     const signal = new AbortController().signal;
     const fetchMock = vi.fn<typeof fetch>(async () =>

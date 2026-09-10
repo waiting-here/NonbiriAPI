@@ -306,9 +306,34 @@ async function installManagementRoutes(
   page: Page,
   station: Station,
   state: FixtureState,
+  terminalReviews = false,
 ): Promise<void> {
   const config = stationConfig(station);
-  const rows = listRows();
+  const rows = listRows().map((row, index) => {
+    if (!terminalReviews) return row;
+    const status = index % 5 < 3 ? 'expired' : 'deleted';
+    const manual = index % 5 === 2;
+    const reviewed = manual || index % 5 === 0 || index % 5 === 3;
+    return {
+      ...row,
+      status,
+      review_result: reviewed
+        ? { decision: 'approve', reason: manual ? 'Accepted' : '', reviewed_at: NOW }
+        : null,
+      reviewer: manual ? { user_id: null, role: 'steward' } : null,
+      handling: {
+        ...handling(),
+        state: 'closed',
+        closed_at: NOW,
+        closed_reason: status === 'expired' ? 'expired' : reviewed ? 'terminated' : 'withdrawn',
+      },
+      state_counts: {
+        ...stateCounts(),
+        available: '0',
+        [status === 'expired' ? 'expired' : 'ended']: '1',
+      },
+    };
+  });
   const models = modelRows();
   const sources = sourceRows();
   await page.route('**/*', async (route) => {
@@ -322,7 +347,11 @@ async function installManagementRoutes(
     if (path === config.root + '/donations') {
       state.listReads.push(url.search);
       await state.listGate?.promise;
-      await fulfillJSON(route, numberedPage(rows, url.searchParams));
+      const status = url.searchParams.get('status');
+      await fulfillJSON(
+        route,
+        numberedPage(status ? rows.filter((row) => row.status === status) : rows, url.searchParams),
+      );
       return;
     }
     const donationMatch = path.match(new RegExp('^' + config.root + '/donations/([1-9][0-9]*)$'));
@@ -345,7 +374,26 @@ async function installManagementRoutes(
         );
         return;
       }
-      await fulfillJSON(route, donationDetail(Number(donationMatch[1]) - 1));
+      const index = Number(donationMatch[1]) - 1;
+      const detail = donationDetail(index);
+      if (terminalReviews) {
+        const summary = rows[index];
+        for (const field of ['status', 'review_result', 'reviewer', 'handling'])
+          detail[field] = summary[field];
+        detail.keys = [
+          {
+            ...keyForDonation(index),
+            charity_state: summary.status === 'expired' ? 'expired' : 'ended',
+            ended_reason:
+              summary.status === 'expired'
+                ? 'expired'
+                : summary.review_result
+                  ? 'terminated'
+                  : 'withdrawn',
+          },
+        ];
+      }
+      await fulfillJSON(route, detail);
       return;
     }
     const donationKeysMatch = path.match(
@@ -921,6 +969,40 @@ function initialState(overrides: Partial<FixtureState> = {}): FixtureState {
 }
 
 for (const station of ['admin', 'user'] as const) {
+  test(
+    station + ' reads mixed expired and ended reviews through list, filter, detail and reload',
+    async ({ context, page }) => {
+      const setup = await prepareStation(context, page, station, 1_265);
+      const state = initialState();
+      await installManagementRoutes(page, station, state, true);
+      const path =
+        station === 'admin' ? '/charity' : '/steward?tab=charity&charity_section=donations';
+      const query = (value: string) =>
+        setup.origin + path + (path.includes('?') ? '&' : '?') + value;
+      await page.goto(query('donations_page_size=10'));
+      for (const id of ['1', '2', '3', '4', '5'])
+        await expect(donationListRow(page, id)).toBeVisible();
+      for (const id of ['1', '2', '4']) {
+        await donationListRow(page, id)
+          .getByRole('button', { name: 'Review', exact: true })
+          .click();
+        await expect(page.getByRole('heading', { name: 'Donation #' + id })).toBeVisible();
+        await page.reload();
+        await expect(page.getByRole('heading', { name: 'Donation #' + id })).toBeVisible();
+        await page.goBack();
+        await expect(donationListRow(page, id)).toBeVisible();
+      }
+      await page.goto(query('donations_page=2&donations_page_size=10'));
+      await expect(donationListRow(page, '20')).toBeVisible();
+      await page.goto(query('donation_status=expired&donations_page_size=10'));
+      await expect(donationListRow(page, '1')).toBeVisible();
+      await expect(donationListRow(page, '2')).toBeVisible();
+      await expect(donationListRow(page, '4')).toHaveCount(0);
+      expect(state.listReads.some((search) => search.includes('status=expired'))).toBe(true);
+      await assertStationClean(page, setup);
+    },
+  );
+
   test(
     station + ' keeps donation detail reachable across pagination, refresh, and browser navigation',
     async ({ context, page }) => {

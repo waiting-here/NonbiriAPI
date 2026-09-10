@@ -380,7 +380,7 @@ FROM donations d LEFT JOIN users u ON u.id=d.user_id WHERE d.id=?`, donationID).
 	}
 	out.ID = strconv.FormatInt(id, 10)
 	out.Revision = strconv.FormatInt(revision, 10)
-	if reviewedAt.Valid && (out.Status == "approved" || out.Status == "rejected" || reviewRole != "") {
+	if reviewedAt.Valid && (out.Status == "approved" || out.Status == "rejected" || out.Status == "expired" || out.Status == "deleted") {
 		decision := "approve"
 		if out.Status == "rejected" {
 			decision = "reject"
