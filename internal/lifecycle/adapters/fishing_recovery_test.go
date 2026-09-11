@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	gameRuntime "github.com/waiting-here/NonbiriAPI/internal/game/runtime"
+	gameRuntime "github.com/waiting-here/NonbiriAPI/internal/game/fishing/runtime"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 )
 

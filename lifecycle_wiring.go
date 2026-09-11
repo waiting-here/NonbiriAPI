@@ -307,8 +307,7 @@ func newLifecycleCoordinator(
 ) (*lifecycle.Coordinator, error) {
 	if store == nil || vault == nil || authRuntime == nil || roleAuthorizer == nil ||
 		forwardRuntime == nil || forwardRuntime.lifecycle == nil || forwardRuntime.flow == nil ||
-		gameRuntimes == nil || gameRuntimes.limiter == nil || gameRuntimes.fishing == nil ||
-		gameRuntimes.linklink == nil || gameRuntimes.rps == nil || claimService == nil ||
+		gameRuntimes == nil || gameRuntimes.Service == nil || gameRuntimes.Limiter() == nil || claimService == nil ||
 		resourceRepository == nil || issueService == nil || logRepository == nil ||
 		activityService == nil || activityRepository == nil || donationService == nil || charityService == nil ||
 		reportRepository == nil || announcementRepository == nil || maintenanceService == nil ||
@@ -347,9 +346,9 @@ func newLifecycleCoordinator(
 	activityAdapter := lifecycleadapters.NewActivity(activityRepository)
 	donationAdapter := lifecycleadapters.NewDonation(donationService)
 	charityAdapter := lifecycleadapters.NewCharity(charityService)
-	fishingAdapter := lifecycleadapters.NewFishing(gameRuntimes.fishing.Lifecycle())
-	linkLinkAdapter := lifecycleadapters.NewLinkLink(gameRuntimes.linklink.Lifecycle())
-	rpsAdapter := lifecycleadapters.NewRPS(gameRuntimes.rps.Lifecycle())
+	fishingAdapter := lifecycleadapters.NewRegisteredFishing(gameRuntimes.Service)
+	linkLinkAdapter := lifecycleadapters.NewRegisteredLinkLink(gameRuntimes.Service)
+	rpsAdapter := lifecycleadapters.NewRegisteredRPS(gameRuntimes.Service)
 	reportAdapter := lifecycleadapters.NewReportLifecycle(reportRepository)
 	announcementAdapter := lifecycleadapters.NewAnnouncementAuditLifecycle(announcementRepository)
 	secretAdapter := lifecycleadapters.NewOrphanSecretRecovery(claimService)
@@ -360,7 +359,7 @@ func newLifecycleCoordinator(
 	coordinator, err := lifecycle.New(lifecycle.Config{
 		Store: store, UserAuth: roleAuthorizer, AdminAuth: roleAuthorizer, CursorKeys: vault,
 		Retirement: &productionRetirementBoundary{
-			gate: forwardRuntime.lifecycle, flow: forwardRuntime.flow, games: gameRuntimes.limiter,
+			gate: forwardRuntime.lifecycle, flow: forwardRuntime.flow, games: gameRuntimes.Limiter(),
 		},
 		Ledger: ledgerAdapter,
 		Export: lifecycle.ExportAdapters{
@@ -381,9 +380,9 @@ func newLifecycleCoordinator(
 			Claims:      lifecycleadapters.NewClaimRecovery(claimService),
 			Thursday:    lifecycleadapters.NewThursdayRecovery(activityService),
 			Reports:     reportAdapter,
-			Fishing:     lifecycleadapters.NewFishingRecovery(gameRuntimes.fishing),
-			LinkLink:    lifecycleadapters.NewLinkLinkRecovery(gameRuntimes.linklink),
-			RPS:         lifecycleadapters.NewRPSRecovery(gameRuntimes.rps),
+			Fishing:     lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.FishingID),
+			LinkLink:    lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.LinkLinkID),
+			RPS:         lifecycleadapters.NewRegisteredGameRecovery(gameRuntimes.Service, game.RPSID),
 			Donations:   lifecycleadapters.NewDonationRecovery(donationService),
 			Secrets:     secretAdapter,
 		},

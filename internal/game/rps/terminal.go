@@ -9,6 +9,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/game/finance"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
@@ -129,15 +130,11 @@ func (service *Service) finalizeTerminalTx(ctx context.Context, tx *sql.Tx, reco
 	if record == nil || record.State != StateTerminalProcessing || record.TerminalOperationID == nil || record.TerminalReason == nil {
 		return terminalResult{}, ErrInvariant
 	}
-	external, err := ledger.CodedAccount(ctx, tx, "external")
-	if err != nil {
-		return terminalResult{}, ErrInvariant
-	}
 	welfare, err := service.pools.WelfareDestination(ctx, tx)
 	if err != nil {
 		return terminalResult{}, classifyDB(err)
 	}
-	payouts := make([]ledger.RPSTerminalPayout, 0, 3)
+	payouts := make([]finance.Payout, 0, 3)
 	users := make([]int64, 0, 3)
 	deletedAmount := new(big.Int)
 	for _, seat := range record.Seats {
@@ -145,15 +142,11 @@ func (service *Service) finalizeTerminalTx(ctx context.Context, tx *sql.Tx, reco
 			return terminalResult{}, ErrInvariant
 		}
 		if seat.DeletionState == "active" && seat.UserID != nil {
-			account, err := ledger.UserAccount(ctx, tx, *seat.UserID)
-			if err != nil {
-				return terminalResult{}, ErrInvariant
-			}
 			amount, err := ledger.AmountFromBig(seat.TerminalReturn.Big())
 			if err != nil {
 				return terminalResult{}, ErrInvariant
 			}
-			payouts = append(payouts, ledger.RPSTerminalPayout{UserAccountID: account.ID, Amount: amount})
+			payouts = append(payouts, finance.Payout{UserID: *seat.UserID, Amount: amount})
 			users = append(users, *seat.UserID)
 		} else {
 			deletedAmount.Add(deletedAmount, seat.TerminalReturn.Big())
@@ -167,13 +160,7 @@ func (service *Service) finalizeTerminalTx(ctx context.Context, tx *sql.Tx, reco
 	if err != nil {
 		return terminalResult{}, ErrInvariant
 	}
-	plan, err := ledger.NewRPSTerminal(ledger.Meta{OperationID: *record.TerminalOperationID, CreatedAt: now}, record.ID,
-		record.AccountID, external.ID, welfare.AccountID, payouts, deleted, carry)
-	if err != nil {
-		return terminalResult{}, ErrInvariant
-	}
-	ref, _ := ledger.RPSSessionReservation(record.ID)
-	_, err = ledger.ConsumeReserved(ctx, tx, ref, plan, func(ctx context.Context, tx *sql.Tx) error {
+	err = service.finance.Terminal(ctx, tx, finance.Terminal{Meta: ledger.Meta{OperationID: *record.TerminalOperationID, CreatedAt: now}, SessionID: record.ID, WelfareAccountID: welfare.AccountID, Payouts: payouts, Deleted: deleted, Carry: carry}, func(ctx context.Context, tx *sql.Tx) error {
 		if err := service.insertTerminalFactsTx(ctx, tx, record, now); err != nil {
 			return err
 		}

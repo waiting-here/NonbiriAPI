@@ -23,6 +23,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
+	fishingconfig "github.com/waiting-here/NonbiriAPI/internal/game/fishing/config"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
@@ -112,15 +113,15 @@ const (
 	KeyGameRPSDeathmatchB          = "game_rps_deathmatch_b_milli"
 	KeyReportPendingTTLSeconds     = "report_pending_ttl_seconds"
 	KeyGamesEnabled                = game.GamesEnabledKey
-	KeyGameFishingEnabled          = game.FishingEnabledKey
-	KeyGameFishingBaitWormPrice    = game.FishingWormPriceMilliKey
-	KeyGameFishingBaitLurePrice    = game.FishingLurePriceMilliKey
-	KeyGameFishingBaitPremiumPrice = game.FishingPremiumPriceMilliKey
-	KeyGameFishingRTP              = game.FishingStandardRTPKey
-	KeyGameFishingRTPPremium       = game.FishingPremiumRTPKey
-	KeyGameFishingTreasureBottle   = game.FishingTreasureBottleMultiplierKey
-	KeyGameFishingTreasureClover   = game.FishingTreasureCloverMultiplierKey
-	KeyGameFishingTreasureShell    = game.FishingTreasureShellMultiplierKey
+	KeyGameFishingEnabled          = fishingconfig.FishingEnabledKey
+	KeyGameFishingBaitWormPrice    = fishingconfig.FishingWormPriceMilliKey
+	KeyGameFishingBaitLurePrice    = fishingconfig.FishingLurePriceMilliKey
+	KeyGameFishingBaitPremiumPrice = fishingconfig.FishingPremiumPriceMilliKey
+	KeyGameFishingRTP              = fishingconfig.FishingStandardRTPKey
+	KeyGameFishingRTPPremium       = fishingconfig.FishingPremiumRTPKey
+	KeyGameFishingTreasureBottle   = fishingconfig.FishingTreasureBottleMultiplierKey
+	KeyGameFishingTreasureClover   = fishingconfig.FishingTreasureCloverMultiplierKey
+	KeyGameFishingTreasureShell    = fishingconfig.FishingTreasureShellMultiplierKey
 	// Anti-abuse policy keys are process-independent values; the policy rail
 	// reads them authoritatively for each relevant event.
 	KeyRPMBanThreshold                  = antiabuse.KeyRPMBanThreshold

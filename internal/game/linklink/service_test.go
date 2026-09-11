@@ -376,7 +376,7 @@ func TestConcurrentStartsAndMatchesCannotDoubleChargeOrDoubleRemove(t *testing.T
 
 func TestServiceRequiresAndDoesNotOwnSharedStartLimiter(t *testing.T) {
 	fixture := newFixture(t)
-	if _, err := New(Options{Store: fixture.store, UserAuthorizer: fixture.authorizer, Continuation: fixture.continuation, HealthEpoch: 8}); err == nil {
+	if _, err := New(Options{Finance: registeredFinance(t, "linklink").LinkLink, Store: fixture.store, UserAuthorizer: fixture.authorizer, Continuation: fixture.continuation, HealthEpoch: 8}); err == nil {
 		t.Fatal("service accepted a missing shared limiter")
 	}
 	if err := fixture.service.Close(); err != nil {

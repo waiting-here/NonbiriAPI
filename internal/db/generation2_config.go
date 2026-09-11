@@ -13,7 +13,9 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	builtinconfig "github.com/waiting-here/NonbiriAPI/internal/game/builtin/config"
 	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
+	fishingconfig "github.com/waiting-here/NonbiriAPI/internal/game/fishing/config"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
 
@@ -145,40 +147,40 @@ func buildGenerationTwoConfigCatalog() map[string]generationTwoConfigSpec {
 		"registration_open": boolSpec("0"),
 		// These three inherited keys have a real raw-null state. They are known,
 		// but intentionally have no required seed row.
-		"site_timezone_offset_minutes": {kind: generationTwoConfigTimezone},
-		"charity_token_reserve_milli":  {kind: generationTwoConfigAmount, minimum: 1, maximum: uint64(MaxMoneyMilli)},
-		"anthropic_default_max_tokens": {kind: generationTwoConfigUint, minimum: 1, maximum: 2147483647},
-		"level_threshold_2_milli":      amountSpec("0", 0),
-		"level_threshold_3_milli":      amountSpec("0", 0),
-		"level_threshold_4_milli":      amountSpec("0", 0),
-		"level_display_name_1":         {kind: generationTwoConfigLevelName, seed: generationTwoSeed(""), maxRunes: 64, allowEmpty: true},
-		"level_display_name_2":         {kind: generationTwoConfigLevelName, seed: generationTwoSeed(""), maxRunes: 64, allowEmpty: true},
-		"level_display_name_3":         {kind: generationTwoConfigLevelName, seed: generationTwoSeed(""), maxRunes: 64, allowEmpty: true},
-		"level_display_name_4":         {kind: generationTwoConfigLevelName, seed: generationTwoSeed(""), maxRunes: 64, allowEmpty: true},
-		"level_display_name_5":         {kind: generationTwoConfigLevelName, seed: generationTwoSeed(""), maxRunes: 64, allowEmpty: true},
-		"checkin_mode":                 {kind: generationTwoConfigEnum, seed: generationTwoSeed(CheckinModeDisabled), allowed: []string{CheckinModeEnabled, CheckinModeLevelGated, CheckinModeDisabled}},
-		"checkin_award_min_milli":      amountSpec(formatGenerationTwoUint(uint64(DefaultCheckinAwardMinMilli)), 0),
-		"checkin_award_max_milli":      amountSpec(formatGenerationTwoUint(uint64(DefaultCheckinAwardMaxMilli)), 0),
-		"credits_cap_milli":            amountSpec(formatGenerationTwoUint(uint64(DefaultCreditsCapMilli)), 0),
-		"charity_enabled":              boolSpec("0"),
-		"donation_accept_enabled":      boolSpec("0"),
-		"games_enabled":                boolSpec("0"),
-		game.FishingEnabledKey:         boolSpec("0"),
-		game.FishingWormPriceMilliKey: amountSpec(
+		"site_timezone_offset_minutes":  {kind: generationTwoConfigTimezone},
+		"charity_token_reserve_milli":   {kind: generationTwoConfigAmount, minimum: 1, maximum: uint64(MaxMoneyMilli)},
+		"anthropic_default_max_tokens":  {kind: generationTwoConfigUint, minimum: 1, maximum: 2147483647},
+		"level_threshold_2_milli":       amountSpec("0", 0),
+		"level_threshold_3_milli":       amountSpec("0", 0),
+		"level_threshold_4_milli":       amountSpec("0", 0),
+		"level_display_name_1":          {kind: generationTwoConfigLevelName, seed: generationTwoSeed(""), maxRunes: 64, allowEmpty: true},
+		"level_display_name_2":          {kind: generationTwoConfigLevelName, seed: generationTwoSeed(""), maxRunes: 64, allowEmpty: true},
+		"level_display_name_3":          {kind: generationTwoConfigLevelName, seed: generationTwoSeed(""), maxRunes: 64, allowEmpty: true},
+		"level_display_name_4":          {kind: generationTwoConfigLevelName, seed: generationTwoSeed(""), maxRunes: 64, allowEmpty: true},
+		"level_display_name_5":          {kind: generationTwoConfigLevelName, seed: generationTwoSeed(""), maxRunes: 64, allowEmpty: true},
+		"checkin_mode":                  {kind: generationTwoConfigEnum, seed: generationTwoSeed(CheckinModeDisabled), allowed: []string{CheckinModeEnabled, CheckinModeLevelGated, CheckinModeDisabled}},
+		"checkin_award_min_milli":       amountSpec(formatGenerationTwoUint(uint64(DefaultCheckinAwardMinMilli)), 0),
+		"checkin_award_max_milli":       amountSpec(formatGenerationTwoUint(uint64(DefaultCheckinAwardMaxMilli)), 0),
+		"credits_cap_milli":             amountSpec(formatGenerationTwoUint(uint64(DefaultCreditsCapMilli)), 0),
+		"charity_enabled":               boolSpec("0"),
+		"donation_accept_enabled":       boolSpec("0"),
+		"games_enabled":                 boolSpec("0"),
+		fishingconfig.FishingEnabledKey: boolSpec("0"),
+		fishingconfig.FishingWormPriceMilliKey: amountSpec(
 			generationTwoFishingDefaultAmount(fishingDefaults, fishing.BaitWorm), uint64(fishing.MinimumBaitPriceMilli)),
-		game.FishingLurePriceMilliKey: amountSpec(
+		fishingconfig.FishingLurePriceMilliKey: amountSpec(
 			generationTwoFishingDefaultAmount(fishingDefaults, fishing.BaitLure), uint64(fishing.MinimumBaitPriceMilli)),
-		game.FishingPremiumPriceMilliKey: amountSpec(
+		fishingconfig.FishingPremiumPriceMilliKey: amountSpec(
 			generationTwoFishingDefaultAmount(fishingDefaults, fishing.BaitPremium), uint64(fishing.MinimumBaitPriceMilli)),
-		game.FishingStandardRTPKey: uintSpec(
+		fishingconfig.FishingStandardRTPKey: uintSpec(
 			formatGenerationTwoUint(uint64(fishingDefaults.StandardRTPPercent)), fishing.MinimumRTPPercent, fishing.MaximumRTPPercent),
-		game.FishingPremiumRTPKey: uintSpec(
+		fishingconfig.FishingPremiumRTPKey: uintSpec(
 			formatGenerationTwoUint(uint64(fishingDefaults.PremiumRTPPercent)), fishing.MinimumRTPPercent, fishing.MaximumRTPPercent),
-		game.FishingTreasureBottleMultiplierKey: uintSpec(
+		fishingconfig.FishingTreasureBottleMultiplierKey: uintSpec(
 			generationTwoFishingDefaultMultiplier(fishingDefaults, "bottle"), fishing.MinimumTreasureMultiplier, fishing.MaximumTreasureMultiplier),
-		game.FishingTreasureCloverMultiplierKey: uintSpec(
+		fishingconfig.FishingTreasureCloverMultiplierKey: uintSpec(
 			generationTwoFishingDefaultMultiplier(fishingDefaults, "clover"), fishing.MinimumTreasureMultiplier, fishing.MaximumTreasureMultiplier),
-		game.FishingTreasureShellMultiplierKey: uintSpec(
+		fishingconfig.FishingTreasureShellMultiplierKey: uintSpec(
 			generationTwoFishingDefaultMultiplier(fishingDefaults, "shell"), fishing.MinimumTreasureMultiplier, fishing.MaximumTreasureMultiplier),
 		"activities_enabled":                   boolSpec("0"),
 		"activity_welfare_enabled":             boolSpec("0"),
@@ -406,15 +408,15 @@ func validateGenerationTwoFishingOperationBound(values map[string]string, rules 
 		return errors.New("Fishing ruleset is missing")
 	}
 	priceKeys := map[fishing.Bait]string{
-		fishing.BaitWorm:    game.FishingWormPriceMilliKey,
-		fishing.BaitLure:    game.FishingLurePriceMilliKey,
-		fishing.BaitPremium: game.FishingPremiumPriceMilliKey,
+		fishing.BaitWorm:    fishingconfig.FishingWormPriceMilliKey,
+		fishing.BaitLure:    fishingconfig.FishingLurePriceMilliKey,
+		fishing.BaitPremium: fishingconfig.FishingPremiumPriceMilliKey,
 	}
 	maxTreasureMultiplier := uint64(0)
 	for _, key := range []string{
-		game.FishingTreasureBottleMultiplierKey,
-		game.FishingTreasureCloverMultiplierKey,
-		game.FishingTreasureShellMultiplierKey,
+		fishingconfig.FishingTreasureBottleMultiplierKey,
+		fishingconfig.FishingTreasureCloverMultiplierKey,
+		fishingconfig.FishingTreasureShellMultiplierKey,
 	} {
 		value, ok := generationTwoConfigUintValue(values, key)
 		if !ok {
@@ -495,18 +497,18 @@ func validateGenerationTwoConfigCombinations(values map[string]string) error {
 		return errors.New("checkin requires site timezone")
 	}
 
-	gameValues := make(map[string]string, len(game.SiteConfigKeys()))
-	for _, key := range game.SiteConfigKeys() {
+	gameValues := make(map[string]string, len(builtinconfig.SiteConfigKeys()))
+	for _, key := range builtinconfig.SiteConfigKeys() {
 		gameValues[key] = values[key]
 	}
-	gameSnapshot, err := game.CompileConfig(gameValues)
+	gameSnapshot, err := builtinconfig.CompileConfig(gameValues)
 	if err != nil {
 		return fmt.Errorf("invalid Fishing configuration: %w", err)
 	}
 	if err := validateGenerationTwoFishingOperationBound(values, gameSnapshot.Rules); err != nil {
 		return err
 	}
-	if generationTwoConfigBoolValue(values, game.FishingEnabledKey) && !generationTwoConfigBoolValue(values, game.GamesEnabledKey) {
+	if generationTwoConfigBoolValue(values, fishingconfig.FishingEnabledKey) && !generationTwoConfigBoolValue(values, game.GamesEnabledKey) {
 		return errors.New("Fishing requires games_enabled")
 	}
 

@@ -11,6 +11,7 @@ import (
 	"strconv"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	rpsconfig "github.com/waiting-here/NonbiriAPI/internal/game/rps/config"
 )
 
 const (
@@ -186,7 +187,7 @@ func randomSeatOrder(random io.Reader) ([3]int, error) {
 }
 
 func leaderboardTieKey(key [32]byte, board, mode string, userID int64) ([32]byte, error) {
-	if board != "profit_rate" && board != "net_profit" || mode != "quick" && mode != "standard" && mode != "deathmatch" || userID <= 0 {
+	if rpsconfig.Descriptor().ResolveBoard(board) != nil || rpsconfig.Descriptor().ResolveMode(mode) != nil || userID <= 0 {
 		return [32]byte{}, ErrInvariant
 	}
 	mac := hmac.New(sha256.New, key[:])

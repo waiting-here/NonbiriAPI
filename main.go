@@ -39,10 +39,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/donation"
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
 	"github.com/waiting-here/NonbiriAPI/internal/elevation"
-	gamehome "github.com/waiting-here/NonbiriAPI/internal/game/home"
-	"github.com/waiting-here/NonbiriAPI/internal/game/linklink"
-	"github.com/waiting-here/NonbiriAPI/internal/game/rps"
-	gameruntime "github.com/waiting-here/NonbiriAPI/internal/game/runtime"
+	gamehost "github.com/waiting-here/NonbiriAPI/internal/game/host"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/httpmw"
 	"github.com/waiting-here/NonbiriAPI/internal/issues"
@@ -290,7 +287,7 @@ type application struct {
 	charity         *charity.Service
 	charityRouting  *charityrouting.Service
 	checkin         *checkin.Service
-	homeGames       *gamehome.Service
+	homeGames       *gamehost.Service
 	announcements   *announcements.Service
 	issues          *issues.Service
 	reports         *reports.Repository
@@ -1034,21 +1031,12 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("create check-in service: %w", err)
 	}
-	homeGameService, err := gamehome.New(gamehome.Options{
-		Database: store.DB(), UserAuthorizer: authRuntime,
-		LinkLink: gameRuntimes.linklink, RPS: gameRuntimes.rps,
-	})
-	if err != nil {
+	homeGameService := gameRuntimes.Service
+	if err := gameRuntimes.RegisterRoutes(gamehost.Registrars{
+		User: authRuntime, Admin: authRuntime, Continuation: authRuntime, Maintenance: registry,
+	}); err != nil {
 		cleanup()
-		return nil, fmt.Errorf("create home game summary service: %w", err)
-	}
-	if err := linklink.RegisterContinuation(registry, gameRuntimes.linklink); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("register LinkLink maintenance continuation: %w", err)
-	}
-	if err := rps.RegisterContinuation(registry, gameRuntimes.rps); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("register RPS maintenance continuation: %w", err)
+		return nil, fmt.Errorf("register game routes: %w", err)
 	}
 	userInvalidations := &userSessionInvalidationFanout{
 		debug: debugHub, connections: accountConnections,
@@ -1135,10 +1123,6 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("register check-in routes: %w", err)
 	}
-	if err := gamehome.RegisterRoutes(authRuntime, homeGameService); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("register home game summary route: %w", err)
-	}
 	activityRoutes := activityRouteRegistrar{runtime: authRuntime}
 	if err := activities.RegisterRoutes(activityRoutes, activityRoutes, activityService); err != nil {
 		cleanup()
@@ -1184,22 +1168,6 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("register administrator log routes: %w", err)
 	}
-	if err := gameruntime.RegisterUserRoutes(authRuntime, gameRuntimes.fishing); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("register Fishing routes: %w", err)
-	}
-	if err := gameruntime.RegisterAdminRoutes(authRuntime, gameRuntimes.fishing); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("register game administrator routes: %w", err)
-	}
-	if err := linklink.RegisterRoutes(authRuntime, authRuntime, gameRuntimes.linklink); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("register LinkLink routes: %w", err)
-	}
-	if err := rps.RegisterRoutes(authRuntime, authRuntime, gameRuntimes.rps); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("register RPS routes: %w", err)
-	}
 	lifecycleRoutes := lifecycleRouteRegistrar{runtime: authRuntime}
 	if err := lifecycle.RegisterRoutes(lifecycleRoutes, lifecycleRoutes, lifecycleCoordinator); err != nil {
 		cleanup()
@@ -1209,7 +1177,7 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("register time API routes: %w", err)
 	}
-	if err := registerAccountEventRoute(authRuntime, gate, gameRuntimes.rps, activityEvents, accountConnections); err != nil {
+	if err := registerAccountEventRoute(authRuntime, gate, gameRuntimes.AccountContinuation(), activityEvents, accountConnections); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("register account event route: %w", err)
 	}
@@ -1217,17 +1185,9 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("prepare maintenance state: %w", err)
 	}
-	if err := gameRuntimes.linklink.ValidatePersistedState(startupContext); err != nil {
+	if err := gameRuntimes.ValidatePersistedState(startupContext); err != nil {
 		cleanup()
-		return nil, fmt.Errorf("validate LinkLink persisted state: %w", err)
-	}
-	if err := gameRuntimes.rps.ValidatePersistedState(startupContext); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("validate RPS persisted state: %w", err)
-	}
-	if err := gameRuntimes.fishing.ValidatePersistedState(startupContext); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("validate Fishing persisted state: %w", err)
+		return nil, fmt.Errorf("validate game persisted state: %w", err)
 	}
 	if err := charityService.ValidateRecurringState(startupContext); err != nil {
 		cleanup()
@@ -1249,17 +1209,9 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		return nil, err
 	}
 	gameWorkerContext := context.Background()
-	if err := gameRuntimes.linklink.StartWorker(gameWorkerContext); err != nil {
+	if err := gameRuntimes.StartWorker(gameWorkerContext); err != nil {
 		cleanup()
-		return nil, fmt.Errorf("start LinkLink worker: %w", err)
-	}
-	if err := gameRuntimes.rps.StartWorker(gameWorkerContext); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("start RPS worker: %w", err)
-	}
-	if err := gameRuntimes.fishing.StartWorker(gameWorkerContext); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("start Fishing worker: %w", err)
+		return nil, fmt.Errorf("start game workers: %w", err)
 	}
 	lifecycleCancel, lifecycleDone, err := startLifecycleWorker(context.Background(), lifecycleCoordinator)
 	if err != nil {

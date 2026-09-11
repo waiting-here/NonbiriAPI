@@ -41,7 +41,7 @@ type accountEventsHTTP struct {
 	connections *accountEventConnections
 }
 
-func registerAccountEventRoute(runtime *auth.Runtime, gate *maintenance.Gate, rpsService *rps.Service, hub *accountstream.Hub, connections *accountEventConnections) error {
+func registerAccountEventRoute(runtime *auth.Runtime, gate *maintenance.Gate, rpsService accountEventRPSReader, hub *accountstream.Hub, connections *accountEventConnections) error {
 	if runtime == nil || gate == nil || rpsService == nil || hub == nil || connections == nil {
 		return errors.New("account event route dependencies are required")
 	}
