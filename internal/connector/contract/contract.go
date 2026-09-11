@@ -21,6 +21,18 @@ const (
 	TypeAnthropicCompatible Type = "anthropic-compatible"
 )
 
+// Operation selects an ingress protocol operation without classifying models.
+type Operation string
+
+const (
+	OperationChatCompletions Operation = "chat_completions"
+	OperationEmbeddings      Operation = "embeddings"
+)
+
+func (o Operation) Valid() bool {
+	return o == OperationChatCompletions || o == OperationEmbeddings
+}
+
 // Capability is one fidelity guarantee made by a connector descriptor.
 type Capability uint64
 
@@ -36,6 +48,7 @@ const (
 	CapabilitySampling
 	CapabilityUnknownOpenAIFields
 	CapabilityModelDiscovery
+	CapabilityEmbeddings
 )
 
 const KnownCapabilities = CapabilityText |
@@ -48,7 +61,8 @@ const KnownCapabilities = CapabilityText |
 	CapabilityStream |
 	CapabilitySampling |
 	CapabilityUnknownOpenAIFields |
-	CapabilityModelDiscovery
+	CapabilityModelDiscovery |
+	CapabilityEmbeddings
 
 // CapabilitySet is an immutable bit set in a registry descriptor.
 type CapabilitySet uint64
