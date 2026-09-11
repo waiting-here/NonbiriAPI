@@ -147,6 +147,20 @@ func (adapter *CharityRoutingAdapter) Preflight(ctx context.Context, userID int6
 	}, nil
 }
 
+func (adapter *CharityRoutingAdapter) PreflightEmbedding(ctx context.Context, userID int64, fullName string, request *openai.EmbeddingRequest, now int64) (CharityPreflight, error) {
+	if adapter == nil || adapter.service == nil {
+		return CharityPreflight{}, ErrInternal
+	}
+	value, err := adapter.service.PreflightEmbedding(ctx, userID, fullName, request, now)
+	if err != nil {
+		return CharityPreflight{}, err
+	}
+	return CharityPreflight{
+		ModelID: value.ModelID, Provider: value.Provider, Model: value.Model, FullName: value.FullName,
+		FlattenToolCalls: value.FlattenToolCalls, ReservedMilli: value.ReservedMilli,
+	}, nil
+}
+
 func (adapter *CharityRoutingAdapter) Snapshot(ctx context.Context, modelID, now int64, connectorTypes []connectorcontract.Type) (CharitySnapshot, error) {
 	if adapter == nil || adapter.service == nil {
 		return CharitySnapshot{}, ErrInternal

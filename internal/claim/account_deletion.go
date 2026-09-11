@@ -136,9 +136,9 @@ func (s *Service) prepareRequestDeletionTx(
 	}
 	var preserve uint64
 	switch request.Route {
-	case RouteOpenAIChat:
+	case RouteOpenAIChat, RouteOpenAIEmbeddings:
 		preserve = 1
-	case RouteCharityChat:
+	case RouteCharityChat, RouteCharityEmbeddings:
 		preserve = 1 + dispatchedClaims
 	case RouteDiscovery:
 		preserve = 0

@@ -508,10 +508,10 @@ FROM dispatch_claims WHERE logical_request_id=?`, request.ID).Scan(&nonterminalC
 		if request.AccountingDisposition != AccountingReserved || remaining < 1 {
 			return Request{}, ErrInvariant
 		}
-		if request.Route == RouteCharityChat && s.charity == nil {
+		if request.Route.IsCharity() && s.charity == nil {
 			return Request{}, ErrDependencyUnavailable
 		}
-		if request.Route == RouteCharityChat {
+		if request.Route.IsCharity() {
 			charge, err := s.charity.RequestCharge(ctx, tx, request.ID, input.Disposition)
 			if err != nil {
 				return Request{}, fmt.Errorf("claim: prepare authoritative request charge: %w", err)
@@ -541,7 +541,7 @@ FROM dispatch_claims WHERE logical_request_id=?`, request.ID).Scan(&nonterminalC
 			if err := setRequestCapacityTx(callbackCtx, callbackTx, request.ID, 1, 0); err != nil {
 				return err
 			}
-			if request.Route == RouteCharityChat {
+			if request.Route.IsCharity() {
 				if err := s.charity.CompleteRequest(callbackCtx, callbackTx, CharityRequestCompletion{
 					RequestID:   request.ID,
 					Caller:      input.Caller,
@@ -877,7 +877,7 @@ func validPersistedRequest(request Request) bool {
 		return false
 	}
 	switch request.Route {
-	case RouteOpenAIChat, RouteCharityChat:
+	case RouteOpenAIChat, RouteCharityChat, RouteOpenAIEmbeddings, RouteCharityEmbeddings:
 	case RouteDiscovery:
 		if request.AttemptLimit != 1 {
 			return false

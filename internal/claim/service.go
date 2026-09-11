@@ -56,7 +56,7 @@ func (s *Service) Accept(ctx context.Context, input AcceptInput) (Request, error
 	if s == nil || s.db == nil || ctx == nil || !validAcceptInput(input) {
 		return Request{}, ErrInvalidInput
 	}
-	if s.accounting == nil || s.acceptance == nil || (input.Route == RouteCharityChat && s.charity == nil) {
+	if s.accounting == nil || s.acceptance == nil || (input.Route.IsCharity() && s.charity == nil) {
 		return Request{}, ErrDependencyUnavailable
 	}
 	requestID, err := db.GenerateOpaqueID("req_")
@@ -78,14 +78,14 @@ func (s *Service) Accept(ctx context.Context, input AcceptInput) (Request, error
 		return Request{}, fmt.Errorf("claim: begin request acceptance: %w", err)
 	}
 	defer tx.Rollback()
-	if err := requireActiveUser(ctx, tx, input.UserID, at, input.Route == RouteCharityChat); err != nil {
+	if err := requireActiveUser(ctx, tx, input.UserID, at, input.Route.IsCharity()); err != nil {
 		return Request{}, err
 	}
 	if err := s.acceptance.AuthorizeChatAcceptance(ctx, tx, input.UserID, at); err != nil {
 		return Request{}, fmt.Errorf("claim: authorize chat acceptance: %w", err)
 	}
 	futureRows := 1
-	if input.Route == RouteCharityChat {
+	if input.Route.IsCharity() {
 		futureRows += input.AttemptLimit
 	}
 	rows := u128Small(uint64(futureRows))
@@ -104,7 +104,7 @@ VALUES(?,?,?,?,'accepted',?,'reserved',?,'user',?,?)`,
 		if err := ensureRequestLogTx(callbackCtx, callbackTx, requestID); err != nil {
 			return err
 		}
-		if input.Route == RouteCharityChat {
+		if input.Route.IsCharity() {
 			if err := s.charity.AcceptRequest(callbackCtx, callbackTx, CharityAcceptance{
 				RequestID:      requestID,
 				UserID:         input.UserID,
@@ -452,7 +452,7 @@ WHERE c.id=?`, handle.claimID).Scan(&stateText, &requestID, &attemptSeq, &purpos
 		clear(encrypted)
 		return nil, ErrInvariant
 	}
-	if requestRoute == string(RouteCharityChat) {
+	if RouteKind(requestRoute).IsCharity() {
 		if !callerID.Valid {
 			clear(contextID)
 			clear(encrypted)
@@ -571,9 +571,9 @@ func validAcceptInput(input AcceptInput) bool {
 		return false
 	}
 	switch input.Route {
-	case RouteOpenAIChat:
+	case RouteOpenAIChat, RouteOpenAIEmbeddings:
 		return input.CharityModelID == 0 && input.CharityDecisionNow == nil
-	case RouteCharityChat:
+	case RouteCharityChat, RouteCharityEmbeddings:
 		return input.CharityModelID > 0 && input.CharityDecisionNow != nil &&
 			*input.CharityDecisionNow >= 0 && *input.CharityDecisionNow <= maxUnixSecond
 	default:
@@ -632,9 +632,9 @@ func validHandle(handle Handle) bool {
 func purposeMatchesRoute(purpose Purpose, route RouteKind) bool {
 	switch purpose {
 	case PurposeSelf, PurposeDebugLive:
-		return route == RouteOpenAIChat
+		return route.IsSelf()
 	case PurposeCharity:
-		return route == RouteCharityChat
+		return route.IsCharity()
 	case PurposeDiscovery:
 		return route == RouteDiscovery
 	default:

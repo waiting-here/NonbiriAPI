@@ -103,7 +103,7 @@ WHERE l.user_id=? AND (l.completed_at IS NULL OR l.completed_at>?)`
 		}
 		if len(page.Data) < filter.Limit {
 			switch RouteKind(record.routeKind) {
-			case RouteOpenAIChat, RouteDiscovery:
+			case RouteOpenAIChat, RouteOpenAIEmbeddings, RouteDiscovery:
 				page.Data = append(page.Data, UserSelfLogRow{
 					ID: record.id, RouteKind: RouteKind(record.routeKind),
 					CallerResultClass: resultClassPointer(record.callerResultClass),
@@ -111,9 +111,9 @@ WHERE l.user_id=? AND (l.completed_at IS NULL OR l.completed_at>?)`
 					StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage,
 					Model: model, AttemptCount: strconv.FormatInt(record.attemptCount, 10),
 				})
-			case RouteCharityChat:
+			case RouteCharityChat, RouteCharityEmbeddings:
 				page.Data = append(page.Data, UserCharityLogRow{
-					ID: record.id, RouteKind: RouteCharityChat,
+					ID: record.id, RouteKind: RouteKind(record.routeKind),
 					CallerResultClass: resultClassPointer(record.callerResultClass),
 					CallerStatus:      intPointer(record.callerStatus), CallerErrorCode: textPointer(record.callerErrorCode),
 					StartedAt: record.startedAt, CompletedAt: int64Pointer(record.completedAt), Usage: usage, Model: model,

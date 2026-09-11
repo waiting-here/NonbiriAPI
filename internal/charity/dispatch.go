@@ -32,7 +32,7 @@ JOIN logical_requests lr ON lr.id=cr.logical_request_id
 JOIN dispatch_claims c ON c.logical_request_id=lr.id
 WHERE cr.logical_request_id=? AND cr.user_id=? AND lr.user_id=?
  AND cr.state IN ('reserved','dispatched') AND lr.state IN ('accepted','running')
- AND lr.route_kind='charity_chat_completions' AND c.id=? AND c.state='claimed' AND c.purpose='charity'`,
+ AND lr.route_kind IN ('charity_chat_completions','charity_embeddings') AND c.id=? AND c.state='claimed' AND c.purpose='charity'`,
 		input.RequestID, input.ActorUserID, input.ActorUserID, input.ClaimID).Scan(&modelID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return claim.ErrNotFound

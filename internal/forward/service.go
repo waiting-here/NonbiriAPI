@@ -28,6 +28,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
+	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
 )
 
@@ -81,6 +82,7 @@ type executionPlan struct {
 
 type attemptRun struct {
 	dispatched      bool
+	responseStarted bool
 	result          connectorcontract.AttemptResult
 	hasResult       bool
 	failure         *wireFailure
@@ -231,7 +233,16 @@ func (service *Service) Chat(
 	mediaType string,
 	language string,
 ) {
-	if service == nil || ctx == nil || writer == nil || userID <= 0 || request == nil {
+	service.execute(ctx, writer, userID, chatRequest(request), body, mediaType, language)
+}
+
+// Embeddings shares the same admission, dispatch, recovery and accounting rail.
+func (service *Service) Embeddings(ctx context.Context, writer http.ResponseWriter, userID int64, request *openai.EmbeddingRequest, body []byte, mediaType, language string) {
+	service.execute(ctx, writer, userID, embeddingRequest(request), body, mediaType, language)
+}
+
+func (service *Service) execute(ctx context.Context, writer http.ResponseWriter, userID int64, request *validatedRequest, body []byte, mediaType, language string) {
+	if service == nil || ctx == nil || writer == nil || userID <= 0 || !request.valid() {
 		writeFailure(writer, platformFailure(httperr.CodeInternal, "internal error"))
 		return
 	}
@@ -254,10 +265,7 @@ func (service *Service) Chat(
 		service.writePreAcceptanceFailure(parent, writer, nil, nil, err, admission.charity, language)
 		return
 	}
-	routeKind := debug.RouteOpenAIChat
-	if admission.charity {
-		routeKind = debug.RouteCharityChat
-	}
+	routeKind := requestkind.ForOperation(request.operation, admission.charity)
 	decision, err := service.debug.DecideAfterAdmission(bounded, debug.CaptureInput{
 		UserID: userID, RouteKind: routeKind, Model: request.Model, Stream: request.Stream,
 		MediaType: mediaType, Body: body, Charity: admission.charity,
@@ -361,13 +369,18 @@ func (service *Service) Chat(
 	}
 }
 
-func (service *Service) preflight(ctx context.Context, userID int64, request *openai.ChatRequest) (logicalAdmission, *openai.ChatRequest, func(), error) {
+func (service *Service) preflight(ctx context.Context, userID int64, request *validatedRequest) (logicalAdmission, *validatedRequest, func(), error) {
 	if strings.HasPrefix(request.Model, charityModelPrefix) {
 		now, err := service.nowUnix()
 		if err != nil {
 			return logicalAdmission{charity: true}, request, nil, err
 		}
-		value, err := service.charity.Preflight(ctx, userID, request.Model, request, now)
+		var value CharityPreflight
+		if request.operation == connectorcontract.OperationEmbeddings {
+			value, err = service.charity.PreflightEmbedding(ctx, userID, request.Model, request.embedding, now)
+		} else {
+			value, err = service.charity.Preflight(ctx, userID, request.Model, request.chat, now)
+		}
 		if err != nil {
 			return logicalAdmission{charity: true}, request, nil, err
 		}
@@ -389,29 +402,29 @@ func (service *Service) preflight(ctx context.Context, userID int64, request *op
 	return prepareModelPolicy(request, admission)
 }
 
-func prepareModelPolicy(request *openai.ChatRequest, admission logicalAdmission) (logicalAdmission, *openai.ChatRequest, func(), error) {
+func prepareModelPolicy(request *validatedRequest, admission logicalAdmission) (logicalAdmission, *validatedRequest, func(), error) {
 	if !validAdmission(admission) {
 		return admission, request, nil, ErrInternal
 	}
-	if !admission.flatten {
+	if !admission.flatten || request.operation != connectorcontract.OperationChatCompletions {
 		return admission, request, nil, nil
 	}
-	transformed, err := request.ReverseFlatten()
+	transformed, err := request.chat.ReverseFlatten()
 	if err != nil || transformed == nil {
 		return admission, request, nil, openai.ErrInvalidRequest
 	}
-	return admission, transformed, transformed.Clear, nil
+	return admission, chatRequest(transformed), transformed.Clear, nil
 }
 
 func (service *Service) snapshot(
 	ctx context.Context,
 	userID int64,
 	identifier string,
-	request *openai.ChatRequest,
+	request *validatedRequest,
 	admission logicalAdmission,
 	decision debug.CaptureDecision,
 ) (executionPlan, error) {
-	plan := executionPlan{logicalAdmission: admission}
+	plan := executionPlan{logicalAdmission: admission, route: requestkind.ForOperation(request.operation, admission.charity)}
 	if admission.charity {
 		connectorTypes := service.supportedCharityConnectorTypes(request, admission.flatten)
 		if len(connectorTypes) == 0 {
@@ -425,7 +438,6 @@ func (service *Service) snapshot(
 			return executionPlan{}, ErrInternal
 		}
 		plan.candidates = append([]RouteCandidate(nil), value.Candidates...)
-		plan.route = claim.RouteCharityChat
 		plan.purpose = claim.PurposeCharity
 	} else {
 		value, err := service.personal.Snapshot(ctx, userID, identifier)
@@ -436,7 +448,6 @@ func (service *Service) snapshot(
 			return executionPlan{}, ErrInternal
 		}
 		plan.candidates = append([]RouteCandidate(nil), value.Candidates...)
-		plan.route = claim.RouteOpenAIChat
 		plan.purpose = claim.PurposeSelf
 		if decision.Active {
 			plan.purpose = claim.PurposeDebugLive
@@ -452,16 +463,16 @@ func (service *Service) snapshot(
 		if !service.validCandidate(candidate, admission.charity) {
 			return executionPlan{}, ErrInternal
 		}
-		if admission.flatten && candidate.ConnectorType != connectorcontract.TypeOpenAICompatible {
+		if request.chat != nil && admission.flatten && candidate.ConnectorType != connectorcontract.TypeOpenAICompatible {
 			return executionPlan{}, ErrInternal
 		}
 		supported, evaluated := capabilityByType[candidate.ConnectorType]
 		if !evaluated {
-			supported = service.registry.SupportsRequest(candidate.ConnectorType, request)
+			supported = request.supports(service.registry, candidate.ConnectorType)
 			capabilityByType[candidate.ConnectorType] = supported
 		}
 		if supported {
-			candidate.Policy.FlattenToolCalls = admission.flatten
+			candidate.Policy.FlattenToolCalls = request.chat != nil && admission.flatten
 			capable = append(capable, candidate)
 		}
 	}
@@ -478,16 +489,16 @@ func (service *Service) snapshot(
 	return plan, nil
 }
 
-func (service *Service) supportedCharityConnectorTypes(request *openai.ChatRequest, flatten bool) []connectorcontract.Type {
+func (service *Service) supportedCharityConnectorTypes(request *validatedRequest, flatten bool) []connectorcontract.Type {
 	if service == nil || service.registry == nil || request == nil {
 		return nil
 	}
 	connectorTypes := make([]connectorcontract.Type, 0, len(service.connectors))
 	for connectorType, instance := range service.connectors {
-		if instance == nil || flatten && connectorType != connectorcontract.TypeOpenAICompatible {
+		if instance == nil || request.chat != nil && flatten && connectorType != connectorcontract.TypeOpenAICompatible {
 			continue
 		}
-		if service.registry.SupportsRequest(connectorType, request) {
+		if request.supports(service.registry, connectorType) {
 			connectorTypes = append(connectorTypes, connectorType)
 		}
 	}
@@ -502,7 +513,7 @@ func (service *Service) runAttempts(
 	suppressor *debug.CallerSuppressor,
 	trace *debug.TraceHandle,
 	userID int64,
-	request *openai.ChatRequest,
+	request *validatedRequest,
 	plan executionPlan,
 	accepted claim.Request,
 ) attemptRun {
@@ -580,6 +591,9 @@ func (service *Service) runAttempts(
 		}
 		policy := dispatch.Policy()
 		policy.SafetyIdentifier = safety
+		if request.embedding != nil {
+			policy.ForceStoreFalse, policy.FlattenToolCalls = false, false
+		}
 		if suppressor != nil {
 			if err := suppressor.MarkDispatched(); err != nil {
 				attemptRequest.Clear()
@@ -609,7 +623,7 @@ func (service *Service) runAttempts(
 			sink = suppressor.UpstreamWriter()
 		}
 		var responseStart *responseStartWriter
-		if plan.charity {
+		if plan.charity || request.embedding != nil {
 			sink, responseStart = checkpointResponseWriter(sink, func() error {
 				checkpointContext, cancel := context.WithTimeout(context.WithoutCancel(parent), service.settlement)
 				defer cancel()
@@ -624,15 +638,18 @@ func (service *Service) runAttempts(
 			break
 		}
 		result := protocolConnector.Attempt(executionContext, connector.AttemptInput{
-			Operation: connectorcontract.OperationChatCompletions,
-			Target:    dispatch.Target(), Credential: credential, Ingress: attemptRequest,
+			Operation: attemptRequest.operation,
+			Target:    dispatch.Target(), Credential: credential, Ingress: attemptRequest.chat, Embedding: attemptRequest.embedding,
 			Policy: policy, Sink: sink, Observer: service.observer,
 			TraceID: traceID(trace, accepted.ID), AttemptIndex: index,
 		})
 		credential.Clear()
 		attemptRequest.Clear()
 		result.Diagnostic = diagnostic.Bound(result.Diagnostic)
-		if executionContext.Err() != nil && !result.Success && !result.Committed {
+		if responseStart != nil && responseStart.started {
+			run.responseStarted = true
+		}
+		if executionContext.Err() != nil && !result.Success && !result.Committed && !run.responseStarted {
 			result = endedExecutionResult(parent, executionContext)
 		}
 		if !validAttemptResult(result) {
@@ -651,7 +668,7 @@ func (service *Service) runAttempts(
 			run.terminalBlocked = true
 			break
 		}
-		if result.Success || !retryable(result, plan.silentRetry) || index == len(plan.candidates)-1 {
+		if run.responseStarted || result.Success || !retryable(result, plan.silentRetry) || index == len(plan.candidates)-1 {
 			break
 		}
 		if !service.backoff.wait(executionContext, index) {
@@ -1011,7 +1028,7 @@ func debugUpstreamResult(result connectorcontract.AttemptResult, route claim.Rou
 		},
 		CompletedAt: completedAt,
 	}
-	if route == claim.RouteCharityChat {
+	if route.IsCharity() {
 		status := http.StatusBadGateway
 		if result.Success {
 			status = http.StatusOK

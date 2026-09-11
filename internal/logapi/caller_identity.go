@@ -7,7 +7,7 @@ import "database/sql"
 // The join is limited to charity rows and surviving ordinary accounts; neither
 // historical log snapshots nor donation owners participate in this projection.
 const callerIdentityColumns = `u.id IS NOT NULL,COALESCE(NULLIF(u.guild_nick,''),NULLIF(u.username,'')),NULLIF(u.discord_id,'')`
-const callerIdentityJoin = ` LEFT JOIN users u ON u.id=l.user_id AND u.is_admin=0 AND l.route_kind='charity_chat_completions' `
+const callerIdentityJoin = ` LEFT JOIN users u ON u.id=l.user_id AND u.is_admin=0 AND l.route_kind IN ('charity_chat_completions','charity_embeddings') `
 
 func scanManagementCommon(scanner rowScanner, extra ...any) (commonLogRecord, *CallerIdentity, error) {
 	var present bool

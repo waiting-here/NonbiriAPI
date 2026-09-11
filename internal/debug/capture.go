@@ -18,7 +18,7 @@ import (
 
 const maxSnapshotTraceBytes = MaxEventBytes - 8*1024
 
-// CaptureInput is intentionally named for its required position in the chat
+// CaptureInput is intentionally named for its required position in the model
 // pipeline. Callers must invoke DecideAfterAdmission only after CallerKey,
 // account, flow-control, body/JSON, model, and policy admission. The value has
 // no candidate, credential, claim, egress, accounting, log, or health
@@ -106,10 +106,11 @@ func (handle *TraceHandle) WasDispatched() bool {
 // its bounded trace. Identity uncertainty forces Dry; a definite loss of
 // authority terminates the session and returns no active capture.
 func (hub *Hub) DecideAfterAdmission(ctx context.Context, input CaptureInput) (CaptureDecision, error) {
-	if hub == nil || ctx == nil || input.UserID <= 0 || !input.RouteKind.valid() ||
+	if hub == nil || ctx == nil || input.UserID <= 0 || !input.RouteKind.IsModelCall() ||
 		!utf8.ValidString(input.Model) || utf8.RuneCountInString(input.Model) > 512 ||
 		(input.MediaType != "" && !safeMediaType(input.MediaType)) ||
-		(input.Charity != (input.RouteKind == RouteCharityChat)) {
+		(input.Charity != input.RouteKind.IsCharity()) ||
+		(input.Stream && input.RouteKind.Operation() != RouteOpenAIChat.Operation()) {
 		return CaptureDecision{}, ErrInvalid
 	}
 	language := normalizeLanguage(input.Language)
@@ -191,7 +192,7 @@ func (hub *Hub) DecideAfterAdmission(ctx context.Context, input CaptureInput) (C
 	handle := &TraceHandle{hub: hub, userID: input.UserID, sessionID: current.id, traceID: record.trace.TraceID}
 	decision := CaptureDecision{Active: true, Mode: mode, Trace: handle, Language: language}
 	if mode == ModeLive {
-		if input.RouteKind == RouteCharityChat {
+		if input.RouteKind.IsCharity() {
 			decision.ClaimPurpose = claim.PurposeCharity
 		} else {
 			decision.ClaimPurpose = claim.PurposeDebugLive
