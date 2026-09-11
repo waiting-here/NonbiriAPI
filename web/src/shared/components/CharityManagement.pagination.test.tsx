@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../test/unit/support';
 import { CharityPage } from '../../admin/pages/CharityPage';
+import { CharityManagement } from './CharityManagement';
 
 const sourceKey = (index: number) => `dsg_${'A'.repeat(41)}${'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[index]}A`;
 const safeSource = {
@@ -112,7 +113,8 @@ function Probe() {
     </>
   );
 }
-function install(pending = false) {
+function install(pending = false, role: 'admin' | 'steward' = 'admin') {
+  const root = role === 'admin' ? '/admin/api' : '/api/steward';
   let current = donation(pending);
   const requests: URL[] = [];
   const reviews: {
@@ -125,9 +127,9 @@ function install(pending = false) {
     const method = init?.method ?? 'GET';
     if (url.pathname === '/admin/api/session')
       return json({ admin: { username: 'fixture-admin' } });
-    if (url.pathname === '/admin/api/time-zones')
+    if (url.pathname === '/admin/api/time-zones' || url.pathname === '/api/time-zones')
       return json({ version: 'go1.26.6-zoneinfo', zones: ['America/Indianapolis', 'UTC'] });
-    if (url.pathname === '/admin/api/donation-sources')
+    if (url.pathname === `${root}/donation-sources`)
       return json(
         page(
           Array.from({ length: 21 }, (_, index) => ({
@@ -141,11 +143,11 @@ function install(pending = false) {
           url,
         ),
       );
-    if (url.pathname === '/admin/api/donations') return json(page([summary(current)], url));
-    if (url.pathname === '/admin/api/donations/7') return json(current);
+    if (url.pathname === `${root}/donations`) return json(page([summary(current)], url));
+    if (url.pathname === `${root}/donations/7`) return json(current);
     if (
-      url.pathname === '/admin/api/donations/7/keys' ||
-      url.pathname === `/admin/api/donation-sources/${sourceKey(0)}/keys`
+      url.pathname === `${root}/donations/7/keys` ||
+      url.pathname === `${root}/donation-sources/${sourceKey(0)}/keys`
     ) {
       return json(
         page(
@@ -162,7 +164,7 @@ function install(pending = false) {
         ),
       );
     }
-    if (url.pathname === '/admin/api/donations/7/review' && method === 'POST') {
+    if (url.pathname === `${root}/donations/7/review` && method === 'POST') {
       const body = JSON.parse(String(init?.body));
       reviews.push(body);
       current = { ...donation(), revision: '2' };
@@ -179,9 +181,128 @@ function install(pending = false) {
     },
   };
 }
+function installBindingNavigation(role: 'admin' | 'steward', forbidden = false) {
+  const fixture = install(false, role);
+  const root = role === 'admin' ? '/admin/api' : '/api/steward';
+  const previousFetch = globalThis.fetch;
+  const models = Array.from({ length: 21 }, (_, index) => ({
+    route_strategy: 'expiry_weighted',
+    id: String(index + 1),
+    provider: 'Provider',
+    model: `Model${index + 1}`,
+    full_name: `[公益]Provider/Model${index + 1}`,
+    enabled: true,
+    allowed_levels: [1, 2, 3, 4, 5],
+    public_description: '',
+    pricing: { mode: 'per_request', user_price: '1', donor_reward: '0' },
+    discount: { enabled: false, percent: 0, start_at: null, end_at: null },
+    flatten_tool_calls: false,
+    revision: '1',
+    binding_revision: '1',
+    binding_count: '1',
+    rolling_success: { sample_count: '0', success_count: '0', percent: null },
+    created_at: 1,
+    updated_at: 1,
+  }));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input), 'http://admin.test');
+      expect(init?.method ?? 'GET').toBe('GET');
+      if (url.pathname === `${root}/charity-models`) return json(page(models, url));
+      if (url.pathname === `${root}/charity-models/1`) return json(models[0]);
+      if (url.pathname === `${root}/charity-models/1/bindings`)
+        return json({
+          binding_revision: '1',
+          bindings: [
+            {
+              id: '3',
+              ord: 0,
+              donation_id: '7',
+              donation_key_id: '31',
+              source: {
+                connector_type: 'openai-compatible',
+                canonical_base_url: safeSource.base_url,
+                display_head: 'head31',
+                display_tail: 'tail',
+              },
+              upstream_model_id: 'embedding-model',
+              source_types: ['manual'],
+            },
+          ],
+        });
+      if (forbidden && url.pathname === `${root}/donations/7`)
+        return json({ error: { code: 'forbidden', message: 'Permission lost' } }, 403);
+      return previousFetch(input, init);
+    }),
+  );
+  return { ...fixture, root };
+}
 afterEach(() => vi.unstubAllGlobals());
 
 describe('managed donation page integration', () => {
+  it.each(['admin', 'steward'] as const)(
+    '%s opens a bound key on its own page and returns to the selected model and filters',
+    async (role) => {
+      const { requests, root } = installBindingNavigation(role);
+      const view = await renderWithProviders(
+        <>
+          <CharityManagement frame={role} accountId="1" />
+          <Probe />
+        </>,
+        {
+          station: role === 'admin' ? 'admin' : 'user',
+          route:
+            '/charity?tab=charity&charity_section=models&models_page=2&model_q=Model&charity_model=1&donation_keys_page=9',
+        },
+      );
+      await view.user.click(await screen.findByRole('button', { name: 'Manage key #31' }));
+      const selected = await screen.findByRole('heading', { name: 'Key 31 · head31…tail' });
+      expect(selected.closest('section.is-selected')).toBeVisible();
+      expect(
+        screen.queryByRole('heading', { name: 'Key 11 · head11…tail' }),
+      ).not.toBeInTheDocument();
+      expect(
+        requests.some(
+          (url) =>
+            url.pathname === `${root}/donations/7/keys` && url.searchParams.get('page') === '2',
+        ),
+      ).toBe(true);
+      await view.user.click(screen.getByRole('button', { name: 'Return to model configuration' }));
+      expect(await screen.findByRole('heading', { name: '[公益]Provider/Model1' })).toBeVisible();
+      expect(await screen.findByText('[公益]Provider/Model21')).toBeVisible();
+      const params = new URLSearchParams(screen.getByTestId('url').textContent ?? '');
+      expect(params.get('charity_model')).toBe('1');
+      expect(params.get('models_page')).toBe('2');
+      expect(params.get('model_q')).toBe('Model');
+      expect(params.get('tab')).toBe('charity');
+      expect(params.has('donation_id')).toBe(false);
+      expect(params.has('donation_key')).toBe(false);
+      await view.user.click(screen.getByRole('button', { name: 'Browser back' }));
+      expect(await screen.findByRole('heading', { name: 'Key 31 · head31…tail' })).toBeVisible();
+    },
+  );
+  it.each(['admin', 'steward'] as const)(
+    '%s clears the management view when opening a bound key loses permission',
+    async (role) => {
+      installBindingNavigation(role, true);
+      const lost = vi.fn();
+      const view = await renderWithProviders(
+        <CharityManagement frame={role} accountId="1" onCapabilityLoss={lost} />,
+        {
+          station: role === 'admin' ? 'admin' : 'user',
+          route: '/charity?charity_section=models&charity_model=1',
+        },
+      );
+      await view.user.click(await screen.findByRole('button', { name: 'Manage key #31' }));
+      await waitFor(() => expect(lost).toHaveBeenCalled());
+      expect(
+        screen.queryByRole('heading', { name: 'Key 31 · head31…tail' }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Manage key #31' })).not.toBeInTheDocument();
+      expect(screen.queryByText('Synthetic donor')).not.toBeInTheDocument();
+    },
+  );
   it('retains an open recurring draft across skewed header and key-page revision refreshes', async () => {
     const fixture = install();
     const initialFetch = globalThis.fetch;

@@ -1157,7 +1157,8 @@ function DonationsPanel({
       else next.delete('donation_id');
       for (const name of ['donation_key', 'donation_keys_page', 'donation_keys_page_size'])
         next.delete(name);
-      if (!id && next.get('donation_from') === 'sources') next.set('charity_section', 'sources');
+      const from = oneParam(current, 'donation_from');
+      if (!id && (from === 'sources' || from === 'models')) next.set('charity_section', from);
       next.delete('donation_from');
       return next;
     });
@@ -1409,7 +1410,11 @@ function DonationsPanel({
       {selected ? (
         <div className="ops-stack ops-detail-target" ref={detailRef} tabIndex={-1}>
           <button className="btn btn-quiet" type="button" onClick={() => setSelected('')}>
-            {t('common.operations.charity.returnToList')}
+            {t(
+              oneParam(searchParams, 'donation_from') === 'models'
+                ? 'common.operations.charity.returnToModel'
+                : 'common.operations.charity.returnToList',
+            )}
           </button>
           {detail.isPending ? (
             <LoadingState />
@@ -1989,6 +1994,7 @@ function BindingsPanel({
   onCapabilityLoss?: () => void;
 }) {
   const { t } = useTranslation();
+  const [, setParams] = useSearchState();
   const pager = usePagePager({
     station: role === 'admin' ? 'admin' : 'user',
     listType: 'charity-binding-order',
@@ -2127,6 +2133,27 @@ function BindingsPanel({
                       {entry.upstream_model_id}
                     </td>
                     <td className="ops-cell-wide" data-label={t(charityCopyKey(role, 'actions'))}>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        disabled={busy || orderChanged}
+                        onClick={() =>
+                          setParams((current) => {
+                            const next = new URLSearchParams(current);
+                            next.set('charity_section', 'donations');
+                            next.set('donation_id', entry.donation_id);
+                            next.set('donation_key', entry.donation_key_id);
+                            next.set('donation_from', 'models');
+                            next.delete('donation_keys_page');
+                            next.delete('donation_keys_page_size');
+                            return next;
+                          })
+                        }
+                      >
+                        {t('common.operations.charity.sourceBrowser.manageKey', {
+                          id: entry.donation_key_id,
+                        })}
+                      </button>
                       <button
                         className="btn btn-secondary"
                         type="button"

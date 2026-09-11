@@ -970,6 +970,109 @@ function initialState(overrides: Partial<FixtureState> = {}): FixtureState {
 
 for (const station of ['admin', 'user'] as const) {
   test(
+    station + ' opens a bound donation key and returns to its model configuration',
+    async ({ context, page }) => {
+      const setup = await prepareStation(context, page, station, station === 'admin' ? 1_280 : 390);
+      const state = initialState();
+      await installManagementRoutes(page, station, state);
+      const keys: JSONRecord[] = Array.from({ length: 21 }, (_, index) => ({
+        ...keyForDonation(index),
+        binding_count: '1',
+        idle: false,
+      }));
+      await page.route('**' + setup.root + '/charity-models/20/bindings', (route) =>
+        fulfillJSON(route, {
+          binding_revision: '1',
+          bindings: [
+            {
+              id: '1',
+              ord: 0,
+              donation_id: '20',
+              donation_key_id: '1020',
+              source: {
+                connector_type: 'openai-compatible',
+                canonical_base_url: 'https://detail-source-21.example.test/v1',
+                display_head: 'detail-head',
+                display_tail: '21',
+              },
+              upstream_model_id: 'embedding-model',
+              source_types: ['manual'],
+            },
+          ],
+        }),
+      );
+      await page.route('**' + setup.root + '/donations/20', (route) =>
+        fulfillJSON(route, { ...donationDetail(19), keys }),
+      );
+      await page.route('**' + setup.root + '/donations/20/keys?*', (route) =>
+        fulfillJSON(
+          route,
+          numberedPage(
+            keys.map((key) => ({
+              ...key,
+              donation_id: '20',
+              key_id: key.id,
+              donation_revision: '1',
+              rule_count: '0',
+              rules: [],
+              handling: handling(),
+            })),
+            new URL(route.request().url()).searchParams,
+          ),
+        ),
+      );
+      const path = station === 'admin' ? '/charity?' : '/steward?tab=charity&';
+      await page.goto(
+        setup.origin +
+          path +
+          'charity_section=models&models_page=2&models_page_size=10&model_q=detail&charity_model=20',
+      );
+      const manageKey = page.getByRole('button', { name: 'Manage key #1020', exact: true });
+      await manageKey.scrollIntoViewIfNeeded();
+      if (EVIDENCE_DIR) {
+        await mkdir(EVIDENCE_DIR, { recursive: true });
+        await page.screenshot({ path: resolve(EVIDENCE_DIR, station + '-binding-shortcut.png') });
+      }
+      await manageKey.click();
+      await expect(page).toHaveURL(/charity_section=donations/);
+      await expect(page).toHaveURL(/donation_keys_page=2/);
+      const selectedKey = page.locator('section.ops-subcard.is-selected');
+      await expect(
+        selectedKey.getByRole('heading', { name: 'Key 1020 · detail-head…21', exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole('heading', { name: 'Key 1000 · detail-head…1', exact: true }),
+      ).toHaveCount(0);
+      await selectedKey.scrollIntoViewIfNeeded();
+      if (EVIDENCE_DIR) {
+        await mkdir(EVIDENCE_DIR, { recursive: true });
+        await page.screenshot({ path: resolve(EVIDENCE_DIR, station + '-bound-key.png') });
+      }
+      await page.reload();
+      await expect(
+        selectedKey.getByRole('heading', { name: 'Key 1020 · detail-head…21', exact: true }),
+      ).toBeVisible();
+      await page
+        .getByRole('button', { name: 'Return to model configuration', exact: true })
+        .click();
+      await expect(
+        page.getByRole('heading', { name: '[公益]DetailProvider/detail-model-20', exact: true }),
+      ).toBeVisible();
+      const params = new URL(page.url()).searchParams;
+      expect(params.get('charity_model')).toBe('20');
+      expect(params.get('models_page')).toBe('2');
+      expect(params.get('models_page_size')).toBe('10');
+      expect(params.get('model_q')).toBe('detail');
+      expect(params.has('donation_id')).toBe(false);
+      await page.goBack();
+      await expect(
+        selectedKey.getByRole('heading', { name: 'Key 1020 · detail-head…21', exact: true }),
+      ).toBeVisible();
+      await assertStationClean(page, setup);
+    },
+  );
+
+  test(
     station + ' reads mixed expired and ended reviews through list, filter, detail and reload',
     async ({ context, page }) => {
       const setup = await prepareStation(context, page, station, 1_265);

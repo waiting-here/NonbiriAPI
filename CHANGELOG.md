@@ -10,6 +10,7 @@ This prerelease targets Linux/amd64 and preserves existing data from the complet
 
 ### Added
 
+- Administrators and stewards can open a bound donation key from a charity model's service connection order, with its key page selected and the original model filters and page preserved on return.
 - OpenAI-compatible `POST /v1/embeddings` for personal and charity models: single or batch text and Token ID inputs, float/base64 output and optional dimensions. Existing model connections, shared limits, logs and memory-only Debug apply without a model-purpose field. Rerank and Anthropic embedding support remain deferred.
 - Embedding charity billing supports per-request batches and input-Token pricing. Explicit zero usage is distinct from unknown usage; missing usage follows existing conservative reserves and earns no donor reward. Only minimum-content penalties are exempted. Requests use a server-generated, user-and-origin-scoped `user` pseudonym.
 
