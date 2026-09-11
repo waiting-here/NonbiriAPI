@@ -33,7 +33,7 @@
       "perToken": "Per token",
       "enabled": "Enabled",
       "disabled": "Disabled",
-      "flattenExperimental": "[Experimental] Flatten tool calls",
+      "flattenExperimental": "[Experimental] Flatten tool calls (chat only)",
       "request_user_price_milli": "Request user price",
       "request_donor_reward_milli": "Request donor reward",
       "uncached_user_price_milli": "Uncached input user price",
@@ -89,7 +89,7 @@
     "debug": {
       "nav": "Debug",
       "descriptionShort": "See what happened from request to result.",
-      "description": "Inspect requests, connected services, and call results visible only to you.",
+      "description": "Capture chat completions and embeddings sent by your external client. Only your requests and safe call results appear here.",
       "actions": {
         "start": "Start Debug"
       },
@@ -106,7 +106,9 @@
       "state": {
         "route": {
           "openaiChatCompletions": "OpenAI-Compatible chat completions",
-          "charityChatCompletions": "Charity chat completions"
+          "charityChatCompletions": "Charity chat completions",
+          "openaiEmbeddings": "Personal embedding",
+          "charityEmbeddings": "Charity embedding"
         },
         "trace": {
           "capturing": "Capturing",

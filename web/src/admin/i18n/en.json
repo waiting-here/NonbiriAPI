@@ -813,7 +813,7 @@
       "perToken": "Per token",
       "enabled": "Enabled",
       "disabled": "Disabled",
-      "flattenExperimental": "Experimental: flatten tool calls",
+      "flattenExperimental": "Experimental: flatten tool calls (chat only)",
       "request_user_price_milli": "Request user price",
       "request_donor_reward_milli": "Request donor reward",
       "uncached_user_price_milli": "Uncached input user price",

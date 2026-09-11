@@ -475,7 +475,7 @@ test('reachable user endpoint keys expose the owner-only upstream prompt storage
   await expect(page.getByRole('heading', { name: 'Resources' })).toBeVisible();
   await page.getByRole('link', { name: 'Manage endpoint' }).click();
   await expect(page.getByRole('heading', { name: 'Endpoint details' })).toBeVisible();
-  await expect(page.getByText('Do not save requests (store=false)')).toBeVisible();
+  await expect(page.getByText('Do not save chat requests (store=false)')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Stop requiring store=false' })).toBeVisible();
   await assertResponsiveAndClean(page, guard);
 });
@@ -836,7 +836,7 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
   const editor = page.locator('.card').filter({
     has: page.getByRole('heading', { name: '[公益]provider/charity-model' }),
   });
-  const flatten = editor.getByRole('checkbox', { name: 'Experimental: flatten tool calls' });
+  const flatten = editor.getByRole('checkbox', { name: 'Experimental: flatten tool calls (chat only)' });
   await flatten.focus();
   await page.keyboard.press('Space');
   await expect(flatten).toBeChecked();

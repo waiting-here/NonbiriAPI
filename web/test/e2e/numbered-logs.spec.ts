@@ -43,13 +43,22 @@ function row(role: Role, index: number, charity = false) {
   const common = {
     id: requestID(index),
     route_kind:
-      role === 'steward' || charity ? 'charity_chat_completions' : 'openai_chat_completions',
+      role === 'steward' || charity
+        ? index % 2
+          ? 'charity_embeddings'
+          : 'charity_chat_completions'
+        : index % 2
+          ? 'openai_embeddings'
+          : 'openai_chat_completions',
     caller_result_class: 'success',
     caller_status: 200,
     caller_error_code: null,
     started_at: 1_800_000_000,
     completed_at: 1_800_000_001,
-    usage,
+    usage:
+      index % 2
+        ? { ...usage, uncached_input_tokens: '1', output_tokens: '0', usage_unknown: index === 21 }
+        : usage,
   };
   if (role === 'admin')
     return { ...common, user_id: '7', caller_identity: null, attempt_count: '23' };
@@ -131,10 +140,13 @@ async function prepare(page: Page, role: Role, locale: 'en' | 'zh', width: numbe
 
 for (const scenario of [
   { role: 'admin', locale: 'en', width: 390 },
+  { role: 'admin', locale: 'zh', width: 1280 },
   { role: 'user', locale: 'zh', width: 320 },
+  { role: 'user', locale: 'en', width: 390 },
   { role: 'steward', locale: 'en', width: 1280 },
+  { role: 'steward', locale: 'zh', width: 390 },
 ] as const)
-  test(`${scenario.role} keeps independent log and attempt pages through refresh and return`, async ({
+  test(`${scenario.role} ${scenario.locale} keeps independent log and attempt pages through refresh and return`, async ({
     page,
   }) => {
     const { role, locale } = scenario;
@@ -195,6 +207,15 @@ for (const scenario of [
     await page.getByRole('button', { name: labels.details, exact: true }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.locator('.log-attempt')).toHaveCount(20);
+    const embeddingLabel =
+      locale === 'zh'
+        ? role === 'steward'
+          ? '公益向量嵌入'
+          : '自用向量嵌入'
+        : role === 'steward'
+          ? 'Charity embedding'
+          : 'Personal embedding';
+    await expect(page.getByText(embeddingLabel, { exact: true }).first()).toBeVisible();
     await dialog.getByLabel(labels.size).selectOption('10');
     await expect(dialog.locator('.log-attempt')).toHaveCount(10);
     await dialog.getByLabel(labels.jump).fill('3');
@@ -223,6 +244,14 @@ for (const scenario of [
     expect(restored.get('page_size')).toBe('10');
     expect(restored.get('status')).toBe('200');
     expect(restored.has('attempt_page')).toBe(false);
+    if (role !== 'user') {
+      for (const format of ['csv', 'json']) {
+        const link = page.getByRole('link', {
+          name: `${locale === 'zh' ? '导出' : 'Export'} ${format.toUpperCase()}`,
+        });
+        await expect(link).toHaveAttribute('href', `${path}/export.${format}?status=200`);
+      }
+    }
     await page.getByRole('button', { name: labels.previous, exact: true }).click();
     await expect(page.getByRole('button', { name: labels.details, exact: true })).toHaveCount(10);
     await page.goBack();

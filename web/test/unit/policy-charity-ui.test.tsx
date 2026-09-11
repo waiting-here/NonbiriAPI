@@ -675,7 +675,7 @@ describe('experimental policy and charity controls', () => {
     await rendered.user.clear(screen.getByLabelText('Maximum RPM'));
     await rendered.user.type(screen.getByLabelText('Maximum RPM'), '30');
     await rendered.user.click(screen.getByLabelText(/I own this credential/));
-    await rendered.user.click(screen.getByLabelText('Do not save requests (store=false)'));
+    await rendered.user.click(screen.getByLabelText('Do not save chat requests (store=false)'));
     await rendered.user.click(screen.getAllByRole('button', { name: 'Add key' })[1]);
     await waitFor(() =>
       expect(lastBody(fetchMock, 'POST', '/api/endpoints/1/keys')).toEqual({
@@ -718,7 +718,7 @@ describe('experimental policy and charity controls', () => {
     await screen.findByRole('heading', { name: 'Endpoint details' });
     expect(screen.queryByRole('button', { name: 'Require store=false' })).toBeNull();
     await rendered.user.click(screen.getAllByRole('button', { name: 'Add key' })[1]);
-    expect(screen.queryByLabelText('Do not save requests (store=false)')).toBeNull();
+    expect(screen.queryByLabelText('Do not save chat requests (store=false)')).toBeNull();
     expect(fetchMock).toHaveBeenCalled();
   });
 
@@ -817,7 +817,7 @@ describe('experimental policy and charity controls', () => {
     await screen.findByRole('heading', { name: 'Platform models' });
     await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
     await rendered.user.click(await screen.findByRole('button', { name: 'Edit platform model' }));
-    await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls' }));
+    await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls (chat only)' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await expect(screen.findByText(/The data changed/)).resolves.toBeVisible();
     await waitFor(() => expect(modelReads).toBeGreaterThan(1));
@@ -871,10 +871,10 @@ describe('experimental policy and charity controls', () => {
     await screen.findByRole('heading', { name: 'Platform models' });
     await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
     await rendered.user.click(await screen.findByRole('button', { name: 'Edit platform model' }));
-    await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls' }));
+    await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls (chat only)' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(modelReads).toBeGreaterThan(1));
-    expect(screen.getByRole('checkbox', { name: 'Flatten tool calls' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Flatten tool calls (chat only)' })).toBeChecked();
   });
 
   test('refetches key authority after a lost response and keeps the committed store policy', async () => {
@@ -957,7 +957,7 @@ describe('experimental policy and charity controls', () => {
     await screen.findByRole('heading', { name: 'Platform models' });
     await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
     await rendered.user.click(await screen.findByRole('button', { name: 'Edit platform model' }));
-    await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls' }));
+    await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls (chat only)' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await expect(screen.findByText(/The response was lost/)).resolves.toBeVisible();
     expect(modelReads).toBeGreaterThan(1);
@@ -1199,7 +1199,7 @@ describe('experimental policy and charity controls', () => {
       }),
     );
     await rendered.user.click(screen.getByRole('button', { name: 'Edit platform model' }));
-    await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls' }));
+    await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls (chat only)' }));
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() =>
       expect(lastBody(fetchMock, 'PATCH', '/api/models/3')).toEqual({
@@ -1758,8 +1758,8 @@ describe('experimental policy and charity controls', () => {
       });
       const flattenLabel =
         frame === 'admin'
-          ? 'Experimental: flatten tool calls'
-          : '[Experimental] Flatten tool calls';
+          ? 'Experimental: flatten tool calls (chat only)'
+          : '[Experimental] Flatten tool calls (chat only)';
       await rendered.user.click(
         await screen.findByRole('tab', {
           name:
@@ -1880,7 +1880,7 @@ describe('experimental policy and charity controls', () => {
     if (!(editForm instanceof HTMLElement)) throw new Error('Missing charity model editor');
     await rendered.user.click(
       within(editForm).getByRole('checkbox', {
-        name: '[Experimental] Flatten tool calls',
+        name: '[Experimental] Flatten tool calls (chat only)',
       }),
     );
     await rendered.user.click(within(editForm).getByRole('button', { name: 'Save model' }));
@@ -1888,7 +1888,7 @@ describe('experimental policy and charity controls', () => {
     await waitFor(() => {
       expect(screen.getByText(/Charity management access is no longer available/i)).toBeVisible();
       expect(
-        screen.queryByRole('checkbox', { name: '[Experimental] Flatten tool calls' }),
+        screen.queryByRole('checkbox', { name: '[Experimental] Flatten tool calls (chat only)' }),
       ).toBeNull();
       expect(screen.queryByRole('button', { name: 'Add charity model' })).toBeNull();
     });
@@ -2294,7 +2294,7 @@ describe('experimental policy and charity controls', () => {
     await screen.findByText(/does not have confirmed level-5 steward access/i);
     expect(rendered.queryClient.getQueriesData({ queryKey: modelPageKey })).toEqual([]);
     expect(
-      screen.queryByRole('checkbox', { name: '[Experimental] Flatten tool calls' }),
+      screen.queryByRole('checkbox', { name: '[Experimental] Flatten tool calls (chat only)' }),
     ).toBeNull();
     expect(
       fetchMock.mock.calls.some((call) => {
