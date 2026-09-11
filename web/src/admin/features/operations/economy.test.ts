@@ -9,7 +9,7 @@ import {
   type Period,
 } from './economy';
 
-const fixture = JSON.parse(readFileSync(resolve(process.cwd(), '..', 'internal/game/runtime/testdata/contracts/games-config.json'), 'utf8')) as unknown;
+const fixture = JSON.parse(readFileSync(resolve(process.cwd(), '..', 'internal/game/fishing/runtime/testdata/contracts/games-config.json'), 'utf8')) as unknown;
 
 describe('administrator game configuration wire', () => {
   it('accepts the canonical Go fixture and emits no read-only queue capacity', () => {

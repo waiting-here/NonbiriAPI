@@ -101,6 +101,10 @@ projection. Each owner must test both orders, replay, DB busy, crash/restart, an
 deadline boundary (`-1`, exact, `+1` second). The cross-domain lifecycle pass must also test 401/403, logout,
 account-switch cache clearing, and export exclusion across every domain.
 
+## Embedding request lifecycle
+
+Embedding text and Token ID input are processed in bounded request memory and may appear only in the owner's explicitly opened, bounded Debug memory trace. Returned vectors are validated in bounded memory and are never persisted in the database, ordinary logs, alerts, exports, backups or Debug. Each upstream call receives a pseudonymous `user` scoped to the same user, deployment and canonical upstream origin; it is not persisted or added to diagnostics. Existing log retention, legal holds, anonymization, export version 5 and account-retirement rules also cover `openai_embeddings` and `charity_embeddings`. No new content store, model-purpose field or background job is added. Registered game modules participate in the existing transactional export, deletion, retention and recovery sequence; their public export shapes remain unchanged.
+
 ## Operator snapshot and destructive-fresh boundary
 
 Complete operator snapshots are outside the account-export contract. They may contain
@@ -112,13 +116,7 @@ historical snapshots.
 
 Generation 2 accepts a fresh database only when main/WAL/SHM are all absent; an
 existing 0-byte main, alpha.3/unknown generation, bad header/identity/manifest/secret
-envelope/config, or an unsafe path fails closed. The four exact earlier manifests and
-the four exact deployed intermediate structures (`preBrowse` with the recurring-quota side table,
-`preQuotaCleanup` with browse indexes, `preStewardHoldRead` with cleanup indexes, and
-`preModelTokenReserve` with the steward held-read audit and Fishing length tables) receive a validated,
-transactional additive upgrade; the latest structure adds only the sparse model-level Token reserve
-override table and all existing business
-rows and custom legal settings are preserved. Arbitrary schema repair and old-generation
+envelope/config, or an unsafe path fails closed. The complete beta.2 manifest and the nine previously supported manifests receive a validated atomic upgrade. From complete beta.2, only the `route_kind` CHECK constraints on `logical_requests` and `request_logs` expand for embeddings. All 99 business tables, existing rows, active games and custom legal settings are preserved. Arbitrary schema repair and old-generation
 data import are unsupported. Current and supported predecessor databases are validated
 before any source write and before writable open. Destructive fresh starts with
 maintenance on and registration/game/activity off, and does not merge a source
