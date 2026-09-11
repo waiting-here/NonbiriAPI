@@ -11,6 +11,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	rpsconfig "github.com/waiting-here/NonbiriAPI/internal/game/rps/config"
 )
 
 func stringAmount(value *db.U128) *string {
@@ -130,7 +131,7 @@ func projectState(record sessionRecord, userID int64, now int64) (State, error) 
 		RuleSnapshot: RuleSnapshot{
 			RulesVersion: record.RulesVersion, Base: formatMilli(big.NewInt(record.BaseMilli)), PumpsBP: record.Pumps,
 			GestureSeconds: record.GestureSeconds, DealerSeconds: record.DealerSeconds, FollowerSeconds: record.FollowerSeconds,
-			StandardMultiplier: game.RPSStandardMultiplier, FreeTieReminder: game.RPSFreeTieReminder, FreeTieLimit: game.RPSFreeTieLimit,
+			StandardMultiplier: rpsconfig.RPSStandardMultiplier, FreeTieReminder: rpsconfig.RPSFreeTieReminder, FreeTieLimit: rpsconfig.RPSFreeTieLimit,
 		},
 		Economy: Economy{
 			PlayerPool: formatMilli(record.PlayerPool.Big()), PermanentMultiplier: record.PermanentMultiplier.Decimal(),
@@ -226,7 +227,7 @@ WHERE p.user_id=?`, userID).Scan(
 	return record, true, nil
 }
 
-func idleModes(snapshot game.ConfigSnapshot) map[string]ModeConfig {
+func idleModes(snapshot rpsconfig.Snapshot) map[string]ModeConfig {
 	result := make(map[string]ModeConfig, 3)
 	for _, mode := range []string{game.RPSModeQuick, game.RPSModeStandard, game.RPSModeDeathmatch} {
 		value := snapshot.RPS.Modes[mode]
@@ -234,7 +235,7 @@ func idleModes(snapshot game.ConfigSnapshot) map[string]ModeConfig {
 			Enabled: snapshot.GamesEnabled && snapshot.RPS.Enabled && value.Enabled,
 			Base:    formatMilli(big.NewInt(value.BaseMilli)), PumpsBP: PumpsBP(value.PumpsBP), QueueSeconds: value.QueueSeconds,
 			GestureSeconds: value.GestureSeconds, DealerSeconds: value.DealerSeconds, FollowerSeconds: value.FollowerSeconds,
-			QueueCapacity: game.RPSQueueCapacity,
+			QueueCapacity: rpsconfig.RPSQueueCapacity,
 		}
 	}
 	return result

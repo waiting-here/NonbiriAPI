@@ -10,6 +10,12 @@ import (
 )
 
 func TestDispatchRevalidatesModelAndCurrentCaller(t *testing.T) {
+	for _, route := range []claim.RouteKind{claim.RouteCharityChat, claim.RouteCharityEmbeddings} {
+		t.Run(string(route), func(t *testing.T) { testDispatchRevalidatesModelAndCaller(t, route) })
+	}
+}
+
+func testDispatchRevalidatesModelAndCaller(t *testing.T, route claim.RouteKind) {
 	for _, test := range []struct {
 		name, query string
 		args        func(*charityTestEnv) []any
@@ -29,7 +35,7 @@ func TestDispatchRevalidatesModelAndCurrentCaller(t *testing.T) {
 			if _, err := e.store.DB().Exec(`UPDATE charity_model_access SET allowed_level_mask=1 WHERE model_id=?`, e.requestModel); err != nil {
 				t.Fatal(err)
 			}
-			requestID := e.accept(t, e.requestModel, 2400, 2)
+			requestID := e.accept(t, e.requestModel, 2400, 2, route)
 			claimed := e.claim(t, requestID, 1, false)
 			if _, err := e.store.DB().Exec(test.query, test.args(e)...); err != nil {
 				t.Fatal(err)
@@ -47,8 +53,14 @@ func TestDispatchRevalidatesModelAndCurrentCaller(t *testing.T) {
 }
 
 func TestAlreadySentCharityCompletesButRetryUsesNewAccess(t *testing.T) {
+	for _, route := range []claim.RouteKind{claim.RouteCharityChat, claim.RouteCharityEmbeddings} {
+		t.Run(string(route), func(t *testing.T) { testAlreadySentCharityCompletes(t, route) })
+	}
+}
+
+func testAlreadySentCharityCompletes(t *testing.T, route claim.RouteKind) {
 	e := newCharityTestEnv(t)
-	requestID := e.accept(t, e.requestModel, 2400, 2)
+	requestID := e.accept(t, e.requestModel, 2400, 2, route)
 	claimed := e.claim(t, requestID, 1, true)
 	if _, err := e.store.DB().Exec(`UPDATE charity_model_access SET allowed_level_mask=0 WHERE model_id=?`, e.requestModel); err != nil {
 		t.Fatal(err)

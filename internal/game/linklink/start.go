@@ -10,6 +10,8 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/game/finance"
+	linklinkconfig "github.com/waiting-here/NonbiriAPI/internal/game/linklink/config"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
@@ -26,7 +28,7 @@ func (service *Service) Start(ctx context.Context, input StartInput) (Result, er
 	if input.UserID <= 0 || !known {
 		return Result{}, ErrInvalidRequest
 	}
-	if err := (game.StartContract{Game: game.LinkLinkID, Version: game.LinkLinkVersion, Spec: input.Spec}).Validate(); err != nil {
+	if err := (game.StartContract{Game: game.LinkLinkID, Version: game.LinkLinkVersion, Spec: input.Spec}).Validate(linklinkconfig.Descriptor()); err != nil {
 		return Result{}, ErrInvalidRequest
 	}
 	if _, err := idempotency.KeyHash(input.IdempotencyKey); err != nil {
@@ -174,18 +176,7 @@ VALUES(?,?,?,'active',?,?,?,?,0,?,?,?,?,?)`, sessionID, input.UserID, input.Spec
 		generated.tiles, generated.removed, deadline, operationID, requestHash[:], now, now); err != nil {
 		return Result{}, classifyDB(err)
 	}
-	platformAccount, err := ledger.CodedAccount(ctx, tx, "platform")
-	if err != nil {
-		return Result{}, ErrInvariant
-	}
-	plan, err := ledger.NewLinkLinkEntry(
-		ledger.Meta{OperationID: operationID, ActorUserID: input.UserID, CreatedAt: now},
-		sessionID, userAccount.ID, platformAccount.ID, ledger.AmountFromMilli(specConfig.PriceMilli),
-	)
-	if err != nil {
-		return Result{}, ErrInvariant
-	}
-	if _, err := ledger.Apply(ctx, tx, plan); err != nil {
+	if err := service.finance.Entry(ctx, tx, finance.Entry{Meta: ledger.Meta{OperationID: operationID, ActorUserID: input.UserID, CreatedAt: now}, ResourceID: sessionID, UserID: input.UserID, Amount: ledger.AmountFromMilli(specConfig.PriceMilli)}); err != nil {
 		return Result{}, mapLedger(err)
 	}
 	if err := recordGameActivity(ctx, tx, input.UserID, now); err != nil {

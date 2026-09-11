@@ -15,7 +15,7 @@ const maxAuthorizationBytes = 512
 
 type callerIdentityContextKey struct{}
 
-// CallerKeyMiddleware authenticates exactly the two public ingress routes,
+// CallerKeyMiddleware authenticates exactly the public ingress routes,
 // repeats the same key verification inside a lifecycle lease, and installs
 // only the safe user/generation identity in context. It must wrap flowcontrol.
 type CallerKeyMiddleware struct {
@@ -141,7 +141,7 @@ func exactIngressFailure(method, path, escapedPath string) *wireFailure {
 	switch path {
 	case "/v1/models":
 		want = http.MethodGet
-	case "/v1/chat/completions":
+	case "/v1/chat/completions", "/v1/embeddings":
 		want = http.MethodPost
 	default:
 		failure := platformFailure(httperr.CodeNotFound, "not found")

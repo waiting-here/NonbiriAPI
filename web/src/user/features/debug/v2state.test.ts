@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyDebugEvent, initialDebugState } from './v2state';
-import { normalizeDebugEvent, normalizeDebugSession, valuePresence } from './v2types';
+import { normalizeDebugEvent, normalizeDebugSession, normalizeDebugTrace, valuePresence } from './v2types';
 
 const oid = (prefix: string, seed = 'A') => `${prefix}${seed.repeat(21)}A`;
 const limits = { session_bytes: 4194304, traces: 32, events: 128, subscribers: 2, event_bytes: 524288, trace_bytes: 786432 };
@@ -67,14 +67,14 @@ describe('Debug v2 wire', () => {
     expect(() => normalizeDebugEvent({ ...wire, data: { ...wire.data, truncated: true } })).toThrow(/truncation/i);
   });
 
-  it('accepts only the fixed charity upstream projection', () => {
+  it.each(['charity_chat_completions', 'charity_embeddings'])('accepts only the fixed upstream projection for %s', (route) => {
     const usage = {
       uncached_input_tokens: '0', cache_write_input_tokens: '0', cache_read_input_tokens: '0',
       output_tokens: '0', total_tokens: '0', usage_unknown: true, charge: '0',
     };
     const trace = {
       trace_id: oid('dbt_'), revision: '1', state: 'capturing',
-      request: { route_kind: 'charity_chat_completions', model: 'charity/model', stream: false,
+      request: { route_kind: route, model: 'charity/model', stream: false,
         body: { media_type: 'application/json', byte_count: 2, text: '{}', base64: null, truncated: false } },
       upstream_result: {
         result_kind: 'synthetic', status_code: 502, upstream_code: null, diag: null,
@@ -94,6 +94,18 @@ describe('Debug v2 wire', () => {
         },
       },
     })).toThrow(/charity Debug upstream projection/i);
+  });
+
+  it.each(['openai_embeddings', 'charity_embeddings'])('rejects streaming and unknown request types for %s', (route) => {
+    const trace = {
+      trace_id: oid('dbt_'), revision: '1', state: 'capturing',
+      request: { route_kind: route, model: 'provider/model', stream: false,
+        body: { media_type: 'application/json', byte_count: 2, text: '{}', base64: null, truncated: false } },
+      upstream_result: null, caller_result: null, created_at: 1, updated_at: 2, truncated: false,
+    };
+    expect(normalizeDebugTrace(trace).request.route_kind).toBe(route);
+    expect(() => normalizeDebugTrace({ ...trace, request: { ...trace.request, stream: true } })).toThrow(/stream/);
+    expect(() => normalizeDebugTrace({ ...trace, request: { ...trace.request, route_kind: 'future_embeddings' } })).toThrow(/route/);
   });
 
   it('rejects caller results whose status, source, and stable code disagree', () => {

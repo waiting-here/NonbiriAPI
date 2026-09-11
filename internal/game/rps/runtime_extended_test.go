@@ -11,6 +11,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	rpsconfig "github.com/waiting-here/NonbiriAPI/internal/game/rps/config"
 )
 
 func (fixture *rpsFixture) maybeSession(sessionID string) (sessionRecord, bool) {
@@ -107,14 +108,14 @@ func assertPaidToFreeTieReminderAndForcedTerminal(t *testing.T, mode string) {
 	if paidPhases != 4 {
 		t.Fatalf("paid phases=%d want=4", paidPhases)
 	}
-	for free := 1; free <= game.RPSFreeTieLimit; free++ {
+	for free := 1; free <= rpsconfig.RPSFreeTieLimit; free++ {
 		state := fixture.playGestures(sessionID, bindings, tie, &key)
-		if free < game.RPSFreeTieLimit {
+		if free < rpsconfig.RPSFreeTieLimit {
 			record, found = fixture.maybeSession(sessionID)
 			if !found || record.Phase != PhaseFreePoolGesture || record.FreePoolStreak.Decimal() != big.NewInt(int64(free)).String() {
 				t.Fatalf("free tie %d record=%+v found=%v", free, record, found)
 			}
-			wantReminder := free >= game.RPSFreeTieReminder
+			wantReminder := free >= rpsconfig.RPSFreeTieReminder
 			if (record.ReminderState == "active") != wantReminder {
 				t.Fatalf("free tie %d reminder=%s", free, record.ReminderState)
 			}
@@ -161,7 +162,7 @@ func TestStandardSixthFreePoolNonTieContinues(t *testing.T) {
 		}
 		fixture.playGestures(sessionID, bindings, tie, &key)
 	}
-	for free := 1; free < game.RPSFreeTieLimit; free++ {
+	for free := 1; free < rpsconfig.RPSFreeTieLimit; free++ {
 		fixture.playGestures(sessionID, bindings, tie, &key)
 	}
 	state := fixture.playGestures(sessionID, bindings,

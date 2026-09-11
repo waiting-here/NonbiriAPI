@@ -18,6 +18,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 )
 
 const (
@@ -54,16 +55,14 @@ const (
 
 func (mode Mode) valid() bool { return mode == ModeDry || mode == ModeLive }
 
-type RouteKind string
+type RouteKind = requestkind.Kind
 
 const (
-	RouteOpenAIChat  RouteKind = "openai_chat_completions"
-	RouteCharityChat RouteKind = "charity_chat_completions"
+	RouteOpenAIChat        = requestkind.OpenAIChat
+	RouteOpenAIEmbeddings  = requestkind.OpenAIEmbeddings
+	RouteCharityChat       = requestkind.CharityChat
+	RouteCharityEmbeddings = requestkind.CharityEmbeddings
 )
-
-func (kind RouteKind) valid() bool {
-	return kind == RouteOpenAIChat || kind == RouteCharityChat
-}
 
 type TraceState string
 
@@ -169,7 +168,7 @@ type DebugRequest struct {
 }
 
 func (request DebugRequest) valid() bool {
-	return request.RouteKind.valid() && utf8.ValidString(request.Model) &&
+	return request.RouteKind.IsModelCall() && (!request.Stream || request.RouteKind.Operation() == requestkind.OpenAIChat.Operation()) && utf8.ValidString(request.Model) &&
 		utf8.RuneCountInString(request.Model) <= 512 && request.Body.valid()
 }
 
@@ -251,7 +250,7 @@ func (trace DebugTrace) valid() bool {
 		if !trace.UpstreamResult.valid() {
 			return false
 		}
-		if trace.Request.RouteKind == RouteCharityChat && !trace.UpstreamResult.validCharityProjection() {
+		if trace.Request.RouteKind.IsCharity() && !trace.UpstreamResult.validCharityProjection() {
 			return false
 		}
 	}

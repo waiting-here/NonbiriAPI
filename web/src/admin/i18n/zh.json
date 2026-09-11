@@ -813,7 +813,7 @@
       "perToken": "按 token",
       "enabled": "已启用",
       "disabled": "已停用",
-      "flattenExperimental": "实验：展平工具调用",
+      "flattenExperimental": "实验：展平工具调用（仅聊天）",
       "request_user_price_milli": "每次用户价格",
       "request_donor_reward_milli": "每次捐赠者回馈",
       "uncached_user_price_milli": "普通输入用户价格",

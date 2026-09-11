@@ -19,6 +19,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	rpsconfig "github.com/waiting-here/NonbiriAPI/internal/game/rps/config"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -270,7 +271,7 @@ func newRPSFixture(t *testing.T) *rpsFixture {
 
 func (fixture *rpsFixture) newService(epoch int64) *Service {
 	fixture.t.Helper()
-	service, err := New(Options{Store: fixture.store, UserAuthorizer: fixture.authorizer,
+	service, err := New(Options{Finance: registeredFinance(fixture.t, "rps").RPS, Store: fixture.store, UserAuthorizer: fixture.authorizer,
 		Continuation: fixture.continuation, Limiter: fixture.limiter, Pools: rpsTestPools{},
 		AccountEvents: fixture.account, ActivityEvents: fixture.activity, Keys: fixture.vault, Random: rand.Reader,
 		Now: func() time.Time { return time.Unix(fixture.clock.Load(), 0).UTC() }, HealthEpoch: epoch, WorkerInterval: time.Minute})
@@ -352,17 +353,17 @@ func (fixture *rpsFixture) setMaintenance(enabled bool) {
 
 func (fixture *rpsFixture) setRPSConfig(enabled bool, base int64, pumps PumpsBP) {
 	fixture.t.Helper()
-	updates := map[string]string{game.GamesEnabledKey: strconv.Itoa(boolIntRPS(enabled)), game.RPSEnabledKey: strconv.Itoa(boolIntRPS(enabled))}
+	updates := map[string]string{game.GamesEnabledKey: strconv.Itoa(boolIntRPS(enabled)), rpsconfig.RPSEnabledKey: strconv.Itoa(boolIntRPS(enabled))}
 	for _, mode := range []string{game.RPSModeQuick, game.RPSModeStandard, game.RPSModeDeathmatch} {
-		updates[game.RPSModeEnabledKey(mode)] = strconv.Itoa(boolIntRPS(enabled))
-		updates[game.RPSModeBaseKey(mode)] = strconv.FormatInt(base, 10)
-		updates[game.RPSModeBPKey(mode, "platform")] = strconv.Itoa(pumps.Platform)
-		updates[game.RPSModeBPKey(mode, "welfare")] = strconv.Itoa(pumps.Welfare)
-		updates[game.RPSModeBPKey(mode, "thursday")] = strconv.Itoa(pumps.Thursday)
-		updates[game.RPSModeTimeKey(mode, "queue")] = "120"
-		updates[game.RPSModeTimeKey(mode, "gesture")] = "20"
-		updates[game.RPSModeTimeKey(mode, "dealer")] = "15"
-		updates[game.RPSModeTimeKey(mode, "follower")] = "15"
+		updates[rpsconfig.RPSModeEnabledKey(mode)] = strconv.Itoa(boolIntRPS(enabled))
+		updates[rpsconfig.RPSModeBaseKey(mode)] = strconv.FormatInt(base, 10)
+		updates[rpsconfig.RPSModeBPKey(mode, "platform")] = strconv.Itoa(pumps.Platform)
+		updates[rpsconfig.RPSModeBPKey(mode, "welfare")] = strconv.Itoa(pumps.Welfare)
+		updates[rpsconfig.RPSModeBPKey(mode, "thursday")] = strconv.Itoa(pumps.Thursday)
+		updates[rpsconfig.RPSModeTimeKey(mode, "queue")] = "120"
+		updates[rpsconfig.RPSModeTimeKey(mode, "gesture")] = "20"
+		updates[rpsconfig.RPSModeTimeKey(mode, "dealer")] = "15"
+		updates[rpsconfig.RPSModeTimeKey(mode, "follower")] = "15"
 	}
 	for key, value := range updates {
 		if _, err := fixture.database.Exec(`UPDATE site_config SET value=?,updated_at=? WHERE key=?`, value, fixture.clock.Load(), key); err != nil {

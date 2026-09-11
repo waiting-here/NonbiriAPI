@@ -192,6 +192,8 @@
         "route": {
           "openaiChatCompletions": "OpenAI-compatible 聊天补全",
           "charityChatCompletions": "公益聊天补全",
+          "openaiEmbeddings": "自用向量嵌入",
+          "charityEmbeddings": "公益向量嵌入",
           "modelDiscovery": "模型检查"
         },
         "resultValue": {
@@ -287,6 +289,9 @@
         "namingHelp": "服务商和模型名称用于定义站内 API 调用名，可自行填写。实际调用的上游模型在下方服务连接中选择。",
         "namePreview": "调用模型名预览",
         "routeStrategy": "调度策略",
+        "operationHelp": "调用方选择的 API 路径决定执行聊天补全或向量嵌入，请连接支持对应操作的上游模型。展平工具调用与 store=false 策略仅作用于聊天补全。",
+        "embeddingBillingHelp": "Embedding 批量输入按一次成功请求计次；按 Token 计费时，全部输入使用未缓存输入价格，向量维度不计为输出 Token。",
+        "embeddingQuotaHelp": "一次成功的 Embedding 批量请求只占用一次捐赠调用额度；Token 用量为全部输入之和，向量维度不占输出 Token。",
         "routeOrdered": "按连接顺序",
         "routeRandom": "纯随机",
         "routeExpiryWeighted": "按到期时间加权随机",

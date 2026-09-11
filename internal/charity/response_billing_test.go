@@ -54,10 +54,14 @@ func (e *charityTestEnv) billingRail(t *testing.T) *claim.Service {
 	return rail
 }
 
-func (e *charityTestEnv) billingRequest(t *testing.T, rail *claim.Service, model, reserve int64, attempts int) claim.Request {
+func (e *charityTestEnv) billingRequest(t *testing.T, rail *claim.Service, model, reserve int64, attempts int, routes ...claim.RouteKind) claim.Request {
 	t.Helper()
 	now := charityTestNow + 30
-	request, err := rail.Accept(context.Background(), claim.AcceptInput{UserID: e.callerID, Route: claim.RouteCharityChat, ModelSnapshot: "[公益]provider/model", AttemptLimit: attempts, ReservedMilli: reserve, CharityModelID: model, CharityDecisionNow: &now})
+	route := claim.RouteCharityChat
+	if len(routes) == 1 {
+		route = routes[0]
+	}
+	request, err := rail.Accept(context.Background(), claim.AcceptInput{UserID: e.callerID, Route: route, ModelSnapshot: "[公益]provider/model", AttemptLimit: attempts, ReservedMilli: reserve, CharityModelID: model, CharityDecisionNow: &now})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,6 +99,12 @@ func (e *charityTestEnv) billingBalance(t *testing.T, userID, want int64) {
 }
 
 func TestResponseBillingUsesDurableStartForCompletionAndRecovery(t *testing.T) {
+	for _, route := range []claim.RouteKind{claim.RouteCharityChat, claim.RouteCharityEmbeddings} {
+		t.Run(string(route), func(t *testing.T) { testResponseBillingRecovery(t, route) })
+	}
+}
+
+func testResponseBillingRecovery(t *testing.T, route claim.RouteKind) {
 	for _, token := range []bool{false, true} {
 		for _, started := range []bool{false, true} {
 			for _, recovery := range []bool{false, true} {
@@ -105,7 +115,7 @@ func TestResponseBillingUsesDurableStartForCompletionAndRecovery(t *testing.T) {
 					if token {
 						model, reserve = e.tokenModel, 5
 					}
-					request := e.billingRequest(t, rail, model, reserve, 1)
+					request := e.billingRequest(t, rail, model, reserve, 1, route)
 					handle := e.billingDispatch(t, rail, request.ID, 1)
 					if started {
 						for range 2 {

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	fishingruntime "github.com/waiting-here/NonbiriAPI/internal/game/runtime"
+	fishingruntime "github.com/waiting-here/NonbiriAPI/internal/game/fishing/runtime"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 )
 

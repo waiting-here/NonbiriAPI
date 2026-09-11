@@ -67,9 +67,9 @@ func (*LedgerAccounting) ReserveRequest(
 	reserved := ledger.AmountFromMilli(input.ReservedMilli)
 	var plan ledger.Plan
 	switch input.Route {
-	case RouteOpenAIChat:
+	case RouteOpenAIChat, RouteOpenAIEmbeddings:
 		plan, err = ledger.NewForwardReserve(meta, input.RequestID, userAccount.ID, reserveAccount.ID, reserved)
-	case RouteCharityChat:
+	case RouteCharityChat, RouteCharityEmbeddings:
 		plan, err = ledger.NewCharityReserve(meta, input.RequestID, userAccount.ID, reserveAccount.ID, reserved)
 	default:
 		return ErrInvalidInput
@@ -257,9 +257,9 @@ func requestTerminalPlan(
 			return ledger.Plan{}, fmt.Errorf("claim: read release user account: %w", err)
 		}
 		switch input.Route {
-		case RouteOpenAIChat:
+		case RouteOpenAIChat, RouteOpenAIEmbeddings:
 			return ledger.NewForwardRelease(meta, input.RequestID, reserveAccount.ID, userAccount.ID, reserved)
-		case RouteCharityChat:
+		case RouteCharityChat, RouteCharityEmbeddings:
 			return ledger.NewCharityRelease(meta, input.RequestID, reserveAccount.ID, userAccount.ID, reserved)
 		default:
 			return ledger.Plan{}, ErrInvalidInput
@@ -275,9 +275,9 @@ func requestTerminalPlan(
 		return ledger.Plan{}, err
 	}
 	switch input.Route {
-	case RouteOpenAIChat:
+	case RouteOpenAIChat, RouteOpenAIEmbeddings:
 		return ledger.NewForwardSettle(meta, input.RequestID, reserveAccount.ID, platformAccount.ID, destination, reserved, actual)
-	case RouteCharityChat:
+	case RouteCharityChat, RouteCharityEmbeddings:
 		return ledger.NewCharitySettle(meta, input.RequestID, reserveAccount.ID, platformAccount.ID, destination, reserved, actual)
 	default:
 		return ledger.Plan{}, ErrInvalidInput
@@ -350,9 +350,9 @@ func claimAccountingTime(ctx context.Context, tx *sql.Tx, claimID string) (int64
 
 func reserveAccountCode(route RouteKind) string {
 	switch route {
-	case RouteOpenAIChat:
+	case RouteOpenAIChat, RouteOpenAIEmbeddings:
 		return forwardReserveAccountCode
-	case RouteCharityChat:
+	case RouteCharityChat, RouteCharityEmbeddings:
 		return charityReserveAccountCode
 	default:
 		return ""
@@ -361,9 +361,9 @@ func reserveAccountCode(route RouteKind) string {
 
 func validReservationRows(route RouteKind, rows uint16) bool {
 	switch route {
-	case RouteOpenAIChat:
+	case RouteOpenAIChat, RouteOpenAIEmbeddings:
 		return rows == 1
-	case RouteCharityChat:
+	case RouteCharityChat, RouteCharityEmbeddings:
 		return rows >= 2 && rows <= MaxAttempts+1
 	default:
 		return false
@@ -392,7 +392,7 @@ func validReleasedReward(input ClaimAccounting) bool {
 func validRequestAccounting(input RequestAccounting) bool {
 	if !db.ValidateOpaqueID(input.RequestID, "req_") || !validMoney(input.ReservedMilli) ||
 		!validMoney(input.ActualMilli) || input.RemainingRows < 1 || input.RemainingRows > MaxAttempts+1 ||
-		(input.Route != RouteOpenAIChat && input.Route != RouteCharityChat) ||
+		!input.Route.IsModelCall() ||
 		(input.Destination != DestinationUser && input.Destination != DestinationExternal) {
 		return false
 	}

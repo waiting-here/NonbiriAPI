@@ -1,6 +1,6 @@
 // Package connector owns the process-wide closed-world connector registry and
-// the one-attempt execution boundary. Public ingress remains the validated
-// OpenAI Chat Completions request; protocol connectors translate it without
+// the one-attempt execution boundary. Public ingress consists of independently
+// validated protocol snapshots; connectors handle supported operations without
 // turning vendor JSON into a core domain model.
 package connector
 
@@ -24,14 +24,27 @@ import (
 type ResponseSink = http.ResponseWriter
 
 type AttemptInput struct {
+	Operation    connectorcontract.Operation
 	Target       connectorcontract.Target
 	Credential   *connectorcontract.ShortLivedSecret
 	Ingress      *openai.ChatRequest
+	Embedding    *openai.EmbeddingRequest
 	Policy       connectorcontract.AttemptPolicy
 	Sink         ResponseSink
 	Observer     *SafeObserver
 	TraceID      string
 	AttemptIndex int
+}
+
+func (input AttemptInput) validOperation() bool {
+	switch input.Operation {
+	case connectorcontract.OperationChatCompletions:
+		return input.Ingress != nil && input.Embedding == nil
+	case connectorcontract.OperationEmbeddings:
+		return input.Ingress == nil && input.Embedding != nil
+	default:
+		return false
+	}
 }
 
 type Connector interface {
@@ -58,6 +71,10 @@ type OpenAIDriver interface {
 // safety identifier; production adapters implement this optional interface.
 type OpenAIPolicyDriver interface {
 	AttemptWithPolicy(context.Context, http.ResponseWriter, openai.Target, *openai.ChatRequest, connectorcontract.AttemptPolicy) openai.AttemptResult
+}
+
+type OpenAIEmbeddingDriver interface {
+	AttemptEmbedding(context.Context, http.ResponseWriter, openai.Target, *openai.EmbeddingRequest, connectorcontract.AttemptPolicy) openai.AttemptResult
 }
 
 // AnthropicDriver is the protocol-specific seam used by the registry wrapper.
@@ -146,6 +163,21 @@ func (r *Registry) SupportsRequest(t connectorcontract.Type, request *openai.Cha
 		return false
 	}
 	return descriptor.Supports == nil || descriptor.Supports(request)
+}
+
+// SupportsOperationRequest applies descriptor capabilities before physical
+// lookup or reservation. A mixed binding never sends embeddings to chat-only
+// connectors, while upstream model support remains an upstream decision.
+func (r *Registry) SupportsOperationRequest(t connectorcontract.Type, operation connectorcontract.Operation, chat *openai.ChatRequest, embedding *openai.EmbeddingRequest) bool {
+	input := AttemptInput{Operation: operation, Ingress: chat, Embedding: embedding}
+	if !input.validOperation() {
+		return false
+	}
+	if operation == connectorcontract.OperationChatCompletions {
+		return r.SupportsRequest(t, chat)
+	}
+	descriptor, ok := r.Descriptor(t)
+	return ok && descriptor.Capabilities.Has(connectorcontract.CapabilityEmbeddings)
 }
 
 func (r *Registry) Supported(t connectorcontract.Type) bool {
@@ -274,17 +306,21 @@ func openAICapabilities() connectorcontract.CapabilitySet {
 			connectorcontract.CapabilityStream |
 			connectorcontract.CapabilitySampling |
 			connectorcontract.CapabilityUnknownOpenAIFields |
+			connectorcontract.CapabilityEmbeddings |
 			connectorcontract.CapabilityModelDiscovery,
 	)
 }
 
 func (c *openAIConnector) Attempt(ctx context.Context, input AttemptInput) connectorcontract.AttemptResult {
 	result := connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "forwarding attempt unavailable"}
-	if c == nil || nilOpenAIDriver(c.driver) || ctx == nil || input.Sink == nil || input.Ingress == nil || input.Credential == nil || input.Target.Type() != c.Type() {
+	if c == nil || nilOpenAIDriver(c.driver) || ctx == nil || input.Sink == nil || !input.validOperation() || input.Credential == nil || input.Target.Type() != c.Type() {
 		if input.Credential != nil {
 			input.Credential.Clear()
 		}
 		return result
+	}
+	if input.Operation == connectorcontract.OperationEmbeddings {
+		return c.attemptEmbedding(ctx, input)
 	}
 	// The two experimental policies are opt-in and must never silently fall
 	// back to the legacy driver seam. A legacy driver is compatible only when
@@ -373,7 +409,7 @@ func anthropicCapabilities() connectorcontract.CapabilitySet {
 
 func (c *anthropicConnector) Attempt(ctx context.Context, input AttemptInput) connectorcontract.AttemptResult {
 	result := connectorcontract.AttemptResult{Failure: connectorcontract.FailureInternal, Diagnostic: "forwarding attempt unavailable"}
-	if c == nil || nilAnthropicDriver(c.driver) || ctx == nil || input.Sink == nil || input.Ingress == nil || input.Credential == nil || input.Target.Type() != c.Type() {
+	if c == nil || nilAnthropicDriver(c.driver) || ctx == nil || input.Sink == nil || !input.validOperation() || input.Operation != connectorcontract.OperationChatCompletions || input.Credential == nil || input.Target.Type() != c.Type() {
 		if input.Credential != nil {
 			input.Credential.Clear()
 		}

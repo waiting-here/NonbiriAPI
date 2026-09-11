@@ -515,6 +515,7 @@ function DonationKeyEditor({
       </dl>
       {donation.status === 'approved' && !terminal ? (
         <>
+          <p>{t('common.operations.charity.embeddingQuotaHelp')}</p>
           <div className="ops-field-grid">
             <NullableValue
               label={t('common.operations.charity.priceLimitCredits')}
@@ -827,6 +828,7 @@ function DonationReview({
                       rpm={entry.max_rpm}
                       readOnly
                     />
+                    <p>{t('common.operations.charity.embeddingQuotaHelp')}</p>
                     <div className="ops-field-grid">
                       <NullableValue
                         label={t('common.operations.charity.priceLimitCredits')}
@@ -1721,6 +1723,8 @@ function ModelForm({
           <span>{t(charityCopyKey(role, 'flattenExperimental'))}</span>
         </label>
       </div>
+      <p>{t('common.operations.charity.operationHelp')}</p>
+      <p>{t('common.operations.charity.embeddingBillingHelp')}</p>
       <div className="ops-model-settings">
         <fieldset className="ops-model-levels">
           <legend>{t('common.operations.charity.allowedLevels')}</legend>

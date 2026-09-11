@@ -79,6 +79,10 @@ func (router *fakeCharityRouter) Snapshot(_ context.Context, _ int64, now int64,
 	return router.snapshot, router.snapErr
 }
 
+func (router *fakeCharityRouter) PreflightEmbedding(ctx context.Context, userID int64, model string, _ *openai.EmbeddingRequest, now int64) (CharityPreflight, error) {
+	return router.Preflight(ctx, userID, model, nil, now)
+}
+
 func (router *fakeCharityRouter) ListAvailableModels(_ context.Context, userID int64, _ int64, _ int) ([]ListedModel, error) {
 	router.listCalls++
 	router.listUsers = append(router.listUsers, userID)

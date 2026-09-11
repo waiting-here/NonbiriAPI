@@ -14,6 +14,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	rpsconfig "github.com/waiting-here/NonbiriAPI/internal/game/rps/config"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
@@ -57,7 +58,7 @@ func scanQueue(scanner interface{ Scan(...any) error }) (queueRecord, error) {
 	copy(record.DeviceHash[:], deviceRaw)
 	copy(record.IPHash[:], ipRaw)
 	if !db.ValidateOpaqueID(record.ID, "rpsq_") || !db.ValidateOpaqueID(record.ReservationOperationID, "op_") ||
-		record.UserID <= 0 || record.AccountID <= 0 || game.ResolveMode(game.RPSID, record.Mode) != nil ||
+		record.UserID <= 0 || record.AccountID <= 0 || rpsconfig.Descriptor().ResolveMode(record.Mode) != nil ||
 		record.Revision.Big().Sign() <= 0 || record.Reserved.Big().Sign() <= 0 ||
 		record.LedgerRowsRemaining.Big().Cmp(bigOne) != 0 || record.CreatedAt < 0 ||
 		record.Deadline < record.CreatedAt+30 || record.Deadline > record.CreatedAt+120 || record.Deadline > 253402300799 {
@@ -287,7 +288,7 @@ func scanSession(scanner interface{ Scan(...any) error }) (sessionRecord, error)
 }
 
 func validateSessionHeader(record sessionRecord) error {
-	if !db.ValidateOpaqueID(record.ID, "rps_") || record.AccountID <= 0 || game.ResolveMode(game.RPSID, record.Mode) != nil ||
+	if !db.ValidateOpaqueID(record.ID, "rps_") || record.AccountID <= 0 || rpsconfig.Descriptor().ResolveMode(record.Mode) != nil ||
 		record.RulesVersion < 1 || record.Revision.Big().Sign() <= 0 || record.PhaseSeq.Big().Sign() <= 0 ||
 		record.IdentityEpoch.Big().Sign() <= 0 || record.BaseMilli <= 0 || record.BaseMilli > game.MaxMoneyMilli ||
 		record.Pumps.Platform < 0 || record.Pumps.Welfare < 0 || record.Pumps.Thursday < 0 ||
@@ -297,7 +298,7 @@ func validateSessionHeader(record sessionRecord) error {
 		record.StartedAt < 0 || record.StartedAt > 253402300799 || record.HealthEpoch < 0 {
 		return ErrInvariant
 	}
-	if record.Mode == game.RPSModeStandard && record.BaseMilli > game.MaxMoneyMilli/game.RPSStandardMultiplier {
+	if record.Mode == game.RPSModeStandard && record.BaseMilli > game.MaxMoneyMilli/rpsconfig.RPSStandardMultiplier {
 		return ErrInvariant
 	}
 	if record.State == StateStarted {

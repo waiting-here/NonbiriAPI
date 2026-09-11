@@ -1,6 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { decoded, queryPath } from '@shared/operations/api';
 import {
+  MODEL_CALL_ROUTES,
+  isCharityRoute,
+  type ModelCallRoute,
+} from '@shared/operations/requestKind';
+import {
   amount,
   boolean,
   decimal,
@@ -21,8 +26,7 @@ import {
 } from '@shared/operations/wire';
 
 export type LogRole = 'user' | 'admin' | 'steward';
-export type LogRouteKind =
-  'openai_chat_completions' | 'charity_chat_completions' | 'model_discovery';
+export type LogRouteKind = ModelCallRoute | 'model_discovery';
 export type LogResultClass = 'success' | 'failed' | 'cancelled';
 
 export interface LogUsage {
@@ -54,7 +58,7 @@ interface LogRowCommon {
 export interface UserSelfLogRow extends LogRowCommon {
   role: 'user';
   kind: 'self';
-  route_kind: 'openai_chat_completions' | 'model_discovery';
+  route_kind: 'openai_chat_completions' | 'openai_embeddings' | 'model_discovery';
   model: string;
   attempt_count: string;
 }
@@ -62,7 +66,7 @@ export interface UserSelfLogRow extends LogRowCommon {
 export interface UserCharityLogRow extends LogRowCommon {
   role: 'user';
   kind: 'charity';
-  route_kind: 'charity_chat_completions';
+  route_kind: 'charity_chat_completions' | 'charity_embeddings';
   model: string;
 }
 
@@ -137,11 +141,7 @@ export interface LogFiltersValue {
   to?: number;
 }
 
-const ROUTE_KINDS = [
-  'openai_chat_completions',
-  'charity_chat_completions',
-  'model_discovery',
-] as const;
+const ROUTE_KINDS = [...MODEL_CALL_ROUTES, 'model_discovery'] as const;
 const RESULT_CLASSES = ['success', 'failed', 'cancelled'] as const;
 const COMMON_ROW_FIELDS = [
   'id',
@@ -259,14 +259,14 @@ export function normalizeUserLogRow(value: unknown): UserLogRow {
   ]);
   const common = commonRow(probe);
   const model = string(probe.model, 'logical model', { max: 512, bytes: 2_048 });
-  if (common.route_kind === 'charity_chat_completions') {
+  if (isCharityRoute(common.route_kind)) {
     if (Object.prototype.hasOwnProperty.call(probe, 'attempt_count'))
       invalidResponse('charity log row');
     return {
       ...common,
       role: 'user',
       kind: 'charity',
-      route_kind: 'charity_chat_completions',
+      route_kind: common.route_kind,
       model,
     };
   }
@@ -290,7 +290,7 @@ export function normalizeAdminLogRow(value: unknown): AdminLogRow {
   );
   const common = commonRow(root);
   const callerIdentity = normalizeCallerIdentity(root.caller_identity);
-  if (common.route_kind !== 'charity_chat_completions' && callerIdentity !== null) {
+  if (!isCharityRoute(common.route_kind) && callerIdentity !== null) {
     invalidResponse('administrator caller identity');
   }
   return {
@@ -327,7 +327,7 @@ export function normalizeStewardLogRow(value: unknown): StewardLogRow {
   );
   const common = commonRow(root);
   const callerIdentity = normalizeCallerIdentity(root.caller_identity);
-  if (common.route_kind !== 'charity_chat_completions' && callerIdentity !== null) {
+  if (!isCharityRoute(common.route_kind) && callerIdentity !== null) {
     invalidResponse('steward caller identity');
   }
   return {

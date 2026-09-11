@@ -14,6 +14,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	rpsconfig "github.com/waiting-here/NonbiriAPI/internal/game/rps/config"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 )
 
@@ -128,6 +129,7 @@ func (adapter *LifecycleAdapter) PrepareDeleteTx(ctx context.Context, tx *sql.Tx
 		`DELETE FROM game_rps_rank_facts WHERE user_id=?`,
 		`DELETE FROM game_rps_rank_aggregates WHERE user_id=?`,
 		`DELETE FROM game_rps_fun_stats WHERE user_id=?`,
+		`DELETE FROM game_user_preferences WHERE user_id=?`,
 	} {
 		if _, err := tx.ExecContext(ctx, statement, userID); err != nil {
 			return nil, classifyDB(err)
@@ -409,7 +411,7 @@ FROM game_rps_summaries s JOIN game_rps_summary_seats seat ON seat.session_id=s.
 				return UserExport{}, nil, ErrInvariant
 			}
 		}
-		if sign < -1 || sign > 1 || !validTerminalReason(summary.TerminalReason) || game.ResolveMode(game.RPSID, summary.Mode) != nil ||
+		if sign < -1 || sign > 1 || !validTerminalReason(summary.TerminalReason) || rpsconfig.Descriptor().ResolveMode(summary.Mode) != nil ||
 			seat.SeatNo < 0 || seat.SeatNo > 2 {
 			_ = rows.Close()
 			return UserExport{}, nil, ErrInvariant
@@ -463,6 +465,9 @@ FROM game_rps_fun_stats WHERE user_id=?`, userID).Scan(&funRaw[0], &funRaw[1], &
 		return UserExport{}, nil, ErrInvariant
 	}
 	result.TutorialSeen = tutorial == 1
+	if _, err := ProjectExportCurrent(result.Current); err != nil {
+		return UserExport{}, finalizer, err
+	}
 	return result, finalizer, nil
 }
 
@@ -719,7 +724,7 @@ func (service *Service) ActiveCounts(ctx context.Context) (ActiveCounts, error) 
 			_ = rows.Close()
 			return ActiveCounts{}, classifyDB(err)
 		}
-		if game.ResolveMode(game.RPSID, mode) != nil || !validPersistentPhase(phase) || count < 0 {
+		if rpsconfig.Descriptor().ResolveMode(mode) != nil || !validPersistentPhase(phase) || count < 0 {
 			_ = rows.Close()
 			return ActiveCounts{}, ErrInvariant
 		}
@@ -744,7 +749,7 @@ func (service *Service) ActiveCounts(ctx context.Context) (ActiveCounts, error) 
 			_ = rows.Close()
 			return ActiveCounts{}, classifyDB(err)
 		}
-		if game.ResolveMode(game.RPSID, mode) != nil || count < 0 {
+		if rpsconfig.Descriptor().ResolveMode(mode) != nil || count < 0 {
 			_ = rows.Close()
 			return ActiveCounts{}, ErrInvariant
 		}

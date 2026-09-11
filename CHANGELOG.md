@@ -4,6 +4,29 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
+## 1.0.0-beta.3 - 2026-09-11
+
+This source update targets Linux/amd64 and preserves existing data from the complete beta.2 schema and the nine previously supported Generation 2 schemas. Build from a pinned commit; a version label does not imply a published tag or binary.
+
+### Added
+
+- OpenAI-compatible `POST /v1/embeddings` for personal and charity models: single or batch text and Token ID inputs, float/base64 output and optional dimensions. Existing model connections, shared limits, logs and memory-only Debug apply without a model-purpose field. Rerank and Anthropic embedding support remain deferred.
+- Embedding charity billing supports per-request batches and input-Token pricing. Explicit zero usage is distinct from unknown usage; missing usage follows existing conservative reserves and earns no donor reward. Only minimum-content penalties are exempted. Requests use a server-generated, user-and-origin-scoped `user` pseudonym.
+
+### Changed
+
+- Fishing, LinkLink and Rock Paper Scissors now register through a common backend game host with shared transactions, recovery and lifecycle handling. Existing routes, saved games, configuration, prices, rewards, timing and exports remain compatible.
+- New LinkLink games use varied constructive layouts with a verified complete matching sequence. Existing boards and free deadlock reshuffling remain intact.
+- Request and log type constraints now admit personal and charity embeddings. The database remains Generation 2 with 99 business tables and account export version 5. Log clients with closed request-type enums must accept the new values.
+
+### Fixed
+
+- Donation lists and details retain automatic or manual approval after expiry or termination and accept legitimate unreviewed terminal records, including when a reviewer has been deleted.
+
+### Upgrade notes
+
+Take a fresh complete stopped-service snapshot and validate an isolated upgrade before switching releases. Custom legal text and existing business data are preserved. The old binary rejects the new schema, so rollback requires its complete matching snapshot. Default bilingual privacy and terms templates describe embedding processing; operators remain responsible for their effective custom text.
+
 ## [1.0.0-beta.2] - 2026-09-10
 
 This release is source-first for Linux/amd64 and keeps the documented Generation 2 compatibility boundary.

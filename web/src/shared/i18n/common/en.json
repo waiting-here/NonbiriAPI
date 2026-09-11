@@ -192,6 +192,8 @@
         "route": {
           "openaiChatCompletions": "OpenAI-compatible chat completions",
           "charityChatCompletions": "Charity chat completions",
+          "openaiEmbeddings": "Personal embedding",
+          "charityEmbeddings": "Charity embedding",
           "modelDiscovery": "Model check"
         },
         "resultValue": {
@@ -287,6 +289,9 @@
         "namingHelp": "Provider and model define the API name used on this site. Choose your own labels, then select the actual upstream models in service connections.",
         "namePreview": "API model name preview",
         "routeStrategy": "Routing strategy",
+        "operationHelp": "Your client's API path selects chat completions or embeddings. Connect a service model that supports that operation. Tool-call flattening and store=false apply only to chat completions.",
+        "embeddingBillingHelp": "An embedding batch counts as one successful request. Token pricing uses the uncached input price for all inputs; vector dimensions add no output tokens.",
+        "embeddingQuotaHelp": "A successful embedding batch uses one call from the donation limit. Its token usage is the total input tokens, with no output tokens for vector dimensions.",
         "routeOrdered": "Connection order",
         "routeRandom": "Uniform random",
         "routeExpiryWeighted": "Expiry-weighted random",

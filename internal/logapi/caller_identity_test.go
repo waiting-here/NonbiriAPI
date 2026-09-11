@@ -8,7 +8,14 @@ import (
 )
 
 func TestStewardCallerIdentityUsesCurrentAccountOnly(t *testing.T) {
+	for _, route := range []RouteKind{RouteCharityChat, RouteCharityEmbeddings} {
+		t.Run(string(route), func(t *testing.T) { testStewardCallerIdentity(t, route) })
+	}
+}
+
+func testStewardCallerIdentity(t *testing.T, route RouteKind) {
 	f := newLogFixture(t)
+	f.mustExec(`UPDATE request_logs SET route_kind=? WHERE logical_request_id=?`, route, f.charityID)
 	ctx := context.Background()
 	f.mustExec(`INSERT INTO users(id,discord_id,username,guild_nick) VALUES(?,?,'synced display name','server nickname')`, logUserOne, "123456789012345678901234567890")
 	assertIdentity := func(nickname, id *string) {
@@ -35,7 +42,7 @@ func TestStewardCallerIdentityUsesCurrentAccountOnly(t *testing.T) {
 				if row.CallerIdentity == nil || !equalIdentityText(row.CallerIdentity.DiscordNickname, nickname) || !equalIdentityText(row.CallerIdentity.DiscordID, id) {
 					t.Fatalf("list/detail identity differ: %+v", row)
 				}
-			} else if row.RouteKind != RouteCharityChat && row.CallerIdentity != nil {
+			} else if !row.RouteKind.IsCharity() && row.CallerIdentity != nil {
 				t.Fatal("self/discovery identity leaked")
 			}
 		}

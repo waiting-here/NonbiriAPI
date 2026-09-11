@@ -13,6 +13,12 @@ import (
 )
 
 func TestKeyLimitRejectionRollsBackCharityReservationAndFailureSequence(t *testing.T) {
+	for _, route := range []claim.RouteKind{claim.RouteCharityChat, claim.RouteCharityEmbeddings} {
+		t.Run(string(route), func(t *testing.T) { testKeyLimitRejectionRollsBackCharity(t, route) })
+	}
+}
+
+func testKeyLimitRejectionRollsBackCharity(t *testing.T, route claim.RouteKind) {
 	e := newCharityTestEnv(t)
 	ctx := context.Background()
 	vault, err := secret.New(bytes.Repeat([]byte{0x43}, secret.MasterKeyBytes))
@@ -27,8 +33,8 @@ func TestKeyLimitRejectionRollsBackCharityReservationAndFailureSequence(t *testi
 	if _, err := e.store.DB().Exec(`INSERT INTO endpoint_key_limits(endpoint_key_id,max_concurrency,max_rpm) VALUES(?,1,1)`, e.endpointKey); err != nil {
 		t.Fatal(err)
 	}
-	request1 := e.accept(t, e.requestModel, 2400, 1)
-	request2 := e.accept(t, e.requestModel, 2400, 1)
+	request1 := e.accept(t, e.requestModel, 2400, 1, route)
+	request2 := e.accept(t, e.requestModel, 2400, 1, route)
 	input := claim.ClaimInput{RequestID: request1, ActorUserID: e.callerID, AttemptSeq: 1, Purpose: claim.PurposeCharity, DonationKeyID: e.donationKey, Candidate: claim.Candidate{EndpointID: e.endpointID, EndpointKeyID: e.endpointKey, ConnectorType: connectorcontract.TypeOpenAICompatible, CanonicalBaseURL: "https://charity.example.test/v1", UpstreamModelID: "upstream-model"}}
 	if _, err := rail.Claim(ctx, input); err != nil {
 		t.Fatal(err)

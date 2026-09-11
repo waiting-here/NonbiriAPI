@@ -180,7 +180,7 @@ const copy = {
   'endpoints.key': ['Key', '密钥'],
   'endpoints.keyIdentifier': ['Key identifier (partial key)', '密钥标识（非完整密钥）'],
   'endpoints.keyState': ['Key status', '密钥状态'],
-  'endpoints.storePolicy': ['Do not save requests (store=false)', '不保存请求（store=false）'],
+  'endpoints.storePolicy': ['Do not save chat requests (store=false)', '不保存聊天请求（store=false）'],
   'endpoints.securityProcessing': [
     'Security processing — currently unavailable',
     '安全处理中，当前不可操作',
@@ -357,8 +357,8 @@ const copy = {
   ],
   'models.title': ['Platform models', '平台模型'],
   'models.description': [
-    'Create stable model names, connect exact service models, and choose the order in which connections are tried.',
-    '创建稳定的模型名称、连接指定的服务模型，并设置各连接的尝试顺序。',
+    'Create stable model names and connect service models. Your client selects chat completions or embeddings through the API path; the connected model must support that operation.',
+    '创建稳定的模型名称并连接上游模型。调用方通过 API 路径选择聊天补全或向量嵌入，所连接的模型须支持对应操作。',
   ],
   'models.create': ['Create platform model', '创建平台模型'],
   'models.emptyTitle': ['No platform models', '还没有平台模型'],
@@ -378,7 +378,7 @@ const copy = {
   'models.ordered': ['Ordered', '顺序'],
   'models.random': ['Random', '随机'],
   'models.silentRetry': ['Silent retry', '静默重试'],
-  'models.flattenTools': ['Flatten tool calls', '扁平化工具调用'],
+  'models.flattenTools': ['Flatten tool calls (chat only)', '扁平化工具调用（仅聊天）'],
   'models.bindingCount': ['Connections', '连接数'],
   'models.manage': ['Manage connections', '管理连接'],
   'models.configurationTitle': ['Platform model settings', '平台模型设置'],

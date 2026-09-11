@@ -68,44 +68,8 @@ type board struct {
 }
 
 func newBoard(definition specDefinition, source IntSource) (board, error) {
-	if source == nil || definition.cells() == 0 || definition.Cols%2 != 0 || definition.TileTypes*4 != definition.cells() {
-		return board{}, ErrInvariant
-	}
-	// Each row gets a random perfect matching. Every pair in the first row can
-	// use the outer ring; after that row is removed, every pair in the next row
-	// can use the cleared row above it. This is a constructive full-clear witness
-	// while avoiding an obvious adjacent-domino layout.
-	labels := make([]byte, 0, definition.totalPairs())
-	for tile := 1; tile <= definition.TileTypes; tile++ {
-		labels = append(labels, byte(tile), byte(tile))
-	}
-	if err := shuffleBytes(labels, source); err != nil {
-		return board{}, err
-	}
-	tiles := make([]byte, definition.cells())
-	witness := make([][2]int, 0, definition.totalPairs())
-	labelIndex := 0
-	for row := 0; row < definition.Rows; row++ {
-		columns := make([]int, definition.Cols)
-		for column := range columns {
-			columns[column] = column
-		}
-		if err := shuffleInts(columns, source); err != nil {
-			return board{}, err
-		}
-		for index := 0; index < len(columns); index += 2 {
-			first := row*definition.Cols + columns[index]
-			second := row*definition.Cols + columns[index+1]
-			tiles[first], tiles[second] = labels[labelIndex], labels[labelIndex]
-			witness = append(witness, [2]int{first, second})
-			labelIndex++
-		}
-	}
-	result := board{definition: definition, tiles: tiles, removed: make([]byte, (definition.cells()+7)/8)}
-	if err := result.validate(); err != nil || !verifyWitness(result, witness) {
-		return board{}, ErrInvariant
-	}
-	return result, nil
+	result, _, err := generateBoard(definition, source)
+	return result, err
 }
 
 func decodeBoard(spec string, blob, removed []byte) (board, error) {

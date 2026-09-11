@@ -653,6 +653,14 @@ func TestDebugUpstreamResultProjectsCharityWithoutChangingSelf(t *testing.T) {
 }
 
 func TestDebugLiveSuppressesAllUpstreamBytesAndUsesDebugPurpose(t *testing.T) {
+	for _, embedding := range []bool{false, true} {
+		t.Run(fmt.Sprintf("embedding=%t", embedding), func(t *testing.T) {
+			testDebugLiveSuppressesAllUpstreamBytes(t, embedding)
+		})
+	}
+}
+
+func testDebugLiveSuppressesAllUpstreamBytes(t *testing.T, embedding bool) {
 	hub, err := debug.NewHub(activeIdentityVerifier{})
 	if err != nil {
 		t.Fatalf("NewHub: %v", err)
@@ -673,10 +681,9 @@ func TestDebugLiveSuppressesAllUpstreamBytesAndUsesDebugPurpose(t *testing.T) {
 		Usage: connectorcontract.Usage{Present: true, UncachedInputTokens: 1, OutputTokens: 2},
 	}}
 	fixture.openAI.bodies = [][]byte{[]byte("RAW_UPSTREAM_SECRET_BODY")}
-	request := decodeChatForTest(t, `{"model":"provider/model","messages":[]}`)
 	recorder := httptest.NewRecorder()
 
-	fixture.service.Chat(context.Background(), recorder, 1, request, []byte(`{"model":"provider/model"}`), "application/json", "en")
+	callDebugModelForTest(t, fixture, recorder, embedding, false)
 
 	if recorder.Code != http.StatusUnprocessableEntity || !strings.Contains(recorder.Body.String(), httperr.CodeDebugLiveResultCaptured) {
 		t.Fatalf("live response=%d %q", recorder.Code, recorder.Body.String())
@@ -694,6 +701,14 @@ func TestDebugLiveSuppressesAllUpstreamBytesAndUsesDebugPurpose(t *testing.T) {
 }
 
 func TestCharityDebugLiveKeepsCharityPurposeAndAccounting(t *testing.T) {
+	for _, embedding := range []bool{false, true} {
+		t.Run(fmt.Sprintf("embedding=%t", embedding), func(t *testing.T) {
+			testCharityDebugLiveKeepsAccounting(t, embedding)
+		})
+	}
+}
+
+func testCharityDebugLiveKeepsAccounting(t *testing.T, embedding bool) {
 	hub, err := debug.NewHub(activeIdentityVerifier{})
 	if err != nil {
 		t.Fatal(err)
@@ -715,10 +730,9 @@ func TestCharityDebugLiveKeepsCharityPurposeAndAccounting(t *testing.T) {
 		Usage:      connectorcontract.Usage{Present: true, UncachedInputTokens: 2, OutputTokens: 1},
 	}}
 	fixture.openAI.bodies = [][]byte{[]byte("CHARITY_RAW_UPSTREAM")}
-	request := decodeChatForTest(t, `{"model":"[公益]care/model","messages":[{"role":"user","content":"hello"}]}`)
 	recorder := httptest.NewRecorder()
 
-	fixture.service.Chat(context.Background(), recorder, 1, request, []byte(`{}`), "application/json", "en")
+	callDebugModelForTest(t, fixture, recorder, embedding, true)
 
 	if recorder.Code != http.StatusUnprocessableEntity || !strings.Contains(recorder.Body.String(), httperr.CodeDebugLiveResultCaptured) ||
 		strings.Contains(recorder.Body.String(), "CHARITY_RAW_UPSTREAM") {
@@ -750,7 +764,11 @@ func TestCharityDebugLiveKeepsCharityPurposeAndAccounting(t *testing.T) {
 	if err := json.Unmarshal(event.Data, &snapshot); err != nil {
 		t.Fatalf("decode snapshot: %v", err)
 	}
-	if len(snapshot.Traces) != 1 || snapshot.Traces[0].Request.RouteKind != debug.RouteCharityChat {
+	wantRoute := debug.RouteCharityChat
+	if embedding {
+		wantRoute = debug.RouteCharityEmbeddings
+	}
+	if len(snapshot.Traces) != 1 || snapshot.Traces[0].Request.RouteKind != wantRoute {
 		t.Fatalf("charity debug traces = %+v", snapshot.Traces)
 	}
 	upstream := snapshot.Traces[0].UpstreamResult
@@ -765,6 +783,14 @@ func TestCharityDebugLiveKeepsCharityPurposeAndAccounting(t *testing.T) {
 }
 
 func TestDebugStopAndReplaceCancelDispatchedForwardWithStable409(t *testing.T) {
+	for _, embedding := range []bool{false, true} {
+		t.Run(fmt.Sprintf("embedding=%t", embedding), func(t *testing.T) {
+			testDebugStopAndReplaceForward(t, embedding)
+		})
+	}
+}
+
+func testDebugStopAndReplaceForward(t *testing.T, embedding bool) {
 	tests := []struct {
 		name   string
 		cancel func(*debug.Hub, string) error
@@ -806,12 +832,11 @@ func TestDebugStopAndReplaceCancelDispatchedForwardWithStable409(t *testing.T) {
 				<-ctx.Done()
 				return connectorcontract.AttemptResult{Failure: connectorcontract.FailureCanceled, Diagnostic: "request canceled"}
 			}
-			request := decodeChatForTest(t, `{"model":"provider/model","messages":[],"stream":false}`)
 			recorder := httptest.NewRecorder()
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
-				fixture.service.Chat(context.Background(), recorder, 1, request, []byte(`{}`), "application/json", "en")
+				callDebugModelForTest(t, fixture, recorder, embedding, false)
 			}()
 			select {
 			case <-entered:

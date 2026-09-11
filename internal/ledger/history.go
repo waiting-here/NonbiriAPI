@@ -140,7 +140,7 @@ WHERE e.account_id=? AND e.account_kind_snapshot='user' AND e.delta_sign<>0 AND 
 	query := `SELECT o.id,e.line_no,o.kind,o.source_type,o.source_id,o.source_seq,o.created_at,e.delta_sign,e.delta_mag,
 CASE WHEN o.source_type='logical_request' AND o.kind IN ('forward_reserve','forward_settle','forward_release','charity_reserve','charity_settle','charity_release')
 THEN (SELECT l.logical_request_id FROM request_logs l WHERE l.logical_request_id=o.source_id AND l.user_id=?
-AND (l.completed_at IS NULL OR l.completed_at>?) AND (l.route_kind<>'charity_chat_completions' OR l.completed_at IS NOT NULL) LIMIT 1)
+AND (l.completed_at IS NULL OR l.completed_at>?) AND (l.route_kind NOT IN ('charity_chat_completions','charity_embeddings') OR l.completed_at IS NOT NULL) LIMIT 1)
 WHEN o.source_type='operation' AND o.kind='anti_abuse_penalty'
 THEN (SELECT l.logical_request_id FROM request_logs l WHERE l.logical_request_id='req_'||substr(o.id,4) AND l.user_id=?
 AND l.route_kind='charity_chat_completions' AND l.caller_error_code='content_too_short' AND l.completed_at>? LIMIT 1)

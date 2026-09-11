@@ -184,9 +184,9 @@ The loader collects the validation problems below and reports them together. Res
 The error message names each offending variable; it never prints secret
 material.
 
-## 6. Prepare a beta.2 Generation 2 database path
+## 6. Prepare a beta.3 Generation 2 database path
 
-For a fresh beta.2 start, the configured database path and its exact `-wal` and `-shm` sidecar paths must all be absent. A beta.2 update may use a validated Generation 2 database, one of the four exact earlier Generation 2 manifests, or one of these five exact previously deployed structures: `preBrowse` (recurring-quota side table), `preQuotaCleanup` (browse indexes), `preStewardHoldRead` (cleanup indexes), `preModelTokenReserve` (steward held-read audit and Fishing length tables), and `preHourlyQuota` (model-level reserve table and the previous quota interval checks), as documented in [deployment.md](deployment.md#beta1-database-compatibility-and-version-changes). The latest extension permits one-hour recurring quotas by widening the existing interval checks; it preserves every stored rule, epoch, counter and receipt. The preceding extension adds the sparse model-level Token reserve override table. It never migrates an alpha database or Generation 1 in place. An empty file is not a fresh database and is rejected.
+For a fresh beta.3 start, the configured database path and its exact `-wal` and `-shm` sidecar paths must all be absent. An update can retain the complete beta.2 database or one of the nine earlier Generation 2 manifests documented in [deployment.md](deployment.md#database-compatibility-and-version-changes). From complete beta.2, only the request-type CHECK constraints on `logical_requests` and `request_logs` change. All 99 business tables, balances, rules, receipts, custom legal settings and existing games are preserved. Alpha databases and Generation 1 cannot be migrated in place. An empty file is not a fresh database and is rejected.
 
 On a true fresh start the process creates a Generation 2 SQLite database with `application_id=0x4E425249` and `user_version=2`, validates the complete schema, and seeds these safe states:
 
@@ -195,9 +195,9 @@ On a true fresh start the process creates a Generation 2 SQLite database with `a
 - activities, charity, and donation intake off;
 - the game master switch and every game-specific switch off.
 
-If a main file or sidecar already exists, the process first validates file identity, the raw SQLite header, schema, foreign keys, indexes, and contextual credential envelopes through a protected read-only snapshot. An alpha or Generation 1 database, an empty or corrupt file, an unknown generation, an unexpected schema object, or an anomalous sidecar is rejected without modifying the source files or creating new source-side sidecars. Do not create a placeholder with `touch`, run hand-written DDL, or point beta.2 at an unverified or unsupported earlier database.
+If a main file or sidecar already exists, the process first validates file identity, the raw SQLite header, schema, foreign keys, indexes, and contextual credential envelopes through a protected read-only snapshot. An alpha or Generation 1 database, an empty or corrupt file, an unknown generation, an unexpected schema object, or an anomalous sidecar is rejected without modifying the source files or creating new source-side sidecars. Do not create a placeholder with `touch`, run hand-written DDL, or point beta.3 at an unverified or unsupported earlier database.
 
-For a cutover, stop the old service and retain a verified complete source snapshot before moving the old database set out of the configured path. The complete snapshot must keep the database/sidecars, matching release, environment/configuration, master key, and systemd unit together. See [deployment.md](deployment.md#beta1-database-compatibility-and-version-changes); deleting or replacing an existing database requires a separate explicit destructive operation and is never an ordinary first-boot step.
+For a cutover, stop the old service and retain a verified complete source snapshot before moving the old database set out of the configured path. The complete snapshot must keep the database/sidecars, matching release, environment/configuration, master key, and systemd unit together. See [deployment.md](deployment.md#database-compatibility-and-version-changes); deleting or replacing an existing database requires a separate explicit destructive operation and is never an ordinary first-boot step.
 
 ## 7. First-boot smoke test
 
@@ -249,3 +249,7 @@ minimum acceptance bar.
 - Do not weaken the authentication, ownership, egress, secret, stream, or
   no-store boundaries to customize a deployment; customize via source and
   rebuild instead.
+
+## Embedding smoke check
+
+For embeddings, select an OpenAI-compatible upstream and use its documented versioned base; the connector appends `/embeddings` without inserting `/v1`. Bind a model that the upstream supports, then call `POST /v1/embeddings` with a short text and with a batch. Check the platform model name, vector indexes, configured encoding and reported usage. Personal and charity models share this entry point. Verify charity input pricing, one-call batch accounting and existing limits before opening a donated resource. Do not enter a model-purpose classification or expect Anthropic and rerank support. The [API contract](api-contract.md#23-post-v1embeddings) lists accepted inputs and limits.

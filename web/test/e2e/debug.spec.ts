@@ -1,4 +1,5 @@
 import { expect, test } from './test';
+import { resolve } from 'node:path';
 import {
   assertNoSensitiveBrowserPersistence,
   collectConsoleViolations,
@@ -32,6 +33,8 @@ const LIMITS = {
 type DebugMode = 'dry' | 'live';
 
 interface DebugFixture {
+  embedding?: boolean;
+  charity?: boolean;
   scenario: string;
   active: boolean;
   id: string;
@@ -110,7 +113,7 @@ async function installDebugFixture(page: Page, fixture: DebugFixture) {
         fixture.scenario = 'basic-one-stream';
       }
       await route.continue({
-        url: `${FIXTURE_ORIGIN}/fixture/debug-events?case=${scenario}&mode=${fixture.mode}&revision=${fixture.revision}`,
+        url: `${FIXTURE_ORIGIN}/fixture/debug-events?case=${scenario}&mode=${fixture.mode}&revision=${fixture.revision}&operation=${fixture.embedding ? 'embedding' : 'chat'}&scope=${fixture.charity ? 'charity' : 'self'}`,
       });
       return;
     }
@@ -184,11 +187,8 @@ async function prepareDebug(
   fixture: DebugFixture,
 ) {
   const consoleGuard = collectConsoleViolations(page);
-  await installURLPersistenceObserver(context, [
-    SESSION_ONE,
-    SESSION_TWO,
-    TRACE_MARKER,
-  ]);
+  await installURLPersistenceObserver(context, [SESSION_ONE, SESSION_TWO, TRACE_MARKER,
+    ...(fixture.embedding ? ['caller-supplied'] : [])]);
   await configureNarrowReducedMotion(page);
   await page.addInitScript(
     ({ language, selectedTheme }) => {
@@ -225,6 +225,72 @@ async function revealTraceMarker(page: Page, summary: RegExp) {
   await trace.getByText(summary).click();
   await expect(trace.locator('pre.ops-debug-json')).toContainText(TRACE_MARKER);
 }
+
+for (const locale of ['en', 'zh'] as const)
+  for (const theme of ['light', 'dark'] as const)
+    for (const width of [390, 1280])
+      test(`Embedding Debug keeps private input in memory at ${locale} ${theme} ${width}`, async ({
+        context,
+        page,
+      }) => {
+        const fixture = makeFixture('basic-one-stream', true);
+        fixture.embedding = true;
+        fixture.charity = width === 390;
+        fixture.mode = theme === 'dark' ? 'live' : 'dry';
+        const guard = await prepareDebug(context, page, locale, theme, fixture);
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(`${USER_ORIGIN}/debug`);
+        await expect(page.locator('p').filter({ hasText: 'debug_live_cancelled' })).toContainText('(409)');
+        const label =
+          locale === 'zh'
+            ? fixture.charity
+              ? '公益向量嵌入'
+              : '自用向量嵌入'
+            : fixture.charity
+              ? 'Charity embedding'
+              : 'Personal embedding';
+        const trace = page.locator('.ops-debug-trace').first();
+        await expect(trace.locator('summary').first()).toContainText(label);
+        await trace.locator('summary').first().click();
+        const fields = trace.locator('.ops-debug-presence').first();
+        await expect(fields.locator('dt')).toHaveText([
+          'model',
+          'input',
+          'encoding_format',
+          'dimensions',
+          'user',
+        ]);
+        await expect(fields).toContainText('base64');
+        await expect(fields).toContainText('caller-supplied');
+        await expect(trace).toContainText(
+          fixture.mode === 'live' ? 'debug_live_result_captured' : 'debug_dry_run_intercepted',
+        );
+        await expect(trace.locator('textarea')).toHaveCount(0);
+        await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+        await expect(page.locator('html')).toHaveAttribute(
+          'lang',
+          locale === 'zh' ? 'zh-CN' : 'en',
+        );
+        await assertViewportContract(page);
+        if (process.env.NONBIRI_VISUAL_DIR)
+          await trace.screenshot({
+            path: resolve(
+              process.env.NONBIRI_VISUAL_DIR,
+              `embedding-debug-${locale}-${theme}-${width}.png`,
+            ),
+          });
+        const stop = locale === 'zh' ? '停止会话' : 'Stop session';
+        await confirmSessionAction(page, stop, stop);
+        await expect(page.locator('.ops-debug-trace')).toHaveCount(0);
+        await expect(page.getByText('caller-supplied')).toHaveCount(0);
+        await assertNoSensitiveBrowserPersistence(page, [
+          SESSION_ONE,
+          SESSION_TWO,
+          TRACE_MARKER,
+          'caller-supplied',
+        ]);
+        guard.assertNone();
+      });
 
 test('Debug route starts dry, replaces, confirms live, and stops without retaining secrets', async ({
   context,
@@ -286,18 +352,11 @@ test('Debug route starts dry, replaces, confirms live, and stops without retaini
   expect(fixture.deleteCalls).toBe(1);
   expect(
     fixture.requestURLs.every(
-      (url) =>
-        ![SESSION_ONE, SESSION_TWO, TRACE_MARKER].some((token) =>
-          url.includes(token),
-        ),
+      (url) => ![SESSION_ONE, SESSION_TWO, TRACE_MARKER].some((token) => url.includes(token)),
     ),
   ).toBe(true);
   await assertViewportContract(page);
-  await assertNoSensitiveBrowserPersistence(page, [
-    SESSION_ONE,
-    SESSION_TWO,
-    TRACE_MARKER,
-  ]);
+  await assertNoSensitiveBrowserPersistence(page, [SESSION_ONE, SESSION_TWO, TRACE_MARKER]);
   consoleGuard.assertNone();
 });
 
@@ -324,18 +383,11 @@ test('Debug reconnect accepts a fresh bounded snapshot after stream closure', as
   expect(fixture.deleteCalls).toBe(1);
   expect(
     fixture.requestURLs.every(
-      (url) =>
-        ![SESSION_ONE, SESSION_TWO, TRACE_MARKER].some((token) =>
-          url.includes(token),
-        ),
+      (url) => ![SESSION_ONE, SESSION_TWO, TRACE_MARKER].some((token) => url.includes(token)),
     ),
   ).toBe(true);
   await assertViewportContract(page);
-  await assertNoSensitiveBrowserPersistence(page, [
-    SESSION_ONE,
-    SESSION_TWO,
-    TRACE_MARKER,
-  ]);
+  await assertNoSensitiveBrowserPersistence(page, [SESSION_ONE, SESSION_TWO, TRACE_MARKER]);
   consoleGuard.assertNone();
 });
 
@@ -369,17 +421,10 @@ test('Debug gap and truncated-event recovery stays visibly safe in Chinese dark 
   expect(fixture.eventConnections).toBe(1);
   expect(
     fixture.requestURLs.every(
-      (url) =>
-        ![SESSION_ONE, SESSION_TWO, TRACE_MARKER].some((token) =>
-          url.includes(token),
-        ),
+      (url) => ![SESSION_ONE, SESSION_TWO, TRACE_MARKER].some((token) => url.includes(token)),
     ),
   ).toBe(true);
-  await assertNoSensitiveBrowserPersistence(page, [
-    SESSION_ONE,
-    SESSION_TWO,
-    TRACE_MARKER,
-  ]);
+  await assertNoSensitiveBrowserPersistence(page, [SESSION_ONE, SESSION_TWO, TRACE_MARKER]);
   consoleGuard.assertNone();
 });
 
@@ -405,16 +450,9 @@ test('Debug mismatched SSE event requires explicit safe recovery without browser
   expect(fixture.eventLastIDs[0]).toBe('');
   expect(
     fixture.requestURLs.every(
-      (url) =>
-        ![SESSION_ONE, SESSION_TWO, TRACE_MARKER].some((token) =>
-          url.includes(token),
-        ),
+      (url) => ![SESSION_ONE, SESSION_TWO, TRACE_MARKER].some((token) => url.includes(token)),
     ),
   ).toBe(true);
-  await assertNoSensitiveBrowserPersistence(page, [
-    SESSION_ONE,
-    SESSION_TWO,
-    TRACE_MARKER,
-  ]);
+  await assertNoSensitiveBrowserPersistence(page, [SESSION_ONE, SESSION_TWO, TRACE_MARKER]);
   consoleGuard.assertNone();
 });

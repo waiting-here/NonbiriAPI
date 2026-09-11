@@ -11,6 +11,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/charityrouting"
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
 )
 
@@ -42,7 +43,7 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 	switch request.URL.Path {
 	case "/v1/models":
 		handler.models(writer, request, userID)
-	case "/v1/chat/completions":
+	case "/v1/chat/completions", "/v1/embeddings":
 		handler.chat(writer, request, userID)
 	}
 }
@@ -85,15 +86,15 @@ func (handler *Handler) chat(writer http.ResponseWriter, request *http.Request, 
 		return
 	}
 	defer clear(body)
-	chatRequest, err := openai.DecodeChatRequest(bytes.NewReader(body), openai.MaxRequestBodyBytes)
+	decoded, err := decodeRequest(bytes.NewReader(body), requestkind.OperationForPath(request.URL.Path))
 	if err != nil {
 		if request.Context().Err() == nil {
 			writeFailure(writer, platformFailure(httperr.CodeInvalidRequest, "invalid request"))
 		}
 		return
 	}
-	defer chatRequest.Clear()
-	handler.service.Chat(request.Context(), writer, userID, chatRequest, body, mediaType, request.Header.Get("Accept-Language"))
+	defer decoded.Clear()
+	handler.service.execute(request.Context(), writer, userID, decoded, body, mediaType, request.Header.Get("Accept-Language"))
 }
 
 func validateChatMedia(request *http.Request) (string, bool) {

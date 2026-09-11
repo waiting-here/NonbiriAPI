@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/waiting-here/NonbiriAPI/internal/egress"
-	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
+	fishingconfig "github.com/waiting-here/NonbiriAPI/internal/game/fishing/config"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 	_ "modernc.org/sqlite"
 )
@@ -77,7 +77,7 @@ func TestGenerationTwoConfigDefaultsUseAuthoritativeSubsystemValues(t *testing.T
 	}
 	for _, key := range []string{
 		"activities_enabled", "activity_welfare_enabled", "activity_thursday_enabled",
-		"games_enabled", game.FishingEnabledKey, "game_linklink_enabled", "game_rps_enabled",
+		"games_enabled", fishingconfig.FishingEnabledKey, "game_linklink_enabled", "game_rps_enabled",
 		"charity_enabled", "donation_accept_enabled",
 	} {
 		if values[key] != "0" {
@@ -87,14 +87,14 @@ func TestGenerationTwoConfigDefaultsUseAuthoritativeSubsystemValues(t *testing.T
 
 	fishingDefaults := fishing.DefaultConfig()
 	wantFishing := map[string]string{
-		game.FishingWormPriceMilliKey:           fishingDefaults.BaitPricesMilli[fishing.BaitWorm],
-		game.FishingLurePriceMilliKey:           fishingDefaults.BaitPricesMilli[fishing.BaitLure],
-		game.FishingPremiumPriceMilliKey:        fishingDefaults.BaitPricesMilli[fishing.BaitPremium],
-		game.FishingStandardRTPKey:              formatGenerationTwoUint(uint64(fishingDefaults.StandardRTPPercent)),
-		game.FishingPremiumRTPKey:               formatGenerationTwoUint(uint64(fishingDefaults.PremiumRTPPercent)),
-		game.FishingTreasureBottleMultiplierKey: formatGenerationTwoUint(uint64(fishingDefaults.TreasureMultipliers["bottle"])),
-		game.FishingTreasureCloverMultiplierKey: formatGenerationTwoUint(uint64(fishingDefaults.TreasureMultipliers["clover"])),
-		game.FishingTreasureShellMultiplierKey:  formatGenerationTwoUint(uint64(fishingDefaults.TreasureMultipliers["shell"])),
+		fishingconfig.FishingWormPriceMilliKey:           fishingDefaults.BaitPricesMilli[fishing.BaitWorm],
+		fishingconfig.FishingLurePriceMilliKey:           fishingDefaults.BaitPricesMilli[fishing.BaitLure],
+		fishingconfig.FishingPremiumPriceMilliKey:        fishingDefaults.BaitPricesMilli[fishing.BaitPremium],
+		fishingconfig.FishingStandardRTPKey:              formatGenerationTwoUint(uint64(fishingDefaults.StandardRTPPercent)),
+		fishingconfig.FishingPremiumRTPKey:               formatGenerationTwoUint(uint64(fishingDefaults.PremiumRTPPercent)),
+		fishingconfig.FishingTreasureBottleMultiplierKey: formatGenerationTwoUint(uint64(fishingDefaults.TreasureMultipliers["bottle"])),
+		fishingconfig.FishingTreasureCloverMultiplierKey: formatGenerationTwoUint(uint64(fishingDefaults.TreasureMultipliers["clover"])),
+		fishingconfig.FishingTreasureShellMultiplierKey:  formatGenerationTwoUint(uint64(fishingDefaults.TreasureMultipliers["shell"])),
 	}
 	for key, want := range wantFishing {
 		if got := values[key]; got != want {
@@ -354,11 +354,11 @@ func TestGenerationTwoConfigCombinationHealth(t *testing.T) {
 
 	t.Run("Fishing ten-outcome bound", func(t *testing.T) {
 		values := cloneGenerationTwoConfigValues(fresh)
-		values[game.FishingWormPriceMilliKey] = formatGenerationTwoUint(uint64(MaxMoneyMilli))
+		values[fishingconfig.FishingWormPriceMilliKey] = formatGenerationTwoUint(uint64(MaxMoneyMilli))
 		if err := validateGenerationTwoConfigCombinations(values); err == nil {
 			t.Fatal("Fishing configuration whose ten-outcome payout exceeds MaxMoney was accepted")
 		}
-		values[game.FishingWormPriceMilliKey] = fresh[game.FishingWormPriceMilliKey]
+		values[fishingconfig.FishingWormPriceMilliKey] = fresh[fishingconfig.FishingWormPriceMilliKey]
 		if err := validateGenerationTwoConfigCombinations(values); err != nil {
 			t.Fatalf("default Fishing operation bound rejected: %v", err)
 		}

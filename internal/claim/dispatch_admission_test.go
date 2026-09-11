@@ -7,12 +7,18 @@ import (
 )
 
 func TestCharityDispatchAdmissionSharesMarkerTransaction(t *testing.T) {
+	for _, route := range []RouteKind{RouteCharityChat, RouteCharityEmbeddings} {
+		t.Run(string(route), func(t *testing.T) { testCharityDispatchAdmission(t, route) })
+	}
+}
+
+func testCharityDispatchAdmission(t *testing.T, route RouteKind) {
 	f := newClaimFixture(t)
 	caller := f.seedUser("caller", false)
 	donor := f.seedUser("donor", false)
 	key := f.seedKey(donor, "admission")
 	donationKey := f.seedDonationKey(donor, key, "admission", 5)
-	request := f.acceptCharity(caller, 2)
+	request := f.acceptCharity(caller, 2, route)
 	handle := mustDeletionClaim(t, f, request, key, 1, PurposeCharity, donationKey)
 	for _, failure := range []error{ErrForbidden, ErrModelUnavailable} {
 		f.charity.mu.Lock()
