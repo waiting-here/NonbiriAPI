@@ -35,6 +35,22 @@ func (s *Service) Preflight(ctx context.Context, userID int64, fullName string, 
 	if err != nil {
 		return RuntimePreflight{}, ErrInvalidRequest
 	}
+	return s.preflight(ctx, userID, fullName, &actual, decisionNow)
+}
+
+// PreflightEmbedding retains all logical and credit admission while omitting
+// only the chat content-length policy. Token arrays are never treated as text.
+func (s *Service) PreflightEmbedding(ctx context.Context, userID int64, fullName string, request *openai.EmbeddingRequest, decisionNow int64) (RuntimePreflight, error) {
+	if request == nil || request.Model != fullName || request.InputCount < 1 {
+		return RuntimePreflight{}, ErrInvalidRequest
+	}
+	return s.preflight(ctx, userID, fullName, nil, decisionNow)
+}
+
+func (s *Service) preflight(ctx context.Context, userID int64, fullName string, textRunes *int, decisionNow int64) (RuntimePreflight, error) {
+	if s == nil || s.db == nil || ctx == nil || userID <= 0 || fullName == "" || decisionNow < 0 || decisionNow > maxUnixSecond {
+		return RuntimePreflight{}, ErrInvalidRequest
+	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return RuntimePreflight{}, fmt.Errorf("charity routing: begin preflight: %w", err)
@@ -71,8 +87,8 @@ WHERE u.id=?`, userID).Scan(&admin, &banned, &bannedUntil, &suspendedUntil, &gat
 	if err != nil || minimum < 0 || int64(minimum) > openai.MaxRequestBodyBytes {
 		return RuntimePreflight{}, ErrInvariant
 	}
-	if actual < minimum {
-		return RuntimePreflight{}, &ContentTooShortError{Actual: actual, Minimum: minimum}
+	if textRunes != nil && *textRunes < minimum {
+		return RuntimePreflight{}, &ContentTooShortError{Actual: *textRunes, Minimum: minimum}
 	}
 
 	var preflight RuntimePreflight

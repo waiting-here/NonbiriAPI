@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 )
 
 // IdentityResolver extracts a CallerKey-established user id from a request.
@@ -18,7 +19,7 @@ import (
 type IdentityResolver func(*http.Request) (int64, error)
 
 // Middleware mounts the shared Controller in front of the forwarding exit.
-// Only POST /v1/chat/completions is metered; /v1/models and any other path
+// Chat and embedding POST requests are metered; /v1/models and other paths
 // pass through without RPM accounting, and health/admin/user APIs never share
 // this limiter. CallerKey-only authentication is unchanged: the middleware
 // only reads the identity the auth layer already installed.
@@ -120,12 +121,12 @@ func writeConcurrencyLimited(writer http.ResponseWriter) {
 	httperr.WriteError(writer, httperr.New(httperr.CodeRateLimited, "rate limit exceeded"))
 }
 
-// meteredRequest scopes RPM accounting to the chat-completion exit. The path
+// meteredRequest scopes RPM accounting to the supported model-call exits. The path
 // mirrors the forward handler's mux registration exactly; anything else
 // (model listing, health, admin/user stations) never touches this limiter.
 func meteredRequest(request *http.Request) bool {
 	return request != nil && request.Method == http.MethodPost &&
-		request.URL != nil && request.URL.Path == "/v1/chat/completions"
+		request.URL != nil && requestkind.OperationForPath(request.URL.Path).Valid()
 }
 
 // writeRateLimited emits the stable rate_limited code with a bounded

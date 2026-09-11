@@ -9,11 +9,11 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/donationquota"
 )
 
-// MarkResponseStarted records that a charity connector has validated its
+// MarkResponseStarted records that a model-call connector has validated its
 // first successful response payload. It precedes delivery so recovery never
 // has to infer successful output from a dispatch alone.
 func (s *Service) MarkResponseStarted(ctx context.Context, handle Handle) error {
-	if s == nil || s.db == nil || ctx == nil || !validHandle(handle) || handle.purpose != PurposeCharity {
+	if s == nil || s.db == nil || ctx == nil || !validHandle(handle) || handle.purpose == PurposeDiscovery {
 		return ErrInvalidInput
 	}
 	tx, err := s.db.BeginTx(ctx, nil)

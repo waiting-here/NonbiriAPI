@@ -372,6 +372,12 @@ func TestRecurringLimitsUseDurableMarkerAndOriginalBillingDuringRecovery(t *test
 }
 
 func TestRecurringDispatchChangeReleasesOwnReservationWithoutCharge(t *testing.T) {
+	for _, route := range []claim.RouteKind{claim.RouteCharityChat, claim.RouteCharityEmbeddings} {
+		t.Run(string(route), func(t *testing.T) { testRecurringDispatchChangeReleases(t, route) })
+	}
+}
+
+func testRecurringDispatchChangeReleases(t *testing.T, route claim.RouteKind) {
 	for _, original := range []bool{false, true} {
 		t.Run(fmt.Sprint(original), func(t *testing.T) {
 			e := newCharityTestEnv(t)
@@ -380,7 +386,7 @@ func TestRecurringDispatchChangeReleasesOwnReservationWithoutCharge(t *testing.T
 			if original {
 				rules = e.setQuota(t, quotaRule("calls", "1"))
 			}
-			request := e.billingRequest(t, rail, e.requestModel, 2400, 1)
+			request := e.billingRequest(t, rail, e.requestModel, 2400, 1, route)
 			handle, err := rail.Claim(context.Background(), e.quotaClaimInput(request.ID, 1))
 			if err != nil {
 				t.Fatal(err)

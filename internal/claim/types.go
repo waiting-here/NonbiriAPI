@@ -12,6 +12,7 @@ import (
 	"time"
 
 	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
 )
 
@@ -49,12 +50,14 @@ const (
 	PurposeDiscovery Purpose = "discovery"
 )
 
-type RouteKind string
+type RouteKind = requestkind.Kind
 
 const (
-	RouteOpenAIChat  RouteKind = "openai_chat_completions"
-	RouteCharityChat RouteKind = "charity_chat_completions"
-	RouteDiscovery   RouteKind = "model_discovery"
+	RouteOpenAIChat        = requestkind.OpenAIChat
+	RouteOpenAIEmbeddings  = requestkind.OpenAIEmbeddings
+	RouteCharityChat       = requestkind.CharityChat
+	RouteCharityEmbeddings = requestkind.CharityEmbeddings
+	RouteDiscovery         = requestkind.Discovery
 )
 
 type RequestState string

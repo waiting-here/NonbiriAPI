@@ -68,6 +68,10 @@ func TestRPMDenialScopeBoundedAndAtMostOnce(t *testing.T) {
 	}{
 		{name: "charity", body: `{"model":"[公益]care/model","messages":[]}`, charity: true},
 		{name: "self", body: `{"model":"provider/model","messages":[]}`},
+		{name: "embedding charity short text", body: `{"model":"[公益]care/model","input":" "}`, change: func(r *http.Request) { r.URL.Path = "/v1/embeddings" }, charity: true},
+		{name: "embedding charity tokens", body: `{"model":"[公益]care/model","input":[[1],[2]]}`, change: func(r *http.Request) { r.URL.Path = "/v1/embeddings" }, charity: true},
+		{name: "embedding self", body: `{"model":"provider/model","input":"a"}`, change: func(r *http.Request) { r.URL.Path = "/v1/embeddings" }},
+		{name: "embedding wrong body", body: `{"model":"[公益]care/model","messages":[]}`, change: func(r *http.Request) { r.URL.Path = "/v1/embeddings" }},
 		{name: "identity absent", body: `{"model":"[公益]care/model","messages":[]}`, noIdentity: true, noRead: true},
 		{name: "unsupported transport", body: `{"model":"[公益]care/model","messages":[]}`, unsupported: true, noRead: true},
 		{name: "cancel while reading", body: `{"model":"[公益]care/model","messages":[]}`, cancelRead: true},

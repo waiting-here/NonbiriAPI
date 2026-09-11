@@ -376,7 +376,7 @@ LIMIT 1`, input.DonationKeyID, input.UpstreamModelID, input.UpstreamModelID,
 	if row.receiverUserID <= 0 || row.donationKeyID != input.DonationKeyID || row.endpointKeyID != input.EndpointKeyID ||
 		row.endpointID != input.EndpointID || row.modelID <= 0 || suspended != 0 ||
 		reservationState != "reserved" && reservationState != "dispatched" ||
-		requestState != "accepted" && requestState != "running" || requestRoute != string(claim.RouteCharityChat) {
+		requestState != "accepted" && requestState != "running" || !claim.RouteKind(requestRoute).IsCharity() {
 		return keyReservation{}, claim.ErrNotFound
 	}
 	return row, nil

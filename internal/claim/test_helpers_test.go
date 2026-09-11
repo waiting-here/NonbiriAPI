@@ -758,11 +758,15 @@ VALUES(?,'report_case',?,?)`, keyID, caseID, f.clock.Load()); err != nil {
 	}
 }
 
-func (f *claimFixture) acceptSelf(userID int64, attemptLimit int) Request {
+func (f *claimFixture) acceptSelf(userID int64, attemptLimit int, routes ...RouteKind) Request {
 	f.t.Helper()
+	route := RouteOpenAIChat
+	if len(routes) == 1 {
+		route = routes[0]
+	}
 	request, err := f.service.Accept(context.Background(), AcceptInput{
 		UserID:        userID,
-		Route:         RouteOpenAIChat,
+		Route:         route,
 		ModelSnapshot: "public/model",
 		AttemptLimit:  attemptLimit,
 		ReservedMilli: 100,
@@ -773,12 +777,16 @@ func (f *claimFixture) acceptSelf(userID int64, attemptLimit int) Request {
 	return request
 }
 
-func (f *claimFixture) acceptCharity(userID int64, attemptLimit int) Request {
+func (f *claimFixture) acceptCharity(userID int64, attemptLimit int, routes ...RouteKind) Request {
 	f.t.Helper()
 	decisionNow := f.clock.Load()
+	route := RouteCharityChat
+	if len(routes) == 1 {
+		route = routes[0]
+	}
 	request, err := f.service.Accept(context.Background(), AcceptInput{
 		UserID:             userID,
-		Route:              RouteCharityChat,
+		Route:              route,
 		ModelSnapshot:      "[公益]provider/model",
 		AttemptLimit:       attemptLimit,
 		ReservedMilli:      200,

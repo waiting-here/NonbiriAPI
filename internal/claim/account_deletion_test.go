@@ -9,6 +9,12 @@ import (
 )
 
 func TestPrepareAccountDeletionConvergesWithUndispatchedReleaseAndRollsBack(t *testing.T) {
+	for _, route := range []RouteKind{RouteOpenAIChat, RouteOpenAIEmbeddings} {
+		t.Run(string(route), func(t *testing.T) { testDeletionUndispatched(t, route) })
+	}
+}
+
+func testDeletionUndispatched(t *testing.T, route RouteKind) {
 	for _, releaseFirst := range []bool{false, true} {
 		name := "deletion-first"
 		if releaseFirst {
@@ -20,7 +26,7 @@ func TestPrepareAccountDeletionConvergesWithUndispatchedReleaseAndRollsBack(t *t
 			userID := fixture.seedUser(name, false)
 			fixture.seedLedgerUser(userID, 1_000)
 			key := fixture.seedKey(userID, name)
-			request := fixture.acceptSelf(userID, 2)
+			request := fixture.acceptSelf(userID, 2, route)
 			handle := mustDeletionClaim(t, fixture, request, key, 1, PurposeSelf, 0)
 
 			if releaseFirst {
@@ -72,6 +78,12 @@ func TestPrepareAccountDeletionConvergesWithUndispatchedReleaseAndRollsBack(t *t
 }
 
 func TestPrepareAccountDeletionConvergesWithDispatchAndCompletion(t *testing.T) {
+	for _, route := range []RouteKind{RouteOpenAIChat, RouteOpenAIEmbeddings} {
+		t.Run(string(route), func(t *testing.T) { testDeletionDispatched(t, route) })
+	}
+}
+
+func testDeletionDispatched(t *testing.T, route RouteKind) {
 	for _, completeFirst := range []bool{false, true} {
 		name := "deletion-before-completion"
 		if completeFirst {
@@ -83,7 +95,7 @@ func TestPrepareAccountDeletionConvergesWithDispatchAndCompletion(t *testing.T) 
 			userID := fixture.seedUser(name, false)
 			fixture.seedLedgerUser(userID, 1_000)
 			key := fixture.seedKey(userID, name)
-			request := fixture.acceptSelf(userID, 2)
+			request := fixture.acceptSelf(userID, 2, route)
 			handle := mustDeletionClaim(t, fixture, request, key, 1, PurposeSelf, 0)
 			dispatch, err := fixture.service.TakeForDispatch(context.Background(), handle)
 			if err != nil {
@@ -143,6 +155,12 @@ func TestPrepareAccountDeletionConvergesWithDispatchAndCompletion(t *testing.T) 
 }
 
 func TestPrepareAccountDeletionReleasesUnusedCharityCapacityAndKeepsLatePathExternal(t *testing.T) {
+	for _, route := range []RouteKind{RouteCharityChat, RouteCharityEmbeddings} {
+		t.Run(string(route), func(t *testing.T) { testDeletionCharity(t, route) })
+	}
+}
+
+func testDeletionCharity(t *testing.T, route RouteKind) {
 	fixture := newClaimFixture(t)
 	fixture.useLedgerAccounting()
 	userID := fixture.seedUser("charity-delete-caller", false)
@@ -150,7 +168,7 @@ func TestPrepareAccountDeletionReleasesUnusedCharityCapacityAndKeepsLatePathExte
 	donorID := fixture.seedUser("charity-delete-donor", false)
 	key := fixture.seedKey(donorID, "charity-delete")
 	donationKeyID := fixture.seedDonationKey(donorID, key, "charity-delete", 0)
-	request := fixture.acceptCharity(userID, 3)
+	request := fixture.acceptCharity(userID, 3, route)
 	seedDeletionCharityProjection(t, fixture.db, request.ID, userID, fixture.clock.Load())
 
 	dispatched := mustDeletionClaim(t, fixture, request, key, 1, PurposeCharity, donationKeyID)

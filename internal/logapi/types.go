@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
+	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
@@ -24,12 +25,14 @@ var (
 	ErrInvariant   = errors.New("logapi: persisted invariant is invalid")
 )
 
-type RouteKind string
+type RouteKind = requestkind.Kind
 
 const (
-	RouteOpenAIChat  RouteKind = "openai_chat_completions"
-	RouteCharityChat RouteKind = "charity_chat_completions"
-	RouteDiscovery   RouteKind = "model_discovery"
+	RouteOpenAIChat        = requestkind.OpenAIChat
+	RouteOpenAIEmbeddings  = requestkind.OpenAIEmbeddings
+	RouteCharityChat       = requestkind.CharityChat
+	RouteCharityEmbeddings = requestkind.CharityEmbeddings
+	RouteDiscovery         = requestkind.Discovery
 )
 
 type ResultClass string

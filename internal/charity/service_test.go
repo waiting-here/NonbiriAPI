@@ -203,16 +203,20 @@ VALUES(?,?,?,'upstream-model',0,?,?)`, modelID, environment.donationKey, environ
 	return modelID
 }
 
-func (environment *charityTestEnv) accept(t *testing.T, modelID, reserved int64, attemptLimit int) string {
+func (environment *charityTestEnv) accept(t *testing.T, modelID, reserved int64, attemptLimit int, routes ...claim.RouteKind) string {
 	t.Helper()
+	route := claim.RouteCharityChat
+	if len(routes) > 0 {
+		route = routes[0]
+	}
 	requestID := mustOpaqueID(t, "req_")
 	tx := beginTestTx(t, environment.store.DB())
 	remaining := u128Blob(t, int64(attemptLimit+1))
 	if _, err := tx.Exec(`INSERT INTO logical_requests(
 id,user_id,route_kind,model_snapshot,state,attempt_limit,accounting_state,account_reserved_milli,
 settlement_destination,ledger_rows_remaining,created_at)
-VALUES(?,?, 'charity_chat_completions','[公益]provider/model','accepted',?,'reserved',?,'user',?,?)`,
-		requestID, environment.callerID, attemptLimit, reserved, remaining, charityTestNow); err != nil {
+VALUES(?,?,?,'[公益]provider/model','accepted',?,'reserved',?,'user',?,?)`,
+		requestID, environment.callerID, route, attemptLimit, reserved, remaining, charityTestNow); err != nil {
 		t.Fatalf("persist logical request: %v", err)
 	}
 	if err := environment.service.AcceptRequest(context.Background(), tx, claim.CharityAcceptance{
@@ -601,9 +605,15 @@ FROM donation_keys WHERE id=?`, environment.donationKey).Scan(
 }
 
 func TestConcurrentClaimsReserveLastCapacityExactlyOnce(t *testing.T) {
+	for _, route := range []claim.RouteKind{claim.RouteCharityChat, claim.RouteCharityEmbeddings} {
+		t.Run(string(route), func(t *testing.T) { testConcurrentClaimsReserveLastCapacity(t, route) })
+	}
+}
+
+func testConcurrentClaimsReserveLastCapacity(t *testing.T, route claim.RouteKind) {
 	environment := newCharityTestEnv(t)
-	firstRequest := environment.accept(t, environment.requestModel, 2400, 1)
-	secondRequest := environment.accept(t, environment.requestModel, 2400, 1)
+	firstRequest := environment.accept(t, environment.requestModel, 2400, 1, route)
+	secondRequest := environment.accept(t, environment.requestModel, 2400, 1, route)
 	if _, err := environment.store.DB().Exec(`UPDATE donation_keys SET call_limit_mag=? WHERE id=?`,
 		u128Blob(t, 1), environment.donationKey); err != nil {
 		t.Fatal(err)

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/connector/openai"
+	"github.com/waiting-here/NonbiriAPI/internal/requestkind"
 )
 
 type deniedChatScopeKey struct{}
@@ -32,7 +33,7 @@ func WithRPMDenialScope(next http.Handler) http.Handler {
 	readGate := make(chan struct{}, maxRPMDenialReads)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID, err := CallerIdentity(r)
-		if err != nil || r.Method != http.MethodPost || r.URL == nil || r.URL.Path != "/v1/chat/completions" {
+		if err != nil || r.Method != http.MethodPost || r.URL == nil || !requestkind.OperationForPath(r.URL.Path).Valid() {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -78,7 +79,7 @@ func CharityRPMDenial(ctx context.Context, userID int64) bool {
 		}
 		defer func() { _ = control.SetReadDeadline(time.Time{}) }()
 		defer r.Body.Close()
-		request, err := openai.DecodeChatRequest(r.Body, openai.MaxRequestBodyBytes)
+		request, err := decodeRequest(r.Body, requestkind.OperationForPath(r.URL.Path))
 		if err != nil {
 			return
 		}
