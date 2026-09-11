@@ -9,7 +9,9 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/credits"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	builtinconfig "github.com/waiting-here/NonbiriAPI/internal/game/builtin/config"
 	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
+	fishingconfig "github.com/waiting-here/NonbiriAPI/internal/game/fishing/config"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 )
 
@@ -264,7 +266,7 @@ func TestGameCatalogUsesAuthoritativeRegistryDefaults(t *testing.T) {
 	for _, entry := range entries {
 		byKey[entry.Key] = entry
 	}
-	registryKeys := game.SiteConfigKeys()
+	registryKeys := builtinconfig.SiteConfigKeys()
 	if len(registryKeys) != 45 {
 		t.Fatalf("game registry keys=%d, want 45", len(registryKeys))
 	}
@@ -276,16 +278,16 @@ func TestGameCatalogUsesAuthoritativeRegistryDefaults(t *testing.T) {
 	}
 	defaults := fishing.DefaultConfig()
 	want := map[string]any{
-		game.GamesEnabledKey:                    false,
-		game.FishingEnabledKey:                  false,
-		game.FishingWormPriceMilliKey:           defaults.BaitPricesMilli[fishing.BaitWorm],
-		game.FishingLurePriceMilliKey:           defaults.BaitPricesMilli[fishing.BaitLure],
-		game.FishingPremiumPriceMilliKey:        defaults.BaitPricesMilli[fishing.BaitPremium],
-		game.FishingStandardRTPKey:              defaults.StandardRTPPercent,
-		game.FishingPremiumRTPKey:               defaults.PremiumRTPPercent,
-		game.FishingTreasureBottleMultiplierKey: defaults.TreasureMultipliers["bottle"],
-		game.FishingTreasureCloverMultiplierKey: defaults.TreasureMultipliers["clover"],
-		game.FishingTreasureShellMultiplierKey:  defaults.TreasureMultipliers["shell"],
+		game.GamesEnabledKey:                             false,
+		fishingconfig.FishingEnabledKey:                  false,
+		fishingconfig.FishingWormPriceMilliKey:           defaults.BaitPricesMilli[fishing.BaitWorm],
+		fishingconfig.FishingLurePriceMilliKey:           defaults.BaitPricesMilli[fishing.BaitLure],
+		fishingconfig.FishingPremiumPriceMilliKey:        defaults.BaitPricesMilli[fishing.BaitPremium],
+		fishingconfig.FishingStandardRTPKey:              defaults.StandardRTPPercent,
+		fishingconfig.FishingPremiumRTPKey:               defaults.PremiumRTPPercent,
+		fishingconfig.FishingTreasureBottleMultiplierKey: defaults.TreasureMultipliers["bottle"],
+		fishingconfig.FishingTreasureCloverMultiplierKey: defaults.TreasureMultipliers["clover"],
+		fishingconfig.FishingTreasureShellMultiplierKey:  defaults.TreasureMultipliers["shell"],
 	}
 	for key, expected := range want {
 		if spec, ok := knownSiteConfig[key]; ok && (spec.kind == kindAmount || spec.kind == kindOptionalAmount) {
@@ -299,16 +301,16 @@ func TestGameCatalogUsesAuthoritativeRegistryDefaults(t *testing.T) {
 			t.Fatalf("%s raw default=%v (%T), want %v (%T)", key, got, got, expected, expected)
 		}
 	}
-	for _, key := range []string{game.FishingStandardRTPKey, game.FishingPremiumRTPKey} {
+	for _, key := range []string{fishingconfig.FishingStandardRTPKey, fishingconfig.FishingPremiumRTPKey} {
 		entry := byKey[key]
 		if entry.Minimum != fishing.MinimumRTPPercent || entry.Maximum != fishing.MaximumRTPPercent {
 			t.Fatalf("%s range=%v..%v", key, entry.Minimum, entry.Maximum)
 		}
 	}
 	for _, key := range []string{
-		game.FishingTreasureBottleMultiplierKey,
-		game.FishingTreasureCloverMultiplierKey,
-		game.FishingTreasureShellMultiplierKey,
+		fishingconfig.FishingTreasureBottleMultiplierKey,
+		fishingconfig.FishingTreasureCloverMultiplierKey,
+		fishingconfig.FishingTreasureShellMultiplierKey,
 	} {
 		entry := byKey[key]
 		if entry.Minimum != fishing.MinimumTreasureMultiplier || entry.Maximum != fishing.MaximumTreasureMultiplier {

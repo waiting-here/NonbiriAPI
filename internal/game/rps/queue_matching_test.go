@@ -13,6 +13,7 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	rpsconfig "github.com/waiting-here/NonbiriAPI/internal/game/rps/config"
 )
 
 func queueCandidate(id string, created int64, device, ip byte) queueRecord {
@@ -92,8 +93,8 @@ func TestSelectMatchUsesFullQueueCapacityWindow(t *testing.T) {
 	if !found || selected[0].ID != candidates[0].ID || selected[1].ID != "device-b" || selected[2].ID != "device-c" {
 		t.Fatalf("full-window selection found=%v ids=%q/%q/%q", found, selected[0].ID, selected[1].ID, selected[2].ID)
 	}
-	if matchCandidateLimit != game.RPSQueueCapacity {
-		t.Fatalf("candidate limit=%d capacity=%d", matchCandidateLimit, game.RPSQueueCapacity)
+	if matchCandidateLimit != rpsconfig.RPSQueueCapacity {
+		t.Fatalf("candidate limit=%d capacity=%d", matchCandidateLimit, rpsconfig.RPSQueueCapacity)
 	}
 }
 

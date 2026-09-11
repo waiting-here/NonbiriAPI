@@ -89,7 +89,7 @@ func TestRecoverBeforeListenAtRestartCleansLeaseAndIsRepeatable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	restarted, err := New(Options{
+	restarted, err := New(Options{Finance: registeredFinance(t, "linklink").LinkLink,
 		Store: fixture.store, UserAuthorizer: fixture.authorizer, Continuation: fixture.continuation,
 		Limiter: fixture.limiter, Random: fixture.random,
 		Now:         func() time.Time { return time.Unix(fixture.clock.Load(), 0).UTC() },

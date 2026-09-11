@@ -14,6 +14,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	linklinkconfig "github.com/waiting-here/NonbiriAPI/internal/game/linklink/config"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
@@ -159,7 +160,7 @@ func newFixture(t *testing.T) *fixture {
 	value.adminID = value.seedIdentity("operator", true)
 	value.setMaintenance(false)
 	value.setConfig(true, true, map[string]bool{"6x8": true, "8x8": true, "10x10": true}, 1000)
-	service, err := New(Options{
+	service, err := New(Options{Finance: registeredFinance(t, "linklink").LinkLink,
 		Store: store, UserAuthorizer: value.authorizer, Continuation: value.continuation,
 		Limiter: limiter,
 		Random:  value.random, Now: func() time.Time { return time.Unix(value.clock.Load(), 0).UTC() },
@@ -276,11 +277,11 @@ func (fixture *fixture) setMaintenance(enabled bool) {
 func (fixture *fixture) setConfig(master, link bool, specs map[string]bool, price int64) {
 	fixture.t.Helper()
 	updates := map[string]string{
-		game.GamesEnabledKey: strconv.Itoa(boolInt(master)), game.LinkLinkEnabledKey: strconv.Itoa(boolInt(link)),
+		game.GamesEnabledKey: strconv.Itoa(boolInt(master)), linklinkconfig.LinkLinkEnabledKey: strconv.Itoa(boolInt(link)),
 	}
 	for _, spec := range []string{game.LinkLinkSpec6x8, game.LinkLinkSpec8x8, game.LinkLinkSpec10x10} {
-		updates[game.LinkLinkSpecEnabledKey(spec)] = strconv.Itoa(boolInt(specs[spec]))
-		updates[game.LinkLinkSpecPriceKey(spec)] = strconv.FormatInt(price, 10)
+		updates[linklinkconfig.LinkLinkSpecEnabledKey(spec)] = strconv.Itoa(boolInt(specs[spec]))
+		updates[linklinkconfig.LinkLinkSpecPriceKey(spec)] = strconv.FormatInt(price, 10)
 	}
 	for key, value := range updates {
 		if _, err := fixture.database.Exec(`UPDATE site_config SET value=?,updated_at=? WHERE key=?`, value, fixture.clock.Load(), key); err != nil {

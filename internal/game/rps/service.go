@@ -18,6 +18,8 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/game/finance"
+	rpsconfig "github.com/waiting-here/NonbiriAPI/internal/game/rps/config"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
@@ -60,6 +62,7 @@ type PublishErrorReporter interface {
 }
 
 type Options struct {
+	Finance        finance.RPS
 	Store          *db.Store
 	UserAuthorizer resources.FinalTxAuthorizer
 	Continuation   ContinuationAuthorizer
@@ -96,6 +99,7 @@ type leaseBinding struct {
 }
 
 type Service struct {
+	finance        finance.RPS
 	database       *sql.DB
 	userAuthorizer resources.FinalTxAuthorizer
 	continuation   ContinuationAuthorizer
@@ -131,7 +135,7 @@ type Service struct {
 
 func New(options Options) (*Service, error) {
 	if options.Store == nil || options.Store.DB() == nil || options.UserAuthorizer == nil || options.Continuation == nil ||
-		options.Limiter == nil || options.Pools == nil || options.AccountEvents == nil || options.ActivityEvents == nil || options.Keys == nil {
+		options.Limiter == nil || options.Pools == nil || options.AccountEvents == nil || options.ActivityEvents == nil || options.Keys == nil || options.Finance == nil {
 		return nil, errors.New("rps: store, authorization, continuation, limiter, pool, event, and key dependencies are required")
 	}
 	keys, err := deriveKeys(options.Keys)
@@ -163,7 +167,7 @@ func New(options Options) (*Service, error) {
 		return nil, errors.New("rps: invalid worker interval")
 	}
 	return &Service{
-		database: options.Store.DB(), userAuthorizer: options.UserAuthorizer, continuation: options.Continuation,
+		database: options.Store.DB(), userAuthorizer: options.UserAuthorizer, continuation: options.Continuation, finance: options.Finance,
 		limiter: options.Limiter, pools: options.Pools, accountEvents: options.AccountEvents,
 		activityEvents: options.ActivityEvents, publishErrors: options.PublishErrors, keys: keys,
 		random: options.Random, now: options.Now, generateID: options.GenerateID,
@@ -219,7 +223,7 @@ func (service *Service) Available(gameID, mode, spec string) bool {
 	if service == nil || service.closed.Load() || !service.recovered.Load() || gameID != game.RPSID || spec != "" {
 		return false
 	}
-	return game.ResolveMode(game.RPSID, mode) == nil
+	return rpsconfig.Descriptor().ResolveMode(mode) == nil
 }
 
 func (service *Service) decisionNow() (int64, error) {
@@ -307,15 +311,15 @@ func (service *Service) forgetUserMemory(userID int64) {
 	service.leaseMu.Unlock()
 }
 
-func (service *Service) readSnapshot(ctx context.Context, tx *sql.Tx) (game.ConfigSnapshot, error) {
-	keys := game.SiteConfigKeys()
+func (service *Service) readSnapshot(ctx context.Context, tx *sql.Tx) (rpsconfig.Snapshot, error) {
+	keys := snapshotKeys()
 	arguments := make([]any, len(keys))
 	for index := range keys {
 		arguments[index] = keys[index]
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT key,value FROM site_config WHERE key IN (`+placeholders(len(keys))+`)`, arguments...)
 	if err != nil {
-		return game.ConfigSnapshot{}, classifyDB(err)
+		return rpsconfig.Snapshot{}, classifyDB(err)
 	}
 	defer rows.Close()
 	values := make(map[string]string, len(keys))
@@ -323,19 +327,19 @@ func (service *Service) readSnapshot(ctx context.Context, tx *sql.Tx) (game.Conf
 		var key string
 		var value sql.NullString
 		if err := rows.Scan(&key, &value); err != nil || !value.Valid {
-			return game.ConfigSnapshot{}, ErrInvariant
+			return rpsconfig.Snapshot{}, ErrInvariant
 		}
 		values[key] = value.String
 	}
 	if err := rows.Err(); err != nil {
-		return game.ConfigSnapshot{}, classifyDB(err)
+		return rpsconfig.Snapshot{}, classifyDB(err)
 	}
 	if len(values) != len(keys) {
-		return game.ConfigSnapshot{}, ErrInvariant
+		return rpsconfig.Snapshot{}, ErrInvariant
 	}
-	snapshot, err := game.CompileConfig(values)
+	snapshot, err := rpsconfig.CompileConfig(values)
 	if err != nil {
-		return game.ConfigSnapshot{}, ErrInvariant
+		return rpsconfig.Snapshot{}, ErrInvariant
 	}
 	return snapshot, nil
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	rpsconfig "github.com/waiting-here/NonbiriAPI/internal/game/rps/config"
 )
 
 type reducer struct {
@@ -373,10 +374,10 @@ func (value *reducer) revealAndReduce() error {
 			if err != nil {
 				return err
 			}
-			if value.record.FreePoolStreak.Big().Cmp(big.NewInt(game.RPSFreeTieLimit)) >= 0 {
+			if value.record.FreePoolStreak.Big().Cmp(big.NewInt(rpsconfig.RPSFreeTieLimit)) >= 0 {
 				return value.finish(TerminalFreeTieLimit)
 			}
-			if value.record.FreePoolStreak.Big().Cmp(big.NewInt(game.RPSFreeTieReminder)) >= 0 {
+			if value.record.FreePoolStreak.Big().Cmp(big.NewInt(rpsconfig.RPSFreeTieReminder)) >= 0 {
 				value.record.ReminderState = "active"
 				if err := appendEvent(value.record, EventReminder, reminderPayload{FreeTieCount: value.record.FreePoolStreak.Decimal()}); err != nil {
 					return err

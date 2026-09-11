@@ -22,10 +22,8 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/debug"
 	"github.com/waiting-here/NonbiriAPI/internal/flowcontrol"
 	"github.com/waiting-here/NonbiriAPI/internal/forward"
-	"github.com/waiting-here/NonbiriAPI/internal/game"
-	"github.com/waiting-here/NonbiriAPI/internal/game/linklink"
-	"github.com/waiting-here/NonbiriAPI/internal/game/rps"
-	gameruntime "github.com/waiting-here/NonbiriAPI/internal/game/runtime"
+	gamebuiltin "github.com/waiting-here/NonbiriAPI/internal/game/builtin"
+	gamehost "github.com/waiting-here/NonbiriAPI/internal/game/host"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
@@ -219,12 +217,7 @@ func (rpsPublishReporter) ReportRPSPublishError(err error) {
 	}
 }
 
-type gameRuntimeBundle struct {
-	limiter  *game.StartLimiter
-	linklink *linklink.Service
-	rps      *rps.Service
-	fishing  *gameruntime.Service
-}
+type gameRuntimeBundle = gamebuiltin.Runtime
 
 func newGameRuntimeBundle(
 	store *db.Store,
@@ -241,81 +234,18 @@ func newGameRuntimeBundle(
 		pools == nil || activityEvents == nil || accountEvents == nil || sources == nil {
 		return nil, errors.New("game runtime dependencies are required")
 	}
-	limiter, err := game.NewStartLimiter(game.StartLimiterConfig{})
-	if err != nil {
-		return nil, fmt.Errorf("create shared game start limiter: %w", err)
-	}
-	bundle := &gameRuntimeBundle{limiter: limiter}
-	fail := func(err error) (*gameRuntimeBundle, error) {
-		_ = bundle.Close()
-		return nil, err
-	}
-	bundle.linklink, err = linklink.New(linklink.Options{
-		Store: store, UserAuthorizer: authRuntime, Continuation: continuation, Limiter: limiter,
-	})
-	if err != nil {
-		return fail(fmt.Errorf("create LinkLink runtime: %w", err))
-	}
-	bundle.rps, err = rps.New(rps.Options{
-		Store: store, UserAuthorizer: authRuntime, Continuation: continuation, Limiter: limiter,
-		Pools: pools, AccountEvents: accountEvents, ActivityEvents: activityEvents, Keys: vault,
-		PublishErrors: rpsPublishReporter{},
-	})
-	if err != nil {
-		return fail(fmt.Errorf("create RPS runtime: %w", err))
-	}
-	if err := sources.BindRPS(bundle.rps); err != nil {
-		return fail(fmt.Errorf("bind RPS account event source: %w", err))
-	}
-	leaderboardKey, err := vault.DeriveGenerationTwoSubkey([]byte("game-leaderboard-tie/v1"))
-	if err != nil {
-		return fail(fmt.Errorf("derive game leaderboard key: %w", err))
-	}
-	defer clear(leaderboardKey)
-	capability := game.RuntimeCapabilityFunc(func(gameID, mode, spec string) bool {
-		switch gameID {
-		case game.FishingID:
-			return mode == "" && spec == ""
-		case game.LinkLinkID:
-			return mode == "" && game.ResolveSpec(game.LinkLinkID, spec) == nil
-		case game.RPSID:
-			return bundle.rps.Available(gameID, mode, spec)
-		default:
-			return false
-		}
-	})
-	adminAuthorization := gameruntime.AdminFinalAuthorizerFunc(func(ctx context.Context, tx *sql.Tx) error {
+	adminAuthorization := gamehost.AdminAuthorizerFunc(func(ctx context.Context, tx *sql.Tx) error {
 		actor, ok := auth.ActorFromContext(ctx)
 		if !ok || actor.Kind != authz.ActorAdminSession || actor.UserID <= 0 {
 			return authz.ErrUnauthorized
 		}
 		return roleAuthorizer.AuthorizeAdminMutation(ctx, tx, actor.UserID)
 	})
-	bundle.fishing, err = gameruntime.New(gameruntime.Options{
-		Store: store, UserAuthorizer: authRuntime, AdminAuthorizer: adminAuthorization,
-		Limiter: limiter, LeaderboardTieKey: leaderboardKey, Capability: capability, RPSHealth: bundle.rps,
+	return gamebuiltin.New(gamebuiltin.Options{
+		Store: store, Vault: vault, UserAuthorizer: authRuntime, AdminAuthorizer: adminAuthorization,
+		Continuation: continuation, Pools: pools, AccountEvents: accountEvents, ActivityEvents: activityEvents,
+		PublishErrors: rpsPublishReporter{}, BindAccountSource: func(source gamebuiltin.AccountEventSource) error {
+			return sources.BindRPS(source)
+		},
 	})
-	if err != nil {
-		return fail(fmt.Errorf("create Fishing runtime: %w", err))
-	}
-	return bundle, nil
-}
-
-func (bundle *gameRuntimeBundle) Close() error {
-	if bundle == nil {
-		return nil
-	}
-	var failures []error
-	if bundle.rps != nil {
-		failures = append(failures, bundle.rps.Close())
-	}
-	if bundle.linklink != nil {
-		failures = append(failures, bundle.linklink.Close())
-	}
-	if bundle.fishing != nil {
-		failures = append(failures, bundle.fishing.Close())
-	} else if bundle.limiter != nil {
-		failures = append(failures, bundle.limiter.Close())
-	}
-	return errors.Join(failures...)
 }

@@ -1,0 +1,47 @@
+# Game modules
+
+The backend assembles games explicitly at build time. Each module owns its rules,
+configuration codec, HTTP handlers, persistent state, rankings, and recovery work.
+The registry is sealed before listeners open; invalid declarations or conflicting
+routes stop startup.
+
+`internal/game` contains shared contracts and the start limiter. `game/host`
+coordinates configuration transactions, registered projections, runtime startup,
+and shutdown. `game/builtin` is the production catalog and contains the audited
+financial adapters. `game/compat` holds the existing named configuration DTOs.
+Fishing rules remain separate from its persistent runtime.
+
+Configuration codecs declare their keys and defaults, validate partial updates,
+and return fresh projections. The host applies a multi-game update in one
+transaction, advances the shared revision once, and stores the idempotent response.
+Configured availability and runtime readiness are separate capabilities.
+
+All games finish validation and recovery before any worker starts. The host owns
+one shared start limiter and closes modules in reverse registration order. Modules
+close only their own workers and memory. A failed constructor or startup phase
+does not leave an active game worker behind.
+
+Homepage summaries, user configuration, and administrative active counts use
+module projections from the same read transaction. Modules validate their own
+states; the host checks declared identifiers, resource prefixes, bounds, and
+ordering. Reading these projections does not acknowledge results or advance games.
+
+Game commands retain their existing authorization, idempotency, and transaction
+boundaries. Financial ports expose only the operations registered for each game.
+Their adapters select the existing closed ledger constructors and verify source
+resources and participants. Modules cannot submit arbitrary ledger plans or
+mutate account balances directly. Capacity reservations, state changes, and
+ledger entries commit together.
+
+Account export and deletion borrow the coordinator's transaction through a bound
+module capability. Commit and abort finalizers preserve lease and event cleanup.
+Retention and recovery receive explicit limits and deadlines. The fixed export
+envelope remains owned by the central lifecycle service; legacy game sections are
+assembled at its compatibility boundary.
+
+Adding a game requires a descriptor, codec, factory, routes, observation and
+lifecycle capabilities, plus registration in the production catalog. Persistent
+objects and export sections are added through the central schema and lifecycle
+registration points. A new financial operation requires an audited ledger
+constructor and a corresponding module port. Modules do not perform schema
+migrations or register themselves through package initialization.

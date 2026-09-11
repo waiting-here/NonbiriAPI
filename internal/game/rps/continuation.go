@@ -11,7 +11,9 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 )
 
-func RegisterContinuation(registry *maintenance.Registry, service *Service) error {
+func RegisterContinuation(registry interface {
+	Register(maintenance.ContinuationKind, maintenance.ContinuationRegistration) error
+}, service *Service) error {
 	if registry == nil || service == nil {
 		return errors.New("rps: continuation registry and service are required")
 	}

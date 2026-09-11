@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
-	"github.com/waiting-here/NonbiriAPI/internal/game"
+	rpsconfig "github.com/waiting-here/NonbiriAPI/internal/game/rps/config"
 )
 
 type expiringRankFact struct {
@@ -67,7 +67,7 @@ func (service *Service) expireRankFactsBatchTxLimit(ctx context.Context, tx *sql
 			return 0, classifyDB(err)
 		}
 		fact.Magnitude, err = db.DecodeU128(raw)
-		if err != nil || fact.UserID <= 0 || !db.ValidateOpaqueID(fact.SessionID, "rps_") || game.ResolveMode(game.RPSID, fact.Mode) != nil ||
+		if err != nil || fact.UserID <= 0 || !db.ValidateOpaqueID(fact.SessionID, "rps_") || rpsconfig.Descriptor().ResolveMode(fact.Mode) != nil ||
 			fact.Sign < -1 || fact.Sign > 1 || fact.Profitable < 0 || fact.Profitable > 1 || (fact.Sign > 0) != (fact.Profitable == 1) {
 			_ = rows.Close()
 			return 0, ErrInvariant
@@ -179,8 +179,8 @@ WHERE session_id_text=? AND user_id=? AND aggregate_applied=1`, fact.SessionID, 
 }
 
 func (service *Service) Leaderboard(ctx context.Context, userID int64, mode, board string) (Leaderboard, error) {
-	if service == nil || service.closed.Load() || userID <= 0 || game.ResolveMode(game.RPSID, mode) != nil ||
-		(board != "profit_rate" && board != "net_profit") {
+	if service == nil || service.closed.Load() || userID <= 0 || rpsconfig.Descriptor().ResolveMode(mode) != nil ||
+		rpsconfig.Descriptor().ResolveBoard(board) != nil {
 		return Leaderboard{}, ErrInvalidRequest
 	}
 	queryNow, err := service.decisionNow()

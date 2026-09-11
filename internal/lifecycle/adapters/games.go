@@ -6,10 +6,11 @@ import (
 	"errors"
 	"time"
 
-	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
+	"github.com/waiting-here/NonbiriAPI/internal/game"
+	fishingruntime "github.com/waiting-here/NonbiriAPI/internal/game/fishing/runtime"
+	"github.com/waiting-here/NonbiriAPI/internal/game/host"
 	"github.com/waiting-here/NonbiriAPI/internal/game/linklink"
 	"github.com/waiting-here/NonbiriAPI/internal/game/rps"
-	fishingruntime "github.com/waiting-here/NonbiriAPI/internal/game/runtime"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 )
 
@@ -31,9 +32,26 @@ type RPSLifecycleOwner interface {
 	Retain(context.Context, int64, int, time.Time) (rps.RetentionResult, error)
 }
 
-type FishingAdapter struct{ owner FishingLifecycleOwner }
-type LinkLinkAdapter struct{ owner LinkLinkLifecycleOwner }
-type RPSAdapter struct{ owner RPSLifecycleOwner }
+type FishingAdapter struct {
+	owner      FishingLifecycleOwner
+	registered *host.Service
+}
+type LinkLinkAdapter struct {
+	owner      LinkLinkLifecycleOwner
+	registered *host.Service
+}
+type RPSAdapter struct {
+	owner      RPSLifecycleOwner
+	registered *host.Service
+}
+
+func NewRegisteredFishing(service *host.Service) *FishingAdapter {
+	return &FishingAdapter{registered: service}
+}
+func NewRegisteredLinkLink(service *host.Service) *LinkLinkAdapter {
+	return &LinkLinkAdapter{registered: service}
+}
+func NewRegisteredRPS(service *host.Service) *RPSAdapter { return &RPSAdapter{registered: service} }
 
 func NewFishing(owner FishingLifecycleOwner) *FishingAdapter { return &FishingAdapter{owner: owner} }
 func NewLinkLink(owner LinkLinkLifecycleOwner) *LinkLinkAdapter {
@@ -46,27 +64,34 @@ func (adapter *FishingAdapter) ExportFishing(
 	tx *sql.Tx,
 	request lifecycle.ExportRequest,
 ) (lifecycle.FishingExport, lifecycle.ExportFinalizer, error) {
-	if adapter == nil || adapter.owner == nil {
+	if adapter == nil || adapter.owner == nil && adapter.registered == nil {
 		return lifecycle.FishingExport{}, nil, lifecycle.ErrUnavailable
 	}
-	value, err := adapter.owner.ExportTx(ctx, tx, request.UserID, request.DecisionNow, request.Limit)
+	var value fishingruntime.UserExport
+	var finalizer host.Finalizer
+	var err error
+	if adapter.registered != nil {
+		value, finalizer, err = exportRegisteredGame[fishingruntime.UserExport](adapter.registered, game.FishingID, ctx, tx, request)
+	} else {
+		value, err = adapter.owner.ExportTx(ctx, tx, request.UserID, request.DecisionNow, request.Limit)
+	}
 	if err != nil {
 		if errors.Is(err, fishingruntime.ErrLifecycleResourceLimit) {
-			return lifecycle.FishingExport{}, nil, lifecycle.ErrTooLarge
+			return lifecycle.FishingExport{}, finalizer, lifecycle.ErrTooLarge
 		}
-		return lifecycle.FishingExport{}, nil, err
+		return lifecycle.FishingExport{}, finalizer, err
 	}
 	single, err := mapFishingRank(value.Single)
 	if err != nil {
-		return lifecycle.FishingExport{}, nil, err
+		return lifecycle.FishingExport{}, finalizer, err
 	}
 	total, err := mapFishingRank(value.Total)
 	if err != nil {
-		return lifecycle.FishingExport{}, nil, err
+		return lifecycle.FishingExport{}, finalizer, err
 	}
 	recent, err := mapFishingRank(value.RollingBest)
 	if err != nil {
-		return lifecycle.FishingExport{}, nil, err
+		return lifecycle.FishingExport{}, finalizer, err
 	}
 	out := lifecycle.FishingExport{
 		Pending:    make([]lifecycle.FishingPendingExport, len(value.Pending)),
@@ -83,8 +108,8 @@ func (adapter *FishingAdapter) ExportFishing(
 	for index, batch := range value.Terminal {
 		outcomes := make([]lifecycle.FishingOutcomeExport, len(batch.Outcomes))
 		for outcomeIndex, outcome := range batch.Outcomes {
-			if outcome.BlueFatFishLengthCM != nil && (outcome.Tier != "legend" || !fishing.ValidBlueFatFishLength(*outcome.BlueFatFishLengthCM)) {
-				return lifecycle.FishingExport{}, nil, lifecycle.ErrInvariant
+			if !fishingruntime.ValidExportOutcome(outcome) {
+				return lifecycle.FishingExport{}, finalizer, lifecycle.ErrInvariant
 			}
 			outcomes[outcomeIndex] = lifecycle.FishingOutcomeExport{
 				Ordinal: outcome.Ordinal, SpeciesKey: outcome.SpeciesKey, Tier: outcome.Tier,
@@ -98,32 +123,19 @@ func (adapter *FishingAdapter) ExportFishing(
 			RevealedAt: cloneInt64(batch.RevealedAt),
 		}
 	}
-	return out, nil, nil
+	return out, finalizer, nil
 }
 
 func mapFishingRank(value *fishingruntime.FishingLeaderboardRow) (*lifecycle.FishingRankExport, error) {
-	if value == nil {
-		return nil, nil
-	}
-	if value.Rank == "" || (value.SpeciesKey == "") == (value.TotalCredits == "") {
+	projected, err := fishingruntime.ProjectExportRank(value)
+	if err != nil {
 		return nil, lifecycle.ErrInvariant
 	}
-	out := &lifecycle.FishingRankExport{Rank: value.Rank}
-	if value.SpeciesKey != "" {
-		species, size := value.SpeciesKey, value.SizeCM
-		out.SpeciesKey, out.SizeCM = &species, &size
+	if projected == nil {
+		return nil, nil
 	}
-	if value.BlueFatFishLengthCM != nil {
-		if !fishing.ValidBlueFatFishLength(*value.BlueFatFishLengthCM) || value.SpeciesKey != "koi" && value.SpeciesKey != "taimen" && value.SpeciesKey != "yellowcheek" {
-			return nil, lifecycle.ErrInvariant
-		}
-		out.BlueFatFishLengthCM = cloneString(value.BlueFatFishLengthCM)
-	}
-	if value.TotalCredits != "" {
-		total := value.TotalCredits
-		out.TotalCredits = &total
-	}
-	return out, nil
+	out := lifecycle.FishingRankExport(*projected)
+	return &out, nil
 }
 
 func (adapter *FishingAdapter) PrepareDelete(
@@ -131,6 +143,9 @@ func (adapter *FishingAdapter) PrepareDelete(
 	tx *sql.Tx,
 	request lifecycle.DeleteRequest,
 ) (lifecycle.DeleteFinalizer, error) {
+	if adapter != nil && adapter.registered != nil {
+		return deleteRegisteredGame(adapter.registered, game.FishingID, ctx, tx, request)
+	}
 	if adapter == nil || adapter.owner == nil {
 		return nil, lifecycle.ErrUnavailable
 	}
@@ -146,6 +161,9 @@ func (adapter *FishingAdapter) Retain(
 	limit int,
 	budgetDeadline time.Time,
 ) (lifecycle.WorkResult, error) {
+	if adapter != nil && adapter.registered != nil {
+		return retainRegisteredGame(adapter.registered, game.FishingID, ctx, decisionNow, limit, budgetDeadline)
+	}
 	if adapter == nil || adapter.owner == nil {
 		return lifecycle.WorkResult{}, lifecycle.ErrUnavailable
 	}
@@ -158,10 +176,21 @@ func (adapter *LinkLinkAdapter) ExportLinkLink(
 	tx *sql.Tx,
 	request lifecycle.ExportRequest,
 ) (lifecycle.LinkLinkExport, lifecycle.ExportFinalizer, error) {
-	if adapter == nil || adapter.owner == nil {
+	if adapter == nil || adapter.owner == nil && adapter.registered == nil {
 		return lifecycle.LinkLinkExport{}, nil, lifecycle.ErrUnavailable
 	}
-	value, finalizer, err := adapter.owner.ExportTx(ctx, tx, request.UserID, request.DecisionNow, request.Limit)
+	var value linklink.UserExport
+	var finalizer host.Finalizer
+	var err error
+	if adapter.registered != nil {
+		value, finalizer, err = exportRegisteredGame[linklink.UserExport](adapter.registered, game.LinkLinkID, ctx, tx, request)
+	} else {
+		var owned *linklink.ExportFinalizer
+		value, owned, err = adapter.owner.ExportTx(ctx, tx, request.UserID, request.DecisionNow, request.Limit)
+		if owned != nil {
+			finalizer = owned
+		}
+	}
 	if err != nil {
 		if errors.Is(err, linklink.ErrLifecycleResourceLimit) {
 			return lifecycle.LinkLinkExport{}, finalizer, lifecycle.ErrTooLarge
@@ -194,6 +223,9 @@ func (adapter *LinkLinkAdapter) PrepareDelete(
 	tx *sql.Tx,
 	request lifecycle.DeleteRequest,
 ) (lifecycle.DeleteFinalizer, error) {
+	if adapter != nil && adapter.registered != nil {
+		return deleteRegisteredGame(adapter.registered, game.LinkLinkID, ctx, tx, request)
+	}
 	if adapter == nil || adapter.owner == nil {
 		return nil, lifecycle.ErrUnavailable
 	}
@@ -206,6 +238,9 @@ func (adapter *LinkLinkAdapter) Retain(
 	limit int,
 	budgetDeadline time.Time,
 ) (lifecycle.WorkResult, error) {
+	if adapter != nil && adapter.registered != nil {
+		return retainRegisteredGame(adapter.registered, game.LinkLinkID, ctx, decisionNow, limit, budgetDeadline)
+	}
 	if adapter == nil || adapter.owner == nil {
 		return lifecycle.WorkResult{}, lifecycle.ErrUnavailable
 	}
@@ -218,10 +253,21 @@ func (adapter *RPSAdapter) ExportRPS(
 	tx *sql.Tx,
 	request lifecycle.ExportRequest,
 ) (lifecycle.RPSExport, lifecycle.ExportFinalizer, error) {
-	if adapter == nil || adapter.owner == nil {
+	if adapter == nil || adapter.owner == nil && adapter.registered == nil {
 		return lifecycle.RPSExport{}, nil, lifecycle.ErrUnavailable
 	}
-	value, finalizer, err := adapter.owner.ExportTx(ctx, tx, request.UserID, request.DecisionNow, request.Limit)
+	var value rps.UserExport
+	var finalizer host.Finalizer
+	var err error
+	if adapter.registered != nil {
+		value, finalizer, err = exportRegisteredGame[rps.UserExport](adapter.registered, game.RPSID, ctx, tx, request)
+	} else {
+		var owned *rps.ExportFinalizer
+		value, owned, err = adapter.owner.ExportTx(ctx, tx, request.UserID, request.DecisionNow, request.Limit)
+		if owned != nil {
+			finalizer = owned
+		}
+	}
 	if err != nil {
 		if errors.Is(err, rps.ErrResourceLimit) {
 			return lifecycle.RPSExport{}, finalizer, lifecycle.ErrTooLarge
@@ -254,31 +300,15 @@ func (adapter *RPSAdapter) ExportRPS(
 }
 
 func mapRPSCurrent(value *rps.HomeState) (*lifecycle.RPSCurrentExport, error) {
-	if value == nil {
-		return nil, nil
-	}
-	switch value.Kind {
-	case "queue":
-		if value.Queue == nil || value.Session != nil || value.Result != nil {
-			return nil, lifecycle.ErrInvariant
-		}
-		deadline := value.Queue.Deadline
-		return &lifecycle.RPSCurrentExport{
-			Kind: "queue", ResourceID: value.Queue.ID, Mode: value.Queue.Mode,
-			State: value.Queue.State, Deadline: &deadline,
-		}, nil
-	case "session":
-		if value.Session == nil || value.Queue != nil || value.Result != nil {
-			return nil, lifecycle.ErrInvariant
-		}
-		phase := value.Session.Phase
-		return &lifecycle.RPSCurrentExport{
-			Kind: "session", ResourceID: value.Session.SessionID, Mode: value.Session.Mode,
-			State: value.Session.State, Phase: &phase, Deadline: cloneInt64(value.Session.Deadline),
-		}, nil
-	default:
+	projected, err := rps.ProjectExportCurrent(value)
+	if err != nil {
 		return nil, lifecycle.ErrInvariant
 	}
+	if projected == nil {
+		return nil, nil
+	}
+	out := lifecycle.RPSCurrentExport(*projected)
+	return &out, nil
 }
 
 func mapRPSPending(value *rps.PendingResult) *lifecycle.RPSPendingExport {
@@ -312,6 +342,9 @@ func (adapter *RPSAdapter) PrepareDelete(
 	tx *sql.Tx,
 	request lifecycle.DeleteRequest,
 ) (lifecycle.DeleteFinalizer, error) {
+	if adapter != nil && adapter.registered != nil {
+		return deleteRegisteredGame(adapter.registered, game.RPSID, ctx, tx, request)
+	}
 	if adapter == nil || adapter.owner == nil {
 		return nil, lifecycle.ErrUnavailable
 	}
@@ -324,6 +357,9 @@ func (adapter *RPSAdapter) Retain(
 	limit int,
 	budgetDeadline time.Time,
 ) (lifecycle.WorkResult, error) {
+	if adapter != nil && adapter.registered != nil {
+		return retainRegisteredGame(adapter.registered, game.RPSID, ctx, decisionNow, limit, budgetDeadline)
+	}
 	if adapter == nil || adapter.owner == nil {
 		return lifecycle.WorkResult{}, lifecycle.ErrUnavailable
 	}

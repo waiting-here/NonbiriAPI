@@ -15,6 +15,8 @@ import (
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/game/finance"
+	linklinkconfig "github.com/waiting-here/NonbiriAPI/internal/game/linklink/config"
 	"github.com/waiting-here/NonbiriAPI/internal/idempotency"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
@@ -32,6 +34,7 @@ type ContinuationAuthorizer interface {
 }
 
 type Options struct {
+	Finance        finance.LinkLink
 	Store          *db.Store
 	UserAuthorizer resources.FinalTxAuthorizer
 	Continuation   ContinuationAuthorizer
@@ -55,6 +58,7 @@ type leaseBinding struct {
 }
 
 type Service struct {
+	finance        finance.LinkLink
 	database       *sql.DB
 	userAuthorizer resources.FinalTxAuthorizer
 	continuation   ContinuationAuthorizer
@@ -81,7 +85,7 @@ type Service struct {
 }
 
 func New(options Options) (*Service, error) {
-	if options.Store == nil || options.Store.DB() == nil || options.UserAuthorizer == nil || options.Continuation == nil || options.Limiter == nil {
+	if options.Store == nil || options.Store.DB() == nil || options.UserAuthorizer == nil || options.Continuation == nil || options.Limiter == nil || options.Finance == nil {
 		return nil, errors.New("linklink: store, final user authorizer, continuation authorizer, and shared start limiter are required")
 	}
 	if options.Now == nil {
@@ -110,7 +114,7 @@ func New(options Options) (*Service, error) {
 		return nil, errors.New("linklink: invalid worker interval")
 	}
 	return &Service{
-		database: options.Store.DB(), userAuthorizer: options.UserAuthorizer,
+		database: options.Store.DB(), userAuthorizer: options.UserAuthorizer, finance: options.Finance,
 		continuation: options.Continuation, limiter: options.Limiter,
 		random: options.Random, now: options.Now, generateID: options.GenerateID,
 		healthEpoch: options.HealthEpoch, workerInterval: options.WorkerInterval,
@@ -225,15 +229,15 @@ func (service *Service) forgetUser(userID int64) {
 	service.leaseMu.Unlock()
 }
 
-func (service *Service) readSnapshot(ctx context.Context, tx *sql.Tx) (game.ConfigSnapshot, error) {
-	keys := game.SiteConfigKeys()
+func (service *Service) readSnapshot(ctx context.Context, tx *sql.Tx) (linklinkconfig.Snapshot, error) {
+	keys := snapshotKeys()
 	arguments := make([]any, len(keys))
 	for index := range keys {
 		arguments[index] = keys[index]
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT key,value FROM site_config WHERE key IN (`+placeholders(len(keys))+`)`, arguments...)
 	if err != nil {
-		return game.ConfigSnapshot{}, classifyDB(err)
+		return linklinkconfig.Snapshot{}, classifyDB(err)
 	}
 	defer rows.Close()
 	values := make(map[string]string, len(keys))
@@ -241,19 +245,19 @@ func (service *Service) readSnapshot(ctx context.Context, tx *sql.Tx) (game.Conf
 		var key string
 		var value sql.NullString
 		if err := rows.Scan(&key, &value); err != nil || !value.Valid {
-			return game.ConfigSnapshot{}, ErrInvariant
+			return linklinkconfig.Snapshot{}, ErrInvariant
 		}
 		values[key] = value.String
 	}
 	if err := rows.Err(); err != nil {
-		return game.ConfigSnapshot{}, classifyDB(err)
+		return linklinkconfig.Snapshot{}, classifyDB(err)
 	}
 	if len(values) != len(keys) {
-		return game.ConfigSnapshot{}, ErrInvariant
+		return linklinkconfig.Snapshot{}, ErrInvariant
 	}
-	snapshot, err := game.CompileConfig(values)
+	snapshot, err := linklinkconfig.CompileConfig(values)
 	if err != nil {
-		return game.ConfigSnapshot{}, ErrInvariant
+		return linklinkconfig.Snapshot{}, ErrInvariant
 	}
 	return snapshot, nil
 }

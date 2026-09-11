@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
+	fishingruntime "github.com/waiting-here/NonbiriAPI/internal/game/fishing/runtime"
 	"github.com/waiting-here/NonbiriAPI/internal/game/linklink"
 	"github.com/waiting-here/NonbiriAPI/internal/game/rps"
-	fishingruntime "github.com/waiting-here/NonbiriAPI/internal/game/runtime"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecycle"
 )
 

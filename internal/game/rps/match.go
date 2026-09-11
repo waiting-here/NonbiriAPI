@@ -15,10 +15,12 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/game/finance"
+	rpsconfig "github.com/waiting-here/NonbiriAPI/internal/game/rps/config"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
-const matchCandidateLimit = game.RPSQueueCapacity
+const matchCandidateLimit = rpsconfig.RPSQueueCapacity
 
 func mergePublishFacts(left, right activities.PublishFacts) activities.PublishFacts {
 	result := activities.PublishFacts{Global: left.Global || right.Global}
@@ -227,7 +229,7 @@ func safePathAtom(value string) bool {
 }
 
 func (service *Service) MatchOnce(ctx context.Context, mode string) (bool, error) {
-	if service == nil || service.closed.Load() || !service.recovered.Load() || game.ResolveMode(game.RPSID, mode) != nil {
+	if service == nil || service.closed.Load() || !service.recovered.Load() || rpsconfig.Descriptor().ResolveMode(mode) != nil {
 		return false, ErrInvalidRequest
 	}
 	now, err := service.decisionNow()
@@ -305,7 +307,7 @@ func (service *Service) MatchOnce(ctx context.Context, mode string) (bool, error
 	return true, nil
 }
 
-func queueCompatibleWithConfig(queue queueRecord, config game.RPSModeConfig) bool {
+func queueCompatibleWithConfig(queue queueRecord, config rpsconfig.RPSModeConfig) bool {
 	base := big.NewInt(config.BaseMilli)
 	if base.Sign() <= 0 || queue.Reserved.Big().Sign() <= 0 {
 		return false
@@ -314,7 +316,7 @@ func queueCompatibleWithConfig(queue queueRecord, config game.RPSModeConfig) boo
 	case game.RPSModeQuick:
 		return queue.Reserved.Big().Cmp(base) == 0
 	case game.RPSModeStandard:
-		return queue.Reserved.Big().Cmp(new(big.Int).Mul(base, big.NewInt(game.RPSStandardMultiplier))) == 0
+		return queue.Reserved.Big().Cmp(new(big.Int).Mul(base, big.NewInt(rpsconfig.RPSStandardMultiplier))) == 0
 	case game.RPSModeDeathmatch:
 		return queue.Reserved.Big().Cmp(base) >= 0
 	default:
@@ -322,7 +324,7 @@ func queueCompatibleWithConfig(queue queueRecord, config game.RPSModeConfig) boo
 	}
 }
 
-func (service *Service) startMatchTx(ctx context.Context, tx *sql.Tx, selected [3]queueRecord, config game.RPSModeConfig, now int64) ([]int64, activities.PublishFacts, error) {
+func (service *Service) startMatchTx(ctx context.Context, tx *sql.Tx, selected [3]queueRecord, config rpsconfig.RPSModeConfig, now int64) ([]int64, activities.PublishFacts, error) {
 	mode := selected[0].Mode
 	for _, queue := range selected {
 		if queue.Mode != mode || queue.Deadline <= now {
@@ -359,10 +361,6 @@ func (service *Service) startMatchTx(ctx context.Context, tx *sql.Tx, selected [
 	if err != nil {
 		return nil, activities.PublishFacts{}, err
 	}
-	sessionAccount, err := ledger.CreateRPSSessionAccount(ctx, tx, sessionID, now)
-	if err != nil {
-		return nil, activities.PublishFacts{}, mapLedger(err)
-	}
 	futureRows, err := sessionFutureRows(now)
 	if err != nil {
 		return nil, activities.PublishFacts{}, err
@@ -372,9 +370,9 @@ func (service *Service) startMatchTx(ctx context.Context, tx *sql.Tx, selected [
 	if deadline < now || deadline > 253402300799 {
 		return nil, activities.PublishFacts{}, ErrServiceUnavailable
 	}
-	planInputs := [3]ledger.RPSQueueInput{}
+	planInputs := [3]finance.QueueInput{}
 	record := sessionRecord{
-		ID: sessionID, AccountID: sessionAccount.ID, Mode: mode, RulesVersion: game.RPSVersion,
+		ID: sessionID, Mode: mode, RulesVersion: game.RPSVersion,
 		State: StateStarted, Phase: PhaseGesture, Revision: one, PhaseSeq: one, IdentityEpoch: one,
 		LedgerRowsRemaining: futureRows, BaseMilli: config.BaseMilli,
 		Pumps: PumpsBP(config.PumpsBP), GestureSeconds: config.GestureSeconds, DealerSeconds: config.DealerSeconds,
@@ -390,7 +388,7 @@ func (service *Service) startMatchTx(ctx context.Context, tx *sql.Tx, selected [
 		if amountErr != nil {
 			return nil, activities.PublishFacts{}, ErrInvariant
 		}
-		planInputs[seat] = ledger.RPSQueueInput{QueueID: queue.ID, AccountID: queue.AccountID, Amount: planAmount}
+		planInputs[seat] = finance.QueueInput{QueueID: queue.ID, UserID: queue.UserID, Amount: planAmount}
 		identity := identities[seat]
 		userID := queue.UserID
 		record.Seats[seat] = seatRecord{
@@ -425,18 +423,8 @@ func (service *Service) startMatchTx(ctx context.Context, tx *sql.Tx, selected [
 	if err := appendEvent(&record, EventPhaseChanged, phaseChangedPayload{Phase: record.Phase, Deadline: record.PhaseDeadline}); err != nil {
 		return nil, activities.PublishFacts{}, err
 	}
-	plan, err := ledger.NewRPSSessionStart(ledger.Meta{OperationID: operationID, CreatedAt: now}, sessionID, sessionAccount.ID, futureRows, planInputs)
-	if err != nil {
-		return nil, activities.PublishFacts{}, ErrInvariant
-	}
-	primary := planInputs[0]
-	for _, value := range planInputs[1:] {
-		if value.QueueID < primary.QueueID {
-			primary = value
-		}
-	}
-	primaryRef, _ := ledger.RPSQueueReservation(primary.QueueID)
-	if _, err := ledger.ConsumeReserved(ctx, tx, primaryRef, plan, func(ctx context.Context, tx *sql.Tx) error {
+	if err := service.finance.SessionStart(ctx, tx, finance.SessionStart{Meta: ledger.Meta{OperationID: operationID, CreatedAt: now}, SessionID: sessionID, FutureRows: futureRows, Queues: planInputs}, func(ctx context.Context, tx *sql.Tx, accountID int64) error {
+		record.AccountID = accountID
 		return insertStartedSessionTx(ctx, tx, &record, queuesBySeat)
 	}); err != nil {
 		return nil, activities.PublishFacts{}, fmt.Errorf("session start ledger: %w", mapLedger(err))
@@ -603,10 +591,6 @@ func (service *Service) applyInputsTx(ctx context.Context, tx *sql.Tx, record *s
 	if err != nil {
 		return activities.PublishFacts{}, err
 	}
-	platform, err := ledger.CodedAccount(ctx, tx, "platform")
-	if err != nil {
-		return activities.PublishFacts{}, ErrInvariant
-	}
 	welfare, err := service.pools.WelfareDestination(ctx, tx)
 	if err != nil {
 		return activities.PublishFacts{}, classifyDB(err)
@@ -627,14 +611,7 @@ func (service *Service) applyInputsTx(ctx context.Context, tx *sql.Tx, record *s
 	if err != nil {
 		return activities.PublishFacts{}, ErrInvariant
 	}
-	plan, err := ledger.NewRPSRoundCut(ledger.Meta{OperationID: operationID, ActorUserID: actorUserID, CreatedAt: now},
-		record.ID, cutSeq, record.AccountID, platform.ID, welfare.AccountID, thursday.AccountID,
-		ledger.RPSCutAmounts{Platform: platformAmount, Welfare: welfareAmount, Thursday: thursdayAmount})
-	if err != nil {
-		return activities.PublishFacts{}, ErrInvariant
-	}
-	ref, _ := ledger.RPSSessionReservation(record.ID)
-	if _, err := ledger.ConsumeReserved(ctx, tx, ref, plan, func(ctx context.Context, tx *sql.Tx) error {
+	if err := service.finance.RoundCut(ctx, tx, finance.RoundCut{Meta: ledger.Meta{OperationID: operationID, ActorUserID: actorUserID, CreatedAt: now}, SessionID: record.ID, Sequence: cutSeq, WelfareAccountID: welfare.AccountID, ThursdayAccountID: thursday.AccountID, Amounts: ledger.RPSCutAmounts{Platform: platformAmount, Welfare: welfareAmount, Thursday: thursdayAmount}}, func(ctx context.Context, tx *sql.Tx) error {
 		if err := persistSessionRowsTx(ctx, tx, record, expectedRevision); err != nil {
 			return fmt.Errorf("persist after round cut: %w", err)
 		}
