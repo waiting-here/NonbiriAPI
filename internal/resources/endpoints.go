@@ -169,26 +169,11 @@ FROM endpoints e WHERE e.id=? AND e.user_id=?`, endpointID, userID))
 }
 
 func (r *Repository) CreateEndpoint(ctx context.Context, userID int64, mutation ControlMutation, input CreateEndpointInput) (MutationResult[Endpoint], error) {
-	if r == nil || userID <= 0 || mutation.Route != routeEndpoints || mutation.Method != http.MethodPost || !mutationPathIDs(mutation) || mutation.Query != "" ||
-		!validateNote(input.Note) || (input.Source != "custom" && input.Source != "mainstream") {
+	if r == nil || userID <= 0 || mutation.Route != routeEndpoints || mutation.Method != http.MethodPost || !mutationPathIDs(mutation) || mutation.Query != "" {
 		return MutationResult[Endpoint]{}, ErrInvalidRequest
 	}
-	canonicalURL := ""
-	connectorType := input.ConnectorType
-	if input.Source == "custom" {
-		if input.ChannelID != "" || input.ConnectorType == "" || input.BaseURL == "" {
-			return MutationResult[Endpoint]{}, ErrInvalidRequest
-		}
-		validatedType, err := r.connectors.MustValidate(connectorcontract.Type(input.ConnectorType))
-		if err != nil || string(validatedType) != input.ConnectorType {
-			return MutationResult[Endpoint]{}, ErrInvalidRequest
-		}
-		canonicalURL, err = r.baseURLs.ValidateBaseURL(input.BaseURL)
-		if err != nil || canonicalURL == "" || len(canonicalURL) > 4096 {
-			return MutationResult[Endpoint]{}, ErrInvalidRequest
-		}
-	} else if input.ChannelID == "" || input.ConnectorType != "" || input.BaseURL != "" || !validMainstreamChannelID(input.ChannelID) {
-		return MutationResult[Endpoint]{}, ErrInvalidRequest
+	if _, _, err := r.validateCreateEndpoint(input); err != nil {
+		return MutationResult[Endpoint]{}, err
 	}
 	now, err := r.nowUnix()
 	if err != nil {
@@ -207,61 +192,7 @@ func (r *Repository) CreateEndpoint(ctx context.Context, userID int64, mutation 
 	if decision.Kind == idempotency.Replay {
 		return replayMutation[Endpoint](decision)
 	}
-	var channelID any
-	var channelRevision any
-	var channelName any
-	var channelCategory any
-	if input.Source == "mainstream" {
-		row, err := getMainstreamChannelSnapshotTx(ctx, tx, input.ChannelID)
-		if err != nil {
-			return MutationResult[Endpoint]{}, err
-		}
-		item, err := row.dto()
-		if err != nil {
-			return MutationResult[Endpoint]{}, ErrUnavailable
-		}
-		if err := r.validateMainstreamChannelDTO(item); err != nil {
-			return MutationResult[Endpoint]{}, err
-		}
-		if item.State != mainstreamChannelStateActive || !item.Enabled {
-			return MutationResult[Endpoint]{}, ErrConflict
-		}
-		canonicalURL = item.BaseURL
-		connectorType = item.ConnectorType
-		channelID, channelRevision, channelName, channelCategory = item.ID, row.revision, item.Name, item.Category
-	}
-	var endpointLimit sql.NullInt64
-	if err := tx.QueryRowContext(ctx, `SELECT endpoint_limit FROM users WHERE id=? AND is_admin=0`, userID).Scan(&endpointLimit); errors.Is(err, sql.ErrNoRows) {
-		return MutationResult[Endpoint]{}, ErrNotFound
-	} else if err != nil {
-		return MutationResult[Endpoint]{}, fmt.Errorf("resources: read endpoint limit: %w", err)
-	}
-	globalLimit, err := readSiteLimitTx(ctx, tx, "default_endpoint_limit", 0, 10000)
-	if err != nil {
-		return MutationResult[Endpoint]{}, err
-	}
-	effectiveLimit := globalLimit
-	if endpointLimit.Valid {
-		effectiveLimit = endpointLimit.Int64
-	}
-	count, err := countTx(ctx, tx, `SELECT count(*) FROM endpoints WHERE user_id=?`, userID)
-	if err != nil {
-		return MutationResult[Endpoint]{}, fmt.Errorf("resources: count endpoints: %w", err)
-	}
-	if count >= effectiveLimit {
-		return MutationResult[Endpoint]{}, ErrResourceLimit
-	}
-	result, err := tx.ExecContext(ctx, `
-INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category,created_at,updated_at)
-VALUES(?,?,?,?,?,1,?,?,?,?,?,?)`, userID, connectorType, canonicalURL, input.Note, boolInt(input.Enabled), channelID, channelRevision, channelName, channelCategory, now, now)
-	if err != nil {
-		return MutationResult[Endpoint]{}, fmt.Errorf("resources: create endpoint: %w", err)
-	}
-	endpointID, err := result.LastInsertId()
-	if err != nil {
-		return MutationResult[Endpoint]{}, fmt.Errorf("resources: create endpoint identity: %w", err)
-	}
-	item, err := getEndpointTx(ctx, tx, userID, endpointID)
+	item, err := r.CreateEndpointInTransaction(ctx, tx, userID, input)
 	if err != nil {
 		return MutationResult[Endpoint]{}, err
 	}
@@ -273,6 +204,108 @@ VALUES(?,?,?,?,?,1,?,?,?,?,?,?)`, userID, connectorType, canonicalURL, input.Not
 		return MutationResult[Endpoint]{}, err
 	}
 	return out, nil
+}
+
+func (r *Repository) validateCreateEndpoint(input CreateEndpointInput) (string, string, error) {
+	if !validateNote(input.Note) || (input.Source != "custom" && input.Source != "mainstream") {
+		return "", "", ErrInvalidRequest
+	}
+	canonicalURL := ""
+	connectorType := input.ConnectorType
+	if input.Source == "custom" {
+		if input.ChannelID != "" || input.ConnectorType == "" || input.BaseURL == "" {
+			return "", "", ErrInvalidRequest
+		}
+		validatedType, err := r.connectors.MustValidate(connectorcontract.Type(input.ConnectorType))
+		if err != nil || string(validatedType) != input.ConnectorType {
+			return "", "", ErrInvalidRequest
+		}
+		canonicalURL, err = r.baseURLs.ValidateBaseURL(input.BaseURL)
+		if err != nil || canonicalURL == "" || len(canonicalURL) > 4096 {
+			return "", "", ErrInvalidRequest
+		}
+	} else if input.ChannelID == "" || input.ConnectorType != "" || input.BaseURL != "" || !validMainstreamChannelID(input.ChannelID) {
+		return "", "", ErrInvalidRequest
+	}
+	return canonicalURL, connectorType, nil
+}
+
+// CreateEndpointInTransaction composes endpoint creation with other owner
+// mutations. The caller owns commit/rollback of the supplied transaction.
+func (r *Repository) CreateEndpointInTransaction(ctx context.Context, tx *sql.Tx, userID int64, input CreateEndpointInput) (Endpoint, error) {
+	if r == nil || tx == nil || userID <= 0 {
+		return Endpoint{}, ErrInvalidRequest
+	}
+	canonicalURL, connectorType, err := r.validateCreateEndpoint(input)
+	if err != nil {
+		return Endpoint{}, err
+	}
+	if err := r.finalAuth.AuthorizeUserMutation(ctx, tx, userID); err != nil {
+		return Endpoint{}, err
+	}
+	now, err := r.nowUnix()
+	if err != nil {
+		return Endpoint{}, err
+	}
+	var channelID any
+	var channelRevision any
+	var channelName any
+	var channelCategory any
+	if input.Source == "mainstream" {
+		row, err := getMainstreamChannelSnapshotTx(ctx, tx, input.ChannelID)
+		if err != nil {
+			return Endpoint{}, err
+		}
+		item, err := row.dto()
+		if err != nil {
+			return Endpoint{}, ErrUnavailable
+		}
+		if err := r.validateMainstreamChannelDTO(item); err != nil {
+			return Endpoint{}, err
+		}
+		if item.State != mainstreamChannelStateActive || !item.Enabled {
+			return Endpoint{}, ErrConflict
+		}
+		canonicalURL = item.BaseURL
+		connectorType = item.ConnectorType
+		channelID, channelRevision, channelName, channelCategory = item.ID, row.revision, item.Name, item.Category
+	}
+	var endpointLimit sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT endpoint_limit FROM users WHERE id=? AND is_admin=0`, userID).Scan(&endpointLimit); errors.Is(err, sql.ErrNoRows) {
+		return Endpoint{}, ErrNotFound
+	} else if err != nil {
+		return Endpoint{}, fmt.Errorf("resources: read endpoint limit: %w", err)
+	}
+	globalLimit, err := readSiteLimitTx(ctx, tx, "default_endpoint_limit", 0, 10000)
+	if err != nil {
+		return Endpoint{}, err
+	}
+	effectiveLimit := globalLimit
+	if endpointLimit.Valid {
+		effectiveLimit = endpointLimit.Int64
+	}
+	count, err := countTx(ctx, tx, `SELECT count(*) FROM endpoints WHERE user_id=?`, userID)
+	if err != nil {
+		return Endpoint{}, fmt.Errorf("resources: count endpoints: %w", err)
+	}
+	if count >= effectiveLimit {
+		return Endpoint{}, ErrResourceLimit
+	}
+	result, err := tx.ExecContext(ctx, `
+INSERT INTO endpoints(user_id,connector_type,base_url,note,enabled,revision,mainstream_channel_id,mainstream_channel_revision,mainstream_channel_name,mainstream_channel_category,created_at,updated_at)
+VALUES(?,?,?,?,?,1,?,?,?,?,?,?)`, userID, connectorType, canonicalURL, input.Note, boolInt(input.Enabled), channelID, channelRevision, channelName, channelCategory, now, now)
+	if err != nil {
+		return Endpoint{}, fmt.Errorf("resources: create endpoint: %w", err)
+	}
+	endpointID, err := result.LastInsertId()
+	if err != nil {
+		return Endpoint{}, fmt.Errorf("resources: create endpoint identity: %w", err)
+	}
+	item, err := getEndpointTx(ctx, tx, userID, endpointID)
+	if err != nil {
+		return Endpoint{}, err
+	}
+	return item, nil
 }
 
 func (r *Repository) PatchEndpoint(ctx context.Context, userID, endpointID int64, mutation ControlMutation, input PatchEndpointInput) (MutationResult[Endpoint], error) {
@@ -745,13 +778,9 @@ func (r *Repository) GetEndpointKey(ctx context.Context, userID, endpointID, key
 }
 
 func (r *Repository) CreateEndpointKey(ctx context.Context, userID, endpointID int64, mutation ControlMutation, input CreateEndpointKeyInput) (MutationResult[EndpointKey], error) {
-	if r == nil || userID <= 0 || endpointID <= 0 || mutation.Route != routeEndpointKeys || mutation.Method != http.MethodPost || !mutationPathIDs(mutation, endpointID) || mutation.Query != "" ||
-		!input.OwnershipConfirmed || !validateEndpointSecretPlaintext(input.Secret) || !validateNote(input.Note) ||
-		!validKeyLimit(input.MaxConcurrency) || !validKeyLimit(input.MaxRPM) {
+	if r == nil || userID <= 0 || endpointID <= 0 || mutation.Route != routeEndpointKeys || mutation.Method != http.MethodPost || !mutationPathIDs(mutation, endpointID) || mutation.Query != "" || !validCreateEndpointKey(input) {
 		return MutationResult[EndpointKey]{}, ErrInvalidRequest
 	}
-	plaintext := append([]byte(nil), input.Secret...)
-	defer clear(plaintext)
 	now, err := r.nowUnix()
 	if err != nil {
 		return MutationResult[EndpointKey]{}, err
@@ -769,72 +798,7 @@ func (r *Repository) CreateEndpointKey(ctx context.Context, userID, endpointID i
 	if decision.Kind == idempotency.Replay {
 		return replayMutation[EndpointKey](decision)
 	}
-	endpoint, err := getEndpointTx(ctx, tx, userID, endpointID)
-	if err != nil {
-		return MutationResult[EndpointKey]{}, err
-	}
-	if input.ForceStoreFalse && endpoint.ConnectorType != string(connectorcontract.TypeOpenAICompatible) {
-		return MutationResult[EndpointKey]{}, ErrInvalidRequest
-	}
-	locked, err := endpointLockedTx(ctx, tx, endpointID)
-	if err != nil {
-		return MutationResult[EndpointKey]{}, err
-	}
-	if locked {
-		return MutationResult[EndpointKey]{}, ErrResourceLocked
-	}
-	keyLimit, err := readSiteLimitTx(ctx, tx, "default_endpoint_key_limit", 1, 10000)
-	if err != nil {
-		return MutationResult[EndpointKey]{}, err
-	}
-	keyCount, err := countTx(ctx, tx, `SELECT count(*) FROM endpoint_keys WHERE endpoint_id=?`, endpointID)
-	if err != nil {
-		return MutationResult[EndpointKey]{}, fmt.Errorf("resources: count endpoint keys: %w", err)
-	}
-	if keyCount >= keyLimit {
-		return MutationResult[EndpointKey]{}, ErrResourceLimit
-	}
-	stored, err := r.secrets.WriteEndpointSecret(ctx, tx, SecretWriteInput{
-		CanonicalBaseURL: endpoint.BaseURL, ConnectorType: endpoint.ConnectorType,
-		Plaintext: plaintext, CreatedAt: now,
-	})
-	if err != nil {
-		return MutationResult[EndpointKey]{}, fmt.Errorf("resources: store endpoint secret: %w", err)
-	}
-	if stored.RefID <= 0 || len(stored.DisplayHead) > 16 || len(stored.DisplayTail) > 16 {
-		return MutationResult[EndpointKey]{}, ErrUnavailable
-	}
-	result, err := tx.ExecContext(ctx, `
-INSERT INTO endpoint_keys(endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,revision,created_at,updated_at)
-VALUES(?,?,?,?,?,?,?,?,1,?,?)`, endpointID, stored.RefID, stored.Fingerprint[:], stored.DisplayHead, stored.DisplayTail,
-		input.Note, boolInt(input.Enabled), boolInt(input.ForceStoreFalse), now, now)
-	if err != nil {
-		return MutationResult[EndpointKey]{}, fmt.Errorf("resources: create endpoint key: %w", err)
-	}
-	keyID, err := result.LastInsertId()
-	if err != nil {
-		return MutationResult[EndpointKey]{}, fmt.Errorf("resources: create endpoint key identity: %w", err)
-	}
-	if err := writeKeyLimitsTx(ctx, tx, keyID, input.MaxConcurrency, input.MaxRPM); err != nil {
-		return MutationResult[EndpointKey]{}, err
-	}
-	if _, err := tx.ExecContext(ctx, `
-INSERT INTO model_discovery_evidence(endpoint_key_id,state,revision,safe_class,safe_diag,fetched_count)
-VALUES(?,'unknown',1,'none','',0)`, keyID); err != nil {
-		return MutationResult[EndpointKey]{}, fmt.Errorf("resources: initialize discovery evidence: %w", err)
-	}
-	if err := r.keyCreation.ProtectNewEndpointKey(ctx, tx, userID, keyID, now); err != nil {
-		return MutationResult[EndpointKey]{}, fmt.Errorf("resources: protect new endpoint key: %w", err)
-	}
-	if err := r.projection.ReconcileModelDiscovery(ctx, tx, userID, keyID); err != nil {
-		return MutationResult[EndpointKey]{}, fmt.Errorf("resources: project new endpoint key discovery: %w", err)
-	}
-	if input.ForceStoreFalse {
-		if err := writePolicyAudit(ctx, tx, userID, "endpoint_key", keyID, "force_store_false", false, true, now); err != nil {
-			return MutationResult[EndpointKey]{}, err
-		}
-	}
-	item, err := getEndpointKeyTx(ctx, tx, userID, endpointID, keyID)
+	item, err := r.CreateEndpointKeyInTransaction(ctx, tx, userID, endpointID, input)
 	if err != nil {
 		return MutationResult[EndpointKey]{}, err
 	}
@@ -846,6 +810,98 @@ VALUES(?,'unknown',1,'none','',0)`, keyID); err != nil {
 		return MutationResult[EndpointKey]{}, err
 	}
 	return out, nil
+}
+
+func validCreateEndpointKey(input CreateEndpointKeyInput) bool {
+	return input.OwnershipConfirmed && validateEndpointSecretPlaintext(input.Secret) && validateNote(input.Note) &&
+		validKeyLimit(input.MaxConcurrency) && validKeyLimit(input.MaxRPM)
+}
+
+// CreateEndpointKeyInTransaction keeps the secret, key protection and catalog
+// projection in the caller's transaction.
+func (r *Repository) CreateEndpointKeyInTransaction(ctx context.Context, tx *sql.Tx, userID, endpointID int64, input CreateEndpointKeyInput) (EndpointKey, error) {
+	if r == nil || tx == nil || userID <= 0 || endpointID <= 0 || !validCreateEndpointKey(input) {
+		return EndpointKey{}, ErrInvalidRequest
+	}
+	if err := r.finalAuth.AuthorizeUserMutation(ctx, tx, userID); err != nil {
+		return EndpointKey{}, err
+	}
+	plaintext := append([]byte(nil), input.Secret...)
+	defer clear(plaintext)
+	now, err := r.nowUnix()
+	if err != nil {
+		return EndpointKey{}, err
+	}
+	endpoint, err := getEndpointTx(ctx, tx, userID, endpointID)
+	if err != nil {
+		return EndpointKey{}, err
+	}
+	if input.ForceStoreFalse && endpoint.ConnectorType != string(connectorcontract.TypeOpenAICompatible) {
+		return EndpointKey{}, ErrInvalidRequest
+	}
+	locked, err := endpointLockedTx(ctx, tx, endpointID)
+	if err != nil {
+		return EndpointKey{}, err
+	}
+	if locked {
+		return EndpointKey{}, ErrResourceLocked
+	}
+	keyLimit, err := readSiteLimitTx(ctx, tx, "default_endpoint_key_limit", 1, 10000)
+	if err != nil {
+		return EndpointKey{}, err
+	}
+	keyCount, err := countTx(ctx, tx, `SELECT count(*) FROM endpoint_keys WHERE endpoint_id=?`, endpointID)
+	if err != nil {
+		return EndpointKey{}, fmt.Errorf("resources: count endpoint keys: %w", err)
+	}
+	if keyCount >= keyLimit {
+		return EndpointKey{}, ErrResourceLimit
+	}
+	stored, err := r.secrets.WriteEndpointSecret(ctx, tx, SecretWriteInput{
+		CanonicalBaseURL: endpoint.BaseURL, ConnectorType: endpoint.ConnectorType,
+		Plaintext: plaintext, CreatedAt: now,
+	})
+	if err != nil {
+		return EndpointKey{}, fmt.Errorf("resources: store endpoint secret: %w", err)
+	}
+	if stored.RefID <= 0 || len(stored.DisplayHead) > 16 || len(stored.DisplayTail) > 16 {
+		return EndpointKey{}, ErrUnavailable
+	}
+	result, err := tx.ExecContext(ctx, `
+INSERT INTO endpoint_keys(endpoint_id,secret_ref_id,secret_fingerprint,display_head,display_tail,note,enabled,force_store_false,revision,created_at,updated_at)
+VALUES(?,?,?,?,?,?,?,?,1,?,?)`, endpointID, stored.RefID, stored.Fingerprint[:], stored.DisplayHead, stored.DisplayTail,
+		input.Note, boolInt(input.Enabled), boolInt(input.ForceStoreFalse), now, now)
+	if err != nil {
+		return EndpointKey{}, fmt.Errorf("resources: create endpoint key: %w", err)
+	}
+	keyID, err := result.LastInsertId()
+	if err != nil {
+		return EndpointKey{}, fmt.Errorf("resources: create endpoint key identity: %w", err)
+	}
+	if err := writeKeyLimitsTx(ctx, tx, keyID, input.MaxConcurrency, input.MaxRPM); err != nil {
+		return EndpointKey{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+INSERT INTO model_discovery_evidence(endpoint_key_id,state,revision,safe_class,safe_diag,fetched_count)
+VALUES(?,'unknown',1,'none','',0)`, keyID); err != nil {
+		return EndpointKey{}, fmt.Errorf("resources: initialize discovery evidence: %w", err)
+	}
+	if err := r.keyCreation.ProtectNewEndpointKey(ctx, tx, userID, keyID, now); err != nil {
+		return EndpointKey{}, fmt.Errorf("resources: protect new endpoint key: %w", err)
+	}
+	if err := r.projection.ReconcileModelDiscovery(ctx, tx, userID, keyID); err != nil {
+		return EndpointKey{}, fmt.Errorf("resources: project new endpoint key discovery: %w", err)
+	}
+	if input.ForceStoreFalse {
+		if err := writePolicyAudit(ctx, tx, userID, "endpoint_key", keyID, "force_store_false", false, true, now); err != nil {
+			return EndpointKey{}, err
+		}
+	}
+	item, err := getEndpointKeyTx(ctx, tx, userID, endpointID, keyID)
+	if err != nil {
+		return EndpointKey{}, err
+	}
+	return item, nil
 }
 
 func (r *Repository) PatchEndpointKey(ctx context.Context, userID, endpointID, keyID int64, mutation ControlMutation, input PatchEndpointKeyInput) (MutationResult[EndpointKey], error) {

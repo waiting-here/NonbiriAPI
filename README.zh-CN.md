@@ -91,6 +91,7 @@ set +a
 首个部署版本采用手动更新的 systemd 服务，详见：
 
 - [部署与 systemd 指南](docs/deployment.md)
+- [供管理员传达的协管自动化调用规则](docs/steward-automation.md)
 - [环境变量示例](admin.env.example)
 - [systemd 单元示例](deploy/nonbiriapi.service.example)
 

@@ -191,6 +191,10 @@ func catalogCursorOwner(userID, endpointID, keyID int64) string {
 }
 
 func (r *Repository) RefreshDiscovery(ctx context.Context, userID, endpointID, keyID int64, mutation ControlMutation) (MutationResult[DiscoveryAccepted], error) {
+	return r.refreshDiscovery(ctx, userID, endpointID, keyID, mutation, false)
+}
+
+func (r *Repository) refreshDiscovery(ctx context.Context, userID, endpointID, keyID int64, mutation ControlMutation, wait bool) (MutationResult[DiscoveryAccepted], error) {
 	if r == nil || userID <= 0 || endpointID <= 0 || keyID <= 0 || mutation.Route != routeDiscovery || mutation.Method != http.MethodPost || !mutationPathIDs(mutation, endpointID, keyID) || mutation.Query != "" {
 		return MutationResult[DiscoveryAccepted]{}, ErrInvalidRequest
 	}
@@ -271,6 +275,16 @@ func (r *Repository) RefreshDiscovery(ctx context.Context, userID, endpointID, k
 			reservation.Release()
 		}
 	}()
+	start := reservation.Start
+	if wait {
+		cancellable, ok := reservation.(interface {
+			StartContext(context.Context, func(context.Context))
+		})
+		if !ok {
+			return MutationResult[DiscoveryAccepted]{}, ErrUnavailable
+		}
+		start = func(work func(context.Context)) { cancellable.StartContext(ctx, work) }
+	}
 	checkpoint := strconv.FormatInt(keyID, 10) + ":" + strconv.FormatInt(newRevision, 10)
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO accepted_operations(
@@ -303,13 +317,52 @@ WHERE endpoint_key_id=? AND revision=? AND state<>'checking'`, newRevision, oper
 		return MutationResult[DiscoveryAccepted]{}, err
 	}
 	reservationStarted = true
-	reservation.Start(func(workerContext context.Context) {
-		r.runDiscovery(workerContext, job)
+	done := make(chan error, 1)
+	start(func(workerContext context.Context) {
+		if !wait {
+			r.runDiscovery(workerContext, job)
+			return
+		}
+		workContext, cancelWork := context.WithCancel(ctx)
+		stop := context.AfterFunc(workerContext, cancelWork)
+		defer stop()
+		defer cancelWork()
+		if workerContext.Err() != nil {
+			cancelWork()
+		}
+		var authorizationErr error
+		if workContext.Err() == nil {
+			check, err := r.beginAuthorizedTx(workContext, userID)
+			if err != nil {
+				authorizationErr = err
+				cancelWork()
+			} else {
+				_ = check.Rollback()
+			}
+		}
+		completionErr := r.runDiscovery(workContext, job)
+		if authorizationErr != nil {
+			completionErr = authorizationErr
+		}
+		done <- completionErr
 	})
+	if wait {
+		select {
+		case err := <-done:
+			if ctx.Err() != nil {
+				return MutationResult[DiscoveryAccepted]{}, ctx.Err()
+			}
+			if err != nil {
+				return MutationResult[DiscoveryAccepted]{}, err
+			}
+		case <-ctx.Done():
+			return MutationResult[DiscoveryAccepted]{}, ctx.Err()
+		}
+	}
 	return out, nil
 }
 
-func (r *Repository) runDiscovery(ctx context.Context, job discoveryJob) {
+func (r *Repository) runDiscovery(ctx context.Context, job discoveryJob) error {
 	markContext, cancelMark := context.WithTimeout(context.Background(), discoveryCleanupTimeout)
 	markErr := r.markDiscoveryRunning(markContext, job.input.OperationID)
 	cancelMark()
@@ -330,10 +383,8 @@ func (r *Repository) runDiscovery(ctx context.Context, job discoveryJob) {
 	}
 	completionContext, cancelCompletion := context.WithTimeout(context.Background(), discoveryCleanupTimeout)
 	defer cancelCompletion()
-	if err := r.completeDiscovery(completionContext, job.input.EndpointKeyID, job.input.OperationID, job.revision, claimResult); err != nil {
-		// No network retry is attempted; stale recovery fails closed.
-		return
-	}
+	// No network retry is attempted; stale recovery fails closed.
+	return r.completeDiscovery(completionContext, job.input.EndpointKeyID, job.input.OperationID, job.revision, claimResult)
 }
 
 func (r *Repository) markDiscoveryRunning(ctx context.Context, operationID string) error {

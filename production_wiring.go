@@ -24,12 +24,14 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/forward"
 	gamebuiltin "github.com/waiting-here/NonbiriAPI/internal/game/builtin"
 	gamehost "github.com/waiting-here/NonbiriAPI/internal/game/host"
+	"github.com/waiting-here/NonbiriAPI/internal/httperr"
 	"github.com/waiting-here/NonbiriAPI/internal/lifecyclegate"
 	"github.com/waiting-here/NonbiriAPI/internal/maintenance"
 	"github.com/waiting-here/NonbiriAPI/internal/ratelimit"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/routing"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/stewardautomation"
 )
 
 type publicForwardRuntime struct {
@@ -38,6 +40,26 @@ type publicForwardRuntime struct {
 	abuse     *antiabuse.Service
 	lifecycle *lifecyclegate.Gate
 	handler   http.Handler
+}
+
+func newStewardAutomationHandler(service *stewardautomation.Service, repository *resources.Repository, lifecycle *lifecyclegate.Gate, gate *maintenance.Gate) (http.Handler, error) {
+	callerKey, err := forward.NewCallerKeyMiddleware(repository, lifecycle)
+	if err != nil {
+		return nil, err
+	}
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		identity, err := forward.CallerKeyIdentity(r)
+		if err != nil {
+			httperr.WriteError(w, httperr.New(httperr.CodeUnauthorized, "authentication required"))
+			return
+		}
+		ctx := authz.WithStewardCaller(r.Context(), authz.StewardCaller{UserID: identity.UserID, Generation: identity.Generation})
+		service.ServeHTTP(w, r.WithContext(ctx))
+	})
+	return maintenance.GateMiddleware(gate, callerKey.WrapExact(inner, map[string]string{
+		stewardautomation.DonationsPath: http.MethodPost,
+		stewardautomation.BindingsPath:  http.MethodPost,
+	})), nil
 }
 
 func newPublicForwardRuntime(

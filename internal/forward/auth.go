@@ -31,6 +31,32 @@ func NewCallerKeyMiddleware(resolver CallerKeyResolver, lifecycle *lifecyclegate
 }
 
 func (middleware *CallerKeyMiddleware) Wrap(next http.Handler) http.Handler {
+	return middleware.wrap(next, exactIngressFailure)
+}
+
+// WrapExact authenticates an explicitly mounted set of control routes without
+// extending the public model ingress or any browser-session route. The route
+// table is copied so it cannot be changed after the handler is constructed.
+func (middleware *CallerKeyMiddleware) WrapExact(next http.Handler, routes map[string]string) http.Handler {
+	allowed := make(map[string]string, len(routes))
+	for path, method := range routes {
+		allowed[path] = method
+	}
+	return middleware.wrap(next, func(method, path, escapedPath string) *wireFailure {
+		want, exists := allowed[path]
+		if !exists || path == "" || escapedPath != path || want == "" {
+			failure := platformFailure(httperr.CodeNotFound, "not found")
+			return &failure
+		}
+		if method != want {
+			failure := platformFailure(httperr.CodeMethodNotAllowed, "method not allowed")
+			return &failure
+		}
+		return nil
+	})
+}
+
+func (middleware *CallerKeyMiddleware) wrap(next http.Handler, checkRoute func(string, string, string) *wireFailure) http.Handler {
 	if next == nil {
 		next = http.NotFoundHandler()
 	}
@@ -40,7 +66,7 @@ func (middleware *CallerKeyMiddleware) Wrap(next http.Handler) http.Handler {
 			writeFailure(writer, platformFailure(httperr.CodeNotFound, "not found"))
 			return
 		}
-		if failure := exactIngressFailure(request.Method, request.URL.Path, request.URL.EscapedPath()); failure != nil {
+		if failure := checkRoute(request.Method, request.URL.Path, request.URL.EscapedPath()); failure != nil {
 			writeFailure(writer, *failure)
 			return
 		}
@@ -103,14 +129,21 @@ func (middleware *CallerKeyMiddleware) Wrap(next http.Handler) http.Handler {
 // CallerIdentity is the flowcontrol identity resolver. It accepts only an
 // identity installed by CallerKeyMiddleware and never browser/admin state.
 func CallerIdentity(request *http.Request) (int64, error) {
+	identity, err := CallerKeyIdentity(request)
+	return identity.UserID, err
+}
+
+// CallerKeyIdentity returns the authenticated generation as well as the user.
+// It never accepts browser state or unverified headers.
+func CallerKeyIdentity(request *http.Request) (resources.CallerIdentity, error) {
 	if request == nil {
-		return 0, errors.New("forward: caller request is required")
+		return resources.CallerIdentity{}, errors.New("forward: caller request is required")
 	}
 	identity, ok := request.Context().Value(callerIdentityContextKey{}).(resources.CallerIdentity)
 	if !ok || !validCallerIdentity(identity) {
-		return 0, errors.New("forward: CallerKey identity is required")
+		return resources.CallerIdentity{}, errors.New("forward: CallerKey identity is required")
 	}
-	return identity.UserID, nil
+	return identity, nil
 }
 
 func validCallerIdentity(identity resources.CallerIdentity) bool {

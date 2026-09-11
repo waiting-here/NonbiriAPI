@@ -21,6 +21,15 @@ var ErrInvalid = errors.New("invalid JSON object")
 // ValidateObject accepts exactly one UTF-8 JSON object, rejecting duplicate
 // decoded member names at every depth and bounding structural work.
 func ValidateObject(data []byte) error {
+	return ValidateObjectWithFieldLimit(data, MaxFields)
+}
+
+// ValidateObjectWithFieldLimit permits bounded bulk control operations to
+// declare their own total field budget without relaxing existing decoders.
+func ValidateObjectWithFieldLimit(data []byte, maxFields int) error {
+	if maxFields < 1 || maxFields > 16384 {
+		return ErrInvalid
+	}
 	if !utf8.Valid(data) || !validStringEscapes(data) {
 		return ErrInvalid
 	}
@@ -35,7 +44,7 @@ func ValidateObject(data []byte) error {
 		return ErrInvalid
 	}
 	fields := 0
-	if err := walk(dec, delim, 1, &fields); err != nil {
+	if err := walk(dec, delim, 1, &fields, maxFields); err != nil {
 		return ErrInvalid
 	}
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
@@ -121,7 +130,7 @@ func decodeHexQuad(data []byte, start int) (uint16, int, bool) {
 	return value, start + 4, true
 }
 
-func walk(dec *json.Decoder, opening json.Delim, depth int, fields *int) error {
+func walk(dec *json.Decoder, opening json.Delim, depth int, fields *int, maxFields int) error {
 	if depth > MaxDepth {
 		return ErrInvalid
 	}
@@ -142,7 +151,7 @@ func walk(dec *json.Decoder, opening json.Delim, depth int, fields *int) error {
 			}
 			seen[name] = struct{}{}
 			(*fields)++
-			if *fields > MaxFields || walkToken(dec, depth+1, fields) != nil {
+			if *fields > maxFields || walkToken(dec, depth+1, fields, maxFields) != nil {
 				return ErrInvalid
 			}
 		}
@@ -157,7 +166,7 @@ func walk(dec *json.Decoder, opening json.Delim, depth int, fields *int) error {
 			if arrayElements > MaxArrayElements {
 				return ErrInvalid
 			}
-			if walkToken(dec, depth+1, fields) != nil {
+			if walkToken(dec, depth+1, fields, maxFields) != nil {
 				return ErrInvalid
 			}
 		}
@@ -171,13 +180,13 @@ func walk(dec *json.Decoder, opening json.Delim, depth int, fields *int) error {
 	return nil
 }
 
-func walkToken(dec *json.Decoder, depth int, fields *int) error {
+func walkToken(dec *json.Decoder, depth int, fields *int, maxFields int) error {
 	tok, err := dec.Token()
 	if err != nil {
 		return ErrInvalid
 	}
 	if delim, ok := tok.(json.Delim); ok {
-		return walk(dec, delim, depth, fields)
+		return walk(dec, delim, depth, fields, maxFields)
 	}
 	return nil
 }

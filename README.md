@@ -92,6 +92,7 @@ Keep `admin.env`, the master-key file, and the database outside the Git working 
 The intended first deployment model is a manually updated systemd service. See:
 
 - [Deployment and systemd guide](docs/deployment.md)
+- [Steward automation instructions for administrators](docs/steward-automation.md)
 - [Example environment file](admin.env.example)
 - [Example systemd unit](deploy/nonbiriapi.service.example)
 

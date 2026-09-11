@@ -10,7 +10,7 @@
 
 | Station | Host | Authentication |
 | --- | --- | --- |
-| User | configured public host | user session for `/api/*`; CallerKey Bearer for `/v1/*` |
+| User | configured public host | user session for `/api/*`, except the two steward automation routes in §6.3; CallerKey Bearer for `/v1/*` and those two routes |
 | Administrator | distinct configured admin host | administrator session for `/admin/api/*` |
 
 Host selection is a security boundary. A route on the wrong host is `404 not_found`, and a user, administrator, or steward credential never changes station. `GET /healthz` is an anonymous liveness probe on both hosts and returns `{"status":"ok"}` without opening the database.
@@ -27,7 +27,7 @@ Account export/deletion and selected administrator legal-hold/user actions requi
 - Revisions, generations, sequences, exact counts, and values that may exceed the JSON safe-integer range are canonical decimal strings.
 - New opaque IDs use a documented prefix plus 22 canonical raw-base64url characters. Important prefixes include `ann_`, `op_`, `req_`, `clm_`, `pol_`, `thu_`, `fb_`, `ll_`, `rpsq_`, `rps_`, `rpc_`, `rpt_`, `iss_`, `lgh_`, `sse_`, `gle_`, `dbs_`, `dbt_`, `dbe_`, and `mch_`.
 - List endpoints retain the legacy `cursor` and `limit` mode and return `{data:[...],next_cursor:null|string}` unless a section states a different closed envelope. Numbered mode is selected by `page` or `page_size`; `page` is a canonical positive decimal from 1 through 2147483647 and `page_size` is 10, 20, 50, or 100, defaulting to 1 and 20. The modes are mutually exclusive, repeated/unknown values are rejected, and numbered responses add the route's `pagination` metadata with `next_cursor:null`; an excessive page clamps to the last page (empty results use page 1 of 1). Count, filters, decision time, and rows come from one authorized read snapshot. Cursors are authenticated, route/owner/filter-bound, expiring, and at most 512 bytes. A malformed, expired, or cross-scope cursor is `400 invalid_request`.
-- State-changing routes require `Idempotency-Key` unless they are authentication/session/elevation/logout, CallerKey plaintext mutation, OpenAI-compatible model calls, an explicitly business-unique ACK/lease/check-in/tutorial mutation, or alert set-state. A key is 1–128 bytes. Same key and same canonical request replay the stored status/body; the same key with a different request is `409 conflict`. Replay records last 24 hours.
+- State-changing routes require `Idempotency-Key` unless they are authentication/session/elevation/logout, CallerKey plaintext mutation, OpenAI-compatible model calls, an explicitly business-unique ACK/lease/check-in/tutorial mutation, alert set-state, or the per-item steward binding automation in §6.3. Control replay keys contain 22–128 URL-safe ASCII characters. Same key and same canonical request replay the stored status/body; the same key with a different request is `409 conflict`. Replay records last 24 hours.
 - Dynamic API responses and every error carry `Cache-Control: no-store`.
 
 Shared numbered-page metadata is `{page:string,page_size:number,total_items:string,total_pages:string}`. `page`, `total_items`, and `total_pages` use exact canonical decimal strings; only `total_items` may be zero. Nested `attempt_pagination` and `materials_pagination` use the same shape. Credit history retains its separately documented top-level pagination envelope.
@@ -193,6 +193,8 @@ Request-log and Debug `route_kind` values are `openai_chat_completions`, `charit
 
 `EndpointKey` exposes display fragments, note, enabled state, `force_store_false`, safe suspension state, revision, and times; never plaintext/ciphertext/fingerprint. Discovery evidence is the closed `unknown|checking|succeeded|failed` union with a safe failure class. Successful empty discovery is explicit and distinct from failure.
 
+Manual catalog `provider` remains the wire/storage name for optional display metadata. The user-station form labels it **Note (optional)**. It does not contribute to the exact upstream model ID or binding identity; personal/charity model naming uses a separate provider field.
+
 `EndpointKey` also returns numeric `max_concurrency` and `max_rpm`. Both accept whole numbers from 0 to 2147483647; 0 disables that key's additional limit. Omitted creation values default to 0; omitted patch values remain unchanged. Null, strings, negative numbers, fractions and out-of-range values are rejected. Only the owner can edit them, using the existing revision and idempotency contract. Existing site and endpoint safeguards still apply. Numbered endpoint, key, and model rows add the corresponding `browse` summary; legacy cursor rows and single-item/mutation responses keep the existing resource shape. Endpoint/key `q` filters are single-value literal text searches of at most 128 Unicode code points (and no more than 512 UTF-8 bytes), with controls rejected.
 
 All personal, charity and live diagnostic model calls using the same EndpointKey share these limits across bindings. Discovery requests use their separate safeguards. Concurrency includes admitted work until its attempt finishes or is canceled, including the full streaming lifetime. RPM uses a rolling 60-second window with server-second precision. Undispatched claims reserve a slot until dispatch or release; a released undispatched attempt returns the slot. A dispatch consumes one slot even on failure, and each retry counts separately. Pending work cannot age out of its reservation. Lowering limits affects new admissions without canceling already admitted work. Recent dispatch counts survive process restarts.
@@ -357,7 +359,7 @@ Dry mode intercepts before upstream dispatch. Live mode captures bounded safe pr
 
 ### 6.2 Steward
 
-Level-5 steward routes are user-host routes and require a currently effective L5 user session. Reads and final mutations recheck that role in their transaction. Log and donation management expose the same information as administrator views; ordinary user projections and unrelated administrator capabilities remain separate.
+The browser routes below require a currently effective L5 user session on the user host. Reads and final mutations recheck that role in their transaction. Log and donation management expose the same information as administrator views; ordinary user projections and unrelated administrator capabilities remain separate. The two dedicated CallerKey controls are described separately in §6.3.
 
 | Surface | Routes |
 | --- | --- |
@@ -397,6 +399,14 @@ Each management attempt displays its persisted nullable `endpoint_key_id` routin
 | `GET /api/steward/donations/{id}/keys` | Numbered `page,page_size` only; steward donation-key page with `pagination`. |
 | `GET /api/steward/donation-sources` | Numbered `page,page_size` only; filters `q,scope=active|all` (default `active`), `handling=pending`. |
 | `GET /api/steward/donation-sources/{source_key}/keys` | Numbered `page,page_size` only; filters `q,scope=active|all` (default `active`), `handling=pending`, `idle=yes|no`. |
+
+### 6.3 Steward CallerKey automation
+
+`POST /api/steward/automation/donations` atomically creates one custom endpoint and 1–100 owned keys, submits them in one donation and approves it as the calling steward. It requires `Idempotency-Key` and returns 201 `{endpoint_id,donation_id,keys:[{endpoint_key_id,donation_key_id}]}`. Explicit `connector_type` and URL are required; both OpenAI-compatible and Anthropic-compatible custom sources are supported. Optional per-key settings include recurring limits. Channel IDs and ownership-confirmation fields are not accepted by this dedicated operation.
+
+`POST /api/steward/automation/model-bindings` accepts `{charity_model_id,donation_key_ids,upstream_model_id,manual?}` and processes only the caller's own donation keys. Automatic mode requires this request's successful fresh discovery; manual mode ensures an exact entry with empty new metadata, preserving existing metadata. Repeated identical bindings succeed without reordering. The response is `{charity_model_id,results:[{donation_key_id,status,code?,message?}]}`, with `success|failed|incomplete` in input order. At least one success gives 200; zero successes gives 504 for any incomplete item, otherwise 422. This endpoint has no whole-batch replay receipt.
+
+Both routes require Bearer CallerKey, current L5 permission and final-transaction generation/ownership checks; cookies cannot replace the CallerKey. They are not listed in the user-station UI. Requests have 256 KiB and 16,384 total-field limits; responses have a 64 KiB limit. At most four automation requests run at once, one per steward, in addition to shared discovery admission limits. Creation is bounded to 30 seconds, binding to 60 seconds and each discovery to 15 seconds. Whole-operation timeout uses 504 `service_unavailable`; per-item result codes additionally include `discovery_failed`, `model_not_found` and `incomplete`. These result envelopes are distinct from the shared error envelope. See the administrator's [complete calling rules](steward-automation.md) for all fields, defaults, limits and retry semantics.
 
 ## 7. Administrator API
 

@@ -50,6 +50,7 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/resourcebridge"
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 	"github.com/waiting-here/NonbiriAPI/internal/secret"
+	"github.com/waiting-here/NonbiriAPI/internal/stewardautomation"
 	"github.com/waiting-here/NonbiriAPI/internal/timeapi"
 	"github.com/waiting-here/NonbiriAPI/web"
 )
@@ -222,7 +223,7 @@ func freshSafeMux(cfg *config.Config, store *db.Store) *http.ServeMux {
 	return mux
 }
 
-func generationTwoMux(cfg *config.Config, store *db.Store, authRuntime *auth.Runtime, callerHandler http.Handler) (*http.ServeMux, error) {
+func generationTwoMux(cfg *config.Config, store *db.Store, authRuntime *auth.Runtime, callerHandler http.Handler, automationHandlers ...http.Handler) (*http.ServeMux, error) {
 	if cfg == nil || store == nil || authRuntime == nil || callerHandler == nil {
 		return nil, errors.New("Generation 2 HTTP dependencies are required")
 	}
@@ -238,6 +239,14 @@ func generationTwoMux(cfg *config.Config, store *db.Store, authRuntime *auth.Run
 	userAuth := authRuntime.UserHandler()
 	mux.Handle("/api", userAuth)
 	mux.Handle("/api/", userAuth)
+	if len(automationHandlers) > 1 || len(automationHandlers) == 1 && automationHandlers[0] == nil {
+		return nil, errors.New("invalid steward automation handler")
+	}
+	if len(automationHandlers) == 1 {
+		automation := httpmw.API(automationHandlers[0])
+		mux.Handle(stewardautomation.DonationsPath, automation)
+		mux.Handle(stewardautomation.BindingsPath, automation)
+	}
 
 	callerAPI := httpmw.API(callerHandler)
 	mux.Handle("/v1", callerAPI)
@@ -449,6 +458,13 @@ func (authorizer *roleFinalTxAuthorizer) authorize(
 ) error {
 	if authorizer == nil || authorizer.authorizer == nil || ctx == nil || tx == nil {
 		return errors.New("role final-transaction authorization unavailable")
+	}
+	if _, ok := authz.StewardCallerFromContext(ctx); ok {
+		if role != authz.RoleSteward || kind != authz.ActorUserSession {
+			return authz.ErrForbidden
+		}
+		_, err := authorizer.authorizer.AuthorizeStewardCaller(ctx, tx, userID)
+		return err
 	}
 	actor, ok := auth.ActorFromContext(ctx)
 	if !ok || actor.Kind != kind || actor.UserID != userID {
@@ -1198,7 +1214,17 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		return nil, fmt.Errorf("recover account lifecycle before listener: %w", err)
 	}
 
-	mux, err := generationTwoMux(cfg, store, authRuntime, forwardRuntime.handler)
+	automationService, err := stewardautomation.New(stewardautomation.Config{Database: store.DB(), Authorizer: authorizer, Resources: resourceRepository, Donations: donationService, Charity: charityRoutingService})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create steward automation service: %w", err)
+	}
+	automationHandler, err := newStewardAutomationHandler(automationService, resourceRepository, forwardRuntime.lifecycle, gate)
+	if err != nil {
+		cleanup()
+		return nil, err
+	}
+	mux, err := generationTwoMux(cfg, store, authRuntime, forwardRuntime.handler, automationHandler)
 	if err != nil {
 		cleanup()
 		return nil, err
