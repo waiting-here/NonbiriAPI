@@ -14,7 +14,7 @@ func TestGeneratedBoardsRespectEveryFrozenSpecification(t *testing.T) {
 		definition, _ := resolveSpec(spec)
 		t.Run(spec, func(t *testing.T) {
 			for iteration := 0; iteration < 20; iteration++ {
-				generated, err := newBoard(definition, &scriptedSource{sequence: uint64(iteration + 1)})
+				generated, stats, err := generateBoard(definition, &scriptedSource{sequence: uint64(iteration + 1)})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -30,8 +30,8 @@ func TestGeneratedBoardsRespectEveryFrozenSpecification(t *testing.T) {
 						t.Fatalf("tile %d count = %d", tile, counts[tile])
 					}
 				}
-				if err := generated.validate(); err != nil || !generated.hasMove() || !generated.solvable() {
-					t.Fatalf("generated board invalid=%v move=%v solvable=%v", err, generated.hasMove(), generated.solvable())
+				if err := generated.validate(); err != nil || !generated.hasMove() || !verifyWitness(generated, stats.Witness) {
+					t.Fatalf("generated board invalid=%v move=%v solution=%v", err, generated.hasMove(), verifyWitness(generated, stats.Witness))
 				}
 			}
 		})
