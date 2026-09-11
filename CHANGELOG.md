@@ -4,9 +4,9 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## 1.0.0-beta.3 - 2026-09-11
+## [1.0.0-beta.3] - 2026-09-11
 
-This source update targets Linux/amd64 and preserves existing data from the complete beta.2 schema and the nine previously supported Generation 2 schemas. Build from a pinned commit; a version label does not imply a published tag or binary.
+This prerelease targets Linux/amd64 and preserves existing data from the complete beta.2 schema and the nine previously supported Generation 2 schemas. Build from the tagged source commit; no official precompiled binaries, container images, or installers are provided.
 
 ### Added
 
@@ -262,6 +262,7 @@ This release is source-first for Linux/amd64 and keeps the documented Generation
 - Purge expired sessions at startup and during the existing six-hour maintenance sweep.
 - Create missing database directories owner-only and align the systemd/key-file guidance with the runtime's strict permission checks.
 
+[1.0.0-beta.3]: https://github.com/waiting-here/NonbiriAPI/compare/v1.0.0-beta.2...v1.0.0-beta.3
 [1.0.0-beta.2]: https://github.com/waiting-here/NonbiriAPI/compare/v1.0.0-beta.1...v1.0.0-beta.2
 [1.0.0-beta.1]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-beta.1
 [1.0.0-alpha.3]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.3
