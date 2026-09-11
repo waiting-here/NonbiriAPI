@@ -4,17 +4,21 @@ All notable changes to NonbiriAPI are documented here.
 
 Each version entry describes its source and compatibility boundary; a release tag is not an upgrade authorization.
 
-## 1.0.0-beta.3 - 2026-09-11
+## [1.0.0-beta.3] - 2026-09-11
 
-This source update targets Linux/amd64 and preserves existing data from the complete beta.2 schema and the nine previously supported Generation 2 schemas. Build from a pinned commit; a version label does not imply a published tag or binary.
+This prerelease targets Linux/amd64 and preserves existing data from the complete beta.2 schema and the nine previously supported Generation 2 schemas. Build from the tagged source commit; no official precompiled binaries, container images, or installers are provided.
 
 ### Added
 
+- Two dedicated CallerKey controls let current stewards atomically create and approve their own donated keys, then synchronously discover or add exact upstream models and bind those keys to an existing charity model. Creation supports all key limits, including recurring rules, with atomic replay; binding preserves per-key successes and reports failures or incomplete work. Calling rules are documented for administrators.
+- Administrators and stewards can open a bound donation key from a charity model's service connection order, with its key page selected and the original model filters and page preserved on return.
 - OpenAI-compatible `POST /v1/embeddings` for personal and charity models: single or batch text and Token ID inputs, float/base64 output and optional dimensions. Existing model connections, shared limits, logs and memory-only Debug apply without a model-purpose field. Rerank and Anthropic embedding support remain deferred.
 - Embedding charity billing supports per-request batches and input-Token pricing. Explicit zero usage is distinct from unknown usage; missing usage follows existing conservative reserves and earns no donor reward. Only minimum-content penalties are exempted. Requests use a server-generated, user-and-origin-scoped `user` pseudonym.
 
 ### Changed
 
+- The user-station manual catalog labels its optional display metadata as “Note”; it remains independent of the exact upstream model ID and connection identity.
+- Creating a Thursday activity automatically uses the next Thursday at 00:00 Beijing time. The administrator page shows the activity window and no longer asks for a period key or opening time; edits preserve an existing period's schedule.
 - Fishing, LinkLink and Rock Paper Scissors now register through a common backend game host with shared transactions, recovery and lifecycle handling. Existing routes, saved games, configuration, prices, rewards, timing and exports remain compatible.
 - New LinkLink games use varied constructive layouts with a verified complete matching sequence. Existing boards and free deadlock reshuffling remain intact.
 - Request and log type constraints now admit personal and charity embeddings. The database remains Generation 2 with 99 business tables and account export version 5. Log clients with closed request-type enums must accept the new values.
@@ -261,6 +265,7 @@ This release is source-first for Linux/amd64 and keeps the documented Generation
 - Purge expired sessions at startup and during the existing six-hour maintenance sweep.
 - Create missing database directories owner-only and align the systemd/key-file guidance with the runtime's strict permission checks.
 
+[1.0.0-beta.3]: https://github.com/waiting-here/NonbiriAPI/compare/v1.0.0-beta.2...v1.0.0-beta.3
 [1.0.0-beta.2]: https://github.com/waiting-here/NonbiriAPI/compare/v1.0.0-beta.1...v1.0.0-beta.2
 [1.0.0-beta.1]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-beta.1
 [1.0.0-alpha.3]: https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-alpha.3

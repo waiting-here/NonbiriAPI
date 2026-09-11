@@ -12,6 +12,7 @@ Use this checklist for every release candidate. It is not evidence that an item 
 - [ ] Review dependencies, generated notices, license obligations, and source-availability requirements.
 - [ ] Confirm the beta.3 source version is source-first, the production target is Linux/amd64, and the validation binary was built from the exact release commit with `CGO_ENABLED=0 -tags dist -trimpath`. The source release publishes no official binaries, container images, or installers.
 - [ ] Verify embeddings for personal/charity models, four input shapes, both encodings, dimensions, a pinned official SDK and independent HTTP client, unknown versus zero usage, billing/quota/cancellation/recovery and role-safe logs/Debug. Verify the three registered game modules, old active-game compatibility, varied solvable LinkLink boards, unchanged game rules, and donation review projection after expiry or termination.
+- [ ] Verify the dedicated steward CallerKey controls: atomic donation creation and replay, optional recurring limits, exact fresh discovery or preserved manual notes, owned-key binding order and partial outcomes, current authority, cancellation, shared capacity, export and account deletion. Check the administrator calling instructions and absence of user-station API entries.
 
 ## Data lifecycle and legal
 

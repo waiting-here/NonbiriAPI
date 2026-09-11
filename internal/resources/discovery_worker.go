@@ -66,9 +66,18 @@ func (pool *DiscoveryWorkerPool) Close() {
 }
 
 func (pool *DiscoveryWorkerPool) run(work func(context.Context)) {
+	pool.runContext(context.Background(), work)
+}
+
+func (pool *DiscoveryWorkerPool) runContext(parent context.Context, work func(context.Context)) {
 	defer pool.finish()
 	workerContext, cancel := context.WithTimeout(pool.context, pool.timeout)
 	defer cancel()
+	stop := context.AfterFunc(parent, cancel)
+	defer stop()
+	if parent.Err() != nil {
+		cancel()
+	}
 	acquired := false
 	select {
 	case pool.workers <- struct{}{}:
@@ -92,6 +101,12 @@ type discoveryPoolReservation struct {
 }
 
 func (reservation *discoveryPoolReservation) Start(work func(context.Context)) {
+	reservation.StartContext(context.Background(), work)
+}
+
+// StartContext makes queue waiting as well as active work cancellable by the
+// synchronous caller. The callback still runs once for bounded cleanup.
+func (reservation *discoveryPoolReservation) StartContext(parent context.Context, work func(context.Context)) {
 	if reservation == nil || reservation.pool == nil {
 		return
 	}
@@ -100,7 +115,7 @@ func (reservation *discoveryPoolReservation) Start(work func(context.Context)) {
 			reservation.pool.finish()
 			return
 		}
-		go reservation.pool.run(work)
+		go reservation.pool.runContext(parent, work)
 	})
 }
 

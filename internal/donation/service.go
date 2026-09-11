@@ -111,37 +111,63 @@ func (s *Service) Create(
 	if decision.Kind == idempotency.Replay {
 		return replay[Donation](decision)
 	}
+	value, err := s.CreateInTransaction(ctx, tx, userID, input)
+	if err != nil {
+		return resources.MutationResult[Donation]{}, err
+	}
+	out, err := finishJSON(ctx, tx, decision, http.StatusCreated, value)
+	if err != nil {
+		return resources.MutationResult[Donation]{}, err
+	}
+	if err := commitTx(tx, &committed); err != nil {
+		return resources.MutationResult[Donation]{}, err
+	}
+	return out, nil
+}
+
+// CreateInTransaction records one donation in a caller-owned transaction.
+func (s *Service) CreateInTransaction(ctx context.Context, tx *sql.Tx, userID int64, input CreateInput) (Donation, error) {
+	if s == nil || ctx == nil || tx == nil || userID <= 0 || !validDonationText(input.Description) || !input.OwnershipAuthorized || !validCreateKeys(input.Keys) {
+		return Donation{}, ErrInvalidRequest
+	}
+	if err := s.ownerAuth.AuthorizeUserMutation(ctx, tx, userID); err != nil {
+		return Donation{}, mapAuthorization(err)
+	}
+	now, err := s.nowUnix()
+	if err != nil {
+		return Donation{}, err
+	}
 	for _, key := range input.Keys {
 		if key.ExpiresAt != nil && (*key.ExpiresAt <= now || *key.ExpiresAt > maxUnixSecond) {
-			return resources.MutationResult[Donation]{}, ErrInvalidRequest
+			return Donation{}, ErrInvalidRequest
 		}
 	}
 	if enabled, err := configBool(ctx, tx, "donation_accept_enabled"); err != nil {
-		return resources.MutationResult[Donation]{}, err
+		return Donation{}, err
 	} else if !enabled {
-		return resources.MutationResult[Donation]{}, ErrFeatureDisabled
+		return Donation{}, ErrFeatureDisabled
 	}
 
 	keys, err := validateSubmissionKeys(ctx, tx, userID, input.Keys)
 	if err != nil {
-		return resources.MutationResult[Donation]{}, err
+		return Donation{}, err
 	}
 	autoApprove, err := submissionAutoApproval(keys)
 	if err != nil {
-		return resources.MutationResult[Donation]{}, err
+		return Donation{}, err
 	}
 	result, err := tx.ExecContext(ctx, `INSERT INTO donations(
 user_id,status,revision,description,review_note,reviewed_by_role,created_at,updated_at)
 VALUES(?,'pending',1,?,'','',?,?)`, userID, input.Description, now, now)
 	if err != nil {
-		return resources.MutationResult[Donation]{}, fmt.Errorf("donation: create submission: %w", err)
+		return Donation{}, fmt.Errorf("donation: create submission: %w", err)
 	}
 	donationID, err := result.LastInsertId()
 	if err != nil || donationID <= 0 {
-		return resources.MutationResult[Donation]{}, ErrInvariant
+		return Donation{}, ErrInvariant
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO donation_handling(donation_id, state, revision, processed_at, processed_by_user_id, processed_by_role, closed_at, closed_reason, created_at, updated_at) VALUES(?, 'pending', 1, NULL, NULL, '', NULL, '', ?, ?)`, donationID, now, now); err != nil {
-		return resources.MutationResult[Donation]{}, classifyWrite("create donation handling", err)
+		return Donation{}, classifyWrite("create donation handling", err)
 	}
 	zero := db.EncodeU128(db.U128{})
 	one := db.U128{}
@@ -160,11 +186,11 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			key.expiresAt, key.expiresAt, key.channelID, key.channelRevision, key.channelName, key.channelCategory,
 			key.id, key.reportFingerprint)
 		if err != nil {
-			return resources.MutationResult[Donation]{}, classifyWrite("create donation key", err)
+			return Donation{}, classifyWrite("create donation key", err)
 		}
 		donationKeyID, err := result.LastInsertId()
 		if err != nil || donationKeyID <= 0 {
-			return resources.MutationResult[Donation]{}, ErrInvariant
+			return Donation{}, ErrInvariant
 		}
 		defaultSettings = append(defaultSettings, KeySetting{
 			DonationKeyID: donationKeyID,
@@ -174,40 +200,33 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		if _, err := tx.ExecContext(ctx, `INSERT INTO donation_key_memberships(
 endpoint_key_id,donation_key_id,donation_id,created_at) VALUES(?,?,?,?)`,
 			key.id, donationKeyID, donationID, now); err != nil {
-			return resources.MutationResult[Donation]{}, classifyWrite("create membership", err)
+			return Donation{}, classifyWrite("create membership", err)
 		}
 	}
 	if autoApprove {
 		if err := applyApprovalKeySettingsTx(ctx, tx, donationID, defaultSettings, now); err != nil {
-			return resources.MutationResult[Donation]{}, err
+			return Donation{}, err
 		}
 		result, err := tx.ExecContext(ctx, `UPDATE donations SET status='approved',review_note='',
 reviewed_by_user_id=NULL,reviewed_by_role='',reviewed_at=?,updated_at=?
 WHERE id=? AND status='pending' AND revision=1`, now, now, donationID)
 		if err != nil {
-			return resources.MutationResult[Donation]{}, fmt.Errorf("donation: auto-approve submission: %w", err)
+			return Donation{}, fmt.Errorf("donation: auto-approve submission: %w", err)
 		}
 		if err := requireOne(result); err != nil {
-			return resources.MutationResult[Donation]{}, err
+			return Donation{}, err
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO donation_reviews(
 donation_id,submission_revision,reviewer_user_id,reviewer_role,action,note,created_at)
 VALUES(?,1,NULL,'','approve','',?)`, donationID, now); err != nil {
-			return resources.MutationResult[Donation]{}, fmt.Errorf("donation: record automatic approval: %w", err)
+			return Donation{}, fmt.Errorf("donation: record automatic approval: %w", err)
 		}
 	}
 	value, err := getOwnerDonationTx(ctx, tx, userID, donationID, now)
 	if err != nil {
-		return resources.MutationResult[Donation]{}, err
+		return Donation{}, err
 	}
-	out, err := finishJSON(ctx, tx, decision, http.StatusCreated, value)
-	if err != nil {
-		return resources.MutationResult[Donation]{}, err
-	}
-	if err := commitTx(tx, &committed); err != nil {
-		return resources.MutationResult[Donation]{}, err
-	}
-	return out, nil
+	return value, nil
 }
 
 func (s *Service) Edit(

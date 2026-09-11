@@ -222,6 +222,7 @@
         "selectedKeyMissing": "The selected key is no longer in this donation.",
         "changedWhileReading": "This donation changed while its keys were loading. Refresh before editing.",
         "returnToList": "Return to list",
+        "returnToModel": "Return to model configuration",
         "sourcePreview": "{{shown}} of {{total}} sources",
         "sourceBrowser": {
           "title": "Browse charity by source",

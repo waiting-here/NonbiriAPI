@@ -376,7 +376,7 @@
         "welfareEnabled": "Welfare enabled",
         "welfareThreshold": "Welfare threshold (credits)",
         "masterRequired": "Enable the activity master switch, or turn off welfare and Thursday together.",
-        "periodRequired": "Configure a Thursday period below, including its time, announcement and entry rules, before enabling it.",
+        "periodRequired": "Fill in and save the Thursday announcement and entry rules below before enabling the activity.",
         "changedElsewhere": "Activity settings changed. Cancel this draft and edit the latest settings."
       },
       "description": "Configure activities, schedule periods, and manage prize pools.",
@@ -384,14 +384,14 @@
         "state": "State"
       },
       "period": {
-        "authorityHint": "A successful write, conflict, or unknown response is followed only by a fresh authoritative GET.",
+        "configuredHint": "The activity time is fixed. You can edit the announcement and entry rules before it opens.",
         "createTitle": "Create next period",
         "entry": "Entry (credits)",
-        "key": "Period key",
         "literature": "Literature",
         "lockedHint": "The period is open or settling; frozen/current configuration cannot be edited.",
         "nextPoolBp": "Next-pool share (basis points)",
-        "opensAt": "Opens at",
+        "scheduleHint": "The next activity opens at 00:00 next Thursday in Beijing time and lasts 24 hours. Fill in the announcement and entry rules, then save.",
+        "windowBeijing": "Activity time (Beijing, UTC+8)",
         "perUserLimit": "Per-user limit",
         "platformBp": "Platform share (basis points)",
         "save": "Save next period",
@@ -441,8 +441,7 @@
         "periodRevision": "Period / revision",
         "processed": "Processed",
         "resume": "Resume existing settlement checkpoint",
-        "title": "Thursday authority",
-        "window": "Window"
+        "title": "Thursday authority"
       },
       "title": "Activities and pools",
       "units": {

@@ -525,6 +525,10 @@ func (r *Runtime) writeSessionFailure(w http.ResponseWriter, err error) {
 }
 
 func (r *Runtime) AuthorizeUserMutation(ctx context.Context, tx *sql.Tx, userID int64) error {
+	if _, ok := authz.StewardCallerFromContext(ctx); ok {
+		_, err := r.authorizer.AuthorizeStewardCaller(ctx, tx, userID)
+		return err
+	}
 	actor, ok := ActorFromContext(ctx)
 	if !ok || actor.Kind != authz.ActorUserSession || actor.UserID != userID {
 		return resources.ErrUnauthorized

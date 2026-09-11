@@ -4,7 +4,7 @@
 
 NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible ingress gateway. It lets each user manage their own upstream endpoints and credentials, discover upstream models, define user-owned platform model names, and call those models through a single `CallerKey`.
 
-> **Current source version:** `1.0.0-beta.3` (2026-09-11). Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
+> **Current source version:** [1.0.0-beta.3](https://github.com/waiting-here/NonbiriAPI/releases/tag/v1.0.0-beta.3) (2026-09-11, prerelease). Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
 >
 > **Compatibility boundary:** beta.3 continues database Generation 2 (`application_id=0x4E425249`, `user_version=2`) and targets source builds for Linux/amd64. A completely absent database set may be created fresh. Alpha and Generation 1 deployments require an explicit fresh cutover; the complete beta.2 schema, four exact earlier Generation 2 manifests and five exact intermediate beta.2 manifests are accepted for additive updates with existing data preserved. See the [deployment guide](docs/deployment.md#database-compatibility-and-version-changes) for the source classes and update rules.
 >
@@ -24,8 +24,8 @@ NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible ingress g
 - Donated keys can combine recurring call, Token and credit limits with their total limits. Administrators and level-5 stewards configure reset or sliding windows of 1 hour, 5 hours, a day, a week or a month with a saved time zone; donors can inspect their own rules, usage, reservations and remaining capacity. These counters include only charity calls. Sharing the same key with personal calls may consume more upstream capacity than the charity counters show. For Token-priced charity models, authorized managers can set an optional per-model credit reserve before a call; leaving it blank inherits the global setting, and per-request pricing keeps its existing per-request reserve.
 - User and administrator resource lists have bounded server-side pagination with 10/20/50/100 page sizes, direct page navigation, filter and page restoration after returning or refreshing, and an independent browser-local page-size preference for each list.
 - The charity model catalog provides plain-text descriptions, allowed-level sets, explicit availability reasons, and source/key browsing for authorized managers. The catalog can show configured models even when the current caller cannot use them; the public API remains limited to currently usable models.
-- Time-point forms parse and display saved instants in the browser's time zone, with server-resolved daylight-saving gaps and repeated times. Recurring quota rules retain their selected business time zone separately from ordinary timestamp display.
-- Daily welfare, the Thursday pooled activity, bilingual announcements, and public credential-theft reporting with administrator review.
+- General time-point forms parse and display saved instants in the browser's time zone, with server-resolved daylight-saving gaps and repeated times. Recurring quota rules retain their selected business time zone separately from ordinary timestamp display.
+- Daily welfare, the Thursday pooled activity, bilingual announcements, and public credential-theft reporting with administrator review. Creating a Thursday period automatically selects the next Thursday at 00:00 Beijing time for 24 hours, including the following week when created on a Thursday. The administrator page displays this Beijing-time window; editing an existing period preserves its schedule.
 - Experimental OpenAI-only chat policies for per-key `store:false` enforcement and per-model tool-call flattening, both disabled by default and explicitly risk-labelled.
 - A memory-only Debug Hub that starts in dry-run mode and requires explicit confirmation to send requests upstream. Live results are captured in the Debug page; the API caller receives a dedicated HTTP 422 debug response.
 - LinkLink creates varied boards with a verified complete matching sequence. Existing sessions keep their saved boards; board sizes, prices, scoring, time limits, and free deadlock reshuffling are unchanged.
@@ -92,6 +92,7 @@ Keep `admin.env`, the master-key file, and the database outside the Git working 
 The intended first deployment model is a manually updated systemd service. See:
 
 - [Deployment and systemd guide](docs/deployment.md)
+- [Steward automation instructions for administrators](docs/steward-automation.md)
 - [Example environment file](admin.env.example)
 - [Example systemd unit](deploy/nonbiriapi.service.example)
 

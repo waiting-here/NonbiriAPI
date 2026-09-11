@@ -287,7 +287,7 @@ const copy = {
     '即使自动发现失败，手工入口仍然可用。',
   ],
   'endpoints.manualModel': ['Exact service model ID', '精确服务模型 ID'],
-  'endpoints.manualProvider': ['Service provider (optional)', '服务商（可选）'],
+  'endpoints.manualProvider': ['Note (optional)', '备注（可选）'],
   'endpoints.manualAdd': ['Add manual entry', '添加手工条目'],
   'endpoints.manualEmpty': ['No manual entries for this key.', '此密钥没有手工条目。'],
   'endpoints.manualImpact': [
@@ -299,8 +299,8 @@ const copy = {
     '暂时无法检查受影响的模型连接。请先刷新连接状态，再修改或删除此条目。',
   ],
   'endpoints.manualImpactTooMany': [
-    'This entry has {{count}} connections. To rename or delete it, first reduce them to 256 or fewer in model connection management. You can still update its provider.',
-    '此条目关联 {{count}} 个连接。改名或删除前，请先在模型连接管理中将关联数量减少至 256 个以内；服务商说明仍可修改。',
+    'This entry has {{count}} connections. To rename or delete it, first reduce them to 256 or fewer in model connection management. You can still update its note.',
+    '此条目关联 {{count}} 个连接。改名或删除前，请先在模型连接管理中将关联数量减少至 256 个以内；备注仍可修改。',
   ],
   'browse.modelCount': ['{{count}} associated model(s)', '关联模型 {{count}} 个'],
   'browse.keyCount': ['{{count}} key(s)', '密钥 {{count}} 把'],

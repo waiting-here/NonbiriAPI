@@ -13,7 +13,7 @@ const announcementId = `ann_${'A'.repeat(21)}Q`;
 const periodId = `thu_${'B'.repeat(21)}Q`;
 const poolId = `pol_${'C'.repeat(21)}Q`;
 const originalAnnouncementExpiry = 1_893_456_047;
-const originalPeriodOpening = 1_893_456_047;
+const originalPeriodOpening = Date.parse('2030-01-03T00:00:00+08:00') / 1_000;
 
 interface RequestRecord {
   method: string;
@@ -48,7 +48,7 @@ function announcementFixture(expiresAt: number | null = originalAnnouncementExpi
 function periodFixture(opensAt = originalPeriodOpening) {
   return {
     id: periodId,
-    period_key: '2026-W01',
+    period_key: '2030-01-03',
     state: 'configured',
     revision: '9',
     opens_at: opensAt,
@@ -196,7 +196,7 @@ describe('administrator time forms', () => {
     );
   });
 
-  it('retains an activity opening second when another period field is saved', async () => {
+  it('preserves an existing activity schedule when its announcement is edited', async () => {
     let saved: unknown;
     installAdminFixtures((method, path, body) => {
       if (method === 'GET' && path === '/admin/api/activities/config') {
@@ -229,14 +229,23 @@ describe('administrator time forms', () => {
       route: '/activities',
     });
 
-    const periodKey = await screen.findByLabelText('Period key');
-    await waitFor(() => expect(dateTimeInput()).toHaveValue('2030-01-01T00:00'));
-    await view.user.clear(periodKey);
-    await view.user.type(periodKey, '2026-W02');
+    const literature = await screen.findByLabelText('Literature');
+    await waitFor(() => expect(literature).toBeEnabled());
+    expect(screen.queryByLabelText('Period key')).not.toBeInTheDocument();
+    expect(document.querySelector('input[type="datetime-local"]')).toBeNull();
+    await view.user.clear(literature);
+    await view.user.type(literature, 'Updated announcement');
     await view.user.click(screen.getByRole('button', { name: 'Save next period' }));
 
     await waitFor(() =>
-      expect(saved).toEqual(expect.objectContaining({ opens_at: originalPeriodOpening })),
+      expect(saved).toEqual(
+        expect.objectContaining({
+          expected_revision: '9',
+          period_key: '2030-01-03',
+          opens_at: originalPeriodOpening,
+          literature: 'Updated announcement',
+        }),
+      ),
     );
   });
 
