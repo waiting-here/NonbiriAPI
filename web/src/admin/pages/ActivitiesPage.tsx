@@ -11,18 +11,11 @@ import {
   PageHeader,
   StatusBadge,
 } from '@shared/components/States';
-import { TimeInput } from '@shared/components/TimeInput';
 import { PagePagination } from '@shared/operations/PagePagination';
 import { useUrlPagePager } from '@shared/operations/useUrlPagePager';
 import { isForbidden, isUnauthorized } from '@shared/query/http';
-import { formatDateTime } from '@shared/utils/datetime';
 import { amount } from '@shared/operations/wire';
-import {
-  createTimeDraft,
-  timeDraftValue,
-  type TimeDraft,
-  type TimeDraftUpdate,
-} from '@shared/time';
+import { formatBeijingTime, nextThursdaySchedule } from '../features/operations/thursdaySchedule';
 import {
   adjustPool,
   patchActivitiesConfig,
@@ -52,8 +45,6 @@ function validPositiveAmount(value: string): boolean {
 }
 
 interface PeriodDraft {
-  period_key: string;
-  opens_at: TimeDraft;
   literature: string;
   entry: string;
   per_user_limit: string;
@@ -62,14 +53,13 @@ interface PeriodDraft {
   next_pool: string;
 }
 
-type PeriodMutation = Omit<PeriodDraft, 'opens_at'> & {
+type PeriodMutation = PeriodDraft & {
+  period_key: string;
   opens_at: number;
   expected_revision: string;
 };
 
 const emptyPeriodDraft = (): PeriodDraft => ({
-  period_key: '',
-  opens_at: createTimeDraft(null, 'minute'),
   literature: '',
   entry: '',
   per_user_limit: '1',
@@ -81,8 +71,6 @@ const emptyPeriodDraft = (): PeriodDraft => ({
 const draftForPeriod = (period: Period | null): PeriodDraft =>
   period
     ? {
-        period_key: period.period_key,
-        opens_at: createTimeDraft(period.opens_at, 'minute'),
         literature: period.literature,
         entry: period.entry,
         per_user_limit: String(period.per_user_limit),
@@ -142,6 +130,21 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
   });
   const [configOverride, setConfigOverride] = useState<ActivitiesConfig | null>(null);
   const [periodOverride, setPeriodOverride] = useState<PeriodDraft | null>(null);
+  const [nextSchedule, setNextSchedule] = useState(() => nextThursdaySchedule(Date.now()));
+  useEffect(() => {
+    const refresh = () => setNextSchedule(nextThursdaySchedule(Date.now()));
+    const timer = window.setTimeout(
+      refresh,
+      Math.max(0, nextSchedule.opens_at * 1_000 - Date.now()),
+    );
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [nextSchedule.opens_at]);
   const [adjustment, setAdjustment] = useState({
     poolId: '',
     revision: '',
@@ -152,10 +155,12 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
     confirmed: false,
   });
   const period = thursday.data?.period ?? null;
+  const scheduledPeriod =
+    period && ['configured', 'open', 'settling'].includes(period.state) ? period : null;
+  const schedule = scheduledPeriod ?? nextSchedule;
   const authorityPeriodRevision = thursday.data?.period?.revision ?? (thursday.data ? 'none' : '');
   const configDraft = config.data ? (configOverride ? configOverride : config.data) : null;
   const periodDraft = periodOverride ?? draftForPeriod(period);
-  const opensAt = timeDraftValue(periodDraft.opens_at);
   const configUnchanged = JSON.stringify(configDraft) === JSON.stringify(config.data);
   const configStale = configDraft?.revision !== config.data?.revision;
   const configDependency =
@@ -242,19 +247,18 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
   const editPeriod = (patch: Partial<PeriodDraft>) => {
     setPeriodOverride((current) => ({ ...(current ?? periodDraft), ...patch }));
   };
-  const editPeriodTime = (update: TimeDraftUpdate) => {
-    setPeriodOverride((current) => {
-      const base = current ?? periodDraft;
-      const opensAt = update(base.opens_at);
-      return opensAt === base.opens_at ? current : { ...base, opens_at: opensAt };
-    });
-  };
   const submitPeriod = () => {
-    const nextOpensAt = timeDraftValue(periodDraft.opens_at);
     const revision = thursdayMutationRevision(config.data, period);
-    if (nextOpensAt === undefined || nextOpensAt === null || revision === null) return;
+    if (!periodAuthorityReady || periodLocked || revision === null) return;
+    const submittedSchedule = scheduledPeriod ?? nextThursdaySchedule(Date.now());
+    if (!scheduledPeriod) setNextSchedule(submittedSchedule);
     savePeriod.mutate(
-      { ...periodDraft, opens_at: nextOpensAt, expected_revision: revision },
+      {
+        ...periodDraft,
+        period_key: submittedSchedule.period_key,
+        opens_at: submittedSchedule.opens_at,
+        expected_revision: revision,
+      },
       { onSuccess: () => setPeriodOverride(null) },
     );
   };
@@ -459,9 +463,9 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
               <dd>
                 {period.period_key} / {period.revision}
               </dd>
-              <dt>{t('admin.activities.thursday.window')}</dt>
+              <dt>{t('admin.activities.period.windowBeijing')}</dt>
               <dd>
-                {formatDateTime(period.opens_at)} — {formatDateTime(period.closes_at)}
+                {formatBeijingTime(period.opens_at)} — {formatBeijingTime(period.closes_at)}
               </dd>
               <dt>{t('admin.activities.thursday.entryLimit')}</dt>
               <dd>
@@ -502,7 +506,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
       </Card>
       <Card>
         <h2>
-          {period
+          {scheduledPeriod
             ? t('admin.activities.period.updateTitle')
             : t('admin.activities.period.createTitle')}
         </h2>
@@ -515,22 +519,20 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
             <p>
               {periodLocked
                 ? t('admin.activities.period.lockedHint')
-                : t('admin.activities.period.authorityHint')}
+                : scheduledPeriod
+                  ? t('admin.activities.period.configuredHint')
+                  : t('admin.activities.period.scheduleHint')}
             </p>
-            <fieldset className="ops-field-grid" disabled={savePeriod.isPending}>
-              <label>
-                <span>{t('admin.activities.period.key')}</span>
-                <input
-                  value={periodDraft.period_key}
-                  onChange={(event) => editPeriod({ period_key: event.target.value })}
-                />
-              </label>
-              <TimeInput
-                station="admin"
-                label={t('admin.activities.period.opensAt')}
-                draft={periodDraft.opens_at}
-                onChange={editPeriodTime}
-              />
+            <dl className="ops-kv">
+              <dt>{t('admin.activities.period.windowBeijing')}</dt>
+              <dd>
+                {formatBeijingTime(schedule.opens_at)} — {formatBeijingTime(schedule.closes_at)}
+              </dd>
+            </dl>
+            <fieldset
+              className="ops-field-grid"
+              disabled={!periodAuthorityReady || periodLocked || savePeriod.isPending}
+            >
               <label>
                 <span>{t('admin.activities.period.entry')}</span>
                 <input
@@ -582,7 +584,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
             <label className="ops-form-field">
               <span>{t('admin.activities.period.literature')}</span>
               <textarea
-                disabled={savePeriod.isPending}
+                disabled={!periodAuthorityReady || periodLocked || savePeriod.isPending}
                 value={periodDraft.literature}
                 onChange={(event) => editPeriod({ literature: event.target.value })}
               />
@@ -596,9 +598,6 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                 !periodAuthorityReady ||
                 periodLocked ||
                 savePeriod.isPending ||
-                !periodDraft.period_key ||
-                opensAt === undefined ||
-                opensAt === null ||
                 !periodDraft.literature ||
                 !validPositiveAmount(periodDraft.entry)
               }

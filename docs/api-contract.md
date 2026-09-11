@@ -453,6 +453,8 @@ Announcement mutations return a bounded receipt and the detail is fetched separa
 
 The activity master switch pauses admission while preserving each activity's switch. Thursday may remain enabled after its last period settles; this idle state does not block public configuration, administrator branding, unrelated settings or startup. A change from effectively disabled to enabled still requires a configured, open or settling Thursday period in the same configuration transaction.
 
+The administrator page automatically schedules a new Thursday period for the next Thursday at 00:00 Beijing time (UTC+8), lasting 24 hours. On Thursday itself, a new period targets the following week. The page generates the date-based `period_key` and matching `opens_at`; neither requires manual input. Editing an existing configured period preserves its scheduled date. The existing `PUT /admin/api/activities/thursday/next` still receives both fields and validates the Beijing Thursday window, revision and activity state on the server. Saving the period and enabling the activity remain separate actions.
+
 `GET /admin/api/pools` accepts `pool_type=welfare|thursday` and `state=open|closed`, plus legacy `cursor,limit` or numbered `page,page_size`; the response keeps the pool page envelope and adds `pagination` only in numbered mode. The page filters are independent and exact.
 
 | Method and path | Request / response |

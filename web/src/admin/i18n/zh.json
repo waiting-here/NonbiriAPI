@@ -376,7 +376,7 @@
         "welfareEnabled": "启用公益活动",
         "welfareThreshold": "公益门槛（积分）",
         "masterRequired": "请开启活动总开关，或同时关闭低保和疯狂星期四。",
-        "periodRequired": "请先在下方设置疯狂星期四的活动时间、文案和投入规则，再开启活动。",
+        "periodRequired": "请先在下方填写疯狂星期四的文案和参与规则并保存，再开启活动。",
         "changedElsewhere": "活动设置已更新。请取消当前修改，再基于最新设置编辑。"
       },
       "description": "设置活动开关、管理活动期次和奖池余额。",
@@ -384,14 +384,14 @@
         "state": "状态"
       },
       "period": {
-        "authorityHint": "写入成功、发生冲突或结果未知后，只会重新读取最新权威状态。",
+        "configuredHint": "活动时间已确定，开放前可以修改文案和参与规则。",
         "createTitle": "创建下一活动周期",
         "entry": "参与金额（积分）",
-        "key": "周期键",
         "literature": "活动文案",
         "lockedHint": "当前周期已经开放或正在结算，冻结配置和当前配置不能编辑。",
         "nextPoolBp": "下一池分配（基点）",
-        "opensAt": "开放时间",
+        "scheduleHint": "下次活动固定在北京时间下一个周四 00:00 开放，持续 24 小时。填写文案和参与规则后保存即可。",
+        "windowBeijing": "活动时间（北京时间）",
         "perUserLimit": "每位用户上限",
         "platformBp": "平台分配（基点）",
         "save": "保存下一活动周期",
@@ -441,8 +441,7 @@
         "periodRevision": "周期 / 修订",
         "processed": "已处理",
         "resume": "恢复现有结算检查点",
-        "title": "星期四活动权威状态",
-        "window": "时间窗口"
+        "title": "星期四活动权威状态"
       },
       "title": "活动与共享池",
       "units": {

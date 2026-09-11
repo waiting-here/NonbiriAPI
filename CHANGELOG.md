@@ -15,6 +15,7 @@ This source update targets Linux/amd64 and preserves existing data from the comp
 
 ### Changed
 
+- Creating a Thursday activity automatically uses the next Thursday at 00:00 Beijing time. The administrator page shows the activity window and no longer asks for a period key or opening time; edits preserve an existing period's schedule.
 - Fishing, LinkLink and Rock Paper Scissors now register through a common backend game host with shared transactions, recovery and lifecycle handling. Existing routes, saved games, configuration, prices, rewards, timing and exports remain compatible.
 - New LinkLink games use varied constructive layouts with a verified complete matching sequence. Existing boards and free deadlock reshuffling remain intact.
 - Request and log type constraints now admit personal and charity embeddings. The database remains Generation 2 with 99 business tables and account export version 5. Log clients with closed request-type enums must accept the new values.
