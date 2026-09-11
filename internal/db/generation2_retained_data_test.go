@@ -144,6 +144,11 @@ VALUES(?,?,'10x10',0,'completed',101,1101,201,50,99)`, hostileOID("ll_"), users[
 
 func makeRetainedSource(t *testing.T, database *sql.DB, want string) {
 	t.Helper()
+	makePreEmbeddingFixture(t, database)
+	if want == preEmbeddingManifestHash {
+		assertRetainedManifest(t, database, want)
+		return
+	}
 	if want == preHourlyQuotaManifestHash || want == preModelTokenReserveManifestHash || want == preBrowseManifestHash || want == preQuotaCleanupManifestHash || want == preStewardHoldReadManifestHash {
 		makePreHourlyQuotaFixture(t, database)
 	}

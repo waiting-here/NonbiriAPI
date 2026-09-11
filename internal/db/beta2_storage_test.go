@@ -12,6 +12,7 @@ import (
 // donation_quota_epochs form a circular FK that otherwise blocks DROP.
 func dropBetaTwoAdditiveObjects(t *testing.T, database *sql.DB) {
 	t.Helper()
+	makePreEmbeddingFixture(t, database)
 	dropBrowseIndexes(t, database)
 	if _, err := database.Exec(`PRAGMA foreign_keys=OFF;
 DROP TABLE IF EXISTS donation_quota_receipts;

@@ -66,6 +66,7 @@ func TestSlowObserverDoesNotChangeAttemptBytesOrCompletion(t *testing.T) {
 	resultCh := make(chan connectorcontract.AttemptResult, 1)
 	go func() {
 		resultCh <- connector.Attempt(context.Background(), AttemptInput{
+			Operation:  connectorcontract.OperationChatCompletions,
 			Target:     connectorcontract.NewTarget(connectorcontract.TypeOpenAICompatible, "https://upstream.example/v1", "upstream/model"),
 			Credential: connectorcontract.NewShortLivedSecret(plaintext, ciphertext),
 			Ingress:    request,
@@ -122,6 +123,7 @@ func TestSlowObserverDoesNotDelayAttemptCancellation(t *testing.T) {
 	resultCh := make(chan connectorcontract.AttemptResult, 1)
 	go func() {
 		resultCh <- protocol.Attempt(ctx, AttemptInput{
+			Operation:  connectorcontract.OperationChatCompletions,
 			Target:     connectorcontract.NewTarget(connectorcontract.TypeOpenAICompatible, "https://upstream.example/v1", "upstream/model"),
 			Credential: connectorcontract.NewShortLivedSecret([]byte("secret"), []byte("cipher")),
 			Ingress:    &openai.ChatRequest{Model: "public/model"},

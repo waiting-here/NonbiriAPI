@@ -217,6 +217,7 @@ func TestLegacyOpenAIDriverCannotSilentlyIgnoreExperimentalPolicies(t *testing.T
 	} {
 		credential := connectorcontract.NewShortLivedSecret([]byte("secret"), []byte("cipher"))
 		result := protocol.Attempt(context.Background(), AttemptInput{
+			Operation:  connectorcontract.OperationChatCompletions,
 			Target:     connectorcontract.NewTarget(connectorcontract.TypeOpenAICompatible, "https://upstream.example", "up/model"),
 			Credential: credential,
 			Ingress:    &openai.ChatRequest{Model: "p/m"},
@@ -232,6 +233,7 @@ func TestLegacyOpenAIDriverCannotSilentlyIgnoreExperimentalPolicies(t *testing.T
 	}
 
 	result := protocol.Attempt(context.Background(), AttemptInput{
+		Operation:  connectorcontract.OperationChatCompletions,
 		Target:     connectorcontract.NewTarget(connectorcontract.TypeOpenAICompatible, "https://upstream.example", "up/model"),
 		Credential: connectorcontract.NewShortLivedSecret([]byte("secret"), []byte("cipher")),
 		Ingress:    &openai.ChatRequest{Model: "p/m"},
@@ -252,6 +254,7 @@ func TestAnthropicConnectorRejectsOpenAIOnlyPoliciesBeforeCredentialTake(t *test
 	} {
 		credential := connectorcontract.NewShortLivedSecret([]byte("secret"), []byte("cipher"))
 		result := protocol.Attempt(context.Background(), AttemptInput{
+			Operation:  connectorcontract.OperationChatCompletions,
 			Target:     connectorcontract.NewTarget(connectorcontract.TypeAnthropicCompatible, "https://upstream.example", "up/model"),
 			Credential: credential,
 			Ingress:    &openai.ChatRequest{Model: "p/m"},

@@ -624,7 +624,8 @@ func (service *Service) runAttempts(
 			break
 		}
 		result := protocolConnector.Attempt(executionContext, connector.AttemptInput{
-			Target: dispatch.Target(), Credential: credential, Ingress: attemptRequest,
+			Operation: connectorcontract.OperationChatCompletions,
+			Target:    dispatch.Target(), Credential: credential, Ingress: attemptRequest,
 			Policy: policy, Sink: sink, Observer: service.observer,
 			TraceID: traceID(trace, accepted.ID), AttemptIndex: index,
 		})

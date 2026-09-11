@@ -771,7 +771,7 @@ CREATE INDEX idx_idempotency_expiry ON idempotency_records(expires_at);
  CREATE TABLE logical_requests (
  id TEXT NOT NULL PRIMARY KEY CHECK(length(id)=26 AND substr(id,1,4)='req_' AND substr(id,5) NOT GLOB '*[^A-Za-z0-9_-]*' AND substr(id,-1,1) IN ('A','Q','g','w')),
  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
- route_kind TEXT NOT NULL CHECK(route_kind IN ('openai_chat_completions','charity_chat_completions','model_discovery')),
+ route_kind TEXT NOT NULL CHECK(route_kind IN ('openai_chat_completions','charity_chat_completions','model_discovery','openai_embeddings','charity_embeddings')),
  model_snapshot TEXT NOT NULL DEFAULT '' CHECK(typeof(model_snapshot)='text' AND length(CAST(model_snapshot AS BLOB))<=512),
  state TEXT NOT NULL CHECK(state IN ('accepted','running','terminal')),
  attempt_limit INTEGER NOT NULL CHECK(attempt_limit BETWEEN 1 AND 100),
@@ -845,7 +845,7 @@ CREATE TABLE request_logs (
  model TEXT NOT NULL DEFAULT '' CHECK(typeof(model)='text' AND length(CAST(model AS BLOB))<=512),
  endpoint_key_id INTEGER REFERENCES endpoint_keys(id) ON DELETE SET NULL,
  upstream_model_id TEXT NOT NULL DEFAULT '' CHECK(typeof(upstream_model_id)='text' AND length(upstream_model_id)<=512),
- route_kind TEXT NOT NULL DEFAULT 'openai_chat_completions' CHECK(route_kind IN ('openai_chat_completions','charity_chat_completions','model_discovery')),
+ route_kind TEXT NOT NULL DEFAULT 'openai_chat_completions' CHECK(route_kind IN ('openai_chat_completions','charity_chat_completions','model_discovery','openai_embeddings','charity_embeddings')),
  endpoint_base_url TEXT NOT NULL DEFAULT '' CHECK(typeof(endpoint_base_url)='text' AND length(CAST(endpoint_base_url AS BLOB))<=4096),
  caller_result_class TEXT CHECK(caller_result_class IS NULL OR caller_result_class IN ('success','failed','cancelled')),
  caller_status INTEGER CHECK(caller_status IS NULL OR caller_status BETWEEN 100 AND 599),

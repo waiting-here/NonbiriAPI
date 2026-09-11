@@ -37,6 +37,9 @@ const preModelTokenReserveManifestHash = "e6e10f9c37f0dff0ea9507173d48808aea6d44
 // The released schema before the one-hour recurring quota interval.
 const preHourlyQuotaManifestHash = "8c0c7dc160170bae72e388c3f7b9c8cb15a756f867af92fa2644d2afd48a2550"
 
+// The released schema before embedding request routes.
+const preEmbeddingManifestHash = "956e85c750aec4ef451f5fda73a816af6474031b4795b76495d85d6715ddcc59"
+
 func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) {
 	if GenerationTwoSchemaHash() != PinnedGenerationTwoSchemaHash {
 		return false, errors.New("generation-two schema hash drift")
@@ -52,7 +55,7 @@ func generationTwoExtensionNeeded(ctx context.Context, q queryer) (bool, error) 
 	switch generationManifestDigest(actual) {
 	case expected:
 		return false, nil
-	case preRoutingManifestHash, preKeyLimitsManifestHash, preResponseStartsManifestHash, preBetaTwoManifestHash, preBrowseManifestHash, preQuotaCleanupManifestHash, preStewardHoldReadManifestHash, preModelTokenReserveManifestHash, preHourlyQuotaManifestHash:
+	case preRoutingManifestHash, preKeyLimitsManifestHash, preResponseStartsManifestHash, preBetaTwoManifestHash, preBrowseManifestHash, preQuotaCleanupManifestHash, preStewardHoldReadManifestHash, preModelTokenReserveManifestHash, preHourlyQuotaManifestHash, preEmbeddingManifestHash:
 		return true, nil
 	default:
 		return false, errors.New("generation-two schema manifest mismatch")
@@ -90,7 +93,7 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) (resu
 		return err
 	}
 	digest := generationManifestDigest(manifest)
-	if digest != preModelTokenReserveManifestHash && digest != preHourlyQuotaManifestHash {
+	if digest != preModelTokenReserveManifestHash && digest != preHourlyQuotaManifestHash && digest != preEmbeddingManifestHash {
 		// Extend any pre-beta.1 structure to the complete beta.1 schema first.
 		if digest == preRoutingManifestHash || digest == preKeyLimitsManifestHash || digest == preResponseStartsManifestHash {
 			if digest == preRoutingManifestHash {
@@ -136,7 +139,7 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) (resu
 			return err
 		}
 	}
-	if digest != preHourlyQuotaManifestHash {
+	if digest != preHourlyQuotaManifestHash && digest != preEmbeddingManifestHash {
 		if _, err := tx.ExecContext(ctx, charityModelReserveSchema); err != nil {
 			return err
 		}
@@ -144,10 +147,16 @@ func extendKnownGenerationTwoSchema(ctx context.Context, database *sql.DB) (resu
 	if err := extendHourlyQuotaInterval(ctx, tx); err != nil {
 		return err
 	}
+	if err := extendEmbeddingRoutes(ctx, tx); err != nil {
+		return err
+	}
 	if err := validateGenerationTwoManifest(ctx, tx); err != nil {
 		return err
 	}
 	if err := foreignKeyCheck(ctx, tx); err != nil {
+		return err
+	}
+	if err := extensionIntegrityCheck(ctx, tx); err != nil {
 		return err
 	}
 	return tx.Commit()
