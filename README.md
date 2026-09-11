@@ -4,15 +4,15 @@
 
 NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible ingress gateway. It lets each user manage their own upstream endpoints and credentials, discover upstream models, define user-owned platform model names, and call those models through a single `CallerKey`.
 
-> **Current release:** `1.0.0-beta.2` (2026-09-10, source release). Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
+> **Current source version:** `1.0.0-beta.3` (2026-09-11). Review the deployment, backup, privacy, and security documentation before exposing an instance to users.
 >
-> **Compatibility boundary:** beta.2 continues database Generation 2 (`application_id=0x4E425249`, `user_version=2`) and targets source builds for Linux/amd64. A completely absent database set may be created fresh. Alpha and Generation 1 deployments require an explicit fresh cutover; four exact earlier Generation 2 manifests and five exact previously deployed beta.2 manifests are accepted for additive updates with existing data preserved. See the [deployment guide](docs/deployment.md#database-compatibility-and-version-changes) for the source classes and update rules.
+> **Compatibility boundary:** beta.3 continues database Generation 2 (`application_id=0x4E425249`, `user_version=2`) and targets source builds for Linux/amd64. A completely absent database set may be created fresh. Alpha and Generation 1 deployments require an explicit fresh cutover; the complete beta.2 schema, four exact earlier Generation 2 manifests and five exact intermediate beta.2 manifests are accepted for additive updates with existing data preserved. See the [deployment guide](docs/deployment.md#database-compatibility-and-version-changes) for the source classes and update rules.
 >
 > Source repository: [github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
 ## Highlights
 
-- OpenAI-compatible `/v1/models` and `/v1/chat/completions` ingress, with OpenAI-compatible and Anthropic-compatible upstream connectors.
+- OpenAI-compatible `/v1/models`, `/v1/chat/completions`, and `/v1/embeddings` ingress. Chat supports OpenAI-compatible and Anthropic-compatible upstream connectors; embeddings require an OpenAI-compatible upstream.
 - Discord OAuth user sign-in and a separate administrator station.
 - Per-user endpoints, mainstream channel templates, encrypted upstream credentials, automatic/manual model catalogs, platform model names, and a guided endpoint → key → model connection workflow.
 - Ordered/random personal routing, ordered/uniform-random/expiry-weighted charity routing, opt-in pre-commit retry, user concurrency limits, and owner-configured per-key concurrency/RPM shared by personal, charity, and live diagnostic calls.
@@ -23,16 +23,17 @@ NonbiriAPI is a self-hosted API endpoint manager and OpenAI-compatible ingress g
 - Credits, check-in with a server-configured balance gate, personal credit history, donation-backed charity routing, per-key donation expiry and usage limits, and level-5 co-management. Authorized administrator and steward logs expose a fixed safe set of upstream resource details, including the routed key identifier and logical-request charge; ordinary charity callers do not receive those details.
 - Donated keys can combine recurring call, Token and credit limits with their total limits. Administrators and level-5 stewards configure reset or sliding windows of 1 hour, 5 hours, a day, a week or a month with a saved time zone; donors can inspect their own rules, usage, reservations and remaining capacity. These counters include only charity calls. Sharing the same key with personal calls may consume more upstream capacity than the charity counters show. For Token-priced charity models, authorized managers can set an optional per-model credit reserve before a call; leaving it blank inherits the global setting, and per-request pricing keeps its existing per-request reserve.
 - User and administrator resource lists have bounded server-side pagination with 10/20/50/100 page sizes, direct page navigation, filter and page restoration after returning or refreshing, and an independent browser-local page-size preference for each list.
-- The beta.2 release includes a full charity model catalog with plain-text descriptions, allowed-level sets, explicit availability reasons, and source/key browsing for authorized managers. The catalog can show configured models even when the current caller cannot use them; the public API remains limited to currently usable models.
+- The charity model catalog provides plain-text descriptions, allowed-level sets, explicit availability reasons, and source/key browsing for authorized managers. The catalog can show configured models even when the current caller cannot use them; the public API remains limited to currently usable models.
 - Time-point forms parse and display saved instants in the browser's time zone, with server-resolved daylight-saving gaps and repeated times. Recurring quota rules retain their selected business time zone separately from ordinary timestamp display.
 - Daily welfare, the Thursday pooled activity, bilingual announcements, and public credential-theft reporting with administrator review.
-- Experimental OpenAI-only per-key `store:false` enforcement and per-model tool-call flattening, both disabled by default and explicitly risk-labelled.
+- Experimental OpenAI-only chat policies for per-key `store:false` enforcement and per-model tool-call flattening, both disabled by default and explicitly risk-labelled.
 - A memory-only Debug Hub that starts in dry-run mode and requires explicit confirmation to send requests upstream. Live results are captured in the Debug page; the API caller receives a dedicated HTTP 422 debug response.
+- LinkLink creates varied boards with a verified complete matching sequence. Existing sessions keep their saved boards; board sizes, prices, scoring, time limits, and free deadlock reshuffling are unchanged.
 - A server-authoritative game center with Pond Fishing, LinkLink, and three-player Rock Paper Scissors, including idempotent accounting, recovery, privacy-aware leaderboards, and bundled local artwork. Fishing opens on the rolling 30-day largest-length board, with the lifetime largest-length and rolling 30-day payout boards still available. Its transparent-background white-rice-themed blue fat fish Easter egg preserves the original legendary species and payout; length-board rows use a compact original species name while result details retain the original-species explanation.
 - Server-generated upstream safety pseudonyms scoped to one user and one canonical upstream origin; see the [API contract](docs/api-contract.md#22-post-v1chatcompletions) for their rotation and privacy boundary.
 - Redesigned bilingual React user/admin stations with responsive navigation, continuous resource workflows, safe Markdown guidance, and configurable site branding, embedded into a single Go binary.
 
-The 1.0.0-beta.2 release exposes only the two OpenAI-compatible ingress routes listed above. An `anthropic-compatible` endpoint is translated behind that ingress; NonbiriAPI does not expose an Anthropic-native public endpoint. Other OpenAI API families and connector types remain deferred. See the [API contract](docs/api-contract.md) for the strict Anthropic subset and token-limit rules.
+The current source exposes the three OpenAI-compatible ingress routes listed above. Embeddings support text and Token ID inputs, single items and batches, float/base64 encoding, and optional output dimensions for personal and charity models. Models have no purpose classification: the request path selects the operation, and the upstream decides whether its model supports it. Rerank remains unsupported. An `anthropic-compatible` endpoint is translated behind that ingress; NonbiriAPI does not expose an Anthropic-native public endpoint. Other OpenAI API families and connector types remain deferred. See the [API contract](docs/api-contract.md) for the strict Anthropic subset and token-limit rules.
 
 ## Architecture
 
@@ -94,9 +95,9 @@ The intended first deployment model is a manually updated systemd service. See:
 - [Example environment file](admin.env.example)
 - [Example systemd unit](deploy/nonbiriapi.service.example)
 
-Beta.2 uses database Generation 2 (`application_id=0x4E425249`, `user_version=2`). It does not migrate an alpha database or Generation 1 in place and refuses unsupported or malformed existing databases without writing to them. Four exact earlier Generation 2 manifests and five exact previously deployed beta.2 manifests are supported for additive updates. The latest extension permits one-hour recurring quotas by widening the existing interval checks; it preserves every stored rule, epoch, counter and receipt. The preceding extension adds the sparse model-level Token reserve override table. A missing override row inherits the global setting, and deleting a model removes its override. The updater validates the source read-only, applies one atomic schema extension, validates the complete manifest and foreign keys, and preserves existing accounts, resources, balances, configuration, routing choices, key limits, and historical facts. A binary-only downgrade to an incompatible schema is unsafe; stop the service, preserve a verified complete snapshot (database/sidecars, release, configuration, master key and unit), and follow the [deployment guide](docs/deployment.md). Starting beta.2 from an alpha deployment requires an explicit fresh cutover; the new database starts with maintenance on and registration, activities, charity, donation intake, and games off.
+Beta.3 uses database Generation 2 (`application_id=0x4E425249`, `user_version=2`). It does not migrate an alpha database or Generation 1 in place and refuses unsupported or malformed existing databases without writing to them. The complete beta.2 schema and the nine previously supported manifests can be updated with existing data preserved. This version only extends the request-type CHECK constraints on `logical_requests` and `request_logs` for embeddings. The 99-table set, export version 5, stored rules, counters, receipts, balances, custom legal text, and existing games remain intact. The preceding extension adds the sparse model-level Token reserve override table. A missing override row inherits the global setting, and deleting a model removes its override. The updater validates the source read-only, applies one atomic schema extension, validates the complete manifest and foreign keys, and preserves existing accounts, resources, balances, configuration, routing choices, key limits, and historical facts. A binary-only downgrade to an incompatible schema is unsafe; stop the service, preserve a verified complete snapshot (database/sidecars, release, configuration, master key and unit), and follow the [deployment guide](docs/deployment.md). Starting beta.3 from an alpha deployment requires an explicit fresh cutover; the new database starts with maintenance on and registration, activities, charity, donation intake, and games off.
 
-Beta.2 is source-first and supports Linux/amd64 as its production target. Operators compile the exact release source commit on that target or use an equivalent controlled build pipeline. This source release provides no official precompiled binaries, container images, or installers; other production platforms are not supported.
+Beta.3 is source-first and supports Linux/amd64 as its production target. Operators compile the exact release source commit on that target or use an equivalent controlled build pipeline. This source release provides no official precompiled binaries, container images, or installers; other production platforms are not supported.
 
 ## GitHub automation
 
@@ -121,6 +122,17 @@ curl https://api.example.com/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{"model":"provider/model","messages":[{"role":"user","content":"Hello"}]}'
 ```
+
+For embeddings, select an upstream model that supports the operation:
+
+```sh
+curl https://api.example.com/v1/embeddings \
+  -H 'Authorization: Bearer nbk_REPLACE_WITH_YOUR_CALLER_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"provider/model","input":["Hello","World"],"encoding_format":"float"}'
+```
+
+Use a versioned upstream base such as `https://provider.example/v1`; the connector appends `/embeddings` without inserting `/v1`. A successful batch counts as one request. Token-priced charity embeddings charge all input tokens at the input rate; vector dimensions are not output tokens. See the [embedding contract](docs/api-contract.md#23-post-v1embeddings) for limits, unknown-usage settlement, and Debug behavior.
 
 The complete CallerKey is shown only once after creation or replacement. Save it immediately; if it was not saved, replace it to receive a new value.
 

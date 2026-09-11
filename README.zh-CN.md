@@ -2,15 +2,15 @@
 
 NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网关。用户可以管理自己持有的上游端点和凭据，拉取上游模型，创建用户自己的平台模型名称，并通过一个 `CallerKey` 调用这些模型。
 
-> **当前版本：** `1.0.0-beta.2`（2026-09-10，源码发布）。正式向用户开放前，请先阅读部署、备份、隐私和安全文档。
+> **当前源码版本：** `1.0.0-beta.3`（2026-09-11）。正式向用户开放前，请先阅读部署、备份、隐私和安全文档。
 >
-> **兼容边界：** beta.2 继续采用数据库 Generation 2（`application_id=0x4E425249`、`user_version=2`），以 Linux/amd64 源码构建为发布边界。完全不存在的数据库文件集合可以全新创建；alpha 和 Generation 1 部署必须显式全新切换。四个精确的旧 Generation 2 manifest 与五个精确的已部署 beta.2 结构可以在增量更新中保留现有数据，具体来源和更新规则见[部署指南](docs/deployment.md#database-compatibility-and-version-changes)。
+> **兼容边界：** beta.3 继续采用数据库 Generation 2（`application_id=0x4E425249`、`user_version=2`），以 Linux/amd64 源码构建为发布边界。完全不存在的数据库文件集合可以全新创建；alpha 和 Generation 1 部署必须显式全新切换。完整 beta.2 结构、四个精确的旧 Generation 2 manifest 与五个精确的中间 beta.2 结构可以在增量更新中保留现有数据，具体来源和更新规则见[部署指南](docs/deployment.md#database-compatibility-and-version-changes)。
 >
 > 源码仓库：[github.com/waiting-here/NonbiriAPI](https://github.com/waiting-here/NonbiriAPI)
 
 ## 主要功能
 
-- OpenAI-compatible `/v1/models` 与 `/v1/chat/completions` 入站接口，以及 OpenAI-compatible、Anthropic-compatible 上游连接器。
+- OpenAI-compatible `/v1/models`、`/v1/chat/completions` 和 `/v1/embeddings` 入站接口。聊天支持 OpenAI-compatible、Anthropic-compatible 上游连接器；向量嵌入只接入 OpenAI-compatible 上游。
 - Discord OAuth 普通用户登录，以及独立的管理员站点。
 - 用户级端点、主流渠道模板、加密上游凭据、自动/手动模型目录、平台模型命名，以及“端点 → 密钥 → 模型”的连续连接流程。
 - 自用顺序/随机路由，公益顺序/均匀随机/到期加权路由，可选的提交前重试，单用户并发限制，以及由所有者配置、自用/公益/实发调试共用的每把密钥并发与 RPM 限额。
@@ -24,13 +24,15 @@ NonbiriAPI 是一个自托管的 API 端点管理与 OpenAI-compatible 入站网
 - beta.2 发布版包含完整公益模型目录、纯文本说明、允许等级集合、明确的可用性原因，以及授权管理者可用的来源／密钥浏览。目录可以展示已配置但当前调用者不能使用的模型；公开 API 仍只返回当前可调用模型。
 - 时间点表单按浏览器时区解析和显示已保存的时间点，由服务端解决夏令时缺失和重复钟点。循环限量规则保存自己的业务时区，与普通时间戳显示分开。
 - 《从头再来》低保、《疯狂星期四》共享池活动、中英文公告，以及由管理员受理的公共凭据防盗举报。
-- 默认关闭并明确标注风险的两项 OpenAI-only 实验策略：物理密钥级 `store:false` 和逻辑模型级工具调用展平。
+- 默认关闭并明确标注风险的两项 OpenAI-only 聊天实验策略：物理密钥级 `store:false` 和逻辑模型级工具调用展平。
 - 只驻留内存的调试中心：新会话始终 dry run，明确确认后才发送到真实上游。实发结果由调试页捕获，API 调用者收到专用的 HTTP 422 调试响应。
 - 服务端负责结果和账务的游戏中心，包含《池塘垂钓》《连连看》和《三人猜拳》，支持幂等处理、自动恢复、隐私榜单和随程序打包的本地图像。《池塘垂钓》默认打开近 30 天单次最大收获榜，历史单次最大收获榜和近 30 天总收获榜仍可切换；透明背景的白饭主题蓝色大肥鱼彩蛋保留原传奇鱼种和奖励，榜单行使用紧凑的原鱼种名，结果说明仍保留原传奇鱼种说明。
 - 服务端生成的上游安全伪名只在“同一用户 + 同一规范化上游 origin”范围内稳定；轮换与隐私边界见 [API 契约](docs/api-contract.md#22-post-v1chatcompletions)。
 - 重新设计的中英文 React 双站，包含响应式导航、连续资源操作、安全 Markdown 说明与自定义站点品牌，并嵌入一个 Go 单二进制。
 
-1.0.0-beta.2 发布版只暴露上述两个 OpenAI-compatible 入站接口。`anthropic-compatible` 端点在网关内部完成转换，NonbiriAPI 不暴露 Anthropic 原生公共入口。其他 OpenAI API 家族和连接器类型仍留待后续版本；严格的 Anthropic 子集与 token 上限规则见 [API 契约](docs/api-contract.md)。
+当前源码暴露上述三个 OpenAI-compatible 入站接口。向量嵌入支持文本和 Token ID 的单条／批量输入、float／base64 编码和可选输出维度，自用与公益均可使用。模型不设置用途分类：请求路径决定操作，实际模型是否支持由上游判断。Rerank 暂不支持。`anthropic-compatible` 端点在网关内部完成转换，NonbiriAPI 不暴露 Anthropic 原生公共入口。其他 OpenAI API 家族和连接器类型仍留待后续版本；严格的 Anthropic 子集与 token 上限规则见 [API 契约](docs/api-contract.md)。
+
+新连连看棋盘通过完整消除序列校验，并减少整行、整列和相邻成组的排列。已有局保留原棋盘；尺寸、入场价格、计分、时限和死局免费重排规则保持。
 
 ## 站点结构
 
@@ -92,9 +94,9 @@ set +a
 - [环境变量示例](admin.env.example)
 - [systemd 单元示例](deploy/nonbiriapi.service.example)
 
-Beta.2 采用数据库 Generation 2（`application_id=0x4E425249`、`user_version=2`）：不会原地迁移 alpha 数据库或 Generation 1；对不支持或异常的现有数据库会在零写入前提下拒绝启动。四个精确的旧 Generation 2 manifest 与五个精确的已部署 beta.2 结构均支持增量更新。最新扩展允许每小时循环限量，只放宽周期校验，保留现有规则、世代、计量和回执。此前扩展增加稀疏的模型级按 Token 积分预留覆盖表；无对应行时继承全局，删除模型时清理覆盖。更新器先以只读方式验证来源，再执行一次原子增量更新并校验完整 manifest 与外键，保留现有账号、资源、余额、配置、调度策略、密钥限额和历史事实。仅替换二进制降级到不兼容结构不安全；必须停止服务并保留经过恢复验证的完整快照（数据库/sidecar、release、配置、主密钥和 unit），再按[部署指南](docs/deployment.md)操作。从 alpha 切换到 beta.2 必须显式执行全新切换；新库默认维护开启，注册、活动、公益、捐赠入口和游戏关闭。
+Beta.3 采用数据库 Generation 2（`application_id=0x4E425249`、`user_version=2`）：不会原地迁移 alpha 数据库或 Generation 1；对不支持或异常的现有数据库会在零写入前提下拒绝启动。完整 beta.2 结构和原先支持的九种结构均可保留数据更新。本次只扩充 `logical_requests` 与 `request_logs` 的请求类型 CHECK，接纳向量调用。99 张业务表集合、导出第 5 版、规则、计量、回执、余额、自定义法律文本和已有游戏状态保持。此前扩展增加稀疏的模型级按 Token 积分预留覆盖表；无对应行时继承全局，删除模型时清理覆盖。更新器先以只读方式验证来源，再执行一次原子增量更新并校验完整 manifest 与外键，保留现有账号、资源、余额、配置、调度策略、密钥限额和历史事实。仅替换二进制降级到不兼容结构不安全；必须停止服务并保留经过恢复验证的完整快照（数据库/sidecar、release、配置、主密钥和 unit），再按[部署指南](docs/deployment.md)操作。从 alpha 切换到 beta.3 必须显式执行全新切换；新库默认维护开启，注册、活动、公益、捐赠入口和游戏关闭。
 
-Beta.2 采用源码优先方式，生产支持平台为 Linux/amd64。运营方应在该目标上从精确发布源码 commit 构建，或使用等价的受控构建流水线。本源码发布不提供官方预编译二进制、容器镜像或安装包，其他生产平台尚不支持。
+Beta.3 采用源码优先方式，生产支持平台为 Linux/amd64。运营方应在该目标上从精确发布源码 commit 构建，或使用等价的受控构建流水线。本源码发布不提供官方预编译二进制、容器镜像或安装包，其他生产平台尚不支持。
 
 ## GitHub 自动化
 
@@ -143,6 +145,17 @@ CallerKey 和上游凭据都必须按密钥保护。不要把它们放入 URL、
 | 502 / 504 | `upstream` | `upstream` | 上游传输或协议失败，或上游超时。 |
 
 自用和公益调用会保留可识别的上游报错信息，以及可选的 `upstream_code`，并清除来源地址和敏感值。无法读取、过大或无法安全呈现的错误使用通用提示。SSE 响应头发出后无法改写 HTTP 状态，失败会通过有界错误事件或关闭连接表达。公益 attempt 在没有有效成功回传时失败，不收积分、不消耗捐赠额度；成功回传开始后的中断按已公布的用量与结算规则处理。完整规则见 [API 错误与收费契约](docs/api-contract.md)。
+
+调用向量嵌入时，选择实际支持该操作的上游模型：
+
+```sh
+curl https://api.example.com/v1/embeddings \
+  -H 'Authorization: Bearer nbk_REPLACE_WITH_YOUR_CALLER_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"provider/model","input":["Hello","World"],"encoding_format":"float"}'
+```
+
+上游填写带版本的 base，如 `https://provider.example/v1`；连接器追加 `/embeddings`，不会自动补 `/v1`。成功批量请求按次只计一次；公益按 Token 计费使用整批输入 Token 和输入价格，向量维度不算输出 Token。校验、未知用量结算、限额和调试行为见[向量接口契约](docs/api-contract.md#23-post-v1embeddings)。
 
 ## 开发门禁
 
