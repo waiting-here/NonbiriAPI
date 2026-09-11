@@ -1,4 +1,5 @@
 import { ApiError } from '@shared/query/http';
+import { MODEL_CALL_ROUTES, isCharityRoute, isEmbeddingRoute, type ModelCallRoute } from '@shared/operations/requestKind';
 import {
   boolean,
   decimal,
@@ -70,7 +71,7 @@ export interface DebugBody {
 }
 
 export interface DebugRequest {
-  route_kind: 'openai_chat_completions' | 'charity_chat_completions';
+  route_kind: ModelCallRoute;
   model: string;
   stream: boolean;
   body: DebugBody;
@@ -240,11 +241,14 @@ export function normalizeDebugTrace(value: unknown): DebugTrace {
   ], 'Debug trace');
   const requestRoot = record(root.request, ['route_kind', 'model', 'stream', 'body'], 'Debug request');
   const request: DebugRequest = {
-    route_kind: oneOf(requestRoot.route_kind, ['openai_chat_completions', 'charity_chat_completions'] as const, 'Debug route kind'),
+    route_kind: oneOf(requestRoot.route_kind, MODEL_CALL_ROUTES, 'Debug route kind'),
     model: string(requestRoot.model, 'Debug model', { max: 512, bytes: 2_048 }),
     stream: boolean(requestRoot.stream, 'Debug stream flag'),
     body: normalizeDebugBody(requestRoot.body),
   };
+  if (isEmbeddingRoute(request.route_kind) && request.stream) {
+    invalidResponse('Embedding stream flag');
+  }
   let upstream: DebugUpstreamResult | null = null;
   if (root.upstream_result !== null) {
     const item = record(root.upstream_result, ['result_kind', 'status_code', 'upstream_code', 'diag', 'usage', 'completed_at'], 'Debug upstream result');
@@ -256,7 +260,7 @@ export function normalizeDebugTrace(value: unknown): DebugTrace {
       usage: normalizeDebugUsage(item.usage),
       completed_at: unixSecond(item.completed_at, 'Debug upstream completion time'),
     };
-    if (request.route_kind === 'charity_chat_completions'
+    if (isCharityRoute(request.route_kind)
       && (upstream.result_kind !== 'synthetic'
         || (upstream.status_code !== 200 && upstream.status_code !== 502)
         || upstream.upstream_code !== null

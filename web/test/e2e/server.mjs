@@ -55,14 +55,16 @@ function debugMetadata(id, generation, revision, mode, lastEventId) {
   };
 }
 
-function debugTrace() {
-  const body = JSON.stringify({ marker: DEBUG_TRACE_MARKER, stream: false });
+function debugTrace(embedding = false, charity = false, mode = 'dry') {
+  const body = JSON.stringify(embedding
+    ? { marker: DEBUG_TRACE_MARKER, model: 'fixture/model', input: [[1], [2, 3]], encoding_format: 'base64', dimensions: 2, user: 'caller-supplied' }
+    : { marker: DEBUG_TRACE_MARKER, stream: false });
   return {
     trace_id: DEBUG_TRACE_ID,
     revision: '1',
     state: 'terminal',
     request: {
-      route_kind: 'openai_chat_completions',
+      route_kind: embedding ? (charity ? 'charity_embeddings' : 'openai_embeddings') : 'openai_chat_completions',
       model: 'fixture/model',
       stream: false,
       body: {
@@ -73,12 +75,16 @@ function debugTrace() {
         truncated: false,
       },
     },
-    upstream_result: null,
+    upstream_result: embedding && mode === 'live' ? {
+      result_kind: charity ? 'synthetic' : 'response', status_code: 200, upstream_code: null, diag: null,
+      usage: { uncached_input_tokens: '3', cache_write_input_tokens: '0', cache_read_input_tokens: '0', output_tokens: '0', total_tokens: '3', usage_unknown: false, charge: charity ? '1' : '0' },
+      completed_at: 2,
+    } : null,
     caller_result: {
       http_status: 422,
-      error_code: 'debug_dry_run_intercepted',
+      error_code: embedding && mode === 'live' ? 'debug_live_result_captured' : 'debug_dry_run_intercepted',
       source: 'platform',
-      message: '[NonbiriAPI] Debug Dry request intercepted.',
+      message: embedding && mode === 'live' ? '[NonbiriAPI] The upstream response was captured by the Debug page.' : '[NonbiriAPI] Debug Dry request intercepted.',
       completed_at: 2,
     },
     created_at: 1,
@@ -154,7 +160,7 @@ function serveDebugEvents(request, response) {
       kind: 'snapshot',
       data: {
         session,
-        traces: [debugTrace()],
+        traces: [debugTrace(url.searchParams.get('operation') === 'embedding', url.searchParams.get('scope') === 'charity', mode)],
         first_event_id: eventId,
         last_event_id: eventId,
       },

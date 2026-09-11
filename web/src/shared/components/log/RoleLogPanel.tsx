@@ -42,6 +42,8 @@ import { useLogUrlState } from './useLogUrlState';
 const ROUTE_LABEL_KEYS: Record<LogRouteKind, string> = {
   openai_chat_completions: 'common.operations.logs.route.openaiChatCompletions',
   charity_chat_completions: 'common.operations.logs.route.charityChatCompletions',
+  openai_embeddings: 'common.operations.logs.route.openaiEmbeddings',
+  charity_embeddings: 'common.operations.logs.route.charityEmbeddings',
   model_discovery: 'common.operations.logs.route.modelDiscovery',
 };
 

@@ -380,6 +380,7 @@ export function CharityCatalogPanel({ accountID }: { accountID: string | undefin
         <div>
           <h2>{t('user.charity.catalog.title')}</h2>
           <p>{t('user.charity.catalog.description')}</p>
+          <p>{t('common.operations.charity.embeddingBillingHelp')}</p>
         </div>
         {pageData ? (
           <StatusBadge

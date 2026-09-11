@@ -4,6 +4,7 @@ import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { Card, EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from '@shared/components/States';
 import { ApiError } from '@shared/query/http';
 import { formatDateTime } from '@shared/utils/datetime';
+import { isEmbeddingRoute } from '@shared/operations/requestKind';
 import type { DebugObserverStatus } from '../features/debug/v2stream';
 import {
   safeRequestJSON,
@@ -19,10 +20,13 @@ import '../features/debug/debug-v2.css';
 import '@shared/operations/operations.css';
 
 const PARAMETER_ORDER = ['model', 'stream', 'messages', 'temperature', 'top_p', 'max_tokens', 'tools', 'tool_choice', 'response_format'] as const;
+const EMBEDDING_PARAMETER_ORDER = ['model', 'input', 'encoding_format', 'dimensions', 'user'] as const;
 
 const ROUTE_LABEL_KEYS = {
   openai_chat_completions: 'user.debug.state.route.openaiChatCompletions',
   charity_chat_completions: 'user.debug.state.route.charityChatCompletions',
+  openai_embeddings: 'user.debug.state.route.openaiEmbeddings',
+  charity_embeddings: 'user.debug.state.route.charityEmbeddings',
 } as const satisfies Record<DebugTrace['request']['route_kind'], string>;
 
 const TRACE_STATE_LABEL_KEYS = {
@@ -102,7 +106,7 @@ function RequestDetails({ trace }: { trace: DebugTrace }) {
       <h3 id={titleId}>{t('user.debug.request.title')}</h3>
       <p>{t('user.debug.request.ownerOnly')}</p>
       <dl className="ops-debug-presence">
-        {PARAMETER_ORDER.map((name) => {
+        {(isEmbeddingRoute(trace.request.route_kind) ? EMBEDDING_PARAMETER_ORDER : PARAMETER_ORDER).map((name) => {
           const present = Boolean(root && Object.prototype.hasOwnProperty.call(root, name));
           const value = root?.[name];
           const presence = valuePresence(value, present);
@@ -253,7 +257,7 @@ export function DebugPage() {
         <h2>{t('user.debug.fixedResults.title')}</h2>
         <p><code>debug_dry_run_intercepted</code> (422): {t('user.debug.fixedResults.dryIntercepted')}</p>
         <p><code>debug_live_result_captured</code> (422): {t('user.debug.fixedResults.liveCaptured')}</p>
-        <p><code>debug_live_cancelled</code> (422): {t('user.debug.fixedResults.liveCancelled')}</p>
+        <p><code>debug_live_cancelled</code> (409): {t('user.debug.fixedResults.liveCancelled')}</p>
         <p>{t('user.debug.fixedResults.callerKeyPrefix')} <code>&#36;NONBIRI_CALLER_KEY</code> {t('user.debug.fixedResults.callerKeySuffix')}</p>
       </Card>
 
