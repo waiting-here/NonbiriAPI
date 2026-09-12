@@ -37,7 +37,6 @@ const MAX_AMOUNT_MILLI = 9_000_000_000_000_000n;
 
 type CatalogValue = string | number | boolean | null;
 type ParseResult = { value: CatalogValue; error: null } | { value: undefined; error: string };
-type LineEndings = 'crlf' | 'lf' | 'cr' | 'mixed' | 'none';
 
 const CATALOG_LOCALES = { en: 'en', zh: 'zh' } as const;
 const SETTING_TYPE_LABEL_KEYS: Record<SiteConfigCatalogEntry['type'], string> = {
@@ -84,22 +83,6 @@ const enumValueLabel = (t: TFunction, value: string) =>
   t(ENUM_VALUE_LABEL_KEYS[value] ?? 'admin.settings.enumValues.unknown', { value });
 
 const utf8Bytes = (value: string) => new TextEncoder().encode(value).byteLength;
-
-function lineEndings(value: string): LineEndings {
-  if (!value.includes('\r') && !value.includes('\n')) return 'none';
-  const remainder = value.replaceAll('\r\n', '');
-  const kinds = [value.includes('\r\n'), remainder.includes('\r'), remainder.includes('\n')].filter(
-    Boolean,
-  ).length;
-  if (kinds > 1) return 'mixed';
-  return value.includes('\r\n') ? 'crlf' : remainder.includes('\r') ? 'cr' : 'lf';
-}
-
-function restoreLineEndings(value: string, style: LineEndings): string {
-  if (style === 'crlf') return value.replace(/\r\n|\r|\n/g, '\r\n');
-  if (style === 'cr') return value.replace(/\r\n|\r|\n/g, '\r');
-  return value;
-}
 
 function amountMilli(value: string): bigint | null {
   const match = /^(0|[1-9][0-9]*)(?:\.([0-9]{1,3}))?$/.exec(value);
@@ -253,10 +236,7 @@ type EditorProps = {
 function parsedDraft(entry: SiteConfigCatalogEntry, draft: SettingDraft, t: TFunction) {
   const text =
     entry.type === 'text'
-      ? restoreLineEndings(
-          draft.text,
-          lineEndings(typeof draft.original === 'string' ? draft.original : ''),
-        )
+      ? draft.text.replace(/\r\n|\r/g, '\n')
       : entry.type === 'amount' || entry.type === 'integer'
         ? draft.text.trim()
         : draft.text;
@@ -551,9 +531,8 @@ export function SettingsPage() {
     ),
   };
   const [search, setSearch] = useState('');
-  const saveErrorMessage = save.error instanceof ApiError
-    ? save.error.message.replace(/^\[NonbiriAPI\]\s*/, '')
-    : '';
+  const saveErrorMessage =
+    save.error instanceof ApiError ? save.error.message.replace(/^\[NonbiriAPI\]\s*/, '') : '';
   const locale = catalogLocale(i18n.resolvedLanguage ?? i18n.language);
   const groups = useMemo(() => {
     if (!authority.data) return new Map<string, SiteConfigCatalogEntry[]>();
@@ -574,13 +553,12 @@ export function SettingsPage() {
     return result;
   }, [authority.data, search]);
   const catalogLabels = useMemo(
-    () =>
-      ({
-        charity_model_pricing: t('admin.settings.charityModelPricing'),
-        ...Object.fromEntries(
-          (authority.data?.catalog ?? []).map((entry) => [entry.key, entry.title[locale]]),
-        ),
-      }),
+    () => ({
+      charity_model_pricing: t('admin.settings.charityModelPricing'),
+      ...Object.fromEntries(
+        (authority.data?.catalog ?? []).map((entry) => [entry.key, entry.title[locale]]),
+      ),
+    }),
     [authority.data, locale, t],
   );
   const ordinary = [...groups].filter(([name]) => !DANGEROUS_GROUPS.has(name));
@@ -612,9 +590,7 @@ export function SettingsPage() {
             </div>
           </Card>
           <Card className="ops-save-bar">
-            <span>
-              {t('admin.settings.pendingChanges', { count: pendingCount })}
-            </span>
+            <span>{t('admin.settings.pendingChanges', { count: pendingCount })}</span>
             <div className="ops-actions">
               <button
                 type="button"

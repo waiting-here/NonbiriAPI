@@ -118,7 +118,7 @@ Game and activity keys cannot be changed through the generic single-key PATCH ro
 
 `PATCH /admin/api/site-config/{key}` accepts `{ "value": ... }`. JSON `null` is writable only for `anthropic_default_max_tokens`, where it deletes the explicit override and restores the built-in 65536 fallback. Specialized maintenance, announcement, activity, and game keys return `conflict` from this generic route and must use their dedicated endpoint.
 
-The four `legal_*_override_*` fields preserve accepted UTF-8 bytes, including LF/CRLF, tabs, and multibyte characters, up to 65,536 bytes. The two donation notices use the same byte-preserving multiline behavior with an 8,192-byte bound. Before opening an instance, save all owner-approved texts, reload the settings page, read them back, and re-save once to prove the full round trip is lossless; then verify the anonymous privacy/terms pages, the user donation form, and `legal_authoritative_locale`. A fresh database does not import prior overrides automatically.
+The four `legal_*_override_*` fields accept multiline UTF-8 text up to 65,536 bytes; the two donation notices allow 8,192 bytes. Line endings are normalized to LF before validation, storage and responses. Paragraphs, tabs and other accepted characters are preserved. Existing stored overrides are not rewritten on startup. After changing an instance's legal text, reload the settings and verify the anonymous privacy/terms pages, the donation form and `legal_authoritative_locale`. A fresh database does not import prior overrides automatically.
 
 ### Per-user limit overrides
 

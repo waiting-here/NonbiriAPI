@@ -446,6 +446,7 @@ func (body draftRequest) patchAndCanonical() (DraftPatch, map[string]any) {
 		canonical["title_zh"] = body.TitleZH.Value
 	}
 	if body.BodyZH.Set {
+		body.BodyZH.Value = normalizeMarkdownLineEndings(body.BodyZH.Value)
 		patch.BodyZH = &body.BodyZH.Value
 		canonical["body_zh"] = body.BodyZH.Value
 	}
@@ -454,6 +455,7 @@ func (body draftRequest) patchAndCanonical() (DraftPatch, map[string]any) {
 		canonical["title_en"] = body.TitleEN.Value
 	}
 	if body.BodyEN.Set {
+		body.BodyEN.Value = normalizeMarkdownLineEndings(body.BodyEN.Value)
 		patch.BodyEN = &body.BodyEN.Value
 		canonical["body_en"] = body.BodyEN.Value
 	}

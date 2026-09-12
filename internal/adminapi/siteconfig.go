@@ -431,9 +431,10 @@ func validConfigText(value string, maxBytes int) bool {
 	return validConfigTextWithRunes(value, maxBytes, 0)
 }
 
-// validMultilineText is like validConfigText but permits newlines and tabs so
-// operators can author multi-paragraph legal override text. Other control
-// characters (NUL, ESC, bidi overrides, ...) remain rejected.
+func normalizeMultilineText(value string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(value, "\r\n", "\n"), "\r", "\n")
+}
+
 func validMultilineText(value string, maxBytes int) bool {
 	if len(value) > maxBytes || !utf8.ValidString(value) {
 		return false
@@ -631,6 +632,7 @@ func typedSiteConfigValue(key, stored string) any {
 			}
 			return ""
 		case kindMultilineText:
+			stored = normalizeMultilineText(stored)
 			if validMultilineText(stored, textMaxFor(key)) {
 				return stored
 			}
@@ -781,7 +783,11 @@ func validateSiteConfigValue(key string, raw json.RawMessage) (string, httperr.E
 			return "", httperr.New(httperr.CodeConflict, "configuration key is read-only")
 		case kindMultilineText:
 			var value string
-			if err := json.Unmarshal(raw, &value); err != nil || !validMultilineText(value, textMaxFor(key)) {
+			if err := json.Unmarshal(raw, &value); err != nil {
+				return "", invalid
+			}
+			value = normalizeMultilineText(value)
+			if !validMultilineText(value, textMaxFor(key)) {
 				return "", invalid
 			}
 			return value, httperr.Error{}

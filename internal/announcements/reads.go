@@ -460,13 +460,13 @@ func (repository *Repository) adminDTO(row rawAnnouncement) (AdminAnnouncement, 
 		if !completeLanguage(row.draftTitleZH, row.draftBodyZH) {
 			return AdminAnnouncement{}, ErrUnavailable
 		}
-		value.Draft.ZH = &AnnouncementLanguageDraft{Title: row.draftTitleZH, Body: row.draftBodyZH}
+		value.Draft.ZH = &AnnouncementLanguageDraft{Title: row.draftTitleZH, Body: normalizeMarkdownLineEndings(row.draftBodyZH)}
 	}
 	if row.draftTitleEN != "" || row.draftBodyEN != "" {
 		if !completeLanguage(row.draftTitleEN, row.draftBodyEN) {
 			return AdminAnnouncement{}, ErrUnavailable
 		}
-		value.Draft.EN = &AnnouncementLanguageDraft{Title: row.draftTitleEN, Body: row.draftBodyEN}
+		value.Draft.EN = &AnnouncementLanguageDraft{Title: row.draftTitleEN, Body: normalizeMarkdownLineEndings(row.draftBodyEN)}
 	}
 	if row.publishedRevision.Valid {
 		publishedRevision, err := decimalRevision(row.publishedRevision.Int64)

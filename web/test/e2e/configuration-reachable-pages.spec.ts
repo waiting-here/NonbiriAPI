@@ -571,7 +571,7 @@ test('reachable admin settings consumes the bilingual catalog and rejects a 345-
   await assertResponsiveAndClean(page, guard);
 });
 
-test('reachable admin settings preserves CRLF legal text through untouched and edited browser saves', async ({
+test('reachable admin settings saves legacy legal text with LF line endings', async ({
   context,
   page,
 }) => {
@@ -639,14 +639,14 @@ test('reachable admin settings preserves CRLF legal text through untouched and e
   await expect(textarea).toHaveValue('alpha\nbeta\n!');
   await save.click();
   await expect.poll(() => patches.length).toBe(1);
-  expect(patches[0]).toBe('alpha\r\nbeta\r\n!');
-  expect(/(^|[^\r])\n/.test(patches[0] ?? '')).toBe(false);
+  expect(patches[0]).toBe('alpha\nbeta\n!');
+  expect(patches[0]).not.toContain('\r');
   await expect(save).toBeDisabled();
   await textarea.fill(original.replaceAll('\r\n', '\n'));
   await save.click();
   await expect.poll(() => patches.length).toBe(2);
   await expect(save).toBeDisabled();
-  expect(state).toBe(original);
+  expect(state).toBe(original.replaceAll('\r\n', '\n'));
   await assertResponsiveAndClean(page, guard);
 });
 
@@ -836,7 +836,9 @@ test('reachable admin charity edits flatten policy with keyboard input at 390px'
   const editor = page.locator('.card').filter({
     has: page.getByRole('heading', { name: '[公益]provider/charity-model' }),
   });
-  const flatten = editor.getByRole('checkbox', { name: 'Experimental: flatten tool calls (chat only)' });
+  const flatten = editor.getByRole('checkbox', {
+    name: 'Experimental: flatten tool calls (chat only)',
+  });
   await flatten.focus();
   await page.keyboard.press('Space');
   await expect(flatten).toBeChecked();

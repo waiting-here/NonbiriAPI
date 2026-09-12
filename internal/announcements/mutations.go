@@ -202,9 +202,9 @@ func (service *Service) Publish(ctx context.Context, adminID int64, id string, m
 	}
 	resultSQL, err := tx.ExecContext(ctx, `
 UPDATE announcements SET state='published',revision=?,published_revision=?,published_at=?,withdrawn_at=NULL,
- published_title_zh=draft_title_zh,published_body_zh=draft_body_zh,
- published_title_en=draft_title_en,published_body_en=draft_body_en,updated_at=?
-WHERE id=? AND revision=?`, next, next, now, now, id, row.revision)
+ published_title_zh=draft_title_zh,published_body_zh=?,
+ published_title_en=draft_title_en,published_body_en=?,updated_at=?
+WHERE id=? AND revision=?`, next, next, now, values.bodyZH, values.bodyEN, now, id, row.revision)
 	if err != nil {
 		return MutationResult[struct{}]{}, fmt.Errorf("announcements: publish: %w", err)
 	}

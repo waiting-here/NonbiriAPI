@@ -270,7 +270,7 @@ func TestSiteConfigPatchScalarBoundariesAndOptionalNull(t *testing.T) {
 		{"optional amount maximum", KeyCharityTokenReserveMilli, `"9000000000000"`, "9000000000000000"},
 		{"text byte maximum", KeySiteName, `"` + strings.Repeat("s", 256) + `"`, strings.Repeat("s", 256)},
 		{"text rune maximum", KeyLevelDisplayName1, `"` + strings.Repeat("界", 64) + `"`, strings.Repeat("界", 64)},
-		{"multiline text", KeyLegalTermsOverrideEn, `"first\nsecond\tline"`, "first\nsecond\tline"},
+		{"multiline text", KeyLegalTermsOverrideEn, `"first\r\nsecond\rthird\tline"`, "first\nsecond\nthird\tline"},
 		{"required locale", KeyLegalAuthoritativeLocale, `"zh"`, "zh"},
 		{"optional locale empty", KeyLegalAuthoritativeLocale, `""`, ""},
 		{"enum", KeyCheckinMode, `"disabled"`, "disabled"},

@@ -277,7 +277,7 @@ type draftValues struct {
 
 func draftFromRow(row rawAnnouncement) draftValues {
 	return draftValues{
-		titleZH: row.draftTitleZH, bodyZH: row.draftBodyZH, titleEN: row.draftTitleEN, bodyEN: row.draftBodyEN,
+		titleZH: row.draftTitleZH, bodyZH: normalizeMarkdownLineEndings(row.draftBodyZH), titleEN: row.draftTitleEN, bodyEN: normalizeMarkdownLineEndings(row.draftBodyEN),
 		severity: row.severity, pinned: row.pinned == 1, dismissible: row.dismissible == 1,
 		expiresAt: nullableInt64(row.expiresAt),
 	}
@@ -288,13 +288,13 @@ func applyDraftPatch(values draftValues, patch DraftPatch) draftValues {
 		values.titleZH = *patch.TitleZH
 	}
 	if patch.BodyZH != nil {
-		values.bodyZH = *patch.BodyZH
+		values.bodyZH = normalizeMarkdownLineEndings(*patch.BodyZH)
 	}
 	if patch.TitleEN != nil {
 		values.titleEN = *patch.TitleEN
 	}
 	if patch.BodyEN != nil {
-		values.bodyEN = *patch.BodyEN
+		values.bodyEN = normalizeMarkdownLineEndings(*patch.BodyEN)
 	}
 	if patch.Severity != nil {
 		values.severity = *patch.Severity

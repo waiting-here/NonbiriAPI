@@ -169,6 +169,7 @@ const coreBaseUser = {
   concurrency_limit: null,
   effective_concurrency_limit: '5',
   balance: '1',
+  game_balance: '0',
   donation_credit: '2',
   effective_level: 2,
   level_display_name: 'Lv2',
@@ -453,8 +454,8 @@ describe('authoritative site-config frontend', () => {
     expect(screen.queryByLabelText('Site name')).not.toBeInTheDocument();
   });
 
-  test('preserves line endings at the exact 65536-byte legal boundary and rejects one byte more', async () => {
-    const prefix = '  标题\r\n\tparagraph \r\n';
+  test('uses LF at the exact 65536-byte legal boundary and rejects one byte more', async () => {
+    const prefix = '  标题\n\tparagraph \n';
     const prefixBytes = new TextEncoder().encode(prefix).byteLength;
     const document = prefix + 'x'.repeat(65_536 - prefixBytes);
     expect(new TextEncoder().encode(document)).toHaveLength(65_536);
@@ -462,7 +463,7 @@ describe('authoritative site-config frontend', () => {
       group: 'legal',
       type: 'text',
       title: { zh: '服务条款覆盖（英文）', en: 'Terms override (English)' },
-      description: { zh: '逐字节保留', en: 'Preserved byte for byte' },
+      description: { zh: '保留段落与制表符', en: 'Preserves paragraphs and tabs' },
       unit: null,
       raw_default: '',
       effective_fallback: '',
@@ -493,7 +494,7 @@ describe('authoritative site-config frontend', () => {
     await rendered.user.click(save);
     await waitFor(() => expect(server.patches).toHaveLength(1));
     expect(server.patches[0]?.value === editedDocument).toBe(true);
-    expect(String(server.patches[0]?.value).replaceAll('\r\n', '')).not.toContain('\n');
+    expect(String(server.patches[0]?.value)).not.toContain('\r');
 
     textarea = await screen.findByLabelText('Terms override (English)');
     form = textarea.closest<HTMLElement>('.ops-setting');
@@ -719,6 +720,7 @@ describe('admin per-user limit explanations', () => {
       effective_concurrency_limit: '5',
       lang: 'en',
       balance: '0',
+      game_balance: '0',
       donation_credit: '0',
       level: { manual: null, automatic: 1, effective: 1, display_name: 'Lv1' },
       game_profile_public: false,
