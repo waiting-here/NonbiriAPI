@@ -197,8 +197,17 @@ func TestReleasedGameplayUpgradeAndRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { app.Close() })
-	service := app.games.AccountContinuation().(*rps.Service)
 	// Advance only persisted deadlines, without sleeping or changing saved rules.
+	var fishingRetry *int64
+	if err := database.QueryRow("SELECT MAX(next_attempt_at) FROM game_fishing_batches WHERE state='reserved'").Scan(&fishingRetry); err != nil {
+		t.Fatal(err)
+	}
+	if fishingRetry != nil {
+		if _, err := app.games.RecoverModule(context.Background(), "fishing", *fishingRetry, 100, time.Now().Add(5*time.Second)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	service := app.games.AccountContinuation().(*rps.Service)
 	for step := 0; ; step++ {
 		var deadline *int64
 		if err := database.QueryRow(`SELECT MIN(deadline) FROM (
