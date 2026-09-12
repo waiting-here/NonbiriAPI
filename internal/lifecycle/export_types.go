@@ -333,26 +333,35 @@ type FishingPendingExport struct {
 }
 
 type FishingBatchExport struct {
-	RulesVersion int                    `json:"rules_version"`
-	Payment      GamePaymentExport      `json:"payment"`
-	BatchID      string                 `json:"batch_id"`
-	Bait         string                 `json:"bait"`
-	Count        int                    `json:"count"`
-	UnitPrice    string                 `json:"unit_price"`
-	EntryTotal   string                 `json:"entry_total"`
-	Outcomes     []FishingOutcomeExport `json:"outcomes"`
-	PayoutTotal  string                 `json:"payout_total"`
-	SettledAt    int64                  `json:"settled_at"`
-	RevealedAt   *int64                 `json:"revealed_at"`
+	NetPayoutTotal string                 `json:"net_payout_total"`
+	Rake           FishingRakeExport      `json:"rake"`
+	RulesVersion   int                    `json:"rules_version"`
+	Payment        GamePaymentExport      `json:"payment"`
+	BatchID        string                 `json:"batch_id"`
+	Bait           string                 `json:"bait"`
+	Count          int                    `json:"count"`
+	UnitPrice      string                 `json:"unit_price"`
+	EntryTotal     string                 `json:"entry_total"`
+	Outcomes       []FishingOutcomeExport `json:"outcomes"`
+	PayoutTotal    string                 `json:"payout_total"`
+	SettledAt      int64                  `json:"settled_at"`
+	RevealedAt     *int64                 `json:"revealed_at"`
 }
 
+type FishingRakeExport struct {
+	Platform string `json:"platform"`
+	Welfare  string `json:"welfare"`
+	Thursday string `json:"thursday"`
+}
 type FishingOutcomeExport struct {
-	Ordinal             int     `json:"ordinal"`
-	SpeciesKey          string  `json:"species_key"`
-	Tier                string  `json:"tier"`
-	SizeCM              int     `json:"size_cm"`
-	Reward              string  `json:"reward"`
-	BlueFatFishLengthCM *string `json:"blue_fat_fish_length_cm"`
+	NetReward           string            `json:"net_reward"`
+	Rake                FishingRakeExport `json:"rake"`
+	Ordinal             int               `json:"ordinal"`
+	SpeciesKey          string            `json:"species_key"`
+	Tier                string            `json:"tier"`
+	SizeCM              int               `json:"size_cm"`
+	Reward              string            `json:"reward"`
+	BlueFatFishLengthCM *string           `json:"blue_fat_fish_length_cm"`
 }
 
 type FishingRankExport struct {

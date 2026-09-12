@@ -107,7 +107,7 @@ func TestCompileConfigCompleteDefaultsAndStrictSwitches(t *testing.T) {
 		t.Fatalf("default snapshot = %#v", snapshot)
 	}
 	evidence, err := snapshot.Rules.Evidence(fishing.BaitWorm)
-	if err != nil || evidence.EntryMilli != "2500000" || evidence.TargetRTP != "9/10" {
+	if err != nil || evidence.EntryMilli != "2500000" || evidence.TargetRTP != "1" {
 		t.Fatalf("default fishing evidence = %#v, %v", evidence, err)
 	}
 	for _, malformed := range []string{"true", "false", " 1", "", "2"} {
@@ -235,7 +235,7 @@ func FuzzCanonicalWireAmount(f *testing.F) {
 
 func TestSiteConfigKeysReturnsCopy(t *testing.T) {
 	first, second := SiteConfigKeys(), SiteConfigKeys()
-	if len(first) != 45 || len(second) != 45 {
+	if len(first) != 48 || len(second) != 48 {
 		t.Fatalf("key lengths = %d, %d", len(first), len(second))
 	}
 	first[0] = "mutated"

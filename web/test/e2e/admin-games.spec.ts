@@ -25,6 +25,7 @@ const INITIAL_CONFIG: GamesConfig = {
     enabled: true,
     bait_prices: { worm: '2.5', lure: '5', premium: '7.5' },
     rtp_percent: { standard: 90, premium: 88 },
+    rake_bp: { platform: 100, welfare: 100, thursday: 100 },
     treasure_multipliers: { bottle: 2, clover: 3, shell: 5 },
   },
   linklink: {

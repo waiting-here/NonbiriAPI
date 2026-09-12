@@ -11,7 +11,13 @@
       "tier": "junk",
       "size_cm": 0,
       "reward": "0",
-      "blue_fat_fish_length_cm": null
+      "blue_fat_fish_length_cm": null,
+      "net_reward": "0",
+      "rake": {
+        "platform": "0",
+        "welfare": "0",
+        "thursday": "0"
+      }
     }
   ],
   "payout_total": "0",
@@ -23,5 +29,11 @@
     "general": "2500",
     "game": "0"
   },
-  "game_balance": "0"
+  "game_balance": "0",
+  "net_payout_total": "0",
+  "rake": {
+    "platform": "0",
+    "welfare": "0",
+    "thursday": "0"
+  }
 }

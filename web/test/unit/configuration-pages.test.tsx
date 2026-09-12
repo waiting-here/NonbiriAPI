@@ -788,6 +788,7 @@ const initialGameConfig: GamesConfig = {
     enabled: false,
     bait_prices: { worm: '2.5', lure: '5', premium: '7.5' },
     rtp_percent: { standard: 90, premium: 88 },
+    rake_bp: { platform: 100, welfare: 100, thursday: 100 },
     treasure_multipliers: { bottle: 2, clover: 3, shell: 5 },
   },
   linklink: {
@@ -930,6 +931,22 @@ function installGameServer(options: { rejectPatch?: boolean } = {}) {
 }
 
 describe('standalone Admin Games feature', () => {
+  test('validates the combined fishing deductions and submits one revision', async () => {
+    const server = installGameServer();
+    const rendered = await renderWithProviders(<AdminSessionFixture><GamesPage /></AdminSessionFixture>,
+      { station: 'admin', locale: 'en', role: 'admin' });
+    const save = await screen.findByRole('button', { name: 'Save game configuration' });
+    const platform = screen.getByLabelText(/platform deduction from each catch/i);
+    fireEvent.change(platform, { target: { value: '9800' } });
+    await rendered.user.click(save);
+    expect(server.patches).toHaveLength(0);
+    expect(screen.getByText(/Fishing pool cuts must total less than 10000/)).toBeVisible();
+    fireEvent.change(platform, { target: { value: '9799' } });
+    await rendered.user.click(save);
+    await waitFor(() => expect(server.patches).toHaveLength(1));
+    expect(server.patches[0]).toMatchObject({ expected_revision: '7', fishing: { rake_bp: { platform: 9799, welfare: 100, thursday: 100 } } });
+  });
+
   test('sends the frozen full mutable PATCH, excludes queue capacity, and renders exact active counts', async () => {
     const server = installGameServer();
     const rendered = await renderWithProviders(

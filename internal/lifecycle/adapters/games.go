@@ -114,14 +114,14 @@ func (adapter *FishingAdapter) ExportFishing(
 			}
 			outcomes[outcomeIndex] = lifecycle.FishingOutcomeExport{
 				Ordinal: outcome.Ordinal, SpeciesKey: outcome.SpeciesKey, Tier: outcome.Tier,
-				SizeCM: outcome.SizeCM, Reward: outcome.Reward, BlueFatFishLengthCM: cloneString(outcome.BlueFatFishLengthCM),
+				NetReward: outcome.NetReward, Rake: lifecycle.FishingRakeExport(outcome.Rake), SizeCM: outcome.SizeCM, Reward: outcome.Reward, BlueFatFishLengthCM: cloneString(outcome.BlueFatFishLengthCM),
 			}
 		}
 		out.Terminal[index] = lifecycle.FishingBatchExport{
 			RulesVersion: batch.RulesVersion, Payment: lifecycle.GamePaymentExport(batch.Payment),
 			BatchID: batch.BatchID, Bait: batch.Bait, Count: batch.Count,
 			UnitPrice: batch.UnitPrice, EntryTotal: batch.EntryTotal, Outcomes: outcomes,
-			PayoutTotal: batch.PayoutTotal, SettledAt: batch.SettledAt,
+			NetPayoutTotal: batch.NetPayoutTotal, Rake: lifecycle.FishingRakeExport(batch.Rake), PayoutTotal: batch.PayoutTotal, SettledAt: batch.SettledAt,
 			RevealedAt: cloneInt64(batch.RevealedAt),
 		}
 	}

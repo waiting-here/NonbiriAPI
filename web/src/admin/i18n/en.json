@@ -263,6 +263,7 @@
       "title": "Game configuration",
       "masterEnabled": "Games master switch",
       "fishingEnabled": "Fishing enabled",
+      "fishingRake": "{{pump}} deduction from each catch (basis points)",
       "worm": "Worm bait",
       "lure": "Lure bait",
       "premium": "Premium bait",

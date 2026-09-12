@@ -12,7 +12,15 @@ export const FISHING_TIERS = [
 ] as const;
 export type FishingTier = (typeof FISHING_TIERS)[number];
 
+export interface FishingRake {
+  readonly platform: string;
+  readonly welfare: string;
+  readonly thursday: string;
+}
+
 export interface FishingOutcome {
+  readonly netReward: string;
+  readonly rake: FishingRake;
   readonly ordinal: number;
   readonly speciesKey: string;
   readonly tier: FishingTier;
@@ -23,6 +31,8 @@ export interface FishingOutcome {
 }
 
 export interface FishingBatchResult {
+  readonly netPayoutTotal: string;
+  readonly rake: FishingRake;
   readonly rulesVersion: number;
   readonly payment: GamePayment;
   readonly batchID: string;

@@ -75,6 +75,7 @@ type Config struct {
 	BaitPricesMilli     map[Bait]string
 	StandardRTPPercent  int
 	PremiumRTPPercent   int
+	RakeBP              RakeBasisPoints
 	TreasureMultipliers map[string]int
 }
 
@@ -86,8 +87,9 @@ func DefaultConfig() Config {
 			BaitLure:    "5000000",
 			BaitPremium: "7500000",
 		},
-		StandardRTPPercent: 90,
-		PremiumRTPPercent:  88,
+		StandardRTPPercent: 100,
+		PremiumRTPPercent:  100,
+		RakeBP:             RakeBasisPoints{Platform: 100, Welfare: 100, Thursday: 100},
 		TreasureMultipliers: map[string]int{
 			"bottle": 2,
 			"clover": 3,
@@ -111,8 +113,9 @@ type Outcome struct {
 // SettlementIntent contains only checked milli-credit amounts. The central
 // game settlement owner remains responsible for applying it atomically.
 type SettlementIntent struct {
-	EntryMilli  int64
-	PayoutMilli int64
+	EntryMilli                                           int64
+	PayoutMilli                                          int64
+	NetMilli, PlatformMilli, WelfareMilli, ThursdayMilli int64
 }
 
 // Result pairs a server-generated outcome with its pure settlement intent.
@@ -186,6 +189,7 @@ type Ruleset struct {
 	baits         map[Bait]*compiledBait
 	speciesByTier map[Tier][]Species
 	junk          []string
+	rakeBP        RakeBasisPoints
 }
 
 // EntryMilli returns the frozen entry price for one bait.
@@ -267,11 +271,8 @@ func (rules *Ruleset) Roll(bait Bait, source IntSource) (Result, error) {
 		}
 		if candidate.tier == TierTreasure {
 			return Result{
-				Outcome: Outcome{Bait: bait, Key: candidate.key, Tier: TierTreasure},
-				Settlement: SettlementIntent{
-					EntryMilli:  compiled.entry,
-					PayoutMilli: compiled.treasurePayout[candidate.key],
-				},
+				Outcome:    Outcome{Bait: bait, Key: candidate.key, Tier: TierTreasure},
+				Settlement: rules.settlement(compiled.entry, compiled.treasurePayout[candidate.key]),
 			}, nil
 		}
 
@@ -294,10 +295,7 @@ func (rules *Ruleset) Roll(bait Bait, source IntSource) (Result, error) {
 				Tier:           selected.Tier,
 				SizeCentimetre: size,
 			},
-			Settlement: SettlementIntent{
-				EntryMilli:  compiled.entry,
-				PayoutMilli: compiled.fishPayoutByTierCM[selected.Tier][size],
-			},
+			Settlement: rules.settlement(compiled.entry, compiled.fishPayoutByTierCM[selected.Tier][size]),
 		}, nil
 	}
 
@@ -379,7 +377,7 @@ func FrozenRulesHash() string {
 
 func canonicalRules(defs definitions, config Config) string {
 	var builder strings.Builder
-	builder.WriteString("fishing-rules-v1\nprices_milli=")
+	builder.WriteString("fishing-rules-v2\nprices_milli=")
 	for index, bait := range baitOrder {
 		if index > 0 {
 			builder.WriteByte(',')
@@ -435,6 +433,7 @@ func canonicalRules(defs definitions, config Config) string {
 		builder.WriteByte(':')
 		builder.WriteString(strconv.Itoa(config.TreasureMultipliers[key]))
 	}
+	fmt.Fprintf(&builder, "\nrake_bp=%d,%d,%d;round=floor_each_outcome", config.RakeBP.Platform, config.RakeBP.Welfare, config.RakeBP.Thursday)
 	builder.WriteString("\ntiers=")
 	for index, tier := range defs.tiers {
 		if index > 0 {
@@ -494,6 +493,7 @@ func compileWithDefinitions(config Config, defs definitions) (*Ruleset, error) {
 		baits:         make(map[Bait]*compiledBait, len(baitOrder)),
 		speciesByTier: speciesByTier,
 		junk:          append([]string(nil), defs.junk...),
+		rakeBP:        config.RakeBP,
 	}
 
 	definitionByBait := make(map[Bait]baitDefinition, len(defs.baits))
@@ -521,6 +521,9 @@ func compileWithDefinitions(config Config, defs definitions) (*Ruleset, error) {
 }
 
 func validateConfig(config Config) (map[Bait]int64, error) {
+	if !config.RakeBP.Valid() {
+		return nil, fmt.Errorf("%w: invalid rake basis points", ErrInvalidConfig)
+	}
 	if config.StandardRTPPercent < MinimumRTPPercent || config.StandardRTPPercent > MaximumRTPPercent ||
 		config.PremiumRTPPercent < MinimumRTPPercent || config.PremiumRTPPercent > MaximumRTPPercent {
 		return nil, fmt.Errorf("%w: RTP percent outside %d..%d", ErrInvalidConfig, MinimumRTPPercent, MaximumRTPPercent)

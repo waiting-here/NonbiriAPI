@@ -30,7 +30,7 @@ func TestFishingOnboardingAwardsEachBaitOnceAcrossBatchSizes(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		payout, err := game.ParseAmount(result.PayoutTotal)
+		payout, err := game.ParseAmount(result.NetPayoutTotal)
 		if err != nil {
 			t.Fatal(err)
 		}

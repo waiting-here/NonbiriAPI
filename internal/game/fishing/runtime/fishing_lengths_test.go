@@ -23,7 +23,7 @@ func TestFishingEasterEggKeepsOriginalSpeciesRewardAndReplay(t *testing.T) {
 			f := newGameFixture(t, legendSource(index, 137, 0, 99, 1, 0))
 			user := f.seedUser("egg-reward", fixtureFunding)
 			input := StartInput{UserID: user, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(800)}
-			result, pending, err := f.service.StartFishing(context.Background(), input)
+			result, pending, err := f.service.startLegacy(context.Background(), input)
 			if err != nil || pending != nil || result == nil {
 				t.Fatalf("start: %+v %+v %v", result, pending, err)
 			}
@@ -31,7 +31,7 @@ func TestFishingEasterEggKeepsOriginalSpeciesRewardAndReplay(t *testing.T) {
 			if outcome.BlueFatFishLengthCM == nil || *outcome.BlueFatFishLengthCM != "203" || outcome.SpeciesKey != species || outcome.SizeCM != 137 || outcome.Tier != "legend" {
 				t.Fatalf("presentation: %+v", outcome)
 			}
-			rules, err := fishing.Compile(fishing.DefaultConfig())
+			rules, err := fishing.Compile(legacyFishingConfig())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -43,7 +43,7 @@ func TestFishingEasterEggKeepsOriginalSpeciesRewardAndReplay(t *testing.T) {
 				t.Fatalf("reward changed: %+v vs %+v", result, original)
 			}
 			calls := f.random.callCount()
-			replay, _, err := f.service.StartFishing(context.Background(), input)
+			replay, _, err := f.service.startLegacy(context.Background(), input)
 			if err != nil || replay == nil || !replay.IdempotentReplay || *replay.Outcomes[0].BlueFatFishLengthCM != "203" || f.random.callCount() != calls {
 				t.Fatalf("replay: %+v %v", replay, err)
 			}
@@ -97,7 +97,7 @@ func TestFishingEasterEggRandomFailureRollsBackWholeTenDrawBatch(t *testing.T) {
 			}
 			operations := f.scalar(`SELECT COUNT(*) FROM credit_operations`)
 			seq := f.scalar(`SELECT last_ledger_seq FROM credit_capacity`)
-			result, pending, err := f.service.StartFishing(context.Background(), StartInput{UserID: user, Bait: "worm", Count: 10, IdempotencyKey: validTestKey(801)})
+			result, pending, err := f.service.startLegacy(context.Background(), StartInput{UserID: user, Bait: "worm", Count: 10, IdempotencyKey: validTestKey(801)})
 			if err == nil || result != nil || pending != nil {
 				t.Fatalf("failed draw accepted: %+v %+v %v", result, pending, err)
 			}
@@ -131,11 +131,11 @@ func TestFishingTenDrawBatchRanksItsLongestCatchWithoutChangingRewards(t *testin
 			}
 			f := newGameFixture(t, &scriptedSource{values: values})
 			user := f.seedUser("ten-catch-maximum", fixtureFunding)
-			result, pending, err := f.service.StartFishing(context.Background(), StartInput{UserID: user, Bait: "worm", Count: 10, IdempotencyKey: validTestKey(804)})
+			result, pending, err := f.service.startLegacy(context.Background(), StartInput{UserID: user, Bait: "worm", Count: 10, IdempotencyKey: validTestKey(804)})
 			if err != nil || pending != nil || result == nil || len(result.Outcomes) != 10 {
 				t.Fatalf("start: %+v %+v %v", result, pending, err)
 			}
-			rules, err := fishing.Compile(fishing.DefaultConfig())
+			rules, err := fishing.Compile(legacyFishingConfig())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -187,7 +187,7 @@ func TestFishingLengthFactFailureRecoversWithoutRerollOrPartialPayout(t *testing
 	if _, err := f.database.Exec(`CREATE TRIGGER reject_length_fact BEFORE INSERT ON game_fishing_length_facts BEGIN SELECT RAISE(ABORT,'fixture'); END`); err != nil {
 		t.Fatal(err)
 	}
-	result, pending, err := f.service.StartFishing(context.Background(), StartInput{UserID: user, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(802)})
+	result, pending, err := f.service.startLegacy(context.Background(), StartInput{UserID: user, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(802)})
 	if err != nil || result != nil || pending == nil {
 		t.Fatalf("pending: %+v %+v %v", result, pending, err)
 	}
@@ -218,13 +218,13 @@ func TestFishingLengthFactFailureRecoversWithoutRerollOrPartialPayout(t *testing
 func TestFishingRollingLengthExpiresWhileLifetimeSnapshotSurvives(t *testing.T) {
 	f := newGameFixture(t, legendSource(2, 200, 0, 1, 1, 0))
 	user := f.seedUser("rolling-length", fixtureFunding)
-	first, _, err := f.service.StartFishing(context.Background(), StartInput{UserID: user, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(810)})
+	first, _, err := f.service.startLegacy(context.Background(), StartInput{UserID: user, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(810)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.clock.Store(fixtureNow + 10)
 	f.random.values = legendSource(0, 100, 0, 1, 0).values
-	second, _, err := f.service.StartFishing(context.Background(), StartInput{UserID: user, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(811)})
+	second, _, err := f.service.startLegacy(context.Background(), StartInput{UserID: user, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(811)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +273,7 @@ func TestFishingHugeLengthsAreExactAcrossAuthorityExportAndDeletion(t *testing.T
 			f := newGameFixture(t, legendSource(1, 137, 1))
 			user := f.seedUser("huge-egg", fixtureFunding)
 			f.service.beforeSettlement = func(string) error { return errInjected }
-			_, pending, err := f.service.StartFishing(context.Background(), StartInput{UserID: user, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(820)})
+			_, pending, err := f.service.startLegacy(context.Background(), StartInput{UserID: user, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(820)})
 			if err != nil || pending == nil {
 				t.Fatal(pending, err)
 			}
@@ -342,7 +342,7 @@ func TestFishingRecentLengthTop20PrivacyAndBanExclusion(t *testing.T) {
 			requester = user
 		}
 		f.random.values = legendSource(0, 200-index, 1).values
-		result, pending, err := f.service.StartFishing(context.Background(), StartInput{UserID: user, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(850 + index)})
+		result, pending, err := f.service.startLegacy(context.Background(), StartInput{UserID: user, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(850 + index)})
 		if err != nil || pending != nil || result == nil {
 			t.Fatalf("seed %d: %+v %+v %v", index, result, pending, err)
 		}
@@ -372,7 +372,7 @@ func TestFishingPresentationConstraintsRejectHostileStates(t *testing.T) {
 	f := newGameFixture(t, legendSource(2, 137, 1))
 	user := f.seedUser("length-constraints", fixtureFunding)
 	f.service.beforeSettlement = func(string) error { return errInjected }
-	_, pending, err := f.service.StartFishing(context.Background(), StartInput{UserID: user, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(880)})
+	_, pending, err := f.service.startLegacy(context.Background(), StartInput{UserID: user, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(880)})
 	if err != nil || pending == nil {
 		t.Fatal(pending, err)
 	}
@@ -405,11 +405,18 @@ func TestFishingPresentationConstraintsRejectHostileStates(t *testing.T) {
 	other := f.seedUser("nonlegend-length", fixtureFunding)
 	f.random.values = []uint64{0, 0}
 	f.service.beforeSettlement = func(string) error { return errInjected }
-	_, junk, err := f.service.StartFishing(context.Background(), StartInput{UserID: other, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(881)})
+	_, junk, err := f.service.startLegacy(context.Background(), StartInput{UserID: other, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(881)})
 	if err != nil || junk == nil {
 		t.Fatal(junk, err)
 	}
 	if _, err := f.database.Exec(`INSERT INTO game_fishing_outcome_lengths(batch_id,ordinal,length_cm) VALUES(?,0,'201')`, junk.BatchID); err == nil {
 		t.Fatal("nonlegend presentation accepted")
 	}
+}
+
+func legacyFishingConfig() fishing.Config {
+	config := fishing.DefaultConfig()
+	config.StandardRTPPercent, config.PremiumRTPPercent = 90, 88
+	config.RakeBP = fishing.RakeBasisPoints{}
+	return config
 }

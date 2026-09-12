@@ -320,6 +320,12 @@
   }
 }
 
+.fishing-rake-details { margin-block: .65rem; font-size: .875rem; }
+.fishing-rake-details summary { cursor: pointer; }
+.fishing-rake-details dl { display: grid; gap: .35rem; margin-block: .5rem; }
+.fishing-rake-details dl > div { display: flex; justify-content: space-between; gap: 1rem; }
+.fishing-rake-details dd { margin: 0; overflow-wrap: anywhere; }
+
 .fishing-rarity--junk {
   --catch-color: #91a1aa;
 }

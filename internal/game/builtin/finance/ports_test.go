@@ -23,7 +23,7 @@ func TestFinancialPortsRejectForeignSourcesBeforeLedgerMutation(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = database.Close() })
 	for _, ddl := range []string{
-		`CREATE TABLE game_fishing_batches(id TEXT,user_id INTEGER,entry_total_milli INTEGER,payout_total_milli INTEGER,state TEXT,operation_id TEXT,rules_version INTEGER,game_paid_milli INTEGER,bait TEXT)`,
+		`CREATE TABLE game_fishing_batches(id TEXT,user_id INTEGER,entry_total_milli INTEGER,payout_total_milli INTEGER,state TEXT,operation_id TEXT,rules_version INTEGER,game_paid_milli INTEGER,bait TEXT,net_payout_total_milli INTEGER,platform_cut_total_milli INTEGER,welfare_cut_total_milli INTEGER,thursday_cut_total_milli INTEGER,platform_bp INTEGER,welfare_bp INTEGER,thursday_bp INTEGER,count INTEGER)`,
 		`CREATE TABLE game_linklink_sessions(id TEXT,user_id INTEGER,price_milli INTEGER,operation_id TEXT,state TEXT,rules_version INTEGER,game_paid_milli INTEGER,spec TEXT)`,
 		`CREATE TABLE game_rps_queue(id TEXT,user_id INTEGER,account_id INTEGER,reserved BLOB,reservation_operation_id TEXT,rules_version INTEGER,game_paid BLOB,mode TEXT)`,
 		`CREATE TABLE game_rps_sessions(id TEXT,account_id INTEGER,state TEXT,terminal_operation_id TEXT,player_pool BLOB,rules_version INTEGER,mode TEXT)`,
@@ -44,7 +44,7 @@ func TestFinancialPortsRejectForeignSourcesBeforeLedgerMutation(t *testing.T) {
 		sql  string
 		args []any
 	}{
-		{`INSERT INTO game_fishing_batches VALUES(?,1,1000,1200,'reserved',?,1,0,'worm')`, []any{id("fb_"), operation}},
+		{`INSERT INTO game_fishing_batches VALUES(?,1,1000,1200,'reserved',?,1,0,'worm',1200,0,0,0,NULL,NULL,NULL,1)`, []any{id("fb_"), operation}},
 		{`INSERT INTO game_linklink_sessions VALUES(?,1,1000,?,'active',1,0,'6x8')`, []any{id("ll_"), operation}},
 		{`INSERT INTO game_rps_queue VALUES(?,1,10,?,?,1,X'00000000000000000000000000000000','quick')`, []any{id("rpsq_"), db.EncodeU128(amount), operation}},
 		{`INSERT INTO game_rps_sessions VALUES(?,11,'started',?,?,1,'quick')`, []any{id("rps_"), operation, db.EncodeU128(amount)}},

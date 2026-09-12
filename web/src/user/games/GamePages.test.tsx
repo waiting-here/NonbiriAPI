@@ -44,10 +44,10 @@ function fishingResult() {
         tier: 'small',
         size_cm: 12,
         blue_fat_fish_length_cm: undefined as string | null | undefined,
-        reward: '2',
+        reward: '2', net_reward: '2', rake: { platform: '0', welfare: '0', thursday: '0' },
       },
     ],
-    payout_total: '2',
+    payout_total: '2', net_payout_total: '2', rake: { platform: '0', welfare: '0', thursday: '0' },
     balance: '12345678901234567891.125',
     settled_at: 1_800_000_000,
     idempotent_replay: false,
@@ -265,7 +265,7 @@ describe('beta.1 game pages', () => {
     const result = {
       ...fishingResult(),
       batch_id: batch,
-      outcomes: [{ ordinal: 0, species_key: 'koi', tier: 'legend', size_cm: 120, reward: '2' }],
+      outcomes: [{ ordinal: 0, species_key: 'koi', tier: 'legend', size_cm: 120, reward: '2', net_reward: '2', rake: { platform: '0', welfare: '0', thursday: '0' } }],
     };
     const replace = () =>
       view.queryClient.setQueryData(
@@ -633,7 +633,7 @@ describe('beta.1 game pages', () => {
       tier: 'legend',
       size_cm: 100,
       blue_fat_fish_length_cm: length,
-      reward: '2',
+      reward: '2', net_reward: '2', rake: { platform: '0', welfare: '0', thursday: '0' },
     };
     const blueRow = {
       rank: '1',

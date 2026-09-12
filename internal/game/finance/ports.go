@@ -21,7 +21,9 @@ type Entry struct {
 }
 type FishingSettlement struct {
 	Entry
-	Payout ledger.Amount
+	Payout                              ledger.Amount
+	Net, Platform, Welfare, Thursday    ledger.Amount
+	WelfareAccountID, ThursdayAccountID int64
 }
 type Fishing interface {
 	Reserve(context.Context, *sql.Tx, Entry, Mutation) error

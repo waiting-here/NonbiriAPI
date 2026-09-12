@@ -118,6 +118,12 @@ function validateGamesDraft(draft: GamesConfig, t: TFunction): string | null {
         maximum: 100,
       });
   }
+  for (const pump of ['platform', 'welfare', 'thursday'] as const) {
+    if (!validInteger(draft.fishing.rake_bp[pump], 0, 9_999))
+      return t('admin.games.validation.integerRange', { field: t('admin.games.fishingRake', { pump: t(RPS_PUMP_LABEL_KEYS[pump]) }), minimum: 0, maximum: 9_999 });
+  }
+  if (draft.fishing.rake_bp.platform + draft.fishing.rake_bp.welfare + draft.fishing.rake_bp.thursday >= 10_000)
+    return t('admin.games.validation.totalCuts', { mode: t('admin.games.sections.fishing'), maximum: 10_000 });
   for (const treasure of ['bottle', 'clover', 'shell'] as const) {
     if (!validInteger(draft.fishing.treasure_multipliers[treasure], 0, 1_000_000)) {
       return t('admin.games.validation.integerRange', {
@@ -352,6 +358,16 @@ function GamesEditor({
                   }))
                 }
               />
+            </label>
+          ))}
+          {(['platform', 'welfare', 'thursday'] as const).map((pump) => (
+            <label key={pump}>
+              <span>{t('admin.games.fishingRake', { pump: t(RPS_PUMP_LABEL_KEYS[pump]) })}</span>
+              <input type="number" min="0" max="9999" step="1"
+                value={numberInput(draft.fishing.rake_bp[pump])} disabled={save.isPending}
+                onChange={(event) => edit((current) => ({ ...current, fishing: { ...current.fishing,
+                  rake_bp: { ...current.fishing.rake_bp, [pump]: numberFromInput(event.target.value) },
+                } }))} />
             </label>
           ))}
           {(['bottle', 'clover', 'shell'] as const).map((treasure) => (
