@@ -1092,7 +1092,7 @@ FROM charity_reservations WHERE logical_request_id=?`, requestID).Scan(
 	if err != nil {
 		return 0, 0, claim.ErrInvariant
 	}
-	if charge > reserved {
+	if unknown == 1 && charge > reserved {
 		charge = reserved
 	}
 	return original, charge, nil
