@@ -1,0 +1,416 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/auth"
+	"github.com/waiting-here/NonbiriAPI/internal/claim"
+	connectorcontract "github.com/waiting-here/NonbiriAPI/internal/connector/contract"
+	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/dbfixture"
+	"github.com/waiting-here/NonbiriAPI/internal/game"
+	"github.com/waiting-here/NonbiriAPI/internal/game/rps"
+	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+	"github.com/waiting-here/NonbiriAPI/internal/secret"
+)
+
+type gameWireFixture struct {
+	app                   *application
+	store                 *db.Store
+	userID, adminID, now  int64
+	cookies, adminCookies []*http.Cookie
+}
+
+func newGameWireFixture(t *testing.T) gameWireFixture {
+	t.Helper()
+	vault, err := secret.New(bytes.Repeat([]byte{0x53}, secret.MasterKeyBytes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = vault.Close() })
+	path := filepath.Join(t.TempDir(), "games-http.db")
+	dbfixture.Materialize(t, path)
+	store, err := db.Open(path, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	app, err := buildApplication(auditConfig(), store, vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = app.Close() })
+	login := testApplicationRequest(t, app.handler, "POST", auditAdminHost, "/admin/api/login", `{"username":"operator","password":"correct horse battery staple"}`, nil, map[string]string{"Content-Type": "application/json"})
+	if login.Code != 200 {
+		t.Fatalf("login: %d %s", login.Code, login.Body.String())
+	}
+	adminCookies := []*http.Cookie{responseCookieNamed(t, login, auth.AdminSessionCookieName)}
+	configuration := testApplicationRequest(t, app.handler, "GET", auditAdminHost, "/admin/api/games/config", "", adminCookies, nil)
+	if configuration.Code != 200 {
+		t.Fatalf("config: %d %s", configuration.Code, configuration.Body.String())
+	}
+	assertGameWireSample(t, "games-config.json", configuration.Body.Bytes())
+	headers := map[string]string{"Content-Type": "application/json", "Origin": "http://" + auditAdminHost, "Idempotency-Key": strings.Repeat("G", 22)}
+	disable := testApplicationRequest(t, app.handler, "POST", auditAdminHost, "/admin/api/maintenance/disable", `{"expected_revision":"1","reason":"Game integration validation"}`, adminCookies, headers)
+	if disable.Code != 200 {
+		t.Fatalf("maintenance: %d %s", disable.Code, disable.Body.String())
+	}
+	headers["Idempotency-Key"] = strings.Repeat("P", 22)
+	patch := testApplicationRequest(t, app.handler, "PATCH", auditAdminHost, "/admin/api/games/config", `{"expected_revision":"1","master_enabled":true,"fishing":{"enabled":true}}`, adminCookies, headers)
+	if patch.Code != 200 {
+		t.Fatalf("patch: %d %s", patch.Code, patch.Body.String())
+	}
+	seedRootCallerIdentity(t, store)
+	var userID, adminID int64
+	if err := store.DB().QueryRow(`SELECT id FROM users WHERE discord_id='root-caller'`).Scan(&userID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB().QueryRow(`SELECT id FROM users WHERE is_admin=1`).Scan(&adminID); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	tx, err := store.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	now := time.Now().Unix()
+	wallet, err := ledger.CreateUserAccount(ctx, tx, userID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	external, err := ledger.CodedAccount(ctx, tx, "external")
+	if err != nil {
+		t.Fatal(err)
+	}
+	op, err := db.GenerateOpaqueID("op_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := ledger.NewAdminUserAdjustment(ledger.Meta{OperationID: op, ActorUserID: adminID, CreatedAt: now}, wallet.ID, external.ID, ledger.AmountFromMilli(1_000_000_000), 0, ledger.Amount{}, "fixture funding")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = ledger.Apply(ctx, tx, plan); err != nil {
+		t.Fatal(err)
+	}
+	const token = "registered_game_http_session_token_0123456789"
+	digest := sha256.Sum256([]byte(token))
+	if _, err = tx.Exec(`INSERT INTO sessions(token_hash,user_id,last_seen_at,expires_at,absolute_expires_at,created_at,cred_gen) VALUES(?,?,?,?,?,?,?)`, hex.EncodeToString(digest[:]), userID, now, now+3600, now+3600, now, "game-fixture-generation"); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	cookies := []*http.Cookie{{Name: auth.UserSessionCookieName, Value: token}}
+	return gameWireFixture{app: app, store: store, userID: userID, adminID: adminID, now: now, cookies: cookies, adminCookies: adminCookies}
+}
+
+// This overlay is compiled only against the exact released source.
+func TestWriteReleasedGameplayFixture(t *testing.T) {
+	if db.GenerationTwoSchemaHash() != "f94972e6544ee5020c6a16451d4213c0cdef61b51814b6216ba9291e3db9734c" {
+		t.Fatal("wrong released schema")
+	}
+	destination := os.Getenv("NONBIRI_GAMEPLAY_FIXTURE")
+	if destination == "" {
+		t.Fatal("missing fixture destination")
+	}
+	f := newGameWireFixture(t)
+	ctx := context.Background()
+	exec := func(q string, args ...any) {
+		t.Helper()
+		if _, err := f.store.DB().Exec(q, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for key, value := range map[string]string{
+		"game_linklink_enabled": "1", "game_linklink_6x8_enabled": "1", "game_linklink_6x8_price_milli": "1000",
+		"game_rps_enabled": "1", "game_rps_quick_enabled": "1", "game_rps_standard_enabled": "1", "game_rps_deathmatch_enabled": "1",
+		"game_rps_quick_b_milli": "1000", "game_rps_standard_b_milli": "1000", "game_rps_deathmatch_b_milli": "1000",
+		"game_fishing_rtp": "90", "game_fishing_rtp_premium": "88",
+		"legal_privacy_override_en": "Synthetic privacy.\nPreserve this text.\tExactly.",
+		"legal_terms_override_zh":   "合成条款。\n保留换行。", "site_timezone_offset_minutes": "0",
+	} {
+		exec("UPDATE site_config SET value=? WHERE key=?", value, key)
+	}
+	users := []int64{f.userID}
+	cookies := []*http.Cookie{f.cookies[0]}
+	zero := make([]byte, 16)
+	for i := 1; i < 17; i++ {
+		result, err := f.store.DB().Exec(`INSERT INTO users(discord_id,username,donation_credit_mag,total_requests,total_uncached_input_tokens,total_cache_write_input_tokens,total_cache_read_input_tokens,total_output_tokens,total_unknown_usage_requests,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+			fmt.Sprintf("released-player-%d", i), fmt.Sprintf("synthetic player %d", i), zero, zero, zero, zero, zero, zero, zero, zero, f.now, f.now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, err := result.LastInsertId()
+		if err != nil {
+			t.Fatal(err)
+		}
+		users = append(users, id)
+		token := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{byte(100 + i)}, 32))
+		hash := sha256.Sum256([]byte(token))
+		cookies = append(cookies, &http.Cookie{Name: auth.UserSessionCookieName, Value: token})
+		exec("INSERT INTO sessions(token_hash,user_id,last_seen_at,expires_at,absolute_expires_at,created_at,cred_gen) VALUES(?,?,?,?,?,?,?)",
+			hex.EncodeToString(hash[:]), id, f.now, f.now+3600, f.now+7200, f.now, "released-fixture")
+		tx, err := f.store.DB().BeginTx(ctx, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wallet, err := ledger.CreateUserAccount(ctx, tx, id, f.now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		external, err := ledger.CodedAccount(ctx, tx, "external")
+		if err != nil {
+			t.Fatal(err)
+		}
+		operation, err := db.GenerateOpaqueID("op_")
+		if err != nil {
+			t.Fatal(err)
+		}
+		amount := int64(1_000_000_000)
+		if i == 16 {
+			amount = -7000
+		}
+		plan, err := ledger.NewAdminUserAdjustment(ledger.Meta{OperationID: operation, ActorUserID: f.adminID, CreatedAt: f.now}, wallet.ID, external.ID, ledger.AmountFromMilli(amount), 0, ledger.Amount{}, "synthetic upgrade funding")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = ledger.Apply(ctx, tx, plan); err != nil {
+			t.Fatal(err)
+		}
+		if err = tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seq := 0
+	call := func(player int, method, path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		seq++
+		req := httptest.NewRequest(method, "http://"+auditUserHost+path, bytes.NewBufferString(body))
+		req.Host = auditUserHost
+		req.RemoteAddr = fmt.Sprintf("198.51.100.%d:4242", 30+player)
+		req.AddCookie(cookies[player])
+		req.Header.Set("Origin", "http://"+auditUserHost)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Idempotency-Key", fmt.Sprintf("%022d", seq))
+		out := httptest.NewRecorder()
+		f.app.handler.ServeHTTP(&scopeRecorder{out}, req)
+		if out.Code < 200 || out.Code >= 300 {
+			t.Fatalf("%s %s: %d %s", method, path, out.Code, out.Body.String())
+		}
+		return out
+	}
+	// Original settled and pending Fishing batches share the production reservation path.
+	call(0, "POST", "/api/games/fishing/batches", `{"bait":"worm","count":1}`)
+	exec(`CREATE TRIGGER reject_fixture_settlement BEFORE INSERT ON credit_operations WHEN NEW.kind='fishing_settle' BEGIN SELECT RAISE(ABORT,'injected settlement failure'); END`)
+	pending := call(1, "POST", "/api/games/fishing/batches", `{"bait":"lure","count":10}`)
+	if pending.Code != 202 {
+		t.Fatal("missing pending fishing batch")
+	}
+	exec("DROP TRIGGER reject_fixture_settlement")
+	// One retained summary and one saved board.
+	board := call(0, "POST", "/api/games/linklink/sessions", `{"spec":"6x8"}`)
+	var link struct {
+		ID       string `json:"session_id"`
+		Revision string `json:"revision"`
+	}
+	if err := json.Unmarshal(board.Body.Bytes(), &link); err != nil {
+		t.Fatal(err)
+	}
+	call(0, "POST", "/api/games/linklink/sessions/"+link.ID+"/abandon", fmt.Sprintf(`{"expected_revision":%q,"confirmation":true}`, link.Revision))
+	call(1, "POST", "/api/games/linklink/sessions", `{"spec":"6x8"}`)
+	service := f.app.games.AccountContinuation().(*rps.Service)
+	state := func(player int) rps.HomeState {
+		t.Helper()
+		var out rps.HomeState
+		response := call(player, "GET", rps.RouteState, "")
+		if err := json.Unmarshal(response.Body.Bytes(), &out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	enqueue := func(player int, mode string) {
+		call(player, "POST", rps.RouteQueue, fmt.Sprintf(`{"mode":%q,"device_token":%q,"deathmatch_confirmed":%t}`, mode, base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{byte(50 + player)}, 32)), mode == game.RPSModeDeathmatch))
+	}
+	action := func(player int, kind, payload string) {
+		current := state(player)
+		if current.Session == nil {
+			t.Fatal("missing session", player, current.Kind)
+		}
+		call(player, "POST", "/api/games/rps/sessions/"+current.Session.SessionID+"/actions", fmt.Sprintf(`{"phase_seq":%q,"expected_revision":%q,"action":%q,"payload":%s}`, current.Session.PhaseSeq, current.Session.Revision, kind, payload))
+	}
+	for group := 0; group < 5; group++ {
+		mode := game.RPSModeStandard
+		if group == 0 || group == 4 {
+			mode = game.RPSModeQuick
+		}
+		base := group * 3
+		for i := 0; i < 3; i++ {
+			enqueue(base+i, mode)
+		}
+		if _, err := service.MatchOnce(ctx, mode); err != nil {
+			t.Fatal(err)
+		}
+		if group == 1 {
+			continue
+		} // waiting for gestures
+		if group == 4 {
+			exec(`CREATE TRIGGER reject_fixture_terminal BEFORE INSERT ON credit_operations WHEN NEW.kind='rps_terminal' BEGIN SELECT RAISE(ABORT,'injected terminal failure'); END`)
+		}
+		for i, gesture := range []string{"rock", "scissors", "paper"} {
+			if group == 0 || group == 4 {
+				gesture = "rock"
+			}
+			action(base+i, "gesture", fmt.Sprintf(`{"gesture":%q}`, gesture))
+		}
+		if group == 0 {
+			if state(base).Result == nil {
+				t.Fatal("missing private result")
+			}
+			continue
+		}
+		if group == 4 {
+			exec("DROP TRIGGER reject_fixture_terminal")
+			continue
+		}
+		if group == 2 {
+			continue
+		} // waiting for dealer
+		current := state(base)
+		if current.Session == nil {
+			t.Fatal("missing dealer")
+		}
+		var dealerSeat int
+		if err := f.store.DB().QueryRow("SELECT dealer_seat FROM game_rps_sessions WHERE id=?", current.Session.SessionID).Scan(&dealerSeat); err != nil {
+			t.Fatal(err)
+		}
+		dealer := -1
+		for i := 0; i < 3; i++ {
+			for _, seat := range state(base + i).Session.Seats {
+				if seat.Viewer == "self" && seat.SeatNo == dealerSeat {
+					dealer = base + i
+				}
+			}
+		}
+		if dealer < 0 {
+			t.Fatal("dealer not found")
+		}
+		action(dealer, "dealer_decision", `{"decision":"raise","amount":"1"}`)
+	}
+	enqueue(15, game.RPSModeDeathmatch)
+	// A durable API reservation that startup must release exactly once.
+	if _, err := f.app.claims.Accept(ctx, claim.AcceptInput{UserID: users[0], Route: claim.RouteOpenAIChat, ModelSnapshot: "synthetic/model", AttemptLimit: 1, ReservedMilli: 5000}); err != nil {
+		t.Fatal(err)
+	}
+	writeReleasedFixture(t, f.app, f.store, destination)
+}
+
+func writeReleasedFixture(t *testing.T, app *application, store *db.Store, destination string) {
+	t.Helper()
+	ctx := context.Background()
+	if err := app.Close(); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := store.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = ledger.ValidateRecovery(ctx, tx); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	var sequence int
+	var name, path string
+	if err := store.DB().QueryRow("PRAGMA database_list").Scan(&sequence, &name, &path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.DB().Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(destination, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWriteReleasedBillingFixture(t *testing.T) {
+	if db.GenerationTwoSchemaHash() != "f94972e6544ee5020c6a16451d4213c0cdef61b51814b6216ba9291e3db9734c" {
+		t.Fatal("wrong released schema")
+	}
+	destination := os.Getenv("NONBIRI_BILLING_FIXTURE")
+	if destination == "" {
+		t.Fatal("missing fixture destination")
+	}
+	f := newEmbeddingHTTPFixture(t)
+	f.exec(t, "UPDATE site_config SET value='5' WHERE key='charity_token_reserve_milli'")
+	var modelID, donationKey, endpointID int64
+	var base string
+	if err := f.store.DB().QueryRow("SELECT id FROM charity_models WHERE pricing_mode='per_token'").Scan(&modelID); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.DB().QueryRow("SELECT dk.id,k.endpoint_id,e.base_url FROM donation_keys dk JOIN endpoint_keys k ON k.id=dk.endpoint_key_id JOIN endpoints e ON e.id=k.endpoint_id WHERE k.id=?", f.keyID).Scan(&donationKey, &endpointID, &base); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	// The first old request is already terminal; the second has trusted usage but
+	// has not yet committed its final charge. Two others stop before/after dispatch.
+	for index := 0; index < 4; index++ {
+		now := time.Now().Unix()
+		request, err := f.app.claims.Accept(ctx, claim.AcceptInput{UserID: f.userID, Route: claim.RouteCharityEmbeddings, ModelSnapshot: fmt.Sprintf("synthetic/billing-%d", index), AttemptLimit: 1, ReservedMilli: 5, CharityModelID: modelID, CharityDecisionNow: &now})
+		if err != nil {
+			t.Fatal(err)
+		}
+		handle, err := f.app.claims.Claim(ctx, claim.ClaimInput{RequestID: request.ID, ActorUserID: f.userID, AttemptSeq: 1, Purpose: claim.PurposeCharity, DonationKeyID: donationKey,
+			Candidate: claim.Candidate{EndpointID: endpointID, EndpointKeyID: f.keyID, ConnectorType: connectorcontract.Type("openai-compatible"), CanonicalBaseURL: base, UpstreamModelID: "private-model"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if index == 2 {
+			continue
+		}
+		dispatch, err := f.app.claims.TakeForDispatch(ctx, handle)
+		if err != nil {
+			t.Fatal(err)
+		}
+		dispatch.Clear()
+		if index == 3 {
+			continue
+		}
+		if _, err = f.app.claims.CompleteAttempt(ctx, handle, claim.AttemptOutcome{Kind: claim.ResultResponse, UpstreamStatus: 200, ProtocolSuccess: true, ResponseStarted: true, Usage: connectorcontract.Usage{Present: true, UncachedInputTokens: 2}}); err != nil {
+			t.Fatal(err)
+		}
+		if index == 0 {
+			charge, err := f.app.charity.CalculateRequestCharge(ctx, request.ID, claim.AccountingCommit)
+			if err != nil || charge != 5 {
+				t.Fatal("old cap was not reproduced", charge, err)
+			}
+			if _, err = f.app.claims.CompleteRequest(ctx, claim.CompleteRequestInput{RequestID: request.ID, Caller: claim.CallerResult{Class: claim.ResultSuccess, Status: 200}, Disposition: claim.AccountingCommit, ActualChargeMilli: charge}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	f.server.Close()
+	writeReleasedFixture(t, f.app, f.store, destination)
+}

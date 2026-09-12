@@ -1,33 +1,55 @@
 # Release checklist
 
-Use this checklist for every release candidate. It is not evidence that an item passed: record results in the release process, keep real secrets/private deployment details out of the repository, and do not create a tag until every required item is complete. For documentation-only changes, reuse implementation results whose code, lockfiles, tools, and relevant inputs are unchanged, while verifying documentation and the final commit's required GitHub checks.
+Bind evidence to the candidate commit/tree, relevant input and lock hashes,
+toolchain, command, environment, time and real exit status. Reuse matching green
+results. Changed schema, DTOs, root wiring, dependencies or lifecycle invalidate
+the corresponding integration evidence; isolated copy/style changes affect their
+own checks. This checklist does not itself assert a pass.
 
-## Scope, version, and compatibility
+## Source and compatibility
 
-- [ ] Freeze the release requirements and API/behavior compatibility statement.
-- [ ] Update version references in the changelog, package metadata, README, API contract, and deployment examples.
-- [ ] Document connector/API limitations, Generation 2 identity (`application_id=0x4E425249`, `user_version=2`), the zero-write rejection matrix, downgrade limits, all four deployment-helper entry classes, and complete-snapshot rollback procedure.
-- [ ] Record the five exact previously deployed beta.2 structures: `preBrowse` (recurring-quota side table), `preQuotaCleanup` (browse indexes), `preStewardHoldRead` (cleanup indexes), `preModelTokenReserve` (steward held-read audit and Fishing length tables), and `preHourlyQuota` (model-level reserve table and the previous quota interval checks); retain those paths and the four earlier Generation 2 paths. Add the complete beta.2 manifest as the mandatory populated upgrade source; only the request-type CHECK constraints on two tables change.
-- [ ] Confirm every public behavior in the release notes is implemented and tested; do not describe planned features as shipped.
-- [ ] Review dependencies, generated notices, license obligations, and source-availability requirements.
-- [ ] Confirm the beta.3 source version is source-first, the production target is Linux/amd64, and the validation binary was built from the exact release commit with `CGO_ENABLED=0 -tags dist -trimpath`. The source release publishes no official binaries, container images, or installers.
-- [ ] Verify embeddings for personal/charity models, four input shapes, both encodings, dimensions, a pinned official SDK and independent HTTP client, unknown versus zero usage, billing/quota/cancellation/recovery and role-safe logs/Debug. Verify the three registered game modules, old active-game compatibility, varied solvable LinkLink boards, unchanged game rules, and donation review projection after expiry or termination.
-- [ ] Verify the dedicated steward CallerKey controls: atomic donation creation and replay, optional recurring limits, exact fresh discovery or preserved manual notes, owned-key binding order and partial outcomes, current authority, cancellation, shared capacity, export and account deletion. Check the administrator calling instructions and absence of user-station API entries.
+- Freeze scope and synchronize README, changelog, package metadata, HTTP contract,
+  configuration, game-module and lifecycle documentation.
+- Verify Generation 2 identity, eleven exact predecessor paths, atomic rollback on
+  injected failure, unknown/partial schema zero-write rejection and second-start
+  no-op. Build the exact beta.3 source to create a populated synthetic fixture;
+  exercise the target on Linux, with old API reservations and all three games.
+- Preserve original account/entry IDs, settled charges, saved game rules, configured
+  RTP, security roots and custom legal text. New game wallets start at zero.
+- Verify that old version-1 games drain while new admissions always select version
+  2; never infer unrecorded historical payment sources.
+- Verify matching complete-snapshot restore and old-binary rejection of the new
+  schema. Do not open an online production database with external SQLite.
 
-## Data lifecycle and legal
+## Financial, control and lifecycle acceptance
 
-- [ ] For every new user-associated table/column, complete [data-lifecycle-checklist.md](data-lifecycle-checklist.md): export, delete, retention, privacy, late writes, and tests.
-- [ ] Verify account export never includes plaintext/ciphertext secrets, OAuth tokens, caller-key plaintext, or request/response content.
-- [ ] Verify account deletion and late callbacks remain atomically linearized.
-- [ ] Update the embedded Chinese/English privacy and terms templates for shipped data processing and permissions.
-- [ ] Confirm both languages cover OpenAI-compatible, Anthropic-compatible, and donor-provided third-party processing; the non-guarantee of `store:false`; tool-call flattening risk; Debug dry/live memory-only capture; embedding input processing, pseudonymous `user`, vectors excluded from persistent storage; server-authoritative game randomness/accounting; the single spendable credit balance versus cumulative donor reward; anonymous/public leaderboard identity and Discord CDN avatar behavior; donation-key secret cleanup versus the separate 90-day report fingerprint; export schema v5; and fresh destructive cutover/snapshot retention.
-- [ ] Round-trip all four legal overrides and both donation-guidance fields with multiline Chinese/English, tabs, multibyte text, and values near their respective 65,536-byte and 8,192-byte limits through save → GET → refresh; verify that line endings use LF. Verify anonymous legal pages and the user donation form at 390 px and with ordinary keyboard, mouse, and touch input.
-- [ ] Obtain the instance owner's explicit approval of the effective production text, then verify the four values and authoritative locale after applying them to the fresh database; a technical consistency review is not legal approval.
-- [ ] Require each operator to review effective date, identity/contact, jurisdiction, subprocessors, backups, and instance-specific legal overrides before onboarding users.
+- Verify per-asset conservation, independent check-ins, game-welfare eligibility,
+  mixed payments, original refunds, RPS per-round sources, actual charity charges
+  above reserve, unknown versus zero usage and historical terminal replay.
+- Verify Fishing per-outcome cuts, net rankings and preserved old RTP; all nine
+  atomic once-only newcomer rewards and their capacity reservation/release.
+- Verify LinkLink hints/deadlock refresh, shared 2/3/5 counters, no automatic v2
+  refresh, completion bonuses, six boards, privacy, per-user best and earliest
+  achievement ordering. Measure queries against 100,000 summaries.
+- Verify role matrices in the final transaction, target promotion and actor
+  demotion, limit strings/inheritance, levels, dual-wallet adjustments, shared
+  announcement actions and no-content audits.
+- Verify owner/management failure resets, generation-safe late callbacks,
+  complete selection before bounded batches, interruption and exact uncertain
+  replay. Do not introduce persistent background jobs for browser batching.
+- Verify multiline Thursday text/preview and complete validation before model-ID
+  deduplication.
+- Verify export v6 and synchronous deletion across both assets, holds, game state,
+  rankings and permanent newcomer completions, including both late-write orders.
+- Synchronize bilingual embedded privacy/terms and administrator/steward calling
+  instructions. Keep instance custom legal overrides intact unless their
+  replacement is explicitly authorized.
 
-## Clean build and automated checks
+## Build and checks
 
-Run from a clean release checkout and preserve every command's real exit status:
+Use a clean candidate checkout. Daily work runs affected tests; stable points run
+the full Go gate. Final Linux Go/race evidence may come from the cumulative PR CI,
+with local Windows and missing platform checks supplementing it.
 
 ```sh
 npm --prefix web ci
@@ -35,54 +57,45 @@ npm --prefix web test
 npm --prefix web run typecheck
 npm --prefix web run lint
 npm --prefix web run build
-npm --prefix web exec -- playwright install --with-deps chromium
 npm --prefix web run test:e2e
 scripts/check-go.sh
 scripts/race-check.sh
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags dist -trimpath -o nonbiriapi-linux-amd64 .
 ```
 
-- [ ] Confirm the frontend build regenerated `web/THIRD_PARTY_NOTICES.md` from the clean install and the diff is expected.
-- [ ] Confirm every GitHub Action reference is pinned to a reviewed full commit SHA with its release tag recorded in a comment.
-- [ ] Confirm the `-tags dist` binary embeds both real station bundles rather than development placeholders.
-- [ ] Inspect `go version -m ./nonbiriapi-linux-amd64`; record source commit, toolchain, target OS/architecture, and SHA256.
-- [ ] Run `go mod verify`, `govulncheck ./...`, and `npm --prefix web audit --json` with current advisory data; review severity and reachability. Run redacted credential scans over the previous-release-to-candidate history and the final tracked tree. Record scanner versions, inputs, timestamps, exit codes, findings, and dispositions; never describe an unavailable scan as passed.
-- [ ] If publishing binaries, produce the decided checksums, SBOM/provenance/signatures and complete license/source offer; otherwise state source-only clearly.
+Run each command only where its evidence is needed. One frontend build generates
+both stations, notices and hashes. Keep the final six CI race shards and aggregate
+Go/Web/CodeQL checks; daily affected-package race defaults to one shuffled round.
 
-## Security and integration
+- Check clean installation, `go mod verify`, current `govulncheck` and `npm audit`,
+  dependency licenses/notices and redacted credential scans. Record findings and
+  dispositions; an unavailable scan is not a pass.
+- Confirm pinned Actions and real embedded bundles. Build Windows/amd64 and the
+  final Linux/amd64 pure-Go artifact, record VCS/tree/toolchain and SHA256.
+- Compare complete first-party JS/CSS gzip totals with an exact beta.3 clean build
+  using the same tools; each station may grow by at most 64 KiB.
+- Cover actual HTTP financial/control flows and representative Chinese/English,
+  light/dark, desktop/mobile combinations. Play LinkLink through ordinary UI,
+  including a 10×10 board at 320 px; measure latency without extra anticheat.
+- Review final diff, LF text, generated files, executable bits and sensitive paths.
+  Reuse unchanged auth, egress, secret and protocol evidence; supplement only
+  gaps created by this candidate.
 
-- [ ] Independently review authentication, ownership, station isolation, egress, secret handling, response bounds, stream termination/cancellation, rate/concurrency limits, and no-store behavior.
-- [ ] Run focused race/shuffle/attack regressions for changed security, accounting, deletion, or callback paths.
-- [ ] Exercise non-streaming, streaming, cancellation, abnormal EOF, malformed usage, retry boundaries, and client disconnects against a disposable upstream.
-- [ ] Exercise OpenAI and Anthropic Connector fixtures, capability rejection, cumulative streaming usage and terminal events; verify `max_tokens`/`max_completion_tokens` absent/null/equal/conflicting behavior and the nullable 65,536 Anthropic fallback.
-- [ ] Verify user-concurrency-before-RPM ordering and every release path under race; a concurrency denial must create no RPM hit, candidate selection, credential access, charity reservation, or penalty.
-- [ ] Verify experimental-policy ownership and disabled byte-equivalence, bounded flatten/reverse-flatten streaming equivalence, Debug dry zero-egress and live capture with the caller's dedicated HTTP 422 outcome, all three games' idempotency/recovery/retention/privacy, report tombstone/lineage behavior, per-key donation expiry, and export schema v5/deletion lifecycle.
-- [ ] Verify real Discord OAuth with disposable credentials and the intended registration gate.
-- [ ] Verify the complete TLS/reverse-proxy/real-IP path, both host boundaries, SSE buffering/timeouts, and unauthenticated admission limits.
-- [ ] Check that logs, errors, alerts, CSV/JSON exports, HTML/text rendering, and generated artifacts contain no secrets or private deployment data.
+## Candidate and deployment
 
-## Fresh database, backup, and staging
-
-- [ ] Stop writes and take a protected complete snapshot: database and applicable WAL/SHM sidecars, exact release, environment/configuration, master key, unit, manifest, and checksums.
-- [ ] Restore that snapshot in an isolated path with the same master key and verify its release/schema/config/key/unit match before relying on it.
-- [ ] Test the fresh/current/legacy/empty/corrupt/unknown-generation/sidecar matrix and prove every rejected source is byte-, identity-, size-, and mtime-unchanged with no new source-side WAL/SHM.
-- [ ] Build the exact complete beta.2 source and create populated isolated databases with active claims, reservations, quota receipts, custom legal text and all three games. Run the target twice on Linux/amd64, compare all 99 tables, and audit each normal recovery/accounting change. Never open an online production database with an external SQLite client.
-- [ ] Test each of the four explicitly supported earlier Generation 2 manifests and the five exact previously deployed structures (`preBrowse`, `preQuotaCleanup`, `preStewardHoldRead`, `preModelTokenReserve`, and `preHourlyQuota`) through its additive update and a second normal startup; verify that accounts, resources, balances, settings, routing choices, key limits, and historical facts are preserved.
-- [ ] Verify model-level Token reserve configuration and source preservation: create omission/`null` inheritance, PATCH omission preservation and `null` clearing, per-request behavior, admitted-value freezing, deletion cleanup, owner-export exclusion, and preservation of existing overrides and all quota facts during the one-hour interval extension.
-- [ ] Test the default interactive deployment, `--restore-snapshot`, `--destructive-fresh-deploy`, and `snapshot inventory|import|delete` flows, including TTY-only confirmations, cancellation, incompatible/missing snapshot refusal, and failure restoration. Do not perform the rehearsal against production.
-- [ ] Test restart recovery, game settlement/retention cleanup, complete-snapshot rollback/downgrade, and the documented absence of any binary-only downgrade path.
-- [ ] Test graceful shutdown, same-generation restart with a compatible previous release, complete-snapshot version rollback, account export/deletion, and any new scheduled maintenance; never substitute a binary-only downgrade.
-- [ ] Compare both stations' complete first-party JS/CSS gzip totals against beta.2 with the same clean build tools; each increase must stay within 32 KiB. Check Chinese/English, light/dark, desktop/mobile, and 320 px LinkLink play through normal UI.
-- [ ] Run a staging soak with representative concurrency and verify resource/memory/connection cleanup.
-- [ ] Record which vulnerability, dependency, license, credential, SBOM, provenance, and signing checks actually ran and which remain explicitly deferred; do not mark a deferred gate as passed.
-
-## Repository and publication
-
-- [ ] Review the final `git diff`, tracked generated files, executable bits, LF endings, and sensitive-file status.
-- [ ] Before any push, verify the SSH host alias, expected GitHub account, `origin`, remote `master`, and a dry-run of the exact integration-branch refspec.
-- [ ] If a version integration branch was used, review the complete merge-base-to-head diff and commit history, then open its single final pull request to the protected default branch.
-- [ ] Confirm required `Go checks`, `Web checks`, and aggregate `CodeQL` checks pass on the exact release commit and branch protection remains active; verify every configured CodeQL language analysis completed successfully and review any alert individually.
-- [ ] Confirm private vulnerability reporting is reachable and no deployment secrets are present in Actions/release settings.
-- [ ] Prepare release notes with fresh cutover/upgrade, backup, compatibility or migration limits, complete-snapshot rollback, known limitations, and checksums/artifacts as applicable.
-- [ ] Create an annotated immutable tag only after owner authorization and green CI; never move a published tag silently.
-- [ ] Mark alpha/beta releases as pre-releases, verify the public release page, and perform post-publication smoke/download checks.
+- Verify origin and protected master, integrate any master advance, audit the
+  cumulative diff and push one candidate PR. Require exact-candidate CI success.
+- Prepare one trusted final Linux artifact. Production reuses validated evidence
+  and checks that artifact's hash instead of repeating full Go/race/web/build.
+- Close admission, drain, stop, create one complete snapshot and start the target
+  once. Reuse valid isolated upgrade evidence; additional rehearsal requires a
+  concrete startup/storage/accounting gap.
+- After local health, reopen and perform public-page acceptance alongside about
+  60 seconds of process/error observation. Do not overwrite newly accepted data
+  automatically with the old snapshot.
+- Remove temporary verification copies/processes and retain the two most recent
+  successful ordinary-switch recovery sets; preserve independent backups,
+  explicit exceptions and unresolved incident sets.
+- Deliver candidate identity, PR/check status, production identity, acceptance
+  results and practical test areas. Merge, tag and release require the owner's
+  later testing decision.

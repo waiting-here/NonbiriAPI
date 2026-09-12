@@ -45,3 +45,11 @@ objects and export sections are added through the central schema and lifecycle
 registration points. A new financial operation requires an audited ledger
 constructor and a corresponding module port. Modules do not perform schema
 migrations or register themselves through package initialization.
+
+New entries use the registered version-2 financial and gameplay rules. Recovery
+selects saved rules per batch, queue or session; version 1 remains available only
+for accepted old work. Caller input cannot downgrade a new game. The game host
+projects both wallets and immutable newcomer-task metadata, while the terminal
+transaction consumes the corresponding reward hold and records the once-only
+completion. Modules retain source payment amounts for refunds and never infer
+historical funding that was not recorded.
