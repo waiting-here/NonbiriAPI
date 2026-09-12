@@ -567,7 +567,7 @@ func printPlans(output io.Writer, plans []shardPlan, digest string) {
 }
 
 func executionGroups(plan shardPlan, timeout string) []commandGroup {
-	base := []string{"test", "-race", "-count=1", "-timeout=" + timeout}
+	base := []string{"test", "-race", "-count=1", "-timeout=" + timeout, "-v"}
 	groups := make([]commandGroup, 0, len(plan.SplitTests)+1)
 	if len(plan.WholePackages) > 0 {
 		args := append(append([]string(nil), base...), plan.WholePackages...)

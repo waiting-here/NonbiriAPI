@@ -16,7 +16,7 @@
 # an explicit bounded deadline with an override for diagnosis.
 #
 # With no arguments this remains the complete local gate. Package arguments
-# remain supported for targeted diagnosis. CI uses --shard N/6; that mode
+# remain supported for targeted diagnosis. CI uses --shard N/TOTAL; that mode
 # derives the live package/test catalog and uses timing data only for balance.
 
 set -euo pipefail
@@ -33,7 +33,7 @@ fi
 
 if [ "${1:-}" = "--shard" ]; then
   if [ "$#" -ne 2 ]; then
-    echo "usage: scripts/race-check.sh --shard N/6" >&2
+    echo "usage: scripts/race-check.sh --shard N/TOTAL" >&2
     exit 2
   fi
   "$GO" run ./internal/citools/raceplan \
