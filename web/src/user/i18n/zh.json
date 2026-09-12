@@ -73,9 +73,11 @@
       "reject": "驳回捐赠",
       "saveKeyLimits": "保存密钥限制",
       "deleteModelTitle": "删除这个公益模型？",
-      "operationsDescription": "查看获准访问的请求记录、审核和管理全部捐赠的公益配置，并在紧急时开启维护模式。",
+      "operationsDescription": "查看请求日志，管理用户权限和公益捐赠，发布公告，并在紧急情况下开启维护。",
       "sensitiveStateCleared": "本页敏感信息已清除。",
-      "maintenanceTab": "维护模式"
+      "maintenanceTab": "维护模式",
+      "usersTab": "用户管理",
+      "announcementsTab": "公告管理"
     },
     "endpoints": {
       "nav": "端点"

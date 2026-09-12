@@ -257,16 +257,15 @@ func (r *Runtime) promoteLevel(ctx context.Context, tx *sql.Tx, u *userRow, now 
 	if err != nil {
 		return err
 	}
-	eligible := 1
+	var thresholds [5]int64
 	for level := 2; level <= 4; level++ {
 		threshold, err := configUintTx(ctx, tx, fmt.Sprintf("level_threshold_%d_milli", level), 0, db.MaxMoneyMilli)
 		if err != nil {
 			return err
 		}
-		if threshold > 0 && donation.Big().Cmp(big.NewInt(threshold)) >= 0 {
-			eligible = level
-		}
+		thresholds[level] = threshold
 	}
+	eligible := authz.AutomaticLevel(u.autoLevel, donation, thresholds)
 	if eligible <= u.autoLevel {
 		return nil
 	}

@@ -546,6 +546,15 @@ func (registrar adminUserRouteRegistrar) RegisterAdminRoute(method, pattern stri
 	}))
 }
 
+func (registrar adminUserRouteRegistrar) RegisterStewardRoute(method, pattern string, handler adminusers.AuthorizedAdminHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterUserRoute(method, pattern, func(writer http.ResponseWriter, request *http.Request, principal resources.UserPrincipal) {
+		handler(writer, request, adminusers.AdminPrincipal{UserID: principal.UserID})
+	})
+}
+
 type activityRouteRegistrar struct{ runtime *auth.Runtime }
 
 var _ activities.UserRouteRegistrar = activityRouteRegistrar{}
@@ -600,6 +609,15 @@ func (registrar announcementRouteRegistrar) RegisterAdminRoute(method, pattern s
 		}
 		handler(writer, request, announcements.AdminPrincipal{UserID: actor.UserID})
 	}))
+}
+
+func (registrar announcementRouteRegistrar) RegisterStewardRoute(method, pattern string, handler announcements.AuthorizedAdminHandler) error {
+	if registrar.runtime == nil || handler == nil {
+		return auth.ErrInvalidRoute
+	}
+	return registrar.runtime.RegisterUserRoute(method, pattern, func(writer http.ResponseWriter, request *http.Request, principal resources.UserPrincipal) {
+		handler(writer, request, announcements.AdminPrincipal{UserID: principal.UserID})
+	})
 }
 
 type issueRouteRegistrar struct{ runtime *auth.Runtime }
@@ -1099,6 +1117,10 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 		cleanup()
 		return nil, fmt.Errorf("register administrator user routes: %w", err)
 	}
+	if err := adminusers.RegisterStewardRoutes(adminUserRouteRegistrar{runtime: authRuntime}, adminUserService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register steward user routes: %w", err)
+	}
 	if err := adminalerts.RegisterRoutes(adminAlertRouteRegistrar{runtime: authRuntime}, adminAlertRepository); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("register administrator alert routes: %w", err)
@@ -1148,6 +1170,10 @@ func buildApplication(cfg *config.Config, store *db.Store, vault *secret.Vault) 
 	if err := announcements.RegisterRoutes(announcementRoutes, announcementRoutes, announcementService); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("register announcement routes: %w", err)
+	}
+	if err := announcements.RegisterStewardRoutes(announcementRoutes, announcementService); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("register steward announcement routes: %w", err)
 	}
 	if err := issues.RegisterRoutes(issueRouteRegistrar{runtime: authRuntime}, issueService); err != nil {
 		cleanup()

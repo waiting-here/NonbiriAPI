@@ -55,6 +55,7 @@ const adminUser = {
   effective_concurrency_limit: '5',
   lang: 'en',
   balance: '0',
+  game_balance: '0',
   donation_credit: '0',
   level: { manual: null, automatic: 1, effective: 1, display_name: 'Lv1' },
   game_profile_public: false,

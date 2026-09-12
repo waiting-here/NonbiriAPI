@@ -73,9 +73,11 @@
       "reject": "Reject donation",
       "saveKeyLimits": "Save key limits",
       "deleteModelTitle": "Delete this charity model?",
-      "operationsDescription": "View authorized request records, review and manage charity settings across donations, and enable maintenance in an emergency.",
+      "operationsDescription": "View request logs, manage user access and charity donations, publish announcements, and enable maintenance in an emergency.",
       "sensitiveStateCleared": "Sensitive information on this page has been cleared.",
-      "maintenanceTab": "Maintenance"
+      "maintenanceTab": "Maintenance",
+      "usersTab": "Users",
+      "announcementsTab": "Announcements"
     },
     "endpoints": {
       "nav": "Endpoints"

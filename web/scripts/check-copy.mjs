@@ -14,7 +14,8 @@ const catalogPairs = [
 
 const requiredNavigationKeys = new Map([
   ['user', ['user.report.nav', 'user.announcements.nav']],
-  ['admin', ['admin.activities.nav', 'admin.reports.nav', 'admin.announcements.nav', 'admin.mainstreamChannels.nav']],
+  ['common', ['management.users.nav', 'management.announcements.nav']],
+  ['admin', ['admin.activities.nav', 'admin.reports.nav', 'admin.mainstreamChannels.nav']],
 ]);
 
 function flatten(value, prefix = '', result = new Map()) {

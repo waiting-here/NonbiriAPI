@@ -11,17 +11,21 @@ import (
 )
 
 func (service *Service) Create(ctx context.Context, adminID int64, mutation ControlMutation, draft DraftPatch) (MutationResult[AnnouncementMutationReceipt], error) {
-	if service == nil || service.repository == nil || !validMutation(mutation, http.MethodPost, routeAdminAnnouncements) || len(mutation.PathIDs) != 0 {
+	return service.create(ctx, adminID, roleAdmin, mutation, draft)
+}
+
+func (service *Service) create(ctx context.Context, adminID int64, role managementRole, mutation ControlMutation, draft DraftPatch) (MutationResult[AnnouncementMutationReceipt], error) {
+	if service == nil || service.repository == nil || !validMutation(mutation, http.MethodPost, role.route(routeAdminAnnouncements)) || len(mutation.PathIDs) != 0 {
 		return MutationResult[AnnouncementMutationReceipt]{}, ErrInvalidRequest
 	}
 	repository := service.repository
-	tx, now, err := repository.beginAuthorizedAdminTx(ctx, adminID)
+	tx, now, err := repository.beginManagementTx(ctx, adminID, role)
 	if err != nil {
 		return MutationResult[AnnouncementMutationReceipt]{}, err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
-	decision, err := beginAnnouncementMutation(ctx, tx, adminID, mutation, now)
+	decision, err := beginAnnouncementMutation(ctx, tx, adminID, role, mutation, now)
 	if err != nil {
 		return MutationResult[AnnouncementMutationReceipt]{}, err
 	}
@@ -83,18 +87,22 @@ INSERT INTO announcements(
 }
 
 func (service *Service) Edit(ctx context.Context, adminID int64, id string, mutation ControlMutation, expectedRevision int64, patch DraftPatch) (MutationResult[AnnouncementMutationReceipt], error) {
+	return service.edit(ctx, adminID, roleAdmin, id, mutation, expectedRevision, patch)
+}
+
+func (service *Service) edit(ctx context.Context, adminID int64, role managementRole, id string, mutation ControlMutation, expectedRevision int64, patch DraftPatch) (MutationResult[AnnouncementMutationReceipt], error) {
 	if service == nil || service.repository == nil || !dbAnnouncementID(id) || expectedRevision < 1 ||
-		!validMutationForID(mutation, http.MethodPatch, routeAdminAnnouncement, id) || !patchHasAny(patch) {
+		!validMutationForID(mutation, http.MethodPatch, role.route(routeAdminAnnouncement), id) || !patchHasAny(patch) {
 		return MutationResult[AnnouncementMutationReceipt]{}, ErrInvalidRequest
 	}
 	repository := service.repository
-	tx, now, err := repository.beginAuthorizedAdminTx(ctx, adminID)
+	tx, now, err := repository.beginManagementTx(ctx, adminID, role)
 	if err != nil {
 		return MutationResult[AnnouncementMutationReceipt]{}, err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
-	decision, err := beginAnnouncementMutation(ctx, tx, adminID, mutation, now)
+	decision, err := beginAnnouncementMutation(ctx, tx, adminID, role, mutation, now)
 	if err != nil {
 		return MutationResult[AnnouncementMutationReceipt]{}, err
 	}
@@ -156,18 +164,22 @@ UPDATE announcements SET revision=?,draft_title_zh=?,draft_body_zh=?,draft_title
 }
 
 func (service *Service) Publish(ctx context.Context, adminID int64, id string, mutation ControlMutation, expectedRevision int64) (MutationResult[struct{}], error) {
+	return service.publish(ctx, adminID, roleAdmin, id, mutation, expectedRevision)
+}
+
+func (service *Service) publish(ctx context.Context, adminID int64, role managementRole, id string, mutation ControlMutation, expectedRevision int64) (MutationResult[struct{}], error) {
 	if service == nil || service.repository == nil || !dbAnnouncementID(id) || expectedRevision < 1 ||
-		!validMutationForID(mutation, http.MethodPost, routeAdminPublish, id) {
+		!validMutationForID(mutation, http.MethodPost, role.route(routeAdminPublish), id) {
 		return MutationResult[struct{}]{}, ErrInvalidRequest
 	}
 	repository := service.repository
-	tx, now, err := repository.beginAuthorizedAdminTx(ctx, adminID)
+	tx, now, err := repository.beginManagementTx(ctx, adminID, role)
 	if err != nil {
 		return MutationResult[struct{}]{}, err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
-	decision, err := beginAnnouncementMutation(ctx, tx, adminID, mutation, now)
+	decision, err := beginAnnouncementMutation(ctx, tx, adminID, role, mutation, now)
 	if err != nil {
 		return MutationResult[struct{}]{}, err
 	}
@@ -225,18 +237,22 @@ WHERE id=? AND revision=?`, next, next, now, values.bodyZH, values.bodyEN, now, 
 }
 
 func (service *Service) Withdraw(ctx context.Context, adminID int64, id string, mutation ControlMutation, expectedRevision int64, reason string) (MutationResult[struct{}], error) {
+	return service.withdraw(ctx, adminID, roleAdmin, id, mutation, expectedRevision, reason)
+}
+
+func (service *Service) withdraw(ctx context.Context, adminID int64, role managementRole, id string, mutation ControlMutation, expectedRevision int64, reason string) (MutationResult[struct{}], error) {
 	if service == nil || service.repository == nil || !dbAnnouncementID(id) || expectedRevision < 1 || !validReason(reason, true) ||
-		!validMutationForID(mutation, http.MethodPost, routeAdminWithdraw, id) {
+		!validMutationForID(mutation, http.MethodPost, role.route(routeAdminWithdraw), id) {
 		return MutationResult[struct{}]{}, ErrInvalidRequest
 	}
 	repository := service.repository
-	tx, now, err := repository.beginAuthorizedAdminTx(ctx, adminID)
+	tx, now, err := repository.beginManagementTx(ctx, adminID, role)
 	if err != nil {
 		return MutationResult[struct{}]{}, err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
-	decision, err := beginAnnouncementMutation(ctx, tx, adminID, mutation, now)
+	decision, err := beginAnnouncementMutation(ctx, tx, adminID, role, mutation, now)
 	if err != nil {
 		return MutationResult[struct{}]{}, err
 	}
@@ -287,19 +303,23 @@ UPDATE announcements SET state='withdrawn',revision=?,withdrawn_at=?,updated_at=
 }
 
 func (service *Service) Delete(ctx context.Context, adminID int64, id string, mutation ControlMutation, expectedRevision int64, confirmation, reason string) (MutationResult[struct{}], error) {
+	return service.delete(ctx, adminID, roleAdmin, id, mutation, expectedRevision, confirmation, reason)
+}
+
+func (service *Service) delete(ctx context.Context, adminID int64, role managementRole, id string, mutation ControlMutation, expectedRevision int64, confirmation, reason string) (MutationResult[struct{}], error) {
 	if service == nil || service.repository == nil || !dbAnnouncementID(id) || expectedRevision < 1 ||
 		confirmation != PermanentDeleteConfirmation || !validReason(reason, true) ||
-		!validMutationForID(mutation, http.MethodDelete, routeAdminAnnouncement, id) {
+		!validMutationForID(mutation, http.MethodDelete, role.route(routeAdminAnnouncement), id) {
 		return MutationResult[struct{}]{}, ErrInvalidRequest
 	}
 	repository := service.repository
-	tx, now, err := repository.beginAuthorizedAdminTx(ctx, adminID)
+	tx, now, err := repository.beginManagementTx(ctx, adminID, role)
 	if err != nil {
 		return MutationResult[struct{}]{}, err
 	}
 	committed := false
 	defer finishTx(tx, &committed)
-	decision, err := beginAnnouncementMutation(ctx, tx, adminID, mutation, now)
+	decision, err := beginAnnouncementMutation(ctx, tx, adminID, role, mutation, now)
 	if err != nil {
 		return MutationResult[struct{}]{}, err
 	}
