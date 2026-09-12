@@ -9,24 +9,26 @@ import (
 // field is explicit so a future database or domain DTO field cannot silently
 // enter a personal export.
 type ExportDocument struct {
-	SchemaVersion int                 `json:"schema_version"`
-	GeneratedAt   int64               `json:"generated_at"`
-	User          UserExport          `json:"user"`
-	Endpoints     []EndpointExport    `json:"endpoints"`
-	CatalogPairs  []CatalogPairExport `json:"catalog_pairs"`
-	Models        []ModelExport       `json:"models"`
-	CallerKey     *CallerKeyExport    `json:"caller_key"`
-	Usage         UsageExport         `json:"usage"`
-	LogSummary    LogSummaryExport    `json:"log_summary"`
-	Issues        []IssueExport       `json:"issues"`
-	CreditLedger  []LedgerEntryExport `json:"credit_ledger"`
-	WelfareClaims []WelfareExport     `json:"welfare_claims"`
-	Thursday      []ThursdayExport    `json:"thursday"`
-	Donations     []DonationExport    `json:"donations"`
-	Charity       CharityExport       `json:"charity"`
-	Fishing       FishingExport       `json:"fishing"`
-	LinkLink      LinkLinkExport      `json:"linklink"`
-	RPS           RPSExport           `json:"rps"`
+	Checkins       []CheckinExport     `json:"checkins"`
+	GameOnboarding []OnboardingExport  `json:"game_onboarding"`
+	SchemaVersion  int                 `json:"schema_version"`
+	GeneratedAt    int64               `json:"generated_at"`
+	User           UserExport          `json:"user"`
+	Endpoints      []EndpointExport    `json:"endpoints"`
+	CatalogPairs   []CatalogPairExport `json:"catalog_pairs"`
+	Models         []ModelExport       `json:"models"`
+	CallerKey      *CallerKeyExport    `json:"caller_key"`
+	Usage          UsageExport         `json:"usage"`
+	LogSummary     LogSummaryExport    `json:"log_summary"`
+	Issues         []IssueExport       `json:"issues"`
+	CreditLedger   []LedgerEntryExport `json:"credit_ledger"`
+	WelfareClaims  []WelfareExport     `json:"welfare_claims"`
+	Thursday       []ThursdayExport    `json:"thursday"`
+	Donations      []DonationExport    `json:"donations"`
+	Charity        CharityExport       `json:"charity"`
+	Fishing        FishingExport       `json:"fishing"`
+	LinkLink       LinkLinkExport      `json:"linklink"`
+	RPS            RPSExport           `json:"rps"`
 }
 
 type UserExport struct {
@@ -46,6 +48,7 @@ type UserExport struct {
 	EffectiveRPMLimit         string  `json:"effective_rpm_limit"`
 	ConcurrencyLimit          *string `json:"concurrency_limit"`
 	EffectiveConcurrencyLimit string  `json:"effective_concurrency_limit"`
+	GameBalance               string  `json:"game_balance"`
 	Balance                   string  `json:"balance"`
 	DonationCredit            string  `json:"donation_credit"`
 	EffectiveLevel            int     `json:"effective_level"`
@@ -184,6 +187,7 @@ type IssueExport struct {
 }
 
 type LedgerEntryExport struct {
+	Asset       string `json:"asset_type"`
 	OperationID string `json:"operation_id"`
 	Kind        string `json:"kind"`
 	SourceType  string `json:"source_type"`
@@ -193,6 +197,7 @@ type LedgerEntryExport struct {
 }
 
 type WelfareExport struct {
+	Asset     string `json:"asset_type"`
 	SiteDay   string `json:"site_day"`
 	Threshold string `json:"threshold"`
 	Cap       string `json:"cap"`
@@ -480,7 +485,7 @@ type LedgerExporter interface {
 }
 
 type ActivityExporter interface {
-	ExportActivities(context.Context, *sql.Tx, ExportRequest) ([]WelfareExport, []ThursdayExport, error)
+	ExportActivities(context.Context, *sql.Tx, ExportRequest) (ActivityExport, error)
 }
 
 type DonationExporter interface {
@@ -501,4 +506,25 @@ type LinkLinkExporter interface {
 
 type RPSExporter interface {
 	ExportRPS(context.Context, *sql.Tx, ExportRequest) (RPSExport, ExportFinalizer, error)
+}
+
+type CheckinExport struct {
+	Asset     string `json:"asset_type"`
+	SiteDay   string `json:"site_day"`
+	Award     string `json:"award"`
+	CreatedAt int64  `json:"created_at"`
+}
+
+type OnboardingExport struct {
+	GameKey     string `json:"game_key"`
+	TaskKey     string `json:"task_key"`
+	Award       string `json:"award"`
+	CompletedAt int64  `json:"completed_at"`
+}
+
+type ActivityExport struct {
+	Checkins       []CheckinExport
+	GameOnboarding []OnboardingExport
+	WelfareClaims  []WelfareExport
+	Thursday       []ThursdayExport
 }

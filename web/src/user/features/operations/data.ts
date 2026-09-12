@@ -118,6 +118,7 @@ export function normalizeUserAuthority(value: unknown): UserAuthority {
     'concurrency_limit',
     'effective_concurrency_limit',
     'balance',
+    'game_balance',
     'donation_credit',
     'effective_level',
     'level_display_name',
@@ -140,6 +141,7 @@ export function normalizeUserAuthority(value: unknown): UserAuthority {
   nullableDecimal(user.concurrency_limit, 'concurrency limit');
   decimal(user.effective_concurrency_limit, 'effective concurrency limit');
   amount(user.balance, 'balance', true);
+  amount(user.game_balance, 'game balance', true);
   amount(user.donation_credit, 'donation credit', false);
   string(user.level_display_name, 'level display name', { min: 1, max: 128, bytes: 512 });
   boolean(user.game_profile_public, 'game profile visibility');

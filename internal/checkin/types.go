@@ -1,9 +1,15 @@
 // Package checkin owns the daily check-in runtime.
 package checkin
 
-import "errors"
+import (
+	"errors"
+	"github.com/waiting-here/NonbiriAPI/internal/ledger"
+)
 
-const Route = "/api/checkin"
+const (
+	Route     = "/api/checkin"
+	GameRoute = "/api/checkin/game"
+)
 
 var (
 	ErrInvalidRequest   = errors.New("checkin: invalid request")
@@ -22,6 +28,7 @@ var (
 // Status is the authoritative service projection. The HTTP boundary emits a
 // smaller object containing only Enabled when the feature is unavailable.
 type Status struct {
+	Asset          ledger.Asset
 	Enabled        bool
 	CheckedInToday bool
 	Balance        string
@@ -32,6 +39,7 @@ type Status struct {
 
 // Result is one committed check-in outcome in user-visible point units.
 type Result struct {
-	Award   string `json:"award"`
-	Balance string `json:"balance"`
+	Asset   ledger.Asset `json:"asset_type"`
+	Award   string       `json:"award"`
+	Balance string       `json:"balance"`
 }

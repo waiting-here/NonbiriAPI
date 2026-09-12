@@ -20,6 +20,7 @@ type GamesConfig struct {
 
 // GamesSnapshot is the exact user-facing configuration/readiness projection.
 type GamesSnapshot struct {
+	GameBalance     string                 `json:"game_balance"`
 	ServerNow       int64                  `json:"server_now"`
 	Balance         string                 `json:"balance"`
 	TutorialRPSSeen bool                   `json:"tutorial_rps_seen"`

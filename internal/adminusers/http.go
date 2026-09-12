@@ -386,7 +386,7 @@ func decodeEconomyMutation(object map[string]json.RawMessage) (EconomyMutation, 
 		return EconomyMutation{}, false
 	}
 	target, ok := requiredString(object, "target")
-	if !ok || target != "balance" && target != "donation_credit" {
+	if !ok || target != "balance" && target != "game_balance" && target != "donation_credit" {
 		return EconomyMutation{}, false
 	}
 	direction, ok := requiredString(object, "direction")

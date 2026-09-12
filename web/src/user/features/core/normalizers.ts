@@ -1,4 +1,5 @@
 import { normalizeAnnouncementSummary } from '../operations/data';
+import { oneOf } from '@shared/operations/wire';
 import { ApiError } from '@shared/query/http';
 import {
   CONNECTOR_TYPES,
@@ -169,7 +170,7 @@ function creditAmount(value: unknown, label: string, signed: boolean): string {
   ) {
     invalid(label);
   }
-  if (value === '-0' || value.startsWith('-0.')) invalid(label);
+  if (value === '-0') invalid(label);
   const unsigned = value.startsWith('-') ? value.slice(1) : value;
   const [integer = '', fraction = ''] = unsigned.split('.');
   if (fraction.endsWith('0')) invalid(label);
@@ -271,7 +272,15 @@ export function normalizeHomeCheckinStatus(value: unknown): HomeCheckinStatus {
   }
   const record = exactRecord(
     value,
-    ['enabled', 'checked_in_today', 'balance', 'award_min', 'award_max', 'balance_cap'],
+    [
+      'enabled',
+      'asset_type',
+      'checked_in_today',
+      'balance',
+      'award_min',
+      'award_max',
+      'balance_cap',
+    ],
     [],
     'check-in status',
   );
@@ -281,6 +290,7 @@ export function normalizeHomeCheckinStatus(value: unknown): HomeCheckinStatus {
   if (creditMilli(awardMin) > creditMilli(awardMax)) invalid('check-in award range');
   return {
     enabled: true,
+    asset_type: oneOf(record.asset_type, ['general', 'game'] as const, 'check-in asset'),
     checked_in_today: exactBoolean(record.checked_in_today, 'check-in day state'),
     balance: creditAmount(record.balance, 'check-in balance', true),
     award_min: awardMin,
@@ -290,8 +300,9 @@ export function normalizeHomeCheckinStatus(value: unknown): HomeCheckinStatus {
 }
 
 export function normalizeHomeCheckinResult(value: unknown): HomeCheckinResult {
-  const record = exactRecord(value, ['award', 'balance'], [], 'check-in result');
+  const record = exactRecord(value, ['asset_type', 'award', 'balance'], [], 'check-in result');
   return {
+    asset_type: oneOf(record.asset_type, ['general', 'game'] as const, 'check-in asset'),
     award: creditAmount(record.award, 'check-in award', false),
     balance: creditAmount(record.balance, 'check-in balance', true),
   };
@@ -460,6 +471,7 @@ export function normalizeUserProfile(value: unknown): UserProfile {
     'concurrency_limit',
     'effective_concurrency_limit',
     'balance',
+    'game_balance',
     'donation_credit',
     'effective_level',
     'level_display_name',
@@ -508,6 +520,7 @@ export function normalizeUserProfile(value: unknown): UserProfile {
       'effective concurrency limit',
     ),
     balance: creditAmount(record.balance, 'balance', true),
+    game_balance: creditAmount(record.game_balance, 'game balance', true),
     donation_credit: creditAmount(record.donation_credit, 'donation credit', false),
     effective_level: record.effective_level as UserProfile['effective_level'],
     level_display_name: scalarString(record.level_display_name, 64, 'level display name', {

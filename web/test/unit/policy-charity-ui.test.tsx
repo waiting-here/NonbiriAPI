@@ -60,6 +60,7 @@ const coreSession = {
     concurrency_limit: null,
     effective_concurrency_limit: '5',
     balance: '0',
+    game_balance: '0',
     donation_credit: '0',
     effective_level: 2,
     level_display_name: 'Lv2',
@@ -817,7 +818,9 @@ describe('experimental policy and charity controls', () => {
     await screen.findByRole('heading', { name: 'Platform models' });
     await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
     await rendered.user.click(await screen.findByRole('button', { name: 'Edit platform model' }));
-    await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls (chat only)' }));
+    await rendered.user.click(
+      screen.getByRole('checkbox', { name: 'Flatten tool calls (chat only)' }),
+    );
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await expect(screen.findByText(/The data changed/)).resolves.toBeVisible();
     await waitFor(() => expect(modelReads).toBeGreaterThan(1));
@@ -871,7 +874,9 @@ describe('experimental policy and charity controls', () => {
     await screen.findByRole('heading', { name: 'Platform models' });
     await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
     await rendered.user.click(await screen.findByRole('button', { name: 'Edit platform model' }));
-    await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls (chat only)' }));
+    await rendered.user.click(
+      screen.getByRole('checkbox', { name: 'Flatten tool calls (chat only)' }),
+    );
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(modelReads).toBeGreaterThan(1));
     expect(screen.getByRole('checkbox', { name: 'Flatten tool calls (chat only)' })).toBeChecked();
@@ -957,7 +962,9 @@ describe('experimental policy and charity controls', () => {
     await screen.findByRole('heading', { name: 'Platform models' });
     await rendered.user.click(await screen.findByRole('button', { name: 'Manage connections' }));
     await rendered.user.click(await screen.findByRole('button', { name: 'Edit platform model' }));
-    await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls (chat only)' }));
+    await rendered.user.click(
+      screen.getByRole('checkbox', { name: 'Flatten tool calls (chat only)' }),
+    );
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await expect(screen.findByText(/The response was lost/)).resolves.toBeVisible();
     expect(modelReads).toBeGreaterThan(1);
@@ -1199,7 +1206,9 @@ describe('experimental policy and charity controls', () => {
       }),
     );
     await rendered.user.click(screen.getByRole('button', { name: 'Edit platform model' }));
-    await rendered.user.click(screen.getByRole('checkbox', { name: 'Flatten tool calls (chat only)' }));
+    await rendered.user.click(
+      screen.getByRole('checkbox', { name: 'Flatten tool calls (chat only)' }),
+    );
     await rendered.user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() =>
       expect(lastBody(fetchMock, 'PATCH', '/api/models/3')).toEqual({
@@ -2745,11 +2754,11 @@ describe('experimental policy and charity controls', () => {
   test('does not download an export returned for the previous account', async () => {
     const marker = 'account-a-export-marker-123456';
     const completion = deferred<AccountExportAttachment>();
-    const exportV5 = vi.fn(() => completion.promise);
+    const exportV6 = vi.fn(() => completion.promise);
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV5: true, deleteAccount: false },
+      capabilities: { exportV6: true, deleteAccount: false },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportV5,
+      exportV6,
       deleteAccount: vi.fn(async () => undefined),
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -2767,7 +2776,7 @@ describe('experimental policy and charity controls', () => {
       rendered.queryClient.setQueryData(coreKeys.session, { user: { id: '1' } });
       const dialog = await screen.findByRole('alertdialog');
       await rendered.user.click(within(dialog).getByRole('button', { name: 'Create export' }));
-      await waitFor(() => expect(exportV5).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(exportV6).toHaveBeenCalledTimes(1));
 
       rendered.rerender(<AccountLifecyclePanel accountId="2" adapter={adapter} />);
       const currentSession = { user: { id: '2' } };
@@ -2775,7 +2784,7 @@ describe('experimental policy and charity controls', () => {
       await act(async () => {
         completion.resolve({
           blob: new Blob([marker], { type: 'application/json' }),
-          schemaVersion: 5,
+          schemaVersion: 6,
         });
         await completion.promise;
       });

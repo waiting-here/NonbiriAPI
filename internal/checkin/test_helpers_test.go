@@ -199,8 +199,10 @@ func (fixture *checkinFixture) seedUser(label string) int64 {
 		fixture.t.Fatalf("begin account seed: %v", err)
 	}
 	defer tx.Rollback()
-	if _, err := ledger.CreateUserAccount(context.Background(), tx, userID, fixture.clock.Load()); err != nil {
-		fixture.t.Fatalf("create user account: %v", err)
+	for _, asset := range []ledger.Asset{ledger.General, ledger.Game} {
+		if _, err := ledger.CreateUserAssetAccount(context.Background(), tx, userID, asset, fixture.clock.Load()); err != nil {
+			fixture.t.Fatalf("create user account: %v", err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		fixture.t.Fatalf("commit account seed: %v", err)

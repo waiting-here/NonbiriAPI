@@ -69,7 +69,16 @@ function normalizeMode(value: unknown, field: string): RPSModeConfig {
 export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
   const record = exactRecord(
     value,
-    ['server_now', 'balance', 'tutorial_rps_seen', 'games_enabled', 'fishing', 'linklink', 'rps'],
+    [
+      'server_now',
+      'balance',
+      'game_balance',
+      'tutorial_rps_seen',
+      'games_enabled',
+      'fishing',
+      'linklink',
+      'rps',
+    ],
     [],
     'games snapshot',
   );
@@ -127,6 +136,7 @@ export function normalizeGamesSnapshot(value: unknown): GamesSnapshot {
   return {
     serverNow: unixTime(record.server_now, 'snapshot server time'),
     balance: creditsValue(record.balance, { signed: true }, 'snapshot balance'),
+    gameBalance: creditsValue(record.game_balance, { signed: true }, 'snapshot game balance'),
     tutorialRPSSeen: booleanValue(record.tutorial_rps_seen, 'tutorial flag'),
     gamesEnabled,
     fishing: {

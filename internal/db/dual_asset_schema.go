@@ -132,15 +132,12 @@ BEGIN SELECT RAISE(ABORT,'credit entry account kind snapshot mismatch'); END;
 CREATE TRIGGER credit_account_asset_insert BEFORE INSERT ON credit_accounts
 WHEN NEW.asset_type='game' AND (NEW.kind='pool' OR NEW.code IN ('forward_reserve','charity_reserve'))
 BEGIN SELECT RAISE(ABORT,'account code does not support this asset'); END;
-CREATE TRIGGER credit_account_asset_update BEFORE UPDATE ON credit_accounts
-WHEN NEW.asset_type='game' AND (NEW.kind='pool' OR NEW.code IN ('forward_reserve','charity_reserve'))
-BEGIN SELECT RAISE(ABORT,'account code does not support this asset'); END;
 CREATE TRIGGER credit_account_identity_update BEFORE UPDATE ON credit_accounts
 WHEN NEW.asset_type IS NOT OLD.asset_type OR NEW.kind IS NOT OLD.kind OR NEW.code IS NOT OLD.code OR NEW.user_id IS NOT OLD.user_id
 BEGIN SELECT RAISE(ABORT,'account identity is immutable'); END;
 DROP TRIGGER welfare_claim_matrix_guard;
 CREATE TRIGGER welfare_claim_matrix_guard BEFORE INSERT ON welfare_claims
-WHEN NEW.asset_type='game' AND NOT EXISTS(SELECT 1 FROM credit_entries e JOIN credit_accounts a ON a.id=e.account_id
+WHEN NEW.asset_type<>'game' OR NOT EXISTS(SELECT 1 FROM credit_entries e JOIN credit_accounts a ON a.id=e.account_id
   WHERE e.operation_id=NEW.operation_id AND a.kind='user' AND a.user_id=NEW.user_id
    AND e.asset_type='game' AND e.delta_sign=1 AND hex(e.delta_mag)=printf('%032X',NEW.award_milli))
  OR typeof(NEW.site_day)<>'text'

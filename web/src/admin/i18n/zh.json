@@ -42,7 +42,9 @@
       "pendingIndexing": "正在索引",
       "pendingReview": "待审核",
       "approvedProcessing": "正在处理",
-      "openReportInbox": "打开举报收件箱"
+      "openReportInbox": "打开举报收件箱",
+      "generalCheckins": "通用积分签到次数",
+      "gameCheckins": "游戏积分签到次数"
     },
     "users": {
       "nav": "用户",
@@ -85,7 +87,7 @@
       "level": "等级",
       "levelAutoTag": "自动",
       "balances": "积分",
-      "creditsBalance": "悠哉积分",
+      "creditsBalance": "通用积分",
       "donationBalance": "捐赠回馈",
       "economyTitle": "积分调整",
       "economyReason": "原因（必填）",
@@ -113,7 +115,8 @@
       "economyTarget": "目标账户",
       "levelEffectiveTag": "有效",
       "revisionGuard": "所有写入都会比较修订号 {{revision}}。",
-      "updated": "更新时间"
+      "updated": "更新时间",
+      "gameBalance": "游戏积分"
     },
     "logs": {
       "nav": "日志与用量",

@@ -12,6 +12,7 @@ export function gamesSnapshotWire() {
   return {
     server_now: 1_800_000_000,
     balance: '12345678901234567890.125',
+    game_balance: '0',
     tutorial_rps_seen: false,
     games_enabled: true,
     fishing: {

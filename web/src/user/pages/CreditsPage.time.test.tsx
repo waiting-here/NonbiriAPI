@@ -22,6 +22,7 @@ const from = Date.parse(`${localFrom}Z`) / 1_000;
 const to = Date.parse(`${localTo}Z`) / 1_000;
 const operationID = `op_${'A'.repeat(22)}`;
 const entry = {
+  asset_type: 'general',
   operation_id: operationID,
   line: 1,
   kind: 'checkin_award',
@@ -36,6 +37,7 @@ const page = {
   total: '1',
   total_pages: '1',
   anchor: operationID,
+  game_balance: '0',
   current_balance: '1',
   server_now: 1_800_000_001,
 };
@@ -62,7 +64,11 @@ describe('credit history time filters', () => {
         path: '/api/time-zones',
         body: { version: 'go1.26.6-zoneinfo', zones: ['UTC'] },
       },
-      { method: 'GET', path: '/api/credits/history?page=1&page_size=20', body: page },
+      {
+        method: 'GET',
+        path: '/api/credits/history?asset_type=all&page=1&page_size=20',
+        body: page,
+      },
     ]);
     await renderWithProviders(<CreditsPage />, { station: 'user', role: 'user' });
     await waitFor(() =>
@@ -106,12 +112,12 @@ describe('credit history time filters', () => {
       },
       {
         method: 'GET',
-        path: '/api/credits/history?page=1&page_size=20',
+        path: '/api/credits/history?asset_type=all&page=1&page_size=20',
         body: page,
       },
       {
         method: 'GET',
-        path: `/api/credits/history?page=1&page_size=20&from=${from}&to=${to}`,
+        path: `/api/credits/history?asset_type=all&page=1&page_size=20&from=${from}&to=${to}`,
         body: page,
       },
     ]);
@@ -131,7 +137,7 @@ describe('credit history time filters', () => {
     await view.user.click(screen.getByRole('button', { name: 'Apply filters' }));
     await waitFor(() =>
       expect(fetchMock.mock.calls.map(([path]) => String(path))).toContain(
-        `/api/credits/history?page=1&page_size=20&from=${from}&to=${to}`,
+        `/api/credits/history?asset_type=all&page=1&page_size=20&from=${from}&to=${to}`,
       ),
     );
     expect(fetchMock.mock.calls.map(([path]) => String(path))).not.toContain(

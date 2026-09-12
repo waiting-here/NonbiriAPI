@@ -1,3 +1,5 @@
+import { GameWallets } from './GameWallets';
+import type { GamesSnapshot } from './types';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { PageHeader } from '@shared/components/States';
@@ -8,11 +10,13 @@ import type { GameSoundControl } from './useGameSound';
 
 export function GameHeader({
   game,
+  wallets,
   sound,
   onRules,
   compact = false,
   children,
 }: {
+  readonly wallets?: Pick<GamesSnapshot, 'balance' | 'gameBalance'>;
   readonly game: 'fishing' | 'linklink' | 'rps';
   readonly sound: GameSoundControl;
   readonly onRules: () => void;
@@ -32,6 +36,7 @@ export function GameHeader({
       description={compact ? undefined : text(`${game}.description`)}
       actions={
         <>
+          {wallets ? <GameWallets wallets={wallets} /> : null}
           <GameRulesButton label={text('common.rulesButton')} onClick={onRules} />
           <GameSoundButton sound={sound} />
           {children}

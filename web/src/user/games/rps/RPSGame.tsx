@@ -1067,7 +1067,14 @@ export function RPSGame() {
   const canQueueDeathmatch =
     deathmatchGateOpen && deathmatchAffordable && homeQuery.isSuccess && !homeQuery.error;
   const closeRules = useCallback(() => setRulesOpen(false), []);
-  const header = <GameHeader game="rps" sound={sound} onRules={() => setRulesOpen(true)} />;
+  const header = (
+    <GameHeader
+      wallets={snapshot.data}
+      game="rps"
+      sound={sound}
+      onRules={() => setRulesOpen(true)}
+    />
+  );
   const rulesDialog = <RPSRules open={rulesOpen} onClose={closeRules} />;
   if (snapshot.isPending)
     return (
@@ -1098,6 +1105,7 @@ export function RPSGame() {
   return (
     <main className={`game-page rps-page${session ? ' is-playing' : ''}`}>
       <GameHeader
+        wallets={snapshot.data}
         game="rps"
         sound={sound}
         onRules={() => setRulesOpen(true)}

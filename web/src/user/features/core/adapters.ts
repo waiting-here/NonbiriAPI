@@ -2,7 +2,7 @@ import { ApiError } from '@shared/query/http';
 import {
   beginElevation,
   deleteCurrentAccount,
-  exportAccountV5,
+  exportAccountV6,
   getHomeAnnouncements,
   getHomeCheckinStatus,
   getHomeGameSummary,
@@ -24,6 +24,11 @@ export const productionHomeAdapters: HomeAdapters = Object.freeze({
     load: getHomeCheckinStatus,
     submit: submitHomeCheckin,
   }),
+  gameCheckin: Object.freeze({
+    state: 'available' as const,
+    load: (signal?: AbortSignal) => getHomeCheckinStatus(signal, 'game'),
+    submit: (signal?: AbortSignal) => submitHomeCheckin(signal, 'game'),
+  }),
   games: Object.freeze({ state: 'available' as const, load: getHomeGameSummary }),
   announcements: Object.freeze({ state: 'available' as const, load: getHomeAnnouncements }),
 });
@@ -37,21 +42,21 @@ const unavailable = async (): Promise<never> => {
  * deletion without issuing a request or manufacturing a successful result.
  */
 export const disabledAccountLifecycleAdapter: AccountLifecycleAdapter = Object.freeze({
-  capabilities: Object.freeze({ exportV5: false, deleteAccount: false }),
+  capabilities: Object.freeze({ exportV6: false, deleteAccount: false }),
   beginElevation: unavailable,
-  exportV5: unavailable,
+  exportV6: unavailable,
   deleteAccount: unavailable,
   readAccountAuthority: unavailable,
 });
 
 export const productionAccountLifecycleAdapter = Object.freeze<AccountLifecycleAdapter>({
-  capabilities: Object.freeze({ exportV5: true, deleteAccount: true }),
+  capabilities: Object.freeze({ exportV6: true, deleteAccount: true }),
   beginElevation: async (_intent, accountId) => {
     if (!/^[1-9][0-9]*$/.test(accountId))
       throw new ApiError('invalid_request', 'Invalid account id.', 400);
     return beginElevation();
   },
-  exportV5: ({ accountId, elevatedToken }) => exportAccountV5(accountId, elevatedToken),
+  exportV6: ({ accountId, elevatedToken }) => exportAccountV6(accountId, elevatedToken),
   deleteAccount: ({ accountId, elevatedToken, confirmation }) =>
     deleteCurrentAccount(accountId, elevatedToken, confirmation),
   readAccountAuthority,

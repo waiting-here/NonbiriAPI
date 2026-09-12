@@ -29,6 +29,7 @@ const account: UserProfile = {
   concurrency_limit: null,
   effective_concurrency_limit: '10',
   balance: '1000',
+  game_balance: '0',
   donation_credit: '0',
   effective_level: 2,
   level_display_name: 'Member',

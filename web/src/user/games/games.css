@@ -205,6 +205,18 @@
   }
 }
 
+.game-wallets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  align-items: baseline;
+}
+.game-wallets span {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: baseline;
+}
+
 @media (max-width: 540px) {
   .game-center-card__body .btn {
     width: 100%;

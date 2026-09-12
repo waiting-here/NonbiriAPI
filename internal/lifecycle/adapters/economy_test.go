@@ -134,7 +134,8 @@ func TestEconomyAdaptersMapClosedExportDTOs(t *testing.T) {
 			CreatedAt: 71, UpdatedAt: 72,
 		}},
 	}}
-	welfare, thursday, err := NewActivity(activityOwner).ExportActivities(ctx, nil, request)
+	activity, err := NewActivity(activityOwner).ExportActivities(ctx, nil, request)
+	welfare, thursday := activity.WelfareClaims, activity.Thursday
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,7 +302,7 @@ func TestEconomyAdaptersDelegateDeleteAndRetention(t *testing.T) {
 func TestEconomyAdaptersTranslateResourceLimits(t *testing.T) {
 	ctx := context.Background()
 	request := lifecycle.ExportRequest{UserID: 1, DecisionNow: 2, Limit: 3}
-	_, _, err := NewActivity(&fakeActivityOwner{exportErr: activities.ErrResourceLimit}).ExportActivities(ctx, nil, request)
+	_, err := NewActivity(&fakeActivityOwner{exportErr: activities.ErrResourceLimit}).ExportActivities(ctx, nil, request)
 	if !errors.Is(err, lifecycle.ErrTooLarge) {
 		t.Fatalf("activity error = %v", err)
 	}

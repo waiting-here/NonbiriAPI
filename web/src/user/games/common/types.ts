@@ -24,6 +24,7 @@ export interface RPSModeConfig {
 export interface GamesSnapshot {
   readonly serverNow: number;
   readonly balance: string;
+  readonly gameBalance: string;
   readonly tutorialRPSSeen: boolean;
   readonly gamesEnabled: boolean;
   readonly fishing: {

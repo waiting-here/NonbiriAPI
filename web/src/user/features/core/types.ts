@@ -1,6 +1,7 @@
 export const CONNECTOR_TYPES = ['openai-compatible', 'anthropic-compatible'] as const;
 
 export type ConnectorType = (typeof CONNECTOR_TYPES)[number];
+export type CreditAsset = 'general' | 'game';
 export type AccountLanguage = '' | 'zh' | 'en';
 export type ExplicitLanguage = Exclude<AccountLanguage, ''>;
 export type RouteStrategy = 'ordered' | 'random';
@@ -41,6 +42,7 @@ export interface UserProfile {
   concurrency_limit: string | null;
   effective_concurrency_limit: string;
   balance: string;
+  game_balance: string;
   donation_credit: string;
   effective_level: 1 | 2 | 3 | 4 | 5;
   level_display_name: string;
@@ -348,6 +350,7 @@ export type HomeCheckinStatus =
   | { enabled: false }
   | {
       enabled: true;
+      asset_type: CreditAsset;
       checked_in_today: boolean;
       balance: string;
       award_min: string;
@@ -356,6 +359,7 @@ export type HomeCheckinStatus =
     };
 
 export interface HomeCheckinResult {
+  asset_type: CreditAsset;
   award: string;
   balance: string;
 }
@@ -424,6 +428,7 @@ export type HomeAnnouncementCapability =
 
 export interface HomeAdapters {
   checkin: HomeCheckinCapability;
+  gameCheckin: HomeCheckinCapability;
   games: HomeCapability<HomeGameSummary[]>;
   announcements: HomeAnnouncementCapability;
 }
@@ -432,15 +437,15 @@ export type LifecycleIntent = 'export' | 'delete';
 
 export interface AccountExportAttachment {
   blob: Blob;
-  schemaVersion: 5;
+  schemaVersion: 6;
 }
 
 export type AccountAuthority = 'active' | 'deleted';
 
 export interface AccountLifecycleAdapter {
-  capabilities: Readonly<{ exportV5: boolean; deleteAccount: boolean }>;
+  capabilities: Readonly<{ exportV6: boolean; deleteAccount: boolean }>;
   beginElevation(intent: LifecycleIntent, accountId: string): Promise<string>;
-  exportV5(input: { accountId: string; elevatedToken: string }): Promise<AccountExportAttachment>;
+  exportV6(input: { accountId: string; elevatedToken: string }): Promise<AccountExportAttachment>;
   deleteAccount(input: {
     accountId: string;
     elevatedToken: string;

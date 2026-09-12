@@ -11,7 +11,7 @@ import (
 func TestConcurrentWelfareClaimsHaveOneWinner(t *testing.T) {
 	fixture := newActivityFixture(t, 1_800_500_000)
 	userID, _ := fixture.seedUser("concurrent-welfare", false)
-	fixture.fundUser(userID, -1)
+	fixture.fundGame(userID, -1)
 	var welfarePool string
 	_ = fixture.store.DB().QueryRow(`SELECT id FROM shared_pools WHERE pool_type='welfare'`).Scan(&welfarePool)
 	fixture.fundPool(welfarePool, 1000)

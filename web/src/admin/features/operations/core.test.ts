@@ -36,6 +36,7 @@ describe('administrator core wire', () => {
       cache_read_input_tokens: '11',
       output_tokens: '13',
       checkins: '17',
+      game_checkins: '340282366920938463463374607431768211455',
       console_writes: '19',
       game_active: false,
       game_rounds: '0',

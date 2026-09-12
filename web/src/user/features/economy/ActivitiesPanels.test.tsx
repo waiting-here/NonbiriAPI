@@ -49,6 +49,8 @@ let claimMutation = mutationResult();
 let contributionMutation = mutationResult();
 
 const welfare: WelfareView = {
+  asset: 'game',
+  poolAsset: 'general',
   enabled: true,
   state: 'empty',
   siteDay: '2026-08-31',
@@ -180,6 +182,9 @@ describe('activity cards', () => {
     claimMutation = {
       ...mutationResult(),
       data: {
+        asset: 'game',
+        poolAsset: 'general',
+        gameBalance: '1',
         awarded: '0',
         balance: '1',
         poolBalance: '0.009',
@@ -213,40 +218,52 @@ describe('activity cards', () => {
     );
   });
 
-  it.each([false, true])('shows next-period details without changing contribution authority (current=%s)', async (withCurrent) => {
-    const next = {
-      periodId: 'thu_abcdefghijklmnopqrstuQ',
-      opensAt: thursday.serverNow + 604_800,
-      closesAt: thursday.serverNow + 691_200,
-      literature: 'Next week\n\n**New event**',
-      entry: '25',
-      perUserLimit: 2,
-      poolBalance: '80',
-    };
-    const view = await renderWithProviders(
-      <ThursdayCard thursday={{
-        ...thursday, state: withCurrent ? 'open' : 'not_open',
-        current: withCurrent ? thursday.current : null, next,
-      }} masterAvailable />,
-      { station: 'user', role: 'user' },
-    );
-    expect(screen.getByRole('heading', { name: activityCopy.thursday.nextPreview })).toBeInTheDocument();
-    expect(screen.getByText('New event', { selector: 'strong' })).toBeInTheDocument();
-    const button = screen.getByRole('button', { name: activityCopy.thursday.contributeOnce });
-    if (withCurrent) {
-      const headings = screen.getAllByRole('heading', { level: 3 });
-      expect(headings.map((heading) => heading.textContent)).toEqual([
-        activityCopy.thursday.currentPeriod, activityCopy.thursday.nextPreview,
-      ]);
-      await view.user.click(button);
-      expect(contributionMutation.mutateAsync).toHaveBeenCalledWith({
-        periodId: thursday.current!.periodId, expectedRevision: thursday.current!.revision,
-      });
-    } else {
-      expect(button).toBeDisabled();
-      expect(contributionMutation.mutateAsync).not.toHaveBeenCalled();
-    }
-  });
+  it.each([false, true])(
+    'shows next-period details without changing contribution authority (current=%s)',
+    async (withCurrent) => {
+      const next = {
+        periodId: 'thu_abcdefghijklmnopqrstuQ',
+        opensAt: thursday.serverNow + 604_800,
+        closesAt: thursday.serverNow + 691_200,
+        literature: 'Next week\n\n**New event**',
+        entry: '25',
+        perUserLimit: 2,
+        poolBalance: '80',
+      };
+      const view = await renderWithProviders(
+        <ThursdayCard
+          thursday={{
+            ...thursday,
+            state: withCurrent ? 'open' : 'not_open',
+            current: withCurrent ? thursday.current : null,
+            next,
+          }}
+          masterAvailable
+        />,
+        { station: 'user', role: 'user' },
+      );
+      expect(
+        screen.getByRole('heading', { name: activityCopy.thursday.nextPreview }),
+      ).toBeInTheDocument();
+      expect(screen.getByText('New event', { selector: 'strong' })).toBeInTheDocument();
+      const button = screen.getByRole('button', { name: activityCopy.thursday.contributeOnce });
+      if (withCurrent) {
+        const headings = screen.getAllByRole('heading', { level: 3 });
+        expect(headings.map((heading) => heading.textContent)).toEqual([
+          activityCopy.thursday.currentPeriod,
+          activityCopy.thursday.nextPreview,
+        ]);
+        await view.user.click(button);
+        expect(contributionMutation.mutateAsync).toHaveBeenCalledWith({
+          periodId: thursday.current!.periodId,
+          expectedRevision: thursday.current!.revision,
+        });
+      } else {
+        expect(button).toBeDisabled();
+        expect(contributionMutation.mutateAsync).not.toHaveBeenCalled();
+      }
+    },
+  );
 
   it('keeps Thursday locked across changed values and unlocks after a same-value successful GET', async () => {
     const unknown = new ApiError('network_error', 'response lost', 0);

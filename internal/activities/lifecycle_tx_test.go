@@ -10,7 +10,7 @@ import (
 func TestExportUserTxUsesCallerSnapshotAndWrapper(t *testing.T) {
 	fixture := newActivityFixture(t, 1_800_100_000)
 	userID, _ := fixture.seedUser("activity-export-tx", false)
-	fixture.fundUser(userID, -1)
+	fixture.fundGame(userID, -1)
 	var welfarePool string
 	if err := fixture.store.DB().QueryRow(`SELECT id FROM shared_pools WHERE pool_type='welfare'`).Scan(&welfarePool); err != nil {
 		t.Fatal(err)
@@ -55,7 +55,7 @@ func TestExportUserTxUsesCallerSnapshotAndWrapper(t *testing.T) {
 func TestExportUserTxRejectsLimitPlusOne(t *testing.T) {
 	fixture := newActivityFixture(t, 1_800_200_000)
 	userID, _ := fixture.seedUser("activity-export-limit", false)
-	fixture.fundUser(userID, -1)
+	fixture.fundGame(userID, -1)
 	var welfarePool string
 	if err := fixture.store.DB().QueryRow(`SELECT id FROM shared_pools WHERE pool_type='welfare'`).Scan(&welfarePool); err != nil {
 		t.Fatal(err)
@@ -65,7 +65,7 @@ func TestExportUserTxRejectsLimitPlusOne(t *testing.T) {
 	for day := 0; day < 2; day++ {
 		fixture.clock.Store(1_800_200_000 + int64(day*86400))
 		if day > 0 {
-			fixture.fundUser(userID, -100)
+			fixture.fundGame(userID, -100)
 		}
 		if _, _, err := fixture.repository.ClaimWelfare(context.Background(), userID,
 			fixture.control(http.MethodPost, routeWelfareClaims, map[string]any{"day": day})); err != nil {

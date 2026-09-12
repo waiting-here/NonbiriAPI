@@ -56,6 +56,7 @@ export interface ActivityDay {
   cache_read_input_tokens: string;
   output_tokens: string;
   checkins: string;
+  game_checkins: string;
   console_writes: string;
   game_active: boolean;
   game_rounds: string;
@@ -65,7 +66,7 @@ export interface ActivityDay {
 export interface ActivityPage extends CursorPage<ActivityDay> { enabled: boolean }
 
 function normalizeActivityDay(value: unknown): ActivityDay {
-  const fields = ['day', 'product_active', 'api_requests', 'uncached_input_tokens', 'cache_write_input_tokens', 'cache_read_input_tokens', 'output_tokens', 'checkins', 'console_writes', 'game_active', 'game_rounds', 'distinct_product_users'] as const;
+  const fields = ['day', 'product_active', 'api_requests', 'uncached_input_tokens', 'cache_write_input_tokens', 'cache_read_input_tokens', 'output_tokens', 'checkins', 'game_checkins', 'console_writes', 'game_active', 'game_rounds', 'distinct_product_users'] as const;
   const root = record(value, fields, 'activity day');
   return {
     day: unixSecond(root.day, 'activity day key'),
@@ -75,6 +76,7 @@ function normalizeActivityDay(value: unknown): ActivityDay {
     cache_write_input_tokens: decimal(root.cache_write_input_tokens, 'cache-write count'),
     cache_read_input_tokens: decimal(root.cache_read_input_tokens, 'cache-read count'),
     output_tokens: decimal(root.output_tokens, 'output count'),
+    game_checkins: decimal(root.game_checkins, 'game check-in count'),
     checkins: decimal(root.checkins, 'check-in count'),
     console_writes: decimal(root.console_writes, 'console write count'),
     game_active: boolean(root.game_active, 'game active state'),
@@ -197,6 +199,7 @@ export interface AdminUser {
   effective_concurrency_limit: string;
   lang: '' | 'zh' | 'en';
   balance: string;
+  game_balance: string;
   donation_credit: string;
   level: { manual: number | null; automatic: number; effective: number; display_name: string };
   game_profile_public: boolean;
@@ -210,7 +213,7 @@ export function normalizeAdminUser(value: unknown): AdminUser {
   const root = record(value, [
     'id', 'discord_id', 'username', 'avatar_url', 'guild_nick', 'guild_avatar_url', 'is_admin', 'is_banned',
     'banned_reason', 'banned_until', 'charity_suspended_until', 'endpoint_limit', 'effective_endpoint_limit',
-    'rpm_limit', 'effective_rpm_limit', 'concurrency_limit', 'effective_concurrency_limit', 'lang', 'balance',
+    'rpm_limit', 'effective_rpm_limit', 'concurrency_limit', 'effective_concurrency_limit', 'lang', 'balance', 'game_balance',
     'donation_credit', 'level', 'game_profile_public', 'revision', 'usage', 'created_at', 'updated_at',
   ], 'administrator user');
   const level = record(root.level, ['manual', 'automatic', 'effective', 'display_name'], 'administrator user level');
@@ -241,6 +244,7 @@ export function normalizeAdminUser(value: unknown): AdminUser {
     effective_concurrency_limit: decimal(root.effective_concurrency_limit, 'effective concurrency limit'),
     lang: oneOf(root.lang, ['', 'zh', 'en'] as const, 'user language'),
     balance: amount(root.balance, 'user balance'),
+    game_balance: amount(root.game_balance, 'user game balance'),
     donation_credit: amount(root.donation_credit, 'donation credit', false),
     level: { manual, automatic, effective, display_name: string(level.display_name, 'level display name', { max: 64, bytes: 256 }) },
     game_profile_public: boolean(root.game_profile_public, 'game profile setting'),

@@ -30,6 +30,7 @@ import {
 } from '../features/core/queries';
 import { isConflict, isOutcomeUnknown } from '../features/core/request';
 import type {
+  CreditAsset,
   HomeAdapters,
   HomeCheckinResult,
   HomeCheckinStatus,
@@ -168,6 +169,12 @@ function EconomyCard({ accountId }: { accountId: string }) {
             </strong>
           </div>
           <div className="core-metric">
+            <span>{t('home.gameBalance')}</span>
+            <strong>
+              <ExactCredits value={me.data.user.game_balance} />
+            </strong>
+          </div>
+          <div className="core-metric">
             <span>{t('home.donationCredit')}</span>
             <strong>
               <ExactCredits value={me.data.user.donation_credit} />
@@ -229,10 +236,12 @@ function UsageCard({ user }: { user: UserProfile }) {
 
 function CheckinCard({
   accountId,
+  asset,
   capability,
 }: {
   accountId: string;
   capability: HomeAdapters['checkin'];
+  asset: CreditAsset;
 }) {
   const { t } = useCoreCopy();
   const queryClient = useQueryClient();
@@ -242,7 +251,7 @@ function CheckinCard({
   const loader = capability.state === 'available' ? capability.load : null;
   const submitter = capability.state === 'available' ? capability.submit : null;
   const status = useQuery({
-    queryKey: coreKeys.home(accountId, 'checkin'),
+    queryKey: coreKeys.home(accountId, asset === 'game' ? 'game-checkin' : 'checkin'),
     queryFn: ({ signal }) => {
       if (!loader) throw new CapabilityUnavailableError();
       return accountScopedHomeLoad(queryClient, accountId, loader, signal);
@@ -290,7 +299,10 @@ function CheckinCard({
           },
         });
       }
-      await status.refetch();
+      await Promise.all([
+        status.refetch(),
+        queryClient.invalidateQueries({ queryKey: coreKeys.me(accountId) }),
+      ]);
     } catch (error) {
       if (isOutcomeUnknown(error)) {
         setOutcomeUnknown(true);
@@ -315,7 +327,7 @@ function CheckinCard({
   return (
     <section className="core-card">
       <div className="core-card__header">
-        <h2>{t('home.checkinTitle')}</h2>
+        <h2>{t(asset === 'game' ? 'home.gameCheckinTitle' : 'home.checkinTitle')}</h2>
       </div>
       {capability.state === 'unavailable' ? (
         <CoreUnavailable compact />
@@ -350,7 +362,7 @@ function CheckinCard({
               </strong>
             </div>
             <div className="core-metric">
-              <span>{t('home.balance')}</span>
+              <span>{t(asset === 'game' ? 'home.gameBalance' : 'home.balance')}</span>
               <strong>
                 <ExactCredits value={committed?.result.balance ?? displayedAuthority.balance} />
               </strong>
@@ -448,9 +460,16 @@ function CapabilitySections({
   return (
     <>
       <CheckinCard
-        key={accountId}
+        key={`general:${accountId}`}
         accountId={accountId}
+        asset="general"
         capability={adapters.checkin}
+      />
+      <CheckinCard
+        key={`game:${accountId}`}
+        accountId={accountId}
+        asset="game"
+        capability={adapters.gameCheckin}
       />
 
       {adapters.games.state === 'unavailable' ? (
@@ -517,10 +536,7 @@ export function HomeDashboard({
         <EconomyCard accountId={user.id} />
       </div>
       <UsageCard user={user} />
-      <CapabilitySections
-        accountId={user.id}
-        adapters={adapters}
-      />
+      <CapabilitySections accountId={user.id} adapters={adapters} />
       <section className="core-card">
         <div className="core-card__header">
           <h2>{t('home.quickTitle')}</h2>

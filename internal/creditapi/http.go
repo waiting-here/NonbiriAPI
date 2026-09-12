@@ -75,6 +75,8 @@ func parseFilter(raw string) (ledger.HistoryFilter, error) {
 		}
 		value := entries[0]
 		switch key {
+		case "asset_type":
+			f.Asset = value
 		case "category":
 			f.Category = value
 		case "direction":

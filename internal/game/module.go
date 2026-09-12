@@ -141,7 +141,7 @@ func (registry *Registry) Seal() error {
 	}
 	for _, module := range registry.modules {
 		for _, field := range module.SnapshotFields {
-			if slices.Contains([]string{"server_now", "balance", "games_enabled", "revision", "master_enabled"}, field) {
+			if slices.Contains([]string{"server_now", "balance", "game_balance", "games_enabled", "revision", "master_enabled"}, field) {
 				return ErrInvalidContract
 			}
 			for _, other := range registry.modules {

@@ -96,6 +96,9 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, "activity-"+label, label, adminValue, zero, 
 	if err != nil {
 		fixture.t.Fatalf("create user account: %v", err)
 	}
+	if _, err := ledger.CreateUserAssetAccount(context.Background(), tx, userID, ledger.Game, fixture.clock.Load()); err != nil {
+		fixture.t.Fatal(err)
+	}
 	if err := tx.Commit(); err != nil {
 		fixture.t.Fatalf("commit user: %v", err)
 	}
@@ -112,23 +115,49 @@ func (fixture *activityFixture) operationID() string {
 }
 
 func (fixture *activityFixture) fundUser(userID int64, amount int64) {
+	fixture.fundAsset(userID, amount, ledger.General)
+}
+
+func (fixture *activityFixture) fundGame(userID int64, amount int64) {
+	fixture.fundAsset(userID, amount, ledger.Game)
+}
+
+func (fixture *activityFixture) gameWallet(userID int64) ledger.Account {
+	fixture.t.Helper()
+	tx, err := fixture.store.DB().BeginTx(context.Background(), nil)
+	if err != nil {
+		fixture.t.Fatal(err)
+	}
+	defer tx.Rollback()
+	account, err := ledger.UserAssetAccount(context.Background(), tx, userID, ledger.Game)
+	if err != nil {
+		fixture.t.Fatal(err)
+	}
+	return account
+}
+
+func (fixture *activityFixture) fundAsset(userID int64, amount int64, asset ledger.Asset) {
 	fixture.t.Helper()
 	tx, err := fixture.store.DB().BeginTx(context.Background(), nil)
 	if err != nil {
 		fixture.t.Fatalf("begin fund user: %v", err)
 	}
 	defer tx.Rollback()
-	user, err := ledger.UserAccount(context.Background(), tx, userID)
+	user, err := ledger.UserAssetAccount(context.Background(), tx, userID, asset)
 	if err != nil {
 		fixture.t.Fatalf("user account: %v", err)
 	}
-	external, err := ledger.CodedAccount(context.Background(), tx, "external")
+	external, err := ledger.CodedAssetAccount(context.Background(), tx, "external", asset)
 	if err != nil {
 		fixture.t.Fatalf("external account: %v", err)
 	}
-	plan, err := ledger.NewAdminUserAdjustment(ledger.Meta{
-		OperationID: fixture.operationID(), ActorUserID: fixture.adminID, CreatedAt: fixture.clock.Load(),
-	}, user.ID, external.ID, ledger.AmountFromMilli(amount), 0, ledger.AmountFromMilli(0), "test funding")
+	meta := ledger.Meta{OperationID: fixture.operationID(), ActorUserID: fixture.adminID, CreatedAt: fixture.clock.Load()}
+	var plan ledger.Plan
+	if asset == ledger.General {
+		plan, err = ledger.NewAdminUserAdjustment(meta, user.ID, external.ID, ledger.AmountFromMilli(amount), 0, ledger.Amount{}, "test funding")
+	} else {
+		plan, err = ledger.NewAdminGameAdjustment(meta, user.ID, external.ID, ledger.AmountFromMilli(amount), "test funding")
+	}
 	if err != nil {
 		fixture.t.Fatalf("user funding plan: %v", err)
 	}

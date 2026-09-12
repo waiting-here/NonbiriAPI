@@ -323,6 +323,9 @@ func TestFreeModuleUsesAllRegisteredCapabilitiesWithoutLedgerKinds(t *testing.T)
 	if _, err := ledger.CreateUserAccount(context.Background(), tx, fixture.adminID, fixtureNow); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := ledger.CreateUserAssetAccount(context.Background(), tx, fixture.adminID, ledger.Game, fixtureNow); err != nil {
+		t.Fatal(err)
+	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
@@ -341,7 +344,7 @@ func TestFreeModuleUsesAllRegisteredCapabilitiesWithoutLedgerKinds(t *testing.T)
 		t.Fatalf("module route: %d %s", response.Code, response.Body.String())
 	}
 	snapshot, err := service.GamesSnapshot(context.Background(), fixture.adminID, time.Unix(fixtureNow, 0))
-	if err != nil || len(snapshot) != 4 || snapshot["free"] == nil {
+	if err != nil || len(snapshot) != 5 || snapshot["free"] == nil {
 		t.Fatalf("snapshot: %+v %v", snapshot, err)
 	}
 	home, err := service.HomeSummary(context.Background(), fixture.adminID)

@@ -463,7 +463,14 @@ export function LinkLinkGame() {
   );
   const canStart = current.isSuccess && gateOpen && affordable;
   const closeRules = useCallback(() => setRulesOpen(false), []);
-  const header = <GameHeader game="linklink" sound={sound} onRules={() => setRulesOpen(true)} />;
+  const header = (
+    <GameHeader
+      wallets={snapshot.data}
+      game="linklink"
+      sound={sound}
+      onRules={() => setRulesOpen(true)}
+    />
+  );
   const rulesDialog = <LinkLinkRules open={rulesOpen} onClose={closeRules} />;
 
   if (snapshot.isPending)
@@ -496,6 +503,7 @@ export function LinkLinkGame() {
   return (
     <main className={`game-page linklink-page${state ? ' is-playing' : ''}`}>
       <GameHeader
+        wallets={snapshot.data}
         game="linklink"
         sound={sound}
         onRules={() => setRulesOpen(true)}

@@ -40,7 +40,7 @@ interface UserDraft {
   rpmLimit: string;
   concurrencyLimit: string;
   level: string;
-  economyTarget: 'balance' | 'donation_credit';
+  economyTarget: 'balance' | 'game_balance' | 'donation_credit';
   economyDirection: 'increase' | 'decrease';
   economyAmount: string;
   economyReason: string;
@@ -213,7 +213,8 @@ function UserAuthority({
           </dd>
           <dt>{t('admin.users.balances')}</dt>
           <dd>
-            {user.balance} {t('admin.users.creditsBalance')} · {user.donation_credit}{' '}
+            {user.balance} {t('admin.users.creditsBalance')} · {user.game_balance}{' '}
+            {t('admin.users.gameBalance')} · {user.donation_credit}{' '}
             {t('admin.users.donationBalance')}
           </dd>
           <dt>
@@ -324,6 +325,7 @@ function UserAuthority({
               }
             >
               <option value="balance">{t('admin.users.creditsBalance')}</option>
+              <option value="game_balance">{t('admin.users.gameBalance')}</option>
               <option value="donation_credit">{t('admin.users.donationBalance')}</option>
             </select>
           </label>
@@ -690,7 +692,10 @@ function UsersPageContent({ account, scopeReady, sessionError }: UsersPageConten
                         />
                       </td>
                       <td data-label={t('admin.users.level')}>{user.level.effective}</td>
-                      <td data-label={t('admin.users.balances')}>{user.balance}</td>
+                      <td data-label={t('admin.users.balances')}>
+                        {user.balance} {t('admin.users.creditsBalance')} · {user.game_balance}{' '}
+                        {t('admin.users.gameBalance')}
+                      </td>
                       <td data-label={t('admin.users.actions')}>
                         <button
                           className="btn btn-secondary"

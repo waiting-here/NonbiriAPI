@@ -184,6 +184,7 @@ export function WelfareCard({
         />
       </div>
       <p>{t(`user.activities.welfare.body.${welfare.state}`)}</p>
+      <p>{t('user.activities.welfare.funding')}</p>
       <div className="economy-stat-grid">
         <section>
           <span>{t('user.activities.poolBalance')}</span>
@@ -343,7 +344,9 @@ export function ThursdayCard({
       </div>
       <p>{t(`user.activities.thursday.body.${thursday.state}`)}</p>
       {current ? <h3>{t('user.activities.thursday.currentPeriod')}</h3> : null}
-      {current?.literature ? <MarkdownText className="economy-literature">{current.literature}</MarkdownText> : null}
+      {current?.literature ? (
+        <MarkdownText className="economy-literature">{current.literature}</MarkdownText>
+      ) : null}
       <div className="economy-stat-grid">
         {current ? (
           <section>
@@ -387,13 +390,18 @@ export function ThursdayCard({
           key={`${thursday.serverNow}:${current.closesAt}`}
           serverNow={thursday.serverNow}
           target={current.closesAt}
-          labelKey={thursday.state === 'open'
-            ? 'user.activities.thursday.closesIn'
-            : 'user.activities.thursday.currentDeadline'}
+          labelKey={
+            thursday.state === 'open'
+              ? 'user.activities.thursday.closesIn'
+              : 'user.activities.thursday.currentDeadline'
+          }
         />
       ) : null}
       {thursday.next ? (
-        <section className="economy-thursday-preview" aria-label={t('user.activities.thursday.nextPreview')}>
+        <section
+          className="economy-thursday-preview"
+          aria-label={t('user.activities.thursday.nextPreview')}
+        >
           <h3>{t('user.activities.thursday.nextPreview')}</h3>
           {thursday.next.literature ? (
             <MarkdownText className="economy-literature">{thursday.next.literature}</MarkdownText>
@@ -401,15 +409,21 @@ export function ThursdayCard({
           <div className="economy-stat-grid">
             <section>
               <span>{t('user.activities.thursday.nextPoolBalance')}</span>
-              <strong><CreditAmount value={thursday.next.poolBalance} /></strong>
+              <strong>
+                <CreditAmount value={thursday.next.poolBalance} />
+              </strong>
             </section>
             <section>
               <span>{t('user.activities.thursday.fixedEntry')}</span>
-              <strong><CreditAmount value={thursday.next.entry} /></strong>
+              <strong>
+                <CreditAmount value={thursday.next.entry} />
+              </strong>
             </section>
             <section>
               <span>{t('user.activities.thursday.perUserLimit')}</span>
-              <strong><ExactCount value={String(thursday.next.perUserLimit)} /></strong>
+              <strong>
+                <ExactCount value={String(thursday.next.perUserLimit)} />
+              </strong>
             </section>
           </div>
           <Countdown
@@ -418,7 +432,9 @@ export function ThursdayCard({
             target={thursday.next.opensAt}
             labelKey="user.activities.thursday.opensIn"
           />
-          <p>{t('user.activities.thursday.closesAt')} {formatDateTime(thursday.next.closesAt)}</p>
+          <p>
+            {t('user.activities.thursday.closesAt')} {formatDateTime(thursday.next.closesAt)}
+          </p>
         </section>
       ) : null}
       {thursday.state === 'settling' ? (

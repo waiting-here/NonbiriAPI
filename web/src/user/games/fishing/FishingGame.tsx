@@ -738,7 +738,14 @@ export function FishingGame() {
     revealed,
   });
   const closeRules = useCallback(() => setRulesOpen(false), []);
-  const header = <GameHeader game="fishing" sound={sound} onRules={() => setRulesOpen(true)} />;
+  const header = (
+    <GameHeader
+      wallets={snapshot.data}
+      game="fishing"
+      sound={sound}
+      onRules={() => setRulesOpen(true)}
+    />
+  );
   const rulesDialog = <FishingRules open={rulesOpen} onClose={closeRules} />;
 
   if (snapshot.isPending)

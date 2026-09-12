@@ -8,21 +8,28 @@ import (
 	"net/url"
 
 	"github.com/waiting-here/NonbiriAPI/internal/httperr"
+	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
-type httpAPI struct{ service *Service }
+type httpAPI struct {
+	service *Service
+	asset   ledger.Asset
+}
 
 func RegisterRoutes(registrar UserRouteRegistrar, service *Service) error {
 	if nilInterface(registrar) || service == nil || service.database == nil {
 		return errors.New("checkin: user registrar and service are required")
 	}
-	api := &httpAPI{service: service}
+	api := &httpAPI{service: service, asset: ledger.General}
+	gameAPI := &httpAPI{service: service, asset: ledger.Game}
 	routes := []struct {
 		method, pattern string
 		handler         AuthorizedUserHandler
 	}{
 		{http.MethodGet, Route, api.status},
 		{http.MethodPost, Route, api.checkin},
+		{http.MethodGet, GameRoute, gameAPI.status},
+		{http.MethodPost, GameRoute, gameAPI.checkin},
 	}
 	for _, route := range routes {
 		if err := registrar.RegisterUserRoute(route.method, route.pattern, route.handler); err != nil {
@@ -36,7 +43,7 @@ func (api *httpAPI) status(writer http.ResponseWriter, request *http.Request, pr
 	if !requireEmptyQuery(writer, request) || !requireNoBody(writer, request) {
 		return
 	}
-	status, err := api.service.Status(request.Context(), principal.UserID)
+	status, err := api.service.StatusForAsset(request.Context(), principal.UserID, api.asset)
 	if err != nil {
 		writeError(writer, err)
 		return
@@ -48,14 +55,15 @@ func (api *httpAPI) status(writer http.ResponseWriter, request *http.Request, pr
 		return
 	}
 	writeJSON(writer, http.StatusOK, struct {
-		Enabled        bool   `json:"enabled"`
-		CheckedInToday bool   `json:"checked_in_today"`
-		Balance        string `json:"balance"`
-		AwardMinimum   string `json:"award_min"`
-		AwardMaximum   string `json:"award_max"`
-		BalanceCap     string `json:"balance_cap"`
+		Enabled        bool         `json:"enabled"`
+		CheckedInToday bool         `json:"checked_in_today"`
+		Asset          ledger.Asset `json:"asset_type"`
+		Balance        string       `json:"balance"`
+		AwardMinimum   string       `json:"award_min"`
+		AwardMaximum   string       `json:"award_max"`
+		BalanceCap     string       `json:"balance_cap"`
 	}{
-		Enabled: true, CheckedInToday: status.CheckedInToday, Balance: status.Balance,
+		Enabled: true, Asset: status.Asset, CheckedInToday: status.CheckedInToday, Balance: status.Balance,
 		AwardMinimum: status.AwardMinimum, AwardMaximum: status.AwardMaximum, BalanceCap: status.BalanceCap,
 	})
 }
@@ -64,7 +72,7 @@ func (api *httpAPI) checkin(writer http.ResponseWriter, request *http.Request, p
 	if !requireEmptyQuery(writer, request) || !requireNoBody(writer, request) {
 		return
 	}
-	result, err := api.service.Checkin(request.Context(), principal.UserID)
+	result, err := api.service.CheckinForAsset(request.Context(), principal.UserID, api.asset)
 	if err != nil {
 		writeError(writer, err)
 		return

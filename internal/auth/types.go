@@ -148,6 +148,7 @@ type User struct {
 	EffectiveRPMLimit         string       `json:"effective_rpm_limit"`
 	ConcurrencyLimit          *string      `json:"concurrency_limit"`
 	EffectiveConcurrencyLimit string       `json:"effective_concurrency_limit"`
+	GameBalance               string       `json:"game_balance"`
 	Balance                   string       `json:"balance"`
 	DonationCredit            string       `json:"donation_credit"`
 	EffectiveLevel            int          `json:"effective_level"`

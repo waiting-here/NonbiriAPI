@@ -106,6 +106,10 @@ export function DashboardPage() {
                     : 'admin.dashboard.inactiveValue',
                 )}
               </dd>
+              <dt>{t('admin.dashboard.generalCheckins')}</dt>
+              <dd>{activity.data.data[0]?.checkins}</dd>
+              <dt>{t('admin.dashboard.gameCheckins')}</dt>
+              <dd>{activity.data.data[0]?.game_checkins}</dd>
               <dt>{t('admin.dashboard.gameActive')}</dt>
               <dd>
                 {t(

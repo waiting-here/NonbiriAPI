@@ -16,6 +16,7 @@ import {
 
 export const HISTORY_CATEGORIES = [
   'checkin',
+  'onboarding',
   'welfare',
   'thursday',
   'fishing',
@@ -32,6 +33,7 @@ export const HISTORY_KINDS = [
   'admin_pool_adjustment',
   'account_delete_zero',
   'checkin_award',
+  'game_onboarding_reward',
   'anti_abuse_penalty',
   'welfare_claim',
   'thursday_contribution',
@@ -58,6 +60,7 @@ export const MAX_HISTORY_PAGE = 9_223_372_036_854_775_807n;
 export const MAX_HISTORY_UNIX_SECOND = 253_402_300_799;
 export type HistoryKind = (typeof HISTORY_KINDS)[number];
 export interface HistoryEntry {
+  asset_type: 'general' | 'game';
   operation_id: string;
   line: number;
   kind: HistoryKind;
@@ -73,9 +76,11 @@ export interface HistoryPage {
   total_pages: string;
   anchor: string | null;
   current_balance: string;
+  game_balance: string;
   server_now: number;
 }
 export interface HistoryFilter {
+  asset_type?: 'general' | 'game' | 'all';
   page: string;
   page_size: PageSize;
   anchor?: string;
@@ -96,6 +101,7 @@ export function normalizeHistory(value: unknown): HistoryPage {
       'total_pages',
       'anchor',
       'current_balance',
+      'game_balance',
       'server_now',
     ],
     'credit history',
@@ -105,7 +111,7 @@ export function normalizeHistory(value: unknown): HistoryPage {
   const data = array(root.data, 'credit history entries', size).map((raw): HistoryEntry => {
     const entry = record(
       raw,
-      ['operation_id', 'line', 'kind', 'delta', 'created_at', 'request_id'],
+      ['asset_type', 'operation_id', 'line', 'kind', 'delta', 'created_at', 'request_id'],
       'credit history entry',
     );
     const kind = oneOf(entry.kind, HISTORY_KINDS, 'credit history reason');
@@ -126,6 +132,7 @@ export function normalizeHistory(value: unknown): HistoryPage {
     const delta = amount(entry.delta, 'credit history change');
     if (delta === '0') invalidResponse('credit history zero change');
     return {
+      asset_type: oneOf(entry.asset_type, ['general', 'game'] as const, 'credit history asset'),
       operation_id: opaqueID(entry.operation_id, 'op_', 'credit history operation'),
       line: integer(entry.line, 'credit history line', 0, 255),
       kind,
@@ -158,6 +165,7 @@ export function normalizeHistory(value: unknown): HistoryPage {
     total,
     total_pages: pages,
     anchor,
+    game_balance: amount(root.game_balance, 'game balance'),
     current_balance: amount(root.current_balance, 'credit history balance'),
     server_now: unixSecond(root.server_now, 'credit history server time'),
   };
@@ -201,11 +209,22 @@ export function normalizeHistoryFilter(filter: HistoryFilter): HistoryFilter {
   if (filter === null || typeof filter !== 'object' || Array.isArray(filter)) {
     return invalidHistoryFilter();
   }
-  const allowed = new Set(['page', 'page_size', 'anchor', 'from', 'to', 'category', 'direction']);
+  const allowed = new Set([
+    'asset_type',
+    'page',
+    'page_size',
+    'anchor',
+    'from',
+    'to',
+    'category',
+    'direction',
+  ]);
   if (Object.keys(filter).some((key) => !allowed.has(key))) return invalidHistoryFilter();
   if (!isHistoryPage(filter.page) || !PAGE_SIZES.includes(filter.page_size)) {
     return invalidHistoryFilter();
   }
+  if (filter.asset_type !== undefined && !['general', 'game', 'all'].includes(filter.asset_type))
+    return invalidHistoryFilter();
   if (filter.anchor !== undefined && !isHistoryAnchor(filter.anchor)) return invalidHistoryFilter();
   if (filter.from !== undefined && !isHistoryUnixSecond(filter.from)) {
     return invalidHistoryFilter();
@@ -221,6 +240,7 @@ export function normalizeHistoryFilter(filter: HistoryFilter): HistoryFilter {
     return invalidHistoryFilter();
   }
   return {
+    ...(filter.asset_type !== undefined ? { asset_type: filter.asset_type } : {}),
     page: filter.page,
     page_size: filter.page_size,
     ...(filter.anchor !== undefined ? { anchor: filter.anchor } : {}),
