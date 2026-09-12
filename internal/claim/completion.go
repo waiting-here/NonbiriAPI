@@ -516,7 +516,7 @@ FROM dispatch_claims WHERE logical_request_id=?`, request.ID).Scan(&nonterminalC
 			if err != nil {
 				return Request{}, fmt.Errorf("claim: prepare authoritative request charge: %w", err)
 			}
-			if !validMoney(charge) || charge > request.ReservedMilli {
+			if !validMoney(charge) {
 				return Request{}, ErrInvariant
 			}
 			input.ActualChargeMilli = charge
