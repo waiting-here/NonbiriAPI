@@ -751,7 +751,7 @@ export function LinkLinkGame() {
           </button>
         </Card>
       ) : null}
-      {!state && !maintenance ? (
+      {current.isSuccess && !state && !maintenance ? (
         <LinkLinkLeaderboard spec={selectedSpec} onSpecChange={setSelectedSpec} />
       ) : null}
       <ConfirmDialog
