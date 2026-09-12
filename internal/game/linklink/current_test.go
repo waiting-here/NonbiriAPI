@@ -25,7 +25,7 @@ func TestCurrentHTTPWireIsRawNullStateOrSummaryAndActiveWins(t *testing.T) {
 		t.Fatalf("empty current = %d %q", nullResponse.Code, nullResponse.Body.String())
 	}
 
-	started, err := fixture.service.Start(context.Background(), StartInput{
+	started, err := fixture.service.startLegacy(context.Background(), StartInput{
 		UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(200),
 	})
 	if err != nil {
@@ -61,7 +61,7 @@ func TestCurrentHTTPWireIsRawNullStateOrSummaryAndActiveWins(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectedSummaryKeys := []string{
-		"rules_version", "payment", "session_id", "spec", "price", "terminal_reason", "started_at", "deadline", "terminal_at", "pairs_removed", "total_pairs", "score",
+		"rules_version", "payment", "opportunities_initial", "opportunities_remaining", "session_id", "spec", "price", "terminal_reason", "started_at", "deadline", "terminal_at", "pairs_removed", "total_pairs", "score",
 	}
 	if len(summaryObject) != len(expectedSummaryKeys) {
 		t.Fatalf("summary wire fields = %v", summaryObject)
@@ -77,7 +77,7 @@ func TestCurrentHTTPWireIsRawNullStateOrSummaryAndActiveWins(t *testing.T) {
 		}
 	}
 
-	fresh, err := fixture.service.Start(context.Background(), StartInput{
+	fresh, err := fixture.service.startLegacy(context.Background(), StartInput{
 		UserID: userID, Spec: game.LinkLinkSpec8x8, IdempotencyKey: fixture.key(202),
 	})
 	if err != nil || fresh.State == nil || fresh.HTTPStatus != http.StatusCreated {
@@ -100,7 +100,7 @@ func TestCurrentHTTPWireIsRawNullStateOrSummaryAndActiveWins(t *testing.T) {
 func TestCurrentHTTPRejectsBodyAndQueryBeforeDeadlineCatchup(t *testing.T) {
 	fixture := newFixture(t)
 	userID, binding := fixture.seedUser("current-http-strict", testFunding)
-	started, err := fixture.service.Start(context.Background(), StartInput{
+	started, err := fixture.service.startLegacy(context.Background(), StartInput{
 		UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(205),
 	})
 	if err != nil {
@@ -135,7 +135,7 @@ func TestCurrentReadDeadlineMinusOneEqualAndPlusOne(t *testing.T) {
 		t.Run(time.Duration(offset).String(), func(t *testing.T) {
 			fixture := newFixture(t)
 			userID, binding := fixture.seedUser("current-deadline-"+time.Duration(offset).String(), testFunding)
-			started, err := fixture.service.Start(context.Background(), StartInput{
+			started, err := fixture.service.startLegacy(context.Background(), StartInput{
 				UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(210 + index),
 			})
 			if err != nil {
@@ -215,7 +215,7 @@ func TestCurrentAfterWorkerRecoveryAndRestart(t *testing.T) {
 	t.Run("worker rail", func(t *testing.T) {
 		fixture := newFixture(t)
 		userID, binding := fixture.seedUser("current-worker", testFunding)
-		started, err := fixture.service.Start(context.Background(), StartInput{
+		started, err := fixture.service.startLegacy(context.Background(), StartInput{
 			UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(220),
 		})
 		if err != nil {
@@ -235,7 +235,7 @@ func TestCurrentAfterWorkerRecoveryAndRestart(t *testing.T) {
 	t.Run("listener recovery and restart", func(t *testing.T) {
 		fixture := newFixture(t)
 		userID, binding := fixture.seedUser("current-recovery", testFunding)
-		started, err := fixture.service.Start(context.Background(), StartInput{
+		started, err := fixture.service.startLegacy(context.Background(), StartInput{
 			UserID: userID, Spec: game.LinkLinkSpec8x8, IdempotencyKey: fixture.key(221),
 		})
 		if err != nil {
@@ -282,7 +282,7 @@ func TestCurrentSummaryOwnershipMaintenanceAndAccountDeletion(t *testing.T) {
 	fixture := newFixture(t)
 	ownerID, ownerBinding := fixture.seedUser("current-owner", testFunding)
 	otherID, otherBinding := fixture.seedUser("current-other", testFunding)
-	started, err := fixture.service.Start(context.Background(), StartInput{
+	started, err := fixture.service.startLegacy(context.Background(), StartInput{
 		UserID: ownerID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(230),
 	})
 	if err != nil {
@@ -339,7 +339,7 @@ func TestCurrentSummaryOwnershipMaintenanceAndAccountDeletion(t *testing.T) {
 func TestMaintenanceExpiredActiveTerminalizesWithoutGrantingSummaryRead(t *testing.T) {
 	fixture := newFixture(t)
 	userID, binding := fixture.seedUser("current-maintenance-expired", testFunding)
-	started, err := fixture.service.Start(context.Background(), StartInput{
+	started, err := fixture.service.startLegacy(context.Background(), StartInput{
 		UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(240),
 	})
 	if err != nil {

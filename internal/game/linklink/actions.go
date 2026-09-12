@@ -267,7 +267,7 @@ func (service *Service) Match(ctx context.Context, input MatchInput) (Result, er
 	record.Board = candidate
 
 	terminal := candidate.activeCount() == 0
-	if !terminal && !candidate.hasMove() {
+	if record.RulesVersion == 1 && !terminal && !candidate.hasMove() {
 		service.rngMu.Lock()
 		reshuffled, reshuffleErr := candidate.reshuffle(service.random)
 		service.rngMu.Unlock()

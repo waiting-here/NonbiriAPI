@@ -7,6 +7,8 @@ import {
   normalizeLinkLinkMatch,
   normalizeLinkLinkState,
   normalizeLinkLinkSummary,
+  normalizeLinkLinkHint,
+  normalizeLinkLinkLeaderboard,
   shouldApplyLinkLinkReplacement,
 } from './normalize';
 import type {
@@ -15,10 +17,16 @@ import type {
   LinkLinkState,
   LinkLinkSummary,
   LinkLinkMatchResult,
+  LinkLinkHintIntent,
+  LinkLinkHintResult,
 } from './types';
 import type { LinkLinkSpec } from '../common/types';
 
-export const linkLinkKeys = { current: ['user', 'games', 'linklink', 'current', 'beta1'] as const };
+export const linkLinkKeys = {
+  current: ['user', 'games', 'linklink', 'current', 'beta1'] as const,
+  leaderboard: (spec: LinkLinkSpec, days: 7 | 30) =>
+    ['user', 'games', 'linklink', 'leaderboard', spec, days] as const,
+};
 
 export async function readLinkLinkCurrent(signal?: AbortSignal): Promise<LinkLinkCurrent> {
   return normalizeLinkLinkCurrent(
@@ -114,5 +122,32 @@ export function useLinkLinkCurrent(enabled: boolean) {
       const replacement = next as LinkLinkCurrent;
       return shouldApplyLinkLinkReplacement(cached, replacement) ? replacement : cached;
     },
+  });
+}
+
+export async function hintLinkLink(intent: LinkLinkHintIntent): Promise<LinkLinkHintResult> {
+  const response = await gameRequest<unknown>(
+    `/api/games/linklink/sessions/${encodeURIComponent(intent.sessionID)}/hint`,
+    {
+      method: 'POST',
+      idempotencyKey: intent.idempotencyKey,
+      expectedStatuses: [200],
+      json: { expected_revision: intent.expectedRevision },
+    },
+  );
+  return normalizeLinkLinkHint(response.data, intent);
+}
+export function useLinkLinkLeaderboard(spec: LinkLinkSpec, days: 7 | 30) {
+  return useQuery({
+    queryKey: linkLinkKeys.leaderboard(spec, days),
+    queryFn: async ({ signal }) => {
+      const response = await gameRequest<unknown>(
+        `/api/games/linklink/leaderboard?spec=${spec}&window=${days}d`,
+        { signal, expectedStatuses: [200] },
+      );
+      return normalizeLinkLinkLeaderboard(response.data, spec, days);
+    },
+    staleTime: 0,
+    retry: false,
   });
 }

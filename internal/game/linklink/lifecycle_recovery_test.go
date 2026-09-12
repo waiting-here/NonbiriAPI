@@ -16,7 +16,7 @@ func TestRecoverBeforeListenAtUsesFrozenDeadlineAndExactBatches(t *testing.T) {
 	deadlines := make([]int64, 0, 2)
 	for index := 0; index < 2; index++ {
 		userID, _ := fixture.seedUser("bounded-recovery-"+string(rune('a'+index)), testFunding)
-		started, err := fixture.service.Start(context.Background(), StartInput{
+		started, err := fixture.service.startLegacy(context.Background(), StartInput{
 			UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(300 + index),
 		})
 		if err != nil {
@@ -62,7 +62,7 @@ func TestRecoverBeforeListenAtUsesFrozenDeadlineAndExactBatches(t *testing.T) {
 func TestRecoverBeforeListenAtRestartCleansLeaseAndIsRepeatable(t *testing.T) {
 	fixture := newFixture(t)
 	userID, binding := fixture.seedUser("bounded-restart", testFunding)
-	started, err := fixture.service.Start(context.Background(), StartInput{
+	started, err := fixture.service.startLegacy(context.Background(), StartInput{
 		UserID: userID, Spec: game.LinkLinkSpec8x8, IdempotencyKey: fixture.key(310),
 	})
 	if err != nil {
@@ -74,7 +74,7 @@ func TestRecoverBeforeListenAtRestartCleansLeaseAndIsRepeatable(t *testing.T) {
 		t.Fatal(err)
 	}
 	otherUserID, otherBinding := fixture.seedUser("bounded-restart-other", testFunding)
-	other, err := fixture.service.Start(context.Background(), StartInput{
+	other, err := fixture.service.startLegacy(context.Background(), StartInput{
 		UserID: otherUserID, Spec: game.LinkLinkSpec10x10, IdempotencyKey: fixture.key(311),
 	})
 	if err != nil {
@@ -150,7 +150,7 @@ func (continuation failingRecoveryContinuation) AuthorizeContinuation(
 func TestRecoverBeforeListenAtMaintenanceRollbackAndRetry(t *testing.T) {
 	fixture := newFixture(t)
 	userID, _ := fixture.seedUser("bounded-maintenance", testFunding)
-	started, err := fixture.service.Start(context.Background(), StartInput{
+	started, err := fixture.service.startLegacy(context.Background(), StartInput{
 		UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(320),
 	})
 	if err != nil {
@@ -227,7 +227,7 @@ func TestRecoverBeforeListenAtValidatesInputsBudgetAndPersistedRows(t *testing.T
 	}
 
 	userID, _ := fixture.seedUser("bounded-hostile", testFunding)
-	started, err := fixture.service.Start(context.Background(), StartInput{
+	started, err := fixture.service.startLegacy(context.Background(), StartInput{
 		UserID: userID, Spec: game.LinkLinkSpec6x8, IdempotencyKey: fixture.key(330),
 	})
 	if err != nil {

@@ -58,6 +58,17 @@ func resolveSpec(name string) (specDefinition, bool) {
 	}
 }
 
+func (definition specDefinition) assists() int {
+	switch definition.Name {
+	case game.LinkLinkSpec6x8:
+		return 2
+	case game.LinkLinkSpec8x8:
+		return 3
+	default:
+		return 5
+	}
+}
+
 func (definition specDefinition) cells() int      { return definition.Rows * definition.Cols }
 func (definition specDefinition) totalPairs() int { return definition.cells() / 2 }
 

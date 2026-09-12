@@ -1,4 +1,5 @@
 import type { LinkLinkSpec, GamePayment } from '../common/types';
+import type { PublicIdentity } from '../common/strict';
 
 export interface LinkLinkCoordinate {
   readonly row: number;
@@ -9,6 +10,8 @@ export interface LinkLinkTile extends LinkLinkCoordinate {
   readonly removed: boolean;
 }
 export interface LinkLinkState {
+  readonly opportunitiesInitial: number;
+  readonly opportunitiesRemaining: number;
   readonly rulesVersion: number;
   readonly payment: GamePayment;
   readonly kind: 'active';
@@ -28,6 +31,8 @@ export interface LinkLinkState {
   readonly serverNow: number;
 }
 export interface LinkLinkSummary {
+  readonly opportunitiesInitial: number;
+  readonly opportunitiesRemaining: number;
   readonly rulesVersion: number;
   readonly payment: GamePayment;
   readonly kind: 'summary';
@@ -53,4 +58,35 @@ export interface LinkLinkMatchIntent {
   readonly first: LinkLinkCoordinate;
   readonly second: LinkLinkCoordinate;
   readonly idempotencyKey: string;
+}
+
+export interface LinkLinkHint {
+  readonly first: LinkLinkCoordinate;
+  readonly second: LinkLinkCoordinate;
+  readonly path: readonly LinkLinkCoordinate[];
+}
+export interface LinkLinkHintResult {
+  readonly result: LinkLinkState;
+  readonly hint: LinkLinkHint | null;
+  readonly reshuffled: boolean;
+}
+export interface LinkLinkHintIntent {
+  readonly sessionID: string;
+  readonly expectedRevision: string;
+  readonly idempotencyKey: string;
+}
+export interface LinkLinkRank {
+  readonly rank: string;
+  readonly score: string;
+  readonly achievedAt: number;
+  readonly identity: PublicIdentity;
+  readonly isMe: boolean;
+}
+export interface LinkLinkLeaderboard {
+  readonly spec: LinkLinkSpec;
+  readonly windowDays: 7 | 30;
+  readonly windowStart: number;
+  readonly asOf: number;
+  readonly rows: readonly LinkLinkRank[];
+  readonly me: LinkLinkRank | null;
 }

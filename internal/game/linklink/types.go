@@ -10,16 +10,19 @@ import (
 )
 
 const (
-	RouteSessions = "/api/games/linklink/sessions"
-	RouteSession  = "/api/games/linklink/session"
-	RouteMatches  = "/api/games/linklink/sessions/{id}/matches"
-	RouteAbandon  = "/api/games/linklink/sessions/{id}/abandon"
-	RouteLease    = "/api/games/linklink/sessions/{id}/lease"
+	RouteSessions    = "/api/games/linklink/sessions"
+	RouteSession     = "/api/games/linklink/session"
+	RouteMatches     = "/api/games/linklink/sessions/{id}/matches"
+	RouteAbandon     = "/api/games/linklink/sessions/{id}/abandon"
+	RouteLease       = "/api/games/linklink/sessions/{id}/lease"
+	RouteHint        = "/api/games/linklink/sessions/{id}/hint"
+	RouteLeaderboard = "/api/games/linklink/leaderboard"
 
 	ContinuationKind = "linklink_session"
 
 	ActionRead    = "read"
 	ActionMatch   = "match"
+	ActionHint    = "hint"
 	ActionAbandon = "abandon"
 	ActionLease   = "lease"
 	ActionTimeout = "timeout"
@@ -62,7 +65,25 @@ type BoardView struct {
 	Tiles []Tile `json:"tiles"`
 }
 
+// A nil Opportunities pointer preserves pre-extension idempotency responses.
+// Every freshly projected state and summary includes both counters, including v1 zeros.
+type Opportunities struct {
+	OpportunitiesInitial   int `json:"opportunities_initial"`
+	OpportunitiesRemaining int `json:"opportunities_remaining"`
+}
+
+func opportunities(initial, remaining int) *Opportunities {
+	return &Opportunities{initial, remaining}
+}
+
+type Hint struct {
+	First  Coordinate   `json:"first"`
+	Second Coordinate   `json:"second"`
+	Path   []Coordinate `json:"path"`
+}
+
 type State struct {
+	*Opportunities
 	RulesVersion int          `json:"rules_version,omitempty"`
 	Payment      game.Payment `json:"payment,omitzero"`
 	SessionID    string       `json:"session_id"`
@@ -79,6 +100,7 @@ type State struct {
 }
 
 type Summary struct {
+	*Opportunities
 	RulesVersion   int          `json:"rules_version,omitempty"`
 	Payment        game.Payment `json:"payment,omitzero"`
 	SessionID      string       `json:"session_id"`
@@ -131,6 +153,8 @@ type Result struct {
 	State            *State
 	Summary          *Summary
 	MatchPath        []Coordinate
+	Hint             *Hint
+	Reshuffled       *bool
 	HTTPStatus       int
 	IdempotentReplay bool
 }
@@ -161,6 +185,14 @@ type MatchInput struct {
 	First            Coordinate
 	Second           Coordinate
 	IncludePath      bool
+	IdempotencyKey   string
+}
+
+type HintInput struct {
+	UserID           int64
+	SessionBinding   string
+	SessionID        string
+	ExpectedRevision string
 	IdempotencyKey   string
 }
 
@@ -195,6 +227,7 @@ type ActiveCount struct {
 }
 
 type SafeActiveExport struct {
+	Opportunities
 	RulesVersion int          `json:"rules_version"`
 	Payment      game.Payment `json:"payment"`
 	SessionID    string       `json:"session_id"`

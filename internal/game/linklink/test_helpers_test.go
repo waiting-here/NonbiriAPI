@@ -228,6 +228,9 @@ VALUES(?,?,?,?,?,?,?)`, binding, userID, testNow, testNow+86400, testNow+172800,
 	if err != nil {
 		fixture.t.Fatal(err)
 	}
+	if _, err := ledger.CreateUserAssetAccount(context.Background(), tx, userID, ledger.Game, fixture.clock.Load()); err != nil {
+		fixture.t.Fatal(err)
+	}
 	if funding > 0 {
 		external, err := ledger.CodedAccount(context.Background(), tx, "external")
 		if err != nil {
@@ -318,4 +321,8 @@ func boolInt(value bool) int {
 		return 1
 	}
 	return 0
+}
+
+func (service *Service) startLegacy(ctx context.Context, input StartInput) (Result, error) {
+	return service.start(ctx, input, 1)
 }

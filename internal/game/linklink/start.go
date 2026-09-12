@@ -21,7 +21,7 @@ type startBody struct {
 }
 
 func (service *Service) Start(ctx context.Context, input StartInput) (Result, error) {
-	return service.start(ctx, input, 1)
+	return service.start(ctx, input, 2)
 }
 
 func (service *Service) start(ctx context.Context, input StartInput, rulesVersion int) (Result, error) {
@@ -186,7 +186,10 @@ func (service *Service) start(ctx context.Context, input StartInput, rulesVersio
 	one, _ := db.U128FromBig(big.NewInt(1))
 	assists := 0
 	if rulesVersion == 2 {
-		assists = map[string]int{"6x8": 2, "8x8": 3, "10x10": 5}[input.Spec]
+		assists = definition.assists()
+		if err := ensureLeaderboardTieKey(ctx, tx, input.UserID, now); err != nil {
+			return Result{}, err
+		}
 	}
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO game_linklink_sessions(id,user_id,spec,state,revision,price_milli,board_blob,removed_bits,pairs_removed,deadline,operation_id,request_hash,created_at,updated_at,rules_version,game_paid_milli,assists_initial,assists_remaining)

@@ -25,12 +25,16 @@ func RegisterRoutes(user resources.UserRouteRegistrar, continuation resources.Co
 	if err := user.RegisterUserRoute(http.MethodPost, RouteSessions, api.start); err != nil {
 		return fmt.Errorf("linklink: register start: %w", err)
 	}
+	if err := user.RegisterUserRoute(http.MethodGet, RouteLeaderboard, api.leaderboard); err != nil {
+		return fmt.Errorf("linklink: register leaderboard: %w", err)
+	}
 	routes := []struct {
 		method, path string
 		handler      resources.AuthenticatedContinuationHandler
 	}{
 		{http.MethodGet, RouteSession, api.read},
 		{http.MethodPost, RouteMatches, api.match},
+		{http.MethodPost, RouteHint, api.hint},
 		{http.MethodPost, RouteAbandon, api.abandon},
 		{http.MethodPost, RouteLease, api.lease},
 	}
@@ -88,6 +92,42 @@ func (api *httpAPI) match(w http.ResponseWriter, request *http.Request, principa
 		IncludePath: bool(body.IncludePath),
 	})
 	writeResult(w, result, err)
+}
+
+func (api *httpAPI) hint(w http.ResponseWriter, request *http.Request, principal resources.ContinuationUserPrincipal) {
+	if !requireExactQuery(w, request) {
+		return
+	}
+	key, ok := requireIdempotencyKey(w, request)
+	if !ok {
+		return
+	}
+	var body hintBody
+	if !decodeStrict(w, request, &body) {
+		return
+	}
+	result, err := api.service.Hint(request.Context(), HintInput{
+		UserID: principal.UserID, SessionBinding: principal.SessionBinding, SessionID: request.PathValue("id"),
+		ExpectedRevision: body.ExpectedRevision, IdempotencyKey: key,
+	})
+	writeResult(w, result, err)
+}
+
+func (api *httpAPI) leaderboard(w http.ResponseWriter, request *http.Request, principal resources.UserPrincipal) {
+	if !noBody(w, request) {
+		return
+	}
+	query, err := url.ParseQuery(request.URL.RawQuery)
+	if err != nil || len(query) != 2 || len(query["spec"]) != 1 || len(query["window"]) != 1 {
+		returnInvalid(w)
+		return
+	}
+	result, err := api.service.Leaderboard(request.Context(), principal.UserID, query.Get("spec"), query.Get("window"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (api *httpAPI) abandon(w http.ResponseWriter, request *http.Request, principal resources.ContinuationUserPrincipal) {

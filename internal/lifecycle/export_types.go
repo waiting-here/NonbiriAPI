@@ -378,31 +378,35 @@ type LinkLinkExport struct {
 }
 
 type LinkLinkActiveExport struct {
-	RulesVersion int               `json:"rules_version"`
-	Payment      GamePaymentExport `json:"payment"`
-	SessionID    string            `json:"session_id"`
-	Spec         string            `json:"spec"`
-	Price        string            `json:"price"`
-	State        string            `json:"state"`
-	PairsRemoved int               `json:"pairs_removed"`
-	TotalPairs   int               `json:"total_pairs"`
-	StartedAt    int64             `json:"started_at"`
-	Deadline     int64             `json:"deadline"`
+	OpportunitiesInitial   int               `json:"opportunities_initial"`
+	OpportunitiesRemaining int               `json:"opportunities_remaining"`
+	RulesVersion           int               `json:"rules_version"`
+	Payment                GamePaymentExport `json:"payment"`
+	SessionID              string            `json:"session_id"`
+	Spec                   string            `json:"spec"`
+	Price                  string            `json:"price"`
+	State                  string            `json:"state"`
+	PairsRemoved           int               `json:"pairs_removed"`
+	TotalPairs             int               `json:"total_pairs"`
+	StartedAt              int64             `json:"started_at"`
+	Deadline               int64             `json:"deadline"`
 }
 
 type LinkLinkSummaryExport struct {
-	RulesVersion   int               `json:"rules_version"`
-	Payment        GamePaymentExport `json:"payment"`
-	SessionID      string            `json:"session_id"`
-	Spec           string            `json:"spec"`
-	Price          string            `json:"price"`
-	TerminalReason string            `json:"terminal_reason"`
-	StartedAt      int64             `json:"started_at"`
-	Deadline       int64             `json:"deadline"`
-	TerminalAt     int64             `json:"terminal_at"`
-	PairsRemoved   int               `json:"pairs_removed"`
-	TotalPairs     int               `json:"total_pairs"`
-	Score          *string           `json:"score"`
+	OpportunitiesInitial   int               `json:"opportunities_initial"`
+	OpportunitiesRemaining int               `json:"opportunities_remaining"`
+	RulesVersion           int               `json:"rules_version"`
+	Payment                GamePaymentExport `json:"payment"`
+	SessionID              string            `json:"session_id"`
+	Spec                   string            `json:"spec"`
+	Price                  string            `json:"price"`
+	TerminalReason         string            `json:"terminal_reason"`
+	StartedAt              int64             `json:"started_at"`
+	Deadline               int64             `json:"deadline"`
+	TerminalAt             int64             `json:"terminal_at"`
+	PairsRemoved           int               `json:"pairs_removed"`
+	TotalPairs             int               `json:"total_pairs"`
+	Score                  *string           `json:"score"`
 }
 
 type RPSExport struct {

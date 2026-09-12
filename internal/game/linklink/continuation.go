@@ -27,7 +27,7 @@ func validContinuationAction(authority maintenance.ContinuationAuthority, action
 		return action == ActionTimeout
 	}
 	switch action {
-	case ActionRead, ActionMatch, ActionAbandon, ActionLease:
+	case ActionRead, ActionMatch, ActionHint, ActionAbandon, ActionLease:
 		return true
 	default:
 		return false

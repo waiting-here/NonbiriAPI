@@ -280,7 +280,7 @@ func TestGenerationExhaustionAndInvalidRandomSourceDoNotCharge(t *testing.T) {
 				return 0, nil
 			})
 			input := StartInput{UserID: userID, Spec: "10x10", IdempotencyKey: fixture.key(701)}
-			if _, err := fixture.service.Start(context.Background(), input); !errors.Is(err, ErrServiceUnavailable) {
+			if _, err := fixture.service.startLegacy(context.Background(), input); !errors.Is(err, ErrServiceUnavailable) {
 				t.Fatalf("error=%v", err)
 			}
 			if fixture.balance(userID) != before || fixture.scalar(`SELECT COUNT(*) FROM game_linklink_sessions WHERE user_id=?`, userID) != 0 || fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='linklink_entry' AND actor_user_id=?`, userID) != 0 || fixture.scalar(`SELECT COUNT(*) FROM idempotency_records WHERE scope='game_linklink'`) != 0 {
@@ -288,7 +288,7 @@ func TestGenerationExhaustionAndInvalidRandomSourceDoNotCharge(t *testing.T) {
 			}
 			// A recovered source can reuse the same request key and shared permit.
 			fixture.service.random = seededGenerationSource(41)
-			if result, err := fixture.service.Start(context.Background(), input); err != nil || result.HTTPStatus != 201 {
+			if result, err := fixture.service.startLegacy(context.Background(), input); err != nil || result.HTTPStatus != 201 {
 				t.Fatalf("retry: %+v %v", result, err)
 			}
 			if fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='linklink_entry' AND actor_user_id=?`, userID) != 1 {

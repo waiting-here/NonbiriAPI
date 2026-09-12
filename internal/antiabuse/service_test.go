@@ -106,6 +106,9 @@ VALUES('Test account',?,?,?,?,?,?,?,?,?,?)`, zero, zero, zero, zero, zero, zero,
 	if _, err := ledger.CreateUserAccount(context.Background(), tx, id, f.clock.Load()); err != nil {
 		f.t.Fatal(err)
 	}
+	if _, err := ledger.CreateUserAssetAccount(context.Background(), tx, id, ledger.Game, f.clock.Load()); err != nil {
+		f.t.Fatal(err)
+	}
 	hash := sha256.Sum256([]byte(strconv.FormatInt(id, 10)))
 	if _, err := tx.Exec(`INSERT INTO caller_keys(user_id,generation,key_hash,key_created_at,updated_at) VALUES(?,1,?,?,?)`, id, hash[:], f.clock.Load(), f.clock.Load()); err != nil {
 		f.t.Fatal(err)
