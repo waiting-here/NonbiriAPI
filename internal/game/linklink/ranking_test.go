@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -16,10 +17,11 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/resources"
 )
 
-func insertRankSummary(ctx context.Context, exec interface {
-	ExecContext(context.Context, string, ...any) (sql.Result, error)
-},
-	id string, user int64, spec string, version int, reason string, at, elapsed int64, remaining int) error {
+const rankSummaryInsertSQL = `
+INSERT INTO game_linklink_summaries(session_id,user_id,spec,price_milli,terminal_reason,started_at,deadline,terminal_at,pairs_removed,score,rules_version,assists_initial,assists_remaining)
+VALUES(?,?,?,1000,?,?,?,?,?,?,?,?,?)`
+
+func rankSummaryValues(id string, user int64, spec string, version int, reason string, at, elapsed int64, remaining int) []any {
 	d, _ := resolveSpec(spec)
 	initial, pairs := 0, d.totalPairs()
 	if version == 2 {
@@ -36,9 +38,14 @@ func insertRankSummary(ctx context.Context, exec interface {
 	case TerminalAbandoned:
 		pairs = 0
 	}
-	_, err := exec.ExecContext(ctx, `
-INSERT INTO game_linklink_summaries(session_id,user_id,spec,price_milli,terminal_reason,started_at,deadline,terminal_at,pairs_removed,score,rules_version,assists_initial,assists_remaining)
-VALUES(?,?,?,1000,?,?,?,?,?,?,?,?,?)`, id, user, spec, reason, at-elapsed, at-elapsed+d.Seconds, at, pairs, score, version, initial, remaining)
+	return []any{id, user, spec, reason, at - elapsed, at - elapsed + d.Seconds, at, pairs, score, version, initial, remaining}
+}
+
+func insertRankSummary(ctx context.Context, exec interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+},
+	id string, user int64, spec string, version int, reason string, at, elapsed int64, remaining int) error {
+	_, err := exec.ExecContext(ctx, rankSummaryInsertSQL, rankSummaryValues(id, user, spec, version, reason, at, elapsed, remaining)...)
 	return err
 }
 
@@ -182,6 +189,14 @@ func TestLeaderboardHundredThousandSummariesUseWindowIndex(t *testing.T) {
 	}
 	f := newFixture(t)
 	ctx := context.Background()
+	instrumented := false
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, setting := range info.Settings {
+			if setting.Key == "-race" && setting.Value == "true" {
+				instrumented = true
+			}
+		}
+	}
 	users := make([]int64, 100)
 	for i := range users {
 		users[i] = f.rankUser(fmt.Sprintf("large-%d", i), byte(i))
@@ -191,13 +206,18 @@ func TestLeaderboardHundredThousandSummariesUseWindowIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
+	statement, err := tx.PrepareContext(ctx, rankSummaryInsertSQL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer statement.Close()
 	for i := 0; i < 100000; i++ {
 		id, err := db.GenerateOpaqueID("ll_")
 		if err != nil {
 			t.Fatal(err)
 		}
 		spec := []string{"6x8", "8x8", "10x10"}[i%3]
-		if err := insertRankSummary(ctx, tx, id, users[i%len(users)], spec, 2, TerminalCompleted, testNow-int64(i%2400000), int64(i%50), 1); err != nil {
+		if _, err := statement.ExecContext(ctx, rankSummaryValues(id, users[i%len(users)], spec, 2, TerminalCompleted, testNow-int64(i%2400000), int64(i%50), 1)...); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -231,13 +251,18 @@ func TestLeaderboardHundredThousandSummariesUseWindowIndex(t *testing.T) {
 	for _, spec := range []string{"6x8", "8x8", "10x10"} {
 		for _, days := range []int{7, 30} {
 			start := time.Now()
-			queryCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+			// Race instrumentation measures correctness, not production latency.
+			// The ordinary run retains the two-second budget for all six queries.
+			queryCtx, cancel := ctx, func() {}
+			if !instrumented {
+				queryCtx, cancel = context.WithTimeout(ctx, 2*time.Second)
+			}
 			result, err := queryLeaderboard(queryCtx, tx, users[99], spec, days, testNow)
 			cancel()
 			if err != nil || len(result.Rows) != 20 {
 				t.Fatal(result, err)
 			}
-			t.Logf("100000 summaries: %s/%dd query=%s returned=%d plus_me=%t", spec, days, time.Since(start), len(result.Rows), result.Me != nil)
+			t.Logf("100000 summaries: %s/%dd query=%s returned=%d plus_me=%t race=%t", spec, days, time.Since(start), len(result.Rows), result.Me != nil, instrumented)
 		}
 	}
 	t.Logf("query plan: %s", strings.Join(details, "; "))
