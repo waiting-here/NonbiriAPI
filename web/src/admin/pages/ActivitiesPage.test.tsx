@@ -22,7 +22,7 @@ const previousPeriod: Period = {
   terminal_at: null,
 };
 
-function installActivities(initialPeriod: Period | null) {
+function installActivities(initialPeriod: Period | null, rejectWrite = false) {
   let period = initialPeriod;
   const writes: Record<string, unknown>[] = [];
   const reply = (body: unknown) =>
@@ -60,6 +60,7 @@ function installActivities(initialPeriod: Period | null) {
           'period_key' | 'opens_at' | 'entry' | 'literature' | 'per_user_limit' | 'pumps_bp'
         >;
         writes.push(body);
+        if (rejectWrite) return new Response(JSON.stringify({ error: { code: 'conflict', message: 'revision changed', source: 'platform' } }), { status: 409, headers: { 'content-type': 'application/json' } });
         period = {
           ...previousPeriod,
           period_key: body.period_key,
@@ -123,6 +124,26 @@ describe('automatic activity schedules', () => {
       await screen.findByRole('heading', { name: 'Update configured next period' });
     },
   );
+
+  it('validates multiline text by field and retains it after a rejected save', async () => {
+    const writes = installActivities(null, true);
+    const view = await renderActivities();
+    await waitFor(() => expect(view.entry).toBeEnabled());
+    await view.user.type(view.entry, '1');
+    const literature = screen.getByLabelText('Literature');
+    const save = screen.getByRole('button', { name: 'Save next period' });
+    expect(save).toBeEnabled();
+    fireEvent.change(literature, { target: { value: '界'.repeat(1025) } });
+    expect(literature).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('alert')).toHaveTextContent('1,024 characters');
+    expect(save).toBeDisabled();
+    fireEvent.change(literature, { target: { value: 'First line\n\tSecond line' } });
+    expect(literature).toHaveAttribute('aria-invalid', 'false');
+    await view.user.click(save);
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]).toMatchObject({ literature: 'First line\n\tSecond line' });
+    expect(literature).toHaveValue('First line\n\tSecond line');
+  });
 
   it('refreshes a new schedule across the Thursday boundary without losing edits, and allows cancel', async () => {
     vi.mocked(Date.now).mockReturnValue(Date.parse('2026-12-30T15:59:59Z'));

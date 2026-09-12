@@ -1,3 +1,4 @@
+import { isActivityLiterature } from '@shared/utils/activityLiterature';
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchState } from '@shared/operations/useSearchState';
@@ -161,6 +162,9 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
   const authorityPeriodRevision = thursday.data?.period?.revision ?? (thursday.data ? 'none' : '');
   const configDraft = config.data ? (configOverride ? configOverride : config.data) : null;
   const periodDraft = periodOverride ?? draftForPeriod(period);
+  const literature = periodDraft.literature.replaceAll('\r\n', '\n');
+  const literatureError = isActivityLiterature(literature)
+    ? null : t('admin.activities.period.literatureInvalid');
   const configUnchanged = JSON.stringify(configDraft) === JSON.stringify(config.data);
   const configStale = configDraft?.revision !== config.data?.revision;
   const configDependency =
@@ -249,12 +253,13 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
   };
   const submitPeriod = () => {
     const revision = thursdayMutationRevision(config.data, period);
-    if (!periodAuthorityReady || periodLocked || revision === null) return;
+    if (!periodAuthorityReady || periodLocked || revision === null || literatureError) return;
     const submittedSchedule = scheduledPeriod ?? nextThursdaySchedule(Date.now());
     if (!scheduledPeriod) setNextSchedule(submittedSchedule);
     savePeriod.mutate(
       {
         ...periodDraft,
+        literature,
         period_key: submittedSchedule.period_key,
         opens_at: submittedSchedule.opens_at,
         expected_revision: revision,
@@ -585,10 +590,13 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
               <span>{t('admin.activities.period.literature')}</span>
               <textarea
                 disabled={!periodAuthorityReady || periodLocked || savePeriod.isPending}
+                aria-invalid={Boolean(literatureError)}
+                aria-describedby={literatureError ? 'thursday-literature-error' : undefined}
                 value={periodDraft.literature}
                 onChange={(event) => editPeriod({ literature: event.target.value })}
               />
             </label>
+            {literatureError ? <p id="thursday-literature-error" role="alert" className="inline-notice">{literatureError}</p> : null}
             {savePeriod.error ? <ErrorState error={savePeriod.error} /> : null}
             <button
               className="btn btn-primary"
@@ -598,7 +606,7 @@ function ActivitiesPageContent({ account, scopeReady, sessionError }: Activities
                 !periodAuthorityReady ||
                 periodLocked ||
                 savePeriod.isPending ||
-                !periodDraft.literature ||
+                Boolean(literatureError) ||
                 !validPositiveAmount(periodDraft.entry)
               }
               onClick={submitPeriod}

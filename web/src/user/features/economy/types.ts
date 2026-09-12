@@ -217,6 +217,10 @@ export interface ThursdayCurrent {
 export interface ThursdayNext {
   periodId: string;
   opensAt: number;
+  closesAt: number;
+  literature: string;
+  entry: string;
+  perUserLimit: number;
   poolBalance: string;
 }
 

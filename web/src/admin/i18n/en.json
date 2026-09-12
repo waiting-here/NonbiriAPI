@@ -396,7 +396,8 @@
         "platformBp": "Platform share (basis points)",
         "save": "Save next period",
         "updateTitle": "Update configured next period",
-        "welfareBp": "Welfare share (basis points)"
+        "welfareBp": "Welfare share (basis points)",
+        "literatureInvalid": "Use up to 1,024 characters and 4,096 bytes. Newlines and tabs are allowed; other control characters are not."
       },
       "pools": {
         "allStates": "All pool states",
