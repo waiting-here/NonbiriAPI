@@ -4,6 +4,9 @@ package finance
 import (
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	ports "github.com/waiting-here/NonbiriAPI/internal/game/finance"
+	fishingconfig "github.com/waiting-here/NonbiriAPI/internal/game/fishing/config"
+	linklinkconfig "github.com/waiting-here/NonbiriAPI/internal/game/linklink/config"
+	rpsconfig "github.com/waiting-here/NonbiriAPI/internal/game/rps/config"
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
@@ -18,11 +21,11 @@ type Capabilities struct {
 func ForModule(id string) (Capabilities, error) {
 	switch id {
 	case game.FishingID:
-		return Capabilities{Fishing: fishingPort{}}, nil
+		return Capabilities{Fishing: fishingPort{onboarding{fishingconfig.Descriptor()}}}, nil
 	case game.LinkLinkID:
-		return Capabilities{LinkLink: linkLinkPort{}}, nil
+		return Capabilities{LinkLink: linkLinkPort{onboarding{linklinkconfig.Descriptor()}}}, nil
 	case game.RPSID:
-		return Capabilities{RPS: rpsPort{}}, nil
+		return Capabilities{RPS: rpsPort{onboarding{rpsconfig.Descriptor()}}}, nil
 	default:
 		return Capabilities{}, ledger.ErrInvalidPlan
 	}

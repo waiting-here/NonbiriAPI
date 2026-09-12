@@ -47,6 +47,7 @@ type ModuleDescriptor struct {
 	ContinuationIDs  []string
 	HomeRouteID      string
 	SnapshotFields   []string
+	Onboarding       []OnboardingTask
 	Codec            ConfigCodec
 }
 
@@ -88,6 +89,7 @@ func cloneDescriptor(module ModuleDescriptor) ModuleDescriptor {
 	module.Routes = slices.Clone(module.Routes)
 	module.ContinuationIDs = slices.Clone(module.ContinuationIDs)
 	module.SnapshotFields = slices.Clone(module.SnapshotFields)
+	module.Onboarding = slices.Clone(module.Onboarding)
 	return module
 }
 
@@ -119,6 +121,13 @@ func (registry *Registry) Register(module ModuleDescriptor) error {
 			return ErrInvalidContract
 		}
 	}
+	seenTasks := map[string]bool{}
+	for _, task := range module.Onboarding {
+		if task.Key == "" || seenTasks[task.Key] || task.RewardMilli <= 0 || task.RewardMilli > MaxMoneyMilli {
+			return ErrInvalidContract
+		}
+		seenTasks[task.Key] = true
+	}
 	module.Codec = declaredCodec{ConfigCodec: module.Codec, keys: slices.Clone(module.Codec.Keys())}
 	registry.modules = append(registry.modules, cloneDescriptor(module))
 	return nil
@@ -141,7 +150,7 @@ func (registry *Registry) Seal() error {
 	}
 	for _, module := range registry.modules {
 		for _, field := range module.SnapshotFields {
-			if slices.Contains([]string{"server_now", "balance", "game_balance", "games_enabled", "revision", "master_enabled"}, field) {
+			if slices.Contains([]string{"server_now", "balance", "game_balance", "onboarding", "games_enabled", "revision", "master_enabled"}, field) {
 				return ErrInvalidContract
 			}
 			for _, other := range registry.modules {

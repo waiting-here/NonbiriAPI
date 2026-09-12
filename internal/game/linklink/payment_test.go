@@ -56,6 +56,9 @@ func TestMixedEntryKeepsEachAssetInItsPlatformAccount(t *testing.T) {
 	if err != nil || summary.Payment != started.State.Payment || summary.RulesVersion != 2 {
 		t.Fatalf("summary=%+v err=%v", summary, err)
 	}
+	if fixture.scalar("SELECT COUNT(*) FROM game_onboarding_holds") != 0 || fixture.scalar("SELECT COUNT(*) FROM game_onboarding_completions") != 0 {
+		t.Fatal("abandoned game retained a reward or hold")
+	}
 	tx, err = fixture.database.BeginTx(ctx, nil)
 	if err != nil {
 		t.Fatal(err)

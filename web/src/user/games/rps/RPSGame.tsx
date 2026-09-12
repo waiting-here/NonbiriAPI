@@ -21,6 +21,8 @@ import { useGameSound } from '../common/useGameSound';
 import { GameHeader } from '../common/GameHeader';
 import { GameMoney } from '../common/GameMoney';
 import { GamePayment } from '../common/GamePayment';
+import { spendableGameCredits } from '../common/spendable';
+import { useGameSettlement } from '../common/useGameSettlement';
 import {
   acknowledgeRPSResult,
   cancelRPSQueue,
@@ -602,7 +604,7 @@ function PendingResult({
             <p>{text('rps.result.ascensionBody')}</p>
           ) : null}
         </div>
-        <div className="rps-result__seats" role="list">
+        <div className="rps-result__seats" role="list" aria-label={text('rps.result.seats')}>
           {result.seats.map((seat) => (
             <div role="listitem" data-result-seat={seat.seatNo} key={seat.seatNo}>
               <strong>
@@ -793,6 +795,7 @@ export function RPSGame() {
   const acked = useRef<string | null>(null);
   const cancelledQueue = useRef<string | null>(null);
   const pending = home?.kind === 'pending_result' ? home.result : null;
+  useGameSettlement(pending?.sessionID);
   const continuingPending = Boolean(
     pending && leaseState?.sessionID === pending.sessionID && leaseState.value === 'active',
   );
@@ -1060,16 +1063,17 @@ export function RPSGame() {
       ? multiplyCredits(selectedConfig.base, 5)
       : selectedConfig.base
     : null;
+  const available = snapshot.data ? spendableGameCredits(snapshot.data) : null;
   const affordable = Boolean(
     snapshot.data &&
     minimumRequired &&
-    creditsToMilli(snapshot.data.balance, true) >= creditsToMilli(minimumRequired),
+    available && creditsToMilli(available.total) >= creditsToMilli(minimumRequired),
   );
   const canQueue = gateOpen && affordable && homeQuery.isSuccess && !homeQuery.error;
   const deathmatchConfig = modes?.deathmatch;
   const deathmatchCommitment =
-    deathmatchConfig && snapshot.data
-      ? queueCommitment('deathmatch', deathmatchConfig.base, snapshot.data.balance)
+    deathmatchConfig && available
+      ? queueCommitment('deathmatch', deathmatchConfig.base, available.total)
       : null;
   const deathmatchGateOpen = Boolean(
     snapshot.data?.gamesEnabled && snapshot.data.rps.enabled && deathmatchConfig?.enabled,
@@ -1077,7 +1081,7 @@ export function RPSGame() {
   const deathmatchAffordable = Boolean(
     snapshot.data &&
     deathmatchConfig &&
-    creditsToMilli(snapshot.data.balance, true) >= creditsToMilli(deathmatchConfig.base),
+    available && creditsToMilli(available.total) >= creditsToMilli(deathmatchConfig.base),
   );
   const canQueueDeathmatch =
     deathmatchGateOpen && deathmatchAffordable && homeQuery.isSuccess && !homeQuery.error;
@@ -1221,12 +1225,13 @@ export function RPSGame() {
       {home?.kind === 'idle' ? (
         <Card className="rps-lobby">
           <h2>{text('center.rps.title')}</h2>
+          <p>{text('common.gamePaymentOrder')}</p>
           <div className="rps-modes">
             {RPS_MODES.map((mode) => {
               const config = modes?.[mode];
               const commitment =
-                config && snapshot.data
-                  ? queueCommitment(mode, config.base, snapshot.data.balance)
+                config && available
+                  ? queueCommitment(mode, config.base, available.total)
                   : null;
               const open = Boolean(
                 snapshot.data?.gamesEnabled && snapshot.data.rps.enabled && config?.enabled,
@@ -1321,6 +1326,7 @@ export function RPSGame() {
           <Card>
             <h2 id="rps-deathmatch-title">{text('rps.mode.deathmatch')}</h2>
             <p>{text('rps.deathmatchReview')}</p>
+            {available ? <GamePayment payment={available} /> : null}
             {deathmatchCommitment ? (
               <p>
                 <strong>{text('rps.entry')}:</strong> <GameMoney value={deathmatchCommitment} />

@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installJsonFetchFixtures, renderWithProviders } from '../../../../test/unit/support';
 import { FishingGame } from './FishingGame';
@@ -147,7 +147,7 @@ describe('Fishing result presentation and queue recovery', () => {
     await flushInitialFishing();
     const start = screen.getByRole('button', { name: 'Start fishing' });
     expect(visibleBatchID()).toBe(OLD_BATCH_ID);
-    expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+    expect(within(screen.getByRole('list', { name: 'Your catch is ready' })).queryAllByRole('listitem')).toHaveLength(0);
     expect(start).toBeDisabled();
     fireEvent.click(start);
     fireEvent.click(start);
@@ -316,7 +316,7 @@ describe('Fishing result presentation and queue recovery', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(FISHING_REVEAL_MS);
     });
-    expect(screen.getAllByRole('listitem')).toHaveLength(1);
+    expect(within(screen.getByRole('list', { name: 'Your catch is ready' })).getAllByRole('listitem')).toHaveLength(1);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(200);
     });
@@ -328,7 +328,7 @@ describe('Fishing result presentation and queue recovery', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(220);
     });
-    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    expect(within(screen.getByRole('list', { name: 'Your catch is ready' })).getAllByRole('listitem')).toHaveLength(2);
     rendered.unmount();
   });
 
@@ -446,7 +446,7 @@ describe('Fishing result presentation and queue recovery', () => {
     });
     expect(screen.getByRole('button', { name: 'Retry marking as viewed' })).toBeInTheDocument();
     expect(firstAcknowledgements).toBe(1);
-    expect(screen.getByRole('list')).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Your catch is ready' })).toBeInTheDocument();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);

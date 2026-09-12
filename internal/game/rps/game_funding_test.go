@@ -119,6 +119,9 @@ func TestMixedQueueRefundPreservesOriginalAssets(t *testing.T) {
 		t.Fatalf("cancel replay=%+v %v", replay, err)
 	}
 	fixture.assertWallets(user, 4_000, 1_000)
+	if fixture.scalar("SELECT COUNT(*) FROM game_onboarding_holds") != 0 || fixture.scalar("SELECT COUNT(*) FROM game_onboarding_completions") != 0 {
+		t.Fatal("cancel retained a reward or hold")
+	}
 	if fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='rps_queue_release'`) != 1 {
 		t.Fatal("duplicate refund")
 	}
@@ -240,7 +243,8 @@ func TestMixedStandardInputsTerminalRetryAndOriginalFunding(t *testing.T) {
 			if processing.Seats[surrender].GameRemaining.Decimal() != "2000" || processing.Seats[surrender].TerminalReturn.Decimal() != "4000" {
 				t.Fatal("unused game principal lost before cashout")
 			}
-			if fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='rps_terminal'`) != 0 || fixture.scalar(`SELECT COUNT(*) FROM game_rps_pending_results`) != 0 {
+			if fixture.scalar(`SELECT COUNT(*) FROM credit_operations WHERE kind='rps_terminal'`) != 0 || fixture.scalar(`SELECT COUNT(*) FROM game_rps_pending_results`) != 0 || fixture.scalar("SELECT COUNT(*) FROM game_onboarding_completions") != 0 ||
+				fixture.scalar("SELECT COUNT(*) FROM credit_operations WHERE kind='game_onboarding_reward'") != 0 {
 				t.Fatal("failed terminal committed money or pending facts")
 			}
 			fixture.assertLedgerRecovery()
@@ -275,7 +279,7 @@ func TestMixedStandardInputsTerminalRetryAndOriginalFunding(t *testing.T) {
 				user := *seat.UserID
 				want := int64(2_000)
 				if user != deletedUser {
-					want += seat.TerminalReturn.Big().Int64()
+					want += seat.TerminalReturn.Big().Int64() + 2_000_000
 				}
 				fixture.assertWallets(user, want, 0)
 				tx := fixture.mustReadTx()
@@ -383,8 +387,10 @@ func TestMixedDeathmatchAllInIgnoresDebtInOtherWallet(t *testing.T) {
 	}
 	key := 90410
 	fixture.playGestures(record.ID, bindings, [3]string{GestureRock, GestureScissors, GestureScissors}, &key)
-	if fixture.scalar("SELECT COUNT(*) FROM game_rps_pending_results") != 3 {
-		t.Fatal("all-in terminal results missing")
+	if fixture.scalar("SELECT COUNT(*) FROM game_rps_pending_results") != 3 ||
+		fixture.scalar("SELECT COUNT(*) FROM game_onboarding_completions") != 3 ||
+		fixture.scalar("SELECT SUM(award_milli) FROM game_onboarding_completions") != 15_000_000 {
+		t.Fatal("all-in terminal results or independent rewards missing")
 	}
 	fixture.assertLedgerRecovery()
 }

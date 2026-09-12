@@ -43,6 +43,11 @@ func (service *Service) GamesSnapshot(ctx context.Context, userID int64, now tim
 		return nil, classifyDB(err)
 	}
 	result := map[string]json.RawMessage{"game_balance": game.ConfigJSON(formatWideMilli(gameAccount.Balance.Big())), "server_now": game.ConfigJSON(now.UTC().Unix()), "balance": game.ConfigJSON(formatWideMilli(account.Balance.Big())), "games_enabled": game.ConfigJSON(configuration.Enabled())}
+	progress, err := service.registry.OnboardingProgress(ctx, tx, userID)
+	if err != nil {
+		return nil, classifyDB(err)
+	}
+	result["onboarding"] = game.ConfigJSON(progress)
 	for _, descriptor := range service.registry.Descriptors() {
 		value, _ := configuration.Value(descriptor.ID)
 		fragment, err := service.modules[descriptor.ID].UserSnapshotTx(ctx, tx, userID, now.UTC().Unix(), value)

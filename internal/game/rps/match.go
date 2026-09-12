@@ -446,7 +446,7 @@ func (service *Service) startMatchTx(ctx context.Context, tx *sql.Tx, selected [
 	}
 	if err := service.finance.SessionStart(ctx, tx, finance.SessionStart{Meta: ledger.Meta{OperationID: operationID, CreatedAt: now}, SessionID: sessionID, FutureRows: futureRows, Queues: planInputs}, func(ctx context.Context, tx *sql.Tx, accountID int64) error {
 		record.AccountID = accountID
-		return insertStartedSessionTx(ctx, tx, &record, queuesBySeat)
+		return service.insertStartedSessionTx(ctx, tx, &record, queuesBySeat)
 	}); err != nil {
 		return nil, activities.PublishFacts{}, fmt.Errorf("session start ledger: %w", mapLedger(err))
 	}
@@ -463,7 +463,7 @@ func (service *Service) startMatchTx(ctx context.Context, tx *sql.Tx, selected [
 	return users, facts, nil
 }
 
-func insertStartedSessionTx(ctx context.Context, tx *sql.Tx, record *sessionRecord, queues [3]queueRecord) error {
+func (service *Service) insertStartedSessionTx(ctx context.Context, tx *sql.Tx, record *sessionRecord, queues [3]queueRecord) error {
 	events, err := json.Marshal(record.RecentEvents)
 	if err != nil {
 		return ErrInvariant
@@ -509,6 +509,11 @@ VALUES(?,?,?,?,?,?,?,?,?,0,NULL,NULL,NULL,NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?
 			nullableU128(value.SnapshotCompletedCount), nullableU128(value.SnapshotProfitableCount), nullableU128(value.SnapshotRockCount),
 			nullableU128(value.SnapshotScissorsCount), nullableU128(value.SnapshotPaperCount), db.EncodeU128(value.GameBuyIn), db.EncodeU128(value.GameRemaining)); err != nil {
 			return classifyDB(err)
+		}
+		if record.RulesVersion == 2 {
+			if err := service.finance.TransferOnboarding(ctx, tx, finance.QueueOnboardingTransfer{QueueID: queues[seat].ID, SessionID: record.ID, UserID: *value.UserID, SeatNo: seat}); err != nil {
+				return mapLedger(err)
+			}
 		}
 		result, err := tx.ExecContext(ctx, `UPDATE game_rps_user_slots SET queue_id=NULL,session_id=? WHERE user_id=? AND queue_id=? AND session_id IS NULL`,
 			record.ID, *value.UserID, queues[seat].ID)

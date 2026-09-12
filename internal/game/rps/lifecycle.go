@@ -96,6 +96,11 @@ func (adapter *LifecycleAdapter) PrepareDeleteTx(ctx context.Context, tx *sql.Tx
 		if err := clearEventsForIdentity(&record, seatNo); err != nil {
 			return nil, err
 		}
+		if record.RulesVersion == 2 {
+			if err := service.finance.ReleaseOnboarding(ctx, tx, userID); err != nil {
+				return nil, mapLedger(err)
+			}
+		}
 		seat := &record.Seats[seatNo]
 		seat.UserID, seat.DisplayName, seat.AvatarURL = nil, nil, nil
 		seat.SnapshotCompletedCount, seat.SnapshotProfitableCount = nil, nil

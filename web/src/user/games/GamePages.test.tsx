@@ -29,6 +29,9 @@ function emptyFishingBoard(board: 'single' | 'recent_single' | 'total') {
 }
 function fishingResult() {
   return {
+    rules_version: 1,
+    payment: { general: '1', game: '0' },
+    game_balance: '0',
     batch_id: 'fb_AAAAAAAAAAAAAAAAAAAAAA',
     bait: 'worm',
     count: 1,
@@ -234,7 +237,7 @@ describe('beta.1 game pages', () => {
       station: 'user',
       route: '/games/fishing',
     });
-    await screen.findByRole('list');
+    await screen.findByRole('list', { name: /Your catch is ready|收获已揭晓/ });
     await view.user.click(screen.getByRole('button', { name: 'Sound off' }));
     expect(audio.play).not.toHaveBeenCalled();
     const batch = 'fb_AAAAAAAAAAAAAAAAAAAAAQ';
@@ -250,6 +253,8 @@ describe('beta.1 game pages', () => {
             state: 'settlement_pending',
             next_attempt_at: 1_800_000_000,
             retry_exhausted: false,
+            rules_version: 1,
+            payment: { general: '1', game: '0' },
           },
           unrevealed: null,
           has_more_unrevealed: false,
@@ -288,6 +293,8 @@ describe('beta.1 game pages', () => {
             state: 'settlement_pending',
             next_attempt_at: 1_800_000_000,
             retry_exhausted: false,
+            rules_version: 1,
+            payment: { general: '1', game: '0' },
           },
           unrevealed: null,
           has_more_unrevealed: false,
@@ -305,7 +312,7 @@ describe('beta.1 game pages', () => {
         }),
       ),
     );
-    await screen.findByRole('list');
+    await screen.findByRole('list', { name: /Your catch is ready|收获已揭晓/ });
     await view.user.click(screen.getByRole('button', { name: 'Sound off' }));
     expect(audio.play.mock.calls).toEqual([['fishing_epic']]);
   });
@@ -598,7 +605,7 @@ describe('beta.1 game pages', () => {
     expect(rules).toHaveTextContent('先选鱼饵');
     await rendered.user.click(within(rules).getByRole('button', { name: '关闭玩法说明' }));
     expect(screen.queryByRole('dialog', { name: '池塘垂钓怎么玩' })).not.toBeInTheDocument();
-    expect(await screen.findByRole('list')).toHaveTextContent('银鱼');
+    expect(await screen.findByRole('list', { name: /Your catch is ready|收获已揭晓/ })).toHaveTextContent('银鱼');
     expect(screen.getByText('12 厘米')).toBeInTheDocument();
     await waitFor(() =>
       expect(
@@ -687,7 +694,7 @@ describe('beta.1 game pages', () => {
       role: 'user',
     });
 
-    expect(await screen.findByRole('list')).toHaveTextContent('Blue fat fish');
+    expect(await screen.findByRole('list', { name: /Your catch is ready|收获已揭晓/ })).toHaveTextContent('Blue fat fish');
     expect(screen.getAllByText(/Original legendary species: Koi/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(`${length} cm`).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('tab')[0]).toHaveTextContent('Rolling 30-day window');
@@ -793,10 +800,10 @@ describe('beta.1 game pages', () => {
       route: '/games/fishing',
       role: 'user',
     });
-    await waitFor(() => expect(screen.getByRole('list')).toHaveTextContent('Whitebait'));
+    await waitFor(() => expect(screen.getByRole('list', { name: /Your catch is ready|收获已揭晓/ })).toHaveTextContent('Whitebait'));
     const retry = await screen.findByRole('button', { name: 'Retry marking as viewed' });
     expect(screen.getByText(/result could not be marked viewed/i)).toBeInTheDocument();
-    expect(screen.getByRole('list')).toHaveTextContent('Whitebait');
+    expect(screen.getByRole('list', { name: /Your catch is ready|收获已揭晓/ })).toHaveTextContent('Whitebait');
     expect(screen.getByRole('button', { name: 'Start fishing' })).toBeEnabled();
     await rendered.user.click(retry);
     await waitFor(() =>
@@ -804,7 +811,7 @@ describe('beta.1 game pages', () => {
         screen.queryByRole('button', { name: 'Retry marking as viewed' }),
       ).not.toBeInTheDocument(),
     );
-    expect(screen.getByRole('list')).toHaveTextContent('Whitebait');
+    expect(screen.getByRole('list', { name: /Your catch is ready|收获已揭晓/ })).toHaveTextContent('Whitebait');
     expect(screen.getByRole('button', { name: 'Start fishing' })).toBeEnabled();
     expect(attempts).toBe(2);
   });
@@ -818,6 +825,8 @@ describe('beta.1 game pages', () => {
       state: 'recovery_required',
       next_attempt_at: null,
       retry_exhausted: true,
+      rules_version: 1,
+      payment: { general: '1', game: '0' },
     };
     const fetchMock = installJsonFetchFixtures([
       { method: 'GET', path: '/api/games', body: gamesSnapshotWire() },
@@ -883,7 +892,7 @@ describe('beta.1 game pages', () => {
       .find((button) => !(button as HTMLButtonElement).disabled);
     expect(replay).toBeDefined();
     await rendered.user.click(replay!);
-    await waitFor(() => expect(screen.getByRole('list')).toHaveTextContent('Whitebait'));
+    await waitFor(() => expect(screen.getByRole('list', { name: /Your catch is ready|收获已揭晓/ })).toHaveTextContent('Whitebait'));
     const calls = fetchMock.mock.calls.filter(
       ([input, init]) =>
         new URL(String(input), window.location.origin).pathname ===
