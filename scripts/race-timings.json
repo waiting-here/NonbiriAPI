@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "shards": 6,
+  "shards": 12,
   "default_package_seconds": 60,
   "split_packages": [
     "github.com/waiting-here/NonbiriAPI/internal/db",

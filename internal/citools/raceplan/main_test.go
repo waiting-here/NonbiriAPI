@@ -278,14 +278,14 @@ func TestExecutionGroupsUseExactTopLevelPatterns(t *testing.T) {
 	if len(groups) != 2 {
 		t.Fatalf("group count = %d, want 2", len(groups))
 	}
-	wantWhole := []string{"test", "-race", "-count=1", "-timeout=30m", "example/a", "example/z"}
+	wantWhole := []string{"test", "-race", "-count=1", "-timeout=30m", "-v", "example/a", "example/z"}
 	if !reflect.DeepEqual(groups[0].Args, wantWhole) {
 		t.Fatalf("whole args = %#v, want %#v", groups[0].Args, wantWhole)
 	}
-	if len(groups[1].Args) != 7 || groups[1].Args[4] != "-run" || groups[1].Args[6] != "example/slow" {
+	if len(groups[1].Args) != 8 || groups[1].Args[5] != "-run" || groups[1].Args[7] != "example/slow" {
 		t.Fatalf("split args = %#v", groups[1].Args)
 	}
-	pattern, err := regexp.Compile(groups[1].Args[5])
+	pattern, err := regexp.Compile(groups[1].Args[6])
 	if err != nil {
 		t.Fatalf("compile generated pattern: %v", err)
 	}

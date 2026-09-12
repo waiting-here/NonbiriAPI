@@ -2033,11 +2033,21 @@ SET user_id=NULL,eligible_at_freeze=?,payout_mag=?,unpaid_reason=?,settled=?,
     ledger_rows_remaining=?,updated_at=1
 WHERE period_id=? AND participant_ref=?`
 
+	// Each case starts from the same period; rollback isolates its rows
+	// without rebuilding every table and trigger for each mutation.
+	db := openGenerationTwoDDLForTest(t)
+	periodID, _, _ := hostileInsertThursdayFixture(t, db)
+	beginCase := func(t *testing.T) {
+		t.Helper()
+		hostileMustExec(t, db, `SAVEPOINT matrix_case`)
+		t.Cleanup(func() {
+			hostileMustExec(t, db, `ROLLBACK TO matrix_case; RELEASE matrix_case`)
+		})
+	}
 	for _, tt := range tests {
 		tt := tt
 		t.Run("insert/"+tt.name, func(t *testing.T) {
-			db := openGenerationTwoDDLForTest(t)
-			periodID, _, _ := hostileInsertThursdayFixture(t, db)
+			beginCase(t)
 			participantID := hostileOIDVariant("thp_", 'M', 'Q')
 			args := []any{
 				periodID, participantID, hostileBlob16(1), hostileBlob16(1), tt.eligible,
@@ -2051,9 +2061,8 @@ WHERE period_id=? AND participant_ref=?`
 		})
 
 		t.Run("update/"+tt.name, func(t *testing.T) {
-			db := openGenerationTwoDDLForTest(t)
+			beginCase(t)
 			uid := hostileInsertUser(t, db, "thursday-matrix", 0, 0)
-			periodID, _, _ := hostileInsertThursdayFixture(t, db)
 			participantID := hostileOIDVariant("thp_", 'M', 'Q')
 			hostileMustExec(t, db, `
 INSERT INTO thursday_participants(
