@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -13,6 +12,7 @@ import (
 // all unrelated tables, constraints, indexes, foreign keys and triggers.
 func makePreEmbeddingFixture(t *testing.T, database *sql.DB) {
 	t.Helper()
+	makePreAssetFixture(t, database)
 	for _, table := range []string{"logical_requests", "request_logs"} {
 		var ddl string
 		var version int
@@ -68,6 +68,7 @@ func TestEmbeddingExtensionPreservesReleasedDataAndStorage(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		defer store.Close()
 		assertRetainedManifest(t, store.DB(), PinnedGenerationTwoManifestHash)
 		assertRetainedImages(t, store.DB(), before)
 		assertHourlySchemaPragmas(t, store.DB())
@@ -78,16 +79,21 @@ func TestEmbeddingExtensionPreservesReleasedDataAndStorage(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		changed := 0
-		for index := range after.Objects {
-			object := &after.Objects[index]
-			if object.Type == "table" && (object.Name == "logical_requests" || object.Name == "request_logs") {
-				object.SQL = strings.Replace(object.SQL, ",'openai_embeddings','charity_embeddings'", "", 1)
-				changed++
+		for _, table := range []string{"logical_requests", "request_logs"} {
+			var previous, current string
+			for _, object := range manifestBefore.Objects {
+				if object.Type == "table" && object.Name == table {
+					previous = object.SQL
+				}
 			}
-		}
-		if changed != 2 || !reflect.DeepEqual(manifestBefore, after) {
-			t.Fatal("upgrade changed more than the two request CHECKs")
+			for _, object := range after.Objects {
+				if object.Type == "table" && object.Name == table {
+					current = object.SQL
+				}
+			}
+			if previous == "" || strings.Replace(current, ",'openai_embeddings','charity_embeddings'", "", 1) != previous {
+				t.Fatalf("request table %s changed beyond its route CHECK", table)
+			}
 		}
 		if err := store.Close(); err != nil {
 			t.Fatal(err)

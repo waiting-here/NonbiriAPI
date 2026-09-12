@@ -71,10 +71,17 @@ const (
 	// (only effective level >= 3 may check in) / disabled (the default). The
 	// two award bounds are a cross-validated pair: PATCHing either validates
 	// min <= max against the other key's current value in ONE transaction.
-	KeyCheckinMode          = "checkin_mode"
-	KeyCheckinAwardMinMilli = "checkin_award_min_milli"
-	KeyCheckinAwardMaxMilli = "checkin_award_max_milli"
-	KeyCreditsCapMilli      = "credits_cap_milli"
+	KeyCheckinMode              = "checkin_mode"
+	KeyCheckinAwardMinMilli     = "checkin_award_min_milli"
+	KeyCheckinAwardMaxMilli     = "checkin_award_max_milli"
+	KeyCreditsCapMilli          = "credits_cap_milli"
+	KeyGameCheckinMode          = "game_checkin_mode"
+	KeyGameCheckinAwardMinMilli = "game_checkin_award_min_milli"
+	KeyGameCheckinAwardMaxMilli = "game_checkin_award_max_milli"
+	KeyGameCreditsCapMilli      = "game_credits_cap_milli"
+	KeyGameFishingRakePlatform  = "game_fishing_rake_platform_bp"
+	KeyGameFishingRakeWelfare   = "game_fishing_rake_welfare_bp"
+	KeyGameFishingRakeThursday  = "game_fishing_rake_thursday_bp"
 	// Charity / donation switches (implementation contract §4.1). Both default
 	// to off: the charity system and donation intake stay closed until the
 	// administrator opens them. They have no runtime singleton — every
@@ -272,6 +279,13 @@ var knownSiteConfig = func() map[string]keySpec {
 		KeyCheckinAwardMinMilli:             {kind: kindAmount, defAmount: db.DefaultCheckinAwardMinMilli},
 		KeyCheckinAwardMaxMilli:             {kind: kindAmount, defAmount: db.DefaultCheckinAwardMaxMilli},
 		KeyCreditsCapMilli:                  {kind: kindAmount, defAmount: db.DefaultCreditsCapMilli},
+		KeyGameCheckinMode:                  {kind: kindEnum, allowed: []string{db.CheckinModeEnabled, db.CheckinModeLevelGated, db.CheckinModeDisabled}, defStr: db.CheckinModeDisabled},
+		KeyGameCheckinAwardMinMilli:         {kind: kindAmount, defAmount: db.DefaultCheckinAwardMinMilli},
+		KeyGameCheckinAwardMaxMilli:         {kind: kindAmount, defAmount: db.DefaultCheckinAwardMaxMilli},
+		KeyGameCreditsCapMilli:              {kind: kindAmount, defAmount: db.DefaultCreditsCapMilli},
+		KeyGameFishingRakePlatform:          {kind: kindInt, min: 0, max: 9999, def: 100},
+		KeyGameFishingRakeWelfare:           {kind: kindInt, min: 0, max: 9999, def: 100},
+		KeyGameFishingRakeThursday:          {kind: kindInt, min: 0, max: 9999, def: 100},
 		KeyCharityEnabled:                   {kind: kindBool, def: 0},
 		KeyDonationAcceptEnabled:            {kind: kindBool, def: 0},
 		KeyCharityTokenReserveMilli:         {kind: kindOptionalAmount},
@@ -360,7 +374,12 @@ func isLegalOverrideKey(key string) bool {
 }
 
 func isGameConfigKey(key string) bool {
-	return key == KeyGamesEnabled || strings.HasPrefix(key, "game_")
+	switch key {
+	case KeyGameCheckinMode, KeyGameCheckinAwardMinMilli, KeyGameCheckinAwardMaxMilli, KeyGameCreditsCapMilli:
+		return false
+	default:
+		return key == KeyGamesEnabled || strings.HasPrefix(key, "game_")
+	}
 }
 
 func isActivityConfigKey(key string) bool {

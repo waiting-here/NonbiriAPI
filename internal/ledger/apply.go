@@ -133,8 +133,7 @@ func ConsumeReserved(ctx context.Context, tx *sql.Tx, ref ReservationRef, plan P
 		if err := requireRemainingDelta(primaryBefore, primaryAfter, primaryDecrease); err != nil {
 			return err
 		}
-		totalReservationDecrease := new(big.Int).Set(primaryDecrease)
-		for i, releaseRef := range plan.spec.capacity.releaseAll {
+		for _, releaseRef := range plan.spec.capacity.releaseAll {
 			after, found, readErr := readReservationRemaining(ctx, tx, releaseRef)
 			if readErr != nil {
 				return readErr
@@ -142,7 +141,6 @@ func ConsumeReserved(ctx context.Context, tx *sql.Tx, ref ReservationRef, plan P
 			if found && after.Big().Sign() != 0 {
 				return ErrInvalidReservation
 			}
-			totalReservationDecrease.Add(totalReservationDecrease, releaseBefore[i].Big())
 		}
 		if plan.spec.capacity.reserve != nil {
 			after, found, readErr := readReservationRemaining(ctx, tx, plan.spec.capacity.reserve.ref)
@@ -160,19 +158,8 @@ func ConsumeReserved(ctx context.Context, tx *sql.Tx, ref ReservationRef, plan P
 				return ErrInvalidReservation
 			}
 		}
-		reservedBig := new(big.Int).Sub(capacity.ReservedFutureRows.Big(), totalReservationDecrease)
-		if plan.spec.capacity.reserve != nil {
-			reservedBig.Add(reservedBig, plan.spec.capacity.reserve.rows.Big())
-		}
-		if reservedBig.Sign() < 0 || capacity.LastLedgerSeq == int64(^uint64(0)>>1) {
-			return ErrInvariant
-		}
-		reserved, err := db.U128FromBig(reservedBig)
-		if err != nil {
-			return ErrInvariant
-		}
 		sequence := capacity.LastLedgerSeq + 1
-		if err := writeCapacity(ctx, tx, capacity, sequence, reserved); err != nil {
+		if err := writeCapacity(ctx, tx, capacity, sequence, finalReservedScalar); err != nil {
 			return err
 		}
 		result, err = applyAtSequence(ctx, tx, plan, sequence)
@@ -222,7 +209,7 @@ func validatePlan(plan Plan) error {
 	}
 	seenAccounts := make(map[int64]struct{}, len(spec.entries))
 	for _, entry := range spec.entries {
-		if entry.role.id <= 0 {
+		if entry.role.id <= 0 || !entry.role.asset.valid() {
 			return ErrInvalidPlan
 		}
 		if _, exists := seenAccounts[entry.role.id]; exists {
@@ -350,10 +337,10 @@ WHERE id=? AND balance_sign=? AND balance_mag=?`,
 		}
 		_, err := tx.ExecContext(ctx, `
 INSERT INTO credit_entries(
- operation_id,line_no,account_id,account_kind_snapshot,delta_sign,delta_mag,
+ operation_id,line_no,account_id,account_kind_snapshot,asset_type,delta_sign,delta_mag,
  balance_after_sign,balance_after_mag)
-VALUES(?,?,?,?,?,?,?,?)`,
-			plan.spec.meta.OperationID, line, account.ID, string(account.Kind),
+VALUES(?,?,?,?,?,?,?,?,?)`,
+			plan.spec.meta.OperationID, line, account.ID, string(account.Kind), string(account.Asset),
 			entry.delta.value.Sign, db.EncodeU128(entry.delta.value.Mag), afterSign, afterMag)
 		if err != nil {
 			return Result{}, classifySQLError("insert ledger entry", err)
@@ -368,19 +355,22 @@ func materializeEntries(plan Plan, accounts map[int64]Account) ([]entrySpec, err
 		copy(out, plan.spec.entries)
 		return out, nil
 	}
-	if plan.spec.dynamic != dynamicAccountDelete || len(plan.spec.entries) != 2 {
+	if plan.spec.dynamic != dynamicAccountDelete || len(plan.spec.entries) != 2 && len(plan.spec.entries) != 4 {
 		return nil, ErrInvalidPlan
 	}
-	userRole := plan.spec.entries[0].role
-	externalRole := plan.spec.entries[1].role
-	if userRole.kind != AccountUser || externalRole.kind != AccountExternal {
-		return nil, ErrInvalidPlan
+	var entries []entrySpec
+	for i := 0; i < len(plan.spec.entries); i += 2 {
+		user := plan.spec.entries[i].role
+		external := plan.spec.entries[i+1].role
+		if user.kind != AccountUser || external.kind != AccountExternal || user.asset != external.asset {
+			return nil, ErrInvalidPlan
+		}
+		balance := accounts[user.id].Balance
+		if !balance.IsZero() {
+			entries = append(entries, entrySpec{role: user, delta: negate(balance)}, entrySpec{role: external, delta: balance})
+		}
 	}
-	balance := accounts[userRole.id].Balance
-	if balance.IsZero() {
-		return nil, nil
-	}
-	return []entrySpec{{role: userRole, delta: negate(balance)}, {role: externalRole, delta: balance}}, nil
+	return entries, nil
 }
 
 func validateConservation(kind Kind, entries []entrySpec) error {
@@ -390,11 +380,15 @@ func validateConservation(kind Kind, entries []entrySpec) error {
 	if len(entries) == 0 && kind != KindAdminUserAdjustment && kind != KindAntiAbusePenalty && kind != KindAccountDeleteZero {
 		return ErrInvalidPlan
 	}
-	total := new(big.Int)
+	totals := map[Asset]*big.Int{General: new(big.Int), Game: new(big.Int)}
 	for _, entry := range entries {
+		total, ok := totals[entry.role.asset]
+		if !ok {
+			return ErrInvalidPlan
+		}
 		total.Add(total, entry.delta.Big())
 	}
-	if total.Sign() != 0 {
+	if totals[General].Sign() != 0 || totals[Game].Sign() != 0 {
 		return ErrInvalidPlan
 	}
 	return nil
@@ -409,7 +403,7 @@ func applyDonationChange(ctx context.Context, tx *sql.Tx, plan Plan) (*db.U128, 
 	err := tx.QueryRowContext(ctx, `
 SELECT u.donation_credit_mag,u.revision
 FROM users u
-JOIN credit_accounts a ON a.kind='user' AND a.user_id=u.id
+JOIN credit_accounts a ON a.kind='user' AND a.user_id=u.id AND a.asset_type='general'
 WHERE u.id=? AND a.id=?`, change.userID, change.accountID).Scan(&raw, &revisionRaw)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -599,13 +593,13 @@ FROM credit_operations WHERE id=?`, operationID).Scan(
 	}
 
 	rows, err := tx.QueryContext(ctx, `
-SELECT line_no,account_id,account_kind_snapshot,delta_sign,delta_mag,balance_after_sign,balance_after_mag
+SELECT line_no,account_id,account_kind_snapshot,asset_type,delta_sign,delta_mag,balance_after_sign,balance_after_mag
 FROM credit_entries WHERE operation_id=? ORDER BY line_no`, operationID)
 	if err != nil {
 		return Result{}, classifySQLError("load ledger entries", err)
 	}
 	defer rows.Close()
-	total := new(big.Int)
+	totals := map[Asset]*big.Int{General: new(big.Int), Game: new(big.Int)}
 	expectedLine := 0
 	for rows.Next() {
 		var (
@@ -617,7 +611,7 @@ FROM credit_entries WHERE operation_id=? ORDER BY line_no`, operationID)
 			afterSign sql.NullInt64
 			afterMag  []byte
 		)
-		if err := rows.Scan(&entry.LineNo, &accountID, &kind, &deltaSign, &deltaMag, &afterSign, &afterMag); err != nil {
+		if err := rows.Scan(&entry.LineNo, &accountID, &kind, &entry.Asset, &deltaSign, &deltaMag, &afterSign, &afterMag); err != nil {
 			return Result{}, classifySQLError("scan ledger entry", err)
 		}
 		if entry.LineNo != expectedLine {
@@ -625,7 +619,7 @@ FROM credit_entries WHERE operation_id=? ORDER BY line_no`, operationID)
 		}
 		expectedLine++
 		entry.AccountKind, ok = parseAccountKind(kind)
-		if !ok {
+		if !ok || !entry.Asset.valid() {
 			return Result{}, ErrInvariant
 		}
 		if accountID.Valid {
@@ -649,13 +643,14 @@ FROM credit_entries WHERE operation_id=? ORDER BY line_no`, operationID)
 			}
 			entry.BalanceAfter = &value
 		}
+		total := totals[entry.Asset]
 		total.Add(total, entry.Delta.Big())
 		result.Entries = append(result.Entries, entry)
 	}
 	if err := rows.Err(); err != nil {
 		return Result{}, classifySQLError("iterate ledger entries", err)
 	}
-	if total.Sign() != 0 || len(result.Entries) == 1 || len(result.Entries) == 0 && result.Kind != KindAdminUserAdjustment && result.Kind != KindAntiAbusePenalty && result.Kind != KindAccountDeleteZero {
+	if totals[General].Sign() != 0 || totals[Game].Sign() != 0 || len(result.Entries) == 1 || len(result.Entries) == 0 && result.Kind != KindAdminUserAdjustment && result.Kind != KindAntiAbusePenalty && result.Kind != KindAccountDeleteZero {
 		return Result{}, ErrInvariant
 	}
 	return result, nil

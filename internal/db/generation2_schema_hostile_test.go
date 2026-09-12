@@ -1865,9 +1865,10 @@ INSERT INTO thursday_participants(
 	// obey the cap and pool-before bounds.
 	operationID := hostileOIDVariant("op_", 'W', 'Q')
 	hostileInsertOperation(t, db, operationID, 1, "welfare_claim", "operation", operationID)
+	hostileGameAwardEntry(t, db, uid, operationID)
 	hostileMustExec(t, db, `
-INSERT INTO welfare_claims(user_id,site_day,award_milli,operation_id,threshold_milli,cap_milli,pool_before_milli,created_at)
-VALUES(?,'1970-01-01',1,?,0,1,1,0)`, uid, operationID)
+INSERT INTO welfare_claims(user_id,site_day,award_milli,operation_id,threshold_milli,cap_milli,pool_before_milli,created_at,asset_type)
+VALUES(?,'1970-01-01',1,?,0,1,1,0,'game')`, uid, operationID)
 	hostileMustExec(t, db, `UPDATE welfare_claims SET created_at=? WHERE operation_id=?`, hostileTimeMax, operationID)
 	hostileMustFail(t, db, `UPDATE welfare_claims SET created_at=? WHERE operation_id=?`, hostileTimeMax+1, operationID)
 	hostileMustFail(t, db, `
@@ -2914,10 +2915,11 @@ func TestGenerationTwoHostileSQLiteIntegerAffinity(t *testing.T) {
 	welfareOperationID := hostileOIDVariant("op_", 'I', 'Q')
 	hostileInsertOperation(t, db, welfareOperationID, 101, "welfare_claim", "operation", welfareOperationID)
 	welfareUser := hostileInsertUser(t, db, "integer-affinity-welfare", 0, 0)
+	hostileGameAwardEntry(t, db, welfareUser, welfareOperationID)
 	welfareIDValue := hostileNextPK64(t, db, "welfare_claims")
 	welfareID := hostileMustLastID(t, hostileMustExec(t, db, `
-	INSERT INTO welfare_claims(id,user_id,site_day,operation_id,threshold_milli,cap_milli,pool_before_milli,award_milli,created_at)
-	VALUES(?,?,'1970-01-01',?,0,2,2,1,0)`, welfareIDValue, welfareUser, welfareOperationID))
+	INSERT INTO welfare_claims(id,user_id,site_day,operation_id,threshold_milli,cap_milli,pool_before_milli,award_milli,created_at,asset_type)
+	VALUES(?,?,'1970-01-01',?,0,2,2,1,0,'game')`, welfareIDValue, welfareUser, welfareOperationID))
 	hostileMustFail(t, db, `UPDATE welfare_claims SET award_milli=1.5 WHERE id=?`, welfareID)
 
 	fishingUser := hostileInsertUser(t, db, "integer-affinity-fishing", 0, 0)

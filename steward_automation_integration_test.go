@@ -140,6 +140,10 @@ func newAutomationFixture(t *testing.T) *automationFixture {
 		_ = tx.Rollback()
 		t.Fatal(err)
 	}
+	if _, err := ledger.CreateUserAssetAccount(context.Background(), tx, f.userID, ledger.Game, time.Now().Unix()); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}

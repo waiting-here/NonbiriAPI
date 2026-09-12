@@ -164,11 +164,19 @@ func (a *LedgerAdapter) ZeroAndDeleteAccount(
 	if err != nil {
 		return fmt.Errorf("lifecycle adapters: read deletion external account: %w", err)
 	}
-	plan, err := ledger.NewAccountDeleteZero(ledger.Meta{
+	gameWallet, err := ledger.UserAssetAccount(ctx, tx, request.UserID, ledger.Game)
+	if err != nil {
+		return fmt.Errorf("lifecycle adapters: read deletion game wallet: %w", err)
+	}
+	gameExternal, err := ledger.CodedAssetAccount(ctx, tx, "external", ledger.Game)
+	if err != nil {
+		return fmt.Errorf("lifecycle adapters: read deletion game external: %w", err)
+	}
+	plan, err := ledger.NewWalletsDeleteZero(ledger.Meta{
 		OperationID: deletionOperationID,
 		ActorUserID: request.UserID,
 		CreatedAt:   request.DecisionNow,
-	}, wallet.ID, external.ID)
+	}, ledger.AccountPair{General: wallet.ID, Game: gameWallet.ID}, ledger.AccountPair{General: external.ID, Game: gameExternal.ID})
 	if err != nil {
 		return fmt.Errorf("lifecycle adapters: build account deletion operation: %w", err)
 	}
@@ -180,23 +188,17 @@ func (a *LedgerAdapter) ZeroAndDeleteAccount(
 		applied.SourceType != "operation" || applied.SourceID != deletionOperationID {
 		return lifecycle.ErrInvariant
 	}
-	zeroed, err := ledger.ReadAccount(ctx, tx, wallet.ID)
-	if err != nil {
-		return fmt.Errorf("lifecycle adapters: verify zeroed deletion wallet: %w", err)
+	for _, id := range []int64{wallet.ID, gameWallet.ID} {
+		result, err := tx.ExecContext(ctx, `DELETE FROM credit_accounts
+WHERE id=? AND kind='user' AND user_id=? AND balance_sign=0`, id, request.UserID)
+		if err != nil {
+			return fmt.Errorf("lifecycle adapters: delete zeroed wallet: %w", err)
+		}
+		if err := requireOneRow(result); err != nil {
+			return err
+		}
 	}
-	if !zeroed.Balance.IsZero() {
-		return lifecycle.ErrInvariant
-	}
-
-	result, err := tx.ExecContext(ctx, `DELETE FROM credit_accounts
-WHERE id=? AND kind='user' AND user_id=? AND balance_sign=0`, wallet.ID, request.UserID)
-	if err != nil {
-		return fmt.Errorf("lifecycle adapters: delete zeroed wallet: %w", err)
-	}
-	if err := requireOneRow(result); err != nil {
-		return err
-	}
-	result, err = tx.ExecContext(ctx, `DELETE FROM users WHERE id=?`, request.UserID)
+	result, err := tx.ExecContext(ctx, `DELETE FROM users WHERE id=?`, request.UserID)
 	if err != nil {
 		return fmt.Errorf("lifecycle adapters: delete account identity: %w", err)
 	}

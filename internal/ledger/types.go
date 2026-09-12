@@ -47,6 +47,7 @@ const (
 	KindRPSSessionStart      Kind = "rps_session_start"
 	KindRPSRoundCut          Kind = "rps_round_cut"
 	KindRPSTerminal          Kind = "rps_terminal"
+	KindGameOnboardingReward Kind = "game_onboarding_reward"
 )
 
 type sourceType string
@@ -61,6 +62,16 @@ const (
 	sourceRPSQueue        sourceType = "rps_queue"
 	sourceRPSSession      sourceType = "rps_session"
 )
+
+// Asset identifies one independently conserved credit balance.
+type Asset string
+
+const (
+	General Asset = "general"
+	Game    Asset = "game"
+)
+
+func (a Asset) valid() bool { return a == General || a == Game }
 
 // AccountKind is a persisted account classification. Account creation is
 // exposed only through the closed constructors in accounts.go.
@@ -78,6 +89,7 @@ const (
 type Account struct {
 	ID        int64
 	Kind      AccountKind
+	Asset     Asset
 	UserID    int64
 	Code      string
 	Balance   Amount
@@ -99,6 +111,7 @@ type Entry struct {
 	LineNo       int
 	AccountID    int64
 	AccountKind  AccountKind
+	Asset        Asset
 	Delta        Amount
 	BalanceAfter *Amount
 }
@@ -137,6 +150,7 @@ const (
 	reservationThursdayParticipant
 	reservationRPSQueue
 	reservationRPSSession
+	reservationGameOnboarding
 )
 
 // ReservationRef is an unforgeable reference to one frozen domain remaining
@@ -172,6 +186,11 @@ func RPSQueueReservation(id string) (ReservationRef, error) {
 
 func RPSSessionReservation(id string) (ReservationRef, error) {
 	return opaqueReservation(reservationRPSSession, id, "rps_")
+}
+
+// GameOnboardingHold reserves the single future reward operation.
+func GameOnboardingHold(id string) (ReservationRef, error) {
+	return opaqueReservation(reservationGameOnboarding, id, "goh_")
 }
 
 func opaqueReservation(kind reservationKind, id, prefix string) (ReservationRef, error) {

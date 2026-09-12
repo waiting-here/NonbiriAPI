@@ -165,7 +165,7 @@ func assertPoolBalance(t *testing.T, database *sql.DB, poolID, want string) {
 func assertCodedBalance(t *testing.T, database *sql.DB, code, want string) {
 	t.Helper()
 	var accountID int64
-	if err := database.QueryRow(`SELECT id FROM credit_accounts WHERE code=?`, code).Scan(&accountID); err != nil {
+	if err := database.QueryRow(`SELECT id FROM credit_accounts WHERE code=? AND asset_type='general'`, code).Scan(&accountID); err != nil {
 		t.Fatal(err)
 	}
 	assertAccountBalance(t, database, accountID, want)
@@ -174,7 +174,7 @@ func assertCodedBalance(t *testing.T, database *sql.DB, code, want string) {
 func assertUserBalance(t *testing.T, database *sql.DB, userID int64, want string) {
 	t.Helper()
 	var accountID int64
-	if err := database.QueryRow(`SELECT id FROM credit_accounts WHERE kind='user' AND user_id=?`, userID).Scan(&accountID); err != nil {
+	if err := database.QueryRow(`SELECT id FROM credit_accounts WHERE kind='user' AND user_id=? AND asset_type='general'`, userID).Scan(&accountID); err != nil {
 		t.Fatal(err)
 	}
 	assertAccountBalance(t, database, accountID, want)

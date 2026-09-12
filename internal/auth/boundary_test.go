@@ -200,7 +200,7 @@ func TestConcurrentDiscordIdentityConvergesToOneRegistration(t *testing.T) {
 			t.Fatalf("callback %d status=%d", index, status)
 		}
 	}
-	for label, query := range map[string]string{"users": `SELECT COUNT(*) FROM users WHERE discord_id='discord-race'`, "wallets": `SELECT COUNT(*) FROM credit_accounts WHERE kind='user'`, "caller_keys": `SELECT COUNT(*) FROM caller_keys`, "sessions": `SELECT COUNT(*) FROM sessions`} {
+	for label, query := range map[string]string{"users": `SELECT COUNT(*) FROM users WHERE discord_id='discord-race'`, "general wallets": `SELECT COUNT(*) FROM credit_accounts WHERE kind='user' AND asset_type='general'`, "game wallets": `SELECT COUNT(*) FROM credit_accounts WHERE kind='user' AND asset_type='game'`, "caller_keys": `SELECT COUNT(*) FROM caller_keys`, "sessions": `SELECT COUNT(*) FROM sessions`} {
 		var count int
 		if err := f.store.DB().QueryRow(query).Scan(&count); err != nil || count != 1 {
 			t.Fatalf("%s count=%d err=%v", label, count, err)

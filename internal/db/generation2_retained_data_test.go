@@ -29,6 +29,7 @@ var retainedSourceManifests = []struct{ name, hash string }{
 func seedRetainedBusinessData(t *testing.T, store *Store, vault *secret.Vault) {
 	t.Helper()
 	database := store.DB()
+	makePreAssetFixture(t, database)
 	database.SetMaxOpenConns(1)
 	zero, one := hostileBlob16(0), hostileBlob16(1)
 	users := []int64{hostileInsertUser(t, database, "retained-a", 0, 100),
@@ -207,12 +208,31 @@ func assertRetainedManifest(t *testing.T, database *sql.DB, want string) {
 
 type retainedTableImage struct {
 	Columns []string
+	Keys    []string
 	Rows    int
 	Digest  [32]byte
 }
 
 func retainedTableImages(t *testing.T, database *sql.DB, tables []string) map[string]retainedTableImage {
+	return projectedRetainedImages(t, database, tables, nil)
+}
+
+func projectedRetainedImages(t *testing.T, database *sql.DB, tables []string, prior map[string]retainedTableImage) map[string]retainedTableImage {
 	t.Helper()
+	projectPriorAssets := false
+	if accounts, ok := prior["credit_accounts"]; ok {
+		hasAsset := false
+		for _, column := range accounts.Columns {
+			hasAsset = hasAsset || column == "asset_type"
+		}
+		if !hasAsset {
+			var present int
+			if err := database.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('credit_accounts') WHERE name='asset_type'`).Scan(&present); err != nil {
+				t.Fatal(err)
+			}
+			projectPriorAssets = present == 1
+		}
+	}
 	if tables == nil {
 		rows, err := database.Query(`SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name`)
 		if err != nil {
@@ -234,7 +254,37 @@ func retainedTableImages(t *testing.T, database *sql.DB, tables []string) map[st
 	}
 	images := make(map[string]retainedTableImage, len(tables))
 	for _, table := range tables {
-		rows, err := database.Query(`SELECT * FROM ` + hostileQuoteIdent(table))
+		projection := "*"
+		if image, ok := prior[table]; ok {
+			names := make([]string, len(image.Columns))
+			for i, column := range image.Columns {
+				names[i] = hostileQuoteIdent(column)
+			}
+			projection = strings.Join(names, ",")
+		}
+		query := "SELECT " + projection + " FROM " + hostileQuoteIdent(table)
+		var args []any
+		// The account allocator advances when zero game accounts are added;
+		// the actual old account IDs and every old row remain covered below.
+		if table == "sqlite_sequence" {
+			query += " WHERE name<>'credit_accounts'"
+		}
+		if projectPriorAssets && table == "credit_accounts" {
+			query += " WHERE asset_type='general'"
+		}
+		if projectPriorAssets && table == "site_config" {
+			var marks []string
+			for _, key := range prior[table].Keys {
+				marks = append(marks, "?")
+				args = append(args, key)
+			}
+			if len(marks) == 0 {
+				query += " WHERE 0"
+			} else {
+				query += " WHERE key IN (" + strings.Join(marks, ",") + ")"
+			}
+		}
+		rows, err := database.Query(query, args...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -242,7 +292,7 @@ func retainedTableImages(t *testing.T, database *sql.DB, tables []string) map[st
 		if err != nil {
 			t.Fatal(err)
 		}
-		var encoded []string
+		var encoded, keys []string
 		for rows.Next() {
 			values := make([]any, len(columns))
 			dest := make([]any, len(columns))
@@ -251,6 +301,9 @@ func retainedTableImages(t *testing.T, database *sql.DB, tables []string) map[st
 			}
 			if err := rows.Scan(dest...); err != nil {
 				t.Fatal(err)
+			}
+			if table == "site_config" {
+				keys = append(keys, values[0].(string))
 			}
 			typed := make([]any, len(values))
 			for i, value := range values {
@@ -269,7 +322,8 @@ func retainedTableImages(t *testing.T, database *sql.DB, tables []string) map[st
 			t.Fatal(err)
 		}
 		sort.Strings(encoded)
-		images[table] = retainedTableImage{columns, len(encoded), sha256.Sum256([]byte(strings.Join(encoded, "\n")))}
+		sort.Strings(keys)
+		images[table] = retainedTableImage{Columns: columns, Keys: keys, Rows: len(encoded), Digest: sha256.Sum256([]byte(strings.Join(encoded, "\n")))}
 	}
 	return images
 }
@@ -280,7 +334,7 @@ func assertRetainedImages(t *testing.T, database *sql.DB, before map[string]reta
 	for table := range before {
 		tables = append(tables, table)
 	}
-	after := retainedTableImages(t, database, tables)
+	after := projectedRetainedImages(t, database, tables, before)
 	for table, old := range before {
 		if !reflect.DeepEqual(old, after[table]) {
 			t.Errorf("retained table %s changed (rows %d -> %d)", table, old.Rows, after[table].Rows)

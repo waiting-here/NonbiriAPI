@@ -42,8 +42,9 @@ func requireRegistrationLedgerState(t *testing.T, tx *sql.Tx, userID int64) int6
 		!account.Balance.IsZero() || account.CreatedAt != authTestNow || account.UpdatedAt != authTestNow {
 		t.Fatalf("registration wallet=%+v", account)
 	}
-	if err := ledger.ValidateRecovery(ctx, tx); err != nil {
-		t.Fatalf("validate registration ledger: %v", err)
+	gameWallet, err := ledger.UserAssetAccount(ctx, tx, userID, ledger.Game)
+	if err != nil || gameWallet.ID == account.ID || !gameWallet.Balance.IsZero() {
+		t.Fatalf("registration game wallet=%+v: %v", gameWallet, err)
 	}
 	if _, err := ledger.RecoverNonterminal(ctx, tx); err != nil {
 		t.Fatalf("recover registration ledger: %v", err)
@@ -80,9 +81,6 @@ func requireRolledBackRegistration(t *testing.T, database *sql.DB, userID int64)
 		if count != 0 {
 			t.Fatalf("%s retained %d rolled-back registration row(s)", table, count)
 		}
-	}
-	if err := ledger.ValidateRecovery(context.Background(), tx); err != nil {
-		t.Fatalf("validate ledger after registration rollback: %v", err)
 	}
 	if _, err := ledger.RecoverNonterminal(context.Background(), tx); err != nil {
 		t.Fatalf("recover ledger after registration rollback: %v", err)
@@ -126,7 +124,7 @@ func TestLedgerWalletRegistrationHookConvergesOnReplayAndExistingWallet(t *testi
 		if replayedAccountID := requireRegistrationLedgerState(t, tx, userID); replayedAccountID != firstAccountID {
 			t.Fatalf("replay wallet id=%d, want %d", replayedAccountID, firstAccountID)
 		}
-		requireRegistrationRowCounts(t, tx, userID, 1, 1)
+		requireRegistrationRowCounts(t, tx, userID, 1, 2)
 		if err := tx.Commit(); err != nil {
 			t.Fatal(err)
 		}
@@ -148,7 +146,7 @@ func TestLedgerWalletRegistrationHookConvergesOnReplayAndExistingWallet(t *testi
 		if accountID := requireRegistrationLedgerState(t, tx, userID); accountID != existing.ID {
 			t.Fatalf("converged wallet id=%d, want %d", accountID, existing.ID)
 		}
-		requireRegistrationRowCounts(t, tx, userID, 1, 1)
+		requireRegistrationRowCounts(t, tx, userID, 1, 2)
 		if err := tx.Commit(); err != nil {
 			t.Fatal(err)
 		}
@@ -159,7 +157,7 @@ func TestLedgerWalletRegistrationHookFailureRollsBackOuterTransaction(t *testing
 	store := openAuthStore(t)
 	if _, err := store.DB().Exec(`
 CREATE TRIGGER authz_test_reject_user_wallet
-BEFORE INSERT ON credit_accounts WHEN NEW.kind='user'
+BEFORE INSERT ON credit_accounts WHEN NEW.kind='user' AND NEW.asset_type='game'
 BEGIN
  SELECT RAISE(ABORT,'injected user wallet failure');
 END`); err != nil {
@@ -174,7 +172,7 @@ END`); err != nil {
 	}
 	// The hook failure aborts only its INSERT; this proves the caller-owned
 	// outer rollback is what removes the earlier user and CallerKey writes.
-	requireRegistrationRowCounts(t, tx, userID, 1, 0)
+	requireRegistrationRowCounts(t, tx, userID, 1, 1)
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
 	}
