@@ -158,7 +158,7 @@ func TestQueueIdempotencyAuthorizationCancelAndTimeoutRelease(t *testing.T) {
 		t.Fatalf("first enqueue=(%+v,%v)", first, err)
 	}
 	replay, err := fixture.service.Enqueue(context.Background(), input)
-	if err != nil || !replay.IdempotentReplay || replay.Queue != first.Queue {
+	if err != nil || !replay.IdempotentReplay || !reflect.DeepEqual(replay.Queue, first.Queue) {
 		t.Fatalf("enqueue replay=(%+v,%v) first=%+v", replay, err, first)
 	}
 	changed := input

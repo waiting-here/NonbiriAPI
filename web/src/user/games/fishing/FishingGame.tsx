@@ -6,6 +6,8 @@ import { useGameCopy } from '../copy';
 import { useGameSound } from '../common/useGameSound';
 import { GameHeader } from '../common/GameHeader';
 import { GameMoney } from '../common/GameMoney';
+import { GamePayment } from '../common/GamePayment';
+import { GameWallets } from '../common/GameWallets';
 import { GameRulesDialog, type GameRulesSection } from '../common/GameRulesDialog';
 import {
   createIdempotencyKey,
@@ -265,7 +267,8 @@ function ResultPanel({
               <div key={label}>
                 <dt>{text(`fishing.result.${label}`)}</dt>
                 <dd>
-                  <GameMoney value={value} />
+                  {label === 'entry' ? <GamePayment payment={result.payment} /> :
+                    label === 'balance' ? <GameWallets wallets={result} /> : <GameMoney value={value} />}
                 </dd>
               </div>
             ))}
@@ -811,7 +814,7 @@ export function FishingGame() {
                 <div>
                   <dt>{text('fishing.totalPrice')}</dt>
                   <dd>
-                    <GameMoney value={pending.entryTotal} />
+                    <GamePayment payment={pending.payment} />
                   </dd>
                 </div>
               </dl>

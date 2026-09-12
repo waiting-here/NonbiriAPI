@@ -15,6 +15,8 @@ function resultWire(count: 1 | 10 = 1) {
     count,
     unit_price: '1.25',
     entry_total: count === 1 ? '1.25' : '12.5',
+    rules_version: 1,
+    payment: { general: count === 1 ? '1.25' : '12.5', game: '0' },
     outcomes: Array.from({ length: count }, (_, ordinal) => ({
       ordinal,
       species_key: 'whitebait',
@@ -25,6 +27,7 @@ function resultWire(count: 1 | 10 = 1) {
     })),
     payout_total: count === 1 ? '0.5' : '5',
     balance: '100.25',
+    game_balance: '0',
     settled_at: 1_800_000_000,
     idempotent_replay: false,
   };
@@ -35,6 +38,8 @@ function pendingWire(state: 'settlement_pending' | 'recovery_required' = 'settle
     bait: 'worm',
     count: 10,
     entry_total: '12.5',
+    rules_version: 1,
+    payment: { general: '12.5', game: '0' },
     state,
     next_attempt_at: state === 'settlement_pending' ? 1_800_000_010 : null,
     retry_exhausted: state === 'recovery_required',

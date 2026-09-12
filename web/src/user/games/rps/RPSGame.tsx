@@ -20,6 +20,7 @@ import { useGameVisibility } from '../common/visibility';
 import { useGameSound } from '../common/useGameSound';
 import { GameHeader } from '../common/GameHeader';
 import { GameMoney } from '../common/GameMoney';
+import { GamePayment } from '../common/GamePayment';
 import {
   acknowledgeRPSResult,
   cancelRPSQueue,
@@ -260,6 +261,16 @@ function SeatCard({ seat }: { readonly seat: RPSSeat }) {
           </dd>
         </div>
       </dl>
+      {seat.deletionState === 'active' && seat.funding ? (
+        <div>
+          <p>{text('rps.seat.currentFunding')}</p>
+          <GamePayment payment={{ general: seat.funding.currentGeneral, game: seat.funding.gameRemaining }} />
+          <details>
+            <summary>{text('rps.result.buyIn')}</summary>
+            <GamePayment payment={{ general: seat.funding.buyInGeneral, game: seat.funding.buyInGame }} />
+          </details>
+        </div>
+      ) : null}
       <div className="rps-seat__flags">
         {seat.currentAllIn ? <strong>{text('rps.seat.allIn')}</strong> : null}
         {BigInt(seat.timeoutCount) > 0n ? (
@@ -626,7 +637,9 @@ function PendingResult({
           <div>
             <dt>{text('rps.result.buyIn')}</dt>
             <dd>
-              {result.ownBuyIn === null ? (
+              {result.ownBuyInGeneral !== null && result.ownBuyInGame !== null ? (
+                <GamePayment payment={{ general: result.ownBuyInGeneral, game: result.ownBuyInGame }} />
+              ) : result.ownBuyIn === null ? (
                 text('rps.result.unrecorded')
               ) : (
                 <GameMoney value={result.ownBuyIn} />
@@ -636,7 +649,9 @@ function PendingResult({
           <div>
             <dt>{text('rps.result.cashOut')}</dt>
             <dd>
-              {result.ownCashOut === null ? (
+              {result.ownReturnedGeneral !== null ? (
+                <span>{text('common.generalBalance')} <GameMoney value={result.ownReturnedGeneral} /></span>
+              ) : result.ownCashOut === null ? (
                 text('rps.result.unrecorded')
               ) : (
                 <GameMoney value={result.ownCashOut} />
@@ -1160,6 +1175,12 @@ export function RPSGame() {
         <Card className="rps-queue">
           <h2>{text('rps.pendingQueue')}</h2>
           <p>{text('rps.pendingQueuePrivacy')}</p>
+          {queue.payment ? (
+            <div>
+              <p>{text('rps.queuePayment')}</p>
+              <GamePayment payment={queue.payment} />
+            </div>
+          ) : null}
           <StatusBadge
             active={stream === 'connected'}
             danger={stream === 'disconnected'}

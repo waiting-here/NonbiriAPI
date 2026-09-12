@@ -111,6 +111,12 @@ func projectState(record sessionRecord, userID int64, now int64) (State, error) 
 			if index == selfSeat {
 				projected.Viewer = "self"
 				projected.FollowerAction = persisted.FollowerAction
+				projected.Funding = &Funding{
+					BuyInGeneral:   formatMilli(new(big.Int).Sub(persisted.StartingBalance.Big(), persisted.GameBuyIn.Big())),
+					BuyInGame:      formatMilli(persisted.GameBuyIn.Big()),
+					CurrentGeneral: formatMilli(new(big.Int).Sub(persisted.CurrentBalance.Big(), persisted.GameRemaining.Big())),
+					GameRemaining:  formatMilli(persisted.GameRemaining.Big()),
+				}
 			}
 		}
 		if persisted.TerminalReturn != nil {
@@ -178,18 +184,20 @@ func projectState(record sessionRecord, userID int64, now int64) (State, error) 
 
 func loadPending(ctx context.Context, tx *sql.Tx, userID int64) (PendingResult, bool, error) {
 	var record PendingResult
-	var inputRaw, returnedRaw, walletRaw, buyInRaw, cashOutRaw []byte
+	var inputRaw, returnedRaw, walletRaw, buyInRaw, cashOutRaw, generalRaw, gameRaw, returnedGeneralRaw []byte
 	var gesturesRaw [3]sql.NullString
 	var sign int
 	var outcomes [3]string
 	err := tx.QueryRowContext(ctx, `SELECT session_id_text,mode,terminal_reason,own_seat_no,own_input,own_returned,
 own_wallet_net_sign,own_wallet_net_mag,seat0_result,seat1_result,seat2_result,created_at,
-own_buy_in,own_cash_out,quick_seat0_gesture,quick_seat1_gesture,quick_seat2_gesture
+own_buy_in,own_cash_out,quick_seat0_gesture,quick_seat1_gesture,quick_seat2_gesture,
+p.rules_version,p.general_buy_in,p.game_buy_in,p.own_returned_general
 FROM game_rps_pending_results p LEFT JOIN game_rps_pending_presentation presentation ON presentation.user_id=p.user_id
 WHERE p.user_id=?`, userID).Scan(
 		&record.SessionID, &record.Mode, &record.TerminalReason, &record.OwnSeatNo, &inputRaw, &returnedRaw,
 		&sign, &walletRaw, &outcomes[0], &outcomes[1], &outcomes[2], &record.CreatedAt,
-		&buyInRaw, &cashOutRaw, &gesturesRaw[0], &gesturesRaw[1], &gesturesRaw[2])
+		&buyInRaw, &cashOutRaw, &gesturesRaw[0], &gesturesRaw[1], &gesturesRaw[2],
+		&record.RulesVersion, &generalRaw, &gameRaw, &returnedGeneralRaw)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PendingResult{}, false, nil
 	}
@@ -211,6 +219,13 @@ WHERE p.user_id=?`, userID).Scan(
 	record.OwnInput, record.OwnReturned = formatMilli(input.Big()), formatMilli(returned.Big())
 	record.OwnWalletNet = formatSignedMilli(sign, wallet.Big())
 	record.OwnBuyIn, record.OwnCashOut, err = presentationTransfers(buyInRaw, cashOutRaw, sign, wallet)
+	if err != nil {
+		return PendingResult{}, false, err
+	}
+	if record.RulesVersion == 2 && returnedGeneralRaw == nil {
+		return PendingResult{}, false, ErrInvariant
+	}
+	record.OwnBuyInGeneral, record.OwnBuyInGame, record.OwnReturnedGeneral, err = terminalFunding(record.RulesVersion, generalRaw, gameRaw, returnedGeneralRaw, record.OwnBuyIn, record.OwnCashOut, sign, wallet)
 	if err != nil {
 		return PendingResult{}, false, err
 	}
@@ -425,6 +440,13 @@ func decodeHomeState(body []byte) (HomeState, error) {
 func matchesCanonicalHomeState(canonical, body []byte, home HomeState) bool {
 	if bytes.Equal(canonical, body) {
 		return true
+	}
+	if home.Result != nil && home.Result.RulesVersion == 0 &&
+		home.Result.OwnBuyInGeneral == nil && home.Result.OwnBuyInGame == nil && home.Result.OwnReturnedGeneral == nil {
+		canonical = bytes.Replace(canonical, []byte(`,"own_buy_in_general":null,"own_buy_in_game":null,"own_returned_general":null`), nil, 1)
+		if bytes.Equal(canonical, body) {
+			return true
+		}
 	}
 	switch home.Kind {
 	case "session":

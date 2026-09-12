@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"sync/atomic"
 	"time"
+
+	"github.com/waiting-here/NonbiriAPI/internal/game"
 )
 
 var (
@@ -134,7 +136,8 @@ func (adapter *LifecycleAdapter) ExportTx(
 	}
 	if found {
 		result.Active = &SafeActiveExport{
-			SessionID: record.ID, Spec: record.Spec, Price: stateFromRecord(record, decisionNow).Price, State: "active",
+			RulesVersion: record.RulesVersion, Payment: game.PaymentFromMilli(record.PriceMilli, record.GamePaid),
+			SessionID: record.ID, Spec: record.Spec, Price: game.FormatAmount(record.PriceMilli), State: "active",
 			PairsRemoved: record.PairsRemoved, TotalPairs: record.Board.definition.totalPairs(),
 			StartedAt: record.CreatedAt, Deadline: record.Deadline,
 		}

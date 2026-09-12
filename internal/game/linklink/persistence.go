@@ -15,19 +15,22 @@ import (
 )
 
 type sessionRecord struct {
-	ID           string
-	UserID       int64
-	Spec         string
-	State        string
-	Revision     db.U128
-	PriceMilli   int64
-	Board        board
-	PairsRemoved int
-	Deadline     int64
-	OperationID  string
-	RequestHash  [32]byte
-	CreatedAt    int64
-	UpdatedAt    int64
+	RulesVersion                     int
+	GamePaid                         int64
+	AssistsInitial, AssistsRemaining int
+	ID                               string
+	UserID                           int64
+	Spec                             string
+	State                            string
+	Revision                         db.U128
+	PriceMilli                       int64
+	Board                            board
+	PairsRemoved                     int
+	Deadline                         int64
+	OperationID                      string
+	RequestHash                      [32]byte
+	CreatedAt                        int64
+	UpdatedAt                        int64
 }
 
 func scanSession(scanner interface{ Scan(...any) error }) (sessionRecord, error) {
@@ -37,6 +40,7 @@ func scanSession(scanner interface{ Scan(...any) error }) (sessionRecord, error)
 		&record.ID, &record.UserID, &record.Spec, &record.State, &revisionRaw, &record.PriceMilli,
 		&boardBlob, &removedBits, &record.PairsRemoved, &record.Deadline,
 		&record.OperationID, &requestHash, &record.CreatedAt, &record.UpdatedAt,
+		&record.RulesVersion, &record.GamePaid, &record.AssistsInitial, &record.AssistsRemaining,
 	)
 	if err != nil {
 		return sessionRecord{}, err
@@ -48,7 +52,8 @@ func scanSession(scanner interface{ Scan(...any) error }) (sessionRecord, error)
 	copy(record.RequestHash[:], requestHash)
 	record.Board, err = decodeBoard(record.Spec, boardBlob, removedBits)
 	if err != nil || !db.ValidateOpaqueID(record.ID, "ll_") || !db.ValidateOpaqueID(record.OperationID, "op_") ||
-		record.UserID <= 0 || record.State != "active" || record.PriceMilli <= 0 || record.PriceMilli > game.MaxMoneyMilli {
+		record.UserID <= 0 || record.State != "active" || record.PriceMilli <= 0 || record.PriceMilli > game.MaxMoneyMilli ||
+		record.RulesVersion < 1 || record.RulesVersion > 2 || record.GamePaid < 0 || record.GamePaid > record.PriceMilli || record.RulesVersion == 1 && record.GamePaid != 0 {
 		return sessionRecord{}, ErrInvariant
 	}
 	definition := record.Board.definition
@@ -63,7 +68,7 @@ func scanSession(scanner interface{ Scan(...any) error }) (sessionRecord, error)
 	return record, nil
 }
 
-const sessionColumns = `id,user_id,spec,state,revision,price_milli,board_blob,removed_bits,pairs_removed,deadline,operation_id,request_hash,created_at,updated_at`
+const sessionColumns = `id,user_id,spec,state,revision,price_milli,board_blob,removed_bits,pairs_removed,deadline,operation_id,request_hash,created_at,updated_at,rules_version,game_paid_milli,assists_initial,assists_remaining`
 
 func loadSessionByUser(ctx context.Context, tx *sql.Tx, userID int64) (sessionRecord, bool, error) {
 	record, err := scanSession(tx.QueryRowContext(ctx, `SELECT `+sessionColumns+` FROM game_linklink_sessions WHERE user_id=?`, userID))
@@ -90,6 +95,7 @@ func loadSessionByID(ctx context.Context, tx *sql.Tx, userID int64, sessionID st
 func stateFromRecord(record sessionRecord, now int64) State {
 	return State{
 		SessionID: record.ID, Spec: record.Spec, Price: game.FormatAmount(record.PriceMilli), State: record.State,
+		RulesVersion: record.RulesVersion, Payment: game.PaymentFromMilli(record.PriceMilli, record.GamePaid),
 		Revision: record.Revision.Decimal(), Board: record.Board.view(), PairsRemoved: record.PairsRemoved,
 		TotalPairs: record.Board.definition.totalPairs(), StartedAt: record.CreatedAt, Deadline: record.Deadline, ServerNow: now,
 	}
@@ -106,13 +112,13 @@ func nextRevision(revision db.U128) (db.U128, error) {
 
 func loadSummary(ctx context.Context, tx *sql.Tx, userID int64, sessionID string) (Summary, bool, error) {
 	var summary Summary
-	var price int64
+	var price, gamePaid int64
 	var score sql.NullInt64
 	err := tx.QueryRowContext(ctx, `
-SELECT session_id,spec,price_milli,terminal_reason,started_at,deadline,terminal_at,pairs_removed,score
+SELECT session_id,spec,price_milli,terminal_reason,started_at,deadline,terminal_at,pairs_removed,score,rules_version,game_paid_milli
 FROM game_linklink_summaries WHERE session_id=? AND user_id=?`, sessionID, userID).Scan(
 		&summary.SessionID, &summary.Spec, &price, &summary.TerminalReason,
-		&summary.StartedAt, &summary.Deadline, &summary.TerminalAt, &summary.PairsRemoved, &score,
+		&summary.StartedAt, &summary.Deadline, &summary.TerminalAt, &summary.PairsRemoved, &score, &summary.RulesVersion, &gamePaid,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Summary{}, false, nil
@@ -127,6 +133,7 @@ FROM game_linklink_summaries WHERE session_id=? AND user_id=?`, sessionID, userI
 		return Summary{}, false, ErrInvariant
 	}
 	summary.Price = game.FormatAmount(price)
+	summary.Payment = game.PaymentFromMilli(price, gamePaid)
 	summary.TotalPairs = definition.totalPairs()
 	expectedScore := int64(summary.PairsRemoved) * 100
 	if remaining := summary.Deadline - summary.TerminalAt; remaining > 0 {
@@ -215,8 +222,8 @@ func terminalize(ctx context.Context, tx *sql.Tx, record sessionRecord, reason s
 		return Summary{}, ErrInvariant
 	}
 	if _, err := tx.ExecContext(ctx, `
-INSERT INTO game_linklink_summaries(session_id,user_id,spec,price_milli,terminal_reason,started_at,deadline,terminal_at,pairs_removed,score)
-VALUES(?,?,?,?,?,?,?,?,?,?)`, record.ID, record.UserID, record.Spec, record.PriceMilli, reason, record.CreatedAt, record.Deadline, terminalAt, record.PairsRemoved, score); err != nil {
+INSERT INTO game_linklink_summaries(session_id,user_id,spec,price_milli,terminal_reason,started_at,deadline,terminal_at,pairs_removed,score,rules_version,game_paid_milli,assists_initial,assists_remaining)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, record.ID, record.UserID, record.Spec, record.PriceMilli, reason, record.CreatedAt, record.Deadline, terminalAt, record.PairsRemoved, score, record.RulesVersion, record.GamePaid, record.AssistsInitial, record.AssistsRemaining); err != nil {
 		return Summary{}, classifyDB(err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM game_online_leases WHERE session_id=?`, record.ID); err != nil {
@@ -231,6 +238,7 @@ VALUES(?,?,?,?,?,?,?,?,?,?)`, record.ID, record.UserID, record.Spec, record.Pric
 	}
 	return Summary{
 		SessionID: record.ID, Spec: record.Spec, Price: game.FormatAmount(record.PriceMilli), TerminalReason: reason,
+		RulesVersion: record.RulesVersion, Payment: game.PaymentFromMilli(record.PriceMilli, record.GamePaid),
 		StartedAt: record.CreatedAt, Deadline: record.Deadline, TerminalAt: terminalAt,
 		PairsRemoved: record.PairsRemoved, TotalPairs: record.Board.definition.totalPairs(), Score: scoreWire,
 	}, nil

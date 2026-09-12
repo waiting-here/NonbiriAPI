@@ -6,7 +6,12 @@
     "entry_total": "25000",
     "state": "recovery_required",
     "next_attempt_at": null,
-    "retry_exhausted": true
+    "retry_exhausted": true,
+    "rules_version": 1,
+    "payment": {
+      "general": "25000",
+      "game": "0"
+    }
   },
   "unrevealed": null,
   "has_more_unrevealed": false

@@ -5,6 +5,8 @@ type GameCopyEntry = readonly [en: string, zh: string];
 
 const copy = {
   'common.generalBalance': ['General credits', '通用积分'],
+  'common.entryPayment': ['Entry payment', '入场付款'],
+
   'common.gameBalance': ['Game credits', '游戏积分'],
   'common.back': ['Back to game center', '返回游戏中心'],
   'common.retry': ['Try again', '重试'],
@@ -419,6 +421,8 @@ const copy = {
   'rps.actionSending': ['Submitting this decision…', '正在提交本次决定…'],
   'rps.seat.deleted': ['Deleted participant', '已删除参与者'],
   'rps.seat.balance': ['Table balance', '场内余额'],
+  'rps.seat.currentFunding': ['Your remaining table funds', '本人的场内资金分项'],
+  'rps.queuePayment': ['Entry payment · refunded in the original assets if cancelled', '入场付款 · 取消匹配时按原币种退回'],
   'rps.seat.input': ['This round', '本轮投入'],
   'rps.seat.allIn': ['All in', '全押'],
   'rps.seat.managed': ['Automatic actions: {{count}}', '自动操作：{{count}} 次'],
@@ -516,7 +520,7 @@ const copy = {
   'rps.result.returned': ['Your total returned', '本人总返还'],
   'rps.result.net': ['Your wallet net', '本人的钱包净变化'],
   'rps.result.buyIn': ['Starting buy-in (actual input)', '开局带入（实际投入）'],
-  'rps.result.cashOut': ['Ending cash-out (actual return)', '结束带出（实际返还）'],
+  'rps.result.cashOut': ['Ending cash-out in general credits', '结束带出（通用积分到账）'],
   'rps.result.unrecorded': ['Not recorded for this historical result', '该历史结果未记录'],
   'rps.result.ackWaiting': [
     'The complete private result is shown. Marking it viewed…',

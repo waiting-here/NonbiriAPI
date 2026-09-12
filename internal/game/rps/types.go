@@ -89,13 +89,27 @@ var (
 	ErrClosed              = errors.New("rps: closed")
 )
 
+type Payment struct {
+	General string `json:"general"`
+	Game    string `json:"game"`
+}
+
+type Funding struct {
+	BuyInGeneral   string `json:"buy_in_general"`
+	BuyInGame      string `json:"buy_in_game"`
+	CurrentGeneral string `json:"current_general"`
+	GameRemaining  string `json:"game_remaining"`
+}
+
 type Queue struct {
-	ID        string `json:"id"`
-	Mode      string `json:"mode"`
-	State     string `json:"state"`
-	Revision  string `json:"revision"`
-	Deadline  int64  `json:"deadline"`
-	ServerNow int64  `json:"server_now"`
+	RulesVersion int      `json:"rules_version,omitempty"`
+	Payment      *Payment `json:"payment,omitempty"`
+	ID           string   `json:"id"`
+	Mode         string   `json:"mode"`
+	State        string   `json:"state"`
+	Revision     string   `json:"revision"`
+	Deadline     int64    `json:"deadline"`
+	ServerNow    int64    `json:"server_now"`
 }
 
 type RuleSnapshot struct {
@@ -162,6 +176,7 @@ type Seat struct {
 	FollowerAction    *string
 	TerminalReturn    *string
 	WalletNet         *string
+	Funding           *Funding
 }
 
 func (seat *Seat) UnmarshalJSON(body []byte) error {
@@ -193,6 +208,7 @@ func (seat *Seat) UnmarshalJSON(body []byte) error {
 		FollowerAction    *string     `json:"follower_action,omitempty"`
 		TerminalReturn    *string     `json:"terminal_return,omitempty"`
 		WalletNet         *string     `json:"wallet_net,omitempty"`
+		Funding           *Funding    `json:"funding,omitempty"`
 	}
 	type deletedSeat struct {
 		SeatNo            int     `json:"seat_no"`
@@ -220,7 +236,7 @@ func (seat *Seat) UnmarshalJSON(body []byte) error {
 			StartingBalance: value.StartingBalance, CurrentBalance: value.CurrentBalance,
 			CurrentRoundInput: value.CurrentRoundInput, CurrentAllIn: value.CurrentAllIn,
 			TotalInput: value.TotalInput, TotalReturned: value.TotalReturned, TimeoutCount: value.TimeoutCount,
-			FunSnapshot: value.FunSnapshot, VisibleGesture: value.VisibleGesture, FollowerAction: value.FollowerAction,
+			FunSnapshot: value.FunSnapshot, VisibleGesture: value.VisibleGesture, FollowerAction: value.FollowerAction, Funding: value.Funding,
 			TerminalReturn: value.TerminalReturn, WalletNet: value.WalletNet,
 		}
 	} else {
@@ -267,7 +283,7 @@ func (seat Seat) MarshalJSON() ([]byte, error) {
 		}
 		return json.Marshal(base)
 	}
-	if seat.Viewer != "self" && seat.Viewer != "opponent" || seat.DisplayName == "" {
+	if seat.Viewer != "self" && seat.Viewer != "opponent" || seat.DisplayName == "" || seat.Viewer != "self" && seat.Funding != nil {
 		return nil, ErrInvariant
 	}
 	type activeSeat struct {
@@ -288,12 +304,13 @@ func (seat Seat) MarshalJSON() ([]byte, error) {
 		FollowerAction    *string     `json:"follower_action,omitempty"`
 		TerminalReturn    *string     `json:"terminal_return,omitempty"`
 		WalletNet         *string     `json:"wallet_net,omitempty"`
+		Funding           *Funding    `json:"funding,omitempty"`
 	}
 	return json.Marshal(activeSeat{
 		seat.SeatNo, seat.Viewer, seat.DeletionState, seat.DisplayName, seat.AvatarURL,
 		seat.StartingBalance, seat.CurrentBalance, seat.CurrentRoundInput, seat.CurrentAllIn,
 		seat.TotalInput, seat.TotalReturned, seat.TimeoutCount, seat.FunSnapshot,
-		seat.VisibleGesture, seat.FollowerAction, seat.TerminalReturn, seat.WalletNet,
+		seat.VisibleGesture, seat.FollowerAction, seat.TerminalReturn, seat.WalletNet, seat.Funding,
 	})
 }
 
@@ -343,17 +360,21 @@ type PendingSeat struct {
 }
 
 type PendingResult struct {
-	SessionID      string        `json:"session_id"`
-	Mode           string        `json:"mode"`
-	TerminalReason string        `json:"terminal_reason"`
-	OwnSeatNo      int           `json:"own_seat_no"`
-	OwnInput       string        `json:"own_input"`
-	OwnReturned    string        `json:"own_returned"`
-	OwnWalletNet   string        `json:"own_wallet_net"`
-	Seats          []PendingSeat `json:"seats"`
-	CreatedAt      int64         `json:"created_at"`
-	OwnBuyIn       *string       `json:"own_buy_in"`
-	OwnCashOut     *string       `json:"own_cash_out"`
+	RulesVersion       int           `json:"rules_version,omitempty"`
+	SessionID          string        `json:"session_id"`
+	Mode               string        `json:"mode"`
+	TerminalReason     string        `json:"terminal_reason"`
+	OwnSeatNo          int           `json:"own_seat_no"`
+	OwnInput           string        `json:"own_input"`
+	OwnReturned        string        `json:"own_returned"`
+	OwnWalletNet       string        `json:"own_wallet_net"`
+	Seats              []PendingSeat `json:"seats"`
+	CreatedAt          int64         `json:"created_at"`
+	OwnBuyIn           *string       `json:"own_buy_in"`
+	OwnCashOut         *string       `json:"own_cash_out"`
+	OwnBuyInGeneral    *string       `json:"own_buy_in_general"`
+	OwnBuyInGame       *string       `json:"own_buy_in_game"`
+	OwnReturnedGeneral *string       `json:"own_returned_general"`
 }
 
 type ModeConfig struct {
@@ -598,19 +619,23 @@ type HomeSummary struct {
 }
 
 type SummarySeatExport struct {
-	SeatNo        int     `json:"seat_no"`
-	Input         string  `json:"input"`
-	Returned      string  `json:"returned"`
-	WalletNet     string  `json:"wallet_net"`
-	TimeoutCount  string  `json:"timeout_count"`
-	RockCount     string  `json:"rock_count"`
-	ScissorsCount string  `json:"scissors_count"`
-	PaperCount    string  `json:"paper_count"`
-	OwnBuyIn      *string `json:"own_buy_in"`
-	OwnCashOut    *string `json:"own_cash_out"`
+	SeatNo             int     `json:"seat_no"`
+	Input              string  `json:"input"`
+	Returned           string  `json:"returned"`
+	WalletNet          string  `json:"wallet_net"`
+	TimeoutCount       string  `json:"timeout_count"`
+	RockCount          string  `json:"rock_count"`
+	ScissorsCount      string  `json:"scissors_count"`
+	PaperCount         string  `json:"paper_count"`
+	OwnBuyIn           *string `json:"own_buy_in"`
+	OwnCashOut         *string `json:"own_cash_out"`
+	OwnBuyInGeneral    *string `json:"own_buy_in_general"`
+	OwnBuyInGame       *string `json:"own_buy_in_game"`
+	OwnReturnedGeneral *string `json:"own_returned_general"`
 }
 
 type SummaryExport struct {
+	RulesVersion   int               `json:"rules_version"`
 	SessionID      string            `json:"session_id"`
 	Mode           string            `json:"mode"`
 	TerminalReason string            `json:"terminal_reason"`

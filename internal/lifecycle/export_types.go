@@ -321,25 +321,29 @@ type FishingExport struct {
 }
 
 type FishingPendingExport struct {
-	BatchID        string `json:"batch_id"`
-	Bait           string `json:"bait"`
-	Count          int    `json:"count"`
-	EntryTotal     string `json:"entry_total"`
-	State          string `json:"state"`
-	NextAttemptAt  *int64 `json:"next_attempt_at"`
-	RetryExhausted bool   `json:"retry_exhausted"`
+	RulesVersion   int               `json:"rules_version"`
+	Payment        GamePaymentExport `json:"payment"`
+	BatchID        string            `json:"batch_id"`
+	Bait           string            `json:"bait"`
+	Count          int               `json:"count"`
+	EntryTotal     string            `json:"entry_total"`
+	State          string            `json:"state"`
+	NextAttemptAt  *int64            `json:"next_attempt_at"`
+	RetryExhausted bool              `json:"retry_exhausted"`
 }
 
 type FishingBatchExport struct {
-	BatchID     string                 `json:"batch_id"`
-	Bait        string                 `json:"bait"`
-	Count       int                    `json:"count"`
-	UnitPrice   string                 `json:"unit_price"`
-	EntryTotal  string                 `json:"entry_total"`
-	Outcomes    []FishingOutcomeExport `json:"outcomes"`
-	PayoutTotal string                 `json:"payout_total"`
-	SettledAt   int64                  `json:"settled_at"`
-	RevealedAt  *int64                 `json:"revealed_at"`
+	RulesVersion int                    `json:"rules_version"`
+	Payment      GamePaymentExport      `json:"payment"`
+	BatchID      string                 `json:"batch_id"`
+	Bait         string                 `json:"bait"`
+	Count        int                    `json:"count"`
+	UnitPrice    string                 `json:"unit_price"`
+	EntryTotal   string                 `json:"entry_total"`
+	Outcomes     []FishingOutcomeExport `json:"outcomes"`
+	PayoutTotal  string                 `json:"payout_total"`
+	SettledAt    int64                  `json:"settled_at"`
+	RevealedAt   *int64                 `json:"revealed_at"`
 }
 
 type FishingOutcomeExport struct {
@@ -365,27 +369,31 @@ type LinkLinkExport struct {
 }
 
 type LinkLinkActiveExport struct {
-	SessionID    string `json:"session_id"`
-	Spec         string `json:"spec"`
-	Price        string `json:"price"`
-	State        string `json:"state"`
-	PairsRemoved int    `json:"pairs_removed"`
-	TotalPairs   int    `json:"total_pairs"`
-	StartedAt    int64  `json:"started_at"`
-	Deadline     int64  `json:"deadline"`
+	RulesVersion int               `json:"rules_version"`
+	Payment      GamePaymentExport `json:"payment"`
+	SessionID    string            `json:"session_id"`
+	Spec         string            `json:"spec"`
+	Price        string            `json:"price"`
+	State        string            `json:"state"`
+	PairsRemoved int               `json:"pairs_removed"`
+	TotalPairs   int               `json:"total_pairs"`
+	StartedAt    int64             `json:"started_at"`
+	Deadline     int64             `json:"deadline"`
 }
 
 type LinkLinkSummaryExport struct {
-	SessionID      string  `json:"session_id"`
-	Spec           string  `json:"spec"`
-	Price          string  `json:"price"`
-	TerminalReason string  `json:"terminal_reason"`
-	StartedAt      int64   `json:"started_at"`
-	Deadline       int64   `json:"deadline"`
-	TerminalAt     int64   `json:"terminal_at"`
-	PairsRemoved   int     `json:"pairs_removed"`
-	TotalPairs     int     `json:"total_pairs"`
-	Score          *string `json:"score"`
+	RulesVersion   int               `json:"rules_version"`
+	Payment        GamePaymentExport `json:"payment"`
+	SessionID      string            `json:"session_id"`
+	Spec           string            `json:"spec"`
+	Price          string            `json:"price"`
+	TerminalReason string            `json:"terminal_reason"`
+	StartedAt      int64             `json:"started_at"`
+	Deadline       int64             `json:"deadline"`
+	TerminalAt     int64             `json:"terminal_at"`
+	PairsRemoved   int               `json:"pairs_removed"`
+	TotalPairs     int               `json:"total_pairs"`
+	Score          *string           `json:"score"`
 }
 
 type RPSExport struct {
@@ -396,27 +404,46 @@ type RPSExport struct {
 	TutorialSeen bool               `json:"tutorial_seen"`
 }
 
+type GamePaymentExport struct {
+	General string `json:"general"`
+	Game    string `json:"game"`
+}
+
+type RPSFundingExport struct {
+	BuyInGeneral   string `json:"buy_in_general"`
+	BuyInGame      string `json:"buy_in_game"`
+	CurrentGeneral string `json:"current_general"`
+	GameRemaining  string `json:"game_remaining"`
+}
+
 type RPSCurrentExport struct {
-	Kind       string  `json:"kind"`
-	ResourceID string  `json:"resource_id"`
-	Mode       string  `json:"mode"`
-	State      string  `json:"state"`
-	Phase      *string `json:"phase"`
-	Deadline   *int64  `json:"deadline"`
+	RulesVersion int                `json:"rules_version"`
+	Payment      *GamePaymentExport `json:"payment,omitempty"`
+	Funding      *RPSFundingExport  `json:"funding,omitempty"`
+	Kind         string             `json:"kind"`
+	ResourceID   string             `json:"resource_id"`
+	Mode         string             `json:"mode"`
+	State        string             `json:"state"`
+	Phase        *string            `json:"phase"`
+	Deadline     *int64             `json:"deadline"`
 }
 
 type RPSPendingExport struct {
-	OwnBuyIn       *string                `json:"own_buy_in"`
-	OwnCashOut     *string                `json:"own_cash_out"`
-	SessionID      string                 `json:"session_id"`
-	Mode           string                 `json:"mode"`
-	TerminalReason string                 `json:"terminal_reason"`
-	OwnSeatNo      int                    `json:"own_seat_no"`
-	OwnInput       string                 `json:"own_input"`
-	OwnReturned    string                 `json:"own_returned"`
-	OwnWalletNet   string                 `json:"own_wallet_net"`
-	Seats          []RPSPendingSeatExport `json:"seats"`
-	CreatedAt      int64                  `json:"created_at"`
+	OwnBuyInGeneral    *string                `json:"own_buy_in_general"`
+	OwnBuyInGame       *string                `json:"own_buy_in_game"`
+	OwnReturnedGeneral *string                `json:"own_returned_general"`
+	RulesVersion       int                    `json:"rules_version"`
+	OwnBuyIn           *string                `json:"own_buy_in"`
+	OwnCashOut         *string                `json:"own_cash_out"`
+	SessionID          string                 `json:"session_id"`
+	Mode               string                 `json:"mode"`
+	TerminalReason     string                 `json:"terminal_reason"`
+	OwnSeatNo          int                    `json:"own_seat_no"`
+	OwnInput           string                 `json:"own_input"`
+	OwnReturned        string                 `json:"own_returned"`
+	OwnWalletNet       string                 `json:"own_wallet_net"`
+	Seats              []RPSPendingSeatExport `json:"seats"`
+	CreatedAt          int64                  `json:"created_at"`
 }
 
 type RPSPendingSeatExport struct {
@@ -425,6 +452,7 @@ type RPSPendingSeatExport struct {
 }
 
 type RPSSummaryExport struct {
+	RulesVersion   int           `json:"rules_version"`
 	SessionID      string        `json:"session_id"`
 	Mode           string        `json:"mode"`
 	TerminalReason string        `json:"terminal_reason"`
@@ -434,16 +462,19 @@ type RPSSummaryExport struct {
 }
 
 type RPSSeatExport struct {
-	OwnBuyIn      *string `json:"own_buy_in"`
-	OwnCashOut    *string `json:"own_cash_out"`
-	SeatNo        int     `json:"seat_no"`
-	Input         string  `json:"input"`
-	Returned      string  `json:"returned"`
-	WalletNet     string  `json:"wallet_net"`
-	TimeoutCount  string  `json:"timeout_count"`
-	RockCount     string  `json:"rock_count"`
-	ScissorsCount string  `json:"scissors_count"`
-	PaperCount    string  `json:"paper_count"`
+	OwnBuyInGeneral    *string `json:"own_buy_in_general"`
+	OwnBuyInGame       *string `json:"own_buy_in_game"`
+	OwnReturnedGeneral *string `json:"own_returned_general"`
+	OwnBuyIn           *string `json:"own_buy_in"`
+	OwnCashOut         *string `json:"own_cash_out"`
+	SeatNo             int     `json:"seat_no"`
+	Input              string  `json:"input"`
+	Returned           string  `json:"returned"`
+	WalletNet          string  `json:"wallet_net"`
+	TimeoutCount       string  `json:"timeout_count"`
+	RockCount          string  `json:"rock_count"`
+	ScissorsCount      string  `json:"scissors_count"`
+	PaperCount         string  `json:"paper_count"`
 }
 
 type RPSFunStatsExport struct {

@@ -21,6 +21,8 @@ function resultWire(batchID: string, balance = '12345678901234567890.125') {
     count: 1,
     unit_price: '1',
     entry_total: '1',
+    rules_version: 1,
+    payment: { general: '1', game: '0' },
     outcomes: [
       {
         ordinal: 0,
@@ -32,6 +34,7 @@ function resultWire(batchID: string, balance = '12345678901234567890.125') {
     ],
     payout_total: '1',
     balance,
+    game_balance: '0',
     settled_at: 1_800_000_000,
     idempotent_replay: false,
   };

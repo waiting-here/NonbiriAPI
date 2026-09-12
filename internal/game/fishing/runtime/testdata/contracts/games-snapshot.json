@@ -1,6 +1,7 @@
 {
   "server_now": 2000000000,
   "balance": "1000000",
+  "game_balance": "0",
   "tutorial_rps_seen": false,
   "games_enabled": true,
   "fishing": {"enabled": true, "available": true, "bait_prices": {"worm": "2500", "lure": "5000", "premium": "7500"}},

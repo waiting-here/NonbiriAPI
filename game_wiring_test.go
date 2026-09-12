@@ -80,6 +80,9 @@ func TestRegisteredGamesProductionWireCompatibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := ledger.CreateUserAssetAccount(ctx, tx, userID, ledger.Game, now); err != nil {
+		t.Fatal(err)
+	}
 	external, err := ledger.CodedAccount(ctx, tx, "external")
 	if err != nil {
 		t.Fatal(err)

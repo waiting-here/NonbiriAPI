@@ -1,12 +1,15 @@
 package rps
 
 type CurrentExportProjection struct {
-	Kind       string  `json:"kind"`
-	ResourceID string  `json:"resource_id"`
-	Mode       string  `json:"mode"`
-	State      string  `json:"state"`
-	Phase      *string `json:"phase"`
-	Deadline   *int64  `json:"deadline"`
+	RulesVersion int      `json:"rules_version"`
+	Payment      *Payment `json:"payment,omitempty"`
+	Funding      *Funding `json:"funding,omitempty"`
+	Kind         string   `json:"kind"`
+	ResourceID   string   `json:"resource_id"`
+	Mode         string   `json:"mode"`
+	State        string   `json:"state"`
+	Phase        *string  `json:"phase"`
+	Deadline     *int64   `json:"deadline"`
 }
 
 func ProjectExportCurrent(value *HomeState) (*CurrentExportProjection, error) {
@@ -19,16 +22,23 @@ func ProjectExportCurrent(value *HomeState) (*CurrentExportProjection, error) {
 			return nil, ErrInvariant
 		}
 		deadline := value.Queue.Deadline
-		return &CurrentExportProjection{Kind: "queue", ResourceID: value.Queue.ID, Mode: value.Queue.Mode, State: value.Queue.State, Deadline: &deadline}, nil
+		return &CurrentExportProjection{Kind: "queue", ResourceID: value.Queue.ID, Mode: value.Queue.Mode, State: value.Queue.State, Deadline: &deadline,
+			RulesVersion: value.Queue.RulesVersion, Payment: value.Queue.Payment}, nil
 	case "session":
 		if value.Session == nil || value.Queue != nil || value.Result != nil {
 			return nil, ErrInvariant
 		}
 		phase := value.Session.Phase
-		out := &CurrentExportProjection{Kind: "session", ResourceID: value.Session.SessionID, Mode: value.Session.Mode, State: value.Session.State, Phase: &phase}
+		out := &CurrentExportProjection{Kind: "session", ResourceID: value.Session.SessionID, Mode: value.Session.Mode, State: value.Session.State, Phase: &phase, RulesVersion: value.Session.RuleSnapshot.RulesVersion}
 		if value.Session.Deadline != nil {
 			deadline := *value.Session.Deadline
 			out.Deadline = &deadline
+		}
+		for _, seat := range value.Session.Seats {
+			if seat.Viewer == "self" && seat.DeletionState == "active" {
+				out.Funding = seat.Funding
+				break
+			}
 		}
 		return out, nil
 	default:

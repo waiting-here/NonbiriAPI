@@ -81,7 +81,7 @@ func (adapter *LifecycleAdapter) PrepareDeleteTx(
 }
 
 func (service *Service) prepareDeletion(ctx context.Context, tx *sql.Tx, userID, at int64) error {
-	rows, err := tx.QueryContext(ctx, `SELECT id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,state,attempt_count,next_attempt_at,retry_exhausted,created_at,settled_at,revealed_at FROM game_fishing_batches WHERE user_id=? ORDER BY created_at,id`, userID)
+	rows, err := tx.QueryContext(ctx, `SELECT `+batchColumns+` FROM game_fishing_batches WHERE user_id=? ORDER BY created_at,id`, userID)
 	if err != nil {
 		return classifyDB(err)
 	}
@@ -104,7 +104,7 @@ func (service *Service) prepareDeletion(ctx context.Context, tx *sql.Tx, userID,
 			continue
 		}
 		zero := db.EncodeU128(db.U128{})
-		consumeErr := service.finance.Release(ctx, tx, finance.Entry{Meta: ledger.Meta{OperationID: record.OperationID, CreatedAt: at}, ResourceID: record.ID, UserID: userID, Amount: ledger.AmountFromMilli(record.EntryTotal)}, func(ctx context.Context, tx *sql.Tx) error {
+		consumeErr := service.finance.Release(ctx, tx, finance.Entry{Meta: ledger.Meta{OperationID: record.OperationID, CreatedAt: at}, ResourceID: record.ID, UserID: userID, Amount: ledger.AmountFromMilli(record.EntryTotal), GamePaid: ledger.AmountFromMilli(record.GamePaid)}, func(ctx context.Context, tx *sql.Tx) error {
 			if _, deleteErr := tx.ExecContext(ctx, `DELETE FROM game_fishing_outcomes WHERE batch_id=?`, record.ID); deleteErr != nil {
 				return classifyDB(deleteErr)
 			}
@@ -155,7 +155,7 @@ func (adapter *LifecycleAdapter) ExportTx(
 		return UserExport{}, err
 	}
 	result := UserExport{Pending: []FishingSettlementPending{}, Terminal: []FishingTerminalExport{}}
-	rows, err := tx.QueryContext(ctx, `SELECT id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,state,attempt_count,next_attempt_at,retry_exhausted,created_at,settled_at,revealed_at FROM game_fishing_batches WHERE user_id=? AND state='reserved' ORDER BY created_at,id LIMIT ?`, userID, limit+1)
+	rows, err := tx.QueryContext(ctx, `SELECT `+batchColumns+` FROM game_fishing_batches WHERE user_id=? AND state='reserved' ORDER BY created_at,id LIMIT ?`, userID, limit+1)
 	if err != nil {
 		return result, classifyDB(err)
 	}
@@ -181,7 +181,7 @@ func (adapter *LifecycleAdapter) ExportTx(
 		result.Pending = append(result.Pending, *pendingFromRecord(record))
 	}
 	cutoff := decisionNow - int64(rankWindow/time.Second)
-	rows, err = tx.QueryContext(ctx, `SELECT id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,state,attempt_count,next_attempt_at,retry_exhausted,created_at,settled_at,revealed_at FROM game_fishing_batches WHERE user_id=? AND state='committed' AND settled_at>? ORDER BY created_at,id LIMIT ?`, userID, cutoff, limit+1)
+	rows, err = tx.QueryContext(ctx, `SELECT `+batchColumns+` FROM game_fishing_batches WHERE user_id=? AND state='committed' AND settled_at>? ORDER BY created_at,id LIMIT ?`, userID, cutoff, limit+1)
 	if err != nil {
 		return result, classifyDB(err)
 	}
@@ -202,7 +202,7 @@ func (adapter *LifecycleAdapter) ExportTx(
 			revealedAt = &value
 		}
 		result.Terminal = append(result.Terminal, FishingTerminalExport{
-			BatchID: terminal.BatchID, Bait: terminal.Bait, Count: terminal.Count,
+			BatchID: terminal.BatchID, Bait: terminal.Bait, Count: terminal.Count, RulesVersion: terminal.RulesVersion, Payment: terminal.Payment,
 			UnitPrice: terminal.UnitPrice, EntryTotal: terminal.EntryTotal, Outcomes: terminal.Outcomes,
 			PayoutTotal: terminal.PayoutTotal, SettledAt: terminal.SettledAt, RevealedAt: revealedAt,
 		})

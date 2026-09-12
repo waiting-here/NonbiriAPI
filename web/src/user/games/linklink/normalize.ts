@@ -5,6 +5,7 @@ import {
   decimalValue,
   enumValue,
   exactRecord,
+  entryPayment,
   invalidResponse,
   opaqueID,
   safeInteger,
@@ -51,7 +52,7 @@ export function normalizeLinkLinkState(value: unknown): LinkLinkState {
       'deadline',
       'server_now',
     ],
-    [],
+    ['rules_version', 'payment'],
     'LinkLink state',
   );
   const spec = specValue(record.spec);
@@ -112,11 +113,13 @@ export function normalizeLinkLinkState(value: unknown): LinkLinkState {
   const serverNow = unixTime(record.server_now, 'LinkLink server time');
   if (deadline - startedAt !== SECONDS[spec] || serverNow < startedAt || serverNow >= deadline)
     invalidResponse('LinkLink time range');
+  const price = creditsValue(record.price, { positive: true }, 'LinkLink price');
   return {
+    ...entryPayment(record, price, 'LinkLink'),
     kind: 'active',
     sessionID: opaqueID(record.session_id, 'll_', 'LinkLink session id'),
     spec,
-    price: creditsValue(record.price, { positive: true }, 'LinkLink price'),
+    price,
     revision: decimalValue(record.revision, { bits: 128, positive: true }, 'LinkLink revision'),
     board: { rows, cols, tiles },
     pairsRemoved,
@@ -142,7 +145,7 @@ export function normalizeLinkLinkSummary(value: unknown): LinkLinkSummary {
       'total_pairs',
       'score',
     ],
-    [],
+    ['rules_version', 'payment'],
     'LinkLink summary',
   );
   const spec = specValue(record.spec);
@@ -187,11 +190,13 @@ export function normalizeLinkLinkSummary(value: unknown): LinkLinkSummary {
     const expected = BigInt(pairsRemoved * 100) + BigInt(Math.max(0, deadline - terminalAt));
     if (BigInt(score) !== expected) invalidResponse('LinkLink score arithmetic');
   }
+  const price = creditsValue(record.price, { positive: true }, 'LinkLink summary price');
   return {
+    ...entryPayment(record, price, 'LinkLink'),
     kind: 'summary',
     sessionID: opaqueID(record.session_id, 'll_', 'LinkLink summary id'),
     spec,
-    price: creditsValue(record.price, { positive: true }, 'LinkLink summary price'),
+    price,
     terminalReason,
     startedAt,
     deadline,
@@ -219,6 +224,8 @@ export function normalizeLinkLinkCurrent(value: unknown): LinkLinkCurrent {
       'started_at',
       'deadline',
       'server_now',
+      'rules_version',
+      'payment',
       'terminal_reason',
       'terminal_at',
       'score',

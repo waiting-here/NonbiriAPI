@@ -4,9 +4,24 @@
   "count": 1,
   "unit_price": "2500",
   "entry_total": "2500",
-  "outcomes": [{"ordinal": 0, "species_key": "boot", "tier": "junk", "size_cm": 0, "reward": "0", "blue_fat_fish_length_cm": null}],
+  "outcomes": [
+    {
+      "ordinal": 0,
+      "species_key": "boot",
+      "tier": "junk",
+      "size_cm": 0,
+      "reward": "0",
+      "blue_fat_fish_length_cm": null
+    }
+  ],
   "payout_total": "0",
   "balance": "997500",
   "settled_at": 2000000000,
-  "idempotent_replay": false
+  "idempotent_replay": false,
+  "rules_version": 1,
+  "payment": {
+    "general": "2500",
+    "game": "0"
+  },
+  "game_balance": "0"
 }
