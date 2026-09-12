@@ -3,11 +3,15 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -274,18 +278,21 @@ func TestExecutionGroupsUseExactTopLevelPatterns(t *testing.T) {
 		SplitTests: map[string][]string{
 			"example/slow": {"ExampleThree", "FuzzTwo", "TestOne", "TestΩ"},
 		},
-	}, "30m")
-	if len(groups) != 2 {
-		t.Fatalf("group count = %d, want 2", len(groups))
+	}, "30m", 1)
+	if len(groups) != 3 {
+		t.Fatalf("group count = %d, want 3", len(groups))
 	}
-	wantWhole := []string{"test", "-race", "-count=1", "-timeout=30m", "-v", "example/a", "example/z"}
+	wantWhole := []string{"test", "-race", "-count=1", "-timeout=30m", "-p=1", "-v", "example/a"}
 	if !reflect.DeepEqual(groups[0].Args, wantWhole) {
 		t.Fatalf("whole args = %#v, want %#v", groups[0].Args, wantWhole)
 	}
-	if len(groups[1].Args) != 8 || groups[1].Args[5] != "-run" || groups[1].Args[7] != "example/slow" {
-		t.Fatalf("split args = %#v", groups[1].Args)
+	if groups[1].Args[len(groups[1].Args)-1] != "example/z" {
+		t.Fatalf("second whole args = %#v", groups[1].Args)
 	}
-	pattern, err := regexp.Compile(groups[1].Args[6])
+	if len(groups[2].Args) != 9 || groups[2].Args[6] != "-run" || groups[2].Args[8] != "example/slow" {
+		t.Fatalf("split args = %#v", groups[2].Args)
+	}
+	pattern, err := regexp.Compile(groups[2].Args[7])
 	if err != nil {
 		t.Fatalf("compile generated pattern: %v", err)
 	}
@@ -301,6 +308,44 @@ func TestExecutionGroupsUseExactTopLevelPatterns(t *testing.T) {
 	}
 }
 
+func TestExecutionGroupsSplitByWeightDeterministicallyAndExactlyOnce(t *testing.T) {
+	t.Parallel()
+	plan := shardPlan{
+		WholePackages:       []string{"example/whole"},
+		WholePackageWeights: map[string]float64{"example/whole": 20},
+		SplitTests:          map[string][]string{"example/slow": {"TestLight", "TestHeavy", "TestMedium", "TestOther"}},
+		SplitTestWeights: map[string]map[string]float64{"example/slow": {
+			"TestLight": 1, "TestHeavy": 10, "TestMedium": 5, "TestOther": 2,
+		}},
+	}
+	first := executionGroups(plan, "30m", 2)
+	plan.SplitTests["example/slow"] = []string{"TestOther", "TestMedium", "TestHeavy", "TestLight"}
+	second := executionGroups(plan, "30m", 2)
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("grouping is not deterministic:\nfirst=%#v\nsecond=%#v", first, second)
+	}
+	if len(first) != 3 || first[1].Label != "example/slow group 1/2" || first[2].Label != "example/slow group 2/2" {
+		t.Fatalf("groups = %#v", first)
+	}
+	seen := make(map[string]int)
+	for _, group := range first[1:] {
+		pattern, err := regexp.Compile(group.Args[7])
+		if err != nil {
+			t.Fatalf("compile %s: %v", group.Label, err)
+		}
+		for _, name := range []string{"TestLight", "TestHeavy", "TestMedium", "TestOther"} {
+			if pattern.MatchString(name) {
+				seen[name]++
+			}
+		}
+	}
+	for _, name := range []string{"TestLight", "TestHeavy", "TestMedium", "TestOther"} {
+		if seen[name] != 1 {
+			t.Fatalf("test %s matched %d groups", name, seen[name])
+		}
+	}
+}
+
 func TestExecuteGroupsContinuesAndAggregatesFailures(t *testing.T) {
 	t.Parallel()
 
@@ -311,9 +356,9 @@ func TestExecuteGroupsContinuesAndAggregatesFailures(t *testing.T) {
 	}
 	var calls []string
 	var output bytes.Buffer
-	err := executeGroups(groups, func(args []string) error {
-		calls = append(calls, args[0])
-		if args[0] != "second" {
+	err := executeGroups(groups, 1, func(group commandGroup, _ io.Writer) error {
+		calls = append(calls, group.Args[0])
+		if group.Args[0] != "second" {
 			return errors.New("failed")
 		}
 		return nil
@@ -327,6 +372,87 @@ func TestExecuteGroupsContinuesAndAggregatesFailures(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), "running first") || !strings.Contains(output.String(), "finished third") {
 		t.Fatalf("output = %q", output.String())
+	}
+}
+
+func TestExecuteGroupsBoundsConcurrencyAndRunsEveryGroup(t *testing.T) {
+	t.Parallel()
+	groups := make([]commandGroup, 7)
+	for index := range groups {
+		groups[index] = commandGroup{Label: fmt.Sprintf("group-%d", index), Args: []string{fmt.Sprintf("%d", index)}, Weight: float64(index + 1)}
+	}
+	var active, maximum atomic.Int32
+	var callsMu sync.Mutex
+	calls := make([]string, 0, len(groups))
+	started := make(chan string, len(groups))
+	release := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- executeGroups(groups, 4, func(group commandGroup, output io.Writer) error {
+			current := active.Add(1)
+			for {
+				previous := maximum.Load()
+				if current <= previous || maximum.CompareAndSwap(previous, current) {
+					break
+				}
+			}
+			callsMu.Lock()
+			calls = append(calls, group.Label)
+			callsMu.Unlock()
+			started <- group.Label
+			<-release
+			active.Add(-1)
+			if group.Label == "group-2" || group.Label == "group-5" {
+				return errors.New("failed")
+			}
+			_, _ = io.WriteString(output, group.Label+" output\n")
+			return nil
+		}, io.Discard)
+	}()
+	seenStarted := make(map[string]struct{}, 4)
+	for index := 0; index < 4; index++ {
+		label := <-started
+		if _, duplicate := seenStarted[label]; duplicate {
+			t.Fatalf("group %s started twice in first worker batch", label)
+		}
+		seenStarted[label] = struct{}{}
+	}
+	for _, label := range []string{"group-3", "group-4", "group-5", "group-6"} {
+		if _, ok := seenStarted[label]; !ok {
+			t.Fatalf("heavy group %s missing from first batch: %v", label, seenStarted)
+		}
+	}
+	select {
+	case label := <-started:
+		t.Fatalf("group %s started before a worker was released", label)
+	default:
+	}
+	close(release)
+	err := <-done
+	if maximum.Load() != 4 {
+		t.Fatalf("maximum concurrency = %d, want 4", maximum.Load())
+	}
+	if len(calls) != len(groups) {
+		t.Fatalf("executed %d groups, want %d", len(calls), len(groups))
+	}
+	seenCalls := make(map[string]struct{}, len(calls))
+	for _, label := range calls {
+		if _, duplicate := seenCalls[label]; duplicate {
+			t.Fatalf("group %s executed twice", label)
+		}
+		seenCalls[label] = struct{}{}
+	}
+	if err == nil || !strings.Contains(err.Error(), "2 race command(s) failed") || !strings.Contains(err.Error(), "group-2") || !strings.Contains(err.Error(), "group-5") {
+		t.Fatalf("executeGroups() error = %v", err)
+	}
+}
+
+func TestExecuteGroupsRejectsInvalidWorkerCount(t *testing.T) {
+	t.Parallel()
+	for _, workers := range []int{0, -1} {
+		if err := executeGroups(nil, workers, func(commandGroup, io.Writer) error { return nil }, io.Discard); err == nil {
+			t.Fatalf("workers=%d unexpectedly accepted", workers)
+		}
 	}
 }
 
