@@ -32,7 +32,7 @@ The database directory and file hold encrypted upstream credentials and private 
 
 Embeddings add no startup variable, model-purpose field, or separate price configuration. Configure an `openai-compatible` versioned base; the connector appends `/embeddings`. Personal and charity model connections use their existing workflow. Token-priced embeddings use only the uncached-input price and reward rate; a batch is one call for per-request pricing and call quotas. Missing usage follows the model's accepted reserve or global inheritance and earns no donor reward. Minimum-content penalties and the `force_store_false`/`flatten_tool_calls` policies apply only to chat. Other shared limits remain active.
 
-The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values below describe the `1.0.0-beta.3` release. A fresh Generation 2 database explicitly seeds maintenance on and registration, activities, charity, donation intake, and all games off; these safety seeds take precedence over generic code fallbacks.
+The administrator station exposes the following authoritative keys. Unknown keys are rejected; `alert_prefs_*` is the only bounded namespace. Values below describe the `1.0.0-beta.4` release. A fresh Generation 2 database explicitly seeds maintenance on and registration, activities, charity, donation intake, and all games off; these safety seeds take precedence over generic code fallbacks.
 
 | Key | Type / range | Default and effect |
 | --- | --- | --- |
@@ -92,8 +92,9 @@ The administrator station exposes the following authoritative keys. Unknown keys
 | `game_fishing_bait_worm_price_milli` | canonical positive decimal string | `"2500000"`; exact Fishing entry price |
 | `game_fishing_bait_lure_price_milli` | canonical positive decimal string | `"5000000"`; exact Fishing entry price |
 | `game_fishing_bait_premium_price_milli` | canonical positive decimal string | `"7500000"`; exact Fishing entry price |
-| `game_fishing_rtp` | integer `[0,100]` | 90; worm/lure target RTP, accepted only when the complete Fishing economy validates |
-| `game_fishing_rtp_premium` | integer `[0,100]` | 88; premium target RTP, subject to the same whole-economy validation |
+| `game_fishing_rtp` | integer `[0,100]` | 100 on fresh databases; worm/lure gross target RTP; existing configured values are preserved |
+| `game_fishing_rtp_premium` | integer `[0,100]` | 100 on fresh databases; premium gross target RTP; existing configured values are preserved |
+| `game_fishing_rake_{platform,welfare,thursday}_bp` | integer `[0,9999]` | 100 each; sum below 10000; freeze at admission and floor each outcome's cuts separately |
 | `game_fishing_treasure_bottle_mult` | integer `[1,1000]` | 2 |
 | `game_fishing_treasure_clover_mult` | integer `[1,1000]` | 3 |
 | `game_fishing_treasure_shell_mult` | integer `[1,1000]` | 5 |
@@ -120,6 +121,8 @@ Game and activity keys cannot be changed through the generic single-key PATCH ro
 
 The four `legal_*_override_*` fields accept multiline UTF-8 text up to 65,536 bytes; the two donation notices allow 8,192 bytes. Line endings are normalized to LF before validation, storage and responses. Paragraphs, tabs and other accepted characters are preserved. Existing stored overrides are not rewritten on startup. After changing an instance's legal text, reload the settings and verify the anonymous privacy/terms pages, the donation form and `legal_authoritative_locale`. A fresh database does not import prior overrides automatically.
 
+The independent game check-in uses `game_checkin_mode`, `game_checkin_award_min_milli`, `game_checkin_award_max_milli` and `game_credits_cap_milli`. Its fresh defaults are disabled, 40,000–60,000 game credits and a 250,000 game-credit admission cap. These generic site-config keys follow the same typed money and mode rules as the general check-in. Each wallet has its own daily record and cap; welfare eligibility instead counts the game wallet plus unused game credits held by accepted games.
+
 ### Per-user limit overrides
 
 The administrator user APIs expose both nullable raw values and their current fallback projections:
@@ -127,15 +130,15 @@ The administrator user APIs expose both nullable raw values and their current fa
 ```json
 {
   "endpoint_limit": null,
-  "effective_endpoint_limit": 50,
+  "effective_endpoint_limit": "50",
   "rpm_limit": null,
-  "effective_rpm_limit": 60,
+  "effective_rpm_limit": "60",
   "concurrency_limit": null,
-  "effective_concurrency_limit": 5
+  "effective_concurrency_limit": "5"
 }
 ```
 
-`PATCH /admin/api/users/{id}` accepts `endpoint_limit` (`0..10000`), `rpm_limit` (`1..4096`), and `concurrency_limit` (`1..100000`) in profile mode. An absent field is unchanged and JSON `null` restores its fallback. An explicit override may be lower, equal to, or higher than the corresponding default; defaults are not clamps. The global RPM and egress gates remain independent. A concurrency value of `0` is invalid and never means unlimited.
+`PATCH /admin/api/users/{id}` accepts `endpoint_limit` (`0..10000`), `rpm_limit` (`1..4096`), and `concurrency_limit` (`1..100000`) as canonical decimal strings in profile mode. Effective projections are also strings. The matching `/api/steward/users/{id}` route can change another current L1–L4 user's settings, subject to a final transaction permission check. An absent field is unchanged and JSON `null` restores its fallback. An explicit override may be lower, equal to, or higher than the corresponding default; defaults are not clamps. The global RPM and egress gates remain independent. A concurrency value of `0` is invalid and never means unlimited.
 
 Donation-key charity limits use a different explicit contract: `max_concurrency` is `[0,100000]`, `rpm_limit` is `[0,4096]`, and `0` means unlimited without falling back to a site, user, or endpoint default. Donation creation/replacement normalizes omitted or JSON-null fields to zero. In a reviewer/admin/level-5 partial update, omission or null means unchanged and an explicit zero removes the limit.
 
@@ -147,7 +150,7 @@ A brand-new account is accepted only when all of these are true:
 2. both `discord_guild_id` and `discord_role_id` are non-empty;
 3. Discord confirms membership in that guild and possession of that role.
 
-If either ID is blank, new registration is paused; blank does **not** mean “skip that check.” Existing registered users can still sign in. Normal users may update their interface language and `game_profile_public` leaderboard preference through `PATCH /api/me`; endpoint, RPM, and concurrency limits remain administrator-controlled.
+If either ID is blank, new registration is paused; blank does **not** mean “skip that check.” Existing registered users can still sign in. Normal users may update their interface language and `game_profile_public` leaderboard preference through `PATCH /api/me`; endpoint, RPM, and concurrency limits are managed by administrators or authorized current L5 stewards.
 
 ### Mainstream channel catalog
 

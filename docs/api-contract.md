@@ -1,6 +1,6 @@
-# NonbiriAPI HTTP API Contract (`v1.0.0-beta.3`)
+# NonbiriAPI HTTP API Contract (`v1.0.0-beta.4`)
 
-- Status: **v1.0.0-beta.3 release contract**.
+- Status: **v1.0.0-beta.4 release contract**.
 - Scope: the OpenAI-compatible ingress routes are `GET /v1/models`, `POST /v1/chat/completions`, and `POST /v1/embeddings`. Chat supports OpenAI-compatible and Anthropic-compatible upstreams; embeddings support only OpenAI-compatible upstreams. There is no public Anthropic-native or rerank API.
 - Authority: this document reflects the production route registry, strict request/response types, stable error catalog, and contract tests. A future wire change requires a changelog entry; undocumented database fields never enter an API response automatically.
 
@@ -69,7 +69,7 @@ Recognizable JSON errors and plain-text errors retain a useful message after rem
 
 ### 1.4 Database and export versions
 
-The database remains Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. Only a completely absent main/WAL/SHM set or a validated Generation 2 set is accepted. Empty, alpha/Generation 1, unknown, corrupt, structurally unexpected, unsafe, or anomalous-sidecar sources are rejected before a writable open or source-side change. Four exact earlier Generation 2 manifests are supported: before charity routing, before per-key request limits, before successful-response checkpoints, and the complete beta.1 schema. Five exact previously deployed beta.2 manifests are also supported: `preBrowse` with the recurring-quota side table, `preQuotaCleanup` with browse indexes, `preStewardHoldRead` with cleanup indexes, `preModelTokenReserve` with the steward held-read audit and Fishing length tables, and `preHourlyQuota` with the model-level reserve table and the previous quota interval checks. The complete beta.2 manifest is also accepted. Its update only widens the `route_kind` CHECK on `logical_requests` and `request_logs` to admit `openai_embeddings` and `charity_embeddings`; all other schema objects, the 99 business tables, Generation 2 identity, and export version 5 remain unchanged. Both changes run atomically with schema-cache reload and complete validation; a second startup is a no-op. Existing request records and active game states are preserved. Older binaries reject the new manifest and require a complete matching snapshot for rollback. The preceding extension permits one-hour recurring quotas by widening the existing interval checks; it preserves every stored rule, epoch, counter and receipt. The preceding extension adds the sparse model-level Token reserve override table. A missing model-level reserve row means that model inherits the global setting. Fishing length facts are backfilled only from complete retained outcomes with a matching applied rank fact; historical egg lengths are never invented. After read-only validation, one transaction adds the missing tables, indexes, and default sidecar rows, validates the complete current manifest, and preserves existing business data and custom legal settings. No historical successful-response evidence, recurring usage, or unrecorded game presentation values are invented. Alpha/Generation 1 requires a fresh database; arbitrary schema repair and old-generation import remain unsupported. See the [deployment compatibility matrix](deployment.md#database-compatibility-and-version-changes).
+The database remains Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. Fresh creation requires the main/WAL/SHM set to be absent. Eleven exact predecessor manifests are accepted: before charity routing, before per-key limits, before successful-response checkpoints, complete beta.1, and `preBrowse`, `preQuotaCleanup`, `preStewardHoldRead`, `preModelTokenReserve`, `preHourlyQuota`, complete beta.2 and complete beta.3. Other existing structures are rejected before source writes. One atomic upgrade applies missing predecessor extensions and the dual-asset schema, then validates the complete manifest, foreign keys, asset ledgers and reward capacity. The result has 102 tables; a second startup adds nothing. Existing account and entry IDs, general balances, settled fees, configuration, custom legal text and saved game rules remain intact. New game wallets start at zero. Existing games retain rules version 1 and original funding; new games use version 2. No historical newcomer completion or unrecorded payment source is invented. Older binaries reject the new manifest; rollback requires the complete matching stopped snapshot. Alpha/Generation 1 and arbitrary schema repair remain unsupported. See the [deployment compatibility matrix](deployment.md#database-compatibility-and-version-changes).
 
 Account export `schema_version=6` is independent of SQLite `user_version`.
 
@@ -270,7 +270,17 @@ Management model detail, create, and patch DTOs also carry the top-level `token_
 
 Level permission is rechecked at admission, claim and immediately before the dispatch marker. A denied level returns `403 forbidden`; an unavailable model returns `404 not_found`. A blocked unsent attempt releases its reservations. Already dispatched attempts finish under their accepted accounting, while later sends and retries must pass current access rules. Debug dry and live calls follow the same caller-level restriction.
 
-### 4.2 Credential-theft reports
+### 4.2 Donation failure-streak reset
+
+Owners can `POST /api/donations/{id}/keys/{keyId}/failure-streak-reset` with `{expected_revision}` and `Idempotency-Key`. Only their own approved, unexpired, active donated key is eligible. The response is `{donation_id,key_id,revision,failure_streak:"0"}`. Missing ownership returns 404; stale or ineligible state returns 409.
+
+Administrators and current stewards can `POST {prefix}/donation-keys/failure-streak-reset`, where the prefix is `/admin/api` or `/api/steward`. The strict body is `{items:[{donation_id,key_id,expected_revision}]}`, with 1–100 unique keys and one expected revision per donation. The response is `{results:[{donation_id,key_id,status,revision}],counts:{processed,reset,skipped}}` in input order. Status is `reset|conflict|ineligible|not_found`; counts are decimal strings and revision is a string or null. A donation's revision advances once per reset key; every result in that donation reports the final revision from the batch. A stale donation skips all its submitted keys; an ineligible key does not prevent eligible keys in other donations from succeeding. Replays require current authority. These control requests have the shared 256 KiB body limit.
+
+Reset clears only the consecutive-failure disabling state and starts a new failure generation. It preserves usage, quotas, expiry, bindings and manual disablement. Late callbacks from the previous generation cannot rebuild the cleared streak. Each actual reset records a no-secret review audit.
+
+Before processing all matching results, `POST {prefix}/donation-keys/failure-streak-reset/selection` accepts `{selection:{view,...filters},cursor:null|string}`. The cursor is required; start with null. Views are `donations|donation_keys|sources|source_keys`. Donation filters are `q,status,handling`; `donation_keys` requires only `donation_id`; source filters are `q,scope,handling`; source-key filters additionally require `source_key` and accept `idle`. These match the corresponding list filters, with no pagination fields. Each call has a five-second budget, scans at most 100 saved key IDs and returns `{items:[{donation_id,key_id,expected_revision}],next_cursor}`; an empty item page may still have a next cursor. The signed cursor fixes the upper key-ID boundary, role, actor and filters for one hour. This read-only operation writes no selection, job or replay record. The browser gathers the fixed selection before sending batches of at most 100, yields between steps, supports interruption and retains the exact batch and idempotency key when a response is uncertain.
+
+### 4.3 Credential-theft reports
 
 `POST /api/reports/credential-theft` is anonymous or user-authenticated, requires an idempotency key, and accepts strict `{connector_type,base_url,secret,note}`. A structurally valid request always returns the same 202 body and `X-Nonbiri-Report-Accepted: 1`, whether or not a match exists. Matching and non-matching responses share the configured timing window. Validation and rate-limit errors remain real errors.
 
@@ -303,7 +313,13 @@ The home page shows at most three visible announcement summaries, with pinned it
 
 Announcement bodies use a fixed Markdown subset: paragraphs, headings h2–h4, emphasis, lists, blockquotes, inline/fenced code, and HTTP(S) links. Raw HTML, images, embedded media, forms, frames, scripts, styles, and unsafe schemes are rejected by the same parser used for preview, publish, and read.
 
-### 5.2 Pond Fishing
+### 5.2 Shared game payments and newcomer awards
+
+New game entries spend positive game credits first, then positive general credits. A negative wallet does not reduce the other wallet's available funds. `payment:{general,game}` contains canonical credit strings. Releases of an unused entry return each part to its original wallet. Game payouts and the nine once-only newcomer awards use general credits. LinkLink has no ordinary monetary payout.
+
+`GET /api/games` adds `onboarding` with completion and reward status for each game's three tasks. Completing each RPS mode, each LinkLink size, and Fishing with each bait qualifies once; a ten-catch batch qualifies only its bait once. All accounts qualify through new normal play. RPS automatic choices on timeout count as normal completion; LinkLink requires a cleared board but no minimum speed. Abandonment, cancellation, deletion and abnormal termination do not qualify. The nine rewards total 17,000 general credits. Completion, payment and reward commit together; acknowledgement, restart and replay do not repeat an award. Each game's card disappears once its three tasks are complete.
+
+### 5.3 Pond Fishing
 
 | Method and path | Request / response |
 | --- | --- |
@@ -315,15 +331,17 @@ Announcement bodies use a fixed Markdown subset: paragraphs, headings h2–h4, e
 
 A start creates all 1 or 10 CSPRNG outcomes and the reservation atomically. A failed settlement retains the same batch and outcomes for automatic recovery; it never redraws or charges again. After ten consecutive failures, only owner recovery continues. Committed or released batches replay without another economic write. Acknowledgement affects presentation only. Terminal batches/outcomes are retained for 30 days; the personal best has the account lifetime.
 
+Version 2 freezes the three configured integer basis-point rates at admission. Each is 0–9,999 and their sum must be below 10,000; fresh defaults are 100 each. For each outcome, each cut is floored separately to a millicredit before the three cuts are subtracted. Ten catches sum their individual cuts. Platform, welfare and Thursday cuts reach their corresponding general-credit accounts in the same settlement. Gross fields `reward,payout_total` remain; `net_reward,net_payout_total,rake:{platform,welfare,thursday}` add the net amounts. Results also include both balances and the payment split. The rolling payout board sums net winnings. Fresh gross RTP defaults to 100% for every bait; upgrades preserve configured values, including 90%/88%. Version 1 settles with its old no-rake rules.
+
 The length boards preserve the original `species_key` and `size_cm`. A result outcome or length-board row also contains `blue_fat_fish_length_cm:null|string`: it is `null` for an ordinary or historical catch, otherwise a canonical decimal integer of at most 128 digits and at least 201. Clients must keep this value as a string, display the Easter-egg name together with the original legendary species, and use it as the displayed length. The original `size_cm` still describes the draw used to calculate the reward. `total` rows retain their existing credits-only shape.
 
 `single` is the lifetime largest-length board and has `window_start:null`. `recent_single` is the largest length per user among settlements strictly after `window_start=query_now-2592000`; `total` remains the rolling 30-day payout board. Expired catches leave the recent length board even before physical cleanup. Length ties use the earlier catch time and the same stable private tie key as the lifetime board. Anonymous preferences and current account eligibility apply independently to every read. ACK changes neither board. Upgrade backfill includes only retained complete settled batches with their matching original rank facts; unavailable historical catches are not reconstructed.
 
 After generating the original complete batch, each legendary catch independently has a 10% Easter-egg chance. An Easter egg starts at 201 cm; each additional centimetre has a 99% continuation chance, so `P(length >= 201+n)=0.99^n`. There is no gameplay length ceiling and the original legendary payout remains unchanged. Random-source, cancellation, work-budget or representation failures reject the complete start before reservation; they never clamp a length, redraw only part of the batch or change the payout rate.
 
-### 5.3 LinkLink
+### 5.4 LinkLink
 
-New sessions use bounded constructive board generation with a verified complete matching sequence and varied cross-row/cross-column pairs. Existing saved boards, matching geometry, sizes, tile counts, entry prices, scoring, deadlines and free deadlock reshuffling are unchanged; resuming an old game does not regenerate its board.
+New sessions use a server-generated solvable board and rules version 2. Sizes, prices, matching geometry and deadlines remain unchanged. Saved version-1 sessions retain their original boards, score rules and free automatic deadlock reshuffling until they finish.
 
 | Method and path | Request / response |
 | --- | --- |
@@ -332,12 +350,18 @@ New sessions use bounded constructive board generation with a verified complete 
 | `POST /api/games/linklink/sessions/{id}/matches` | `{expected_revision,first:{row,col},second:{row,col},include_path?:boolean}`; returns authoritative state or terminal summary. |
 | `POST /api/games/linklink/sessions/{id}/abandon` | `{expected_revision,confirmation}`; returns terminal summary. |
 | `POST /api/games/linklink/sessions/{id}/lease` | `{lease_id}`; returns the lease expiry. |
+| `POST /api/games/linklink/sessions/{id}/hint` | Idempotency key and `{expected_revision}`; consumes one opportunity and returns state with `hint` or `reshuffled`. |
+| `GET /api/games/linklink/leaderboard` | Required `spec=6x8|8x8|10x10&window=7d|30d`; six independent boards. |
 
 With `include_path:true`, a successful match also returns `match_path:[{row,col},…]`: two to four vertices of the server-approved connection, starting at `first` and ending at `second`. Coordinates can use the single outer ring (row −1 through rows, column −1 through columns). This optional field is retained only in the existing idempotency receipt and is replayed unchanged. Omitted or false preserves the original response shape and request identity. Current, start, and abandon responses do not include a path.
 
 The board is server-generated and solvable. A legal connection travels through empty cells and at most one perimeter ring with no more than two turns. Completion, timeout, and abandonment delete the active board/lease in the terminal transaction and retain only a 30-day summary. The absolute deadline does not move after ordinary disconnect or process downtime.
 
-### 5.4 Three-player rock-paper-scissors
+Version 2 starts with 2, 3 or 5 shared hint/refresh opportunities for 6×8, 8×8 or 10×10. A hint returns one legal pair and its path. If no pair exists, the same operation reshuffles only remaining tiles. Either action consumes one opportunity; repeated or concurrent requests cannot consume it twice. There is no automatic reshuffle in version 2. At zero opportunities a deadlock can only time out or be abandoned. State and summaries include `opportunities_initial,opportunities_remaining`; old sessions show zero. Successful completion adds 100 score points per unused opportunity; timeout adds none and abandonment has a null score. Ordinary matches update only their returned game state; the browser can accept the next pair while the previous connection animation finishes.
+
+Each leaderboard returns `{spec,window_days,window_start,as_of,rules_version:2,rows,me}`. Rows contain decimal-string `rank,score`, Unix-second `achieved_at`, the existing private/public `identity` union and `is_me`. Only version-2 completed summaries inside the requested window count, with one best score per user. Higher scores rank first; equal scores use the earliest achievement, with a stable private random key only for the same second. The top 20 are returned in `rows`; `me` is the caller's eligible row only when outside that set, otherwise null. Banned, deleted and administrator accounts are excluded and profile visibility is resolved at read time. No board, tile layout, hidden key or internal user ID is exposed.
+
+### 5.5 Three-player rock-paper-scissors
 
 | Method and path | Request / response |
 | --- | --- |
@@ -351,6 +375,8 @@ The board is server-generated and solvable. A legal connection travels through e
 | `GET /api/games/rps/leaderboard` | `mode=quick|standard|deathmatch&board=profit_rate|net_profit`; top 20 plus caller. |
 
 The service is authoritative for queueing, phases, deadlines, hidden gestures, defaults, cuts, settlement, result acknowledgement, and both leaderboards. `RPSHomeState` contains exactly one branch. Unrevealed gestures are omitted entirely from other viewers' responses. Every state/action carries the current revision, phase sequence, and identity epoch needed to replace stale client state. A pending private result blocks another queue entry until acknowledged and has no age expiry; shared summaries/ranking facts last 30 days. Fun statistics last for the account lifetime and cannot be drilled down to individual games.
+
+Version 2 retains `own_buy_in,own_cash_out` and adds nullable `own_buy_in_general,own_buy_in_game,own_returned_general` to private results. Queues carry `payment:{general,game}`; the viewer's own seat carries `funding:{buy_in_general,buy_in_game,current_general,game_remaining}`. Each round spends the seat's remaining game-funded amount first; winnings become general-funded chips. At normal final settlement, unused game-funded chips convert to general credits and are included in cash-out. Queue cancellation and administrative refunds preserve original sources. Legacy results with unrecorded funding details use null rather than invented amounts.
 
 ## 6. Debug and level-5 steward surfaces
 
@@ -377,8 +403,11 @@ The browser routes below require a currently effective L5 user session on the us
 | Maintenance | `GET /api/steward/maintenance`, `POST /api/steward/maintenance/enable` |
 | Shared donation management | `GET /api/steward/donations`, `GET /api/steward/donations/{id}`, `POST /api/steward/donations/{id}/review`, `PATCH /api/steward/donations/{id}/keys/{keyId}` |
 | Charity models | Exact route family in the table below |
+| Users | `GET /api/steward/users`; `GET|PATCH /api/steward/users/{id}`; `POST /api/steward/users/{id}/ban`; `POST /api/steward/users/{id}/unban` |
+| Announcements | The eight routes in §7.3 with `/api/steward/announcements` replacing `/admin/api/announcements` |
+| Failure reset | Shared batch and selection routes in §4.2 |
 
-Stewards can review and manage charity settings across donations. They can enable but cannot disable maintenance. They have no report route, legal-hold route, account-export route, user-account mutation route, or administrator audit identity. Known-ID donation and request-log details under an active legal hold are available to both management roles, with a separate steward read audit. Shared management does not widen an account's owner export.
+Stewards can review and manage charity settings across donations. They can enable but cannot disable maintenance. They have no report, legal-hold, account-export or account-deletion route and cannot change cumulative donation credit or grant level 5. Known-ID donation and request-log details under an active legal hold are available to both management roles, with a separate steward read audit. Shared management does not widen an account's owner export.
 
 Both management prefixes (`/admin/api` and `/api/steward`) provide `GET {prefix}/donations/badge`, with no query or body. The no-store response is `{pending_count,server_now}` with an exact decimal-string count. Only logically active donations with pending handling count; expiration is reflected even before cleanup runs.
 
@@ -440,9 +469,13 @@ All routes below are available only on the administrator host with an administra
 | Alerts | `GET /admin/api/alerts`; `POST /admin/api/alerts/{id}/resolve` with explicit set-state body |
 | Maintenance | `GET /admin/api/maintenance`; `POST /admin/api/maintenance/enable`; `POST /admin/api/maintenance/disable` |
 
+User lists additionally accept `level=1|2|3|4|5`; filtering uses the current effective level before pagination and counting, and cursor identity includes the filter. Stewards can read non-administrator users, including themselves and other L5 users, but can mutate only other currently effective L1–L4 accounts. Actor and target authority are checked again in the final transaction before any replay or write. A hidden administrator target is 404; disallowed target or operation is 403.
+
+User limits use decimal strings or null: `endpoint_limit` is "0"–"10000", `rpm_limit` is "1"–"4096", and `concurrency_limit` is "1"–"100000". Effective limit fields are strings. In profile PATCH, omission preserves a value and null inherits its default. Invalid input returns 400 with the affected field and range. Manual level can be null or a JSON integer; stewards may set only 1–4. The economy PATCH has `{mode:"economy",expected_revision,target,direction,amount,reason}`; targets are `balance|game_balance|donation_credit`, direction is `increase|decrease`, and amount is a positive credit string. Both wallets may become negative; stewards cannot use the donation-credit target.
+
 The generic site-config patch rejects maintenance, announcement epoch, and all activity/game economic keys; those use their typed domain routes. User patch is a tagged operation for profile, limits/level, or economy and never returns credentials. Log exports retain their fixed privacy projections and spreadsheet-safe encoding.
 
-The administrator list reads retain cursor mode and also accept numbered `page,page_size` with the shared metadata, except where noted: `GET /admin/api/users` accepts `is_banned=true|false` and `q`; `GET /admin/api/usage?group_by=user` is paginated, while `group_by=site` is a complete non-paginated snapshot and rejects all page/cursor parameters; `GET /admin/api/activity` is paginated; and `GET /admin/api/overview/endpoints` accepts `q` and is paginated. Numbered endpoint-overview rows contain at most three user previews; the complete group can be read with `GET /admin/api/overview/endpoints/users?base_url=<exact>&page=<page>&page_size=<size>`, which is numbered-only and returns `{data,next_cursor:null,pagination}`. `base_url` is an exact canonical value, not a pattern.
+The administrator list reads retain cursor mode and also accept numbered `page,page_size` with the shared metadata, except where noted: `GET /admin/api/users` accepts `is_banned=true|false`, `q`, and `level=1|2|3|4|5`; `GET /admin/api/usage?group_by=user` is paginated, while `group_by=site` is a complete non-paginated snapshot and rejects all page/cursor parameters; `GET /admin/api/activity` is paginated; and `GET /admin/api/overview/endpoints` accepts `q` and is paginated. Numbered endpoint-overview rows contain at most three user previews; the complete group can be read with `GET /admin/api/overview/endpoints/users?base_url=<exact>&page=<page>&page_size=<size>`, which is numbered-only and returns `{data,next_cursor:null,pagination}`. `base_url` is an exact canonical value, not a pattern.
 
 `GET /admin/api/logs` accepts `error_code,status,from,to,user_id,endpoint_base_url,upstream_model` plus cursor or numbered page parameters; `GET /admin/api/logs/{id}` accepts `attempt_cursor,attempt_limit` or `attempt_page,attempt_page_size` and returns `attempt_pagination` in numbered mode. `GET /admin/api/alerts` accepts `resolved=true|false` plus either pagination mode. Log exports accept the same role-scoped non-pagination filters but reject `cursor,limit,page,page_size`.
 
@@ -468,6 +501,8 @@ Category is `subscription|api_platform`. At most 100 active channels may be enab
 | Pools | `GET /admin/api/pools`; `POST /admin/api/pools/{poolId}/adjustments` |
 | Activities | `GET|PATCH /admin/api/activities/config`; `GET /admin/api/activities/thursday`; `PUT /admin/api/activities/thursday/next`; `POST /admin/api/activities/thursday/{periodId}/resume` |
 | Games | `GET /admin/api/games/active-counts`; `GET|PATCH /admin/api/games/config` |
+
+Both management roles use the same announcement handler and final-transaction role checks. Create requires `title_zh,body_zh,title_en,body_en,severity,pinned,dismissible`; optional `expires_at` is a Unix-second integer or null. A language may be empty, but a published announcement requires at least one complete title/body pair. Titles allow 160 Unicode characters, each body 64 KiB, severity is `info|warning|important`, and pin/dismiss flags are booleans. PATCH omission preserves fields and `expires_at:null` removes expiry. Withdrawal/deletion reasons allow 1,024 characters and 4,096 UTF-8 bytes. Revision fields are positive decimal strings; all mutations require the usual idempotency key. Actor identity is removed from audits after 90 days and the no-content announcement audit lasts 365 days.
 
 Announcement mutations return a bounded receipt and the detail is fetched separately. Published content and drafts are isolated. Activity/game configuration reads a complete typed snapshot, merges a strict patch, validates all dependent values and checked arithmetic, then commits atomically. Existing accepted work retains its frozen configuration.
 
@@ -571,6 +606,8 @@ Account deletion is synchronous. It revokes credentials, removes private project
 
 Maintenance mode rejects new public inference, OAuth admission, ordinary pages, reports, activities, queues, and games. Health, safe configuration, logout, administrator control, workers, and work already accepted before the switch remain available. A game continuation additionally requires the same user/session and a valid pre-existing lease; it cannot start a game, queue, list, or open a new lease after losing that authority.
 
+New Fishing batches, LinkLink sessions and RPS queues always use rules version 2; clients cannot choose an older version. Old version-1 state drains through its saved rules and funding, including after restart. Already terminal fees and game results are never recalculated under current prices or rules.
+
 Recovery runs before listeners open. Recovery of unfinished API requests drains once per process before accepting traffic; periodic maintenance cannot settle live requests as abandoned after a restart. Accepted requests, donation claims, report indexing/deletion, Thursday settlement, Fishing settlement, LinkLink deadlines, and RPS matching/phases/terminal processing resume from persisted state and exact-once operation identities. Non-terminal records are not removed by age. SQLite WAL/checkpoint restart is supported for a valid Generation 2 database, including after an explicitly supported additive update. Unsupported schemas remain outside the recovery boundary.
 
 Principal retention periods are:
@@ -586,7 +623,9 @@ Principal retention periods are:
 | Donation report fingerprint | Until exactly 90 days after that key instance ends; the deadline never moves |
 | Fishing terminal batches/outcomes and their display lengths | 30 days after settlement |
 | Fishing recent-length facts | The matching 30-day ranking window, independent of ACK/outcome cleanup; lifetime best and its display length remain for account lifetime |
-| LinkLink terminal summary | 30 days |
+| LinkLink terminal summary | 30 days; six boards read the retained successful version-2 summaries |
+| Independent check-ins and once-only game newcomer completions | Account lifetime; deleted with the account |
+| Temporary newcomer reward-capacity holds | Until the associated accepted game settles or releases; never exported |
 | RPS shared summary/rank facts | 30 days; pending private result until acknowledgement; fun totals for account lifetime |
 | Announcement audit without content | 365 days; actor identity removed after 90 days |
 | Administrator/steward domain audit and maintenance event material | 400 days; maintenance actor identity removed after 90 days |

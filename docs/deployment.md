@@ -1,6 +1,6 @@
 # VPS deployment with systemd
 
-This guide describes the supported single-instance operating model for the `1.0.0-beta.3` release: one Linux/amd64 binary built from the exact source commit, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS. Alpha deployments require a fresh cutover; validated current and explicitly supported earlier Generation 2 schemas can be updated normally with existing data preserved. Verify compatibility, backups, configuration, legal text, and smoke tests before opening any deployment. See [configuration.md](configuration.md) for the full environment and runtime-settings reference.
+This guide describes the supported single-instance operating model for the `1.0.0-beta.4` release: one Linux/amd64 binary built from the exact source commit, a dedicated system user, a systemd unit, a local SQLite database, and a reverse proxy that provides public TLS. Alpha deployments require a fresh cutover; validated current and explicitly supported earlier Generation 2 schemas can be updated normally with existing data preserved. Verify compatibility, backups, configuration, legal text, and smoke tests before opening any deployment. See [configuration.md](configuration.md) for the full environment and runtime-settings reference.
 
 The commands are examples. Replace paths, hostnames, users, and package-manager commands for the target VPS. Do not copy real secrets into a Git checkout.
 
@@ -71,7 +71,7 @@ The `dist` build tag is required for the real frontend. An untagged binary conta
 Install into a versioned directory and publish the symlink with a same-filesystem rename. Set `version` to the release being installed:
 
 ```sh
-version=1.0.0-beta.3
+version=1.0.0-beta.4
 release=/opt/nonbiriapi/releases/$version
 sudo install -d -o root -g root -m 0755 "$release"
 sudo install -o root -g root -m 0755 nonbiriapi "$release/nonbiriapi"
@@ -155,7 +155,9 @@ Model calls allow up to 900 seconds for upstream response headers and 1200 secon
 
 ## Database compatibility and version changes
 
-The current source accepts only a completely absent database set or a validated Generation 2 database whose SQLite header contains `application_id=0x4E425249` and `user_version=2`. Four exact earlier Generation 2 manifests are supported: the schema before charity routing, before key request limits, before successful-response checkpoints, and the complete beta.1 schema. Five exact previously deployed beta.2 manifests are also supported: `preBrowse` with the recurring-quota side table, `preQuotaCleanup` with browse indexes, `preStewardHoldRead` with cleanup indexes, `preModelTokenReserve` with the steward held-read audit and Fishing length tables, and `preHourlyQuota` with the model-level reserve table and the previous quota interval checks. The complete beta.2 manifest is also accepted. Its update only widens the `route_kind` CHECK on `logical_requests` and `request_logs` to admit `openai_embeddings` and `charity_embeddings`; all other schema objects, the 99 business tables, Generation 2 identity, and export version 5 remain unchanged. Both changes run atomically with schema-cache reload and complete validation; a second startup is a no-op. Existing request records and active game states are preserved. Older binaries reject the new manifest and require a complete matching snapshot for rollback. The preceding extension permits one-hour recurring quotas by widening the existing interval checks; it preserves every stored rule, epoch, counter and receipt. The preceding extension adds the sparse model-level Token reserve override table. A missing row means that model inherits the global setting, and deleting a model removes its override. Recent-length backfill uses only retained complete settlements with their matching original rank facts; original catches, lifetime records and economic values remain unchanged. The audit table starts empty, and deleting a steward clears its actor reference while its counts follow the existing hold lifetime. For the four earlier manifests, one transaction adds the missing routing, key limits, dispatch indexes and checkpoints, donation handling, model access, recurring quota, and game presentation tables as needed, seeds only defined defaults, and then adds the indexes. The one-hour interval update runs in the same transaction, changes only the pinned quota CHECK definitions, reloads the schema, and keeps foreign keys enabled. The complete manifest and foreign keys are validated before commit. Existing business rows, routing strategies, key limits, historical times, accounting, and custom legal settings are preserved. Older models without routing configuration retain expiry-weighted routing; older keys without limits remain unlimited. Existing models initially allow all five levels and have empty public descriptions; existing donations receive the legacy handling state. Recurring rule sets begin empty. No historical response-start evidence, recurring consumption, or unrecorded game presentation values are invented. Before a writable source open, an existing database is copied through no-follow read-only handles to a private validation directory; header, schema, foreign keys, indexes, sidecars, and contextual credential envelopes are checked there. Alpha/Generation 1 files, empty files, unknown generations, unexpected or corrupt schemas, unsafe file shapes, rollback journals, and anomalous sidecars are refused without modifying the source set or creating source-side WAL/SHM files. Arbitrary schema repair and old-generation data import remain unsupported.
+The database remains Generation 2: SQLite `application_id=0x4E425249` and `user_version=2`. Fresh creation requires the main/WAL/SHM set to be absent. Eleven exact predecessor manifests are accepted: before charity routing, before per-key limits, before successful-response checkpoints, complete beta.1, and `preBrowse`, `preQuotaCleanup`, `preStewardHoldRead`, `preModelTokenReserve`, `preHourlyQuota`, complete beta.2 and complete beta.3. Other existing structures are rejected before source writes. One atomic upgrade applies missing predecessor extensions and the dual-asset schema, then validates the complete manifest, foreign keys, asset ledgers and reward capacity. The result has 102 tables; a second startup adds nothing. Existing account and entry IDs, general balances, settled fees, configuration, custom legal text and saved game rules remain intact. New game wallets start at zero. Existing games retain rules version 1 and original funding; new games use version 2. No historical newcomer completion or unrecorded payment source is invented. Older binaries reject the new manifest; rollback requires the complete matching stopped snapshot. Alpha/Generation 1 and arbitrary schema repair remain unsupported.
+
+Before a writable source open, existing files are copied through no-follow read-only handles to a private validation directory. Header, manifest, foreign keys, indexes, sidecars and contextual credential envelopes are validated there. Unsupported sources are rejected without repair or new source-side WAL/SHM files. The eleven source classes include `preRouting`, `preKeyLimits`, `preResponseStarts`, `preBetaTwo`, `preBrowse`, `preQuotaCleanup`, `preStewardHoldRead`, `preModelTokenReserve`, `preHourlyQuota`, `preEmbedding` and `preBetaFour`. These are exact manifests, not permission to accept arbitrary intermediate schemas.
 
 Therefore:
 
@@ -165,7 +167,7 @@ Therefore:
 - a cutover from an alpha release deliberately starts with an empty Generation 2 database and loses active application state unless the operator later re-enters it manually;
 - a fresh Generation 2 database starts with maintenance on and registration, activities, charity, donation intake, and games off. Keep those gates closed until instance legal text, required configuration, initialization, and smoke tests pass.
 
-Beta.3 adds no startup environment-variable names relative to beta.2. An existing environment file must still satisfy the current validation rules and is retained by the separately maintained helper, but every database-backed runtime setting is reset by a destructive fresh cutover and must be reviewed or re-entered through the administrator station.
+Beta.4 adds no startup environment-variable names relative to beta.3. An existing environment file must still satisfy the current validation rules and is retained by the separately maintained helper, but every database-backed runtime setting is reset by a destructive fresh cutover and must be reviewed or re-entered through the administrator station.
 
 The companion deployment helper is maintained separately and is **not shipped by this repository**. Any helper used for this cutover must expose exactly four operator entry classes:
 
@@ -174,52 +176,24 @@ The companion deployment helper is maintained separately and is **not shipped by
 3. `--destructive-fresh-deploy`, a permanent high-risk upgrade/downgrade escape hatch that first preserves a complete source snapshot, then removes only the revalidated active database/WAL/SHM paths and creates a fresh target-generation deployment;
 4. `snapshot inventory`, `snapshot import`, and `snapshot delete` management.
 
-The helper must present tags in version order and branches by name, identify branches as non-release targets, pin the selected commit, and allow `q` to exit before any destructive action. It may skip only the duplicate local race gate when the operator explicitly supplies a GitHub Actions run id and the helper verifies through the official API that the run is a completed successful `master` push for the exact selected commit, with all six race shards and the aggregate Go gate successful; a mismatch or unavailable response must fail closed, while every frontend, ordinary Go, production-build, rehearsal, snapshot, rollback, and health check remains local. Without that evidence the full local race gate still runs. After the source snapshot has been verified, destructive fresh requires an interactive `/dev/tty` and one complete confirmation phrase bound to the operation, source and target refs/commits, revalidated absolute database path, and snapshot id; there is no `--yes`, `--no-backup`, or non-interactive bypass. A failure before the local commit point must restore the complete source state while retaining both the source snapshot and old release. Once local health has passed and the target is committed, a later public proxy/DNS/TLS check failure keeps the new service and source snapshot in place for diagnosis instead of automatically rolling back. If you do not have a separately reviewed compatible helper, use the manual procedure below only for a same-generation disposable/staging deployment or a verified compatible Generation 2 database; it is not a substitute for a destructive fresh cutover.
+Any helper must fix a selected ref to an immutable commit and preserve the complete recovery set. Review the helper's actual behavior before using it: an option that merely skips tests does not verify CI evidence. Reuse successful checks only when source tree, relevant inputs, lockfiles, toolchain and target match. A valid final artifact should be transferred and checksum-verified rather than rebuilt by default on the production host. Destructive fresh and stateful restore operations require explicit operator authorization, a complete matching snapshot and precise path checks; normal compatible updates follow the procedure below.
 
-A destructive fresh cutover deletes the active database set and therefore removes users, sessions, OAuth state, and CallerKeys; endpoints, upstream credentials, models, catalogs, and routing state; public reports, retained report fingerprints/tombstones, donation lineage, charity resources, donations, reviews, and routing state; spendable `credits`, cumulative `donation_credit`, ledger entries, claims, levels, check-ins, welfare and Thursday activity, usage totals, and per-user limits; announcements, request/usage logs, audits, alerts, lifecycle records, and worker checkpoints; display, OAuth-gate, anti-abuse, charity, economy, timezone, maintenance, registration, donation-guidance, and legal settings in `site_config`; and every game's queues, sessions, pending results, summaries, ranks, and statistics. Process-memory Debug sessions also end when the service stops. The protected source snapshot remains sensitive and may still contain all persisted data. It is not an account export and must be protected together with the original release, environment/configuration, master key, unit, manifest, and checksums.
+A destructive fresh cutover deletes the active database set and therefore removes users, sessions, OAuth state, and CallerKeys; endpoints, upstream credentials, models, catalogs, and routing state; public reports, retained report fingerprints/tombstones, donation lineage, charity resources, donations, reviews, and routing state; both spendable credit wallets, cumulative `donation_credit`, ledger entries, claims, levels, check-ins, welfare and Thursday activity, usage totals, and per-user limits; announcements, request/usage logs, audits, alerts, lifecycle records, and worker checkpoints; display, OAuth-gate, anti-abuse, charity, economy, timezone, maintenance, registration, donation-guidance, and legal settings in `site_config`; and every game's queues, sessions, pending results, summaries, ranks, and statistics. Process-memory Debug sessions also end when the service stops. The protected source snapshot remains sensitive and may still contain all persisted data. It is not an account export and must be protected together with the original release, environment/configuration, master key, unit, manifest, and checksums.
 
 ## Manual same-generation deployment procedure
 
-1. Verify the release source and build on a separate Linux/amd64 build host. Confirm that the target binary and current database are both Generation 2; this procedure never converts an earlier database.
-2. Run the Go, race, frontend, and release-like embed gates.
-3. Copy the new binary to a new versioned release directory; do not overwrite the active binary in place.
-4. Stop the service before backing up or replacing the database-adjacent files:
+1. Fix the source commit, supported source schema and impact of the change. Generation 2 alone does not prove compatibility. Reuse valid CI and release evidence; run only missing platform, startup, storage or recovery checks. Validate schema changes using isolated synthetic predecessor databases before the production window.
+2. Build the final Linux/amd64 `CGO_ENABLED=0 -tags dist -trimpath` binary once in a controlled environment. Record commit, tree, toolchain and SHA256, copy it into a new immutable release directory, and verify the hash on the host.
+3. Close public admission, drain accepted work and stop the service. Create one complete protected snapshot containing the database and existing sidecars, exact old release, environment, master key, unit, manifest and checksums. An unchanged stopped-state retry does not need another snapshot.
+4. Preserve runtime configuration and custom legal text. Point the current-release link at the prepared release and start the target once. Validate local health and the active binary identity before reopening.
+5. Reopen admission. Verify both public hosts, login boundaries and changed pages while observing the process and errors for about 60 seconds. Extend observation or add an isolated audit only for a concrete fault or remaining evidence gap.
+6. Remove temporary verification copies and processes. Ordinary deployment recovery sets retain the most recent two successful switches, excluding independent disaster recovery, legal retention and any unresolved incident set. Do not retroactively delete unrelated older archives.
 
-   ```sh
-   sudo systemctl stop nonbiriapi.service
-   ```
-
-5. Create and verify a complete protected snapshot before changing the active release. It must keep the exact previous release, environment/configuration, master key, systemd unit, database and existing sidecars together with a manifest and checksums. The following command is only the database component of that complete snapshot; when the service is stopped, copy the main file plus existing `-wal` and `-shm` files, or use a tested SQLite backup tool:
-
-   ```sh
-   stamp=$(date -u +%Y%m%dT%H%M%SZ)
-   sudo mkdir -p "/var/backups/nonbiriapi/$stamp"
-   sudo cp -a /var/lib/nonbiriapi/nonbiriapi.db \
-     "/var/backups/nonbiriapi/$stamp/"
-   for sidecar in /var/lib/nonbiriapi/nonbiriapi.db-wal /var/lib/nonbiriapi/nonbiriapi.db-shm; do
-     [ -e "$sidecar" ] && sudo cp -a "$sidecar" "/var/backups/nonbiriapi/$stamp/"
-   done
-   ```
-
-   Protect backups as carefully as the master key: the database contains encrypted credentials and private account metadata.
-
-6. Point `/opt/nonbiriapi/current` at the new compatible release and start the service:
-
-   ```sh
-   version=1.0.0-beta.3  # replace with the compatible release being installed
-   sudo ln -sfn "/opt/nonbiriapi/releases/$version" /opt/nonbiriapi/current.next
-   sudo mv -Tf /opt/nonbiriapi/current.next /opt/nonbiriapi/current
-   sudo systemctl start nonbiriapi.service
-   sudo systemctl status nonbiriapi.service
-   ```
-
-7. Verify both configured hosts through the reverse proxy, then inspect the journal for startup errors. Confirm the user station, admin station, login boundary, and `/healthz` response. Do not treat a running process alone as a successful deployment.
-
-If the binary fails to start, stop it. Reverting only the release symlink is allowed only when the previous binary is explicitly compatible with the unchanged database generation. Otherwise restore the complete pre-change snapshot — release, database/sidecars, environment, master key, and unit — before starting the old service. Never delete a database or rotate the master key as an improvised rollback.
+If startup fails before reopening, stop the target and preserve its diagnostic state. Restore the complete matching pre-change set when rollback is needed; an old binary alone is not a rollback. After reopening, new user data must not be overwritten automatically by the old snapshot. Diagnose public proxy/TLS failures while preserving accepted target data.
 
 ## Backup and restore test
 
-A backup is not complete until it has been restored in an isolated directory with the same master key and opened by a test instance. Test this before onboarding users and periodically thereafter. Never test restoration against the production database path.
+Verify the recovery procedure with a complete restore in an isolated directory, using its matching binary and master key. Reuse matching Linux upgrade/restore evidence for an unchanged procedure; a production snapshot does not need a second full rehearsal by default. Never open an online production database with an external SQLite client or rehearse against its active path.
 
 ## Cutting over from alpha or Generation 1
 
