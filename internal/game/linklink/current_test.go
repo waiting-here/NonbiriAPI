@@ -61,7 +61,7 @@ func TestCurrentHTTPWireIsRawNullStateOrSummaryAndActiveWins(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectedSummaryKeys := []string{
-		"session_id", "spec", "price", "terminal_reason", "started_at", "deadline", "terminal_at", "pairs_removed", "total_pairs", "score",
+		"rules_version", "payment", "session_id", "spec", "price", "terminal_reason", "started_at", "deadline", "terminal_at", "pairs_removed", "total_pairs", "score",
 	}
 	if len(summaryObject) != len(expectedSummaryKeys) {
 		t.Fatalf("summary wire fields = %v", summaryObject)

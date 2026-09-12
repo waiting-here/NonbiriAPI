@@ -6,6 +6,7 @@ import {
   decimalValue,
   enumValue,
   exactRecord,
+  entryPayment,
   invalidResponse,
   opaqueID,
   publicIdentity,
@@ -107,7 +108,7 @@ function blueFatFishLength(
 export function normalizeFishingPending(value: unknown): FishingSettlementPending {
   const record = exactRecord(
     value,
-    ['batch_id', 'bait', 'count', 'entry_total', 'state', 'next_attempt_at', 'retry_exhausted'],
+    ['batch_id', 'bait', 'count', 'entry_total', 'state', 'next_attempt_at', 'retry_exhausted', 'rules_version', 'payment'],
     [],
     'fishing pending',
   );
@@ -124,11 +125,13 @@ export function normalizeFishingPending(value: unknown): FishingSettlementPendin
     (state === 'recovery_required' && (nextAttemptAt !== null || !retryExhausted))
   )
     invalidResponse('fishing pending matrix');
+  const entryTotal = creditsValue(record.entry_total, { positive: true }, 'fishing entry total');
   return {
+    ...entryPayment(record, entryTotal, 'fishing'),
     batchID: opaqueID(record.batch_id, 'fb_', 'fishing batch id'),
     bait: bait(record.bait, 'fishing bait'),
     count: count(record.count, 'fishing count'),
-    entryTotal: creditsValue(record.entry_total, { positive: true }, 'fishing entry total'),
+    entryTotal,
     state,
     nextAttemptAt,
     retryExhausted,
@@ -139,6 +142,7 @@ export function normalizeFishingResult(value: unknown): FishingBatchResult {
   const record = exactRecord(
     value,
     [
+      'rules_version', 'payment', 'game_balance',
       'batch_id',
       'bait',
       'count',
@@ -192,6 +196,8 @@ export function normalizeFishingResult(value: unknown): FishingBatchResult {
   if (sumCredits(outcomes.map((outcome) => outcome.reward)) !== payoutTotal)
     invalidResponse('fishing payout arithmetic');
   return {
+    ...entryPayment(record, entryTotal, 'fishing'),
+    gameBalance: creditsValue(record.game_balance, { signed: true }, 'fishing game balance'),
     batchID: opaqueID(record.batch_id, 'fb_', 'fishing batch id'),
     bait: bait(record.bait, 'fishing bait'),
     count: parsedCount,
@@ -212,6 +218,7 @@ export function normalizeFishingStart(
     value as unknown,
     [],
     [
+      'rules_version', 'payment', 'game_balance',
       'batch_id',
       'bait',
       'count',

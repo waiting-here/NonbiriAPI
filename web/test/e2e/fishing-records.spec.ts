@@ -65,9 +65,12 @@ const RESULT = {
   count: 10,
   unit_price: '2.5',
   entry_total: '25',
+  rules_version: 1,
+  payment: { general: '25', game: '0' },
   outcomes: [OLD_RESULT, BLUE_RESULT, ...FILLER_RESULTS],
   payout_total: '3',
   balance: '4999995',
+  game_balance: '0',
   settled_at: 1_800_000_111,
   idempotent_replay: false,
 };

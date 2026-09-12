@@ -1,5 +1,5 @@
 import type { PublicIdentity } from '../common/strict';
-import type { RPSMode, RPSModeConfig } from '../common/types';
+import type { GamePayment, RPSMode, RPSModeConfig } from '../common/types';
 
 export const RPS_PHASES = [
   'gesture',
@@ -22,6 +22,8 @@ export type RPSTerminalReason =
   | 'free_tie_limit';
 
 export interface RPSQueue {
+  readonly rulesVersion: number;
+  readonly payment: GamePayment | null;
   readonly id: string;
   readonly mode: RPSMode;
   readonly state: 'waiting';
@@ -55,7 +57,14 @@ interface SeatMoney {
   readonly terminalReturn?: string;
   readonly walletNet?: string;
 }
+export interface RPSFunding {
+  readonly buyInGeneral: string;
+  readonly buyInGame: string;
+  readonly currentGeneral: string;
+  readonly gameRemaining: string;
+}
 export interface ActiveRPSSeat extends SeatMoney {
+  readonly funding?: RPSFunding;
   readonly deletionState: 'active';
   readonly displayName: string;
   readonly avatarURL: string | null;
@@ -135,6 +144,10 @@ export interface RPSState {
   readonly firstAvailableSeq: string;
 }
 export interface RPSPendingResult {
+  readonly rulesVersion: number;
+  readonly ownBuyInGeneral: string | null;
+  readonly ownBuyInGame: string | null;
+  readonly ownReturnedGeneral: string | null;
   readonly sessionID: string;
   readonly mode: RPSMode;
   readonly terminalReason: RPSTerminalReason;

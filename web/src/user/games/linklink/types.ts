@@ -1,4 +1,4 @@
-import type { LinkLinkSpec } from '../common/types';
+import type { LinkLinkSpec, GamePayment } from '../common/types';
 
 export interface LinkLinkCoordinate {
   readonly row: number;
@@ -9,6 +9,8 @@ export interface LinkLinkTile extends LinkLinkCoordinate {
   readonly removed: boolean;
 }
 export interface LinkLinkState {
+  readonly rulesVersion: number;
+  readonly payment: GamePayment;
   readonly kind: 'active';
   readonly sessionID: string;
   readonly spec: LinkLinkSpec;
@@ -26,6 +28,8 @@ export interface LinkLinkState {
   readonly serverNow: number;
 }
 export interface LinkLinkSummary {
+  readonly rulesVersion: number;
+  readonly payment: GamePayment;
   readonly kind: 'summary';
   readonly sessionID: string;
   readonly spec: LinkLinkSpec;

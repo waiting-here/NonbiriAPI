@@ -323,7 +323,7 @@ VALUES(?,?,?,?,?,?,?)`, binding, userID, fixture.clock.Load(), fixture.clock.Loa
 	if err != nil {
 		fixture.t.Fatal(err)
 	}
-	if funding > 0 {
+	if funding != 0 {
 		external, err := ledger.CodedAccount(context.Background(), tx, "external")
 		if err != nil {
 			fixture.t.Fatal(err)

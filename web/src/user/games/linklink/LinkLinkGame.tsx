@@ -17,6 +17,7 @@ import { useAuthoritativeCountdown } from '../common/countdown';
 import { useGameSound } from '../common/useGameSound';
 import { GameHeader } from '../common/GameHeader';
 import { GameMoney } from '../common/GameMoney';
+import { GamePayment } from '../common/GamePayment';
 import { LINKLINK_SPECS, type LinkLinkSpec } from '../common/types';
 import { gameKeys, useGamesSnapshot } from '../common/snapshot';
 import {
@@ -204,6 +205,8 @@ function SummaryCard({
     <Card className="linklink-summary">
       <p className="eyebrow">{text(`linklink.summary.${summary.terminalReason}`)}</p>
       <h2>{text(`linklink.spec`, { spec: summary.spec })}</h2>
+      <p>{text('common.entryPayment')}</p>
+      <GamePayment payment={summary.payment} />
       <dl className="linklink-facts">
         <div>
           <dt>
@@ -542,6 +545,10 @@ export function LinkLinkGame() {
                 }
               />
             </div>
+            <details>
+              <summary>{text('common.entryPayment')}</summary>
+              <GamePayment payment={state.payment} />
+            </details>
             <div className="linklink-progress">
               <progress max={state.totalPairs} value={state.pairsRemoved} />
               <span>

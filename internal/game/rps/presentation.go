@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"math/big"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
@@ -97,4 +98,56 @@ func presentationTransfers(buyInRaw, cashOutRaw []byte, sign int, magnitude db.U
 		return nil, nil, ErrInvariant
 	}
 	return stringAmount(&buyIn), stringAmount(&cashOut), nil
+}
+
+// terminalFunding uses original buy-in and wallet cash-out facts, never the
+// cumulative returns from individual rounds. Historical unknowns stay null.
+func terminalFunding(version int, generalRaw, gameRaw, returnedRaw []byte, buyIn, cashOut *string, sign int, magnitude db.U128) (*string, *string, *string, error) {
+	if version != 1 && version != 2 {
+		return nil, nil, nil, ErrInvariant
+	}
+	var generalText, gameText, returnedText *string
+	if generalRaw == nil && gameRaw == nil {
+		if version == 2 {
+			return nil, nil, nil, ErrInvariant
+		}
+		if buyIn != nil {
+			zero := "0"
+			generalText, gameText = buyIn, &zero
+		}
+		returnedText = cashOut
+	} else {
+		general, err := db.DecodeU128(generalRaw)
+		if err != nil {
+			return nil, nil, nil, ErrInvariant
+		}
+		game, err := db.DecodeU128(gameRaw)
+		if err != nil || version == 1 && game.Big().Sign() != 0 {
+			return nil, nil, nil, ErrInvariant
+		}
+		total, err := addU128(general, game)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		returned, err := u128(new(big.Int).Add(total.Big(), new(big.Int).Mul(big.NewInt(int64(sign)), magnitude.Big())))
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		generalText, gameText, returnedText = stringAmount(&general), stringAmount(&game), stringAmount(&returned)
+		if buyIn != nil && *buyIn != formatMilli(total.Big()) || cashOut != nil && *cashOut != *returnedText {
+			return nil, nil, nil, ErrInvariant
+		}
+	}
+	if returnedRaw != nil {
+		returned, err := db.DecodeU128(returnedRaw)
+		if err != nil {
+			return nil, nil, nil, ErrInvariant
+		}
+		actual := formatMilli(returned.Big())
+		if returnedText != nil && *returnedText != actual {
+			return nil, nil, nil, ErrInvariant
+		}
+		returnedText = &actual
+	}
+	return generalText, gameText, returnedText, nil
 }

@@ -26,6 +26,8 @@ type queueRecord struct {
 	Revision               db.U128
 	ReservationOperationID string
 	Reserved               db.U128
+	GamePaid               db.U128
+	RulesVersion           int
 	LedgerRowsRemaining    db.U128
 	DeviceHash             [32]byte
 	IPHash                 [32]byte
@@ -34,14 +36,14 @@ type queueRecord struct {
 }
 
 const queueColumns = `id,user_id,account_id,mode,revision,reservation_operation_id,reserved,
-ledger_rows_remaining,device_token_hash,source_ip_hash,deadline,created_at`
+ledger_rows_remaining,device_token_hash,source_ip_hash,deadline,created_at,rules_version,game_paid`
 
 func scanQueue(scanner interface{ Scan(...any) error }) (queueRecord, error) {
 	var record queueRecord
-	var revisionRaw, reservedRaw, remainingRaw, deviceRaw, ipRaw []byte
+	var revisionRaw, reservedRaw, remainingRaw, deviceRaw, ipRaw, gameRaw []byte
 	err := scanner.Scan(&record.ID, &record.UserID, &record.AccountID, &record.Mode, &revisionRaw,
 		&record.ReservationOperationID, &reservedRaw, &remainingRaw, &deviceRaw, &ipRaw,
-		&record.Deadline, &record.CreatedAt)
+		&record.Deadline, &record.CreatedAt, &record.RulesVersion, &gameRaw)
 	if err != nil {
 		return queueRecord{}, err
 	}
@@ -52,6 +54,9 @@ func scanQueue(scanner interface{ Scan(...any) error }) (queueRecord, error) {
 	if err == nil {
 		record.LedgerRowsRemaining, err = db.DecodeU128(remainingRaw)
 	}
+	if err == nil {
+		record.GamePaid, err = db.DecodeU128(gameRaw)
+	}
 	if err != nil || len(deviceRaw) != 32 || len(ipRaw) != 32 {
 		return queueRecord{}, ErrInvariant
 	}
@@ -59,6 +64,8 @@ func scanQueue(scanner interface{ Scan(...any) error }) (queueRecord, error) {
 	copy(record.IPHash[:], ipRaw)
 	if !db.ValidateOpaqueID(record.ID, "rpsq_") || !db.ValidateOpaqueID(record.ReservationOperationID, "op_") ||
 		record.UserID <= 0 || record.AccountID <= 0 || rpsconfig.Descriptor().ResolveMode(record.Mode) != nil ||
+		record.RulesVersion < 1 || record.RulesVersion > 2 || record.GamePaid.Big().Cmp(record.Reserved.Big()) > 0 ||
+		record.RulesVersion == 1 && record.GamePaid.Big().Sign() != 0 ||
 		record.Revision.Big().Sign() <= 0 || record.Reserved.Big().Sign() <= 0 ||
 		record.LedgerRowsRemaining.Big().Cmp(bigOne) != 0 || record.CreatedAt < 0 ||
 		record.Deadline < record.CreatedAt+30 || record.Deadline > record.CreatedAt+120 || record.Deadline > 253402300799 {
@@ -96,6 +103,8 @@ type seatRecord struct {
 	DisplayName             *string
 	AvatarURL               *string
 	StartingBalance         db.U128
+	GameBuyIn               db.U128
+	GameRemaining           db.U128
 	CurrentBalance          db.U128
 	CurrentRoundInput       db.U128
 	CurrentAllIn            bool
@@ -289,7 +298,7 @@ func scanSession(scanner interface{ Scan(...any) error }) (sessionRecord, error)
 
 func validateSessionHeader(record sessionRecord) error {
 	if !db.ValidateOpaqueID(record.ID, "rps_") || record.AccountID <= 0 || rpsconfig.Descriptor().ResolveMode(record.Mode) != nil ||
-		record.RulesVersion < 1 || record.Revision.Big().Sign() <= 0 || record.PhaseSeq.Big().Sign() <= 0 ||
+		record.RulesVersion < 1 || record.RulesVersion > 2 || record.Revision.Big().Sign() <= 0 || record.PhaseSeq.Big().Sign() <= 0 ||
 		record.IdentityEpoch.Big().Sign() <= 0 || record.BaseMilli <= 0 || record.BaseMilli > game.MaxMoneyMilli ||
 		record.Pumps.Platform < 0 || record.Pumps.Welfare < 0 || record.Pumps.Thursday < 0 ||
 		record.Pumps.Platform+record.Pumps.Welfare+record.Pumps.Thursday >= 10000 ||
@@ -380,7 +389,7 @@ func scanSeat(scanner interface{ Scan(...any) error }) (seatRecord, error) {
 	var user sql.NullInt64
 	var display, avatar, follower sql.NullString
 	var allIn, statsApplied int
-	var startRaw, currentRaw, roundRaw, gesturePhaseRaw, lastActionRaw []byte
+	var startRaw, currentRaw, roundRaw, gesturePhaseRaw, lastActionRaw, gameBuyInRaw, gameRemainingRaw []byte
 	var totalInputRaw, totalReturnedRaw, terminalRaw, walletRaw []byte
 	var walletSign sql.NullInt64
 	var rockRaw, scissorsRaw, paperRaw, timeoutRaw []byte
@@ -389,14 +398,14 @@ func scanSeat(scanner interface{ Scan(...any) error }) (seatRecord, error) {
 		&roundRaw, &allIn, &record.GestureEnvelope, &gesturePhaseRaw, &follower, &lastActionRaw,
 		&totalInputRaw, &totalReturnedRaw, &terminalRaw, &walletSign, &walletRaw,
 		&rockRaw, &scissorsRaw, &paperRaw, &timeoutRaw, &snapshotCompleted, &snapshotProfitable,
-		&snapshotRock, &snapshotScissors, &snapshotPaper, &statsApplied)
+		&snapshotRock, &snapshotScissors, &snapshotPaper, &statsApplied, &gameBuyInRaw, &gameRemainingRaw)
 	if err != nil {
 		return seatRecord{}, err
 	}
 	required := []struct {
 		raw []byte
 		out *db.U128
-	}{{startRaw, &record.StartingBalance}, {currentRaw, &record.CurrentBalance}, {roundRaw, &record.CurrentRoundInput},
+	}{{startRaw, &record.StartingBalance}, {currentRaw, &record.CurrentBalance}, {roundRaw, &record.CurrentRoundInput}, {gameBuyInRaw, &record.GameBuyIn}, {gameRemainingRaw, &record.GameRemaining},
 		{rockRaw, &record.RockCount}, {scissorsRaw, &record.ScissorsCount}, {paperRaw, &record.PaperCount}, {timeoutRaw, &record.TimeoutCount}}
 	for _, value := range required {
 		decoded, decodeErr := decodeRequiredU128(value.raw)
@@ -487,7 +496,7 @@ const seatColumns = `seat_no,user_id,deletion_state,display_name_snapshot,avatar
 current_balance,current_round_input,current_all_in,current_gesture_envelope,current_gesture_phase_seq,follower_action,
 last_action_phase_seq,total_input,total_returned,terminal_return,wallet_net_sign,wallet_net_mag,rock_count,scissors_count,
 paper_count,timeout_count,snapshot_completed_count,snapshot_profitable_count,snapshot_rock_count,snapshot_scissors_count,
-snapshot_paper_count,stats_applied`
+snapshot_paper_count,stats_applied,game_buy_in,game_remaining`
 
 func loadSessionByID(ctx context.Context, tx *sql.Tx, sessionID string) (sessionRecord, bool, error) {
 	record, err := scanSession(tx.QueryRowContext(ctx, `SELECT `+sessionColumns+` FROM game_rps_sessions WHERE id=?`, sessionID))
@@ -613,12 +622,24 @@ func validateSession(ctx context.Context, tx *sql.Tx, record *sessionRecord) err
 		return err
 	}
 	account, err := ledger.ReadAccount(ctx, tx, record.AccountID)
-	if err != nil || account.Kind != ledger.AccountPlatform || account.Code != "rps-session:"+record.ID || account.Balance.Sign() < 0 {
+	if err != nil || account.Kind != ledger.AccountPlatform || account.Code != "rps-session:"+record.ID || account.Asset != ledger.General || account.Balance.Sign() < 0 {
 		return fmt.Errorf("session account: %w", ErrInvariant)
 	}
 	currentTotal := cloneBig(record.PlayerPool.Big())
 	startingTotal := new(big.Int)
+	gameTotal := new(big.Int)
 	for index, seat := range record.Seats {
+		if seat.GameBuyIn.Big().Cmp(seat.StartingBalance.Big()) > 0 || record.RulesVersion == 1 && seat.GameBuyIn.Big().Sign() != 0 {
+			return fmt.Errorf("seat %d original game payment: %w", index, ErrInvariant)
+		}
+		expectedGame := new(big.Int).Sub(seat.GameBuyIn.Big(), seat.TotalInput.Big())
+		if expectedGame.Sign() < 0 {
+			expectedGame.SetInt64(0)
+		}
+		if seat.GameRemaining.Big().Cmp(expectedGame) != 0 || seat.GameRemaining.Big().Cmp(seat.CurrentBalance.Big()) > 0 {
+			return fmt.Errorf("seat %d remaining game payment: %w", index, ErrInvariant)
+		}
+		gameTotal.Add(gameTotal, seat.GameRemaining.Big())
 		expectedCurrent := new(big.Int).Sub(seat.StartingBalance.Big(), seat.TotalInput.Big())
 		expectedCurrent.Add(expectedCurrent, seat.TotalReturned.Big())
 		if expectedCurrent.Sign() < 0 || expectedCurrent.Cmp(seat.CurrentBalance.Big()) != 0 {
@@ -635,8 +656,20 @@ func validateSession(ctx context.Context, tx *sql.Tx, record *sessionRecord) err
 		currentTotal.Add(currentTotal, seat.CurrentBalance.Big())
 		startingTotal.Add(startingTotal, seat.StartingBalance.Big())
 	}
-	if currentTotal.Cmp(account.Balance.Big()) != 0 {
-		return fmt.Errorf("session balance got=%s account=%s: %w", currentTotal, account.Balance.Big(), ErrInvariant)
+	generalTotal := new(big.Int).Sub(currentTotal, gameTotal)
+	if generalTotal.Cmp(account.Balance.Big()) != 0 {
+		return fmt.Errorf("session general balance got=%s account=%s: %w", generalTotal, account.Balance.Big(), ErrInvariant)
+	}
+	if record.RulesVersion == 2 {
+		var sign int
+		var magnitude []byte
+		if err := tx.QueryRowContext(ctx, "SELECT balance_sign,balance_mag FROM credit_accounts WHERE code=? AND asset_type='game' AND kind='platform'", "rps-session:"+record.ID).Scan(&sign, &magnitude); err != nil {
+			return fmt.Errorf("session game account: %w", err)
+		}
+		balance, err := db.NewSM128(sign, magnitude)
+		if err != nil || balance.Big().Cmp(gameTotal) != 0 {
+			return fmt.Errorf("session game balance: %w", ErrInvariant)
+		}
 	}
 	accounted := cloneBig(currentTotal)
 	accounted.Add(accounted, record.PlatformCutTotal.Big())
@@ -740,7 +773,7 @@ user_id=?,deletion_state=?,display_name_snapshot=?,avatar_url_snapshot=?,current
 current_all_in=?,current_gesture_envelope=?,current_gesture_phase_seq=?,follower_action=?,last_action_phase_seq=?,
 total_input=?,total_returned=?,terminal_return=?,wallet_net_sign=?,wallet_net_mag=?,rock_count=?,scissors_count=?,
 paper_count=?,timeout_count=?,snapshot_completed_count=?,snapshot_profitable_count=?,snapshot_rock_count=?,
-snapshot_scissors_count=?,snapshot_paper_count=?,stats_applied=? WHERE session_id=? AND seat_no=?`,
+snapshot_scissors_count=?,snapshot_paper_count=?,stats_applied=?,game_remaining=? WHERE session_id=? AND seat_no=?`,
 			user, value.DeletionState, nullableString(value.DisplayName), nullableString(value.AvatarURL),
 			db.EncodeU128(value.CurrentBalance), db.EncodeU128(value.CurrentRoundInput), allIn, nullableBytes(value.GestureEnvelope),
 			nullableU128(value.GesturePhaseSeq), nullableString(value.FollowerAction), nullableU128(value.LastActionPhaseSeq),
@@ -749,7 +782,7 @@ snapshot_scissors_count=?,snapshot_paper_count=?,stats_applied=? WHERE session_i
 			db.EncodeU128(value.ScissorsCount), db.EncodeU128(value.PaperCount), db.EncodeU128(value.TimeoutCount),
 			nullableU128(value.SnapshotCompletedCount), nullableU128(value.SnapshotProfitableCount),
 			nullableU128(value.SnapshotRockCount), nullableU128(value.SnapshotScissorsCount),
-			nullableU128(value.SnapshotPaperCount), statsApplied, record.ID, seat)
+			nullableU128(value.SnapshotPaperCount), statsApplied, db.EncodeU128(value.GameRemaining), record.ID, seat)
 		if err != nil {
 			return classifyDB(err)
 		}
@@ -802,5 +835,6 @@ func safeAvatar(value string) *string {
 }
 
 func queueView(record queueRecord, now int64) Queue {
-	return Queue{ID: record.ID, Mode: record.Mode, State: "waiting", Revision: record.Revision.Decimal(), Deadline: record.Deadline, ServerNow: now}
+	return Queue{ID: record.ID, Mode: record.Mode, State: "waiting", Revision: record.Revision.Decimal(), Deadline: record.Deadline, ServerNow: now,
+		RulesVersion: record.RulesVersion, Payment: &Payment{General: formatMilli(new(big.Int).Sub(record.Reserved.Big(), record.GamePaid.Big())), Game: formatMilli(record.GamePaid.Big())}}
 }

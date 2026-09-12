@@ -15,6 +15,8 @@ import (
 )
 
 type batchRecord struct {
+	RulesVersion                       int
+	GamePaid                           int64
 	ID                                 string
 	UserID                             int64
 	Bait                               string
@@ -33,9 +35,9 @@ type batchRecord struct {
 func scanBatch(row interface{ Scan(...any) error }) (batchRecord, error) {
 	var record batchRecord
 	var exhausted int
-	err := row.Scan(&record.ID, &record.UserID, &record.Bait, &record.Count, &record.UnitPrice, &record.EntryTotal, &record.PayoutTotal, &record.OperationID, &record.State, &record.AttemptCount, &record.NextAttempt, &exhausted, &record.CreatedAt, &record.SettledAt, &record.RevealedAt)
+	err := row.Scan(&record.ID, &record.UserID, &record.Bait, &record.Count, &record.UnitPrice, &record.EntryTotal, &record.PayoutTotal, &record.OperationID, &record.State, &record.AttemptCount, &record.NextAttempt, &exhausted, &record.CreatedAt, &record.SettledAt, &record.RevealedAt, &record.RulesVersion, &record.GamePaid)
 	if err == nil {
-		if exhausted != 0 && exhausted != 1 {
+		if exhausted != 0 && exhausted != 1 || record.RulesVersion < 1 || record.RulesVersion > 2 || record.GamePaid < 0 || record.GamePaid > record.EntryTotal || record.RulesVersion == 1 && record.GamePaid != 0 {
 			return batchRecord{}, ErrInvariant
 		}
 		record.RetryExhausted = exhausted == 1
@@ -43,7 +45,9 @@ func scanBatch(row interface{ Scan(...any) error }) (batchRecord, error) {
 	return record, err
 }
 
-const batchSelect = `SELECT id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,state,attempt_count,next_attempt_at,retry_exhausted,created_at,settled_at,revealed_at FROM game_fishing_batches WHERE id=?`
+const batchColumns = `id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,state,attempt_count,next_attempt_at,retry_exhausted,created_at,settled_at,revealed_at,rules_version,game_paid_milli`
+
+const batchSelect = `SELECT ` + batchColumns + ` FROM game_fishing_batches WHERE id=?`
 
 // settle is the only reserved->committed primitive. HTTP, worker and recovery
 // all invoke it; no caller can supply new outcomes or amounts.
@@ -84,7 +88,7 @@ func (service *Service) settle(ctx context.Context, batchID string, expectedUser
 		return nil, ErrConflict
 	}
 	zero := db.EncodeU128(db.U128{})
-	err = service.finance.Settle(ctx, tx, finance.FishingSettlement{Entry: finance.Entry{Meta: ledger.Meta{OperationID: record.OperationID, ActorUserID: record.UserID, CreatedAt: decisionNow}, ResourceID: record.ID, UserID: record.UserID, Amount: ledger.AmountFromMilli(record.EntryTotal)}, Payout: ledger.AmountFromMilli(record.PayoutTotal)}, func(ctx context.Context, tx *sql.Tx) error {
+	err = service.finance.Settle(ctx, tx, finance.FishingSettlement{Entry: finance.Entry{Meta: ledger.Meta{OperationID: record.OperationID, ActorUserID: record.UserID, CreatedAt: decisionNow}, ResourceID: record.ID, UserID: record.UserID, Amount: ledger.AmountFromMilli(record.EntryTotal), GamePaid: ledger.AmountFromMilli(record.GamePaid)}, Payout: ledger.AmountFromMilli(record.PayoutTotal)}, func(ctx context.Context, tx *sql.Tx) error {
 		if err := service.applyBest(ctx, tx, record, record.CreatedAt); err != nil {
 			return err
 		}
@@ -243,7 +247,11 @@ WHERE o.batch_id=? ORDER BY o.ordinal`, record.ID)
 	if len(outcomes) != record.Count {
 		return nil, ErrInvariant
 	}
-	return &FishingBatchResult{BatchID: record.ID, Bait: record.Bait, Count: record.Count, UnitPrice: game.FormatAmount(record.UnitPrice), EntryTotal: game.FormatAmount(record.EntryTotal), Outcomes: outcomes, PayoutTotal: game.FormatAmount(record.PayoutTotal), Balance: formatWideMilli(account.Balance.Big()), SettledAt: record.SettledAt.Int64, IdempotentReplay: replay}, nil
+	gameAccount, err := ledger.UserAssetAccount(ctx, tx, record.UserID, ledger.Game)
+	if err != nil {
+		return nil, ErrInvariant
+	}
+	return &FishingBatchResult{RulesVersion: record.RulesVersion, Payment: game.PaymentFromMilli(record.EntryTotal, record.GamePaid), GameBalance: formatWideMilli(gameAccount.Balance.Big()), BatchID: record.ID, Bait: record.Bait, Count: record.Count, UnitPrice: game.FormatAmount(record.UnitPrice), EntryTotal: game.FormatAmount(record.EntryTotal), Outcomes: outcomes, PayoutTotal: game.FormatAmount(record.PayoutTotal), Balance: formatWideMilli(account.Balance.Big()), SettledAt: record.SettledAt.Int64, IdempotentReplay: replay}, nil
 }
 
 func pendingFromRecord(record batchRecord) *FishingSettlementPending {
@@ -255,7 +263,7 @@ func pendingFromRecord(record batchRecord) *FishingSettlementPending {
 		value := record.NextAttempt.Int64
 		next = &value
 	}
-	return &FishingSettlementPending{BatchID: record.ID, Bait: record.Bait, Count: record.Count, EntryTotal: game.FormatAmount(record.EntryTotal), State: state, NextAttemptAt: next, RetryExhausted: record.RetryExhausted}
+	return &FishingSettlementPending{RulesVersion: record.RulesVersion, Payment: game.PaymentFromMilli(record.EntryTotal, record.GamePaid), BatchID: record.ID, Bait: record.Bait, Count: record.Count, EntryTotal: game.FormatAmount(record.EntryTotal), State: state, NextAttemptAt: next, RetryExhausted: record.RetryExhausted}
 }
 
 func (service *Service) loadAuthority(ctx context.Context, userID int64, batchID string, replay bool) (*FishingBatchResult, *FishingSettlementPending, error) {
@@ -458,7 +466,7 @@ func (service *Service) FishingState(ctx context.Context, userID int64) (Fishing
 	defer tx.Rollback()
 	var record batchRecord
 	// Use owner queries because batchSelect binds a concrete ID.
-	row := tx.QueryRowContext(ctx, `SELECT id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,state,attempt_count,next_attempt_at,retry_exhausted,created_at,settled_at,revealed_at FROM game_fishing_batches WHERE user_id=? AND state='reserved'`, userID)
+	row := tx.QueryRowContext(ctx, `SELECT `+batchColumns+` FROM game_fishing_batches WHERE user_id=? AND state='reserved'`, userID)
 	record, err = scanBatch(row)
 	if err == nil {
 		return FishingState{SettlementPending: pendingFromRecord(record)}, nil
@@ -466,7 +474,7 @@ func (service *Service) FishingState(ctx context.Context, userID int64) (Fishing
 	if !errors.Is(err, sql.ErrNoRows) {
 		return FishingState{}, classifyDB(err)
 	}
-	row = tx.QueryRowContext(ctx, `SELECT id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,state,attempt_count,next_attempt_at,retry_exhausted,created_at,settled_at,revealed_at FROM game_fishing_batches WHERE user_id=? AND state='committed' AND revealed_at IS NULL ORDER BY settled_at,id LIMIT 1`, userID)
+	row = tx.QueryRowContext(ctx, `SELECT `+batchColumns+` FROM game_fishing_batches WHERE user_id=? AND state='committed' AND revealed_at IS NULL ORDER BY settled_at,id LIMIT 1`, userID)
 	record, err = scanBatch(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return FishingState{}, nil

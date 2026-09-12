@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/game/fishing"
 )
 
@@ -46,6 +47,8 @@ type FishingOutcome struct {
 }
 
 type FishingBatchResult struct {
+	RulesVersion     int              `json:"rules_version"`
+	Payment          game.Payment     `json:"payment"`
 	BatchID          string           `json:"batch_id"`
 	Bait             string           `json:"bait"`
 	Count            int              `json:"count"`
@@ -54,18 +57,21 @@ type FishingBatchResult struct {
 	Outcomes         []FishingOutcome `json:"outcomes"`
 	PayoutTotal      string           `json:"payout_total"`
 	Balance          string           `json:"balance"`
+	GameBalance      string           `json:"game_balance"`
 	SettledAt        int64            `json:"settled_at"`
 	IdempotentReplay bool             `json:"idempotent_replay"`
 }
 
 type FishingSettlementPending struct {
-	BatchID        string `json:"batch_id"`
-	Bait           string `json:"bait"`
-	Count          int    `json:"count"`
-	EntryTotal     string `json:"entry_total"`
-	State          string `json:"state"`
-	NextAttemptAt  *int64 `json:"next_attempt_at"`
-	RetryExhausted bool   `json:"retry_exhausted"`
+	RulesVersion   int          `json:"rules_version"`
+	Payment        game.Payment `json:"payment"`
+	BatchID        string       `json:"batch_id"`
+	Bait           string       `json:"bait"`
+	Count          int          `json:"count"`
+	EntryTotal     string       `json:"entry_total"`
+	State          string       `json:"state"`
+	NextAttemptAt  *int64       `json:"next_attempt_at"`
+	RetryExhausted bool         `json:"retry_exhausted"`
 }
 
 type FishingState struct {
@@ -163,15 +169,17 @@ type UserExport struct {
 // is deliberately kept out of FishingBatchResult so the public game response
 // remains the frozen closed DTO while account export can include ACK state.
 type FishingTerminalExport struct {
-	BatchID     string           `json:"batch_id"`
-	Bait        string           `json:"bait"`
-	Count       int              `json:"count"`
-	UnitPrice   string           `json:"unit_price"`
-	EntryTotal  string           `json:"entry_total"`
-	Outcomes    []FishingOutcome `json:"outcomes"`
-	PayoutTotal string           `json:"payout_total"`
-	SettledAt   int64            `json:"settled_at"`
-	RevealedAt  *int64           `json:"revealed_at"`
+	RulesVersion int              `json:"rules_version"`
+	Payment      game.Payment     `json:"payment"`
+	BatchID      string           `json:"batch_id"`
+	Bait         string           `json:"bait"`
+	Count        int              `json:"count"`
+	UnitPrice    string           `json:"unit_price"`
+	EntryTotal   string           `json:"entry_total"`
+	Outcomes     []FishingOutcome `json:"outcomes"`
+	PayoutTotal  string           `json:"payout_total"`
+	SettledAt    int64            `json:"settled_at"`
+	RevealedAt   *int64           `json:"revealed_at"`
 }
 
 type StartInput struct {

@@ -17,6 +17,7 @@ type Entry struct {
 	ResourceID string
 	UserID     int64
 	Amount     ledger.Amount
+	GamePaid   ledger.Amount
 }
 type FishingSettlement struct {
 	Entry
@@ -32,9 +33,10 @@ type LinkLink interface {
 }
 
 type QueueInput struct {
-	QueueID string
-	UserID  int64
-	Amount  ledger.Amount
+	QueueID  string
+	UserID   int64
+	Amount   ledger.Amount
+	GamePaid ledger.Amount
 }
 type SessionStart struct {
 	Meta       ledger.Meta
@@ -48,6 +50,7 @@ type RoundCut struct {
 	Sequence                            db.U128
 	WelfareAccountID, ThursdayAccountID int64
 	Amounts                             ledger.RPSCutAmounts
+	GameInput                           ledger.Amount
 }
 type Payout struct {
 	UserID int64

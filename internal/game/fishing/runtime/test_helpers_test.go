@@ -217,6 +217,9 @@ func (fixture *gameFixture) seedUser(label string, funding int64) int64 {
 	if err != nil {
 		fixture.t.Fatalf("create wallet: %v", err)
 	}
+	if _, err := ledger.CreateUserAssetAccount(context.Background(), tx, userID, ledger.Game, fixture.clock.Load()); err != nil {
+		fixture.t.Fatal(err)
+	}
 	if funding != 0 {
 		external, readErr := ledger.CodedAccount(context.Background(), tx, "external")
 		if readErr != nil {

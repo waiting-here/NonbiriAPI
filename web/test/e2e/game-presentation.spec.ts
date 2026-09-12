@@ -29,6 +29,7 @@ function gamesSnapshot() {
   return {
     server_now: NOW,
     balance: '12345678901234567890.125',
+    game_balance: '0',
     tutorial_rps_seen: true,
     games_enabled: true,
     fishing: {
@@ -321,6 +322,8 @@ function fishingResult(tier: 'big' | 'legend'): Record<string, unknown> {
     count: 1,
     unit_price: '1',
     entry_total: '1',
+    rules_version: 1,
+    payment: { general: '1', game: '0' },
     outcomes: [
       {
         ordinal: 0,
@@ -332,6 +335,7 @@ function fishingResult(tier: 'big' | 'legend'): Record<string, unknown> {
     ],
     payout_total: legendary ? '8' : '3',
     balance: '12345678901234567890.125',
+    game_balance: '0',
     settled_at: NOW + 1,
     idempotent_replay: false,
   };

@@ -31,6 +31,10 @@ type replayLocator struct {
 // terminal settlement primitive. The returned value is exactly one of result
 // or pending.
 func (service *Service) StartFishing(ctx context.Context, input StartInput) (*FishingBatchResult, *FishingSettlementPending, error) {
+	return service.startFishing(ctx, input, 1)
+}
+
+func (service *Service) startFishing(ctx context.Context, input StartInput, rulesVersion int) (*FishingBatchResult, *FishingSettlementPending, error) {
 	if service == nil || service.closed.Load() {
 		return nil, nil, ErrClosed
 	}
@@ -135,9 +139,21 @@ func (service *Service) StartFishing(ctx context.Context, input StartInput) (*Fi
 	if err != nil {
 		return nil, nil, ErrInvariant
 	}
-	if userAccount.Balance.Big().Cmp(big.NewInt(entryTotal)) < 0 {
+	gameBalance := ledger.Amount{}
+	if rulesVersion == 2 {
+		gameAccount, err := ledger.UserAssetAccount(ctx, tx, input.UserID, ledger.Game)
+		if err != nil {
+			return nil, nil, ErrInvariant
+		}
+		gameBalance = gameAccount.Balance
+	} else if userAccount.Balance.Big().Cmp(big.NewInt(entryTotal)) < 0 {
 		return nil, nil, ErrInsufficientCredits
 	}
+	payment, err := ledger.SplitGamePayment(ledger.AmountFromMilli(entryTotal), userAccount.Balance, gameBalance)
+	if err != nil {
+		return nil, nil, mapLedger(err)
+	}
+	gamePaid := payment.Game.Big().Int64()
 	one, oneErr := db.U128FromBig(big.NewInt(1))
 	if oneErr != nil {
 		return nil, nil, ErrInvariant
@@ -174,13 +190,13 @@ func (service *Service) StartFishing(ctx context.Context, input StartInput) (*Fi
 		return nil, nil, ErrServiceUnavailable
 	}
 	nextAttempt := now.Add(firstRetryDelay).Unix()
-	err = service.finance.Reserve(ctx, tx, finance.Entry{Meta: ledger.Meta{OperationID: reserveOperationID, ActorUserID: input.UserID, CreatedAt: decisionNow}, ResourceID: batchID, UserID: input.UserID, Amount: ledger.AmountFromMilli(entryTotal)}, func(ctx context.Context, tx *sql.Tx) error {
-		_, insertErr := tx.ExecContext(ctx, `INSERT INTO game_fishing_batches(id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,request_hash,state,ledger_rows_remaining,attempt_count,next_attempt_at,last_error_class,retry_exhausted,created_at,settled_at,revealed_at) VALUES(?,?,?,?,?,?,?,?,?,'reserved',?,0,?,NULL,0,?,NULL,NULL)`, batchID, input.UserID, string(bait), input.Count, entry, entryTotal, payoutTotal, terminalOperationID, requestHash[:], db.EncodeU128(one), nextAttempt, decisionNow)
+	err = service.finance.Reserve(ctx, tx, finance.Entry{Meta: ledger.Meta{OperationID: reserveOperationID, ActorUserID: input.UserID, CreatedAt: decisionNow}, ResourceID: batchID, UserID: input.UserID, Amount: ledger.AmountFromMilli(entryTotal), GamePaid: payment.Game}, func(ctx context.Context, tx *sql.Tx) error {
+		_, insertErr := tx.ExecContext(ctx, `INSERT INTO game_fishing_batches(id,user_id,bait,count,unit_price_milli,entry_total_milli,payout_total_milli,operation_id,request_hash,state,ledger_rows_remaining,attempt_count,next_attempt_at,last_error_class,retry_exhausted,created_at,settled_at,revealed_at,rules_version,game_paid_milli,net_payout_total_milli) VALUES(?,?,?,?,?,?,?,?,?,'reserved',?,0,?,NULL,0,?,NULL,NULL,?,?,?)`, batchID, input.UserID, string(bait), input.Count, entry, entryTotal, payoutTotal, terminalOperationID, requestHash[:], db.EncodeU128(one), nextAttempt, decisionNow, rulesVersion, gamePaid, payoutTotal)
 		if insertErr != nil {
 			return classifyDB(insertErr)
 		}
 		for ordinal, draw := range draws {
-			if _, insertErr = tx.ExecContext(ctx, `INSERT INTO game_fishing_outcomes(batch_id,ordinal,species_key,tier,size_cm,payout_milli) VALUES(?,?,?,?,?,?)`, batchID, ordinal, draw.Outcome.Key, string(draw.Outcome.Tier), draw.Outcome.SizeCentimetre, draw.Settlement.PayoutMilli); insertErr != nil {
+			if _, insertErr = tx.ExecContext(ctx, `INSERT INTO game_fishing_outcomes(batch_id,ordinal,species_key,tier,size_cm,payout_milli,net_payout_milli) VALUES(?,?,?,?,?,?,?)`, batchID, ordinal, draw.Outcome.Key, string(draw.Outcome.Tier), draw.Outcome.SizeCentimetre, draw.Settlement.PayoutMilli, draw.Settlement.PayoutMilli); insertErr != nil {
 				return classifyDB(insertErr)
 			}
 			if draw.Outcome.BlueFatFishLengthCM != "" {

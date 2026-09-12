@@ -21,6 +21,11 @@ export interface RPSModeConfig {
   readonly queueCapacity: number;
 }
 
+export interface GamePayment {
+  readonly general: string;
+  readonly game: string;
+}
+
 export interface GamesSnapshot {
   readonly serverNow: number;
   readonly balance: string;
