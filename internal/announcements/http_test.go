@@ -59,7 +59,7 @@ func TestAnnouncementHTTPRoutesStrictBodiesAndPreviewIsReadOnly(t *testing.T) {
 		t.Fatalf("registered routes: users=%d admins=%d", len(routes.users), len(routes.admins))
 	}
 
-	createBody := `{"title_zh":"标题","body_zh":"正文","title_en":"Title","body_en":"Body","severity":"info","pinned":false,"dismissible":true}`
+	createBody := `{"title_zh":"标题","body_zh":"正文","title_en":"Title","body_en":"Body\r\nSecond line","severity":"info","pinned":false,"dismissible":true}`
 	create := routes.admins[http.MethodPost+" "+routeAdminAnnouncements]
 	recorder := invokeAnnouncementAdmin(create, adminID, http.MethodPost, routeAdminAnnouncements, createBody, strings.Repeat("a", 22), "")
 	if recorder.Code != http.StatusCreated || recorder.Header().Get("Cache-Control") != "no-store" {
@@ -78,6 +78,18 @@ func TestAnnouncementHTTPRoutesStrictBodiesAndPreviewIsReadOnly(t *testing.T) {
 	var draft AdminAnnouncement
 	if err := json.Unmarshal(recorder.Body.Bytes(), &draft); err != nil || draft.ID != receipt.ID || draft.Revision != receipt.Revision {
 		t.Fatalf("decode follow-up GET: draft=%+v err=%v", draft, err)
+	}
+
+	if draft.Draft.EN == nil || draft.Draft.EN.Body != "Body\nSecond line" {
+		t.Fatalf("draft line endings: %+v", draft.Draft.EN)
+	}
+	var storedBody string
+	if err := environment.store.DB().QueryRow("SELECT draft_body_en FROM announcements WHERE id=?", receipt.ID).Scan(&storedBody); err != nil || storedBody != "Body\nSecond line" {
+		t.Fatalf("stored body=%q error=%v", storedBody, err)
+	}
+	recorder = invokeAnnouncementAdmin(create, adminID, http.MethodPost, routeAdminAnnouncements, strings.ReplaceAll(createBody, "\\r\\n", "\\n"), strings.Repeat("a", 22), "")
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("LF replay status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 
 	edit := routes.admins[http.MethodPatch+" "+routeAdminAnnouncement]

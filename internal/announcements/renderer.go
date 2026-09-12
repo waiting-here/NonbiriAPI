@@ -24,11 +24,15 @@ type renderedMarkdown struct {
 
 type markdownRenderer struct{}
 
+func normalizeMarkdownLineEndings(source string) string {
+	return strings.ReplaceAll(source, "\r\n", "\n")
+}
+
 func (markdownRenderer) render(source string) (renderedMarkdown, error) {
 	if !validMarkdownSource(source) {
 		return renderedMarkdown{}, ErrInvalidRequest
 	}
-	source = strings.ReplaceAll(source, "\r\n", "\n")
+	source = normalizeMarkdownLineEndings(source)
 	lines := strings.Split(source, "\n")
 	var out strings.Builder
 	plainParts := make([]string, 0, len(lines))

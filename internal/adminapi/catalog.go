@@ -68,10 +68,10 @@ var (
 var catalogMetadataByKey = map[string]catalogMetadata{
 	KeySiteName:                 {"identity", catalogText("站点名称", "Site name"), catalogText("显示在双站标题与公共配置中的实例名称。", "Instance name shown in both stations and public configuration."), unitNone, nil},
 	KeySiteLogoURL:              {"identity", catalogText("站点标志地址", "Site logo URL"), catalogText("可选的公开站点标志地址；留空不显示远端标志。", "Optional public logo URL; leave empty to show no remote logo."), unitNone, nil},
-	KeyLegalPrivacyOverrideZh:   {"legal", catalogText("隐私政策覆盖（中文）", "Privacy override (Chinese)"), catalogText("逐字节覆盖内置中文隐私政策，保留换行与制表符。", "Byte-preserving override for the built-in Chinese privacy policy."), unitNone, nil},
-	KeyLegalPrivacyOverrideEn:   {"legal", catalogText("隐私政策覆盖（英文）", "Privacy override (English)"), catalogText("逐字节覆盖内置英文隐私政策，保留换行与制表符。", "Byte-preserving override for the built-in English privacy policy."), unitNone, nil},
-	KeyLegalTermsOverrideZh:     {"legal", catalogText("服务条款覆盖（中文）", "Terms override (Chinese)"), catalogText("逐字节覆盖内置中文服务条款，保留换行与制表符。", "Byte-preserving override for the built-in Chinese terms."), unitNone, nil},
-	KeyLegalTermsOverrideEn:     {"legal", catalogText("服务条款覆盖（英文）", "Terms override (English)"), catalogText("逐字节覆盖内置英文服务条款，保留换行与制表符。", "Byte-preserving override for the built-in English terms."), unitNone, nil},
+	KeyLegalPrivacyOverrideZh:   {"legal", catalogText("隐私政策覆盖（中文）", "Privacy override (Chinese)"), catalogText("覆盖内置中文隐私政策，保留段落与制表符。", "Custom text for the built-in Chinese privacy policy."), unitNone, nil},
+	KeyLegalPrivacyOverrideEn:   {"legal", catalogText("隐私政策覆盖（英文）", "Privacy override (English)"), catalogText("覆盖内置英文隐私政策，保留段落与制表符。", "Custom text for the built-in English privacy policy."), unitNone, nil},
+	KeyLegalTermsOverrideZh:     {"legal", catalogText("服务条款覆盖（中文）", "Terms override (Chinese)"), catalogText("覆盖内置中文服务条款，保留段落与制表符。", "Custom text for the built-in Chinese terms."), unitNone, nil},
+	KeyLegalTermsOverrideEn:     {"legal", catalogText("服务条款覆盖（英文）", "Terms override (English)"), catalogText("覆盖内置英文服务条款，保留段落与制表符。", "Custom text for the built-in English terms."), unitNone, nil},
 	KeyLegalAuthoritativeLocale: {"legal", catalogText("法律文本权威语言", "Authoritative legal language"), catalogText("声明中英文文本发生冲突时优先采用的语言。", "Declares which language prevails if the legal versions conflict."), unitNone, nil},
 
 	KeyDefaultEndpointLimit:    {"limits", catalogText("默认端点上限", "Default endpoint limit"), catalogText("用户未单独配置时可创建的端点数量；不是显式用户值的上限。", "Endpoint count used when a user has no override; it is not a cap on explicit user values."), unitCount, nil},
