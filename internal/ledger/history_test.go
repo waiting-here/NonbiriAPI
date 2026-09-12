@@ -16,9 +16,9 @@ func TestUserHistoryFiltersSnapshotPagesAndOwnerIsolation(t *testing.T) {
 	store := openLedgerTestStore(t)
 	ctx := context.Background()
 	tx := beginLedgerTestTx(t, store.DB())
-	owner, wallet := seedLedgerUser(t, tx, "history-owner")
-	foreign, foreignWallet := seedLedgerUser(t, tx, "history-foreign")
-	emptyUser, _ := seedLedgerUser(t, tx, "history-empty")
+	owner, wallet := seedHistoryUser(t, tx, "history-owner")
+	foreign, foreignWallet := seedHistoryUser(t, tx, "history-foreign")
+	emptyUser, _ := seedHistoryUser(t, tx, "history-empty")
 	external, err := CodedAccount(ctx, tx, "external")
 	if err != nil {
 		t.Fatal(err)
@@ -150,8 +150,8 @@ func TestHistoryRequestLinksRequireCurrentCallerOwnershipAndRetention(t *testing
 	store := openLedgerTestStore(t)
 	ctx := context.Background()
 	tx := beginLedgerTestTx(t, store.DB())
-	owner, wallet := seedLedgerUser(t, tx, "link-owner")
-	foreign, _ := seedLedgerUser(t, tx, "link-foreign")
+	owner, wallet := seedHistoryUser(t, tx, "link-owner")
+	foreign, _ := seedHistoryUser(t, tx, "link-foreign")
 	external, err := CodedAccount(ctx, tx, "external")
 	if err != nil {
 		t.Fatal(err)
@@ -272,4 +272,13 @@ VALUES(?,?,'charity_chat_completions','model','accepted',1,'reserved',0,'user',?
 	if strings.Contains(string(body), requestID) || strings.Contains(string(body), claimID) {
 		t.Fatal("donor history disclosed another caller request/claim")
 	}
+}
+
+func seedHistoryUser(t *testing.T, tx *sql.Tx, label string) (int64, Account) {
+	t.Helper()
+	user, wallet := seedLedgerUser(t, tx, label)
+	if _, err := CreateUserAssetAccount(context.Background(), tx, user, Game, ledgerTestNow); err != nil {
+		t.Fatal(err)
+	}
+	return user, wallet
 }

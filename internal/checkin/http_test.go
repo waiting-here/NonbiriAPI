@@ -48,7 +48,7 @@ func TestRegisterRoutesPublishesFrozenMethods(t *testing.T) {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	want := []string{http.MethodGet + " " + Route, http.MethodPost + " " + Route}
+	want := []string{http.MethodGet + " " + Route, http.MethodGet + " " + GameRoute, http.MethodPost + " " + Route, http.MethodPost + " " + GameRoute}
 	if !reflect.DeepEqual(keys, want) {
 		t.Fatalf("routes = %v, want %v", keys, want)
 	}
@@ -98,7 +98,8 @@ func TestHTTPEnabledStatusAndMutationUseClosedWire(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantStatus := map[string]any{
-		"enabled": true, "checked_in_today": false, "balance": "0",
+		"asset_type": "general",
+		"enabled":    true, "checked_in_today": false, "balance": "0",
 		"award_min": "1.25", "award_max": "1.25", "balance_cap": "9",
 	}
 	if !reflect.DeepEqual(status, wantStatus) {
@@ -118,7 +119,7 @@ func TestHTTPEnabledStatusAndMutationUseClosedWire(t *testing.T) {
 	if err := json.Unmarshal(postResponse.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	wantResult := map[string]any{"award": "1.25", "balance": "1.25"}
+	wantResult := map[string]any{"asset_type": "general", "award": "1.25", "balance": "1.25"}
 	if !reflect.DeepEqual(result, wantResult) {
 		t.Fatalf("POST body = %#v, want %#v", result, wantResult)
 	}
@@ -185,7 +186,7 @@ func TestHTTPDomainErrorMapping(t *testing.T) {
 
 func invokeCheckinRoute(t *testing.T, registrar *capturedUserRoutes, method, target string, body *strings.Reader, userID int64) *httptest.ResponseRecorder {
 	t.Helper()
-	key := method + " " + Route
+	key := method + " " + strings.SplitN(target, "?", 2)[0]
 	handler := registrar.routes[key]
 	if handler == nil {
 		t.Fatalf("missing handler %s", key)

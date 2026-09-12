@@ -103,7 +103,7 @@ export const coreKeys = {
       endpointId,
       ...[...keyIds].sort(),
     ] as const,
-  home: (accountId: string, capability: 'checkin' | 'games' | 'announcements') =>
+  home: (accountId: string, capability: 'checkin' | 'game-checkin' | 'games' | 'announcements') =>
     ['user', 'core', 'account', accountId, 'home', capability] as const,
 };
 

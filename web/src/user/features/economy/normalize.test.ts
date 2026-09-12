@@ -13,6 +13,8 @@ import {
 export const ACTIVITY_FIXTURE = {
   master: { enabled: true, available: true, reason: 'available' },
   welfare: {
+    asset_type: 'game',
+    pool_asset_type: 'general',
     enabled: true,
     state: 'available',
     site_day: '2026-08-31',
@@ -110,6 +112,8 @@ describe('economy closed-wire normalizers', () => {
       normalizeActivitiesSnapshot({
         master: { enabled: false, available: false, reason: 'disabled' },
         welfare: {
+          asset_type: 'game',
+          pool_asset_type: 'general',
           enabled: false,
           state: 'unavailable',
           site_day: '',
@@ -429,6 +433,9 @@ describe('economy closed-wire normalizers', () => {
   it('accepts signed SM128 wallet balances only on signed response fields', () => {
     expect(
       normalizeWelfareClaimResult({
+        asset_type: 'game',
+        pool_asset_type: 'general',
+        game_balance: '0',
         awarded: '0.001',
         balance: '-12.345',
         pool_balance: '100',
@@ -437,6 +444,9 @@ describe('economy closed-wire normalizers', () => {
     ).toBe('-12.345');
     expect(() =>
       normalizeWelfareClaimResult({
+        asset_type: 'game',
+        pool_asset_type: 'general',
+        game_balance: '0',
         awarded: '0.001',
         balance: '-0.000',
         pool_balance: '100',
@@ -659,10 +669,7 @@ describe('economy closed-wire normalizers', () => {
         state: 'available',
         donation_intake: 'open',
         server_now: CAPABILITY_SERVER_NOW,
-        models: [
-          capabilityModel('a', 'one'),
-          { ...capabilityModel('a', 'two'), id: '1' },
-        ],
+        models: [capabilityModel('a', 'one'), { ...capabilityModel('a', 'two'), id: '1' }],
       }),
     ).toThrow();
     expect(() =>

@@ -22,6 +22,7 @@ var (
 // ledger line. It deliberately omits actor, reason, donation-credit metadata,
 // pool balances, account identity, and line-level post-balance internals.
 type UserExportEntry struct {
+	Asset       Asset
 	OperationID string
 	Kind        Kind
 	SourceType  string
@@ -42,18 +43,18 @@ func ExportUserEntries(
 	if ctx == nil || tx == nil || userID <= 0 || limit <= 0 || limit > MaxUserExportEntries {
 		return nil, ErrInvalidExport
 	}
-	wallet, err := UserAccount(ctx, tx, userID)
+	_, err := UserAccount(ctx, tx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("ledger: read export wallet: %w", err)
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT
 o.id,o.kind,o.source_type,o.source_id,o.source_seq,o.created_at,
-e.delta_sign,e.delta_mag
+e.asset_type,e.delta_sign,e.delta_mag
 FROM credit_entries e
 JOIN credit_operations o ON o.id=e.operation_id
-WHERE e.account_id=? AND e.account_kind_snapshot='user'
+WHERE e.account_id IN (SELECT id FROM credit_accounts WHERE kind='user' AND user_id=?) AND e.account_kind_snapshot='user'
 ORDER BY o.ledger_seq,e.line_no
-LIMIT ?`, wallet.ID, limit+1)
+LIMIT ?`, userID, limit+1)
 	if err != nil {
 		return nil, classifySQLError("export user ledger", err)
 	}
@@ -75,13 +76,14 @@ LIMIT ?`, wallet.ID, limit+1)
 			&entry.SourceID,
 			&sourceSeq,
 			&entry.CreatedAt,
+			&entry.Asset,
 			&deltaSign,
 			&deltaMag,
 		); err != nil {
 			return nil, classifySQLError("scan user ledger export", err)
 		}
 		entry.Kind = Kind(kindText)
-		if !validExportOperation(entry, sourceSeq) {
+		if !entry.Asset.valid() || !validExportOperation(entry, sourceSeq) {
 			clear(sourceSeq)
 			clear(deltaMag)
 			return nil, ErrInvariant

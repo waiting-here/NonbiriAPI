@@ -2,6 +2,7 @@ package activities
 
 import (
 	"github.com/waiting-here/NonbiriAPI/internal/accountstream"
+	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 	"github.com/waiting-here/NonbiriAPI/internal/pagination"
 )
 
@@ -149,13 +150,15 @@ type MasterView struct {
 }
 
 type WelfareView struct {
-	Enabled      bool   `json:"enabled"`
-	State        string `json:"state"`
-	SiteDay      string `json:"site_day"`
-	Threshold    string `json:"threshold"`
-	Cap          string `json:"cap"`
-	PoolBalance  string `json:"pool_balance"`
-	ClaimedToday bool   `json:"claimed_today"`
+	Asset        ledger.Asset `json:"asset_type"`
+	PoolAsset    ledger.Asset `json:"pool_asset_type"`
+	Enabled      bool         `json:"enabled"`
+	State        string       `json:"state"`
+	SiteDay      string       `json:"site_day"`
+	Threshold    string       `json:"threshold"`
+	Cap          string       `json:"cap"`
+	PoolBalance  string       `json:"pool_balance"`
+	ClaimedToday bool         `json:"claimed_today"`
 }
 
 type ActivitiesSnapshot struct {
@@ -226,10 +229,13 @@ type PoolListQuery struct {
 }
 
 type WelfareClaimResult struct {
-	Awarded     string `json:"awarded"`
-	Balance     string `json:"balance"`
-	PoolBalance string `json:"pool_balance"`
-	SiteDay     string `json:"site_day"`
+	GameBalance string       `json:"game_balance"`
+	Asset       ledger.Asset `json:"asset_type"`
+	PoolAsset   ledger.Asset `json:"pool_asset_type"`
+	Awarded     string       `json:"awarded"`
+	Balance     string       `json:"balance"`
+	PoolBalance string       `json:"pool_balance"`
+	SiteDay     string       `json:"site_day"`
 }
 
 type ThursdayContributionInput struct {
@@ -286,16 +292,19 @@ type PoolDestination struct {
 }
 
 type UserExport struct {
-	WelfareClaims []WelfareClaimExport        `json:"welfare_claims"`
-	Thursday      []ThursdayParticipantExport `json:"thursday"`
+	Checkins       []CheckinExport             `json:"checkins"`
+	GameOnboarding []OnboardingExport          `json:"game_onboarding"`
+	WelfareClaims  []WelfareClaimExport        `json:"welfare_claims"`
+	Thursday       []ThursdayParticipantExport `json:"thursday"`
 }
 
 type WelfareClaimExport struct {
-	SiteDay   string `json:"site_day"`
-	Threshold string `json:"threshold"`
-	Cap       string `json:"cap"`
-	Awarded   string `json:"awarded"`
-	CreatedAt int64  `json:"created_at"`
+	Asset     ledger.Asset `json:"asset_type"`
+	SiteDay   string       `json:"site_day"`
+	Threshold string       `json:"threshold"`
+	Cap       string       `json:"cap"`
+	Awarded   string       `json:"awarded"`
+	CreatedAt int64        `json:"created_at"`
 }
 
 type ThursdayParticipantExport struct {
@@ -316,4 +325,18 @@ type WorkerResult struct {
 	More          bool
 	PeriodID      string
 	ProcessedRows int
+}
+
+type CheckinExport struct {
+	Asset     ledger.Asset `json:"asset_type"`
+	SiteDay   string       `json:"site_day"`
+	Award     string       `json:"award"`
+	CreatedAt int64        `json:"created_at"`
+}
+
+type OnboardingExport struct {
+	GameKey     string `json:"game_key"`
+	TaskKey     string `json:"task_key"`
+	Award       string `json:"award"`
+	CompletedAt int64  `json:"completed_at"`
 }

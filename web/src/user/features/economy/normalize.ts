@@ -897,6 +897,8 @@ function normalizeMaster(value: unknown): ActivitiesMaster {
 
 function normalizeWelfare(value: unknown): ActivitiesSnapshot['welfare'] {
   const item = record(value, 'welfare view', [
+    'asset_type',
+    'pool_asset_type',
     'enabled',
     'state',
     'site_day',
@@ -929,6 +931,8 @@ function normalizeWelfare(value: unknown): ActivitiesSnapshot['welfare'] {
     invalid('welfare site day');
   }
   const result: ActivitiesSnapshot['welfare'] = {
+    asset: enumValue(item.asset_type, 'welfare asset', ['game'] as const),
+    poolAsset: enumValue(item.pool_asset_type, 'welfare pool asset', ['general'] as const),
     enabled,
     state,
     siteDay,
@@ -994,7 +998,13 @@ function normalizeThursdayCurrent(value: unknown): ThursdayCurrent | null {
 function normalizeThursdayNext(value: unknown): ThursdayNext | null {
   if (value === null) return null;
   const item = record(value, 'Thursday next period', [
-    'period_id', 'opens_at', 'closes_at', 'literature', 'entry', 'per_user_limit', 'pool_balance',
+    'period_id',
+    'opens_at',
+    'closes_at',
+    'literature',
+    'entry',
+    'per_user_limit',
+    'pool_balance',
   ]);
   const opensAt = timestamp(item.opens_at, 'Thursday next opens timestamp');
   const closesAt = timestamp(item.closes_at, 'Thursday next closes timestamp');
@@ -1123,6 +1133,9 @@ export function normalizeActivitiesSnapshot(value: unknown): ActivitiesSnapshot 
 
 export function normalizeWelfareClaimResult(value: unknown): WelfareClaimResult {
   const item = record(value, 'welfare claim result', [
+    'asset_type',
+    'pool_asset_type',
+    'game_balance',
     'awarded',
     'balance',
     'pool_balance',
@@ -1130,6 +1143,9 @@ export function normalizeWelfareClaimResult(value: unknown): WelfareClaimResult 
   ]);
   const siteDay = canonicalSiteDay(item.site_day, 'welfare result site day');
   return {
+    asset: enumValue(item.asset_type, 'welfare asset', ['game'] as const),
+    poolAsset: enumValue(item.pool_asset_type, 'welfare pool asset', ['general'] as const),
+    gameBalance: signedSM128Amount(item.game_balance, 'welfare game balance'),
     awarded: creditAmount(item.awarded, 'welfare awarded amount', MAX_MONEY_MILLI),
     balance: signedSM128Amount(item.balance, 'welfare balance'),
     poolBalance: sm128CreditAmount(item.pool_balance, 'welfare pool balance'),

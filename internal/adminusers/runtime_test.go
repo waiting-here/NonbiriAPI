@@ -152,6 +152,9 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 	if _, err := ledger.CreateUserAccount(context.Background(), tx, userID, adminUsersTestNow); err != nil {
 		fixture.t.Fatal(err)
 	}
+	if _, err := ledger.CreateUserAssetAccount(context.Background(), tx, userID, ledger.Game, adminUsersTestNow); err != nil {
+		fixture.t.Fatal(err)
+	}
 	if !admin {
 		hash := sha256.Sum256([]byte(label))
 		if _, err := tx.Exec(`INSERT INTO caller_keys(user_id,generation,key_hash,display_head,display_tail,key_created_at,updated_at) VALUES(?,0,?,'nbk_','tail',?,?)`, userID, hash[:], adminUsersTestNow, adminUsersTestNow); err != nil {
@@ -326,7 +329,7 @@ WHERE id=?`, u128FromBig(t, big.NewInt(1250)), u128FromBig(t, max), u128FromBig(
 	}
 	encoded, _ := json.Marshal(user)
 	var fields map[string]json.RawMessage
-	if json.Unmarshal(encoded, &fields) != nil || len(fields) != 26 {
+	if json.Unmarshal(encoded, &fields) != nil || len(fields) != 27 {
 		t.Fatalf("AdminUser fields=%v", fields)
 	}
 	var usageFields map[string]json.RawMessage

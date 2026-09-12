@@ -261,7 +261,7 @@ func (reporter *recordingPublishReporter) ReportActivitiesPublishError(error) {
 func TestPostCommitPublishFailureDoesNotRollbackMutation(t *testing.T) {
 	fixture := newActivityFixture(t, 1_800_200_000)
 	user, _ := fixture.seedUser("publish-failure", false)
-	fixture.fundUser(user, -1)
+	fixture.fundGame(user, -1)
 	var welfarePool string
 	_ = fixture.store.DB().QueryRow(`SELECT id FROM shared_pools WHERE pool_type='welfare'`).Scan(&welfarePool)
 	fixture.fundPool(welfarePool, 1000)

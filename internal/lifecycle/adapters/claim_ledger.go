@@ -134,7 +134,7 @@ func (a *LedgerAdapter) ExportLedger(
 	}
 	out := make([]lifecycle.LedgerEntryExport, len(entries))
 	for index, entry := range entries {
-		out[index] = lifecycle.LedgerEntryExport{
+		out[index] = lifecycle.LedgerEntryExport{Asset: string(entry.Asset),
 			OperationID: entry.OperationID,
 			Kind:        string(entry.Kind),
 			SourceType:  entry.SourceType,

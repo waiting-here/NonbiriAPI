@@ -8,6 +8,7 @@ import {
 } from './data';
 
 const entry = {
+  asset_type: 'general',
   operation_id: `op_${'A'.repeat(22)}`,
   line: 1,
   kind: 'charity_settle',
@@ -22,6 +23,7 @@ const page = {
   total: '1',
   total_pages: '1',
   anchor: entry.operation_id,
+  game_balance: '0',
   current_balance: '9000000000000.007',
   server_now: 1_800_000_001,
 };

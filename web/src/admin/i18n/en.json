@@ -42,7 +42,9 @@
       "pendingIndexing": "Indexing",
       "pendingReview": "Review",
       "approvedProcessing": "Processing",
-      "openReportInbox": "Open report inbox"
+      "openReportInbox": "Open report inbox",
+      "generalCheckins": "General-credit check-ins",
+      "gameCheckins": "Game-credit check-ins"
     },
     "users": {
       "nav": "Users",
@@ -85,7 +87,7 @@
       "level": "Level",
       "levelAutoTag": "auto",
       "balances": "Credits",
-      "creditsBalance": "Nonbiri credits",
+      "creditsBalance": "General credits",
       "donationBalance": "Donor reward",
       "economyTitle": "Credit adjustment",
       "economyReason": "Reason (required)",
@@ -113,7 +115,8 @@
       "economyTarget": "Target",
       "levelEffectiveTag": "effective",
       "revisionGuard": "All writes compare revision {{revision}}.",
-      "updated": "Updated"
+      "updated": "Updated",
+      "gameBalance": "Game credits"
     },
     "logs": {
       "nav": "Logs & usage",

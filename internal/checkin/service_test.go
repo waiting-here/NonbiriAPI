@@ -52,6 +52,7 @@ func TestStatusDisabledAndLevelGated(t *testing.T) {
 			t.Fatalf("read enabled status: %v", err)
 		}
 		want := Status{
+			Asset:   "general",
 			Enabled: true, CheckedInToday: false, Balance: "3.5",
 			AwardMinimum: "1.25", AwardMaximum: "2.75", BalanceCap: "9",
 		}
@@ -123,7 +124,7 @@ func TestCheckinCommitsLedgerActivityAndLocalDayAtomically(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first check-in: %v", err)
 	}
-	if result != (Result{Award: "1.5", Balance: "1.5"}) {
+	if result != (Result{Asset: "general", Award: "1.5", Balance: "1.5"}) {
 		t.Fatalf("first result = %#v", result)
 	}
 	var siteDate, operationID string
@@ -179,7 +180,7 @@ func TestCheckinCommitsLedgerActivityAndLocalDayAtomically(t *testing.T) {
 	if err != nil {
 		t.Fatalf("next local day check-in: %v", err)
 	}
-	if second != (Result{Award: "1.5", Balance: "3"}) {
+	if second != (Result{Asset: "general", Award: "1.5", Balance: "3"}) {
 		t.Fatalf("second result = %#v", second)
 	}
 	if got := fixture.scalar(`SELECT COUNT(*) FROM checkins WHERE user_id=?`, userID); got != 2 {
@@ -254,7 +255,7 @@ func TestZeroAwardPersistsOperationAndActivity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("zero award check-in: %v", err)
 	}
-	if result != (Result{Award: "0", Balance: "0"}) {
+	if result != (Result{Asset: "general", Award: "0", Balance: "0"}) {
 		t.Fatalf("zero result = %#v", result)
 	}
 	if fixture.scalar(`SELECT COUNT(*) FROM checkins WHERE user_id=?`, userID) != 1 ||

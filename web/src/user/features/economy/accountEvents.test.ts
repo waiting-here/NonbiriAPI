@@ -8,6 +8,8 @@ const EVENT_ID_4 = 'sse_abcdefghijklmnopqrstuw';
 const ACTIVITY_FIXTURE = {
   master: { enabled: true, available: true, reason: 'available' },
   welfare: {
+    asset_type: 'game',
+    pool_asset_type: 'general',
     enabled: true,
     state: 'available',
     site_day: '2026-08-31',

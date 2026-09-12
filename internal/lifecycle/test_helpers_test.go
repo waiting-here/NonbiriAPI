@@ -115,9 +115,9 @@ func (adapter *testExportAdapter) ExportLedger(_ context.Context, tx *sql.Tx, _ 
 	return adapter.ledger, adapter.record("ledger", tx)
 }
 
-func (adapter *testExportAdapter) ExportActivities(_ context.Context, tx *sql.Tx, _ ExportRequest) ([]WelfareExport, []ThursdayExport, error) {
+func (adapter *testExportAdapter) ExportActivities(_ context.Context, tx *sql.Tx, _ ExportRequest) (ActivityExport, error) {
 	err := adapter.record("activities", tx)
-	return adapter.welfare, adapter.thursday, err
+	return ActivityExport{WelfareClaims: adapter.welfare, Thursday: adapter.thursday}, err
 }
 
 func (adapter *testExportAdapter) ExportDonations(_ context.Context, tx *sql.Tx, _ ExportRequest) ([]DonationExport, error) {

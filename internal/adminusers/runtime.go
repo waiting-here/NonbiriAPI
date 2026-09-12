@@ -186,6 +186,10 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 	if err != nil {
 		return AdminUser{}, classifyLedgerError("read user wallet", err)
 	}
+	gameWallet, err := ledger.UserAssetAccount(ctx, tx, row.id, ledger.Game)
+	if err != nil {
+		return AdminUser{}, classifyLedgerError("read game wallet", err)
+	}
 	automatic := row.autoLevel
 	if automatic < 1 || automatic > 4 {
 		return AdminUser{}, fmt.Errorf("%w: invalid automatic level", ErrInvariant)
@@ -219,7 +223,7 @@ func projectUser(ctx context.Context, tx *sql.Tx, row userRow, config projection
 		EndpointLimit:         nullableIntString(row.endpointLimit), EffectiveEndpointLimit: effectiveLimit(row.endpointLimit, config.endpointDefault),
 		RPMLimit: nullableIntString(row.rpmLimit), EffectiveRPMLimit: effectiveLimit(row.rpmLimit, config.rpmDefault),
 		ConcurrencyLimit: nullableIntString(row.concurrencyLimit), EffectiveConcurrencyLimit: effectiveLimit(row.concurrencyLimit, config.concurrencyDefault),
-		Lang: row.lang, Balance: formatMilliPoints(wallet.Balance.Big()), DonationCredit: formatMilliPoints(donation.Big()),
+		Lang: row.lang, Balance: formatMilliPoints(wallet.Balance.Big()), GameBalance: formatMilliPoints(gameWallet.Balance.Big()), DonationCredit: formatMilliPoints(donation.Big()),
 		Level:             AdminUserLevel{Manual: manual, Automatic: automatic, Effective: effective, DisplayName: config.display[effective]},
 		GameProfilePublic: row.gamePublic == 1, Revision: revision.Decimal(), Usage: usage,
 		CreatedAt: row.createdAt, UpdatedAt: row.updatedAt,
@@ -523,7 +527,7 @@ func (service *Service) Activity(ctx context.Context, adminID int64, query PageQ
 	}
 	selection, args, metadata, err := listPageQuery(ctx, tx, `
 SELECT day,product_active,api_requests,uncached_input_tokens,cache_write_input_tokens,
- cache_read_input_tokens,output_tokens,checkins,console_writes,game_active,game_rounds,distinct_product_users
+ cache_read_input_tokens,output_tokens,checkins,console_writes,game_active,game_rounds,distinct_product_users,game_checkins
 FROM site_activity_daily WHERE day<?`, ` ORDER BY day DESC`, []any{upper}, query.Page, limit)
 	if err != nil {
 		return ActivityPage{}, err
@@ -536,8 +540,8 @@ FROM site_activity_daily WHERE day<?`, ` ORDER BY day DESC`, []any{upper}, query
 	for rows.Next() {
 		var day ActivityDay
 		var product, game int
-		raw := make([][]byte, 9)
-		if err := rows.Scan(&day.Day, &product, &raw[0], &raw[1], &raw[2], &raw[3], &raw[4], &raw[5], &raw[6], &game, &raw[7], &raw[8]); err != nil {
+		raw := make([][]byte, 10)
+		if err := rows.Scan(&day.Day, &product, &raw[0], &raw[1], &raw[2], &raw[3], &raw[4], &raw[5], &raw[6], &game, &raw[7], &raw[8], &raw[9]); err != nil {
 			_ = rows.Close()
 			return ActivityPage{}, classifyDatabaseError("scan activity", err)
 		}
@@ -549,6 +553,7 @@ FROM site_activity_daily WHERE day<?`, ` ORDER BY day DESC`, []any{upper}, query
 				return ActivityPage{}, fmt.Errorf("%w: decode activity", ErrInvariant)
 			}
 		}
+		day.GameCheckins = values[9].Decimal()
 		day.ProductActive, day.GameActive = product == 1, game == 1
 		day.APIRequests, day.UncachedInputTokens = values[0].Decimal(), values[1].Decimal()
 		day.CacheWriteInputTokens, day.CacheReadInputTokens = values[2].Decimal(), values[3].Decimal()
@@ -798,11 +803,15 @@ func (service *Service) Economy(ctx context.Context, adminID, userID int64, cont
 	if !equalU128Bytes(row.revision, input.ExpectedRevision) {
 		return MutationResult[AdminUser]{}, ErrConflict
 	}
-	wallet, err := ledger.UserAccount(ctx, tx, userID)
+	asset := ledger.General
+	if input.Target == "game_balance" {
+		asset = ledger.Game
+	}
+	wallet, err := ledger.UserAssetAccount(ctx, tx, userID, asset)
 	if err != nil {
 		return MutationResult[AdminUser]{}, classifyLedgerError("read adjustment wallet", err)
 	}
-	external, err := ledger.CodedAccount(ctx, tx, "external")
+	external, err := ledger.CodedAssetAccount(ctx, tx, "external", asset)
 	if err != nil {
 		return MutationResult[AdminUser]{}, classifyLedgerError("read external account", err)
 	}
@@ -812,7 +821,7 @@ func (service *Service) Economy(ctx context.Context, adminID, userID int64, cont
 	}
 	creditDelta, donationDelta := ledger.AmountFromMilli(0), ledger.AmountFromMilli(0)
 	donationUserID := int64(0)
-	if input.Target == "balance" {
+	if input.Target == "balance" || input.Target == "game_balance" {
 		creditDelta = ledger.AmountFromMilli(delta)
 	} else {
 		donationDelta = ledger.AmountFromMilli(delta)
@@ -822,7 +831,13 @@ func (service *Service) Economy(ctx context.Context, adminID, userID int64, cont
 	if err != nil || !db.ValidateOpaqueID(operationID, "op_") {
 		return MutationResult[AdminUser]{}, ErrUnavailable
 	}
-	plan, err := ledger.NewAdminUserAdjustment(ledger.Meta{OperationID: operationID, ActorUserID: adminID, CreatedAt: now}, wallet.ID, external.ID, creditDelta, donationUserID, donationDelta, input.Reason)
+	meta := ledger.Meta{OperationID: operationID, ActorUserID: adminID, CreatedAt: now}
+	var plan ledger.Plan
+	if asset == ledger.Game {
+		plan, err = ledger.NewAdminGameAdjustment(meta, wallet.ID, external.ID, creditDelta, input.Reason)
+	} else {
+		plan, err = ledger.NewAdminUserAdjustment(meta, wallet.ID, external.ID, creditDelta, donationUserID, donationDelta, input.Reason)
+	}
 	if err != nil {
 		return MutationResult[AdminUser]{}, classifyLedgerError("build user adjustment", err)
 	}

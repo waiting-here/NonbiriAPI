@@ -105,6 +105,67 @@ async function renderHomeDashboard(
 }
 
 describe('home independent capability states', () => {
+  it('checks in each wallet independently and refreshes the shared balances', async () => {
+    const envelope = canonicalEnvelope();
+    envelope.user.balance = '0';
+    envelope.user.game_balance = '-0.001';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(envelope)),
+    );
+    const makeCheckin = (asset: 'general' | 'game', amount: string) => {
+      let checked = false;
+      return {
+        state: 'available' as const,
+        load: vi.fn(async (): Promise<HomeCheckinStatus> => ({
+          enabled: true,
+          asset_type: asset,
+          checked_in_today: checked,
+          balance: asset === 'game' ? envelope.user.game_balance : envelope.user.balance,
+          award_min: amount,
+          award_max: amount,
+          balance_cap: '0',
+        })),
+        submit: vi.fn(async () => {
+          checked = true;
+          if (asset === 'game') envelope.user.game_balance = '1.999';
+          else envelope.user.balance = amount;
+          return { asset_type: asset, award: amount, balance: asset === 'game' ? '1.999' : amount };
+        }),
+      };
+    };
+    const general = makeCheckin('general', '1');
+    const game = makeCheckin('game', '2');
+    const view = await renderHomeDashboard(envelope.user, {
+      checkin: general,
+      gameCheckin: game,
+      games: { state: 'available', load: async () => [] },
+      announcements: { state: 'available', load: async () => homeAnnouncementPage() },
+    });
+    const card = (title: string) =>
+      screen.getByRole('heading', { name: title }).closest('section')!;
+    const generalButton = await within(card('General-credit check-in')).findByRole('button', {
+      name: 'Check in',
+    });
+    const gameButton = await within(card('Game-credit check-in')).findByRole('button', {
+      name: 'Check in',
+    });
+    await view.user.click(gameButton);
+    await waitFor(() => expect(gameButton).toBeDisabled());
+    expect(generalButton).toBeEnabled();
+    expect(general.submit).not.toHaveBeenCalled();
+    expect(game.submit).toHaveBeenCalledTimes(1);
+    await view.user.click(generalButton);
+    await waitFor(() => expect(generalButton).toBeDisabled());
+    expect(general.submit).toHaveBeenCalledTimes(1);
+    expect(game.submit).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(
+        view.queryClient.getQueryData<UserEnvelope>(coreKeys.me(envelope.user.id))?.user,
+      ).toMatchObject({ balance: '1', game_balance: '1.999' }),
+    );
+  });
+
   it('keeps confirmed profile, economy, usage, and announcement data when the game summary fails', async () => {
     const envelope = canonicalEnvelope();
     const announcement = homeAnnouncementSummary('planned', {
@@ -125,6 +186,7 @@ describe('home independent capability states', () => {
       }),
     );
     const adapters: HomeAdapters = {
+      gameCheckin: { state: 'unavailable' },
       checkin: { state: 'unavailable' },
       games: {
         state: 'available',
@@ -161,6 +223,7 @@ describe('home independent capability states', () => {
       vi.fn(async () => jsonResponse(envelope)),
     );
     const adapters: HomeAdapters = {
+      gameCheckin: { state: 'unavailable' },
       checkin: { state: 'unavailable' },
       games: { state: 'available', load: async () => [] },
       announcements: { state: 'available', load: async () => homeAnnouncementPage() },
@@ -174,7 +237,7 @@ describe('home independent capability states', () => {
       ).not.toBeInTheDocument();
       expect(screen.queryByRole('heading', { name: 'Announcements' })).not.toBeInTheDocument();
     });
-    expect(screen.getByRole('heading', { name: 'Daily check-in' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'General-credit check-in' })).toBeVisible();
   });
 
   it('does not turn an available capability with no loader into a successful empty summary', async () => {
@@ -184,6 +247,7 @@ describe('home independent capability states', () => {
       vi.fn(async () => jsonResponse(envelope)),
     );
     const adapters = {
+      gameCheckin: { state: 'unavailable' },
       checkin: { state: 'unavailable' },
       games: { state: 'available' },
       announcements: { state: 'unavailable' },
@@ -204,6 +268,7 @@ describe('home independent capability states', () => {
     const reconciliation = deferred<HomeCheckinStatus>();
     const initial: HomeCheckinStatus = {
       enabled: true,
+      asset_type: 'general',
       checked_in_today: false,
       balance: '-1.5',
       award_min: '1',
@@ -219,6 +284,7 @@ describe('home independent capability states', () => {
       throw new ApiError('network_error', 'The network request failed.', 0);
     });
     const adapters: HomeAdapters = {
+      gameCheckin: { state: 'unavailable' },
       checkin: { state: 'available', load, submit },
       games: { state: 'available', load: async () => [] },
       announcements: { state: 'available', load: async () => homeAnnouncementPage() },
@@ -234,6 +300,7 @@ describe('home independent capability states', () => {
     await act(async () => {
       reconciliation.resolve({
         ...initial,
+        asset_type: 'general',
         checked_in_today: true,
         balance: '0.5',
       });
@@ -254,6 +321,7 @@ describe('home independent capability states', () => {
     const maximum = '340282366920938463463374607431768211.455';
     const initial: HomeCheckinStatus = {
       enabled: true,
+      asset_type: 'general',
       checked_in_today: false,
       balance: '-1.5',
       award_min: maximum,
@@ -263,9 +331,19 @@ describe('home independent capability states', () => {
     const load = vi
       .fn<(signal?: AbortSignal) => Promise<HomeCheckinStatus>>()
       .mockResolvedValueOnce(initial)
-      .mockResolvedValueOnce({ ...initial, checked_in_today: true, balance: maximum });
-    const submit = vi.fn(async () => ({ award: maximum, balance: maximum }));
+      .mockResolvedValueOnce({
+        ...initial,
+        asset_type: 'general',
+        checked_in_today: true,
+        balance: maximum,
+      });
+    const submit = vi.fn(async () => ({
+      asset_type: 'general' as const,
+      award: maximum,
+      balance: maximum,
+    }));
     const adapters: HomeAdapters = {
+      gameCheckin: { state: 'unavailable' },
       checkin: { state: 'available', load, submit },
       games: { state: 'available', load: async () => [] },
       announcements: { state: 'available', load: async () => homeAnnouncementPage() },
@@ -288,14 +366,20 @@ describe('home independent capability states', () => {
     );
     const load = vi.fn(async (): Promise<HomeCheckinStatus> => ({
       enabled: true,
+      asset_type: 'general',
       checked_in_today: false,
       balance: '10',
       award_min: '1',
       award_max: '2',
       balance_cap: '10',
     }));
-    const submit = vi.fn(async () => ({ award: '1', balance: '11' }));
+    const submit = vi.fn(async () => ({
+      asset_type: 'general' as const,
+      award: '1',
+      balance: '11',
+    }));
     const adapters: HomeAdapters = {
+      gameCheckin: { state: 'unavailable' },
       checkin: { state: 'available', load, submit },
       games: { state: 'available', load: async () => [] },
       announcements: { state: 'available', load: async () => homeAnnouncementPage() },
@@ -321,6 +405,7 @@ describe('home independent capability states', () => {
     );
     const initial: HomeCheckinStatus = {
       enabled: true,
+      asset_type: 'general',
       checked_in_today: false,
       balance: '10',
       award_min: '1',
@@ -332,10 +417,15 @@ describe('home independent capability states', () => {
       reads += 1;
       if (reads === 1) return initial;
       if (reads === 2) throw new ApiError('network_error', 'The network request failed.', 0);
-      return { ...initial, checked_in_today: true, balance: '12' };
+      return { ...initial, asset_type: 'general', checked_in_today: true, balance: '12' };
     });
-    const submit = vi.fn(async () => ({ award: '2', balance: '12' }));
+    const submit = vi.fn(async () => ({
+      asset_type: 'general' as const,
+      award: '2',
+      balance: '12',
+    }));
     const adapters: HomeAdapters = {
+      gameCheckin: { state: 'unavailable' },
       checkin: { state: 'available', load, submit },
       games: { state: 'available', load: async () => [] },
       announcements: { state: 'available', load: async () => homeAnnouncementPage() },
@@ -371,6 +461,7 @@ describe('home independent capability states', () => {
     );
     const initial: HomeCheckinStatus = {
       enabled: true,
+      asset_type: 'general',
       checked_in_today: false,
       balance: '10',
       award_min: '1',
@@ -381,8 +472,13 @@ describe('home independent capability states', () => {
       .fn<(signal?: AbortSignal) => Promise<HomeCheckinStatus>>()
       .mockResolvedValueOnce(initial)
       .mockResolvedValueOnce({ ...initial, balance: '11' });
-    const submit = vi.fn(async () => ({ award: '1', balance: '11' }));
+    const submit = vi.fn(async () => ({
+      asset_type: 'general' as const,
+      award: '1',
+      balance: '11',
+    }));
     const adapters: HomeAdapters = {
+      gameCheckin: { state: 'unavailable' },
       checkin: { state: 'available', load, submit },
       games: { state: 'available', load: async () => [] },
       announcements: { state: 'available', load: async () => homeAnnouncementPage() },
@@ -420,6 +516,7 @@ describe('home independent capability states', () => {
       return gameReads === 1 ? lateGames.promise : [];
     });
     const adapters: HomeAdapters = {
+      gameCheckin: { state: 'unavailable' },
       checkin: { state: 'unavailable' },
       games: { state: 'available', load: loadGames },
       announcements: { state: 'available', load: async () => homeAnnouncementPage() },
@@ -695,9 +792,9 @@ describe('account deletion confirmation', () => {
     document.cookie = 'nb_elevated=elevated_token; Path=/; SameSite=Lax';
     const deleteAccount = vi.fn(async () => undefined);
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV5: false, deleteAccount: true },
+      capabilities: { exportV6: false, deleteAccount: true },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportV5: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 5 }) as const),
+      exportV6: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 6 }) as const),
       deleteAccount,
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -745,9 +842,9 @@ describe('account deletion confirmation', () => {
     const completion = deferred<void>();
     const deleteAccount = vi.fn(() => completion.promise);
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV5: false, deleteAccount: true },
+      capabilities: { exportV6: false, deleteAccount: true },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportV5: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 5 }) as const),
+      exportV6: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 6 }) as const),
       deleteAccount,
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -791,9 +888,9 @@ describe('account deletion confirmation', () => {
       .mockResolvedValueOnce('active')
       .mockResolvedValueOnce('deleted');
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV5: false, deleteAccount: true },
+      capabilities: { exportV6: false, deleteAccount: true },
       beginElevation: vi.fn(async () => 'https://identity.example.test/elevate'),
-      exportV5: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 5 }) as const),
+      exportV6: vi.fn(async () => ({ blob: new Blob(), schemaVersion: 6 }) as const),
       deleteAccount,
       readAccountAuthority,
     };
@@ -831,13 +928,13 @@ describe('account deletion confirmation', () => {
     window.sessionStorage.setItem('nb.pending.elevation.account', '1');
     document.cookie = 'nb_elevated=unknown_export_token; Path=/; SameSite=Lax';
     const beginElevation = vi.fn(async () => 'https://identity.example.test/elevate');
-    const exportV5 = vi.fn(async () => {
+    const exportV6 = vi.fn(async () => {
       throw new ApiError('network_error', 'The network request failed.', 0);
     });
     const adapter: AccountLifecycleAdapter = {
-      capabilities: { exportV5: true, deleteAccount: false },
+      capabilities: { exportV6: true, deleteAccount: false },
       beginElevation,
-      exportV5,
+      exportV6,
       deleteAccount: vi.fn(async () => undefined),
       readAccountAuthority: vi.fn(async () => 'active' as const),
     };
@@ -853,8 +950,8 @@ describe('account deletion confirmation', () => {
     expect(
       await screen.findByText(/verify your Discord identity again to create a new export/i),
     ).toBeVisible();
-    expect(exportV5).toHaveBeenCalledTimes(1);
-    expect(exportV5).toHaveBeenCalledWith({
+    expect(exportV6).toHaveBeenCalledTimes(1);
+    expect(exportV6).toHaveBeenCalledWith({
       accountId: '1',
       elevatedToken: 'unknown_export_token',
     });

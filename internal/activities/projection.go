@@ -78,6 +78,7 @@ func projectWelfareTx(ctx context.Context, tx *sql.Tx, userID, now int64, config
 	if view == nil {
 		return ErrInvariant
 	}
+	view.Asset, view.PoolAsset = ledger.Game, ledger.General
 	view.Enabled = config.welfareEnabled
 	view.Threshold = formatMilliPointsInt64(config.welfareThreshold)
 	view.Cap = formatMilliPointsInt64(config.welfareCap)

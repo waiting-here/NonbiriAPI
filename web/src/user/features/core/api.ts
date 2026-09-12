@@ -57,6 +57,7 @@ import {
   type EndpointPatchInput,
   type ExplicitLanguage,
   type HomeAnnouncementPage,
+  type CreditAsset,
   type HomeCheckinResult,
   type HomeCheckinStatus,
   type HomeGameSummary,
@@ -162,14 +163,25 @@ export async function getMe(signal?: AbortSignal): Promise<UserEnvelope> {
   return normalizeUserEnvelope(response.payload);
 }
 
-export async function getHomeCheckinStatus(signal?: AbortSignal): Promise<HomeCheckinStatus> {
-  const response = await coreRequest('/api/checkin', { signal });
+export async function getHomeCheckinStatus(
+  signal?: AbortSignal,
+  asset: CreditAsset = 'general',
+): Promise<HomeCheckinStatus> {
+  const response = await coreRequest(asset === 'game' ? '/api/checkin/game' : '/api/checkin', {
+    signal,
+  });
   expectedStatus(response.status, 200, 'check-in status');
   return normalizeHomeCheckinStatus(response.payload);
 }
 
-export async function submitHomeCheckin(signal?: AbortSignal): Promise<HomeCheckinResult> {
-  const response = await coreRequest('/api/checkin', { method: 'POST', signal });
+export async function submitHomeCheckin(
+  signal?: AbortSignal,
+  asset: CreditAsset = 'general',
+): Promise<HomeCheckinResult> {
+  const response = await coreRequest(asset === 'game' ? '/api/checkin/game' : '/api/checkin', {
+    method: 'POST',
+    signal,
+  });
   expectedStatus(response.status, 200, 'check-in');
   return normalizeHomeCheckinResult(response.payload);
 }
@@ -240,6 +252,8 @@ const ACCOUNT_EXPORT_KEYS = [
   'log_summary',
   'issues',
   'credit_ledger',
+  'checkins',
+  'game_onboarding',
   'welfare_claims',
   'thursday',
   'donations',
@@ -309,7 +323,7 @@ function validateAccountExport(bytes: Uint8Array): void {
   const record = value as Record<string, unknown>;
   const expected = new Set<string>(ACCOUNT_EXPORT_KEYS);
   if (
-    record.schema_version !== 5 ||
+    record.schema_version !== 6 ||
     Object.keys(record).length !== ACCOUNT_EXPORT_KEYS.length ||
     Object.keys(record).some((key) => !expected.has(key))
   ) {
@@ -317,7 +331,7 @@ function validateAccountExport(bytes: Uint8Array): void {
   }
 }
 
-export async function exportAccountV5(
+export async function exportAccountV6(
   accountId: string,
   elevatedToken: string,
   signal?: AbortSignal,
@@ -333,7 +347,7 @@ export async function exportAccountV5(
   const disposition = response.headers.get('Content-Disposition') ?? '';
   if (
     !contentType.startsWith('application/json') ||
-    disposition !== 'attachment; filename="nonbiriapi-account-export-v5.json"'
+    disposition !== 'attachment; filename="nonbiriapi-account-export-v6.json"'
   ) {
     throw new ApiError('invalid_response', 'The server returned invalid export metadata.', 200);
   }
@@ -343,7 +357,7 @@ export async function exportAccountV5(
   new Uint8Array(buffer).set(bytes);
   return {
     blob: new Blob([buffer], { type: 'application/json' }),
-    schemaVersion: 5,
+    schemaVersion: 6,
   };
 }
 

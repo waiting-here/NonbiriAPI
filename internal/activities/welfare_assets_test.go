@@ -9,10 +9,11 @@ import (
 	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
-func TestWelfareLogicalHoldConversionCountsExactlyOnce(t *testing.T) {
+func TestWelfareIgnoresGeneralAPIReservations(t *testing.T) {
 	fixture := newActivityFixture(t, 1_800_600_000)
 	userID, _ := fixture.seedUser("logical-hold", false)
 	fixture.fundUser(userID, 100)
+	fixture.fundGame(userID, 25)
 	requestID, err := db.GenerateOpaqueID("req_")
 	if err != nil {
 		t.Fatal(err)
@@ -46,7 +47,7 @@ VALUES(?,?,'openai_chat_completions','','accepted',1,'reserved',40,'user',?,?)`,
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	assertWelfareAssets(t, fixture, userID, "100")
+	assertWelfareAssets(t, fixture, userID, "25")
 
 	tx, err = fixture.store.DB().BeginTx(context.Background(), nil)
 	if err != nil {
@@ -66,7 +67,7 @@ VALUES(?,?,'openai_chat_completions','','accepted',1,'reserved',40,'user',?,?)`,
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	assertWelfareAssets(t, fixture, userID, "100")
+	assertWelfareAssets(t, fixture, userID, "25")
 	validateLedgerRecovery(t, fixture.store.DB())
 }
 

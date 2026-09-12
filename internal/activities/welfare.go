@@ -72,6 +72,10 @@ func (r *Repository) ClaimWelfare(ctx context.Context, userID int64, mutation Co
 	if assets.Cmp(big.NewInt(config.welfareThreshold)) >= 0 {
 		return MutationResult[WelfareClaimResult]{}, PublishFacts{}, ErrConflict
 	}
+	generalWallet, err := ledger.UserAccount(ctx, tx, userID)
+	if err != nil {
+		return MutationResult[WelfareClaimResult]{}, PublishFacts{}, classifyLedgerError("read general wallet", err)
+	}
 	destination, err := r.WelfareDestination(ctx, tx)
 	if err != nil {
 		return MutationResult[WelfareClaimResult]{}, PublishFacts{}, err
@@ -89,7 +93,8 @@ func (r *Repository) ClaimWelfare(ctx context.Context, userID int64, mutation Co
 	}
 	if awardBig.Sign() == 0 {
 		value := WelfareClaimResult{
-			Awarded: "0", Balance: formatMilliPoints(wallet.Balance.Big()),
+			Awarded: "0", Balance: formatMilliPoints(generalWallet.Balance.Big()),
+			GameBalance: formatMilliPoints(wallet.Balance.Big()), Asset: ledger.Game, PoolAsset: ledger.General,
 			PoolBalance: formatMilliPoints(poolAccount.Balance.Big()), SiteDay: day,
 		}
 		response, err := finishJSONMutation(ctx, tx, decision, http.StatusOK, value)
@@ -110,7 +115,19 @@ func (r *Repository) ClaimWelfare(ctx context.Context, userID int64, mutation Co
 	if err != nil {
 		return MutationResult[WelfareClaimResult]{}, PublishFacts{}, err
 	}
-	plan, err := ledger.NewWelfareClaim(ledger.Meta{OperationID: operationID, ActorUserID: userID, CreatedAt: now}, destination.AccountID, wallet.ID, award)
+	external := ledger.AccountPair{}
+	for _, asset := range []ledger.Asset{ledger.General, ledger.Game} {
+		account, err := ledger.CodedAssetAccount(ctx, tx, "external", asset)
+		if err != nil {
+			return MutationResult[WelfareClaimResult]{}, PublishFacts{}, classifyLedgerError("read welfare external account", err)
+		}
+		if asset == ledger.General {
+			external.General = account.ID
+		} else {
+			external.Game = account.ID
+		}
+	}
+	plan, err := ledger.NewGameWelfareClaim(ledger.Meta{OperationID: operationID, ActorUserID: userID, CreatedAt: now}, destination.AccountID, wallet.ID, external, award)
 	if err != nil {
 		return MutationResult[WelfareClaimResult]{}, PublishFacts{}, classifyLedgerError("build welfare claim", err)
 	}
@@ -125,8 +142,8 @@ func (r *Repository) ClaimWelfare(ctx context.Context, userID int64, mutation Co
 		poolBefore = dbMaxMoneyBig()
 	}
 	if _, err := tx.ExecContext(ctx, `
-INSERT INTO welfare_claims(user_id,site_day,operation_id,threshold_milli,cap_milli,pool_before_milli,award_milli,created_at)
-VALUES(?,?,?,?,?,?,?,?)`, userID, day, operationID, config.welfareThreshold, config.welfareCap,
+INSERT INTO welfare_claims(user_id,site_day,operation_id,threshold_milli,cap_milli,pool_before_milli,award_milli,created_at,asset_type)
+VALUES(?,?,?,?,?,?,?,?,'game')`, userID, day, operationID, config.welfareThreshold, config.welfareCap,
 		poolBefore.Int64(), awardBig.Int64(), now); err != nil {
 		return MutationResult[WelfareClaimResult]{}, PublishFacts{}, classifyDatabaseError("record welfare claim", err)
 	}
@@ -142,7 +159,8 @@ VALUES(?,?,?,?,?,?,?,?)`, userID, day, operationID, config.welfareThreshold, con
 	}
 	value := WelfareClaimResult{
 		Awarded:     formatMilliPoints(award.Big()),
-		Balance:     formatMilliPoints(new(big.Int).Add(wallet.Balance.Big(), awardBig)),
+		Balance:     formatMilliPoints(generalWallet.Balance.Big()),
+		GameBalance: formatMilliPoints(new(big.Int).Add(wallet.Balance.Big(), awardBig)), Asset: ledger.Game, PoolAsset: ledger.General,
 		PoolBalance: formatMilliPoints(new(big.Int).Sub(poolAccount.Balance.Big(), awardBig)), SiteDay: day,
 	}
 	response, err := finishJSONMutation(ctx, tx, decision, http.StatusOK, value)
@@ -156,7 +174,7 @@ VALUES(?,?,?,?,?,?,?,?)`, userID, day, operationID, config.welfareThreshold, con
 }
 
 func welfareAssetsTx(ctx context.Context, tx *sql.Tx, userID int64) (*big.Int, ledger.Account, error) {
-	wallet, err := ledger.UserAccount(ctx, tx, userID)
+	wallet, err := ledger.UserAssetAccount(ctx, tx, userID, ledger.Game)
 	if err != nil {
 		return nil, ledger.Account{}, classifyLedgerError("read welfare wallet", err)
 	}
@@ -181,10 +199,7 @@ func welfareAssetsTx(ctx context.Context, tx *sql.Tx, userID int64) (*big.Int, l
 		}
 		return nil
 	}
-	if err := addIntRows(`SELECT account_reserved_milli FROM logical_requests WHERE user_id=? AND state IN ('accepted','running') AND accounting_state='reserved'`); err != nil {
-		return nil, ledger.Account{}, err
-	}
-	if err := addIntRows(`SELECT entry_total_milli FROM game_fishing_batches WHERE user_id=? AND state='reserved'`); err != nil {
+	if err := addIntRows(`SELECT game_paid_milli FROM game_fishing_batches WHERE user_id=? AND state='reserved'`); err != nil {
 		return nil, ledger.Account{}, err
 	}
 	addU128Rows := func(query string) error {
@@ -207,11 +222,11 @@ func welfareAssetsTx(ctx context.Context, tx *sql.Tx, userID int64) (*big.Int, l
 		}
 		return nil
 	}
-	if err := addU128Rows(`SELECT reserved FROM game_rps_queue WHERE user_id=?`); err != nil {
+	if err := addU128Rows(`SELECT game_paid FROM game_rps_queue WHERE user_id=?`); err != nil {
 		return nil, ledger.Account{}, err
 	}
 	if err := addU128Rows(`
-SELECT seat.current_balance
+SELECT seat.game_remaining
 FROM game_rps_seats seat
 JOIN game_rps_sessions session ON session.id=seat.session_id
 WHERE seat.user_id=? AND session.state IN ('started','terminal_processing')`); err != nil {
@@ -249,7 +264,7 @@ func readWelfareClaimTx(ctx context.Context, tx *sql.Tx, userID int64, day strin
 func welfareClaimForExport(rows *sql.Rows) (WelfareClaimExport, error) {
 	var claim WelfareClaimExport
 	var threshold, cap, award int64
-	if err := rows.Scan(&claim.SiteDay, &threshold, &cap, &award, &claim.CreatedAt); err != nil {
+	if err := rows.Scan(&claim.SiteDay, &threshold, &cap, &award, &claim.CreatedAt, &claim.Asset); err != nil {
 		return WelfareClaimExport{}, err
 	}
 	if threshold < 0 || cap < 0 || award <= 0 {

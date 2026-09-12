@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 type GameCopyEntry = readonly [en: string, zh: string];
 
 const copy = {
+  'common.generalBalance': ['General credits', '通用积分'],
+  'common.gameBalance': ['Game credits', '游戏积分'],
   'common.back': ['Back to game center', '返回游戏中心'],
   'common.retry': ['Try again', '重试'],
   'common.loading': ['Loading game status…', '正在读取游戏状态…'],

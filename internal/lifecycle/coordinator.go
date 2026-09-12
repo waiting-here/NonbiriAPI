@@ -302,9 +302,12 @@ func (coordinator *Coordinator) Export(ctx context.Context, userID, decisionNow 
 	if document.CreditLedger, err = coordinator.export.Ledger.ExportLedger(ctx, tx, request); err != nil {
 		return nil, err
 	}
-	if document.WelfareClaims, document.Thursday, err = coordinator.export.Activities.ExportActivities(ctx, tx, request); err != nil {
+	activity, err := coordinator.export.Activities.ExportActivities(ctx, tx, request)
+	if err != nil {
 		return nil, err
 	}
+	document.WelfareClaims, document.Thursday = activity.WelfareClaims, activity.Thursday
+	document.Checkins, document.GameOnboarding = activity.Checkins, activity.GameOnboarding
 	if document.Donations, err = coordinator.export.Donations.ExportDonations(ctx, tx, request); err != nil {
 		return nil, err
 	}
@@ -363,6 +366,12 @@ func normalizeExportDocument(document *ExportDocument) {
 	}
 	if document.Issues == nil {
 		document.Issues = []IssueExport{}
+	}
+	if document.Checkins == nil {
+		document.Checkins = []CheckinExport{}
+	}
+	if document.GameOnboarding == nil {
+		document.GameOnboarding = []OnboardingExport{}
 	}
 	if document.CreditLedger == nil {
 		document.CreditLedger = []LedgerEntryExport{}
@@ -425,7 +434,7 @@ func normalizeExportDocument(document *ExportDocument) {
 func validateExportCollectionBounds(document ExportDocument) error {
 	lengths := []int{
 		len(document.Endpoints), len(document.CatalogPairs), len(document.Models), len(document.Issues),
-		len(document.CreditLedger), len(document.WelfareClaims), len(document.Thursday), len(document.Donations),
+		len(document.Checkins), len(document.GameOnboarding), len(document.CreditLedger), len(document.WelfareClaims), len(document.Thursday), len(document.Donations),
 		len(document.Fishing.Pending), len(document.Fishing.Terminal), len(document.LinkLink.Summaries), len(document.RPS.Summaries),
 	}
 	for _, endpoint := range document.Endpoints {

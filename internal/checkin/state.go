@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/waiting-here/NonbiriAPI/internal/db"
+	"github.com/waiting-here/NonbiriAPI/internal/ledger"
 )
 
 const (
@@ -26,6 +27,21 @@ const (
 	levelThreshold4Key = "level_threshold_4_milli"
 )
 
+type checkinSource struct {
+	table, mode, minimum, maximum, cap string
+}
+
+func sourceForAsset(asset ledger.Asset) (checkinSource, error) {
+	switch asset {
+	case ledger.General:
+		return checkinSource{"checkins", checkinModeKey, awardMinimumKey, awardMaximumKey, balanceCapKey}, nil
+	case ledger.Game:
+		return checkinSource{"game_checkins", "game_checkin_mode", "game_checkin_award_min_milli", "game_checkin_award_max_milli", "game_credits_cap_milli"}, nil
+	default:
+		return checkinSource{}, ErrInvalidRequest
+	}
+}
+
 type checkinConfig struct {
 	mode                           string
 	awardMin, awardMax, balanceCap int64
@@ -36,7 +52,7 @@ type siteDay struct {
 	siteDate    string
 }
 
-func readSiteDayAndConfig(ctx context.Context, tx *sql.Tx, now int64) (siteDay, checkinConfig, error) {
+func readSiteDayAndConfig(ctx context.Context, tx *sql.Tx, now int64, source checkinSource) (siteDay, checkinConfig, error) {
 	rawOffset, err := readRequiredConfig(ctx, tx, db.SiteTimezoneKey)
 	if err != nil {
 		return siteDay{}, checkinConfig{}, err
@@ -46,22 +62,22 @@ func readSiteDayAndConfig(ctx context.Context, tx *sql.Tx, now int64) (siteDay, 
 	if parseErr != nil || strconv.FormatInt(int64(offset), 10) != trimmed || !db.ValidSiteTimezoneOffset(offset) {
 		return siteDay{}, checkinConfig{}, ErrFeatureDisabled
 	}
-	mode, err := readRequiredConfig(ctx, tx, checkinModeKey)
+	mode, err := readRequiredConfig(ctx, tx, source.mode)
 	if err != nil {
 		return siteDay{}, checkinConfig{}, err
 	}
 	if mode != db.CheckinModeEnabled && mode != db.CheckinModeLevelGated {
 		return siteDay{}, checkinConfig{}, ErrFeatureDisabled
 	}
-	minimum, err := readCheckinAmount(ctx, tx, awardMinimumKey)
+	minimum, err := readCheckinAmount(ctx, tx, source.minimum)
 	if err != nil {
 		return siteDay{}, checkinConfig{}, err
 	}
-	maximum, err := readCheckinAmount(ctx, tx, awardMaximumKey)
+	maximum, err := readCheckinAmount(ctx, tx, source.maximum)
 	if err != nil {
 		return siteDay{}, checkinConfig{}, err
 	}
-	capValue, err := readCheckinAmount(ctx, tx, balanceCapKey)
+	capValue, err := readCheckinAmount(ctx, tx, source.cap)
 	if err != nil {
 		return siteDay{}, checkinConfig{}, err
 	}
@@ -201,28 +217,15 @@ func drawAward(random io.Reader, minimum, maximum int64) (int64, error) {
 	}
 }
 
-func temporalTableEmpty(ctx context.Context, tx *sql.Tx, table string) (bool, error) {
-	switch table {
-	case "checkins", "user_activity_daily", "site_activity_daily":
-	default:
-		return false, ErrInvariant
-	}
-	var exists int
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM `+table+` LIMIT 1)`).Scan(&exists); err != nil {
-		return false, classifyDatabase("probe timezone freeze table", err)
-	}
-	return exists == 0, nil
-}
-
 func freezeTimezone(ctx context.Context, tx *sql.Tx, now int64) error {
 	if _, err := tx.ExecContext(ctx, `INSERT INTO site_config(key,value,updated_at) VALUES(?,'1',?)
-		ON CONFLICT(key) DO UPDATE SET value='1',updated_at=excluded.updated_at`, timezoneLockKey, now); err != nil {
+		ON CONFLICT(key) DO UPDATE SET value='1',updated_at=excluded.updated_at WHERE site_config.value<>'1'`, timezoneLockKey, now); err != nil {
 		return classifyDatabase("freeze site timezone", err)
 	}
 	return nil
 }
 
-func recordCheckinActivity(ctx context.Context, tx *sql.Tx, userID, day, now int64) error {
+func recordCheckinActivity(ctx context.Context, tx *sql.Tx, userID, day, now int64, counter string) error {
 	var priorActive int
 	priorExists := true
 	err := tx.QueryRowContext(ctx, `SELECT product_active FROM user_activity_daily
@@ -238,8 +241,8 @@ func recordCheckinActivity(ctx context.Context, tx *sql.Tx, userID, day, now int
 	}
 	if priorExists {
 		result, err := tx.ExecContext(ctx, `UPDATE user_activity_daily
-			SET product_active=1,checkins=checkins+1,updated_at=?
-			WHERE day=? AND user_id=? AND checkins<?`, now, day, userID, int64(math.MaxInt64))
+			SET product_active=1,`+counter+`=`+counter+`+1,updated_at=?
+			WHERE day=? AND user_id=? AND `+counter+`<?`, now, day, userID, int64(math.MaxInt64))
 		if err != nil {
 			return classifyDatabase("update user check-in activity", err)
 		}
@@ -252,7 +255,7 @@ func recordCheckinActivity(ctx context.Context, tx *sql.Tx, userID, day, now int
 		}
 	} else {
 		result, err := tx.ExecContext(ctx, `INSERT INTO user_activity_daily(
-			day,user_id,product_active,checkins,updated_at
+			day,user_id,product_active,`+counter+`,updated_at
 		) SELECT ?,?,1,1,? WHERE EXISTS(SELECT 1 FROM users WHERE id=?)`, day, userID, now, userID)
 		if err != nil {
 			return classifyDatabase("insert user check-in activity", err)
@@ -269,13 +272,13 @@ func recordCheckinActivity(ctx context.Context, tx *sql.Tx, userID, day, now int
 	if priorActive == 1 {
 		distinctIncrement = 0
 	}
-	return incrementSiteCheckinActivity(ctx, tx, day, now, distinctIncrement)
+	return incrementSiteCheckinActivity(ctx, tx, day, now, distinctIncrement, counter)
 }
 
-func incrementSiteCheckinActivity(ctx context.Context, tx *sql.Tx, day, now, distinctIncrement int64) error {
+func incrementSiteCheckinActivity(ctx context.Context, tx *sql.Tx, day, now, distinctIncrement int64, counter string) error {
 	var checkinsRaw, distinctRaw []byte
 	var productActive int
-	err := tx.QueryRowContext(ctx, `SELECT product_active,checkins,distinct_product_users
+	err := tx.QueryRowContext(ctx, `SELECT product_active,`+counter+`,distinct_product_users
 		FROM site_activity_daily WHERE day=?`, day).Scan(&productActive, &checkinsRaw, &distinctRaw)
 	if errors.Is(err, sql.ErrNoRows) {
 		if distinctIncrement != 1 {
@@ -285,11 +288,15 @@ func incrementSiteCheckinActivity(ctx context.Context, tx *sql.Tx, day, now, dis
 		one := db.U128{}
 		one[15] = 1
 		oneRaw := db.EncodeU128(one)
+		generalCount, gameCount := oneRaw, zero
+		if counter == "game_checkins" {
+			generalCount, gameCount = zero, oneRaw
+		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO site_activity_daily(
 			day,product_active,api_requests,uncached_input_tokens,cache_write_input_tokens,
-			cache_read_input_tokens,output_tokens,checkins,console_writes,game_active,
+			cache_read_input_tokens,output_tokens,checkins,game_checkins,console_writes,game_active,
 			game_rounds,distinct_product_users,updated_at
-		) VALUES(?,1,?,?,?,?,?,?,?,0,?,?,?)`, day, zero, zero, zero, zero, zero, oneRaw, zero, zero, oneRaw, now); err != nil {
+		) VALUES(?,1,?,?,?,?,?,?,?,?,0,?,?,?)`, day, zero, zero, zero, zero, zero, generalCount, gameCount, zero, zero, oneRaw, now); err != nil {
 			return classifyDatabase("insert site check-in activity", err)
 		}
 		return nil
@@ -322,8 +329,8 @@ func incrementSiteCheckinActivity(ctx context.Context, tx *sql.Tx, day, now, dis
 		return ErrInvariant
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE site_activity_daily
-		SET product_active=1,checkins=?,distinct_product_users=?,updated_at=?
-		WHERE day=? AND checkins=? AND distinct_product_users=?`,
+		SET product_active=1,`+counter+`=?,distinct_product_users=?,updated_at=?
+		WHERE day=? AND `+counter+`=? AND distinct_product_users=?`,
 		db.EncodeU128(nextCheckins), db.EncodeU128(nextDistinct), now, day, checkinsRaw, distinctRaw)
 	if err != nil {
 		return classifyDatabase("update site check-in activity", err)
