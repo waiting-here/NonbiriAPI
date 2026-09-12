@@ -4,6 +4,7 @@ import { useSearchState } from '@shared/operations/useSearchState';
 import { useTranslation } from 'react-i18next';
 import { CharityBindingPicker, type CharitySelection } from './CharityBindingPicker';
 import { CharitySourceBrowser } from './CharitySourceBrowser';
+import { FailureResetControl } from './FailureResetControl';
 import { ConfirmDialog } from '@shared/components/ConfirmDialog';
 import { KeyLimitSummary } from './KeyRoutingLimits';
 import { DonationHandlingControl, DonationHandlingStatus } from './DonationHandling';
@@ -1033,6 +1034,24 @@ function DonationKeyPages({
   return (
     <Card>
       <h3>{t('common.operations.charity.donationKeys')}</h3>
+      {keys.data ? (
+        <FailureResetControl
+          key={`${role}:${accountId}:${item.id}`}
+          role={role}
+          selection={{ view: 'donation_keys', donation_id: item.id }}
+          disabled={keys.isFetching || Boolean(keys.error) || staleRevision}
+          onCapabilityLoss={onCapabilityLoss}
+          choices={keys.data.data.map((key) => ({
+            id: key.id,
+            label: `${key.id} · ${key.display_head}…${key.display_tail}`,
+            target: {
+              donation_id: item.id,
+              key_id: key.id,
+              expected_revision: key.donation_revision,
+            },
+          }))}
+        />
+      ) : null}
       {focusKey && focusIndex === -1 ? (
         <p className="inline-notice">{t('common.operations.charity.selectedKeyMissing')}</p>
       ) : null}
@@ -1294,6 +1313,23 @@ function DonationsPanel({
             </select>
           </label>
         </div>
+        {list.data ? (
+          <FailureResetControl
+            key={`${role}:${accountId}:${status}:${handling}:${query}`}
+            role={role}
+            selection={{
+              view: 'donations',
+              ...({ status, handling, q: query } as ManagedDonationPageFilters),
+            }}
+            disabled={list.isFetching || Boolean(list.error)}
+            onCapabilityLoss={onCapabilityLoss}
+            choices={list.data.data.map((item) => ({
+              id: item.id,
+              label: `${item.id} · ${item.description}`,
+              target: { view: 'donation_keys', donation_id: item.id },
+            }))}
+          />
+        ) : null}
         {list.isPending ? (
           <LoadingState />
         ) : list.error ? (

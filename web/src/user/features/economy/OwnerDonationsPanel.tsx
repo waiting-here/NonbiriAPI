@@ -397,6 +397,7 @@ export function OwnerDonationKeys({
                 key={key.id}
                 donationKey={key}
                 donationId={donationID}
+                donationRevision={key.donationRevision}
                 accountID={accountID}
                 returnTo={returnTo}
                 ruleSummary={

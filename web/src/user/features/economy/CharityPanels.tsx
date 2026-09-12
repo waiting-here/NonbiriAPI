@@ -15,6 +15,7 @@ import { CreditAmount, ExactCount } from './ExactValue';
 import { maskedKey } from './format';
 import { isDimensionExhausted } from './normalize';
 import { DonationResourcePicker } from './DonationResourcePicker';
+import { OwnerFailureReset } from './OwnerFailureReset';
 import {
   useCreateDonation,
   useEditDonation,
@@ -544,6 +545,7 @@ export function DonationKeyPanel({
   accountID,
   donationId,
   donationStatus,
+  donationRevision,
   compact = false,
   returnTo,
   ruleSummary,
@@ -552,6 +554,7 @@ export function DonationKeyPanel({
   accountID?: string;
   donationId?: string;
   donationStatus?: Donation['status'];
+  donationRevision?: string;
   compact?: boolean;
   returnTo?: string;
   ruleSummary?: ReactNode;
@@ -700,6 +703,18 @@ export function DonationKeyPanel({
         </dl>
       </details>
       {ruleSummary}
+      {accountID && donationId && donationRevision ? (
+        <OwnerFailureReset
+          key={`${accountID}:${donationId}:${donationKey.id}`}
+          donationID={donationId}
+          keyID={donationKey.id}
+          revision={donationRevision}
+          disabled={
+            ['pending', 'expired', 'ended'].includes(donationKey.charityState) ||
+            (donationStatus !== undefined && donationStatus !== 'approved')
+          }
+        />
+      ) : null}
       {accountID && donationId ? (
         <RecurringLimitsDisclosure
           key={`${accountID}:${donationId}:${donationKey.id}`}
@@ -889,6 +904,8 @@ export function DonationCard({
               key={key.id}
               donationKey={key}
               donationId={donation.id}
+              donationRevision={donation.revision}
+              donationStatus={donation.status}
               accountID={accountID}
               compact
             />
@@ -907,6 +924,8 @@ export function DonationCard({
                   key={key.id}
                   donationKey={key}
                   donationId={donation.id}
+                  donationRevision={donation.revision}
+                  donationStatus={donation.status}
                   accountID={accountID}
                 />
               ))}
