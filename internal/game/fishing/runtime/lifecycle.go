@@ -204,7 +204,7 @@ func (adapter *LifecycleAdapter) ExportTx(
 		result.Terminal = append(result.Terminal, FishingTerminalExport{
 			BatchID: terminal.BatchID, Bait: terminal.Bait, Count: terminal.Count, RulesVersion: terminal.RulesVersion, Payment: terminal.Payment,
 			UnitPrice: terminal.UnitPrice, EntryTotal: terminal.EntryTotal, Outcomes: terminal.Outcomes,
-			PayoutTotal: terminal.PayoutTotal, SettledAt: terminal.SettledAt, RevealedAt: revealedAt,
+			NetPayoutTotal: terminal.NetPayoutTotal, Rake: terminal.Rake, PayoutTotal: terminal.PayoutTotal, SettledAt: terminal.SettledAt, RevealedAt: revealedAt,
 		})
 		if len(result.Terminal) > limit {
 			_ = rows.Close()

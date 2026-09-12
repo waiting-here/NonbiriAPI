@@ -6,7 +6,7 @@ import {
 } from '@shared/operations/wire';
 
 interface ActivityPumps { platform: number; welfare: number; next_pool: number }
-interface RPSPumps { platform: number; welfare: number; thursday: number }
+interface GamePumps { platform: number; welfare: number; thursday: number }
 function normalizeActivityPumps(value: unknown): ActivityPumps {
   const root = record(value, ['platform', 'welfare', 'next_pool'], 'pool split');
   const result = {
@@ -18,14 +18,14 @@ function normalizeActivityPumps(value: unknown): ActivityPumps {
   return result;
 }
 
-function normalizeRPSPumps(value: unknown): RPSPumps {
-  const root = record(value, ['platform', 'welfare', 'thursday'], 'RPS pool split');
+function normalizeGamePumps(value: unknown): GamePumps {
+  const root = record(value, ['platform', 'welfare', 'thursday'], 'game pool split');
   const result = {
-    platform: integer(root.platform, 'RPS platform split', 0, 9_999),
-    welfare: integer(root.welfare, 'RPS welfare split', 0, 9_999),
-    thursday: integer(root.thursday, 'RPS Thursday split', 0, 9_999),
+    platform: integer(root.platform, 'platform split', 0, 9_999),
+    welfare: integer(root.welfare, 'welfare split', 0, 9_999),
+    thursday: integer(root.thursday, 'Thursday split', 0, 9_999),
   };
-  if (result.platform + result.welfare + result.thursday >= 10_000) invalidResponse('RPS pool split total');
+  if (result.platform + result.welfare + result.thursday >= 10_000) invalidResponse('game pool split total');
   return result;
 }
 
@@ -111,12 +111,12 @@ export function normalizeActivitiesConfig(value: unknown): ActivitiesConfig {
 }
 
 interface RPSModeConfig {
-  enabled: boolean; base: string; pumps_bp: RPSPumps; queue_seconds: number;
+  enabled: boolean; base: string; pumps_bp: GamePumps; queue_seconds: number;
   gesture_seconds: number; dealer_seconds: number; follower_seconds: number; queue_capacity: number;
 }
 interface GamesConfig {
   revision: string; master_enabled: boolean;
-  fishing: { enabled: boolean; bait_prices: { worm: string; lure: string; premium: string }; rtp_percent: { standard: number; premium: number }; treasure_multipliers: { bottle: number; clover: number; shell: number } };
+  fishing: { rake_bp: GamePumps; enabled: boolean; bait_prices: { worm: string; lure: string; premium: string }; rtp_percent: { standard: number; premium: number }; treasure_multipliers: { bottle: number; clover: number; shell: number } };
   linklink: { enabled: boolean; specs: Record<'6x8' | '8x8' | '10x10', { enabled: boolean; price: string }> };
   rps: { enabled: boolean; modes: Record<'quick' | 'standard' | 'deathmatch', RPSModeConfig> };
 }
@@ -124,7 +124,7 @@ interface GamesConfig {
 function normalizeRPSMode(value: unknown, label: string): RPSModeConfig {
   const root = record(value, ['enabled', 'base', 'pumps_bp', 'queue_seconds', 'gesture_seconds', 'dealer_seconds', 'follower_seconds', 'queue_capacity'], label);
   return {
-    enabled: boolean(root.enabled, `${label} switch`), base: amount(root.base, `${label} base`, false), pumps_bp: normalizeRPSPumps(root.pumps_bp),
+    enabled: boolean(root.enabled, `${label} switch`), base: amount(root.base, `${label} base`, false), pumps_bp: normalizeGamePumps(root.pumps_bp),
     queue_seconds: integer(root.queue_seconds, `${label} queue seconds`, 30, 120), gesture_seconds: integer(root.gesture_seconds, `${label} gesture seconds`, 5, 20),
     dealer_seconds: integer(root.dealer_seconds, `${label} dealer seconds`, 5, 15), follower_seconds: integer(root.follower_seconds, `${label} follower seconds`, 5, 15),
     queue_capacity: integer(root.queue_capacity, `${label} queue capacity`, 1, 4_096),
@@ -133,7 +133,7 @@ function normalizeRPSMode(value: unknown, label: string): RPSModeConfig {
 
 export function normalizeGamesConfig(value: unknown): GamesConfig {
   const root = record(value, ['revision', 'master_enabled', 'fishing', 'linklink', 'rps'], 'games configuration');
-  const fishing = record(root.fishing, ['enabled', 'bait_prices', 'rtp_percent', 'treasure_multipliers'], 'Fishing configuration');
+  const fishing = record(root.fishing, ['enabled', 'bait_prices', 'rtp_percent', 'treasure_multipliers', 'rake_bp'], 'Fishing configuration');
   const bait = record(fishing.bait_prices, ['worm', 'lure', 'premium'], 'Fishing bait prices');
   const rtp = record(fishing.rtp_percent, ['standard', 'premium'], 'Fishing RTP');
   const treasure = record(fishing.treasure_multipliers, ['bottle', 'clover', 'shell'], 'Fishing treasure multipliers');
@@ -148,7 +148,7 @@ export function normalizeGamesConfig(value: unknown): GamesConfig {
   return {
     revision: decimal(root.revision, 'games configuration revision', { positive: true }), master_enabled: boolean(root.master_enabled, 'games master switch'),
     fishing: {
-      enabled: boolean(fishing.enabled, 'Fishing switch'),
+      enabled: boolean(fishing.enabled, 'Fishing switch'), rake_bp: normalizeGamePumps(fishing.rake_bp),
       bait_prices: { worm: amount(bait.worm, 'worm price', false), lure: amount(bait.lure, 'lure price', false), premium: amount(bait.premium, 'premium price', false) },
       rtp_percent: { standard: integer(rtp.standard, 'standard RTP', 0, 100), premium: integer(rtp.premium, 'premium RTP', 0, 100) },
       treasure_multipliers: { bottle: integer(treasure.bottle, 'bottle multiplier', 0, 1_000_000), clover: integer(treasure.clover, 'clover multiplier', 0, 1_000_000), shell: integer(treasure.shell, 'shell multiplier', 0, 1_000_000) },

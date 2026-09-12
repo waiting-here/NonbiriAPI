@@ -80,7 +80,7 @@ func TestFishingHTTPRequiresOneValidIdempotencyKey(t *testing.T) {
 
 	pendingUser := fixture.seedUser("http-recover", fixtureFunding)
 	fixture.service.beforeSettlement = func(string) error { return errInjected }
-	_, pending, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: pendingUser, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(128)})
+	_, pending, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: pendingUser, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(128)})
 	if err != nil || pending == nil {
 		t.Fatalf("seed pending = (%#v,%v)", pending, err)
 	}
@@ -118,7 +118,7 @@ func TestIdempotencyDatabaseFailuresRemainRetryable(t *testing.T) {
 		if _, err := fixture.database.Exec(`CREATE TRIGGER fail_idempotency_begin BEFORE INSERT ON idempotency_records BEGIN SELECT RAISE(ABORT,'database is locked'); END`); err != nil {
 			t.Fatal(err)
 		}
-		_, _, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(130)})
+		_, _, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(130)})
 		if !errors.Is(err, ErrServiceUnavailable) || errors.Is(err, ErrInvalidRequest) {
 			t.Fatalf("Begin BUSY classification = %v", err)
 		}
@@ -130,7 +130,7 @@ func TestIdempotencyDatabaseFailuresRemainRetryable(t *testing.T) {
 			t.Fatal(err)
 		}
 		before := fixture.scalar(`SELECT COUNT(*) FROM credit_operations`)
-		_, _, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(131)})
+		_, _, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(131)})
 		if !errors.Is(err, ErrServiceUnavailable) {
 			t.Fatalf("Fishing Complete BUSY classification = %v", err)
 		}

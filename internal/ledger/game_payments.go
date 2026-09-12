@@ -38,17 +38,49 @@ func NewFishingReserveWithPayment(meta Meta, batchID string, wallets, reserves A
 	return requirePaymentAvailable(plan, wallets, payment), nil
 }
 
-func NewFishingSettleWithPayment(meta Meta, batchID string, reserves, platforms AccountPair, externalAccountID, userAccountID int64, payment Payment, payout Amount) (Plan, error) {
+// FishingPayout contains the already frozen general-currency proceeds.
+// Entry fees remain separate and are retired in their original currencies.
+type FishingPayout struct {
+	Net, Platform, Welfare, Thursday    Amount
+	WelfareAccountID, ThursdayAccountID int64
+}
+
+func NewFishingSettleWithPayment(meta Meta, batchID string, reserves, platforms AccountPair, externalAccountID, userAccountID int64, payment Payment, payout FishingPayout) (Plan, error) {
 	total, err := paymentTotal(payment)
-	if err != nil || !validPrimitive(total) || !reserves.valid() || !platforms.valid() {
+	if err != nil || !validPrimitive(total) || !reserves.valid() || !platforms.valid() || externalAccountID <= 0 || userAccountID <= 0 ||
+		!validNonnegativePrimitive(payout.Net) || !validNonnegativePrimitive(payout.Platform) || !validNonnegativePrimitive(payout.Welfare) || !validNonnegativePrimitive(payout.Thursday) ||
+		positive(payout.Welfare) && payout.WelfareAccountID <= 0 || positive(payout.Thursday) && payout.ThursdayAccountID <= 0 {
 		return Plan{}, ErrInvalidPlan
 	}
-	plan, err := NewFishingSettle(meta, batchID, reserves.General, platforms.General, externalAccountID, userAccountID, payment.General, payout)
+	gross, err := addAmounts(payout.Net, payout.Platform, payout.Welfare, payout.Thursday)
+	if err != nil || !validPrimitive(gross) {
+		return Plan{}, ErrInvalidPlan
+	}
+	platformGeneral, err := addAmounts(payment.General, payout.Platform)
 	if err != nil {
 		return Plan{}, err
 	}
-	return plan.add(roleForAsset(reserveRole(reserves.Game, "game_fishing_reserve"), Game), negate(payment.Game)).
-		add(roleForAsset(platformRole(platforms.Game), Game), payment.Game), nil
+	ref, err := FishingReservation(batchID)
+	if err != nil {
+		return Plan{}, err
+	}
+	plan, err := fishingPlan(meta, KindFishingSettle, batchID)
+	if err != nil {
+		return Plan{}, err
+	}
+	plan = plan.add(reserveRole(reserves.General, "game_fishing_reserve"), negate(payment.General)).
+		add(platformRole(platforms.General), platformGeneral).
+		add(externalRole(externalAccountID), negate(gross)).
+		add(userRole(userAccountID), payout.Net).
+		add(roleForAsset(reserveRole(reserves.Game, "game_fishing_reserve"), Game), negate(payment.Game)).
+		add(roleForAsset(platformRole(platforms.Game), Game), payment.Game)
+	if positive(payout.Welfare) {
+		plan = plan.add(poolRole(payout.WelfareAccountID), payout.Welfare)
+	}
+	if positive(payout.Thursday) {
+		plan = plan.add(poolRole(payout.ThursdayAccountID), payout.Thursday)
+	}
+	return plan.consume(ref), nil
 }
 
 func NewFishingReleaseWithPayment(meta Meta, batchID string, reserves, wallets AccountPair, payment Payment) (Plan, error) {

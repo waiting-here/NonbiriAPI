@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useOptionalToast } from '@shared/components/Toast';
+import { spendableGameCredits } from '../common/spendable';
 import { Card, ErrorState, LoadingState } from '@shared/components/States';
 import { useUserSession } from '../../data';
 import { useGameCopy } from '../copy';
@@ -36,6 +38,7 @@ import {
 import { FISHING_REVEAL_MS, fishingPresentationPhase, nextRevealCount } from './stateMachine';
 import type {
   FishingBatchResult,
+  FishingRake,
   FishingLeaderboard,
   FishingLeaderboard as Leaderboard,
   FishingLeaderboardBoard,
@@ -195,6 +198,21 @@ function FishingStage({
   );
 }
 
+function RakeDetails({ gross, rake }: { readonly gross: string; readonly rake: FishingRake }) {
+  const { text } = useGameCopy();
+  return (
+    <details className="fishing-rake-details">
+      <summary>{text('fishing.rake.details')}</summary>
+      <dl>
+        <div><dt>{text('fishing.rake.gross')}</dt><dd><GameMoney value={gross} /></dd></div>
+        {(['platform', 'welfare', 'thursday'] as const).map((kind) => (
+          <div key={kind}><dt>{text(`fishing.rake.${kind}`)}</dt><dd><GameMoney value={rake[kind]} /></dd></div>
+        ))}
+      </dl>
+    </details>
+  );
+}
+
 function ResultPanel({
   result,
   revealed,
@@ -251,7 +269,8 @@ function ResultPanel({
                     ? text('fishing.size', { size: outcomeDisplayLength(outcome)! })
                     : text(`fishing.tier.${outcome.tier}`)}
                 </span>
-                <span>{text('fishing.reward', { amount: formatCredits(outcome.reward) })}</span>
+                <span>{text('fishing.reward', { amount: formatCredits(outcome.netReward) })}</span>
+                <RakeDetails gross={outcome.reward} rake={outcome.rake} />
               </div>
             </article>
           ))}
@@ -261,7 +280,7 @@ function ResultPanel({
             {(
               [
                 ['entry', result.entryTotal],
-                ['payout', result.payoutTotal],
+                ['payout', result.netPayoutTotal],
                 ['balance', result.balance],
               ] as const
             ).map(([label, value]) => (
@@ -275,6 +294,7 @@ function ResultPanel({
             ))}
           </dl>
         ) : null}
+        {revealed === result.outcomes.length ? <RakeDetails gross={result.payoutTotal} rake={result.rake} /> : null}
         {hasMore && revealed === result.outcomes.length ? (
           <p className="game-inline-notice">{text('fishing.result.more')}</p>
         ) : null}
@@ -514,6 +534,8 @@ export function FishingGame() {
   } | null>(null);
   const [viewedResult, setViewedResult] = useState<FishingBatchResult | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const pushToast = useOptionalToast()?.push;
+  const notifyBatch = useRef<string | null>(null);
   const soundBatch = useRef<{ readonly id: string; through: number } | null>(null);
   const audibleBatch = useRef<string | null>(null);
   const resultRef = useRef<HTMLElement | null>(null);
@@ -524,6 +546,13 @@ export function FishingGame() {
   const refetchState = state.refetch;
   const result = authoritative?.unrevealed ?? null;
   useGameSettlement(result?.batchID);
+  useEffect(() => {
+    if (result && notifyBatch.current === result.batchID) {
+      notifyBatch.current = null;
+      pushToast?.({ tone: 'success', title: text('fishing.result.title'),
+        message: text('fishing.netReceived', { amount: formatCredits(result.netPayoutTotal) }) });
+    }
+  }, [result, pushToast, text]);
   const pending = authoritative?.settlementPending ?? null;
   const effectiveActionState = actionState;
   const replayOperation = operation;
@@ -630,6 +659,7 @@ export function FishingGame() {
 
   const adoptResponse = useCallback(
     async (response: FishingStartResult) => {
+      notifyBatch.current = response.batchID;
       await queryClient.cancelQueries({ queryKey: fishingKeys.state });
       queryClient.setQueryData<FishingState>(fishingKeys.state, (current) => {
         // Finish presenting the oldest unacknowledged batch before a newer response.
@@ -723,7 +753,7 @@ export function FishingGame() {
   const unit = prices?.[selectedBait] ?? '0';
   const frozenTotal = multiplyCredits(unit, count);
   const affordable = snapshot.data
-    ? creditsToMilli(snapshot.data.balance, true) >= creditsToMilli(frozenTotal)
+    ? creditsToMilli(spendableGameCredits(snapshot.data).total) >= creditsToMilli(frozenTotal)
     : false;
   const startsOpen = Boolean(
     snapshot.data?.gamesEnabled && snapshot.data.fishing.enabled && snapshot.data.fishing.available,
@@ -951,7 +981,7 @@ export function FishingGame() {
             <div>
               <dt>{text('fishing.balance')}</dt>
               <dd>
-                <GameMoney value={snapshot.data.balance} />
+                <GameWallets wallets={snapshot.data} />
               </dd>
             </div>
           </dl>

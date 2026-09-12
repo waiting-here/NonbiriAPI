@@ -5,12 +5,14 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/waiting-here/NonbiriAPI/internal/activities"
 	"github.com/waiting-here/NonbiriAPI/internal/db"
 	"github.com/waiting-here/NonbiriAPI/internal/game"
 	"github.com/waiting-here/NonbiriAPI/internal/game/finance"
@@ -28,7 +30,19 @@ const (
 	rankWindow      = 30 * 24 * time.Hour
 )
 
+type PoolRepository interface {
+	WelfareDestination(context.Context, *sql.Tx) (activities.PoolDestination, error)
+	ThursdayDestination(context.Context, *sql.Tx, int64) (activities.PoolDestination, error)
+	RecordPoolTransfers(context.Context, *sql.Tx, int64, ...activities.PoolDestination) (activities.PublishFacts, error)
+}
+
+type ActivityPublisher interface {
+	Publish(context.Context, activities.PublishFacts) error
+}
+
 type Options struct {
+	Pools          PoolRepository
+	ActivityEvents ActivityPublisher
 	Finance        finance.Fishing
 	Store          *db.Store
 	UserAuthorizer resources.FinalTxAuthorizer
@@ -45,6 +59,8 @@ type Options struct {
 }
 
 type Service struct {
+	pools          PoolRepository
+	activityEvents ActivityPublisher
 	finance        finance.Fishing
 	database       *sql.DB
 	userAuthorizer resources.FinalTxAuthorizer
@@ -75,8 +91,8 @@ type Service struct {
 }
 
 func New(options Options) (*Service, error) {
-	if options.Store == nil || options.Store.DB() == nil || options.UserAuthorizer == nil || options.Finance == nil {
-		return nil, errors.New("game runtime: store and final user authorizer are required")
+	if options.Store == nil || options.Store.DB() == nil || options.UserAuthorizer == nil || options.Finance == nil || options.Pools == nil || options.ActivityEvents == nil {
+		return nil, errors.New("game runtime: store, finance, final authorizer and activity dependencies are required")
 	}
 	if options.Now == nil {
 		options.Now = time.Now
@@ -109,6 +125,7 @@ func New(options Options) (*Service, error) {
 	}
 	key := append([]byte(nil), options.LeaderboardTieKey...)
 	return &Service{
+		pools: options.Pools, activityEvents: options.ActivityEvents,
 		database: options.Store.DB(), userAuthorizer: options.UserAuthorizer, finance: options.Finance,
 		limiter: options.Limiter, ownsLimiter: ownsLimiter,
 		random: options.Random, now: options.Now, generateID: options.GenerateID,
@@ -310,4 +327,12 @@ func formatWideMilli(value *big.Int) string {
 		return "-" + text
 	}
 	return text
+}
+
+func (service *Service) publishPoolTransfers(ctx context.Context, facts activities.PublishFacts) {
+	if facts.Global {
+		if err := service.activityEvents.Publish(ctx, facts); err != nil {
+			slog.ErrorContext(ctx, "fishing activity notification failed", "error", err)
+		}
+	}
 }

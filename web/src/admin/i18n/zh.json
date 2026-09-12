@@ -263,6 +263,7 @@
       "title": "游戏配置",
       "masterEnabled": "游戏总开关",
       "fishingEnabled": "启用池塘垂钓",
+      "fishingRake": "每条渔获的{{pump}}抽水（基点）",
       "worm": "蚯蚓鱼饵",
       "lure": "拟饵",
       "premium": "高级鱼饵",

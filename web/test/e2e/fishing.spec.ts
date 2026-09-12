@@ -27,8 +27,8 @@ const RESULT = {
   entry_total: '2.5',
   rules_version: 1,
   payment: { general: '2.5', game: '0' },
-  outcomes: [{ ordinal: 0, species_key: 'koi', tier: 'legend', size_cm: 180, reward: '12' }],
-  payout_total: '12',
+  outcomes: [{ ordinal: 0, species_key: 'koi', tier: 'legend', size_cm: 180, reward: '12', net_reward: '12', rake: { platform: '0', welfare: '0', thursday: '0' } }],
+  payout_total: '12', net_payout_total: '12', rake: { platform: '0', welfare: '0', thursday: '0' },
   balance: '14.5',
   game_balance: '0',
   settled_at: 1_787_450_010,
@@ -323,21 +323,21 @@ const ARTWORK_RESULTS = [
           species_key: art.key,
           tier: spec.tier,
           size_cm: spec.size,
-          reward: '0',
+          reward: '0', net_reward: '0', rake: { platform: '0', welfare: '0', thursday: '0' },
         },
       ],
-      payout_total: '0',
+      payout_total: '0', net_payout_total: '0', rake: { platform: '0', welfare: '0', thursday: '0' },
     };
   }),
   ...junkArtwork.map((art) => ({
     ...RESULT,
-    outcomes: [{ ordinal: 0, species_key: art.key, tier: 'junk', size_cm: 0, reward: '0' }],
-    payout_total: '0',
+    outcomes: [{ ordinal: 0, species_key: art.key, tier: 'junk', size_cm: 0, reward: '0', net_reward: '0', rake: { platform: '0', welfare: '0', thursday: '0' } }],
+    payout_total: '0', net_payout_total: '0', rake: { platform: '0', welfare: '0', thursday: '0' },
   })),
   ...treasureArtwork.map((art) => ({
     ...RESULT,
-    outcomes: [{ ordinal: 0, species_key: art.key, tier: 'treasure', size_cm: 0, reward: '0' }],
-    payout_total: '0',
+    outcomes: [{ ordinal: 0, species_key: art.key, tier: 'treasure', size_cm: 0, reward: '0', net_reward: '0', rake: { platform: '0', welfare: '0', thursday: '0' } }],
+    payout_total: '0', net_payout_total: '0', rake: { platform: '0', welfare: '0', thursday: '0' },
   })),
 ];
 

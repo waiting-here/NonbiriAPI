@@ -15,7 +15,7 @@ function resultWire(batchID: string, count: 1 | 10) {
     species_key: 'whitebait',
     tier: 'small',
     size_cm: 12,
-    reward: '1',
+    reward: '1', net_reward: '1', rake: { platform: '0', welfare: '0', thursday: '0' },
   }));
   return {
     batch_id: batchID,
@@ -26,7 +26,7 @@ function resultWire(batchID: string, count: 1 | 10) {
     rules_version: 1,
     payment: { general: String(count), game: '0' },
     outcomes,
-    payout_total: String(count),
+    payout_total: String(count), net_payout_total: String(count), rake: { platform: '0', welfare: '0', thursday: '0' },
     balance: '12345678901234567890.125',
     game_balance: '0',
     settled_at: 1_800_000_000,
@@ -125,6 +125,31 @@ async function flushZeroTimers() {
 afterEach(() => vi.useRealTimers());
 
 describe('Fishing result presentation and queue recovery', () => {
+  it('shows net general income with expandable deductions and spends a positive game wallet independently', async () => {
+    vi.useFakeTimers();
+    stubReducedMotion(true);
+    const result = resultWire(OLD_BATCH_ID, 1);
+    result.rules_version = 2;
+    result.net_payout_total = '0.97';
+    result.rake = { platform: '0.01', welfare: '0.01', thursday: '0.01' };
+    result.outcomes[0].net_reward = '0.97';
+    result.outcomes[0].rake = { ...result.rake };
+    const snapshot = { ...gamesSnapshotWire(), balance: '-100', game_balance: '10' };
+    installJsonFetchFixtures(fishingFixtures(stateWire(result)).map((fixture) =>
+      fixture.path === '/api/games' ? { ...fixture, body: snapshot } : fixture));
+    const rendered = await renderWithProviders(<FishingGame />, { station: 'user', route: '/games/fishing', role: 'user' });
+    await flushInitialFishing();
+    expect(screen.getByRole('button', { name: 'Start fishing' })).toBeEnabled();
+    const catchList = within(screen.getByRole('list', { name: 'Your catch is ready' }));
+    expect(catchList.getByText('Net: 0.97 general credits')).toBeVisible();
+    const details = catchList.getByText('Gross catch and deductions').closest('details')!;
+    expect(details).not.toHaveAttribute('open');
+    fireEvent.click(within(details).getByText('Gross catch and deductions'));
+    expect(details).toHaveAttribute('open');
+    expect(within(details).getByText('Welfare pool deduction')).toBeVisible();
+    rendered.unmount();
+  });
+
   it('disables start until the previous batch is fully presented and ignores rapid clicks', async () => {
     vi.useFakeTimers();
     stubReducedMotion(false);

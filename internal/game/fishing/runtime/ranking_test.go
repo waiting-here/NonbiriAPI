@@ -17,7 +17,7 @@ import (
 func TestZeroSizeOutcomeCreatesSingleBestAndExplicitWireSize(t *testing.T) {
 	fixture := newGameFixture(t, &scriptedSource{})
 	userID := fixture.seedUser("zero-best", fixtureFunding)
-	result, pending, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(400)})
+	result, pending, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(400)})
 	if err != nil || pending != nil || result == nil || result.Outcomes[0].SizeCM != 0 {
 		t.Fatalf("zero-size start = (%#v,%#v,%v)", result, pending, err)
 	}
@@ -58,7 +58,7 @@ func TestFishingRankingPrivacyExclusionAndStableOrder(t *testing.T) {
 		fixture.seedUser("banned-rank", fixtureFunding),
 	}
 	for index, userID := range ids {
-		result, pending, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(410 + index)})
+		result, pending, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(410 + index)})
 		if err != nil || pending != nil || result == nil {
 			t.Fatalf("start %d = (%#v,%#v,%v)", index, result, pending, err)
 		}
@@ -93,7 +93,7 @@ func TestFishingLeaderboardHiddenTieIsStable(t *testing.T) {
 		fixture.seedUser("tie-b", fixtureFunding),
 	}
 	for index, userID := range users {
-		result, pending, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(415 + index)})
+		result, pending, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(415 + index)})
 		if err != nil || pending != nil || result == nil || result.Outcomes[0].SizeCM != 0 || result.PayoutTotal != "0" {
 			t.Fatalf("tie start %d = (%#v,%#v,%v)", index, result, pending, err)
 		}
@@ -135,12 +135,12 @@ func TestFishingRollingFactsExpiryExactOnceAndBudget(t *testing.T) {
 	t.Run("nonzero boundary", func(t *testing.T) {
 		fixture := newGameFixture(t, &scriptedSource{max: true})
 		userID := fixture.seedUser("expiry", fixtureFunding)
-		first, _, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(420)})
+		first, _, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(420)})
 		if err != nil {
 			t.Fatal(err)
 		}
 		fixture.clock.Store(fixtureNow + 1)
-		second, _, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(421)})
+		second, _, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(421)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -175,12 +175,12 @@ func TestFishingRollingFactsExpiryExactOnceAndBudget(t *testing.T) {
 	t.Run("zero payout does not move achieved time", func(t *testing.T) {
 		fixture := newGameFixture(t, &scriptedSource{})
 		userID := fixture.seedUser("zero-expiry", fixtureFunding)
-		first, _, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(422)})
+		first, _, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(422)})
 		if err != nil {
 			t.Fatal(err)
 		}
 		fixture.clock.Store(fixtureNow + 10)
-		if _, _, err = fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(423)}); err != nil {
+		if _, _, err = fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(423)}); err != nil {
 			t.Fatal(err)
 		}
 		fixture.clock.Store(first.SettledAt + int64(rankWindow.Seconds()))
@@ -199,7 +199,7 @@ func TestFishingRollingFactsExpiryExactOnceAndBudget(t *testing.T) {
 	t.Run("budget exhaustion", func(t *testing.T) {
 		fixture := newGameFixture(t, &scriptedSource{max: true})
 		userID := fixture.seedUser("budget", fixtureFunding)
-		result, _, err := fixture.service.StartFishing(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(424)})
+		result, _, err := fixture.service.startLegacy(context.Background(), StartInput{UserID: userID, Bait: "worm", Count: 1, IdempotencyKey: validTestKey(424)})
 		if err != nil {
 			t.Fatal(err)
 		}

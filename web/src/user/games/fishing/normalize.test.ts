@@ -23,9 +23,9 @@ function resultWire(count: 1 | 10 = 1) {
       tier: 'small',
       size_cm: 5 + ordinal,
       blue_fat_fish_length_cm: undefined as string | null | undefined,
-      reward: '0.5',
+      reward: '0.5', net_reward: '0.5', rake: { platform: '0', welfare: '0', thursday: '0' },
     })),
-    payout_total: count === 1 ? '0.5' : '5',
+    payout_total: count === 1 ? '0.5' : '5', net_payout_total: count === 1 ? '0.5' : '5', rake: { platform: '0', welfare: '0', thursday: '0' },
     balance: '100.25',
     game_balance: '0',
     settled_at: 1_800_000_000,
@@ -46,7 +46,27 @@ function pendingWire(state: 'settlement_pending' | 'recovery_required' = 'settle
   };
 }
 
-describe('Fishing beta.1 wire', () => {
+describe('Fishing wire', () => {
+  it('requires complete net proceeds and exact per-outcome rake totals', () => {
+    const value = resultWire(10);
+    value.rules_version = 2;
+    value.net_payout_total = '4.85';
+    value.rake = { platform: '0.05', welfare: '0.05', thursday: '0.05' };
+    value.outcomes.forEach((outcome) => {
+      outcome.net_reward = '0.485';
+      outcome.rake = { platform: '0.005', welfare: '0.005', thursday: '0.005' };
+    });
+    expect(normalizeFishingResult(value).netPayoutTotal).toBe('4.85');
+    const incorrect = structuredClone(value);
+    incorrect.outcomes[0].net_reward = '0.486';
+    expect(() => normalizeFishingResult(incorrect)).toThrow(/arithmetic/);
+    const sum = structuredClone(value);
+    sum.rake.platform = '0.051';
+    expect(() => normalizeFishingResult(sum)).toThrow(/rake sum/);
+    value.rules_version = 1;
+    expect(() => normalizeFishingResult(value)).toThrow(/arithmetic/);
+  });
+
   afterEach(() => vi.unstubAllGlobals());
   it('validates one and ten outcome atomic batches with exact arithmetic and ordinal order', () => {
     expect(normalizeFishingResult(resultWire()).outcomes).toHaveLength(1);
@@ -170,7 +190,7 @@ describe('Fishing beta.1 wire', () => {
       tier: 'legend',
       size_cm: 100,
       blue_fat_fish_length_cm: `201${'9'.repeat(125)}`,
-      reward: '0.5',
+      reward: '0.5', net_reward: '0.5', rake: { platform: '0', welfare: '0', thursday: '0' },
     };
     const normalized = normalizeFishingResult(blue).outcomes[0];
     expect(normalized.blueFatFishLengthCM).toBe(`201${'9'.repeat(125)}`);
@@ -185,7 +205,7 @@ describe('Fishing beta.1 wire', () => {
         tier: 'legend',
         size_cm: 100,
         blue_fat_fish_length_cm: invalidLength,
-        reward: '0.5',
+        reward: '0.5', net_reward: '0.5', rake: { platform: '0', welfare: '0', thursday: '0' },
       };
       expect(() => normalizeFishingResult(invalid)).toThrow(/blue fat fish length/i);
     }

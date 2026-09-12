@@ -131,7 +131,13 @@ const copy = {
   'fishing.result.title': ['Your catch is ready', '收获已揭晓'],
   'fishing.result.total': ['Total catch', '本次总收获'],
   'fishing.result.entry': ['Entry total', '投入总额'],
-  'fishing.result.payout': ['Credits received', '获得积分'],
+  'fishing.result.payout': ['Net catch received · general credits', '净渔获到账 · 通用积分'],
+  'fishing.rake.details': ['Gross catch and deductions', '查看原始渔获与抽水'],
+  'fishing.rake.gross': ['Gross catch', '原始渔获'],
+  'fishing.rake.platform': ['Platform deduction', '平台抽水'],
+  'fishing.rake.welfare': ['Welfare pool deduction', '低保池抽水'],
+  'fishing.rake.thursday': ['Thursday pool deduction', '星期四池抽水'],
+  'fishing.netReceived': ['Net catch: +{{amount}} general credits', '净渔获到账：+{{amount}} 通用积分'],
   'fishing.result.balance': ['Resulting balance', '结算后余额'],
   'fishing.result.more': [
     'More catches are waiting to be shown next.',
@@ -154,7 +160,7 @@ const copy = {
   'fishing.tier.junk': ['Pond find', '池塘杂物'],
   'fishing.tier.treasure': ['Treasure', '宝物'],
   'fishing.size': ['{{size}} cm', '{{size}} 厘米'],
-  'fishing.reward': ['{{amount}} credits', '{{amount}} 积分'],
+  'fishing.reward': ['Net: {{amount}} general credits', '净到账 {{amount}} 通用积分'],
   'fishing.blueFatFish': ['Blue fat fish', '蓝色大肥鱼'],
   'fishing.blueFatFish.original': [
     'Original legendary species: {{species}}',
@@ -201,8 +207,8 @@ const copy = {
   ],
   'fishing.rules.resultTitle': ['What you receive', '你会看到什么'],
   'fishing.rules.resultBody': [
-    'Results show the catch, length and credits. Legendary fish have a 10% chance of the blue fat fish egg: 201 cm or longer, with exponentially decreasing odds and no gameplay limit. Only artwork and length rankings change; original species and rewards stay unchanged.',
-    '结果展示收获、长度和积分。传奇鱼有 10% 概率成为蓝色大肥鱼：201 厘米起，长度概率指数衰减，不设玩法上限。彩蛋只改变图案和长度榜，结果及榜单保留原鱼种，奖励不变。',
+    'Results show the catch, length and net general credits after per-catch deductions. Expand a catch to see its gross reward and deductions. Legendary fish have a 10% chance of the blue fat fish egg: 201 cm or longer, with exponentially decreasing odds and no gameplay limit. Only artwork and length rankings change; original species and rewards stay unchanged.',
+    '结果展示收获、长度和逐条抽水后的通用积分净到账，展开可看原始渔获与各项抽水。传奇鱼有 10% 概率成为蓝色大肥鱼：201 厘米起，长度概率指数衰减，不设玩法上限。彩蛋只改变图案和长度榜，结果及榜单保留原鱼种，奖励不变。',
   ],
   'fishing.rules.recoveryTitle': ['If you leave or refresh', '离开或刷新后怎么办'],
   'fishing.rules.recoveryBody': [
@@ -211,13 +217,13 @@ const copy = {
   ],
   'fishing.rules.scoresTitle': ['Catch boards', '收获榜'],
   'fishing.rules.scoresBody': [
-    'Each of the ten catches can enter the single-catch board, and all catches count toward your total.',
-    '十连中的每次收获都可以计入收获榜，全部渔获都会计入总收获。',
+    'Each catch can enter the length boards. The total board counts net catch income; newcomer rewards are separate.',
+    '每条渔获都可计入体长榜；总收获榜累计净渔获收入，新人奖励单独发放，不计入该榜。',
   ],
   'fishing.rules.startTitle': ['Before you start', '开始前确认'],
   'fishing.rules.startBody': [
-    'Check your bait, number of casts, and total price. You can start while fishing is open.',
-    '请先确认鱼饵、抛竿次数和总价，开放期间即可开始垂钓。',
+    'Check your bait, number of casts, and total price. Payment uses game credits first, then general credits.',
+    '请先确认鱼饵、抛竿次数和总价。付款优先使用游戏积分，不足部分使用通用积分。',
   ],
   'linklink.eyebrow': ['LinkLink', '连连看'],
   'linklink.title': ['Find a pair, draw a path', '找相同，连成对'],

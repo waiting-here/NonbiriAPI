@@ -72,7 +72,7 @@ func New(options Options) (*Runtime, error) {
 				return nil, err
 			}
 			defer clear(key)
-			service, err := fishingruntime.New(fishingruntime.Options{Store: options.Store, Finance: financial.Fishing, UserAuthorizer: shared.UserAuthorizer, Limiter: shared.Limiter, LeaderboardTieKey: key, Now: shared.Now})
+			service, err := fishingruntime.New(fishingruntime.Options{Store: options.Store, Finance: financial.Fishing, Pools: options.Pools, ActivityEvents: options.ActivityEvents, UserAuthorizer: shared.UserAuthorizer, Limiter: shared.Limiter, LeaderboardTieKey: key, Now: shared.Now})
 			if err != nil {
 				return nil, err
 			}

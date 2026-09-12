@@ -18,6 +18,7 @@ import {
 import {
   FISHING_TIERS,
   type FishingBatchResult,
+  type FishingRake,
   type FishingLeaderboardBoard,
   type FishingLeaderboard,
   type FishingSettlementPending,
@@ -138,11 +139,20 @@ export function normalizeFishingPending(value: unknown): FishingSettlementPendin
   };
 }
 
+function normalizeRake(value: unknown, field: string): FishingRake {
+  const record = exactRecord(value, ['platform', 'welfare', 'thursday'], [], field);
+  return {
+    platform: creditsValue(record.platform, {}, field),
+    welfare: creditsValue(record.welfare, {}, field),
+    thursday: creditsValue(record.thursday, {}, field),
+  };
+}
+
 export function normalizeFishingResult(value: unknown): FishingBatchResult {
   const record = exactRecord(
     value,
     [
-      'rules_version', 'payment', 'game_balance',
+      'rules_version', 'payment', 'game_balance', 'net_payout_total', 'rake',
       'batch_id',
       'bait',
       'count',
@@ -165,10 +175,11 @@ export function normalizeFishingResult(value: unknown): FishingBatchResult {
   }
   if (!Array.isArray(record.outcomes) || record.outcomes.length !== parsedCount)
     invalidResponse('fishing outcomes');
+  const funding = entryPayment(record, entryTotal, 'fishing');
   const outcomes = record.outcomes.map((value, index) => {
     const outcome = exactRecord(
       value,
-      ['ordinal', 'species_key', 'tier', 'size_cm', 'reward'],
+      ['ordinal', 'species_key', 'tier', 'size_cm', 'reward', 'net_reward', 'rake'],
       ['blue_fat_fish_length_cm'],
       `fishing outcome ${index}`,
     );
@@ -183,20 +194,35 @@ export function normalizeFishingResult(value: unknown): FishingBatchResult {
       tier,
       `fishing outcome ${index} blue fat fish length`,
     );
+    const reward = creditsValue(outcome.reward, {}, `fishing outcome ${index} reward`);
+    const netReward = creditsValue(outcome.net_reward, {}, `fishing outcome ${index} net reward`);
+    const rake = normalizeRake(outcome.rake, `fishing outcome ${index} rake`);
+    if (sumCredits([netReward, rake.platform, rake.welfare, rake.thursday]) !== reward ||
+        funding.rulesVersion === 1 && netReward !== reward) invalidResponse('fishing outcome arithmetic');
     return {
+      netReward,
+      rake,
       ordinal,
       speciesKey,
       tier,
       sizeCM,
       blueFatFishLengthCM,
-      reward: creditsValue(outcome.reward, {}, `fishing outcome ${index} reward`),
+      reward,
     };
   });
   const payoutTotal = creditsValue(record.payout_total, {}, 'fishing payout total');
-  if (sumCredits(outcomes.map((outcome) => outcome.reward)) !== payoutTotal)
+  const netPayoutTotal = creditsValue(record.net_payout_total, {}, 'fishing net payout total');
+  const rake = normalizeRake(record.rake, 'fishing rake total');
+  for (const kind of ['platform', 'welfare', 'thursday'] as const) {
+    if (sumCredits(outcomes.map((outcome) => outcome.rake[kind])) !== rake[kind]) invalidResponse('fishing rake sum');
+  }
+  if (sumCredits(outcomes.map((outcome) => outcome.netReward)) !== netPayoutTotal ||
+      sumCredits(outcomes.map((outcome) => outcome.reward)) !== payoutTotal)
     invalidResponse('fishing payout arithmetic');
   return {
-    ...entryPayment(record, entryTotal, 'fishing'),
+    ...funding,
+    netPayoutTotal,
+    rake,
     gameBalance: creditsValue(record.game_balance, { signed: true }, 'fishing game balance'),
     batchID: opaqueID(record.batch_id, 'fb_', 'fishing batch id'),
     bait: bait(record.bait, 'fishing bait'),
@@ -218,7 +244,7 @@ export function normalizeFishingStart(
     value as unknown,
     [],
     [
-      'rules_version', 'payment', 'game_balance',
+      'rules_version', 'payment', 'game_balance', 'net_payout_total', 'rake',
       'batch_id',
       'bait',
       'count',
