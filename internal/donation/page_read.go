@@ -14,12 +14,17 @@ import (
 )
 
 func (s *Service) beginBrowseTx(ctx context.Context, role reviewerRole, userID int64) (*sql.Tx, error) {
+	tx, _, err := s.beginBrowseActorTx(ctx, role, userID)
+	return tx, err
+}
+
+func (s *Service) beginBrowseActorTx(ctx context.Context, role reviewerRole, userID int64) (*sql.Tx, int64, error) {
 	if s == nil || s.db == nil || ctx == nil {
-		return nil, ErrUnavailable
+		return nil, 0, ErrUnavailable
 	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	switch role {
 	case recurringOwner:
@@ -51,9 +56,9 @@ func (s *Service) beginBrowseTx(ctx context.Context, role reviewerRole, userID i
 	}
 	if err != nil {
 		_ = tx.Rollback()
-		return nil, err
+		return nil, 0, err
 	}
-	return tx, nil
+	return tx, userID, nil
 }
 
 func browseIDs(ctx context.Context, tx *sql.Tx, query string, args []any, page pagination.Request) ([]int64, pagination.Metadata, error) {

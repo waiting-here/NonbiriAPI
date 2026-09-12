@@ -33,13 +33,23 @@ func validSourceFilter(filter SourceFilter, keys bool) bool {
 
 // This query contains only management-visible source/key metadata. It never
 // joins private endpoint notes or donor identities for filtering or counting.
-func sourceSelectionSQL(filter SourceFilter, source *sourceIdentity, now int64) (string, []any) {
-	query := `SELECT dk.id AS id,d.id AS donation_id,d.status AS donation_status,` + sourceChannelSQL + ` AS source_channel,` + sourceConnectorSQL + ` AS source_connector,` + sourceURLSQL + ` AS source_url,
+func sourceSelectionSQL(filter SourceFilter, source *sourceIdentity, now int64, candidates ...int64) (string, []any) {
+	index := " INDEXED BY idx_donation_keys_source_page"
+	if len(candidates) > 0 {
+		index = ""
+	}
+	query := `SELECT dk.id AS id,d.id AS donation_id,d.revision AS revision,d.status AS donation_status,` + sourceChannelSQL + ` AS source_channel,` + sourceConnectorSQL + ` AS source_connector,` + sourceURLSQL + ` AS source_url,
 CASE WHEN h.state='pending' AND ` + logicallyActiveDonationSQL + ` THEN 1 ELSE 0 END AS pending
-FROM donation_keys dk INDEXED BY idx_donation_keys_source_page CROSS JOIN donations d ON d.id=dk.donation_id
+FROM donation_keys dk` + index + ` CROSS JOIN donations d ON d.id=dk.donation_id
 JOIN donation_handling h ON h.donation_id=d.id
 WHERE (d.status IN ('pending','approved') OR d.terminal_at>?)`
 	args := []any{now, now - terminalRetention}
+	if len(candidates) > 0 {
+		query += ` AND dk.id IN (` + strings.TrimSuffix(strings.Repeat("?,", len(candidates)), ",") + `)`
+		for _, id := range candidates {
+			args = append(args, id)
+		}
+	}
 	if filter.Scope != "all" {
 		query += ` AND ` + logicallyActiveDonationSQL
 		args = append(args, now)

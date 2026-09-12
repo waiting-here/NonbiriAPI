@@ -460,6 +460,28 @@
           "discountDates": "折扣日期必须有效，且结束时间必须晚于开始时间。"
         }
       }
+    },
+    "failureReset": {
+      "title": "重置失败计数",
+      "help": "清空连续失败计数并解除因失败导致的自动停用，启停设置、额度和有效期保持原样。",
+      "selectPage": "勾选本页",
+      "clear": "清空勾选",
+      "selected": "重置勾选项（{{count}}）",
+      "all": "重置筛选范围内全部密钥",
+      "selecting": "正在选择密钥 · 已找到 {{selected}} 项",
+      "resetting": "正在重置 · 已处理 {{processed}} / {{selected}} 项",
+      "paused": "已暂停 · 已处理 {{processed}} / {{selected}} 项 · 重置 {{reset}} 项 · 跳过 {{skipped}} 项",
+      "done": "已完成 · 选中 {{selected}} 项 · 重置 {{reset}} 项 · 跳过 {{skipped}} 项",
+      "resume": "继续",
+      "resumeHelp": "继续会重试中断的请求并处理剩余密钥。全部选择完成后才会开始重置。",
+      "newSelection": "重新选择",
+      "skippedHelp": "已跳过 {{count}} 项，下方最多显示 100 项。请刷新后重新选择需要重试的冲突或已变更密钥。",
+      "reset": "已重置",
+      "conflict": "选择或重置期间已变更",
+      "ineligible": "已不符合重置条件",
+      "notFound": "不存在",
+      "item": "捐赠 {{donation}} · 密钥 {{key}}",
+      "singleDone": "失败计数已重置。"
     }
   },
   "logs": {

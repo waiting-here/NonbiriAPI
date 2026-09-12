@@ -1,0 +1,31 @@
+.failure-reset-control {
+  margin-block: 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--nb-color-border);
+  border-radius: 0.5rem;
+}
+.failure-reset-control summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.failure-reset-choices {
+  display: grid;
+  gap: 0.5rem;
+  max-height: 16rem;
+  overflow: auto;
+  margin-block: 0.75rem;
+}
+.failure-reset-choices label {
+  display: flex;
+  align-items: start;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.failure-reset-choices input {
+  width: auto;
+  flex: 0 0 auto;
+}
+.failure-reset-choices span,
+.failure-reset-control li {
+  overflow-wrap: anywhere;
+}

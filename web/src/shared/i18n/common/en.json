@@ -460,6 +460,28 @@
           "discountDates": "Discount dates must be valid and the end must be later than the start."
         }
       }
+    },
+    "failureReset": {
+      "title": "Reset failure count",
+      "help": "Clears consecutive failures and the automatic failure stop. Enablement, limits and expiry stay as configured.",
+      "selectPage": "Select this page",
+      "clear": "Clear selection",
+      "selected": "Reset selected ({{count}})",
+      "all": "Reset all matching keys",
+      "selecting": "Selecting keys · {{selected}} found",
+      "resetting": "Resetting · {{processed}} / {{selected}} processed",
+      "paused": "Paused · {{processed}} / {{selected}} processed · {{reset}} reset · {{skipped}} skipped",
+      "done": "Finished · {{selected}} selected · {{reset}} reset · {{skipped}} skipped",
+      "resume": "Continue",
+      "resumeHelp": "Continue to retry the interrupted request and process the remaining keys. Selection finishes before any reset begins.",
+      "newSelection": "Start a new selection",
+      "skippedHelp": "{{count}} keys were skipped. The first 100 are shown below. Refresh and select again to retry conflicts or changed keys.",
+      "reset": "Reset",
+      "conflict": "Changed during selection or reset",
+      "ineligible": "No longer eligible",
+      "notFound": "Not found",
+      "item": "Donation {{donation}} · key {{key}}",
+      "singleDone": "Failure count reset."
     }
   },
   "logs": {
